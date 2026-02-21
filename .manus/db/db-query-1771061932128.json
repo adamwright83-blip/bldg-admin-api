@@ -1,0 +1,100 @@
+{
+  "query": "SELECT id, firstName, lastName, phone, status, stripeCustomerId, stripePaymentMethodId FROM orders ORDER BY id DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.a19e12a5afac --database ENMKipk9TB4jvVA6wqwLd8 --execute SELECT id, firstName, lastName, phone, status, stripeCustomerId, stripePaymentMethodId FROM orders ORDER BY id DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "120006",
+      "firstName": "Testey",
+      "lastName": "McTesterson",
+      "phone": "3238074661",
+      "status": "new",
+      "stripeCustomerId": "cus_TycQiySTSOwyKz",
+      "stripePaymentMethodId": "pm_1T0fCABBsii2ingrjCzElYlu"
+    },
+    {
+      "id": "120005",
+      "firstName": "Test",
+      "lastName": "Testery",
+      "phone": "3238074661",
+      "status": "collected",
+      "stripeCustomerId": "NULL",
+      "stripePaymentMethodId": "NULL"
+    },
+    {
+      "id": "120004",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "phone": "(323) 555-0200",
+      "status": "new",
+      "stripeCustomerId": "NULL",
+      "stripePaymentMethodId": "NULL"
+    },
+    {
+      "id": "120003",
+      "firstName": "John",
+      "lastName": "Doe",
+      "phone": "(310) 555-0100",
+      "status": "new",
+      "stripeCustomerId": "NULL",
+      "stripePaymentMethodId": "NULL"
+    },
+    {
+      "id": "120002",
+      "firstName": "Test",
+      "lastName": "User",
+      "phone": "3235551234",
+      "status": "collected",
+      "stripeCustomerId": "NULL",
+      "stripePaymentMethodId": "NULL"
+    },
+    {
+      "id": "120001",
+      "firstName": "John",
+      "lastName": "Doe",
+      "phone": "3235551234",
+      "status": "new",
+      "stripeCustomerId": "NULL",
+      "stripePaymentMethodId": "NULL"
+    },
+    {
+      "id": "90002",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "phone": "(323) 555-0200",
+      "status": "new",
+      "stripeCustomerId": "NULL",
+      "stripePaymentMethodId": "NULL"
+    },
+    {
+      "id": "90001",
+      "firstName": "John",
+      "lastName": "Doe",
+      "phone": "(310) 555-0100",
+      "status": "new",
+      "stripeCustomerId": "NULL",
+      "stripePaymentMethodId": "NULL"
+    },
+    {
+      "id": "60008",
+      "firstName": "Adam",
+      "lastName": "Test",
+      "phone": "(323) 807-4661",
+      "status": "collected",
+      "stripeCustomerId": "NULL",
+      "stripePaymentMethodId": "NULL"
+    },
+    {
+      "id": "60007",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "phone": "(323) 555-0200",
+      "status": "new",
+      "stripeCustomerId": "NULL",
+      "stripePaymentMethodId": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tfirstName\tlastName\tphone\tstatus\tstripeCustomerId\tstripePaymentMethodId\n120006\tTestey\tMcTesterson\t3238074661\tnew\tcus_TycQiySTSOwyKz\tpm_1T0fCABBsii2ingrjCzElYlu\n120005\tTest\tTestery\t3238074661\tcollected\tNULL\tNULL\n120004\tJane\tSmith\t(323) 555-0200\tnew\tNULL\tNULL\n120003\tJohn\tDoe\t(310) 555-0100\tnew\tNULL\tNULL\n120002\tTest\tUser\t3235551234\tcollected\tNULL\tNULL\n120001\tJohn\tDoe\t3235551234\tnew\tNULL\tNULL\n90002\tJane\tSmith\t(323) 555-0200\tnew\tNULL\tNULL\n90001\tJohn\tDoe\t(310) 555-0100\tnew\tNULL\tNULL\n60008\tAdam\tTest\t(323) 807-4661\tcollected\tNULL\tNULL\n60007\tJane\tSmith\t(323) 555-0200\tnew\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 181
+}

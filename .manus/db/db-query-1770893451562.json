@@ -1,0 +1,50 @@
+{
+  "query": "SELECT id, status FROM orders;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.a19e12a5afac --database ENMKipk9TB4jvVA6wqwLd8 --execute SELECT id, status FROM orders;",
+  "rows": [
+    {
+      "id": "1",
+      "status": "pending"
+    },
+    {
+      "id": "2",
+      "status": "pending"
+    },
+    {
+      "id": "3",
+      "status": "pending"
+    },
+    {
+      "id": "4",
+      "status": "pending"
+    },
+    {
+      "id": "5",
+      "status": "pending"
+    },
+    {
+      "id": "6",
+      "status": "pending"
+    },
+    {
+      "id": "7",
+      "status": "pending"
+    },
+    {
+      "id": "8",
+      "status": "pending"
+    },
+    {
+      "id": "9",
+      "status": "pending"
+    },
+    {
+      "id": "30001",
+      "status": "pending"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tstatus\n1\tpending\n2\tpending\n3\tpending\n4\tpending\n5\tpending\n6\tpending\n7\tpending\n8\tpending\n9\tpending\n30001\tpending\n",
+  "stderr": "",
+  "execution_time_ms": 348
+}

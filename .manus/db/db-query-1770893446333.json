@@ -1,0 +1,13 @@
+{
+  "query": "SELECT DISTINCT status FROM orders;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.a19e12a5afac --database ENMKipk9TB4jvVA6wqwLd8 --execute SELECT DISTINCT status FROM orders;",
+  "rows": [
+    {
+      "status": "pending"
+    }
+  ],
+  "messages": [],
+  "stdout": "status\npending\n",
+  "stderr": "",
+  "execution_time_ms": 363
+}

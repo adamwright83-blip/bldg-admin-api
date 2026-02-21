@@ -1,0 +1,8 @@
+{
+  "query": "UPDATE orders SET status = 'new' WHERE status = 'pending'; UPDATE orders SET status = 'collected' WHERE status = 'confirmed'; UPDATE orders SET status = 'collected' WHERE status = 'picked_up'; UPDATE orders SET status = 'delivered' WHERE status = 'cancelled';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.a19e12a5afac --database ENMKipk9TB4jvVA6wqwLd8 --execute UPDATE orders SET status = 'new' WHERE status = 'pending'; UPDATE orders SET status = 'collected' WHERE status = 'confirmed'; UPDATE orders SET status = 'collected' WHERE status = 'picked_up'; UPDATE orders SET status = 'delivered' WHERE status = 'cancelled';",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1265 (01000) at line 1: Data truncated for column '%s' at row %d"
+  ]
+}

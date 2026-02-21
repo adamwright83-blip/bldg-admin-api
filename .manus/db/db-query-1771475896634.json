@@ -1,0 +1,15 @@
+{
+  "query": "SELECT id, firstName, pickupDate FROM orders WHERE id = 630013;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.a19e12a5afac --database ENMKipk9TB4jvVA6wqwLd8 --execute SELECT id, firstName, pickupDate FROM orders WHERE id = 630013;",
+  "rows": [
+    {
+      "id": "630013",
+      "firstName": "Test2",
+      "pickupDate": "2026-02-22"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tfirstName\tpickupDate\n630013\tTest2\t2026-02-22\n",
+  "stderr": "",
+  "execution_time_ms": 56
+}

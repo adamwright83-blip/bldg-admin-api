@@ -1,0 +1,103 @@
+{
+  "query": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'orders' ORDER BY ORDINAL_POSITION;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.a19e12a5afac --database ENMKipk9TB4jvVA6wqwLd8 --execute SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'orders' ORDER BY ORDINAL_POSITION;",
+  "rows": [
+    {
+      "COLUMN_NAME": "id"
+    },
+    {
+      "COLUMN_NAME": "serviceType"
+    },
+    {
+      "COLUMN_NAME": "pickupDate"
+    },
+    {
+      "COLUMN_NAME": "pickupTimeWindow"
+    },
+    {
+      "COLUMN_NAME": "address"
+    },
+    {
+      "COLUMN_NAME": "unit"
+    },
+    {
+      "COLUMN_NAME": "specialInstructions"
+    },
+    {
+      "COLUMN_NAME": "firstName"
+    },
+    {
+      "COLUMN_NAME": "lastName"
+    },
+    {
+      "COLUMN_NAME": "phone"
+    },
+    {
+      "COLUMN_NAME": "email"
+    },
+    {
+      "COLUMN_NAME": "stripeCustomerId"
+    },
+    {
+      "COLUMN_NAME": "stripePaymentMethodId"
+    },
+    {
+      "COLUMN_NAME": "status"
+    },
+    {
+      "COLUMN_NAME": "createdAt"
+    },
+    {
+      "COLUMN_NAME": "updatedAt"
+    },
+    {
+      "COLUMN_NAME": "deliveryDate"
+    },
+    {
+      "COLUMN_NAME": "deliveryTimeWindow"
+    },
+    {
+      "COLUMN_NAME": "stripePaymentIntentId"
+    },
+    {
+      "COLUMN_NAME": "weightLbs"
+    },
+    {
+      "COLUMN_NAME": "bagCount"
+    },
+    {
+      "COLUMN_NAME": "garmentCount"
+    },
+    {
+      "COLUMN_NAME": "subtotal"
+    },
+    {
+      "COLUMN_NAME": "discountPercent"
+    },
+    {
+      "COLUMN_NAME": "total"
+    },
+    {
+      "COLUMN_NAME": "upchargesJson"
+    },
+    {
+      "COLUMN_NAME": "drycleanItemsJson"
+    },
+    {
+      "COLUMN_NAME": "paid"
+    },
+    {
+      "COLUMN_NAME": "isFirstPaidOrder"
+    },
+    {
+      "COLUMN_NAME": "portalJwt"
+    },
+    {
+      "COLUMN_NAME": "tenantId"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\nid\nserviceType\npickupDate\npickupTimeWindow\naddress\nunit\nspecialInstructions\nfirstName\nlastName\nphone\nemail\nstripeCustomerId\nstripePaymentMethodId\nstatus\ncreatedAt\nupdatedAt\ndeliveryDate\ndeliveryTimeWindow\nstripePaymentIntentId\nweightLbs\nbagCount\ngarmentCount\nsubtotal\ndiscountPercent\ntotal\nupchargesJson\ndrycleanItemsJson\npaid\nisFirstPaidOrder\nportalJwt\ntenantId\n",
+  "stderr": "",
+  "execution_time_ms": 58
+}

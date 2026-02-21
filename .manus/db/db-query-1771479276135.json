@@ -1,0 +1,210 @@
+{
+  "query": "SELECT id, firstName, lastName, phone, pickupDate, status, serviceType, createdAt FROM orders ORDER BY id DESC LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.a19e12a5afac --database ENMKipk9TB4jvVA6wqwLd8 --execute SELECT id, firstName, lastName, phone, pickupDate, status, serviceType, createdAt FROM orders ORDER BY id DESC LIMIT 20;",
+  "rows": [
+    {
+      "id": "630017",
+      "firstName": "Jason",
+      "lastName": "Schwartzman",
+      "phone": "+11126462828",
+      "pickupDate": "2027-02-19",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-19 05:26:30"
+    },
+    {
+      "id": "630016",
+      "firstName": "Miles",
+      "lastName": "Teller",
+      "phone": "+18888889999",
+      "pickupDate": "2026-02-23",
+      "status": "collected",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-19 05:00:24"
+    },
+    {
+      "id": "630015",
+      "firstName": "Test",
+      "lastName": "Resident",
+      "phone": "+1guest1771476981160",
+      "pickupDate": "2027-02-19",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-19 04:57:00"
+    },
+    {
+      "id": "630011",
+      "firstName": "Paul",
+      "lastName": "Reubens",
+      "phone": "+19909909999",
+      "pickupDate": "2027-02-19",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-19 04:32:02"
+    },
+    {
+      "id": "630010",
+      "firstName": "Test",
+      "lastName": "Resident",
+      "phone": "+1guest1771475337570",
+      "pickupDate": "2027-02-19",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-19 04:29:23"
+    },
+    {
+      "id": "630009",
+      "firstName": "Test",
+      "lastName": "Resident",
+      "phone": "+1guest1771475093020",
+      "pickupDate": "2027-02-19",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-19 04:25:20"
+    },
+    {
+      "id": "630008",
+      "firstName": "Bill",
+      "lastName": "Murray",
+      "phone": "+17777777777",
+      "pickupDate": "2027-02-19",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-19 04:16:29"
+    },
+    {
+      "id": "630006",
+      "firstName": "Test",
+      "lastName": "Resident",
+      "phone": "+1guest1771473199074",
+      "pickupDate": "2027-02-19",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-19 03:54:08"
+    },
+    {
+      "id": "630003",
+      "firstName": "Test",
+      "lastName": "Resident",
+      "phone": "+1guest1771465121620",
+      "pickupDate": "2027-02-19",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-19 01:39:19"
+    },
+    {
+      "id": "630002",
+      "firstName": "Test",
+      "lastName": "Resident",
+      "phone": "+1guest1771464518289",
+      "pickupDate": "2027-02-19",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-19 01:29:31"
+    },
+    {
+      "id": "630001",
+      "firstName": "Test",
+      "lastName": "Resident",
+      "phone": "+1guest1771449058025",
+      "pickupDate": "2027-02-19",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-19 01:15:10"
+    },
+    {
+      "id": "540001",
+      "firstName": "Test",
+      "lastName": "Resident",
+      "phone": "+1guest1771398160318",
+      "pickupDate": "2027-02-18",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-18 07:03:23"
+    },
+    {
+      "id": "510009",
+      "firstName": "Test",
+      "lastName": "Resident",
+      "phone": "+1guest1771385474548",
+      "pickupDate": "2027-02-18",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-18 03:31:18"
+    },
+    {
+      "id": "510008",
+      "firstName": "Test",
+      "lastName": "Resident",
+      "phone": "+13235559999",
+      "pickupDate": "2027-02-18",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-18 03:30:15"
+    },
+    {
+      "id": "510007",
+      "firstName": "Test",
+      "lastName": "Resident",
+      "phone": "+1guest1771383901137",
+      "pickupDate": "2027-02-18",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-18 03:05:11"
+    },
+    {
+      "id": "510006",
+      "firstName": "Marcus",
+      "lastName": "you abot",
+      "phone": "+",
+      "pickupDate": "2027-02-18",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-18 02:48:23"
+    },
+    {
+      "id": "510003",
+      "firstName": "Test",
+      "lastName": "Resident",
+      "phone": "+1guest1771378302867",
+      "pickupDate": "2027-02-18",
+      "status": "new",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-18 01:36:42"
+    },
+    {
+      "id": "210013",
+      "firstName": "Adam",
+      "lastName": "Wright",
+      "phone": "3238074661",
+      "pickupDate": "2026-02-16",
+      "status": "delivered",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-15 11:13:35"
+    },
+    {
+      "id": "210007",
+      "firstName": "ABBOT ",
+      "lastName": "KINNEY",
+      "phone": "3238074661",
+      "pickupDate": "2026-02-17",
+      "status": "delivered",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-15 11:01:49"
+    },
+    {
+      "id": "150001",
+      "firstName": "SMS",
+      "lastName": "Test",
+      "phone": "3238074661",
+      "pickupDate": "2026-02-14",
+      "status": "delivered",
+      "serviceType": "wash_fold",
+      "createdAt": "2026-02-14 10:09:35"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tfirstName\tlastName\tphone\tpickupDate\tstatus\tserviceType\tcreatedAt\n630017\tJason\tSchwartzman\t+11126462828\t2027-02-19\tnew\twash_fold\t2026-02-19 05:26:30\n630016\tMiles\tTeller\t+18888889999\t2026-02-23\tcollected\twash_fold\t2026-02-19 05:00:24\n630015\tTest\tResident\t+1guest1771476981160\t2027-02-19\tnew\twash_fold\t2026-02-19 04:57:00\n630011\tPaul\tReubens\t+19909909999\t2027-02-19\tnew\twash_fold\t2026-02-19 04:32:02\n630010\tTest\tResident\t+1guest1771475337570\t2027-02-19\tnew\twash_fold\t2026-02-19 04:29:23\n630009\tTest\tResident\t+1guest1771475093020\t2027-02-19\tnew\twash_fold\t2026-02-19 04:25:20\n630008\tBill\tMurray\t+17777777777\t2027-02-19\tnew\twash_fold\t2026-02-19 04:16:29\n630006\tTest\tResident\t+1guest1771473199074\t2027-02-19\tnew\twash_fold\t2026-02-19 03:54:08\n630003\tTest\tResident\t+1guest1771465121620\t2027-02-19\tnew\twash_fold\t2026-02-19 01:39:19\n630002\tTest\tResident\t+1guest1771464518289\t2027-02-19\tnew\twash_fold\t2026-02-19 01:29:31\n630001\tTest\tResident\t+1guest1771449058025\t2027-02-19\tnew\twash_fold\t2026-02-19 01:15:10\n540001\tTest\tResident\t+1guest1771398160318\t2027-02-18\tnew\twash_fold\t2026-02-18 07:03:23\n510009\tTest\tResident\t+1guest1771385474548\t2027-02-18\tnew\twash_fold\t2026-02-18 03:31:18\n510008\tTest\tResident\t+13235559999\t2027-02-18\tnew\twash_fold\t2026-02-18 03:30:15\n510007\tTest\tResident\t+1guest1771383901137\t2027-02-18\tnew\twash_fold\t2026-02-18 03:05:11\n510006\tMarcus\tyou abot\t+\t2027-02-18\tnew\twash_fold\t2026-02-18 02:48:23\n510003\tTest\tResident\t+1guest1771378302867\t2027-02-18\tnew\twash_fold\t2026-02-18 01:36:42\n210013\tAdam\tWright\t3238074661\t2026-02-16\tdelivered\twash_fold\t2026-02-15 11:13:35\n210007\tABBOT \tKINNEY\t3238074661\t2026-02-17\tdelivered\twash_fold\t2026-02-15 11:01:49\n150001\tSMS\tTest\t3238074661\t2026-02-14\tdelivered\twash_fold\t2026-02-14 10:09:35\n",
+  "stderr": "",
+  "execution_time_ms": 59
+}

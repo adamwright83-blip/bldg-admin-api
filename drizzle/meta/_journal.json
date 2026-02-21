@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1770627573225,
+      "tag": "0000_military_pretty_boy",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1770627687585,
+      "tag": "0001_oval_lilith",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1770893428261,
+      "tag": "0002_heavy_demogoblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1770969702640,
+      "tag": "0003_lovely_bloodaxe",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1771529797519,
+      "tag": "0004_optimal_mordo",
+      "breakpoints": true
+    }
+  ]
+}
