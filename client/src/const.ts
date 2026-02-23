@@ -1,17 +1,54 @@
 export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
+const getAppHomeUrl = () => {
+  if (typeof window === "undefined") return "/";
+  return `${window.location.origin}/`;
+};
+
+const isAbsoluteHttpUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
 // Generate login URL at runtime so redirect URI reflects the current origin.
+// This must never throw; admin/driver should fail safe if auth env is missing.
 export const getLoginUrl = () => {
+  if (typeof window === "undefined") return "/";
+
   const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
   const appId = import.meta.env.VITE_APP_ID;
   const redirectUri = `${window.location.origin}/api/oauth/callback`;
-  const state = btoa(redirectUri);
+  const fallback = getAppHomeUrl();
 
-  const url = new URL(`${oauthPortalUrl}/app-auth`);
-  url.searchParams.set("appId", appId);
-  url.searchParams.set("redirectUri", redirectUri);
-  url.searchParams.set("state", state);
-  url.searchParams.set("type", "signIn");
+  if (!oauthPortalUrl || !appId || !isAbsoluteHttpUrl(redirectUri)) {
+    console.warn("[Auth] Login URL fallback", {
+      oauthPortalUrl,
+      appId,
+      redirectUri,
+      reason: "missing_or_invalid_inputs",
+    });
+    return fallback;
+  }
 
-  return url.toString();
+  try {
+    const url = new URL("/app-auth", oauthPortalUrl);
+    url.searchParams.set("appId", appId);
+    url.searchParams.set("redirectUri", redirectUri);
+    url.searchParams.set("state", btoa(redirectUri));
+    url.searchParams.set("type", "signIn");
+    return url.toString();
+  } catch (error) {
+    console.warn("[Auth] Login URL fallback", {
+      oauthPortalUrl,
+      appId,
+      redirectUri,
+      reason: "url_construction_failed",
+      error: String(error),
+    });
+    return fallback;
+  }
 };
