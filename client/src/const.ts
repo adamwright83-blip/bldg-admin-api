@@ -52,3 +52,23 @@ export const getLoginUrl = () => {
     return fallback;
   }
 };
+
+export const canRedirectToLoginUrl = (targetUrl: string) => {
+  if (typeof window === "undefined") return false;
+  if (!targetUrl) return false;
+  try {
+    const target = new URL(targetUrl, window.location.origin);
+    const current = new URL(window.location.href);
+    // Prevent reload loops (same page / same root fallback).
+    if (target.href === current.href) return false;
+    if (
+      target.origin === current.origin &&
+      (target.pathname === "/" || target.pathname === current.pathname)
+    ) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
