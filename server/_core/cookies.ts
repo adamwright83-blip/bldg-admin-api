@@ -39,10 +39,12 @@ export function getSessionCookieOptions(
   //       ? hostname
   //       : undefined;
 
+  const isLocal = LOCAL_HOSTS.has(req.hostname);
+
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
-    secure: isSecureRequest(req),
+    sameSite: isLocal ? "lax" : "none",
+    secure: isLocal ? false : true,
   };
 }
