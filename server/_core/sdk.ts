@@ -171,8 +171,8 @@ class SDKServer {
     return this.signSession(
       {
         openId,
-        appId: ENV.appId,
-        name: options.name || "",
+        appId: ENV.appId || "bldg-admin",
+        name: options.name || "admin",
       },
       options
     );
