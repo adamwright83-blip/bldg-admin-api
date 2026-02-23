@@ -36,25 +36,17 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  // CORS — must be first, before body parsers
-  const allowedOrigins = new Set([
-    "https://admin.bldg.chat",
-    "https://driver.bldg.chat",
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:3002",
-    "http://localhost:3003",
-    "http://localhost:3004",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:3001",
-    "http://127.0.0.1:3002",
-    "http://127.0.0.1:3003",
-    "http://127.0.0.1:3004",
-  ]);
+  // CORS — must be first, before body parsers.
+  // Allow any *.bldg.chat origin plus localhost ports for dev.
   const corsOptions: cors.CorsOptions = {
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.has(origin)) return callback(null, true);
-      callback(new Error(`Origin not allowed: ${origin}`));
+      if (!origin) return callback(null, true); // server-to-server
+      const ok =
+        origin.endsWith(".bldg.chat") ||
+        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+      if (ok) return callback(null, true);
+      console.warn(`[CORS] Blocked origin: ${origin}`);
+      callback(new Error(`CORS: blocked origin ${origin}`));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
