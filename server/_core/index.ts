@@ -1,4 +1,5 @@
 import "dotenv/config";
+import cors from "cors";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
@@ -34,6 +35,34 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+
+  // CORS — must be first, before body parsers
+  const allowedOrigins = new Set([
+    "https://admin.bldg.chat",
+    "https://driver.bldg.chat",
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+    "http://localhost:3003",
+    "http://localhost:3004",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "http://127.0.0.1:3002",
+    "http://127.0.0.1:3003",
+    "http://127.0.0.1:3004",
+  ]);
+  const corsOptions: cors.CorsOptions = {
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+      callback(new Error(`Origin not allowed: ${origin}`));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-trpc-source"],
+  };
+  app.use(cors(corsOptions));
+  app.options("*", cors(corsOptions));
+
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));

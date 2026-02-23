@@ -17,7 +17,8 @@ export function LoginForm({ role = "admin", onSuccess }: Props) {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
+      const apiBase = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
+      const res = await fetch(`${apiBase}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

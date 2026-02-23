@@ -41,10 +41,14 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
+// Use VITE_API_URL when set (Vercel deploy pointing to Railway backend),
+// otherwise fall back to same-origin (Railway serving everything directly).
+const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
+
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
-      url: "/api/trpc",
+      url: `${API_BASE}/api/trpc`,
       transformer: superjson,
       fetch(input, init) {
         return globalThis.fetch(input, {
