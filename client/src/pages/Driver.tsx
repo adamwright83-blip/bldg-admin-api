@@ -1,63 +1,28 @@
-import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { Button } from "@/components/ui/button";
-import { Loader2, ChevronLeft, ChevronRight, MapPin, Phone, MessageSquare, Package } from "lucide-react";
+import { Loader2, MapPin, Phone, MessageSquare, Package } from "lucide-react";
 import type { Order } from "@shared/types";
 import { matchBuilding } from "@shared/buildings";
 
-function getWeekDates(offset: number) {
-  const today = new Date();
-  today.setDate(today.getDate() + offset * 7);
-  const day = today.getDay();
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - ((day + 6) % 7));
-  const dates: { label: string; shortLabel: string; value: string; isToday: boolean }[] = [];
-  const todayStr = new Date().toISOString().split("T")[0];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    const val = d.toISOString().split("T")[0];
-    dates.push({
-      label: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
-      shortLabel: d.toLocaleDateString("en-US", { weekday: "short", day: "numeric" }),
-      value: val,
-      isToday: val === todayStr,
-    });
-  }
-  return dates;
-}
-
 export default function Driver() {
   const { loading: authLoading, isAuthenticated } = useAuth();
-  const [weekOffset, setWeekOffset] = useState(0);
-  const dates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
-  const todayStr = new Date().toISOString().split("T")[0];
-  const [selectedDate, setSelectedDate] = useState(todayStr);
-
-  const { data: pickups, refetch: refetchPickups } = trpc.admin.listByDate.useQuery({
-    date: selectedDate,
-    status: "new",
-    dateField: "pickupDate",
-  });
-
-  const { data: deliveries, refetch: refetchDeliveries } = trpc.admin.listByDate.useQuery({
-    date: selectedDate,
-    status: "ready",
-    dateField: "deliveryDate",
-  });
+  const acceptedQuery = trpc.admin.listByStatus.useQuery({ status: "collected" });
+  const inProgressQuery = trpc.admin.listByStatus.useQuery({ status: "processing" });
 
   const updateStatus = trpc.admin.updateStatus.useMutation();
 
-  const handleCollect = async (orderId: number) => {
-    await updateStatus.mutateAsync({ orderId, status: "collected" });
-    refetchPickups();
+  const handleStartJob = async (orderId: number) => {
+    await updateStatus.mutateAsync({ orderId, status: "processing" });
+    acceptedQuery.refetch();
+    inProgressQuery.refetch();
   };
 
-  const handleDeliver = async (orderId: number) => {
+  const handleCompleteJob = async (orderId: number) => {
     await updateStatus.mutateAsync({ orderId, status: "delivered" });
-    refetchDeliveries();
+    acceptedQuery.refetch();
+    inProgressQuery.refetch();
   };
 
   if (authLoading) {
@@ -80,50 +45,27 @@ export default function Driver() {
         <p className="text-sm font-semibold tracking-widest uppercase text-center">Driver</p>
       </div>
 
-      {/* Day selector */}
-      <div className="sticky top-[44px] z-40 bg-white border-b border-black/10 px-2 py-2">
-        <div className="flex items-center gap-1 overflow-x-auto">
-          <button onClick={() => setWeekOffset(weekOffset - 1)} className="p-1.5 hover:bg-black/5 shrink-0">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          {dates.map((d) => (
-            <button
-              key={d.value}
-              onClick={() => setSelectedDate(d.value)}
-              className={`px-2.5 py-2 text-xs whitespace-nowrap border transition-colors shrink-0 ${
-                selectedDate === d.value
-                  ? "bg-black text-white border-black"
-                  : d.isToday
-                  ? "bg-white text-black border-black/40 font-medium"
-                  : "bg-white text-black/50 border-black/10"
-              }`}
-            >
-              {d.shortLabel}
-            </button>
-          ))}
-          <button onClick={() => setWeekOffset(weekOffset + 1)} className="p-1.5 hover:bg-black/5 shrink-0">
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
       {/* Content */}
       <div className="px-4 py-4 max-w-lg mx-auto">
-        {/* Pickups section */}
+        {/* Accepted section */}
         <div className="mb-8">
           <h3 className="text-xs font-semibold text-black/50 uppercase tracking-wider mb-3">
-            Pickups ({pickups?.length || 0})
+            Accepted ({acceptedQuery.data?.length || 0})
           </h3>
-          {!pickups?.length ? (
-            <p className="text-sm text-black/30 py-4 text-center">No pickups.</p>
+          {acceptedQuery.isLoading ? (
+            <div className="flex justify-center py-4">
+              <Loader2 className="animate-spin w-5 h-5 text-black/30" />
+            </div>
+          ) : !acceptedQuery.data?.length ? (
+            <p className="text-sm text-black/30 py-4 text-center">No accepted jobs.</p>
           ) : (
             <div className="space-y-3">
-              {pickups.map((o) => (
+              {acceptedQuery.data.map((o) => (
                 <DriverStopCard
                   key={o.id}
                   order={o}
-                  action="Collected"
-                  onAction={() => handleCollect(o.id)}
+                  action="Start In Progress"
+                  onAction={() => handleStartJob(o.id)}
                   isPending={updateStatus.isPending}
                 />
               ))}
@@ -131,21 +73,25 @@ export default function Driver() {
           )}
         </div>
 
-        {/* Deliveries section */}
+        {/* In Progress section */}
         <div>
           <h3 className="text-xs font-semibold text-black/50 uppercase tracking-wider mb-3">
-            Deliveries ({deliveries?.length || 0})
+            In Progress ({inProgressQuery.data?.length || 0})
           </h3>
-          {!deliveries?.length ? (
-            <p className="text-sm text-black/30 py-4 text-center">No deliveries.</p>
+          {inProgressQuery.isLoading ? (
+            <div className="flex justify-center py-4">
+              <Loader2 className="animate-spin w-5 h-5 text-black/30" />
+            </div>
+          ) : !inProgressQuery.data?.length ? (
+            <p className="text-sm text-black/30 py-4 text-center">No in-progress jobs.</p>
           ) : (
             <div className="space-y-3">
-              {deliveries.map((o) => (
+              {inProgressQuery.data.map((o) => (
                 <DriverStopCard
                   key={o.id}
                   order={o}
-                  action="Delivered"
-                  onAction={() => handleDeliver(o.id)}
+                  action="Mark Completed"
+                  onAction={() => handleCompleteJob(o.id)}
                   isPending={updateStatus.isPending}
                   showBags
                 />

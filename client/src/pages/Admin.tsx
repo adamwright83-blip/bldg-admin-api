@@ -152,6 +152,8 @@ function NewOrderTab() {
   );
 
   const createOrder = trpc.admin.createOrder.useMutation();
+  const queueQuery = trpc.admin.listByStatus.useQuery({ status: "new" });
+  const dispatchMutation = trpc.admin.updateStatus.useMutation();
 
   // Refs for autofill detection — browser autofill bypasses React onChange
   const phoneRef = useRef<HTMLInputElement>(null);
@@ -237,6 +239,12 @@ function NewOrderTab() {
       stripePaymentMethodId: stripePaymentMethodId || undefined,
     });
     setSubmitted(true);
+    queueQuery.refetch();
+  };
+
+  const handleDispatch = async (orderId: number) => {
+    await dispatchMutation.mutateAsync({ orderId, status: "collected" });
+    queueQuery.refetch();
   };
 
   if (submitted) {
@@ -381,6 +389,50 @@ function NewOrderTab() {
         {createOrder.isPending ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : null}
         Create Order
       </Button>
+
+      <div className="mt-10">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold">Dispatch Queue</h3>
+          <span className="text-xs text-black/40">
+            {queueQuery.data?.length || 0} pending
+          </span>
+        </div>
+        {!queueQuery.data?.length ? (
+          <p className="text-sm text-black/40 border border-black/10 p-3">
+            No unassigned requests in queue.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {queueQuery.data.map((order) => (
+              <div
+                key={order.id}
+                className="border border-black/10 p-3 flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {order.firstName} {order.lastName}
+                  </p>
+                  <p className="text-xs text-black/50 truncate">
+                    Unit {order.unit || "—"} · {order.pickupDate} · {order.pickupTimeWindow}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-black text-black text-xs shrink-0"
+                  onClick={() => handleDispatch(order.id)}
+                  disabled={dispatchMutation.isPending}
+                >
+                  {dispatchMutation.isPending ? (
+                    <Loader2 className="animate-spin w-3.5 h-3.5 mr-1" />
+                  ) : null}
+                  Dispatch
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
