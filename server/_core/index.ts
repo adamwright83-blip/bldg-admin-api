@@ -36,17 +36,22 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
+  console.log("[Boot] v4 — CORS open for *.bldg.chat and localhost");
+
   // CORS — must be first, before body parsers.
-  // Allow any *.bldg.chat origin plus localhost ports for dev.
+  // Allow any *.bldg.chat origin plus localhost for dev.
   const corsOptions: cors.CorsOptions = {
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true); // server-to-server
+      // No origin = server-to-server, always allow.
+      if (!origin) return callback(null, true);
       const ok =
+        origin === "https://admin.bldg.chat" ||
+        origin === "https://driver.bldg.chat" ||
         origin.endsWith(".bldg.chat") ||
         /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
       if (ok) return callback(null, true);
-      console.warn(`[CORS] Blocked origin: ${origin}`);
-      callback(new Error(`CORS: blocked origin ${origin}`));
+      console.warn(`[CORS v4] Blocked: ${origin}`);
+      callback(null, false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
