@@ -8,7 +8,7 @@ import { matchBuilding } from "@shared/buildings";
 
 export default function Driver() {
   const { loading: authLoading, isAuthenticated } = useAuth();
-  const acceptedQuery = trpc.admin.listByStatus.useQuery({ status: "collected" });
+  const acceptedQuery = trpc.admin.listByStatus.useQuery({ status: "new" });
   const inProgressQuery = trpc.admin.listByStatus.useQuery({ status: "processing" });
 
   const updateStatus = trpc.admin.updateStatus.useMutation();
