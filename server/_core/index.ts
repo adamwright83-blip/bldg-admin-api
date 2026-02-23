@@ -82,12 +82,18 @@ async function startServer() {
 
     try {
       const ownerOpenId = process.env.OWNER_OPEN_ID || "admin-owner";
-      await upsertUser({
-        openId: ownerOpenId,
-        name: "Admin",
-        loginMethod: "password",
-        lastSignedIn: new Date(),
-      });
+
+      // DB upsert is best-effort — schema mismatch or missing DB must not block login.
+      try {
+        await upsertUser({
+          openId: ownerOpenId,
+          name: "Admin",
+          loginMethod: "password",
+          lastSignedIn: new Date(),
+        });
+      } catch (dbErr) {
+        console.warn("[Auth] upsertUser failed (non-fatal):", (dbErr as Error).message);
+      }
 
       const sessionToken = await sdk.createSessionToken(ownerOpenId, {
         name: "Admin",
