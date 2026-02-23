@@ -6,23 +6,49 @@ import { Loader2, MapPin, Phone, MessageSquare, Package } from "lucide-react";
 import type { Order } from "@shared/types";
 import { matchBuilding } from "@shared/buildings";
 
+/** Returns the delivery date string: pickupDate + 1 calendar day */
+function computeDeliveryDate(pickupDate: string): string {
+  const [y, m, d] = pickupDate.split("-").map(Number);
+  const next = new Date(y, m - 1, d + 1);
+  return (
+    next.getFullYear() +
+    "-" +
+    String(next.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(next.getDate()).padStart(2, "0")
+  );
+}
+
+/** Format a YYYY-MM-DD string as "Mon Feb 24" */
+function formatPickupDate(dateStr: string): string {
+  if (!dateStr) return "—";
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export default function Driver() {
   const { loading: authLoading, isAuthenticated } = useAuth();
-  const acceptedQuery = trpc.admin.listByStatus.useQuery({ status: "new" });
-  const inProgressQuery = trpc.admin.listByStatus.useQuery({ status: "processing" });
+
+  // PICKUPS: orders placed by residents, ready to be picked up
+  const pickupQuery = trpc.admin.listByStatus.useQuery({ status: "new" });
+
+  // DELIVERIES: orders processed by admin, ready to be delivered back
+  const deliveryQuery = trpc.admin.listByStatus.useQuery({ status: "ready" });
 
   const updateStatus = trpc.admin.updateStatus.useMutation();
 
-  const handleStartJob = async (orderId: number) => {
-    await updateStatus.mutateAsync({ orderId, status: "processing" });
-    acceptedQuery.refetch();
-    inProgressQuery.refetch();
+  const handlePickedUp = async (orderId: number) => {
+    await updateStatus.mutateAsync({ orderId, status: "collected" });
+    pickupQuery.refetch();
   };
 
-  const handleCompleteJob = async (orderId: number) => {
+  const handleDelivered = async (orderId: number) => {
     await updateStatus.mutateAsync({ orderId, status: "delivered" });
-    acceptedQuery.refetch();
-    inProgressQuery.refetch();
+    deliveryQuery.refetch();
   };
 
   if (authLoading) {
@@ -46,25 +72,29 @@ export default function Driver() {
 
       {/* Content */}
       <div className="px-4 py-4 max-w-lg mx-auto">
-        {/* Accepted section */}
+
+        {/* PICKUPS section */}
         <div className="mb-8">
           <h3 className="text-xs font-semibold text-black/50 uppercase tracking-wider mb-3">
-            Accepted ({acceptedQuery.data?.length || 0})
+            Pickups ({pickupQuery.data?.length || 0})
           </h3>
-          {acceptedQuery.isLoading ? (
+          {pickupQuery.isLoading ? (
             <div className="flex justify-center py-4">
               <Loader2 className="animate-spin w-5 h-5 text-black/30" />
             </div>
-          ) : !acceptedQuery.data?.length ? (
-            <p className="text-sm text-black/30 py-4 text-center">No accepted jobs.</p>
+          ) : !pickupQuery.data?.length ? (
+            <p className="text-sm text-black/30 py-4 text-center">No pickups scheduled.</p>
           ) : (
             <div className="space-y-3">
-              {acceptedQuery.data.map((o) => (
+              {pickupQuery.data.map((o) => (
                 <DriverStopCard
                   key={o.id}
                   order={o}
-                  action="Start In Progress"
-                  onAction={() => handleStartJob(o.id)}
+                  dateLabel={formatPickupDate(o.pickupDate)}
+                  datePrefix="Pickup"
+                  timeWindow={o.pickupTimeWindow}
+                  actionLabel="Mark Picked Up"
+                  onAction={() => handlePickedUp(o.id)}
                   isPending={updateStatus.isPending}
                 />
               ))}
@@ -72,25 +102,28 @@ export default function Driver() {
           )}
         </div>
 
-        {/* In Progress section */}
+        {/* DELIVERIES section */}
         <div>
           <h3 className="text-xs font-semibold text-black/50 uppercase tracking-wider mb-3">
-            In Progress ({inProgressQuery.data?.length || 0})
+            Deliveries ({deliveryQuery.data?.length || 0})
           </h3>
-          {inProgressQuery.isLoading ? (
+          {deliveryQuery.isLoading ? (
             <div className="flex justify-center py-4">
               <Loader2 className="animate-spin w-5 h-5 text-black/30" />
             </div>
-          ) : !inProgressQuery.data?.length ? (
-            <p className="text-sm text-black/30 py-4 text-center">No in-progress jobs.</p>
+          ) : !deliveryQuery.data?.length ? (
+            <p className="text-sm text-black/30 py-4 text-center">No deliveries scheduled.</p>
           ) : (
             <div className="space-y-3">
-              {inProgressQuery.data.map((o) => (
+              {deliveryQuery.data.map((o) => (
                 <DriverStopCard
                   key={o.id}
                   order={o}
-                  action="Mark Completed"
-                  onAction={() => handleCompleteJob(o.id)}
+                  dateLabel={formatPickupDate(computeDeliveryDate(o.pickupDate))}
+                  datePrefix="Delivery"
+                  timeWindow={o.pickupTimeWindow}
+                  actionLabel="Mark Delivered"
+                  onAction={() => handleDelivered(o.id)}
                   isPending={updateStatus.isPending}
                   showBags
                 />
@@ -98,6 +131,7 @@ export default function Driver() {
             </div>
           )}
         </div>
+
       </div>
     </div>
   );
@@ -106,13 +140,19 @@ export default function Driver() {
 /* ===== DRIVER STOP CARD ===== */
 function DriverStopCard({
   order,
-  action,
+  dateLabel,
+  datePrefix,
+  timeWindow,
+  actionLabel,
   onAction,
   isPending,
   showBags,
 }: {
   order: Order;
-  action: string;
+  dateLabel: string;
+  datePrefix: "Pickup" | "Delivery";
+  timeWindow: string;
+  actionLabel: string;
   onAction: () => void;
   isPending: boolean;
   showBags?: boolean;
@@ -132,13 +172,23 @@ function DriverStopCard({
 
   return (
     <div className="border border-black/10 p-4">
+      {/* Date/time banner */}
+      <div className="flex items-center justify-between mb-3 pb-2 border-b border-black/5">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
+          {datePrefix}
+        </span>
+        <span className="text-xs font-medium text-black">
+          {dateLabel} · {timeWindow}
+        </span>
+      </div>
+
       {/* Customer name + unit + service badge */}
       <div className="flex items-start justify-between mb-2">
         <div>
           <p className="font-medium text-sm">
             {order.firstName} {order.lastName}
           </p>
-          <p className="text-xs text-black/50">Unit {order.unit || "—"} · {order.pickupTimeWindow}</p>
+          <p className="text-xs text-black/50">Unit {order.unit || "—"}</p>
         </div>
         <span className="text-[10px] text-black/30 uppercase tracking-wider">
           {order.serviceType === "wash_fold" ? "W&F" : "DC"}
@@ -203,7 +253,7 @@ function DriverStopCard({
         disabled={isPending}
       >
         {isPending ? <Loader2 className="animate-spin w-3 h-3 mr-1" /> : null}
-        Mark {action}
+        {actionLabel}
       </Button>
     </div>
   );
