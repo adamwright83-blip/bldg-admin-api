@@ -9,10 +9,18 @@ import Admin from "./pages/Admin";
 import Driver from "./pages/Driver";
 
 function Router() {
+  const hostname =
+    typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
+  const isAdminHost = hostname === "admin.bldg.chat";
+  const isDriverHost = hostname === "driver.bldg.chat";
+
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
+      <Route
+        path={"/"}
+        component={isAdminHost ? Admin : isDriverHost ? Driver : Home}
+      />
       <Route path={"/admin"} component={Admin} />
       <Route path={"/driver"} component={Driver} />
       <Route path={"/404"} component={NotFound} />
