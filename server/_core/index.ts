@@ -7,6 +7,10 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { sdk } from "./sdk";
+import { upsertUser } from "../db";
+import { getSessionCookieOptions } from "./cookies";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -35,6 +39,43 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
+  // Direct password login — bypasses OAuth portal entirely.
+  // Set ADMIN_PASSWORD in Railway env. Falls back to APP_SHARED_API_SECRET.
+  app.post("/api/auth/login", async (req, res) => {
+    const { password } = req.body || {};
+    const validPassword =
+      process.env.ADMIN_PASSWORD || process.env.APP_SHARED_API_SECRET || "";
+
+    if (!validPassword) {
+      return res.status(503).json({ error: "ADMIN_PASSWORD not configured on server" });
+    }
+    if (!password || password !== validPassword) {
+      return res.status(401).json({ error: "Invalid password" });
+    }
+
+    try {
+      const ownerOpenId = process.env.OWNER_OPEN_ID || "admin-owner";
+      await upsertUser({
+        openId: ownerOpenId,
+        name: "Admin",
+        loginMethod: "password",
+        lastSignedIn: new Date(),
+      });
+
+      const sessionToken = await sdk.createSessionToken(ownerOpenId, {
+        name: "Admin",
+        expiresInMs: ONE_YEAR_MS,
+      });
+
+      const cookieOptions = getSessionCookieOptions(req);
+      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[Auth] Login failed:", err);
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
 
   // Receipt API endpoint (authenticated via shared secret)
   app.get("/api/orders/:orderId/receipt", async (req, res) => {

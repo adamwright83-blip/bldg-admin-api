@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { canRedirectToLoginUrl, getLoginUrl } from "@/const";
+import { LoginForm } from "@/components/LoginForm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Search, Check, Copy, AlertCircle, ChevronLeft, ChevronRight, MapPin, Phone, MessageSquare, Package } from "lucide-react";
@@ -82,21 +82,7 @@ export default function Admin() {
   }
 
   if (!isAuthenticated) {
-    const loginUrl = getLoginUrl();
-    if (canRedirectToLoginUrl(loginUrl)) {
-      window.location.href = loginUrl;
-      return null;
-    }
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center px-6 text-center">
-        <div>
-          <p className="text-lg font-semibold mb-2">Admin access needs auth setup</p>
-          <p className="text-sm text-black/50">
-            OAuth portal URL or app ID is missing/invalid for this deployment.
-          </p>
-        </div>
-      </div>
-    );
+    return <LoginForm role="admin" onSuccess={() => window.location.reload()} />;
   }
 
   return (
