@@ -614,15 +614,15 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
       }
     });
 
-    // Save intake data first
+    // Save intake data first (support mixed orders: send both when populated)
     await saveIntake.mutateAsync({
       orderId: order.id,
-      weightLbs: isWF ? parseFloat(weightLbs) || 0 : undefined,
+      weightLbs: parseFloat(weightLbs) || undefined,
       subtotal: centsToDollars(totals.subtotalCents),
       discountPercent: discountPercent || "0",
       total: centsToDollars(totals.totalCents),
-      upchargesJson: isWF ? upchargesJson : undefined,
-      drycleanItemsJson: !isWF ? drycleanItemsJson : undefined,
+      upchargesJson: Object.keys(upchargesJson).length > 0 ? upchargesJson : undefined,
+      drycleanItemsJson: Object.keys(drycleanItemsJson).length > 0 ? drycleanItemsJson : undefined,
     });
 
     // Charge
@@ -658,7 +658,7 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
   }
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-6xl">
       <button onClick={onBack} className="text-sm text-black/50 hover:text-black mb-4 flex items-center gap-1">
         <ChevronLeft className="w-4 h-4" /> Back
       </button>
@@ -684,16 +684,28 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
         </div>
       )}
 
-      <WashFoldIntake
-        weightLbs={weightLbs}
-        setWeightLbs={setWeightLbs}
-        selectedUpcharges={selectedUpcharges}
-        setSelectedUpcharges={setSelectedUpcharges}
-        flatRateQtys={flatRateQtys}
-        setFlatRateQtys={setFlatRateQtys}
-      />
-      
-      <DryCleanIntake dcQtys={dcQtys} setDcQtys={setDcQtys} />
+      {/* Intake sections: side-by-side on desktop, horizontal scroll on mobile */}
+      <div className="flex gap-6 overflow-x-auto pb-2 snap-x snap-mandatory md:overflow-visible md:snap-none scroll-smooth">
+        {/* Wash & Fold — left column on desktop */}
+        <div className="min-w-[85vw] sm:min-w-[320px] md:min-w-0 md:flex-1 snap-start shrink-0 md:max-h-[calc(100vh-320px)] md:overflow-y-auto">
+          <h3 className="text-xs font-medium text-black/50 uppercase tracking-wider mb-3">Wash & Fold</h3>
+          <p className="md:hidden text-[10px] text-black/40 mb-2">Swipe left → for Dry Cleaning</p>
+          <WashFoldIntake
+            weightLbs={weightLbs}
+            setWeightLbs={setWeightLbs}
+            selectedUpcharges={selectedUpcharges}
+            setSelectedUpcharges={setSelectedUpcharges}
+            flatRateQtys={flatRateQtys}
+            setFlatRateQtys={setFlatRateQtys}
+          />
+        </div>
+
+        {/* Dry Cleaning — right column on desktop, swipe left on mobile */}
+        <div className="min-w-[85vw] sm:min-w-[320px] md:min-w-0 md:flex-1 snap-start shrink-0 md:max-h-[calc(100vh-320px)] md:overflow-y-auto">
+          <h3 className="text-xs font-medium text-black/50 uppercase tracking-wider mb-3">Dry Cleaning</h3>
+          <DryCleanIntake dcQtys={dcQtys} setDcQtys={setDcQtys} />
+        </div>
+      </div>
 
       {/* Discount */}
       <div className="mt-6 mb-4">
