@@ -414,6 +414,7 @@ function NewOrderTab() {
                   <p className="text-xs text-black/50 truncate">
                     Unit {order.unit || "—"} · {order.pickupDate} · {order.pickupTimeWindow}
                   </p>
+                  <p className="text-xs text-black/40 truncate">{order.address}</p>
                 </div>
                 <Button
                   variant="outline"
@@ -465,6 +466,7 @@ function IntakeTab() {
             <tr className="border-b border-black/10 text-left text-xs text-black/50 uppercase tracking-wider">
               <th className="py-2 pr-4">Customer</th>
               <th className="py-2 pr-4">Unit</th>
+              <th className="py-2 pr-4">Address</th>
               <th className="py-2 pr-4">Service</th>
               <th className="py-2 pr-4">Pickup Date</th>
               <th className="py-2 pr-4">Notes</th>
@@ -476,6 +478,7 @@ function IntakeTab() {
               <tr key={o.id} className="border-b border-black/5 hover:bg-black/[0.02]">
                 <td className="py-3 pr-4">{o.firstName} {o.lastName}</td>
                 <td className="py-3 pr-4">{o.unit || "—"}</td>
+                <td className="py-3 pr-4 max-w-[180px] truncate">{o.address}</td>
                 <td className="py-3 pr-4">{o.serviceType === "wash_fold" ? "W&F" : "DC"}</td>
                 <td className="py-3 pr-4">{formatDate(o.pickupDate)}</td>
                 <td className="py-3 pr-4 max-w-[200px] truncate text-black/50">{o.specialInstructions || "—"}</td>
@@ -663,11 +666,14 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
         <ChevronLeft className="w-4 h-4" /> Back
       </button>
 
-      <div className="flex items-baseline justify-between mb-6">
+      <div className="flex items-start justify-between mb-6">
         <h2 className="text-lg font-semibold">
           Order #{order.id} — {order.firstName} {order.lastName}
         </h2>
-        <span className="text-xs text-black/40">Unit {order.unit || "—"}</span>
+        <div className="text-right">
+          <p className="text-xs text-black/40">Unit {order.unit || "—"}</p>
+          <p className="text-xs text-black/50 max-w-[200px] text-right">{order.address}</p>
+        </div>
       </div>
 
       {order.specialInstructions && (
