@@ -1,11 +1,13 @@
-import "dotenv/config";
+if (process.env.NODE_ENV !== "production") {
+  await import("dotenv/config");
+}
 import cors from "cors";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
-import { appRouter } from "../routers";
+import { appRouter, validateStripeEnv } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { sdk } from "./sdk";
@@ -33,6 +35,8 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  validateStripeEnv();
+
   const app = express();
   const server = createServer(app);
 

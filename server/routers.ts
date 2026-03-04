@@ -23,14 +23,30 @@ import Stripe from "stripe";
 import * as jose from "jose";
 import { matchBuilding } from "@shared/buildings";
 
-// Override with alternate Stripe account if provided
-const stripeKey = process.env.STRIPE_SECRET_KEY_OVERRIDE || process.env.STRIPE_SECRET_KEY || "";
-const stripe = new Stripe(stripeKey, {
-  apiVersion: "2025-03-31.basil" as any,
-});
+const STRIPE_API_VERSION = "2025-03-31.basil" as const;
 
-if (process.env.STRIPE_SECRET_KEY_OVERRIDE) {
-  console.log("[Stripe] Using alternate Stripe account (STRIPE_SECRET_KEY_OVERRIDE)");
+function getStripe(): Stripe {
+  const key =
+    process.env.STRIPE_SECRET_KEY_OVERRIDE || process.env.STRIPE_SECRET_KEY || "";
+  if (!key || key.length < 20) {
+    throw new Error(
+      "STRIPE_SECRET_KEY (or STRIPE_SECRET_KEY_OVERRIDE) must be set and non-empty. Check env."
+    );
+  }
+  return new Stripe(key, { apiVersion: STRIPE_API_VERSION as any });
+}
+
+export function validateStripeEnv(): void {
+  const key =
+    process.env.STRIPE_SECRET_KEY_OVERRIDE || process.env.STRIPE_SECRET_KEY || "";
+  if (!key || key.length < 20) {
+    throw new Error(
+      "STRIPE_SECRET_KEY (or STRIPE_SECRET_KEY_OVERRIDE) must be set at startup. Set in Railway env."
+    );
+  }
+  if (process.env.STRIPE_SECRET_KEY_OVERRIDE) {
+    console.log("[Stripe] Using alternate account (key ends ..." + key.slice(-4) + ")");
+  }
 }
 
 const APP_SHARED_SECRET = new TextEncoder().encode(process.env.APP_SHARED_API_SECRET || "fallback-secret");
@@ -100,6 +116,7 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
+        const stripe = getStripe();
         const customer = await stripe.customers.create({
           name: `${input.firstName} ${input.lastName}`,
           email: input.email || undefined,
@@ -357,6 +374,7 @@ export const appRouter = router({
         amountCents: z.number().int().min(50), // Stripe minimum $0.50
       }))
       .mutation(async ({ input }) => {
+        const stripe = getStripe();
         const order = await getOrderById(input.orderId);
         if (!order) {
           throw new Error("Order not found");
@@ -407,7 +425,16 @@ export const appRouter = router({
           });
 
           // Generate receipt JWT for app.bldg.chat
-          const sharedSecret = new TextEncoder().encode(process.env.JWT_SHARED_SECRET || "");
+          const jwtSigningSecret =
+  process.env.JWT_SHARED_SECRET ||
+  process.env.JWT_SECRET ||
+  process.env.APP_SHARED_API_SECRET;
+
+if (!jwtSigningSecret) {
+  throw new Error("Missing JWT signing secret (JWT_SHARED_SECRET / JWT_SECRET / APP_SHARED_API_SECRET)");
+}
+
+const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
           const VENDOR_MAP: Record<string, string> = {
             wash_fold: "Laundry Butler",
             dry_cleaning: "Laundry Butler",

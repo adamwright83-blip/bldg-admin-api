@@ -1,6 +1,10 @@
 import mysql from "mysql2/promise";
 
-const DB_URL = process.env.DATABASE_URL || "mysql://root:gKtLKCELwQeVyvbIpBQETwTMPnErVdjW@shortline.proxy.rlwy.net:36032/railway";
+const DB_URL = process.env.DATABASE_URL;
+if (!DB_URL) {
+  console.error("DATABASE_URL env var required");
+  process.exit(1);
+}
 
 const conn = await mysql.createConnection(DB_URL);
 console.log("Connected to Railway MySQL");

@@ -18,8 +18,9 @@ const LOGO_FULL = "https://files.manuscdn.com/user_upload_by_module/session_file
 const pf = { fontFamily: '"Playfair Display", Georgia, serif' };
 const cg = { fontFamily: '"Cormorant Garamond", Georgia, serif' };
 
-// Load Stripe outside of component to avoid re-creating on every render
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "");
+// Publishable key from env (live in prod, test in dev). Never commit keys.
+const stripePk = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ?? "";
+const stripePromise = stripePk ? loadStripe(stripePk) : Promise.resolve(null);
 
 /* ===== TYPES ===== */
 interface FormData {
@@ -525,10 +526,19 @@ function Step5(props: {
   onSuccess: () => void;
   onBack: () => void;
 }) {
+  const isDev = import.meta.env.DEV;
+  const isTestKey = stripePk.startsWith("pk_test_");
   return (
-    <Elements stripe={stripePromise}>
-      <Step5Inner {...props} />
-    </Elements>
+    <div className="relative">
+      {isDev && isTestKey && (
+        <span className="absolute top-0 right-0 text-xs text-amber-600 bg-amber-100 px-2 py-0.5 rounded">
+          Stripe: test
+        </span>
+      )}
+      <Elements stripe={stripePromise}>
+        <Step5Inner {...props} />
+      </Elements>
+    </div>
   );
 }
 
