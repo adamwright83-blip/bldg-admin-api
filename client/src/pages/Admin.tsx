@@ -19,8 +19,21 @@ import {
 } from "@shared/pricing";
 import type { Order } from "@shared/types";
 
-const TABS = ["New Order", "Intake", "Processing", "Ready", "Pickups"] as const;
+const TABS = ["New Order", "Intake", "Processing", "Ready", "Pickups", "Vendors"] as const;
 type Tab = (typeof TABS)[number];
+
+const SUPPORTED_BUILDINGS: { label: string; value: string }[] = [
+  { label: "OPUS LA", value: "opusla" },
+  { label: "Century Park East", value: "centuryparkeast" },
+];
+
+function connectStatusBadge(vendor: { stripeConnectAccountId: string | null; payoutsEnabled: boolean | null; detailsSubmitted: boolean | null; disabledReason: string | null }) {
+  if (!vendor.stripeConnectAccountId) return { label: "Not connected", color: "bg-black/10 text-black/50" };
+  if (vendor.disabledReason) return { label: "Restricted", color: "bg-red-100 text-red-700" };
+  if (vendor.payoutsEnabled) return { label: "Active", color: "bg-green-100 text-green-700" };
+  if (vendor.detailsSubmitted) return { label: "Onboarding incomplete", color: "bg-amber-100 text-amber-700" };
+  return { label: "Onboarding incomplete", color: "bg-amber-100 text-amber-700" };
+}
 
 const TIME_WINDOWS = [
   "7:00am–9:00am",
@@ -35,6 +48,7 @@ const STATUS_FOR_TAB: Record<Tab, Order["status"] | null> = {
   Processing: "processing",
   Ready: "ready",
   Pickups: null,
+  Vendors: null,
 };
 
 /* ===== Utility ===== */
@@ -119,6 +133,7 @@ export default function Admin() {
         {activeTab === "Processing" && <ProcessingTab />}
         {activeTab === "Ready" && <ReadyTab />}
         {activeTab === "Pickups" && <PickupsTab />}
+        {activeTab === "Vendors" && <VendorsTab />}
       </div>
     </div>
   );
@@ -139,11 +154,15 @@ function NewOrderTab() {
     pickupTimeWindow: TIME_WINDOWS[0],
     deliveryDate: "",
     deliveryTimeWindow: "",
+    buildingSlug: SUPPORTED_BUILDINGS[0].value,
+    vendorId: undefined as number | undefined,
   });
   const [prefilled, setPrefilled] = useState(false);
   const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null);
   const [stripePaymentMethodId, setStripePaymentMethodId] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+
+  const vendorsQuery = trpc.admin.listVendors.useQuery();
 
   const searchQuery = trpc.admin.searchCustomer.useQuery(
     { phone },
@@ -236,6 +255,8 @@ function NewOrderTab() {
       email: actualEmail || undefined,
       stripeCustomerId: stripeCustomerId || undefined,
       stripePaymentMethodId: stripePaymentMethodId || undefined,
+      buildingSlug: form.buildingSlug,
+      vendorId: form.vendorId,
     });
     setSubmitted(true);
     queueQuery.refetch();
@@ -263,6 +284,7 @@ function NewOrderTab() {
               specialInstructions: "", serviceType: "wash_fold",
               pickupDate: new Date().toISOString().split("T")[0],
               pickupTimeWindow: TIME_WINDOWS[0], deliveryDate: "", deliveryTimeWindow: "",
+              buildingSlug: SUPPORTED_BUILDINGS[0].value, vendorId: undefined,
             });
           }}
         >
@@ -327,6 +349,35 @@ function NewOrderTab() {
       <div className="mb-6">
         <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">Special Instructions</label>
         <Input value={form.specialInstructions} onChange={(e) => setForm({ ...form, specialInstructions: e.target.value })} className="bg-white border-black/20" />
+      </div>
+
+      {/* Building + Vendor */}
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div>
+          <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">Building</label>
+          <select
+            value={form.buildingSlug}
+            onChange={(e) => setForm({ ...form, buildingSlug: e.target.value })}
+            className="w-full h-9 px-3 text-sm border border-black/20 bg-white"
+          >
+            {SUPPORTED_BUILDINGS.map((b) => (
+              <option key={b.value} value={b.value}>{b.label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">Vendor (optional)</label>
+          <select
+            value={form.vendorId ?? ""}
+            onChange={(e) => setForm({ ...form, vendorId: e.target.value ? Number(e.target.value) : undefined })}
+            className="w-full h-9 px-3 text-sm border border-black/20 bg-white"
+          >
+            <option value="">Auto-assign</option>
+            {vendorsQuery.data?.filter(v => v.isActive).map((v) => (
+              <option key={v.id} value={v.id}>{v.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Service type */}
@@ -1285,5 +1336,218 @@ function CopyButton({ text }: { text: string }) {
       {copied ? <Check className="w-4 h-4 shrink-0" /> : <Copy className="w-4 h-4 shrink-0" />}
       <span className="truncate">{copied ? "Copied!" : text}</span>
     </button>
+  );
+}
+
+/* ===== VENDORS TAB ===== */
+function VendorsTab() {
+  const vendorsQuery = trpc.admin.listVendors.useQuery();
+  const createVendorMutation = trpc.admin.createVendor.useMutation();
+  const updateActiveMutation = trpc.admin.updateVendorActive.useMutation();
+  const createAccountMutation = trpc.admin.createConnectAccount.useMutation();
+  const onboardingLinkMutation = trpc.admin.createConnectOnboardingLink.useMutation();
+  const statusMutation = trpc.admin.getConnectAccountStatus.useMutation();
+
+  const [newVendor, setNewVendor] = useState({ name: "", email: "", country: "US" });
+  const [creating, setCreating] = useState(false);
+  const [statusMap, setStatusMap] = useState<Record<number, { chargesEnabled: boolean; payoutsEnabled: boolean; detailsSubmitted: boolean; currentlyDue: string[]; pastDue: string[]; disabledReason: string | null }>>({});
+
+  const handleCreateVendor = async () => {
+    if (!newVendor.name.trim()) return;
+    setCreating(true);
+    try {
+      await createVendorMutation.mutateAsync({ name: newVendor.name, email: newVendor.email || undefined, country: newVendor.country || undefined });
+      setNewVendor({ name: "", email: "", country: "US" });
+      vendorsQuery.refetch();
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleCreateAccount = async (vendorId: number) => {
+    await createAccountMutation.mutateAsync({ vendorId });
+    vendorsQuery.refetch();
+  };
+
+  const handleOpenOnboarding = async (vendorId: number) => {
+    const result = await onboardingLinkMutation.mutateAsync({ vendorId });
+    window.open(result.url, "_blank");
+  };
+
+  const handleCopyOnboarding = async (vendorId: number) => {
+    const result = await onboardingLinkMutation.mutateAsync({ vendorId });
+    await navigator.clipboard.writeText(result.url);
+  };
+
+  const handleRefreshStatus = async (vendorId: number) => {
+    const result = await statusMutation.mutateAsync({ vendorId });
+    setStatusMap(prev => ({ ...prev, [vendorId]: result }));
+    vendorsQuery.refetch();
+  };
+
+  const handleToggleActive = async (vendorId: number, isActive: boolean) => {
+    await updateActiveMutation.mutateAsync({ vendorId, isActive });
+    vendorsQuery.refetch();
+  };
+
+  const vendors = vendorsQuery.data ?? [];
+
+  return (
+    <div className="max-w-3xl">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-lg font-semibold">Vendors</h2>
+        <span className="text-xs text-black/40">Platform fee: {import.meta.env.VITE_PLATFORM_FEE_PERCENT ?? "5"}%</span>
+      </div>
+
+      {/* Create vendor form */}
+      <div className="border border-black/10 p-4 mb-8">
+        <h3 className="text-sm font-semibold mb-3">Add Vendor</h3>
+        <div className="grid grid-cols-3 gap-3 mb-3">
+          <div>
+            <label className="block text-xs text-black/50 uppercase tracking-wider mb-1">Name</label>
+            <Input value={newVendor.name} onChange={e => setNewVendor(v => ({ ...v, name: e.target.value }))} placeholder="Laundry Butler" className="bg-white border-black/20" />
+          </div>
+          <div>
+            <label className="block text-xs text-black/50 uppercase tracking-wider mb-1">Email (optional)</label>
+            <Input value={newVendor.email} onChange={e => setNewVendor(v => ({ ...v, email: e.target.value }))} placeholder="vendor@example.com" className="bg-white border-black/20" />
+          </div>
+          <div>
+            <label className="block text-xs text-black/50 uppercase tracking-wider mb-1">Country</label>
+            <Input value={newVendor.country} onChange={e => setNewVendor(v => ({ ...v, country: e.target.value.toUpperCase().slice(0, 2) }))} placeholder="US" maxLength={2} className="bg-white border-black/20" />
+          </div>
+        </div>
+        <Button className="bg-black text-white hover:bg-black/90" onClick={handleCreateVendor} disabled={creating || !newVendor.name.trim()}>
+          {creating ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : null}
+          Create Vendor
+        </Button>
+      </div>
+
+      {/* Vendor list */}
+      {vendorsQuery.isLoading ? (
+        <div className="flex justify-center py-12"><Loader2 className="animate-spin w-6 h-6 text-black/30" /></div>
+      ) : vendors.length === 0 ? (
+        <p className="text-sm text-black/40 border border-black/10 p-4">No vendors yet. Add one above.</p>
+      ) : (
+        <div className="space-y-4">
+          {vendors.map(vendor => {
+            const badge = connectStatusBadge(vendor);
+            const liveStatus = statusMap[vendor.id];
+            const currentlyDue: string[] = liveStatus?.currentlyDue ?? (vendor.currentlyDue ? JSON.parse(vendor.currentlyDue) : []);
+            const pastDue: string[] = liveStatus?.pastDue ?? (vendor.pastDue ? JSON.parse(vendor.pastDue) : []);
+            const disabledReason = liveStatus?.disabledReason ?? vendor.disabledReason;
+            const payoutsEnabled = liveStatus?.payoutsEnabled ?? vendor.payoutsEnabled;
+            const chargesEnabled = liveStatus?.chargesEnabled ?? vendor.chargesEnabled;
+            const detailsSubmitted = liveStatus?.detailsSubmitted ?? vendor.detailsSubmitted;
+
+            return (
+              <div key={vendor.id} className="border border-black/10 p-4">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{vendor.name}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${badge.color}`}>{badge.label}</span>
+                      {!vendor.isActive && <span className="text-xs px-2 py-0.5 rounded-full bg-black/10 text-black/50">Inactive</span>}
+                    </div>
+                    {vendor.email && <p className="text-xs text-black/40 mt-0.5">{vendor.email} · {vendor.country ?? "US"}</p>}
+                    {vendor.stripeConnectAccountId && (
+                      <p className="text-xs text-black/30 mt-0.5 font-mono">
+                        {vendor.stripeConnectAccountId.slice(0, 8)}…{vendor.stripeConnectAccountId.slice(-4)}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleToggleActive(vendor.id, !vendor.isActive)}
+                    className="text-xs text-black/40 hover:text-black underline shrink-0"
+                  >
+                    {vendor.isActive ? "Deactivate" : "Activate"}
+                  </button>
+                </div>
+
+                {/* Status indicators */}
+                {vendor.stripeConnectAccountId && (
+                  <div className="flex gap-4 mb-3 text-xs text-black/50">
+                    <span className={payoutsEnabled ? "text-green-600" : ""}>{payoutsEnabled ? "✓" : "✗"} Payouts</span>
+                    <span className={chargesEnabled ? "text-green-600" : ""}>{chargesEnabled ? "✓" : "✗"} Charges</span>
+                    <span className={detailsSubmitted ? "text-green-600" : ""}>{detailsSubmitted ? "✓" : "✗"} Details submitted</span>
+                  </div>
+                )}
+
+                {/* Requirements */}
+                {(currentlyDue.length > 0 || pastDue.length > 0 || disabledReason) && (
+                  <div className="mb-3 p-3 bg-amber-50 border border-amber-200 text-xs">
+                    {disabledReason && <p className="font-medium text-red-700 mb-1">Disabled: {disabledReason}</p>}
+                    {currentlyDue.length > 0 && (
+                      <div className="mb-1">
+                        <span className="font-medium text-amber-800">Currently due:</span>
+                        <ul className="mt-0.5 space-y-0.5 text-amber-700">
+                          {currentlyDue.map(r => <li key={r}>· {r}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {pastDue.length > 0 && (
+                      <div>
+                        <span className="font-medium text-red-800">Past due:</span>
+                        <ul className="mt-0.5 space-y-0.5 text-red-700">
+                          {pastDue.map(r => <li key={r}>· {r}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex flex-wrap gap-2">
+                  {!vendor.stripeConnectAccountId ? (
+                    <Button
+                      size="sm"
+                      className="bg-black text-white hover:bg-black/90 text-xs"
+                      onClick={() => handleCreateAccount(vendor.id)}
+                      disabled={createAccountMutation.isPending}
+                    >
+                      {createAccountMutation.isPending ? <Loader2 className="animate-spin w-3 h-3 mr-1" /> : null}
+                      Create Connect Account
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-black text-black text-xs"
+                        onClick={() => handleOpenOnboarding(vendor.id)}
+                        disabled={onboardingLinkMutation.isPending}
+                      >
+                        {onboardingLinkMutation.isPending ? <Loader2 className="animate-spin w-3 h-3 mr-1" /> : null}
+                        Open Onboarding
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-black text-black text-xs"
+                        onClick={() => handleCopyOnboarding(vendor.id)}
+                        disabled={onboardingLinkMutation.isPending}
+                      >
+                        <Copy className="w-3 h-3 mr-1" />
+                        Copy Link
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-black text-black text-xs"
+                        onClick={() => handleRefreshStatus(vendor.id)}
+                        disabled={statusMutation.isPending}
+                      >
+                        {statusMutation.isPending ? <Loader2 className="animate-spin w-3 h-3 mr-1" /> : null}
+                        Refresh Status
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

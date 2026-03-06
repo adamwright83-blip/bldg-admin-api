@@ -105,5 +105,58 @@ for (const [sql, label] of cols) {
   await run(sql, label);
 }
 
+// ── vendors table (Phase 1) ───────────────────────────────────────
+await run(`
+  CREATE TABLE IF NOT EXISTS vendors (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255),
+    country VARCHAR(2) DEFAULT 'US',
+    isActive BOOLEAN NOT NULL DEFAULT TRUE,
+    stripeConnectAccountId VARCHAR(255),
+    chargesEnabled BOOLEAN DEFAULT FALSE,
+    payoutsEnabled BOOLEAN DEFAULT FALSE,
+    detailsSubmitted BOOLEAN DEFAULT FALSE,
+    currentlyDue TEXT,
+    pastDue TEXT,
+    disabledReason VARCHAR(255),
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  )
+`, "CREATE TABLE vendors");
+
+// ── orders: vendor + payout columns (Phase 1) ────────────────────
+const vendorCols = [
+  [`ALTER TABLE orders ADD COLUMN buildingSlug VARCHAR(100) AFTER portalJwt`, "orders.buildingSlug"],
+  [`ALTER TABLE orders ADD COLUMN vendorId INT AFTER buildingSlug`, "orders.vendorId"],
+  [`ALTER TABLE orders ADD COLUMN vendorNameSnapshot VARCHAR(255) AFTER vendorId`, "orders.vendorNameSnapshot"],
+  [`ALTER TABLE orders ADD COLUMN routingPrioritySnapshot INT AFTER vendorNameSnapshot`, "orders.routingPrioritySnapshot"],
+  [`ALTER TABLE orders ADD COLUMN platformFeeCents INT AFTER routingPrioritySnapshot`, "orders.platformFeeCents"],
+  [`ALTER TABLE orders ADD COLUMN vendorPayoutCents INT AFTER platformFeeCents`, "orders.vendorPayoutCents"],
+  [`ALTER TABLE orders ADD COLUMN stripeConnectedAccountIdSnapshot VARCHAR(255) AFTER vendorPayoutCents`, "orders.stripeConnectedAccountIdSnapshot"],
+];
+
+for (const [sql, label] of vendorCols) {
+  await run(sql, label);
+}
+
+// ── vendor_service_coverage table (Phase 2) ───────────────────────
+await run(`
+  CREATE TABLE IF NOT EXISTS vendor_service_coverage (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    vendorId INT NOT NULL,
+    buildingSlug VARCHAR(100) NOT NULL,
+    serviceType ENUM('wash_fold','dry_cleaning') NOT NULL,
+    priority INT NOT NULL DEFAULT 10,
+    isActive BOOLEAN NOT NULL DEFAULT TRUE,
+    isDefault BOOLEAN DEFAULT FALSE,
+    notes TEXT,
+    serviceArea VARCHAR(255),
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_vendor_coverage (vendorId, buildingSlug, serviceType)
+  )
+`, "CREATE TABLE vendor_service_coverage");
+
 await conn.end();
 console.log("\nMigration complete.");

@@ -14,7 +14,20 @@ import {
   hasCustomerPaidBefore,
   findStripeCardByPhone,
   deleteOrder,
+  updateOrderVendor,
+  createVendor,
+  getVendorById,
+  listVendors,
+  updateVendorIsActive,
+  updateVendorConnectAccount,
+  updateVendorConnectStatus,
+  createVendorCoverage,
+  updateVendorCoverage,
+  deleteVendorCoverage,
+  listVendorCoverage,
+  getVendorForOrder,
 } from "./db";
+import { ENV } from "./_core/env";
 import { notifyOwner } from "./_core/notification";
 import { notifyPickupEnRoute, notifyCardCharged, notifyDeliveryEnRoute } from "./_core/sms";
 import { centsToDollars } from "@shared/pricing";
@@ -265,11 +278,25 @@ export const appRouter = router({
         email: z.string().optional(),
         stripeCustomerId: z.string().optional(),
         stripePaymentMethodId: z.string().optional(),
+        buildingSlug: z.string().min(1),
+        vendorId: z.number().optional(),
       }))
       .mutation(async ({ input }) => {
         const pickupDateObj = new Date(input.pickupDate + "T00:00:00");
         pickupDateObj.setDate(pickupDateObj.getDate() + 1);
         const defaultDeliveryDate = pickupDateObj.toISOString().split("T")[0];
+
+        // Resolve vendorId: explicit > Phase 2 routing > null
+        let resolvedVendorId: number | null = input.vendorId ?? null;
+        if (!resolvedVendorId && input.buildingSlug) {
+          const vendor = await getVendorForOrder(input.buildingSlug, input.serviceType);
+          resolvedVendorId = vendor?.id ?? null;
+          if (vendor) {
+            console.log(`[VendorRouting] assigned vendor #${vendor.id} (${vendor.name}) for building=${input.buildingSlug} service=${input.serviceType}`);
+          } else {
+            console.log(`[VendorRouting] no vendor found for building=${input.buildingSlug} service=${input.serviceType}`);
+          }
+        }
 
         const orderId = await createOrder({
           tenantId: "default",
@@ -287,6 +314,8 @@ export const appRouter = router({
           email: input.email || null,
           stripeCustomerId: input.stripeCustomerId || null,
           stripePaymentMethodId: input.stripePaymentMethodId || null,
+          buildingSlug: input.buildingSlug,
+          vendorId: resolvedVendorId,
           status: "new",
         });
 
@@ -415,14 +444,47 @@ export const appRouter = router({
         }
 
         try {
-          const paymentIntent = await stripe.paymentIntents.create({
-            customer: customerId,
-            payment_method: paymentMethodId,
-            amount: input.amountCents,
-            currency: "usd",
-            confirm: true,
-            off_session: true,
-          });
+          // Resolve vendor for payout routing
+          const vendor = order.vendorId ? await getVendorById(order.vendorId) : null;
+          const vendorAccountId = vendor?.stripeConnectAccountId
+            ?? process.env.STRIPE_CONNECT_VENDOR_ACCOUNT_ID
+            ?? null;
+          const payoutReady = !!vendorAccountId && vendor?.payoutsEnabled === true;
+
+          let paymentIntent;
+          let platformFeeCents: number | null = null;
+          let vendorPayoutCents: number | null = null;
+
+          if (payoutReady) {
+            const feePercent = ENV.platformFeePercent;
+            platformFeeCents = Math.round(input.amountCents * feePercent / 100);
+            vendorPayoutCents = input.amountCents - platformFeeCents;
+            const useOnBehalfOf = process.env.STRIPE_CONNECT_ON_BEHALF_OF === "true";
+
+            paymentIntent = await stripe.paymentIntents.create({
+              customer: customerId,
+              payment_method: paymentMethodId,
+              amount: input.amountCents,
+              currency: "usd",
+              confirm: true,
+              off_session: true,
+              transfer_data: { destination: vendorAccountId! },
+              application_fee_amount: platformFeeCents,
+              ...(useOnBehalfOf ? { on_behalf_of: vendorAccountId! } : {}),
+            });
+            console.log(`[ChargeCard] Destination charge for vendor ${vendorAccountId}`);
+            console.log(`[ChargeCard] Vendor payout: $${(vendorPayoutCents / 100).toFixed(2)}  Platform fee: $${(platformFeeCents / 100).toFixed(2)} (${feePercent}%)`);
+          } else {
+            paymentIntent = await stripe.paymentIntents.create({
+              customer: customerId,
+              payment_method: paymentMethodId,
+              amount: input.amountCents,
+              currency: "usd",
+              confirm: true,
+              off_session: true,
+            });
+            console.log(`[ChargeCard] No payout routing applied for order #${input.orderId}`);
+          }
 
           // Generate receipt JWT for app.bldg.chat
           const jwtSigningSecret =
@@ -435,11 +497,7 @@ if (!jwtSigningSecret) {
 }
 
 const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
-          const VENDOR_MAP: Record<string, string> = {
-            wash_fold: "Laundry Butler",
-            dry_cleaning: "Laundry Butler",
-          };
-          const vendorName = VENDOR_MAP[order.serviceType] || null;
+          const vendorName = vendor?.name ?? (order.serviceType === "wash_fold" ? "Laundry Butler" : "Laundry Butler");
           const receiptToken = await new jose.SignJWT({
             orderId: input.orderId,
             customerId: customerId,
@@ -462,6 +520,13 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
             status: "processing",
             isFirstPaidOrder: !hasPaidBefore,
             portalJwt: receiptUrl,
+            ...(payoutReady ? {
+              platformFeeCents,
+              vendorPayoutCents,
+              stripeConnectedAccountIdSnapshot: vendorAccountId,
+              vendorNameSnapshot: vendor?.name ?? null,
+              routingPrioritySnapshot: null,
+            } : {}),
           });
 
           // Notify owner
@@ -531,6 +596,162 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
       .mutation(async ({ input }) => {
         await deleteOrder(input.orderId);
         return { success: true };
+      }),
+
+    /** Manually assign/reassign vendor on an order */
+    updateOrderVendor: protectedProcedure
+      .input(z.object({ orderId: z.number(), vendorId: z.number().nullable() }))
+      .mutation(async ({ input }) => {
+        await updateOrderVendor(input.orderId, input.vendorId);
+        return { success: true };
+      }),
+
+    /* ===== VENDOR MANAGEMENT (Phase 1) ===== */
+
+    createVendor: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1),
+        email: z.string().email().optional(),
+        country: z.string().length(2).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const id = await createVendor({ name: input.name, email: input.email, country: input.country });
+        return getVendorById(id);
+      }),
+
+    listVendors: protectedProcedure
+      .query(async () => {
+        return listVendors();
+      }),
+
+    updateVendorActive: protectedProcedure
+      .input(z.object({ vendorId: z.number(), isActive: z.boolean() }))
+      .mutation(async ({ input }) => {
+        await updateVendorIsActive(input.vendorId, input.isActive);
+        return { success: true };
+      }),
+
+    createConnectAccount: protectedProcedure
+      .input(z.object({ vendorId: z.number() }))
+      .mutation(async ({ input }) => {
+        const vendor = await getVendorById(input.vendorId);
+        if (!vendor) throw new Error("Vendor not found");
+        if (vendor.stripeConnectAccountId) throw new Error("Vendor already has a Connect account");
+
+        const stripe = getStripe();
+        const account = await stripe.accounts.create({
+          type: "express",
+          business_type: "company",
+          country: vendor.country ?? "US",
+          company: { name: vendor.name },
+          email: vendor.email ?? undefined,
+          capabilities: {
+            card_payments: { requested: true },
+            transfers: { requested: true },
+          },
+        });
+
+        await updateVendorConnectAccount(input.vendorId, account.id);
+        console.log(`[Connect] Created Express account ${account.id} for vendor #${input.vendorId} (${vendor.name})`);
+        return { accountId: account.id };
+      }),
+
+    createConnectOnboardingLink: protectedProcedure
+      .input(z.object({ vendorId: z.number() }))
+      .mutation(async ({ input }) => {
+        const vendor = await getVendorById(input.vendorId);
+        if (!vendor) throw new Error("Vendor not found");
+        if (!vendor.stripeConnectAccountId) throw new Error("Vendor has no Connect account. Create one first.");
+
+        const stripe = getStripe();
+        const link = await stripe.accountLinks.create({
+          account: vendor.stripeConnectAccountId,
+          type: "account_onboarding",
+          refresh_url: `${ENV.adminBaseUrl}/admin?tab=Vendors`,
+          return_url: `${ENV.adminBaseUrl}/admin?tab=Vendors`,
+          collection_options: { fields: "eventually_due" },
+        });
+
+        console.log(`[Connect] Generated fresh onboarding link for vendor #${input.vendorId}`);
+        return { url: link.url };
+      }),
+
+    getConnectAccountStatus: protectedProcedure
+      .input(z.object({ vendorId: z.number() }))
+      .mutation(async ({ input }) => {
+        const vendor = await getVendorById(input.vendorId);
+        if (!vendor) throw new Error("Vendor not found");
+        if (!vendor.stripeConnectAccountId) throw new Error("Vendor has no Connect account");
+
+        const stripe = getStripe();
+        const account = await stripe.accounts.retrieve(vendor.stripeConnectAccountId);
+
+        const currentlyDue = account.requirements?.currently_due ?? [];
+        const pastDue = account.requirements?.past_due ?? [];
+        const disabledReason = account.requirements?.disabled_reason ?? null;
+
+        await updateVendorConnectStatus(input.vendorId, {
+          chargesEnabled: account.charges_enabled,
+          payoutsEnabled: account.payouts_enabled,
+          detailsSubmitted: account.details_submitted,
+          currentlyDue: JSON.stringify(currentlyDue),
+          pastDue: JSON.stringify(pastDue),
+          disabledReason: disabledReason,
+        });
+
+        console.log(`[Connect] Refreshed status for vendor #${input.vendorId}: payoutsEnabled=${account.payouts_enabled}`);
+        return {
+          chargesEnabled: account.charges_enabled,
+          payoutsEnabled: account.payouts_enabled,
+          detailsSubmitted: account.details_submitted,
+          currentlyDue,
+          pastDue,
+          disabledReason,
+        };
+      }),
+
+    /* ===== VENDOR SERVICE COVERAGE (Phase 2) ===== */
+
+    createVendorCoverage: protectedProcedure
+      .input(z.object({
+        vendorId: z.number(),
+        buildingSlug: z.string().min(1),
+        serviceType: z.enum(["wash_fold", "dry_cleaning"]),
+        priority: z.number().int().default(10),
+        isActive: z.boolean().default(true),
+        isDefault: z.boolean().default(false),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const id = await createVendorCoverage(input);
+        return { id };
+      }),
+
+    updateVendorCoverage: protectedProcedure
+      .input(z.object({
+        coverageId: z.number(),
+        priority: z.number().int().optional(),
+        isActive: z.boolean().optional(),
+        isDefault: z.boolean().optional(),
+        notes: z.string().nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { coverageId, ...data } = input;
+        await updateVendorCoverage(coverageId, data);
+        return { success: true };
+      }),
+
+    deleteVendorCoverage: protectedProcedure
+      .input(z.object({ coverageId: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteVendorCoverage(input.coverageId);
+        return { success: true };
+      }),
+
+    listVendorCoverage: protectedProcedure
+      .input(z.object({ vendorId: z.number().optional() }))
+      .query(async ({ input }) => {
+        return listVendorCoverage(input.vendorId);
       }),
   }),
 });

@@ -1,6 +1,11 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, orders, InsertOrder, Order } from "../drizzle/schema";
+import {
+  InsertUser, users,
+  orders, InsertOrder, Order,
+  vendors, InsertVendor, Vendor,
+  vendorServiceCoverage, InsertVendorServiceCoverage, VendorServiceCoverage,
+} from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -243,4 +248,173 @@ export async function deleteOrder(orderId: number): Promise<void> {
   if (!db) throw new Error("Database not available");
 
   await db.delete(orders).where(eq(orders.id, orderId));
+}
+
+export async function updateOrderVendor(orderId: number, vendorId: number | null): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(orders).set({ vendorId }).where(eq(orders.id, orderId));
+}
+
+/* ===== VENDOR HELPERS (Phase 1) ===== */
+
+export async function createVendor(data: {
+  name: string;
+  email?: string | null;
+  country?: string | null;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(vendors).values({
+    name: data.name,
+    email: data.email ?? null,
+    country: data.country ?? "US",
+    isActive: true,
+  });
+  return Number(result[0].insertId);
+}
+
+export async function getVendorById(id: number): Promise<Vendor | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(vendors).where(eq(vendors.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function listVendors(): Promise<Vendor[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db.select().from(vendors).orderBy(asc(vendors.name));
+}
+
+export async function updateVendorIsActive(id: number, isActive: boolean): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(vendors).set({ isActive }).where(eq(vendors.id, id));
+}
+
+export async function updateVendorConnectAccount(
+  id: number,
+  stripeConnectAccountId: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(vendors).set({ stripeConnectAccountId }).where(eq(vendors.id, id));
+}
+
+export async function updateVendorConnectStatus(
+  id: number,
+  status: {
+    chargesEnabled: boolean;
+    payoutsEnabled: boolean;
+    detailsSubmitted: boolean;
+    currentlyDue: string | null;
+    pastDue: string | null;
+    disabledReason: string | null;
+  }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(vendors).set({
+    chargesEnabled: status.chargesEnabled,
+    payoutsEnabled: status.payoutsEnabled,
+    detailsSubmitted: status.detailsSubmitted,
+    currentlyDue: status.currentlyDue,
+    pastDue: status.pastDue,
+    disabledReason: status.disabledReason,
+  }).where(eq(vendors.id, id));
+}
+
+/* ===== VENDOR SERVICE COVERAGE HELPERS (Phase 2) ===== */
+
+export async function createVendorCoverage(data: {
+  vendorId: number;
+  buildingSlug: string;
+  serviceType: "wash_fold" | "dry_cleaning";
+  priority?: number;
+  isActive?: boolean;
+  isDefault?: boolean;
+  notes?: string | null;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(vendorServiceCoverage).values({
+    vendorId: data.vendorId,
+    buildingSlug: data.buildingSlug,
+    serviceType: data.serviceType,
+    priority: data.priority ?? 10,
+    isActive: data.isActive ?? true,
+    isDefault: data.isDefault ?? false,
+    notes: data.notes ?? null,
+  });
+  return Number(result[0].insertId);
+}
+
+export async function updateVendorCoverage(
+  id: number,
+  data: {
+    priority?: number;
+    isActive?: boolean;
+    isDefault?: boolean;
+    notes?: string | null;
+  }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(vendorServiceCoverage).set(data).where(eq(vendorServiceCoverage.id, id));
+}
+
+export async function deleteVendorCoverage(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(vendorServiceCoverage).where(eq(vendorServiceCoverage.id, id));
+}
+
+export async function listVendorCoverage(vendorId?: number): Promise<VendorServiceCoverage[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  if (vendorId !== undefined) {
+    return db
+      .select()
+      .from(vendorServiceCoverage)
+      .where(eq(vendorServiceCoverage.vendorId, vendorId))
+      .orderBy(asc(vendorServiceCoverage.priority));
+  }
+  return db.select().from(vendorServiceCoverage).orderBy(asc(vendorServiceCoverage.priority));
+}
+
+export async function getVendorForOrder(
+  buildingSlug: string,
+  serviceType: "wash_fold" | "dry_cleaning"
+): Promise<Vendor | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db
+    .select({ vendor: vendors, priority: vendorServiceCoverage.priority })
+    .from(vendorServiceCoverage)
+    .innerJoin(vendors, eq(vendorServiceCoverage.vendorId, vendors.id))
+    .where(
+      and(
+        eq(vendorServiceCoverage.buildingSlug, buildingSlug),
+        eq(vendorServiceCoverage.serviceType, serviceType),
+        eq(vendorServiceCoverage.isActive, true),
+        eq(vendors.isActive, true)
+      )
+    )
+    .orderBy(asc(vendorServiceCoverage.priority))
+    .limit(1);
+
+  return rows.length > 0 ? rows[0].vendor : null;
 }

@@ -1,4 +1,4 @@
-import { bigint, boolean, decimal, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { boolean, decimal, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -84,6 +84,17 @@ export const orders = mysqlTable("orders", {
   isFirstPaidOrder: boolean("isFirstPaidOrder").default(false).notNull(),
   portalJwt: text("portalJwt"),
 
+  /* Vendor routing — snapshotted at order creation */
+  buildingSlug: varchar("buildingSlug", { length: 100 }),
+  vendorId: int("vendorId"),
+
+  /* Payout audit — frozen at charge time */
+  vendorNameSnapshot: varchar("vendorNameSnapshot", { length: 255 }),
+  routingPrioritySnapshot: int("routingPrioritySnapshot"),
+  platformFeeCents: int("platformFeeCents"),
+  vendorPayoutCents: int("vendorPayoutCents"),
+  stripeConnectedAccountIdSnapshot: varchar("stripeConnectedAccountIdSnapshot", { length: 255 }),
+
   /* Timestamps */
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -91,3 +102,53 @@ export const orders = mysqlTable("orders", {
 
 export type Order = typeof orders.$inferSelect;
 export type InsertOrder = typeof orders.$inferInsert;
+
+/**
+ * Vendors — service providers who fulfill orders (e.g. Laundry Butler).
+ * Stripe Connect Express accounts are linked here.
+ */
+export const vendors = mysqlTable("vendors", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }),
+  country: varchar("country", { length: 2 }).default("US"),
+  isActive: boolean("isActive").default(true).notNull(),
+  stripeConnectAccountId: varchar("stripeConnectAccountId", { length: 255 }),
+  /* Stripe Connect status — persisted after every getConnectAccountStatus call */
+  chargesEnabled: boolean("chargesEnabled").default(false),
+  payoutsEnabled: boolean("payoutsEnabled").default(false),
+  detailsSubmitted: boolean("detailsSubmitted").default(false),
+  currentlyDue: text("currentlyDue"),
+  pastDue: text("pastDue"),
+  disabledReason: varchar("disabledReason", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Vendor = typeof vendors.$inferSelect;
+export type InsertVendor = typeof vendors.$inferInsert;
+
+/**
+ * Vendor service coverage — routing table for building+serviceType → vendor.
+ * Phase 2: populated to enable automatic vendor assignment at order creation.
+ */
+export const vendorServiceCoverage = mysqlTable("vendor_service_coverage", {
+  id: int("id").autoincrement().primaryKey(),
+  vendorId: int("vendorId").notNull(),
+  buildingSlug: varchar("buildingSlug", { length: 100 }).notNull(),
+  serviceType: mysqlEnum("serviceType", ["wash_fold", "dry_cleaning"]).notNull(),
+  priority: int("priority").default(10).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  isDefault: boolean("isDefault").default(false),
+  notes: text("notes"),
+  serviceArea: varchar("serviceArea", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  uniqueCoverage: uniqueIndex("uq_vendor_coverage").on(
+    table.vendorId, table.buildingSlug, table.serviceType
+  ),
+}));
+
+export type VendorServiceCoverage = typeof vendorServiceCoverage.$inferSelect;
+export type InsertVendorServiceCoverage = typeof vendorServiceCoverage.$inferInsert;
