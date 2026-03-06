@@ -125,6 +125,12 @@ await run(`
   )
 `, "CREATE TABLE vendors");
 
+// ── vendors: per-vendor platform fee ─────────────────────────────
+await run(
+  `ALTER TABLE vendors ADD COLUMN platformFeePercent DECIMAL(5,2) AFTER disabledReason`,
+  "vendors.platformFeePercent"
+);
+
 // ── orders: vendor + payout columns (Phase 1) ────────────────────
 const vendorCols = [
   [`ALTER TABLE orders ADD COLUMN buildingSlug VARCHAR(100) AFTER portalJwt`, "orders.buildingSlug"],

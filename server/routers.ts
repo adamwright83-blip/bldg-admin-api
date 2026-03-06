@@ -456,7 +456,9 @@ export const appRouter = router({
           let vendorPayoutCents: number | null = null;
 
           if (payoutReady) {
-            const feePercent = ENV.platformFeePercent;
+            const feePercent = vendor?.platformFeePercent != null
+              ? parseFloat(vendor.platformFeePercent as string)
+              : ENV.platformFeePercent;
             platformFeeCents = Math.round(input.amountCents * feePercent / 100);
             vendorPayoutCents = input.amountCents - platformFeeCents;
             const useOnBehalfOf = process.env.STRIPE_CONNECT_ON_BEHALF_OF === "true";
@@ -613,9 +615,15 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
         name: z.string().min(1),
         email: z.string().email().optional(),
         country: z.string().length(2).optional(),
+        platformFeePercent: z.number().min(0).max(100).optional(),
       }))
       .mutation(async ({ input }) => {
-        const id = await createVendor({ name: input.name, email: input.email, country: input.country });
+        const id = await createVendor({
+          name: input.name,
+          email: input.email,
+          country: input.country,
+          platformFeePercent: input.platformFeePercent ?? null,
+        });
         return getVendorById(id);
       }),
 

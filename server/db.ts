@@ -263,6 +263,7 @@ export async function createVendor(data: {
   name: string;
   email?: string | null;
   country?: string | null;
+  platformFeePercent?: number | null;
 }): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -272,6 +273,9 @@ export async function createVendor(data: {
     email: data.email ?? null,
     country: data.country ?? "US",
     isActive: true,
+    platformFeePercent: data.platformFeePercent != null
+      ? data.platformFeePercent.toString()
+      : null,
   });
   return Number(result[0].insertId);
 }

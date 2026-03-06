@@ -1348,7 +1348,7 @@ function VendorsTab() {
   const onboardingLinkMutation = trpc.admin.createConnectOnboardingLink.useMutation();
   const statusMutation = trpc.admin.getConnectAccountStatus.useMutation();
 
-  const [newVendor, setNewVendor] = useState({ name: "", email: "", country: "US" });
+  const [newVendor, setNewVendor] = useState({ name: "", email: "", country: "US", platformFeePercent: "5" });
   const [creating, setCreating] = useState(false);
   const [statusMap, setStatusMap] = useState<Record<number, { chargesEnabled: boolean; payoutsEnabled: boolean; detailsSubmitted: boolean; currentlyDue: string[]; pastDue: string[]; disabledReason: string | null }>>({});
 
@@ -1356,8 +1356,14 @@ function VendorsTab() {
     if (!newVendor.name.trim()) return;
     setCreating(true);
     try {
-      await createVendorMutation.mutateAsync({ name: newVendor.name, email: newVendor.email || undefined, country: newVendor.country || undefined });
-      setNewVendor({ name: "", email: "", country: "US" });
+      const feeVal = parseFloat(newVendor.platformFeePercent);
+      await createVendorMutation.mutateAsync({
+        name: newVendor.name,
+        email: newVendor.email || undefined,
+        country: newVendor.country || undefined,
+        platformFeePercent: !isNaN(feeVal) && feeVal >= 0 && feeVal <= 100 ? feeVal : undefined,
+      });
+      setNewVendor({ name: "", email: "", country: "US", platformFeePercent: "5" });
       vendorsQuery.refetch();
     } finally {
       setCreating(false);
@@ -1402,7 +1408,7 @@ function VendorsTab() {
       {/* Create vendor form */}
       <div className="border border-black/10 p-4 mb-8">
         <h3 className="text-sm font-semibold mb-3">Add Vendor</h3>
-        <div className="grid grid-cols-3 gap-3 mb-3">
+        <div className="grid grid-cols-4 gap-3 mb-3">
           <div>
             <label className="block text-xs text-black/50 uppercase tracking-wider mb-1">Name</label>
             <Input value={newVendor.name} onChange={e => setNewVendor(v => ({ ...v, name: e.target.value }))} placeholder="Laundry Butler" className="bg-white border-black/20" />
@@ -1414,6 +1420,19 @@ function VendorsTab() {
           <div>
             <label className="block text-xs text-black/50 uppercase tracking-wider mb-1">Country</label>
             <Input value={newVendor.country} onChange={e => setNewVendor(v => ({ ...v, country: e.target.value.toUpperCase().slice(0, 2) }))} placeholder="US" maxLength={2} className="bg-white border-black/20" />
+          </div>
+          <div>
+            <label className="block text-xs text-black/50 uppercase tracking-wider mb-1">Platform Fee (%)</label>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              step={0.1}
+              value={newVendor.platformFeePercent}
+              onChange={e => setNewVendor(v => ({ ...v, platformFeePercent: e.target.value }))}
+              placeholder="5"
+              className="bg-white border-black/20"
+            />
           </div>
         </div>
         <Button className="bg-black text-white hover:bg-black/90" onClick={handleCreateVendor} disabled={creating || !newVendor.name.trim()}>
@@ -1450,6 +1469,9 @@ function VendorsTab() {
                       {!vendor.isActive && <span className="text-xs px-2 py-0.5 rounded-full bg-black/10 text-black/50">Inactive</span>}
                     </div>
                     {vendor.email && <p className="text-xs text-black/40 mt-0.5">{vendor.email} · {vendor.country ?? "US"}</p>}
+                    <p className="text-xs text-black/40 mt-0.5">
+                      Platform fee: {vendor.platformFeePercent != null ? `${parseFloat(vendor.platformFeePercent as string)}%` : `${import.meta.env.VITE_PLATFORM_FEE_PERCENT ?? "5"}% (global default)`}
+                    </p>
                     {vendor.stripeConnectAccountId && (
                       <p className="text-xs text-black/30 mt-0.5 font-mono">
                         {vendor.stripeConnectAccountId.slice(0, 8)}…{vendor.stripeConnectAccountId.slice(-4)}

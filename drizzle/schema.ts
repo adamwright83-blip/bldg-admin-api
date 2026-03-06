@@ -121,6 +121,7 @@ export const vendors = mysqlTable("vendors", {
   currentlyDue: text("currentlyDue"),
   pastDue: text("pastDue"),
   disabledReason: varchar("disabledReason", { length: 255 }),
+  platformFeePercent: decimal("platformFeePercent", { precision: 5, scale: 2 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
