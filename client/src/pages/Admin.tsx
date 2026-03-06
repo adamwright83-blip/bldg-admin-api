@@ -1411,19 +1411,19 @@ function VendorsTab() {
         <div className="grid grid-cols-4 gap-3 mb-3">
           <div>
             <label className="block text-xs text-black/50 uppercase tracking-wider mb-1">Name</label>
-            <Input value={newVendor.name} onChange={e => setNewVendor(v => ({ ...v, name: e.target.value }))} placeholder="Laundry Butler" className="bg-white border-black/20" />
+            <input value={newVendor.name} onChange={e => setNewVendor(v => ({ ...v, name: e.target.value }))} placeholder="Laundry Butler" className="w-full border border-black/20 rounded px-3 py-2 text-sm bg-white" />
           </div>
           <div>
             <label className="block text-xs text-black/50 uppercase tracking-wider mb-1">Email (optional)</label>
-            <Input value={newVendor.email} onChange={e => setNewVendor(v => ({ ...v, email: e.target.value }))} placeholder="vendor@example.com" className="bg-white border-black/20" />
+            <input value={newVendor.email} onChange={e => setNewVendor(v => ({ ...v, email: e.target.value }))} placeholder="vendor@example.com" className="w-full border border-black/20 rounded px-3 py-2 text-sm bg-white" />
           </div>
           <div>
             <label className="block text-xs text-black/50 uppercase tracking-wider mb-1">Country</label>
-            <Input value={newVendor.country} onChange={e => setNewVendor(v => ({ ...v, country: e.target.value.toUpperCase().slice(0, 2) }))} placeholder="US" maxLength={2} className="bg-white border-black/20" />
+            <input value={newVendor.country} onChange={e => setNewVendor(v => ({ ...v, country: e.target.value.toUpperCase().slice(0, 2) }))} placeholder="US" maxLength={2} className="w-full border border-black/20 rounded px-3 py-2 text-sm bg-white" />
           </div>
           <div>
             <label className="block text-xs text-black/50 uppercase tracking-wider mb-1">Platform Fee (%)</label>
-            <Input
+            <input
               type="number"
               min={0}
               max={100}
@@ -1431,11 +1431,12 @@ function VendorsTab() {
               value={newVendor.platformFeePercent}
               onChange={e => setNewVendor(v => ({ ...v, platformFeePercent: e.target.value }))}
               placeholder="5"
-              className="bg-white border-black/20"
+              className="w-full border border-black/20 rounded px-3 py-2 text-sm bg-white"
             />
           </div>
         </div>
-        <Button className="bg-black text-white hover:bg-black/90" onClick={handleCreateVendor} disabled={creating || !newVendor.name.trim()}>
+        <p className="text-xs text-black/30 mb-2">Name state: "{newVendor.name}"</p>
+        <Button className="bg-black text-white hover:bg-black/90" onClick={handleCreateVendor} disabled={creating}>
           {creating ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : null}
           Create Vendor
         </Button>
