@@ -146,6 +146,24 @@ for (const [sql, label] of vendorCols) {
   await run(sql, label);
 }
 
+// ── vendors: vendor portal columns ────────────────────────────────
+await run(`ALTER TABLE vendors ADD COLUMN slug VARCHAR(50) UNIQUE AFTER platformFeePercent`, "vendors.slug");
+await run(`ALTER TABLE vendors ADD COLUMN brandName VARCHAR(100) AFTER slug`, "vendors.brandName");
+await run(`ALTER TABLE vendors ADD COLUMN logoUrl VARCHAR(512) AFTER brandName`, "vendors.logoUrl");
+
+// ── vendor_users table (vendor portal auth) ───────────────────────
+await run(`
+  CREATE TABLE IF NOT EXISTS vendor_users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    vendorId INT NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    passwordHash VARCHAR(255) NOT NULL,
+    role VARCHAR(50) DEFAULT 'user',
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_vendor_email (vendorId, email)
+  )
+`, "CREATE TABLE vendor_users");
+
 // ── vendor_service_coverage table (Phase 2) ───────────────────────
 await run(`
   CREATE TABLE IF NOT EXISTS vendor_service_coverage (

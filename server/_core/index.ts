@@ -14,6 +14,10 @@ import { sdk } from "./sdk";
 import { upsertUser } from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { VENDOR_COOKIE_NAME, THIRTY_DAYS_MS } from "@shared/const";
+import bcrypt from "bcryptjs";
+import { SignJWT } from "jose";
+import { getVendorBySlug, getVendorUserByVendorIdAndEmail } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -109,6 +113,56 @@ async function startServer() {
       res.json({ ok: true });
     } catch (err) {
       console.error("[Auth] Login failed:", err);
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  // Vendor portal login — slug + email + password, vendor_users table
+  app.post("/api/vendor/login", async (req, res) => {
+    const { slug, email, password } = req.body || {};
+    if (!slug || !email || !password) {
+      return res.status(400).json({ error: "slug, email, and password are required" });
+    }
+
+    try {
+      const vendor = await getVendorBySlug(String(slug).trim().toLowerCase());
+      if (!vendor) {
+        return res.status(401).json({ error: "Invalid vendor or password" });
+      }
+      if (!vendor.isActive) {
+        return res.status(403).json({ error: "Vendor account is inactive" });
+      }
+
+      const vendorUser = await getVendorUserByVendorIdAndEmail(vendor.id, String(email));
+      if (!vendorUser) {
+        return res.status(401).json({ error: "Invalid vendor or password" });
+      }
+
+      const match = await bcrypt.compare(String(password), vendorUser.passwordHash);
+      if (!match) {
+        return res.status(401).json({ error: "Invalid vendor or password" });
+      }
+
+      const secret = new TextEncoder().encode(
+        process.env.JWT_SECRET || process.env.APP_SHARED_API_SECRET || ""
+      );
+      if (!secret.length) {
+        return res.status(503).json({ error: "JWT_SECRET not configured" });
+      }
+
+      const token = await new SignJWT({ vendorId: vendor.id })
+        .setProtectedHeader({ alg: "HS256" })
+        .setExpirationTime("30d")
+        .sign(secret);
+
+      const cookieOptions = getSessionCookieOptions(req);
+      res.cookie(VENDOR_COOKIE_NAME, token, {
+        ...cookieOptions,
+        maxAge: THIRTY_DAYS_MS,
+      });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[VendorAuth] Login failed:", err);
       res.status(500).json({ error: "Login failed" });
     }
   });

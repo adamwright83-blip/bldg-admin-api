@@ -4,6 +4,7 @@ import {
   InsertUser, users,
   orders, InsertOrder, Order,
   vendors, InsertVendor, Vendor,
+  vendorUsers, InsertVendorUser, VendorUser,
   vendorServiceCoverage, InsertVendorServiceCoverage, VendorServiceCoverage,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -128,31 +129,55 @@ export async function updateOrderStripe(
 /* ===== ADMIN / DRIVER HELPERS ===== */
 
 export async function getOrdersByStatus(
-  status: Order["status"]
+  status: Order["status"],
+  vendorId?: number
 ): Promise<Order[]> {
   const db = await getDb();
   if (!db) return [];
 
+  const where = vendorId != null
+    ? and(eq(orders.status, status), eq(orders.vendorId, vendorId))
+    : eq(orders.status, status);
   return db
     .select()
     .from(orders)
-    .where(eq(orders.status, status))
+    .where(where)
+    .orderBy(desc(orders.createdAt));
+}
+
+export async function getOrdersByVendorId(
+  vendorId: number,
+  status?: Order["status"]
+): Promise<Order[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const where = status != null
+    ? and(eq(orders.vendorId, vendorId), eq(orders.status, status))
+    : eq(orders.vendorId, vendorId);
+  return db
+    .select()
+    .from(orders)
+    .where(where)
     .orderBy(desc(orders.createdAt));
 }
 
 export async function getOrdersByDateAndStatus(
   date: string,
   status: Order["status"],
-  dateField: "pickupDate" | "deliveryDate" = "pickupDate"
+  dateField: "pickupDate" | "deliveryDate" = "pickupDate",
+  vendorId?: number
 ): Promise<Order[]> {
   const db = await getDb();
   if (!db) return [];
 
   const col = dateField === "deliveryDate" ? orders.deliveryDate : orders.pickupDate;
+  const conditions = [eq(col, date), eq(orders.status, status)];
+  if (vendorId != null) conditions.push(eq(orders.vendorId, vendorId));
   return db
     .select()
     .from(orders)
-    .where(and(eq(col, date), eq(orders.status, status)))
+    .where(and(...conditions))
     .orderBy(desc(orders.createdAt));
 }
 
@@ -288,6 +313,78 @@ export async function getVendorById(id: number): Promise<Vendor | undefined> {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function getVendorBySlug(slug: string): Promise<Vendor | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(vendors).where(eq(vendors.slug, slug)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getVendorUserByVendorIdAndEmail(
+  vendorId: number,
+  email: string
+): Promise<VendorUser | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select()
+    .from(vendorUsers)
+    .where(and(eq(vendorUsers.vendorId, vendorId), eq(vendorUsers.email, email.toLowerCase().trim())))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function createVendorUser(data: {
+  vendorId: number;
+  email: string;
+  passwordHash: string;
+  role?: string;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(vendorUsers).values({
+    vendorId: data.vendorId,
+    email: data.email.toLowerCase().trim(),
+    passwordHash: data.passwordHash,
+    role: data.role ?? "user",
+  });
+  return Number(result[0].insertId);
+}
+
+export async function updateVendorUserPassword(
+  vendorId: number,
+  email: string,
+  passwordHash: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(vendorUsers)
+    .set({ passwordHash })
+    .where(and(eq(vendorUsers.vendorId, vendorId), eq(vendorUsers.email, email.toLowerCase().trim())));
+}
+
+export async function updateVendorBranding(
+  vendorId: number,
+  data: { brandName?: string | null; logoUrl?: string | null }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(vendors).set(data).where(eq(vendors.id, vendorId));
+}
+
+export async function updateVendorSlug(vendorId: number, slug: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(vendors).set({ slug: slug.trim().toLowerCase() }).where(eq(vendors.id, vendorId));
+}
+
 export async function listVendors(): Promise<Vendor[]> {
   const db = await getDb();
   if (!db) return [];
@@ -396,6 +493,71 @@ export async function listVendorCoverage(vendorId?: number): Promise<VendorServi
       .orderBy(asc(vendorServiceCoverage.priority));
   }
   return db.select().from(vendorServiceCoverage).orderBy(asc(vendorServiceCoverage.priority));
+}
+
+export async function getVendorCustomers(
+  vendorId: number
+): Promise<{ firstName: string; buildingSlug: string | null; unit: string | null; totalOrdersWithThisVendor: number; lastOrderDate: string }[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db
+    .select({
+      firstName: orders.firstName,
+      buildingSlug: orders.buildingSlug,
+      unit: orders.unit,
+      lastOrderDate: orders.updatedAt,
+    })
+    .from(orders)
+    .where(eq(orders.vendorId, vendorId))
+    .orderBy(desc(orders.updatedAt));
+
+  const byKey = new Map<string, { firstName: string; buildingSlug: string | null; unit: string | null; count: number; lastDate: Date }>();
+  for (const r of rows) {
+    const key = `${r.firstName}|${r.buildingSlug ?? ""}|${r.unit ?? ""}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.count += 1;
+      if (r.lastOrderDate && (!existing.lastDate || r.lastOrderDate > existing.lastDate)) {
+        existing.lastDate = r.lastOrderDate;
+      }
+    } else {
+      byKey.set(key, {
+        firstName: r.firstName,
+        buildingSlug: r.buildingSlug,
+        unit: r.unit,
+        count: 1,
+        lastDate: r.lastOrderDate ?? new Date(0),
+      });
+    }
+  }
+  return Array.from(byKey.values()).map(v => ({
+    firstName: v.firstName,
+    buildingSlug: v.buildingSlug,
+    unit: v.unit,
+    totalOrdersWithThisVendor: v.count,
+    lastOrderDate: v.lastDate.getTime() ? v.lastDate.toISOString().split("T")[0] : "",
+  }));
+}
+
+export async function getVendorPayouts(
+  vendorId: number
+): Promise<Order[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(orders)
+    .where(and(eq(orders.vendorId, vendorId), eq(orders.paid, true)))
+    .orderBy(desc(orders.updatedAt));
+}
+
+export async function listVendorUsers(vendorId: number): Promise<VendorUser[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db.select().from(vendorUsers).where(eq(vendorUsers.vendorId, vendorId));
 }
 
 export async function getVendorForOrder(

@@ -1,7 +1,7 @@
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, VENDOR_COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, adminProcedure, platformOrVendorProcedure, vendorProcedure, router } from "./_core/trpc";
 import {
   createOrder,
   updateOrderStripe,
@@ -26,6 +26,16 @@ import {
   deleteVendorCoverage,
   listVendorCoverage,
   getVendorForOrder,
+  getVendorBySlug,
+  getVendorUserByVendorIdAndEmail,
+  getOrdersByVendorId,
+  getVendorCustomers,
+  getVendorPayouts,
+  createVendorUser,
+  updateVendorUserPassword,
+  updateVendorBranding,
+  updateVendorSlug,
+  listVendorUsers,
 } from "./db";
 import { ENV } from "./_core/env";
 import { notifyOwner } from "./_core/notification";
@@ -72,6 +82,93 @@ export const appRouter = router({
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
+    }),
+  }),
+
+  vendor: router({
+    /** Public — returns vendor info when session valid, null otherwise. For vendor portal auth check. */
+    me: publicProcedure.query(async ({ ctx }) => {
+      if (!ctx.vendorSession) return null;
+      const vendor = await getVendorById(ctx.vendorSession.vendorId);
+      if (!vendor) return null;
+      return {
+        vendorId: vendor.id,
+        vendorSlug: vendor.slug ?? "",
+        brandName: vendor.brandName ?? vendor.name,
+        logoUrl: vendor.logoUrl ?? null,
+        chargesEnabled: vendor.chargesEnabled ?? false,
+        payoutsEnabled: vendor.payoutsEnabled ?? false,
+      };
+    }),
+    logout: vendorProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(VENDOR_COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      return { success: true } as const;
+    }),
+    dashboard: vendorProcedure.query(async ({ ctx }) => {
+      const vid = ctx.vendorSession.vendorId;
+      const today = new Date().toISOString().split("T")[0];
+      const orders = await getOrdersByVendorId(vid);
+      const todayOrders = orders.filter(o =>
+        (o.pickupDate === today || o.deliveryDate === today)
+      );
+      const awaitingIntake = orders.filter(o => o.status === "collected");
+      const readyForDelivery = orders.filter(o => o.status === "ready");
+      const weekStart = new Date();
+      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+      const weekStartStr = weekStart.toISOString().split("T")[0];
+      const thisWeekOrders = orders.filter(o => {
+        const d = o.updatedAt ? new Date(o.updatedAt).toISOString().split("T")[0] : "";
+        return d >= weekStartStr && o.paid;
+      });
+      const grossCents = thisWeekOrders.reduce((s, o) => s + (o.total ? Math.round(parseFloat(String(o.total)) * 100) : 0), 0);
+      const payoutCents = thisWeekOrders.reduce((s, o) => s + (o.vendorPayoutCents ?? 0), 0);
+      const last5 = orders.slice(0, 5);
+      return {
+        todayOrderCount: todayOrders.length,
+        awaitingIntakeCount: awaitingIntake.length,
+        readyForDeliveryCount: readyForDelivery.length,
+        thisWeekGrossCents: grossCents,
+        thisWeekPayoutCents: payoutCents,
+        recentOrders: last5,
+      };
+    }),
+    listOrders: vendorProcedure
+      .input(z.object({ status: z.enum(["new", "collected", "processing", "ready", "delivered"]).optional() }))
+      .query(async ({ ctx, input }) => {
+        return getOrdersByVendorId(ctx.vendorSession.vendorId, input.status);
+      }),
+    listByStatus: vendorProcedure
+      .input(z.object({ status: z.enum(["new", "collected", "processing", "ready", "delivered"]) }))
+      .query(async ({ ctx, input }) => {
+        return getOrdersByVendorId(ctx.vendorSession.vendorId, input.status);
+      }),
+    listByDate: vendorProcedure
+      .input(z.object({
+        date: z.string(),
+        status: z.enum(["new", "collected", "processing", "ready", "delivered"]),
+        dateField: z.enum(["pickupDate", "deliveryDate"]).default("pickupDate"),
+      }))
+      .query(async ({ ctx, input }) => {
+        return getOrdersByDateAndStatus(
+          input.date,
+          input.status,
+          input.dateField,
+          ctx.vendorSession.vendorId
+        );
+      }),
+    listCustomers: vendorProcedure.query(async ({ ctx }) => {
+      return getVendorCustomers(ctx.vendorSession.vendorId);
+    }),
+    listPayouts: vendorProcedure.query(async ({ ctx }) => {
+      return getVendorPayouts(ctx.vendorSession.vendorId);
+    }),
+    getConnectDashboardLink: vendorProcedure.query(async ({ ctx }) => {
+      const vendor = await getVendorById(ctx.vendorSession.vendorId);
+      if (!vendor?.stripeConnectAccountId) return null;
+      const stripe = getStripe();
+      const link = await stripe.accounts.createLoginLink(vendor.stripeConnectAccountId);
+      return { url: link.url };
     }),
   }),
 
@@ -217,32 +314,39 @@ export const appRouter = router({
 
   /* ===== ADMIN ROUTES (protected — owner only) ===== */
   admin: router({
-    /** List orders by status */
-    listByStatus: protectedProcedure
+    /** List orders by status — platform or vendor (vendor gets scoped list) */
+    listByStatus: platformOrVendorProcedure
       .input(z.object({ status: z.enum(["new", "collected", "processing", "ready", "delivered"]) }))
-      .query(async ({ input }) => {
-        return getOrdersByStatus(input.status);
+      .query(async ({ ctx, input }) => {
+        const vendorId = ctx.vendorSession?.vendorId;
+        return getOrdersByStatus(input.status, vendorId);
       }),
 
-    /** List orders by date + status (for pickups/deliveries view) */
-    listByDate: protectedProcedure
+    /** List orders by date + status — platform or vendor */
+    listByDate: platformOrVendorProcedure
       .input(z.object({
         date: z.string(),
         status: z.enum(["new", "collected", "processing", "ready", "delivered"]),
         dateField: z.enum(["pickupDate", "deliveryDate"]).default("pickupDate"),
       }))
-      .query(async ({ input }) => {
-        return getOrdersByDateAndStatus(input.date, input.status, input.dateField);
+      .query(async ({ ctx, input }) => {
+        const vendorId = ctx.vendorSession?.vendorId;
+        return getOrdersByDateAndStatus(input.date, input.status, input.dateField, vendorId);
       }),
 
-    /** Get single order detail */
-    getOrder: protectedProcedure
+    /** Get single order detail — vendor can only get own orders */
+    getOrder: platformOrVendorProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return getOrderById(input.id);
+      .query(async ({ ctx, input }) => {
+        const order = await getOrderById(input.id);
+        if (!order) return null;
+        if (ctx.vendorSession && order.vendorId !== ctx.vendorSession.vendorId) {
+          return null; // vendor cannot see other vendor's orders
+        }
+        return order;
       }),
 
-    /** Search customer by phone (for new order prefill) */
+    /** Search customer by phone — platform only (new order prefill) */
     searchCustomer: protectedProcedure
       .input(z.object({ phone: z.string().min(3) }))
       .query(async ({ input }) => {
@@ -322,13 +426,18 @@ export const appRouter = router({
         return { orderId };
       }),
 
-    /** Update order status (generic) */
-    updateStatus: protectedProcedure
+    /** Update order status — platform or vendor (vendor scoped to own orders) */
+    updateStatus: platformOrVendorProcedure
       .input(z.object({
         orderId: z.number(),
         status: z.enum(["new", "collected", "processing", "ready", "delivered"]),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        const order = await getOrderById(input.orderId);
+        if (!order) throw new Error("Order not found");
+        if (ctx.vendorSession && order.vendorId !== ctx.vendorSession.vendorId) {
+          throw new Error("Unauthorized");
+        }
         await updateOrderStatus(input.orderId, input.status);
 
         // SMS: Pickup en route when marking as collected
@@ -346,14 +455,19 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    /** Mark ready — includes bag_count and garment_count */
-    markReady: protectedProcedure
+    /** Mark ready — platform or vendor (vendor scoped to own orders) */
+    markReady: platformOrVendorProcedure
       .input(z.object({
         orderId: z.number(),
         bagCount: z.number().int().min(1).default(1),
         garmentCount: z.number().int().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        const order = await getOrderById(input.orderId);
+        if (!order) throw new Error("Order not found");
+        if (ctx.vendorSession && order.vendorId !== ctx.vendorSession.vendorId) {
+          throw new Error("Unauthorized");
+        }
         await updateOrderIntake(input.orderId, {
           status: "ready",
           bagCount: input.bagCount,
@@ -361,7 +475,6 @@ export const appRouter = router({
         });
 
         // SMS: Delivery en route when marking as ready
-        const order = await getOrderById(input.orderId);
         if (order) {
           try {
             await notifyDeliveryEnRoute(order.phone);
@@ -373,8 +486,8 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    /** Save intake data (pricing details before charge) */
-    saveIntake: protectedProcedure
+    /** Save intake data — platform or vendor (chargeCard stays platform-only) */
+    saveIntake: platformOrVendorProcedure
       .input(z.object({
         orderId: z.number(),
         weightLbs: z.number().optional(),
@@ -384,7 +497,12 @@ export const appRouter = router({
         upchargesJson: z.any().optional(),
         drycleanItemsJson: z.any().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        const order = await getOrderById(input.orderId);
+        if (!order) throw new Error("Order not found");
+        if (ctx.vendorSession && order.vendorId !== ctx.vendorSession.vendorId) {
+          throw new Error("Unauthorized");
+        }
         await updateOrderIntake(input.orderId, {
           weightLbs: input.weightLbs?.toString() ?? null,
           subtotal: input.subtotal,
@@ -637,6 +755,54 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
       .mutation(async ({ input }) => {
         await updateVendorIsActive(input.vendorId, input.isActive);
         return { success: true };
+      }),
+
+    setVendorUserPassword: adminProcedure
+      .input(z.object({
+        vendorId: z.number(),
+        email: z.string().email(),
+        password: z.string().min(6),
+      }))
+      .mutation(async ({ input }) => {
+        const hash = await import("bcryptjs").then(b => b.default.hash(input.password, 10));
+        const existing = await getVendorUserByVendorIdAndEmail(input.vendorId, input.email);
+        if (existing) {
+          await updateVendorUserPassword(input.vendorId, input.email, hash);
+        } else {
+          await createVendorUser({
+            vendorId: input.vendorId,
+            email: input.email,
+            passwordHash: hash,
+          });
+        }
+        return { success: true };
+      }),
+
+    updateVendorBranding: adminProcedure
+      .input(z.object({
+        vendorId: z.number(),
+        brandName: z.string().nullable().optional(),
+        logoUrl: z.string().url().nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        await updateVendorBranding(input.vendorId, {
+          brandName: input.brandName,
+          logoUrl: input.logoUrl,
+        });
+        return { success: true };
+      }),
+
+    updateVendorSlug: adminProcedure
+      .input(z.object({ vendorId: z.number(), slug: z.string().min(1).max(50) }))
+      .mutation(async ({ input }) => {
+        await updateVendorSlug(input.vendorId, input.slug.trim().toLowerCase());
+        return { success: true };
+      }),
+
+    listVendorUsers: adminProcedure
+      .input(z.object({ vendorId: z.number() }))
+      .query(async ({ input }) => {
+        return listVendorUsers(input.vendorId);
       }),
 
     createConnectAccount: protectedProcedure

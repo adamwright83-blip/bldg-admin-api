@@ -1351,6 +1351,11 @@ function VendorsTab() {
   const [newVendor, setNewVendor] = useState({ name: "", email: "", country: "US", platformFeePercent: "5" });
   const [creating, setCreating] = useState(false);
   const [statusMap, setStatusMap] = useState<Record<number, { chargesEnabled: boolean; payoutsEnabled: boolean; detailsSubmitted: boolean; currentlyDue: string[]; pastDue: string[]; disabledReason: string | null }>>({});
+  const setVendorUserPasswordMutation = trpc.admin.setVendorUserPassword.useMutation();
+  const updateVendorBrandingMutation = trpc.admin.updateVendorBranding.useMutation();
+  const updateVendorSlugMutation = trpc.admin.updateVendorSlug.useMutation();
+  const [vendorEdits, setVendorEdits] = useState<Record<number, { slug: string; brandName: string; logoUrl: string }>>({});
+  const [vendorPassword, setVendorPassword] = useState<Record<number, { email: string; password: string }>>({});
 
   const handleCreateVendor = async () => {
     if (!newVendor.name.trim()) return;
@@ -1393,6 +1398,21 @@ function VendorsTab() {
 
   const handleToggleActive = async (vendorId: number, isActive: boolean) => {
     await updateActiveMutation.mutateAsync({ vendorId, isActive });
+    vendorsQuery.refetch();
+  };
+
+  const handleSetVendorUserPassword = async (vendorId: number, email: string, password: string) => {
+    await setVendorUserPasswordMutation.mutateAsync({ vendorId, email, password });
+    setVendorPassword(prev => ({ ...prev, [vendorId]: { email: "", password: "" } }));
+  };
+
+  const handleUpdateVendorBranding = async (vendorId: number, brandName: string | null, logoUrl: string | null) => {
+    await updateVendorBrandingMutation.mutateAsync({ vendorId, brandName, logoUrl });
+    vendorsQuery.refetch();
+  };
+
+  const handleUpdateVendorSlug = async (vendorId: number, slug: string) => {
+    await updateVendorSlugMutation.mutateAsync({ vendorId, slug });
     vendorsQuery.refetch();
   };
 
@@ -1485,6 +1505,82 @@ function VendorsTab() {
                   >
                     {vendor.isActive ? "Deactivate" : "Activate"}
                   </button>
+                </div>
+
+                {/* Vendor portal: slug, brand, logo, password */}
+                <div className="mb-3 p-3 bg-black/5 rounded text-xs space-y-2">
+                  <p className="font-medium text-black/70">Vendor portal</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-black/50 mb-0.5">Slug (e.g. laundrybutler)</label>
+                      <div className="flex gap-1">
+                        <input
+                          value={vendorEdits[vendor.id]?.slug ?? vendor.slug ?? ""}
+                          onChange={e => setVendorEdits(v => ({ ...v, [vendor.id]: { ...v[vendor.id], slug: e.target.value, brandName: v[vendor.id]?.brandName ?? vendor.brandName ?? "", logoUrl: v[vendor.id]?.logoUrl ?? vendor.logoUrl ?? "" } }))}
+                          placeholder="laundrybutler"
+                          className="flex-1 border border-black/20 rounded px-2 py-1.5 text-sm"
+                        />
+                        <Button size="sm" variant="outline" className="shrink-0 text-xs" onClick={() => handleUpdateVendorSlug(vendor.id, vendorEdits[vendor.id]?.slug ?? vendor.slug ?? "")}>
+                          Set
+                        </Button>
+                      </div>
+                      {vendor.slug && <p className="text-black/40 mt-0.5 text-[10px]">→ [slug].ops.bldg.chat</p>}
+                    </div>
+                    <div>
+                      <label className="block text-black/50 mb-0.5">Brand name</label>
+                      <div className="flex gap-1">
+                        <input
+                          value={vendorEdits[vendor.id]?.brandName ?? vendor.brandName ?? vendor.name}
+                          onChange={e => setVendorEdits(v => ({ ...v, [vendor.id]: { ...v[vendor.id], slug: v[vendor.id]?.slug ?? vendor.slug ?? "", brandName: e.target.value, logoUrl: v[vendor.id]?.logoUrl ?? vendor.logoUrl ?? "" } }))}
+                          placeholder="Brand"
+                          className="flex-1 border border-black/20 rounded px-2 py-1.5 text-sm"
+                        />
+                        <Button size="sm" variant="outline" className="shrink-0 text-xs" onClick={() => handleUpdateVendorBranding(vendor.id, vendorEdits[vendor.id]?.brandName ?? vendor.brandName ?? null, vendorEdits[vendor.id]?.logoUrl ?? vendor.logoUrl ?? null)}>
+                          Set
+                        </Button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-black/50 mb-0.5">Logo URL</label>
+                      <input
+                        value={vendorEdits[vendor.id]?.logoUrl ?? vendor.logoUrl ?? ""}
+                        onChange={e => setVendorEdits(v => ({ ...v, [vendor.id]: { ...v[vendor.id], slug: v[vendor.id]?.slug ?? vendor.slug ?? "", brandName: v[vendor.id]?.brandName ?? vendor.brandName ?? "", logoUrl: e.target.value } }))}
+                        placeholder="https://..."
+                        className="w-full border border-black/20 rounded px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-black/10">
+                    <label className="block text-black/50 mb-1">Set vendor user password</label>
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        type="email"
+                        value={vendorPassword[vendor.id]?.email ?? ""}
+                        onChange={e => setVendorPassword(v => ({ ...v, [vendor.id]: { ...v[vendor.id], email: e.target.value, password: v[vendor.id]?.password ?? "" } }))}
+                        placeholder="vendor@example.com"
+                        className="border border-black/20 rounded px-2 py-1.5 text-sm w-40"
+                      />
+                      <input
+                        type="password"
+                        value={vendorPassword[vendor.id]?.password ?? ""}
+                        onChange={e => setVendorPassword(v => ({ ...v, [vendor.id]: { ...v[vendor.id], email: v[vendor.id]?.email ?? "", password: e.target.value } }))}
+                        placeholder="Password (min 6)"
+                        className="border border-black/20 rounded px-2 py-1.5 text-sm w-32"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs"
+                        disabled={!(vendorPassword[vendor.id]?.email && vendorPassword[vendor.id]?.password?.length >= 6)}
+                        onClick={() => {
+                          const pw = vendorPassword[vendor.id];
+                          if (pw?.email && pw?.password) handleSetVendorUserPassword(vendor.id, pw.email, pw.password);
+                        }}
+                      >
+                        Set / Reset password
+                      </Button>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Status indicators */}

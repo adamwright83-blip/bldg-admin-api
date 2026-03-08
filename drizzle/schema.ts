@@ -114,7 +114,6 @@ export const vendors = mysqlTable("vendors", {
   country: varchar("country", { length: 2 }).default("US"),
   isActive: boolean("isActive").default(true).notNull(),
   stripeConnectAccountId: varchar("stripeConnectAccountId", { length: 255 }),
-  /* Stripe Connect status — persisted after every getConnectAccountStatus call */
   chargesEnabled: boolean("chargesEnabled").default(false),
   payoutsEnabled: boolean("payoutsEnabled").default(false),
   detailsSubmitted: boolean("detailsSubmitted").default(false),
@@ -122,9 +121,27 @@ export const vendors = mysqlTable("vendors", {
   pastDue: text("pastDue"),
   disabledReason: varchar("disabledReason", { length: 255 }),
   platformFeePercent: decimal("platformFeePercent", { precision: 5, scale: 2 }),
+  slug: varchar("slug", { length: 50 }),
+  brandName: varchar("brandName", { length: 100 }),
+  logoUrl: varchar("logoUrl", { length: 512 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
+
+/**
+ * Vendor users — login credentials for vendor portal (auth separate from vendors table).
+ */
+export const vendorUsers = mysqlTable("vendor_users", {
+  id: int("id").autoincrement().primaryKey(),
+  vendorId: int("vendorId").notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+  role: varchar("role", { length: 50 }).default("user"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type VendorUser = typeof vendorUsers.$inferSelect;
+export type InsertVendorUser = typeof vendorUsers.$inferInsert;
 
 export type Vendor = typeof vendors.$inferSelect;
 export type InsertVendor = typeof vendors.$inferInsert;

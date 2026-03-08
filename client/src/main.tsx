@@ -10,11 +10,18 @@ import "./index.css";
 
 const queryClient = new QueryClient();
 
+const VENDOR_UNAUTHED_MSG = "Please login to the vendor portal (10003)";
+
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
 
   const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
+  const isVendorUnauthorized = error.message === VENDOR_UNAUTHED_MSG;
+
+  // Do not redirect on vendor host — vendor portal shows inline login form
+  const hostname = typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
+  if (hostname.endsWith(".ops.bldg.chat") && isVendorUnauthorized) return;
 
   if (!isUnauthorized) return;
   const loginUrl = getLoginUrl();

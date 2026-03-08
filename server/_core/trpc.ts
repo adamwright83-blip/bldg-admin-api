@@ -3,6 +3,8 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
 
+const VENDOR_UNAUTHED_MSG = "Please login to the vendor portal (10003)";
+
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
 });
@@ -12,17 +14,10 @@ export const publicProcedure = t.procedure;
 
 const requireUser = t.middleware(async opts => {
   const { ctx, next } = opts;
-
   if (!ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
-
-  return next({
-    ctx: {
-      ...ctx,
-      user: ctx.user,
-    },
-  });
+  return next({ ctx: { ...ctx, user: ctx.user } });
 });
 
 export const protectedProcedure = t.procedure.use(requireUser);
@@ -30,16 +25,34 @@ export const protectedProcedure = t.procedure.use(requireUser);
 export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
-
-    if (!ctx.user || ctx.user.role !== 'admin') {
+    if (!ctx.user || ctx.user.role !== "admin") {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
+    return next({ ctx: { ...ctx, user: ctx.user } });
+  })
+);
 
-    return next({
-      ctx: {
-        ...ctx,
-        user: ctx.user,
-      },
-    });
-  }),
+export const platformProcedure = adminProcedure;
+
+const requireVendorSession = t.middleware(async opts => {
+  const { ctx, next } = opts;
+  if (!ctx.vendorSession) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: VENDOR_UNAUTHED_MSG });
+  }
+  return next({ ctx: { ...ctx, vendorSession: ctx.vendorSession } });
+});
+
+export const vendorProcedure = t.procedure.use(requireVendorSession);
+
+/** Requires either platform admin (user.role=admin) OR vendor session. For order mutations — chargeCard stays platform-only. */
+export const platformOrVendorProcedure = t.procedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+    const isPlatform = ctx.user && ctx.user.role === "admin";
+    const isVendor = !!ctx.vendorSession;
+    if (!isPlatform && !isVendor) {
+      throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+    }
+    return next({ ctx: { ...ctx, user: ctx.user, vendorSession: ctx.vendorSession } });
+  })
 );
