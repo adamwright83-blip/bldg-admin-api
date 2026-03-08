@@ -219,11 +219,19 @@ async function startServer() {
   });
 
   // Intake API endpoint for bldg-chat integration (authenticated via shared secret)
+  // Resident app must ONLY show "Laundry booked" when response is 200 + { ok: true, orderId }.
   app.post("/api/intake/from-bldg", async (req, res) => {
-    const sharedSecret = req.headers["x-app-shared-secret"];
+    const reqId = `intake-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    console.log(`[Intake ${reqId}] POST /api/intake/from-bldg received`);
 
+    const sharedSecret = req.headers["x-app-shared-secret"];
     if (!sharedSecret || sharedSecret !== process.env.APP_SHARED_API_SECRET) {
-      return res.status(401).json({ error: "Unauthorized" });
+      console.log(`[Intake ${reqId}] Auth failed (401)`);
+      return res.status(401).json({
+        error: "Unauthorized",
+        code: "ADMIN_INTAKE_FAILED",
+        message: "Invalid or missing x-app-shared-secret",
+      });
     }
 
     try {
@@ -243,27 +251,63 @@ async function startServer() {
         stripeCustomerId,
         stripePaymentMethodId,
         bldgUserId,
+        buildingSlug,
       } = req.body;
 
       // Validate required fields
       if (!serviceType || !firstName || !lastName || !phone || !address || !pickupDate || !pickupWindow) {
-        return res.status(400).json({ error: "Missing required fields" });
+        console.log(`[Intake ${reqId}] Validation failed: missing required fields`);
+        return res.status(400).json({
+          error: "Missing required fields",
+          code: "ADMIN_INTAKE_FAILED",
+          message: "serviceType, firstName, lastName, phone, address, pickupDate, pickupWindow are required",
+        });
       }
-
 
       // Normalize service type from "wash-fold" to "wash_fold"
-      const normalizedServiceType = serviceType.replace("-", "_");
-
+      const normalizedServiceType = String(serviceType).replace("-", "_");
       if (normalizedServiceType !== "wash_fold" && normalizedServiceType !== "dry_cleaning") {
-        return res.status(400).json({ error: "Invalid service type" });
+        console.log(`[Intake ${reqId}] Validation failed: invalid service type "${serviceType}"`);
+        return res.status(400).json({
+          error: "Invalid service type",
+          code: "ADMIN_INTAKE_FAILED",
+          message: "serviceType must be wash-fold or dry-cleaning",
+        });
       }
 
-      // Calculate default delivery date (next day) - avoid timezone issues
-      const [year, month, day] = pickupDate.split("-").map(Number);
+      // Calculate default delivery date (next day) - guard against invalid dates
+      const parts = String(pickupDate).split("-").map(Number);
+      const year = parts[0],
+        month = parts[1],
+        day = parts[2];
+      if (!year || !month || !day || isNaN(year) || isNaN(month) || isNaN(day)) {
+        console.log(`[Intake ${reqId}] Validation failed: invalid pickupDate "${pickupDate}"`);
+        return res.status(400).json({
+          error: "Invalid pickup date",
+          code: "ADMIN_INTAKE_FAILED",
+          message: "pickupDate must be YYYY-MM-DD",
+        });
+      }
       const nextDay = new Date(year, month - 1, day + 1);
-      const defaultDeliveryDate = nextDay.getFullYear() + "-" + String(nextDay.getMonth() + 1).padStart(2, "0") + "-" + String(nextDay.getDate()).padStart(2, "0");
+      if (isNaN(nextDay.getTime())) {
+        console.log(`[Intake ${reqId}] Validation failed: invalid date from pickupDate "${pickupDate}"`);
+        return res.status(400).json({
+          error: "Invalid pickup date",
+          code: "ADMIN_INTAKE_FAILED",
+          message: "pickupDate could not be parsed",
+        });
+      }
+      const defaultDeliveryDate =
+        nextDay.getFullYear() +
+        "-" +
+        String(nextDay.getMonth() + 1).padStart(2, "0") +
+        "-" +
+        String(nextDay.getDate()).padStart(2, "0");
 
-      // Create order with status "scheduled" (same as admin-created orders)
+      console.log(
+        `[Intake ${reqId}] Creating order: ${firstName} ${lastName}, ${normalizedServiceType}, pickup ${pickupDate}`
+      );
+
       const orderId = await createOrder({
         tenantId: "default",
         serviceType: normalizedServiceType,
@@ -281,13 +325,20 @@ async function startServer() {
         stripeCustomerId: stripeCustomerId || null,
         stripePaymentMethodId: stripePaymentMethodId || null,
         bldgUserId: bldgUserId || null,
-        status: "new", // Same as admin form
+        buildingSlug: buildingSlug || null,
+        status: "new",
       });
 
-      res.json({ ok: true, orderId });
+      console.log(`[Intake ${reqId}] Order created: id=${orderId}`);
+      res.status(200).json({ ok: true, orderId });
     } catch (err) {
-      console.error("[Intake API] Error:", err);
-      res.status(500).json({ error: "Internal server error" });
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[Intake ${reqId}] Error:`, err);
+      res.status(500).json({
+        error: "Internal server error",
+        code: "ADMIN_INTAKE_FAILED",
+        message: msg,
+      });
     }
   });
 
