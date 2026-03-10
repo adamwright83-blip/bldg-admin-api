@@ -597,25 +597,36 @@ export async function listCoordinatedRequests(): Promise<CoordinatedRequestWithR
   const db = await getDb();
   if (!db) return [];
 
-  const rows = await db
-    .select({
-      request: serviceRequests,
-      resident: {
-        id: bldgUsers.id,
-        firstName: bldgUsers.firstName,
-        lastName: bldgUsers.lastName,
-        phoneE164: bldgUsers.phoneE164,
-        phone: bldgUsers.phone,
-        buildingSlug: bldgUsers.buildingSlug,
-        unit: bldgUsers.unit,
-      },
-    })
-    .from(serviceRequests)
-    .leftJoin(bldgUsers, eq(serviceRequests.bldgUserId, bldgUsers.id))
-    .where(inArray(serviceRequests.serviceType, [...COORDINATED_SERVICE_TYPES]))
-    .orderBy(desc(serviceRequests.createdAt));
+  try {
+    const rows = await db
+      .select({
+        request: serviceRequests,
+        resident: {
+          id: bldgUsers.id,
+          firstName: bldgUsers.firstName,
+          lastName: bldgUsers.lastName,
+          phoneE164: bldgUsers.phoneE164,
+          phone: bldgUsers.phone,
+          buildingSlug: bldgUsers.buildingSlug,
+          unit: bldgUsers.unit,
+        },
+      })
+      .from(serviceRequests)
+      .leftJoin(bldgUsers, eq(serviceRequests.bldgUserId, bldgUsers.id))
+      .where(inArray(serviceRequests.serviceType, [...COORDINATED_SERVICE_TYPES]))
+      .orderBy(desc(serviceRequests.createdAt));
 
-  return rows.map((r) => ({ ...r.request, resident: r.resident?.id != null ? r.resident : null }));
+    return rows.map((r) => ({ ...r.request, resident: r.resident?.id != null ? r.resident : null }));
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn("[Requests] bldg_users join failed, returning requests without resident:", msg);
+    const requestsOnly = await db
+      .select()
+      .from(serviceRequests)
+      .where(inArray(serviceRequests.serviceType, [...COORDINATED_SERVICE_TYPES]))
+      .orderBy(desc(serviceRequests.createdAt));
+    return requestsOnly.map((r) => ({ ...r, resident: null }));
+  }
 }
 
 export async function getNewCoordinatedRequestsCount(): Promise<number> {

@@ -203,15 +203,16 @@ export type ServiceRequest = typeof serviceRequests.$inferSelect;
 export type InsertServiceRequest = typeof serviceRequests.$inferInsert;
 
 /**
- * Resident/users from bldg.chat app. Joined via service_requests.bldgUserId for name, phone, building, unit.
+ * Resident/users from bldg.chat app. Joined via service_requests.bldgUserId.
+ * DB column names use snake_case (first_name, last_name, etc.); verify with scripts/check-bldg-users-columns.mjs.
  */
 export const bldgUsers = mysqlTable("bldg_users", {
   id: int("id").autoincrement().primaryKey(),
-  firstName: varchar("firstName", { length: 100 }),
-  lastName: varchar("lastName", { length: 100 }),
-  phoneE164: varchar("phoneE164", { length: 30 }),
-  phone: varchar("phone", { length: 30 }), // alternate if table has phone instead of phoneE164
-  buildingSlug: varchar("buildingSlug", { length: 100 }),
+  firstName: varchar("first_name", { length: 100 }),
+  lastName: varchar("last_name", { length: 100 }),
+  phoneE164: varchar("phone_e164", { length: 30 }),
+  phone: varchar("phone", { length: 30 }),
+  buildingSlug: varchar("building_slug", { length: 100 }),
   unit: varchar("unit", { length: 100 }),
 });
 
