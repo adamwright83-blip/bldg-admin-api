@@ -19,7 +19,7 @@ import {
 } from "@shared/pricing";
 import type { Order } from "@shared/types";
 
-const TABS = ["New Order", "Intake", "Processing", "Ready", "Pickups", "Vendors"] as const;
+const TABS = ["New Order", "Intake", "Processing", "Ready", "Pickups", "Requests", "Vendors"] as const;
 type Tab = (typeof TABS)[number];
 
 const SUPPORTED_BUILDINGS: { label: string; value: string }[] = [
@@ -48,6 +48,7 @@ const STATUS_FOR_TAB: Record<Tab, Order["status"] | null> = {
   Processing: "processing",
   Ready: "ready",
   Pickups: null,
+  Requests: null,
   Vendors: null,
 };
 
@@ -86,6 +87,7 @@ function getWeekDates(offset: number) {
 export default function Admin() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("New Order");
+  const requestsCount = trpc.admin.countNewCoordinatedRequests.useQuery(undefined, { enabled: isAuthenticated });
 
   if (authLoading) {
     return (
@@ -109,19 +111,26 @@ export default function Admin() {
             <span className="text-xs text-black/40">{user?.name || "Admin"}</span>
           </div>
           <div className="flex gap-0 -mb-px overflow-x-auto">
-            {TABS.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-                  activeTab === tab
-                    ? "border-black text-black"
-                    : "border-transparent text-black/40 hover:text-black/70"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
+            {TABS.map((tab) => {
+              const isRequests = tab === "Requests";
+              const count = isRequests ? requestsCount.data ?? 0 : 0;
+              const label = isRequests
+                ? (count >= 1 ? <>Requests <span className="text-green-600 font-semibold">({count})</span></> : "Requests")
+                : tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                    activeTab === tab
+                      ? "border-black text-black"
+                      : "border-transparent text-black/40 hover:text-black/70"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
       </nav>
@@ -133,6 +142,7 @@ export default function Admin() {
         {activeTab === "Processing" && <ProcessingTab />}
         {activeTab === "Ready" && <ReadyTab />}
         {activeTab === "Pickups" && <PickupsTab />}
+        {activeTab === "Requests" && <RequestsTab />}
         {activeTab === "Vendors" && <VendorsTab />}
       </div>
     </div>
@@ -1180,6 +1190,175 @@ function PickupsTab() {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ===== REQUESTS TAB (coordinated requests from resident app) ===== */
+function RequestsTab() {
+  const utils = trpc.useUtils();
+  const { data: requests, refetch } = trpc.admin.listCoordinatedRequests.useQuery();
+  const updateStatus = trpc.admin.updateRequestStatus.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        refetch(),
+        utils.admin.countNewCoordinatedRequests.invalidate(),
+      ]);
+    },
+  });
+
+  const handleStatus = (requestId: number, status: string) => {
+    updateStatus.mutateAsync({ requestId, status });
+  };
+
+  if (requests === undefined) {
+    return (
+      <div className="flex items-center gap-2 text-black/50">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        <span>Loading requests…</span>
+      </div>
+    );
+  }
+
+  if (!requests.length) {
+    return (
+      <div>
+        <h2 className="text-lg font-semibold mb-4">Requests</h2>
+        <p className="text-sm text-black/50">No coordinated requests. Requests from the resident app (car-wash, grooming, other) will appear here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2 className="text-lg font-semibold mb-4">Requests</h2>
+      <p className="text-xs text-black/50 mb-4">Coordinated requests from bldg.chat (car-wash, grooming, other).</p>
+      <div className="space-y-4">
+        {requests.map((req) => (
+          <RequestCard
+            key={req.id}
+            request={req}
+            onStatus={handleStatus}
+            isPending={updateStatus.isPending}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RequestCard({
+  request,
+  onStatus,
+  isPending,
+}: {
+  request: {
+    id: number;
+    serviceType: string | null;
+    status: string | null;
+    requestSummary: string | null;
+    createdAt: Date | null;
+    resident: {
+      firstName: string | null;
+      lastName: string | null;
+      phoneE164: string | null;
+      phone: string | null;
+      buildingSlug: string | null;
+      unit: string | null;
+    } | null;
+  };
+  onStatus: (id: number, status: string) => void;
+  isPending: boolean;
+}) {
+  const created = request.createdAt
+    ? new Date(request.createdAt).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })
+    : "—";
+  const residentName = request.resident
+    ? [request.resident.firstName, request.resident.lastName].filter(Boolean).join(" ").trim() || "—"
+    : "—";
+  const building = request.resident?.buildingSlug ?? "—";
+  const unit = request.resident?.unit ?? "—";
+  const summary = request.requestSummary ?? "—";
+  const rawPhone = request.resident?.phoneE164 || request.resident?.phone || "";
+  const phone = rawPhone.replace(/[^\d+]/g, "") || "";
+  const smsHref = phone ? `sms:${phone.startsWith("+") ? phone : "+1" + phone}` : null;
+
+  return (
+    <div className="border border-black/10 rounded-lg p-4 bg-white">
+      <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+        <div>
+          <span className="text-xs font-medium uppercase tracking-wider text-black/60">{request.serviceType ?? "—"}</span>
+          <p className="font-medium text-sm mt-0.5">{residentName}</p>
+          <p className="text-xs text-black/50">Unit {unit} · {building}</p>
+        </div>
+        <span className="text-xs text-black/40">{created}</span>
+      </div>
+      <p className="text-sm text-black/70 mb-3">{summary}</p>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xs text-black/50">Status: {request.status ?? "new"}</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {smsHref ? (
+          <a
+            href={smsHref}
+            className="inline-flex items-center gap-1 px-2 py-1.5 text-xs border border-black/20 rounded hover:bg-black/5"
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            Text resident
+          </a>
+        ) : (
+          <span className="inline-flex items-center gap-1 px-2 py-1.5 text-xs border border-black/10 rounded text-black/40">
+            <MessageSquare className="w-3.5 h-3.5" />
+            Text resident (no phone)
+          </span>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-xs border-black/20"
+          disabled
+          title="Vendor phone not yet configured for these request types"
+        >
+          <Phone className="w-3.5 h-3.5 mr-1" />
+          Call vendor
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-xs border-black/20"
+          onClick={() => onStatus(request.id, "contacting-vendor")}
+          disabled={isPending}
+        >
+          Contacting vendor
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-xs border-black/20"
+          onClick={() => onStatus(request.id, "awaiting-vendor")}
+          disabled={isPending}
+        >
+          Awaiting vendor confirmation
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-xs border-green-600 text-green-600 hover:bg-green-50"
+          onClick={() => onStatus(request.id, "scheduled")}
+          disabled={isPending}
+        >
+          Mark scheduled
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-xs border-black/20"
+          onClick={() => onStatus(request.id, "closed")}
+          disabled={isPending}
+        >
+          Close request
+        </Button>
       </div>
     </div>
   );

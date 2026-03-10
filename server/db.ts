@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users,
@@ -6,6 +6,8 @@ import {
   vendors, InsertVendor, Vendor,
   vendorUsers, InsertVendorUser, VendorUser,
   vendorServiceCoverage, InsertVendorServiceCoverage, VendorServiceCoverage,
+  serviceRequests, ServiceRequest,
+  bldgUsers, BldgUser,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -583,4 +585,65 @@ export async function getVendorForOrder(
     .limit(1);
 
   return rows.length > 0 ? rows[0].vendor : null;
+}
+
+/* ===== COORDINATED SERVICE REQUESTS (from resident app) ===== */
+
+const COORDINATED_SERVICE_TYPES = ["car-wash", "grooming", "other"] as const;
+
+export type CoordinatedRequestWithResident = ServiceRequest & { resident: BldgUser | null };
+
+export async function listCoordinatedRequests(): Promise<CoordinatedRequestWithResident[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db
+    .select({
+      request: serviceRequests,
+      resident: {
+        id: bldgUsers.id,
+        firstName: bldgUsers.firstName,
+        lastName: bldgUsers.lastName,
+        phoneE164: bldgUsers.phoneE164,
+        phone: bldgUsers.phone,
+        buildingSlug: bldgUsers.buildingSlug,
+        unit: bldgUsers.unit,
+      },
+    })
+    .from(serviceRequests)
+    .leftJoin(bldgUsers, eq(serviceRequests.bldgUserId, bldgUsers.id))
+    .where(inArray(serviceRequests.serviceType, [...COORDINATED_SERVICE_TYPES]))
+    .orderBy(desc(serviceRequests.createdAt));
+
+  return rows.map((r) => ({ ...r.request, resident: r.resident?.id != null ? r.resident : null }));
+}
+
+export async function getNewCoordinatedRequestsCount(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(serviceRequests)
+    .where(
+      and(
+        inArray(serviceRequests.serviceType, [...COORDINATED_SERVICE_TYPES]),
+        eq(serviceRequests.status, "new")
+      )
+    );
+
+  return Number(result[0]?.count ?? 0);
+}
+
+export async function updateServiceRequestStatus(
+  id: number,
+  status: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(serviceRequests)
+    .set({ status })
+    .where(eq(serviceRequests.id, id));
 }

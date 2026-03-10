@@ -36,6 +36,9 @@ import {
   updateVendorBranding,
   updateVendorSlug,
   listVendorUsers,
+  listCoordinatedRequests,
+  getNewCoordinatedRequestsCount,
+  updateServiceRequestStatus,
 } from "./db";
 import { ENV } from "./_core/env";
 import { notifyOwner } from "./_core/notification";
@@ -723,6 +726,23 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
       .input(z.object({ orderId: z.number(), vendorId: z.number().nullable() }))
       .mutation(async ({ input }) => {
         await updateOrderVendor(input.orderId, input.vendorId);
+        return { success: true };
+      }),
+
+    /* ===== COORDINATED REQUESTS (from resident app) ===== */
+
+    listCoordinatedRequests: protectedProcedure.query(async () => {
+      return listCoordinatedRequests();
+    }),
+
+    countNewCoordinatedRequests: protectedProcedure.query(async () => {
+      return getNewCoordinatedRequestsCount();
+    }),
+
+    updateRequestStatus: protectedProcedure
+      .input(z.object({ requestId: z.number(), status: z.string().min(1) }))
+      .mutation(async ({ input }) => {
+        await updateServiceRequestStatus(input.requestId, input.status);
         return { success: true };
       }),
 

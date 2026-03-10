@@ -170,3 +170,50 @@ export const vendorServiceCoverage = mysqlTable("vendor_service_coverage", {
 
 export type VendorServiceCoverage = typeof vendorServiceCoverage.$inferSelect;
 export type InsertVendorServiceCoverage = typeof vendorServiceCoverage.$inferInsert;
+
+/**
+ * Coordinated service requests from resident app (bldg.chat).
+ * Filter by serviceType IN ('car-wash','grooming','other'). Resident context via bldg_users (bldgUserId).
+ */
+export const serviceRequests = mysqlTable("service_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  bldgUserId: int("bldgUserId"),
+  serviceType: varchar("serviceType", { length: 64 }).notNull(),
+  status: varchar("status", { length: 64 }).notNull().default("new"),
+  requestSummary: text("requestSummary"),
+  requestJson: json("requestJson"),
+  scheduledDate: varchar("scheduledDate", { length: 20 }),
+  scheduledWindow: varchar("scheduledWindow", { length: 100 }),
+  scheduledStartUtc: timestamp("scheduledStartUtc"),
+  scheduledEndUtc: timestamp("scheduledEndUtc"),
+  scheduledStartLocal: varchar("scheduledStartLocal", { length: 50 }),
+  scheduledEndLocal: varchar("scheduledEndLocal", { length: 50 }),
+  timezone: varchar("timezone", { length: 64 }),
+  upgradeCode: varchar("upgradeCode", { length: 64 }),
+  upgradePriceCents: int("upgradePriceCents"),
+  upgradeLabel: varchar("upgradeLabel", { length: 255 }),
+  paymentAdjustmentDueCents: int("paymentAdjustmentDueCents"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  receiptUrl: text("receiptUrl"),
+  orderId: int("orderId"),
+});
+
+export type ServiceRequest = typeof serviceRequests.$inferSelect;
+export type InsertServiceRequest = typeof serviceRequests.$inferInsert;
+
+/**
+ * Resident/users from bldg.chat app. Joined via service_requests.bldgUserId for name, phone, building, unit.
+ */
+export const bldgUsers = mysqlTable("bldg_users", {
+  id: int("id").autoincrement().primaryKey(),
+  firstName: varchar("firstName", { length: 100 }),
+  lastName: varchar("lastName", { length: 100 }),
+  phoneE164: varchar("phoneE164", { length: 30 }),
+  phone: varchar("phone", { length: 30 }), // alternate if table has phone instead of phoneE164
+  buildingSlug: varchar("buildingSlug", { length: 100 }),
+  unit: varchar("unit", { length: 100 }),
+});
+
+export type BldgUser = typeof bldgUsers.$inferSelect;
+export type InsertBldgUser = typeof bldgUsers.$inferInsert;
