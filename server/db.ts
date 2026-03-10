@@ -639,7 +639,7 @@ export async function getNewCoordinatedRequestsCount(): Promise<number> {
     .where(
       and(
         inArray(serviceRequests.serviceType, [...COORDINATED_SERVICE_TYPES]),
-        eq(serviceRequests.status, "new")
+        inArray(serviceRequests.status, ["new", "pending"])
       )
     );
 
