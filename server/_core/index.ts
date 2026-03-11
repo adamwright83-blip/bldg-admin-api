@@ -44,21 +44,38 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  console.log("[Boot] v4 — CORS open for *.bldg.chat and localhost");
+  console.log("[Boot] v5 — CORS open for *.bldg.chat and localhost");
 
   // CORS — must be first, before body parsers.
-  // Allow any *.bldg.chat origin plus localhost for dev.
+  // Explicitly allow public form origins + any *.bldg.chat + localhost for dev.
+  const ALLOWED_ORIGINS = [
+    "https://admin.bldg.chat",
+    "https://driver.bldg.chat",
+    "https://buildings.bldg.chat",
+    "https://contact.bldg.chat",
+  ];
+
   const corsOptions: cors.CorsOptions = {
     origin: (origin, callback) => {
       // No origin = server-to-server, always allow.
       if (!origin) return callback(null, true);
-      const ok =
-        origin === "https://admin.bldg.chat" ||
-        origin === "https://driver.bldg.chat" ||
-        origin.endsWith(".bldg.chat") ||
-        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-      if (ok) return callback(null, true);
-      console.warn(`[CORS v4] Blocked: ${origin}`);
+
+      // Check explicit list first
+      if (ALLOWED_ORIGINS.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // Check *.bldg.chat pattern (https only)
+      if (origin.startsWith("https://") && origin.endsWith(".bldg.chat")) {
+        return callback(null, true);
+      }
+
+      // Allow localhost/127.0.0.1 for dev
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+      }
+
+      console.warn(`[CORS v5] Blocked origin: ${origin}`);
       callback(null, false);
     },
     credentials: true,
