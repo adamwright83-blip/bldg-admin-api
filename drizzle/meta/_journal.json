@@ -36,6 +36,13 @@
       "when": 1771529797519,
       "tag": "0004_optimal_mordo",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1741689600000,
+      "tag": "0005_add_leads_table",
+      "breakpoints": true
     }
   ]
 }

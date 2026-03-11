@@ -39,6 +39,14 @@ import {
   listCoordinatedRequests,
   getNewCoordinatedRequestsCount,
   updateServiceRequestStatus,
+  createLead,
+  getLeadById,
+  listLeads,
+  getUnreadLeadsCount,
+  updateLeadStatus,
+  markLeadAsRead,
+  markLeadAsUnread,
+  updateLeadNotes,
 } from "./db";
 import { ENV } from "./_core/env";
 import { notifyOwner } from "./_core/notification";
@@ -312,6 +320,54 @@ export const appRouter = router({
           .sign(APP_SHARED_SECRET);
 
         return { token };
+      }),
+  }),
+
+  /* ===== LEADS (public submission from Add Your Building form) ===== */
+  leads: router({
+    submit: publicProcedure
+      .input(
+        z.object({
+          name: z.string().min(1),
+          building_name: z.string().min(1),
+          role: z.string().optional(),
+          email: z.string().email(),
+          number_of_units: z.union([z.string(), z.number()]).optional(),
+          phone: z.string().optional(),
+          source: z.string().optional(),
+          source_url: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const leadId = await createLead({
+          name: input.name,
+          buildingName: input.building_name,
+          role: input.role || null,
+          email: input.email,
+          numberOfUnits: input.number_of_units?.toString() || null,
+          phone: input.phone || null,
+          source: input.source || "add_your_building_form",
+          sourceUrl: input.source_url || null,
+        });
+
+        try {
+          await notifyOwner({
+            title: `New Building Lead: ${input.building_name}`,
+            content: [
+              `${input.name} submitted the "Add Your Building" form.`,
+              ``,
+              `Building: ${input.building_name}`,
+              `Role: ${input.role || "—"}`,
+              `Email: ${input.email}`,
+              `Units: ${input.number_of_units || "—"}`,
+              input.phone ? `Phone: ${input.phone}` : "",
+            ].filter(Boolean).join("\n"),
+          });
+        } catch (err) {
+          console.warn("[Notification] Failed to notify owner of new lead:", err);
+        }
+
+        return { success: true, id: leadId.toString() };
       }),
   }),
 
@@ -743,6 +799,53 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
       .input(z.object({ requestId: z.number(), status: z.string().min(1) }))
       .mutation(async ({ input }) => {
         await updateServiceRequestStatus(input.requestId, input.status);
+        return { success: true };
+      }),
+
+    /* ===== LEADS (Add Your Building form submissions) ===== */
+
+    listLeads: protectedProcedure.query(async () => {
+      return listLeads();
+    }),
+
+    getLead: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        return getLeadById(input.id);
+      }),
+
+    countUnreadLeads: protectedProcedure.query(async () => {
+      return getUnreadLeadsCount();
+    }),
+
+    updateLeadStatus: protectedProcedure
+      .input(z.object({
+        leadId: z.number(),
+        status: z.enum(["New", "Contacted", "Qualified", "Closed", "Spam"]),
+      }))
+      .mutation(async ({ input }) => {
+        await updateLeadStatus(input.leadId, input.status);
+        return { success: true };
+      }),
+
+    markLeadAsRead: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .mutation(async ({ input }) => {
+        await markLeadAsRead(input.leadId);
+        return { success: true };
+      }),
+
+    markLeadAsUnread: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .mutation(async ({ input }) => {
+        await markLeadAsUnread(input.leadId);
+        return { success: true };
+      }),
+
+    updateLeadNotes: protectedProcedure
+      .input(z.object({ leadId: z.number(), notes: z.string().nullable() }))
+      .mutation(async ({ input }) => {
+        await updateLeadNotes(input.leadId, input.notes);
         return { success: true };
       }),
 

@@ -8,6 +8,7 @@ import {
   vendorServiceCoverage, InsertVendorServiceCoverage, VendorServiceCoverage,
   serviceRequests, ServiceRequest,
   bldgUsers, BldgUser,
+  leads, Lead, InsertLead,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -657,4 +658,95 @@ export async function updateServiceRequestStatus(
     .update(serviceRequests)
     .set({ status })
     .where(eq(serviceRequests.id, id));
+}
+
+/* ===== LEADS HELPERS (Add Your Building form submissions) ===== */
+
+export async function createLead(data: {
+  name: string;
+  buildingName: string;
+  role?: string | null;
+  email: string;
+  numberOfUnits?: string | null;
+  phone?: string | null;
+  source?: string | null;
+  sourceUrl?: string | null;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(leads).values({
+    name: data.name,
+    buildingName: data.buildingName,
+    role: data.role ?? null,
+    email: data.email,
+    numberOfUnits: data.numberOfUnits ?? null,
+    phone: data.phone ?? null,
+    source: data.source ?? "add_your_building_form",
+    sourceUrl: data.sourceUrl ?? null,
+    status: "New",
+    isRead: false,
+  });
+  return Number(result[0].insertId);
+}
+
+export async function getLeadById(id: number): Promise<Lead | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(leads).where(eq(leads.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function listLeads(): Promise<Lead[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db.select().from(leads).orderBy(desc(leads.submittedAt));
+}
+
+export async function getUnreadLeadsCount(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(leads)
+    .where(eq(leads.isRead, false));
+
+  return Number(result[0]?.count ?? 0);
+}
+
+export async function updateLeadStatus(
+  id: number,
+  status: Lead["status"]
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(leads).set({ status }).where(eq(leads.id, id));
+}
+
+export async function markLeadAsRead(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(leads).set({ isRead: true }).where(eq(leads.id, id));
+}
+
+export async function markLeadAsUnread(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(leads).set({ isRead: false }).where(eq(leads.id, id));
+}
+
+export async function updateLeadNotes(
+  id: number,
+  notes: string | null
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(leads).set({ notes }).where(eq(leads.id, id));
 }

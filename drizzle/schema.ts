@@ -218,3 +218,29 @@ export const bldgUsers = mysqlTable("bldg_users", {
 
 export type BldgUser = typeof bldgUsers.$inferSelect;
 export type InsertBldgUser = typeof bldgUsers.$inferInsert;
+
+/**
+ * Leads — submissions from the public "Add your building" form on contact.bldg.chat.
+ * Displayed in the admin Leads tab for sales/onboarding follow-up.
+ */
+export const leads = mysqlTable("leads", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  buildingName: varchar("building_name", { length: 255 }).notNull(),
+  role: varchar("role", { length: 100 }),
+  email: varchar("email", { length: 320 }).notNull(),
+  numberOfUnits: varchar("number_of_units", { length: 50 }),
+  phone: varchar("phone", { length: 30 }),
+  source: varchar("source", { length: 100 }).default("add_your_building_form"),
+  sourceUrl: varchar("source_url", { length: 512 }),
+  status: mysqlEnum("status", ["New", "Contacted", "Qualified", "Closed", "Spam"]).default("New").notNull(),
+  isRead: boolean("is_read").default(false).notNull(),
+  notes: text("notes"),
+  assignedTo: varchar("assigned_to", { length: 255 }),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Lead = typeof leads.$inferSelect;
+export type InsertLead = typeof leads.$inferInsert;

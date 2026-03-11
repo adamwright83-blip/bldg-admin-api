@@ -19,7 +19,7 @@ import {
 } from "@shared/pricing";
 import type { Order } from "@shared/types";
 
-const TABS = ["New Order", "Intake", "Processing", "Ready", "Pickups", "Requests", "Vendors"] as const;
+const TABS = ["New Order", "Intake", "Processing", "Ready", "Pickups", "Requests", "Leads", "Vendors"] as const;
 type Tab = (typeof TABS)[number];
 
 const SUPPORTED_BUILDINGS: { label: string; value: string }[] = [
@@ -88,6 +88,7 @@ export default function Admin() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("New Order");
   const requestsCount = trpc.admin.countNewCoordinatedRequests.useQuery(undefined, { enabled: isAuthenticated });
+  const leadsCount = trpc.admin.countUnreadLeads.useQuery(undefined, { enabled: isAuthenticated });
 
   if (authLoading) {
     return (
@@ -113,10 +114,15 @@ export default function Admin() {
           <div className="flex gap-0 -mb-px overflow-x-auto">
             {TABS.map((tab) => {
               const isRequests = tab === "Requests";
-              const count = isRequests ? requestsCount.data ?? 0 : 0;
-              const label = isRequests
-                ? (count >= 1 ? <>Requests <span className="text-green-600 font-semibold">({count})</span></> : "Requests")
-                : tab;
+              const isLeads = tab === "Leads";
+              const reqCount = isRequests ? requestsCount.data ?? 0 : 0;
+              const leadCount = isLeads ? leadsCount.data ?? 0 : 0;
+              let label: React.ReactNode = tab;
+              if (isRequests && reqCount >= 1) {
+                label = <>Requests <span className="text-green-600 font-semibold">({reqCount})</span></>;
+              } else if (isLeads && leadCount >= 1) {
+                label = <>Leads <span className="text-green-600 font-semibold">({leadCount})</span></>;
+              }
               return (
                 <button
                   key={tab}
@@ -143,6 +149,7 @@ export default function Admin() {
         {activeTab === "Ready" && <ReadyTab />}
         {activeTab === "Pickups" && <PickupsTab />}
         {activeTab === "Requests" && <RequestsTab />}
+        {activeTab === "Leads" && <LeadsTab />}
         {activeTab === "Vendors" && <VendorsTab />}
       </div>
     </div>
@@ -1515,6 +1522,281 @@ function CopyButton({ text }: { text: string }) {
       {copied ? <Check className="w-4 h-4 shrink-0" /> : <Copy className="w-4 h-4 shrink-0" />}
       <span className="truncate">{copied ? "Copied!" : text}</span>
     </button>
+  );
+}
+
+/* ===== LEADS TAB ===== */
+function LeadsTab() {
+  const utils = trpc.useUtils();
+  const { data: leads, isLoading, refetch } = trpc.admin.listLeads.useQuery();
+  const updateStatus = trpc.admin.updateLeadStatus.useMutation({
+    onSuccess: () => {
+      refetch();
+      utils.admin.countUnreadLeads.invalidate();
+    },
+  });
+  const markAsRead = trpc.admin.markLeadAsRead.useMutation({
+    onSuccess: () => {
+      refetch();
+      utils.admin.countUnreadLeads.invalidate();
+    },
+  });
+  const markAsUnread = trpc.admin.markLeadAsUnread.useMutation({
+    onSuccess: () => {
+      refetch();
+      utils.admin.countUnreadLeads.invalidate();
+    },
+  });
+  const updateNotes = trpc.admin.updateLeadNotes.useMutation({
+    onSuccess: () => refetch(),
+  });
+
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [editingNotes, setEditingNotes] = useState<string>("");
+
+  const selectedLead = selectedId ? leads?.find((l) => l.id === selectedId) : null;
+
+  const handleOpenLead = (lead: typeof leads extends (infer T)[] | undefined ? T : never) => {
+    setSelectedId(lead.id);
+    setEditingNotes(lead.notes || "");
+    if (!lead.isRead) {
+      markAsRead.mutate({ leadId: lead.id });
+    }
+  };
+
+  const handleStatusChange = (leadId: number, status: "New" | "Contacted" | "Qualified" | "Closed" | "Spam") => {
+    updateStatus.mutate({ leadId, status });
+  };
+
+  const handleSaveNotes = () => {
+    if (selectedId) {
+      updateNotes.mutate({ leadId: selectedId, notes: editingNotes || null });
+    }
+  };
+
+  const formatTimestamp = (date: Date | string | null) => {
+    if (!date) return "—";
+    const d = new Date(date);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
+      " " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  };
+
+  const statusColors: Record<string, string> = {
+    New: "bg-green-100 text-green-700",
+    Contacted: "bg-blue-100 text-blue-700",
+    Qualified: "bg-purple-100 text-purple-700",
+    Closed: "bg-black/10 text-black/60",
+    Spam: "bg-red-100 text-red-700",
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-black/50">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        <span>Loading leads…</span>
+      </div>
+    );
+  }
+
+  if (selectedLead) {
+    return (
+      <div className="max-w-2xl">
+        <button
+          onClick={() => setSelectedId(null)}
+          className="text-sm text-black/50 hover:text-black mb-4 flex items-center gap-1"
+        >
+          <ChevronLeft className="w-4 h-4" /> Back to Leads
+        </button>
+
+        <div className="border border-black/10 p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold">{selectedLead.name}</h2>
+              <p className="text-sm text-black/50">{selectedLead.email}</p>
+            </div>
+            <span className={`text-xs px-2 py-1 rounded-full ${statusColors[selectedLead.status] || "bg-black/10"}`}>
+              {selectedLead.status}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
+            <div>
+              <p className="text-xs text-black/50 uppercase tracking-wider mb-1">Building</p>
+              <p>{selectedLead.buildingName}</p>
+            </div>
+            <div>
+              <p className="text-xs text-black/50 uppercase tracking-wider mb-1">Role</p>
+              <p>{selectedLead.role || "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-black/50 uppercase tracking-wider mb-1">Units</p>
+              <p>{selectedLead.numberOfUnits || "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-black/50 uppercase tracking-wider mb-1">Phone</p>
+              <p>{selectedLead.phone || "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-black/50 uppercase tracking-wider mb-1">Source</p>
+              <p>{selectedLead.source || "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-black/50 uppercase tracking-wider mb-1">Source URL</p>
+              <p className="truncate text-xs">{selectedLead.sourceUrl || "—"}</p>
+            </div>
+            <div className="col-span-2">
+              <p className="text-xs text-black/50 uppercase tracking-wider mb-1">Submitted</p>
+              <p>{formatTimestamp(selectedLead.submittedAt)}</p>
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <label className="block text-xs text-black/50 uppercase tracking-wider mb-2">Notes</label>
+            <textarea
+              value={editingNotes}
+              onChange={(e) => setEditingNotes(e.target.value)}
+              placeholder="Add internal notes..."
+              className="w-full border border-black/20 px-3 py-2 text-sm bg-white resize-none"
+              rows={3}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 text-xs border-black/20"
+              onClick={handleSaveNotes}
+              disabled={updateNotes.isPending}
+            >
+              {updateNotes.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+              Save Notes
+            </Button>
+          </div>
+
+          <div className="border-t border-black/10 pt-4">
+            <p className="text-xs text-black/50 uppercase tracking-wider mb-3">Actions</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs border-blue-500 text-blue-600 hover:bg-blue-50"
+                onClick={() => handleStatusChange(selectedLead.id, "Contacted")}
+                disabled={updateStatus.isPending}
+              >
+                Mark Contacted
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs border-purple-500 text-purple-600 hover:bg-purple-50"
+                onClick={() => handleStatusChange(selectedLead.id, "Qualified")}
+                disabled={updateStatus.isPending}
+              >
+                Mark Qualified
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs border-black/20"
+                onClick={() => handleStatusChange(selectedLead.id, "Closed")}
+                disabled={updateStatus.isPending}
+              >
+                Mark Closed
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs border-red-300 text-red-600 hover:bg-red-50"
+                onClick={() => handleStatusChange(selectedLead.id, "Spam")}
+                disabled={updateStatus.isPending}
+              >
+                Mark Spam
+              </Button>
+              {selectedLead.isRead ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs border-black/20"
+                  onClick={() => markAsUnread.mutate({ leadId: selectedLead.id })}
+                  disabled={markAsUnread.isPending}
+                >
+                  Mark Unread
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!leads?.length) {
+    return (
+      <div>
+        <h2 className="text-lg font-semibold mb-4">Leads</h2>
+        <p className="text-sm text-black/50">No leads yet. Submissions from the "Add Your Building" form will appear here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2 className="text-lg font-semibold mb-4">Leads</h2>
+      <p className="text-xs text-black/50 mb-4">Building onboarding submissions from contact.bldg.chat</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-black/10 text-left text-xs text-black/50 uppercase tracking-wider">
+              <th className="py-2 pr-4">Name</th>
+              <th className="py-2 pr-4">Building</th>
+              <th className="py-2 pr-4">Role</th>
+              <th className="py-2 pr-4">Email</th>
+              <th className="py-2 pr-4">Units</th>
+              <th className="py-2 pr-4">Status</th>
+              <th className="py-2 pr-4">Submitted</th>
+              <th className="py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {leads.map((lead) => (
+              <tr
+                key={lead.id}
+                className={`border-b border-black/5 hover:bg-black/[0.02] cursor-pointer ${!lead.isRead ? "bg-green-50/50" : ""}`}
+                onClick={() => handleOpenLead(lead)}
+              >
+                <td className="py-3 pr-4 font-medium">
+                  {!lead.isRead && <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-2" />}
+                  {lead.name}
+                </td>
+                <td className="py-3 pr-4">{lead.buildingName}</td>
+                <td className="py-3 pr-4">{lead.role || "—"}</td>
+                <td className="py-3 pr-4 max-w-[200px] truncate">{lead.email}</td>
+                <td className="py-3 pr-4">{lead.numberOfUnits || "—"}</td>
+                <td className="py-3 pr-4">
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[lead.status] || "bg-black/10"}`}>
+                    {lead.status}
+                  </span>
+                </td>
+                <td className="py-3 pr-4 text-black/50 text-xs">
+                  {lead.submittedAt ? new Date(lead.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
+                </td>
+                <td className="py-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-black text-black text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenLead(lead);
+                    }}
+                  >
+                    Open
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
