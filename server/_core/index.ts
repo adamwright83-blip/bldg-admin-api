@@ -44,10 +44,9 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  console.log("[Boot] v5 — CORS open for *.bldg.chat and localhost");
+  console.log("[Boot] v6 — CORS with explicit preflight for public endpoints");
 
-  // CORS — must be first, before body parsers.
-  // Explicitly allow public form origins + any *.bldg.chat + localhost for dev.
+  // Allowed origins for CORS
   const ALLOWED_ORIGINS = [
     "https://admin.bldg.chat",
     "https://driver.bldg.chat",
@@ -55,27 +54,38 @@ async function startServer() {
     "https://contact.bldg.chat",
   ];
 
+  const isAllowedOrigin = (origin: string | undefined): boolean => {
+    if (!origin) return true; // server-to-server
+    if (ALLOWED_ORIGINS.includes(origin)) return true;
+    if (origin.startsWith("https://") && origin.endsWith(".bldg.chat")) return true;
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
+    return false;
+  };
+
+  // Manual CORS preflight handler for public form endpoints
+  // This ensures OPTIONS requests always get proper CORS headers
+  app.options("/api/trpc/leads.submit", (req, res) => {
+    const origin = req.headers.origin;
+    if (origin && isAllowedOrigin(origin)) {
+      res.set("Access-Control-Allow-Origin", origin);
+      res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-trpc-source");
+      res.set("Access-Control-Allow-Credentials", "true");
+      res.set("Access-Control-Max-Age", "86400");
+      console.log(`[CORS v6] Preflight OK for leads.submit from ${origin}`);
+      return res.status(204).end();
+    }
+    console.warn(`[CORS v6] Preflight blocked for leads.submit from ${origin}`);
+    return res.status(403).end();
+  });
+
+  // CORS — must be first, before body parsers.
   const corsOptions: cors.CorsOptions = {
     origin: (origin, callback) => {
-      // No origin = server-to-server, always allow.
-      if (!origin) return callback(null, true);
-
-      // Check explicit list first
-      if (ALLOWED_ORIGINS.includes(origin)) {
+      if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
-
-      // Check *.bldg.chat pattern (https only)
-      if (origin.startsWith("https://") && origin.endsWith(".bldg.chat")) {
-        return callback(null, true);
-      }
-
-      // Allow localhost/127.0.0.1 for dev
-      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
-        return callback(null, true);
-      }
-
-      console.warn(`[CORS v5] Blocked origin: ${origin}`);
+      console.warn(`[CORS v6] Blocked origin: ${origin}`);
       callback(null, false);
     },
     credentials: true,
