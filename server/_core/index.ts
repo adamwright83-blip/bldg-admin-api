@@ -44,7 +44,7 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  console.log("[Boot] v7 — Manual CORS for leads.submit, standard cors for rest");
+  console.log("[Boot] v8 — REST endpoint for leads, bypasses tRPC/cors entirely");
 
   // Public form origins that can submit leads
   const PUBLIC_FORM_ORIGINS = [
@@ -59,51 +59,102 @@ async function startServer() {
     ...PUBLIC_FORM_ORIGINS,
   ];
 
-  // Manual CORS middleware for leads.submit endpoint ONLY
-  // Handles both OPTIONS preflight and actual POST requests
-  // Must come BEFORE the cors middleware to avoid duplicate headers
-  app.use("/api/trpc/leads.submit", (req, res, next) => {
+  // =============================================================================
+  // PUBLIC LEADS SUBMISSION - REST endpoint with manual CORS (no middleware)
+  // This MUST come before any other middleware to avoid conflicts
+  // =============================================================================
+  
+  // OPTIONS preflight for /api/leads/submit
+  app.options("/api/leads/submit", (req, res) => {
     const origin = req.headers.origin as string | undefined;
+    console.log(`[Leads v8] OPTIONS preflight from origin: ${origin}`);
     
-    // Only allow specific public form origins for this endpoint
     if (origin && PUBLIC_FORM_ORIGINS.includes(origin)) {
-      // Set CORS headers - exactly one origin, not multiple
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
       res.setHeader("Access-Control-Allow-Headers", "Content-Type");
       res.setHeader("Access-Control-Max-Age", "86400");
-      
-      // Handle preflight
-      if (req.method === "OPTIONS") {
-        console.log(`[CORS v7] Preflight OK: leads.submit from ${origin}`);
-        return res.status(204).end();
-      }
-      
-      console.log(`[CORS v7] POST OK: leads.submit from ${origin}`);
-      return next();
+      console.log(`[Leads v8] Preflight OK for ${origin}`);
+      return res.status(204).end();
     }
     
-    // No origin (server-to-server) is allowed
-    if (!origin) {
-      return next();
-    }
-    
-    // Block other origins
-    console.warn(`[CORS v7] Blocked: leads.submit from ${origin}`);
-    if (req.method === "OPTIONS") {
-      return res.status(403).end();
-    }
-    return res.status(403).json({ error: "Origin not allowed" });
+    console.warn(`[Leads v8] Preflight BLOCKED for ${origin}`);
+    return res.status(403).end();
   });
 
-  // Standard CORS for all OTHER endpoints (skip leads.submit since we handle it above)
+  // POST handler for /api/leads/submit - uses inline body parser
+  app.post("/api/leads/submit", express.json(), async (req, res) => {
+    const origin = req.headers.origin as string | undefined;
+    console.log(`[Leads v8] POST from origin: ${origin}`);
+
+    // Set CORS header for allowed origins
+    if (origin && PUBLIC_FORM_ORIGINS.includes(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    } else if (origin) {
+      console.warn(`[Leads v8] POST BLOCKED for ${origin}`);
+      return res.status(403).json({ error: "Origin not allowed" });
+    }
+
+    try {
+      const { createLead } = await import("../db");
+      const { notifyOwner } = await import("./notification");
+      const { name, building_name, role, email, number_of_units, phone, source, source_url } = req.body || {};
+
+      // Validate required fields
+      if (!name || !building_name || !email) {
+        console.log(`[Leads v8] Validation failed: missing required fields`);
+        return res.status(400).json({ error: "Missing required fields: name, building_name, email" });
+      }
+
+      const leadId = await createLead({
+        name,
+        buildingName: building_name,
+        role: role || null,
+        email,
+        numberOfUnits: number_of_units?.toString() || null,
+        phone: phone || null,
+        source: source || "add_your_building_form",
+        sourceUrl: source_url || null,
+      });
+
+      console.log(`[Leads v8] Lead created: id=${leadId}`);
+
+      // Notify owner (non-blocking)
+      try {
+        await notifyOwner({
+          title: `New Building Lead: ${building_name}`,
+          content: [
+            `${name} submitted the "Add Your Building" form.`,
+            ``,
+            `Building: ${building_name}`,
+            `Role: ${role || "—"}`,
+            `Email: ${email}`,
+            `Units: ${number_of_units || "—"}`,
+            phone ? `Phone: ${phone}` : "",
+          ].filter(Boolean).join("\n"),
+        });
+      } catch (notifyErr) {
+        console.warn("[Leads v8] Notification failed:", notifyErr);
+      }
+
+      return res.status(200).json({ success: true, id: leadId.toString() });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[Leads v8] Error:`, err);
+      return res.status(500).json({ error: "Internal server error", message: msg });
+    }
+  });
+
+  // =============================================================================
+  // STANDARD CORS for all other endpoints
+  // =============================================================================
   const corsOptions: cors.CorsOptions = {
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       if (ADMIN_ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
       if (origin.startsWith("https://") && origin.endsWith(".bldg.chat")) return callback(null, true);
       if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
-      console.warn(`[CORS v7] Blocked origin: ${origin}`);
+      console.warn(`[CORS v8] Blocked origin: ${origin}`);
       callback(null, false);
     },
     credentials: true,
@@ -111,21 +162,9 @@ async function startServer() {
     allowedHeaders: ["Content-Type", "Authorization", "x-trpc-source"],
   };
   
-  // Apply cors middleware only to paths that are NOT leads.submit
-  app.use((req, res, next) => {
-    if (req.path === "/api/trpc/leads.submit") {
-      return next(); // Skip cors middleware, already handled above
-    }
-    return cors(corsOptions)(req, res, next);
-  });
-  
-  // Handle OPTIONS for all other paths
-  app.options("*", (req, res, next) => {
-    if (req.path === "/api/trpc/leads.submit") {
-      return next(); // Already handled above
-    }
-    return cors(corsOptions)(req, res, next);
-  });
+  // Apply cors middleware to all paths (leads REST endpoint is handled above, before this)
+  app.use(cors(corsOptions));
+  app.options("*", cors(corsOptions));
 
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
