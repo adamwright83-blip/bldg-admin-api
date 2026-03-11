@@ -44,56 +44,88 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  console.log("[Boot] v6 — CORS with explicit preflight for public endpoints");
+  console.log("[Boot] v7 — Manual CORS for leads.submit, standard cors for rest");
 
-  // Allowed origins for CORS
-  const ALLOWED_ORIGINS = [
-    "https://admin.bldg.chat",
-    "https://driver.bldg.chat",
+  // Public form origins that can submit leads
+  const PUBLIC_FORM_ORIGINS = [
     "https://buildings.bldg.chat",
     "https://contact.bldg.chat",
   ];
 
-  const isAllowedOrigin = (origin: string | undefined): boolean => {
-    if (!origin) return true; // server-to-server
-    if (ALLOWED_ORIGINS.includes(origin)) return true;
-    if (origin.startsWith("https://") && origin.endsWith(".bldg.chat")) return true;
-    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
-    return false;
-  };
+  // All allowed origins for the admin API
+  const ADMIN_ALLOWED_ORIGINS = [
+    "https://admin.bldg.chat",
+    "https://driver.bldg.chat",
+    ...PUBLIC_FORM_ORIGINS,
+  ];
 
-  // Manual CORS preflight handler for public form endpoints
-  // This ensures OPTIONS requests always get proper CORS headers
-  app.options("/api/trpc/leads.submit", (req, res) => {
-    const origin = req.headers.origin;
-    if (origin && isAllowedOrigin(origin)) {
-      res.set("Access-Control-Allow-Origin", origin);
-      res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-      res.set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-trpc-source");
-      res.set("Access-Control-Allow-Credentials", "true");
-      res.set("Access-Control-Max-Age", "86400");
-      console.log(`[CORS v6] Preflight OK for leads.submit from ${origin}`);
-      return res.status(204).end();
+  // Manual CORS middleware for leads.submit endpoint ONLY
+  // Handles both OPTIONS preflight and actual POST requests
+  // Must come BEFORE the cors middleware to avoid duplicate headers
+  app.use("/api/trpc/leads.submit", (req, res, next) => {
+    const origin = req.headers.origin as string | undefined;
+    
+    // Only allow specific public form origins for this endpoint
+    if (origin && PUBLIC_FORM_ORIGINS.includes(origin)) {
+      // Set CORS headers - exactly one origin, not multiple
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.setHeader("Access-Control-Max-Age", "86400");
+      
+      // Handle preflight
+      if (req.method === "OPTIONS") {
+        console.log(`[CORS v7] Preflight OK: leads.submit from ${origin}`);
+        return res.status(204).end();
+      }
+      
+      console.log(`[CORS v7] POST OK: leads.submit from ${origin}`);
+      return next();
     }
-    console.warn(`[CORS v6] Preflight blocked for leads.submit from ${origin}`);
-    return res.status(403).end();
+    
+    // No origin (server-to-server) is allowed
+    if (!origin) {
+      return next();
+    }
+    
+    // Block other origins
+    console.warn(`[CORS v7] Blocked: leads.submit from ${origin}`);
+    if (req.method === "OPTIONS") {
+      return res.status(403).end();
+    }
+    return res.status(403).json({ error: "Origin not allowed" });
   });
 
-  // CORS — must be first, before body parsers.
+  // Standard CORS for all OTHER endpoints (skip leads.submit since we handle it above)
   const corsOptions: cors.CorsOptions = {
     origin: (origin, callback) => {
-      if (isAllowedOrigin(origin)) {
-        return callback(null, true);
-      }
-      console.warn(`[CORS v6] Blocked origin: ${origin}`);
+      if (!origin) return callback(null, true);
+      if (ADMIN_ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+      if (origin.startsWith("https://") && origin.endsWith(".bldg.chat")) return callback(null, true);
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
+      console.warn(`[CORS v7] Blocked origin: ${origin}`);
       callback(null, false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "x-trpc-source"],
   };
-  app.use(cors(corsOptions));
-  app.options("*", cors(corsOptions));
+  
+  // Apply cors middleware only to paths that are NOT leads.submit
+  app.use((req, res, next) => {
+    if (req.path === "/api/trpc/leads.submit") {
+      return next(); // Skip cors middleware, already handled above
+    }
+    return cors(corsOptions)(req, res, next);
+  });
+  
+  // Handle OPTIONS for all other paths
+  app.options("*", (req, res, next) => {
+    if (req.path === "/api/trpc/leads.submit") {
+      return next(); // Already handled above
+    }
+    return cors(corsOptions)(req, res, next);
+  });
 
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
