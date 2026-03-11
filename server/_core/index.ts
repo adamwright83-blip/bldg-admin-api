@@ -44,7 +44,7 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  console.log("[Boot] v8 — REST endpoint for leads, bypasses tRPC/cors entirely");
+  console.log("[Boot] v9 — REST endpoint for leads with robust error handling");
 
   // Public form origins that can submit leads
   const PUBLIC_FORM_ORIGINS = [
@@ -63,86 +63,118 @@ async function startServer() {
   // PUBLIC LEADS SUBMISSION - REST endpoint with manual CORS (no middleware)
   // This MUST come before any other middleware to avoid conflicts
   // =============================================================================
-  
+
+  // Helper to set CORS headers
+  const setLeadsCorsHeaders = (res: express.Response, origin: string) => {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  };
+
+  // Health check for /api/leads/submit (GET)
+  app.get("/api/leads/submit", (req, res) => {
+    console.log("[Leads v9] GET health check");
+    res.json({ status: "ok", endpoint: "/api/leads/submit", version: "v9" });
+  });
+
   // OPTIONS preflight for /api/leads/submit
   app.options("/api/leads/submit", (req, res) => {
     const origin = req.headers.origin as string | undefined;
-    console.log(`[Leads v8] OPTIONS preflight from origin: ${origin}`);
+    console.log(`[Leads v9] OPTIONS from: ${origin}`);
     
     if (origin && PUBLIC_FORM_ORIGINS.includes(origin)) {
-      res.setHeader("Access-Control-Allow-Origin", origin);
-      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      setLeadsCorsHeaders(res, origin);
       res.setHeader("Access-Control-Max-Age", "86400");
-      console.log(`[Leads v8] Preflight OK for ${origin}`);
+      console.log(`[Leads v9] OPTIONS OK`);
       return res.status(204).end();
     }
     
-    console.warn(`[Leads v8] Preflight BLOCKED for ${origin}`);
-    return res.status(403).end();
+    // For non-matching origins, still send CORS error with proper format
+    console.warn(`[Leads v9] OPTIONS BLOCKED: ${origin}`);
+    return res.status(403).json({ error: "Origin not allowed" });
   });
 
-  // POST handler for /api/leads/submit - uses inline body parser
-  app.post("/api/leads/submit", express.json(), async (req, res) => {
-    const origin = req.headers.origin as string | undefined;
-    console.log(`[Leads v8] POST from origin: ${origin}`);
+  // POST handler for /api/leads/submit
+  app.post("/api/leads/submit", (req, res, next) => {
+    // Manual body parsing with error handling
+    let body = "";
+    req.setEncoding("utf8");
+    
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    
+    req.on("end", async () => {
+      const origin = req.headers.origin as string | undefined;
+      console.log(`[Leads v9] POST from: ${origin}, body length: ${body.length}`);
 
-    // Set CORS header for allowed origins
-    if (origin && PUBLIC_FORM_ORIGINS.includes(origin)) {
-      res.setHeader("Access-Control-Allow-Origin", origin);
-    } else if (origin) {
-      console.warn(`[Leads v8] POST BLOCKED for ${origin}`);
-      return res.status(403).json({ error: "Origin not allowed" });
-    }
-
-    try {
-      const { createLead } = await import("../db");
-      const { notifyOwner } = await import("./notification");
-      const { name, building_name, role, email, number_of_units, phone, source, source_url } = req.body || {};
-
-      // Validate required fields
-      if (!name || !building_name || !email) {
-        console.log(`[Leads v8] Validation failed: missing required fields`);
-        return res.status(400).json({ error: "Missing required fields: name, building_name, email" });
+      // Set CORS header first, before any processing
+      if (origin && PUBLIC_FORM_ORIGINS.includes(origin)) {
+        setLeadsCorsHeaders(res, origin);
+      } else if (origin) {
+        console.warn(`[Leads v9] POST BLOCKED: ${origin}`);
+        return res.status(403).json({ error: "Origin not allowed" });
       }
 
-      const leadId = await createLead({
-        name,
-        buildingName: building_name,
-        role: role || null,
-        email,
-        numberOfUnits: number_of_units?.toString() || null,
-        phone: phone || null,
-        source: source || "add_your_building_form",
-        sourceUrl: source_url || null,
-      });
-
-      console.log(`[Leads v8] Lead created: id=${leadId}`);
-
-      // Notify owner (non-blocking)
+      // Parse JSON body
+      let data: any;
       try {
-        await notifyOwner({
-          title: `New Building Lead: ${building_name}`,
-          content: [
-            `${name} submitted the "Add Your Building" form.`,
-            ``,
-            `Building: ${building_name}`,
-            `Role: ${role || "—"}`,
-            `Email: ${email}`,
-            `Units: ${number_of_units || "—"}`,
-            phone ? `Phone: ${phone}` : "",
-          ].filter(Boolean).join("\n"),
-        });
-      } catch (notifyErr) {
-        console.warn("[Leads v8] Notification failed:", notifyErr);
+        data = body ? JSON.parse(body) : {};
+      } catch (parseErr) {
+        console.error(`[Leads v9] JSON parse error:`, parseErr);
+        return res.status(400).json({ error: "Invalid JSON body" });
       }
 
-      return res.status(200).json({ success: true, id: leadId.toString() });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[Leads v8] Error:`, err);
-      return res.status(500).json({ error: "Internal server error", message: msg });
-    }
+      console.log(`[Leads v9] Parsed data:`, JSON.stringify(data).slice(0, 200));
+
+      try {
+        const { createLead } = await import("../db");
+        const { name, building_name, role, email, number_of_units, phone, source, source_url } = data;
+
+        // Validate required fields
+        if (!name || !building_name || !email) {
+          console.log(`[Leads v9] Validation failed - name: ${!!name}, building: ${!!building_name}, email: ${!!email}`);
+          return res.status(400).json({ 
+            error: "Missing required fields", 
+            required: ["name", "building_name", "email"],
+            received: Object.keys(data)
+          });
+        }
+
+        const leadId = await createLead({
+          name,
+          buildingName: building_name,
+          role: role || null,
+          email,
+          numberOfUnits: number_of_units?.toString() || null,
+          phone: phone || null,
+          source: source || "add_your_building_form",
+          sourceUrl: source_url || null,
+        });
+
+        console.log(`[Leads v9] SUCCESS - Lead created: id=${leadId}`);
+
+        // Notify owner (non-blocking, don't await)
+        import("./notification").then(({ notifyOwner }) => {
+          notifyOwner({
+            title: `New Building Lead: ${building_name}`,
+            content: `${name} submitted the form.\nBuilding: ${building_name}\nEmail: ${email}`,
+          }).catch(err => console.warn("[Leads v9] Notify failed:", err));
+        });
+
+        return res.status(200).json({ success: true, id: leadId.toString() });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const stack = err instanceof Error ? err.stack : "";
+        console.error(`[Leads v9] DB Error:`, msg, stack);
+        return res.status(500).json({ error: "Internal server error", message: msg });
+      }
+    });
+
+    req.on("error", (err) => {
+      console.error(`[Leads v9] Request error:`, err);
+      res.status(500).json({ error: "Request processing error" });
+    });
   });
 
   // =============================================================================
