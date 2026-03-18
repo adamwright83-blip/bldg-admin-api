@@ -653,10 +653,16 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
     });
     const dcTotal = calcDryCleanTotal(items, disc);
 
-    // Combine both sections
+    // Only the order's service type counts (avoid W&F $45 minimum on dry-cleaning-only orders)
+    if (order.serviceType === "dry_cleaning") {
+      return {
+        subtotalCents: dcTotal.subtotalCents,
+        totalCents: dcTotal.totalCents,
+      };
+    }
     return {
-      subtotalCents: wfTotal.subtotalCents + dcTotal.subtotalCents,
-      totalCents: wfTotal.totalCents + dcTotal.totalCents
+      subtotalCents: wfTotal.subtotalCents,
+      totalCents: wfTotal.totalCents,
     };
   }, [order, weightLbs, selectedUpcharges, flatRateQtys, dcQtys, discountPercent]);
 
@@ -715,6 +721,15 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
           <p className="text-xl font-semibold mb-1">Charged successfully.</p>
           <p className="text-black/50 text-sm">${centsToDollars(totals.totalCents)} — {order.firstName} {order.lastName}</p>
 
+          <a
+            href={`/receipt/${order.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-6 inline-flex items-center justify-center rounded-md border border-black bg-white px-4 py-2 text-sm font-medium text-black hover:bg-black/5 w-full max-w-xs"
+          >
+            View digital receipt (open to screenshot)
+          </a>
+
           {chargeResult.isFirstPaidOrder && chargeResult.portalJwt && (
             <div className="mt-8 p-4 border border-black/20 text-left">
               <p className="text-xs font-medium text-black/50 uppercase tracking-wider mb-2">Portal Enrollment</p>
@@ -758,16 +773,18 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
         </div>
       )}
 
-      <WashFoldIntake
-        weightLbs={weightLbs}
-        setWeightLbs={setWeightLbs}
-        selectedUpcharges={selectedUpcharges}
-        setSelectedUpcharges={setSelectedUpcharges}
-        flatRateQtys={flatRateQtys}
-        setFlatRateQtys={setFlatRateQtys}
-      />
-      
-      <DryCleanIntake dcQtys={dcQtys} setDcQtys={setDcQtys} />
+      {isWF ? (
+        <WashFoldIntake
+          weightLbs={weightLbs}
+          setWeightLbs={setWeightLbs}
+          selectedUpcharges={selectedUpcharges}
+          setSelectedUpcharges={setSelectedUpcharges}
+          flatRateQtys={flatRateQtys}
+          setFlatRateQtys={setFlatRateQtys}
+        />
+      ) : (
+        <DryCleanIntake dcQtys={dcQtys} setDcQtys={setDcQtys} />
+      )}
 
       {/* Discount */}
       <div className="mt-6 mb-4">
@@ -986,6 +1003,7 @@ function ProcessingTab() {
               <th className="py-2 pr-4">Total</th>
               <th className="py-2 pr-4">Paid</th>
               <th className="py-2 pr-4">Notes</th>
+              <th className="py-2 pr-2">Receipt</th>
               <th className="py-2"></th>
             </tr>
           </thead>
@@ -998,6 +1016,20 @@ function ProcessingTab() {
                 <td className="py-3 pr-4">${o.total || "0.00"}</td>
                 <td className="py-3 pr-4">{o.paid ? "Yes" : "No"}</td>
                 <td className="py-3 pr-4 max-w-[200px] truncate text-black/50">{o.specialInstructions || "—"}</td>
+                <td className="py-3 pr-2">
+                  {o.paid ? (
+                    <a
+                      href={`/receipt/${o.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 underline whitespace-nowrap"
+                    >
+                      View
+                    </a>
+                  ) : (
+                    <span className="text-black/30 text-xs">—</span>
+                  )}
+                </td>
                 <td className="py-3">
                   <Button
                     variant="outline"

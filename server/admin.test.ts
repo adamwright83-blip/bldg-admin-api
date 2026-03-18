@@ -7,6 +7,47 @@ import {
   type UpchargeEntry,
   type DryCleanEntry,
 } from "../shared/pricing";
+import { buildReceiptLines } from "../shared/receipt";
+
+describe("buildReceiptLines", () => {
+  it("maps dry cleaning items to receipt rows", () => {
+    const lines = buildReceiptLines({
+      serviceType: "dry_cleaning",
+      weightLbs: null,
+      upchargesJson: null,
+      drycleanItemsJson: {
+        pants: {
+          label: "Pants",
+          unit_price_cents: 1000,
+          qty: 2,
+          total_cents: 2000,
+        },
+      },
+      subtotal: "20.00",
+    });
+    expect(lines).toEqual([
+      {
+        item: "Pants",
+        quantity: "2",
+        unitPrice: "10.00",
+        amount: "20.00",
+      },
+    ]);
+  });
+
+  it("adds minimum adjustment line for wash_fold below subtotal", () => {
+    const lines = buildReceiptLines({
+      serviceType: "wash_fold",
+      weightLbs: "5",
+      upchargesJson: {},
+      drycleanItemsJson: null,
+      subtotal: "45.00",
+    });
+    expect(lines[0].item).toBe("Wash & Fold");
+    expect(lines[0].quantity).toBe("5");
+    expect(lines.some((l) => l.item.includes("minimum"))).toBe(true);
+  });
+});
 
 describe("Pricing: calcWashFoldTotal", () => {
   it("enforces $45 minimum when weight-based total is below", () => {

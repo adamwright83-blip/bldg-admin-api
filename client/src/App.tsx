@@ -8,6 +8,7 @@ import Home from "./pages/Home";
 import Admin from "./pages/Admin";
 import Driver from "./pages/Driver";
 import VendorPortal from "./pages/VendorPortal";
+import DigitalReceiptPage from "./pages/DigitalReceiptPage";
 
 function Router() {
   const hostname =
@@ -19,6 +20,7 @@ function Router() {
 
   return (
     <Switch>
+      <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route
         path={"/"}
         component={
