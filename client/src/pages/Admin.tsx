@@ -22,6 +22,16 @@ import type { Order } from "@shared/types";
 const TABS = ["New Order", "Intake", "Processing", "Ready", "Pickups", "Requests", "Leads", "Vendors"] as const;
 type Tab = (typeof TABS)[number];
 
+/* Debounce hook for customer search */
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
 const SUPPORTED_BUILDINGS: { label: string; value: string }[] = [
   { label: "OPUS LA", value: "opusla" },
   { label: "Century Park East", value: "centuryparkeast" },
@@ -87,6 +97,12 @@ function getWeekDates(offset: number) {
 export default function Admin() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("New Order");
+  const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+  const debouncedCustomerQuery = useDebounce(customerSearchQuery, 300);
+  const searchOrders = trpc.admin.searchOrdersForReceipt.useQuery(
+    { q: debouncedCustomerQuery },
+    { enabled: debouncedCustomerQuery.length >= 2 }
+  );
   const requestsCount = trpc.admin.countNewCoordinatedRequests.useQuery(undefined, { enabled: isAuthenticated });
   const leadsCount = trpc.admin.countUnreadLeads.useQuery(undefined, { enabled: isAuthenticated });
 
@@ -140,6 +156,52 @@ export default function Admin() {
           </div>
         </div>
       </nav>
+
+      {/* Customer search — find order and view receipt */}
+      <div className="border-b border-black/10 bg-white">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-3">
+          <div className="relative max-w-md">
+            <input
+              type="text"
+              placeholder="Customer"
+              value={customerSearchQuery}
+              onChange={(e) => setCustomerSearchQuery(e.target.value)}
+              className="w-full rounded-md border border-black/15 bg-neutral-100/80 px-3 py-2.5 text-sm text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-black/30"
+            />
+            {debouncedCustomerQuery.length >= 2 && (
+              <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[320px] overflow-auto rounded-md border border-black/15 bg-white shadow-lg">
+                {searchOrders.isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-black/30" />
+                  </div>
+                ) : searchOrders.data?.length ? (
+                  <ul className="py-1">
+                    {searchOrders.data.map((o) => (
+                      <li key={o.id}>
+                        <a
+                          href={`/receipt/${o.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm hover:bg-black/5"
+                        >
+                          <span className="font-medium text-black">
+                            #{o.id} — {o.firstName} {o.lastName}
+                          </span>
+                          <span className="text-black/50 text-xs">
+                            {o.total ? `$${o.total}` : "—"} · {o.serviceType === "wash_fold" ? "W&F" : "DC"}
+                          </span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="px-3 py-4 text-sm text-black/50">No orders found.</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Tab content */}
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">

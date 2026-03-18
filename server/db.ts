@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users,
@@ -218,6 +218,60 @@ export async function searchCustomerByPhone(
     .limit(1);
 
   return result.length > 0 ? result[0] : undefined;
+}
+
+export type OrderSearchHit = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  createdAt: Date;
+  status: Order["status"];
+  serviceType: Order["serviceType"];
+  total: string | null;
+  paid: boolean;
+};
+
+export async function searchOrdersForReceipt(
+  q: string
+): Promise<OrderSearchHit[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const trimmed = q.trim().slice(0, 80);
+  if (trimmed.length < 2) return [];
+
+  const safe = trimmed.replace(/[%_\\]/g, "");
+  const pattern = `%${safe}%`;
+  const phoneDigits = trimmed.replace(/\D/g, "");
+
+  const conditions = [
+    like(orders.firstName, pattern),
+    like(orders.lastName, pattern),
+    sql`CONCAT(${orders.firstName}, ' ', ${orders.lastName}) LIKE ${pattern}`,
+  ];
+  if (phoneDigits.length >= 2) {
+    conditions.push(like(orders.phone, `%${phoneDigits}%`));
+  }
+
+  const result = await db
+    .select({
+      id: orders.id,
+      firstName: orders.firstName,
+      lastName: orders.lastName,
+      phone: orders.phone,
+      createdAt: orders.createdAt,
+      status: orders.status,
+      serviceType: orders.serviceType,
+      total: orders.total,
+      paid: orders.paid,
+    })
+    .from(orders)
+    .where(or(...conditions))
+    .orderBy(desc(orders.createdAt))
+    .limit(80);
+
+  return result as OrderSearchHit[];
 }
 
 export async function findStripeCardByPhone(

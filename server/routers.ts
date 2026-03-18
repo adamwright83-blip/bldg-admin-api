@@ -11,6 +11,7 @@ import {
   updateOrderStatus,
   updateOrderIntake,
   searchCustomerByPhone,
+  searchOrdersForReceipt,
   hasCustomerPaidBefore,
   findStripeCardByPhone,
   deleteOrder,
@@ -404,6 +405,11 @@ export const appRouter = router({
         }
         return order;
       }),
+
+    /** Search orders by customer name or phone — platform only (find receipt) */
+    searchOrdersForReceipt: protectedProcedure
+      .input(z.object({ q: z.string().min(2).max(100) }))
+      .query(async ({ input }) => searchOrdersForReceipt(input.q)),
 
     /** Search customer by phone — platform only (new order prefill) */
     searchCustomer: protectedProcedure
