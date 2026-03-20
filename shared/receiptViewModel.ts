@@ -1,17 +1,18 @@
 /**
- * Vendor-neutral receipt view model for BLDG / resident surfaces.
+ * Receipt view-model shapes **aligned with the resident (app.bldg.chat) public contract**.
  *
- * **BldgReceiptViewModel** is the intended public abstraction: branding and copy
- * come from data (payload, vendor config, building config), not from hard-coded
- * vendor strings inside the paper component.
+ * **Canonical ownership:** The resident app owns the long-term **`BldgReceiptViewModel`**
+ * contract, generic **`ReceiptPaper`**, branding resolver, vendor-aware token expansion,
+ * and mapper registry. This file duplicates the shapes for Laundry Butler admin tooling
+ * and handoff — **keep in sync** with resident when the public contract changes.
  *
- * **LaundryButlerReceiptViewModel** / **LaundryButlerReceiptLine** are legacy
- * aliases of the same shapes. They exist for this repo’s laundry vertical only
- * and must not be treated as the long-term cross-vendor contract name in
- * app.bldg.chat or other consumers.
+ * **This repo does not define the permanent BLDG public receipt API.** Admin is the
+ * Laundry Butler **reference implementation** only.
+ *
+ * **LaundryButler*** names are **local / legacy aliases** — not the cross-vendor contract name.
  */
 
-/** One line on the receipt (vendor-neutral). */
+/** One line on the receipt (vendor-neutral public shape). */
 export type BldgReceiptLine = {
   item: string;
   quantity: string;
@@ -20,15 +21,16 @@ export type BldgReceiptLine = {
 };
 
 /**
- * Vendor-neutral receipt payload rendered by a generic receipt paper component.
- * `order.serviceType` is a vendor-defined label key or short code (e.g. wash_fold).
+ * Vendor-neutral receipt payload — **rendered by resident `ReceiptPaper`** in production.
+ * Branding fields are filled by the resident **branding resolver**, not hard-coded per vendor in the component.
+ *
+ * `order.serviceType`: vendor-defined code (e.g. wash_fold for LB).
  */
 export type BldgReceiptViewModel = {
   schemaVersion: 1;
   branding: {
-    /** Main header — from data (e.g. vendor display name), not hard-coded in UI */
+    /** From resolver / payload — not a hard-coded vendor string inside shared UI */
     title: string;
-    /** Service or category subtitle — from data */
     serviceSubtitle: string;
     businessName: string;
     addressLine1: string;
@@ -38,17 +40,15 @@ export type BldgReceiptViewModel = {
   order: {
     id: number;
     customerName: string;
-    /** Vendor-specific; e.g. wash_fold | dry_cleaning for Laundry Butler */
     serviceType: string;
   };
   meta: {
     /**
-     * ISO 8601 — when the customer originally placed the order (`orders.createdAt`).
-     * Not card charge time or processing completion time.
+     * ISO 8601 — **original customer order placement** (`orders.createdAt`).
+     * Not payment capture time. Not completion/delivery time.
      */
     orderPlacedAt: string;
     dueDisplay: string;
-    /** e.g. "03/14/26, 11:35PM, Card" or "Pending" */
     paymentDisplay: string;
   };
   lines: BldgReceiptLine[];
@@ -61,8 +61,8 @@ export type BldgReceiptViewModel = {
   footerMessage: string;
 };
 
-/** @deprecated Use {@link BldgReceiptLine}. Laundry vertical legacy name only. */
+/** @deprecated Local alias only. Prefer {@link BldgReceiptLine}. Not a public BLDG contract name. */
 export type LaundryButlerReceiptLine = BldgReceiptLine;
 
-/** @deprecated Use {@link BldgReceiptViewModel}. Laundry vertical legacy name only. */
+/** @deprecated Local alias only. Prefer {@link BldgReceiptViewModel}. Not a public BLDG contract name. */
 export type LaundryButlerReceiptViewModel = BldgReceiptViewModel;

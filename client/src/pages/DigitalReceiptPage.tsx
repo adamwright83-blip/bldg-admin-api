@@ -1,3 +1,10 @@
+/**
+ * Staff-only Laundry Butler digital receipt (`/receipt/:orderId` on admin).
+ *
+ * **Public multi-vendor receipts** are owned by the resident app: `ReceiptPaper` +
+ * `BldgReceiptViewModel` + branding resolver + mapper registry. This page is the LB
+ * reference layout for parity; it is not the shared BLDG renderer.
+ */
 import { useParams, Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Loader2 } from "lucide-react";

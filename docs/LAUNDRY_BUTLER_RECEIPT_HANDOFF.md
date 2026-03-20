@@ -1,43 +1,56 @@
-# Laundry Butler digital receipt — handoff for resident app
+# Laundry Butler receipt — handoff (admin reference vs resident public layer)
 
-Use this doc (and `docs/samples/*.json`) to align **OrderReceipt** / **Receipt** in the resident app with the admin **visual prototype**. This admin repo remains **Laundry Butler processing only**; BLDG must serve **many vendors** over time.
+This document describes how **bldg-admin-api** relates to the **resident (app.bldg.chat)** receipt system. It is **not** the authority for BLDG’s long-term public receipt contract.
 
-## BLDG vs this admin repo
+## Canonical ownership (final architecture)
+
+| Concern | **Owner (canonical)** | **This admin repo** |
+|--------|------------------------|---------------------|
+| Public receipt contract (`BldgReceiptViewModel`, evolution, versioning) | **Resident app** | Includes **aligned** types in [`shared/receiptViewModel.ts`](../shared/receiptViewModel.ts) for handoff and Laundry Butler tooling — **keep in sync** with resident when the contract changes. |
+| Generic renderer (`ReceiptPaper`) + print CSS | **Resident** | [`DigitalReceiptPage.tsx`](../client/src/pages/DigitalReceiptPage.tsx) is a **staff-only LB visual prototype** — layout reference for parity, not the shared production renderer. |
+| Branding / title / footer resolution | **Resident** (central resolver + config) | Admin hard-codes LB defaults + env for **this vertical only**. |
+| Vendor-aware JWT / token expansion → view model | **Resident** | Admin issues LB JWTs (`chargeCard`); **expansion and registry** live in resident. |
+| Vendor mapper registry (LB, future vendors) | **Resident** | Admin provides **Laundry Butler reference mapper**: [`buildReceiptLines`](../shared/receipt.ts), LB pricing rules, sample payloads. |
+
+**Admin does not define the permanent public receipt contract.** It is the **first vendor-specific implementation** and **reference mapper** for Laundry Butler. **`LaundryButler*`** naming anywhere is **local / reference only** — not the BLDG-wide API surface.
+
+## BLDG vs this admin repo (summary)
 
 | Layer | Responsibility |
 |--------|----------------|
-| **Resident / app.bldg.chat** | **`BldgReceiptViewModel`** (vendor-neutral) + a dumb **`ReceiptPaper`** (or `BldgReceiptPaper`). Branding (title, subtitle, footer, business block) always from **data** — payload, vendor config, or building config — never hard-coded vendor strings in the component. |
-| **Per-vendor mappers** | e.g. `mapLaundryButlerOrderToBldgReceipt` — first mapper; future: grooming, car wash, etc. |
-| **This admin app** | LB order intake, charge, receipt at `/receipt/:orderId`. Types named `LaundryButler*` are **legacy aliases** of `Bldg*` for this vertical only. |
-| **Samples** | `docs/samples/laundry-butler-receipt*.json` are **Laundry Butler fixtures** for tests/Storybook; add more fixtures per vertical later. |
+| **Resident / app.bldg.chat** | Owns **`BldgReceiptViewModel`**, **`ReceiptPaper`**, **branding resolver**, **vendor-aware token expansion**, **mapper registry**. Renders all building vendors’ receipts for residents. |
+| **This admin app** | Laundry Butler order intake, charge, staff receipt at **`/receipt/:orderId`**. Ships LB line-item logic and samples so resident’s **LB mapper** can match behavior. |
+| **`LaundryButler*` types** | Deprecated aliases in this repo only — **do not** use as the public contract name in resident. |
+| **Samples** | `docs/samples/laundry-butler-receipt*.json` — **LB fixture data** for tests; not a global receipt schema registry. |
 
-**Contract rule:** The resident app must **not** treat `LaundryButlerReceiptViewModel` or the literal title **LAUNDRY BUTLER** as the permanent public receipt contract for BLDG. Use **`BldgReceiptViewModel`** as the documented resident/public abstraction.
+**Contract rule:** The **resident app** is the canonical home for the public multi-vendor receipt contract. This repo must **not** be documented as defining BLDG’s permanent API.
 
-## 1. Source files in this repo (prototype)
+## 1. Source files in this repo (Laundry Butler reference)
 
-| Piece | Location |
-|--------|-----------|
-| Receipt page (React + Tailwind) | [`client/src/pages/DigitalReceiptPage.tsx`](../client/src/pages/DigitalReceiptPage.tsx) |
-| Line items from DB intake | [`shared/receipt.ts`](../shared/receipt.ts) — `buildReceiptLines()`, `ReceiptLine` |
-| Vendor-neutral view model | [`shared/receiptViewModel.ts`](../shared/receiptViewModel.ts) — **`BldgReceiptViewModel`**, **`BldgReceiptLine`** |
-| Legacy laundry aliases | Same file — `LaundryButlerReceiptViewModel` = `BldgReceiptViewModel` (deprecated name) |
-| Sample JSON (dry cleaning) | [`docs/samples/laundry-butler-receipt.sample.json`](samples/laundry-butler-receipt.sample.json) |
-| Sample JSON (wash & fold) | [`docs/samples/laundry-butler-receipt-wash-fold.sample.json`](samples/laundry-butler-receipt-wash-fold.sample.json) |
+| Piece | Role |
+|--------|------|
+| [`client/src/pages/DigitalReceiptPage.tsx`](../client/src/pages/DigitalReceiptPage.tsx) | **LB staff receipt** — visual/layout reference; not `ReceiptPaper`. |
+| [`shared/receipt.ts`](../shared/receipt.ts) | **`buildReceiptLines`** — **first vendor mapper** (Laundry Butler only). Same shape as `BldgReceiptLine` when mapped. |
+| [`shared/receiptViewModel.ts`](../shared/receiptViewModel.ts) | **`BldgReceiptViewModel`** / **`BldgReceiptLine`** — shapes aligned with **resident-owned** contract for handoff. **`LaundryButler*`** = legacy alias, reference naming only. |
+| [`docs/samples/laundry-butler-receipt.sample.json`](samples/laundry-butler-receipt.sample.json) | LB dry-cleaning fixture. |
+| [`docs/samples/laundry-butler-receipt-wash-fold.sample.json`](samples/laundry-butler-receipt-wash-fold.sample.json) | LB wash-and-fold fixture. |
 
 ## 2. Branding (admin vs resident)
 
-**This admin app (Laundry Butler receipt page):**
+**This admin app (Laundry Butler only):**
 
-- May use **LAUNDRY BUTLER** as the default header and LB env defaults (`VITE_RECEIPT_*`) — unchanged product behavior for staff.
+- May use **LAUNDRY BUTLER** as the default header and LB env defaults (`VITE_RECEIPT_*`).
 - Subtitle: `Wash & Fold` or `Dry Cleaning` from `order.serviceType`.
 - Footer default: *Thanks for your business. Have an amazing day!*
 
-**Resident / BLDG:**
+**Resident / BLDG (all vendors):**
 
-- **Parity** means **shared layout, typography, table structure, totals block, and print quality** — not copying the literal **LAUNDRY BUTLER** string for every vendor.
-- Each receipt’s **title, subtitle, business block, and footer** must come from **payload or config** for that vendor.
+- **Parity** with admin = **layout, table, totals, print quality** — not mandating the literal **LAUNDRY BUTLER** string for non-LB vendors.
+- **Branding resolver** supplies title, subtitle, business block, footer per vendor/building.
 
 ## 3. Layout & styles (Tailwind reference — “paper”)
+
+Use this section to match **resident `ReceiptPaper`** visually. Admin page is the LB staff implementation of the same pattern.
 
 Outer shell:
 
@@ -48,69 +61,55 @@ Sections (top → bottom):
 
 1. Brand block: centered, bottom border `border-neutral-100`, padding `pt-8 pb-6 px-6`.
 2. Order `#id` + customer name: centered, `text-2xl font-bold` for `#id`, `text-lg font-medium` for name.
-3. Two-column grid: `grid grid-cols-2 gap-4 px-6 pb-6 text-sm border-b border-neutral-200` — left business, right metadata: **Total**, **Order placed** (see below), **Due**, **Payment** (labels `text-black/50`).
-4. Line table: full width, header row uppercase small caps style `text-xs uppercase tracking-wide`, columns Item | Qty | Unit (right) | Amount (right).
-5. Totals block: right-aligned column ~`w-48`, rows Subtotal, Discount, Total (bold + top border), Payment.
+3. Two-column grid: `grid grid-cols-2 gap-4 px-6 pb-6 text-sm border-b border-neutral-200` — left business, right metadata: **Total**, **Order placed**, **Due**, **Payment** (labels `text-black/50`).
+4. Line table: Item | Qty | Unit (right) | Amount (right).
+5. Totals block: Subtotal, Discount, Total, Payment.
 6. Footer strip: `bg-neutral-50 border-t` + footer text.
 
-**Order placed (metadata):**
+**Order placed (metadata) — semantics (authoritative):**
 
-- **Label:** `Order placed:` (human-readable date/time, same formatting family as other meta lines).
-- **Source:** `orders.createdAt` — when the customer originally placed the order. **Not** card capture time (`Payment:` uses last update when paid, typically post-charge) and not processing completion.
+- **`BldgReceiptViewModel.meta.orderPlacedAt`:** ISO 8601 — **original customer order creation** (`orders.createdAt`).
+- **Not** card payment capture time, **not** order completion/delivery time.
+- **Payment** line uses paid / charge-related timestamp when applicable (may differ from `orderPlacedAt`).
+- **Label on admin prototype:** `Order placed:`
 
-**Print / screenshot:**
+**Print / screenshot:** `print:` variants; hide chrome with `print:hidden`.
 
-- Use `print:` variants on the outer page and card as above.
-- Hide non-receipt chrome with `print:hidden` (e.g. “Screenshot…” hint, “Back to admin” link).
+## 4. Data paths (ecosystem)
 
-## 4. Data: `/orders` only vs `/receipt/:token` (JWT)
+| Context | Mechanism | Owner of “full receipt” UX |
+|--------|------------|----------------------------|
+| **Admin** (`admin.bldg.chat`) | **`/receipt/:orderId`** + `trpc.admin.getOrder` | Admin (LB staff only). |
+| **Resident** | **`/receipt/:token`**, JWT from LB `chargeCard` + **vendor-aware expansion** | **Resident** maps to `BldgReceiptViewModel`. |
+| **Server-to-server** | **`GET /api/orders/:orderId/receipt`** + `x-app-shared-secret` | Raw LB JSON; **resident mapper** turns this into `BldgReceiptViewModel` when proxying. |
 
-There are **three** receipt-related paths in the ecosystem; they are **not** interchangeable.
+**Resident responsibilities (not admin):** `ReceiptPaper`, branding resolver, **mapper registry**, **token expansion** to neutral view model.
 
-| Context | Mechanism | Auth |
-|--------|------------|------|
-| **Admin** (`admin.bldg.chat`) | Client route **`/receipt/:orderId`** (numeric id). Renders [`DigitalReceiptPage`](../client/src/pages/DigitalReceiptPage.tsx). | Admin session + `trpc.admin.getOrder`. **No JWT** on this URL. |
-| **Consumer app** (`app.bldg.chat`) | URL like **`/receipt/:token`** where `token` is a **JWT** issued at charge time (see `chargeCard` in `server/routers.ts`). Payload includes `orderId`, `finalAmount`, `totalWeight`, `currency`, `vendorName`, etc. | Validated by resident app; **enrich** with line items via a trusted API using `orderId` (and vendor identity as you define it). |
-| **Server-to-server** | **`GET /api/orders/:orderId/receipt`** with header **`x-app-shared-secret: APP_SHARED_API_SECRET`**. | Returns JSON: `lineItems`, `drycleanItems`, `subtotal`, etc. Map to **`BldgReceiptViewModel`** (and `buildReceiptLines` rules for LB). |
+## 5. Mapping order → `BldgReceiptViewModel` (Laundry Butler mapper — reference)
 
-**Recommendation for resident refactor:**
+This is the **first vendor mapper**; others follow the same output shape in resident.
 
-- Presentational component: **`ReceiptPaper({ model: BldgReceiptViewModel })`** — no data fetching.
-- **Order list / `/orders`:** Resolve vendor + fetch the correct receipt endpoint → map → `BldgReceiptViewModel`.
-- **`/receipt/:token`:** Prefer **minimal JWT + server expansion** to a neutral view model when possible; avoid fat tokens with full line items for every vertical unless product requires offline display.
-
-## 5. Mapping order → `BldgReceiptViewModel` (Laundry Butler)
-
-1. **Lines:** Use [`buildReceiptLines`](../shared/receipt.ts) with `serviceType`, `weightLbs`, `upchargesJson`, `drycleanItemsJson`, `subtotal`. Output matches `BldgReceiptLine`.
-2. **Totals:** `subtotal` / `total` from order strings; `discount = max(0, subtotal - total)` as currency strings with 2 decimals.
+1. **Lines:** [`buildReceiptLines`](../shared/receipt.ts) — **Laundry Butler pricing / intake rules only.** Output matches `BldgReceiptLine`.
+2. **Totals:** `subtotal` / `total` from order strings; `discount = max(0, subtotal - total)`.
 3. **Meta:**
-   - **`orderPlacedAt`:** ISO 8601 from **`order.createdAt`** (customer placed the order).
-   - **`dueDisplay`:** from `deliveryDate` + `deliveryTimeWindow`.
-   - **`paymentDisplay`:** from paid time + “Card” or “Pending” (charge time may differ from `orderPlacedAt`).
-4. **Branding:** For LB-only mappers, title/subtitle/business block can match admin defaults; for BLDG, fill from vendor/building config.
+   - **`orderPlacedAt`:** ISO 8601 from **`order.createdAt`** (placed — not paid, not completed).
+   - **`dueDisplay`:** `deliveryDate` + `deliveryTimeWindow`.
+   - **`paymentDisplay`:** paid time + “Card” or “Pending”.
+4. **Branding:** In resident, from **resolver**; LB mapper may inject LB defaults when source is this admin API.
 
-## 6. Open decisions (not settled in this repo)
+## 6. Open decisions (resident / platform)
 
-Document only — implement in resident / platform when ready.
+- Receipt URL shape (unified vs vendor in path/query).
+- JWT minimal vs fat vs expansion policy per vendor.
+- Branding defaults storage; building → vendor mapping and routing.
 
-- **Receipt URL shape:** Single pattern for all vendors vs vendor in path or query (e.g. `/orders/:vendorSlug/:orderId/receipt`) vs unified BLDG receipt service.
-- **Token strategy:** Minimal JWT + server-side expansion to `BldgReceiptViewModel` vs fat JWT per vertical.
-- **Vendor branding defaults:** Where default title, phone, and footer live when not embedded in payload (DB vs static config).
-- **Building → vendor mapping:** Source of truth for which vendors serve a building and how receipt fetch is routed.
+## 7. Resident implementation checklist
 
-## 7. Refactor checklist (resident app)
+- [ ] Canonical **`BldgReceiptViewModel`** + **`ReceiptPaper`** + **branding resolver** in resident.
+- [ ] **Mapper registry**; register **Laundry Butler** using rules aligned with **`buildReceiptLines`** + admin samples.
+- [ ] **Vendor-aware token expansion** for `/receipt/:token`.
+- [ ] Keep shared types **in sync** with resident when contract evolves.
 
-- [ ] Introduce **`ReceiptPaper({ model: BldgReceiptViewModel })`** — no data fetching inside.
-- [ ] Implement **`mapLaundryButler…ToBldgReceipt`** (or proxy + map) as the first mapper.
-- [ ] Point **OrderReceipt** at mapper + paper; make vendor resolution explicit before fetch.
-- [ ] **Receipt** (`/receipt/:token`): decode JWT; expand or fetch to **`BldgReceiptViewModel`** with vendor-aware routing.
-- [ ] **Print CSS** once on the paper component.
-- [ ] Use sample JSON fixtures; add non-LB samples as verticals ship.
+## 8. JWT reference (Laundry Butler — issued from admin)
 
-## 8. JWT payload reference (charge flow — Laundry Butler)
-
-Issued in `server/routers.ts` (`chargeCard`), signed with `JWT_SHARED_SECRET` / `JWT_SECRET` / `APP_SHARED_API_SECRET`. Claims include at least:
-
-`orderId`, `customerId` (Stripe), `totalWeight`, `finalAmount` (cents), `currency`, `vendorName`.
-
-Resident **`/receipt/:token`** should verify token and load full receipt via a trusted API; **order placed** time should still come from order **`createdAt`** when mapping to `BldgReceiptViewModel.meta.orderPlacedAt`.
+`chargeCard` in `server/routers.ts` signs JWTs; claims include `orderId`, `customerId`, `totalWeight`, `finalAmount`, `currency`, `vendorName`. **Expansion to `BldgReceiptViewModel`** (including **`orderPlacedAt` from `createdAt`**) is a **resident** concern.

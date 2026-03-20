@@ -1,5 +1,12 @@
 /**
- * Build itemized receipt rows from stored order intake JSON.
+ * Laundry Butler — **first vendor receipt line mapper** (reference implementation).
+ *
+ * Converts LB order intake (`upchargesJson`, `drycleanItemsJson`, weight, minimum rules)
+ * into display lines. Output shape matches **`BldgReceiptLine`** when mapped into
+ * **`BldgReceiptViewModel`** in the **resident** app.
+ *
+ * This is **not** a system-wide or multi-vendor mapper registry — only LB rules.
+ * Other vendors get their own mappers in the resident **mapper registry**.
  */
 import { WF_RATE_PER_LB_CENTS } from "./pricing";
 
@@ -33,7 +40,7 @@ function fmtUnit(cents: number): string {
 }
 
 /**
- * Line items that sum to pre-discount subtotal (matches order.subtotal after intake).
+ * LB-only: line items that sum to pre-discount subtotal (matches `order.subtotal` after intake).
  */
 export function buildReceiptLines(order: {
   serviceType: "wash_fold" | "dry_cleaning";

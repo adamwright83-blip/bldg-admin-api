@@ -5,6 +5,7 @@
 
 export type * from "../drizzle/schema";
 export * from "./_core/errors";
+/** Receipt shapes aligned with resident-owned public contract; see receiptViewModel.ts */
 export type {
   BldgReceiptLine,
   BldgReceiptViewModel,
