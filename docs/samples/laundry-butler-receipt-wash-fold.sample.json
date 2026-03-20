@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "branding": {
+    "title": "LAUNDRY BUTLER",
+    "serviceSubtitle": "Wash & Fold",
+    "businessName": "Laundry Butler",
+    "addressLine1": "Los Angeles, CA",
+    "addressLine2": "United States",
+    "phoneDisplay": "(323) 807-4661"
+  },
+  "order": {
+    "id": 353,
+    "customerName": "Moj Salon",
+    "serviceType": "wash_fold"
+  },
+  "meta": {
+    "orderPlacedAt": "2026-03-15T07:35:00.000Z",
+    "dueDisplay": "03/15/26 1pm-4pm",
+    "paymentDisplay": "03/14/26, 11:35 PM, Card"
+  },
+  "lines": [
+    {
+      "item": "Wash & Fold",
+      "quantity": "20",
+      "unitPrice": "2.50",
+      "amount": "50.00"
+    }
+  ],
+  "totals": {
+    "subtotal": "50.00",
+    "discount": "5.00",
+    "total": "45.00",
+    "payment": "45.00"
+  },
+  "footerMessage": "Thanks for your business. Have an amazing day!"
+}

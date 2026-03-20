@@ -83,7 +83,8 @@ export default function DigitalReceiptPage() {
     );
   }
 
-  const created = order.createdAt ? new Date(order.createdAt) : new Date();
+  /** Customer’s original order placement time (`orders.createdAt`), not charge time. */
+  const orderPlaced = order.createdAt ? new Date(order.createdAt) : new Date();
   const paidAt = order.paid && order.updatedAt ? new Date(order.updatedAt) : null;
   const dueStr =
     order.deliveryDate
@@ -139,8 +140,8 @@ export default function DigitalReceiptPage() {
               </span>
             </p>
             <p className="mt-1">
-              <span className="text-black/50">Created: </span>
-              {formatReceiptDate(created)}
+              <span className="text-black/50">Order placed: </span>
+              {formatReceiptDate(orderPlaced)}
             </p>
             <p className="mt-1">
               <span className="text-black/50">Due: </span>

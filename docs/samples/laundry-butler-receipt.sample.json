@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "branding": {
+    "title": "LAUNDRY BUTLER",
+    "serviceSubtitle": "Dry Cleaning",
+    "businessName": "Laundry Butler",
+    "addressLine1": "Los Angeles, CA",
+    "addressLine2": "United States",
+    "phoneDisplay": "(323) 807-4661"
+  },
+  "order": {
+    "id": 630042,
+    "customerName": "Jordan Lee",
+    "serviceType": "dry_cleaning"
+  },
+  "meta": {
+    "orderPlacedAt": "2026-03-17T21:35:00.000Z",
+    "dueDisplay": "03/18/26 7:00am–9:00am",
+    "paymentDisplay": "03/17/26, 9:35 PM, Card"
+  },
+  "lines": [
+    {
+      "item": "Dress Shirt",
+      "quantity": "3",
+      "unitPrice": "6.00",
+      "amount": "18.00"
+    },
+    {
+      "item": "Pants",
+      "quantity": "2",
+      "unitPrice": "10.00",
+      "amount": "20.00"
+    }
+  ],
+  "totals": {
+    "subtotal": "38.00",
+    "discount": "0.00",
+    "total": "38.00",
+    "payment": "38.00"
+  },
+  "footerMessage": "Thanks for your business. Have an amazing day!"
+}
