@@ -32,6 +32,12 @@ export const BUILDINGS: BuildingConfig[] = [
     accessProtocol:
       "ButterflyMX entry. Staff manually programs elevator for unit floor.",
   },
+  {
+    id: "century_park_east",
+    slug: "centuryparkeast",
+    name: "Century Park East",
+    addressKeywords: ["century park east", "century pke"],
+  },
 ];
 
 /**

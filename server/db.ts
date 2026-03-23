@@ -221,9 +221,8 @@ export type AdminCustomerAggregateDbRow = {
 };
 
 /**
- * Admin customer aggregates by phone.
- * Uses set-based SQL with window functions; returns one latest-record row per phone
- * plus counts/sums across that phone's order history.
+ * Admin customer aggregates by stable customer key.
+ * Uses phone when available; otherwise falls back to name+unit+address composite.
  */
 export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggregateDbRow[]> {
   const db = await getDb();
@@ -233,6 +232,17 @@ export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggreg
     WITH ranked AS (
       SELECT
         id,
+        CASE
+          WHEN phone IS NOT NULL AND LENGTH(TRIM(phone)) >= 7
+            THEN LOWER(TRIM(phone))
+          ELSE CONCAT(
+            'fallback:',
+            LOWER(TRIM(COALESCE(firstName, ''))), '|',
+            LOWER(TRIM(COALESCE(lastName, ''))), '|',
+            LOWER(TRIM(COALESCE(unit, ''))), '|',
+            LOWER(TRIM(COALESCE(address, '')))
+          )
+        END AS customerKey,
         phone,
         firstName,
         lastName,
@@ -242,19 +252,19 @@ export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggreg
         buildingSlug,
         createdAt,
         ROW_NUMBER() OVER (
-          PARTITION BY phone
+          PARTITION BY customerKey
           ORDER BY createdAt DESC, id DESC
         ) AS rn,
-        COUNT(*) OVER (PARTITION BY phone) AS totalOrders,
-        MIN(createdAt) OVER (PARTITION BY phone) AS firstOrderAt,
-        MAX(createdAt) OVER (PARTITION BY phone) AS lastOrderAt,
+        COUNT(*) OVER (PARTITION BY customerKey) AS totalOrders,
+        MIN(createdAt) OVER (PARTITION BY customerKey) AS firstOrderAt,
+        MAX(createdAt) OVER (PARTITION BY customerKey) AS lastOrderAt,
         SUM(CASE WHEN paid = 1 THEN CAST(COALESCE(total, 0) AS DECIMAL(10,2)) ELSE 0 END)
-          OVER (PARTITION BY phone) AS lifetimeSpend,
-        SUM(CASE WHEN paid = 1 THEN 1 ELSE 0 END) OVER (PARTITION BY phone) AS paidOrderCount,
+          OVER (PARTITION BY customerKey) AS lifetimeSpend,
+        SUM(CASE WHEN paid = 1 THEN 1 ELSE 0 END) OVER (PARTITION BY customerKey) AS paidOrderCount,
         SUM(CASE WHEN createdAt >= UTC_TIMESTAMP() - INTERVAL 30 DAY THEN 1 ELSE 0 END)
-          OVER (PARTITION BY phone) AS ordersLast30Days,
+          OVER (PARTITION BY customerKey) AS ordersLast30Days,
         SUM(CASE WHEN createdAt >= UTC_TIMESTAMP() - INTERVAL 90 DAY THEN 1 ELSE 0 END)
-          OVER (PARTITION BY phone) AS ordersLast90Days
+          OVER (PARTITION BY customerKey) AS ordersLast90Days
       FROM orders
     )
     SELECT
