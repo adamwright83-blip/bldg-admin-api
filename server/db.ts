@@ -229,9 +229,83 @@ export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggreg
   if (!db) return [];
 
   const result = await db.execute(sql`
-    WITH base AS (
+    SELECT
+      latest.phone,
+      latest.firstName,
+      latest.lastName,
+      latest.email,
+      latest.unit,
+      latest.address,
+      latest.buildingSlug,
+      agg.totalOrders,
+      agg.lifetimeSpend,
+      agg.paidOrderCount,
+      agg.firstOrderAt,
+      agg.lastOrderAt,
+      latest.id AS lastOrderId,
+      agg.ordersLast30Days,
+      agg.ordersLast90Days
+    FROM (
       SELECT
-        id,
+        o.id,
+        CASE
+          WHEN o.phone IS NOT NULL AND LENGTH(TRIM(o.phone)) >= 7
+            THEN LOWER(TRIM(o.phone))
+          ELSE CONCAT(
+            'fallback:',
+            LOWER(TRIM(COALESCE(o.firstName, ''))), '|',
+            LOWER(TRIM(COALESCE(o.lastName, ''))), '|',
+            LOWER(TRIM(COALESCE(o.unit, ''))), '|',
+            LOWER(TRIM(COALESCE(o.address, '')))
+          )
+        END AS customerKey,
+        o.phone,
+        o.firstName,
+        o.lastName,
+        o.email,
+        o.unit,
+        o.address,
+        o.buildingSlug,
+        o.createdAt
+      FROM orders o
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM orders o2
+        WHERE
+          (
+            CASE
+              WHEN o2.phone IS NOT NULL AND LENGTH(TRIM(o2.phone)) >= 7
+                THEN LOWER(TRIM(o2.phone))
+              ELSE CONCAT(
+                'fallback:',
+                LOWER(TRIM(COALESCE(o2.firstName, ''))), '|',
+                LOWER(TRIM(COALESCE(o2.lastName, ''))), '|',
+                LOWER(TRIM(COALESCE(o2.unit, ''))), '|',
+                LOWER(TRIM(COALESCE(o2.address, '')))
+              )
+            END
+          ) =
+          (
+            CASE
+              WHEN o.phone IS NOT NULL AND LENGTH(TRIM(o.phone)) >= 7
+                THEN LOWER(TRIM(o.phone))
+              ELSE CONCAT(
+                'fallback:',
+                LOWER(TRIM(COALESCE(o.firstName, ''))), '|',
+                LOWER(TRIM(COALESCE(o.lastName, ''))), '|',
+                LOWER(TRIM(COALESCE(o.unit, ''))), '|',
+                LOWER(TRIM(COALESCE(o.address, '')))
+              )
+            END
+          )
+          AND (
+            o2.createdAt > o.createdAt
+            OR (o2.createdAt = o.createdAt AND o2.id > o.id)
+          )
+      )
+    ) latest
+    INNER JOIN (
+      SELECT
         CASE
           WHEN phone IS NOT NULL AND LENGTH(TRIM(phone)) >= 7
             THEN LOWER(TRIM(phone))
@@ -243,62 +317,16 @@ export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggreg
             LOWER(TRIM(COALESCE(address, '')))
           )
         END AS customerKey,
-        phone,
-        firstName,
-        lastName,
-        email,
-        unit,
-        address,
-        buildingSlug,
-        createdAt
+        COUNT(*) AS totalOrders,
+        MIN(createdAt) AS firstOrderAt,
+        MAX(createdAt) AS lastOrderAt,
+        SUM(CASE WHEN paid = 1 THEN CAST(COALESCE(total, 0) AS DECIMAL(10,2)) ELSE 0 END) AS lifetimeSpend,
+        SUM(CASE WHEN paid = 1 THEN 1 ELSE 0 END) AS paidOrderCount,
+        SUM(CASE WHEN createdAt >= UTC_TIMESTAMP() - INTERVAL 30 DAY THEN 1 ELSE 0 END) AS ordersLast30Days,
+        SUM(CASE WHEN createdAt >= UTC_TIMESTAMP() - INTERVAL 90 DAY THEN 1 ELSE 0 END) AS ordersLast90Days
       FROM orders
-    ),
-    ranked AS (
-      SELECT
-        id,
-        customerKey,
-        phone,
-        firstName,
-        lastName,
-        email,
-        unit,
-        address,
-        buildingSlug,
-        createdAt,
-        ROW_NUMBER() OVER (
-          PARTITION BY customerKey
-          ORDER BY createdAt DESC, id DESC
-        ) AS rn,
-        COUNT(*) OVER (PARTITION BY customerKey) AS totalOrders,
-        MIN(createdAt) OVER (PARTITION BY customerKey) AS firstOrderAt,
-        MAX(createdAt) OVER (PARTITION BY customerKey) AS lastOrderAt,
-        SUM(CASE WHEN paid = 1 THEN CAST(COALESCE(total, 0) AS DECIMAL(10,2)) ELSE 0 END)
-          OVER (PARTITION BY customerKey) AS lifetimeSpend,
-        SUM(CASE WHEN paid = 1 THEN 1 ELSE 0 END) OVER (PARTITION BY customerKey) AS paidOrderCount,
-        SUM(CASE WHEN createdAt >= UTC_TIMESTAMP() - INTERVAL 30 DAY THEN 1 ELSE 0 END)
-          OVER (PARTITION BY customerKey) AS ordersLast30Days,
-        SUM(CASE WHEN createdAt >= UTC_TIMESTAMP() - INTERVAL 90 DAY THEN 1 ELSE 0 END)
-          OVER (PARTITION BY customerKey) AS ordersLast90Days
-      FROM base
-    )
-    SELECT
-      phone,
-      firstName,
-      lastName,
-      email,
-      unit,
-      address,
-      buildingSlug,
-      totalOrders,
-      lifetimeSpend,
-      paidOrderCount,
-      firstOrderAt,
-      lastOrderAt,
-      id AS lastOrderId,
-      ordersLast30Days,
-      ordersLast90Days
-    FROM ranked
-    WHERE rn = 1
+      GROUP BY customerKey
+    ) agg ON agg.customerKey = latest.customerKey
   `);
 
   return result as unknown as AdminCustomerAggregateDbRow[];
