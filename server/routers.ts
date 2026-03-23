@@ -596,7 +596,7 @@ export const appRouter = router({
         pickupTimeWindow: z.string(),
         deliveryDate: z.string().optional(),
         deliveryTimeWindow: z.string().optional(),
-        address: z.string().min(1),
+        address: z.string(),
         unit: z.string().optional(),
         specialInstructions: z.string().optional(),
         firstName: z.string().min(1),
@@ -605,9 +605,12 @@ export const appRouter = router({
         email: z.string().optional(),
         stripeCustomerId: z.string().optional(),
         stripePaymentMethodId: z.string().optional(),
-        buildingSlug: z.string().min(1),
+        buildingSlug: z.string(),
         vendorId: z.number().optional(),
-      }))
+      }).refine(
+        (d) => d.address.trim().length > 0 || d.buildingSlug.trim().length > 0,
+        { message: "Either address or buildingSlug is required" }
+      ))
       .mutation(async ({ input }) => {
         const pickupDateObj = new Date(input.pickupDate + "T00:00:00");
         pickupDateObj.setDate(pickupDateObj.getDate() + 1);
@@ -615,8 +618,11 @@ export const appRouter = router({
 
         // Resolve vendorId: explicit > Phase 2 routing > null
         let resolvedVendorId: number | null = input.vendorId ?? null;
-        if (!resolvedVendorId && input.buildingSlug) {
-          const vendor = await getVendorForOrder(input.buildingSlug, input.serviceType);
+        if (!resolvedVendorId && input.buildingSlug.trim()) {
+          const vendor = await getVendorForOrder(
+            input.buildingSlug.trim(),
+            input.serviceType
+          );
           resolvedVendorId = vendor?.id ?? null;
           if (vendor) {
             console.log(`[VendorRouting] assigned vendor #${vendor.id} (${vendor.name}) for building=${input.buildingSlug} service=${input.serviceType}`);

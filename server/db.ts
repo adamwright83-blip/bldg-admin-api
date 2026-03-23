@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, like, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users,
@@ -12,6 +12,7 @@ import {
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { matchBuilding } from "@shared/buildings";
+import { resolveOrderLocationForInsert } from "./orderLocation";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -104,8 +105,74 @@ export async function createOrder(order: InsertOrder): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const result = await db.insert(orders).values(order);
-  return Number(result[0].insertId);
+  const resolved = resolveOrderLocationForInsert({
+    address: order.address ?? "",
+    buildingSlug: order.buildingSlug ?? null,
+  });
+  const values: InsertOrder = {
+    ...order,
+    address: resolved.address,
+    buildingSlug: resolved.buildingSlug,
+  };
+
+  const result = await db.insert(orders).values(values);
+  const insertId = Number(result[0].insertId);
+  if (!resolved.buildingSlug) {
+    console.warn("[ORDER WITHOUT BUILDING]", {
+      orderId: insertId,
+      address: resolved.address,
+    });
+  }
+  return insertId;
+}
+
+/** Rows with no usable building slug (null, empty, or whitespace only). */
+const missingBuildingSlugWhere = sql`(${orders.buildingSlug} IS NULL OR TRIM(COALESCE(${orders.buildingSlug}, '')) = '')`;
+
+export async function countOrdersMissingBuildingSlug(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db
+    .select({ c: sql<number>`count(*)` })
+    .from(orders)
+    .where(missingBuildingSlugWhere);
+  return Number(rows[0]?.c ?? 0);
+}
+
+export type OrderBuildingBackfillRow = {
+  id: number;
+  address: string | null;
+  buildingSlug: string | null;
+};
+
+/**
+ * Keyset pagination for backfill: orders missing buildingSlug, id &gt; afterId.
+ */
+export async function listOrdersMissingBuildingSlugBatch(
+  afterId: number,
+  limit: number
+): Promise<OrderBuildingBackfillRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: orders.id,
+      address: orders.address,
+      buildingSlug: orders.buildingSlug,
+    })
+    .from(orders)
+    .where(and(gt(orders.id, afterId), missingBuildingSlugWhere))
+    .orderBy(asc(orders.id))
+    .limit(limit);
+}
+
+export async function updateOrderBuildingSlug(
+  orderId: number,
+  buildingSlug: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(orders).set({ buildingSlug }).where(eq(orders.id, orderId));
 }
 
 export async function getOrderById(id: number): Promise<Order | undefined> {

@@ -446,13 +446,29 @@ async function startServer() {
         buildingSlug,
       } = req.body;
 
-      // Validate required fields
-      if (!serviceType || !firstName || !lastName || !phone || !address || !pickupDate || !pickupWindow) {
+      const addressTrim =
+        address != null && typeof address === "string" ? address.trim() : "";
+      const buildingSlugTrim =
+        buildingSlug != null && typeof buildingSlug === "string"
+          ? buildingSlug.trim()
+          : "";
+
+      // Validate required fields (address OR buildingSlug required for location)
+      if (!serviceType || !firstName || !lastName || !phone || !pickupDate || !pickupWindow) {
         console.log(`[Intake ${reqId}] Validation failed: missing required fields`);
         return res.status(400).json({
           error: "Missing required fields",
           code: "ADMIN_INTAKE_FAILED",
-          message: "serviceType, firstName, lastName, phone, address, pickupDate, pickupWindow are required",
+          message:
+            "serviceType, firstName, lastName, phone, pickupDate, pickupWindow are required",
+        });
+      }
+      if (!addressTrim && !buildingSlugTrim) {
+        console.log(`[Intake ${reqId}] Validation failed: missing address and buildingSlug`);
+        return res.status(400).json({
+          error: "Missing location",
+          code: "ADMIN_INTAKE_FAILED",
+          message: "Either address or buildingSlug is required",
         });
       }
 
@@ -507,7 +523,7 @@ async function startServer() {
         pickupTimeWindow: pickupWindow,
         deliveryDate: defaultDeliveryDate,
         deliveryTimeWindow: pickupWindow,
-        address,
+        address: addressTrim || "",
         unit: unit || null,
         specialInstructions: specialInstructions || null,
         firstName,
@@ -517,7 +533,7 @@ async function startServer() {
         stripeCustomerId: stripeCustomerId || null,
         stripePaymentMethodId: stripePaymentMethodId || null,
         bldgUserId: bldgUserId || null,
-        buildingSlug: buildingSlug || null,
+        buildingSlug: buildingSlugTrim || null,
         status: "new",
       });
 
