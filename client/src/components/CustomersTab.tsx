@@ -20,6 +20,8 @@ type CustomerRow = {
   email: string | null;
   unit: string | null;
   buildingSlug: string | null;
+  /** Latest order address from aggregate (for unresolved-building triage). */
+  address: string;
   totalOrders: number;
   lifetimeSpend: number;
   lastOrderAt: Date | string;
@@ -97,33 +99,51 @@ function formatLastOrder(value: Date | string): string {
 export function CustomersTab({ onOpenProfile }: Props) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<RecencyStatus | "">("");
+  /** Default All — only send tier to API when VIP or Standard is explicitly chosen. */
   const [tierFilter, setTierFilter] = useState<Tier | "">("");
   const [buildingSort, setBuildingSort] = useState<BuildingSort>("revenue");
   const debouncedSearch = useDebounce(search, 300);
+
+  const tierForApi = tierFilter === "" ? undefined : tierFilter;
 
   const list = trpc.admin.listCustomers.useQuery({
     search: debouncedSearch || undefined,
     sortBy: "lastOrder",
     status: statusFilter || undefined,
-    tier: tierFilter || undefined,
+    tier: tierForApi,
   });
 
-  const customers: CustomerRow[] = (list.data?.customers ?? []) as CustomerRow[];
+  const customers: CustomerRow[] = (list.data?.customers ?? []).map((row) => ({
+    ...(row as CustomerRow),
+    address:
+      typeof (row as { address?: string }).address === "string"
+        ? (row as { address: string }).address
+        : "",
+  }));
   const buildingSummary = (list.data?.buildingSummary ?? {}) as Record<
     string,
     BuildingSummaryEntry
   >;
 
-  /** Leaderboard hides unassigned rows (test/bad data); drawer and APIs unchanged. */
-  const leaderboardCustomers = useMemo(
+  const resolvedCustomers = useMemo(
     () =>
       customers.filter((c) => normalizeBuildingSlug(c.buildingSlug) !== "unknown"),
     [customers]
   );
 
+  const unresolvedCustomers = useMemo(() => {
+    const rows = customers.filter(
+      (c) => normalizeBuildingSlug(c.buildingSlug) === "unknown"
+    );
+    return [...rows].sort(
+      (a, b) =>
+        new Date(b.lastOrderAt).getTime() - new Date(a.lastOrderAt).getTime()
+    );
+  }, [customers]);
+
   const buildingSections = useMemo(() => {
     const grouped = new Map<string, CustomerRow[]>();
-    for (const c of leaderboardCustomers) {
+    for (const c of resolvedCustomers) {
       const key = normalizeBuildingSlug(c.buildingSlug);
       const arr = grouped.get(key);
       if (arr) arr.push(c);
@@ -189,7 +209,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
           ? "LAST"
           : `#${rankBySlug.get(s.slug) ?? "?"}`,
     }));
-  }, [leaderboardCustomers, buildingSummary, buildingSort]);
+  }, [resolvedCustomers, buildingSummary, buildingSort]);
 
   const maxRevenue = useMemo(
     () => buildingSections.reduce((m, s) => Math.max(m, s.totalRevenue), 0),
@@ -264,7 +284,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
             onChange={(e) => setTierFilter(e.target.value as Tier | "")}
             className="rounded-md border border-black/20 bg-white px-3 py-2 text-sm min-w-[120px]"
           >
-            <option value="">All</option>
+            <option value="">All tiers</option>
             <option value="vip">VIP</option>
             <option value="standard">Standard</option>
           </select>
@@ -272,23 +292,23 @@ export function CustomersTab({ onOpenProfile }: Props) {
       </div>
 
       <p className="text-sm text-black/50">
-        {leaderboardCustomers.length} customer
-        {leaderboardCustomers.length === 1 ? "" : "s"} across{" "}
-        {buildingSections.length} building
-        {buildingSections.length === 1 ? "" : "s"}
-        {customers.length > leaderboardCustomers.length
-          ? ` (${customers.length - leaderboardCustomers.length} unassigned hidden)`
-          : ""}
-        .
+        {customers.length === 0 ? (
+          <>No customers match the current filters.</>
+        ) : (
+          (() => {
+            let s = `${customers.length} customer${customers.length === 1 ? "" : "s"}`;
+            if (buildingSections.length > 0) {
+              s += ` across ${buildingSections.length} building${buildingSections.length === 1 ? "" : "s"}`;
+            }
+            if (unresolvedCustomers.length > 0) {
+              s += ` · ${unresolvedCustomers.length} need building resolution`;
+            }
+            return <>{s}.</>;
+          })()
+        )}
       </p>
 
       <div className="space-y-5">
-        {buildingSections.length === 0 && (
-          <p className="text-sm text-black/50 py-6">
-            No customers with a resolved building in the current filters. Unassigned rows are hidden
-            on this view.
-          </p>
-        )}
         {buildingSections.map((section, idx) => {
           const intensity = maxRevenue > 0 ? section.totalRevenue / maxRevenue : 0;
           const sectionStyle =
@@ -371,6 +391,63 @@ export function CustomersTab({ onOpenProfile }: Props) {
             </section>
           );
         })}
+
+        {unresolvedCustomers.length > 0 && (
+          <section className="rounded-md border border-amber-200/80 bg-amber-50/40">
+            <div className="px-4 py-3 border-b border-amber-200/60">
+              <p className="font-semibold text-base text-black">
+                Needs Building Resolution
+              </p>
+              <p className="text-sm text-black/60 mt-0.5">
+                {unresolvedCustomers.length} customer
+                {unresolvedCustomers.length === 1 ? "" : "s"} — could not match{" "}
+                <code className="text-xs bg-white/80 px-1 rounded">buildingSlug</code> or address
+                to a known building. Open a profile to fix data upstream.
+              </p>
+            </div>
+            <div className="divide-y divide-amber-100 overflow-x-auto">
+              <div className="grid min-w-[640px] grid-cols-[minmax(0,1.1fr)_minmax(0,0.45fr)_minmax(0,0.5fr)_minmax(0,0.55fr)_minmax(0,1.35fr)] gap-2 items-center px-4 py-2 text-[10px] uppercase tracking-wider text-black/45 bg-white/50">
+                <div>Name</div>
+                <div>Unit</div>
+                <div>Spend</div>
+                <div>Last Order</div>
+                <div>buildingSlug / address</div>
+              </div>
+              {unresolvedCustomers.map((r) => (
+                <button
+                  key={`needs-building:${r.phone}:${r.unit ?? ""}:${String(r.lastOrderAt)}:${r.address}`}
+                  type="button"
+                  onClick={() => onOpenProfile(r.phone)}
+                  className="w-full min-w-[640px] px-4 py-2 text-left hover:bg-amber-100/50 focus:outline-none focus:ring-2 focus:ring-amber-300/60"
+                  aria-label={`Open profile for ${r.firstName} ${r.lastName}`}
+                >
+                  <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,0.45fr)_minmax(0,0.5fr)_minmax(0,0.55fr)_minmax(0,1.35fr)] gap-2 items-start text-sm">
+                    <div className="min-w-0">
+                      <p className="font-medium text-black truncate">
+                        {[r.firstName, r.lastName].filter(Boolean).join(" ") || "—"}
+                      </p>
+                    </div>
+                    <div className="text-black/70">{r.unit || "—"}</div>
+                    <div className="text-black/80 font-medium">${r.lifetimeSpend.toFixed(2)}</div>
+                    <div className="text-black/60 text-xs whitespace-nowrap">
+                      {formatLastOrder(r.lastOrderAt)}
+                    </div>
+                    <div className="min-w-0 text-xs text-black/70 space-y-0.5">
+                      <p className="truncate" title={r.buildingSlug ?? ""}>
+                        <span className="text-black/45">slug:</span>{" "}
+                        {r.buildingSlug?.trim() ? r.buildingSlug.trim() : "—"}
+                      </p>
+                      <p className="break-words line-clamp-3" title={r.address}>
+                        <span className="text-black/45">addr:</span>{" "}
+                        {r.address?.trim() ? r.address.trim() : "—"}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );
