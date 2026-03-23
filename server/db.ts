@@ -221,8 +221,8 @@ export type AdminCustomerAggregateDbRow = {
 };
 
 /**
- * Admin customer aggregates by stable customer key.
- * Uses phone when available; otherwise falls back to name+unit+address composite.
+ * Admin customer aggregates by stable composite customer key.
+ * Keeps records distinct across building/name/unit even when phone is reused.
  */
 export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggregateDbRow[]> {
   const db = await getDb();
@@ -248,17 +248,14 @@ export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggreg
     FROM (
       SELECT
         o.id,
-        CASE
-          WHEN o.phone IS NOT NULL AND LENGTH(TRIM(o.phone)) >= 7
-            THEN LOWER(TRIM(o.phone))
-          ELSE CONCAT(
-            'fallback:',
-            LOWER(TRIM(COALESCE(o.firstName, ''))), '|',
-            LOWER(TRIM(COALESCE(o.lastName, ''))), '|',
-            LOWER(TRIM(COALESCE(o.unit, ''))), '|',
-            LOWER(TRIM(COALESCE(o.address, '')))
-          )
-        END AS customerKey,
+        CONCAT(
+          'p:', LOWER(TRIM(COALESCE(o.phone, ''))), '|',
+          'fn:', LOWER(TRIM(COALESCE(o.firstName, ''))), '|',
+          'ln:', LOWER(TRIM(COALESCE(o.lastName, ''))), '|',
+          'u:', LOWER(TRIM(COALESCE(o.unit, ''))), '|',
+          'b:', LOWER(TRIM(COALESCE(o.buildingSlug, ''))), '|',
+          'a:', LOWER(TRIM(COALESCE(o.address, '')))
+        ) AS customerKey,
         o.phone,
         o.firstName,
         o.lastName,
@@ -273,30 +270,24 @@ export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggreg
         FROM orders o2
         WHERE
           (
-            CASE
-              WHEN o2.phone IS NOT NULL AND LENGTH(TRIM(o2.phone)) >= 7
-                THEN LOWER(TRIM(o2.phone))
-              ELSE CONCAT(
-                'fallback:',
-                LOWER(TRIM(COALESCE(o2.firstName, ''))), '|',
-                LOWER(TRIM(COALESCE(o2.lastName, ''))), '|',
-                LOWER(TRIM(COALESCE(o2.unit, ''))), '|',
-                LOWER(TRIM(COALESCE(o2.address, '')))
-              )
-            END
+            CONCAT(
+              'p:', LOWER(TRIM(COALESCE(o2.phone, ''))), '|',
+              'fn:', LOWER(TRIM(COALESCE(o2.firstName, ''))), '|',
+              'ln:', LOWER(TRIM(COALESCE(o2.lastName, ''))), '|',
+              'u:', LOWER(TRIM(COALESCE(o2.unit, ''))), '|',
+              'b:', LOWER(TRIM(COALESCE(o2.buildingSlug, ''))), '|',
+              'a:', LOWER(TRIM(COALESCE(o2.address, '')))
+            )
           ) =
           (
-            CASE
-              WHEN o.phone IS NOT NULL AND LENGTH(TRIM(o.phone)) >= 7
-                THEN LOWER(TRIM(o.phone))
-              ELSE CONCAT(
-                'fallback:',
-                LOWER(TRIM(COALESCE(o.firstName, ''))), '|',
-                LOWER(TRIM(COALESCE(o.lastName, ''))), '|',
-                LOWER(TRIM(COALESCE(o.unit, ''))), '|',
-                LOWER(TRIM(COALESCE(o.address, '')))
-              )
-            END
+            CONCAT(
+              'p:', LOWER(TRIM(COALESCE(o.phone, ''))), '|',
+              'fn:', LOWER(TRIM(COALESCE(o.firstName, ''))), '|',
+              'ln:', LOWER(TRIM(COALESCE(o.lastName, ''))), '|',
+              'u:', LOWER(TRIM(COALESCE(o.unit, ''))), '|',
+              'b:', LOWER(TRIM(COALESCE(o.buildingSlug, ''))), '|',
+              'a:', LOWER(TRIM(COALESCE(o.address, '')))
+            )
           )
           AND (
             o2.createdAt > o.createdAt
@@ -306,17 +297,14 @@ export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggreg
     ) latest
     INNER JOIN (
       SELECT
-        CASE
-          WHEN phone IS NOT NULL AND LENGTH(TRIM(phone)) >= 7
-            THEN LOWER(TRIM(phone))
-          ELSE CONCAT(
-            'fallback:',
-            LOWER(TRIM(COALESCE(firstName, ''))), '|',
-            LOWER(TRIM(COALESCE(lastName, ''))), '|',
-            LOWER(TRIM(COALESCE(unit, ''))), '|',
-            LOWER(TRIM(COALESCE(address, '')))
-          )
-        END AS customerKey,
+        CONCAT(
+          'p:', LOWER(TRIM(COALESCE(phone, ''))), '|',
+          'fn:', LOWER(TRIM(COALESCE(firstName, ''))), '|',
+          'ln:', LOWER(TRIM(COALESCE(lastName, ''))), '|',
+          'u:', LOWER(TRIM(COALESCE(unit, ''))), '|',
+          'b:', LOWER(TRIM(COALESCE(buildingSlug, ''))), '|',
+          'a:', LOWER(TRIM(COALESCE(address, '')))
+        ) AS customerKey,
         COUNT(*) AS totalOrders,
         MIN(createdAt) AS firstOrderAt,
         MAX(createdAt) AS lastOrderAt,
