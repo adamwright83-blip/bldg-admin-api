@@ -1,7 +1,10 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useDebounce } from "@/hooks/useDebounce";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
+import { CustomerProfileDrawer } from "@/components/CustomerProfileDrawer";
+import { CustomersTab } from "@/components/CustomersTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Search, Check, Copy, AlertCircle, ChevronLeft, ChevronRight, MapPin, Phone, MessageSquare, Package } from "lucide-react";
@@ -19,18 +22,18 @@ import {
 } from "@shared/pricing";
 import type { Order } from "@shared/types";
 
-const TABS = ["New Order", "Intake", "Processing", "Ready", "Pickups", "Requests", "Leads", "Vendors"] as const;
+const TABS = [
+  "New Order",
+  "Customers",
+  "Intake",
+  "Processing",
+  "Ready",
+  "Pickups",
+  "Requests",
+  "Leads",
+  "Vendors",
+] as const;
 type Tab = (typeof TABS)[number];
-
-/* Debounce hook for customer search */
-function useDebounce<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(t);
-  }, [value, delay]);
-  return debounced;
-}
 
 const SUPPORTED_BUILDINGS: { label: string; value: string }[] = [
   { label: "OPUS LA", value: "opusla" },
@@ -54,11 +57,13 @@ const TIME_WINDOWS = [
 
 const STATUS_FOR_TAB: Record<Tab, Order["status"] | null> = {
   "New Order": null,
+  Customers: null,
   Intake: "collected",
   Processing: "processing",
   Ready: "ready",
   Pickups: null,
   Requests: null,
+  Leads: null,
   Vendors: null,
 };
 
@@ -97,6 +102,8 @@ function getWeekDates(offset: number) {
 export default function Admin() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("New Order");
+  const [profilePhone, setProfilePhone] = useState<string | null>(null);
+  const [newOrderPhoneSeed, setNewOrderPhoneSeed] = useState<string | null>(null);
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
   const debouncedCustomerQuery = useDebounce(customerSearchQuery, 300);
   const searchOrders = trpc.admin.searchOrdersForReceipt.useQuery(
@@ -177,20 +184,35 @@ export default function Admin() {
                 ) : searchOrders.data?.length ? (
                   <ul className="py-1">
                     {searchOrders.data.map((o) => (
-                      <li key={o.id}>
-                        <a
-                          href={`/receipt/${o.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm hover:bg-black/5"
-                        >
-                          <span className="font-medium text-black">
+                      <li
+                        key={o.id}
+                        className="flex items-stretch gap-1 px-2 py-1.5 hover:bg-black/[0.03] border-b border-black/5 last:border-0"
+                      >
+                        <div className="flex-1 min-w-0 flex flex-col justify-center px-1">
+                          <span className="font-medium text-black text-sm truncate">
                             #{o.id} — {o.firstName} {o.lastName}
                           </span>
                           <span className="text-black/50 text-xs">
                             {o.total ? `$${o.total}` : "—"} · {o.serviceType === "wash_fold" ? "W&F" : "DC"}
                           </span>
-                        </a>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-1 shrink-0">
+                          <button
+                            type="button"
+                            className="text-xs font-medium px-2 py-1.5 rounded border border-black/15 bg-white hover:bg-black/5 text-black"
+                            onClick={() => setProfilePhone(o.phone)}
+                          >
+                            Profile
+                          </button>
+                          <a
+                            href={`/receipt/${o.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-medium px-2 py-1.5 rounded border border-black/15 bg-white hover:bg-black/5 text-black text-center"
+                          >
+                            Receipt
+                          </a>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -205,7 +227,16 @@ export default function Admin() {
 
       {/* Tab content */}
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
-        {activeTab === "New Order" && <NewOrderTab />}
+        {activeTab === "New Order" && (
+          <NewOrderTab
+            onOpenProfile={(p) => setProfilePhone(p)}
+            phoneSeed={newOrderPhoneSeed}
+            onConsumePhoneSeed={() => setNewOrderPhoneSeed(null)}
+          />
+        )}
+        {activeTab === "Customers" && (
+          <CustomersTab onOpenProfile={(p) => setProfilePhone(p)} />
+        )}
         {activeTab === "Intake" && <IntakeTab />}
         {activeTab === "Processing" && <ProcessingTab />}
         {activeTab === "Ready" && <ReadyTab />}
@@ -214,12 +245,32 @@ export default function Admin() {
         {activeTab === "Leads" && <LeadsTab />}
         {activeTab === "Vendors" && <VendorsTab />}
       </div>
+
+      <CustomerProfileDrawer
+        open={profilePhone !== null}
+        onOpenChange={(open) => {
+          if (!open) setProfilePhone(null);
+        }}
+        phone={profilePhone}
+        onPrefillNewOrder={(p) => {
+          setNewOrderPhoneSeed(p);
+          setActiveTab("New Order");
+        }}
+      />
     </div>
   );
 }
 
 /* ===== NEW ORDER TAB ===== */
-function NewOrderTab() {
+function NewOrderTab({
+  onOpenProfile,
+  phoneSeed,
+  onConsumePhoneSeed,
+}: {
+  onOpenProfile: (phone: string) => void;
+  phoneSeed: string | null;
+  onConsumePhoneSeed: () => void;
+}) {
   const [phone, setPhone] = useState("");
   const [form, setForm] = useState({
     firstName: "",
@@ -247,6 +298,14 @@ function NewOrderTab() {
     { phone },
     { enabled: phone.length >= 7 && !prefilled }
   );
+
+  useEffect(() => {
+    if (phoneSeed) {
+      setPhone(phoneSeed);
+      setPrefilled(false);
+      onConsumePhoneSeed();
+    }
+  }, [phoneSeed, onConsumePhoneSeed]);
 
   const createOrder = trpc.admin.createOrder.useMutation();
   const queueQuery = trpc.admin.listByStatus.useQuery({ status: "new" });
@@ -380,7 +439,7 @@ function NewOrderTab() {
       {/* Phone search */}
       <div className="mb-6">
         <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">Phone</label>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Input
             ref={phoneRef}
             value={phone}
@@ -389,9 +448,19 @@ function NewOrderTab() {
             className="bg-white border-black/20"
           />
           {searchQuery.data && !prefilled && (
-            <Button variant="outline" className="border-black text-black shrink-0" onClick={handlePrefill}>
-              <Search className="w-4 h-4 mr-1" /> Prefill
-            </Button>
+            <>
+              <Button variant="outline" className="border-black text-black shrink-0" onClick={handlePrefill}>
+                <Search className="w-4 h-4 mr-1" /> Prefill
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-black/30 text-black shrink-0"
+                onClick={() => onOpenProfile(searchQuery.data!.phone)}
+              >
+                View profile
+              </Button>
+            </>
           )}
         </div>
         {searchQuery.data && !prefilled && (

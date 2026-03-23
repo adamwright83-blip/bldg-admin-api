@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, like, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users,
@@ -11,6 +11,7 @@ import {
   leads, Lead, InsertLead,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
+import { matchBuilding } from "@shared/buildings";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -127,6 +128,179 @@ export async function updateOrderStripe(
     .update(orders)
     .set({ stripeCustomerId, stripePaymentMethodId })
     .where(eq(orders.id, orderId));
+}
+
+/** PII for resident backfill — excludes Stripe and payment fields */
+export type CustomerIdentityExportRow = {
+  phone: string;
+  firstName: string;
+  lastName: string;
+  buildingSlug: string | null;
+  lastOrderId: number;
+};
+
+/**
+ * Latest order per phone (by createdAt desc, then id desc). Names/slug come from that row.
+ * buildingSlug: trimmed orders.buildingSlug if set, else matchBuilding(address)?.slug.
+ */
+export async function listLatestCustomerIdentityForExport(options?: {
+  since?: Date;
+}): Promise<CustomerIdentityExportRow[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const baseQuery = db
+    .select({
+      id: orders.id,
+      phone: orders.phone,
+      firstName: orders.firstName,
+      lastName: orders.lastName,
+      buildingSlug: orders.buildingSlug,
+      address: orders.address,
+      createdAt: orders.createdAt,
+    })
+    .from(orders);
+
+  const rows = await (options?.since
+    ? baseQuery.where(gte(orders.createdAt, options.since))
+    : baseQuery
+  ).orderBy(desc(orders.createdAt), desc(orders.id));
+
+  const byPhone = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    if (!byPhone.has(row.phone)) {
+      byPhone.set(row.phone, row);
+    }
+  }
+
+  const sorted = Array.from(byPhone.values()).sort((a, b) =>
+    a.phone.localeCompare(b.phone)
+  );
+
+  return sorted.map((row) => {
+    const slugFromOrder = row.buildingSlug?.trim() || null;
+    const slugFromAddress = matchBuilding(row.address)?.slug ?? null;
+    return {
+      phone: row.phone,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      buildingSlug: slugFromOrder || slugFromAddress,
+      lastOrderId: row.id,
+    };
+  });
+}
+
+/** All orders for one phone (exact match), newest first */
+export async function getOrdersByPhoneExact(phone: string): Promise<Order[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(orders)
+    .where(eq(orders.phone, phone))
+    .orderBy(desc(orders.createdAt), desc(orders.id));
+}
+
+export type AdminCustomerAggregateDbRow = {
+  phone: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  unit: string | null;
+  address: string;
+  buildingSlug: string | null;
+  totalOrders: number;
+  lifetimeSpend: number;
+  paidOrderCount: number;
+  firstOrderAt: Date;
+  lastOrderAt: Date;
+  lastOrderId: number;
+  ordersLast30Days: number;
+  ordersLast90Days: number;
+};
+
+/**
+ * Admin customer aggregates by phone.
+ * Uses set-based SQL with window functions; returns one latest-record row per phone
+ * plus counts/sums across that phone's order history.
+ */
+export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggregateDbRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db.execute(sql`
+    WITH ranked AS (
+      SELECT
+        id,
+        phone,
+        firstName,
+        lastName,
+        email,
+        unit,
+        address,
+        buildingSlug,
+        createdAt,
+        ROW_NUMBER() OVER (
+          PARTITION BY phone
+          ORDER BY createdAt DESC, id DESC
+        ) AS rn,
+        COUNT(*) OVER (PARTITION BY phone) AS totalOrders,
+        MIN(createdAt) OVER (PARTITION BY phone) AS firstOrderAt,
+        MAX(createdAt) OVER (PARTITION BY phone) AS lastOrderAt,
+        SUM(CASE WHEN paid = 1 THEN CAST(COALESCE(total, 0) AS DECIMAL(10,2)) ELSE 0 END)
+          OVER (PARTITION BY phone) AS lifetimeSpend,
+        SUM(CASE WHEN paid = 1 THEN 1 ELSE 0 END) OVER (PARTITION BY phone) AS paidOrderCount,
+        SUM(CASE WHEN createdAt >= UTC_TIMESTAMP() - INTERVAL 30 DAY THEN 1 ELSE 0 END)
+          OVER (PARTITION BY phone) AS ordersLast30Days,
+        SUM(CASE WHEN createdAt >= UTC_TIMESTAMP() - INTERVAL 90 DAY THEN 1 ELSE 0 END)
+          OVER (PARTITION BY phone) AS ordersLast90Days
+      FROM orders
+    )
+    SELECT
+      phone,
+      firstName,
+      lastName,
+      email,
+      unit,
+      address,
+      buildingSlug,
+      totalOrders,
+      lifetimeSpend,
+      paidOrderCount,
+      firstOrderAt,
+      lastOrderAt,
+      id AS lastOrderId,
+      ordersLast30Days,
+      ordersLast90Days
+    FROM ranked
+    WHERE rn = 1
+  `);
+
+  return result as unknown as AdminCustomerAggregateDbRow[];
+}
+
+export type BuildingRevenueOrderRow = {
+  buildingSlug: string | null;
+  address: string;
+  unit: string | null;
+  total: string | null;
+};
+
+/** Paid orders for per-order building revenue attribution */
+export async function listPaidOrdersForBuildingRevenue(): Promise<BuildingRevenueOrderRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select({
+      buildingSlug: orders.buildingSlug,
+      address: orders.address,
+      unit: orders.unit,
+      total: orders.total,
+    })
+    .from(orders)
+    .where(eq(orders.paid, true));
 }
 
 /* ===== ADMIN / DRIVER HELPERS ===== */

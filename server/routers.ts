@@ -48,7 +48,15 @@ import {
   markLeadAsRead,
   markLeadAsUnread,
   updateLeadNotes,
+  getOrdersByPhoneExact,
+  listAdminCustomerAggregates,
+  listPaidOrdersForBuildingRevenue,
 } from "./db";
+import {
+  buildCustomerProfile,
+  deriveFloorNumber,
+  hydrateCustomerAggregates,
+} from "./customerProfile";
 import { ENV } from "./_core/env";
 import { notifyOwner } from "./_core/notification";
 import { notifyPickupEnRoute, notifyCardCharged, notifyDeliveryEnRoute } from "./_core/sms";
@@ -301,18 +309,27 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    /** Generate JWT for app.bldg.chat portal handoff */
+    /**
+     * HS256 JWT for app.bldg.chat welcome handoff (APP_SHARED_API_SECRET).
+     * Claims: phone, firstName, lastName, orderId, buildingSlug, exp (15m).
+     */
     generatePortalToken: publicProcedure
       .input(z.object({ orderId: z.number() }))
       .mutation(async ({ input }) => {
         const order = await getOrderById(input.orderId);
         if (!order) throw new Error("Order not found");
 
+        const buildingSlug =
+          (order.buildingSlug && order.buildingSlug.trim()) ||
+          matchBuilding(order.address)?.slug ||
+          null;
+
         const payload = {
           phone: order.phone,
           firstName: order.firstName,
+          lastName: order.lastName,
           orderId: order.id,
-          buildingSlug: "opusla",
+          buildingSlug,
           exp: Math.floor(Date.now() / 1000) + 15 * 60, // 15 minutes
         };
 
@@ -428,6 +445,144 @@ export const appRouter = router({
           stripeCustomerId: order.stripeCustomerId,
           stripePaymentMethodId: order.stripePaymentMethodId,
         };
+      }),
+
+    /** Customer intelligence — all orders for exact phone (no Stripe fields in response) */
+    getCustomerProfile: protectedProcedure
+      .input(z.object({ phone: z.string().min(3).max(50) }))
+      .query(async ({ input }) => {
+        const phone = input.phone.trim();
+        const rows = await getOrdersByPhoneExact(phone);
+        return buildCustomerProfile(phone, rows);
+      }),
+
+    /** Directory of customers grouped by phone (loads all orders once; fine for typical LB volume) */
+    listCustomers: protectedProcedure
+      .input(
+        z
+          .object({
+            search: z.string().max(120).optional(),
+            sortBy: z.enum(["spend", "orders", "lastOrder"]).default("lastOrder"),
+            status: z.enum(["new", "active", "warm", "cooling", "lapsed"]).optional(),
+            tier: z.enum(["vip", "standard"]).optional(),
+            buildingSlug: z.string().max(100).optional(),
+          })
+          .optional()
+      )
+      .query(async ({ input }) => {
+        const [aggregateRows, paidOrders] = await Promise.all([
+          listAdminCustomerAggregates(),
+          listPaidOrdersForBuildingRevenue(),
+        ]);
+        let rows = hydrateCustomerAggregates(aggregateRows);
+        const q = input?.search?.trim().toLowerCase();
+        if (q) {
+          rows = rows.filter(
+            (r) =>
+              r.phone.toLowerCase().includes(q) ||
+              `${r.firstName} ${r.lastName}`.toLowerCase().includes(q) ||
+              (r.email?.toLowerCase().includes(q) ?? false)
+          );
+        }
+        if (input?.status) {
+          rows = rows.filter((r) => r.recencyStatus === input.status);
+        }
+        if (input?.tier) {
+          rows = rows.filter((r) => r.tier === input.tier);
+        }
+        if (input?.buildingSlug) {
+          rows = rows.filter((r) => r.buildingSlug === input.buildingSlug);
+        }
+        const sortBy = input?.sortBy ?? "lastOrder";
+        if (sortBy === "spend") {
+          rows.sort((a, b) => b.lifetimeSpend - a.lifetimeSpend || b.lastOrderAt.getTime() - a.lastOrderAt.getTime());
+        } else if (sortBy === "orders") {
+          rows.sort((a, b) => b.totalOrders - a.totalOrders || b.lastOrderAt.getTime() - a.lastOrderAt.getTime());
+        } else {
+          rows.sort(
+            (a, b) =>
+              new Date(b.lastOrderAt).getTime() - new Date(a.lastOrderAt).getTime()
+          );
+        }
+
+        const buildingSummaryMap = new Map<
+          string,
+          {
+            totalCustomers: number;
+            activeCustomers: number;
+            totalRevenue: number;
+            floors: Record<number, { totalCustomers: number; activeCustomers: number; totalRevenue: number }>;
+          }
+        >();
+
+        for (const row of rows) {
+          const key = row.buildingSlug || "unknown";
+          const existing = buildingSummaryMap.get(key) ?? {
+            totalCustomers: 0,
+            activeCustomers: 0,
+            totalRevenue: 0,
+            floors: {},
+          };
+          existing.totalCustomers += 1;
+          if (row.recencyStatus === "active") existing.activeCustomers += 1;
+          if (row.floorNumber != null) {
+            const floor = row.floorNumber;
+            const floorEntry = existing.floors[floor] ?? {
+              totalCustomers: 0,
+              activeCustomers: 0,
+              totalRevenue: 0,
+            };
+            floorEntry.totalCustomers += 1;
+            if (row.recencyStatus === "active") floorEntry.activeCustomers += 1;
+            existing.floors[floor] = floorEntry;
+          }
+          buildingSummaryMap.set(key, existing);
+        }
+
+        for (const order of paidOrders) {
+          const key = order.buildingSlug?.trim() || matchBuilding(order.address)?.slug || "unknown";
+          const existing = buildingSummaryMap.get(key) ?? {
+            totalCustomers: 0,
+            activeCustomers: 0,
+            totalRevenue: 0,
+            floors: {},
+          };
+          const amount = parseFloat(String(order.total ?? "0"));
+          const revenue = Number.isFinite(amount) ? amount : 0;
+          existing.totalRevenue += revenue;
+          const floor = deriveFloorNumber(order.unit);
+          if (floor != null) {
+            const floorEntry = existing.floors[floor] ?? {
+              totalCustomers: 0,
+              activeCustomers: 0,
+              totalRevenue: 0,
+            };
+            floorEntry.totalRevenue += revenue;
+            existing.floors[floor] = floorEntry;
+          }
+          buildingSummaryMap.set(key, existing);
+        }
+
+        const buildingSummary = Object.fromEntries(
+          Array.from(buildingSummaryMap.entries()).map(([slug, val]) => [
+            slug,
+            {
+              ...val,
+              totalRevenue: Math.round(val.totalRevenue * 100) / 100,
+              floors: Object.fromEntries(
+                Object.entries(val.floors).map(([floor, data]) => [
+                  floor,
+                  {
+                    ...data,
+                    totalRevenue: Math.round(data.totalRevenue * 100) / 100,
+                  },
+                ])
+              ),
+            },
+          ])
+        );
+
+        return { customers: rows, buildingSummary };
       }),
 
     /** Create order manually (admin new order tab) */

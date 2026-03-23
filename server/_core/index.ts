@@ -348,6 +348,68 @@ async function startServer() {
     }
   });
 
+  // Read-only customer identity export for resident backfill (shared secret; no payment fields)
+  app.get("/api/export/customer-identities", async (req, res) => {
+    const sharedSecret = req.headers["x-app-shared-secret"];
+    if (!sharedSecret || sharedSecret !== process.env.APP_SHARED_API_SECRET) {
+      return res.status(401).json({
+        error: "Unauthorized",
+        code: "EXPORT_UNAUTHORIZED",
+        message: "Invalid or missing x-app-shared-secret",
+      });
+    }
+
+    const rawDays = req.query.days;
+    let since: Date | undefined;
+    let daysRequested: number | undefined;
+    if (rawDays !== undefined && rawDays !== "") {
+      const s = Array.isArray(rawDays) ? rawDays[0] : rawDays;
+      const lower = String(s).toLowerCase();
+      if (lower !== "all") {
+        const n = parseInt(String(s), 10);
+        if (!Number.isFinite(n) || n < 1 || n > 3650) {
+          return res.status(400).json({
+            error: "Invalid days parameter",
+            code: "EXPORT_BAD_REQUEST",
+            message: "Use days=all, omit days for full export, or days=1..3650 (UTC window from now)",
+          });
+        }
+        daysRequested = n;
+        since = new Date();
+        since.setUTCDate(since.getUTCDate() - n);
+      }
+    }
+
+    try {
+      const { listLatestCustomerIdentityForExport } = await import("../db");
+      const customers = await listLatestCustomerIdentityForExport(
+        since ? { since } : undefined
+      );
+      res.json({
+        generatedAt: new Date().toISOString(),
+        filter:
+          since != null && daysRequested != null
+            ? {
+                mode: "since",
+                days: daysRequested,
+                since: since.toISOString(),
+                note: "Orders with createdAt >= since (UTC)",
+              }
+            : { mode: "all" },
+        count: customers.length,
+        customers,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[Export customer-identities]", err);
+      res.status(500).json({
+        error: "Internal server error",
+        code: "EXPORT_FAILED",
+        message: msg,
+      });
+    }
+  });
+
   // Intake API endpoint for bldg-chat integration (authenticated via shared secret)
   // Resident app must ONLY show "Laundry booked" when response is 200 + { ok: true, orderId }.
   app.post("/api/intake/from-bldg", async (req, res) => {
