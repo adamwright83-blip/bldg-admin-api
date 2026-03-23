@@ -3,6 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
+import { BUILDINGS } from "@shared/buildings";
 
 type RecencyStatus = "new" | "active" | "warm" | "cooling" | "lapsed";
 type Tier = "vip" | "standard";
@@ -56,8 +57,13 @@ function statusBadgeClass(token: string) {
   }
 }
 
+const buildingNameBySlug = new Map(
+  BUILDINGS.map((b) => [b.slug.toLowerCase(), b.name])
+);
+
 function formatBuildingLabel(slug: string) {
-  if (slug === "unknown") return "Unknown / Unassigned";
+  const configured = buildingNameBySlug.get(slug.toLowerCase());
+  if (configured) return configured;
   return slug
     .split(/[_-]/g)
     .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
@@ -108,9 +114,16 @@ export function CustomersTab({ onOpenProfile }: Props) {
     BuildingSummaryEntry
   >;
 
+  /** Leaderboard hides unassigned rows (test/bad data); drawer and APIs unchanged. */
+  const leaderboardCustomers = useMemo(
+    () =>
+      customers.filter((c) => normalizeBuildingSlug(c.buildingSlug) !== "unknown"),
+    [customers]
+  );
+
   const buildingSections = useMemo(() => {
     const grouped = new Map<string, CustomerRow[]>();
-    for (const c of customers) {
+    for (const c of leaderboardCustomers) {
       const key = normalizeBuildingSlug(c.buildingSlug);
       const arr = grouped.get(key);
       if (arr) arr.push(c);
@@ -155,8 +168,6 @@ export function CustomersTab({ onOpenProfile }: Props) {
     });
 
     sections.sort((a, b) => {
-      if (a.slug === "unknown" && b.slug !== "unknown") return 1;
-      if (b.slug === "unknown" && a.slug !== "unknown") return -1;
       if (buildingSort === "orders") return b.totalOrders - a.totalOrders;
       if (buildingSort === "active") return b.activeCustomers - a.activeCustomers;
       return b.totalRevenue - a.totalRevenue;
@@ -174,13 +185,11 @@ export function CustomersTab({ onOpenProfile }: Props) {
     return sections.map((s) => ({
       ...s,
       rankLabel:
-        s.slug === "unknown" && s.totalRevenue === 0
+        lowestRevenue != null && s.totalRevenue === lowestRevenue
           ? "LAST"
-          : lowestRevenue != null && s.totalRevenue === lowestRevenue
-            ? "LAST"
-            : `#${rankBySlug.get(s.slug) ?? "?"}`,
+          : `#${rankBySlug.get(s.slug) ?? "?"}`,
     }));
-  }, [customers, buildingSummary, buildingSort]);
+  }, [leaderboardCustomers, buildingSummary, buildingSort]);
 
   const maxRevenue = useMemo(
     () => buildingSections.reduce((m, s) => Math.max(m, s.totalRevenue), 0),
@@ -263,12 +272,23 @@ export function CustomersTab({ onOpenProfile }: Props) {
       </div>
 
       <p className="text-sm text-black/50">
-        {customers.length} customer{customers.length === 1 ? "" : "s"} across{" "}
+        {leaderboardCustomers.length} customer
+        {leaderboardCustomers.length === 1 ? "" : "s"} across{" "}
         {buildingSections.length} building
-        {buildingSections.length === 1 ? "" : "s"}.
+        {buildingSections.length === 1 ? "" : "s"}
+        {customers.length > leaderboardCustomers.length
+          ? ` (${customers.length - leaderboardCustomers.length} unassigned hidden)`
+          : ""}
+        .
       </p>
 
       <div className="space-y-5">
+        {buildingSections.length === 0 && (
+          <p className="text-sm text-black/50 py-6">
+            No customers with a resolved building in the current filters. Unassigned rows are hidden
+            on this view.
+          </p>
+        )}
         {buildingSections.map((section, idx) => {
           const intensity = maxRevenue > 0 ? section.totalRevenue / maxRevenue : 0;
           const sectionStyle =
@@ -318,7 +338,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
                 </div>
                 {section.customers.map((r) => (
                   <button
-                    key={r.phone}
+                    key={`${section.slug}:${r.phone}:${r.unit ?? ""}:${String(r.lastOrderAt)}`}
                     type="button"
                     onClick={() => onOpenProfile(r.phone)}
                     className="w-full px-4 py-2 text-left hover:bg-black/[0.02] focus:outline-none focus:ring-2 focus:ring-black/20"

@@ -27,8 +27,14 @@ export const BUILDINGS: BuildingConfig[] = [
     id: "opus_la",
     slug: "opusla",
     name: "Opus Los Angeles",
-    addressKeywords: ["opus", "12655 bluff creek"],
-    defaultAddress: "12655 Bluff Creek Dr, Los Angeles, CA 90094",
+    addressKeywords: [
+      "3545 wilshire",
+      "3650 6th",
+      "3545",
+      "3650",
+      "opus",
+    ],
+    defaultAddress: "3545 Wilshire Blvd, Los Angeles, CA 90010",
     accessProtocol:
       "ButterflyMX entry. Staff manually programs elevator for unit floor.",
   },
@@ -36,7 +42,14 @@ export const BUILDINGS: BuildingConfig[] = [
     id: "century_park_east",
     slug: "centuryparkeast",
     name: "Century Park East",
-    addressKeywords: ["century park east", "century pke"],
+    addressKeywords: [
+      "2170 century park",
+      "2160 century park",
+      "century park e",
+      "century park east",
+      "century pke",
+    ],
+    defaultAddress: "2170 Century Park E, Los Angeles, CA 90067",
   },
 ];
 
