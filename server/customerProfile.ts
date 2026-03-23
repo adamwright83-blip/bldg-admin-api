@@ -227,9 +227,10 @@ export function hydrateCustomerAggregates(rows: CustomerAggregateDbRow[]): Custo
       lastName: toSafeString(r.lastName),
       email: toSafeNullableString(r.email),
       unit: r.unit ?? null,
-      buildingSlug: r.buildingSlug?.trim() || matchBuilding(r.address)?.slug || null,
+      buildingSlug:
+        r.buildingSlug?.trim() || matchBuilding(toSafeString(r.address))?.slug || null,
       floorNumber: deriveFloorNumber(r.unit),
-      address: r.address,
+      address: toSafeString(r.address),
       totalOrders: Number(r.totalOrders || 0),
       lifetimeSpend,
       firstOrderAt: r.firstOrderAt,

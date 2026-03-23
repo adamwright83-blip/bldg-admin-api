@@ -38,7 +38,8 @@ export const BUILDINGS: BuildingConfig[] = [
  * Find a matching building config for a given address string.
  * Returns undefined if no building matches.
  */
-export function matchBuilding(address: string): BuildingConfig | undefined {
+export function matchBuilding(address: string | null | undefined): BuildingConfig | undefined {
+  if (!address || typeof address !== "string") return undefined;
   const lower = address.toLowerCase();
   return BUILDINGS.find((b) =>
     b.addressKeywords.some((kw) => lower.includes(kw))
