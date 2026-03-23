@@ -229,7 +229,7 @@ export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggreg
   if (!db) return [];
 
   const result = await db.execute(sql`
-    WITH ranked AS (
+    WITH base AS (
       SELECT
         id,
         CASE
@@ -243,6 +243,20 @@ export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggreg
             LOWER(TRIM(COALESCE(address, '')))
           )
         END AS customerKey,
+        phone,
+        firstName,
+        lastName,
+        email,
+        unit,
+        address,
+        buildingSlug,
+        createdAt
+      FROM orders
+    ),
+    ranked AS (
+      SELECT
+        id,
+        customerKey,
         phone,
         firstName,
         lastName,
@@ -265,7 +279,7 @@ export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggreg
           OVER (PARTITION BY customerKey) AS ordersLast30Days,
         SUM(CASE WHEN createdAt >= UTC_TIMESTAMP() - INTERVAL 90 DAY THEN 1 ELSE 0 END)
           OVER (PARTITION BY customerKey) AS ordersLast90Days
-      FROM orders
+      FROM base
     )
     SELECT
       phone,
