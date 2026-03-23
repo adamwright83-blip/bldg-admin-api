@@ -201,6 +201,11 @@ export type CustomerAggregateDbRow = {
 };
 
 export function hydrateCustomerAggregates(rows: CustomerAggregateDbRow[]): CustomerAggregateRow[] {
+  const toSafeString = (value: unknown): string =>
+    typeof value === "string" ? value : "";
+  const toSafeNullableString = (value: unknown): string | null =>
+    typeof value === "string" ? value : null;
+
   return rows.map((r) => {
     const lifetimeSpend = Math.round(Number(r.lifetimeSpend || 0) * 100) / 100;
     const paidOrderCount = Number(r.paidOrderCount || 0);
@@ -217,10 +222,10 @@ export function hydrateCustomerAggregates(rows: CustomerAggregateDbRow[]): Custo
     });
 
     return {
-      phone: r.phone,
-      firstName: r.firstName,
-      lastName: r.lastName,
-      email: r.email ?? null,
+      phone: toSafeString(r.phone),
+      firstName: toSafeString(r.firstName),
+      lastName: toSafeString(r.lastName),
+      email: toSafeNullableString(r.email),
       unit: r.unit ?? null,
       buildingSlug: r.buildingSlug?.trim() || matchBuilding(r.address)?.slug || null,
       floorNumber: deriveFloorNumber(r.unit),

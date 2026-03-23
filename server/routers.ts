@@ -470,6 +470,9 @@ export const appRouter = router({
           .optional()
       )
       .query(async ({ input }) => {
+        const safeLower = (value: unknown): string =>
+          typeof value === "string" ? value.toLowerCase() : "";
+
         const [aggregateRows, paidOrders] = await Promise.all([
           listAdminCustomerAggregates(),
           listPaidOrdersForBuildingRevenue(),
@@ -479,9 +482,9 @@ export const appRouter = router({
         if (q) {
           rows = rows.filter(
             (r) =>
-              r.phone.toLowerCase().includes(q) ||
-              `${r.firstName} ${r.lastName}`.toLowerCase().includes(q) ||
-              (r.email?.toLowerCase().includes(q) ?? false)
+              safeLower(r.phone).includes(q) ||
+              `${safeLower(r.firstName)} ${safeLower(r.lastName)}`.includes(q) ||
+              safeLower(r.email).includes(q)
           );
         }
         if (input?.status) {
