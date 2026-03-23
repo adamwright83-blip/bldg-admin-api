@@ -13,6 +13,12 @@ import {
 import { ENV } from './_core/env';
 import { matchBuilding } from "@shared/buildings";
 import { resolveOrderLocationForInsert } from "./orderLocation";
+import {
+  buildAdminCustomerAggregatesInMemory,
+  type AdminCustomerAggregateDbRow,
+} from "./adminCustomerAggregate";
+
+export type { AdminCustomerAggregateDbRow };
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -269,122 +275,31 @@ export async function getOrdersByPhoneExact(phone: string): Promise<Order[]> {
     .orderBy(desc(orders.createdAt), desc(orders.id));
 }
 
-export type AdminCustomerAggregateDbRow = {
-  phone: string;
-  firstName: string;
-  lastName: string;
-  email: string | null;
-  unit: string | null;
-  address: string;
-  buildingSlug: string | null;
-  totalOrders: number;
-  lifetimeSpend: number;
-  paidOrderCount: number;
-  firstOrderAt: Date;
-  lastOrderAt: Date;
-  lastOrderId: number;
-  ordersLast30Days: number;
-  ordersLast90Days: number;
-};
-
 /**
  * Admin customer aggregates by stable composite customer key.
- * Keeps records distinct across building/name/unit even when phone is reused.
+ * Metrics use full order history per key; display fields use the best row (see adminCustomerAggregate.ts).
  */
 export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggregateDbRow[]> {
   const db = await getDb();
   if (!db) return [];
 
-  const result = await db.execute(sql`
-    SELECT
-      latest.phone,
-      latest.firstName,
-      latest.lastName,
-      latest.email,
-      latest.unit,
-      latest.address,
-      latest.buildingSlug,
-      agg.totalOrders,
-      agg.lifetimeSpend,
-      agg.paidOrderCount,
-      agg.firstOrderAt,
-      agg.lastOrderAt,
-      latest.id AS lastOrderId,
-      agg.ordersLast30Days,
-      agg.ordersLast90Days
-    FROM (
-      SELECT
-        o.id,
-        CONCAT(
-          'p:', LOWER(TRIM(COALESCE(o.phone, ''))), '|',
-          'fn:', LOWER(TRIM(COALESCE(o.firstName, ''))), '|',
-          'ln:', LOWER(TRIM(COALESCE(o.lastName, ''))), '|',
-          'u:', LOWER(TRIM(COALESCE(o.unit, ''))), '|',
-          'b:', LOWER(TRIM(COALESCE(o.buildingSlug, ''))), '|',
-          'a:', LOWER(TRIM(COALESCE(o.address, '')))
-        ) AS customerKey,
-        o.phone,
-        o.firstName,
-        o.lastName,
-        o.email,
-        o.unit,
-        o.address,
-        o.buildingSlug,
-        o.createdAt
-      FROM orders o
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM orders o2
-        WHERE
-          (
-            CONCAT(
-              'p:', LOWER(TRIM(COALESCE(o2.phone, ''))), '|',
-              'fn:', LOWER(TRIM(COALESCE(o2.firstName, ''))), '|',
-              'ln:', LOWER(TRIM(COALESCE(o2.lastName, ''))), '|',
-              'u:', LOWER(TRIM(COALESCE(o2.unit, ''))), '|',
-              'b:', LOWER(TRIM(COALESCE(o2.buildingSlug, ''))), '|',
-              'a:', LOWER(TRIM(COALESCE(o2.address, '')))
-            )
-          ) =
-          (
-            CONCAT(
-              'p:', LOWER(TRIM(COALESCE(o.phone, ''))), '|',
-              'fn:', LOWER(TRIM(COALESCE(o.firstName, ''))), '|',
-              'ln:', LOWER(TRIM(COALESCE(o.lastName, ''))), '|',
-              'u:', LOWER(TRIM(COALESCE(o.unit, ''))), '|',
-              'b:', LOWER(TRIM(COALESCE(o.buildingSlug, ''))), '|',
-              'a:', LOWER(TRIM(COALESCE(o.address, '')))
-            )
-          )
-          AND (
-            o2.createdAt > o.createdAt
-            OR (o2.createdAt = o.createdAt AND o2.id > o.id)
-          )
-      )
-    ) latest
-    INNER JOIN (
-      SELECT
-        CONCAT(
-          'p:', LOWER(TRIM(COALESCE(phone, ''))), '|',
-          'fn:', LOWER(TRIM(COALESCE(firstName, ''))), '|',
-          'ln:', LOWER(TRIM(COALESCE(lastName, ''))), '|',
-          'u:', LOWER(TRIM(COALESCE(unit, ''))), '|',
-          'b:', LOWER(TRIM(COALESCE(buildingSlug, ''))), '|',
-          'a:', LOWER(TRIM(COALESCE(address, '')))
-        ) AS customerKey,
-        COUNT(*) AS totalOrders,
-        MIN(createdAt) AS firstOrderAt,
-        MAX(createdAt) AS lastOrderAt,
-        SUM(CASE WHEN paid = 1 THEN CAST(COALESCE(total, 0) AS DECIMAL(10,2)) ELSE 0 END) AS lifetimeSpend,
-        SUM(CASE WHEN paid = 1 THEN 1 ELSE 0 END) AS paidOrderCount,
-        SUM(CASE WHEN createdAt >= UTC_TIMESTAMP() - INTERVAL 30 DAY THEN 1 ELSE 0 END) AS ordersLast30Days,
-        SUM(CASE WHEN createdAt >= UTC_TIMESTAMP() - INTERVAL 90 DAY THEN 1 ELSE 0 END) AS ordersLast90Days
-      FROM orders
-      GROUP BY customerKey
-    ) agg ON agg.customerKey = latest.customerKey
-  `);
+  const rows = await db
+    .select({
+      id: orders.id,
+      phone: orders.phone,
+      firstName: orders.firstName,
+      lastName: orders.lastName,
+      email: orders.email,
+      unit: orders.unit,
+      address: orders.address,
+      buildingSlug: orders.buildingSlug,
+      createdAt: orders.createdAt,
+      paid: orders.paid,
+      total: orders.total,
+    })
+    .from(orders);
 
-  return result as unknown as AdminCustomerAggregateDbRow[];
+  return buildAdminCustomerAggregatesInMemory(rows);
 }
 
 export type BuildingRevenueOrderRow = {
