@@ -1,16 +1,38 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
 
-type SortBy = "lastOrder" | "spend" | "orders";
 type RecencyStatus = "new" | "active" | "warm" | "cooling" | "lapsed";
 type Tier = "vip" | "standard";
+type BuildingSort = "revenue" | "orders" | "active";
 
 type Props = {
   onOpenProfile: (phone: string) => void;
+};
+
+type CustomerRow = {
+  phone: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  unit: string | null;
+  buildingSlug: string | null;
+  totalOrders: number;
+  lifetimeSpend: number;
+  lastOrderAt: Date | string;
+  recencyStatus: RecencyStatus;
+  tier: Tier;
+  statusColor: string;
+};
+
+type BuildingSummaryEntry = {
+  totalCustomers: number;
+  activeCustomers: number;
+  totalRevenue: number;
+  floors?: Record<string, { totalCustomers: number; activeCustomers: number; totalRevenue: number }>;
+  estimatedUnits?: number;
 };
 
 function formatStatusLabel(s: RecencyStatus) {
@@ -34,159 +56,95 @@ function statusBadgeClass(token: string) {
   }
 }
 
-function floorBaseClass(recency: RecencyStatus | "none") {
-  switch (recency) {
-    case "active":
-    case "new":
-      return "bg-green-500";
-    case "warm":
-      return "bg-neutral-500";
-    case "cooling":
-      return "bg-amber-500";
-    case "lapsed":
-      return "bg-neutral-400";
-    default:
-      return "bg-red-500";
-  }
-}
-
-function cleanPhoneForSms(phone: string): string {
-  return phone.replace(/[^\d+]/g, "");
+function formatBuildingLabel(slug: string) {
+  if (slug === "unknown") return "Unknown / Unassigned";
+  return slug
+    .split(/[_-]/g)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(" ");
 }
 
 export function CustomersTab({ onOpenProfile }: Props) {
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<SortBy>("lastOrder");
   const [statusFilter, setStatusFilter] = useState<RecencyStatus | "">("");
   const [tierFilter, setTierFilter] = useState<Tier | "">("");
-  const [buildingFilter, setBuildingFilter] = useState<string>("");
-  const [selectedFloor, setSelectedFloor] = useState<number | null>(null);
+  const [buildingSort, setBuildingSort] = useState<BuildingSort>("revenue");
   const debouncedSearch = useDebounce(search, 300);
 
   const list = trpc.admin.listCustomers.useQuery({
     search: debouncedSearch || undefined,
-    sortBy,
+    sortBy: "lastOrder",
     status: statusFilter || undefined,
     tier: tierFilter || undefined,
-    buildingSlug: buildingFilter || undefined,
   });
 
-  const buildings = useMemo(() => {
-    const s = new Set<string>();
-    for (const r of list.data?.customers ?? []) {
-      if (r.buildingSlug) s.add(r.buildingSlug);
+  const customers: CustomerRow[] = (list.data?.customers ?? []) as CustomerRow[];
+  const buildingSummary = (list.data?.buildingSummary ?? {}) as Record<
+    string,
+    BuildingSummaryEntry
+  >;
+
+  const buildingSections = useMemo(() => {
+    const grouped = new Map<string, CustomerRow[]>();
+    for (const c of customers) {
+      const key = c.buildingSlug?.trim() || "unknown";
+      const arr = grouped.get(key);
+      if (arr) arr.push(c);
+      else grouped.set(key, [c]);
     }
-    return Array.from(s).sort();
-  }, [list.data?.customers]);
 
-  const rows = list.data?.customers ?? [];
-  const territoryBuildingSlug = "opusla";
-  const territoryBuildingName = "OPUS LA";
+    const sections = Array.from(grouped.entries()).map(([slug, rows]) => {
+      const summary = buildingSummary[slug];
+      const totalOrders = rows.reduce((sum, r) => sum + (r.totalOrders || 0), 0);
+      const lapsedCount = rows.filter((r) => r.recencyStatus === "lapsed").length;
+      const estimatedUnits =
+        typeof summary?.estimatedUnits === "number" ? summary.estimatedUnits : null;
+      const penetrationPercent =
+        estimatedUnits && estimatedUnits > 0
+          ? Math.round((rows.length / estimatedUnits) * 1000) / 10
+          : null;
+      const floorsWithZeroCustomers = summary?.floors
+        ? Object.entries(summary.floors)
+            .filter(([, v]) => (v?.totalCustomers ?? 0) === 0)
+            .map(([f]) => f)
+        : [];
 
-  const territorySummary = list.data?.buildingSummary?.[territoryBuildingSlug];
-  const territoryCustomers = useMemo(
-    () => rows.filter((r) => r.buildingSlug === territoryBuildingSlug),
-    [rows]
-  );
-  const selectedFloorCustomers = useMemo(
-    () =>
-      selectedFloor == null
-        ? []
-        : territoryCustomers.filter((r) => r.floorNumber === selectedFloor),
-    [selectedFloor, territoryCustomers]
-  );
-
-  const floorRows = useMemo(() => {
-    const floorsFromSummary = Object.entries(territorySummary?.floors ?? {}).map(
-      ([floor, metrics]) => ({
-        floorNumber: Number(floor),
-        ...metrics,
-      })
-    );
-    floorsFromSummary.sort((a, b) => b.floorNumber - a.floorNumber);
-    const maxCustomers = floorsFromSummary.reduce(
-      (max, f) => Math.max(max, f.totalCustomers),
-      0
-    );
-
-    return floorsFromSummary.map((f) => {
-      const customersOnFloor = territoryCustomers.filter(
-        (c) => c.floorNumber === f.floorNumber
-      );
-      const counts = {
-        active: customersOnFloor.filter((c) => c.recencyStatus === "active").length,
-        warm: customersOnFloor.filter((c) => c.recencyStatus === "warm").length,
-        cooling: customersOnFloor.filter((c) => c.recencyStatus === "cooling").length,
-        lapsed: customersOnFloor.filter((c) => c.recencyStatus === "lapsed").length,
-        new: customersOnFloor.filter((c) => c.recencyStatus === "new").length,
-      };
-      const dominantRecency: RecencyStatus | "none" =
-        counts.active > 0
-          ? "active"
-          : counts.new > 0
-            ? "new"
-            : counts.warm > 0
-              ? "warm"
-              : counts.cooling > 0
-                ? "cooling"
-                : counts.lapsed > 0
-                  ? "lapsed"
-                  : "none";
-      const vipCount = customersOnFloor.filter((c) => c.tier === "vip").length;
-      const vipHeavy =
-        customersOnFloor.length > 0 &&
-        vipCount / customersOnFloor.length >= 0.5;
-      const density =
-        maxCustomers > 0 ? f.totalCustomers / maxCustomers : 0;
+      rows.sort((a, b) => {
+        const ta = new Date(a.lastOrderAt).getTime();
+        const tb = new Date(b.lastOrderAt).getTime();
+        return tb - ta;
+      });
 
       return {
-        ...f,
-        dominantRecency,
-        vipHeavy,
-        density,
+        slug,
+        label: formatBuildingLabel(slug),
+        totalRevenue: summary?.totalRevenue ?? rows.reduce((sum, r) => sum + (r.lifetimeSpend || 0), 0),
+        totalCustomers: summary?.totalCustomers ?? rows.length,
+        activeCustomers:
+          summary?.activeCustomers ?? rows.filter((r) => r.recencyStatus === "active").length,
+        totalOrders,
+        lapsedCount,
+        penetrationPercent,
+        floorsWithZeroCustomers,
+        customers: rows,
       };
     });
-  }, [territorySummary?.floors, territoryCustomers]);
 
-  const topFloor = useMemo(() => {
-    if (floorRows.length === 0) return null;
-    return [...floorRows].sort((a, b) => b.totalRevenue - a.totalRevenue)[0];
-  }, [floorRows]);
+    sections.sort((a, b) => {
+      if (a.slug === "unknown" && b.slug !== "unknown") return 1;
+      if (b.slug === "unknown" && a.slug !== "unknown") return -1;
+      if (buildingSort === "orders") return b.totalOrders - a.totalOrders;
+      if (buildingSort === "active") return b.activeCustomers - a.activeCustomers;
+      return b.totalRevenue - a.totalRevenue;
+    });
 
-  const weakestFloor = useMemo(() => {
-    if (floorRows.length === 0) return null;
-    return [...floorRows].sort(
-      (a, b) => a.activeCustomers - b.activeCustomers || a.totalCustomers - b.totalCustomers
-    )[0];
-  }, [floorRows]);
+    return sections;
+  }, [customers, buildingSummary, buildingSort]);
 
-  const smsAllHref = useMemo(() => {
-    if (selectedFloorCustomers.length === 0) return "";
-    const recipients = selectedFloorCustomers
-      .map((c) => cleanPhoneForSms(c.phone))
-      .filter(Boolean)
-      .join(",");
-    const body = encodeURIComponent("Hi from Laundry Butler. We have service windows open this week.");
-    return recipients ? `sms:${recipients}?body=${body}` : "";
-  }, [selectedFloorCustomers]);
-
-  const reengageHref = useMemo(() => {
-    const targets = selectedFloorCustomers.filter((c) => c.recencyStatus === "lapsed");
-    if (targets.length === 0) return "";
-    const recipients = targets
-      .map((c) => cleanPhoneForSms(c.phone))
-      .filter(Boolean)
-      .join(",");
-    const body = encodeURIComponent("Hi from Laundry Butler. We miss you and would love to schedule your next pickup.");
-    return recipients ? `sms:${recipients}?body=${body}` : "";
-  }, [selectedFloorCustomers]);
-
-  const rowsForTable = useMemo(() => {
-    if (selectedFloor == null) return rows;
-    return rows.filter(
-      (r) => r.buildingSlug === territoryBuildingSlug && r.floorNumber === selectedFloor
-    );
-  }, [rows, selectedFloor]);
+  const maxRevenue = useMemo(
+    () => buildingSections.reduce((m, s) => Math.max(m, s.totalRevenue), 0),
+    [buildingSections]
+  );
 
   if (list.isLoading) {
     return (
@@ -202,7 +160,8 @@ export function CustomersTab({ onOpenProfile }: Props) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-black">Customers</h2>
+      <h2 className="text-lg font-semibold text-black">Building Leaderboard</h2>
+
       <div className="flex flex-col sm:flex-row gap-3 sm:items-end flex-wrap">
         <div className="max-w-xs flex-1">
           <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
@@ -217,16 +176,16 @@ export function CustomersTab({ onOpenProfile }: Props) {
         </div>
         <div>
           <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
-            Sort by
+            Building sort
           </label>
           <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortBy)}
-            className="rounded-md border border-black/20 bg-white px-3 py-2 text-sm"
+            value={buildingSort}
+            onChange={(e) => setBuildingSort(e.target.value as BuildingSort)}
+            className="rounded-md border border-black/20 bg-white px-3 py-2 text-sm min-w-[150px]"
           >
-            <option value="lastOrder">Last order</option>
-            <option value="spend">Lifetime spend</option>
-            <option value="orders">Order count</option>
+            <option value="revenue">Revenue</option>
+            <option value="orders">Total orders</option>
+            <option value="active">Active customers</option>
           </select>
         </div>
         <div>
@@ -260,223 +219,91 @@ export function CustomersTab({ onOpenProfile }: Props) {
             <option value="standard">Standard</option>
           </select>
         </div>
-        <div>
-          <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
-            Building
-          </label>
-          <select
-            value={buildingFilter}
-            onChange={(e) => setBuildingFilter(e.target.value)}
-            className="rounded-md border border-black/20 bg-white px-3 py-2 text-sm min-w-[140px]"
-          >
-            <option value="">All</option>
-            {buildings.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       <p className="text-xs text-black/45">
-        {rowsForTable.length} customer{rowsForTable.length === 1 ? "" : "s"} (grouped by exact phone). Spend and average
-        use paid orders only.
+        {customers.length} customer{customers.length === 1 ? "" : "s"} across{" "}
+        {buildingSections.length} building
+        {buildingSections.length === 1 ? "" : "s"}.
       </p>
 
-      {!!territorySummary && (
-        <section className="border border-black/10 rounded-md p-3 bg-neutral-50/70">
-          <h3 className="text-sm font-semibold text-black mb-3">
-            Building territory view — {territoryBuildingName}
-          </h3>
-          <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4">
-            <div className="space-y-2 text-sm">
-              <div className="border border-black/10 rounded-md p-2.5 bg-white">
-                <p className="text-xs text-black/50">Total customers</p>
-                <p className="font-semibold text-black">{territorySummary.totalCustomers}</p>
-              </div>
-              <div className="border border-black/10 rounded-md p-2.5 bg-white">
-                <p className="text-xs text-black/50">Active customers</p>
-                <p className="font-semibold text-black">{territorySummary.activeCustomers}</p>
-              </div>
-              <div className="border border-black/10 rounded-md p-2.5 bg-white">
-                <p className="text-xs text-black/50">Total revenue</p>
-                <p className="font-semibold text-black">${territorySummary.totalRevenue.toFixed(2)}</p>
-              </div>
-              <div className="border border-black/10 rounded-md p-2.5 bg-white">
-                <p className="text-xs text-black/50">Top floor (revenue)</p>
-                <p className="font-semibold text-black">
-                  {topFloor ? `${topFloor.floorNumber} • $${topFloor.totalRevenue.toFixed(2)}` : "—"}
-                </p>
-              </div>
-              <div className="border border-black/10 rounded-md p-2.5 bg-white">
-                <p className="text-xs text-black/50">Weakest floor</p>
-                <p className="font-semibold text-black">
-                  {weakestFloor
-                    ? `${weakestFloor.floorNumber} • ${weakestFloor.activeCustomers} active`
-                    : "—"}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              {floorRows.map((f) => (
-                <button
-                  key={f.floorNumber}
-                  type="button"
-                  onClick={() => {
-                    setSelectedFloor(f.floorNumber);
-                    setBuildingFilter(territoryBuildingSlug);
-                  }}
-                  className={`w-full border rounded-md px-3 py-2 text-left transition ${
-                    selectedFloor === f.floorNumber
-                      ? "border-black bg-white"
-                      : "border-black/10 bg-white/70 hover:bg-white"
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-xs text-black/60 mb-1">
-                    <span>Floor {f.floorNumber}</span>
-                    <span>
-                      {f.totalCustomers} cust · {f.activeCustomers} active · ${f.totalRevenue.toFixed(0)}
-                    </span>
+      <div className="space-y-3">
+        {buildingSections.map((section, idx) => {
+          const intensity = maxRevenue > 0 ? section.totalRevenue / maxRevenue : 0;
+          const sectionStyle =
+            idx === 0
+              ? "border-black/20 bg-white shadow-sm"
+              : intensity < 0.35
+                ? "border-black/10 bg-neutral-50/60"
+                : "border-black/10 bg-white";
+          return (
+            <section key={section.slug} className={`rounded-md border ${sectionStyle}`}>
+              <div className="px-4 py-3 border-b border-black/10">
+                <div className="flex flex-wrap items-end justify-between gap-2">
+                  <div>
+                    <p className={`font-semibold ${idx === 0 ? "text-lg" : "text-base"} text-black`}>
+                      {section.label}
+                    </p>
+                    <p className="text-xs text-black/50">
+                      {section.totalCustomers} customers · {section.activeCustomers} active ·{" "}
+                      {section.totalOrders} orders
+                    </p>
                   </div>
-                  <div
-                    className={`h-4 rounded ${floorBaseClass(f.dominantRecency)} ${
-                      f.vipHeavy ? "ring-2 ring-amber-300/70" : ""
-                    }`}
-                    style={{ opacity: 0.35 + f.density * 0.65 }}
-                  />
-                </button>
-              ))}
-
-              {selectedFloor != null && (
-                <div className="border border-black/10 rounded-md p-2.5 bg-white flex flex-wrap gap-2">
-                  <span className="text-xs text-black/60 mr-1">
-                    Floor {selectedFloor} actions
-                  </span>
-                  <Button size="sm" variant="outline" className="h-8 text-xs border-black/20" asChild>
-                    <a href={smsAllHref || "#"} onClick={(e) => !smsAllHref && e.preventDefault()}>
-                      Text all
-                    </a>
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-8 text-xs border-black/20" asChild>
-                    <a href={reengageHref || "#"} onClick={(e) => !reengageHref && e.preventDefault()}>
-                      Re-engage
-                    </a>
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 text-xs border-black/20"
-                    onClick={() => {
-                      setBuildingFilter(territoryBuildingSlug);
-                    }}
-                  >
-                    View customers
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 text-xs"
-                    onClick={() => setSelectedFloor(null)}
-                  >
-                    Clear floor
-                  </Button>
+                  <p className={`font-semibold ${idx === 0 ? "text-xl" : "text-lg"} text-black`}>
+                    ${section.totalRevenue.toFixed(2)}
+                  </p>
                 </div>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-black/60">
+                  <span>Lapsed: {section.lapsedCount}</span>
+                  {section.penetrationPercent != null && (
+                    <span>Penetration: {section.penetrationPercent}%</span>
+                  )}
+                  {section.floorsWithZeroCustomers.length > 0 && (
+                    <span>Floors with 0 customers: {section.floorsWithZeroCustomers.join(", ")}</span>
+                  )}
+                </div>
+              </div>
 
-      {!!list.data?.buildingSummary && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-          {Object.entries(list.data.buildingSummary).map(([slug, summary]) => (
-            <div key={slug} className="border border-black/10 rounded-md p-2.5 text-xs bg-neutral-50/80">
-              <p className="font-medium text-black mb-1">{slug}</p>
-              <p className="text-black/60">Customers: {summary.totalCustomers}</p>
-              <p className="text-black/60">Active: {summary.activeCustomers}</p>
-              <p className="text-black/60">Revenue: ${summary.totalRevenue.toFixed(2)}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="overflow-x-auto border border-black/10 rounded-md">
-        <table className="w-full text-sm text-left">
-          <thead className="bg-neutral-50 border-b border-black/10 text-xs uppercase text-black/45">
-            <tr>
-              <th className="px-3 py-2 font-medium">Name</th>
-              <th className="px-3 py-2 font-medium">Unit</th>
-              <th className="px-3 py-2 font-medium">Building</th>
-              <th className="px-3 py-2 font-medium">Phone</th>
-              <th className="px-3 py-2 font-medium">Email</th>
-              <th className="px-3 py-2 font-medium text-right">Orders</th>
-              <th className="px-3 py-2 font-medium text-right">Spend</th>
-              <th className="px-3 py-2 font-medium">Last order</th>
-              <th className="px-3 py-2 font-medium">Status</th>
-              <th className="px-3 py-2 font-medium">Tier</th>
-              <th className="px-3 py-2 font-medium" />
-            </tr>
-          </thead>
-          <tbody>
-            {rowsForTable.map((r) => (
-              <tr
-                key={r.phone}
-                className="border-b border-black/5 hover:bg-black/[0.02] cursor-pointer"
-                onClick={() => onOpenProfile(r.phone)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onOpenProfile(r.phone);
-                  }
-                }}
-                tabIndex={0}
-                role="button"
-                aria-label={`Open profile for ${r.firstName} ${r.lastName}`}
-              >
-                <td className="px-3 py-2 font-medium text-black">
-                  {r.firstName} {r.lastName}
-                </td>
-                <td className="px-3 py-2 text-black/70">{r.unit || "—"}</td>
-                <td className="px-3 py-2 text-black/70">{r.buildingSlug || "—"}</td>
-                <td className="px-3 py-2 text-black/70 whitespace-nowrap">{r.phone}</td>
-                <td className="px-3 py-2 text-black/60 max-w-[160px] truncate">{r.email || "—"}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{r.totalOrders}</td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  ${r.lifetimeSpend.toFixed(2)}
-                </td>
-                <td className="px-3 py-2 text-black/60 whitespace-nowrap text-xs">
-                  {new Date(r.lastOrderAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </td>
-                <td className="px-3 py-2">
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-xs ${statusBadgeClass(r.statusColor)}`}>
-                    {formatStatusLabel(r.recencyStatus)}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-black/70 uppercase text-xs font-medium">{r.tier}</td>
-                <td className="px-3 py-2">
-                  <Button
+              <div className="divide-y divide-black/5">
+                {section.customers.map((r) => (
+                  <button
+                    key={r.phone}
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs border-black/20"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenProfile(r.phone);
-                    }}
+                    onClick={() => onOpenProfile(r.phone)}
+                    className="w-full px-4 py-2 text-left hover:bg-black/[0.02] focus:outline-none focus:ring-2 focus:ring-black/20"
+                    aria-label={`Open profile for ${r.firstName} ${r.lastName}`}
                   >
-                    Profile
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-2 items-center text-sm">
+                      <div className="min-w-0">
+                        <p className="font-medium text-black truncate">
+                          {r.firstName} {r.lastName}
+                        </p>
+                      </div>
+                      <div className="text-black/70">{r.unit || "—"}</div>
+                      <div className="text-black/80 font-medium">${r.lifetimeSpend.toFixed(2)}</div>
+                      <div className="text-black/60 text-xs">
+                        {new Date(r.lastOrderAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </div>
+                      <div>
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs ${statusBadgeClass(r.statusColor)}`}>
+                          {formatStatusLabel(r.recencyStatus)}
+                        </span>
+                      </div>
+                      <div className="text-black/70 uppercase text-xs font-medium">{r.tier}</div>
+                    </div>
+                  </button>
+                ))}
+                {section.customers.length === 0 && (
+                  <div className="px-4 py-3 text-xs text-black/50">No customers in current filter.</div>
+                )}
+              </div>
+            </section>
+          );
+        })}
       </div>
     </div>
   );
