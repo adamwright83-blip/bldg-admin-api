@@ -63,7 +63,7 @@ export function computeCustomerGroupKey(order: {
   return `composite:${computeAdminCustomerKey(order)}`;
 }
 
-type OrderAggRow = {
+export type OrderAggRow = {
   id: number;
   phone: string;
   firstName: string;
@@ -76,6 +76,44 @@ type OrderAggRow = {
   paid: boolean;
   total: string | null;
 };
+
+/** Coerce Drizzle/MySQL shapes so aggregation never sees silent null/number bugs. */
+export function normalizeOrderRowFromDb(r: {
+  id: number;
+  phone: string | null | undefined;
+  firstName: string | null | undefined;
+  lastName: string | null | undefined;
+  email: string | null | undefined;
+  unit: string | null | undefined;
+  address: string | null | undefined;
+  buildingSlug: string | null | undefined;
+  createdAt: Date;
+  paid: boolean | number | null | undefined;
+  total: string | null | undefined;
+}): OrderAggRow {
+  return {
+    id: r.id,
+    phone: r.phone != null ? String(r.phone) : "",
+    firstName: r.firstName != null ? String(r.firstName) : "",
+    lastName: r.lastName != null ? String(r.lastName) : "",
+    email:
+      r.email != null && String(r.email).trim() !== ""
+        ? String(r.email).trim()
+        : null,
+    unit:
+      r.unit != null && String(r.unit).trim() !== ""
+        ? String(r.unit).trim()
+        : null,
+    address: r.address != null ? String(r.address) : "",
+    buildingSlug:
+      r.buildingSlug != null && String(r.buildingSlug).trim() !== ""
+        ? String(r.buildingSlug).trim()
+        : null,
+    createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
+    paid: r.paid === true || r.paid === 1,
+    total: r.total != null ? String(r.total) : null,
+  };
+}
 
 function normAddr(s: string | null | undefined): string {
   if (s == null || typeof s !== "string") return "";
@@ -107,13 +145,62 @@ function compareDisplayCandidates(a: OrderAggRow, b: OrderAggRow): number {
   return b.id - a.id;
 }
 
-function pickBestDisplayRow(group: OrderAggRow[]): OrderAggRow {
-  let best = group[0];
-  for (let i = 1; i < group.length; i++) {
-    // compareDisplayCandidates(a,b) > 0 means b is better than a
-    if (compareDisplayCandidates(best, group[i]) > 0) best = group[i];
+/**
+ * Merge identity/location across every order in the group (best rows first),
+ * so name on one order + address on another + slug on a third still produce
+ * one complete leaderboard row.
+ */
+function mergeDisplayFields(group: OrderAggRow[]): {
+  phone: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  unit: string | null;
+  address: string;
+  buildingSlug: string | null;
+} {
+  const sorted = [...group].sort((a, b) => compareDisplayCandidates(b, a));
+
+  let phone = "";
+  let firstName = "";
+  let lastName = "";
+  let email: string | null = null;
+  let unit: string | null = null;
+  let address = "";
+  let explicitSlug: string | null = null;
+
+  for (const o of sorted) {
+    if (!phone && o.phone.trim()) phone = o.phone.trim();
+    if (!firstName && o.firstName.trim()) firstName = o.firstName.trim();
+    if (!lastName && o.lastName.trim()) lastName = o.lastName.trim();
+    if (email == null && o.email?.trim()) email = o.email.trim();
+    if (!unit && o.unit != null && String(o.unit).trim())
+      unit = String(o.unit).trim();
+    if (!address && o.address.trim()) address = o.address.trim();
+    if (!explicitSlug && o.buildingSlug?.trim())
+      explicitSlug = o.buildingSlug.trim();
   }
-  return best;
+
+  let inferredSlug: string | null = null;
+  for (const o of group) {
+    const hit = matchBuilding(normAddr(o.address));
+    if (hit) {
+      inferredSlug = hit.slug;
+      break;
+    }
+  }
+
+  const buildingSlug = explicitSlug ?? inferredSlug ?? null;
+
+  return {
+    phone,
+    firstName,
+    lastName,
+    email,
+    unit,
+    address,
+    buildingSlug,
+  };
 }
 
 /** True chronological latest (for lastOrderId). */
@@ -129,12 +216,6 @@ function pickLatestRow(group: OrderAggRow[]): OrderAggRow {
   return best;
 }
 
-function resolveDisplayBuildingSlug(row: OrderAggRow): string | null {
-  const s = row.buildingSlug?.trim();
-  if (s) return s;
-  return matchBuilding(normAddr(row.address))?.slug ?? null;
-}
-
 const MS_PER_DAY = 86400000;
 
 function isWithinLastDaysUtc(createdAt: Date, days: number): boolean {
@@ -145,7 +226,8 @@ function isWithinLastDaysUtc(createdAt: Date, days: number): boolean {
 
 /**
  * Build customer aggregate rows: metrics from full order history per key;
- * identity/location from best display row; lastOrderId from true latest order.
+ * identity/location merged across all orders in the group (best rows first);
+ * lastOrderId from true latest order.
  */
 export function buildAdminCustomerAggregatesInMemory(
   rows: OrderAggRow[]
@@ -188,18 +270,17 @@ export function buildAdminCustomerAggregatesInMemory(
 
     lifetimeSpend = Math.round(lifetimeSpend * 100) / 100;
 
-    const best = pickBestDisplayRow(group);
+    const display = mergeDisplayFields(group);
     const latest = pickLatestRow(group);
-    const displaySlug = resolveDisplayBuildingSlug(best);
 
     out.push({
-      phone: typeof best.phone === "string" ? best.phone : "",
-      firstName: typeof best.firstName === "string" ? best.firstName : "",
-      lastName: typeof best.lastName === "string" ? best.lastName : "",
-      email: best.email ?? null,
-      unit: best.unit ?? null,
-      address: typeof best.address === "string" ? best.address : "",
-      buildingSlug: displaySlug,
+      phone: display.phone,
+      firstName: display.firstName,
+      lastName: display.lastName,
+      email: display.email,
+      unit: display.unit,
+      address: display.address,
+      buildingSlug: display.buildingSlug,
       totalOrders,
       lifetimeSpend,
       paidOrderCount,

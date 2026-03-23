@@ -15,6 +15,7 @@ import { matchBuilding } from "@shared/buildings";
 import { resolveOrderLocationForInsert } from "./orderLocation";
 import {
   buildAdminCustomerAggregatesInMemory,
+  normalizeOrderRowFromDb,
   type AdminCustomerAggregateDbRow,
 } from "./adminCustomerAggregate";
 
@@ -299,7 +300,7 @@ export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggreg
     })
     .from(orders);
 
-  return buildAdminCustomerAggregatesInMemory(rows);
+  return buildAdminCustomerAggregatesInMemory(rows.map(normalizeOrderRowFromDb));
 }
 
 export type BuildingRevenueOrderRow = {
