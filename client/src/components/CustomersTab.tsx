@@ -64,6 +64,30 @@ function formatBuildingLabel(slug: string) {
     .join(" ");
 }
 
+function normalizeBuildingSlug(slug: string | null | undefined): string {
+  const s = (slug || "").trim().toLowerCase();
+  if (!s) return "unknown";
+  if (
+    s === "unknown" ||
+    s === "unassigned" ||
+    s === "unknown/unassigned" ||
+    s === "unknown / unassigned"
+  ) {
+    return "unknown";
+  }
+  return s;
+}
+
+function formatLastOrder(value: Date | string): string {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 export function CustomersTab({ onOpenProfile }: Props) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<RecencyStatus | "">("");
@@ -87,7 +111,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
   const buildingSections = useMemo(() => {
     const grouped = new Map<string, CustomerRow[]>();
     for (const c of customers) {
-      const key = c.buildingSlug?.trim() || "unknown";
+      const key = normalizeBuildingSlug(c.buildingSlug);
       const arr = grouped.get(key);
       if (arr) arr.push(c);
       else grouped.set(key, [c]);
@@ -138,7 +162,24 @@ export function CustomersTab({ onOpenProfile }: Props) {
       return b.totalRevenue - a.totalRevenue;
     });
 
-    return sections;
+    const revenueRanked = [...sections].sort((a, b) => b.totalRevenue - a.totalRevenue);
+    const lowestRevenue =
+      revenueRanked.length > 0
+        ? Math.min(...revenueRanked.map((s) => s.totalRevenue))
+        : null;
+    const rankBySlug = new Map(
+      revenueRanked.map((s, i) => [s.slug, i + 1])
+    );
+
+    return sections.map((s) => ({
+      ...s,
+      rankLabel:
+        s.slug === "unknown" && s.totalRevenue === 0
+          ? "LAST"
+          : lowestRevenue != null && s.totalRevenue === lowestRevenue
+            ? "LAST"
+            : `#${rankBySlug.get(s.slug) ?? "?"}`,
+    }));
   }, [customers, buildingSummary, buildingSort]);
 
   const maxRevenue = useMemo(
@@ -160,7 +201,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-black">Building Leaderboard</h2>
+      <h2 className="text-2xl font-semibold text-black">Building Leaderboard</h2>
 
       <div className="flex flex-col sm:flex-row gap-3 sm:items-end flex-wrap">
         <div className="max-w-xs flex-1">
@@ -221,20 +262,20 @@ export function CustomersTab({ onOpenProfile }: Props) {
         </div>
       </div>
 
-      <p className="text-xs text-black/45">
+      <p className="text-sm text-black/50">
         {customers.length} customer{customers.length === 1 ? "" : "s"} across{" "}
         {buildingSections.length} building
         {buildingSections.length === 1 ? "" : "s"}.
       </p>
 
-      <div className="space-y-3">
+      <div className="space-y-5">
         {buildingSections.map((section, idx) => {
           const intensity = maxRevenue > 0 ? section.totalRevenue / maxRevenue : 0;
           const sectionStyle =
             idx === 0
-              ? "border-black/20 bg-white shadow-sm"
+              ? "border-black/25 bg-white shadow-md"
               : intensity < 0.35
-                ? "border-black/10 bg-neutral-50/60"
+                ? "border-black/10 bg-neutral-50/50"
                 : "border-black/10 bg-white";
           return (
             <section key={section.slug} className={`rounded-md border ${sectionStyle}`}>
@@ -242,15 +283,17 @@ export function CustomersTab({ onOpenProfile }: Props) {
                 <div className="flex flex-wrap items-end justify-between gap-2">
                   <div>
                     <p className={`font-semibold ${idx === 0 ? "text-lg" : "text-base"} text-black`}>
-                      {section.label}
+                      {section.label} <span className="text-black/45">- {section.rankLabel}</span>
                     </p>
-                    <p className="text-xs text-black/50">
-                      {section.totalCustomers} customers · {section.activeCustomers} active ·{" "}
-                      {section.totalOrders} orders
+                    <p className={`font-semibold ${idx === 0 ? "text-4xl" : "text-3xl"} tracking-tight text-black`}>
+                      ${section.totalRevenue.toFixed(0)}
+                    </p>
+                    <p className="text-sm text-black/55">
+                      {section.totalCustomers} customers · {section.activeCustomers} active
                     </p>
                   </div>
-                  <p className={`font-semibold ${idx === 0 ? "text-xl" : "text-lg"} text-black`}>
-                    ${section.totalRevenue.toFixed(2)}
+                  <p className="text-xs text-black/45">
+                    {section.totalCustomers} customers · {section.activeCustomers}
                   </p>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-black/60">
@@ -265,6 +308,14 @@ export function CustomersTab({ onOpenProfile }: Props) {
               </div>
 
               <div className="divide-y divide-black/5">
+                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-2 items-center px-4 py-2 text-[11px] uppercase tracking-wider text-black/45 bg-white/60">
+                  <div>Name</div>
+                  <div>Unit</div>
+                  <div>Spend</div>
+                  <div>Last Order</div>
+                  <div>Status</div>
+                  <div>Tier</div>
+                </div>
                 {section.customers.map((r) => (
                   <button
                     key={r.phone}
@@ -282,11 +333,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
                       <div className="text-black/70">{r.unit || "—"}</div>
                       <div className="text-black/80 font-medium">${r.lifetimeSpend.toFixed(2)}</div>
                       <div className="text-black/60 text-xs">
-                        {new Date(r.lastOrderAt).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
+                        {formatLastOrder(r.lastOrderAt)}
                       </div>
                       <div>
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs ${statusBadgeClass(r.statusColor)}`}>
