@@ -167,14 +167,18 @@ export type OrderForSheet = {
   serviceType: "wash_fold" | "dry_cleaning";
 };
 
+export type WriteOrderToSheetResult =
+  | { ok: true; tabName: string }
+  | { ok: false; reason: string };
+
 export async function writeOrderToSheet(
   order: OrderForSheet,
   amountCents: number,
-): Promise<void> {
+): Promise<WriteOrderToSheetResult> {
   const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID?.trim();
   if (!spreadsheetId) {
     console.warn("[Sheets] Skipped: GOOGLE_SHEETS_SPREADSHEET_ID not configured");
-    return;
+    return { ok: false, reason: "GOOGLE_SHEETS_SPREADSHEET_ID not configured" };
   }
 
   const clientEmail = process.env.GOOGLE_SHEETS_CLIENT_EMAIL?.trim();
@@ -184,7 +188,10 @@ export async function writeOrderToSheet(
     console.warn(
       "[Sheets] Skipped: missing GOOGLE_SHEETS_CLIENT_EMAIL or GOOGLE_SHEETS_PRIVATE_KEY",
     );
-    return;
+    return {
+      ok: false,
+      reason: "Missing GOOGLE_SHEETS_CLIENT_EMAIL or GOOGLE_SHEETS_PRIVATE_KEY",
+    };
   }
 
   const auth = new google.auth.JWT({
@@ -202,7 +209,7 @@ export async function writeOrderToSheet(
     meta.data.sheets?.map((s) => s.properties?.title).filter(Boolean) as string[];
   if (!titles.includes(tabName)) {
     console.warn(`[Sheets] Skipped: monthly tab "${tabName}" not found`);
-    return;
+    return { ok: false, reason: `Monthly tab "${tabName}" not found` };
   }
 
   const gridRange = `${escapeSheetName(tabName)}!A1:ZZ1000`;
@@ -214,14 +221,17 @@ export async function writeOrderToSheet(
   const values = grid.data.values ?? [];
   if (values.length === 0) {
     console.warn(`[Sheets] Skipped: empty tab "${tabName}"`);
-    return;
+    return { ok: false, reason: `Empty tab "${tabName}"` };
   }
 
   const headerRow = values[0] ?? [];
   const dayCol0 = findDayColumn(headerRow, chargeDate);
   if (dayCol0 == null) {
     console.warn(`[Sheets] Skipped: no column found for ${format(chargeDate, "yyyy-MM-dd")}`);
-    return;
+    return {
+      ok: false,
+      reason: `No column found for ${format(chargeDate, "yyyy-MM-dd")}`,
+    };
   }
 
   const columnA = values.map((row) => row?.[0]);
@@ -232,7 +242,7 @@ export async function writeOrderToSheet(
     const revRow0 = findRowByLabel(columnA, "LB Laundry Rev");
     if (revRow0 == null) {
       console.warn('[Sheets] Skipped: row label "LB Laundry Rev" not found');
-      return;
+      return { ok: false, reason: 'Row label "LB Laundry Rev" not found' };
     }
     const revRow1 = revRow0 + 1;
     const col1 = dayCol0 + 1;
@@ -248,20 +258,20 @@ export async function writeOrderToSheet(
     const loadsRow0 = findRowByLabel(columnA, "Number of Loads");
     if (loadsRow0 == null) {
       console.warn('[Sheets] Skipped: row label "Number of Loads" not found');
-      return;
+      return { ok: false, reason: 'Row label "Number of Loads" not found' };
     }
     await incrementCell(auth, spreadsheetId, tabName, loadsRow0 + 1, col1, 1, {
       integerCell: true,
       logLabel: "Number of Loads",
     });
-    return;
+    return { ok: true, tabName };
   }
 
   if (order.serviceType === "dry_cleaning") {
     const revRow0 = findRowByLabel(columnA, "LB Dry Clean Rev");
     if (revRow0 == null) {
       console.warn('[Sheets] Skipped: row label "LB Dry Clean Rev" not found');
-      return;
+      return { ok: false, reason: 'Row label "LB Dry Clean Rev" not found' };
     }
     const revRow1 = revRow0 + 1;
     const col1 = dayCol0 + 1;
@@ -273,8 +283,9 @@ export async function writeOrderToSheet(
     await incrementCell(auth, spreadsheetId, tabName, revRow1, col1, dollars, {
       logLabel: "LB Dry Clean Rev",
     });
-    return;
+    return { ok: true, tabName };
   }
 
   console.warn(`[Sheets] Skipped: unknown serviceType "${order.serviceType}"`);
+  return { ok: false, reason: `Unknown serviceType "${order.serviceType}"` };
 }

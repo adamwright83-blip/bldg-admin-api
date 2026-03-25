@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -72,6 +73,39 @@ function formatDate(d: string) {
   if (!d) return "—";
   const dt = new Date(d + "T00:00:00");
   return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function ResendSheetsButton({ orderId }: { orderId: number }) {
+  const [busy, setBusy] = useState(false);
+  const [cooldown, setCooldown] = useState(false);
+  const resend = trpc.admin.resendToSheets.useMutation();
+
+  const onClick = async () => {
+    setBusy(true);
+    try {
+      const r = await resend.mutateAsync({ orderId });
+      if (r.success) toast.success("Sent to Sheets");
+      else toast.error(r.error ?? "Failed");
+    } catch {
+      toast.error("Failed");
+    } finally {
+      setBusy(false);
+      setCooldown(true);
+      window.setTimeout(() => setCooldown(false), 3000);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      className="text-xs px-2 py-1.5 rounded border border-black/15 bg-white hover:bg-black/5 disabled:opacity-40 disabled:pointer-events-none leading-none"
+      onClick={onClick}
+      disabled={busy || cooldown}
+      title="Resend revenue to Google Sheets"
+    >
+      📊
+    </button>
+  );
 }
 
 function getWeekDates(offset: number) {
@@ -669,6 +703,7 @@ function IntakeTab() {
               <th className="py-2 pr-4">Service</th>
               <th className="py-2 pr-4">Pickup Date</th>
               <th className="py-2 pr-4">Notes</th>
+              <th className="py-2 pr-2 w-10"></th>
               <th className="py-2"></th>
             </tr>
           </thead>
@@ -681,6 +716,9 @@ function IntakeTab() {
                 <td className="py-3 pr-4">{o.serviceType === "wash_fold" ? "W&F" : "DC"}</td>
                 <td className="py-3 pr-4">{formatDate(o.pickupDate)}</td>
                 <td className="py-3 pr-4 max-w-[200px] truncate text-black/50">{o.specialInstructions || "—"}</td>
+                <td className="py-3 pr-2 align-middle">
+                  {o.paid ? <ResendSheetsButton orderId={o.id} /> : <span className="text-black/20 text-xs">—</span>}
+                </td>
                 <td className="py-3 flex gap-2">
                   <Button
                     variant="outline"
@@ -1135,6 +1173,7 @@ function ProcessingTab() {
               <th className="py-2 pr-4">Paid</th>
               <th className="py-2 pr-4">Notes</th>
               <th className="py-2 pr-2">Receipt</th>
+              <th className="py-2 pr-2 w-10"></th>
               <th className="py-2"></th>
             </tr>
           </thead>
@@ -1160,6 +1199,9 @@ function ProcessingTab() {
                   ) : (
                     <span className="text-black/30 text-xs">—</span>
                   )}
+                </td>
+                <td className="py-3 pr-2 align-middle">
+                  {o.paid ? <ResendSheetsButton orderId={o.id} /> : <span className="text-black/20 text-xs">—</span>}
                 </td>
                 <td className="py-3">
                   <Button
@@ -1234,6 +1276,7 @@ function ReadyTab() {
               <th className="py-2 pr-4">Bags</th>
               <th className="py-2 pr-4">Garments</th>
               <th className="py-2 pr-4">Total</th>
+              <th className="py-2 pr-2 w-10"></th>
               <th className="py-2"></th>
             </tr>
           </thead>
@@ -1248,6 +1291,9 @@ function ReadyTab() {
                 <td className="py-3 pr-4">{o.bagCount || "—"}</td>
                 <td className="py-3 pr-4">{o.garmentCount || "—"}</td>
                 <td className="py-3 pr-4">${o.total || "0.00"}</td>
+                <td className="py-3 pr-2 align-middle">
+                  {o.paid ? <ResendSheetsButton orderId={o.id} /> : <span className="text-black/20 text-xs">—</span>}
+                </td>
                 <td className="py-3">
                   <Button
                     variant="outline"
@@ -1340,7 +1386,14 @@ function PickupsTab() {
         ) : (
           <div className="space-y-2">
             {pickups.map((o) => (
-              <StopCard key={o.id} order={o} action="Mark Collected" onAction={() => handleCollect(o.id)} isPending={updateStatus.isPending} />
+              <StopCard
+                key={o.id}
+                order={o}
+                action="Mark Collected"
+                onAction={() => handleCollect(o.id)}
+                isPending={updateStatus.isPending}
+                showSheetsResend
+              />
             ))}
           </div>
         )}
@@ -1356,7 +1409,15 @@ function PickupsTab() {
         ) : (
           <div className="space-y-2">
             {deliveries.map((o) => (
-              <StopCard key={o.id} order={o} action="Mark Delivered" onAction={() => handleDeliver(o.id)} isPending={updateStatus.isPending} showBags />
+              <StopCard
+                key={o.id}
+                order={o}
+                action="Mark Delivered"
+                onAction={() => handleDeliver(o.id)}
+                isPending={updateStatus.isPending}
+                showBags
+                showSheetsResend
+              />
             ))}
           </div>
         )}
@@ -1541,12 +1602,15 @@ export function StopCard({
   onAction,
   isPending,
   showBags,
+  showSheetsResend,
 }: {
   order: Order;
   action: string;
   onAction: () => void;
   isPending: boolean;
   showBags?: boolean;
+  /** Admin Pickups tab: show 📊 resend when order is paid */
+  showSheetsResend?: boolean;
 }) {
   const fullAddress = order.address + (order.unit ? `, Unit ${order.unit}` : "");
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`;
@@ -1614,16 +1678,19 @@ export function StopCard({
         <p className="text-xs text-black/40 italic mb-3">{order.specialInstructions}</p>
       )}
 
-      {/* Action button */}
-      <Button
-        variant="outline"
-        size="sm"
-        className="border-black text-black text-xs w-full sm:w-auto"
-        onClick={onAction}
-        disabled={isPending}
-      >
-        {action}
-      </Button>
+      {/* Action row */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-black text-black text-xs w-full sm:w-auto"
+          onClick={onAction}
+          disabled={isPending}
+        >
+          {action}
+        </Button>
+        {showSheetsResend && order.paid ? <ResendSheetsButton orderId={order.id} /> : null}
+      </div>
     </div>
   );
 }

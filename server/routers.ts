@@ -947,6 +947,47 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
         }
       }),
 
+    /**
+     * Re-run Google Sheets revenue write for a paid order only.
+     * Does not charge, notify, webhook, or update the database.
+     */
+    resendToSheets: adminProcedure
+      .input(z.object({ orderId: z.number() }))
+      .mutation(async ({ input }) => {
+        console.log(`[Sheets:Manual] Resending order #${input.orderId} to Sheets`);
+        try {
+          const order = await getOrderById(input.orderId);
+          if (!order) {
+            console.warn(`[Sheets:Manual] Failed: order #${input.orderId} — Order not found`);
+            return { success: false as const, error: "Order not found" };
+          }
+          if (!order.paid) {
+            console.warn(`[Sheets:Manual] Failed: order #${input.orderId} — Order not charged yet`);
+            return { success: false as const, error: "Order not charged yet" };
+          }
+          const amountCents = Math.round(Number.parseFloat(String(order.total ?? "0")) * 100);
+          if (!Number.isFinite(amountCents)) {
+            console.warn(`[Sheets:Manual] Failed: order #${input.orderId} — Invalid charge total`);
+            return { success: false as const, error: "Invalid charge total" };
+          }
+          const sheetResult = await writeOrderToSheet(order, amountCents);
+          if (!sheetResult.ok) {
+            console.warn(
+              `[Sheets:Manual] Failed: order #${input.orderId} — ${sheetResult.reason}`,
+            );
+            return { success: false as const, error: sheetResult.reason };
+          }
+          console.log(
+            `[Sheets:Manual] Success: order #${input.orderId} written to ${sheetResult.tabName}`,
+          );
+          return { success: true as const };
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[Sheets:Manual] Failed: order #${input.orderId} — ${msg}`);
+          return { success: false as const, error: msg };
+        }
+      }),
+
     /** Delete order */
     deleteOrder: protectedProcedure
       .input(z.object({ orderId: z.number() }))
