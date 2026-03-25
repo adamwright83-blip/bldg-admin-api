@@ -1,3 +1,4 @@
+import { writeOrderToSheet } from "./sheets";
 import { COOKIE_NAME, VENDOR_COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -922,6 +923,13 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
             } catch (err) {
               console.warn('[ChargeCard] Failed to send receipt webhook:', err);
             }
+          }
+
+          try {
+            await writeOrderToSheet(order, input.amountCents);
+            console.log('[Sheets] Revenue written successfully');
+          } catch (err) {
+            console.warn('[Sheets] Failed to write revenue:', err);
           }
 
           return {
