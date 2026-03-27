@@ -4,15 +4,18 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
+import { TenantProvider, useTenant } from "./hooks/useTenant";
+import ButlerHome from "./pages/Home";
 import Admin from "./pages/Admin";
 import Driver from "./pages/Driver";
 import VendorPortal from "./pages/VendorPortal";
 import DigitalReceiptPage from "./pages/DigitalReceiptPage";
+import LaundryFarmHome from "./pages/LaundryFarmHome";
 
 function Router() {
   const hostname =
     typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
+  const { tenant } = useTenant();
   const isAdminHost = hostname === "admin.bldg.chat";
   const isDriverHost = hostname === "driver.bldg.chat";
   const isVendorHost = hostname.endsWith(".ops.bldg.chat");
@@ -30,7 +33,9 @@ function Router() {
               ? Driver
               : isVendorHost
                 ? () => <VendorPortal slug={vendorSlug ?? ""} />
-                : Home
+                : tenant.templateType === "laundryfarm"
+                  ? LaundryFarmHome
+                  : ButlerHome
         }
       />
       <Route path={"/admin"} component={Admin} />
@@ -45,10 +50,12 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+        <TenantProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </TenantProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

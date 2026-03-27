@@ -210,14 +210,14 @@ export const appRouter = router({
           email: z.string().optional(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         // Calculate default delivery date (pickup + 1 day)
         const pickupDateObj = new Date(input.pickupDate + "T00:00:00");
         pickupDateObj.setDate(pickupDateObj.getDate() + 1);
         const deliveryDate = pickupDateObj.toISOString().split("T")[0];
 
         const orderId = await createOrder({
-          tenantId: "default",
+          tenantId: ctx.tenantId,
           serviceType: input.serviceType,
           pickupDate: input.pickupDate,
           pickupTimeWindow: input.pickupTimeWindow,

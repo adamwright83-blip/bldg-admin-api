@@ -15,9 +15,12 @@ import { upsertUser } from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { VENDOR_COOKIE_NAME, THIRTY_DAYS_MS } from "@shared/const";
+import { resolveTenantIdFromHeaders } from "@shared/tenantConfig";
 import bcrypt from "bcryptjs";
 import { SignJWT } from "jose";
 import { getVendorBySlug, getVendorUserByVendorIdAndEmail } from "../db";
+
+const warnedUnknownTenantHosts = new Set<string>();
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -516,8 +519,19 @@ async function startServer() {
         `[Intake ${reqId}] Creating order: ${firstName} ${lastName}, ${normalizedServiceType}, pickup ${pickupDate}`
       );
 
+      const tenantResolution = resolveTenantIdFromHeaders(
+        req.headers as Record<string, string | string[] | undefined>
+      );
+      if (!tenantResolution.matched) {
+        const unknownHost = tenantResolution.host || "(missing-host)";
+        if (!warnedUnknownTenantHosts.has(unknownHost)) {
+          warnedUnknownTenantHosts.add(unknownHost);
+          console.warn(`[TenantResolver] Unknown host "${unknownHost}", falling back to default.`);
+        }
+      }
+
       const orderId = await createOrder({
-        tenantId: "default",
+        tenantId: tenantResolution.tenantId,
         serviceType: normalizedServiceType,
         pickupDate,
         pickupTimeWindow: pickupWindow,

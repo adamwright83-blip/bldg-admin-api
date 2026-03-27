@@ -7,17 +7,9 @@
  */
 import { useParams, Link } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { useTenant } from "@/hooks/useTenant";
 import { Loader2 } from "lucide-react";
 import { buildReceiptLines } from "@shared/receipt";
-
-const BUSINESS_NAME =
-  import.meta.env.VITE_RECEIPT_BUSINESS_NAME ?? "Laundry Butler";
-const BUSINESS_LINE1 =
-  import.meta.env.VITE_RECEIPT_ADDRESS_LINE1 ?? "Los Angeles, CA";
-const BUSINESS_LINE2 =
-  import.meta.env.VITE_RECEIPT_ADDRESS_LINE2 ?? "United States";
-const BUSINESS_PHONE =
-  import.meta.env.VITE_RECEIPT_PHONE ?? "(323) 807-4661";
 
 function formatReceiptDate(d: Date): string {
   return d.toLocaleString("en-US", {
@@ -31,6 +23,11 @@ function formatReceiptDate(d: Date): string {
 }
 
 export default function DigitalReceiptPage() {
+  const { tenant } = useTenant();
+  const businessName = import.meta.env.VITE_RECEIPT_BUSINESS_NAME ?? tenant.brandName;
+  const businessLine1 = import.meta.env.VITE_RECEIPT_ADDRESS_LINE1 ?? "Los Angeles, CA";
+  const businessLine2 = import.meta.env.VITE_RECEIPT_ADDRESS_LINE2 ?? "United States";
+  const businessPhone = import.meta.env.VITE_RECEIPT_PHONE ?? tenant.supportPhone;
   const params = useParams<{ orderId: string }>();
   const orderId = Number(params.orderId);
   const { data: order, isLoading, error } = trpc.admin.getOrder.useQuery(
@@ -118,7 +115,7 @@ export default function DigitalReceiptPage() {
         {/* Brand */}
         <div className="text-center pt-8 pb-6 px-6 border-b border-neutral-100">
           <h1 className="text-2xl font-semibold tracking-tight text-black">
-            LAUNDRY BUTLER
+            {tenant.brandName.toUpperCase()}
           </h1>
           <p className="text-xs text-black/45 mt-1">{serviceLabel}</p>
         </div>
@@ -134,10 +131,10 @@ export default function DigitalReceiptPage() {
 
         <div className="grid grid-cols-2 gap-4 px-6 pb-6 text-sm border-b border-neutral-200">
           <div className="text-black/80 leading-relaxed">
-            <p className="font-medium text-black">{BUSINESS_NAME}</p>
-            <p>{BUSINESS_LINE1}</p>
-            <p>{BUSINESS_LINE2}</p>
-            <p className="mt-1">Tel: {BUSINESS_PHONE}</p>
+            <p className="font-medium text-black">{businessName}</p>
+            <p>{businessLine1}</p>
+            <p>{businessLine2}</p>
+            <p className="mt-1">Tel: {businessPhone}</p>
           </div>
           <div className="text-right text-black/80 leading-relaxed text-sm">
             <p>

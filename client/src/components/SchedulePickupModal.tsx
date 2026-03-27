@@ -10,10 +10,11 @@
  */
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
+import { useTenant } from "@/hooks/useTenant";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
 
-const LOGO_FULL = "https://files.manuscdn.com/user_upload_by_module/session_file/310419663029845795/WZKCbJMLcYxTxbBz.png";
+const DEFAULT_LOGO_FULL = "https://files.manuscdn.com/user_upload_by_module/session_file/310419663029845795/WZKCbJMLcYxTxbBz.png";
 
 const pf = { fontFamily: '"Playfair Display", Georgia, serif' };
 const cg = { fontFamily: '"Cormorant Garamond", Georgia, serif' };
@@ -61,20 +62,23 @@ function BlackButton({
   onClick,
   disabled = false,
   type = "button",
+  primaryColor = "#111111",
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   disabled?: boolean;
   type?: "button" | "submit";
+  primaryColor?: string;
 }) {
   return (
     <button
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className="w-full bg-black text-white hover:bg-black/90 disabled:bg-black/40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+      className="w-full text-white disabled:bg-black/40 disabled:cursor-not-allowed transition-colors cursor-pointer"
       style={{
         ...cg,
+        backgroundColor: primaryColor,
         fontSize: "0.95rem",
         fontWeight: 500,
         letterSpacing: "0.1em",
@@ -137,10 +141,16 @@ function Step1({
   formData,
   setFormData,
   onNext,
+  brandName,
+  logoUrl,
+  primaryColor,
 }: {
   formData: FormData;
   setFormData: (d: FormData) => void;
   onNext: () => void;
+  brandName: string;
+  logoUrl: string;
+  primaryColor: string;
 }) {
   const select = (type: "wash_fold" | "dry_cleaning") => {
     setFormData({ ...formData, serviceType: type });
@@ -150,7 +160,7 @@ function Step1({
     <div>
       {/* Logo */}
       <div className="flex justify-center mb-6">
-        <img src={LOGO_FULL} alt="Laundry Butler" className="w-[180px] h-auto" />
+        <img src={logoUrl} alt={brandName} className="w-[180px] h-auto" />
       </div>
 
       <StepHeading>What do you need?</StepHeading>
@@ -189,7 +199,7 @@ function Step1({
         </button>
       </div>
 
-      <BlackButton onClick={onNext} disabled={!formData.serviceType}>
+      <BlackButton onClick={onNext} disabled={!formData.serviceType} primaryColor={primaryColor}>
         CONTINUE
       </BlackButton>
     </div>
@@ -543,8 +553,19 @@ function Step5(props: {
 }
 
 /* ===== STEP 6: SUCCESS ===== */
-function Step6({ orderId, onClose }: { orderId: number; onClose: () => void }) {
+function Step6({
+  orderId,
+  onClose,
+  supportPhone,
+  primaryColor,
+}: {
+  orderId: number;
+  onClose: () => void;
+  supportPhone: string;
+  primaryColor: string;
+}) {
   const [loading, setLoading] = useState(false);
+  const supportPhoneHref = `tel:${supportPhone.replace(/[^\d+]/g, "")}`;
   const generateTokenMutation = trpc.orders.generatePortalToken.useMutation();
 
   const handleContinue = async () => {
@@ -580,13 +601,13 @@ function Step6({ orderId, onClose }: { orderId: number; onClose: () => void }) {
         style={cg}
       >
         Call or text{" "}
-        <a href="tel:+13238074661" className="text-black underline">
-          (323) 807-4661
+        <a href={supportPhoneHref} className="text-black underline">
+          {supportPhone}
         </a>{" "}
         if you have requests or questions.
       </p>
 
-      <BlackButton onClick={handleContinue} disabled={loading}>
+      <BlackButton onClick={handleContinue} disabled={loading} primaryColor={primaryColor}>
         {loading ? "REDIRECTING..." : "CONTINUE"}
       </BlackButton>
     </div>
@@ -595,6 +616,7 @@ function Step6({ orderId, onClose }: { orderId: number; onClose: () => void }) {
 
 /* ===== MAIN MODAL ===== */
 export default function SchedulePickupModal({ onClose }: SchedulePickupModalProps) {
+  const { tenant } = useTenant();
   const [step, setStep] = useState(1);
   const [orderId, setOrderId] = useState<number | null>(null);
   const [formData, setFormData] = useState<FormData>({
@@ -665,6 +687,9 @@ export default function SchedulePickupModal({ onClose }: SchedulePickupModalProp
             formData={formData}
             setFormData={setFormData}
             onNext={() => setStep(2)}
+            brandName={tenant.brandName}
+            logoUrl={tenant.logoUrl || DEFAULT_LOGO_FULL}
+            primaryColor={tenant.primaryColor}
           />
         )}
         {step === 2 && (
@@ -699,7 +724,14 @@ export default function SchedulePickupModal({ onClose }: SchedulePickupModalProp
             onBack={() => setStep(4)}
           />
         )}
-        {step === 6 && orderId && <Step6 orderId={orderId} onClose={onClose} />}
+        {step === 6 && orderId && (
+          <Step6
+            orderId={orderId}
+            onClose={onClose}
+            supportPhone={tenant.supportPhone}
+            primaryColor={tenant.primaryColor}
+          />
+        )}
       </div>
     </div>
   );
