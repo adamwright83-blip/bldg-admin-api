@@ -14,6 +14,10 @@ import {
 import SchedulePickupModal from "@/components/SchedulePickupModal";
 import { useTenant } from "@/hooks/useTenant";
 
+/** Served from `client/public/laundry-farm/` */
+const HERO_IMAGE = "/laundry-farm/hero.png";
+const PROCESS_MOCKUP = "/laundry-farm/book-pickup-mockup.png";
+
 const ICONS = {
   shirts:
     "https://d2xsxph8kpxj0f.cloudfront.net/310519663281332025/66ERVFSQvqDVmLFWEFPer6/Untitleddesign(29)_dc2cfc16.png",
@@ -96,8 +100,12 @@ export default function LaundryFarmHome() {
               </motion.div>
             </div>
             <div className="lg:col-span-5 relative">
-              <div className="aspect-[3/4] bg-[#ddd7cc] rounded-t-[2rem] overflow-hidden">
-                <img src={tenant.logoUrl} alt={tenant.brandName} className="h-full w-full object-cover opacity-85" />
+              <div className="aspect-[3/4] max-h-[min(88vh,820px)] bg-[#ddd7cc] rounded-t-[2rem] overflow-hidden shadow-xl">
+                <img
+                  src={HERO_IMAGE}
+                  alt=""
+                  className="h-full w-full object-cover object-[center_28%]"
+                />
               </div>
             </div>
           </div>
@@ -105,12 +113,22 @@ export default function LaundryFarmHome() {
       </section>
 
       <section id="process" className="py-24 md:py-32 bg-white">
-        <div className="max-w-6xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-start">
-          <div>
-            <span className="text-xs font-bold uppercase tracking-[0.25em] mb-4 block" style={{ color }}>How it works</span>
-            <h2 className="text-4xl md:text-5xl font-black tracking-tight leading-[1.1]">
-              Three steps. <span className="italic" style={{ color }}>That is it.</span>
-            </h2>
+        <div className="max-w-6xl mx-auto px-6 grid lg:grid-cols-2 gap-12 lg:gap-16 items-start">
+          <div className="space-y-8 lg:sticky lg:top-24">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-[0.25em] mb-4 block" style={{ color }}>How it works</span>
+              <h2 className="text-4xl md:text-5xl font-black tracking-tight leading-[1.1]">
+                Three steps. <span className="italic" style={{ color }}>That is it.</span>
+              </h2>
+            </div>
+            <div className="rounded-3xl overflow-hidden border border-black/10 shadow-lg bg-[#f5f2ed] max-w-md mx-auto lg:mx-0">
+              <img
+                src={PROCESS_MOCKUP}
+                alt="Book pickup: schedule and estimate on your phone"
+                className="w-full h-auto object-cover object-top block"
+                loading="lazy"
+              />
+            </div>
           </div>
           <div className="space-y-4">
             {["Book a time", "We handle it", "Back to you"].map((step, i) => (
