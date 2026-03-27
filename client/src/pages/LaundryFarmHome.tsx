@@ -167,7 +167,7 @@ export default function LaundryFarmHome() {
               </button>
               <a
                 href="#pricing"
-                className="inline-flex items-center rounded-full border-2 border-gray-900/15 bg-white px-6 py-3.5 text-[15px] font-bold text-gray-900 transition-colors hover:bg-gray-50"
+                className="inline-flex items-center rounded-full border-[2.5px] border-gray-900/70 bg-white/95 px-6 py-3.5 text-[15px] font-bold text-gray-950 shadow-[0_2px_8px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.9)] ring-1 ring-gray-900/20 transition-colors hover:bg-gray-50 hover:border-gray-900"
               >
                 View Pricing
               </a>
@@ -179,7 +179,7 @@ export default function LaundryFarmHome() {
             <div className="aspect-video w-full bg-gray-200">
               <img
                 src={HERO_IMAGE}
-                alt="Fresh laundry, professionally finished and ready for delivery"
+                alt="Folded laundry in a sealed bag, delivered at your door"
                 className="h-full w-full object-cover object-[center_35%]"
                 width={1920}
                 height={1080}
