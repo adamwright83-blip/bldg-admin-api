@@ -1,16 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  ArrowRight,
-  Check,
-  ChevronDown,
-  Home,
-  Mail,
-  MapPin,
-  Menu,
-  Phone,
-  X,
-} from "lucide-react";
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  useScroll,
+  useTransform,
+} from "framer-motion";
+import { Check, ChevronDown } from "lucide-react";
 import SchedulePickupModal from "@/components/SchedulePickupModal";
 import { useTenant } from "@/hooks/useTenant";
 
@@ -50,7 +46,7 @@ const REVIEWS = [
   { name: "David K.", src: "Yelp", quote: "Best laundry service in LA. Professional team, results speak for themselves." },
 ];
 
-function NavBar({ onBook, brandSlug }: { onBook: () => void; brandSlug: string }) {
+function NavBar({ onBook, brandName }: { onBook: () => void; brandName: string }) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -69,12 +65,11 @@ function NavBar({ onBook, brandSlug }: { onBook: () => void; brandSlug: string }
     >
       <button
         type="button"
-        className="flex items-center gap-2 text-[17px] font-bold tracking-tight"
+        className="text-[17px] font-bold tracking-tight"
         style={{ color: C.forest }}
         onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
       >
-        <Home className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
-        {brandSlug}
+        {brandName}
       </button>
       <ul className="hidden items-center gap-8 md:flex list-none">
         {[
@@ -152,73 +147,153 @@ function FloatCardDelayed({ className, children }: { className?: string; childre
   );
 }
 
+const easeOut = [0.22, 1, 0.36, 1] as const;
+
+function Reveal({
+  children,
+  className,
+  delay = 0,
+}: {
+  children: ReactNode;
+  className?: string;
+  delay?: number;
+}) {
+  const reduce = useReducedMotion();
+  return (
+    <motion.div
+      className={className}
+      initial={reduce ? false : { opacity: 0, y: 26 }}
+      whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
+      transition={{ duration: 0.52, ease: easeOut, delay }}
+      viewport={{ once: true, margin: "-48px 0px -10% 0px", amount: 0.12 }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+function ScrollCue() {
+  const reduce = useReducedMotion();
+  return (
+    <motion.a
+      href="#how"
+      className="absolute bottom-5 left-1/2 z-[5] flex -translate-x-1/2 flex-col items-center gap-0.5 max-lg:bottom-4"
+      style={{ color: C.gold }}
+      aria-label="Scroll to how it works"
+      animate={reduce ? undefined : { y: [0, 7, 0] }}
+      transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+    >
+      <span className="text-[10px] font-semibold uppercase tracking-[0.2em]">Scroll</span>
+      <ChevronDown className="h-5 w-5 opacity-90" strokeWidth={2} aria-hidden />
+    </motion.a>
+  );
+}
+
 export default function LaundryFarmHome() {
   const { tenant } = useTenant();
   const [showModal, setShowModal] = useState(false);
-  const brandSlug = tenant.brandName.toLowerCase().replace(/\s+/g, "");
+  const heroRef = useRef<HTMLElement | null>(null);
+  const reduceMotion = useReducedMotion();
+  const { scrollYProgress } = useScroll({
+    target: heroRef,
+    offset: ["start start", "end start"],
+  });
+  const heroImgY = useTransform(scrollYProgress, [0, 1], [0, reduceMotion ? 0 : 80]);
+  const heroImgScale = useTransform(scrollYProgress, [0, 1], [1, reduceMotion ? 1 : 1.045]);
+
+  const heroContainer = {
+    hidden: {},
+    show: {
+      transition: {
+        staggerChildren: reduceMotion ? 0 : 0.1,
+        delayChildren: reduceMotion ? 0 : 0.06,
+      },
+    },
+  };
+  const heroItem = {
+    hidden: { opacity: 0, y: 22 },
+    show: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: reduceMotion ? 0 : 0.48, ease: easeOut },
+    },
+  };
 
   return (
     <div className="min-h-screen overflow-x-hidden antialiased" style={{ fontFamily: sans, color: C.charcoal, background: C.cream }}>
-      <NavBar onBook={() => setShowModal(true)} brandSlug={brandSlug} />
+      <NavBar onBook={() => setShowModal(true)} brandName={tenant.brandName} />
 
       {/* Hero — split grid (v3) */}
-      <section className="grid min-h-screen grid-cols-1 lg:grid-cols-2 lg:min-h-0">
+      <section ref={heroRef} className="relative grid min-h-screen grid-cols-1 lg:grid-cols-2 lg:min-h-0">
         <div
           className="flex flex-col justify-center px-6 pb-10 pt-[clamp(100px,10vw,140px)] lg:pr-[clamp(30px,4vw,60px)] lg:pl-[clamp(30px,5vw,80px)]"
           style={{ fontFamily: sans }}
         >
-          <div className="mb-5 flex items-center gap-2.5 text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: C.gold }}>
-            <span className="h-px w-6 shrink-0" style={{ background: C.gold }} aria-hidden />
-            Los Angeles
-          </div>
-          <h1
-            className="mb-6 max-w-xl text-[clamp(36px,4.5vw,58px)] font-medium leading-[1.12] tracking-tight"
-            style={{ fontFamily: serif, color: C.forest }}
+          <motion.div
+            className="flex w-full flex-col"
+            initial={reduceMotion ? false : "hidden"}
+            animate="show"
+            variants={heroContainer}
           >
-            The city runs hot.
-            <br />
-            <em className="italic font-normal">Your clothes</em>{" "}
-            <span style={{ color: C.gold }}>don&apos;t have to.</span>
-          </h1>
-          <p className="mb-9 max-w-[420px] text-[17px] leading-[1.7]" style={{ color: C.slate }}>
-            Fresh laundry, picked up and delivered across LA. You handle the living — we handle the rest.
-          </p>
-          <div className="mb-10 flex flex-wrap items-center gap-3.5">
-            <button
-              type="button"
-              onClick={() => setShowModal(true)}
-              className="inline-flex items-center gap-2 rounded-full px-9 py-4 text-[15px] font-semibold text-[#faf7f2] transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_32px_rgba(26,58,42,0.2)]"
-              style={{ background: C.forest }}
+            <motion.div variants={heroItem} className="mb-5 flex items-center gap-2.5 text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: C.gold }}>
+              <span className="h-px w-6 shrink-0" style={{ background: C.gold }} aria-hidden />
+              Los Angeles
+            </motion.div>
+            <motion.h1
+              variants={heroItem}
+              className="mb-6 max-w-xl text-[clamp(36px,4.5vw,58px)] font-medium leading-[1.12] tracking-tight"
+              style={{ fontFamily: serif, color: C.forest }}
             >
-              Schedule Pickup →
-            </button>
-            <a
-              href="#pricing"
-              className="inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-[rgba(26,58,42,0.18)] px-8 py-4 text-[15px] font-medium transition-all hover:border-[#1a3a2a] hover:bg-[rgba(26,58,42,0.03)]"
-              style={{ color: C.forest }}
-            >
-              View Pricing
-            </a>
-          </div>
-          <div className="flex flex-wrap items-center gap-7 border-t pt-8 max-md:flex-col max-md:items-start max-md:gap-3.5" style={{ borderColor: "rgba(26, 58, 42, 0.08)" }}>
-            {[
-              ["20,000+", "Items Cleaned"],
-              ["99.99%", "Success Rate"],
-              ["0", "Damage Reports"],
-            ].map(([num, label], i) => (
-              <div key={label} className="flex items-center gap-7 max-md:contents">
-                {i > 0 && <span className="hidden h-8 w-px shrink-0 max-md:hidden sm:block" style={{ background: "rgba(26, 58, 42, 0.1)" }} aria-hidden />}
-                <div className="flex flex-col">
-                  <span className="text-[22px] font-semibold leading-tight" style={{ fontFamily: serif, color: C.forest }}>{num}</span>
-                  <span className="text-[11px] font-medium uppercase tracking-[0.06em]" style={{ color: C.slate }}>{label}</span>
+              The city runs hot.
+              <br />
+              <em className="italic font-normal">Your clothes</em>{" "}
+              <span style={{ color: C.gold }}>don&apos;t have to.</span>
+            </motion.h1>
+            <motion.p variants={heroItem} className="mb-9 max-w-[420px] text-[17px] leading-[1.7]" style={{ color: C.slate }}>
+              Fresh laundry, picked up and delivered across LA. You handle the living — we handle the rest.
+            </motion.p>
+            <motion.div variants={heroItem} className="mb-10 flex flex-wrap items-center gap-3.5">
+              <button
+                type="button"
+                onClick={() => setShowModal(true)}
+                className="inline-flex items-center gap-2 rounded-full px-9 py-4 text-[15px] font-semibold text-[#faf7f2] transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_32px_rgba(26,58,42,0.2)]"
+                style={{ background: C.forest }}
+              >
+                Schedule Pickup →
+              </button>
+              <a
+                href="#pricing"
+                className="inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-[rgba(26,58,42,0.18)] px-8 py-4 text-[15px] font-medium transition-all hover:border-[#1a3a2a] hover:bg-[rgba(26,58,42,0.03)]"
+                style={{ color: C.forest }}
+              >
+                View Pricing
+              </a>
+            </motion.div>
+            <motion.div variants={heroItem} className="flex flex-wrap items-center gap-7 border-t pt-8 max-md:flex-col max-md:items-start max-md:gap-3.5" style={{ borderColor: "rgba(26, 58, 42, 0.08)" }}>
+              {[
+                ["20,000+", "Items Cleaned"],
+                ["99.99%", "Success Rate"],
+                ["0", "Damage Reports"],
+              ].map(([num, label], i) => (
+                <div key={label} className="flex items-center gap-7 max-md:contents">
+                  {i > 0 && <span className="hidden h-8 w-px shrink-0 max-md:hidden sm:block" style={{ background: "rgba(26, 58, 42, 0.1)" }} aria-hidden />}
+                  <div className="flex flex-col">
+                    <span className="text-[22px] font-semibold leading-tight" style={{ fontFamily: serif, color: C.forest }}>{num}</span>
+                    <span className="text-[11px] font-medium uppercase tracking-[0.06em]" style={{ color: C.slate }}>{label}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </motion.div>
+          </motion.div>
         </div>
 
-        <div className="relative min-h-[45vh] lg:min-h-screen">
-          <img src={HERO_IMAGE} alt="Laundry delivered at your door in a sealed bag" className="absolute inset-0 h-full w-full object-cover object-center" />
+        <div className="relative min-h-[45vh] overflow-hidden lg:min-h-screen">
+          <motion.div
+            className="absolute inset-0 h-[120%] w-full -top-[10%]"
+            style={{ y: heroImgY, scale: heroImgScale }}
+          >
+            <img src={HERO_IMAGE} alt="Laundry delivered at your door in a sealed bag" className="h-full w-full object-cover object-center" />
+          </motion.div>
           <div
             className="pointer-events-none absolute inset-0"
             style={{
@@ -242,17 +317,20 @@ export default function LaundryFarmHome() {
             <span className="text-xs font-medium" style={{ color: C.slate }}>Google & Yelp</span>
           </FloatCardDelayed>
         </div>
+        <ScrollCue />
       </section>
 
       {/* How it works */}
       <section id="how" className="mx-auto max-w-[1200px] px-5 py-[clamp(48px,8vw,100px)] md:px-[clamp(20px,6vw,80px)]">
-        <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: C.gold }}>How it works</div>
-        <h2 className="mb-4 max-w-xl text-[clamp(28px,3.5vw,42px)] font-medium leading-[1.15]" style={{ fontFamily: serif, color: C.forest }}>
-          Three steps. Then go <em className="italic">do something better.</em>
-        </h2>
-        <p className="mb-10 max-w-[480px] text-base leading-relaxed md:mb-12" style={{ color: C.slate }}>
-          No apps to download. No subscriptions. Just schedule, and we take it from there.
-        </p>
+        <Reveal>
+          <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: C.gold }}>How it works</div>
+          <h2 className="mb-4 max-w-xl text-[clamp(28px,3.5vw,42px)] font-medium leading-[1.15]" style={{ fontFamily: serif, color: C.forest }}>
+            Three steps. Then go <em className="italic">do something better.</em>
+          </h2>
+          <p className="mb-10 max-w-[480px] text-base leading-relaxed md:mb-12" style={{ color: C.slate }}>
+            No apps to download. No subscriptions. Just schedule, and we take it from there.
+          </p>
+        </Reveal>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3 md:gap-6">
           {[
             {
@@ -291,29 +369,30 @@ export default function LaundryFarmHome() {
                 </svg>
               ),
             },
-          ].map((step) => (
-            <div
-              key={step.n}
-              className="group relative rounded-[20px] border border-[rgba(26,58,42,0.05)] bg-white p-7 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(26,58,42,0.07)] md:p-8 md:pt-8 md:pb-8 md:pl-7 md:pr-7"
-            >
-              <div className="mb-3.5 text-[52px] font-normal leading-none" style={{ fontFamily: serif, color: "rgba(26, 58, 42, 0.05)" }}>{step.n}</div>
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-[14px]" style={{ background: C.emeraldSoft }}>{step.icon}</div>
-              <h3 className="mb-2 text-lg font-semibold" style={{ color: C.forest }}>{step.title}</h3>
-              <p className="text-sm leading-[1.65]" style={{ color: C.slate }}>{step.body}</p>
-              {"micro" in step && step.micro && (
-                <div
-                  className="mt-3 inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ borderColor: "rgba(16, 185, 129, 0.1)", background: "rgba(16, 185, 129, 0.05)", color: C.forestLight }}
-                >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
-                    <rect x="3" y="3" width="18" height="18" rx="2" />
-                    <circle cx="8.5" cy="8.5" r="1.5" />
-                    <polyline points="21 15 16 10 5 21" />
-                  </svg>
-                  {step.micro}
-                </div>
-              )}
-            </div>
+          ].map((step, i) => (
+            <Reveal key={step.n} delay={i * 0.09}>
+              <div
+                className="group relative h-full rounded-[20px] border border-[rgba(26,58,42,0.05)] bg-white p-7 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(26,58,42,0.07)] md:p-8 md:pt-8 md:pb-8 md:pl-7 md:pr-7"
+              >
+                <div className="mb-3.5 text-[52px] font-normal leading-none" style={{ fontFamily: serif, color: "rgba(26, 58, 42, 0.05)" }}>{step.n}</div>
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-[14px]" style={{ background: C.emeraldSoft }}>{step.icon}</div>
+                <h3 className="mb-2 text-lg font-semibold" style={{ color: C.forest }}>{step.title}</h3>
+                <p className="text-sm leading-[1.65]" style={{ color: C.slate }}>{step.body}</p>
+                {"micro" in step && step.micro && (
+                  <div
+                    className="mt-3 inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold"
+                    style={{ borderColor: "rgba(16, 185, 129, 0.1)", background: "rgba(16, 185, 129, 0.05)", color: C.forestLight }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                    {step.micro}
+                  </div>
+                )}
+              </div>
+            </Reveal>
           ))}
         </div>
       </section>
@@ -324,7 +403,7 @@ export default function LaundryFarmHome() {
           className="pointer-events-none absolute -right-[150px] -top-[150px] h-[500px] w-[500px] rounded-full"
           style={{ background: "radial-gradient(circle, rgba(200, 169, 110, 0.06) 0%, transparent 70%)" }}
         />
-        <div className="relative z-[1] mx-auto max-w-[800px] text-center">
+        <Reveal className="relative z-[1] mx-auto max-w-[800px] text-center">
           <h2 className="mb-5 text-[clamp(26px,3.5vw,44px)] font-normal leading-tight" style={{ fontFamily: serif, color: C.cream }}>
             You didn&apos;t move to LA
             <br />
@@ -333,40 +412,43 @@ export default function LaundryFarmHome() {
           <p className="mx-auto max-w-[560px] text-base leading-[1.75]" style={{ color: "rgba(250, 247, 242, 0.55)" }}>
             Every hour you spend at a laundromat is an hour you&apos;re not hiking Griffith, not meeting someone for coffee, not building something that matters. We give that hour back.
           </p>
-        </div>
+        </Reveal>
       </section>
 
       {/* Pricing */}
       <section id="pricing" className="mx-auto max-w-[1200px] px-5 py-[clamp(48px,8vw,100px)] md:px-[clamp(20px,6vw,80px)]">
-        <div className="mb-3 text-center text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: C.gold }}>Pricing</div>
-        <h2 className="mb-3 text-center text-[clamp(28px,3.5vw,42px)] font-medium" style={{ fontFamily: serif, color: C.forest }}>
-          Straightforward <em className="italic">per-item pricing.</em>
-        </h2>
-        <p className="mb-10 text-center text-[15px] md:mb-12" style={{ color: C.slate }}>
-          No hidden fees. No subscriptions. Pay for what you clean.
-        </p>
+        <Reveal>
+          <div className="mb-3 text-center text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: C.gold }}>Pricing</div>
+          <h2 className="mb-3 text-center text-[clamp(28px,3.5vw,42px)] font-medium" style={{ fontFamily: serif, color: C.forest }}>
+            Straightforward <em className="italic">per-item pricing.</em>
+          </h2>
+          <p className="mb-10 text-center text-[15px] md:mb-12" style={{ color: C.slate }}>
+            No hidden fees. No subscriptions. Pay for what you clean.
+          </p>
+        </Reveal>
         <div className="mb-10 grid grid-cols-1 gap-[18px] sm:grid-cols-2 lg:grid-cols-4">
           {[
             { icon: ICONS.shirts, name: "Shirts", desc: "Washed & pressed", price: "$4.99" },
             { icon: ICONS.dress, name: "Dresses", desc: "Dry cleaned", price: "$11.50" },
             { icon: ICONS.serviceWash, name: "Service Wash", desc: "Wash, dry & fold", price: "$35.00" },
             { icon: ICONS.bedding, name: "Bedding", desc: "Wash & press", price: "$14.50" },
-          ].map((item) => (
-            <div
-              key={item.name}
-              className="rounded-[18px] border border-[rgba(26,58,42,0.05)] bg-white px-6 py-7 text-center transition-all duration-300 hover:-translate-y-1 hover:border-[#c8a96e] hover:shadow-[0_8px_30px_rgba(26,58,42,0.06)]"
-            >
-              <div className="mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-[14px]" style={{ background: C.cream }}>
-                <img src={item.icon} alt="" className="h-9 w-9 object-contain" />
+          ].map((item, i) => (
+            <Reveal key={item.name} delay={i * 0.07}>
+              <div
+                className="h-full rounded-[18px] border border-[rgba(26,58,42,0.05)] bg-white px-6 py-7 text-center transition-all duration-300 hover:-translate-y-1 hover:border-[#c8a96e] hover:shadow-[0_8px_30px_rgba(26,58,42,0.06)]"
+              >
+                <div className="mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-[14px]" style={{ background: C.cream }}>
+                  <img src={item.icon} alt="" className="h-9 w-9 object-contain" />
+                </div>
+                <h3 className="mb-1 text-base font-semibold" style={{ color: C.forest }}>{item.name}</h3>
+                <div className="mb-3.5 text-xs" style={{ color: C.slate }}>{item.desc}</div>
+                <div className="text-[28px] font-medium" style={{ fontFamily: serif, color: C.forest }}>{item.price}</div>
+                <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: C.slate }}>from</div>
               </div>
-              <h3 className="mb-1 text-base font-semibold" style={{ color: C.forest }}>{item.name}</h3>
-              <div className="mb-3.5 text-xs" style={{ color: C.slate }}>{item.desc}</div>
-              <div className="text-[28px] font-medium" style={{ fontFamily: serif, color: C.forest }}>{item.price}</div>
-              <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: C.slate }}>from</div>
-            </div>
+            </Reveal>
           ))}
         </div>
-        <div className="text-center">
+        <Reveal className="text-center">
           <button
             type="button"
             onClick={() => setShowModal(true)}
@@ -375,7 +457,7 @@ export default function LaundryFarmHome() {
           >
             Schedule Pickup →
           </button>
-        </div>
+        </Reveal>
       </section>
 
       {/* Stats bar */}
@@ -385,11 +467,13 @@ export default function LaundryFarmHome() {
             ["20,000+", "Items Cleaned"],
             ["99.99%", "Success Rate"],
             ["0", "Damage Reports"],
-          ].map(([num, label]) => (
-            <div key={label}>
-              <div className="mb-1.5 text-[clamp(32px,4vw,48px)] font-medium leading-none" style={{ fontFamily: serif, color: C.cream }}>{num}</div>
-              <div className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: "rgba(250, 247, 242, 0.4)" }}>{label}</div>
-            </div>
+          ].map(([num, label], i) => (
+            <Reveal key={label} delay={i * 0.1}>
+              <div>
+                <div className="mb-1.5 text-[clamp(32px,4vw,48px)] font-medium leading-none" style={{ fontFamily: serif, color: C.cream }}>{num}</div>
+                <div className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: "rgba(250, 247, 242, 0.4)" }}>{label}</div>
+              </div>
+            </Reveal>
           ))}
         </div>
       </section>
@@ -397,21 +481,25 @@ export default function LaundryFarmHome() {
       {/* Reviews */}
       <section className="px-5 py-[clamp(48px,8vw,100px)] md:px-[clamp(20px,6vw,80px)]" style={{ background: C.creamDark }}>
         <div className="mx-auto max-w-[1200px]">
-          <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: C.gold }}>Reviews</div>
-          <h2 className="mb-3 text-[clamp(28px,3.5vw,42px)] font-medium" style={{ fontFamily: serif, color: C.forest }}>
-            Trusted on <em className="italic">Google & Yelp.</em>
-          </h2>
-          <p className="mb-8 text-[15px] md:mb-10" style={{ color: C.slate }}>Real reviews from real customers across Los Angeles.</p>
+          <Reveal>
+            <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: C.gold }}>Reviews</div>
+            <h2 className="mb-3 text-[clamp(28px,3.5vw,42px)] font-medium" style={{ fontFamily: serif, color: C.forest }}>
+              Trusted on <em className="italic">Google & Yelp.</em>
+            </h2>
+            <p className="mb-8 text-[15px] md:mb-10" style={{ color: C.slate }}>Real reviews from real customers across Los Angeles.</p>
+          </Reveal>
           <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-2 lg:grid-cols-4">
-            {REVIEWS.map((r) => (
-              <div key={r.name} className="rounded-[18px] border border-[rgba(26,58,42,0.04)] bg-white p-6">
-                <div className="mb-3 text-sm tracking-[2px]" style={{ color: C.gold }}>★★★★★</div>
-                <blockquote className="mb-4 text-sm italic leading-[1.65]" style={{ color: C.charcoal }}>&ldquo;{r.quote}&rdquo;</blockquote>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[13px] font-semibold" style={{ color: C.forest }}>{r.name}</span>
-                  <span className="text-[11px]" style={{ color: C.slate }}>{r.src}</span>
+            {REVIEWS.map((r, i) => (
+              <Reveal key={r.name} delay={i * 0.08}>
+                <div className="h-full rounded-[18px] border border-[rgba(26,58,42,0.04)] bg-white p-6">
+                  <div className="mb-3 text-sm tracking-[2px]" style={{ color: C.gold }}>★★★★★</div>
+                  <blockquote className="mb-4 text-sm italic leading-[1.65]" style={{ color: C.charcoal }}>&ldquo;{r.quote}&rdquo;</blockquote>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-semibold" style={{ color: C.forest }}>{r.name}</span>
+                    <span className="text-[11px]" style={{ color: C.slate }}>{r.src}</span>
+                  </div>
                 </div>
-              </div>
+              </Reveal>
             ))}
           </div>
         </div>
@@ -424,7 +512,7 @@ export default function LaundryFarmHome() {
             className="pointer-events-none absolute -right-[100px] -top-[100px] h-[400px] w-[400px] rounded-full"
             style={{ background: "radial-gradient(circle, rgba(200, 169, 110, 0.08) 0%, transparent 70%)" }}
           />
-          <div className="relative z-[1]">
+          <Reveal className="relative z-[1]">
             <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: C.goldLight }}>For Property Managers</div>
             <h3 className="mb-4 text-[clamp(24px,3vw,34px)] font-medium leading-tight" style={{ fontFamily: serif, color: C.cream }}>
               Laundry as a building amenity.
@@ -439,19 +527,21 @@ export default function LaundryFarmHome() {
             >
               Learn More →
             </a>
-          </div>
+          </Reveal>
           <div className="relative z-[1] grid grid-cols-1 gap-4 sm:grid-cols-2">
             {[
               { emoji: "🏢", t: "Concierge Integration", d: "Works with your building flow" },
               { emoji: "📊", t: "Usage visibility", d: "Track satisfaction over time" },
               { emoji: "🚪", t: "Doorstep delivery", d: "Unit-to-unit service" },
               { emoji: "💳", t: "Zero cost to building", d: "Residents pay per order" },
-            ].map((f) => (
-              <div key={f.t} className="rounded-[14px] border border-white/[0.08] bg-white/[0.05] p-5">
-                <span className="mb-2.5 block text-lg" aria-hidden>{f.emoji}</span>
-                <h4 className="mb-1 text-[13px] font-semibold" style={{ color: C.cream }}>{f.t}</h4>
-                <p className="text-xs leading-normal" style={{ color: "rgba(250, 247, 242, 0.4)" }}>{f.d}</p>
-              </div>
+            ].map((f, i) => (
+              <Reveal key={f.t} delay={i * 0.07}>
+                <div className="h-full rounded-[14px] border border-white/[0.08] bg-white/[0.05] p-5">
+                  <span className="mb-2.5 block text-lg" aria-hidden>{f.emoji}</span>
+                  <h4 className="mb-1 text-[13px] font-semibold" style={{ color: C.cream }}>{f.t}</h4>
+                  <p className="text-xs leading-normal" style={{ color: "rgba(250, 247, 242, 0.4)" }}>{f.d}</p>
+                </div>
+              </Reveal>
             ))}
           </div>
         </div>
@@ -459,23 +549,30 @@ export default function LaundryFarmHome() {
 
       {/* FAQ */}
       <section id="faq" className="mx-auto max-w-[800px] px-5 py-[clamp(48px,8vw,100px)] md:px-[clamp(20px,6vw,80px)]">
-        <h2 className="mb-10 text-center text-[clamp(28px,3vw,38px)] font-medium" style={{ fontFamily: serif, color: C.forest }}>
-          Quick answers
-        </h2>
+        <Reveal className="mb-10 text-center">
+          <h2 className="text-[clamp(28px,3vw,38px)] font-medium" style={{ fontFamily: serif, color: C.forest }}>
+            Quick answers
+          </h2>
+        </Reveal>
         {[
           { q: "How are payments processed?", a: "Securely through Stripe. Your card is charged after items are cleaned and a final price is confirmed. You get an itemized receipt by email." },
           { q: "What if I'm not home?", a: "Leave laundry in a bag outside your door. We pick up and deliver the same way. You get a text when your driver arrives and when delivery is complete." },
           { q: "What areas do you cover?", a: "Greater Los Angeles — Hollywood, Koreatown, DTLA, Silver Lake, Los Feliz, WeHo, Beverly Hills, and expanding. Contact us if you're outside these areas." },
           { q: "What's the turnaround time?", a: "Most orders return within 24 hours. Same-day and rush may be available — check when scheduling." },
           { q: "Can I get a cost estimate before booking?", a: "Yes — upload a photo when booking for a quick estimate, or use the per-item pricing above." },
-        ].map((item) => (
-          <details key={item.q} className="group border-b py-5 first:pt-0" style={{ borderColor: "rgba(26, 58, 42, 0.08)" }}>
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[15px] font-medium" style={{ color: C.forest }}>
-              {item.q}
-              <span className="text-xl font-light transition-transform group-open:rotate-45" style={{ color: C.gold }}>+</span>
-            </summary>
-            <p className="mt-3 pb-1 text-sm leading-[1.7]" style={{ color: C.slate }}>{item.a}</p>
-          </details>
+        ].map((item, i) => (
+          <Reveal key={item.q} delay={i * 0.05}>
+            <details
+              className={`group border-b ${i === 0 ? "pb-5 pt-0" : "py-5"}`}
+              style={{ borderColor: "rgba(26, 58, 42, 0.08)" }}
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[15px] font-medium" style={{ color: C.forest }}>
+                {item.q}
+                <span className="text-xl font-light transition-transform group-open:rotate-45" style={{ color: C.gold }}>+</span>
+              </summary>
+              <p className="mt-3 pb-1 text-sm leading-[1.7]" style={{ color: C.slate }}>{item.a}</p>
+            </details>
+          </Reveal>
         ))}
       </section>
 
@@ -485,22 +582,24 @@ export default function LaundryFarmHome() {
           className="pointer-events-none absolute left-1/2 top-[-100px] h-[400px] w-[800px] -translate-x-1/2 rounded-[50%]"
           style={{ background: "radial-gradient(ellipse, rgba(200, 169, 110, 0.06) 0%, transparent 70%)" }}
         />
-        <h2 className="relative z-[1] mb-3.5 text-[clamp(28px,3.5vw,44px)] font-normal leading-tight" style={{ fontFamily: serif, color: C.cream }}>
-          Go live your life.
-          <br />
-          <em className="italic" style={{ color: C.goldLight }}>We&apos;ll handle the laundry.</em>
-        </h2>
-        <p className="relative z-[1] mb-9 text-base" style={{ color: "rgba(250, 247, 242, 0.55)" }}>
-          First pickup is 20% off. Schedule in under a minute.
-        </p>
-        <button
-          type="button"
-          onClick={() => setShowModal(true)}
-          className="relative z-[1] inline-flex items-center gap-2 rounded-full px-11 py-[18px] text-base font-semibold transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_40px_rgba(250,247,242,0.2)]"
-          style={{ background: C.cream, color: C.forest }}
-        >
-          Schedule Pickup →
-        </button>
+        <Reveal>
+          <h2 className="relative z-[1] mb-3.5 text-[clamp(28px,3.5vw,44px)] font-normal leading-tight" style={{ fontFamily: serif, color: C.cream }}>
+            Go live your life.
+            <br />
+            <em className="italic" style={{ color: C.goldLight }}>We&apos;ll handle the laundry.</em>
+          </h2>
+          <p className="relative z-[1] mb-9 text-base" style={{ color: "rgba(250, 247, 242, 0.55)" }}>
+            First pickup is 20% off. Schedule in under a minute.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowModal(true)}
+            className="relative z-[1] inline-flex items-center gap-2 rounded-full px-11 py-[18px] text-base font-semibold transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_40px_rgba(250,247,242,0.2)]"
+            style={{ background: C.cream, color: C.forest }}
+          >
+            Schedule Pickup →
+          </button>
+        </Reveal>
       </section>
 
       {/* Footer */}
