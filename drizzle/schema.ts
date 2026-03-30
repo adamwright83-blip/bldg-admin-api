@@ -256,9 +256,11 @@ export const catalogItems = mysqlTable(
     slug: varchar("slug", { length: 128 }).notNull(),
     name: varchar("name", { length: 255 }).notNull(),
     category: varchar("category", { length: 100 }).notNull(),
+    /** dry_clean | wash_fold | alteration | other */
+    serviceType: varchar("serviceType", { length: 32 }).notNull().default("dry_clean"),
     standardPriceCents: int("standardPriceCents").notNull(),
     expressPriceCents: int("expressPriceCents"),
-    costCents: int("costCents").notNull().default(0),
+    costCents: int("costCents"),
     isActive: boolean("isActive").notNull().default(true),
     isOnline: boolean("isOnline").notNull().default(false),
     archived: boolean("archived").notNull().default(false),

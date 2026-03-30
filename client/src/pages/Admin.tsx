@@ -822,12 +822,17 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
   );
   const catalogRows = useMemo(
     () =>
-      (catalogQuery.data ?? []).map((r) => ({
-        slug: r.slug,
-        name: r.name,
-        category: r.category,
-        standardPriceCents: r.standardPriceCents,
-      })),
+      (catalogQuery.data ?? [])
+        .filter((r) => {
+          const st = r.serviceType ?? "dry_clean";
+          return st === "dry_clean" || st === "alteration";
+        })
+        .map((r) => ({
+          slug: r.slug,
+          name: r.name,
+          category: r.category,
+          standardPriceCents: r.standardPriceCents,
+        })),
     [catalogQuery.data]
   );
 

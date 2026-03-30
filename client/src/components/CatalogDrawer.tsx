@@ -13,6 +13,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useIsMobile } from "@/hooks/useMobile";
 import { cn } from "@/lib/utils";
@@ -33,8 +40,11 @@ function centsToDollarsInput(c: number): string {
   return (c / 100).toFixed(2);
 }
 
-function marginFromStandard(standardCents: number, costCents: number) {
+type CatalogServiceType = "dry_clean" | "wash_fold" | "alteration" | "other";
+
+function marginFromStandard(standardCents: number, costCents: number | null) {
   if (standardCents <= 0) return { pct: null as number | null, dollars: 0 };
+  if (costCents == null) return { pct: null, dollars: 0 };
   const dollars = (standardCents - costCents) / 100;
   const pct = ((standardCents - costCents) / standardCents) * 100;
   return { pct, dollars };
@@ -65,6 +75,7 @@ export function CatalogDrawer({
   const [isActive, setIsActive] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
   const [iconUrl, setIconUrl] = useState("");
+  const [serviceType, setServiceType] = useState<CatalogServiceType>("dry_clean");
 
   useEffect(() => {
     if (!open) return;
@@ -76,25 +87,35 @@ export function CatalogDrawer({
       setExpressDollars(
         item.expressPriceCents != null ? centsToDollarsInput(item.expressPriceCents) : ""
       );
-      setCostDollars(centsToDollarsInput(item.costCents));
+      setCostDollars(item.costCents != null ? centsToDollarsInput(item.costCents) : "");
       setIsActive(item.isActive);
       setIsOnline(item.isOnline);
       setIconUrl(item.iconUrl ?? "");
+      const st = item.serviceType;
+      setServiceType(
+        st === "wash_fold" || st === "alteration" || st === "other" || st === "dry_clean"
+          ? st
+          : "dry_clean"
+      );
     } else {
       setName("");
       setSlug("");
       setCategory("");
       setStandardDollars("0.00");
       setExpressDollars("");
-      setCostDollars("0.00");
+      setCostDollars("");
       setIsActive(true);
       setIsOnline(false);
       setIconUrl("");
+      setServiceType("dry_clean");
     }
   }, [open, item]);
 
   const standardCents = useMemo(() => dollarsToCents(standardDollars), [standardDollars]);
-  const costCents = useMemo(() => dollarsToCents(costDollars), [costDollars]);
+  const costCents = useMemo(
+    () => (costDollars.trim() === "" ? null : dollarsToCents(costDollars)),
+    [costDollars]
+  );
   const margin = useMemo(
     () => marginFromStandard(standardCents, costCents),
     [standardCents, costCents]
@@ -109,9 +130,10 @@ export function CatalogDrawer({
           slug: slug.trim(),
           name: name.trim(),
           category: category.trim(),
+          serviceType,
           standardPriceCents: standardCents,
           expressPriceCents: expressCents,
-          costCents,
+          costCents: costCents ?? null,
           isActive,
           isOnline,
           iconUrl: iconUrl.trim() || null,
@@ -122,9 +144,10 @@ export function CatalogDrawer({
           slug: slug.trim(),
           name: name.trim(),
           category: category.trim(),
+          serviceType,
           standardPriceCents: standardCents,
           expressPriceCents: expressCents,
-          costCents,
+          costCents: costCents ?? null,
           isActive,
           isOnline,
           iconUrl: iconUrl.trim() || null,
@@ -164,8 +187,12 @@ export function CatalogDrawer({
             <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-black/40">
               Margin (live)
             </div>
-            {margin.pct == null ? (
+            {standardCents <= 0 ? (
               <span className="text-black/45">Enter a standard price &gt; 0</span>
+            ) : costCents == null ? (
+              <span className="text-black/45">Add cost to see margin (optional)</span>
+            ) : margin.pct == null ? (
+              <span className="text-black/45">—</span>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
                 <Badge
@@ -205,6 +232,24 @@ export function CatalogDrawer({
             />
           </div>
 
+          <div className="grid gap-1.5">
+            <Label className="text-xs">Service type</Label>
+            <Select
+              value={serviceType}
+              onValueChange={(v) => setServiceType(v as CatalogServiceType)}
+            >
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dry_clean">Dry clean</SelectItem>
+                <SelectItem value="wash_fold">Wash &amp; fold</SelectItem>
+                <SelectItem value="alteration">Alteration</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="grid gap-1.5">
               <Label className="text-xs">Standard ($)</Label>
@@ -232,6 +277,7 @@ export function CatalogDrawer({
                 value={costDollars}
                 onChange={(e) => setCostDollars(e.target.value)}
                 className="h-9 font-mono text-sm tabular-nums"
+                placeholder="Optional"
               />
             </div>
           </div>

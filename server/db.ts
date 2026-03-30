@@ -1010,6 +1010,7 @@ export type PublicCatalogRow = {
   slug: string;
   name: string;
   category: string;
+  serviceType: string;
   standardPriceCents: number;
   expressPriceCents: number | null;
   sortOrder: number;
@@ -1042,6 +1043,7 @@ export async function listActiveCatalogForPublic(tenantId: string): Promise<Publ
       slug: catalogItems.slug,
       name: catalogItems.name,
       category: catalogItems.category,
+      serviceType: catalogItems.serviceType,
       standardPriceCents: catalogItems.standardPriceCents,
       expressPriceCents: catalogItems.expressPriceCents,
       sortOrder: catalogItems.sortOrder,
@@ -1078,9 +1080,10 @@ export async function createCatalogItemRow(data: {
   slug: string;
   name: string;
   category: string;
+  serviceType?: string;
   standardPriceCents: number;
   expressPriceCents?: number | null;
-  costCents: number;
+  costCents?: number | null;
   isActive?: boolean;
   isOnline?: boolean;
   iconUrl?: string | null;
@@ -1100,9 +1103,10 @@ export async function createCatalogItemRow(data: {
     slug: data.slug,
     name: data.name,
     category: data.category,
+    serviceType: data.serviceType ?? "dry_clean",
     standardPriceCents: data.standardPriceCents,
     expressPriceCents: data.expressPriceCents ?? null,
-    costCents: data.costCents,
+    costCents: data.costCents ?? null,
     isActive: data.isActive ?? true,
     isOnline: data.isOnline ?? false,
     archived: false,
@@ -1119,9 +1123,10 @@ export async function updateCatalogItemRow(
     slug: string;
     name: string;
     category: string;
+    serviceType: string;
     standardPriceCents: number;
     expressPriceCents: number | null;
-    costCents: number;
+    costCents: number | null;
     isActive: boolean;
     isOnline: boolean;
     iconUrl: string | null;
@@ -1169,4 +1174,220 @@ export async function reorderCatalogItemsForTenant(
       .set({ sortOrder: i, updatedAt: new Date() })
       .where(and(eq(catalogItems.id, id), eq(catalogItems.tenantId, tenantId)));
   }
+}
+
+export async function getCatalogItemBySlugForTenant(
+  slug: string,
+  tenantId: string
+): Promise<CatalogItem | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(catalogItems)
+    .where(
+      and(
+        eq(catalogItems.slug, slug),
+        eq(catalogItems.tenantId, tenantId),
+        eq(catalogItems.archived, false)
+      )
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function archiveCatalogItemBySlug(slug: string, tenantId: string): Promise<boolean> {
+  const row = await getCatalogItemBySlugForTenant(slug, tenantId);
+  if (!row) return false;
+  return archiveCatalogItemRow(row.id, tenantId);
+}
+
+/** Case-insensitive substring match on name (active rows only). */
+export async function findActiveCatalogItemsForTenantSearch(
+  tenantId: string,
+  needle: string,
+  limit = 8
+): Promise<CatalogItem[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const q = needle.trim().slice(0, 80);
+  if (q.length < 2) return [];
+  const safe = q.replace(/[%_\\]/g, "");
+  if (safe.length < 2) return [];
+  const pattern = `%${safe}%`;
+  return db
+    .select()
+    .from(catalogItems)
+    .where(
+      and(
+        eq(catalogItems.tenantId, tenantId),
+        eq(catalogItems.archived, false),
+        like(catalogItems.name, pattern)
+      )
+    )
+    .limit(limit);
+}
+
+export async function resolveActiveCatalogItemBySlugOrName(
+  tenantId: string,
+  slug: string | null | undefined,
+  name: string | null | undefined
+): Promise<CatalogItem | null> {
+  const s = slug?.trim().toLowerCase();
+  if (s) {
+    const bySlug = await getCatalogItemBySlugForTenant(s, tenantId);
+    if (bySlug) return bySlug;
+  }
+  const n = name?.trim();
+  if (n && n.length >= 2) {
+    const hits = await findActiveCatalogItemsForTenantSearch(tenantId, n, 8);
+    const exact = hits.find((h) => h.name.trim().toLowerCase() === n.toLowerCase());
+    if (exact) return exact;
+    if (hits.length === 1) return hits[0] ?? null;
+  }
+  return null;
+}
+
+export type CatalogImportRowInput = {
+  slug: string;
+  name: string;
+  category: string;
+  serviceType: string;
+  standardPriceCents: number;
+  expressPriceCents: number | null;
+  costCents: number | null;
+  isActive: boolean;
+  isOnline: boolean;
+  duplicateAction: "skip" | "update_existing" | "create_new";
+};
+
+/** Apply reviewed import rows. Never runs without client-confirmed duplicateAction per slug collision. */
+export async function bulkApplyCatalogImport(
+  tenantId: string,
+  rows: CatalogImportRowInput[]
+): Promise<{ created: number; updated: number; skipped: number }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const database = db;
+
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  async function nextSortOrder(): Promise<number> {
+    const [agg] = await database
+      .select({ m: max(catalogItems.sortOrder) })
+      .from(catalogItems)
+      .where(eq(catalogItems.tenantId, tenantId));
+    return (agg?.m != null ? Number(agg.m) : -1) + 1;
+  }
+
+  async function uniqueSlug(base: string): Promise<string> {
+    let s = base;
+    let n = 2;
+    while (true) {
+      const hit = await database
+        .select({ id: catalogItems.id })
+        .from(catalogItems)
+        .where(and(eq(catalogItems.tenantId, tenantId), eq(catalogItems.slug, s)))
+        .limit(1);
+      if (hit.length === 0) return s;
+      s = `${base}_${n}`;
+      n += 1;
+      if (n > 500) throw new Error("Could not allocate unique slug");
+    }
+  }
+
+  let sortCursor = await nextSortOrder();
+
+  for (const row of rows) {
+    const existing = await database
+      .select()
+      .from(catalogItems)
+      .where(and(eq(catalogItems.tenantId, tenantId), eq(catalogItems.slug, row.slug)))
+      .limit(1);
+    const ex = existing[0];
+
+    if (ex && !ex.archived) {
+      if (row.duplicateAction === "skip") {
+        skipped += 1;
+        continue;
+      }
+      if (row.duplicateAction === "update_existing") {
+        await database
+          .update(catalogItems)
+          .set({
+            name: row.name,
+            category: row.category,
+            serviceType: row.serviceType,
+            standardPriceCents: row.standardPriceCents,
+            expressPriceCents: row.expressPriceCents,
+            costCents: row.costCents,
+            isActive: row.isActive,
+            isOnline: row.isOnline,
+            updatedAt: new Date(),
+          })
+          .where(eq(catalogItems.id, ex.id));
+        updated += 1;
+        continue;
+      }
+      const newSlug = await uniqueSlug(row.slug);
+      await database.insert(catalogItems).values({
+        tenantId,
+        slug: newSlug,
+        name: row.name,
+        category: row.category,
+        serviceType: row.serviceType,
+        standardPriceCents: row.standardPriceCents,
+        expressPriceCents: row.expressPriceCents,
+        costCents: row.costCents,
+        isActive: row.isActive,
+        isOnline: row.isOnline,
+        archived: false,
+        sortOrder: sortCursor++,
+        iconUrl: null,
+      });
+      created += 1;
+      continue;
+    }
+
+    if (ex?.archived) {
+      await database
+        .update(catalogItems)
+        .set({
+          name: row.name,
+          category: row.category,
+          serviceType: row.serviceType,
+          standardPriceCents: row.standardPriceCents,
+          expressPriceCents: row.expressPriceCents,
+          costCents: row.costCents,
+          isActive: row.isActive,
+          isOnline: row.isOnline,
+          archived: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(catalogItems.id, ex.id));
+      updated += 1;
+      continue;
+    }
+
+    await database.insert(catalogItems).values({
+      tenantId,
+      slug: row.slug,
+      name: row.name,
+      category: row.category,
+      serviceType: row.serviceType,
+      standardPriceCents: row.standardPriceCents,
+      expressPriceCents: row.expressPriceCents,
+      costCents: row.costCents,
+      isActive: row.isActive,
+      isOnline: row.isOnline,
+      archived: false,
+      sortOrder: sortCursor++,
+      iconUrl: null,
+    });
+    created += 1;
+  }
+
+  return { created, updated, skipped };
 }

@@ -5,7 +5,15 @@ import { centsToDollars } from "@shared/pricing";
 type Variant = "butler" | "laundryfarm";
 
 /**
- * Resident-facing dry-clean list from catalog.getActiveCatalog (DB, tenant from host).
+ * Marketing / dry-clean flows: garment SKUs only. Matches admin Intake DC grid (excludes wash_fold catalog lines).
+ */
+export function isCatalogRowDryCleanOrAlteration(row: { serviceType?: string | null }): boolean {
+  const st = row.serviceType ?? "dry_clean";
+  return st === "dry_clean" || st === "alteration";
+}
+
+/**
+ * Resident-facing dry-clean list from catalog.getActiveCatalog (runtime DB, tenant from host).
  */
 export function CatalogDryCleanPricing({
   variant = "butler",
@@ -19,22 +27,26 @@ export function CatalogDryCleanPricing({
 }) {
   const { data, isLoading, isError } = trpc.catalog.getActiveCatalog.useQuery();
 
+  const dryCleanRows = useMemo(
+    () => (data ?? []).filter(isCatalogRowDryCleanOrAlteration),
+    [data]
+  );
+
   const byCategory = useMemo(() => {
-    if (!data?.length) return [] as [string, typeof data][];
-    const m = new Map<string, typeof data>();
-    for (const row of data) {
+    if (!dryCleanRows.length) return [] as [string, typeof dryCleanRows][];
+    const m = new Map<string, typeof dryCleanRows>();
+    for (const row of dryCleanRows) {
       const c = row.category || "Other";
       if (!m.has(c)) m.set(c, []);
       m.get(c)!.push(row);
     }
     return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [data]);
+  }, [dryCleanRows]);
 
   const minFrom = useMemo(() => {
-    if (!data?.length) return null;
-    const m = Math.min(...data.map((r) => r.standardPriceCents));
-    return m;
-  }, [data]);
+    if (!dryCleanRows.length) return null;
+    return Math.min(...dryCleanRows.map((r) => r.standardPriceCents));
+  }, [dryCleanRows]);
 
   if (isLoading) {
     return (
@@ -44,7 +56,7 @@ export function CatalogDryCleanPricing({
     );
   }
 
-  if (isError || !data?.length) {
+  if (isError || !dryCleanRows.length) {
     return null;
   }
 
@@ -96,11 +108,12 @@ export function CatalogDryCleanPricing({
   );
 }
 
-/** Minimum standard price in cents from catalog, or null if unavailable */
+/** Minimum standard price in cents from catalog (dry_clean + alteration rows only), or null if unavailable */
 export function useCatalogDryCleanMinCents(): number | null {
   const { data } = trpc.catalog.getActiveCatalog.useQuery();
   return useMemo(() => {
-    if (!data?.length) return null;
-    return Math.min(...data.map((r) => r.standardPriceCents));
+    const rows = (data ?? []).filter(isCatalogRowDryCleanOrAlteration);
+    if (!rows.length) return null;
+    return Math.min(...rows.map((r) => r.standardPriceCents));
   }, [data]);
 }

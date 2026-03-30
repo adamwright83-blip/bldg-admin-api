@@ -59,7 +59,15 @@ import {
   updateCatalogItemRow,
   archiveCatalogItemRow,
   reorderCatalogItemsForTenant,
+  bulkApplyCatalogImport,
+  getCatalogItemBySlugForTenant,
+  resolveActiveCatalogItemBySlugOrName,
 } from "./db";
+import {
+  parseMenuFileWithLLM,
+  parseCatalogCommandWithLLM,
+  slugifyCatalogName,
+} from "./catalogAi";
 import {
   buildCustomerProfile,
   deriveFloorNumber,
@@ -1304,9 +1312,12 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
               .regex(/^[a-z0-9][a-z0-9_-]*$/i, "Slug: letters, numbers, hyphen, underscore"),
             name: z.string().min(1).max(255),
             category: z.string().min(1).max(100),
+            serviceType: z
+              .enum(["dry_clean", "wash_fold", "alteration", "other"])
+              .optional(),
             standardPriceCents: z.number().int().min(0),
             expressPriceCents: z.number().int().min(0).nullable().optional(),
-            costCents: z.number().int().min(0),
+            costCents: z.number().int().min(0).nullable().optional(),
             isActive: z.boolean().optional(),
             isOnline: z.boolean().optional(),
             iconUrl: z.string().max(512).optional().nullable(),
@@ -1319,9 +1330,10 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
               slug: input.slug.trim().toLowerCase(),
               name: input.name.trim(),
               category: input.category.trim(),
+              serviceType: input.serviceType,
               standardPriceCents: input.standardPriceCents,
               expressPriceCents: input.expressPriceCents ?? null,
-              costCents: input.costCents,
+              costCents: input.costCents ?? null,
               isActive: input.isActive,
               isOnline: input.isOnline,
               iconUrl:
@@ -1351,9 +1363,10 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
               .optional(),
             name: z.string().min(1).max(255).optional(),
             category: z.string().min(1).max(100).optional(),
+            serviceType: z.enum(["dry_clean", "wash_fold", "alteration", "other"]).optional(),
             standardPriceCents: z.number().int().min(0).optional(),
             expressPriceCents: z.number().int().min(0).nullable().optional(),
-            costCents: z.number().int().min(0).optional(),
+            costCents: z.number().int().min(0).nullable().optional(),
             isActive: z.boolean().optional(),
             isOnline: z.boolean().optional(),
             iconUrl: z.string().max(512).optional().nullable(),
@@ -1365,6 +1378,7 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
           if (rest.slug !== undefined) patch.slug = rest.slug.trim().toLowerCase();
           if (rest.name !== undefined) patch.name = rest.name.trim();
           if (rest.category !== undefined) patch.category = rest.category.trim();
+          if (rest.serviceType !== undefined) patch.serviceType = rest.serviceType;
           if (rest.standardPriceCents !== undefined) patch.standardPriceCents = rest.standardPriceCents;
           if (rest.expressPriceCents !== undefined) patch.expressPriceCents = rest.expressPriceCents;
           if (rest.costCents !== undefined) patch.costCents = rest.costCents;
@@ -1401,6 +1415,251 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
         .mutation(async ({ ctx, input }) => {
           await reorderCatalogItemsForTenant(ctx.tenantId, input.orderedIds);
           return { success: true as const };
+        }),
+
+      parseMenuImport: adminProcedure
+        .input(
+          z.object({
+            mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "application/pdf"]),
+            base64: z.string().max(9_000_000),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          try {
+            const parsed = await parseMenuFileWithLLM({
+              mimeType: input.mimeType,
+              base64Data: input.base64,
+            });
+            const existing = await listCatalogItemsForAdmin(ctx.tenantId, { includeArchived: false });
+            const bySlug = new Map(existing.map((r) => [r.slug, r]));
+            const rows = parsed.map((it) => {
+              const slug = slugifyCatalogName(it.name);
+              const hit = bySlug.get(slug);
+              return {
+                name: it.name,
+                category: it.category,
+                serviceType: it.serviceType,
+                standardPriceCents: it.standardPriceCents,
+                expressPriceCents: it.expressPriceCents ?? null,
+                costCents: it.costCents ?? null,
+                pricingUnit: it.pricingUnit,
+                slug,
+                existingMatch: hit
+                  ? { id: hit.id, slug: hit.slug, name: hit.name }
+                  : null,
+              };
+            });
+            return { rows };
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (msg.includes("BUILT_IN_FORGE_API_KEY") || msg.includes("not configured")) {
+              throw new TRPCError({
+                code: "PRECONDITION_FAILED",
+                message: "AI menu import is not configured. Set BUILT_IN_FORGE_API_KEY.",
+              });
+            }
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: msg.length > 200 ? `${msg.slice(0, 200)}…` : msg,
+            });
+          }
+        }),
+
+      confirmMenuImport: adminProcedure
+        .input(
+          z.object({
+            rows: z.array(
+              z.object({
+                slug: z.string().min(1).max(128),
+                name: z.string().min(1).max(255),
+                category: z.string().min(1).max(100),
+                serviceType: z.enum(["dry_clean", "wash_fold", "alteration", "other"]),
+                standardPriceCents: z.number().int().min(0),
+                expressPriceCents: z.number().int().min(0).nullable(),
+                costCents: z.number().int().min(0).nullable(),
+                isActive: z.boolean(),
+                isOnline: z.boolean(),
+                duplicateAction: z.enum(["skip", "update_existing", "create_new"]),
+              })
+            ),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const mapped = input.rows.map((r) => ({
+            slug: r.slug.trim().toLowerCase(),
+            name: r.name.trim(),
+            category: r.category.trim(),
+            serviceType: r.serviceType,
+            standardPriceCents: r.standardPriceCents,
+            expressPriceCents: r.expressPriceCents,
+            costCents: r.costCents,
+            isActive: r.isActive,
+            isOnline: r.isOnline,
+            duplicateAction: r.duplicateAction,
+          }));
+          return bulkApplyCatalogImport(ctx.tenantId, mapped);
+        }),
+
+      parseCommand: adminProcedure
+        .input(z.object({ command: z.string().min(1).max(2000) }))
+        .mutation(async ({ ctx, input }) => {
+          try {
+            const list = await listCatalogItemsForAdmin(ctx.tenantId, { includeArchived: false });
+            const summary = list
+              .map((r) => `${r.slug} | ${r.name} | ${r.standardPriceCents}`)
+              .join("\n");
+            const draft = await parseCatalogCommandWithLLM({
+              command: input.command.trim(),
+              existingCatalogSummary: summary.slice(0, 12_000),
+            });
+            return { draft };
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (msg.includes("BUILT_IN_FORGE_API_KEY") || msg.includes("not configured")) {
+              throw new TRPCError({
+                code: "PRECONDITION_FAILED",
+                message: "AI composer is not configured. Set BUILT_IN_FORGE_API_KEY.",
+              });
+            }
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: msg.length > 200 ? `${msg.slice(0, 200)}…` : msg,
+            });
+          }
+        }),
+
+      applyCommand: adminProcedure
+        .input(
+          z.object({
+            intent: z.enum(["create", "update_price", "archive", "toggle_online"]),
+            slug: z.string().min(1).max(128).nullable().optional(),
+            name: z.string().max(255).nullable().optional(),
+            category: z.string().max(100).nullable().optional(),
+            serviceType: z.enum(["dry_clean", "wash_fold", "alteration", "other"]).nullable().optional(),
+            standardPriceCents: z.number().int().min(0).nullable().optional(),
+            expressPriceCents: z.number().int().min(0).nullable().optional(),
+            costCents: z.number().int().min(0).nullable().optional(),
+            isOnline: z.boolean().nullable().optional(),
+            notes: z.string().nullable().optional(),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const tid = ctx.tenantId;
+
+          if (input.intent === "create") {
+            const name = input.name?.trim();
+            const cat = input.category?.trim();
+            if (!name || !cat) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Create requires name and category in the preview.",
+              });
+            }
+            if (input.standardPriceCents == null) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Create requires standard price (cents) in the preview.",
+              });
+            }
+            const baseSlug =
+              input.slug?.trim().toLowerCase() || slugifyCatalogName(name);
+            const slug = baseSlug.replace(/[^a-z0-9_-]/g, "_").slice(0, 128);
+            if (!/^[a-z0-9][a-z0-9_-]*$/i.test(slug)) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Derived slug is invalid; edit name or slug in a follow-up command.",
+              });
+            }
+            const exists = await getCatalogItemBySlugForTenant(slug, tid);
+            if (exists) {
+              throw new TRPCError({
+                code: "CONFLICT",
+                message: `Slug "${slug}" already exists. Use update or a different name.`,
+              });
+            }
+            const id = await createCatalogItemRow({
+              tenantId: tid,
+              slug,
+              name,
+              category: cat,
+              serviceType: input.serviceType ?? "dry_clean",
+              standardPriceCents: input.standardPriceCents,
+              expressPriceCents: input.expressPriceCents ?? null,
+              costCents: input.costCents ?? null,
+              isActive: true,
+              isOnline: input.isOnline ?? true,
+              iconUrl: null,
+            });
+            return { ok: true as const, createdId: id };
+          }
+
+          if (input.intent === "update_price") {
+            if (input.standardPriceCents == null) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "update_price requires standardPriceCents.",
+              });
+            }
+            const row = await resolveActiveCatalogItemBySlugOrName(tid, input.slug, input.name);
+            if (!row) {
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message: "No single matching catalog item for slug/name.",
+              });
+            }
+            const patch: Parameters<typeof updateCatalogItemRow>[2] = {
+              standardPriceCents: input.standardPriceCents,
+            };
+            if (input.expressPriceCents !== undefined) {
+              patch.expressPriceCents = input.expressPriceCents;
+            }
+            if (input.costCents !== undefined) {
+              patch.costCents = input.costCents;
+            }
+            const ok = await updateCatalogItemRow(row.id, tid, patch);
+            if (!ok) {
+              throw new TRPCError({ code: "NOT_FOUND", message: "Item not found" });
+            }
+            return { ok: true as const, updatedId: row.id };
+          }
+
+          if (input.intent === "archive") {
+            const row = await resolveActiveCatalogItemBySlugOrName(tid, input.slug, input.name);
+            if (!row) {
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message: "No single matching catalog item for slug/name.",
+              });
+            }
+            const ok = await archiveCatalogItemRow(row.id, tid);
+            if (!ok) {
+              throw new TRPCError({ code: "NOT_FOUND", message: "Item not found or already archived" });
+            }
+            return { ok: true as const, archivedId: row.id };
+          }
+
+          if (input.intent === "toggle_online") {
+            if (input.isOnline == null) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "toggle_online requires isOnline true or false.",
+              });
+            }
+            const row = await resolveActiveCatalogItemBySlugOrName(tid, input.slug, input.name);
+            if (!row) {
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message: "No single matching catalog item for slug/name.",
+              });
+            }
+            const ok = await updateCatalogItemRow(row.id, tid, { isOnline: input.isOnline });
+            if (!ok) {
+              throw new TRPCError({ code: "NOT_FOUND", message: "Item not found" });
+            }
+            return { ok: true as const, updatedId: row.id };
+          }
+
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Unknown intent" });
         }),
     }),
   }),
