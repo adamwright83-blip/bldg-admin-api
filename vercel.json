@@ -2,6 +2,8 @@
   "rewrites": [
     { "source": "/receipt/:path*", "destination": "/index.html" },
     { "source": "/admin", "destination": "/index.html" },
+    { "source": "/catalog", "destination": "/index.html" },
+    { "source": "/catalog/:path*", "destination": "/index.html" },
     { "source": "/driver", "destination": "/index.html" },
     { "source": "/404", "destination": "/index.html" }
   ]
