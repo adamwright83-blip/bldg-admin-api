@@ -11,6 +11,8 @@
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useTenant } from "@/hooks/useTenant";
+import { WF_RATE_PER_LB_CENTS, centsToDollars } from "@shared/pricing";
+import { useCatalogDryCleanMinCents } from "@/components/CatalogDryCleanPricing";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
 
@@ -152,6 +154,7 @@ function Step1({
   logoUrl: string;
   primaryColor: string;
 }) {
+  const dcMinCents = useCatalogDryCleanMinCents();
   const select = (type: "wash_fold" | "dry_cleaning") => {
     setFormData({ ...formData, serviceType: type });
   };
@@ -178,7 +181,7 @@ function Step1({
             Wash &amp; Fold
           </div>
           <div className="text-[0.9rem] text-black/60 mt-0.5" style={cg}>
-            $2.50/lb
+            ${centsToDollars(WF_RATE_PER_LB_CENTS)}/lb
           </div>
         </button>
 
@@ -194,7 +197,9 @@ function Step1({
             Dry Cleaning
           </div>
           <div className="text-[0.9rem] text-black/60 mt-0.5" style={cg}>
-            Per garment
+            {dcMinCents != null
+              ? `From $${centsToDollars(dcMinCents)} per garment`
+              : "Per garment — see price list on site"}
           </div>
         </button>
       </div>

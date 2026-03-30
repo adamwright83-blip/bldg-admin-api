@@ -12,7 +12,6 @@ import { Loader2, Search, Check, Copy, AlertCircle, ChevronLeft, ChevronRight, M
 import {
   WF_UPCHARGES,
   WF_FLAT_RATE_TEXTILES,
-  DC_ITEMS,
   WF_RATE_PER_LB_CENTS,
   WF_MINIMUM_SUBTOTAL_CENTS,
   calcWashFoldTotal,
@@ -40,6 +39,39 @@ const SUPPORTED_BUILDINGS: { label: string; value: string }[] = [
   { label: "OPUS LA", value: "opusla" },
   { label: "Century Park East", value: "centuryparkeast" },
 ];
+
+/** Build drycleanItemsJson: keys = catalog slug (legacy DC item id). Uses DB catalog prices; falls back to saved JSON for unknown slugs. */
+function buildDrycleanLineItems(
+  catalogRows: Array<{ slug: string; name: string; category: string; standardPriceCents: number }>,
+  dcQtys: Record<string, number>,
+  legacyJson: Record<string, DryCleanEntry> | null | undefined
+): Record<string, DryCleanEntry> {
+  const bySlug = new Map(catalogRows.map((r) => [r.slug, r]));
+  const out: Record<string, DryCleanEntry> = {};
+  for (const [slug, qty] of Object.entries(dcQtys)) {
+    if (!qty || qty <= 0) continue;
+    const row = bySlug.get(slug);
+    if (row) {
+      out[slug] = {
+        label: row.name,
+        category: row.category,
+        unit_price_cents: row.standardPriceCents,
+        qty,
+        total_cents: row.standardPriceCents * qty,
+      };
+    } else if (legacyJson && legacyJson[slug]) {
+      const leg = legacyJson[slug];
+      out[slug] = {
+        label: leg.label,
+        category: leg.category,
+        unit_price_cents: leg.unit_price_cents,
+        qty,
+        total_cents: leg.unit_price_cents * qty,
+      };
+    }
+  }
+  return out;
+}
 
 function connectStatusBadge(vendor: { stripeConnectAccountId: string | null; payoutsEnabled: boolean | null; detailsSubmitted: boolean | null; disabledReason: string | null }) {
   if (!vendor.stripeConnectAccountId) return { label: "Not connected", color: "bg-black/10 text-black/50" };
@@ -784,6 +816,21 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
   const saveIntake = trpc.admin.saveIntake.useMutation();
   const chargeCard = trpc.admin.chargeCard.useMutation();
 
+  const catalogQuery = trpc.admin.catalog.list.useQuery(
+    { includeArchived: false },
+    { enabled: !!order && order.serviceType === "dry_cleaning" }
+  );
+  const catalogRows = useMemo(
+    () =>
+      (catalogQuery.data ?? []).map((r) => ({
+        slug: r.slug,
+        name: r.name,
+        category: r.category,
+        standardPriceCents: r.standardPriceCents,
+      })),
+    [catalogQuery.data]
+  );
+
   // Wash & fold state
   const [weightLbs, setWeightLbs] = useState("");
   const [selectedUpcharges, setSelectedUpcharges] = useState<Record<string, boolean>>({});
@@ -795,6 +842,20 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
   // Shared
   const [discountPercent, setDiscountPercent] = useState("0");
   const [chargeResult, setChargeResult] = useState<{ success: boolean; error?: string; isFirstPaidOrder?: boolean; portalJwt?: string | null } | null>(null);
+
+  const hydratedOrderId = useRef<number | null>(null);
+  useEffect(() => {
+    if (!order || order.serviceType !== "dry_cleaning") return;
+    if (hydratedOrderId.current === order.id) return;
+    hydratedOrderId.current = order.id;
+    const raw = order.drycleanItemsJson;
+    if (!raw || typeof raw !== "object") return;
+    const next: Record<string, number> = {};
+    for (const [k, v] of Object.entries(raw as Record<string, DryCleanEntry>)) {
+      if (v && typeof v.qty === "number" && v.qty > 0) next[k] = v.qty;
+    }
+    setDcQtys(next);
+  }, [order]);
 
   const isWF = order?.serviceType === "wash_fold";
 
@@ -820,14 +881,12 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
     });
     const wfTotal = calcWashFoldTotal(w, upcharges, flatRate, disc);
 
-    // Calculate DC section
-    const items: Record<string, DryCleanEntry> = {};
-    DC_ITEMS.forEach((item) => {
-      const qty = dcQtys[item.id] || 0;
-      if (qty > 0) {
-        items[item.id] = { label: item.label, category: item.category, unit_price_cents: item.priceCents, qty, total_cents: item.priceCents * qty };
-      }
-    });
+    // Calculate DC section (catalog + legacy JSON for unknown slugs)
+    const items = buildDrycleanLineItems(
+      catalogRows,
+      dcQtys,
+      order.drycleanItemsJson as Record<string, DryCleanEntry> | null | undefined
+    );
     const dcTotal = calcDryCleanTotal(items, disc);
 
     // Only the order's service type counts (avoid W&F $45 minimum on dry-cleaning-only orders)
@@ -841,7 +900,7 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
       subtotalCents: wfTotal.subtotalCents,
       totalCents: wfTotal.totalCents,
     };
-  }, [order, weightLbs, selectedUpcharges, flatRateQtys, dcQtys, discountPercent]);
+  }, [order, weightLbs, selectedUpcharges, flatRateQtys, dcQtys, discountPercent, catalogRows]);
 
   const handleCharge = async () => {
     if (!order) return;
@@ -860,13 +919,11 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
       }
     });
 
-    const drycleanItemsJson: Record<string, DryCleanEntry> = {};
-    DC_ITEMS.forEach((item) => {
-      const qty = dcQtys[item.id] || 0;
-      if (qty > 0) {
-        drycleanItemsJson[item.id] = { label: item.label, category: item.category, unit_price_cents: item.priceCents, qty, total_cents: item.priceCents * qty };
-      }
-    });
+    const drycleanItemsJson = buildDrycleanLineItems(
+      catalogRows,
+      dcQtys,
+      order.drycleanItemsJson as Record<string, DryCleanEntry> | null | undefined
+    );
 
     // Save intake data first
     await saveIntake.mutateAsync({
@@ -959,8 +1016,21 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
           flatRateQtys={flatRateQtys}
           setFlatRateQtys={setFlatRateQtys}
         />
+      ) : catalogQuery.isLoading ? (
+        <div className="flex justify-center py-10">
+          <Loader2 className="h-6 w-6 animate-spin text-black/30" />
+        </div>
+      ) : catalogRows.length === 0 ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          No dry-clean SKUs for this tenant. Run{" "}
+          <code className="rounded bg-white/80 px-1">pnpm seed:catalog</code> or add items in{" "}
+          <a href="/catalog" className="font-medium underline">
+            Catalog
+          </a>
+          .
+        </div>
       ) : (
-        <DryCleanIntake dcQtys={dcQtys} setDcQtys={setDcQtys} />
+        <DryCleanIntake dcQtys={dcQtys} setDcQtys={setDcQtys} catalogRows={catalogRows} />
       )}
 
       {/* Discount */}
@@ -1089,19 +1159,22 @@ function WashFoldIntake({
 
 /* ===== DRY CLEAN INTAKE ===== */
 function DryCleanIntake({
-  dcQtys, setDcQtys,
+  dcQtys,
+  setDcQtys,
+  catalogRows,
 }: {
   dcQtys: Record<string, number>;
   setDcQtys: (v: Record<string, number>) => void;
+  catalogRows: Array<{ slug: string; name: string; category: string; standardPriceCents: number }>;
 }) {
   const categories = useMemo(() => {
-    const cats: Record<string, typeof DC_ITEMS> = {};
-    DC_ITEMS.forEach((item) => {
+    const cats: Record<string, typeof catalogRows> = {};
+    catalogRows.forEach((item) => {
       if (!cats[item.category]) cats[item.category] = [];
       cats[item.category].push(item);
     });
     return cats;
-  }, []);
+  }, [catalogRows]);
 
   return (
     <div className="space-y-6">
@@ -1110,14 +1183,15 @@ function DryCleanIntake({
           <h3 className="text-xs font-medium text-black/50 uppercase tracking-wider mb-2">{cat}</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {items.map((item) => {
-              const qty = dcQtys[item.id] || 0;
+              const qty = dcQtys[item.slug] || 0;
               return (
                 <button
-                  key={item.id}
-                  onClick={() => setDcQtys({ ...dcQtys, [item.id]: qty + 1 })}
+                  key={item.slug}
+                  type="button"
+                  onClick={() => setDcQtys({ ...dcQtys, [item.slug]: qty + 1 })}
                   onContextMenu={(e) => {
                     e.preventDefault();
-                    if (qty > 0) setDcQtys({ ...dcQtys, [item.id]: qty - 1 });
+                    if (qty > 0) setDcQtys({ ...dcQtys, [item.slug]: qty - 1 });
                   }}
                   className={`relative p-2 border text-left text-xs transition-colors ${
                     qty > 0
@@ -1125,8 +1199,8 @@ function DryCleanIntake({
                       : "bg-white text-black border-black/15 hover:border-black/30"
                   }`}
                 >
-                  <span className="block">{item.label}</span>
-                  <span className="block text-[10px] opacity-60">${centsToDollars(item.priceCents)}</span>
+                  <span className="block">{item.name}</span>
+                  <span className="block text-[10px] opacity-60">${centsToDollars(item.standardPriceCents)}</span>
                   {qty > 0 && (
                     <span className="absolute top-1 right-1 bg-white text-black text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">
                       {qty}

@@ -8,6 +8,7 @@ import {
 } from "framer-motion";
 import { Check, ChevronDown } from "lucide-react";
 import SchedulePickupModal from "@/components/SchedulePickupModal";
+import { CatalogDryCleanPricing } from "@/components/CatalogDryCleanPricing";
 import { useTenant } from "@/hooks/useTenant";
 
 /** Palette aligned with laundryfarm-v3.html */
@@ -448,6 +449,18 @@ export default function LaundryFarmHome() {
             </Reveal>
           ))}
         </div>
+        <Reveal className="mx-auto mt-8 max-w-[720px]">
+          <h3
+            className="mb-2 text-center text-[13px] font-semibold uppercase tracking-[0.1em]"
+            style={{ color: C.gold }}
+          >
+            Dry cleaning garment menu
+          </h3>
+          <p className="mb-3 text-center text-[13px]" style={{ color: C.slate }}>
+            Live prices from our catalog (wash &amp; fold packages above stay as shown).
+          </p>
+          <CatalogDryCleanPricing variant="laundryfarm" maxHeightClass="max-h-[280px]" />
+        </Reveal>
         <Reveal className="text-center">
           <button
             type="button"

@@ -37,6 +37,10 @@ export interface DryCleanItem {
   category: string;
 }
 
+/**
+ * Legacy snapshot used by `pnpm seed:catalog` to populate `catalog_items` (slug = id).
+ * Runtime source of truth for menus and admin intake is the DB catalog — not this array.
+ */
 export const DC_ITEMS: DryCleanItem[] = [
   // SUITS
   { id: "2pc_suit", label: "2pc Suit", priceCents: 2500, category: "Suits" },

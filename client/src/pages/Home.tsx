@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import SchedulePickupModal from "../components/SchedulePickupModal";
+import { CatalogDryCleanPricing } from "../components/CatalogDryCleanPricing";
 
 const ASSETS = {
   background: "https://files.manuscdn.com/user_upload_by_module/session_file/310419663029845795/diCeeQRRzswvwYpY.png",
@@ -208,13 +209,12 @@ export default function Home() {
             <h3 className="text-[1.1rem] md:text-[1.3rem] mb-1 tracking-tight" style={{ ...pf, fontWeight: 600 }}>
               Dry Cleaning — per garment
             </h3>
-            <p className="text-[0.9rem] md:text-[0.97rem] leading-[1.55] text-black/65" style={cg}>
-              Same-day return on orders placed before
-              <br />
-              8am, Monday–Friday, for $2 per garment.
+            <p className="text-[0.9rem] md:text-[0.97rem] leading-[1.55] text-black/65 mb-3" style={cg}>
+              Same-day return on orders placed before 8am, Monday–Friday, when available.
               <br />
               Two business days at no extra cost.
             </p>
+            <CatalogDryCleanPricing variant="butler" maxHeightClass="max-h-[240px]" />
           </div>
         </div>
 
