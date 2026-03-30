@@ -11,6 +11,7 @@ import Driver from "./pages/Driver";
 import VendorPortal from "./pages/VendorPortal";
 import DigitalReceiptPage from "./pages/DigitalReceiptPage";
 import LaundryFarmHome from "./pages/LaundryFarmHome";
+import AdminCatalog from "./pages/AdminCatalog";
 
 function Router() {
   const hostname =
@@ -24,6 +25,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
+      <Route path="/catalog" component={AdminCatalog} />
       <Route
         path={"/"}
         component={

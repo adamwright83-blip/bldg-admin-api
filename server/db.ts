@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, inArray, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, like, max, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users,
@@ -9,6 +9,7 @@ import {
   serviceRequests, ServiceRequest,
   bldgUsers, BldgUser,
   leads, Lead, InsertLead,
+  catalogItems, CatalogItem,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { matchBuilding } from "@shared/buildings";
@@ -1000,4 +1001,172 @@ export async function updateLeadNotes(
   if (!db) throw new Error("Database not available");
 
   await db.update(leads).set({ notes }).where(eq(leads.id, id));
+}
+
+/* ===== CATALOG ITEMS (tenant-scoped SKUs) ===== */
+
+export type PublicCatalogRow = {
+  id: number;
+  slug: string;
+  name: string;
+  category: string;
+  standardPriceCents: number;
+  expressPriceCents: number | null;
+  sortOrder: number;
+  iconUrl: string | null;
+};
+
+export async function listCatalogItemsForAdmin(
+  tenantId: string,
+  opts?: { includeArchived?: boolean }
+): Promise<CatalogItem[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conds = [eq(catalogItems.tenantId, tenantId)];
+  if (!opts?.includeArchived) {
+    conds.push(eq(catalogItems.archived, false));
+  }
+  return db
+    .select()
+    .from(catalogItems)
+    .where(and(...conds))
+    .orderBy(asc(catalogItems.sortOrder), asc(catalogItems.id));
+}
+
+export async function listActiveCatalogForPublic(tenantId: string): Promise<PublicCatalogRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: catalogItems.id,
+      slug: catalogItems.slug,
+      name: catalogItems.name,
+      category: catalogItems.category,
+      standardPriceCents: catalogItems.standardPriceCents,
+      expressPriceCents: catalogItems.expressPriceCents,
+      sortOrder: catalogItems.sortOrder,
+      iconUrl: catalogItems.iconUrl,
+    })
+    .from(catalogItems)
+    .where(
+      and(
+        eq(catalogItems.tenantId, tenantId),
+        eq(catalogItems.archived, false),
+        eq(catalogItems.isActive, true),
+        eq(catalogItems.isOnline, true)
+      )
+    )
+    .orderBy(asc(catalogItems.sortOrder), asc(catalogItems.id));
+}
+
+export async function getCatalogItemByIdForTenant(
+  id: number,
+  tenantId: string
+): Promise<CatalogItem | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(catalogItems)
+    .where(and(eq(catalogItems.id, id), eq(catalogItems.tenantId, tenantId)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function createCatalogItemRow(data: {
+  tenantId: string;
+  slug: string;
+  name: string;
+  category: string;
+  standardPriceCents: number;
+  expressPriceCents?: number | null;
+  costCents: number;
+  isActive?: boolean;
+  isOnline?: boolean;
+  iconUrl?: string | null;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [agg] = await db
+    .select({ m: max(catalogItems.sortOrder) })
+    .from(catalogItems)
+    .where(eq(catalogItems.tenantId, data.tenantId));
+  const maxSort = agg?.m != null ? Number(agg.m) : -1;
+  const nextOrder = maxSort + 1;
+
+  const result = await db.insert(catalogItems).values({
+    tenantId: data.tenantId,
+    slug: data.slug,
+    name: data.name,
+    category: data.category,
+    standardPriceCents: data.standardPriceCents,
+    expressPriceCents: data.expressPriceCents ?? null,
+    costCents: data.costCents,
+    isActive: data.isActive ?? true,
+    isOnline: data.isOnline ?? false,
+    archived: false,
+    sortOrder: nextOrder,
+    iconUrl: data.iconUrl ?? null,
+  });
+  return Number(result[0].insertId);
+}
+
+export async function updateCatalogItemRow(
+  id: number,
+  tenantId: string,
+  patch: Partial<{
+    slug: string;
+    name: string;
+    category: string;
+    standardPriceCents: number;
+    expressPriceCents: number | null;
+    costCents: number;
+    isActive: boolean;
+    isOnline: boolean;
+    iconUrl: string | null;
+  }>
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await getCatalogItemByIdForTenant(id, tenantId);
+  if (!existing) return false;
+  await db
+    .update(catalogItems)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(and(eq(catalogItems.id, id), eq(catalogItems.tenantId, tenantId)));
+  return true;
+}
+
+export async function archiveCatalogItemRow(id: number, tenantId: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await getCatalogItemByIdForTenant(id, tenantId);
+  if (!existing || existing.archived) return false;
+  await db
+    .update(catalogItems)
+    .set({ archived: true, isOnline: false, updatedAt: new Date() })
+    .where(and(eq(catalogItems.id, id), eq(catalogItems.tenantId, tenantId)));
+  return true;
+}
+
+export async function reorderCatalogItemsForTenant(
+  tenantId: string,
+  orderedIds: number[]
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db
+    .select({ id: catalogItems.id })
+    .from(catalogItems)
+    .where(and(eq(catalogItems.tenantId, tenantId), eq(catalogItems.archived, false)));
+  const allowed = new Set(rows.map((r) => r.id));
+  for (let i = 0; i < orderedIds.length; i++) {
+    const id = orderedIds[i];
+    if (!allowed.has(id)) continue;
+    await db
+      .update(catalogItems)
+      .set({ sortOrder: i, updatedAt: new Date() })
+      .where(and(eq(catalogItems.id, id), eq(catalogItems.tenantId, tenantId)));
+  }
 }

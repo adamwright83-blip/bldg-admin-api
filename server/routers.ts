@@ -3,6 +3,7 @@ import { COOKIE_NAME, VENDOR_COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, platformOrVendorProcedure, vendorProcedure, router } from "./_core/trpc";
+import { TRPCError } from "@trpc/server";
 import {
   createOrder,
   updateOrderStripe,
@@ -52,6 +53,12 @@ import {
   getOrdersByPhoneExact,
   listAdminCustomerAggregates,
   listPaidOrdersForBuildingRevenue,
+  listCatalogItemsForAdmin,
+  listActiveCatalogForPublic,
+  createCatalogItemRow,
+  updateCatalogItemRow,
+  archiveCatalogItemRow,
+  reorderCatalogItemsForTenant,
 } from "./db";
 import {
   buildCustomerProfile,
@@ -103,6 +110,13 @@ export const appRouter = router({
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
+    }),
+  }),
+
+  /** Resident + marketing sites: active, online catalog for request Host tenant only */
+  catalog: router({
+    getActiveCatalog: publicProcedure.query(async ({ ctx }) => {
+      return listActiveCatalogForPublic(ctx.tenantId);
     }),
   }),
 
@@ -1269,6 +1283,126 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
       .query(async ({ input }) => {
         return listVendorCoverage(input.vendorId);
       }),
+
+    /* ===== CATALOG (Revenue Control Surface) — platform admin, tenant-scoped by Host ===== */
+    catalog: router({
+      list: adminProcedure
+        .input(z.object({ includeArchived: z.boolean().optional() }).optional())
+        .query(async ({ ctx, input }) => {
+          return listCatalogItemsForAdmin(ctx.tenantId, {
+            includeArchived: input?.includeArchived ?? false,
+          });
+        }),
+
+      create: adminProcedure
+        .input(
+          z.object({
+            slug: z
+              .string()
+              .min(1)
+              .max(128)
+              .regex(/^[a-z0-9][a-z0-9_-]*$/i, "Slug: letters, numbers, hyphen, underscore"),
+            name: z.string().min(1).max(255),
+            category: z.string().min(1).max(100),
+            standardPriceCents: z.number().int().min(0),
+            expressPriceCents: z.number().int().min(0).nullable().optional(),
+            costCents: z.number().int().min(0),
+            isActive: z.boolean().optional(),
+            isOnline: z.boolean().optional(),
+            iconUrl: z.string().max(512).optional().nullable(),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          try {
+            const id = await createCatalogItemRow({
+              tenantId: ctx.tenantId,
+              slug: input.slug.trim().toLowerCase(),
+              name: input.name.trim(),
+              category: input.category.trim(),
+              standardPriceCents: input.standardPriceCents,
+              expressPriceCents: input.expressPriceCents ?? null,
+              costCents: input.costCents,
+              isActive: input.isActive,
+              isOnline: input.isOnline,
+              iconUrl:
+                input.iconUrl && String(input.iconUrl).trim().length > 0
+                  ? String(input.iconUrl).trim()
+                  : null,
+            });
+            return { id };
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (msg.includes("Duplicate") || msg.includes("duplicate") || msg.includes("uq_catalog")) {
+              throw new TRPCError({ code: "CONFLICT", message: "Slug already exists for this tenant" });
+            }
+            throw e;
+          }
+        }),
+
+      update: adminProcedure
+        .input(
+          z.object({
+            id: z.number().int(),
+            slug: z
+              .string()
+              .min(1)
+              .max(128)
+              .regex(/^[a-z0-9][a-z0-9_-]*$/i)
+              .optional(),
+            name: z.string().min(1).max(255).optional(),
+            category: z.string().min(1).max(100).optional(),
+            standardPriceCents: z.number().int().min(0).optional(),
+            expressPriceCents: z.number().int().min(0).nullable().optional(),
+            costCents: z.number().int().min(0).optional(),
+            isActive: z.boolean().optional(),
+            isOnline: z.boolean().optional(),
+            iconUrl: z.string().max(512).optional().nullable(),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const { id, iconUrl, ...rest } = input;
+          const patch: Parameters<typeof updateCatalogItemRow>[2] = {};
+          if (rest.slug !== undefined) patch.slug = rest.slug.trim().toLowerCase();
+          if (rest.name !== undefined) patch.name = rest.name.trim();
+          if (rest.category !== undefined) patch.category = rest.category.trim();
+          if (rest.standardPriceCents !== undefined) patch.standardPriceCents = rest.standardPriceCents;
+          if (rest.expressPriceCents !== undefined) patch.expressPriceCents = rest.expressPriceCents;
+          if (rest.costCents !== undefined) patch.costCents = rest.costCents;
+          if (rest.isActive !== undefined) patch.isActive = rest.isActive;
+          if (rest.isOnline !== undefined) patch.isOnline = rest.isOnline;
+          if (iconUrl !== undefined) {
+            patch.iconUrl =
+              iconUrl && String(iconUrl).trim().length > 0 ? String(iconUrl).trim() : null;
+          }
+          try {
+            const ok = await updateCatalogItemRow(id, ctx.tenantId, patch);
+            if (!ok) throw new TRPCError({ code: "NOT_FOUND", message: "Item not found" });
+            return { success: true as const };
+          } catch (e: unknown) {
+            if (e instanceof TRPCError) throw e;
+            const msg = e instanceof Error ? e.message : String(e);
+            if (msg.includes("Duplicate") || msg.includes("duplicate") || msg.includes("uq_catalog")) {
+              throw new TRPCError({ code: "CONFLICT", message: "Slug already exists for this tenant" });
+            }
+            throw e;
+          }
+        }),
+
+      archive: adminProcedure
+        .input(z.object({ id: z.number().int() }))
+        .mutation(async ({ ctx, input }) => {
+          const ok = await archiveCatalogItemRow(input.id, ctx.tenantId);
+          if (!ok) throw new TRPCError({ code: "NOT_FOUND", message: "Item not found or already archived" });
+          return { success: true as const };
+        }),
+
+      reorder: adminProcedure
+        .input(z.object({ orderedIds: z.array(z.number().int()) }))
+        .mutation(async ({ ctx, input }) => {
+          await reorderCatalogItemsForTenant(ctx.tenantId, input.orderedIds);
+          return { success: true as const };
+        }),
+    }),
   }),
 });
 

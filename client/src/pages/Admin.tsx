@@ -165,7 +165,15 @@ export default function Admin() {
       <nav className="border-b border-black/10 bg-white sticky top-0 z-50">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-14">
-            <span className="text-sm font-semibold tracking-widest uppercase">Laundry Butler</span>
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-semibold tracking-widest uppercase">Laundry Butler</span>
+              <a
+                href="/catalog"
+                className="text-xs font-medium text-black/45 underline-offset-2 hover:text-black hover:underline"
+              >
+                Catalog
+              </a>
+            </div>
             <span className="text-xs text-black/40">{user?.name || "Admin"}</span>
           </div>
           <div className="flex gap-0 -mb-px overflow-x-auto">

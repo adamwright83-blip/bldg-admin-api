@@ -244,3 +244,33 @@ export const leads = mysqlTable("leads", {
 
 export type Lead = typeof leads.$inferSelect;
 export type InsertLead = typeof leads.$inferInsert;
+
+/**
+ * Tenant-scoped sellable SKUs for admin catalog + resident-facing price lists.
+ */
+export const catalogItems = mysqlTable(
+  "catalog_items",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    slug: varchar("slug", { length: 128 }).notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    category: varchar("category", { length: 100 }).notNull(),
+    standardPriceCents: int("standardPriceCents").notNull(),
+    expressPriceCents: int("expressPriceCents"),
+    costCents: int("costCents").notNull().default(0),
+    isActive: boolean("isActive").notNull().default(true),
+    isOnline: boolean("isOnline").notNull().default(false),
+    archived: boolean("archived").notNull().default(false),
+    sortOrder: int("sortOrder").notNull().default(0),
+    iconUrl: varchar("iconUrl", { length: 512 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    uqTenantSlug: uniqueIndex("uq_catalog_items_tenant_slug").on(table.tenantId, table.slug),
+  })
+);
+
+export type CatalogItem = typeof catalogItems.$inferSelect;
+export type InsertCatalogItem = typeof catalogItems.$inferInsert;

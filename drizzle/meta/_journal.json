@@ -43,6 +43,13 @@
       "when": 1741689600000,
       "tag": "0005_add_leads_table",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1742000000000,
+      "tag": "0006_catalog_items",
+      "breakpoints": true
     }
   ]
 }
