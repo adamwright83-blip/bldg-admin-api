@@ -7,8 +7,9 @@
  *   pnpm seed:catalog
  *   pnpm exec tsx scripts/seed-catalog-from-dc-items.ts --tenant=laundry_farm
  *   pnpm exec tsx scripts/seed-catalog-from-dc-items.ts --tenant=all
+ *   pnpm exec tsx scripts/seed-catalog-from-dc-items.ts --tenant=your_tenant_id
  *
- * Requires: DATABASE_URL, migration 0006_catalog_items applied.
+ * Requires: DATABASE_URL, migrations through catalog_items + serviceType.
  */
 import { eq } from "drizzle-orm";
 import { getDb } from "../server/db";
@@ -21,11 +22,10 @@ const TENANTS_ALL = ["default", "laundry_farm"] as const;
 function parseTenantArg(): readonly string[] {
   const arg = process.argv.find((a) => a.startsWith("--tenant="));
   if (!arg) return TENANTS_DEFAULT;
-  const v = arg.split("=")[1]?.trim().toLowerCase();
-  if (v === "all") return TENANTS_ALL;
-  if (v === "default" || v === "laundry_farm") return [v];
-  console.error(`Unknown --tenant=${v}. Use default | laundry_farm | all`);
-  process.exit(1);
+  const raw = arg.split("=")[1]?.trim();
+  if (!raw) return TENANTS_DEFAULT;
+  if (raw.toLowerCase() === "all") return TENANTS_ALL;
+  return [raw];
 }
 
 async function main() {
@@ -61,9 +61,10 @@ async function main() {
         slug,
         name: item.label,
         category: item.category,
+        serviceType: "dry_clean",
         standardPriceCents: item.priceCents,
         expressPriceCents: null,
-        costCents: 0,
+        costCents: Math.round(item.priceCents / 2),
         isActive: true,
         isOnline: true,
         archived: false,
