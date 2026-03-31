@@ -1474,13 +1474,15 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
             const rows = parsed.map((it) => {
               const slug = slugifyCatalogName(it.name);
               const hit = bySlug.get(slug);
+              const inferredCost =
+                it.costCents != null ? it.costCents : Math.round(it.standardPriceCents / 2);
               return {
                 name: it.name,
                 category: it.category,
                 serviceType: it.serviceType,
                 standardPriceCents: it.standardPriceCents,
                 expressPriceCents: it.expressPriceCents ?? null,
-                costCents: it.costCents ?? null,
+                costCents: inferredCost,
                 pricingUnit: it.pricingUnit,
                 slug,
                 existingMatch: hit

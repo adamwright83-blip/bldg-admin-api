@@ -989,9 +989,14 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
       </button>
 
       <div className="flex items-start justify-between mb-6">
-        <h2 className="text-lg font-semibold">
-          Order #{order.id} — {order.firstName} {order.lastName}
-        </h2>
+        <div>
+          <h2 className="text-lg font-semibold">
+            Order #{order.id} — {order.firstName} {order.lastName}
+          </h2>
+          <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-black/45">
+            {isWF ? "Service: Wash & fold" : "Service: Dry cleaning"}
+          </p>
+        </div>
         <div className="text-right">
           <p className="text-xs text-black/40">Unit {order.unit || "—"}</p>
           <p className="text-xs text-black/50 max-w-[200px] text-right">{order.address}</p>
@@ -1013,14 +1018,22 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
       )}
 
       {isWF ? (
-        <WashFoldIntake
-          weightLbs={weightLbs}
-          setWeightLbs={setWeightLbs}
-          selectedUpcharges={selectedUpcharges}
-          setSelectedUpcharges={setSelectedUpcharges}
-          flatRateQtys={flatRateQtys}
-          setFlatRateQtys={setFlatRateQtys}
-        />
+        <>
+          <div className="mb-4 rounded-md border border-black/10 bg-black/[0.03] px-3 py-2.5 text-xs text-black/70">
+            <strong className="text-black">Catalog SKUs</strong> (dress shirts, alterations, etc.)
+            only appear on intake for orders created as <strong>Dry cleaning</strong>. This job is{" "}
+            <strong>Wash &amp; fold</strong> — use weight and flat-rate items below. To charge catalog
+            items, create a new order with service <strong>Dry cleaning</strong>.
+          </div>
+          <WashFoldIntake
+            weightLbs={weightLbs}
+            setWeightLbs={setWeightLbs}
+            selectedUpcharges={selectedUpcharges}
+            setSelectedUpcharges={setSelectedUpcharges}
+            flatRateQtys={flatRateQtys}
+            setFlatRateQtys={setFlatRateQtys}
+          />
+        </>
       ) : catalogQuery.isLoading ? (
         <div className="flex justify-center py-10">
           <Loader2 className="h-6 w-6 animate-spin text-black/30" />
