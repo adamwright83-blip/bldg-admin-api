@@ -1,3 +1,8 @@
+import Anthropic, {
+  APIError,
+  AuthenticationError,
+  RateLimitError,
+} from "@anthropic-ai/sdk";
 import { ENV } from "./env";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
@@ -19,7 +24,7 @@ export type FileContent = {
   type: "file_url";
   file_url: {
     url: string;
-    mime_type?: "audio/mpeg" | "audio/wav" | "application/pdf" | "audio/mp4" | "video/mp4" ;
+    mime_type?: "audio/mpeg" | "audio/wav" | "application/pdf" | "audio/mp4" | "video/mp4";
   };
 };
 
@@ -50,10 +55,7 @@ export type ToolChoiceExplicit = {
   };
 };
 
-export type ToolChoice =
-  | ToolChoicePrimitive
-  | ToolChoiceByName
-  | ToolChoiceExplicit;
+export type ToolChoice = ToolChoicePrimitive | ToolChoiceByName | ToolChoiceExplicit;
 
 export type InvokeParams = {
   messages: Message[];
@@ -120,103 +122,69 @@ const normalizeContentPart = (
   if (typeof part === "string") {
     return { type: "text", text: part };
   }
-
-  if (part.type === "text") {
-    return part;
-  }
-
-  if (part.type === "image_url") {
-    return part;
-  }
-
-  if (part.type === "file_url") {
-    return part;
-  }
-
+  if (part.type === "text") return part;
+  if (part.type === "image_url") return part;
+  if (part.type === "file_url") return part;
   throw new Error("Unsupported message content part");
 };
 
-const normalizeMessage = (message: Message) => {
-  const { role, name, tool_call_id } = message;
+function parseDataUrl(url: string): { mime: string; base64: string } | null {
+  const m = url.match(/^data:([^;,]+);base64,([\s\S]*)$/);
+  if (!m) return null;
+  return { mime: m[1].trim(), base64: m[2].trim() };
+}
 
-  if (role === "tool" || role === "function") {
-    const content = ensureArray(message.content)
-      .map(part => (typeof part === "string" ? part : JSON.stringify(part)))
-      .join("\n");
-
-    return {
-      role,
-      name,
-      tool_call_id,
-      content,
-    };
-  }
-
-  const contentParts = ensureArray(message.content).map(normalizeContentPart);
-
-  // If there's only text content, collapse to a single string for compatibility
-  if (contentParts.length === 1 && contentParts[0].type === "text") {
-    return {
-      role,
-      name,
-      content: contentParts[0].text,
-    };
-  }
-
-  return {
-    role,
-    name,
-    content: contentParts,
-  };
-};
-
-const normalizeToolChoice = (
-  toolChoice: ToolChoice | undefined,
-  tools: Tool[] | undefined
-): "none" | "auto" | ToolChoiceExplicit | undefined => {
-  if (!toolChoice) return undefined;
-
-  if (toolChoice === "none" || toolChoice === "auto") {
-    return toolChoice;
-  }
-
-  if (toolChoice === "required") {
-    if (!tools || tools.length === 0) {
-      throw new Error(
-        "tool_choice 'required' was provided but no tools were configured"
-      );
+export function messageContentToAnthropicBlocks(
+  content: MessageContent | MessageContent[]
+): Anthropic.ContentBlockParam[] {
+  const parts = ensureArray(content).map(normalizeContentPart);
+  const blocks: Anthropic.ContentBlockParam[] = [];
+  for (const part of parts) {
+    if (part.type === "text") {
+      blocks.push({ type: "text", text: part.text });
+      continue;
     }
-
-    if (tools.length > 1) {
-      throw new Error(
-        "tool_choice 'required' needs a single tool or specify the tool name explicitly"
-      );
+    if (part.type === "image_url") {
+      const parsed = parseDataUrl(part.image_url.url);
+      if (!parsed) {
+        throw new Error(
+          "Anthropic vision requires a data URL (data:<mime>;base64,...). Check menu upload encoding."
+        );
+      }
+      const mt = parsed.mime.toLowerCase();
+      const allowed = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+      const mediaType = (allowed.includes(mt as (typeof allowed)[number])
+        ? mt
+        : "image/jpeg") as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+      blocks.push({
+        type: "image",
+        source: { type: "base64", media_type: mediaType, data: parsed.base64 },
+      });
+      continue;
     }
-
-    return {
-      type: "function",
-      function: { name: tools[0].function.name },
-    };
+    if (part.type === "file_url" && part.file_url.mime_type === "application/pdf") {
+      const parsed = parseDataUrl(part.file_url.url);
+      if (!parsed) {
+        throw new Error(
+          "Anthropic PDF requires a data URL (data:application/pdf;base64,...). Check menu upload encoding."
+        );
+      }
+      blocks.push({
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: parsed.base64 },
+      });
+      continue;
+    }
+    throw new Error(
+      `Unsupported file type for Anthropic: ${(part as FileContent).file_url?.mime_type ?? "unknown"}`
+    );
   }
+  return blocks;
+}
 
-  if ("name" in toolChoice) {
-    return {
-      type: "function",
-      function: { name: toolChoice.name },
-    };
-  }
-
-  return toolChoice;
-};
-
-const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://forge.manus.im/v1/chat/completions";
-
-const assertApiKey = () => {
-  if (!ENV.forgeApiKey) {
-    throw new Error("BUILT_IN_FORGE_API_KEY is not configured");
+const assertAnthropicApiKey = () => {
+  if (!ENV.anthropicApiKey?.trim()) {
+    throw new Error("ANTHROPIC_API_KEY is not configured");
   }
 };
 
@@ -241,20 +209,16 @@ const normalizeResponseFormat = ({
       explicitFormat.type === "json_schema" &&
       !explicitFormat.json_schema?.schema
     ) {
-      throw new Error(
-        "responseFormat json_schema requires a defined schema object"
-      );
+      throw new Error("responseFormat json_schema requires a defined schema object");
     }
     return explicitFormat;
   }
 
   const schema = outputSchema || output_schema;
   if (!schema) return undefined;
-
   if (!schema.name || !schema.schema) {
     throw new Error("outputSchema requires both name and schema");
   }
-
   return {
     type: "json_schema",
     json_schema: {
@@ -265,68 +229,157 @@ const normalizeResponseFormat = ({
   };
 };
 
+function inputSchemaForAnthropic(schema: Record<string, unknown>): Record<string, unknown> {
+  const clone = JSON.parse(JSON.stringify(schema)) as Record<string, unknown>;
+  delete clone.strict;
+  return clone;
+}
+
+export function toAnthropicCallerError(err: unknown): Error {
+  if (err instanceof AuthenticationError) {
+    return new Error(
+      `Anthropic authentication failed (${err.status}). Check ANTHROPIC_API_KEY is valid and not revoked.`
+    );
+  }
+  if (err instanceof RateLimitError) {
+    return new Error(
+      `Anthropic rate limit (${err.status}). Wait and retry, or check usage limits on your Anthropic account.`
+    );
+  }
+  if (err instanceof APIError) {
+    const status = err.status ?? "?";
+    const msg = err.message || "request failed";
+    if (status === 400 || status === 422) {
+      return new Error(`Anthropic rejected the request (${status}): ${msg}`);
+    }
+    if (status === 529) {
+      return new Error(`Anthropic is overloaded (${status}). Retry later.`);
+    }
+    return new Error(`Anthropic API error (${status}): ${msg}`);
+  }
+  if (err instanceof Error) {
+    return err;
+  }
+  return new Error(String(err));
+}
+
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  assertApiKey();
+  assertAnthropicApiKey();
 
-  const {
-    messages,
-    tools,
-    toolChoice,
-    tool_choice,
-    outputSchema,
-    output_schema,
-    responseFormat,
-    response_format,
-  } = params;
-
-  const payload: Record<string, unknown> = {
-    model: "gemini-2.5-flash",
-    messages: messages.map(normalizeMessage),
-  };
-
-  if (tools && tools.length > 0) {
-    payload.tools = tools;
+  if (params.tools?.length) {
+    throw new Error("invokeLLM with Anthropic does not support custom tools; use outputSchema only.");
   }
 
-  const normalizedToolChoice = normalizeToolChoice(
-    toolChoice || tool_choice,
-    tools
-  );
-  if (normalizedToolChoice) {
-    payload.tool_choice = normalizedToolChoice;
-  }
-
-  payload.max_tokens = 32768
-  payload.thinking = {
-    "budget_tokens": 128
-  }
-
-  const normalizedResponseFormat = normalizeResponseFormat({
-    responseFormat,
-    response_format,
-    outputSchema,
-    output_schema,
+  const normalizedFormat = normalizeResponseFormat({
+    responseFormat: params.responseFormat,
+    response_format: params.response_format,
+    outputSchema: params.outputSchema,
+    output_schema: params.output_schema,
   });
 
-  if (normalizedResponseFormat) {
-    payload.response_format = normalizedResponseFormat;
-  }
-
-  const response = await fetch(resolveApiUrl(), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
+  if (!normalizedFormat || normalizedFormat.type !== "json_schema") {
     throw new Error(
-      `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
+      "Anthropic invoke requires outputSchema (JSON schema) for structured catalog/menu output."
     );
   }
 
-  return (await response.json()) as InvokeResult;
+  const toolName = normalizedFormat.json_schema.name;
+  const inputSchema = inputSchemaForAnthropic(
+    normalizedFormat.json_schema.schema as Record<string, unknown>
+  );
+
+  const systemParts: string[] = [];
+  const anthropicMessages: Anthropic.MessageParam[] = [];
+
+  for (const m of params.messages) {
+    if (m.role === "system") {
+      const arr = ensureArray(m.content).map(normalizeContentPart);
+      for (const p of arr) {
+        if (p.type !== "text") {
+          throw new Error("Anthropic system message must be text-only.");
+        }
+        systemParts.push(p.text);
+      }
+      continue;
+    }
+    if (m.role === "user") {
+      anthropicMessages.push({
+        role: "user",
+        content: messageContentToAnthropicBlocks(m.content),
+      });
+      continue;
+    }
+    throw new Error(`Unsupported message role for Anthropic invoke: ${m.role}`);
+  }
+
+  if (anthropicMessages.length === 0) {
+    throw new Error("At least one user message is required for Anthropic invoke.");
+  }
+
+  const client = new Anthropic({ apiKey: ENV.anthropicApiKey });
+  const model = ENV.anthropicModel;
+  const maxTokens = Math.min(params.maxTokens ?? params.max_tokens ?? 8192, 8192);
+
+  try {
+    const response = await client.messages.create({
+      model,
+      max_tokens: maxTokens,
+      ...(systemParts.length ? { system: systemParts.join("\n\n") } : {}),
+      messages: anthropicMessages,
+      tools: [
+        {
+          name: toolName,
+          description:
+            "Emit structured data exactly matching the schema. Fill fields per the user instructions.",
+          input_schema: inputSchema as Anthropic.Tool.InputSchema,
+        },
+      ],
+      tool_choice: { type: "tool", name: toolName, disable_parallel_tool_use: true },
+    });
+
+    const toolBlock = response.content.find(
+      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
+    );
+    if (!toolBlock) {
+      const summary = response.content
+        .map((b) => (b.type === "text" ? b.text : `[${b.type}]`))
+        .join(" ")
+        .slice(0, 500);
+      throw new Error(
+        `Anthropic returned no tool_use block for structured output. Content preview: ${summary || "(empty)"}`
+      );
+    }
+    if (toolBlock.name !== toolName) {
+      throw new Error(
+        `Anthropic tool mismatch: expected ${toolName}, got ${toolBlock.name}`
+      );
+    }
+
+    const jsonStr = JSON.stringify(toolBlock.input ?? {});
+    if (!jsonStr || jsonStr === "{}") {
+      throw new Error("Anthropic tool returned empty input object.");
+    }
+
+    return {
+      id: response.id,
+      created: Date.now(),
+      model: response.model,
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content: jsonStr },
+          finish_reason: response.stop_reason,
+        },
+      ],
+      usage: response.usage
+        ? {
+            prompt_tokens: response.usage.input_tokens,
+            completion_tokens: response.usage.output_tokens,
+            total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+          }
+        : undefined,
+    };
+  } catch (e) {
+    throw toAnthropicCallerError(e);
+  }
 }

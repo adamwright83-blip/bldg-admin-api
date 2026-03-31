@@ -7,6 +7,9 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  /** Anthropic (catalog AI). Forge is unused for invokeLLM. */
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514",
   platformFeePercent: parseFloat(process.env.PLATFORM_FEE_PERCENT ?? "5"),
   adminBaseUrl: process.env.ADMIN_BASE_URL ?? "https://admin.bldg.chat",
 };

@@ -110,6 +110,45 @@ export function validateStripeEnv(): void {
 
 const APP_SHARED_SECRET = new TextEncoder().encode(process.env.APP_SHARED_API_SECRET || "fallback-secret");
 
+/** Catalog/menu LLM errors → tRPC (Anthropic Messages API). */
+function throwCatalogAiAsTrpc(e: unknown): never {
+  const msg = e instanceof Error ? e.message : String(e);
+  const max = 2000;
+  const clip = (s: string) => (s.length > max ? `${s.slice(0, max)}…` : s);
+
+  if (msg.includes("ANTHROPIC_API_KEY is not configured")) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "AI is not configured. Set ANTHROPIC_API_KEY on the server.",
+    });
+  }
+  if (msg.includes("authentication failed")) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: clip(msg) });
+  }
+  if (msg.includes("rate limit")) {
+    throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: clip(msg) });
+  }
+  if (
+    msg.includes("no tool_use") ||
+    msg.includes("tool mismatch") ||
+    msg.includes("empty input object") ||
+    msg.includes("invalid JSON") ||
+    msg.includes("Command parse returned") ||
+    msg.includes("Menu parse returned") ||
+    msg.includes("missing items array") ||
+    msg.includes("requires a data URL") ||
+    msg.includes("Menu parse missing") ||
+    msg.includes("Command parse:") ||
+    msg.includes("Menu parse:")
+  ) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: clip(msg) });
+  }
+  if (msg.includes("rejected the request") || msg.includes("Anthropic API error")) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: clip(msg) });
+  }
+  throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: clip(msg) });
+}
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -1451,17 +1490,7 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
             });
             return { rows };
           } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : String(e);
-            if (msg.includes("BUILT_IN_FORGE_API_KEY") || msg.includes("not configured")) {
-              throw new TRPCError({
-                code: "PRECONDITION_FAILED",
-                message: "AI menu import is not configured. Set BUILT_IN_FORGE_API_KEY.",
-              });
-            }
-            throw new TRPCError({
-              code: "INTERNAL_SERVER_ERROR",
-              message: msg.length > 200 ? `${msg.slice(0, 200)}…` : msg,
-            });
+            throwCatalogAiAsTrpc(e);
           }
         }),
 
@@ -1514,17 +1543,7 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
             });
             return { draft };
           } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : String(e);
-            if (msg.includes("BUILT_IN_FORGE_API_KEY") || msg.includes("not configured")) {
-              throw new TRPCError({
-                code: "PRECONDITION_FAILED",
-                message: "AI composer is not configured. Set BUILT_IN_FORGE_API_KEY.",
-              });
-            }
-            throw new TRPCError({
-              code: "INTERNAL_SERVER_ERROR",
-              message: msg.length > 200 ? `${msg.slice(0, 200)}…` : msg,
-            });
+            throwCatalogAiAsTrpc(e);
           }
         }),
 

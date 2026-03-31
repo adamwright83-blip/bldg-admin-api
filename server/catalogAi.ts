@@ -177,11 +177,16 @@ export async function parseMenuFileWithLLM(params: {
   });
 
   const text = getMessageText(result);
+  if (!text.trim()) {
+    throw new Error("Menu parse: empty model output after Anthropic tool_use.");
+  }
   let parsed: { items: ParsedMenuItem[] };
   try {
     parsed = JSON.parse(text) as { items: ParsedMenuItem[] };
   } catch {
-    throw new Error("Menu parse returned invalid JSON");
+    throw new Error(
+      `Menu parse returned invalid JSON (first 240 chars): ${text.slice(0, 240)}`
+    );
   }
   if (!parsed.items || !Array.isArray(parsed.items)) {
     throw new Error("Menu parse missing items array");
@@ -218,11 +223,16 @@ export async function parseCatalogCommandWithLLM(params: {
   });
 
   const text = getMessageText(result);
+  if (!text.trim()) {
+    throw new Error("Command parse: empty model output after Anthropic tool_use.");
+  }
   let parsed: ParsedCommandDraft;
   try {
     parsed = JSON.parse(text) as ParsedCommandDraft;
   } catch {
-    throw new Error("Command parse returned invalid JSON");
+    throw new Error(
+      `Command parse returned invalid JSON (first 240 chars): ${text.slice(0, 240)}`
+    );
   }
   return parsed;
 }
