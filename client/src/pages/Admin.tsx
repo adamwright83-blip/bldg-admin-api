@@ -21,19 +21,10 @@ import {
   type DryCleanEntry,
 } from "@shared/pricing";
 import type { Order } from "@shared/types";
-
-const TABS = [
-  "New Order",
-  "Customers",
-  "Intake",
-  "Processing",
-  "Ready",
-  "Pickups",
-  "Requests",
-  "Leads",
-  "Vendors",
-] as const;
-type Tab = (typeof TABS)[number];
+import {
+  ADMIN_WORKSPACE_TABS as TABS,
+  type AdminWorkspaceTab as Tab,
+} from "@/admin/adminPaths";
 
 const SUPPORTED_BUILDINGS: { label: string; value: string }[] = [
   { label: "OPUS LA", value: "opusla" },
@@ -238,86 +229,21 @@ export default function Admin() {
         </div>
       </nav>
 
-      {/* Customer search — find order and view receipt */}
-      <div className="border-b border-black/10 bg-white">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-3">
-          <div className="relative max-w-md">
-            <input
-              type="text"
-              placeholder="Customer"
-              value={customerSearchQuery}
-              onChange={(e) => setCustomerSearchQuery(e.target.value)}
-              className="w-full rounded-md border border-black/15 bg-neutral-100/80 px-3 py-2.5 text-sm text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-black/30"
-            />
-            {debouncedCustomerQuery.length >= 2 && (
-              <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[320px] overflow-auto rounded-md border border-black/15 bg-white shadow-lg">
-                {searchOrders.isLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-5 w-5 animate-spin text-black/30" />
-                  </div>
-                ) : searchOrders.data?.length ? (
-                  <ul className="py-1">
-                    {searchOrders.data.map((o) => (
-                      <li
-                        key={o.id}
-                        className="flex items-stretch gap-1 px-2 py-1.5 hover:bg-black/[0.03] border-b border-black/5 last:border-0"
-                      >
-                        <div className="flex-1 min-w-0 flex flex-col justify-center px-1">
-                          <span className="font-medium text-black text-sm truncate">
-                            #{o.id} — {o.firstName} {o.lastName}
-                          </span>
-                          <span className="text-black/50 text-xs">
-                            {o.total ? `$${o.total}` : "—"} · {o.serviceType === "wash_fold" ? "W&F" : "DC"}
-                          </span>
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-1 shrink-0">
-                          <button
-                            type="button"
-                            className="text-xs font-medium px-2 py-1.5 rounded border border-black/15 bg-white hover:bg-black/5 text-black"
-                            onClick={() => setProfilePhone(o.phone)}
-                          >
-                            Profile
-                          </button>
-                          <a
-                            href={`/receipt/${o.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs font-medium px-2 py-1.5 rounded border border-black/15 bg-white hover:bg-black/5 text-black text-center"
-                          >
-                            Receipt
-                          </a>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="px-3 py-4 text-sm text-black/50">No orders found.</p>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <AdminCustomerSearchBlock
+        customerSearchQuery={customerSearchQuery}
+        setCustomerSearchQuery={setCustomerSearchQuery}
+        debouncedCustomerQuery={debouncedCustomerQuery}
+        searchOrders={searchOrders}
+        setProfilePhone={setProfilePhone}
+      />
 
-      {/* Tab content */}
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
-        {activeTab === "New Order" && (
-          <NewOrderTab
-            onOpenProfile={(p) => setProfilePhone(p)}
-            phoneSeed={newOrderPhoneSeed}
-            onConsumePhoneSeed={() => setNewOrderPhoneSeed(null)}
-          />
-        )}
-        {activeTab === "Customers" && (
-          <CustomersTab onOpenProfile={(p) => setProfilePhone(p)} />
-        )}
-        {activeTab === "Intake" && <IntakeTab />}
-        {activeTab === "Processing" && <ProcessingTab />}
-        {activeTab === "Ready" && <ReadyTab />}
-        {activeTab === "Pickups" && <PickupsTab />}
-        {activeTab === "Requests" && <RequestsTab />}
-        {activeTab === "Leads" && <LeadsTab />}
-        {activeTab === "Vendors" && <VendorsTab />}
+        <AdminTabPanels
+          activeTab={activeTab}
+          setProfilePhone={setProfilePhone}
+          newOrderPhoneSeed={newOrderPhoneSeed}
+          onConsumePhoneSeed={() => setNewOrderPhoneSeed(null)}
+        />
       </div>
 
       <CustomerProfileDrawer
@@ -2459,5 +2385,123 @@ function VendorsTab() {
         </div>
       )}
     </div>
+  );
+}
+
+export function AdminCustomerSearchBlock({
+  customerSearchQuery,
+  setCustomerSearchQuery,
+  debouncedCustomerQuery,
+  searchOrders,
+  setProfilePhone,
+}: {
+  customerSearchQuery: string;
+  setCustomerSearchQuery: (q: string) => void;
+  debouncedCustomerQuery: string;
+  setProfilePhone: (p: string) => void;
+  searchOrders: {
+    isLoading: boolean;
+    data?: {
+      id: number;
+      firstName: string;
+      lastName: string;
+      phone: string;
+      total: string | null;
+      serviceType: string;
+    }[];
+  };
+}) {
+  return (
+    <div className="border-b border-black/10 bg-white">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-3">
+        <div className="relative max-w-md">
+          <input
+            type="text"
+            placeholder="Customer"
+            value={customerSearchQuery}
+            onChange={(e) => setCustomerSearchQuery(e.target.value)}
+            className="w-full rounded-md border border-black/15 bg-neutral-100/80 px-3 py-2.5 text-sm text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-black/30"
+          />
+          {debouncedCustomerQuery.length >= 2 && (
+            <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[320px] overflow-auto rounded-md border border-black/15 bg-white shadow-lg">
+              {searchOrders.isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-black/30" />
+                </div>
+              ) : searchOrders.data?.length ? (
+                <ul className="py-1">
+                  {searchOrders.data.map((o) => (
+                    <li
+                      key={o.id}
+                      className="flex items-stretch gap-1 px-2 py-1.5 hover:bg-black/[0.03] border-b border-black/5 last:border-0"
+                    >
+                      <div className="flex-1 min-w-0 flex flex-col justify-center px-1">
+                        <span className="font-medium text-black text-sm truncate">
+                          #{o.id} — {o.firstName} {o.lastName}
+                        </span>
+                        <span className="text-black/50 text-xs">
+                          {o.total ? `$${o.total}` : "—"} · {o.serviceType === "wash_fold" ? "W&F" : "DC"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-1 shrink-0">
+                        <button
+                          type="button"
+                          className="text-xs font-medium px-2 py-1.5 rounded border border-black/15 bg-white hover:bg-black/5 text-black"
+                          onClick={() => setProfilePhone(o.phone)}
+                        >
+                          Profile
+                        </button>
+                        <a
+                          href={`/receipt/${o.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-medium px-2 py-1.5 rounded border border-black/15 bg-white hover:bg-black/5 text-black text-center"
+                        >
+                          Receipt
+                        </a>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="px-3 py-4 text-sm text-black/50">No orders found.</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function AdminTabPanels({
+  activeTab,
+  setProfilePhone,
+  newOrderPhoneSeed,
+  onConsumePhoneSeed,
+}: {
+  activeTab: Tab;
+  setProfilePhone: (p: string) => void;
+  newOrderPhoneSeed: string | null;
+  onConsumePhoneSeed: () => void;
+}) {
+  return (
+    <>
+      {activeTab === "New Order" && (
+        <NewOrderTab
+          onOpenProfile={(p) => setProfilePhone(p)}
+          phoneSeed={newOrderPhoneSeed}
+          onConsumePhoneSeed={onConsumePhoneSeed}
+        />
+      )}
+      {activeTab === "Customers" && <CustomersTab onOpenProfile={(p) => setProfilePhone(p)} />}
+      {activeTab === "Intake" && <IntakeTab />}
+      {activeTab === "Processing" && <ProcessingTab />}
+      {activeTab === "Ready" && <ReadyTab />}
+      {activeTab === "Pickups" && <PickupsTab />}
+      {activeTab === "Requests" && <RequestsTab />}
+      {activeTab === "Leads" && <LeadsTab />}
+      {activeTab === "Vendors" && <VendorsTab />}
+    </>
   );
 }

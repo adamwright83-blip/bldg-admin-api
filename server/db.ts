@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, inArray, like, max, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, like, lt, max, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users,
@@ -19,6 +19,14 @@ import {
   normalizeOrderRowFromDb,
   type AdminCustomerAggregateDbRow,
 } from "./adminCustomerAggregate";
+import {
+  getDashboardTimeZone,
+  zonedDayStartUtc,
+  zonedMonthRangeUtcContaining,
+  zonedNextDayYmd,
+  zonedWeekRangeUtcContaining,
+  zonedYmd,
+} from "./dashboardZoned";
 
 export type { AdminCustomerAggregateDbRow };
 
@@ -325,6 +333,90 @@ export async function listPaidOrdersForBuildingRevenue(): Promise<BuildingRevenu
     })
     .from(orders)
     .where(eq(orders.paid, true));
+}
+
+export type AdminDashboardSummary = {
+  revenueTimestampBasis: "updatedAt_proxy";
+  dashboardTimeZone: string;
+  revenueToday: number;
+  revenueWeek: number;
+  revenueMonth: number;
+  paidOrderCountMonth: number;
+  avgOrderValueMonth: number | null;
+  distinctBuildingsWithSlug: number;
+  distinctCustomerPhones: number;
+  totalOrders: number;
+};
+
+async function paidRevenueAndCountInUpdatedAtRange(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  start: Date,
+  end: Date
+): Promise<{ revenue: number; count: number }> {
+  const [row] = await db
+    .select({
+      revenue: sql<string>`COALESCE(SUM(CAST(${orders.total} AS DECIMAL(14,4))), 0)`,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(orders)
+    .where(and(eq(orders.paid, true), gte(orders.updatedAt, start), lt(orders.updatedAt, end)));
+
+  return {
+    revenue: Number(row?.revenue ?? 0),
+    count: Number(row?.count ?? 0),
+  };
+}
+
+/**
+ * Home dashboard metrics. Paid orders only; time windows use `updatedAt` as a v1 proxy (not true charge time).
+ */
+export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const tz = getDashboardTimeZone();
+  const now = new Date();
+  const todayYmd = zonedYmd(now, tz);
+  const todayStart = zonedDayStartUtc(todayYmd, tz);
+  const tomorrowYmd = zonedNextDayYmd(todayYmd, tz);
+  const todayEnd = zonedDayStartUtc(tomorrowYmd, tz);
+  const { start: weekStart, end: weekEnd } = zonedWeekRangeUtcContaining(now, tz);
+  const { start: monthStart, end: monthEnd } = zonedMonthRangeUtcContaining(now, tz);
+
+  const [todayAgg, weekAgg, monthAgg, buildingsRow, phonesRow, totalRow] = await Promise.all([
+    paidRevenueAndCountInUpdatedAtRange(db, todayStart, todayEnd),
+    paidRevenueAndCountInUpdatedAtRange(db, weekStart, weekEnd),
+    paidRevenueAndCountInUpdatedAtRange(db, monthStart, monthEnd),
+    db
+      .select({
+        n: sql<number>`COUNT(DISTINCT ${orders.buildingSlug})`,
+      })
+      .from(orders)
+      .where(and(sql`${orders.buildingSlug} IS NOT NULL`, sql`${orders.buildingSlug} != ''`)),
+    db
+      .select({
+        n: sql<number>`COUNT(DISTINCT ${orders.phone})`,
+      })
+      .from(orders),
+    db.select({ n: sql<number>`COUNT(*)` }).from(orders),
+  ]);
+
+  const paidOrderCountMonth = monthAgg.count;
+  const avgOrderValueMonth =
+    paidOrderCountMonth > 0 ? monthAgg.revenue / paidOrderCountMonth : null;
+
+  return {
+    revenueTimestampBasis: "updatedAt_proxy",
+    dashboardTimeZone: tz,
+    revenueToday: todayAgg.revenue,
+    revenueWeek: weekAgg.revenue,
+    revenueMonth: monthAgg.revenue,
+    paidOrderCountMonth,
+    avgOrderValueMonth,
+    distinctBuildingsWithSlug: Number(buildingsRow[0]?.n ?? 0),
+    distinctCustomerPhones: Number(phonesRow[0]?.n ?? 0),
+    totalOrders: Number(totalRow[0]?.n ?? 0),
+  };
 }
 
 /* ===== ADMIN / DRIVER HELPERS ===== */

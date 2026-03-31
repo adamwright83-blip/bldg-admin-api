@@ -7,11 +7,34 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { TenantProvider, useTenant } from "./hooks/useTenant";
 import ButlerHome from "./pages/Home";
 import Admin from "./pages/Admin";
+import AdminHostApp from "./pages/AdminHostApp";
 import Driver from "./pages/Driver";
 import VendorPortal from "./pages/VendorPortal";
 import DigitalReceiptPage from "./pages/DigitalReceiptPage";
 import LaundryFarmHome from "./pages/LaundryFarmHome";
 import AdminCatalog from "./pages/AdminCatalog";
+
+function AdminHostRouter() {
+  return (
+    <Switch>
+      <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
+      <Route path="/catalog" component={AdminCatalog} />
+      <Route path="/admin" component={AdminHostApp} />
+      <Route path="/home" component={AdminHostApp} />
+      <Route path="/new-order" component={AdminHostApp} />
+      <Route path="/customers" component={AdminHostApp} />
+      <Route path="/intake" component={AdminHostApp} />
+      <Route path="/processing" component={AdminHostApp} />
+      <Route path="/ready" component={AdminHostApp} />
+      <Route path="/pickups" component={AdminHostApp} />
+      <Route path="/requests" component={AdminHostApp} />
+      <Route path="/leads" component={AdminHostApp} />
+      <Route path="/vendors" component={AdminHostApp} />
+      <Route path="/" component={AdminHostApp} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
 
 function Router() {
   const hostname =
@@ -22,6 +45,10 @@ function Router() {
   const isVendorHost = hostname.endsWith(".ops.bldg.chat");
   const vendorSlug = isVendorHost ? hostname.replace(".ops.bldg.chat", "") : null;
 
+  if (isAdminHost) {
+    return <AdminHostRouter />;
+  }
+
   return (
     <Switch>
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
@@ -29,15 +56,13 @@ function Router() {
       <Route
         path={"/"}
         component={
-          isAdminHost
-            ? Admin
-            : isDriverHost
-              ? Driver
-              : isVendorHost
-                ? () => <VendorPortal slug={vendorSlug ?? ""} />
-                : tenant.templateType === "laundryfarm"
-                  ? LaundryFarmHome
-                  : ButlerHome
+          isDriverHost
+            ? Driver
+            : isVendorHost
+              ? () => <VendorPortal slug={vendorSlug ?? ""} />
+              : tenant.templateType === "laundryfarm"
+                ? LaundryFarmHome
+                : ButlerHome
         }
       />
       <Route path={"/admin"} component={Admin} />

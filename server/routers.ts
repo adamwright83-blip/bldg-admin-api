@@ -1,3 +1,4 @@
+import { getDashboardTimeZone } from "./dashboardZoned";
 import { writeOrderToSheet } from "./sheets";
 import { COOKIE_NAME, VENDOR_COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -53,6 +54,7 @@ import {
   getOrdersByPhoneExact,
   listAdminCustomerAggregates,
   listPaidOrdersForBuildingRevenue,
+  getAdminDashboardSummary,
   listCatalogItemsForAdmin,
   listActiveCatalogForPublic,
   createCatalogItemRow,
@@ -489,6 +491,23 @@ export const appRouter = router({
     searchOrdersForReceipt: protectedProcedure
       .input(z.object({ q: z.string().min(2).max(100) }))
       .query(async ({ input }) => searchOrdersForReceipt(input.q)),
+
+    /** Home command center — paid orders, `updatedAt` proxy for v1 (see revenueTimestampBasis) */
+    dashboardSummary: protectedProcedure.query(async () => {
+      const row = await getAdminDashboardSummary();
+      return row ?? {
+        revenueTimestampBasis: "updatedAt_proxy" as const,
+        dashboardTimeZone: getDashboardTimeZone(),
+        revenueToday: 0,
+        revenueWeek: 0,
+        revenueMonth: 0,
+        paidOrderCountMonth: 0,
+        avgOrderValueMonth: null,
+        distinctBuildingsWithSlug: 0,
+        distinctCustomerPhones: 0,
+        totalOrders: 0,
+      };
+    }),
 
     /** Search customer by phone — platform only (new order prefill) */
     searchCustomer: protectedProcedure
