@@ -95,6 +95,9 @@ export const orders = mysqlTable("orders", {
   vendorPayoutCents: int("vendorPayoutCents"),
   stripeConnectedAccountIdSnapshot: varchar("stripeConnectedAccountIdSnapshot", { length: 255 }),
 
+  /* Revenue intervention — manual at-risk override (see server/revenueIntervention.ts) */
+  manualRiskFlag: boolean("manualRiskFlag").default(false).notNull(),
+
   /* Timestamps */
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -102,6 +105,47 @@ export const orders = mysqlTable("orders", {
 
 export type Order = typeof orders.$inferSelect;
 export type InsertOrder = typeof orders.$inferInsert;
+
+/**
+ * Single row per tenant: weekly revenue target for deficit / predator UI.
+ */
+export const adminSettings = mysqlTable(
+  "admin_settings",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    weeklyRevenueTargetCents: int("weeklyRevenueTargetCents").notNull().default(0),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    uqTenant: uniqueIndex("uq_admin_settings_tenant").on(table.tenantId),
+  })
+);
+
+export type AdminSettings = typeof adminSettings.$inferSelect;
+export type InsertAdminSettings = typeof adminSettings.$inferInsert;
+
+/**
+ * Audit log for revenue interventions (send reminder, invoice, etc.).
+ * entity_type: order | customer; entity_id per revenueIntervention canonical rules.
+ */
+export const adminActionLog = mysqlTable("admin_action_log", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  actionType: varchar("actionType", { length: 64 }).notNull(),
+  entityType: mysqlEnum("entityType", ["order", "customer"]).notNull(),
+  entityId: varchar("entityId", { length: 128 }).notNull(),
+  dollarValueCents: int("dollarValueCents").notNull(),
+  status: mysqlEnum("status", ["success", "reversed", "failed"]).notNull(),
+  source: mysqlEnum("source", ["manual_action", "auto_capture"]).notNull(),
+  executionTimeMs: int("executionTimeMs"),
+  metadata: json("metadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AdminActionLog = typeof adminActionLog.$inferSelect;
+export type InsertAdminActionLog = typeof adminActionLog.$inferInsert;
 
 /**
  * Vendors — service providers who fulfill orders (e.g. Laundry Butler).

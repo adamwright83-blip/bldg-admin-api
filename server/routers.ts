@@ -83,6 +83,11 @@ import { z } from "zod";
 import Stripe from "stripe";
 import * as jose from "jose";
 import { matchBuilding } from "@shared/buildings";
+import {
+  getLevel1ApexCommand as loadLevel1ApexCommand,
+  getRecoveredTodayCents,
+  sendPaymentReminderForOrder,
+} from "./revenueIntervention";
 
 const STRIPE_API_VERSION = "2025-03-31.basil" as const;
 
@@ -508,6 +513,88 @@ export const appRouter = router({
         totalOrders: 0,
       };
     }),
+
+    /** Revenue predator — Step 1: recovered sum today (dashboard business TZ; manual send_reminder + send_invoice). */
+    getRecoveredToday: adminProcedure.query(async ({ ctx }) => {
+      const r = await getRecoveredTodayCents(ctx.tenantId);
+      if (!r) {
+        return {
+          cents: 0,
+          businessYmd: "",
+          timeZone: getDashboardTimeZone(),
+          dbAvailable: false,
+        };
+      }
+      return {
+        cents: r.cents,
+        businessYmd: r.bounds.ymd,
+        timeZone: r.bounds.timeZone,
+        dbAvailable: true,
+      };
+    }),
+
+    /** Highest-scored at-risk order without a successful send_reminder logged today. */
+    getLevel1ApexCommand: adminProcedure.query(async ({ ctx }) => {
+      const r = await loadLevel1ApexCommand(ctx.tenantId);
+      if (!r) {
+        return {
+          dbAvailable: false,
+          candidate: null,
+          businessYmd: "",
+          timeZone: getDashboardTimeZone(),
+        };
+      }
+      const { bounds, candidate } = r;
+      if (!candidate) {
+        return {
+          dbAvailable: true,
+          candidate: null,
+          businessYmd: bounds.ymd,
+          timeZone: bounds.timeZone,
+        };
+      }
+      const o = candidate.order;
+      return {
+        dbAvailable: true,
+        businessYmd: bounds.ymd,
+        timeZone: bounds.timeZone,
+        candidate: {
+          issueLabel: candidate.issueLabel,
+          score: candidate.score,
+          dollarValueCents: candidate.dollarValueCents,
+          order: {
+            id: o.id,
+            firstName: o.firstName,
+            lastName: o.lastName,
+            phone: o.phone,
+            status: o.status,
+            total: o.total,
+            paid: o.paid,
+            updatedAt: o.updatedAt,
+            buildingSlug: o.buildingSlug,
+            manualRiskFlag: o.manualRiskFlag,
+          },
+        },
+      };
+    }),
+
+    /** Logs admin_action_log (send_reminder); idempotent per order per dashboard business day. */
+    sendPaymentReminder: adminProcedure
+      .input(z.object({ orderId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const out = await sendPaymentReminderForOrder({
+          tenantId: ctx.tenantId,
+          orderId: input.orderId,
+        });
+        if (!out.ok) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: out.error });
+        }
+        return {
+          deduped: out.deduped,
+          logId: out.logId,
+          recoveredTodayCents: out.recoveredTodayCents,
+        };
+      }),
 
     /** Search customer by phone — platform only (new order prefill) */
     searchCustomer: protectedProcedure

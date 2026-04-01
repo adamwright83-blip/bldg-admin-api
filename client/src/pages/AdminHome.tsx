@@ -1,12 +1,32 @@
 import { Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { Button } from "@/components/ui/button";
 
 function formatUsd(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 }
 
+function formatUsdFromCents(cents: number) {
+  return formatUsd(cents / 100);
+}
+
 export default function AdminHome() {
-  const q = trpc.admin.dashboardSummary.useQuery();
+  const { user, isAuthenticated } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const q = trpc.admin.dashboardSummary.useQuery(undefined, { enabled: isAuthenticated });
+  const recovered = trpc.admin.getRecoveredToday.useQuery(undefined, { enabled: isAuthenticated && isAdmin });
+  const apex = trpc.admin.getLevel1ApexCommand.useQuery(undefined, { enabled: isAuthenticated && isAdmin });
+  const utils = trpc.useUtils();
+
+  const sendReminder = trpc.admin.sendPaymentReminder.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.admin.getRecoveredToday.invalidate(),
+        utils.admin.getLevel1ApexCommand.invalidate(),
+      ]);
+    },
+  });
 
   if (q.isLoading) {
     return (
@@ -28,6 +48,65 @@ export default function AdminHome() {
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 space-y-8">
+      {isAdmin && (
+        <section className="rounded-lg border border-black/10 bg-white px-4 py-4 space-y-3">
+          <h2 className="text-sm font-semibold text-black">Revenue intervention — Level 1</h2>
+          {!recovered.data?.dbAvailable || !apex.data?.dbAvailable ? (
+            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              Database unavailable or schema missing. Run migration{" "}
+              <code className="text-xs">0009_revenue_intervention.sql</code> and ensure{" "}
+              <code className="text-xs">DATABASE_URL</code> is set.
+            </p>
+          ) : (
+            <>
+              <p className="text-xs text-black/50">
+                Business day {recovered.data.businessYmd} ({recovered.data.timeZone}) · Recovered today (manual
+                log):{" "}
+                <span className="font-mono text-black">{formatUsdFromCents(recovered.data.cents)}</span>
+              </p>
+              {apex.data.candidate ? (
+                <div className="space-y-2 border-t border-black/10 pt-3">
+                  <p className="text-[11px] font-mono uppercase tracking-wide text-black/45">
+                    {apex.data.candidate.issueLabel}
+                  </p>
+                  <p className="text-sm text-black">
+                    Order #{apex.data.candidate.order.id} · {apex.data.candidate.order.firstName}{" "}
+                    {apex.data.candidate.order.lastName} · {apex.data.candidate.order.phone}
+                  </p>
+                  <p className="text-xs text-black/50">
+                    Status <span className="font-mono">{apex.data.candidate.order.status}</span>
+                    {apex.data.candidate.order.paid ? " · paid" : " · unpaid"} · Potential{" "}
+                    <span className="font-mono">{formatUsdFromCents(apex.data.candidate.dollarValueCents)}</span>
+                  </p>
+                  <Button
+                    type="button"
+                    className="bg-emerald-600 hover:bg-emerald-600/90 text-white"
+                    disabled={sendReminder.isPending}
+                    onClick={() => sendReminder.mutate({ orderId: apex.data.candidate!.order.id })}
+                  >
+                    {sendReminder.isPending ? "Logging…" : "Send payment reminder (log action)"}
+                  </Button>
+                  {sendReminder.isSuccess && (
+                    <p className="text-xs text-emerald-700">
+                      Logged{sendReminder.data.deduped ? " (idempotent — already counted today)" : ""}. Recovered
+                      today: {formatUsdFromCents(sendReminder.data.recoveredTodayCents)}.
+                    </p>
+                  )}
+                  {sendReminder.isError && (
+                    <p className="text-xs text-red-600">{sendReminder.error.message}</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-black/45 pt-2">
+                  No Level 1 candidate — no at-risk orders for this tenant, or each already has a successful
+                  reminder logged today.
+                </p>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
       <section>
         <h1 className="text-lg font-semibold text-black mb-4">Command center</h1>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
