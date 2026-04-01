@@ -48,6 +48,8 @@ export type IssueLabel =
   | "ready_unpaid_24h"
   | "delivered_unpaid_24h"
   | "new_stale_48h"
+  | /** Intake queue (`collected`): scheduled pickup/day has passed in dashboard TZ but card not run — not keyed off `updatedAt` */
+  "collected_financially_open"
   | "collected_stale_48h"
   | "manual_risk_override";
 
@@ -60,11 +62,48 @@ export type ScoredInterventionCandidate = {
 
 const REMINDER_WEIGHT = 1.2;
 
-function issueForOrder(row: Order, _now: Date, stale48: Date, stale24: Date): IssueLabel | null {
+const ISO_YMD = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** Calendar days from `scheduleYmd` to `businessYmd` (both `yyyy-MM-dd`); invalid → 0 */
+function daysYmdElapsed(scheduleYmd: string, businessYmd: string): number {
+  const m1 = scheduleYmd.trim().match(ISO_YMD);
+  const m2 = businessYmd.match(ISO_YMD);
+  if (!m1 || !m2) return 0;
+  const t1 = Date.UTC(Number(m1[1]), Number(m1[2]) - 1, Number(m1[3]));
+  const t2 = Date.UTC(Number(m2[1]), Number(m2[2]) - 1, Number(m2[3]));
+  return Math.max(0, Math.floor((t2 - t1) / 86400000));
+}
+
+/**
+ * Operational schedule is strictly before dashboard "today" (Intake = still `collected` + unpaid in DB).
+ * Uses `pickupDate` / `deliveryDate` (ISO from `<input type="date">`), not `updatedAt`.
+ */
+export function isCollectedFinanciallyOpen(row: Order, businessYmd: string): boolean {
+  if (row.status !== "collected" || row.paid) return false;
+  const pickup = row.pickupDate?.trim() ?? "";
+  const del = row.deliveryDate?.trim() ?? "";
+  const pickupElapsed = pickup.match(ISO_YMD) && pickup < businessYmd;
+  const delElapsed =
+    del.length > 0 &&
+    del.match(ISO_YMD) !== null &&
+    del < businessYmd;
+  return Boolean(pickupElapsed || delElapsed);
+}
+
+function issueForOrder(
+  row: Order,
+  _now: Date,
+  stale48: Date,
+  stale24: Date,
+  businessYmd: string
+): IssueLabel | null {
   if (row.manualRiskFlag) return "manual_risk_override";
   if (row.status === "processing" && row.updatedAt < stale48) return "processing_stale_48h";
   if (row.status === "new" && row.updatedAt < stale48) return "new_stale_48h";
-  if (row.status === "collected" && row.updatedAt < stale48) return "collected_stale_48h";
+  if (row.status === "collected") {
+    if (isCollectedFinanciallyOpen(row, businessYmd)) return "collected_financially_open";
+    if (row.updatedAt < stale48) return "collected_stale_48h";
+  }
   const owed =
     (row.status === "ready" || row.status === "delivered") &&
     !row.paid &&
@@ -76,18 +115,34 @@ function issueForOrder(row: Order, _now: Date, stale48: Date, stale24: Date): Is
   return null;
 }
 
-function scoreCandidate(row: Order, issueLabel: IssueLabel, now: Date): number {
+function scoreCandidate(
+  row: Order,
+  issueLabel: IssueLabel,
+  now: Date,
+  businessYmd: string
+): number {
   const dollarValueCents = orderTotalCents(row);
   const daysOverdue = daysBetween(row.updatedAt, now);
   const isCompletedUninvoiced =
     issueLabel === "ready_unpaid_24h" || issueLabel === "delivered_unpaid_24h";
   const isFailedRetry = false;
-  return (
+  let base =
     dollarValueCents * REMINDER_WEIGHT +
     daysOverdue * 0.25 * dollarValueCents +
     (isCompletedUninvoiced ? dollarValueCents * 0.5 : 0) +
-    (isFailedRetry ? dollarValueCents * 2.0 : 0)
-  );
+    (isFailedRetry ? dollarValueCents * 2.0 : 0);
+
+  if (issueLabel === "collected_financially_open") {
+    const pickup = row.pickupDate?.trim() ?? "";
+    const del = row.deliveryDate?.trim() ?? "";
+    const dPick = pickup.match(ISO_YMD) ? daysYmdElapsed(pickup, businessYmd) : 0;
+    const dDel =
+      del.length > 0 && del.match(ISO_YMD) ? daysYmdElapsed(del, businessYmd) : 0;
+    const scheduleLag = Math.max(dPick, dDel);
+    /** Dominates `updatedAt`-based rules so long-standing Intake debt surfaces first */
+    base += 2_000_000 + scheduleLag * 25_000 + dollarValueCents * 2;
+  }
+  return base;
 }
 
 async function orderIdsWithReminderSuccessToday(
@@ -129,6 +184,7 @@ export async function listInterventionCandidates(
 
   const stale48 = new Date(now.getTime() - 48 * 3600 * 1000);
   const stale24 = new Date(now.getTime() - 24 * 3600 * 1000);
+  const businessYmd = zonedYmd(now, getDashboardTimeZone());
 
   const candidateRows = await db
     .select()
@@ -141,6 +197,18 @@ export async function listInterventionCandidates(
           and(eq(orders.status, "processing"), lt(orders.updatedAt, stale48)),
           and(eq(orders.status, "new"), lt(orders.updatedAt, stale48)),
           and(eq(orders.status, "collected"), lt(orders.updatedAt, stale48)),
+          and(
+            eq(orders.status, "collected"),
+            eq(orders.paid, false),
+            or(
+              lt(orders.pickupDate, businessYmd),
+              and(
+                sql`TRIM(COALESCE(${orders.deliveryDate}, '')) != ''`,
+                sql`${orders.deliveryDate} REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`,
+                lt(orders.deliveryDate, businessYmd)
+              )
+            )
+          ),
           and(
             eq(orders.status, "ready"),
             eq(orders.paid, false),
@@ -160,13 +228,13 @@ export async function listInterventionCandidates(
 
   const scored: ScoredInterventionCandidate[] = [];
   for (const row of candidateRows) {
-    const issueLabel = issueForOrder(row, now, stale48, stale24);
+    const issueLabel = issueForOrder(row, now, stale48, stale24, businessYmd);
     if (!issueLabel) continue;
     scored.push({
       order: row,
       issueLabel,
       dollarValueCents: orderTotalCents(row),
-      score: scoreCandidate(row, issueLabel, now),
+      score: scoreCandidate(row, issueLabel, now, businessYmd),
     });
   }
   scored.sort((a, b) => b.score - a.score || b.order.id - a.order.id);
