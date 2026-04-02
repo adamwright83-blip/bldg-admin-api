@@ -1,5 +1,11 @@
 export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
+/** Base URL for resident-facing web (welcome handoff, SMS-safe links). Override with VITE_RESIDENT_WEB_ORIGIN. */
+export const getResidentWebOrigin = (): string => {
+  const raw = import.meta.env.VITE_RESIDENT_WEB_ORIGIN ?? "https://laundrybutler.bldg.chat";
+  return String(raw).replace(/\/+$/, "");
+};
+
 const getAppHomeUrl = () => {
   if (typeof window === "undefined") return "/";
   return `${window.location.origin}/`;

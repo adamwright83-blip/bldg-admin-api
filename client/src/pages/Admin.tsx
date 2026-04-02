@@ -25,6 +25,7 @@ import {
   ADMIN_WORKSPACE_TABS as TABS,
   type AdminWorkspaceTab as Tab,
 } from "@/admin/adminPaths";
+import { getResidentWebOrigin } from "@/const";
 
 const SUPPORTED_BUILDINGS: { label: string; value: string }[] = [
   { label: "OPUS LA", value: "opusla" },
@@ -741,6 +742,7 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
   const { data: order, isLoading } = trpc.admin.getOrder.useQuery({ id: orderId });
   const saveIntake = trpc.admin.saveIntake.useMutation();
   const chargeCard = trpc.admin.chargeCard.useMutation();
+  const generatePortalToken = trpc.orders.generatePortalToken.useMutation();
 
   const catalogQuery = trpc.admin.catalog.list.useQuery(
     { includeArchived: false },
@@ -772,7 +774,13 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
 
   // Shared
   const [discountPercent, setDiscountPercent] = useState("0");
-  const [chargeResult, setChargeResult] = useState<{ success: boolean; error?: string; isFirstPaidOrder?: boolean; portalJwt?: string | null } | null>(null);
+  const [chargeResult, setChargeResult] = useState<{
+    success: boolean;
+    error?: string;
+    isFirstPaidOrder?: boolean;
+    receiptUrl?: string;
+    portalWelcomeUrl?: string;
+  } | null>(null);
 
   const hydratedOrderId = useRef<number | null>(null);
   useEffect(() => {
@@ -872,7 +880,32 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
       orderId: order.id,
       amountCents: totals.totalCents,
     });
-    setChargeResult(result);
+    if (!result.success) {
+      setChargeResult(result);
+      return;
+    }
+
+    let portalWelcomeUrl: string | undefined;
+    if (result.isFirstPaidOrder) {
+      try {
+        const { token } = await generatePortalToken.mutateAsync({ orderId: order.id });
+        const welcome = new URL("/welcome", `${getResidentWebOrigin()}/`);
+        welcome.searchParams.set("token", token);
+        portalWelcomeUrl = welcome.toString();
+      } catch (err) {
+        console.error("Failed to generate portal welcome link:", err);
+        toast.error(
+          "Charged successfully, but the portal enrollment link could not be created. Use the receipt link below."
+        );
+      }
+    }
+
+    setChargeResult({
+      success: true,
+      isFirstPaidOrder: result.isFirstPaidOrder,
+      receiptUrl: result.receiptUrl,
+      portalWelcomeUrl,
+    });
   };
 
   if (isLoading || !order) return <Loader2 className="animate-spin w-6 h-6 text-black/30 mx-auto mt-10" />;
@@ -895,13 +928,21 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
             View digital receipt (open to screenshot)
           </a>
 
-          {chargeResult.isFirstPaidOrder && chargeResult.portalJwt && (
-            <div className="mt-8 p-4 border border-black/20 text-left">
-              <p className="text-xs font-medium text-black/50 uppercase tracking-wider mb-2">Portal Enrollment</p>
-              <p className="text-sm text-black/60 mb-3">First paid order. Copy the link below and send to the customer.</p>
-              <CopyButton text={`https://bldg.chat/foropusla/welcome?token=${chargeResult.portalJwt}`} />
+          {chargeResult.receiptUrl ? (
+            <div className="mt-6 p-4 border border-black/20 text-left w-full max-w-md mx-auto">
+              <p className="text-xs font-medium text-black/50 uppercase tracking-wider mb-2">Customer receipt (app)</p>
+              <p className="text-sm text-black/60 mb-3">Copy this link to text or email — it opens their receipt in one tap.</p>
+              <CopyButton text={chargeResult.receiptUrl} />
             </div>
-          )}
+          ) : null}
+
+          {chargeResult.isFirstPaidOrder && chargeResult.portalWelcomeUrl ? (
+            <div className="mt-6 p-4 border border-black/20 text-left w-full max-w-md mx-auto">
+              <p className="text-xs font-medium text-black/50 uppercase tracking-wider mb-2">Portal enrollment</p>
+              <p className="text-sm text-black/60 mb-3">First paid order. Copy the link below and send to the customer.</p>
+              <CopyButton text={chargeResult.portalWelcomeUrl} />
+            </div>
+          ) : null}
         </div>
         <Button variant="outline" className="border-black text-black" onClick={onBack}>Back to Intake</Button>
       </div>

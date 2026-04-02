@@ -10,6 +10,7 @@
  */
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
+import { getResidentWebOrigin } from "@/const";
 import { useTenant } from "@/hooks/useTenant";
 import { WF_RATE_PER_LB_CENTS, centsToDollars } from "@shared/pricing";
 import { useCatalogDryCleanMinCents } from "@/components/CatalogDryCleanPricing";
@@ -577,7 +578,9 @@ function Step6({
     setLoading(true);
     try {
       const { token } = await generateTokenMutation.mutateAsync({ orderId });
-      window.location.href = `https://app.bldg.chat/welcome?token=${token}`;
+      const welcome = new URL("/welcome", `${getResidentWebOrigin()}/`);
+      welcome.searchParams.set("token", token);
+      window.location.href = welcome.toString();
     } catch (err) {
       console.error("Failed to generate portal token:", err);
       setLoading(false);
