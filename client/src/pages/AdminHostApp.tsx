@@ -165,6 +165,11 @@ export default function AdminHostApp() {
           debouncedCustomerQuery={debouncedCustomerQuery}
           searchOrders={searchOrders}
           setProfilePhone={setProfilePhone}
+          onPrefillNewOrder={(phone) => {
+            setNewOrderPhoneSeed(phone);
+            navigate("/new-order");
+            setCustomerSearchQuery("");
+          }}
         />
 
         {isHome ? (

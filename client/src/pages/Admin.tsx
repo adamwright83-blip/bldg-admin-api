@@ -236,6 +236,11 @@ export default function Admin() {
         debouncedCustomerQuery={debouncedCustomerQuery}
         searchOrders={searchOrders}
         setProfilePhone={setProfilePhone}
+        onPrefillNewOrder={(phone) => {
+          setNewOrderPhoneSeed(phone);
+          setActiveTab("New Order");
+          setCustomerSearchQuery("");
+        }}
       />
 
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
@@ -300,13 +305,45 @@ function NewOrderTab({
     { enabled: phone.length >= 7 && !prefilled }
   );
 
+  const pendingSeedPrefill = useRef(false);
+
   useEffect(() => {
     if (phoneSeed) {
       setPhone(phoneSeed);
       setPrefilled(false);
+      pendingSeedPrefill.current = true;
       onConsumePhoneSeed();
     }
   }, [phoneSeed, onConsumePhoneSeed]);
+
+  /** After header search selects a customer, auto-fill the form when searchCustomer returns. */
+  useEffect(() => {
+    if (!pendingSeedPrefill.current) return;
+    if (phone.length < 7) return;
+    if (searchQuery.isFetching) return;
+    if (!searchQuery.isFetched) return;
+
+    pendingSeedPrefill.current = false;
+
+    const d = searchQuery.data;
+    if (d == null) return;
+
+    const norm = (p: string) => p.replace(/\D/g, "");
+    if (norm(d.phone) !== norm(phone)) return;
+
+    setForm((f) => ({
+      ...f,
+      firstName: d.firstName,
+      lastName: d.lastName,
+      email: d.email || "",
+      address: d.address || "",
+      unit: d.unit || "",
+      specialInstructions: d.specialInstructions || "",
+    }));
+    setStripeCustomerId(d.stripeCustomerId || null);
+    setStripePaymentMethodId(d.stripePaymentMethodId || null);
+    setPrefilled(true);
+  }, [phone, searchQuery.isFetching, searchQuery.isFetched, searchQuery.data]);
 
   const createOrder = trpc.admin.createOrder.useMutation();
   const queueQuery = trpc.admin.listByStatus.useQuery({ status: "new" });
@@ -2435,11 +2472,13 @@ export function AdminCustomerSearchBlock({
   debouncedCustomerQuery,
   searchOrders,
   setProfilePhone,
+  onPrefillNewOrder,
 }: {
   customerSearchQuery: string;
   setCustomerSearchQuery: (q: string) => void;
   debouncedCustomerQuery: string;
   setProfilePhone: (p: string) => void;
+  onPrefillNewOrder: (phone: string) => void;
   searchOrders: {
     isLoading: boolean;
     data?: {
@@ -2474,16 +2513,24 @@ export function AdminCustomerSearchBlock({
                   {searchOrders.data.map((o) => (
                     <li
                       key={o.id}
-                      className="flex items-stretch gap-1 px-2 py-1.5 hover:bg-black/[0.03] border-b border-black/5 last:border-0"
+                      className="flex items-stretch gap-1 px-2 py-1.5 border-b border-black/5 last:border-0"
                     >
-                      <div className="flex-1 min-w-0 flex flex-col justify-center px-1">
+                      <button
+                        type="button"
+                        title="New order for this customer"
+                        className="flex-1 min-w-0 flex flex-col justify-center px-1 text-left rounded-md hover:bg-black/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-black/25"
+                        onClick={() => {
+                          onPrefillNewOrder(o.phone);
+                          setCustomerSearchQuery("");
+                        }}
+                      >
                         <span className="font-medium text-black text-sm truncate">
                           #{o.id} — {o.firstName} {o.lastName}
                         </span>
                         <span className="text-black/50 text-xs">
                           {o.total ? `$${o.total}` : "—"} · {o.serviceType === "wash_fold" ? "W&F" : "DC"}
                         </span>
-                      </div>
+                      </button>
                       <div className="flex flex-col sm:flex-row gap-1 shrink-0">
                         <button
                           type="button"
