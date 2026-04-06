@@ -79,6 +79,8 @@ export const orders = mysqlTable("orders", {
 
   /* Payment */
   paid: boolean("paid").default(false).notNull(),
+  /** Set when payment succeeds (Stripe PI time on charge); used for "Collected today" — not `updatedAt`. */
+  paidAt: timestamp("paidAt"),
 
   /* First-paid portal enrollment */
   isFirstPaidOrder: boolean("isFirstPaidOrder").default(false).notNull(),
@@ -137,7 +139,7 @@ export const adminActionLog = mysqlTable("admin_action_log", {
   entityType: mysqlEnum("entityType", ["order", "customer"]).notNull(),
   entityId: varchar("entityId", { length: 128 }).notNull(),
   dollarValueCents: int("dollarValueCents").notNull(),
-  status: mysqlEnum("status", ["success", "reversed", "failed"]).notNull(),
+  status: mysqlEnum("status", ["attempted", "delivered", "failed", "paid", "reversed"]).notNull(),
   source: mysqlEnum("source", ["manual_action", "auto_capture"]).notNull(),
   executionTimeMs: int("executionTimeMs"),
   metadata: json("metadata"),

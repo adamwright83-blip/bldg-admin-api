@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
 import { adminActionLog, orders, type Order } from "../drizzle/schema";
 import { getDb } from "./db";
 import {
@@ -9,6 +9,9 @@ import {
 } from "./dashboardZoned";
 
 export const ACTION_SEND_REMINDER = "send_reminder" as const;
+
+/** Log rows that count as a completed operational touch (not cash collection). */
+export const ACTION_LOG_ACTED_STATUSES = ["attempted", "delivered"] as const;
 
 /** Canonical entity_id for order-scoped actions (matches locked spec). */
 export function orderEntityId(orderId: number): string {
@@ -22,7 +25,7 @@ export type DashboardBusinessDayBounds = {
   endUtc: Date;
 };
 
-/** All "today", dedupe, and recovered sums use this window (no mixed TZ). */
+/** All dashboard business-day windows (action logs, paid-order “today”, etc.) use this (no mixed TZ). */
 export function getDashboardBusinessDayBoundsUtc(now: Date = new Date()): DashboardBusinessDayBounds {
   const timeZone = getDashboardTimeZone();
   const ymd = zonedYmd(now, timeZone);
@@ -90,13 +93,14 @@ export function isCollectedFinanciallyOpen(row: Order, businessYmd: string): boo
   return Boolean(pickupElapsed || delElapsed);
 }
 
-function issueForOrder(
+export function issueForOrder(
   row: Order,
   _now: Date,
   stale48: Date,
   stale24: Date,
   businessYmd: string
 ): IssueLabel | null {
+  if (row.paid) return null;
   if (row.manualRiskFlag) return "manual_risk_override";
   if (row.status === "processing" && row.updatedAt < stale48) return "processing_stale_48h";
   if (row.status === "new" && row.updatedAt < stale48) return "new_stale_48h";
@@ -145,7 +149,7 @@ function scoreCandidate(
   return base;
 }
 
-async function orderIdsWithReminderSuccessToday(
+async function orderIdsWithReminderActedToday(
   tenantId: string,
   bounds: DashboardBusinessDayBounds
 ): Promise<Set<number>> {
@@ -160,7 +164,7 @@ async function orderIdsWithReminderSuccessToday(
         eq(adminActionLog.tenantId, tenantId),
         eq(adminActionLog.actionType, ACTION_SEND_REMINDER),
         eq(adminActionLog.entityType, "order"),
-        eq(adminActionLog.status, "success"),
+        inArray(adminActionLog.status, [...ACTION_LOG_ACTED_STATUSES]),
         gte(adminActionLog.createdAt, bounds.startUtc),
         lt(adminActionLog.createdAt, bounds.endUtc)
       )
@@ -252,7 +256,7 @@ export async function getLevel1ApexCommand(
   if (!db) return null;
 
   const bounds = getDashboardBusinessDayBoundsUtc(now);
-  const excluded = await orderIdsWithReminderSuccessToday(tenantId, bounds);
+  const excluded = await orderIdsWithReminderActedToday(tenantId, bounds);
   const candidates = await listInterventionCandidates(tenantId, now);
 
   for (const c of candidates) {
@@ -262,8 +266,12 @@ export async function getLevel1ApexCommand(
   return { bounds, candidate: null };
 }
 
-/** Sum successful manual recoveries logged today (dashboard TZ). Includes negative reversal rows. */
-export async function getRecoveredTodayCents(
+const RECOVERY_ACTION_TYPES = [ACTION_SEND_REMINDER, "send_invoice"] as const;
+
+/**
+ * Dollar value tied to manual recovery actions logged today (attempted or delivered — not cash collected).
+ */
+export async function getActedOnTodayCents(
   tenantId: string,
   now: Date = new Date()
 ): Promise<{ bounds: DashboardBusinessDayBounds; cents: number } | null> {
@@ -271,7 +279,6 @@ export async function getRecoveredTodayCents(
   if (!db) return null;
 
   const bounds = getDashboardBusinessDayBoundsUtc(now);
-  const recoveryActions = [ACTION_SEND_REMINDER, "send_invoice"] as const;
 
   const [row] = await db
     .select({
@@ -281,8 +288,8 @@ export async function getRecoveredTodayCents(
     .where(
       and(
         eq(adminActionLog.tenantId, tenantId),
-        inArray(adminActionLog.actionType, [...recoveryActions]),
-        eq(adminActionLog.status, "success"),
+        inArray(adminActionLog.actionType, [...RECOVERY_ACTION_TYPES]),
+        inArray(adminActionLog.status, [...ACTION_LOG_ACTED_STATUSES]),
         eq(adminActionLog.source, "manual_action"),
         gte(adminActionLog.createdAt, bounds.startUtc),
         lt(adminActionLog.createdAt, bounds.endUtc)
@@ -292,8 +299,119 @@ export async function getRecoveredTodayCents(
   return { bounds, cents: Number(row?.cents ?? 0) };
 }
 
+/**
+ * Unpaid intervention pipeline — sum of order totals currently scored as at-risk for this tenant.
+ */
+export async function getAwaitingPaymentCents(
+  tenantId: string,
+  now: Date = new Date()
+): Promise<{ bounds: DashboardBusinessDayBounds; cents: number } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const bounds = getDashboardBusinessDayBoundsUtc(now);
+  const candidates = await listInterventionCandidates(tenantId, now);
+  let cents = 0;
+  for (const c of candidates) {
+    cents += c.dollarValueCents;
+  }
+  return { bounds, cents };
+}
+
+/**
+ * Actual cash collected: paid orders whose `paidAt` falls in the dashboard business day (tenant-scoped).
+ * Does not use manual action logs. Requires `paidAt` set at payment time.
+ */
+export async function getCollectedTodayCents(
+  tenantId: string,
+  now: Date = new Date()
+): Promise<{ bounds: DashboardBusinessDayBounds; cents: number } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const bounds = getDashboardBusinessDayBoundsUtc(now);
+
+  const [row] = await db
+    .select({
+      cents: sql<number>`COALESCE(SUM(ROUND(CAST(${orders.total} AS DECIMAL(14,4)) * 100)), 0)`,
+    })
+    .from(orders)
+    .where(
+      and(
+        sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`,
+        eq(orders.paid, true),
+        isNotNull(orders.paidAt),
+        gte(orders.paidAt, bounds.startUtc),
+        lt(orders.paidAt, bounds.endUtc)
+      )
+    );
+
+  return { bounds, cents: Number(row?.cents ?? 0) };
+}
+
+/**
+ * Level 2 items: next 2–3 candidates after apex, never including the apex order id (defensive).
+ */
+export function tacticalClusterItemsAfterApex(
+  filtered: ScoredInterventionCandidate[]
+): ScoredInterventionCandidate[] {
+  if (filtered.length === 0) return [];
+  const apexId = filtered[0]!.order.id;
+  return filtered.slice(1, 4).filter((c) => c.order.id !== apexId);
+}
+
+export type InterventionMutationType = "send_reminder";
+
+export function interventionMutationTypeForCandidate(_c: ScoredInterventionCandidate): InterventionMutationType {
+  return "send_reminder";
+}
+
+/**
+ * Next 2–3 scored items after Level 1 apex, same ordering. Single mutation type in v1 (`send_reminder`).
+ */
+export async function getLevel2TacticalCluster(
+  tenantId: string,
+  now: Date = new Date()
+): Promise<{
+  bounds: DashboardBusinessDayBounds;
+  items: ScoredInterventionCandidate[];
+  /** When length &gt; 1 and all items share this mutation type, UI may aggregate. */
+  aggregateMutationType: InterventionMutationType | null;
+} | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const bounds = getDashboardBusinessDayBoundsUtc(now);
+  const excluded = await orderIdsWithReminderActedToday(tenantId, bounds);
+  const candidates = await listInterventionCandidates(tenantId, now);
+  const filtered = candidates.filter((c) => !excluded.has(c.order.id));
+  if (filtered.length === 0) {
+    return { bounds, items: [], aggregateMutationType: null };
+  }
+  const items = tacticalClusterItemsAfterApex(filtered);
+  const first = items[0];
+  const firstType = first ? interventionMutationTypeForCandidate(first) : null;
+  const aggregateMutationType =
+    items.length > 1 &&
+    firstType &&
+    items.every((c) => interventionMutationTypeForCandidate(c) === firstType)
+      ? firstType
+      : null;
+  return { bounds, items, aggregateMutationType };
+}
+
 export type SendReminderResult =
-  | { ok: true; deduped: boolean; logId: number | null; recoveredTodayCents: number }
+  | {
+      ok: true;
+      deduped: boolean;
+      logId: number | null;
+      logWriteSucceeded: true;
+      logStatus: "attempted" | "delivered" | "failed" | "paid" | "reversed";
+      /** Outbound comms: true once we record an operational attempt (log row). */
+      outboundReminderAttempted: boolean;
+      /** Known delivered when log status is `delivered`; `false` for `attempted`; else unknown. */
+      outboundReminderDelivered: boolean | null;
+      paymentCollected: boolean;
+      actedOnTodayCents: number;
+    }
   | { ok: false; error: string };
 
 export async function sendPaymentReminderForOrder(params: {
@@ -315,7 +433,7 @@ export async function sendPaymentReminderForOrder(params: {
   const entityId = orderEntityId(row.id);
 
   const [existing] = await db
-    .select({ id: adminActionLog.id })
+    .select({ id: adminActionLog.id, status: adminActionLog.status })
     .from(adminActionLog)
     .where(
       and(
@@ -323,20 +441,34 @@ export async function sendPaymentReminderForOrder(params: {
         eq(adminActionLog.actionType, ACTION_SEND_REMINDER),
         eq(adminActionLog.entityType, "order"),
         eq(adminActionLog.entityId, entityId),
-        eq(adminActionLog.status, "success"),
+        inArray(adminActionLog.status, [...ACTION_LOG_ACTED_STATUSES]),
         gte(adminActionLog.createdAt, bounds.startUtc),
         lt(adminActionLog.createdAt, bounds.endUtc)
       )
     )
     .limit(1);
 
+  function deliveryFromLogStatus(
+    s: "attempted" | "delivered" | "failed" | "paid" | "reversed"
+  ): boolean | null {
+    if (s === "delivered") return true;
+    if (s === "attempted") return false;
+    return null;
+  }
+
   if (existing) {
-    const recovered = await getRecoveredTodayCents(params.tenantId, now);
+    const acted = await getActedOnTodayCents(params.tenantId, now);
+    const st = existing.status;
     return {
       ok: true,
       deduped: true,
       logId: existing.id,
-      recoveredTodayCents: recovered?.cents ?? 0,
+      logWriteSucceeded: true,
+      logStatus: st,
+      outboundReminderAttempted: true,
+      outboundReminderDelivered: deliveryFromLogStatus(st),
+      paymentCollected: false,
+      actedOnTodayCents: acted?.cents ?? 0,
     };
   }
 
@@ -350,21 +482,95 @@ export async function sendPaymentReminderForOrder(params: {
       entityType: "order",
       entityId,
       dollarValueCents,
-      status: "success",
+      status: "attempted",
       source: "manual_action",
       executionTimeMs: Date.now() - t0,
-      metadata: { orderId: row.id },
+      metadata: {
+        orderId: row.id,
+        outboundDeliveryConfirmed: false,
+        outboundChannel: "not_configured",
+        /** Populated when a provider returns an id; `delivered` only via webhook confirmation. */
+        providerMessageId: null,
+      },
     });
     const logId = Number(ins[0].insertId);
-    const recovered = await getRecoveredTodayCents(params.tenantId, now);
+    const acted = await getActedOnTodayCents(params.tenantId, now);
     return {
       ok: true,
       deduped: false,
       logId: Number.isFinite(logId) ? logId : null,
-      recoveredTodayCents: recovered?.cents ?? dollarValueCents,
+      logWriteSucceeded: true,
+      logStatus: "attempted",
+      outboundReminderAttempted: true,
+      outboundReminderDelivered: false,
+      paymentCollected: false,
+      actedOnTodayCents: acted?.cents ?? 0,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: msg };
   }
+}
+
+export type RevenueInterventionOrderDebug =
+  | {
+      orderId: number;
+      paid: boolean;
+      paidAt: Date | null;
+      issueLabel: IssueLabel | null;
+      apexEligible: boolean;
+      l2Eligible: boolean;
+      lastSendReminderLogStatus: string | null;
+    }
+  | { error: "order_not_found" | "wrong_tenant" };
+
+/**
+ * Dev-only diagnostics for a single order (apex/L2 eligibility, issue label, last reminder log).
+ */
+export async function getRevenueInterventionOrderDebug(
+  tenantId: string,
+  orderId: number,
+  now: Date = new Date()
+): Promise<RevenueInterventionOrderDebug | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const [orderRow] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!orderRow) return { error: "order_not_found" };
+  if ((orderRow.tenantId ?? "default") !== tenantId) return { error: "wrong_tenant" };
+
+  const stale48 = new Date(now.getTime() - 48 * 3600 * 1000);
+  const stale24 = new Date(now.getTime() - 24 * 3600 * 1000);
+  const businessYmd = zonedYmd(now, getDashboardTimeZone());
+  const issueLabel = issueForOrder(orderRow, now, stale48, stale24, businessYmd);
+
+  const l1 = await getLevel1ApexCommand(tenantId, now);
+  const apexEligible = l1?.candidate?.order.id === orderId;
+
+  const l2 = await getLevel2TacticalCluster(tenantId, now);
+  const l2Eligible = l2?.items.some((c) => c.order.id === orderId) ?? false;
+
+  const [log] = await db
+    .select({ status: adminActionLog.status })
+    .from(adminActionLog)
+    .where(
+      and(
+        eq(adminActionLog.tenantId, tenantId),
+        eq(adminActionLog.actionType, ACTION_SEND_REMINDER),
+        eq(adminActionLog.entityType, "order"),
+        eq(adminActionLog.entityId, orderEntityId(orderId))
+      )
+    )
+    .orderBy(desc(adminActionLog.createdAt))
+    .limit(1);
+
+  return {
+    orderId,
+    paid: orderRow.paid,
+    paidAt: orderRow.paidAt,
+    issueLabel,
+    apexEligible,
+    l2Eligible,
+    lastSendReminderLogStatus: log?.status ?? null,
+  };
 }

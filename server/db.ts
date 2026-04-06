@@ -491,7 +491,19 @@ export async function updateOrderIntake(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(orders).set(data).where(eq(orders.id, orderId));
+  let patch: Partial<InsertOrder> = { ...data };
+  if (data.paid === true && data.paidAt === undefined) {
+    const [existing] = await db
+      .select({ paid: orders.paid, paidAt: orders.paidAt })
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+    if (existing && !existing.paid) {
+      patch = { ...patch, paidAt: new Date() };
+    }
+  }
+
+  await db.update(orders).set(patch).where(eq(orders.id, orderId));
 }
 
 export async function searchCustomerByPhone(

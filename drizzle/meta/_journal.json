@@ -71,6 +71,20 @@
       "when": 1742300000000,
       "tag": "0009_revenue_intervention",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1742400000000,
+      "tag": "0010_admin_action_log_status_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1742500000000,
+      "tag": "0011_orders_paid_at",
+      "breakpoints": true
     }
   ]
 }

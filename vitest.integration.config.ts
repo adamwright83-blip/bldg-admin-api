@@ -3,6 +3,7 @@ import path from "path";
 
 const templateRoot = path.resolve(import.meta.dirname);
 
+/** Optional: DB + local server + Twilio. Not part of default `pnpm test`. */
 export default defineConfig({
   root: templateRoot,
   resolve: {
@@ -14,8 +15,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["server/**/*.test.ts", "server/**/*.spec.ts"],
-    /** HTTP/Twilio/DB-dependent suites live in `*.integration.test.ts` — run via `pnpm test:integration`. */
-    exclude: ["**/node_modules/**", "**/dist/**", "**/*.integration.test.ts"],
+    include: ["server/**/*.integration.test.ts"],
+    exclude: ["**/node_modules/**", "**/dist/**"],
   },
 });

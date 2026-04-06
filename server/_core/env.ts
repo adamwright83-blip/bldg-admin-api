@@ -12,4 +12,9 @@ export const ENV = {
   anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514",
   platformFeePercent: parseFloat(process.env.PLATFORM_FEE_PERCENT ?? "5"),
   adminBaseUrl: process.env.ADMIN_BASE_URL ?? "https://admin.bldg.chat",
+  /**
+   * When true, outbound reminder infrastructure exists; UI still shows "attempted" until log status is
+   * `delivered` (webhook-confirmed only). Does not imply messages are sent.
+   */
+  revenueReminderOutboundConfigured: process.env.REVENUE_REMINDER_OUTBOUND_CONFIGURED === "true",
 };

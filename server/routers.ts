@@ -84,8 +84,12 @@ import Stripe from "stripe";
 import * as jose from "jose";
 import { matchBuilding } from "@shared/buildings";
 import {
+  getActedOnTodayCents,
+  getAwaitingPaymentCents,
+  getCollectedTodayCents,
   getLevel1ApexCommand as loadLevel1ApexCommand,
-  getRecoveredTodayCents,
+  getLevel2TacticalCluster as loadLevel2TacticalCluster,
+  getRevenueInterventionOrderDebug,
   sendPaymentReminderForOrder,
 } from "./revenueIntervention";
 
@@ -514,9 +518,9 @@ export const appRouter = router({
       };
     }),
 
-    /** Revenue predator — Step 1: recovered sum today (dashboard business TZ; manual send_reminder + send_invoice). */
-    getRecoveredToday: adminProcedure.query(async ({ ctx }) => {
-      const r = await getRecoveredTodayCents(ctx.tenantId);
+    /** Manual recovery actions logged today (attempted/delivered — not cash collection). */
+    getActedOnToday: adminProcedure.query(async ({ ctx }) => {
+      const r = await getActedOnTodayCents(ctx.tenantId);
       if (!r) {
         return {
           cents: 0,
@@ -533,7 +537,75 @@ export const appRouter = router({
       };
     }),
 
-    /** Highest-scored at-risk order without a successful send_reminder logged today. */
+    /** Unpaid intervention pipeline — sum of at-risk order totals. */
+    getAwaitingPayment: adminProcedure.query(async ({ ctx }) => {
+      const r = await getAwaitingPaymentCents(ctx.tenantId);
+      if (!r) {
+        return {
+          cents: 0,
+          businessYmd: "",
+          timeZone: getDashboardTimeZone(),
+          dbAvailable: false,
+        };
+      }
+      return {
+        cents: r.cents,
+        businessYmd: r.bounds.ymd,
+        timeZone: r.bounds.timeZone,
+        dbAvailable: true,
+      };
+    }),
+
+    /** Paid orders today — sums totals where `paidAt` falls in the business day (not action logs). */
+    getCollectedToday: adminProcedure.query(async ({ ctx }) => {
+      const r = await getCollectedTodayCents(ctx.tenantId);
+      if (!r) {
+        return {
+          cents: 0,
+          businessYmd: "",
+          timeZone: getDashboardTimeZone(),
+          dbAvailable: false,
+          timestampBasis: "paidAt" as const,
+        };
+      }
+      return {
+        cents: r.cents,
+        businessYmd: r.bounds.ymd,
+        timeZone: r.bounds.timeZone,
+        dbAvailable: true,
+        timestampBasis: "paidAt" as const,
+      };
+    }),
+
+    /** Static UI hints (env-backed); delivery truth remains on admin_action_log + webhooks. */
+    revenueInterventionUiContext: adminProcedure.query(() => ({
+      outboundReminderProviderConfigured: ENV.revenueReminderOutboundConfigured,
+    })),
+
+    /** Development-only: raw eligibility + log status for one order (NODE_ENV !== production). */
+    getRevenueInterventionOrderDebug: adminProcedure
+      .input(z.object({ orderId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        if (process.env.NODE_ENV === "production") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Revenue intervention debug is available in development only.",
+          });
+        }
+        const r = await getRevenueInterventionOrderDebug(ctx.tenantId, input.orderId);
+        if (r === null) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        }
+        if ("error" in r) {
+          throw new TRPCError({
+            code: r.error === "order_not_found" ? "NOT_FOUND" : "FORBIDDEN",
+            message: r.error === "order_not_found" ? "Order not found" : "Order not in tenant",
+          });
+        }
+        return r;
+      }),
+
+    /** Highest-scored at-risk order without send_reminder attempted/delivered today. */
     getLevel1ApexCommand: adminProcedure.query(async ({ ctx }) => {
       const r = await loadLevel1ApexCommand(ctx.tenantId);
       if (!r) {
@@ -570,6 +642,7 @@ export const appRouter = router({
             status: o.status,
             total: o.total,
             paid: o.paid,
+            paidAt: o.paidAt,
             updatedAt: o.updatedAt,
             buildingSlug: o.buildingSlug,
             manualRiskFlag: o.manualRiskFlag,
@@ -578,7 +651,50 @@ export const appRouter = router({
       };
     }),
 
-    /** Logs admin_action_log (send_reminder); idempotent per order per dashboard business day. */
+    /** Next 2–3 scored actions after Level 1 (same ordering); optional aggregate hint when one mutation type. */
+    getLevel2TacticalCluster: adminProcedure.query(async ({ ctx }) => {
+      const r = await loadLevel2TacticalCluster(ctx.tenantId);
+      if (!r) {
+        return {
+          dbAvailable: false,
+          businessYmd: "",
+          timeZone: getDashboardTimeZone(),
+          items: [] as const,
+          aggregateMutationType: null as null,
+        };
+      }
+      const { bounds, items, aggregateMutationType } = r;
+      return {
+        dbAvailable: true,
+        businessYmd: bounds.ymd,
+        timeZone: bounds.timeZone,
+        aggregateMutationType,
+        items: items.map((c) => {
+          const o = c.order;
+          return {
+            issueLabel: c.issueLabel,
+            score: c.score,
+            dollarValueCents: c.dollarValueCents,
+            mutationType: "send_reminder" as const,
+            order: {
+              id: o.id,
+              firstName: o.firstName,
+              lastName: o.lastName,
+              phone: o.phone,
+              status: o.status,
+              total: o.total,
+              paid: o.paid,
+              paidAt: o.paidAt,
+              updatedAt: o.updatedAt,
+              buildingSlug: o.buildingSlug,
+              manualRiskFlag: o.manualRiskFlag,
+            },
+          };
+        }),
+      };
+    }),
+
+    /** Logs admin_action_log (send_reminder, status=attempted); idempotent per order per dashboard business day. */
     sendPaymentReminder: adminProcedure
       .input(z.object({ orderId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
@@ -592,7 +708,12 @@ export const appRouter = router({
         return {
           deduped: out.deduped,
           logId: out.logId,
-          recoveredTodayCents: out.recoveredTodayCents,
+          logWriteSucceeded: out.logWriteSucceeded,
+          logStatus: out.logStatus,
+          outboundReminderAttempted: out.outboundReminderAttempted,
+          outboundReminderDelivered: out.outboundReminderDelivered,
+          paymentCollected: out.paymentCollected,
+          actedOnTodayCents: out.actedOnTodayCents,
         };
       }),
 
@@ -1031,8 +1152,11 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
           const receiptUrl = `https://app.bldg.chat/receipt/${receiptToken}`;
           const hasPaidBefore = await hasCustomerPaidBefore(customerId!);
 
+          const paidAt = new Date(paymentIntent.created * 1000);
+
           await updateOrderIntake(input.orderId, {
             paid: true,
+            paidAt,
             stripePaymentIntentId: paymentIntent.id,
             status: "processing",
             isFirstPaidOrder: !hasPaidBefore,
