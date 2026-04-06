@@ -22,6 +22,9 @@ build/
 *~
 
 # OS generated files
+# macOS screenshots (often dragged into the repo by mistake)
+**/Screen Shot*.png
+**/Screenshot*.png
 .DS_Store
 .DS_Store?
 ._*
