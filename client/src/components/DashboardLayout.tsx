@@ -148,24 +148,24 @@ function DashboardLayoutContent({
       <div className="relative" ref={sidebarRef}>
         <Sidebar
           collapsible="icon"
-          className="border-r border-[var(--hairline)] bg-[var(--card)]"
+          className="border-r-[0.5px] border-[var(--hairline)] bg-[var(--background)]"
           disableTransition={isResizing}
         >
           <SidebarHeader className="h-16 justify-center border-0">
             <div className="flex items-center gap-3 px-2 transition-all w-full">
               <button
                 onClick={toggleSidebar}
-                className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
+                className="h-8 w-8 flex items-center justify-center hover:bg-[rgba(250,247,242,0.06)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
                 aria-label="Toggle navigation"
               >
-                <PanelLeft className="h-4 w-4 text-muted-foreground" />
+                <PanelLeft className="h-4 w-4 text-[var(--ink-muted)]" />
               </button>
               {!isCollapsed ? (
                 <div className="flex flex-col gap-0.5 min-w-0">
-                  <span className="font-sans text-sm font-semibold tracking-tight text-foreground truncate">
+                  <span className="font-sans text-sm font-semibold tracking-tight text-[var(--cream)] truncate">
                     BLDG.chat
                   </span>
-                  <span className="font-sans text-[10px] font-medium uppercase tracking-wide text-[var(--ink-muted)]">
+                  <span className="font-sans text-[10px] font-medium uppercase tracking-wide text-[var(--gold-dim)]">
                     Admin
                   </span>
                 </div>
@@ -184,14 +184,17 @@ function DashboardLayoutContent({
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
                       className={cn(
-                        "h-10 transition-all pl-3 border-l-2 font-sans text-[13px]",
+                        "h-10 transition-all pl-3 border-l-2 font-sans text-[13px] rounded-md",
                         isActive
-                          ? "border-[var(--forest)] text-foreground bg-transparent font-medium"
-                          : "border-transparent text-[var(--ink-muted)] font-normal hover:text-foreground"
+                          ? "border-[var(--forest)] text-[var(--cream)] bg-[var(--forest-glow)] font-medium data-[active=true]:bg-[var(--forest-glow)] data-[active=true]:text-[var(--cream)] hover:bg-[rgba(45,122,79,0.22)]"
+                          : "border-transparent text-[rgba(250,247,242,0.4)] font-normal hover:bg-[rgba(250,247,242,0.06)] hover:text-[rgba(250,247,242,0.72)] data-[active=false]:hover:text-[rgba(250,247,242,0.72)]"
                       )}
                     >
                       <item.icon
-                        className={cn("h-4 w-4 shrink-0", isActive ? "text-[var(--forest)]" : "opacity-80")}
+                        className={cn(
+                          "h-4 w-4 shrink-0",
+                          isActive ? "text-[var(--cream)]" : "text-[rgba(250,247,242,0.4)]"
+                        )}
                       />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
@@ -204,7 +207,7 @@ function DashboardLayoutContent({
           <SidebarFooter className="p-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-[rgba(250,247,242,0.06)] transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <Avatar className="h-9 w-9 border shrink-0">
                     <AvatarFallback className="text-xs font-medium">
                       {user?.name?.charAt(0).toUpperCase()}

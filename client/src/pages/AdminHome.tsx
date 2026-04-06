@@ -94,6 +94,14 @@ export default function AdminHome() {
     };
   }, [watchPaidOrderId, watchedOrder.data?.paid, watchedOrder.data?.paidAt, watchedOrder.data?.total, watchedOrder.data?.id, utils]);
 
+  useEffect(() => {
+    if (l1Flash == null || !apex.isSuccess || apex.data == null) return;
+    const cid = apex.data.candidate?.order.id ?? null;
+    if (cid == null || cid !== l1Flash.orderId) {
+      setL1Flash(null);
+    }
+  }, [apex.isSuccess, apex.data, l1Flash]);
+
   const sendReminder = trpc.admin.sendPaymentReminder.useMutation({
     onSuccess: async (data, variables) => {
       const issueLabel = pendingIssueRef.current;
@@ -116,21 +124,20 @@ export default function AdminHome() {
         utils.admin.getLevel1ApexCommand.invalidate(),
         utils.admin.getLevel2TacticalCluster.invalidate(),
       ]);
-      if (isL1) setL1Flash(null);
     },
   });
 
   if (q.isLoading) {
     return (
       <div className="flex justify-center py-24">
-        <Loader2 className="h-8 w-8 animate-spin text-black/25" />
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--ink-ghost)]" />
       </div>
     );
   }
 
   if (q.isError || q.data == null) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+      <div className="rounded-lg border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-200">
         Could not load dashboard metrics.
       </div>
     );
@@ -168,16 +175,22 @@ export default function AdminHome() {
 
   return (
     <div className="max-w-[1200px] mx-auto px-6 sm:px-9 py-7 space-y-8">
-      <header className="space-y-3">
-        <p className="text-xs font-sans font-normal text-[var(--ink-muted)]">{headlineDate}</p>
-        <h1 className="font-display text-[clamp(1.75rem,4vw,2.25rem)] font-normal tracking-tight text-foreground leading-tight">
-          Three buildings away from{" "}
-          <span className="italic text-[var(--gold)]">a different life.</span>
-        </h1>
-        <p className="text-sm font-sans font-normal text-[var(--ink-muted)] max-w-2xl leading-relaxed">
-          Every action today either moves you closer or keeps you where you are.
-        </p>
-      </header>
+      <div className="relative -mx-1 px-1">
+        <div
+          className="pointer-events-none absolute inset-x-0 -top-6 h-40 bg-[radial-gradient(ellipse_at_50%_0%,var(--gold-glow)_0%,transparent_60%)]"
+          aria-hidden
+        />
+        <header className="relative space-y-3">
+          <p className="text-xs font-sans font-normal text-[var(--ink-muted)]">{headlineDate}</p>
+          <h1 className="font-display text-[clamp(1.75rem,4vw,2.5rem)] font-normal tracking-tight text-[var(--cream)] leading-[1.15]">
+            Three buildings away from{" "}
+            <span className="italic text-[var(--gold)]">a different life.</span>
+          </h1>
+          <p className="text-sm font-sans font-normal text-[var(--ink-muted)] max-w-2xl leading-relaxed">
+            Every action today either moves you closer or keeps you where you are.
+          </p>
+        </header>
+      </div>
 
       {isAdmin && (
         <section className="space-y-5">
@@ -185,16 +198,16 @@ export default function AdminHome() {
             Revenue intervention
           </h2>
           {!interventionReady ? (
-            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+            <p className="text-sm text-amber-100/90 bg-amber-950/50 border border-amber-600/40 rounded-md px-3 py-2">
               {interventionLoading ? (
                 "Loading revenue intervention metrics…"
               ) : (
                 <>
                   Database unavailable or schema missing. Run migration{" "}
-                  <code className="text-xs">0011_orders_paid_at.sql</code>,{" "}
-                  <code className="text-xs">0010_admin_action_log_status_expand.sql</code>, and{" "}
-                  <code className="text-xs">0009_revenue_intervention.sql</code> if needed, and ensure{" "}
-                  <code className="text-xs">DATABASE_URL</code> is set.
+                  <code className="text-xs text-amber-50/90">0011_orders_paid_at.sql</code>,{" "}
+                  <code className="text-xs text-amber-50/90">0010_admin_action_log_status_expand.sql</code>, and{" "}
+                  <code className="text-xs text-amber-50/90">0009_revenue_intervention.sql</code> if needed, and ensure{" "}
+                  <code className="text-xs text-amber-50/90">DATABASE_URL</code> is set.
                 </>
               )}
             </p>
@@ -206,7 +219,7 @@ export default function AdminHome() {
                     <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
                       Acted on today
                     </p>
-                    <p className="font-display text-[28px] font-normal tabular-nums leading-none text-foreground">
+                    <p className="font-display text-[28px] font-normal tabular-nums leading-none text-[var(--cream)]">
                       {formatUsdFromCents(actedOn.data!.cents)}
                     </p>
                   </div>
@@ -214,7 +227,7 @@ export default function AdminHome() {
                     <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
                       Awaiting payment
                     </p>
-                    <p className="font-display text-[28px] font-normal tabular-nums leading-none text-[var(--red-text)]">
+                    <p className="font-display text-[28px] font-normal tabular-nums leading-none text-[var(--red)]">
                       {formatUsdFromCents(awaiting.data!.cents)}
                     </p>
                   </div>
@@ -238,11 +251,15 @@ export default function AdminHome() {
               </div>
 
               {paymentCelebrationCents != null && (
-                <div className="w-full rounded-lg border border-emerald-300 bg-emerald-50 px-5 py-3.5">
-                  <p className="font-display text-lg text-emerald-800 leading-snug">
+                <div
+                  className="w-full rounded-[10px] border border-[rgba(52,211,153,0.2)] bg-[rgba(52,211,153,0.08)] px-6 py-4 shadow-[0_0_40px_var(--emerald-glow)]"
+                >
+                  <p className="font-display text-xl text-[var(--emerald-text)] leading-snug">
                     ✓ Collected {formatUsdFromCents(paymentCelebrationCents)}
                   </p>
-                  <p className="font-mono text-[11px] text-emerald-600 mt-1">paidAt recorded for this order.</p>
+                  <p className="font-mono text-[11px] text-[var(--emerald-text)]/80 mt-1">
+                    paidAt recorded for this order.
+                  </p>
                 </div>
               )}
 
@@ -250,8 +267,8 @@ export default function AdminHome() {
                 {l1Candidate ? (
                   <div
                     className={cn(
-                      "relative overflow-hidden rounded-xl border border-[var(--hairline)] bg-white p-6 shadow-sm transition-colors duration-200",
-                      showL1Success && "bg-emerald-50 ring-2 ring-emerald-300/80"
+                      "relative overflow-hidden rounded-xl border border-[var(--hairline)] bg-[var(--card)] px-7 py-6 shadow-[inset_0_1px_0_0_rgba(200,169,110,0.12)] transition-colors duration-200",
+                      showL1Success && "border-[rgba(52,211,153,0.2)] bg-[rgba(52,211,153,0.06)]"
                     )}
                   >
                     <div
@@ -264,17 +281,17 @@ export default function AdminHome() {
                     <div className="relative space-y-4 pt-1">
                       <div className="flex items-center gap-2">
                         <span
-                          className="ri-pulse-dot h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
+                          className="ri-pulse-dot h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--emerald)]"
                           aria-hidden
                         />
                         <p className="text-[11px] font-sans font-semibold uppercase tracking-[0.1em] text-[var(--gold)]">
                           One thing right now
                         </p>
                       </div>
-                      <p className="font-mono text-[10px] uppercase tracking-wide text-foreground/45">
+                      <p className="font-mono text-[10px] uppercase tracking-wide text-[var(--ink-muted)]">
                         {l1Candidate.issueLabel}
                       </p>
-                      <p className="font-sans text-lg font-medium text-foreground leading-snug">
+                      <p className="font-sans text-[19px] font-medium text-[var(--cream)] leading-snug">
                         {l1Candidate.order.firstName} {l1Candidate.order.lastName}
                       </p>
                       <p className="text-sm font-sans font-normal text-[var(--ink-muted)]">
@@ -284,7 +301,7 @@ export default function AdminHome() {
                         Status <span className="font-mono text-[13px]">{l1Candidate.order.status}</span>
                         {l1Candidate.order.paid ? " · paid" : " · unpaid"}
                       </p>
-                      <p className="font-display text-xl tabular-nums text-foreground">
+                      <p className="font-display text-[22px] tabular-nums text-[var(--cream)]">
                         At stake {formatUsdFromCents(l1Candidate.dollarValueCents)}
                       </p>
                       <div className="pt-1">
@@ -297,8 +314,11 @@ export default function AdminHome() {
                             sendReminder.mutate({ orderId: l1Candidate.order.id });
                           }}
                           className={cn(
-                            "h-11 min-h-11 rounded-lg px-7 font-sans text-sm font-semibold text-[var(--primary-foreground)] shadow-none border-0",
-                            "bg-[var(--forest)] hover:bg-[var(--forest)]/90"
+                            "h-11 min-h-[44px] rounded-lg px-8 font-sans text-[15px] font-semibold border-0 shadow-none transition-all duration-150",
+                            "text-[var(--cream)] active:scale-[0.98]",
+                            showL1Success
+                              ? "bg-[var(--emerald-text)] hover:brightness-110 shadow-[0_0_28px_var(--emerald-glow)]"
+                              : "bg-[var(--forest)] hover:brightness-110 shadow-[0_0_20px_var(--forest-glow)] hover:shadow-[0_0_30px_var(--forest-glow)]"
                           )}
                         >
                           {sendReminder.isPending
@@ -313,7 +333,7 @@ export default function AdminHome() {
                                 : "Send payment reminder (log attempt)"}
                         </Button>
                         {sendReminder.isError && (
-                          <p className="text-xs text-red-600 mt-2 font-sans">{sendReminder.error.message}</p>
+                          <p className="text-xs text-[var(--red)] mt-2 font-sans">{sendReminder.error.message}</p>
                         )}
                       </div>
                     </div>
@@ -328,7 +348,7 @@ export default function AdminHome() {
                 {level2.data!.items.length > 0 && (
                   <div className="space-y-0 pt-2">
                     <div className="flex flex-wrap items-baseline justify-between gap-2 pb-3">
-                      <p className="text-[10px] font-mono uppercase tracking-wide text-foreground/35">
+                      <p className="text-[10px] font-mono uppercase tracking-wide text-[var(--ink-muted)]">
                         Level 2 — Tactical cluster
                       </p>
                       {level2.data!.aggregateMutationType != null && level2.data!.items.length > 1 && (
@@ -345,15 +365,15 @@ export default function AdminHome() {
                       {level2.data!.items.map((item) => (
                         <li
                           key={item.order.id}
-                          className="group py-3 -mx-2 px-2 rounded-md transition-colors hover:bg-black/[0.008] hover:px-3 hover:-mx-3"
+                          className="group py-3.5 -mx-2 px-2 rounded-md transition-colors hover:bg-[rgba(250,247,242,0.02)] hover:-mx-3 hover:px-3"
                         >
-                          <p className="font-mono text-[10px] uppercase tracking-wide text-foreground/35">
+                          <p className="font-mono text-[10px] uppercase tracking-wide text-[var(--ink-muted)]">
                             {item.issueLabel}
                           </p>
-                          <p className="font-sans text-[13px] text-foreground mt-1">
+                          <p className="font-sans text-[13px] text-[var(--cream)] mt-1">
                             Order #{item.order.id} · {item.order.firstName} {item.order.lastName} · {item.order.phone}
                           </p>
-                          <p className="font-mono text-[13px] font-medium text-foreground mt-0.5 tabular-nums">
+                          <p className="font-mono text-[13px] font-medium text-[var(--cream)] mt-0.5 tabular-nums">
                             At stake {formatUsdFromCents(item.dollarValueCents)}
                           </p>
                           <div className="mt-2">
@@ -366,8 +386,8 @@ export default function AdminHome() {
                                 sendReminder.mutate({ orderId: item.order.id });
                               }}
                               className={cn(
-                                "h-8 min-h-8 rounded-md px-4 font-sans text-xs font-semibold text-[var(--primary-foreground)] border-0 shadow-none",
-                                "bg-[var(--forest)] hover:bg-[var(--forest)]/90"
+                                "h-[34px] min-h-[34px] rounded-md px-[18px] py-2 font-sans text-xs font-semibold text-[var(--cream)] border-0 shadow-none",
+                                "bg-[var(--forest)] shadow-[0_0_14px_rgba(45,122,79,0.12)] hover:shadow-[0_0_22px_rgba(45,122,79,0.22)] hover:brightness-110 active:scale-[0.98] transition-all"
                               )}
                             >
                               {sendReminder.isPending
@@ -392,7 +412,7 @@ export default function AdminHome() {
                 <input
                   type="number"
                   min={1}
-                  className="font-mono text-xs border border-[var(--hairline)] rounded px-2 py-1 w-32 bg-[var(--muted)]"
+                  className="font-mono text-xs border border-[var(--hairline)] rounded px-2 py-1 w-32 bg-[var(--muted)] text-[var(--cream)]"
                   placeholder="order id"
                   value={debugOrderInput}
                   onChange={(e) => setDebugOrderInput(e.target.value)}
@@ -401,7 +421,7 @@ export default function AdminHome() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="font-mono text-xs h-8 border-[var(--hairline)]"
+                  className="font-mono text-xs h-8 border-[var(--hairline)] text-[var(--cream)]"
                   onClick={() => {
                     const n = parseInt(debugOrderInput, 10);
                     setDebugLoadId(Number.isFinite(n) && n > 0 ? n : null);
@@ -411,7 +431,7 @@ export default function AdminHome() {
                 </Button>
               </div>
               {debugLoadId != null && (
-                <pre className="text-[10px] font-mono text-foreground/80 bg-[var(--muted)] border border-[var(--hairline)] rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">
+                <pre className="text-[10px] font-mono text-[var(--cream)]/80 bg-[var(--muted)] border border-[var(--hairline)] rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">
                   {riDebug.isLoading
                     ? "loading…"
                     : riDebug.error
@@ -425,13 +445,13 @@ export default function AdminHome() {
       )}
 
       <section className="space-y-5">
-        <h2 className="font-display text-xl font-normal tracking-tight text-foreground">Command center</h2>
+        <h2 className="font-display text-xl font-normal tracking-tight text-[var(--cream)]">Command center</h2>
         <div className="flex flex-wrap items-end justify-between gap-x-12 gap-y-6 pb-5 border-b border-[var(--hairline)]">
           <div className="flex flex-col gap-1 min-w-[6rem]">
             <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
               Revenue today
             </p>
-            <p className="font-display text-2xl font-normal tabular-nums text-foreground leading-none">
+            <p className="font-display text-2xl font-normal tabular-nums text-[var(--cream)] leading-none">
               {formatUsd(d.revenueToday)}
             </p>
           </div>
@@ -439,7 +459,7 @@ export default function AdminHome() {
             <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
               Revenue this week
             </p>
-            <p className="font-display text-2xl font-normal tabular-nums text-foreground leading-none">
+            <p className="font-display text-2xl font-normal tabular-nums text-[var(--cream)] leading-none">
               {formatUsd(d.revenueWeek)}
             </p>
           </div>
@@ -447,7 +467,7 @@ export default function AdminHome() {
             <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
               Revenue this month
             </p>
-            <p className="font-display text-2xl font-normal tabular-nums text-foreground leading-none">
+            <p className="font-display text-2xl font-normal tabular-nums text-[var(--cream)] leading-none">
               {formatUsd(d.revenueMonth)}
             </p>
           </div>
@@ -456,7 +476,7 @@ export default function AdminHome() {
               Avg order value
             </p>
             <p className="text-[10px] font-sans text-[var(--ink-ghost)]">This month · paid orders</p>
-            <p className="font-display text-2xl font-normal tabular-nums text-foreground leading-none mt-0.5">
+            <p className="font-display text-2xl font-normal tabular-nums text-[var(--cream)] leading-none mt-0.5">
               {d.avgOrderValueMonth != null ? formatUsd(d.avgOrderValueMonth) : "—"}
             </p>
           </div>
@@ -470,19 +490,21 @@ export default function AdminHome() {
             <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
               Buildings
             </p>
-            <p className="font-display text-xl font-normal tabular-nums text-foreground">{d.distinctBuildingsWithSlug}</p>
+            <p className="font-display text-[22px] font-normal tabular-nums text-[var(--gold)] [text-shadow:0_0_28px_rgba(200,169,110,0.45)]">
+              {d.distinctBuildingsWithSlug}
+            </p>
             <p className="text-[10px] font-sans text-[var(--ink-ghost)]">Distinct building slugs on orders</p>
           </div>
           <div className="flex flex-col gap-1">
             <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
               Customers
             </p>
-            <p className="font-display text-xl font-normal tabular-nums text-foreground">{d.distinctCustomerPhones}</p>
+            <p className="font-display text-[22px] font-normal tabular-nums text-[var(--cream)]">{d.distinctCustomerPhones}</p>
             <p className="text-[10px] font-sans text-[var(--ink-ghost)]">Distinct phone numbers</p>
           </div>
           <div className="flex flex-col gap-1">
             <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">Orders</p>
-            <p className="font-display text-xl font-normal tabular-nums text-foreground">{d.totalOrders}</p>
+            <p className="font-display text-[22px] font-normal tabular-nums text-[var(--cream)]">{d.totalOrders}</p>
             <p className="text-[10px] font-sans text-[var(--ink-ghost)]">All orders in the system</p>
           </div>
         </div>
