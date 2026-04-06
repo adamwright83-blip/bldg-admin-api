@@ -20,14 +20,30 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  FileText,
+  LayoutDashboard,
+  LogOut,
+  MessageSquare,
+  Package,
+  PanelLeft,
+  ShoppingBag,
+  Store,
+  Users,
+} from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
+import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Page 1", path: "/" },
-  { icon: Users, label: "Page 2", path: "/some-path" },
+  { icon: LayoutDashboard, label: "Overview", path: "/" },
+  { icon: ShoppingBag, label: "Orders", path: "/admin" },
+  { icon: Users, label: "Customers", path: "/customers" },
+  { icon: Package, label: "Catalog", path: "/catalog" },
+  { icon: FileText, label: "Leads", path: "/leads" },
+  { icon: Store, label: "Vendors", path: "/vendors" },
+  { icon: MessageSquare, label: "Requests", path: "/requests" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -51,7 +67,7 @@ export default function DashboardLayout({
   }, [sidebarWidth]);
 
   if (loading) {
-    return <DashboardLayoutSkeleton />
+    return <DashboardLayoutSkeleton />;
   }
 
   if (!user) {
@@ -88,7 +104,7 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find(item => item.path === location);
+  const activeMenuItem = menuItems.find((item) => item.path === location);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -132,10 +148,10 @@ function DashboardLayoutContent({
       <div className="relative" ref={sidebarRef}>
         <Sidebar
           collapsible="icon"
-          className="border-r-0"
+          className="border-r border-[var(--hairline)] bg-[var(--card)]"
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-16 justify-center">
+          <SidebarHeader className="h-16 justify-center border-0">
             <div className="flex items-center gap-3 px-2 transition-all w-full">
               <button
                 onClick={toggleSidebar}
@@ -145,9 +161,12 @@ function DashboardLayoutContent({
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
               {!isCollapsed ? (
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-semibold tracking-tight truncate">
-                    Navigation
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="font-sans text-sm font-semibold tracking-tight text-foreground truncate">
+                    BLDG.chat
+                  </span>
+                  <span className="font-sans text-[10px] font-medium uppercase tracking-wide text-[var(--ink-muted)]">
+                    Admin
                   </span>
                 </div>
               ) : null}
@@ -156,7 +175,7 @@ function DashboardLayoutContent({
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1">
-              {menuItems.map(item => {
+              {menuItems.map((item) => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
@@ -164,10 +183,15 @@ function DashboardLayoutContent({
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
-                      className={`h-10 transition-all font-normal`}
+                      className={cn(
+                        "h-10 transition-all pl-3 border-l-2 font-sans text-[13px]",
+                        isActive
+                          ? "border-[var(--forest)] text-foreground bg-transparent font-medium"
+                          : "border-transparent text-[var(--ink-muted)] font-normal hover:text-foreground"
+                      )}
                     >
                       <item.icon
-                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
+                        className={cn("h-4 w-4 shrink-0", isActive ? "text-[var(--forest)]" : "opacity-80")}
                       />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
@@ -220,12 +244,12 @@ function DashboardLayoutContent({
 
       <SidebarInset>
         {isMobile && (
-          <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
+          <div className="flex border-b border-[var(--hairline)] h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
               <div className="flex items-center gap-3">
                 <div className="flex flex-col gap-1">
-                  <span className="tracking-tight text-foreground">
+                  <span className="tracking-tight text-foreground font-sans text-sm">
                     {activeMenuItem?.label ?? "Menu"}
                   </span>
                 </div>
@@ -233,7 +257,7 @@ function DashboardLayoutContent({
             </div>
           </div>
         )}
-        <main className="flex-1 p-4">{children}</main>
+        <main className="flex-1 min-h-0">{children}</main>
       </SidebarInset>
     </>
   );

@@ -159,11 +159,31 @@ export default function AdminHome() {
   const showL1Success =
     l1Flash && l1OrderId != null && l1Flash.orderId === l1OrderId && sendReminder.isPending === false;
 
+  const headlineDate = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+
   return (
-    <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 space-y-8">
+    <div className="max-w-[1200px] mx-auto px-6 sm:px-9 py-7 space-y-8">
+      <header className="space-y-3">
+        <p className="text-xs font-sans font-normal text-[var(--ink-muted)]">{headlineDate}</p>
+        <h1 className="font-display text-[clamp(1.75rem,4vw,2.25rem)] font-normal tracking-tight text-foreground leading-tight">
+          Three buildings away from{" "}
+          <span className="italic text-[var(--gold)]">a different life.</span>
+        </h1>
+        <p className="text-sm font-sans font-normal text-[var(--ink-muted)] max-w-2xl leading-relaxed">
+          Every action today either moves you closer or keeps you where you are.
+        </p>
+      </header>
+
       {isAdmin && (
-        <section className="rounded-lg border border-black/10 bg-white px-4 py-4 space-y-3">
-          <h2 className="text-sm font-semibold text-black">Revenue intervention</h2>
+        <section className="space-y-5">
+          <h2 className="text-[10px] font-sans font-semibold uppercase tracking-[0.12em] text-[var(--ink-muted)]">
+            Revenue intervention
+          </h2>
           {!interventionReady ? (
             <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
               {interventionLoading ? (
@@ -180,167 +200,199 @@ export default function AdminHome() {
             </p>
           ) : (
             <>
-              <p className="text-xs text-black/50">
-                Business day {actedOn.data!.businessYmd} ({actedOn.data!.timeZone})
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="rounded-md border border-black/10 bg-black/[0.02] px-3 py-2">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-black/45">Acted on today</p>
-                  <p className="text-lg font-semibold tabular-nums text-black">
-                    {formatUsdFromCents(actedOn.data!.cents)}
-                  </p>
-                  <p className="text-[10px] text-black/40 mt-0.5">Actions attempted or delivered (ops log)</p>
+              <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-4 pb-5 border-b border-[var(--hairline)]">
+                <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
+                  <div className="flex flex-col gap-1 min-w-[7rem]">
+                    <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
+                      Acted on today
+                    </p>
+                    <p className="font-display text-[28px] font-normal tabular-nums leading-none text-foreground">
+                      {formatUsdFromCents(actedOn.data!.cents)}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-1 min-w-[7rem]">
+                    <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
+                      Awaiting payment
+                    </p>
+                    <p className="font-display text-[28px] font-normal tabular-nums leading-none text-[var(--red-text)]">
+                      {formatUsdFromCents(awaiting.data!.cents)}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-1 min-w-[7rem]">
+                    <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
+                      Collected today
+                    </p>
+                    <p
+                      className={cn(
+                        "font-display text-[28px] font-normal tabular-nums leading-none text-[var(--emerald-text)] transition-colors",
+                        paymentCelebrationCents != null && "animate-pulse"
+                      )}
+                    >
+                      {formatUsdFromCents(collected.data!.cents)}
+                    </p>
+                  </div>
                 </div>
-                <div className="rounded-md border border-black/10 bg-black/[0.02] px-3 py-2">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-black/45">Awaiting payment</p>
-                  <p className="text-lg font-semibold tabular-nums text-black">
-                    {formatUsdFromCents(awaiting.data!.cents)}
-                  </p>
-                  <p className="text-[10px] text-black/40 mt-0.5">Outstanding at-risk orders (unpaid)</p>
-                </div>
-                <div
-                  className={cn(
-                    "rounded-md border px-3 py-2 transition-colors",
-                    paymentCelebrationCents != null
-                      ? "border-emerald-400 bg-emerald-50 shadow-[0_0_0_1px_rgba(16,185,129,0.25)]"
-                      : "border-black/10 bg-black/[0.02]"
-                  )}
-                >
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-black/45">Collected today</p>
-                  <p className="text-lg font-semibold tabular-nums text-emerald-800">
-                    {formatUsdFromCents(collected.data!.cents)}
-                  </p>
-                  <p className="text-[10px] text-black/40 mt-0.5">
-                    Paid orders · cash by paidAt ({collected.data!.timeZone})
-                  </p>
-                </div>
+                <p className="text-[10px] font-mono text-[var(--ink-ghost)] w-full sm:w-auto sm:ml-auto sm:text-right">
+                  Business day {actedOn.data!.businessYmd} ({actedOn.data!.timeZone})
+                </p>
               </div>
 
-              <p className="text-[10px] font-mono text-black/40 leading-snug">
-                Operator actions, unpaid pipeline, and cash received (paidAt) are tracked separately.
-              </p>
-
               {paymentCelebrationCents != null && (
-                <p className="text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200/90 rounded-md px-3 py-2">
-                  ✓ Collected {formatUsdFromCents(paymentCelebrationCents)} — paidAt recorded for this order.
-                </p>
+                <div className="w-full rounded-lg border border-emerald-300 bg-emerald-50 px-5 py-3.5">
+                  <p className="font-display text-lg text-emerald-800 leading-snug">
+                    ✓ Collected {formatUsdFromCents(paymentCelebrationCents)}
+                  </p>
+                  <p className="font-mono text-[11px] text-emerald-600 mt-1">paidAt recorded for this order.</p>
+                </div>
               )}
 
-              <div className="border-t border-black/10 pt-3 space-y-2">
-                <p className="text-[11px] font-mono uppercase tracking-wide text-black/45">Level 1 — Apex command</p>
+              <div className="pt-1 space-y-4">
                 {l1Candidate ? (
                   <div
                     className={cn(
-                      "space-y-2 rounded-md transition-colors duration-200",
+                      "relative overflow-hidden rounded-xl border border-[var(--hairline)] bg-white p-6 shadow-sm transition-colors duration-200",
                       showL1Success && "bg-emerald-50 ring-2 ring-emerald-300/80"
                     )}
                   >
-                    <p className="text-[11px] font-mono uppercase tracking-wide text-black/45 px-1 pt-1">
-                      {l1Candidate.issueLabel}
-                    </p>
-                    <p className="text-sm text-black px-1">
-                      Order #{l1Candidate.order.id} · {l1Candidate.order.firstName} {l1Candidate.order.lastName} ·{" "}
-                      {l1Candidate.order.phone}
-                    </p>
-                    <p className="text-xs text-black/50 px-1">
-                      Status <span className="font-mono">{l1Candidate.order.status}</span>
-                      {l1Candidate.order.paid ? " · paid" : " · unpaid"} · At stake{" "}
-                      <span className="font-mono">{formatUsdFromCents(l1Candidate.dollarValueCents)}</span>
-                    </p>
-                    <div className="px-1 pb-2">
-                      <Button
-                        type="button"
-                        className="bg-emerald-600 hover:bg-emerald-600/90 text-white"
-                        disabled={sendReminder.isPending}
-                        onClick={() => {
-                          clickWasLevel1Ref.current = true;
-                          pendingIssueRef.current = l1Candidate.issueLabel;
-                          sendReminder.mutate({ orderId: l1Candidate.order.id });
-                        }}
-                      >
-                        {sendReminder.isPending
-                          ? "Working…"
-                          : showL1Success
-                            ? actionSuccessButtonLabel(
-                                l1Flash?.issueLabel ?? undefined,
-                                l1Flash?.outboundDelivered ?? false
-                              )
-                            : PIPELINE_ISSUES.has(l1Candidate.issueLabel)
-                              ? "Log intake / pipeline action"
-                              : "Send payment reminder (log attempt)"}
-                      </Button>
-                      {sendReminder.isError && (
-                        <p className="text-xs text-red-600 mt-2">{sendReminder.error.message}</p>
-                      )}
+                    <div
+                      className="absolute top-0 left-0 right-0 h-[3px]"
+                      style={{
+                        background: "linear-gradient(90deg, var(--gold), var(--forest))",
+                      }}
+                      aria-hidden
+                    />
+                    <div className="relative space-y-4 pt-1">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="ri-pulse-dot h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
+                          aria-hidden
+                        />
+                        <p className="text-[11px] font-sans font-semibold uppercase tracking-[0.1em] text-[var(--gold)]">
+                          One thing right now
+                        </p>
+                      </div>
+                      <p className="font-mono text-[10px] uppercase tracking-wide text-foreground/45">
+                        {l1Candidate.issueLabel}
+                      </p>
+                      <p className="font-sans text-lg font-medium text-foreground leading-snug">
+                        {l1Candidate.order.firstName} {l1Candidate.order.lastName}
+                      </p>
+                      <p className="text-sm font-sans font-normal text-[var(--ink-muted)]">
+                        Order #{l1Candidate.order.id} · {l1Candidate.order.phone}
+                      </p>
+                      <p className="text-sm font-sans font-normal text-[var(--ink-muted)]">
+                        Status <span className="font-mono text-[13px]">{l1Candidate.order.status}</span>
+                        {l1Candidate.order.paid ? " · paid" : " · unpaid"}
+                      </p>
+                      <p className="font-display text-xl tabular-nums text-foreground">
+                        At stake {formatUsdFromCents(l1Candidate.dollarValueCents)}
+                      </p>
+                      <div className="pt-1">
+                        <Button
+                          type="button"
+                          disabled={sendReminder.isPending}
+                          onClick={() => {
+                            clickWasLevel1Ref.current = true;
+                            pendingIssueRef.current = l1Candidate.issueLabel;
+                            sendReminder.mutate({ orderId: l1Candidate.order.id });
+                          }}
+                          className={cn(
+                            "h-11 min-h-11 rounded-lg px-7 font-sans text-sm font-semibold text-[var(--primary-foreground)] shadow-none border-0",
+                            "bg-[var(--forest)] hover:bg-[var(--forest)]/90"
+                          )}
+                        >
+                          {sendReminder.isPending
+                            ? "Working…"
+                            : showL1Success
+                              ? actionSuccessButtonLabel(
+                                  l1Flash?.issueLabel ?? undefined,
+                                  l1Flash?.outboundDelivered ?? false
+                                )
+                              : PIPELINE_ISSUES.has(l1Candidate.issueLabel)
+                                ? "Log intake / pipeline action"
+                                : "Send payment reminder (log attempt)"}
+                        </Button>
+                        {sendReminder.isError && (
+                          <p className="text-xs text-red-600 mt-2 font-sans">{sendReminder.error.message}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-black/45">
+                  <p className="text-sm font-sans text-[var(--ink-muted)]">
                     No Level 1 candidate — no at-risk orders for this tenant, or each already has a reminder attempt
                     logged today.
                   </p>
                 )}
-              </div>
 
-              {level2.data!.items.length > 0 && (
-                <div className="border-t border-black/10 pt-3 space-y-2">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <p className="text-[11px] font-mono uppercase tracking-wide text-black/45">Level 2 — Tactical cluster</p>
-                    {level2.data!.aggregateMutationType != null && level2.data!.items.length > 1 && (
-                      <p className="text-xs text-black/50">
-                        {level2.data!.items.length} reminders ·{" "}
-                        {formatUsdFromCents(
-                          level2.data!.items.reduce((acc, it) => acc + it.dollarValueCents, 0)
-                        )}{" "}
-                        combined
+                {level2.data!.items.length > 0 && (
+                  <div className="space-y-0 pt-2">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2 pb-3">
+                      <p className="text-[10px] font-mono uppercase tracking-wide text-foreground/35">
+                        Level 2 — Tactical cluster
                       </p>
-                    )}
-                  </div>
-                  <ul className="space-y-3">
-                    {level2.data!.items.map((item) => (
-                      <li
-                        key={item.order.id}
-                        className="rounded-md border border-black/8 bg-black/[0.02] px-3 py-2 space-y-2"
-                      >
-                        <p className="text-[10px] font-mono uppercase text-black/40">{item.issueLabel}</p>
-                        <p className="text-sm text-black">
-                          Order #{item.order.id} · {item.order.firstName} {item.order.lastName} · {item.order.phone}
+                      {level2.data!.aggregateMutationType != null && level2.data!.items.length > 1 && (
+                        <p className="text-xs font-sans text-[var(--ink-muted)]">
+                          {level2.data!.items.length} reminders ·{" "}
+                          {formatUsdFromCents(
+                            level2.data!.items.reduce((acc, it) => acc + it.dollarValueCents, 0)
+                          )}{" "}
+                          combined
                         </p>
-                        <p className="text-xs text-black/50">
-                          At stake <span className="font-mono">{formatUsdFromCents(item.dollarValueCents)}</span>
-                        </p>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-600/90 text-white"
-                          disabled={sendReminder.isPending}
-                          onClick={() => {
-                            clickWasLevel1Ref.current = false;
-                            pendingIssueRef.current = null;
-                            sendReminder.mutate({ orderId: item.order.id });
-                          }}
+                      )}
+                    </div>
+                    <ul className="divide-y divide-[var(--hairline)] border-t border-[var(--hairline)]">
+                      {level2.data!.items.map((item) => (
+                        <li
+                          key={item.order.id}
+                          className="group py-3 -mx-2 px-2 rounded-md transition-colors hover:bg-black/[0.008] hover:px-3 hover:-mx-3"
                         >
-                          {sendReminder.isPending
-                            ? "Working…"
-                            : PIPELINE_ISSUES.has(item.issueLabel)
-                              ? "Log intake / pipeline action"
-                              : "Log reminder attempt"}
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+                          <p className="font-mono text-[10px] uppercase tracking-wide text-foreground/35">
+                            {item.issueLabel}
+                          </p>
+                          <p className="font-sans text-[13px] text-foreground mt-1">
+                            Order #{item.order.id} · {item.order.firstName} {item.order.lastName} · {item.order.phone}
+                          </p>
+                          <p className="font-mono text-[13px] font-medium text-foreground mt-0.5 tabular-nums">
+                            At stake {formatUsdFromCents(item.dollarValueCents)}
+                          </p>
+                          <div className="mt-2">
+                            <Button
+                              type="button"
+                              disabled={sendReminder.isPending}
+                              onClick={() => {
+                                clickWasLevel1Ref.current = false;
+                                pendingIssueRef.current = null;
+                                sendReminder.mutate({ orderId: item.order.id });
+                              }}
+                              className={cn(
+                                "h-8 min-h-8 rounded-md px-4 font-sans text-xs font-semibold text-[var(--primary-foreground)] border-0 shadow-none",
+                                "bg-[var(--forest)] hover:bg-[var(--forest)]/90"
+                              )}
+                            >
+                              {sendReminder.isPending
+                                ? "Working…"
+                                : PIPELINE_ISSUES.has(item.issueLabel)
+                                  ? "Log intake / pipeline action"
+                                  : "Log reminder attempt"}
+                            </Button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </>
           )}
           {import.meta.env.DEV && isAdmin && (
-            <div className="border-t border-dashed border-black/20 mt-3 pt-3 space-y-2">
-              <p className="text-[10px] font-mono uppercase text-black/50">Dev — revenue intervention debug</p>
+            <div className="border-t border-dashed border-[var(--hairline)] mt-6 pt-4 space-y-2">
+              <p className="text-[10px] font-mono uppercase text-[var(--ink-muted)]">Dev — revenue intervention debug</p>
               <div className="flex flex-wrap gap-2 items-center">
                 <input
                   type="number"
                   min={1}
-                  className="font-mono text-xs border border-black/30 rounded px-2 py-1 w-32 bg-black/[0.03]"
+                  className="font-mono text-xs border border-[var(--hairline)] rounded px-2 py-1 w-32 bg-[var(--muted)]"
                   placeholder="order id"
                   value={debugOrderInput}
                   onChange={(e) => setDebugOrderInput(e.target.value)}
@@ -349,7 +401,7 @@ export default function AdminHome() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="font-mono text-xs h-8 border-black/30"
+                  className="font-mono text-xs h-8 border-[var(--hairline)]"
                   onClick={() => {
                     const n = parseInt(debugOrderInput, 10);
                     setDebugLoadId(Number.isFinite(n) && n > 0 ? n : null);
@@ -359,7 +411,7 @@ export default function AdminHome() {
                 </Button>
               </div>
               {debugLoadId != null && (
-                <pre className="text-[10px] font-mono text-black/80 bg-black/[0.04] border border-black/15 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">
+                <pre className="text-[10px] font-mono text-foreground/80 bg-[var(--muted)] border border-[var(--hairline)] rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">
                   {riDebug.isLoading
                     ? "loading…"
                     : riDebug.error
@@ -372,54 +424,66 @@ export default function AdminHome() {
         </section>
       )}
 
-      <section>
-        <h1 className="text-lg font-semibold text-black mb-4">Command center</h1>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="rounded-lg border border-black/10 bg-white px-4 py-3">
-            <p className="text-xs font-medium text-black/50 uppercase tracking-wide">Revenue today</p>
-            <p className="text-2xl font-semibold text-black tabular-nums mt-1">{formatUsd(d.revenueToday)}</p>
+      <section className="space-y-5">
+        <h2 className="font-display text-xl font-normal tracking-tight text-foreground">Command center</h2>
+        <div className="flex flex-wrap items-end justify-between gap-x-12 gap-y-6 pb-5 border-b border-[var(--hairline)]">
+          <div className="flex flex-col gap-1 min-w-[6rem]">
+            <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
+              Revenue today
+            </p>
+            <p className="font-display text-2xl font-normal tabular-nums text-foreground leading-none">
+              {formatUsd(d.revenueToday)}
+            </p>
           </div>
-          <div className="rounded-lg border border-black/10 bg-white px-4 py-3">
-            <p className="text-xs font-medium text-black/50 uppercase tracking-wide">Revenue this week</p>
-            <p className="text-2xl font-semibold text-black tabular-nums mt-1">{formatUsd(d.revenueWeek)}</p>
+          <div className="flex flex-col gap-1 min-w-[6rem]">
+            <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
+              Revenue this week
+            </p>
+            <p className="font-display text-2xl font-normal tabular-nums text-foreground leading-none">
+              {formatUsd(d.revenueWeek)}
+            </p>
           </div>
-          <div className="rounded-lg border border-black/10 bg-white px-4 py-3">
-            <p className="text-xs font-medium text-black/50 uppercase tracking-wide">Revenue this month</p>
-            <p className="text-2xl font-semibold text-black tabular-nums mt-1">{formatUsd(d.revenueMonth)}</p>
+          <div className="flex flex-col gap-1 min-w-[6rem]">
+            <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
+              Revenue this month
+            </p>
+            <p className="font-display text-2xl font-normal tabular-nums text-foreground leading-none">
+              {formatUsd(d.revenueMonth)}
+            </p>
           </div>
-          <div className="rounded-lg border border-black/10 bg-white px-4 py-3">
-            <p className="text-xs font-medium text-black/50 uppercase tracking-wide">Avg order value</p>
-            <p className="text-xs text-black/40 mt-0.5">This month · paid orders</p>
-            <p className="text-2xl font-semibold text-black tabular-nums mt-1">
+          <div className="flex flex-col gap-1 min-w-[8rem]">
+            <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
+              Avg order value
+            </p>
+            <p className="text-[10px] font-sans text-[var(--ink-ghost)]">This month · paid orders</p>
+            <p className="font-display text-2xl font-normal tabular-nums text-foreground leading-none mt-0.5">
               {d.avgOrderValueMonth != null ? formatUsd(d.avgOrderValueMonth) : "—"}
             </p>
           </div>
         </div>
-        <p className="text-[11px] text-black/45 mt-3 leading-snug">Based on paid orders · timestamp proxy</p>
       </section>
 
-      <section className="rounded-lg border border-black/8 bg-black/[0.02] px-4 py-5">
-        <h2 className="text-sm font-medium text-black/70 mb-1">Guidance</h2>
-        <p className="text-sm text-black/45">Automated action cards will appear here in a future update.</p>
-      </section>
-
-      <section>
-        <h2 className="text-sm font-medium text-black/70 mb-3">At a glance</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="rounded-lg border border-black/10 bg-white px-4 py-3">
-            <p className="text-xs text-black/45">Buildings</p>
-            <p className="text-xl font-semibold text-black tabular-nums">{d.distinctBuildingsWithSlug}</p>
-            <p className="text-[11px] text-black/40 mt-1">Distinct building slugs on orders</p>
+      <section className="space-y-4">
+        <h2 className="text-sm font-sans font-medium text-[var(--ink-muted)]">At a glance</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pb-5 border-b border-[var(--hairline)]">
+          <div className="flex flex-col gap-1">
+            <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
+              Buildings
+            </p>
+            <p className="font-display text-xl font-normal tabular-nums text-foreground">{d.distinctBuildingsWithSlug}</p>
+            <p className="text-[10px] font-sans text-[var(--ink-ghost)]">Distinct building slugs on orders</p>
           </div>
-          <div className="rounded-lg border border-black/10 bg-white px-4 py-3">
-            <p className="text-xs text-black/45">Customers</p>
-            <p className="text-xl font-semibold text-black tabular-nums">{d.distinctCustomerPhones}</p>
-            <p className="text-[11px] text-black/40 mt-1">Distinct phone numbers</p>
+          <div className="flex flex-col gap-1">
+            <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
+              Customers
+            </p>
+            <p className="font-display text-xl font-normal tabular-nums text-foreground">{d.distinctCustomerPhones}</p>
+            <p className="text-[10px] font-sans text-[var(--ink-ghost)]">Distinct phone numbers</p>
           </div>
-          <div className="rounded-lg border border-black/10 bg-white px-4 py-3">
-            <p className="text-xs text-black/45">Orders</p>
-            <p className="text-xl font-semibold text-black tabular-nums">{d.totalOrders}</p>
-            <p className="text-[11px] text-black/40 mt-1">All orders in the system</p>
+          <div className="flex flex-col gap-1">
+            <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">Orders</p>
+            <p className="font-display text-xl font-normal tabular-nums text-foreground">{d.totalOrders}</p>
+            <p className="text-[10px] font-sans text-[var(--ink-ghost)]">All orders in the system</p>
           </div>
         </div>
       </section>
