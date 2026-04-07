@@ -107,6 +107,10 @@ export default function AdminHome() {
     }
   }, [apex.isSuccess, apex.data, l1Flash]);
 
+  useEffect(() => {
+    if (awaitingEditing) awaitingInputRef.current?.focus();
+  }, [awaitingEditing]);
+
   const setAwaitingAdjustment = trpc.admin.setAwaitingPaymentAdjustment.useMutation({
     onSuccess: () => {
       void utils.admin.getAwaitingPayment.invalidate();
@@ -197,10 +201,6 @@ export default function AdminHome() {
     day: "numeric",
     year: "numeric",
   });
-
-  useEffect(() => {
-    if (awaitingEditing) awaitingInputRef.current?.focus();
-  }, [awaitingEditing]);
 
   return (
     <div className="max-w-[1200px] mx-auto px-6 sm:px-9 py-7 space-y-8">
