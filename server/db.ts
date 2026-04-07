@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, inArray, like, lt, max, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, max, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users,
@@ -336,7 +336,8 @@ export async function listPaidOrdersForBuildingRevenue(): Promise<BuildingRevenu
 }
 
 export type AdminDashboardSummary = {
-  revenueTimestampBasis: "updatedAt_proxy";
+  /** Paid orders counted when `paidAt` falls in the window; rows with null `paidAt` use `updatedAt` (legacy). */
+  revenueTimestampBasis: "paidAt";
   dashboardTimeZone: string;
   revenueToday: number;
   revenueWeek: number;
@@ -348,7 +349,10 @@ export type AdminDashboardSummary = {
   totalOrders: number;
 };
 
-async function paidRevenueAndCountInUpdatedAtRange(
+/**
+ * Revenue attributed to when payment was recorded: `paidAt` in [start, end), or legacy rows with null `paidAt` use `updatedAt`.
+ */
+async function paidRevenueAndCountInPaidAtWindow(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   start: Date,
   end: Date
@@ -359,7 +363,15 @@ async function paidRevenueAndCountInUpdatedAtRange(
       count: sql<number>`COUNT(*)`,
     })
     .from(orders)
-    .where(and(eq(orders.paid, true), gte(orders.updatedAt, start), lt(orders.updatedAt, end)));
+    .where(
+      and(
+        eq(orders.paid, true),
+        or(
+          and(isNotNull(orders.paidAt), gte(orders.paidAt, start), lt(orders.paidAt, end)),
+          and(isNull(orders.paidAt), gte(orders.updatedAt, start), lt(orders.updatedAt, end))
+        )
+      )
+    );
 
   return {
     revenue: Number(row?.revenue ?? 0),
@@ -368,7 +380,7 @@ async function paidRevenueAndCountInUpdatedAtRange(
 }
 
 /**
- * Home dashboard metrics. Paid orders only; time windows use `updatedAt` as a v1 proxy (not true charge time).
+ * Home dashboard metrics. Paid orders only; windows use payment time (`paidAt`) aligned with "Collected today".
  */
 export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary | null> {
   const db = await getDb();
@@ -384,9 +396,9 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary 
   const { start: monthStart, end: monthEnd } = zonedMonthRangeUtcContaining(now, tz);
 
   const [todayAgg, weekAgg, monthAgg, buildingsRow, phonesRow, totalRow] = await Promise.all([
-    paidRevenueAndCountInUpdatedAtRange(db, todayStart, todayEnd),
-    paidRevenueAndCountInUpdatedAtRange(db, weekStart, weekEnd),
-    paidRevenueAndCountInUpdatedAtRange(db, monthStart, monthEnd),
+    paidRevenueAndCountInPaidAtWindow(db, todayStart, todayEnd),
+    paidRevenueAndCountInPaidAtWindow(db, weekStart, weekEnd),
+    paidRevenueAndCountInPaidAtWindow(db, monthStart, monthEnd),
     db
       .select({
         n: sql<number>`COUNT(DISTINCT ${orders.buildingSlug})`,
@@ -406,7 +418,7 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary 
     paidOrderCountMonth > 0 ? monthAgg.revenue / paidOrderCountMonth : null;
 
   return {
-    revenueTimestampBasis: "updatedAt_proxy",
+    revenueTimestampBasis: "paidAt",
     dashboardTimeZone: tz,
     revenueToday: todayAgg.revenue,
     revenueWeek: weekAgg.revenue,

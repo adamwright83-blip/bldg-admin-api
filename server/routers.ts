@@ -502,11 +502,11 @@ export const appRouter = router({
       .input(z.object({ q: z.string().min(2).max(100) }))
       .query(async ({ input }) => searchOrdersForReceipt(input.q)),
 
-    /** Home command center — paid orders, `updatedAt` proxy for v1 (see revenueTimestampBasis) */
+    /** Home command center — paid revenue by `paidAt` in dashboard TZ (legacy rows without paidAt use `updatedAt`). */
     dashboardSummary: protectedProcedure.query(async () => {
       const row = await getAdminDashboardSummary();
       return row ?? {
-        revenueTimestampBasis: "updatedAt_proxy" as const,
+        revenueTimestampBasis: "paidAt" as const,
         dashboardTimeZone: getDashboardTimeZone(),
         revenueToday: 0,
         revenueWeek: 0,

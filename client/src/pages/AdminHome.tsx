@@ -463,22 +463,22 @@ export default function AdminHome() {
                   </p>
                 )}
 
-                {level2.data!.items.length > 0 && (
-                  <div className="space-y-0 pt-2">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2 pb-3">
-                      <p className="text-[10px] font-mono uppercase tracking-wide text-[var(--ink-muted)]">
-                        Level 2 — Tactical cluster
+                <div className="space-y-0 pt-4 border-t border-[var(--hairline)]">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 pb-3">
+                    <p className="text-[10px] font-mono uppercase tracking-wide text-[var(--ink-muted)]">
+                      Level 2 — Tactical cluster
+                    </p>
+                    {level2.data!.items.length > 1 && level2.data!.aggregateMutationType != null && (
+                      <p className="text-xs font-sans text-[var(--ink-muted)]">
+                        {level2.data!.items.length} reminders ·{" "}
+                        {formatUsdFromCents(
+                          level2.data!.items.reduce((acc, it) => acc + it.dollarValueCents, 0)
+                        )}{" "}
+                        combined
                       </p>
-                      {level2.data!.aggregateMutationType != null && level2.data!.items.length > 1 && (
-                        <p className="text-xs font-sans text-[var(--ink-muted)]">
-                          {level2.data!.items.length} reminders ·{" "}
-                          {formatUsdFromCents(
-                            level2.data!.items.reduce((acc, it) => acc + it.dollarValueCents, 0)
-                          )}{" "}
-                          combined
-                        </p>
-                      )}
-                    </div>
+                    )}
+                  </div>
+                  {level2.data!.items.length > 0 ? (
                     <ul className="divide-y divide-[var(--hairline)] border-t border-[var(--hairline)]">
                       {level2.data!.items.map((item) => (
                         <li
@@ -518,8 +518,13 @@ export default function AdminHome() {
                         </li>
                       ))}
                     </ul>
-                  </div>
-                )}
+                  ) : (
+                    <p className="text-sm font-sans text-[var(--ink-muted)] pb-1">
+                      No additional candidates — Level 2 is the next orders in the same queue after Level 1. It fills in
+                      automatically when more than one at-risk order qualifies; there is no separate screen to open.
+                    </p>
+                  )}
+                </div>
               </div>
             </>
           )}
@@ -563,7 +568,12 @@ export default function AdminHome() {
       )}
 
       <section className="space-y-5">
-        <h2 className="font-display text-xl font-normal tracking-tight text-[var(--foreground)]">Command center</h2>
+        <div className="space-y-1">
+          <h2 className="font-display text-xl font-normal tracking-tight text-[var(--foreground)]">Command center</h2>
+          <p className="text-[10px] font-sans text-[var(--ink-ghost)]">
+            Paid revenue · by payment time ({d.dashboardTimeZone})
+          </p>
+        </div>
         <div className="flex flex-wrap items-end justify-between gap-x-12 gap-y-6 pb-5 border-b border-[var(--hairline)]">
           <div className="flex flex-col gap-1 min-w-[6rem]">
             <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
