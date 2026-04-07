@@ -321,12 +321,24 @@ export async function getAwaitingPaymentCents(
     pipelineCents += c.dollarValueCents;
   }
 
-  const [settingsRow] = await db
-    .select({ adjustment: adminSettings.awaitingPaymentAdjustmentCents })
-    .from(adminSettings)
-    .where(eq(adminSettings.tenantId, tenantId))
-    .limit(1);
-  const adjustmentCents = settingsRow?.adjustment ?? 0;
+  let adjustmentCents = 0;
+  try {
+    const [settingsRow] = await db
+      .select({ adjustment: adminSettings.awaitingPaymentAdjustmentCents })
+      .from(adminSettings)
+      .where(eq(adminSettings.tenantId, tenantId))
+      .limit(1);
+    adjustmentCents = settingsRow?.adjustment ?? 0;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("awaitingPaymentAdjustmentCents") || msg.includes("Unknown column")) {
+      console.warn(
+        "[revenueIntervention] admin_settings.awaitingPaymentAdjustmentCents missing — run migration 0012_admin_settings_awaiting_adjustment.sql. Using adjustment 0."
+      );
+    } else {
+      throw e;
+    }
+  }
   const cents = Math.max(0, pipelineCents + adjustmentCents);
 
   return { bounds, cents, pipelineCents, adjustmentCents };
