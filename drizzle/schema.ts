@@ -117,6 +117,8 @@ export const adminSettings = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
     weeklyRevenueTargetCents: int("weeklyRevenueTargetCents").notNull().default(0),
+    /** Added to pipeline sum for "Awaiting payment" — offline / not-yet-ordered exposure. Can be negative to trim display. */
+    awaitingPaymentAdjustmentCents: int("awaitingPaymentAdjustmentCents").notNull().default(0),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },

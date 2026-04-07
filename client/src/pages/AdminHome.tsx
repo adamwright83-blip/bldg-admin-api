@@ -55,6 +55,11 @@ export default function AdminHome() {
 
   const [debugOrderInput, setDebugOrderInput] = useState("");
   const [debugLoadId, setDebugLoadId] = useState<number | null>(null);
+
+  const [awaitingEditing, setAwaitingEditing] = useState(false);
+  const [awaitingDraft, setAwaitingDraft] = useState("");
+  const awaitingInputRef = useRef<HTMLInputElement>(null);
+  const skipAwaitingBlurCommit = useRef(false);
   const riDebug = trpc.admin.getRevenueInterventionOrderDebug.useQuery(
     { orderId: debugLoadId! },
     {
@@ -101,6 +106,13 @@ export default function AdminHome() {
       setL1Flash(null);
     }
   }, [apex.isSuccess, apex.data, l1Flash]);
+
+  const setAwaitingAdjustment = trpc.admin.setAwaitingPaymentAdjustment.useMutation({
+    onSuccess: () => {
+      void utils.admin.getAwaitingPayment.invalidate();
+      setAwaitingEditing(false);
+    },
+  });
 
   const sendReminder = trpc.admin.sendPaymentReminder.useMutation({
     onSuccess: async (data, variables) => {
@@ -186,6 +198,10 @@ export default function AdminHome() {
     year: "numeric",
   });
 
+  useEffect(() => {
+    if (awaitingEditing) awaitingInputRef.current?.focus();
+  }, [awaitingEditing]);
+
   return (
     <div className="max-w-[1200px] mx-auto px-6 sm:px-9 py-7 space-y-8">
       <div className="relative -mx-1 px-1">
@@ -219,7 +235,8 @@ export default function AdminHome() {
                   Database unavailable or schema missing. Run migration{" "}
                   <code className="text-xs font-mono text-amber-900">0011_orders_paid_at.sql</code>,{" "}
                   <code className="text-xs font-mono text-amber-900">0010_admin_action_log_status_expand.sql</code>, and{" "}
-                  <code className="text-xs font-mono text-amber-900">0009_revenue_intervention.sql</code> if needed, and ensure{" "}
+                  <code className="text-xs font-mono text-amber-900">0009_revenue_intervention.sql</code>,{" "}
+                  <code className="text-xs font-mono text-amber-900">0012_admin_settings_awaiting_adjustment.sql</code> if needed, and ensure{" "}
                   <code className="text-xs font-mono text-amber-900">DATABASE_URL</code> is set.
                 </>
               )}
@@ -240,9 +257,87 @@ export default function AdminHome() {
                     <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
                       Awaiting payment
                     </p>
-                    <p className="font-display text-[28px] font-normal tabular-nums leading-none text-[var(--red)]">
-                      {formatUsdFromCents(awaiting.data!.cents)}
-                    </p>
+                    {awaitingEditing ? (
+                      <div className="flex items-center gap-2 min-h-[34px]">
+                        <input
+                          ref={awaitingInputRef}
+                          type="text"
+                          inputMode="decimal"
+                          autoComplete="off"
+                          disabled={setAwaitingAdjustment.isPending}
+                          value={awaitingDraft}
+                          onChange={(e) => setAwaitingDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              e.preventDefault();
+                              skipAwaitingBlurCommit.current = true;
+                              setAwaitingEditing(false);
+                            }
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              const raw = awaitingDraft.trim().replace(/[$,]/g, "");
+                              const n = parseFloat(raw);
+                              if (!Number.isFinite(n) || n < 0) {
+                                setAwaitingEditing(false);
+                                return;
+                              }
+                              const displayCents = Math.round(n * 100);
+                              const pipeline = awaiting.data!.pipelineCents;
+                              setAwaitingAdjustment.mutate({
+                                adjustmentCents: displayCents - pipeline,
+                              });
+                            }
+                          }}
+                          onBlur={() => {
+                            if (skipAwaitingBlurCommit.current) {
+                              skipAwaitingBlurCommit.current = false;
+                              return;
+                            }
+                            if (setAwaitingAdjustment.isPending) return;
+                            const raw = awaitingDraft.trim().replace(/[$,]/g, "");
+                            const n = parseFloat(raw);
+                            if (!Number.isFinite(n) || n < 0) {
+                              setAwaitingEditing(false);
+                              return;
+                            }
+                            const displayCents = Math.round(n * 100);
+                            const pipeline = awaiting.data!.pipelineCents;
+                            const nextAdj = displayCents - pipeline;
+                            if (nextAdj === awaiting.data!.adjustmentCents) {
+                              setAwaitingEditing(false);
+                              return;
+                            }
+                            setAwaitingAdjustment.mutate({ adjustmentCents: nextAdj });
+                          }}
+                          className={cn(
+                            "font-display text-[28px] font-normal tabular-nums leading-none text-[var(--red)]",
+                            "min-w-[6.5rem] max-w-[12rem] bg-transparent border-0 border-b border-[var(--hairline)] rounded-none p-0",
+                            "focus:outline-none focus:border-b-[var(--red)]/35"
+                          )}
+                          aria-label="Awaiting payment amount"
+                        />
+                        {setAwaitingAdjustment.isPending ? (
+                          <Loader2 className="h-5 w-5 shrink-0 animate-spin text-[var(--muted-foreground)]" />
+                        ) : null}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className={cn(
+                          "font-display text-[28px] font-normal tabular-nums leading-none text-[var(--red)] text-left",
+                          "bg-transparent border-0 p-0 m-0 cursor-default",
+                          "hover:opacity-[0.92] active:opacity-85",
+                          "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--red)]/20 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] rounded-sm"
+                        )}
+                        aria-label="Edit awaiting payment amount"
+                        onClick={() => {
+                          setAwaitingDraft((awaiting.data!.cents / 100).toFixed(2));
+                          setAwaitingEditing(true);
+                        }}
+                      >
+                        {formatUsdFromCents(awaiting.data!.cents)}
+                      </button>
+                    )}
                   </div>
                   <div className="flex flex-col gap-1 min-w-[7rem]">
                     <p className="text-[10px] font-sans font-semibold uppercase tracking-wide text-[var(--ink-muted)]">

@@ -1,5 +1,5 @@
 import { and, desc, eq, gte, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
-import { adminActionLog, orders, type Order } from "../drizzle/schema";
+import { adminActionLog, adminSettings, orders, type Order } from "../drizzle/schema";
 import { getDb } from "./db";
 import {
   getDashboardTimeZone,
@@ -300,21 +300,54 @@ export async function getActedOnTodayCents(
 }
 
 /**
- * Unpaid intervention pipeline — sum of order totals currently scored as at-risk for this tenant.
+ * Unpaid intervention pipeline — sum of order totals currently scored as at-risk for this tenant,
+ * plus per-tenant manual adjustment (offline / not-yet-ordered exposure tracked in admin_settings).
  */
 export async function getAwaitingPaymentCents(
   tenantId: string,
   now: Date = new Date()
-): Promise<{ bounds: DashboardBusinessDayBounds; cents: number } | null> {
+): Promise<{
+  bounds: DashboardBusinessDayBounds;
+  cents: number;
+  pipelineCents: number;
+  adjustmentCents: number;
+} | null> {
   const db = await getDb();
   if (!db) return null;
   const bounds = getDashboardBusinessDayBoundsUtc(now);
   const candidates = await listInterventionCandidates(tenantId, now);
-  let cents = 0;
+  let pipelineCents = 0;
   for (const c of candidates) {
-    cents += c.dollarValueCents;
+    pipelineCents += c.dollarValueCents;
   }
-  return { bounds, cents };
+
+  const [settingsRow] = await db
+    .select({ adjustment: adminSettings.awaitingPaymentAdjustmentCents })
+    .from(adminSettings)
+    .where(eq(adminSettings.tenantId, tenantId))
+    .limit(1);
+  const adjustmentCents = settingsRow?.adjustment ?? 0;
+  const cents = Math.max(0, pipelineCents + adjustmentCents);
+
+  return { bounds, cents, pipelineCents, adjustmentCents };
+}
+
+/**
+ * Persist manual adjustment for "Awaiting payment" (display = max(0, pipeline + adjustment)).
+ */
+export async function upsertAwaitingPaymentAdjustmentCents(tenantId: string, adjustmentCents: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db
+    .insert(adminSettings)
+    .values({
+      tenantId,
+      weeklyRevenueTargetCents: 0,
+      awaitingPaymentAdjustmentCents: adjustmentCents,
+    })
+    .onDuplicateKeyUpdate({
+      set: { awaitingPaymentAdjustmentCents: adjustmentCents },
+    });
 }
 
 /**

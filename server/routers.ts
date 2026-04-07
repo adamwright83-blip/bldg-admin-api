@@ -86,6 +86,7 @@ import { matchBuilding } from "@shared/buildings";
 import {
   getActedOnTodayCents,
   getAwaitingPaymentCents,
+  upsertAwaitingPaymentAdjustmentCents,
   getCollectedTodayCents,
   getLevel1ApexCommand as loadLevel1ApexCommand,
   getLevel2TacticalCluster as loadLevel2TacticalCluster,
@@ -537,12 +538,14 @@ export const appRouter = router({
       };
     }),
 
-    /** Unpaid intervention pipeline — sum of at-risk order totals. */
+    /** Unpaid intervention pipeline — sum of at-risk order totals plus optional manual adjustment. */
     getAwaitingPayment: adminProcedure.query(async ({ ctx }) => {
       const r = await getAwaitingPaymentCents(ctx.tenantId);
       if (!r) {
         return {
           cents: 0,
+          pipelineCents: 0,
+          adjustmentCents: 0,
           businessYmd: "",
           timeZone: getDashboardTimeZone(),
           dbAvailable: false,
@@ -550,11 +553,29 @@ export const appRouter = router({
       }
       return {
         cents: r.cents,
+        pipelineCents: r.pipelineCents,
+        adjustmentCents: r.adjustmentCents,
         businessYmd: r.bounds.ymd,
         timeZone: r.bounds.timeZone,
         dbAvailable: true,
       };
     }),
+
+    /** Manual adjustment to "Awaiting payment" (display = max(0, pipeline + adjustment)). */
+    setAwaitingPaymentAdjustment: adminProcedure
+      .input(z.object({ adjustmentCents: z.number().int() }))
+      .mutation(async ({ ctx, input }) => {
+        const clamped = Math.max(-500_000_000, Math.min(500_000_000, input.adjustmentCents));
+        try {
+          await upsertAwaitingPaymentAdjustmentCents(ctx.tenantId, clamped);
+        } catch (e) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: e instanceof Error ? e.message : "Failed to save adjustment",
+          });
+        }
+        return { ok: true as const };
+      }),
 
     /** Paid orders today — sums totals where `paidAt` falls in the business day (not action logs). */
     getCollectedToday: adminProcedure.query(async ({ ctx }) => {

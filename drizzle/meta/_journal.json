@@ -85,6 +85,13 @@
       "when": 1742500000000,
       "tag": "0011_orders_paid_at",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1742600000000,
+      "tag": "0012_admin_settings_awaiting_adjustment",
+      "breakpoints": true
     }
   ]
 }
