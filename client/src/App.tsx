@@ -13,6 +13,7 @@ import VendorPortal from "./pages/VendorPortal";
 import DigitalReceiptPage from "./pages/DigitalReceiptPage";
 import LaundryFarmHome from "./pages/LaundryFarmHome";
 import AdminCatalog from "./pages/AdminCatalog";
+import AdminLevel4Preview from "./pages/AdminLevel4Preview";
 
 function AdminHostRouter() {
   return (
@@ -30,6 +31,7 @@ function AdminHostRouter() {
       <Route path="/requests" component={AdminHostApp} />
       <Route path="/leads" component={AdminHostApp} />
       <Route path="/vendors" component={AdminHostApp} />
+      <Route path="/level4" component={AdminLevel4Preview} />
       <Route path="/" component={AdminHostApp} />
       <Route component={NotFound} />
     </Switch>

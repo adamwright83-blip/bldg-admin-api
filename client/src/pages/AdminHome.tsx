@@ -31,7 +31,11 @@ function actionSuccessButtonLabel(issueLabel: string | undefined, outboundDelive
 
 const PIPELINE_ISSUES = new Set(["collected_financially_open", "collected_stale_48h"]);
 
-export default function AdminHome() {
+export default function AdminHome({
+  forceLevel4Preview = false,
+}: {
+  forceLevel4Preview?: boolean;
+}) {
   const { user, isAuthenticated } = useAuth();
   const isAdmin = user?.role === "admin";
   const q = trpc.admin.dashboardSummary.useQuery(undefined, { enabled: isAuthenticated });
@@ -201,7 +205,8 @@ export default function AdminHome() {
     year: "numeric",
   });
 
-  const showLevel4 = interventionReady && recovery.data?.isRecoveryEmpty === true;
+  const showLevel4 =
+    forceLevel4Preview || (interventionReady && recovery.data?.isRecoveryEmpty === true);
 
   return (
     <div className="max-w-[1200px] mx-auto px-6 sm:px-9 py-7 space-y-8">
