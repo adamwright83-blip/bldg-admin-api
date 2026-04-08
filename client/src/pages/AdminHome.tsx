@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Level4Offensive } from "@/components/Level4Offensive";
 
 function formatUsd(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -200,6 +201,8 @@ export default function AdminHome() {
     year: "numeric",
   });
 
+  const showLevel4 = interventionReady && recovery.data?.isRecoveryEmpty === true;
+
   return (
     <div className="max-w-[1200px] mx-auto px-6 sm:px-9 py-7 space-y-8">
       <div className="relative -mx-1 px-1">
@@ -241,6 +244,19 @@ export default function AdminHome() {
             </p>
           ) : (
             <>
+              {showLevel4 ? (
+                <Level4Offensive
+                  soberDays={2114}
+                  recoveredTodayCents={actedOn.data!.cents}
+                  debtCents={0}
+                  onDeployLane1={() => {
+                    // Placeholder action: Lane 1 in Level 4 is not wired to the payment reminder pipeline.
+                    // We keep this as a UI-only ritual surface until business logic is defined.
+                    console.log("[Level4] Lane 1 deploy");
+                  }}
+                />
+              ) : null}
+
               <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-4 pb-5 border-b border-[var(--hairline)]">
                 <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
                   <div className="flex flex-col gap-1 min-w-[7rem]">
