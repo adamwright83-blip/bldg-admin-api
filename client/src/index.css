@@ -401,7 +401,7 @@
   }
   /* Market hole data box (absolute, bottom-center of canvas) */
   .l4-marketOverlay {
-    position: absolute; left: 50%; top: 40%;
+    position: absolute; left: 50%; top: 32%;
     transform: translateX(-50%);
     z-index: 9;
     width: max-content;
@@ -457,18 +457,18 @@
   /* Avatar cluster centered over MARRY HER? node */
   .l4-figureCluster {
     position: absolute;
-    top: 55%;
+    top: 46%;
     left: 50%;
     transform: translate(-50%, -50%);
     width: min(340px, 80%);
-    height: 240px;
+    height: 220px;
     z-index: 8;
     pointer-events: none;
   }
   .l4-figure {
     position: absolute; bottom: 0;
     z-index: 8;
-    height: 165px; width: auto;
+    height: auto; width: auto;
     object-fit: contain; object-position: bottom center;
     transition: transform 260ms ease;
     transform-origin: bottom center;
@@ -477,12 +477,14 @@
   }
   .l4-figureMan {
     left: 46%;
-    bottom: 2%;
+    bottom: 0;
+    height: 223px;
     transform: translateX(-50%);
   }
   .l4-figureWoman {
     left: 54%;
-    bottom: 2%;
+    bottom: 0;
+    height: 165px;
     transform: translateX(-50%);
   }
   .l4-figure.l4-figureMan.is-crush { transform: translateX(-50%) scaleY(.08); }
@@ -563,7 +565,7 @@
   .l4-mapHamburger { font-size: 14px; color: #8a928d; }
   .l4-map {
     position: relative; border: 1px solid var(--l4-line); border-radius: 2px;
-    height: 210px; overflow: hidden;
+    height: 280px; overflow: hidden;
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,.08),
       inset 0 4px 14px rgba(0,0,0,.65);
@@ -571,15 +573,14 @@
   .l4-mapBg {
     position: absolute; inset: 0;
     background:
-      linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,.45)),
       var(--l4-map-art),
       linear-gradient(180deg, #161918, #101211);
-    background-size: auto, cover, auto;
-    background-position: 0 0, center, 0 0;
+    background-size: contain, auto;
+    background-repeat: no-repeat, no-repeat;
+    background-position: center, center;
   }
-  .l4-mapLines { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .l4-mapLine { stroke: rgba(74,222,128,.65); stroke-width: 1.2; fill: none; stroke-dasharray: 5 4; }
-  .l4-mapNodes { position: absolute; inset: 0; }
+  .l4-mapLines { display: none; }
+  .l4-mapNodes { display: none; }
   .l4-node {
     position: absolute; transform: translate(-50%, -50%);
     border: 0; background: transparent; color: #c6cbc8;
