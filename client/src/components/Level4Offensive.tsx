@@ -19,9 +19,12 @@ const MAP_NODES: MapNode[] = [
   { id: "beaudry", label: "The Beaudry", type: "target" },
 ];
 
+import manFigure from "@/assets/l4/man.png";
+import womanFigure from "@/assets/l4/woman.png";
+
 const FIGURE_ASSETS = {
-  man: "https://drive.google.com/uc?export=view&id=1b6xOQr_tUsQxMAiCpUtdPJ_T1Tlb1s2M",
-  woman: "https://drive.google.com/uc?export=view&id=1R--qaD5bCyxszYYawSkwvDi_dYjNuCya",
+  man: manFigure,
+  woman: womanFigure,
 } as const;
 
 export function Level4Offensive({
