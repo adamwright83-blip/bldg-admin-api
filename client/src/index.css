@@ -182,6 +182,7 @@
     position: relative; z-index: 5;
     border-bottom: 1px solid var(--l4-line);
     padding: 8px 12px;
+    width: 100%;
     display: flex; justify-content: center;
     background: rgba(17,17,17,.92);
   }
@@ -268,7 +269,7 @@
      ============================================ */
   .l4-canvas {
     position: relative;
-    min-height: 620px;
+    min-height: 700px;
     background-size: contain;
     background-position: center;
     background-repeat: no-repeat;
@@ -319,26 +320,18 @@
     animation: l4-textFlicker 3.2s ease-in-out infinite;
     text-align: center; line-height: 1.15;
   }
-  .l4-spikes {
-    display: grid; grid-template-columns: repeat(28, 1fr);
-    gap: 2px; height: 36px; padding: 0 6px;
-    filter: drop-shadow(0 5px 6px rgba(0,0,0,.6));
-  }
-  .l4-spike {
-    width: 100%; height: 100%;
-    background: linear-gradient(180deg, #3d2e28, #0c0c0c);
-    clip-path: polygon(50% 100%, 100% 0, 0 0);
-  }
-
   /* Market hole data box (absolute, bottom-center of canvas) */
   .l4-marketOverlay {
-    position: absolute; left: 50%; bottom: 10%;
+    position: absolute; left: 50%; top: 40%;
     transform: translateX(-50%);
     z-index: 9;
-    width: min(70%, 420px); padding: 8px 10px;
+    width: max-content;
+    max-width: 350px;
+    padding: 8px 10px;
     border: 1px solid rgba(74,222,128,.3); border-radius: 2px;
     background: linear-gradient(180deg, rgba(16,185,129,.18), rgba(10,26,20,.92));
     backdrop-filter: blur(4px);
+    text-align: center;
   }
   .l4-overlayTitle {
     font-size: clamp(12px, 1.3vw, 16px); line-height: 1.2;
@@ -352,7 +345,7 @@
 
   /* YOU ARE HERE badge (absolute, on MARRY HER? circle) */
   .l4-youAreHere {
-    position: absolute; left: 50%; top: 66%;
+    position: absolute; left: 50%; top: 62%;
     transform: translate(-50%, -50%); z-index: 8;
     background: var(--l4-red); color: #fff;
     font-size: 8px; font-weight: 800; letter-spacing: .1em;
@@ -366,15 +359,15 @@
     top: 55%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: min(300px, 76%);
-    height: 220px;
+    width: min(340px, 80%);
+    height: 240px;
     z-index: 8;
     pointer-events: none;
   }
   .l4-figure {
     position: absolute; bottom: 0;
     z-index: 8;
-    height: 148px; width: auto;
+    height: 165px; width: auto;
     object-fit: contain; object-position: bottom center;
     transition: transform 260ms ease;
     transform-origin: bottom center;
@@ -382,19 +375,21 @@
     filter: drop-shadow(0 5px 8px rgba(0,0,0,.55));
   }
   .l4-figureMan {
-    left: 50%;
-    transform: translateX(calc(-50% - 42px));
+    left: 46%;
+    bottom: 2%;
+    transform: translateX(-50%);
   }
   .l4-figureWoman {
-    left: 50%;
-    transform: translateX(calc(-50% + 42px));
+    left: 54%;
+    bottom: 2%;
+    transform: translateX(-50%);
   }
-  .l4-figure.l4-figureMan.is-crush { transform: translateX(calc(-50% - 42px)) scaleY(.08); }
-  .l4-figure.l4-figureWoman.is-crush { transform: translateX(calc(-50% + 42px)) scaleY(.08); }
-  .l4-figure.l4-figureMan.is-merge { transform: translateX(calc(-50% - 10px)); }
-  .l4-figure.l4-figureWoman.is-merge { transform: translateX(calc(-50% + 10px)); }
-  .l4-figure.l4-figureMan.is-merge.is-crush { transform: translateX(calc(-50% - 10px)) scaleY(.08); }
-  .l4-figure.l4-figureWoman.is-merge.is-crush { transform: translateX(calc(-50% + 10px)) scaleY(.08); }
+  .l4-figure.l4-figureMan.is-crush { transform: translateX(-50%) scaleY(.08); }
+  .l4-figure.l4-figureWoman.is-crush { transform: translateX(-50%) scaleY(.08); }
+  .l4-figure.l4-figureMan.is-merge { left: 48.5%; transform: translateX(-50%); }
+  .l4-figure.l4-figureWoman.is-merge { left: 51.5%; transform: translateX(-50%); }
+  .l4-figure.l4-figureMan.is-merge.is-crush { left: 48.5%; transform: translateX(-50%) scaleY(.08); }
+  .l4-figure.l4-figureWoman.is-merge.is-crush { left: 51.5%; transform: translateX(-50%) scaleY(.08); }
 
   /* ============================================
      LANE STACK — below the grid, full width
@@ -533,7 +528,7 @@
   @media (max-width: 1200px) {
     .l4-grid { grid-template-columns: 1fr; }
     .l4-panel { margin: 6px 6px 0; }
-    .l4-canvas { min-height: 520px; }
+    .l4-canvas { min-height: 600px; }
     .l4-right { margin-bottom: 6px; }
     .l4-threatText { font-size: 14px; }
     .l4-ceilingBadge { position: static; justify-content: flex-end; margin-bottom: 4px; padding: 4px 8px; }

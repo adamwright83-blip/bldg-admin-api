@@ -120,7 +120,7 @@ export function Level4Offensive({
 
   return (
     <section className={cn("l4-root", className)}>
-      {/* TOP BANNER */}
+      {/* GLOBAL TOP BANNER (outside 3-column split) */}
       <header className="l4-topBanner">
         <div className="l4-topBannerInner">
           <div className="l4-topTitle">Three buildings away from a different life.</div>
@@ -174,7 +174,7 @@ export function Level4Offensive({
             <span className="l4-ceilingBadgeValue">DESCENDING</span>
           </div>
 
-          {/* Animated ceiling (absolute, top:0) */}
+          {/* Animated ceiling bar (absolute, top:0) */}
           <div
             className={cn(
               "l4-ceiling",
@@ -185,11 +185,6 @@ export function Level4Offensive({
           >
             <div className="l4-ceilingBar">
               <p className="l4-threatText">Stagnation will be the death of you.</p>
-            </div>
-            <div className="l4-spikes" aria-hidden>
-              {Array.from({ length: 28 }).map((_, i) => (
-                <span key={i} className="l4-spike" />
-              ))}
             </div>
           </div>
 
@@ -314,7 +309,7 @@ export function Level4Offensive({
               <div className="l4-laneTitle">LANE 3 | EXPANSION | The Beaudry</div>
               <div className="l4-laneBody">Capture new tower target. 64-story luxury high-rise.</div>
             </div>
-            <button type="button" className="l4-laneCta is-dim">GENERATE FLYER →</button>
+            <button type="button" className="l4-laneCta is-dim">GENERATE BEAUDRY PITCH →</button>
           </div>
         </div>
 
