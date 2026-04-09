@@ -399,9 +399,9 @@
     animation: l4-textFlicker 3.2s ease-in-out infinite;
     text-align: center; line-height: 1.15;
   }
-  /* Market hole data box — floats mid-canvas, above avatar heads */
+  /* Market hole data box — floats mid-canvas, well above avatar heads */
   .l4-marketOverlay {
-    position: absolute; left: 50%; top: 36%;
+    position: absolute; left: 50%; top: 15%;
     transform: translateX(-50%);
     z-index: 12;
     width: max-content;
@@ -441,7 +441,7 @@
 
   /* YOU ARE HERE badge — small red pill, just below avatars */
   .l4-youAreHere {
-    position: absolute; left: 50%; top: 60%;
+    position: absolute; left: 50%; top: 68%;
     transform: translate(-50%, -50%); z-index: 11;
     width: 90px; height: 40px;
     background-color: transparent;
@@ -454,14 +454,14 @@
     box-shadow: 0 0 10px rgba(239,68,68,.35);
   }
 
-  /* Avatar cluster — large, centered mid-board, above YOU ARE HERE */
+  /* Avatar cluster — centered mid-board, between market overlay and YOU ARE HERE */
   .l4-figureCluster {
     position: absolute;
-    top: 38%;
+    top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     width: min(380px, 85%);
-    height: 260px;
+    height: 200px;
     z-index: 10;
     pointer-events: none;
   }
@@ -478,13 +478,13 @@
   .l4-figureMan {
     left: 44%;
     bottom: 0;
-    height: 230px;
+    height: 180px;
     transform: translateX(-50%);
   }
   .l4-figureWoman {
     left: 56%;
     bottom: 0;
-    height: 170px;
+    height: 133px;
     transform: translateX(-50%);
   }
   .l4-figure.l4-figureMan.is-crush { transform: translateX(-50%) scaleY(.08); }
@@ -656,14 +656,45 @@
   .l4-keepTitle { font-size: 11px; font-weight: 700; color: #c0c8c4; letter-spacing: .06em; margin-bottom: 4px; }
   .l4-keepBody { font-size: 10px; color: #7a8580; line-height: 1.35; }
 
-  /* Responsive */
+  /* Responsive — tablet / narrow desktop */
   @media (max-width: 1200px) {
-    .l4-grid { grid-template-columns: 1fr; }
-    .l4-panel { margin: 6px 6px 0; }
-    .l4-canvas { min-height: 400px; }
-    .l4-right { margin-bottom: 6px; }
+    .l4-grid { grid-template-columns: 180px minmax(0, 1fr) 220px; }
+    .l4-panel { margin: 4px; }
+    .l4-canvas { min-height: 380px; }
     .l4-threatText { font-size: 14px; }
-    .l4-ceilingBadge { position: static; justify-content: flex-end; margin-bottom: 4px; padding: 4px 8px; }
+  }
+
+  /* Responsive — mobile */
+  @media (max-width: 768px) {
+    .l4-grid {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto;
+    }
+    .l4-left { order: 1; }
+    .l4-canvas {
+      order: 0;
+      min-height: 360px;
+      background-size: cover;
+      background-position: center 50%;
+    }
+    .l4-right { order: 2; }
+    .l4-panel { margin: 4px 4px 0; }
+    .l4-figureCluster { top: 50%; height: 160px; }
+    .l4-figureMan { height: 140px; }
+    .l4-figureWoman { height: 104px; }
+    .l4-youAreHere { top: 72%; width: 70px; height: 32px; }
+    .l4-marketOverlay { top: 12%; max-width: 280px; padding: 6px 8px; }
+    .l4-overlayTitle { font-size: 12px; }
+    .l4-overlayValue { font-size: 13px; }
+    .l4-overlaySub { font-size: 10px; }
+    .l4-ceilingBadge { position: absolute; top: 4px; right: 6px; font-size: 9px; }
+    .l4-ceilingBar { min-height: 28px; }
+    .l4-threatText { font-size: 12px; }
+    .l4-map { height: 180px; }
+    .l4-ritual { padding: 6px; gap: 4px; }
+    .l4-lane { padding: 8px 10px; }
+    .l4-laneTitle { font-size: 13px; }
+    .l4-laneCta { font-size: 10px; padding: 0 10px; min-height: 28px; }
   }
 
   /* Keep full-vision preview in 3-column layout even on smaller windows. */
