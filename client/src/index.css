@@ -401,9 +401,9 @@
   }
   /* Market hole data box (absolute, bottom-center of canvas) */
   .l4-marketOverlay {
-    position: absolute; left: 50%; top: 32%;
+    position: absolute; left: 50%; top: 19%;
     transform: translateX(-50%);
-    z-index: 9;
+    z-index: 12;
     width: max-content;
     max-width: 350px;
     padding: 8px 10px;
@@ -441,8 +441,8 @@
 
   /* YOU ARE HERE badge (absolute, on MARRY HER? circle) */
   .l4-youAreHere {
-    position: absolute; left: 50%; top: 62%;
-    transform: translate(-50%, -50%); z-index: 8;
+    position: absolute; left: 50%; top: 67%;
+    transform: translate(-50%, -50%); z-index: 11;
     width: 154px; height: 68px;
     background-color: transparent;
     background-image: var(--l4-you-are-here);
@@ -457,12 +457,13 @@
   /* Avatar cluster centered over MARRY HER? node */
   .l4-figureCluster {
     position: absolute;
-    top: 46%;
+    top: auto;
+    bottom: 19%;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translateX(-50%);
     width: min(340px, 80%);
     height: 220px;
-    z-index: 8;
+    z-index: 9;
     pointer-events: none;
   }
   .l4-figure {
@@ -565,7 +566,7 @@
   .l4-mapHamburger { font-size: 14px; color: #8a928d; }
   .l4-map {
     position: relative; border: 1px solid var(--l4-line); border-radius: 2px;
-    height: 280px; overflow: hidden;
+    height: 320px; overflow: hidden;
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,.08),
       inset 0 4px 14px rgba(0,0,0,.65);
@@ -578,6 +579,8 @@
     background-size: contain, auto;
     background-repeat: no-repeat, no-repeat;
     background-position: center, center;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
   }
   .l4-mapLines { display: none; }
   .l4-mapNodes { display: none; }
