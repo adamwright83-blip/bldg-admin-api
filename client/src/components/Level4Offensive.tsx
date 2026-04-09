@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 import boardPng from "@/assets/l4/board.png";
 import manFigure from "@/assets/l4/man.png";
 import womanFigure from "@/assets/l4/woman.png";
+import frameTexture from "@/assets/l4/frame_texture_2k.png";
+import panelFace from "@/assets/l4/panel_face_tile_1k.png";
+import centerGrit from "@/assets/l4/center_grit_bg_1920.png";
+import hudPlate from "@/assets/l4/hud_overlay_plate.png";
+import youAreHereBadge from "@/assets/l4/you_are_here_badge.png";
+import mapPanelArt from "@/assets/l4/map_panel_art.png";
 
 type CeilingState = "idle" | "failure" | "success";
 type MapNodeId = "opus" | "century" | "beaudry";
@@ -86,6 +92,18 @@ export function Level4Offensive({
   }
 
   const selectedNode = useMemo(() => MAP_NODES.find((n) => n.id === selectedNodeId)!, [selectedNodeId]);
+  const textureVars = useMemo(
+    () =>
+      ({
+        "--l4-frame-texture": `url(${frameTexture})`,
+        "--l4-panel-face": `url(${panelFace})`,
+        "--l4-center-grit": `url(${centerGrit})`,
+        "--l4-hud-plate": `url(${hudPlate})`,
+        "--l4-you-are-here": `url(${youAreHereBadge})`,
+        "--l4-map-art": `url(${mapPanelArt})`,
+      }) as CSSProperties,
+    []
+  );
 
   const dossier = useMemo(() => {
     if (selectedNode.id === "beaudry") {
@@ -119,7 +137,7 @@ export function Level4Offensive({
   }, [selectedNode.id]);
 
   return (
-    <section className={cn("l4-root", className)}>
+    <section className={cn("l4-root", className)} style={textureVars}>
       {/* GLOBAL TOP BANNER (outside 3-column split) */}
       <header className="l4-topBanner">
         <div className="l4-topBannerInner">
@@ -192,6 +210,7 @@ export function Level4Offensive({
           <div className="l4-marketOverlay">
             <div className="l4-overlayTitle">**MARKET HOLE DETECTED: Pants Alterations**</div>
             <div className="l4-overlayValue">+400% ZIPPERS SEARCH 3mi.</div>
+            <div className="l4-overlaySub">Impending Hope of bought house and marige</div>
           </div>
 
           {/* YOU ARE HERE badge — on the MARRY HER? circle */}
@@ -309,7 +328,7 @@ export function Level4Offensive({
               <div className="l4-laneTitle">LANE 3 | EXPANSION | The Beaudry</div>
               <div className="l4-laneBody">Capture new tower target. 64-story luxury high-rise.</div>
             </div>
-            <button type="button" className="l4-laneCta is-dim">GENERATE BEAUDRY PITCH →</button>
+            <button type="button" className="l4-laneCta is-dim">GENERATE FLYER →</button>
           </div>
         </div>
 

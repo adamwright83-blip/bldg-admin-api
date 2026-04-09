@@ -167,31 +167,76 @@
     --l4-line: #333;
     --l4-panel: #1c1c1c;
     --l4-deep: #111;
+    --l4-frame-texture: none;
+    --l4-panel-face: none;
+    --l4-center-grit: none;
+    --l4-hud-plate: none;
+    --l4-you-are-here: none;
+    --l4-map-art: none;
     position: relative;
     color: #d7dbd8;
     font-family: var(--font-mono);
     border: 1px solid #2a2a2a;
     border-radius: 2px;
-    background: linear-gradient(180deg, #151515, var(--l4-deep) 40%, #0d0d0d);
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,.03), inset 0 3px 24px rgba(0,0,0,.55), 0 12px 40px rgba(0,0,0,.45);
+    background:
+      radial-gradient(120% 50% at 50% 0%, rgba(255,255,255,.08), transparent 45%),
+      linear-gradient(180deg, #1a1c1d 0%, #111213 38%, #0a0b0c 100%);
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,.04),
+      inset 0 2px 0 rgba(255,255,255,.08),
+      inset 0 -2px 0 rgba(0,0,0,.7),
+      inset 0 12px 24px rgba(0,0,0,.5),
+      0 14px 50px rgba(0,0,0,.55);
     overflow: hidden;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .l4-root::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.05), transparent 12%, transparent 88%, rgba(0,0,0,.35)),
+      var(--l4-frame-texture),
+      repeating-linear-gradient(
+        105deg,
+        rgba(255,255,255,.02) 0px,
+        rgba(255,255,255,.02) 1px,
+        transparent 1px,
+        transparent 5px
+      );
+    background-size: auto, 520px 520px, auto;
+    background-position: center top, center top, center;
+    mix-blend-mode: soft-light;
+    opacity: .42;
+    z-index: 0;
+  }
+  .l4-root > * {
+    position: relative;
+    z-index: 1;
   }
 
   /* Top banner (brushed metal plaque) */
   .l4-topBanner {
     position: relative; z-index: 5;
     border-bottom: 1px solid var(--l4-line);
-    padding: 8px 12px;
+    padding: 10px 12px 8px;
     width: 100%;
     display: flex; justify-content: center;
-    background: rgba(17,17,17,.92);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,0) 35%),
+      linear-gradient(180deg, #1c1d1f, #111214);
+    box-shadow: inset 0 -1px 0 rgba(0,0,0,.8);
   }
   .l4-topBannerInner {
     border: 1px solid #555; border-radius: 2px;
-    background: linear-gradient(180deg, #909890, #6a706c);
-    color: #111; width: min(520px, 100%); text-align: center;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.5), inset 0 -1px 0 rgba(0,0,0,.4);
-    padding: 6px 14px;
+    background: linear-gradient(180deg, #9ba39d, #6c7470 48%, #565d59);
+    color: #111; width: min(510px, 100%); text-align: center;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.55), inset 0 -2px 0 rgba(0,0,0,.55), 0 3px 8px rgba(0,0,0,.45);
+    padding: 8px 14px 6px;
   }
   .l4-topTitle {
     font-family: var(--font-display); font-style: italic;
@@ -205,16 +250,27 @@
   /* 3-column grid */
   .l4-grid {
     display: grid;
-    grid-template-columns: 200px minmax(0, 1fr) 260px;
-    min-height: 520px;
+    grid-template-columns: 188px minmax(0, 1fr) 248px;
+    min-height: 610px;
+    flex: 1;
   }
 
   /* Side panels */
   .l4-panel {
     position: relative; z-index: 4;
-    background: linear-gradient(170deg, #191919, var(--l4-panel) 50%, #131313);
+    background:
+      radial-gradient(120% 65% at 50% 0%, rgba(255,255,255,.06), transparent 60%),
+      var(--l4-panel-face),
+      linear-gradient(170deg, #212223, var(--l4-panel) 52%, #101112);
+    background-size: auto, 440px 440px, auto;
+    background-position: center top, center, center;
+    background-blend-mode: normal, overlay, normal;
     border: 1px solid var(--l4-line); border-radius: 2px; margin: 6px;
-    box-shadow: inset 0 2px 14px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.025);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.08),
+      inset 0 -1px 0 rgba(0,0,0,.75),
+      inset 0 4px 14px rgba(0,0,0,.6),
+      0 6px 14px rgba(0,0,0,.35);
   }
 
   /* LEFT SIDEBAR */
@@ -223,9 +279,9 @@
   .l4-navBtn {
     border: 1px solid #444; border-radius: 2px;
     background: linear-gradient(180deg, #2a2a2a, #1a1a1a);
-    min-height: 32px; color: #c8d0cc;
+    min-height: 34px; color: #c8d0cc;
     display: flex; align-items: center; gap: 6px; padding: 0 8px;
-    text-align: left; font-family: var(--font-mono); font-size: 11px;
+    text-align: left; font-family: var(--font-mono); font-size: 12px;
     font-weight: 600; letter-spacing: .05em;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.06), inset 0 -2px 6px rgba(0,0,0,.3);
   }
@@ -237,7 +293,7 @@
   .l4-metrics { padding: 8px; }
   .l4-metricLabel { font-size: 11px; color: #b0b8b4; font-weight: 700; letter-spacing: .06em; }
   .l4-metricValue {
-    font-size: 42px; line-height: .92; color: #f4f7f5;
+    font-size: 54px; line-height: .88; color: #f4f7f5;
     margin-top: 2px; font-weight: 700; font-variant-numeric: tabular-nums;
   }
   .l4-metricSub { margin-top: 6px; font-size: 10px; color: #7a8580; line-height: 1.3; }
@@ -269,11 +325,28 @@
      ============================================ */
   .l4-canvas {
     position: relative;
-    min-height: 700px;
+    min-height: 610px;
     background-size: contain;
-    background-position: center;
+    background-position: center 58%;
     background-repeat: no-repeat;
     overflow: hidden;
+    border: 1px solid #2e3231;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.08),
+      inset 0 0 0 1px rgba(0,0,0,.45),
+      inset 0 14px 28px rgba(0,0,0,.45);
+  }
+  .l4-canvas::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background: var(--l4-center-grit);
+    background-size: cover;
+    background-position: center;
+    mix-blend-mode: soft-light;
+    opacity: .5;
   }
 
   /* Ceiling status badge (pinned top-right, never animates) */
@@ -308,9 +381,14 @@
   }
   .l4-ceilingBar {
     min-height: 36px; border: 1px solid #3a3a3a; border-radius: 2px;
-    background: linear-gradient(180deg, #2f2f2f, #1a1a1a);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,0) 35%),
+      linear-gradient(180deg, #323436, #161719);
     display: flex; align-items: center; justify-content: center;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), inset 0 -3px 10px rgba(0,0,0,.45);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.12),
+      inset 0 -3px 10px rgba(0,0,0,.6),
+      0 4px 10px rgba(0,0,0,.35);
     padding: 0 10px; margin: 0 4px;
   }
   .l4-threatText {
@@ -328,10 +406,19 @@
     width: max-content;
     max-width: 350px;
     padding: 8px 10px;
-    border: 1px solid rgba(74,222,128,.3); border-radius: 2px;
-    background: linear-gradient(180deg, rgba(16,185,129,.18), rgba(10,26,20,.92));
+    border: 1px solid rgba(84,94,89,.9); border-radius: 2px;
+    background:
+      var(--l4-hud-plate),
+      linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0) 28%),
+      linear-gradient(180deg, rgba(0,0,0,.78), rgba(0,0,0,.72));
+    background-size: 100% 100%, auto, auto;
+    background-repeat: no-repeat;
     backdrop-filter: blur(4px);
     text-align: center;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.12),
+      inset 0 -1px 0 rgba(0,0,0,.7),
+      0 8px 20px rgba(0,0,0,.4);
   }
   .l4-overlayTitle {
     font-size: clamp(12px, 1.3vw, 16px); line-height: 1.2;
@@ -342,15 +429,28 @@
     margin-top: 3px; letter-spacing: .03em;
     text-shadow: 0 0 12px rgba(74,222,128,.3);
   }
+  .l4-overlaySub {
+    margin-top: 5px;
+    color: #d8d5cc;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-shadow: 0 1px 0 rgba(0,0,0,.85);
+  }
 
   /* YOU ARE HERE badge (absolute, on MARRY HER? circle) */
   .l4-youAreHere {
     position: absolute; left: 50%; top: 62%;
     transform: translate(-50%, -50%); z-index: 8;
-    background: var(--l4-red); color: #fff;
-    font-size: 8px; font-weight: 800; letter-spacing: .1em;
-    padding: 3px 8px; border-radius: 2px;
-    box-shadow: 0 0 14px rgba(239,68,68,.55);
+    width: 154px; height: 68px;
+    background-color: transparent;
+    background-image: var(--l4-you-are-here);
+    background-repeat: no-repeat;
+    background-size: contain;
+    background-position: center;
+    color: transparent;
+    font-size: 0;
+    box-shadow: 0 0 14px rgba(239,68,68,.35);
   }
 
   /* Avatar cluster centered over MARRY HER? node */
@@ -399,14 +499,23 @@
     display: flex; flex-direction: column; gap: 6px;
     border: 1px solid #2a2a2a; border-radius: 2px;
     background: linear-gradient(180deg, #1a1a1a, #141414);
-    padding: 10px; margin: 0 6px 6px;
+    padding: 8px 10px 10px; margin: 0 6px 6px;
     box-shadow: inset 0 2px 12px rgba(0,0,0,.45);
   }
   .l4-lane {
     border: 1px solid #3a3a3a; border-radius: 2px;
-    background: linear-gradient(180deg, #1e1e1e, #151515);
-    padding: 10px 12px;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.04), inset 0 -2px 8px rgba(0,0,0,.35);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0) 30%),
+      var(--l4-panel-face),
+      linear-gradient(180deg, #1f2022, #121315);
+    background-size: auto, 440px 440px, auto;
+    background-position: center top, center, center;
+    background-blend-mode: normal, overlay, normal;
+    padding: 11px 12px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.08),
+      inset 0 -2px 8px rgba(0,0,0,.45),
+      0 3px 8px rgba(0,0,0,.25);
   }
   .l4-lane.is-primary {
     border-color: rgba(74,222,128,.4);
@@ -421,10 +530,10 @@
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
   }
   .l4-laneTitle {
-    color: #d4d9d6; font-size: clamp(13px, 1.2vw, 17px);
+    color: #d4d9d6; font-size: clamp(14px, 1.25vw, 18px);
     line-height: 1.25; letter-spacing: .02em; font-weight: 600;
   }
-  .l4-laneBody { color: #7d8983; font-size: 11px; margin-top: 3px; line-height: 1.35; }
+  .l4-laneBody { color: #7d8983; font-size: 12px; margin-top: 3px; line-height: 1.3; }
   .l4-laneCta {
     flex: 0 0 auto; min-height: 32px; border-radius: 2px;
     font-family: var(--font-mono); font-size: 11px; font-weight: 700;
@@ -453,17 +562,19 @@
   .l4-mapHamburger { font-size: 14px; color: #8a928d; }
   .l4-map {
     position: relative; border: 1px solid var(--l4-line); border-radius: 2px;
-    height: 240px; overflow: hidden;
-    box-shadow: inset 0 2px 12px rgba(0,0,0,.5);
+    height: 210px; overflow: hidden;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.08),
+      inset 0 4px 14px rgba(0,0,0,.65);
   }
   .l4-mapBg {
     position: absolute; inset: 0;
     background:
-      linear-gradient(135deg, rgba(255,255,255,.02) 25%, transparent 25%),
-      linear-gradient(225deg, rgba(255,255,255,.02) 25%, transparent 25%),
+      linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,.45)),
+      var(--l4-map-art),
       linear-gradient(180deg, #161918, #101211);
-    background-size: 32px 32px, 32px 32px, auto;
-    background-position: 16px 0, 16px 0, 0 0;
+    background-size: auto, cover, auto;
+    background-position: 0 0, center, 0 0;
   }
   .l4-mapLines { position: absolute; inset: 0; width: 100%; height: 100%; }
   .l4-mapLine { stroke: rgba(74,222,128,.65); stroke-width: 1.2; fill: none; stroke-dasharray: 5 4; }
@@ -493,9 +604,17 @@
   .l4-dossier {
     border: 1px solid var(--l4-line); border-radius: 2px;
     background: linear-gradient(180deg, #1c1c1c, #161616);
-    padding: 8px 10px; display: flex; flex-direction: column; gap: 5px;
+    background-image:
+      linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0) 26%),
+      var(--l4-panel-face),
+      linear-gradient(180deg, #1c1c1c, #161616);
+    background-size: auto, 440px 440px, auto;
+    background-blend-mode: normal, overlay, normal;
+    padding: 8px 10px; display: flex; flex-direction: column; gap: 4px;
     color: #d0d5d2;
-    box-shadow: inset 0 2px 10px rgba(0,0,0,.45);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.08),
+      inset 0 2px 10px rgba(0,0,0,.55);
   }
   .l4-dossierHeader {
     font-size: 10px; font-weight: 700; letter-spacing: .08em;
@@ -518,8 +637,17 @@
   /* KEEP IN FRAME panel — dark */
   .l4-keepInFrame {
     border: 1px solid var(--l4-line); border-radius: 2px;
-    background: linear-gradient(180deg, #151515, #0e0e0e);
-    padding: 8px; box-shadow: inset 0 2px 10px rgba(0,0,0,.4);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0) 26%),
+      var(--l4-panel-face),
+      linear-gradient(180deg, #151515, #0e0e0e);
+    background-size: auto, 440px 440px, auto;
+    background-blend-mode: normal, overlay, normal;
+    padding: 8px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.06),
+      inset 0 2px 10px rgba(0,0,0,.5);
+    flex: 1;
   }
   .l4-keepTitle { font-size: 10px; font-weight: 700; color: #c0c8c4; letter-spacing: .06em; margin-bottom: 4px; }
   .l4-keepBody { font-size: 9px; color: #7a8580; line-height: 1.35; }
@@ -532,6 +660,21 @@
     .l4-right { margin-bottom: 6px; }
     .l4-threatText { font-size: 14px; }
     .l4-ceilingBadge { position: static; justify-content: flex-end; margin-bottom: 4px; padding: 4px 8px; }
+  }
+
+  /* Keep full-vision preview in 3-column layout even on smaller windows. */
+  .l4-fullvisionSurface .l4-grid {
+    grid-template-columns: 188px minmax(0, 1fr) 248px;
+    min-height: 610px;
+  }
+  .l4-fullvisionSurface .l4-canvas {
+    min-height: 610px;
+  }
+  .l4-fullvisionSurface .l4-panel {
+    margin: 6px;
+  }
+  .l4-fullvisionSurface .l4-right {
+    margin-bottom: 0;
   }
 
   .container {
