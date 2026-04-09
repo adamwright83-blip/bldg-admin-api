@@ -19,6 +19,11 @@ const MAP_NODES: MapNode[] = [
   { id: "beaudry", label: "The Beaudry", type: "target" },
 ];
 
+const FIGURE_ASSETS = {
+  man: "https://drive.google.com/uc?export=view&id=1b6xOQr_tUsQxMAiCpUtdPJ_T1Tlb1s2M",
+  woman: "https://drive.google.com/uc?export=view&id=1R--qaD5bCyxszYYawSkwvDi_dYjNuCya",
+} as const;
+
 export function Level4Offensive({
   className,
 }: {
@@ -188,21 +193,27 @@ export function Level4Offensive({
             <div className="l4-board">
               <div className={cn("l4-boardNode", ceilingState === "success" && "is-success")} />
 
-              <div
+              <img
+                src={FIGURE_ASSETS.man}
+                alt=""
                 className={cn(
                   "l4-figure l4-figureMan",
                   ceilingState === "failure" && "is-crush",
                   ceilingState === "success" && "is-merge"
                 )}
                 aria-hidden
+                draggable={false}
               />
-              <div
+              <img
+                src={FIGURE_ASSETS.woman}
+                alt=""
                 className={cn(
                   "l4-figure l4-figureWoman",
                   ceilingState === "failure" && "is-crush",
                   ceilingState === "success" && "is-merge"
                 )}
                 aria-hidden
+                draggable={false}
               />
 
               <div className="l4-boardOverlay">
