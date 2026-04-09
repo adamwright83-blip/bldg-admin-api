@@ -33,8 +33,6 @@ export type Level4OffensiveProps = {
 export function Level4Offensive({
   className,
   soberDays = 2114,
-  debtCents = 0,
-  recoveredTodayCents = 538_000,
   onDeployLane1,
   lane1Executed = false,
 }: Level4OffensiveProps) {
@@ -122,7 +120,7 @@ export function Level4Offensive({
 
   return (
     <section className={cn("l4-root", className)}>
-      {/* === TOP BANNER === */}
+      {/* TOP BANNER */}
       <header className="l4-topBanner">
         <div className="l4-topBannerInner">
           <div className="l4-topTitle">Three buildings away from a different life.</div>
@@ -130,12 +128,11 @@ export function Level4Offensive({
         </div>
       </header>
 
-      {/* === MAIN 3-COLUMN GRID === */}
+      {/* 3-COLUMN GRID */}
       <div className="l4-grid">
-
         {/* LEFT SIDEBAR */}
         <aside className="l4-panel l4-left">
-          <nav className="l4-nav" aria-label="HUD sections">
+          <nav className="l4-nav">
             {(["ORDERS", "CUSTOMERS", "LEADS", "SETTINGS"] as const).map((label) => (
               <button key={label} type="button" className="l4-navBtn">
                 <span className="l4-navCheck" aria-hidden>✓</span>
@@ -145,10 +142,8 @@ export function Level4Offensive({
           </nav>
 
           <div className="l4-metrics">
-            <div className="l4-metricBlock">
-              <div className="l4-metricLabel">SOBER DAYS:</div>
-              <div className="l4-metricValue">{soberDays.toLocaleString("en-US")}</div>
-            </div>
+            <div className="l4-metricLabel">SOBER DAYS:</div>
+            <div className="l4-metricValue">{soberDays.toLocaleString("en-US")}</div>
             <div className="l4-metricSub">Refined compact debt ledger</div>
           </div>
 
@@ -157,9 +152,9 @@ export function Level4Offensive({
           <div className="l4-growthPanel">
             <div className="l4-growthTitle">GROWTH FOCUS</div>
             <ul className="l4-growthList">
-              <li className="l4-growthItem">+$45 → Send CPA invoice</li>
-              <li className="l4-growthItem">+$28 → Follow up Sarah</li>
-              <li className="l4-growthItem">+$45 → Follow up Aaliyah</li>
+              <li>+$45 → Send CPA invoice</li>
+              <li>+$28 → Follow up Sarah</li>
+              <li>+$45 → Follow up Aaliyah</li>
             </ul>
           </div>
 
@@ -170,16 +165,16 @@ export function Level4Offensive({
           </div>
         </aside>
 
-        {/* CENTER COLUMN */}
-        <main className="l4-center">
-          {/* Ceiling status badge (top-right of center) */}
+        {/* CENTER CANVAS — board is background-image, everything floats over it */}
+        <main className="l4-canvas" style={{ backgroundImage: `url(${boardPng})` }}>
+          {/* Ceiling status badge (top-right, never moves) */}
           <div className="l4-ceilingBadge">
             <span className="l4-ceilingBadgeIcon" aria-hidden>↓</span>
             <span className="l4-ceilingBadgeLabel">CEILING STATUS:</span>
             <span className="l4-ceilingBadgeValue">DESCENDING</span>
           </div>
 
-          {/* Threat bar */}
+          {/* Animated ceiling (absolute, top:0) */}
           <div
             className={cn(
               "l4-ceiling",
@@ -198,96 +193,44 @@ export function Level4Offensive({
             </div>
           </div>
 
-          {/* Board area */}
-          <div className="l4-boardShell">
-            <div className="l4-boardStage">
-              <img src={boardPng} alt="" className="l4-boardBg" draggable={false} aria-hidden />
-
-              <div className="l4-boardLayers">
-                {/* Market hole overlay - floats over top portion of board */}
-                <div className="l4-marketOverlay">
-                  <div className="l4-overlayTitle">**MARKET HOLE DETECTED: Pants Alterations**</div>
-                  <div className="l4-overlayValue">+400% ZIPPERS SEARCH 3mi.</div>
-                </div>
-
-                {/* Narrative text - center of board */}
-                <div className="l4-boardNarrative">
-                  Impending Hope of<br />bought house and marriage
-                </div>
-
-                {/* YOU ARE HERE badge - on the MARRY HER? circle */}
-                <div className="l4-youAreHere" aria-hidden>YOU ARE HERE</div>
-
-                {/* Figures placed on/near the MARRY HER? area */}
-                <div className="l4-figureSlot">
-                  <img
-                    src={manFigure}
-                    alt=""
-                    className={cn(
-                      "l4-figure l4-figureMan",
-                      ceilingState === "failure" && "is-crush",
-                      ceilingState === "success" && "is-merge"
-                    )}
-                    draggable={false}
-                    aria-hidden
-                  />
-                  <img
-                    src={womanFigure}
-                    alt=""
-                    className={cn(
-                      "l4-figure l4-figureWoman",
-                      ceilingState === "failure" && "is-crush",
-                      ceilingState === "success" && "is-merge"
-                    )}
-                    draggable={false}
-                    aria-hidden
-                  />
-                </div>
-              </div>
-            </div>
+          {/* Market hole data box */}
+          <div className="l4-marketOverlay">
+            <div className="l4-overlayTitle">**MARKET HOLE DETECTED: Pants Alterations**</div>
+            <div className="l4-overlayValue">+400% ZIPPERS SEARCH 3mi.</div>
           </div>
 
-          {/* Lanes / ritual stack */}
-          <div className="l4-ritual">
-            <div ref={lane1Ref} className={cn("l4-lane is-primary", lane1Pulse && "is-pulse")} data-lane="1">
-              <div className="l4-laneHead">
-                <div>
-                  <div className="l4-laneTitle">LANE 1 | FAST CASH | Rainy Day Valet SMS</div>
-                  <div className="l4-laneBody">It is pouring. Solve Los Feliz High-rise inconvenience.</div>
-                </div>
-                <button type="button" className="l4-laneCta is-green" onClick={executeLane1}>
-                  DEPLOY SMS →
-                </button>
-              </div>
-            </div>
-
-            <div className={cn("l4-lane", lane2Primary && "is-primaryNext")} data-lane="2">
-              <div className="l4-laneHead">
-                <div>
-                  <div className="l4-laneTitle">LANE 2 | COMPOUNDING | Concierge Opt-In</div>
-                  <div className="l4-laneBody">Scale retention Insert into intake flow.</div>
-                </div>
-                <button type="button" className="l4-laneCta is-dim">
-                  INTEGRATE STEP →
-                </button>
-              </div>
-            </div>
-
-            <div className="l4-lane" data-lane="3">
-              <div className="l4-laneHead">
-                <div>
-                  <div className="l4-laneTitle">LANE 3 | EXPANSION | The Beaudry</div>
-                  <div className="l4-laneBody">Capture new tower target. 64-story luxury high-rise.</div>
-                </div>
-                <button type="button" className="l4-laneCta is-dim">
-                  GENERATE FLYER →
-                </button>
-              </div>
-            </div>
-
-            <div className="l4-ticker">MUTED TEXT TICKER</div>
-            <div className="l4-diamond" aria-hidden>◆</div>
+          {/* Narrative text */}
+          <div className="l4-boardNarrative">
+            Impending Hope of<br />bought house and marriage
           </div>
+
+          {/* YOU ARE HERE badge — on the MARRY HER? circle */}
+          <div className="l4-youAreHere" aria-hidden>YOU ARE HERE</div>
+
+          {/* Man figure — absolute on MARRY HER? */}
+          <img
+            src={manFigure}
+            alt=""
+            className={cn(
+              "l4-figure l4-figureMan",
+              ceilingState === "failure" && "is-crush",
+              ceilingState === "success" && "is-merge"
+            )}
+            draggable={false}
+            aria-hidden
+          />
+          {/* Woman figure — absolute on MARRY HER? */}
+          <img
+            src={womanFigure}
+            alt=""
+            className={cn(
+              "l4-figure l4-figureWoman",
+              ceilingState === "failure" && "is-crush",
+              ceilingState === "success" && "is-merge"
+            )}
+            draggable={false}
+            aria-hidden
+          />
         </main>
 
         {/* RIGHT SIDEBAR */}
@@ -335,19 +278,11 @@ export function Level4Offensive({
             <div className="l4-dossierHeader">{dossier.header}</div>
             <div className="l4-dossierState">{dossier.stateLabel}</div>
             <div className="l4-dossierBody">
-              <div className="l4-dossierRow">
-                <span className="k">PROFILE:</span> {dossier.profile}
-              </div>
-              <div className="l4-dossierRow">
-                <span className="k">WEDGE:</span> {dossier.wedge}
-              </div>
-              <div className="l4-dossierRow">
-                <span className="k">VECTOR:</span> {dossier.vector}
-              </div>
+              <div className="l4-dossierRow"><span className="k">PROFILE:</span> {dossier.profile}</div>
+              <div className="l4-dossierRow"><span className="k">WEDGE:</span> {dossier.wedge}</div>
+              <div className="l4-dossierRow"><span className="k">VECTOR:</span> {dossier.vector}</div>
             </div>
-            <button type="button" className="l4-dossierCta">
-              [ {dossier.cta} ]
-            </button>
+            <button type="button" className="l4-dossierCta">[ {dossier.cta} ]</button>
           </div>
 
           <div className="l4-keepInFrame">
@@ -355,6 +290,42 @@ export function Level4Offensive({
             <div className="l4-keepBody">Consolidated "KEEP IN FRAME" notes. Pre populated with original text.</div>
           </div>
         </aside>
+      </div>
+
+      {/* LANE STACK — full width below the grid */}
+      <div className="l4-ritual">
+        <div ref={lane1Ref} className={cn("l4-lane is-primary", lane1Pulse && "is-pulse")} data-lane="1">
+          <div className="l4-laneHead">
+            <div>
+              <div className="l4-laneTitle">LANE 1 | FAST CASH | Rainy Day Valet SMS</div>
+              <div className="l4-laneBody">It is pouring. Solve Los Feliz High-rise inconvenience.</div>
+            </div>
+            <button type="button" className="l4-laneCta is-green" onClick={executeLane1}>DEPLOY SMS →</button>
+          </div>
+        </div>
+
+        <div className={cn("l4-lane", lane2Primary && "is-primaryNext")} data-lane="2">
+          <div className="l4-laneHead">
+            <div>
+              <div className="l4-laneTitle">LANE 2 | COMPOUNDING | Concierge Opt-In</div>
+              <div className="l4-laneBody">Scale retention Insert into intake flow.</div>
+            </div>
+            <button type="button" className="l4-laneCta is-dim">INTEGRATE STEP →</button>
+          </div>
+        </div>
+
+        <div className="l4-lane" data-lane="3">
+          <div className="l4-laneHead">
+            <div>
+              <div className="l4-laneTitle">LANE 3 | EXPANSION | The Beaudry</div>
+              <div className="l4-laneBody">Capture new tower target. 64-story luxury high-rise.</div>
+            </div>
+            <button type="button" className="l4-laneCta is-dim">GENERATE FLYER →</button>
+          </div>
+        </div>
+
+        <div className="l4-ticker">MUTED TEXT TICKER</div>
+        <div className="l4-diamond" aria-hidden>◆</div>
       </div>
     </section>
   );
