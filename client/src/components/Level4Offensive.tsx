@@ -199,38 +199,32 @@ export function Level4Offensive({
             <div className="l4-overlayValue">+400% ZIPPERS SEARCH 3mi.</div>
           </div>
 
-          {/* Narrative text */}
-          <div className="l4-boardNarrative">
-            Impending Hope of<br />bought house and marriage
-          </div>
-
           {/* YOU ARE HERE badge — on the MARRY HER? circle */}
           <div className="l4-youAreHere" aria-hidden>YOU ARE HERE</div>
 
-          {/* Man figure — absolute on MARRY HER? */}
-          <img
-            src={manFigure}
-            alt=""
-            className={cn(
-              "l4-figure l4-figureMan",
-              ceilingState === "failure" && "is-crush",
-              ceilingState === "success" && "is-merge"
-            )}
-            draggable={false}
-            aria-hidden
-          />
-          {/* Woman figure — absolute on MARRY HER? */}
-          <img
-            src={womanFigure}
-            alt=""
-            className={cn(
-              "l4-figure l4-figureWoman",
-              ceilingState === "failure" && "is-crush",
-              ceilingState === "success" && "is-merge"
-            )}
-            draggable={false}
-            aria-hidden
-          />
+          {/* Figure cluster locked over the MARRY HER? node */}
+          <div className="l4-figureCluster" aria-hidden>
+            <img
+              src={manFigure}
+              alt=""
+              className={cn(
+                "l4-figure l4-figureMan",
+                ceilingState === "failure" && "is-crush",
+                ceilingState === "success" && "is-merge"
+              )}
+              draggable={false}
+            />
+            <img
+              src={womanFigure}
+              alt=""
+              className={cn(
+                "l4-figure l4-figureWoman",
+                ceilingState === "failure" && "is-crush",
+                ceilingState === "success" && "is-merge"
+              )}
+              draggable={false}
+            />
+          </div>
         </main>
 
         {/* RIGHT SIDEBAR */}
