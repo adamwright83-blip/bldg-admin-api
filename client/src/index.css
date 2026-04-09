@@ -321,15 +321,12 @@
   }
 
   /* ============================================
-     CENTER CANVAS — board.png IS the background.
-     Everything floats with position:absolute.
+     CENTER CANVAS — 3 explicit vertical regions.
+     No free-floating overlap allowed.
      ============================================ */
   .l4-canvas {
-    position: relative;
-    min-height: 480px;
-    background-size: cover;
-    background-position: center 55%;
-    background-repeat: no-repeat;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
     border: 1px solid #2e3231;
     box-shadow:
@@ -337,23 +334,16 @@
       inset 0 0 0 1px rgba(0,0,0,.45),
       inset 0 14px 28px rgba(0,0,0,.45);
   }
-  .l4-canvas::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    pointer-events: none;
-    background: var(--l4-center-grit);
-    background-size: cover;
-    background-position: center;
-    mix-blend-mode: soft-light;
-    opacity: .5;
-  }
 
-  /* Ceiling status badge (pinned top-right, never animates) */
+  /* REGION 1: ThreatCeiling — normal flow, top strip */
+  .l4-threatCeiling {
+    position: relative;
+    z-index: 3;
+    flex: 0 0 auto;
+  }
   .l4-ceilingBadge {
-    position: absolute; top: 8px; right: 10px; z-index: 10;
-    display: flex; align-items: center; gap: 4px;
+    display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+    padding: 4px 10px;
     font-size: 10px; letter-spacing: .06em; font-family: var(--font-mono);
   }
   .l4-ceilingBadgeIcon { color: var(--l4-green); font-weight: 800; font-size: 11px; }
@@ -362,11 +352,7 @@
     color: var(--l4-green); font-weight: 700;
     text-shadow: 0 0 8px rgba(74,222,128,.4);
   }
-
-  /* Ceiling (absolute inside canvas, slides down from top) */
   .l4-ceiling {
-    position: absolute; top: 0; left: 0; right: 0; width: 100%;
-    z-index: 8;
     transition: transform 420ms ease;
     transform: translateY(0);
     pointer-events: none;
@@ -375,7 +361,7 @@
     transform: translateY(6px); transition: transform 10s linear;
   }
   .l4-ceiling.is-failure {
-    transform: translateY(120px); transition: transform 220ms cubic-bezier(.18,.85,.32,1.12);
+    transform: translateY(40px); transition: transform 220ms cubic-bezier(.18,.85,.32,1.12);
   }
   .l4-ceiling.is-success {
     transform: translateY(-100%); transition: transform 260ms ease-out;
@@ -399,11 +385,41 @@
     animation: l4-textFlicker 3.2s ease-in-out infinite;
     text-align: center; line-height: 1.15;
   }
-  /* Market hole data box — floats mid-canvas, well above avatar heads */
+
+  /* REGION 2: BoardStage — fixed aspect ratio box with board background.
+     Contains exactly 3 layers stacked top-to-bottom:
+       1. MarketHoleOverlay (top zone, z-index 3)
+       2. AvatarLayer       (middle zone, z-index 2)
+       3. YouAreHere         (bottom zone, z-index 1)
+     No layer may share the same vertical band as another. */
+  .l4-boardStage {
+    position: relative;
+    flex: 1;
+    aspect-ratio: 16 / 9;
+    min-height: 340px;
+    background-size: cover;
+    background-position: center 55%;
+    background-repeat: no-repeat;
+    overflow: hidden;
+  }
+  .l4-boardStage::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: var(--l4-center-grit);
+    background-size: cover;
+    background-position: center;
+    mix-blend-mode: soft-light;
+    opacity: .5;
+  }
+
+  /* MarketHoleOverlay — top 30% of board, never lower */
   .l4-marketOverlay {
-    position: absolute; left: 50%; top: 15%;
+    position: absolute; left: 50%; top: 8%;
     transform: translateX(-50%);
-    z-index: 12;
+    z-index: 3;
     width: max-content;
     max-width: 350px;
     padding: 8px 10px;
@@ -439,35 +455,22 @@
     text-shadow: 0 1px 0 rgba(0,0,0,.85);
   }
 
-  /* YOU ARE HERE badge — small red pill, just below avatars */
-  .l4-youAreHere {
-    position: absolute; left: 50%; top: 68%;
-    transform: translate(-50%, -50%); z-index: 11;
-    width: 90px; height: 40px;
-    background-color: transparent;
-    background-image: var(--l4-you-are-here);
-    background-repeat: no-repeat;
-    background-size: contain;
-    background-position: center;
-    color: transparent;
-    font-size: 0;
-    box-shadow: 0 0 10px rgba(239,68,68,.35);
-  }
-
-  /* Avatar cluster — centered mid-board, between market overlay and YOU ARE HERE */
-  .l4-figureCluster {
+  /* AvatarLayer — middle 30-70% vertical band of board.
+     Figures are bottom-aligned inside this container.
+     Container top must be below MarketHoleOverlay bottom.
+     Container bottom must be above YouAreHere top. */
+  .l4-avatarLayer {
     position: absolute;
-    top: 50%;
+    top: 32%;
+    bottom: 22%;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translateX(-50%);
     width: min(380px, 85%);
-    height: 200px;
-    z-index: 10;
+    z-index: 2;
     pointer-events: none;
   }
   .l4-figure {
     position: absolute; bottom: 0;
-    z-index: 10;
     height: auto; width: auto;
     object-fit: contain; object-position: bottom center;
     transition: transform 260ms ease;
@@ -478,13 +481,15 @@
   .l4-figureMan {
     left: 44%;
     bottom: 0;
-    height: 180px;
+    max-height: 100%;
+    height: 100%;
     transform: translateX(-50%);
   }
   .l4-figureWoman {
     left: 56%;
     bottom: 0;
-    height: 133px;
+    max-height: 74%;
+    height: 74%;
     transform: translateX(-50%);
   }
   .l4-figure.l4-figureMan.is-crush { transform: translateX(-50%) scaleY(.08); }
@@ -493,6 +498,36 @@
   .l4-figure.l4-figureWoman.is-merge { left: 51.5%; transform: translateX(-50%); }
   .l4-figure.l4-figureMan.is-merge.is-crush { left: 48.5%; transform: translateX(-50%) scaleY(.08); }
   .l4-figure.l4-figureWoman.is-merge.is-crush { left: 51.5%; transform: translateX(-50%) scaleY(.08); }
+
+  /* Debug zone guides — visible only with ?debug=1 */
+  .l4-debugZone {
+    position: absolute; left: 0; right: 0;
+    z-index: 99; pointer-events: none;
+  }
+  .l4-debugZone::after {
+    content: attr(data-zone);
+    position: absolute; top: 4px; left: 4px;
+    font-size: 9px; font-family: monospace;
+    color: rgba(255,255,255,.7);
+    background: rgba(0,0,0,.5);
+    padding: 1px 4px; border-radius: 2px;
+  }
+
+  /* YouAreHere badge — bottom 22% of board, never higher */
+  .l4-youAreHere {
+    position: absolute; left: 50%; bottom: 8%;
+    transform: translateX(-50%);
+    z-index: 1;
+    width: 90px; height: 40px;
+    background-color: transparent;
+    background-image: var(--l4-you-are-here);
+    background-repeat: no-repeat;
+    background-size: contain;
+    background-position: center;
+    color: transparent;
+    font-size: 0;
+    box-shadow: 0 0 10px rgba(239,68,68,.35);
+  }
 
   /* ============================================
      LANE STACK — below the grid, full width
@@ -658,9 +693,9 @@
 
   /* Responsive — tablet / narrow desktop */
   @media (max-width: 1200px) {
-    .l4-grid { grid-template-columns: 180px minmax(0, 1fr) 220px; }
+    .l4-grid { grid-template-columns: 170px minmax(0, 1fr) 210px; }
     .l4-panel { margin: 4px; }
-    .l4-canvas { min-height: 380px; }
+    .l4-boardStage { min-height: 300px; }
     .l4-threatText { font-size: 14px; }
   }
 
@@ -670,24 +705,15 @@
       grid-template-columns: 1fr;
       grid-template-rows: auto;
     }
+    .l4-canvas { order: 0; }
     .l4-left { order: 1; }
-    .l4-canvas {
-      order: 0;
-      min-height: 360px;
-      background-size: cover;
-      background-position: center 50%;
-    }
     .l4-right { order: 2; }
     .l4-panel { margin: 4px 4px 0; }
-    .l4-figureCluster { top: 50%; height: 160px; }
-    .l4-figureMan { height: 140px; }
-    .l4-figureWoman { height: 104px; }
-    .l4-youAreHere { top: 72%; width: 70px; height: 32px; }
-    .l4-marketOverlay { top: 12%; max-width: 280px; padding: 6px 8px; }
+    .l4-boardStage { min-height: 280px; aspect-ratio: 16 / 10; }
+    .l4-marketOverlay { max-width: 280px; padding: 6px 8px; }
     .l4-overlayTitle { font-size: 12px; }
     .l4-overlayValue { font-size: 13px; }
     .l4-overlaySub { font-size: 10px; }
-    .l4-ceilingBadge { position: absolute; top: 4px; right: 6px; font-size: 9px; }
     .l4-ceilingBar { min-height: 28px; }
     .l4-threatText { font-size: 12px; }
     .l4-map { height: 180px; }
@@ -700,10 +726,6 @@
   /* Keep full-vision preview in 3-column layout even on smaller windows. */
   .l4-fullvisionSurface .l4-grid {
     grid-template-columns: 188px minmax(0, 1fr) 248px;
-    min-height: 480px;
-  }
-  .l4-fullvisionSurface .l4-canvas {
-    min-height: 480px;
   }
   .l4-fullvisionSurface .l4-panel {
     margin: 6px;

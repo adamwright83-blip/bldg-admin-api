@@ -91,6 +91,8 @@ export function Level4Offensive({
     onDeployLane1?.();
   }
 
+  const showDebugZones = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("debug");
+
   const selectedNode = useMemo(() => MAP_NODES.find((n) => n.id === selectedNodeId)!, [selectedNodeId]);
   const textureVars = useMemo(
     () =>
@@ -183,61 +185,72 @@ export function Level4Offensive({
           </div>
         </aside>
 
-        {/* CENTER CANVAS — board is background-image, everything floats over it */}
-        <main className="l4-canvas" style={{ backgroundImage: `url(${boardPng})` }}>
-          {/* Ceiling status badge (top-right, never moves) */}
-          <div className="l4-ceilingBadge">
-            <span className="l4-ceilingBadgeIcon" aria-hidden>↓</span>
-            <span className="l4-ceilingBadgeLabel">CEILING STATUS:</span>
-            <span className="l4-ceilingBadgeValue">DESCENDING</span>
-          </div>
-
-          {/* Animated ceiling bar (absolute, top:0) */}
-          <div
-            className={cn(
-              "l4-ceiling",
-              ceilingState === "idle" && "is-idle",
-              ceilingState === "failure" && "is-failure",
-              ceilingState === "success" && "is-success"
-            )}
-          >
-            <div className="l4-ceilingBar">
-              <p className="l4-threatText">Stagnation will be the death of you.</p>
+        {/* CENTER CANVAS — 3 explicit vertical regions, no free-floating overlap */}
+        <main className="l4-canvas">
+          {/* REGION 1: ThreatCeiling — top strip */}
+          <div className="l4-threatCeiling">
+            <div className="l4-ceilingBadge">
+              <span className="l4-ceilingBadgeIcon" aria-hidden>↓</span>
+              <span className="l4-ceilingBadgeLabel">CEILING STATUS:</span>
+              <span className="l4-ceilingBadgeValue">DESCENDING</span>
+            </div>
+            <div
+              className={cn(
+                "l4-ceiling",
+                ceilingState === "idle" && "is-idle",
+                ceilingState === "failure" && "is-failure",
+                ceilingState === "success" && "is-success"
+              )}
+            >
+              <div className="l4-ceilingBar">
+                <p className="l4-threatText">Stagnation will be the death of you.</p>
+              </div>
             </div>
           </div>
 
-          {/* Market hole data box */}
-          <div className="l4-marketOverlay">
-            <div className="l4-overlayTitle">**MARKET HOLE DETECTED: Pants Alterations**</div>
-            <div className="l4-overlayValue">+400% ZIPPERS SEARCH 3mi.</div>
-            <div className="l4-overlaySub">Impending Hope of bought house and marige</div>
-          </div>
+          {/* REGION 2: BoardStage — image + overlays in fixed aspect box */}
+          <div className="l4-boardStage" style={{ backgroundImage: `url(${boardPng})` }}>
+            {showDebugZones && (
+              <>
+                <div className="l4-debugZone" style={{ top: 0, height: '32%', borderBottom: '2px dashed rgba(255,0,0,.6)' }} data-zone="overlay-safe (0-32%)" />
+                <div className="l4-debugZone" style={{ top: '32%', bottom: '22%', borderTop: '2px dashed rgba(0,255,0,.6)', borderBottom: '2px dashed rgba(0,255,0,.6)' }} data-zone="avatar-band (32-78%)" />
+                <div className="l4-debugZone" style={{ bottom: 0, height: '22%', borderTop: '2px dashed rgba(0,120,255,.6)' }} data-zone="badge-zone (78-100%)" />
+              </>
+            )}
 
-          {/* YOU ARE HERE badge — on the MARRY HER? circle */}
-          <div className="l4-youAreHere" aria-hidden>YOU ARE HERE</div>
+            {/* Layer 1: Market hole overlay — top zone of board */}
+            <div className="l4-marketOverlay">
+              <div className="l4-overlayTitle">**MARKET HOLE DETECTED: Pants Alterations**</div>
+              <div className="l4-overlayValue">+400% ZIPPERS SEARCH 3mi.</div>
+              <div className="l4-overlaySub">Impending Hope of bought house and marige</div>
+            </div>
 
-          {/* Figure cluster locked over the MARRY HER? node */}
-          <div className="l4-figureCluster" aria-hidden>
-            <img
-              src={manFigure}
-              alt=""
-              className={cn(
-                "l4-figure l4-figureMan",
-                ceilingState === "failure" && "is-crush",
-                ceilingState === "success" && "is-merge"
-              )}
-              draggable={false}
-            />
-            <img
-              src={womanFigure}
-              alt=""
-              className={cn(
-                "l4-figure l4-figureWoman",
-                ceilingState === "failure" && "is-crush",
-                ceilingState === "success" && "is-merge"
-              )}
-              draggable={false}
-            />
+            {/* Layer 2: Avatar figures — middle zone of board */}
+            <div className="l4-avatarLayer" aria-hidden>
+              <img
+                src={manFigure}
+                alt=""
+                className={cn(
+                  "l4-figure l4-figureMan",
+                  ceilingState === "failure" && "is-crush",
+                  ceilingState === "success" && "is-merge"
+                )}
+                draggable={false}
+              />
+              <img
+                src={womanFigure}
+                alt=""
+                className={cn(
+                  "l4-figure l4-figureWoman",
+                  ceilingState === "failure" && "is-crush",
+                  ceilingState === "success" && "is-merge"
+                )}
+                draggable={false}
+              />
+            </div>
+
+            {/* Layer 3: YOU ARE HERE badge — bottom zone of board */}
+            <div className="l4-youAreHere" aria-hidden>YOU ARE HERE</div>
           </div>
         </main>
 
