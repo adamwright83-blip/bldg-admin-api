@@ -158,6 +158,18 @@
     0%,100% { opacity: 1; }
     50% { opacity: .82; }
   }
+  @keyframes l4-ceilingDescend {
+    from { transform: translateY(0); }
+    to { transform: translateY(120px); }
+  }
+  @keyframes l4-ctaUrgentPulse {
+    0%, 100% { box-shadow: inset 0 0 0 1px rgba(74,222,128,.18), 0 0 8px rgba(74,222,128,.08); }
+    50% { box-shadow: inset 0 0 0 1px rgba(74,222,128,.4), 0 0 20px rgba(74,222,128,.22); }
+  }
+  @keyframes l4-ctaMaxPulse {
+    0%, 100% { box-shadow: inset 0 0 0 2px rgba(74,222,128,.45), 0 0 16px rgba(74,222,128,.25); }
+    50% { box-shadow: inset 0 0 0 2px rgba(74,222,128,.75), 0 0 32px rgba(74,222,128,.45); }
+  }
 
   /* Root shell */
   .l4-root {
@@ -246,6 +258,15 @@
   .l4-topSubtitle {
     font-family: var(--font-mono); font-size: 11px; opacity: .82;
     margin-top: 2px; letter-spacing: .08em;
+  }
+  .l4-allCleared {
+    text-align: center;
+    font-size: 11px; font-weight: 700; letter-spacing: .12em;
+    color: var(--l4-green);
+    padding: 6px 12px;
+    background: linear-gradient(180deg, rgba(74,222,128,.08), transparent);
+    border-bottom: 1px solid rgba(74,222,128,.2);
+    text-shadow: 0 0 12px rgba(74,222,128,.35);
   }
 
   /* 3-column grid */
@@ -354,18 +375,61 @@
     text-shadow: 0 0 8px rgba(74,222,128,.4);
   }
   .l4-ceiling {
-    transition: transform 420ms ease;
     transform: translateY(0);
     pointer-events: none;
+    will-change: transform;
   }
-  .l4-ceiling.is-idle {
-    transform: translateY(6px); transition: transform 10s linear;
+  .l4-ceiling.is-calm {
+    transform: translateY(0);
+    transition: transform 0.6s ease-out;
   }
-  .l4-ceiling.is-failure {
-    transform: translateY(40px); transition: transform 220ms cubic-bezier(.18,.85,.32,1.12);
+  .l4-ceiling.is-descending {
+    animation: l4-ceilingDescend var(--l4-descent-duration, 20s) linear forwards;
   }
-  .l4-ceiling.is-success {
-    transform: translateY(-100%); transition: transform 260ms ease-out;
+  .l4-ceiling.is-descending.is-descent-paused {
+    animation-play-state: paused;
+  }
+  .l4-ceiling.is-stagnated-ceiling {
+    transform: translateY(120px);
+    transition: none;
+  }
+  .l4-ceiling.is-rescuing {
+    animation: none;
+    transform: translateY(0);
+    transition: transform var(--l4-rescue-rise, 1.5s) cubic-bezier(.25,.9,.35,1);
+  }
+  .l4-ceiling.is-celebrating {
+    transform: translateY(0);
+    transition: transform 0.4s ease-out;
+  }
+  .l4-ceiling.is-spikey .l4-ceilingBar {
+    position: relative;
+    border-bottom: none;
+    padding-bottom: 10px;
+  }
+  .l4-ceiling.is-spikey .l4-ceilingBar::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 10px;
+    background:
+      repeating-linear-gradient(
+        115deg,
+        #1a1c1e 0px,
+        #1a1c1e 5px,
+        #2a2420 5px,
+        #2a2420 8px,
+        #0d0e0f 8px,
+        #0d0e0f 11px
+      );
+    clip-path: polygon(
+      0% 0%, 3% 100%, 6% 0%, 9% 100%, 12% 0%, 15% 100%, 18% 0%, 21% 100%, 24% 0%, 27% 100%,
+      30% 0%, 33% 100%, 36% 0%, 39% 100%, 42% 0%, 45% 100%, 48% 0%, 51% 100%, 54% 0%, 57% 100%,
+      60% 0%, 63% 100%, 66% 0%, 69% 100%, 72% 0%, 75% 100%, 78% 0%, 81% 100%, 84% 0%, 87% 100%,
+      90% 0%, 93% 100%, 96% 0%, 100% 100%, 100% 0%
+    );
+    opacity: .95;
+    pointer-events: none;
   }
   .l4-ceilingBar {
     min-height: 36px; border: 1px solid #3a3a3a; border-radius: 2px;
@@ -414,6 +478,19 @@
     background-position: center;
     mix-blend-mode: soft-light;
     opacity: .5;
+    transition: opacity 0.5s ease, filter 0.5s ease;
+  }
+  .l4-boardStage.is-board-warm::before {
+    opacity: .5;
+    filter: none;
+  }
+  .l4-boardStage.is-board-cool::before {
+    opacity: .58;
+    filter: saturate(0.92) brightness(0.94);
+  }
+  .l4-boardStage.is-board-dim::before {
+    opacity: .72;
+    filter: saturate(0.75) brightness(0.72);
   }
 
   /* MarketHoleOverlay — deliberate 3-row tactical panel, no accidental wrapping */
@@ -475,6 +552,11 @@
     width: min(380px, 85%);
     z-index: 2;
     pointer-events: none;
+    transition: opacity 0.45s ease;
+  }
+  .l4-avatarLayer.is-avatars-hidden {
+    opacity: 0;
+    transition: opacity 0.45s ease;
   }
   .l4-figure {
     position: absolute; bottom: 0;
@@ -534,6 +616,10 @@
     color: transparent;
     font-size: 0;
     box-shadow: 0 0 10px rgba(239,68,68,.35);
+    transition: opacity 0.45s ease;
+  }
+  .l4-youAreHere.is-avatars-hidden {
+    opacity: 0;
   }
 
   /* ============================================
@@ -570,6 +656,12 @@
     box-shadow: inset 0 0 0 1px rgba(74,222,128,.12), inset 0 1px 0 rgba(255,255,255,.04);
   }
   .l4-lane.is-pulse { animation: l4-lanePulse 1.2s ease-in-out; }
+  .l4-lane.is-cta-urgent.is-primary {
+    animation: l4-ctaUrgentPulse 2s ease-in-out infinite;
+  }
+  .l4-lane.is-cta-max.is-primary {
+    animation: l4-ctaMaxPulse 1.1s ease-in-out infinite;
+  }
   .l4-lane.is-primaryNext {
     border-color: rgba(74,222,128,.45);
     box-shadow: inset 0 0 0 1px rgba(74,222,128,.15), 0 0 18px rgba(74,222,128,.1);
@@ -596,6 +688,12 @@
     border: 1px solid #444; color: #8a928d;
     background: linear-gradient(180deg, #262626, #1a1a1a);
     box-shadow: inset 0 1px 0 rgba(255,255,255,.04), inset 0 -2px 6px rgba(0,0,0,.3);
+  }
+  .l4-laneCta.is-error {
+    border-color: rgba(239,68,68,.6);
+    color: #fecaca;
+    background: linear-gradient(180deg, #3f2020, #2a1515);
+    animation: none;
   }
   .l4-ticker {
     margin-top: 6px; font-size: 10px; letter-spacing: .1em;

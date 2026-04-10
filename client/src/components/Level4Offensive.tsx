@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 import boardPng from "@/assets/l4/board.png";
@@ -11,7 +11,16 @@ import hudPlate from "@/assets/l4/hud_overlay_plate.png";
 import youAreHereBadge from "@/assets/l4/you_are_here_badge.png";
 import mapPanelArt from "@/assets/l4/map_panel_art.png";
 
-type CeilingState = "idle" | "failure" | "success";
+type LaneId = 1 | 2 | 3;
+type CeilingPhase = "calm" | "descending" | "stagnated" | "rescuing" | "celebrating";
+
+const L4_CALM_BEFORE_DESCENT_MS = 10_000;
+const L4_DESCENT_DURATION_MS = 20_000;
+const L4_RESCUE_RISE_MS = 1_500;
+const L4_CELEBRATION_MS = 2_000;
+const L4_NEXT_LANE_CALM_MS = 8_000;
+const L4_FAILURE_PAUSE_MS = 3_000;
+
 type MapNodeId = "opus" | "century" | "beaudry";
 
 type MapNode = {
@@ -27,12 +36,35 @@ const MAP_NODES: MapNode[] = [
   { id: "beaudry", label: "Targeted Park", sublabel: "General Building(typ)", tone: "general" },
 ];
 
+function nextActiveLane(completed: Record<LaneId, boolean>): LaneId | null {
+  if (!completed[1]) return 1;
+  if (!completed[2]) return 2;
+  if (!completed[3]) return 3;
+  return null;
+}
+
+function allLanesCleared(completed: Record<LaneId, boolean>) {
+  return completed[1] && completed[2] && completed[3];
+}
+
+async function resolveDeploy(fn?: () => void | Promise<boolean | void>): Promise<boolean> {
+  if (!fn) return true;
+  const r = fn();
+  if (r != null && typeof (r as Promise<boolean | void>).then === "function") {
+    const v = await (r as Promise<boolean | void>);
+    return v !== false;
+  }
+  return true;
+}
+
 export type Level4OffensiveProps = {
   className?: string;
   soberDays?: number;
   debtCents?: number;
   recoveredTodayCents?: number;
-  onDeployLane1?: () => void;
+  onDeployLane1?: () => void | Promise<boolean | void>;
+  onDeployLane2?: () => void | Promise<boolean | void>;
+  onDeployLane3?: () => void | Promise<boolean | void>;
   lane1Executed?: boolean;
 };
 
@@ -40,55 +72,113 @@ export function Level4Offensive({
   className,
   soberDays = 2114,
   onDeployLane1,
+  onDeployLane2,
+  onDeployLane3,
   lane1Executed = false,
 }: Level4OffensiveProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<MapNodeId>("beaudry");
-  const [ceilingState, setCeilingState] = useState<CeilingState>("idle");
+  const [completedLanes, setCompletedLanes] = useState<Record<LaneId, boolean>>({
+    1: false,
+    2: false,
+    3: false,
+  });
+  const [ceilingPhase, setCeilingPhase] = useState<CeilingPhase>("calm");
+  const [cycleNonce, setCycleNonce] = useState(0);
   const [lane1Pulse, setLane1Pulse] = useState(false);
-  const [lane2Primary, setLane2Primary] = useState(false);
+  const [ctaErrorLane, setCtaErrorLane] = useState<LaneId | null>(null);
+  const [descentPaused, setDescentPaused] = useState(false);
 
-  const deadlineMs = 20_000;
-  const failureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timersRef = useRef<number[]>([]);
   const lane1Ref = useRef<HTMLDivElement | null>(null);
+  const rescueInFlightRef = useRef(false);
 
-  useEffect(() => {
-    setCeilingState("idle");
-    setLane2Primary(false);
-    setLane1Pulse(false);
-    if (failureTimerRef.current) clearTimeout(failureTimerRef.current);
-    failureTimerRef.current = setTimeout(() => {
-      setCeilingState((s) => (s === "success" ? s : "failure"));
-    }, deadlineMs);
-    return () => {
-      if (failureTimerRef.current) clearTimeout(failureTimerRef.current);
-      failureTimerRef.current = null;
-    };
+  const clearTimers = useCallback(() => {
+    timersRef.current.forEach((id) => window.clearTimeout(id));
+    timersRef.current = [];
   }, []);
+
+  const schedule = useCallback((fn: () => void, ms: number) => {
+    const id = window.setTimeout(fn, ms);
+    timersRef.current.push(id);
+    return id;
+  }, []);
+
+  const activeLane = useMemo(() => nextActiveLane(completedLanes), [completedLanes]);
 
   useEffect(() => {
     if (!lane1Executed) return;
-    setCeilingState("success");
-    setLane2Primary(true);
-    if (failureTimerRef.current) {
-      clearTimeout(failureTimerRef.current);
-      failureTimerRef.current = null;
-    }
+    setCompletedLanes((p) => (p[1] ? p : { ...p, 1: true }));
   }, [lane1Executed]);
+
+  useEffect(() => {
+    clearTimers();
+    rescueInFlightRef.current = false;
+
+    if (activeLane === null || allLanesCleared(completedLanes)) {
+      setCeilingPhase("calm");
+      return;
+    }
+
+    const calmMs = activeLane === 1 ? L4_CALM_BEFORE_DESCENT_MS : L4_NEXT_LANE_CALM_MS;
+    setCeilingPhase("calm");
+
+    schedule(() => {
+      if (rescueInFlightRef.current) return;
+      setCeilingPhase((p) => (p === "calm" ? "descending" : p));
+    }, calmMs);
+
+    schedule(() => {
+      if (rescueInFlightRef.current) return;
+      setCeilingPhase((p) => {
+        if (rescueInFlightRef.current) return p;
+        if (p === "descending" || p === "calm") return "stagnated";
+        return p;
+      });
+    }, calmMs + L4_DESCENT_DURATION_MS);
+
+    return clearTimers;
+  }, [activeLane, cycleNonce, clearTimers, schedule]);
+
+  const runRescue = useCallback(
+    (lane: LaneId) => {
+      rescueInFlightRef.current = true;
+      clearTimers();
+      setDescentPaused(false);
+      setCeilingPhase("rescuing");
+      schedule(() => setCeilingPhase("celebrating"), L4_RESCUE_RISE_MS);
+      schedule(() => {
+        setCompletedLanes((p) => ({ ...p, [lane]: true }));
+        setCeilingPhase("calm");
+        rescueInFlightRef.current = false;
+        setCycleNonce((n) => n + 1);
+      }, L4_RESCUE_RISE_MS + L4_CELEBRATION_MS);
+    },
+    [clearTimers, schedule]
+  );
+
+  async function tryCompleteLane(lane: LaneId) {
+    if (activeLane !== lane) return;
+    if (rescueInFlightRef.current) return;
+    if (ceilingPhase === "rescuing" || ceilingPhase === "celebrating") return;
+
+    const fn = lane === 1 ? onDeployLane1 : lane === 2 ? onDeployLane2 : onDeployLane3;
+    const ok = await resolveDeploy(fn);
+    if (!ok) {
+      setCtaErrorLane(lane);
+      window.setTimeout(() => setCtaErrorLane(null), L4_FAILURE_PAUSE_MS);
+      setDescentPaused(true);
+      window.setTimeout(() => setDescentPaused(false), L4_FAILURE_PAUSE_MS);
+      return;
+    }
+
+    setCtaErrorLane(null);
+    runRescue(lane);
+  }
 
   function scrollToLane1() {
     lane1Ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     setLane1Pulse(true);
     window.setTimeout(() => setLane1Pulse(false), 1400);
-  }
-
-  function executeLane1() {
-    setCeilingState("success");
-    setLane2Primary(true);
-    if (failureTimerRef.current) {
-      clearTimeout(failureTimerRef.current);
-      failureTimerRef.current = null;
-    }
-    onDeployLane1?.();
   }
 
   const showDebugZones = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("debug");
@@ -103,6 +193,8 @@ export function Level4Offensive({
         "--l4-hud-plate": `url(${hudPlate})`,
         "--l4-you-are-here": `url(${youAreHereBadge})`,
         "--l4-map-art": `url(${mapPanelArt})`,
+        "--l4-descent-duration": `${L4_DESCENT_DURATION_MS}ms`,
+        "--l4-rescue-rise": `${L4_RESCUE_RISE_MS}ms`,
       }) as CSSProperties,
     []
   );
@@ -131,16 +223,38 @@ export function Level4Offensive({
     return {
       header: "TACTICAL DOSSIER (STATE-ful)",
       stateLabel: "STATE C",
-        profile: "Foothold captured. Resident flow active.",
-        wedge: "Upsell: closet audit + seasonal rotation.",
-        vector: "Concierge playbook + flyer refresh.",
+      profile: "Foothold captured. Resident flow active.",
+      wedge: "Upsell: closet audit + seasonal rotation.",
+      vector: "Concierge playbook + flyer refresh.",
       cta: "GENERATED PITCH",
     };
   }, [selectedNode.id]);
 
+  const ceilingStatusLabel =
+    ceilingPhase === "calm"
+      ? "SECURE"
+      : ceilingPhase === "descending"
+        ? "DESCENDING"
+        : ceilingPhase === "stagnated"
+          ? "STAGNATION"
+          : ceilingPhase === "rescuing"
+            ? "RESCUING"
+            : "CLEAR";
+
+  const ceilingSpikey = ceilingPhase === "descending" || ceilingPhase === "stagnated";
+  const avatarsVisible = ceilingPhase !== "stagnated";
+  const boardTone =
+    ceilingPhase === "stagnated" ? "is-board-dim" : ceilingPhase === "descending" ? "is-board-cool" : "is-board-warm";
+
+  const laneUrgency = (lane: LaneId) => {
+    if (activeLane !== lane) return "";
+    if (ceilingPhase === "stagnated") return "is-cta-max";
+    if (ceilingPhase === "descending") return "is-cta-urgent";
+    return "";
+  };
+
   return (
     <section className={cn("l4-root", className)} style={textureVars}>
-      {/* GLOBAL TOP BANNER (outside 3-column split) */}
       <header className="l4-topBanner">
         <div className="l4-topBannerInner">
           <div className="l4-topTitle">Three buildings away from a different life.</div>
@@ -148,14 +262,20 @@ export function Level4Offensive({
         </div>
       </header>
 
-      {/* 3-COLUMN GRID */}
+      {allLanesCleared(completedLanes) && (
+        <div className="l4-allCleared" role="status">
+          ALL LANES CLEARED. EMPIRE EXPANDING.
+        </div>
+      )}
+
       <div className="l4-grid">
-        {/* LEFT SIDEBAR */}
         <aside className="l4-panel l4-left">
           <nav className="l4-nav">
             {(["ORDERS", "CUSTOMERS", "LEADS", "SETTINGS"] as const).map((label) => (
               <button key={label} type="button" className="l4-navBtn">
-                <span className="l4-navCheck" aria-hidden>✓</span>
+                <span className="l4-navCheck" aria-hidden>
+                  ✓
+                </span>
                 <span className="l4-navLabel">{label}</span>
               </button>
             ))}
@@ -185,21 +305,25 @@ export function Level4Offensive({
           </div>
         </aside>
 
-        {/* CENTER CANVAS — 3 explicit vertical regions, no free-floating overlap */}
         <main className="l4-canvas">
-          {/* REGION 1: ThreatCeiling — top strip */}
           <div className="l4-threatCeiling">
             <div className="l4-ceilingBadge">
-              <span className="l4-ceilingBadgeIcon" aria-hidden>↓</span>
+              <span className="l4-ceilingBadgeIcon" aria-hidden>
+                {ceilingPhase === "rescuing" || ceilingPhase === "celebrating" ? "↑" : "↓"}
+              </span>
               <span className="l4-ceilingBadgeLabel">CEILING STATUS:</span>
-              <span className="l4-ceilingBadgeValue">DESCENDING</span>
+              <span className="l4-ceilingBadgeValue">{ceilingStatusLabel}</span>
             </div>
             <div
               className={cn(
                 "l4-ceiling",
-                ceilingState === "idle" && "is-idle",
-                ceilingState === "failure" && "is-failure",
-                ceilingState === "success" && "is-success"
+                ceilingPhase === "calm" && "is-calm",
+                ceilingPhase === "descending" && "is-descending",
+                ceilingPhase === "stagnated" && "is-stagnated-ceiling",
+                ceilingPhase === "rescuing" && "is-rescuing",
+                ceilingPhase === "celebrating" && "is-celebrating",
+                ceilingSpikey && "is-spikey",
+                descentPaused && ceilingPhase === "descending" && "is-descent-paused"
               )}
             >
               <div className="l4-ceilingBar">
@@ -208,57 +332,61 @@ export function Level4Offensive({
             </div>
           </div>
 
-          {/* REGION 2: BoardStage — image + overlays in fixed aspect box */}
-          <div className="l4-boardStage" style={{ backgroundImage: `url(${boardPng})` }}>
+          <div
+            className={cn("l4-boardStage", boardTone)}
+            style={{ backgroundImage: `url(${boardPng})` }}
+          >
             {showDebugZones && (
               <>
-                <div className="l4-debugZone" style={{ top: 0, height: '32%', borderBottom: '2px dashed rgba(255,0,0,.6)' }} data-zone="overlay-safe (0-32%)" />
-                <div className="l4-debugZone" style={{ top: '32%', bottom: '22%', borderTop: '2px dashed rgba(0,255,0,.6)', borderBottom: '2px dashed rgba(0,255,0,.6)' }} data-zone="avatar-band (32-78%)" />
-                <div className="l4-debugZone" style={{ bottom: 0, height: '22%', borderTop: '2px dashed rgba(0,120,255,.6)' }} data-zone="badge-zone (78-100%)" />
+                <div
+                  className="l4-debugZone"
+                  style={{ top: 0, height: "32%", borderBottom: "2px dashed rgba(255,0,0,.6)" }}
+                  data-zone="overlay-safe (0-32%)"
+                />
+                <div
+                  className="l4-debugZone"
+                  style={{
+                    top: "32%",
+                    bottom: "22%",
+                    borderTop: "2px dashed rgba(0,255,0,.6)",
+                    borderBottom: "2px dashed rgba(0,255,0,.6)",
+                  }}
+                  data-zone="avatar-band (32-78%)"
+                />
+                <div
+                  className="l4-debugZone"
+                  style={{ bottom: 0, height: "22%", borderTop: "2px dashed rgba(0,120,255,.6)" }}
+                  data-zone="badge-zone (78-100%)"
+                />
               </>
             )}
 
-            {/* Layer 1: Market hole overlay — 3-row tactical panel */}
             <div className="l4-marketOverlay">
               <div className="l4-overlayRow1">MARKET HOLE DETECTED: PANTS ALTERATIONS</div>
               <div className="l4-overlayRow2">+400% ZIPPER REPAIR SEARCHES WITHIN 3 MILES</div>
               <div className="l4-overlayRow3">Impending hope of bought house and marriage</div>
             </div>
 
-            {/* Layer 2: Avatar figures — middle zone of board */}
-            <div className="l4-avatarLayer" aria-hidden>
-              <img
-                src={manFigure}
-                alt=""
-                className={cn(
-                  "l4-figure l4-figureMan",
-                  ceilingState === "failure" && "is-crush",
-                  ceilingState === "success" && "is-merge"
-                )}
-                draggable={false}
-              />
-              <img
-                src={womanFigure}
-                alt=""
-                className={cn(
-                  "l4-figure l4-figureWoman",
-                  ceilingState === "failure" && "is-crush",
-                  ceilingState === "success" && "is-merge"
-                )}
-                draggable={false}
-              />
+            <div
+              className={cn("l4-avatarLayer", !avatarsVisible && "is-avatars-hidden")}
+              aria-hidden
+            >
+              <img src={manFigure} alt="" className="l4-figure l4-figureMan" draggable={false} />
+              <img src={womanFigure} alt="" className="l4-figure l4-figureWoman" draggable={false} />
             </div>
 
-            {/* Layer 3: YOU ARE HERE badge — bottom zone of board */}
-            <div className="l4-youAreHere" aria-hidden>YOU ARE HERE</div>
+            <div className={cn("l4-youAreHere", !avatarsVisible && "is-avatars-hidden")} aria-hidden>
+              YOU ARE HERE
+            </div>
           </div>
         </main>
 
-        {/* RIGHT SIDEBAR */}
         <aside className="l4-panel l4-right">
           <div className="l4-mapHeader">
             <div className="l4-mapTitle">The Empire - Always-on Map</div>
-            <div className="l4-mapHamburger" aria-hidden>☰</div>
+            <div className="l4-mapHamburger" aria-hidden>
+              ☰
+            </div>
           </div>
 
           <div className="l4-map">
@@ -299,54 +427,111 @@ export function Level4Offensive({
             <div className="l4-dossierHeader">{dossier.header}</div>
             <div className="l4-dossierState">{dossier.stateLabel}</div>
             <div className="l4-dossierBody">
-              <div className="l4-dossierRow"><span className="k">PROFILE:</span> {dossier.profile}</div>
-              <div className="l4-dossierRow"><span className="k">WEDGE:</span> {dossier.wedge}</div>
-              <div className="l4-dossierRow"><span className="k">VECTOR:</span> {dossier.vector}</div>
+              <div className="l4-dossierRow">
+                <span className="k">PROFILE:</span> {dossier.profile}
+              </div>
+              <div className="l4-dossierRow">
+                <span className="k">WEDGE:</span> {dossier.wedge}
+              </div>
+              <div className="l4-dossierRow">
+                <span className="k">VECTOR:</span> {dossier.vector}
+              </div>
             </div>
-            <button type="button" className="l4-dossierCta">[ {dossier.cta} ]</button>
+            <button type="button" className="l4-dossierCta">
+              [ {dossier.cta} ]
+            </button>
           </div>
 
           <div className="l4-keepInFrame">
             <div className="l4-keepTitle">KEEP IN FRAME: →</div>
-            <div className="l4-keepBody">Consolidated "KEEP IN FRAME" notes. Pre populated with original text.</div>
+            <div className="l4-keepBody">
+              Consolidated "KEEP IN FRAME" notes. Pre populated with original text.
+            </div>
           </div>
         </aside>
       </div>
 
-      {/* LANE STACK — full width below the grid */}
       <div className="l4-ritual">
-        <div ref={lane1Ref} className={cn("l4-lane is-primary", lane1Pulse && "is-pulse")} data-lane="1">
+        <div
+          ref={lane1Ref}
+          className={cn(
+            "l4-lane",
+            activeLane === 1 && !completedLanes[1] && "is-primary",
+            lane1Pulse && "is-pulse",
+            laneUrgency(1)
+          )}
+          data-lane="1"
+        >
           <div className="l4-laneHead">
             <div>
               <div className="l4-laneTitle">LANE 1 | FAST CASH | Rainy Day Valet SMS</div>
               <div className="l4-laneBody">It is pouring. Solve Los Feliz High-rise inconvenience.</div>
             </div>
-            <button type="button" className="l4-laneCta is-green" onClick={executeLane1}>DEPLOY SMS →</button>
+            <button
+              type="button"
+              className={cn(
+                "l4-laneCta",
+                activeLane === 1 && !completedLanes[1] ? "is-green" : "is-dim",
+                ctaErrorLane === 1 && "is-error"
+              )}
+              onClick={() => void tryCompleteLane(1)}
+            >
+              {ctaErrorLane === 1 ? "RETRY →" : completedLanes[1] ? "DONE ✓" : "DEPLOY SMS →"}
+            </button>
           </div>
         </div>
 
-        <div className={cn("l4-lane", lane2Primary && "is-primaryNext")} data-lane="2">
+        <div
+          className={cn(
+            "l4-lane",
+            activeLane === 2 && !completedLanes[2] && "is-primary",
+            laneUrgency(2)
+          )}
+          data-lane="2"
+        >
           <div className="l4-laneHead">
             <div>
               <div className="l4-laneTitle">LANE 2 | COMPOUNDING | Concierge Opt-In</div>
-              <div className="l4-laneBody">Scale retention Insert into intake flow.</div>
+              <div className="l4-laneBody">Scale retention. Insert into intake flow.</div>
             </div>
-            <button type="button" className="l4-laneCta is-dim">INTEGRATE STEP →</button>
+            <button
+              type="button"
+              className={cn(
+                "l4-laneCta",
+                activeLane === 2 && !completedLanes[2] ? "is-green" : "is-dim",
+                ctaErrorLane === 2 && "is-error"
+              )}
+              onClick={() => void tryCompleteLane(2)}
+            >
+              {ctaErrorLane === 2 ? "RETRY →" : completedLanes[2] ? "DONE ✓" : "INTEGRATE STEP →"}
+            </button>
           </div>
         </div>
 
-        <div className="l4-lane" data-lane="3">
+        <div className={cn("l4-lane", activeLane === 3 && !completedLanes[3] && "is-primary", laneUrgency(3))} data-lane="3">
           <div className="l4-laneHead">
             <div>
               <div className="l4-laneTitle">LANE 3 | EXPANSION | The Beaudry</div>
               <div className="l4-laneBody">Capture new tower target. 64-story luxury high-rise.</div>
             </div>
-            <button type="button" className="l4-laneCta is-dim">GENERATE FLYER →</button>
+            <button
+              type="button"
+              className={cn(
+                "l4-laneCta",
+                activeLane === 3 && !completedLanes[3] ? "is-green" : "is-dim",
+                ctaErrorLane === 3 && "is-error"
+              )}
+              onClick={() => void tryCompleteLane(3)}
+            >
+              {ctaErrorLane === 3 ? "RETRY →" : completedLanes[3] ? "DONE ✓" : "GENERATE FLYER →"}
+            </button>
           </div>
         </div>
 
         <div className="l4-ticker">MUTED TEXT TICKER</div>
-        <div className="l4-diamond" aria-hidden>◆</div>
+        <div className="l4-diamond" aria-hidden>
+          ◆
+        </div>
       </div>
     </section>
   );
