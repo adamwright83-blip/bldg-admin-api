@@ -112,9 +112,9 @@ export function Level4Offensive({
       return {
         header: "TACTICAL DOSSIER (STATE-ful)",
         stateLabel: "STATE A",
-        profile: "785 units. DTLA Financial Core. High-density time-poor professional.",
-        wedge: "Premium: Closet Valet wardrobe. Sedulous copy. Eliminate the high-rise dry-cleaning rut.",
-        vector: "Resident Services and the effective(ist) building pitch and incrementing.",
+        profile: "785 units. DTLA Financial Core. Time-poor professionals.",
+        wedge: "Closet Valet wardrobe. Eliminate dry-cleaning rut.",
+        vector: "Resident Services pitch + incremental capture.",
         cta: "GENERATED PITCH",
       };
     }
@@ -122,18 +122,18 @@ export function Level4Offensive({
       return {
         header: "TACTICAL DOSSIER (STATE-ful)",
         stateLabel: "STATE B",
-        profile: "12 active units. 418 total units. Penetration: 2.8%.",
-        wedge: "Leverage existing resident social proof to capture adjacent units.",
-        vector: "Deploy 'Refer-a-Neighbor' targeted mailer to specific floors.",
+        profile: "12 active / 418 total. 2.8% penetration.",
+        wedge: "Social proof capture via adjacent units.",
+        vector: "Refer-a-Neighbor mailer to target floors.",
         cta: "GENERATED PITCH",
       };
     }
     return {
       header: "TACTICAL DOSSIER (STATE-ful)",
       stateLabel: "STATE C",
-      profile: "Captured foothold. Existing resident flow established.",
-      wedge: "Upsell: closet audit + seasonal rotation pickup.",
-      vector: "Concierge playbook + building flyer refresh.",
+        profile: "Foothold captured. Resident flow active.",
+        wedge: "Upsell: closet audit + seasonal rotation.",
+        vector: "Concierge playbook + flyer refresh.",
       cta: "GENERATED PITCH",
     };
   }, [selectedNode.id]);
