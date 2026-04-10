@@ -162,6 +162,10 @@
     from { transform: translateY(0); }
     to { transform: translateY(120px); }
   }
+  @keyframes l4-spikeThreatPulse {
+    0%, 100% { filter: drop-shadow(0 3px 4px rgba(0,0,0,.85)) drop-shadow(0 0 14px rgba(239,68,68,.12)); }
+    50% { filter: drop-shadow(0 3px 4px rgba(0,0,0,.9)) drop-shadow(0 0 18px rgba(239,68,68,.22)); }
+  }
   @keyframes l4-ctaUrgentPulse {
     0%, 100% { box-shadow: inset 0 0 0 1px rgba(74,222,128,.18), 0 0 8px rgba(74,222,128,.08); }
     50% { box-shadow: inset 0 0 0 1px rgba(74,222,128,.4), 0 0 20px rgba(74,222,128,.22); }
@@ -393,6 +397,10 @@
     transform: translateY(120px);
     transition: none;
   }
+  /* Threat: red-tinted glint on the spike strip only (bar text stays stable) */
+  .l4-ceiling.is-spikey .l4-ceilingSpikeStrip {
+    animation: l4-spikeThreatPulse 2.4s ease-in-out infinite;
+  }
   .l4-ceiling.is-rescuing {
     animation: none;
     transform: translateY(0);
@@ -402,46 +410,42 @@
     transform: translateY(0);
     transition: transform 0.4s ease-out;
   }
-  .l4-ceiling.is-spikey .l4-ceilingBar {
-    position: relative;
-    border-bottom: none;
-    padding-bottom: 10px;
-  }
-  .l4-ceiling.is-spikey .l4-ceilingBar::after {
-    content: "";
-    position: absolute;
-    left: 0; right: 0; bottom: 0;
-    height: 10px;
-    background:
-      repeating-linear-gradient(
-        115deg,
-        #1a1c1e 0px,
-        #1a1c1e 5px,
-        #2a2420 5px,
-        #2a2420 8px,
-        #0d0e0f 8px,
-        #0d0e0f 11px
-      );
-    clip-path: polygon(
-      0% 0%, 3% 100%, 6% 0%, 9% 100%, 12% 0%, 15% 100%, 18% 0%, 21% 100%, 24% 0%, 27% 100%,
-      30% 0%, 33% 100%, 36% 0%, 39% 100%, 42% 0%, 45% 100%, 48% 0%, 51% 100%, 54% 0%, 57% 100%,
-      60% 0%, 63% 100%, 66% 0%, 69% 100%, 72% 0%, 75% 100%, 78% 0%, 81% 100%, 84% 0%, 87% 100%,
-      90% 0%, 93% 100%, 96% 0%, 100% 100%, 100% 0%
-    );
-    opacity: .95;
-    pointer-events: none;
-  }
   .l4-ceilingBar {
     min-height: 36px; border: 1px solid #3a3a3a; border-radius: 2px;
     background:
       linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,0) 35%),
       linear-gradient(180deg, #323436, #161719);
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,.12),
       inset 0 -3px 10px rgba(0,0,0,.6),
       0 4px 10px rgba(0,0,0,.35);
-    padding: 0 10px; margin: 0 4px;
+    padding: 6px 10px 0; margin: 0 4px;
+  }
+  .l4-ceilingBar .l4-threatText {
+    align-self: center;
+    text-align: center;
+  }
+  .l4-ceilingBar.is-spikey-bar {
+    border-bottom: 1px solid #1a1210;
+    border-radius: 2px 2px 0 0;
+    padding-bottom: 0;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.1),
+      inset 0 -2px 8px rgba(0,0,0,.65),
+      0 4px 12px rgba(0,0,0,.45),
+      0 2px 0 rgba(239,68,68,.15);
+  }
+  .l4-ceilingSpikeStrip {
+    display: block;
+    flex: 0 0 auto;
+    height: 20px;
+    margin-top: 4px;
+    margin-left: -1px;
+    width: calc(100% + 2px);
   }
   .l4-threatText {
     margin: 0; font-family: var(--font-display);

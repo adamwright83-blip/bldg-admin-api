@@ -1,4 +1,4 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 import boardPng from "@/assets/l4/board.png";
@@ -47,6 +47,20 @@ function allLanesCleared(completed: Record<LaneId, boolean>) {
   return completed[1] && completed[2] && completed[3];
 }
 
+/** Saw-tooth path for SVG spike strip (sharp points down — reads as danger, not a flat trim). */
+function buildCeilingSpikePath(teeth: number, width: number, peakY: number): string {
+  const step = width / teeth;
+  let d = "M 0 0";
+  for (let i = 0; i < teeth; i++) {
+    const x = i * step;
+    d += ` L ${x + step / 2} ${peakY} L ${x + step} 0`;
+  }
+  d += ` L ${width} 0 Z`;
+  return d;
+}
+
+const L4_SPIKE_PATH = buildCeilingSpikePath(72, 240, 20);
+
 async function resolveDeploy(fn?: () => void | Promise<boolean | void>): Promise<boolean> {
   if (!fn) return true;
   const r = fn();
@@ -91,6 +105,7 @@ export function Level4Offensive({
   const timersRef = useRef<number[]>([]);
   const lane1Ref = useRef<HTMLDivElement | null>(null);
   const rescueInFlightRef = useRef(false);
+  const spikeGradientId = `l4-spike-metal-${useId().replace(/:/g, "")}`;
 
   const clearTimers = useCallback(() => {
     timersRef.current.forEach((id) => window.clearTimeout(id));
@@ -114,7 +129,8 @@ export function Level4Offensive({
     clearTimers();
     rescueInFlightRef.current = false;
 
-    if (activeLane === null || allLanesCleared(completedLanes)) {
+    const nothingLeft = activeLane === null || allLanesCleared(completedLanes);
+    if (nothingLeft) {
       setCeilingPhase("calm");
       return;
     }
@@ -326,8 +342,32 @@ export function Level4Offensive({
                 descentPaused && ceilingPhase === "descending" && "is-descent-paused"
               )}
             >
-              <div className="l4-ceilingBar">
+              <div className={cn("l4-ceilingBar", ceilingSpikey && "is-spikey-bar")}>
                 <p className="l4-threatText">Stagnation will be the death of you.</p>
+                {ceilingSpikey && (
+                  <svg
+                    className="l4-ceilingSpikeStrip"
+                    viewBox="0 0 240 20"
+                    preserveAspectRatio="none"
+                    aria-hidden
+                  >
+                    <defs>
+                      <linearGradient id={spikeGradientId} x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#8a8580" />
+                        <stop offset="25%" stopColor="#4a4542" />
+                        <stop offset="55%" stopColor="#1f1c1a" />
+                        <stop offset="100%" stopColor="#0a0908" />
+                      </linearGradient>
+                    </defs>
+                    <path
+                      d={L4_SPIKE_PATH}
+                      fill={`url(#${spikeGradientId})`}
+                      stroke="rgba(0,0,0,0.65)"
+                      strokeWidth="0.35"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </svg>
+                )}
               </div>
             </div>
           </div>
