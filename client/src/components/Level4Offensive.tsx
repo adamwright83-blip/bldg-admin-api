@@ -218,11 +218,11 @@ export function Level4Offensive({
               </>
             )}
 
-            {/* Layer 1: Market hole overlay — top zone of board */}
+            {/* Layer 1: Market hole overlay — 3-row tactical panel */}
             <div className="l4-marketOverlay">
-              <div className="l4-overlayTitle">**MARKET HOLE DETECTED: Pants Alterations**</div>
-              <div className="l4-overlayValue">+400% ZIPPERS SEARCH 3mi.</div>
-              <div className="l4-overlaySub">Impending Hope of bought house and marige</div>
+              <div className="l4-overlayRow1">MARKET HOLE DETECTED: PANTS ALTERATIONS</div>
+              <div className="l4-overlayRow2">+400% ZIPPER REPAIR SEARCHES WITHIN 3 MILES</div>
+              <div className="l4-overlayRow3">Impending hope of bought house and marriage</div>
             </div>
 
             {/* Layer 2: Avatar figures — middle zone of board */}

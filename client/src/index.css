@@ -415,14 +415,18 @@
     opacity: .5;
   }
 
-  /* MarketHoleOverlay — tactical intel glass, not a bright placard */
+  /* MarketHoleOverlay — deliberate 3-row tactical panel, no accidental wrapping */
   .l4-marketOverlay {
     position: absolute; left: 50%; top: 8%;
     transform: translateX(-50%);
     z-index: 3;
-    width: max-content;
-    max-width: 320px;
-    padding: 6px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    width: 390px;
+    max-width: 90%;
+    padding: 8px 14px;
     border: 1px solid rgba(84,94,89,.55); border-radius: 2px;
     background:
       var(--l4-hud-plate),
@@ -437,17 +441,19 @@
       inset 0 -1px 0 rgba(0,0,0,.5),
       0 4px 12px rgba(0,0,0,.35);
   }
-  .l4-overlayTitle {
-    font-size: clamp(11px, 1.2vw, 14px); line-height: 1.2;
-    color: #c8ceca; font-weight: 700;
+  .l4-overlayRow1 {
+    font-size: 13px; line-height: 1.1;
+    color: #dfe6e2; font-weight: 700;
+    letter-spacing: .02em;
+    white-space: nowrap;
   }
-  .l4-overlayValue {
-    color: var(--l4-green); font-size: 14px; font-weight: 800;
-    margin-top: 2px; letter-spacing: .03em;
+  .l4-overlayRow2 {
+    color: var(--l4-green); font-size: 13px; font-weight: 800;
+    line-height: 1.1; letter-spacing: .03em;
+    white-space: nowrap;
     text-shadow: 0 0 8px rgba(74,222,128,.2);
   }
-  .l4-overlaySub {
-    margin-top: 3px;
+  .l4-overlayRow3 {
     color: #b0ada6;
     font-size: 11px;
     font-weight: 600;
@@ -713,10 +719,10 @@
     .l4-right { order: 2; }
     .l4-panel { margin: 4px 4px 0; }
     .l4-boardStage { min-height: 280px; aspect-ratio: 16 / 10; }
-    .l4-marketOverlay { max-width: 280px; padding: 6px 8px; }
-    .l4-overlayTitle { font-size: 12px; }
-    .l4-overlayValue { font-size: 13px; }
-    .l4-overlaySub { font-size: 10px; }
+    .l4-marketOverlay { width: 300px; max-width: 92%; padding: 6px 10px; }
+    .l4-overlayRow1 { font-size: 11px; white-space: normal; }
+    .l4-overlayRow2 { font-size: 11px; white-space: normal; }
+    .l4-overlayRow3 { font-size: 10px; }
     .l4-ceilingBar { min-height: 28px; }
     .l4-threatText { font-size: 12px; }
     .l4-map { height: 180px; }
