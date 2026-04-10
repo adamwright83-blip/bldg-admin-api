@@ -12,13 +12,13 @@ import youAreHereBadge from "@/assets/l4/you_are_here_badge.png";
 import mapPanelArt from "@/assets/l4/map_panel_art.png";
 
 type LaneId = 1 | 2 | 3;
-type CeilingPhase = "calm" | "descending" | "stagnated" | "rescuing" | "celebrating";
+/** Spikey wall only — never a smooth bar. */
+type WallState = "top" | "descending" | "bottomed" | "resetting";
 
-const L4_CALM_BEFORE_DESCENT_MS = 10_000;
+const L4_CALM_LANE1_MS = 10_000;
+const L4_CALM_LANE23_MS = 8_000;
 const L4_DESCENT_DURATION_MS = 20_000;
-const L4_RESCUE_RISE_MS = 1_500;
-const L4_CELEBRATION_MS = 2_000;
-const L4_NEXT_LANE_CALM_MS = 8_000;
+const L4_WALL_RESET_SNAP_MS = 420;
 const L4_FAILURE_PAUSE_MS = 3_000;
 
 type MapNodeId = "opus" | "century" | "beaudry";
@@ -96,7 +96,7 @@ export function Level4Offensive({
     2: false,
     3: false,
   });
-  const [ceilingPhase, setCeilingPhase] = useState<CeilingPhase>("calm");
+  const [wallState, setWallState] = useState<WallState>("top");
   const [cycleNonce, setCycleNonce] = useState(0);
   const [lane1Pulse, setLane1Pulse] = useState(false);
   const [ctaErrorLane, setCtaErrorLane] = useState<LaneId | null>(null);
@@ -104,7 +104,10 @@ export function Level4Offensive({
 
   const timersRef = useRef<number[]>([]);
   const lane1Ref = useRef<HTMLDivElement | null>(null);
-  const rescueInFlightRef = useRef(false);
+  const resetInFlightRef = useRef(false);
+  const descentPausedRef = useRef(false);
+
+  descentPausedRef.current = descentPaused;
   const spikeGradientId = `l4-spike-metal-${useId().replace(/:/g, "")}`;
 
   const clearTimers = useCallback(() => {
@@ -120,18 +123,18 @@ export function Level4Offensive({
 
   const activeLane = useMemo(() => nextActiveLane(completedLanes), [completedLanes]);
 
-  /** Parent can flag L1 done; never merge while rescue timers run or celebration is cut off. */
+  /** Parent can flag L1 done; never merge while wall reset timers are in flight. */
   useEffect(() => {
     if (!lane1Executed) return;
     setCompletedLanes((p) => {
       if (p[1]) return p;
-      if (rescueInFlightRef.current) return p;
+      if (resetInFlightRef.current) return p;
       return { ...p, 1: true };
     });
   }, [lane1Executed]);
 
   useEffect(() => {
-    if (rescueInFlightRef.current) {
+    if (resetInFlightRef.current) {
       return;
     }
 
@@ -139,51 +142,41 @@ export function Level4Offensive({
 
     const nothingLeft = activeLane === null || allLanesCleared(completedLanes);
     if (nothingLeft) {
-      setCeilingPhase("calm");
+      setWallState("top");
       return;
     }
 
-    const calmMs = activeLane === 1 ? L4_CALM_BEFORE_DESCENT_MS : L4_NEXT_LANE_CALM_MS;
-    setCeilingPhase("calm");
+    const calmMs = activeLane === 1 ? L4_CALM_LANE1_MS : L4_CALM_LANE23_MS;
+    setWallState("top");
 
     schedule(() => {
-      if (rescueInFlightRef.current) return;
-      setCeilingPhase((p) => (p === "calm" ? "descending" : p));
+      if (resetInFlightRef.current) return;
+      setWallState((p) => (p === "top" ? "descending" : p));
     }, calmMs);
-
-    schedule(() => {
-      if (rescueInFlightRef.current) return;
-      setCeilingPhase((p) => {
-        if (rescueInFlightRef.current) return p;
-        if (p === "descending" || p === "calm") return "stagnated";
-        return p;
-      });
-    }, calmMs + L4_DESCENT_DURATION_MS);
 
     return clearTimers;
   }, [activeLane, cycleNonce, clearTimers, schedule]);
 
-  const runRescue = useCallback(
+  const runWallResetAfterSuccess = useCallback(
     (lane: LaneId) => {
-      rescueInFlightRef.current = true;
+      resetInFlightRef.current = true;
       clearTimers();
       setDescentPaused(false);
-      setCeilingPhase("rescuing");
-      schedule(() => setCeilingPhase("celebrating"), L4_RESCUE_RISE_MS);
+      setWallState("resetting");
       schedule(() => {
         setCompletedLanes((p) => ({ ...p, [lane]: true }));
-        setCeilingPhase("calm");
-        rescueInFlightRef.current = false;
+        setWallState("top");
+        resetInFlightRef.current = false;
         setCycleNonce((n) => n + 1);
-      }, L4_RESCUE_RISE_MS + L4_CELEBRATION_MS);
+      }, L4_WALL_RESET_SNAP_MS);
     },
     [clearTimers, schedule]
   );
 
   async function tryCompleteLane(lane: LaneId) {
     if (activeLane !== lane) return;
-    if (rescueInFlightRef.current) return;
-    if (ceilingPhase === "rescuing" || ceilingPhase === "celebrating") return;
+    if (resetInFlightRef.current) return;
+    if (wallState === "resetting") return;
 
     const fn = lane === 1 ? onDeployLane1 : lane === 2 ? onDeployLane2 : onDeployLane3;
     const ok = await resolveDeploy(fn);
@@ -196,7 +189,7 @@ export function Level4Offensive({
     }
 
     setCtaErrorLane(null);
-    runRescue(lane);
+    runWallResetAfterSuccess(lane);
   }
 
   function scrollToLane1() {
@@ -218,7 +211,8 @@ export function Level4Offensive({
         "--l4-you-are-here": `url(${youAreHereBadge})`,
         "--l4-map-art": `url(${mapPanelArt})`,
         "--l4-descent-duration": `${L4_DESCENT_DURATION_MS}ms`,
-        "--l4-rescue-rise": `${L4_RESCUE_RISE_MS}ms`,
+        "--l4-wall-reset": `${L4_WALL_RESET_SNAP_MS}ms`,
+        "--l4-wall-drop": "380px",
       }) as CSSProperties,
     []
   );
@@ -255,30 +249,20 @@ export function Level4Offensive({
   }, [selectedNode.id]);
 
   const ceilingStatusLabel =
-    ceilingPhase === "calm"
-      ? "SECURE"
-      : ceilingPhase === "descending"
+    wallState === "top"
+      ? "TOP"
+      : wallState === "descending"
         ? "DESCENDING"
-        : ceilingPhase === "stagnated"
-          ? "STAGNATION"
-          : ceilingPhase === "rescuing"
-            ? "RESCUING"
-            : "CLEAR";
+        : wallState === "bottomed"
+          ? "BOTTOMED"
+          : "RESET";
 
-  const ceilingSpikey = ceilingPhase === "descending" || ceilingPhase === "stagnated";
-  const avatarsVisible = ceilingPhase !== "stagnated";
-  const boardTone = cn(
-    ceilingPhase === "stagnated" && "is-board-dim",
-    ceilingPhase === "descending" && "is-board-cool",
-    (ceilingPhase === "calm" || ceilingPhase === "rescuing" || ceilingPhase === "celebrating") && "is-board-warm",
-    ceilingPhase === "celebrating" && "is-board-relief"
-  );
-  const canvasThreat = ceilingPhase === "descending" || ceilingPhase === "stagnated";
+  const boardTone = "is-board-warm";
 
   const laneUrgency = (lane: LaneId) => {
     if (activeLane !== lane) return "";
-    if (ceilingPhase === "stagnated") return "is-cta-max";
-    if (ceilingPhase === "descending") return "is-cta-urgent";
+    if (wallState === "bottomed") return "is-cta-max";
+    if (wallState === "descending") return "is-cta-urgent";
     return "";
   };
 
@@ -334,11 +318,11 @@ export function Level4Offensive({
           </div>
         </aside>
 
-        <main className={cn("l4-canvas", canvasThreat && "is-canvas-threat")}>
+        <main className="l4-canvas">
           <div className="l4-threatCeiling">
             <div className="l4-ceilingBadge">
               <span className="l4-ceilingBadgeIcon" aria-hidden>
-                {ceilingPhase === "rescuing" || ceilingPhase === "celebrating" ? "↑" : "↓"}
+                {wallState === "resetting" ? "↑" : "↓"}
               </span>
               <span className="l4-ceilingBadgeLabel">CEILING STATUS:</span>
               <span className="l4-ceilingBadgeValue">{ceilingStatusLabel}</span>
@@ -346,41 +330,42 @@ export function Level4Offensive({
             <div
               className={cn(
                 "l4-ceiling",
-                ceilingPhase === "calm" && "is-calm",
-                ceilingPhase === "descending" && "is-descending",
-                ceilingPhase === "stagnated" && "is-stagnated-ceiling",
-                ceilingPhase === "rescuing" && "is-rescuing",
-                ceilingPhase === "celebrating" && "is-celebrating",
-                ceilingSpikey && "is-spikey",
-                descentPaused && ceilingPhase === "descending" && "is-descent-paused"
+                wallState === "top" && "is-wall-top",
+                wallState === "descending" && "is-wall-descending",
+                wallState === "bottomed" && "is-wall-bottomed",
+                wallState === "resetting" && "is-wall-resetting",
+                descentPaused && wallState === "descending" && "is-descent-paused"
               )}
+              onTransitionEnd={(e) => {
+                if (e.propertyName !== "transform" || e.target !== e.currentTarget) return;
+                if (resetInFlightRef.current || descentPausedRef.current) return;
+                setWallState((p) => (p === "descending" ? "bottomed" : p));
+              }}
             >
-              <div className={cn("l4-ceilingBar", ceilingSpikey && "is-spikey-bar")}>
+              <div className="l4-ceilingBar is-spikey-bar">
                 <p className="l4-threatText">Stagnation will be the death of you.</p>
-                {ceilingSpikey && (
-                  <svg
-                    className="l4-ceilingSpikeStrip"
-                    viewBox="0 0 240 20"
-                    preserveAspectRatio="none"
-                    aria-hidden
-                  >
-                    <defs>
-                      <linearGradient id={spikeGradientId} x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#8a8580" />
-                        <stop offset="25%" stopColor="#4a4542" />
-                        <stop offset="55%" stopColor="#1f1c1a" />
-                        <stop offset="100%" stopColor="#0a0908" />
-                      </linearGradient>
-                    </defs>
-                    <path
-                      d={L4_SPIKE_PATH}
-                      fill={`url(#${spikeGradientId})`}
-                      stroke="rgba(0,0,0,0.65)"
-                      strokeWidth="0.35"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  </svg>
-                )}
+                <svg
+                  className="l4-ceilingSpikeStrip"
+                  viewBox="0 0 240 20"
+                  preserveAspectRatio="none"
+                  aria-hidden
+                >
+                  <defs>
+                    <linearGradient id={spikeGradientId} x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stopColor="#8a8580" />
+                      <stop offset="25%" stopColor="#4a4542" />
+                      <stop offset="55%" stopColor="#1f1c1a" />
+                      <stop offset="100%" stopColor="#0a0908" />
+                    </linearGradient>
+                  </defs>
+                  <path
+                    d={L4_SPIKE_PATH}
+                    fill={`url(#${spikeGradientId})`}
+                    stroke="rgba(0,0,0,0.65)"
+                    strokeWidth="0.35"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </svg>
               </div>
             </div>
           </div>
@@ -420,19 +405,12 @@ export function Level4Offensive({
               <div className="l4-overlayRow3">Impending hope of bought house and marriage</div>
             </div>
 
-            <div
-              className={cn(
-                "l4-avatarLayer",
-                !avatarsVisible && "is-avatars-hidden",
-                ceilingPhase === "celebrating" && "is-avatars-relief"
-              )}
-              aria-hidden
-            >
+            <div className="l4-avatarLayer" aria-hidden>
               <img src={manFigure} alt="" className="l4-figure l4-figureMan" draggable={false} />
               <img src={womanFigure} alt="" className="l4-figure l4-figureWoman" draggable={false} />
             </div>
 
-            <div className={cn("l4-youAreHere", !avatarsVisible && "is-avatars-hidden")} aria-hidden>
+            <div className="l4-youAreHere" aria-hidden>
               YOU ARE HERE
             </div>
           </div>
