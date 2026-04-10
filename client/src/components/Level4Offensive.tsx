@@ -120,14 +120,22 @@ export function Level4Offensive({
 
   const activeLane = useMemo(() => nextActiveLane(completedLanes), [completedLanes]);
 
+  /** Parent can flag L1 done; never merge while rescue timers run or celebration is cut off. */
   useEffect(() => {
     if (!lane1Executed) return;
-    setCompletedLanes((p) => (p[1] ? p : { ...p, 1: true }));
+    setCompletedLanes((p) => {
+      if (p[1]) return p;
+      if (rescueInFlightRef.current) return p;
+      return { ...p, 1: true };
+    });
   }, [lane1Executed]);
 
   useEffect(() => {
+    if (rescueInFlightRef.current) {
+      return;
+    }
+
     clearTimers();
-    rescueInFlightRef.current = false;
 
     const nothingLeft = activeLane === null || allLanesCleared(completedLanes);
     if (nothingLeft) {
@@ -259,8 +267,13 @@ export function Level4Offensive({
 
   const ceilingSpikey = ceilingPhase === "descending" || ceilingPhase === "stagnated";
   const avatarsVisible = ceilingPhase !== "stagnated";
-  const boardTone =
-    ceilingPhase === "stagnated" ? "is-board-dim" : ceilingPhase === "descending" ? "is-board-cool" : "is-board-warm";
+  const boardTone = cn(
+    ceilingPhase === "stagnated" && "is-board-dim",
+    ceilingPhase === "descending" && "is-board-cool",
+    (ceilingPhase === "calm" || ceilingPhase === "rescuing" || ceilingPhase === "celebrating") && "is-board-warm",
+    ceilingPhase === "celebrating" && "is-board-relief"
+  );
+  const canvasThreat = ceilingPhase === "descending" || ceilingPhase === "stagnated";
 
   const laneUrgency = (lane: LaneId) => {
     if (activeLane !== lane) return "";
@@ -321,7 +334,7 @@ export function Level4Offensive({
           </div>
         </aside>
 
-        <main className="l4-canvas">
+        <main className={cn("l4-canvas", canvasThreat && "is-canvas-threat")}>
           <div className="l4-threatCeiling">
             <div className="l4-ceilingBadge">
               <span className="l4-ceilingBadgeIcon" aria-hidden>
@@ -408,7 +421,11 @@ export function Level4Offensive({
             </div>
 
             <div
-              className={cn("l4-avatarLayer", !avatarsVisible && "is-avatars-hidden")}
+              className={cn(
+                "l4-avatarLayer",
+                !avatarsVisible && "is-avatars-hidden",
+                ceilingPhase === "celebrating" && "is-avatars-relief"
+              )}
               aria-hidden
             >
               <img src={manFigure} alt="" className="l4-figure l4-figureMan" draggable={false} />
