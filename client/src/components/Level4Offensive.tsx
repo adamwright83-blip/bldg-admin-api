@@ -27,9 +27,10 @@ function wallVisualFromPhase(phase: GamePhase): "top" | "descending" | "bottomed
   return "top";
 }
 
-const L4_CALM_LANE1_MS = 10_000;
-const L4_CALM_LANE23_MS = 8_000;
-const L4_DESCENT_DURATION_MS = 20_000;
+/** Tuned so a full lane cycle fits ~20–25s — impact is reachable without a 30s+ wait. */
+const L4_CALM_LANE1_MS = 6_000;
+const L4_CALM_LANE23_MS = 5_000;
+const L4_DESCENT_DURATION_MS = 14_000;
 const L4_WALL_RESET_SNAP_MS = 420;
 const L4_FAILURE_PAUSE_MS = 3_000;
 
@@ -112,6 +113,8 @@ export function Level4Offensive({
   const [cycleNonce, setCycleNonce] = useState(0);
   const [lane1Pulse, setLane1Pulse] = useState(false);
   const [ctaErrorLane, setCtaErrorLane] = useState<LaneId | null>(null);
+  /** Unwired deploy lane clicked during calm — must wait for threat to arm (descent). */
+  const [ctaWaitLane, setCtaWaitLane] = useState<LaneId | null>(null);
   const [descentPaused, setDescentPaused] = useState(false);
 
   const timersRef = useRef<number[]>([]);
@@ -147,6 +150,10 @@ export function Level4Offensive({
       return { ...p, 1: true };
     });
   }, [lane1Executed]);
+
+  useEffect(() => {
+    if (gamePhase === "descent") setCtaWaitLane(null);
+  }, [gamePhase]);
 
   /** Primary game loop: calm → descent (timer), descent → impact (deadline), victory freezes the loop. */
   useEffect(() => {
@@ -235,6 +242,18 @@ export function Level4Offensive({
     if (gamePhase !== "calm" && gamePhase !== "descent") return;
 
     const fn = lane === 1 ? onDeployLane1 : lane === 2 ? onDeployLane2 : onDeployLane3;
+
+    // No deploy hook: do not allow a silent one-click clear during calm (that made L2/L3 feel like no game).
+    if (!fn) {
+      if (gamePhase === "calm") {
+        setCtaWaitLane(lane);
+        window.setTimeout(() => setCtaWaitLane(null), 1_400);
+        return;
+      }
+      runWallResetAfterSuccess(lane);
+      return;
+    }
+
     const ok = await resolveDeploy(fn);
     if (!ok) {
       setCtaErrorLane(lane);
@@ -271,6 +290,7 @@ export function Level4Offensive({
         "--l4-descent-duration": `${L4_DESCENT_DURATION_MS}ms`,
         "--l4-wall-reset": `${L4_WALL_RESET_SNAP_MS}ms`,
         "--l4-wall-drop": "380px",
+        "--l4-ceiling-rig-h": "4.5rem",
       }) as CSSProperties,
     []
   );
@@ -380,7 +400,7 @@ export function Level4Offensive({
           </div>
         </aside>
 
-        <main className="l4-canvas">
+        <main className={cn("l4-canvas", gamePhase === "impact" && "is-impact")}>
           <div className="l4-threatCeiling">
             <div className="l4-ceilingBadge">
               <span className="l4-ceilingBadgeIcon" aria-hidden>
@@ -389,48 +409,14 @@ export function Level4Offensive({
               <span className="l4-ceilingBadgeLabel">CEILING STATUS:</span>
               <span className="l4-ceilingBadgeValue">{ceilingStatusLabel}</span>
             </div>
-            <div
-              className={cn(
-                "l4-ceiling",
-                wallVisual === "top" && "is-wall-top",
-                wallVisual === "descending" && "is-wall-descending",
-                wallVisual === "bottomed" && "is-wall-bottomed",
-                wallVisual === "resetting" && "is-wall-resetting",
-                descentPaused && wallVisual === "descending" && "is-descent-paused"
-              )}
-            >
-              <div className="l4-ceilingBar is-spikey-bar">
-                <p className="l4-threatText">Stagnation will be the death of you.</p>
-                <svg
-                  className="l4-ceilingSpikeStrip"
-                  viewBox="0 0 240 20"
-                  preserveAspectRatio="none"
-                  aria-hidden
-                >
-                  <defs>
-                    <linearGradient id={spikeGradientId} x1="0%" y1="0%" x2="0%" y2="100%">
-                      <stop offset="0%" stopColor="#8a8580" />
-                      <stop offset="25%" stopColor="#4a4542" />
-                      <stop offset="55%" stopColor="#1f1c1a" />
-                      <stop offset="100%" stopColor="#0a0908" />
-                    </linearGradient>
-                  </defs>
-                  <path
-                    d={L4_SPIKE_PATH}
-                    fill={`url(#${spikeGradientId})`}
-                    stroke="rgba(0,0,0,0.65)"
-                    strokeWidth="0.35"
-                    vectorEffect="non-scaling-stroke"
-                  />
-                </svg>
-              </div>
-            </div>
           </div>
 
-          <div
-            className={cn("l4-boardStage", boardTone)}
-            style={{ backgroundImage: `url(${boardPng})` }}
-          >
+          <div className="l4-canvasStack">
+            <div className="l4-ceilingSpacer" aria-hidden />
+            <div
+              className={cn("l4-boardStage", boardTone)}
+              style={{ backgroundImage: `url(${boardPng})` }}
+            >
             {showDebugZones && (
               <>
                 <div
@@ -479,6 +465,59 @@ export function Level4Offensive({
 
             <div className="l4-youAreHere" aria-hidden>
               YOU ARE HERE
+            </div>
+
+            {gamePhase === "impact" && (
+              <div className="l4-impactOverlay" role="alert" aria-live="assertive">
+                <div className="l4-impactOverlayInner">
+                  <span className="l4-impactTitle">IMPACT</span>
+                  <span className="l4-impactSub">Use REVIVE on the active lane to reset the threat.</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+            <div className="l4-ceilingCrusher" aria-hidden>
+              <div
+                className={cn(
+                  "l4-ceiling",
+                  wallVisual === "top" && "is-wall-top",
+                  wallVisual === "descending" && "is-wall-descending",
+                  wallVisual === "bottomed" && "is-wall-bottomed",
+                  wallVisual === "resetting" && "is-wall-resetting",
+                  descentPaused && wallVisual === "descending" && "is-descent-paused"
+                )}
+              >
+                <div className="l4-ceilingBar is-spikey-bar">
+                  <p className={cn("l4-threatText", gamePhase === "impact" && "is-impact")}>
+                    {gamePhase === "impact"
+                      ? "Impact. The future is crushed unless you revive."
+                      : "Stagnation will be the death of you."}
+                  </p>
+                  <svg
+                    className="l4-ceilingSpikeStrip"
+                    viewBox="0 0 240 20"
+                    preserveAspectRatio="none"
+                    aria-hidden
+                  >
+                    <defs>
+                      <linearGradient id={spikeGradientId} x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#8a8580" />
+                        <stop offset="25%" stopColor="#4a4542" />
+                        <stop offset="55%" stopColor="#1f1c1a" />
+                        <stop offset="100%" stopColor="#0a0908" />
+                      </linearGradient>
+                    </defs>
+                    <path
+                      d={L4_SPIKE_PATH}
+                      fill={`url(#${spikeGradientId})`}
+                      stroke="rgba(0,0,0,0.65)"
+                      strokeWidth="0.35"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </svg>
+                </div>
+              </div>
             </div>
           </div>
         </main>
@@ -573,18 +612,24 @@ export function Level4Offensive({
               type="button"
               className={cn(
                 "l4-laneCta",
-                activeLane === 1 && !completedLanes[1] ? "is-green" : "is-dim",
+                gamePhase === "impact" && activeLane === 1 && !completedLanes[1]
+                  ? "is-revive"
+                  : activeLane === 1 && !completedLanes[1]
+                    ? "is-green"
+                    : "is-dim",
                 ctaErrorLane === 1 && "is-error"
               )}
               onClick={() => void tryCompleteLane(1)}
             >
               {completedLanes[1]
                 ? "DONE ✓"
-                : ctaErrorLane === 1
-                  ? "RETRY →"
-                  : gamePhase === "impact" && activeLane === 1
-                    ? "REVIVE →"
-                    : "DEPLOY SMS →"}
+                : ctaWaitLane === 1
+                  ? "WAIT —"
+                  : ctaErrorLane === 1
+                    ? "RETRY →"
+                    : gamePhase === "impact" && activeLane === 1
+                      ? "REVIVE →"
+                      : "DEPLOY SMS →"}
             </button>
           </div>
         </div>
@@ -606,18 +651,24 @@ export function Level4Offensive({
               type="button"
               className={cn(
                 "l4-laneCta",
-                activeLane === 2 && !completedLanes[2] ? "is-green" : "is-dim",
+                gamePhase === "impact" && activeLane === 2 && !completedLanes[2]
+                  ? "is-revive"
+                  : activeLane === 2 && !completedLanes[2]
+                    ? "is-green"
+                    : "is-dim",
                 ctaErrorLane === 2 && "is-error"
               )}
               onClick={() => void tryCompleteLane(2)}
             >
               {completedLanes[2]
                 ? "DONE ✓"
-                : ctaErrorLane === 2
-                  ? "RETRY →"
-                  : gamePhase === "impact" && activeLane === 2
-                    ? "REVIVE →"
-                    : "INTEGRATE STEP →"}
+                : ctaWaitLane === 2
+                  ? "WAIT —"
+                  : ctaErrorLane === 2
+                    ? "RETRY →"
+                    : gamePhase === "impact" && activeLane === 2
+                      ? "REVIVE →"
+                      : "INTEGRATE STEP →"}
             </button>
           </div>
         </div>
@@ -632,18 +683,24 @@ export function Level4Offensive({
               type="button"
               className={cn(
                 "l4-laneCta",
-                activeLane === 3 && !completedLanes[3] ? "is-green" : "is-dim",
+                gamePhase === "impact" && activeLane === 3 && !completedLanes[3]
+                  ? "is-revive"
+                  : activeLane === 3 && !completedLanes[3]
+                    ? "is-green"
+                    : "is-dim",
                 ctaErrorLane === 3 && "is-error"
               )}
               onClick={() => void tryCompleteLane(3)}
             >
               {completedLanes[3]
                 ? "DONE ✓"
-                : ctaErrorLane === 3
-                  ? "RETRY →"
-                  : gamePhase === "impact" && activeLane === 3
-                    ? "REVIVE →"
-                    : "GENERATE FLYER →"}
+                : ctaWaitLane === 3
+                  ? "WAIT —"
+                  : ctaErrorLane === 3
+                    ? "RETRY →"
+                    : gamePhase === "impact" && activeLane === 3
+                      ? "REVIVE →"
+                      : "GENERATE FLYER →"}
             </button>
           </div>
         </div>
