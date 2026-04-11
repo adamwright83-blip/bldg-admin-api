@@ -382,7 +382,8 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    /* Do not clip the crusher: fixed translateY(px) was larger than short viewports and hid the whole bar + spikes. */
+    overflow: visible;
   }
   .l4-ceilingSpacer {
     flex: 0 0 auto;

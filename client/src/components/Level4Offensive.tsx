@@ -1,4 +1,13 @@
-import { type CSSProperties, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@/lib/utils";
 
 import boardPng from "@/assets/l4/board.png";
@@ -33,6 +42,11 @@ const L4_CALM_LANE23_MS = 5_000;
 const L4_DESCENT_DURATION_MS = 14_000;
 const L4_WALL_RESET_SNAP_MS = 420;
 const L4_FAILURE_PAUSE_MS = 3_000;
+
+/** Max travel (px). Actual drop is clamped to the measured canvas stack so overflow:hidden never fully clips the crusher. */
+const L4_WALL_DROP_MAX_PX = 380;
+/** Bar + spike strip + margins — must stay inside the track at max translate. */
+const L4_WALL_BAR_EST_PX = 76;
 
 type MapNodeId = "opus" | "century" | "beaudry";
 
@@ -118,6 +132,7 @@ export function Level4Offensive({
   const [descentPaused, setDescentPaused] = useState(false);
 
   const timersRef = useRef<number[]>([]);
+  const canvasStackRef = useRef<HTMLDivElement | null>(null);
   const lane1Ref = useRef<HTMLDivElement | null>(null);
   const resetInFlightRef = useRef(false);
   const descentPausedRef = useRef(false);
@@ -127,6 +142,23 @@ export function Level4Offensive({
   descentPausedRef.current = descentPaused;
   const wallVisual = wallVisualFromPhase(gamePhase);
   const spikeGradientId = `l4-spike-metal-${useId().replace(/:/g, "")}`;
+
+  const syncWallDropToTrack = useCallback(() => {
+    const el = canvasStackRef.current;
+    if (!el) return;
+    const h = el.clientHeight;
+    const drop = Math.max(80, Math.min(L4_WALL_DROP_MAX_PX, h - L4_WALL_BAR_EST_PX));
+    el.style.setProperty("--l4-wall-drop", `${drop}px`);
+  }, []);
+
+  useLayoutEffect(() => {
+    syncWallDropToTrack();
+    const el = canvasStackRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => syncWallDropToTrack());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [syncWallDropToTrack]);
 
   const clearTimers = useCallback(() => {
     timersRef.current.forEach((id) => window.clearTimeout(id));
@@ -289,7 +321,7 @@ export function Level4Offensive({
         "--l4-map-art": `url(${mapPanelArt})`,
         "--l4-descent-duration": `${L4_DESCENT_DURATION_MS}ms`,
         "--l4-wall-reset": `${L4_WALL_RESET_SNAP_MS}ms`,
-        "--l4-wall-drop": "380px",
+        "--l4-wall-drop": `${L4_WALL_DROP_MAX_PX}px`,
         "--l4-ceiling-rig-h": "4.5rem",
       }) as CSSProperties,
     []
@@ -411,7 +443,7 @@ export function Level4Offensive({
             </div>
           </div>
 
-          <div className="l4-canvasStack">
+          <div ref={canvasStackRef} className="l4-canvasStack">
             <div className="l4-ceilingSpacer" aria-hidden />
             <div
               className={cn("l4-boardStage", boardTone)}
