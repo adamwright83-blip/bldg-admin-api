@@ -1,4 +1,4 @@
-import { BUILDINGS, matchBuilding } from "@shared/buildings";
+import { BUILDINGS, canonicalTowerIdForHandoff, matchBuilding } from "@shared/buildings";
 
 /**
  * Normalize stored address for consistent keyword matching (lowercase, trimmed).
@@ -14,10 +14,10 @@ export type OrderLocationInput = {
 
 /**
  * Resolve address + buildingSlug for a new order.
- * - Explicit non-empty buildingSlug wins over address-derived slug.
- * - If only buildingSlug: fill address from BUILDINGS.defaultAddress or a tagged placeholder.
- * - If only address: derive slug via matchBuilding (may be null).
- * @throws If both address and buildingSlug are empty after trim.
+ * - Explicit tower id (3545/3650/2160/2170) wins.
+ * - Legacy slugs opusla / centuryparkeast require a disambiguating address or throw.
+ * - If only address: derive via matchBuilding (may be null if no tower keywords match).
+ * @throws If both address and buildingSlug are empty after trim, or legacy slug cannot be resolved.
  */
 export function resolveOrderLocationForInsert(
   input: OrderLocationInput
@@ -38,15 +38,36 @@ export function resolveOrderLocationForInsert(
   }
 
   if (rawSlug) {
-    const config = BUILDINGS.find(
-      (b) => b.slug.toLowerCase() === rawSlug.toLowerCase()
-    );
-    const canonicalSlug = config?.slug ?? rawSlug.toLowerCase();
+    const lower = rawSlug.toLowerCase();
+    const config = BUILDINGS.find((b) => b.slug.toLowerCase() === lower);
+    if (config) {
+      const canonicalSlug = config.slug;
+      const addressNorm = rawAddr
+        ? normalizeOrderAddress(rawAddr)
+        : normalizeOrderAddress(
+            config.defaultAddress ?? `[building:${canonicalSlug}]`
+          );
+      return { address: addressNorm, buildingSlug: canonicalSlug };
+    }
+
+    if (lower === "opusla" || lower === "centuryparkeast") {
+      const tid = canonicalTowerIdForHandoff(rawAddr || "", rawSlug);
+      if (!tid) {
+        throw new Error(
+          `Cannot place order with legacy building "${rawSlug}" without a clear tower. Add street number 3545, 3650, 2160, or 2170 to the address, or choose Opus 3545 / Opus 3650 / CPE North / CPE South from the list.`
+        );
+      }
+      const cfg = BUILDINGS.find((b) => b.slug === tid);
+      const addressNorm = rawAddr
+        ? normalizeOrderAddress(rawAddr)
+        : normalizeOrderAddress(cfg?.defaultAddress ?? `[building:${tid}]`);
+      return { address: addressNorm, buildingSlug: tid };
+    }
+
+    const canonicalSlug = lower;
     const addressNorm = rawAddr
       ? normalizeOrderAddress(rawAddr)
-      : normalizeOrderAddress(
-          config?.defaultAddress ?? `[building:${canonicalSlug}]`
-        );
+      : normalizeOrderAddress(`[building:${canonicalSlug}]`);
     return { address: addressNorm, buildingSlug: canonicalSlug };
   }
 

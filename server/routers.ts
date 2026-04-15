@@ -82,7 +82,7 @@ import { centsToDollars } from "@shared/pricing";
 import { z } from "zod";
 import Stripe from "stripe";
 import * as jose from "jose";
-import { matchBuilding } from "@shared/buildings";
+import { canonicalTowerIdForHandoff } from "@shared/buildings";
 import {
   getActedOnTodayCents,
   getAwaitingPaymentCents,
@@ -394,10 +394,10 @@ export const appRouter = router({
         const order = await getOrderById(input.orderId);
         if (!order) throw new Error("Order not found");
 
-        const buildingSlug =
-          (order.buildingSlug && order.buildingSlug.trim()) ||
-          matchBuilding(order.address)?.slug ||
-          null;
+        const buildingSlug = canonicalTowerIdForHandoff(
+          order.address,
+          order.buildingSlug
+        );
 
         const payload = {
           phone: order.phone,
@@ -927,7 +927,10 @@ export const appRouter = router({
         }
 
         for (const order of paidOrders) {
-          const key = order.buildingSlug?.trim() || matchBuilding(order.address)?.slug || "unknown";
+          const key =
+            canonicalTowerIdForHandoff(order.address, order.buildingSlug) ??
+            order.buildingSlug?.trim() ??
+            "unknown";
           const existing = buildingSummaryMap.get(key) ?? {
             totalCustomers: 0,
             activeCustomers: 0,
