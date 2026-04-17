@@ -14,6 +14,7 @@ import {
   type AdminWorkspaceTab,
 } from "@/admin/adminPaths";
 import AdminHome from "./AdminHome";
+import AdminLevel4Preview from "./AdminLevel4Preview";
 import { AdminCustomerSearchBlock, AdminTabPanels } from "./Admin";
 
 function normalizePath(loc: string): string {
@@ -44,12 +45,13 @@ export default function AdminHostApp() {
   }, [path, navigate]);
 
   const isHome = isAdminCommandCenterPath(path);
+  const isLevel4Preview = path === "/level4";
   const activeTab = adminPathToTab(path);
 
   useEffect(() => {
     if (path === "/admin") return;
-    if (!isHome && activeTab === null) navigate("/", { replace: true });
-  }, [isHome, activeTab, path, navigate]);
+    if (!isHome && !isLevel4Preview && activeTab === null) navigate("/", { replace: true });
+  }, [isHome, isLevel4Preview, activeTab, path, navigate]);
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -126,6 +128,13 @@ export default function AdminHostApp() {
           >
             Home
           </Link>
+          <Link
+            href="/level4"
+            className={sidebarLinkClass("/level4")}
+            onClick={() => setMobileNavOpen(false)}
+          >
+            Level 4 Preview
+          </Link>
           {ADMIN_WORKSPACE_TABS.map((tab) => (
             <Link
               key={tab}
@@ -172,7 +181,9 @@ export default function AdminHostApp() {
           }}
         />
 
-        {isHome ? (
+        {isLevel4Preview ? (
+          <AdminLevel4Preview />
+        ) : isHome ? (
           <AdminHome />
         ) : activeTab ? (
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full">

@@ -35,9 +35,12 @@ import {
 } from "@/admin/adminPaths";
 import { getResidentWebOrigin } from "@/const";
 
+/** Canonical tower ids — must match `shared/buildings.ts` (single source of truth). */
 const SUPPORTED_BUILDINGS: { label: string; value: string }[] = [
-  { label: "OPUS LA", value: "opusla" },
-  { label: "Century Park East", value: "centuryparkeast" },
+  { label: "Opus — 3545 Wilshire", value: "3545" },
+  { label: "Opus — 3650 S 6th", value: "3650" },
+  { label: "Century Park East — North (2160)", value: "2160" },
+  { label: "Century Park East — South (2170)", value: "2170" },
 ];
 
 /** Build drycleanItemsJson: keys = catalog slug (legacy DC item id). Uses DB catalog prices; falls back to saved JSON for unknown slugs. */

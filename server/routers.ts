@@ -82,7 +82,7 @@ import { centsToDollars } from "@shared/pricing";
 import { z } from "zod";
 import Stripe from "stripe";
 import * as jose from "jose";
-import { matchBuilding } from "@shared/buildings";
+import { canonicalTowerIdForHandoff } from "@shared/buildings";
 import {
   getActedOnTodayCents,
   getAwaitingPaymentCents,
@@ -90,6 +90,7 @@ import {
   getCollectedTodayCents,
   getLevel1ApexCommand as loadLevel1ApexCommand,
   getLevel2TacticalCluster as loadLevel2TacticalCluster,
+  getRecoveryPipelineState as loadRecoveryPipelineState,
   getRevenueInterventionOrderDebug,
   sendPaymentReminderForOrder,
 } from "./revenueIntervention";
@@ -393,10 +394,10 @@ export const appRouter = router({
         const order = await getOrderById(input.orderId);
         if (!order) throw new Error("Order not found");
 
-        const buildingSlug =
-          (order.buildingSlug && order.buildingSlug.trim()) ||
-          matchBuilding(order.address)?.slug ||
-          null;
+        const buildingSlug = canonicalTowerIdForHandoff(
+          order.address,
+          order.buildingSlug
+        );
 
         const payload = {
           phone: order.phone,
@@ -715,6 +716,79 @@ export const appRouter = router({
       };
     }),
 
+    /** Unified recovery pipeline state to avoid cross-query race conditions in AdminHome. */
+    getRecoveryPipelineState: adminProcedure.query(async ({ ctx }) => {
+      const r = await loadRecoveryPipelineState(ctx.tenantId);
+      if (!r) {
+        return {
+          dbAvailable: false,
+          businessYmd: "",
+          timeZone: getDashboardTimeZone(),
+          candidateCount: 0,
+          isRecoveryEmpty: true,
+          apexCandidate: null,
+          tacticalCluster: [] as const,
+          aggregateMutationType: null as null,
+        };
+      }
+
+      const mapCandidate = (candidate: (typeof r)["apexCandidate"]) => {
+        if (!candidate) return null;
+        const o = candidate.order;
+        return {
+          issueLabel: candidate.issueLabel,
+          score: candidate.score,
+          dollarValueCents: candidate.dollarValueCents,
+          mutationType: "send_reminder" as const,
+          order: {
+            id: o.id,
+            firstName: o.firstName,
+            lastName: o.lastName,
+            phone: o.phone,
+            status: o.status,
+            total: o.total,
+            paid: o.paid,
+            paidAt: o.paidAt,
+            updatedAt: o.updatedAt,
+            buildingSlug: o.buildingSlug,
+            manualRiskFlag: o.manualRiskFlag,
+          },
+        };
+      };
+
+      return {
+        dbAvailable: true,
+        businessYmd: r.bounds.ymd,
+        timeZone: r.bounds.timeZone,
+        candidateCount: r.candidateCount,
+        isRecoveryEmpty: r.isRecoveryEmpty,
+        apexCandidate: mapCandidate(r.apexCandidate),
+        tacticalCluster: r.tacticalCluster.map((candidate) => {
+          const o = candidate.order;
+          return {
+            issueLabel: candidate.issueLabel,
+            score: candidate.score,
+            dollarValueCents: candidate.dollarValueCents,
+            mutationType: "send_reminder" as const,
+            order: {
+              id: o.id,
+              firstName: o.firstName,
+              lastName: o.lastName,
+              phone: o.phone,
+              status: o.status,
+              total: o.total,
+              paid: o.paid,
+              paidAt: o.paidAt,
+              updatedAt: o.updatedAt,
+              buildingSlug: o.buildingSlug,
+              manualRiskFlag: o.manualRiskFlag,
+            },
+          };
+        }),
+        aggregateMutationType: r.aggregateMutationType,
+      };
+    }),
+
     /** Logs admin_action_log (send_reminder, status=attempted); idempotent per order per dashboard business day. */
     sendPaymentReminder: adminProcedure
       .input(z.object({ orderId: z.number().int().positive() }))
@@ -853,7 +927,10 @@ export const appRouter = router({
         }
 
         for (const order of paidOrders) {
-          const key = order.buildingSlug?.trim() || matchBuilding(order.address)?.slug || "unknown";
+          const key =
+            canonicalTowerIdForHandoff(order.address, order.buildingSlug) ??
+            order.buildingSlug?.trim() ??
+            "unknown";
           const existing = buildingSummaryMap.get(key) ?? {
             totalCustomers: 0,
             activeCustomers: 0,

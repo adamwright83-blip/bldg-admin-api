@@ -1,4 +1,4 @@
-import { matchBuilding } from "@shared/buildings";
+import { canonicalTowerIdForHandoff, matchBuilding } from "@shared/buildings";
 
 export type AdminCustomerAggregateDbRow = {
   phone: string;
@@ -190,7 +190,16 @@ function mergeDisplayFields(group: OrderAggRow[]): {
     }
   }
 
-  const buildingSlug = explicitSlug ?? inferredSlug ?? null;
+  const anchorAddr =
+    normAddr(address) ||
+    group.map((o) => normAddr(o.address)).find((a) => a.length > 0) ||
+    "";
+  const canonicalExplicit = explicitSlug
+    ? canonicalTowerIdForHandoff(anchorAddr, explicitSlug)
+    : null;
+
+  const buildingSlug =
+    canonicalExplicit ?? inferredSlug ?? explicitSlug ?? null;
 
   return {
     phone,

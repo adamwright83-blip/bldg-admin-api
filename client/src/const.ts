@@ -2,8 +2,17 @@ export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
 /** Base URL for resident-facing web (welcome handoff, SMS-safe links). Override with VITE_RESIDENT_WEB_ORIGIN. */
 export const getResidentWebOrigin = (): string => {
-  const raw = import.meta.env.VITE_RESIDENT_WEB_ORIGIN ?? "https://laundrybutler.bldg.chat";
-  return String(raw).replace(/\/+$/, "");
+  const fallback = "https://app.bldg.chat";
+  const raw = import.meta.env.VITE_RESIDENT_WEB_ORIGIN ?? fallback;
+  const normalized = String(raw).replace(/\/+$/, "");
+  try {
+    const host = new URL(normalized).hostname.toLowerCase();
+    // `/welcome` handoff is owned by resident app; never point this to LB marketing host.
+    if (host === "laundrybutler.bldg.chat") return fallback;
+  } catch {
+    return fallback;
+  }
+  return normalized;
 };
 
 const getAppHomeUrl = () => {

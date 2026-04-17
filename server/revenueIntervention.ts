@@ -443,6 +443,45 @@ export async function getLevel2TacticalCluster(
   return { bounds, items, aggregateMutationType };
 }
 
+export async function getRecoveryPipelineState(
+  tenantId: string,
+  now: Date = new Date()
+): Promise<{
+  bounds: DashboardBusinessDayBounds;
+  candidateCount: number;
+  isRecoveryEmpty: boolean;
+  apexCandidate: ScoredInterventionCandidate | null;
+  tacticalCluster: ScoredInterventionCandidate[];
+  aggregateMutationType: InterventionMutationType | null;
+} | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const bounds = getDashboardBusinessDayBoundsUtc(now);
+  const excluded = await orderIdsWithReminderActedToday(tenantId, bounds);
+  const candidates = await listInterventionCandidates(tenantId, now);
+  const filtered = candidates.filter((c) => !excluded.has(c.order.id));
+  const apexCandidate = filtered[0] ?? null;
+  const tacticalCluster = tacticalClusterItemsAfterApex(filtered);
+  const first = tacticalCluster[0];
+  const firstType = first ? interventionMutationTypeForCandidate(first) : null;
+  const aggregateMutationType =
+    tacticalCluster.length > 1 &&
+    firstType &&
+    tacticalCluster.every((c) => interventionMutationTypeForCandidate(c) === firstType)
+      ? firstType
+      : null;
+
+  return {
+    bounds,
+    candidateCount: filtered.length,
+    isRecoveryEmpty: filtered.length === 0,
+    apexCandidate,
+    tacticalCluster,
+    aggregateMutationType,
+  };
+}
+
 export type SendReminderResult =
   | {
       ok: true;

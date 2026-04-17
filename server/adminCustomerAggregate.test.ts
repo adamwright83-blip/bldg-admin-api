@@ -43,7 +43,7 @@ describe("buildAdminCustomerAggregatesInMemory", () => {
     expect(agg.lastName).toBe("Smith");
     expect(agg.unit).toBe("1205");
     expect(agg.address).toContain("3545");
-    expect(agg.buildingSlug).toBe("opusla");
+    expect(agg.buildingSlug).toBe("3545");
     expect(agg.lastOrderId).toBe(2);
     expect(agg.totalOrders).toBe(2);
     expect(agg.lastOrderAt.getTime()).toBe(new Date("2026-03-01T12:00:00Z").getTime());
@@ -78,7 +78,7 @@ describe("buildAdminCustomerAggregatesInMemory", () => {
     expect(agg.firstName).toBe("Alex");
     expect(agg.lastName).toBe("Rivera");
     expect(agg.address).toContain("3545");
-    expect(agg.buildingSlug).toBe("opusla");
+    expect(agg.buildingSlug).toBe("3545");
     expect(agg.lastOrderId).toBe(2);
   });
 

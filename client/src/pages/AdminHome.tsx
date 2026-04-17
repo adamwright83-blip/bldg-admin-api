@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Level4Offensive } from "@/components/Level4Offensive";
 
 function formatUsd(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -30,15 +31,20 @@ function actionSuccessButtonLabel(issueLabel: string | undefined, outboundDelive
 
 const PIPELINE_ISSUES = new Set(["collected_financially_open", "collected_stale_48h"]);
 
-export default function AdminHome() {
+export default function AdminHome({
+  forceLevel4Preview = false,
+}: {
+  forceLevel4Preview?: boolean;
+}) {
   const { user, isAuthenticated } = useAuth();
   const isAdmin = user?.role === "admin";
   const q = trpc.admin.dashboardSummary.useQuery(undefined, { enabled: isAuthenticated });
   const actedOn = trpc.admin.getActedOnToday.useQuery(undefined, { enabled: isAuthenticated && isAdmin });
   const awaiting = trpc.admin.getAwaitingPayment.useQuery(undefined, { enabled: isAuthenticated && isAdmin });
   const collected = trpc.admin.getCollectedToday.useQuery(undefined, { enabled: isAuthenticated && isAdmin });
-  const apex = trpc.admin.getLevel1ApexCommand.useQuery(undefined, { enabled: isAuthenticated && isAdmin });
-  const level2 = trpc.admin.getLevel2TacticalCluster.useQuery(undefined, { enabled: isAuthenticated && isAdmin });
+  const recovery = trpc.admin.getRecoveryPipelineState.useQuery(undefined, {
+    enabled: isAuthenticated && isAdmin,
+  });
   const utils = trpc.useUtils();
 
   const [l1Flash, setL1Flash] = useState<{
@@ -100,12 +106,12 @@ export default function AdminHome() {
   }, [watchPaidOrderId, watchedOrder.data?.paid, watchedOrder.data?.paidAt, watchedOrder.data?.total, watchedOrder.data?.id, utils]);
 
   useEffect(() => {
-    if (l1Flash == null || !apex.isSuccess || apex.data == null) return;
-    const cid = apex.data.candidate?.order.id ?? null;
+    if (l1Flash == null || !recovery.isSuccess || recovery.data == null) return;
+    const cid = recovery.data.apexCandidate?.order.id ?? null;
     if (cid == null || cid !== l1Flash.orderId) {
       setL1Flash(null);
     }
-  }, [apex.isSuccess, apex.data, l1Flash]);
+  }, [recovery.isSuccess, recovery.data, l1Flash]);
 
   useEffect(() => {
     if (awaitingEditing) awaitingInputRef.current?.focus();
@@ -137,8 +143,7 @@ export default function AdminHome() {
         utils.admin.getActedOnToday.invalidate(),
         utils.admin.getAwaitingPayment.invalidate(),
         utils.admin.getCollectedToday.invalidate(),
-        utils.admin.getLevel1ApexCommand.invalidate(),
-        utils.admin.getLevel2TacticalCluster.invalidate(),
+        utils.admin.getRecoveryPipelineState.invalidate(),
       ]);
     },
   });
@@ -162,22 +167,20 @@ export default function AdminHome() {
   const d = q.data;
 
   const interventionLoading =
-    actedOn.isLoading || awaiting.isLoading || collected.isLoading || apex.isLoading || level2.isLoading;
+    actedOn.isLoading || awaiting.isLoading || collected.isLoading || recovery.isLoading;
 
   const interventionReady =
     !interventionLoading &&
     actedOn.data &&
     awaiting.data &&
     collected.data &&
-    apex.data &&
-    level2.data &&
+    recovery.data &&
     actedOn.data.dbAvailable &&
     awaiting.data.dbAvailable &&
     collected.data.dbAvailable &&
-    apex.data.dbAvailable &&
-    level2.data.dbAvailable;
+    recovery.data.dbAvailable;
 
-  const l1Candidate = apex.data?.candidate ?? null;
+  const l1Candidate = recovery.data?.apexCandidate ?? null;
   const l1OrderId = l1Candidate?.order.id;
   const showL1Success =
     l1Flash && l1OrderId != null && l1Flash.orderId === l1OrderId && sendReminder.isPending === false;
@@ -201,6 +204,9 @@ export default function AdminHome() {
     day: "numeric",
     year: "numeric",
   });
+
+  const showLevel4 =
+    forceLevel4Preview || (interventionReady && recovery.data?.isRecoveryEmpty === true);
 
   return (
     <div className="max-w-[1200px] mx-auto px-6 sm:px-9 py-7 space-y-8">
@@ -243,6 +249,19 @@ export default function AdminHome() {
             </p>
           ) : (
             <>
+              {showLevel4 ? (
+                <Level4Offensive
+                  soberDays={2114}
+                  recoveredTodayCents={actedOn.data!.cents}
+                  debtCents={0}
+                  onDeployLane1={() => {
+                    // Placeholder action: Lane 1 in Level 4 is not wired to the payment reminder pipeline.
+                    // We keep this as a UI-only ritual surface until business logic is defined.
+                    console.log("[Level4] Lane 1 deploy");
+                  }}
+                />
+              ) : null}
+
               <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-4 pb-5 border-b border-[var(--hairline)]">
                 <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
                   <div className="flex flex-col gap-1 min-w-[7rem]">
@@ -468,19 +487,23 @@ export default function AdminHome() {
                     <p className="text-[10px] font-mono uppercase tracking-wide text-[var(--ink-muted)]">
                       Level 2 — Tactical cluster
                     </p>
-                    {level2.data!.items.length > 1 && level2.data!.aggregateMutationType != null && (
+                    {recovery.data!.tacticalCluster.length > 1 &&
+                      recovery.data!.aggregateMutationType != null && (
                       <p className="text-xs font-sans text-[var(--ink-muted)]">
-                        {level2.data!.items.length} reminders ·{" "}
+                        {recovery.data!.tacticalCluster.length} reminders ·{" "}
                         {formatUsdFromCents(
-                          level2.data!.items.reduce((acc, it) => acc + it.dollarValueCents, 0)
+                          recovery.data!.tacticalCluster.reduce(
+                            (acc, it) => acc + it.dollarValueCents,
+                            0
+                          )
                         )}{" "}
                         combined
                       </p>
                     )}
                   </div>
-                  {level2.data!.items.length > 0 ? (
+                  {recovery.data!.tacticalCluster.length > 0 ? (
                     <ul className="divide-y divide-[var(--hairline)] border-t border-[var(--hairline)]">
-                      {level2.data!.items.map((item) => (
+                      {recovery.data!.tacticalCluster.map((item) => (
                         <li
                           key={item.order.id}
                           className="group/row py-3.5 -mx-2 px-2 rounded-md transition-colors hover:bg-[rgba(22,22,22,0.03)] hover:-mx-3 hover:px-3"
