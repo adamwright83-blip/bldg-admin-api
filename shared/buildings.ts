@@ -20,6 +20,16 @@ export interface BuildingConfig {
   defaultAddress?: string;
   /** Access protocol note shown on driver stop cards */
   accessProtocol?: string;
+  /** Total rentable units in the building (denominator for penetration). Placeholder values marked needsVerification are flagged provisional by Level 4 endpoints. */
+  total_units: number;
+  /** True when total_units is a placeholder pending verification — Level 4 reports provisional=true for the building. */
+  needsVerification?: boolean;
+  /**
+   * All bldg_users.buildingSlug variants that should roll up to this building.
+   * Must include the canonical `slug` itself. Level 4 building penetration sums
+   * signups and paid users across this family.
+   */
+  slugAliases: string[];
 }
 
 export const BUILDINGS: BuildingConfig[] = [
@@ -37,6 +47,8 @@ export const BUILDINGS: BuildingConfig[] = [
     defaultAddress: "3545 Wilshire Blvd, Los Angeles, CA 90010",
     accessProtocol:
       "ButterflyMX entry. Staff manually programs elevator for unit floor.",
+    total_units: 428,
+    slugAliases: ["opusla", "opus-south", "opus-north", "opus-la", "3545"],
   },
   {
     id: "century_park_east",
@@ -50,6 +62,8 @@ export const BUILDINGS: BuildingConfig[] = [
       "century pke",
     ],
     defaultAddress: "2170 Century Park E, Los Angeles, CA 90067",
+    total_units: 576,
+    slugAliases: ["centuryparkeast", "century-park-east", "cpe-south", "cpe-north", "2170", "2160"],
   },
 ];
 

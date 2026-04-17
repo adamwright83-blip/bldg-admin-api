@@ -93,6 +93,15 @@ import {
   getRevenueInterventionOrderDebug,
   sendPaymentReminderForOrder,
 } from "./revenueIntervention";
+import { getLevel4OffensiveState as loadLevel4OffensiveState } from "./level4Offensive";
+import {
+  generateOffensiveCopy as generateLevel4OffensiveCopy,
+  type GenerateOffensiveCopyInput,
+} from "./level4OffensiveCopy";
+import {
+  executeOffensiveAction as executeLevel4OffensiveAction,
+  type ExecuteOffensiveInput,
+} from "./level4OffensiveExecute";
 
 const STRIPE_API_VERSION = "2025-03-31.basil" as const;
 
@@ -714,6 +723,120 @@ export const appRouter = router({
         }),
       };
     }),
+
+    /** Level 4 Offensive Growth — read-only deterministic snapshot of the three offensive blocks (no scoring engine). */
+    getLevel4OffensiveState: adminProcedure.query(async ({ ctx }) => {
+      return loadLevel4OffensiveState(ctx.tenantId);
+    }),
+
+    /**
+     * Level 4 Offensive Growth — LLM-generated outreach copy for a single block.
+     * Block C (market_hole) returns a deterministic stub; no LLM call is made for it.
+     * Caller passes the same per-block payload shape returned by getLevel4OffensiveState.
+     */
+    generateOffensiveCopy: adminProcedure
+      .input(
+        z.discriminatedUnion("block", [
+          z.object({
+            block: z.literal("building_penetration"),
+            payload: z.object({
+              buildingSlug: z.string().min(1),
+              buildingName: z.string().min(1),
+              convertedUsers: z.number().int().min(0),
+              convertedPaidUsers: z.number().int().min(0),
+              total: z.number().int().min(0),
+              unconverted: z.number().int().min(0),
+              penetrationPct: z.number().min(0),
+              paidPenetrationPct: z.number().min(0),
+            }),
+          }),
+          z.object({
+            block: z.literal("referral_request"),
+            payload: z.object({
+              firstName: z.string().min(1),
+              lastInitial: z.string().min(0).max(1),
+              orderCount: z.number().int().min(0),
+              ltvCents: z.number().int().min(0),
+            }),
+          }),
+          z.object({
+            block: z.literal("market_hole"),
+            payload: z.object({}).strict(),
+          }),
+        ])
+      )
+      .mutation(async ({ input }) => {
+        try {
+          return await generateLevel4OffensiveCopy(input as GenerateOffensiveCopyInput);
+        } catch (e) {
+          throwCatalogAiAsTrpc(e);
+        }
+      }),
+
+    /**
+     * Level 4 Offensive Growth — executes the admin's deploy click.
+     * Writes one admin_action_log row of the canonical actionType for the block
+     * and dedups per the per-block rules in server/level4OffensiveExecute.ts.
+     * No outbound delivery in v1 — logging the decision retires the card.
+     */
+    executeOffensiveAction: adminProcedure
+      .input(
+        z.discriminatedUnion("block", [
+          z.object({
+            block: z.literal("building_penetration"),
+            buildingSlug: z.string().min(1),
+            buildingName: z.string().min(1),
+            metadata: z
+              .object({
+                convertedUsers: z.number().int().min(0).optional(),
+                convertedPaidUsers: z.number().int().min(0).optional(),
+                total: z.number().int().min(0).optional(),
+                unconverted: z.number().int().min(0).optional(),
+                penetrationPct: z.number().min(0).optional(),
+                paidPenetrationPct: z.number().min(0).optional(),
+              })
+              .optional(),
+            generatedCopy: z.object({
+              headline: z.string().min(1),
+              body: z.string().min(1),
+              smsCopy: z.string().min(1),
+              internalNote: z.string().min(1),
+            }),
+          }),
+          z.object({
+            block: z.literal("referral_request"),
+            userId: z.number().int().positive(),
+            firstName: z.string().min(1),
+            lastInitial: z.string().min(0).max(1),
+            orderCount: z.number().int().min(0),
+            ltvCents: z.number().int().min(0),
+            generatedCopy: z.object({
+              headline: z.string().min(1),
+              body: z.string().min(1),
+              smsCopy: z.string().min(1),
+              internalNote: z.string().min(1),
+            }),
+          }),
+          z.object({
+            block: z.literal("market_hole_outreach"),
+            note: z.string().optional(),
+          }),
+        ])
+      )
+      .mutation(async ({ ctx, input }) => {
+        const out = await executeLevel4OffensiveAction(
+          ctx.tenantId,
+          input as ExecuteOffensiveInput
+        );
+        if (!out.ok) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: out.error });
+        }
+        return {
+          deduped: out.deduped,
+          logId: out.logId,
+          actionType: out.actionType,
+        };
+      }),
 
     /** Logs admin_action_log (send_reminder, status=attempted); idempotent per order per dashboard business day. */
     sendPaymentReminder: adminProcedure
