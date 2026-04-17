@@ -8,7 +8,15 @@ import { CustomerProfileDrawer } from "@/components/CustomerProfileDrawer";
 import { CustomersTab } from "@/components/CustomersTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, Check, Copy, AlertCircle, ChevronLeft, ChevronRight, MapPin, Phone, MessageSquare, Package } from "lucide-react";
+import { Loader2, Search, Check, Copy, AlertCircle, ChevronLeft, ChevronRight, MapPin, Phone, MessageSquare, Package, Menu } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   WF_UPCHARGES,
   WF_FLAT_RATE_TEXTILES,
@@ -189,14 +197,31 @@ export default function Admin() {
       <nav className="border-b border-black/10 bg-white sticky top-0 z-50">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-14">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Open menu"
+                    className="-ml-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-black/60 hover:bg-black/5 hover:text-black focus:outline-none focus-visible:ring-2 focus-visible:ring-black/20"
+                  >
+                    <Menu className="h-4 w-4" strokeWidth={2.25} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                    Shortcuts
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <a href="/catalog" className="flex items-center gap-2 text-sm">
+                      <Package className="h-4 w-4 text-black/60" />
+                      Manage Catalog
+                    </a>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <span className="text-sm font-semibold tracking-widest uppercase">Laundry Butler</span>
-              <a
-                href="/catalog"
-                className="text-xs font-medium text-black/45 underline-offset-2 hover:text-black hover:underline"
-              >
-                Catalog
-              </a>
             </div>
             <span className="text-xs text-black/40">{user?.name || "Admin"}</span>
           </div>

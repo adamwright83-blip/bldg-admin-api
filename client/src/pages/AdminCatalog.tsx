@@ -610,58 +610,120 @@ export default function AdminCatalog() {
       </header>
 
       <main className="mx-auto max-w-[1400px] px-3 py-3 sm:px-4 sm:py-3.5">
-        <section className="mb-4 space-y-3 rounded-lg border border-black/10 bg-white p-3 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-2 border-b border-black/6 pb-2">
-            <div>
-              <h2 className="text-xs font-semibold tracking-tight">Catalog composer</h2>
-              <p className="text-[10px] text-black/45">
-                Parse → editable preview → apply. Cmd+Enter / Ctrl+Enter to parse.
-              </p>
+        <section
+          className="mb-4 rounded-[14px] p-[3px] shadow-[0_8px_28px_rgba(22,28,48,0.14)]"
+          style={{
+            backgroundImage:
+              "linear-gradient(135deg, #3a4a78 0%, #7666b2 22%, #3f92aa 46%, #7e5fa6 72%, #3a4a78 100%)",
+          }}
+        >
+          <div
+            className="rounded-[11px] bg-white p-4 sm:p-5"
+            style={{
+              boxShadow:
+                "inset 0 0 0 1px rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.95)",
+            }}
+          >
+            <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-black/8 pb-2">
+              <h2 className="font-mono text-[13px] font-semibold uppercase tracking-[0.14em] text-black">
+                Catalog Composer
+              </h2>
+              <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-black/40">
+                // natural language catalog control
+              </span>
+              {composerForm && (
+                <Badge
+                  variant="secondary"
+                  className="ml-auto font-mono text-[10px] uppercase"
+                >
+                  {composerForm.intent.replace(/_/g, " ")}
+                </Badge>
+              )}
+            </div>
+
+            <ol className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-black/75">
+              {[
+                "Tell BLDG what to change",
+                "Parse",
+                "Review editable preview",
+                "Apply changes",
+              ].map((label, i) => (
+                <li key={label} className="flex items-center gap-1.5">
+                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-black text-[10px] font-bold leading-none text-white">
+                    {i + 1}
+                  </span>
+                  <span className="font-medium">{label}</span>
+                </li>
+              ))}
+            </ol>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+              <Input
+                placeholder="Tell BLDG what to change…"
+                value={commandText}
+                onChange={(e) => setCommandText(e.target.value)}
+                className="h-10 flex-1 rounded-md text-sm"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    const t = commandText.trim();
+                    if (t) parseCmdMut.mutate({ command: t });
+                  }
+                }}
+              />
+              <button
+                type="button"
+                disabled={!commandText.trim() || parseCmdMut.isPending}
+                onClick={() => parseCmdMut.mutate({ command: commandText.trim() })}
+                className="inline-flex h-10 shrink-0 items-center justify-center rounded-md px-5 font-mono text-sm font-bold tracking-[0.12em] transition-all disabled:cursor-not-allowed disabled:opacity-60"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(180deg, #0d2a10 0%, #041706 100%)",
+                  color: "#18ff68",
+                  textShadow:
+                    "0 0 10px rgba(24,255,104,0.75), 0 0 2px rgba(24,255,104,0.9)",
+                  border: "1px solid #0a3a14",
+                  boxShadow:
+                    "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 0 12px rgba(24,255,104,0.08), 0 0 14px rgba(24,255,104,0.18)",
+                }}
+              >
+                {parseCmdMut.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" style={{ color: "#18ff68" }} />
+                ) : (
+                  "[ PARSE ]"
+                )}
+              </button>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {[
+                { label: "Raise price", prefill: "Raise <slug> price to $" },
+                { label: "Create SKU", prefill: "Add <item>. price $ cost $" },
+                { label: "Archive item", prefill: "Archive <slug>" },
+                { label: "Take item offline", prefill: "Take <slug> offline" },
+                { label: "Bulk margin update", prefill: "Set all <category> margin to %" },
+              ].map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => setCommandText(p.prefill)}
+                  className="rounded-full border border-black/12 bg-black/[0.03] px-3 py-1 text-[11px] font-medium text-black/65 transition-colors hover:bg-black/[0.06] hover:text-black"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            <p className="mt-2.5 text-[10px] leading-snug text-black/40">
+              Examples: Add pants zipper alteration. price $26 cost $22 · Set 2pc suit price to $28 · Archive old rug
+              cleaning · Take dress hem offline
+            </p>
+
+            <div className="mt-3 border-t border-black/6 pt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-black/35">
+              System: parse → editable preview → apply // bulk pricing, create, archive, and online/offline control
             </div>
             {composerForm && (
-              <Badge variant="secondary" className="font-mono text-[10px] uppercase">
-                {composerForm.intent.replace(/_/g, " ")}
-              </Badge>
-            )}
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Input
-              placeholder="Tell BLDG what to change…"
-              value={commandText}
-              onChange={(e) => setCommandText(e.target.value)}
-              className="h-9 flex-1 text-sm"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault();
-                  const t = commandText.trim();
-                  if (t) parseCmdMut.mutate({ command: t });
-                }
-              }}
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="h-9 shrink-0"
-              disabled={!commandText.trim() || parseCmdMut.isPending}
-              onClick={() => parseCmdMut.mutate({ command: commandText.trim() })}
-            >
-              {parseCmdMut.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                  Parse
-                </>
-              )}
-            </Button>
-          </div>
-          <p className="text-[10px] leading-snug text-black/40">
-            Examples: Add pants zipper alteration. price $26 cost $22 · Set 2pc suit price to $28 · Archive old rug
-            cleaning · Take dress hem offline
-          </p>
-          {composerForm && (
-            <div className="space-y-3 rounded-md border border-black/8 bg-black/[0.02] p-3">
+              <div className="mt-3 space-y-3 rounded-md border border-black/8 bg-black/[0.02] p-3">
               {composerForm.notes.trim() && (
                 <p className="text-[11px] text-black/55">{composerForm.notes}</p>
               )}
@@ -809,7 +871,8 @@ export default function AdminCatalog() {
                 </div>
               </div>
             </div>
-          )}
+            )}
+          </div>
         </section>
 
         {importRows.length > 0 && (
