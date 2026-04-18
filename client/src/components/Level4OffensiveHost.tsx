@@ -66,6 +66,19 @@ function formatUsdCents(cents: number) {
  * resolves true after the admin deploys (execute mutation success), false on
  * cancel or error — the crusher game uses that to advance or retry the lane.
  */
+/**
+ * Client-only synthetic lane 2 candidate. Created by the Simulation Override so the
+ * referral-ask loop can be tested when the real admin.getLevel4OffensiveState returns no
+ * referralRequest. This object never touches execAction and is never written to the DB.
+ */
+const SYNTHETIC_LANE2_CANDIDATE = {
+  userId: -1,
+  firstName: "Sim",
+  lastInitial: "X",
+  orderCount: 7,
+  ltvCents: 48_400,
+} as const;
+
 export function Level4OffensiveHost() {
   const state = trpc.admin.getLevel4OffensiveState.useQuery();
   const generateCopy = trpc.admin.generateOffensiveCopy.useMutation();
@@ -77,6 +90,8 @@ export function Level4OffensiveHost() {
   const [modalError, setModalError] = useState<string | null>(null);
   /** Resolves the crusher-game promise once the modal is dismissed or deploy completes. */
   const resolverRef = useRef<((ok: boolean) => void) | null>(null);
+  /** When true, lane 2 runs on a client-only candidate with a no-op deploy. */
+  const [syntheticLane2Active, setSyntheticLane2Active] = useState(false);
 
   // Pick the top building-penetration target by unconverted desc.
   const topBuilding = useMemo(() => {
@@ -86,11 +101,12 @@ export function Level4OffensiveHost() {
   }, [state.data]);
 
   const referralCandidate = useMemo(() => {
+    if (syntheticLane2Active) return SYNTHETIC_LANE2_CANDIDATE;
     const r = state.data?.referralRequest;
     if (!r) return null;
     if ("userId" in r) return r;
     return null;
-  }, [state.data]);
+  }, [state.data, syntheticLane2Active]);
 
   const openBuildingPenetration = useCallback(async (): Promise<boolean> => {
     if (!topBuilding) {
@@ -144,6 +160,28 @@ export function Level4OffensiveHost() {
       setModalError("No referral candidate available.");
       return false;
     }
+    // SYNTHETIC LANE 2: bypass LLM + execAction. Show a mock preview and resolve true
+    // with zero server calls. This is guarded by syntheticLane2Active so production flow
+    // is untouched when the flag is off.
+    if (syntheticLane2Active) {
+      setModal({
+        kind: "referral_request",
+        userId: referralCandidate.userId,
+        firstName: referralCandidate.firstName,
+        lastInitial: referralCandidate.lastInitial,
+        orderCount: referralCandidate.orderCount,
+        ltvCents: referralCandidate.ltvCents,
+        copy: {
+          headline: "Refer a neighbor — both get $15",
+          body: "Synthetic preview copy. Deploy is stubbed; nothing is sent.",
+          smsCopy: "Hey {FIRST}, know someone who'd love our service? You'll both get $15.",
+          internalNote: "SIMULATION: no execAction, no admin_action_log row.",
+        },
+      });
+      return new Promise<boolean>((resolve) => {
+        resolverRef.current = resolve;
+      });
+    }
     setModalError(null);
     setModalBusy("generating");
     try {
@@ -175,7 +213,7 @@ export function Level4OffensiveHost() {
     return new Promise<boolean>((resolve) => {
       resolverRef.current = resolve;
     });
-  }, [referralCandidate, generateCopy]);
+  }, [referralCandidate, generateCopy, syntheticLane2Active]);
 
   const openMarketHole = useCallback(async (): Promise<boolean> => {
     setModalError(null);
@@ -199,6 +237,14 @@ export function Level4OffensiveHost() {
 
   const confirmDeploy = useCallback(async () => {
     if (!modal) return;
+    // SYNTHETIC LANE 2 path: short visual pause, no mutation, no cache invalidate.
+    if (modal.kind === "referral_request" && syntheticLane2Active) {
+      setModalBusy("deploying");
+      setModalError(null);
+      await new Promise((r) => setTimeout(r, 280));
+      closeModal(true);
+      return;
+    }
     setModalBusy("deploying");
     setModalError(null);
     try {
@@ -229,7 +275,7 @@ export function Level4OffensiveHost() {
       setModalBusy("idle");
       setModalError(e instanceof Error ? e.message : "Deploy failed.");
     }
-  }, [modal, execAction, utils, closeModal]);
+  }, [modal, execAction, utils, closeModal, syntheticLane2Active]);
 
   // Honest lane labels derived from real state.
   const lane1Title = topBuilding
@@ -243,14 +289,22 @@ export function Level4OffensiveHost() {
   const lane1CtaLabel = topBuilding ? "GENERATE OUTREACH →" : "NO TARGET";
 
   const lane2Title = referralCandidate
-    ? `LANE 2 | BLOCK B | ${referralCandidate.firstName} ${referralCandidate.lastInitial}.`
+    ? syntheticLane2Active
+      ? `LANE 2 | BLOCK B | ${referralCandidate.firstName} ${referralCandidate.lastInitial}. (SIM)`
+      : `LANE 2 | BLOCK B | ${referralCandidate.firstName} ${referralCandidate.lastInitial}.`
     : "LANE 2 | BLOCK B | Referral request";
   const lane2Body = referralCandidate
-    ? `${referralCandidate.orderCount} paid orders · ${formatUsdCents(referralCandidate.ltvCents)} LTV.`
+    ? syntheticLane2Active
+      ? `SYNTHETIC · ${referralCandidate.orderCount} paid orders · ${formatUsdCents(referralCandidate.ltvCents)} LTV · no db writes.`
+      : `${referralCandidate.orderCount} paid orders · ${formatUsdCents(referralCandidate.ltvCents)} LTV.`
     : state.isLoading
       ? "Loading referral candidate…"
       : "No eligible referral candidate right now.";
-  const lane2CtaLabel = referralCandidate ? "GENERATE REFERRAL ASK →" : "NO CANDIDATE";
+  const lane2CtaLabel = referralCandidate
+    ? syntheticLane2Active
+      ? "SIM: DEPLOY REFERRAL →"
+      : "GENERATE REFERRAL ASK →"
+    : "NO CANDIDATE";
   const lane2Disabled = !referralCandidate;
 
   const lane3Title = "LANE 3 | BLOCK C | Market hole";
@@ -272,6 +326,9 @@ export function Level4OffensiveHost() {
         lane3Title={lane3Title}
         lane3Body={lane3Body}
         lane3Stubbed
+        syntheticLane2Active={syntheticLane2Active}
+        onInjectSyntheticLane2={() => setSyntheticLane2Active(true)}
+        onResetSyntheticLane2={() => setSyntheticLane2Active(false)}
       />
 
       <Dialog

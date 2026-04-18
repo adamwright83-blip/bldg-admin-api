@@ -163,6 +163,10 @@ export type Level4OffensiveProps = {
   lane3CtaLabel?: string;
   /** When set, the lane 3 deploy CTA is labeled as stubbed rather than suggesting real capture. */
   lane3Stubbed?: boolean;
+  /** Gameplay-testability hooks — see SimulationOverride. Host owns client-only state. */
+  onInjectSyntheticLane2?: () => void;
+  onResetSyntheticLane2?: () => void;
+  syntheticLane2Active?: boolean;
 };
 
 export function Level4Offensive({
@@ -183,11 +187,22 @@ export function Level4Offensive({
   lane3Body,
   lane3CtaLabel,
   lane3Stubbed = false,
+  onInjectSyntheticLane2,
+  onResetSyntheticLane2,
+  syntheticLane2Active = false,
 }: Level4OffensiveProps) {
-  const fastFactor = useMemo(readFastFactor, []);
+  /** ?fast=N is the initial seed; Simulation Override can change it at runtime. */
+  const [fastFactor, setFastFactor] = useState<number>(readFastFactor);
   const idleToThreatMs = L4_IDLE_TO_THREAT_MS / fastFactor;
   const impactThresholdMs = L4_IMPACT_THRESHOLD_MS / fastFactor;
   const partialReliefMs = L4_PARTIAL_RELIEF_MS / fastFactor;
+
+  /** Simulation Override forcing a fixed phase — bypasses idle/work-hour derivation. null = live. */
+  const [forcedPhase, setForcedPhase] = useState<GamePhase | null>(null);
+  /** "auto" = real clock; "on" = always in-hours; "off" = always off-hours. */
+  const [workHoursOverride, setWorkHoursOverride] = useState<"auto" | "on" | "off">("auto");
+  /** Simulation Override terminal visibility. */
+  const [simOpen, setSimOpen] = useState(false);
 
   const [selectedNodeId, setSelectedNodeId] = useState<MapNodeId>("beaudry");
   const [completedLanes, setCompletedLanes] = useState<Record<LaneId, boolean>>(() => {
@@ -245,7 +260,12 @@ export function Level4Offensive({
       ? 0
       : Math.min(1, (idleMs - idleToThreatMs) / (impactThresholdMs - idleToThreatMs));
   const structuralIntegrity = Math.max(0, 100 - descentProgress * 100);
-  const workHoursActive = isWorkHours(new Date(nowTick));
+  const workHoursActive =
+    workHoursOverride === "on"
+      ? true
+      : workHoursOverride === "off"
+        ? false
+        : isWorkHours(new Date(nowTick));
 
   const syncWallDropToTrack = useCallback(() => {
     const el = canvasStackRef.current;
@@ -314,6 +334,12 @@ export function Level4Offensive({
     if (resetInFlightRef.current) return;
     if (revivePhase !== "idle") return;
 
+    // Simulation Override: forcedPhase pins the machine regardless of idle / hours / victory.
+    if (forcedPhase !== null) {
+      if (gamePhase !== forcedPhase) setGamePhase(forcedPhase);
+      return;
+    }
+
     if (allLanesCleared(completedLanes)) {
       if (gamePhase !== "victory") setGamePhase("victory");
       return;
@@ -342,6 +368,7 @@ export function Level4Offensive({
     completedLanes,
     gamePhase,
     revivePhase,
+    forcedPhase,
   ]);
 
   /**
@@ -388,6 +415,84 @@ export function Level4Offensive({
     },
     [clearTimers, schedule]
   );
+
+  /** Simulation Override: wipe client-side gameplay state without touching server/audit rows. */
+  const resetCycle = useCallback(() => {
+    clearTimers();
+    resetInFlightRef.current = false;
+    setForcedPhase(null);
+    setWorkHoursOverride("auto");
+    setFastFactor(1);
+    setRevivePhase("idle");
+    setReviveLane(null);
+    setDescentPaused(false);
+    setCtaErrorLane(null);
+    setCtaWaitLane(null);
+    setCompletedLanes({ 1: false, 2: false, 3: false });
+    const now = Date.now();
+    setLastActionAt(now);
+    setGamePhase("calm");
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(L4_LS_COMPLETED);
+      window.localStorage.removeItem(L4_LS_COMPLETED_DAY);
+      window.localStorage.setItem(L4_LS_LAST_ACTION, String(now));
+    }
+    if (onResetSyntheticLane2) onResetSyntheticLane2();
+  }, [clearTimers, onResetSyntheticLane2]);
+
+  /** Simulation Override: pin phase. Passing null releases the pin. */
+  const forcePhase = useCallback(
+    (phase: GamePhase | null) => {
+      clearTimers();
+      resetInFlightRef.current = false;
+      setRevivePhase("idle");
+      setReviveLane(null);
+      setDescentPaused(false);
+      if (phase === null) {
+        setForcedPhase(null);
+        return;
+      }
+      setForcedPhase(phase);
+      setGamePhase(phase);
+      // When forcing IMPACT we also snap idle forward so the telemetry reads 0%.
+      if (phase === "impact" && typeof window !== "undefined") {
+        const impactNow = Date.now() - (impactThresholdMs + 1_000);
+        setLastActionAt(impactNow);
+        window.localStorage.setItem(L4_LS_LAST_ACTION, String(impactNow));
+      }
+      if (phase === "calm" && typeof window !== "undefined") {
+        const now = Date.now();
+        setLastActionAt(now);
+        window.localStorage.setItem(L4_LS_LAST_ACTION, String(now));
+      }
+    },
+    [clearTimers, impactThresholdMs]
+  );
+
+  /** Simulation Override: run the full revive choreography on the active lane (or L1 fallback). */
+  const forceRevive = useCallback(() => {
+    const target = nextActiveLane(completedLanes) ?? 1;
+    // Release any forced pin so the revive sequence's resetting → calm transition takes.
+    setForcedPhase(null);
+    runReviveSequence(target);
+  }, [completedLanes, runReviveSequence]);
+
+  /** Shift+D toggles the Simulation Override terminal. */
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.shiftKey && (e.key === "D" || e.key === "d") && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        // Ignore when typing in inputs so we don't hijack admin usage of the chrome.
+        const t = e.target as HTMLElement | null;
+        if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+        e.preventDefault();
+        setSimOpen((v) => !v);
+      } else if (e.key === "Escape" && simOpen) {
+        setSimOpen(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [simOpen]);
 
   async function tryCompleteLane(lane: LaneId) {
     if (activeLane !== lane) return;
@@ -923,6 +1028,188 @@ export function Level4Offensive({
           ◆
         </div>
       </div>
+
+      {/* Discreet footer trigger — double-chevron matches the tactical chrome. */}
+      <button
+        type="button"
+        className="l4-simTrigger"
+        aria-label="Open Simulation Override (Shift+D)"
+        onClick={() => setSimOpen((v) => !v)}
+      >
+        ⌖⌖
+      </button>
+
+      {simOpen && (
+        <SimulationOverride
+          onClose={() => setSimOpen(false)}
+          gamePhase={gamePhase}
+          forcedPhase={forcedPhase}
+          workHoursOverride={workHoursOverride}
+          workHoursActive={workHoursActive}
+          fastFactor={fastFactor}
+          structuralIntegrity={structuralIntegrity}
+          idleMs={idleMs}
+          syntheticLane2Active={syntheticLane2Active}
+          onForcePhase={forcePhase}
+          onForceRevive={forceRevive}
+          onSetWorkHoursOverride={setWorkHoursOverride}
+          onSetFastFactor={setFastFactor}
+          onResetCycle={resetCycle}
+          onInjectSyntheticLane2={onInjectSyntheticLane2}
+          onResetSyntheticLane2={onResetSyntheticLane2}
+        />
+      )}
     </section>
+  );
+}
+
+type SimulationOverrideProps = {
+  onClose: () => void;
+  gamePhase: GamePhase;
+  forcedPhase: GamePhase | null;
+  workHoursOverride: "auto" | "on" | "off";
+  workHoursActive: boolean;
+  fastFactor: number;
+  structuralIntegrity: number;
+  idleMs: number;
+  syntheticLane2Active: boolean;
+  onForcePhase: (phase: GamePhase | null) => void;
+  onForceRevive: () => void;
+  onSetWorkHoursOverride: (mode: "auto" | "on" | "off") => void;
+  onSetFastFactor: (factor: number) => void;
+  onResetCycle: () => void;
+  onInjectSyntheticLane2?: () => void;
+  onResetSyntheticLane2?: () => void;
+};
+
+function SimulationOverride(p: SimulationOverrideProps) {
+  const idleSeconds = Math.floor(p.idleMs / 1000);
+  return (
+    <div className="l4-simOverride" role="dialog" aria-label="Simulation Override">
+      <div className="l4-simOverridePanel">
+        <div className="l4-simOverrideHead">
+          <span className="l4-simOverrideTitle">[ SIMULATION OVERRIDE ]</span>
+          <span className="l4-simOverrideSub">gameplay verification // no db writes</span>
+          <button
+            type="button"
+            className="l4-simOverrideClose"
+            onClick={p.onClose}
+            aria-label="Close override (Esc)"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="l4-simOverrideReadout">
+          <span>PHASE:</span>
+          <span className="l4-simOverrideValue">
+            {p.gamePhase.toUpperCase()}
+            {p.forcedPhase !== null ? " (PINNED)" : ""}
+          </span>
+          <span>HOURS:</span>
+          <span className="l4-simOverrideValue">
+            {p.workHoursActive ? "IN-HOURS" : "OFF-HOURS"} ·{" "}
+            {p.workHoursOverride === "auto" ? "auto" : p.workHoursOverride === "on" ? "forced on" : "forced off"}
+          </span>
+          <span>SPEED:</span>
+          <span className="l4-simOverrideValue">{p.fastFactor}× · idle {idleSeconds}s</span>
+          <span>INTEG:</span>
+          <span className="l4-simOverrideValue">{p.structuralIntegrity.toFixed(3)}%</span>
+        </div>
+
+        <div className="l4-simOverrideSection">
+          <div className="l4-simOverrideSectionLabel">FORCE PHASE</div>
+          <div className="l4-simOverrideBtnRow">
+            <button type="button" className="l4-simOverrideBtn" onClick={() => p.onForcePhase("calm")}>
+              [ FORCE: CALM ]
+            </button>
+            <button type="button" className="l4-simOverrideBtn" onClick={() => p.onForcePhase("descent")}>
+              [ FORCE: THREAT ]
+            </button>
+            <button type="button" className="l4-simOverrideBtn is-warn" onClick={() => p.onForcePhase("impact")}>
+              [ FORCE: IMPACT ]
+            </button>
+            <button type="button" className="l4-simOverrideBtn is-good" onClick={p.onForceRevive}>
+              [ FORCE: REVIVE ]
+            </button>
+            {p.forcedPhase !== null && (
+              <button type="button" className="l4-simOverrideBtn is-ghost" onClick={() => p.onForcePhase(null)}>
+                [ UNPIN PHASE ]
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="l4-simOverrideSection">
+          <div className="l4-simOverrideSectionLabel">WORK-HOURS</div>
+          <div className="l4-simOverrideBtnRow">
+            <button
+              type="button"
+              className={cn("l4-simOverrideBtn", p.workHoursOverride === "on" && "is-active")}
+              onClick={() => p.onSetWorkHoursOverride("on")}
+            >
+              [ TOGGLE: WORK-HOURS ]
+            </button>
+            <button
+              type="button"
+              className={cn("l4-simOverrideBtn", p.workHoursOverride === "off" && "is-active")}
+              onClick={() => p.onSetWorkHoursOverride("off")}
+            >
+              [ TOGGLE: OFF-HOURS ]
+            </button>
+            <button
+              type="button"
+              className={cn("l4-simOverrideBtn is-ghost", p.workHoursOverride === "auto" && "is-active")}
+              onClick={() => p.onSetWorkHoursOverride("auto")}
+            >
+              [ AUTO: REAL CLOCK ]
+            </button>
+          </div>
+        </div>
+
+        <div className="l4-simOverrideSection">
+          <div className="l4-simOverrideSectionLabel">TIME</div>
+          <div className="l4-simOverrideBtnRow">
+            <button
+              type="button"
+              className={cn("l4-simOverrideBtn", p.fastFactor === 100 && "is-active")}
+              onClick={() => p.onSetFastFactor(100)}
+            >
+              [ ACCELERATE TIME: 100× ]
+            </button>
+            <button
+              type="button"
+              className={cn("l4-simOverrideBtn is-ghost", p.fastFactor === 1 && "is-active")}
+              onClick={() => p.onSetFastFactor(1)}
+            >
+              [ REAL TIME: 1× ]
+            </button>
+          </div>
+        </div>
+
+        <div className="l4-simOverrideSection">
+          <div className="l4-simOverrideSectionLabel">LANES & REPLAY</div>
+          <div className="l4-simOverrideBtnRow">
+            <button type="button" className="l4-simOverrideBtn is-warn" onClick={p.onResetCycle}>
+              [ RESET LEVEL 4 CYCLE ]
+            </button>
+            {p.onInjectSyntheticLane2 && !p.syntheticLane2Active && (
+              <button type="button" className="l4-simOverrideBtn" onClick={p.onInjectSyntheticLane2}>
+                [ INJECT SYNTHETIC LANE 2 ]
+              </button>
+            )}
+            {p.onResetSyntheticLane2 && p.syntheticLane2Active && (
+              <button type="button" className="l4-simOverrideBtn is-ghost" onClick={p.onResetSyntheticLane2}>
+                [ CLEAR SYNTHETIC LANE 2 ]
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="l4-simOverrideFootnote">
+          client-only · no db writes · resets do not reverse logged admin_action_log rows · esc or shift+d to close
+        </div>
+      </div>
+    </div>
   );
 }
