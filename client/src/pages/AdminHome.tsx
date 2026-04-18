@@ -4,7 +4,6 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Level4OffensiveHost } from "@/components/Level4OffensiveHost";
 
 function formatUsd(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -639,15 +638,6 @@ export default function AdminHome() {
           </div>
         </div>
       </section>
-
-      {isAdmin && (
-        <section className="space-y-4">
-          <h2 className="text-[10px] font-sans font-semibold uppercase tracking-[0.12em] text-[var(--ink-muted)]">
-            Level 4 — Offensive growth
-          </h2>
-          <Level4OffensiveHost />
-        </section>
-      )}
     </div>
   );
 }

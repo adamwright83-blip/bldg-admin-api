@@ -14,6 +14,7 @@ import {
   type AdminWorkspaceTab,
 } from "@/admin/adminPaths";
 import AdminHome from "./AdminHome";
+import { Level4OffensiveHost } from "@/components/Level4OffensiveHost";
 import { AdminCustomerSearchBlock, AdminTabPanels } from "./Admin";
 
 function normalizePath(loc: string): string {
@@ -44,12 +45,13 @@ export default function AdminHostApp() {
   }, [path, navigate]);
 
   const isHome = isAdminCommandCenterPath(path);
+  const isLevel4 = path === "/level4";
   const activeTab = adminPathToTab(path);
 
   useEffect(() => {
     if (path === "/admin") return;
-    if (!isHome && activeTab === null) navigate("/", { replace: true });
-  }, [isHome, activeTab, path, navigate]);
+    if (!isHome && !isLevel4 && activeTab === null) navigate("/", { replace: true });
+  }, [isHome, isLevel4, activeTab, path, navigate]);
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -126,6 +128,15 @@ export default function AdminHostApp() {
           >
             Home
           </Link>
+          <Link
+            href="/level4"
+            className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              isLevel4 ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
+            }`}
+            onClick={() => setMobileNavOpen(false)}
+          >
+            Level 4
+          </Link>
           {ADMIN_WORKSPACE_TABS.map((tab) => (
             <Link
               key={tab}
@@ -174,6 +185,10 @@ export default function AdminHostApp() {
 
         {isHome ? (
           <AdminHome />
+        ) : isLevel4 ? (
+          <div className="px-4 sm:px-6 py-6 w-full">
+            <Level4OffensiveHost />
+          </div>
         ) : activeTab ? (
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full">
             <AdminTabPanels

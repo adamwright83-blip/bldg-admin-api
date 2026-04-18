@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { cn } from "@/lib/utils";
+import "./Level4Offensive.css";
 
 import boardPng from "@/assets/l4/board.png";
 import manFigure from "@/assets/l4/man.png";

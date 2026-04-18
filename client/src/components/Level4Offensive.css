@@ -1,0 +1,824 @@
+/*
+ * Level 4 Offensive HUD — restored stylesheet.
+ *
+ * Recovered verbatim from branch cursor/stagnation-defeat-protocol-19c0
+ * (index.css lines 143–955) where it was originally authored alongside
+ * Level4Offensive.tsx. Wrapped in @layer components so the cascade matches
+ * the original location inside Tailwind v4 layer ordering.
+ */
+
+@layer components {
+  /* =============================================
+     Level 4 Offensive HUD — Layered Overlay System
+     Board = background-image. All overlays = position:absolute.
+     Zero white backgrounds. All dark metal.
+     ============================================= */
+  @keyframes l4-lanePulse {
+    0% { box-shadow: inset 0 0 0 1px rgba(74,222,128,.16), 0 0 0 rgba(74,222,128,0); }
+    50% { box-shadow: inset 0 0 0 1px rgba(74,222,128,.32), 0 0 28px rgba(74,222,128,.18); }
+    100% { box-shadow: inset 0 0 0 1px rgba(74,222,128,.16), 0 0 0 rgba(74,222,128,0); }
+  }
+  @keyframes l4-nodePulse {
+    0%,100% { box-shadow: 0 0 0 rgba(74,222,128,0); }
+    50% { box-shadow: 0 0 20px rgba(74,222,128,.55); }
+  }
+  @keyframes l4-textFlicker {
+    0%,100% { opacity: 1; }
+    50% { opacity: .82; }
+  }
+  @keyframes l4-spikeThreatPulse {
+    0%, 100% { filter: drop-shadow(0 3px 4px rgba(0,0,0,.85)) drop-shadow(0 0 14px rgba(239,68,68,.12)); }
+    50% { filter: drop-shadow(0 3px 4px rgba(0,0,0,.9)) drop-shadow(0 0 18px rgba(239,68,68,.22)); }
+  }
+  @keyframes l4-boardReliefPulse {
+    0%, 100% { opacity: .5; filter: saturate(1) brightness(1); }
+    40% { opacity: .42; filter: saturate(1.12) brightness(1.08); }
+  }
+  @keyframes l4-avatarReliefGlow {
+    0%, 100% { filter: brightness(1) drop-shadow(0 5px 8px rgba(0,0,0,.55)); }
+    45% { filter: brightness(1.09) drop-shadow(0 6px 18px rgba(74,222,128,.22)); }
+  }
+  @keyframes l4-ctaUrgentPulse {
+    0%, 100% { box-shadow: inset 0 0 0 1px rgba(74,222,128,.18), 0 0 8px rgba(74,222,128,.08); }
+    50% { box-shadow: inset 0 0 0 1px rgba(74,222,128,.4), 0 0 20px rgba(74,222,128,.22); }
+  }
+  @keyframes l4-ctaMaxPulse {
+    0%, 100% { box-shadow: inset 0 0 0 2px rgba(74,222,128,.45), 0 0 16px rgba(74,222,128,.25); }
+    50% { box-shadow: inset 0 0 0 2px rgba(74,222,128,.75), 0 0 32px rgba(74,222,128,.45); }
+  }
+  @keyframes l4-impactOverlayPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.88; }
+  }
+
+  /* Root shell */
+  .l4-root {
+    --l4-green: #4ade80;
+    --l4-green-2: #10b981;
+    --l4-red: #ef4444;
+    --l4-line: #333;
+    --l4-panel: #1c1c1c;
+    --l4-deep: #111;
+    --l4-frame-texture: none;
+    --l4-panel-face: none;
+    --l4-center-grit: none;
+    --l4-hud-plate: none;
+    --l4-you-are-here: none;
+    --l4-map-art: none;
+    position: relative;
+    color: #d7dbd8;
+    font-family: var(--font-mono);
+    text-rendering: optimizeLegibility;
+    border: 1px solid #2a2a2a;
+    border-radius: 2px;
+    background:
+      radial-gradient(120% 50% at 50% 0%, rgba(255,255,255,.08), transparent 45%),
+      linear-gradient(180deg, #1a1c1d 0%, #111213 38%, #0a0b0c 100%);
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,.04),
+      inset 0 2px 0 rgba(255,255,255,.08),
+      inset 0 -2px 0 rgba(0,0,0,.7),
+      inset 0 12px 24px rgba(0,0,0,.5),
+      0 14px 50px rgba(0,0,0,.55);
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .l4-root::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.05), transparent 12%, transparent 88%, rgba(0,0,0,.35)),
+      var(--l4-frame-texture),
+      repeating-linear-gradient(
+        105deg,
+        rgba(255,255,255,.02) 0px,
+        rgba(255,255,255,.02) 1px,
+        transparent 1px,
+        transparent 5px
+      );
+    background-size: auto, 520px 520px, auto;
+    background-position: center top, center top, center;
+    mix-blend-mode: soft-light;
+    opacity: .42;
+    z-index: 0;
+  }
+  .l4-root > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Top banner (brushed metal plaque) */
+  .l4-topBanner {
+    position: relative; z-index: 5;
+    border-bottom: 1px solid var(--l4-line);
+    padding: 10px 12px 8px;
+    width: 100%;
+    display: flex; justify-content: center;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,0) 35%),
+      linear-gradient(180deg, #1c1d1f, #111214);
+    box-shadow: inset 0 -1px 0 rgba(0,0,0,.8);
+  }
+  .l4-topBannerInner {
+    border: 1px solid #555; border-radius: 2px;
+    background: linear-gradient(180deg, #9ba39d, #6c7470 48%, #565d59);
+    color: #111; width: min(510px, 100%); text-align: center;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.55), inset 0 -2px 0 rgba(0,0,0,.55), 0 3px 8px rgba(0,0,0,.45);
+    padding: 8px 14px 6px;
+  }
+  .l4-topTitle {
+    font-family: var(--font-display); font-style: italic;
+    font-size: clamp(17px, 1.8vw, 24px); line-height: 1.15; font-weight: 600;
+  }
+  .l4-topSubtitle {
+    font-family: var(--font-mono); font-size: 11px; opacity: .82;
+    margin-top: 2px; letter-spacing: .08em;
+  }
+  .l4-allCleared {
+    text-align: center;
+    font-size: 11px; font-weight: 700; letter-spacing: .12em;
+    color: var(--l4-green);
+    padding: 6px 12px;
+    background: linear-gradient(180deg, rgba(74,222,128,.08), transparent);
+    border-bottom: 1px solid rgba(74,222,128,.2);
+    text-shadow: 0 0 12px rgba(74,222,128,.35);
+  }
+
+  /* 3-column grid */
+  .l4-grid {
+    display: grid;
+    grid-template-columns: 188px minmax(0, 1fr) 248px;
+    min-height: 380px;
+    flex: 1;
+  }
+
+  /* Side panels */
+  .l4-panel {
+    position: relative; z-index: 4;
+    background:
+      radial-gradient(120% 65% at 50% 0%, rgba(255,255,255,.06), transparent 60%),
+      var(--l4-panel-face),
+      linear-gradient(170deg, #212223, var(--l4-panel) 52%, #101112);
+    background-size: auto, 440px 440px, auto;
+    background-position: center top, center, center;
+    background-blend-mode: normal, overlay, normal;
+    border: 1px solid var(--l4-line); border-radius: 2px; margin: 6px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.08),
+      inset 0 -1px 0 rgba(0,0,0,.75),
+      inset 0 4px 14px rgba(0,0,0,.6),
+      0 6px 14px rgba(0,0,0,.35);
+  }
+
+  /* LEFT SIDEBAR */
+  .l4-left { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .l4-nav { display: flex; flex-direction: column; gap: 5px; }
+  .l4-navBtn {
+    border: 1px solid #444; border-radius: 2px;
+    background: linear-gradient(180deg, #2a2a2a, #1a1a1a);
+    min-height: 34px; color: #c8d0cc;
+    display: flex; align-items: center; gap: 6px; padding: 0 8px;
+    text-align: left; font-family: var(--font-mono); font-size: 12px;
+    font-weight: 600; letter-spacing: .05em;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), inset 0 -2px 6px rgba(0,0,0,.3);
+  }
+  .l4-navCheck {
+    width: 16px; flex: 0 0 16px; text-align: center; font-size: 13px;
+    color: var(--l4-green); text-shadow: 0 0 6px rgba(74,222,128,.5);
+  }
+  .l4-navLabel { font-weight: 600; }
+  .l4-metrics { padding: 8px; }
+  .l4-metricLabel { font-size: 11px; color: #b0b8b4; font-weight: 700; letter-spacing: .06em; }
+  .l4-metricValue {
+    font-size: 54px; line-height: .88; color: #f4f7f5;
+    margin-top: 2px; font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+  .l4-metricSub { margin-top: 6px; font-size: 10px; color: #7a8580; line-height: 1.3; }
+  .l4-fallbackLabel { font-size: 12px; font-weight: 700; color: #c0c8c4; padding: 0 2px; }
+  .l4-growthPanel {
+    border: 1px solid var(--l4-line); border-radius: 2px;
+    padding: 8px 8px 10px; background: linear-gradient(180deg, #131313, #0e0e0e);
+    box-shadow: inset 0 2px 8px rgba(0,0,0,.4);
+  }
+  .l4-growthTitle { font-size: 9px; letter-spacing: .14em; color: #7a8580; margin-bottom: 5px; font-weight: 700; }
+  .l4-growthList {
+    margin: 0; padding: 0 0 0 4px; list-style: none;
+    display: flex; flex-direction: column; gap: 3px;
+    font-size: 12px; color: var(--l4-green); line-height: 1.35;
+  }
+  .l4-leftFooter { margin-top: auto; padding-top: 6px; }
+  .l4-startBtn {
+    width: 100%; min-height: 36px;
+    border: 1px solid rgba(74,222,128,.65); border-radius: 2px;
+    background: linear-gradient(180deg, #1a5c44, #123d2c);
+    color: #edfff5; font-family: var(--font-mono);
+    font-size: 12px; font-weight: 700; letter-spacing: .06em;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 0 16px rgba(74,222,128,.18);
+  }
+
+  /* ============================================
+     CENTER CANVAS — 3 explicit vertical regions.
+     No free-floating overlap allowed.
+     ============================================ */
+  .l4-canvas {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid #2e3231;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.08),
+      inset 0 0 0 1px rgba(0,0,0,.45),
+      inset 0 14px 28px rgba(0,0,0,.45);
+    transition: box-shadow 0.6s ease;
+  }
+  .l4-canvas.is-impact {
+    box-shadow:
+      inset 0 0 0 2px rgba(220, 38, 38, 0.5),
+      inset 0 0 48px rgba(0, 0, 0, 0.55),
+      inset 0 0 140px rgba(90, 12, 12, 0.38);
+  }
+  /* Board + spikey ceiling overlay (ceiling is NOT in flow — avoids overflow clip on translateY). */
+  .l4-canvasStack {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    /* Do not clip the crusher: fixed translateY(px) was larger than short viewports and hid the whole bar + spikes. */
+    overflow: visible;
+  }
+  .l4-ceilingSpacer {
+    flex: 0 0 auto;
+    height: var(--l4-ceiling-rig-h, 4.5rem);
+    pointer-events: none;
+  }
+  .l4-ceilingCrusher {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 9;
+    pointer-events: none;
+    overflow: visible;
+  }
+  .l4-ceilingCrusher .l4-ceiling {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    width: 100%;
+  }
+  /* REGION 1: CEILING STATUS badge only (spikes live in l4-ceilingCrusher). */
+  .l4-threatCeiling {
+    position: relative;
+    z-index: 6;
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+  .l4-ceilingBadge {
+    display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+    padding: 4px 10px;
+    font-size: 10px; letter-spacing: .06em; font-family: var(--font-mono);
+  }
+  .l4-ceilingBadgeIcon { color: var(--l4-green); font-weight: 800; font-size: 11px; }
+  .l4-ceilingBadgeLabel { color: #6f7c76; }
+  .l4-ceilingBadgeValue {
+    color: var(--l4-green); font-weight: 700;
+    text-shadow: 0 0 8px rgba(74,222,128,.4);
+  }
+  .l4-ceiling {
+    transform: translateY(0);
+    pointer-events: none;
+    will-change: transform;
+  }
+  /* Spikey wall loop: top → descend past lower threshold → snap back on lane success */
+  .l4-ceiling.is-wall-top {
+    transform: translateY(0);
+    transition: none;
+  }
+  /* Transform-only descent so mid-animation resets can interpolate smoothly */
+  .l4-ceiling.is-wall-descending {
+    transform: translateY(var(--l4-wall-drop, 380px));
+    transition: transform var(--l4-descent-duration, 20s) linear;
+  }
+  .l4-ceiling.is-wall-descending.is-descent-paused {
+    transition-play-state: paused;
+  }
+  .l4-ceiling.is-wall-bottomed {
+    transform: translateY(var(--l4-wall-drop, 380px));
+    transition: none;
+  }
+  .l4-ceiling.is-wall-resetting {
+    transform: translateY(0);
+    transition: transform var(--l4-wall-reset, 420ms) cubic-bezier(0.25, 0.9, 0.35, 1);
+  }
+  /* Threat: red-tinted glint on the spike strip — wall is always spikey in Level 4 */
+  .l4-ceiling .l4-ceilingSpikeStrip {
+    animation: l4-spikeThreatPulse 2.4s ease-in-out infinite;
+  }
+  .l4-ceilingBar {
+    min-height: 36px; border: 1px solid #3a3a3a; border-radius: 2px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,0) 35%),
+      linear-gradient(180deg, #323436, #161719);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.12),
+      inset 0 -3px 10px rgba(0,0,0,.6),
+      0 4px 10px rgba(0,0,0,.35);
+    padding: 6px 10px 0; margin: 0 4px;
+  }
+  .l4-ceilingBar .l4-threatText {
+    align-self: center;
+    text-align: center;
+  }
+  .l4-ceilingBar.is-spikey-bar {
+    border-bottom: 1px solid #1a1210;
+    border-radius: 2px 2px 0 0;
+    padding-bottom: 0;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.1),
+      inset 0 -2px 8px rgba(0,0,0,.65),
+      0 4px 12px rgba(0,0,0,.45),
+      0 2px 0 rgba(239,68,68,.15);
+  }
+  .l4-ceilingSpikeStrip {
+    display: block;
+    flex: 0 0 auto;
+    height: 20px;
+    margin-top: 4px;
+    margin-left: -1px;
+    width: calc(100% + 2px);
+  }
+  .l4-threatText {
+    margin: 0; font-family: var(--font-display);
+    font-size: clamp(15px, 1.7vw, 24px); font-style: italic;
+    color: #b8bcb9; text-shadow: 0 1px 0 #000;
+    animation: l4-textFlicker 3.2s ease-in-out infinite;
+    text-align: center; line-height: 1.15;
+  }
+  .l4-threatText.is-impact {
+    color: #fecaca;
+    text-shadow: 0 0 14px rgba(239, 68, 68, 0.5);
+  }
+
+  /* REGION 2: BoardStage — fixed aspect ratio box with board background.
+     Contains exactly 3 layers stacked top-to-bottom:
+       1. MarketHoleOverlay (top zone, z-index 3)
+       2. AvatarLayer       (middle zone, z-index 2)
+       3. YouAreHere         (bottom zone, z-index 1)
+     No layer may share the same vertical band as another. */
+  .l4-boardStage {
+    position: relative;
+    flex: 1;
+    aspect-ratio: 16 / 9;
+    min-height: 280px;
+    background-size: cover;
+    background-position: center 55%;
+    background-repeat: no-repeat;
+    overflow: hidden;
+  }
+  .l4-boardStage::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: var(--l4-center-grit);
+    background-size: cover;
+    background-position: center;
+    mix-blend-mode: soft-light;
+    opacity: .5;
+    transition: opacity 0.5s ease, filter 0.5s ease;
+  }
+  .l4-boardStage.is-board-warm::before {
+    opacity: .5;
+    filter: none;
+  }
+  .l4-boardStage.is-board-cool::before {
+    opacity: .58;
+    filter: saturate(0.92) brightness(0.94);
+  }
+  .l4-boardStage.is-board-dim::before {
+    opacity: .72;
+    filter: saturate(0.75) brightness(0.72);
+  }
+  .l4-boardStage.is-board-relief::before {
+    animation: l4-boardReliefPulse 1.85s ease-out 1;
+  }
+
+  /* MarketHoleOverlay — deliberate 3-row tactical panel, no accidental wrapping */
+  .l4-marketOverlay {
+    position: absolute; left: 50%; top: 8%;
+    transform: translateX(-50%);
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    width: 390px;
+    max-width: 90%;
+    padding: 8px 14px;
+    border: 1px solid rgba(84,94,89,.55); border-radius: 2px;
+    background:
+      var(--l4-hud-plate),
+      linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0) 28%),
+      linear-gradient(180deg, rgba(0,0,0,.82), rgba(0,0,0,.76));
+    background-size: 100% 100%, auto, auto;
+    background-repeat: no-repeat;
+    backdrop-filter: blur(6px);
+    text-align: center;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.06),
+      inset 0 -1px 0 rgba(0,0,0,.5),
+      0 4px 12px rgba(0,0,0,.35);
+  }
+  .l4-overlayRow1 {
+    font-size: 13px; line-height: 1.1;
+    color: #dfe6e2; font-weight: 700;
+    letter-spacing: .02em;
+    white-space: nowrap;
+  }
+  .l4-overlayRow2 {
+    color: var(--l4-green); font-size: 13px; font-weight: 800;
+    line-height: 1.1; letter-spacing: .03em;
+    white-space: nowrap;
+    text-shadow: 0 0 8px rgba(74,222,128,.2);
+  }
+  .l4-overlayRow3 {
+    color: #b0ada6;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-shadow: 0 1px 0 rgba(0,0,0,.7);
+  }
+
+  /* AvatarLayer — middle 30-70% vertical band of board.
+     Figures are bottom-aligned inside this container.
+     Container top must be below MarketHoleOverlay bottom.
+     Container bottom must be above YouAreHere top. */
+  .l4-avatarLayer {
+    position: absolute;
+    top: 32%;
+    bottom: 22%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(380px, 85%);
+    z-index: 2;
+    pointer-events: none;
+    transition: opacity 0.45s ease;
+  }
+  .l4-avatarLayer.is-avatars-hidden {
+    opacity: 0;
+    transition: opacity 0.45s ease;
+  }
+  .l4-avatarLayer.is-avatars-relief .l4-figure {
+    animation: l4-avatarReliefGlow 1.85s ease-out 1;
+  }
+  .l4-figure {
+    position: absolute; bottom: 0;
+    height: auto; width: auto;
+    object-fit: contain; object-position: bottom center;
+    transition: transform 260ms ease;
+    transform-origin: bottom center;
+    display: block; border: none; background: transparent;
+    filter: drop-shadow(0 5px 8px rgba(0,0,0,.55));
+  }
+  .l4-figureMan {
+    left: 44%;
+    bottom: 0;
+    max-height: 100%;
+    height: 100%;
+    transform: translateX(-50%);
+  }
+  .l4-figureWoman {
+    left: 56%;
+    bottom: 0;
+    max-height: 74%;
+    height: 74%;
+    transform: translateX(-50%);
+  }
+  .l4-figure.l4-figureMan.is-crush { transform: translateX(-50%) scaleY(.08); }
+  .l4-figure.l4-figureWoman.is-crush { transform: translateX(-50%) scaleY(.08); }
+  .l4-figure.l4-figureMan.is-merge { left: 48.5%; transform: translateX(-50%); }
+  .l4-figure.l4-figureWoman.is-merge { left: 51.5%; transform: translateX(-50%); }
+  .l4-figure.l4-figureMan.is-merge.is-crush { left: 48.5%; transform: translateX(-50%) scaleY(.08); }
+  .l4-figure.l4-figureWoman.is-merge.is-crush { left: 51.5%; transform: translateX(-50%) scaleY(.08); }
+
+  /* Debug zone guides — visible only with ?debug=1 */
+  .l4-debugZone {
+    position: absolute; left: 0; right: 0;
+    z-index: 99; pointer-events: none;
+  }
+  .l4-debugZone::after {
+    content: attr(data-zone);
+    position: absolute; top: 4px; left: 4px;
+    font-size: 9px; font-family: monospace;
+    color: rgba(255,255,255,.7);
+    background: rgba(0,0,0,.5);
+    padding: 1px 4px; border-radius: 2px;
+  }
+
+  /* YouAreHere badge — tucked at avatar feet near the MARRY HER? node */
+  .l4-youAreHere {
+    position: absolute; left: 40%; bottom: 23%;
+    transform: translateX(-50%);
+    z-index: 4;
+    width: 90px; height: 40px;
+    background-color: transparent;
+    background-image: var(--l4-you-are-here);
+    background-repeat: no-repeat;
+    background-size: contain;
+    background-position: center;
+    color: transparent;
+    font-size: 0;
+    box-shadow: 0 0 10px rgba(239,68,68,.35);
+    transition: opacity 0.45s ease;
+  }
+  .l4-youAreHere.is-avatars-hidden {
+    opacity: 0;
+  }
+
+  .l4-impactOverlay {
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, rgba(45, 0, 0, 0.5), rgba(0, 0, 0, 0.4));
+    animation: l4-impactOverlayPulse 1.25s ease-in-out infinite;
+  }
+  .l4-impactOverlayInner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 22px;
+    border: 1px solid rgba(220, 38, 38, 0.5);
+    background: rgba(8, 8, 8, 0.72);
+    backdrop-filter: blur(8px);
+    text-align: center;
+    max-width: min(400px, 92%);
+    box-shadow: 0 0 32px rgba(0, 0, 0, 0.65);
+  }
+  .l4-impactTitle {
+    font-family: var(--font-display);
+    font-size: clamp(22px, 3vw, 34px);
+    font-weight: 800;
+    line-height: 1;
+    color: #fecaca;
+    text-shadow: 0 0 22px rgba(239, 68, 68, 0.55);
+    letter-spacing: 0.1em;
+  }
+  .l4-impactSub {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #a8b0ad;
+    line-height: 1.35;
+    letter-spacing: 0.04em;
+  }
+
+  /* ============================================
+     LANE STACK — below the grid, full width
+     ============================================ */
+  .l4-ritual {
+    position: relative; z-index: 5;
+    display: flex; flex-direction: column; gap: 5px;
+    border: 1px solid #2a2a2a; border-radius: 0 0 2px 2px;
+    border-top: none;
+    background: linear-gradient(180deg, #1a1a1a, #141414);
+    padding: 6px 10px 8px; margin: 0 6px 6px;
+    box-shadow:
+      inset 0 2px 12px rgba(0,0,0,.45),
+      0 -4px 10px rgba(0,0,0,.3);
+  }
+  .l4-lane {
+    border: 1px solid #3a3a3a; border-radius: 2px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0) 30%),
+      var(--l4-panel-face),
+      linear-gradient(180deg, #1f2022, #121315);
+    background-size: auto, 440px 440px, auto;
+    background-position: center top, center, center;
+    background-blend-mode: normal, overlay, normal;
+    padding: 9px 12px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.08),
+      inset 0 -2px 8px rgba(0,0,0,.45),
+      0 3px 8px rgba(0,0,0,.25);
+  }
+  .l4-lane.is-primary {
+    border-color: rgba(74,222,128,.4);
+    box-shadow: inset 0 0 0 1px rgba(74,222,128,.12), inset 0 1px 0 rgba(255,255,255,.04);
+  }
+  .l4-lane.is-pulse { animation: l4-lanePulse 1.2s ease-in-out; }
+  .l4-lane.is-cta-urgent.is-primary {
+    animation: l4-ctaUrgentPulse 2s ease-in-out infinite;
+  }
+  .l4-lane.is-cta-max.is-primary {
+    animation: l4-ctaMaxPulse 1.1s ease-in-out infinite;
+  }
+  .l4-lane.is-primaryNext {
+    border-color: rgba(74,222,128,.45);
+    box-shadow: inset 0 0 0 1px rgba(74,222,128,.15), 0 0 18px rgba(74,222,128,.1);
+  }
+  .l4-laneHead {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .l4-laneTitle {
+    color: #d4d9d6; font-size: clamp(14px, 1.25vw, 18px);
+    line-height: 1.25; letter-spacing: .02em; font-weight: 600;
+  }
+  .l4-laneBody { color: #7d8983; font-size: 12px; margin-top: 3px; line-height: 1.3; }
+  .l4-laneCta {
+    flex: 0 0 auto; min-height: 32px; border-radius: 2px;
+    font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+    padding: 0 14px; white-space: nowrap; letter-spacing: .04em;
+  }
+  .l4-laneCta.is-green {
+    border: 1px solid rgba(74,222,128,.55);
+    background: linear-gradient(180deg, #2a7f5b, #1d5c41);
+    color: #e8fff1; box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  .l4-laneCta.is-dim {
+    border: 1px solid #444; color: #8a928d;
+    background: linear-gradient(180deg, #262626, #1a1a1a);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04), inset 0 -2px 6px rgba(0,0,0,.3);
+  }
+  .l4-laneCta.is-error {
+    border-color: rgba(239,68,68,.6);
+    color: #fecaca;
+    background: linear-gradient(180deg, #3f2020, #2a1515);
+    animation: none;
+  }
+  .l4-laneCta.is-revive {
+    border-color: rgba(248, 113, 113, 0.75);
+    color: #fff;
+    background: linear-gradient(180deg, #b91c1c, #7f1d1d);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 0 18px rgba(239,68,68,.4);
+    animation: l4-revivePulse 1.05s ease-in-out infinite;
+  }
+  @keyframes l4-revivePulse {
+    0%, 100% { box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 0 14px rgba(239,68,68,.35); }
+    50% { box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 0 28px rgba(239,68,68,.55); }
+  }
+  .l4-ticker {
+    margin-top: 6px; font-size: 10px; letter-spacing: .1em;
+    color: #5a625e; text-transform: uppercase;
+  }
+  .l4-diamond { text-align: center; margin-top: 6px; font-size: 14px; color: #5a625e; }
+
+  /* RIGHT SIDEBAR */
+  .l4-right { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .l4-mapHeader { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .l4-mapTitle { color: #d0d5d2; font-size: 12px; font-weight: 700; letter-spacing: .04em; }
+  .l4-mapHamburger { font-size: 14px; color: #8a928d; }
+  .l4-map {
+    position: relative; border: 1px solid var(--l4-line); border-radius: 2px;
+    height: 200px; overflow: hidden;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.08),
+      inset 0 4px 14px rgba(0,0,0,.65);
+  }
+  .l4-mapBg {
+    position: absolute; inset: 0;
+    background:
+      var(--l4-map-art),
+      linear-gradient(180deg, #161918, #101211);
+    background-size: cover, auto;
+    background-repeat: no-repeat, no-repeat;
+    background-position: center top, center;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+  .l4-mapLines { position: absolute; inset: 0; z-index: 1; opacity: .5; }
+  .l4-mapLine { fill: none; stroke: var(--l4-green); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .6; }
+  .l4-mapNodes { position: absolute; inset: 0; z-index: 2; }
+  .l4-node {
+    position: absolute; transform: translate(-50%, -50%);
+    border: 0; background: transparent; color: #c6cbc8;
+    text-align: left; padding: 0; cursor: pointer; font-family: var(--font-mono);
+  }
+  .l4-nodeDot { width: 12px; height: 12px; display: block; border-radius: 50%; border: 1px solid #444; }
+  .l4-node.is-captured .l4-nodeDot {
+    background: radial-gradient(circle at 30% 30%, #86f7b6, #10b981);
+    border-color: rgba(74,222,128,.75); box-shadow: 0 0 10px rgba(74,222,128,.4);
+  }
+  .l4-node.is-director .l4-nodeDot,
+  .l4-node.is-general .l4-nodeDot {
+    background: radial-gradient(circle at 30% 30%, #fca5a5, #b91c1c);
+    border-color: rgba(239,68,68,.75); box-shadow: 0 0 10px rgba(239,68,68,.3);
+  }
+  .l4-node.is-selected .l4-nodeDot {
+    box-shadow: 0 0 0 2px rgba(74,222,128,.3), 0 0 12px rgba(74,222,128,.35);
+  }
+  .l4-nodeLabel { display: block; margin-top: 3px; font-size: 10px; white-space: nowrap; color: #c0c8c4; font-weight: 600; }
+  .l4-nodeSub { display: block; font-size: 9px; color: #7a8580; white-space: nowrap; font-style: italic; }
+
+  /* Dossier — DARK metal, no white anywhere */
+  .l4-dossier {
+    border: 1px solid var(--l4-line); border-radius: 2px;
+    background: linear-gradient(180deg, #1c1c1c, #161616);
+    background-image:
+      linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0) 26%),
+      var(--l4-panel-face),
+      linear-gradient(180deg, #1c1c1c, #161616);
+    background-size: auto, 440px 440px, auto;
+    background-blend-mode: normal, overlay, normal;
+    padding: 7px 10px; display: flex; flex-direction: column; gap: 3px;
+    color: #d0d5d2;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.08),
+      inset 0 2px 10px rgba(0,0,0,.55);
+  }
+  .l4-dossierHeader {
+    font-size: 11px; font-weight: 700; letter-spacing: .08em;
+    color: #a0a8a4; border-bottom: 1px solid #333; padding-bottom: 4px;
+  }
+  .l4-dossierState { font-size: 14px; font-weight: 800; color: #e8efe8; margin-top: 2px; }
+  .l4-dossierBody { display: flex; flex-direction: column; gap: 2px; }
+  .l4-dossierRow { font-size: 11px; line-height: 1.25; color: #b0b8b4; }
+  .l4-dossierRow .k { color: #7a8580; font-weight: 700; letter-spacing: .04em; }
+  .l4-dossierCta {
+    min-height: 28px; border-radius: 2px;
+    border: 1px solid #444;
+    background: linear-gradient(180deg, #262626, #1a1a1a);
+    color: #c0c8c4; font-family: var(--font-mono);
+    font-weight: 700; letter-spacing: .04em; font-size: 11px;
+    padding: 0 8px; margin-top: 4px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+  }
+
+  /* KEEP IN FRAME panel — dark */
+  .l4-keepInFrame {
+    border: 1px solid var(--l4-line); border-radius: 2px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0) 26%),
+      var(--l4-panel-face),
+      linear-gradient(180deg, #151515, #0e0e0e);
+    background-size: auto, 440px 440px, auto;
+    background-blend-mode: normal, overlay, normal;
+    padding: 8px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.06),
+      inset 0 2px 10px rgba(0,0,0,.5);
+    flex: 1;
+  }
+  .l4-keepTitle { font-size: 11px; font-weight: 700; color: #c0c8c4; letter-spacing: .06em; margin-bottom: 4px; }
+  .l4-keepBody { font-size: 10px; color: #7a8580; line-height: 1.35; }
+
+  /* Responsive — tablet / narrow desktop */
+  @media (max-width: 1200px) {
+    .l4-grid { grid-template-columns: 170px minmax(0, 1fr) 210px; }
+    .l4-panel { margin: 4px; }
+    .l4-boardStage { min-height: 240px; }
+    .l4-threatText { font-size: 14px; }
+  }
+
+  /* Responsive — mobile */
+  @media (max-width: 768px) {
+    .l4-grid {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto;
+    }
+    .l4-canvas { order: 0; }
+    .l4-left { order: 1; }
+    .l4-right { order: 2; }
+    .l4-panel { margin: 4px 4px 0; }
+    .l4-boardStage { min-height: 280px; aspect-ratio: 16 / 10; }
+    .l4-marketOverlay { width: 300px; max-width: 92%; padding: 6px 10px; }
+    .l4-overlayRow1 { font-size: 11px; white-space: normal; }
+    .l4-overlayRow2 { font-size: 11px; white-space: normal; }
+    .l4-overlayRow3 { font-size: 10px; }
+    .l4-ceilingBar { min-height: 28px; }
+    .l4-threatText { font-size: 12px; }
+    .l4-map { height: 180px; }
+    .l4-ritual { padding: 6px; gap: 4px; }
+    .l4-lane { padding: 8px 10px; }
+    .l4-laneTitle { font-size: 13px; }
+    .l4-laneCta { font-size: 10px; padding: 0 10px; min-height: 28px; }
+  }
+
+  /* Keep full-vision preview in 3-column layout even on smaller windows. */
+  .l4-fullvisionSurface .l4-grid {
+    grid-template-columns: 188px minmax(0, 1fr) 248px;
+  }
+  .l4-fullvisionSurface .l4-panel {
+    margin: 6px;
+  }
+  .l4-fullvisionSurface .l4-right {
+    margin-bottom: 0;
+  }
+}
