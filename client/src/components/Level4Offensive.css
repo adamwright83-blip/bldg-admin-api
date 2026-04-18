@@ -880,4 +880,229 @@
     .l4-dedicated .l4-lane { padding: 12px 14px; }
     .l4-dedicated .l4-laneCta { min-height: 36px; padding: 0 18px; }
   }
+
+  /* ============================================================
+     GAMEPLAY PASS — behavioral crusher states.
+     Motion is concentrated in (a) the crusher, (b) the active CTA,
+     (c) failure overlays, (d) revive effects. The rest of the page
+     holds still so these signals read as real threat, not decoration.
+     ============================================================ */
+
+  /* Crusher Y is derived from wall-clock idle via --l4-descent-progress.
+     Override the keyframe-driven transforms in the legacy is-wall-* classes
+     so a single deterministic source drives vertical position. */
+  .l4-canvasStack { --l4-descent-progress: 0; }
+  .l4-canvasStack .l4-ceiling.is-wall-top,
+  .l4-canvasStack .l4-ceiling.is-wall-descending,
+  .l4-canvasStack .l4-ceiling.is-wall-bottomed {
+    animation: none !important;
+    transform: translateY(calc(var(--l4-wall-drop, 380px) * var(--l4-descent-progress, 0)));
+    transition: transform 120ms linear;
+  }
+  .l4-canvasStack .l4-ceiling.is-wall-bottomed {
+    transform: translateY(var(--l4-wall-drop, 380px));
+  }
+  .l4-canvasStack .l4-ceiling.is-wall-resetting {
+    animation: none !important;
+    transform: translateY(0);
+    transition: transform var(--l4-wall-reset, 200ms) cubic-bezier(.22, 1, .28, 1);
+  }
+
+  /* STATE 2 — THREAT: vignette tightens as crusher descends. */
+  .l4-vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 6;
+    background:
+      radial-gradient(ellipse at center,
+        rgba(0,0,0,0) 42%,
+        rgba(0,0,0,.55) 78%,
+        rgba(0,0,0,.92) 100%);
+    box-shadow: inset 0 0 120px 40px rgba(0,0,0,.85);
+    opacity: 0;
+    transition: opacity 180ms linear;
+  }
+  .l4-canvas.is-impact .l4-vignette {
+    background:
+      radial-gradient(ellipse at center,
+        rgba(0,0,0,.35) 10%,
+        rgba(0,0,0,.82) 55%,
+        rgba(0,0,0,.98) 100%);
+    box-shadow: inset 0 0 200px 80px rgba(0,0,0,.98);
+  }
+
+  /* Mono terminal telemetry counter — the only number the user sees tick. */
+  .l4-telemetry {
+    margin-left: 12px;
+    padding: 2px 8px;
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    color: rgba(210, 120, 120, .55);
+    border: 1px solid rgba(210, 60, 60, 0);
+    border-radius: 3px;
+    background: rgba(0,0,0,.25);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    opacity: .55;
+    transition: color 200ms, border-color 200ms, opacity 200ms;
+  }
+  .l4-telemetry.is-active {
+    color: #ff4d4d;
+    border-color: rgba(255, 77, 77, .45);
+    opacity: 1;
+    text-shadow: 0 0 6px rgba(255, 77, 77, .5);
+  }
+
+  /* Avatar suppression during descent — grayscale + flattened saturation.
+     On impact we additionally drop the whole band into near-black. */
+  .l4-avatarLayer.is-threat .l4-figure {
+    filter: grayscale(.85) brightness(.78) contrast(.95)
+            drop-shadow(0 2px 0 rgba(0,0,0,.55))
+            drop-shadow(0 0 14px rgba(0,0,0,.65));
+    transition: filter 300ms linear;
+  }
+  .l4-avatarLayer.is-impact .l4-figure {
+    filter: grayscale(1) brightness(.28) contrast(1.1);
+  }
+
+  /* STATE 3 — IMPACT: red censor block over the avatar eye line. */
+  .l4-eyeCensor {
+    position: absolute;
+    left: 50%;
+    top: 48%;
+    transform: translate(-50%, -50%);
+    z-index: 9;
+    padding: 6px 18px;
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: .18em;
+    color: #0b0000;
+    background: #e30613;
+    box-shadow:
+      0 0 0 2px rgba(0,0,0,.85),
+      0 10px 40px rgba(227, 6, 19, .5);
+    text-shadow: 0 0 2px rgba(255,255,255,.35);
+    animation: l4-eyeCensorIn 180ms ease-out both;
+  }
+  @keyframes l4-eyeCensorIn {
+    0%   { transform: translate(-50%, -50%) scaleX(.12); opacity: 0; }
+    60%  { transform: translate(-50%, -50%) scaleX(1.06); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scaleX(1); opacity: 1; }
+  }
+
+  /* IMPACT overlay override: much heavier blackout + mono voice. */
+  .l4-canvas.is-impact .l4-impactOverlay {
+    background: rgba(0, 0, 0, .9);
+  }
+  .l4-canvas.is-impact .l4-impactTitle {
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+    font-size: clamp(18px, 1.9vw, 28px);
+    letter-spacing: .18em;
+    color: #ff3b3b;
+    text-shadow: 0 0 18px rgba(255, 59, 59, .55);
+  }
+
+  /* Dim the entire board texture under IMPACT so only the CTA & censor glow. */
+  .l4-boardStage.is-board-dim {
+    filter: brightness(.35) saturate(.55);
+  }
+
+  /* STATE 4 — REVIVE: 150ms white → neon-green flash over the board. */
+  .l4-reviveFlash {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    pointer-events: none;
+    animation: l4-reviveFlash var(--l4-flash-duration, 150ms) ease-out forwards;
+  }
+  @keyframes l4-reviveFlash {
+    0%   { background: rgba(255,255,255,.95); }
+    60%  { background: rgba(180,255,180,.85); }
+    100% { background: rgba(0, 255, 140, 0); }
+  }
+
+  .l4-reviveStamp {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 21;
+    padding: 10px 22px;
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+    font-size: clamp(13px, 1.15vw, 17px);
+    font-weight: 800;
+    letter-spacing: .22em;
+    color: #0b1f14;
+    background: #00ff8c;
+    border: 1px solid rgba(0, 255, 140, .8);
+    box-shadow:
+      0 0 0 2px rgba(0, 0, 0, .8),
+      0 0 32px rgba(0, 255, 140, .55),
+      0 0 90px rgba(0, 255, 140, .35);
+    animation: l4-reviveStamp var(--l4-stamp-duration, 1500ms) ease-out forwards;
+  }
+  @keyframes l4-reviveStamp {
+    0%   { opacity: 0; transform: translate(-50%, -50%) scale(.92); }
+    15%  { opacity: 1; transform: translate(-50%, -50%) scale(1.02); }
+    30%  { transform: translate(-50%, -50%) scale(1); }
+    80%  { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+  }
+
+  /* Board recoil — 200ms shake on the board + slight scale snap. */
+  .l4-boardStage.is-recoiling {
+    animation: l4-boardRecoil 380ms cubic-bezier(.2, .85, .25, 1) both;
+  }
+  @keyframes l4-boardRecoil {
+    0%   { transform: translate(0, 0) scale(1); }
+    12%  { transform: translate(-6px, -4px) scale(1.012); }
+    24%  { transform: translate(7px, 3px) scale(1.008); }
+    38%  { transform: translate(-4px, 2px) scale(1.004); }
+    54%  { transform: translate(3px, -2px) scale(1.002); }
+    100% { transform: translate(0, 0) scale(1); }
+  }
+
+  /* Strengthen the active lane CTA during descent so motion lives *here*,
+     not across the whole page. */
+  .l4-lane.is-cta-urgent .l4-laneCta {
+    animation: l4-ctaUrgentPulse 900ms ease-in-out infinite;
+  }
+  .l4-lane.is-cta-max .l4-laneCta {
+    animation: l4-ctaHeartbeat 680ms ease-in-out infinite;
+  }
+  @keyframes l4-ctaUrgentPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 77, 77, 0); }
+    50%      { box-shadow: 0 0 0 6px rgba(255, 77, 77, .22), 0 0 24px rgba(255, 77, 77, .35); }
+  }
+  @keyframes l4-ctaHeartbeat {
+    0%, 100% { transform: scale(1);     box-shadow: 0 0 0 0 rgba(255, 59, 59, 0); }
+    28%      { transform: scale(1.04);  box-shadow: 0 0 0 5px rgba(255, 59, 59, .35), 0 0 22px rgba(255, 59, 59, .55); }
+    52%      { transform: scale(.99); }
+    68%      { transform: scale(1.02); }
+  }
+
+  /* Selected captured map node glows green — single world element lighting up. */
+  .l4-node.is-captured.is-selected .l4-nodeDot,
+  .l4-dedicated .l4-node.is-captured .l4-nodeDot {
+    box-shadow: 0 0 0 2px rgba(0, 255, 140, .35), 0 0 16px rgba(0, 255, 140, .55);
+  }
+
+  /* Respect users who opt out of motion — pin values but keep color cues. */
+  @media (prefers-reduced-motion: reduce) {
+    .l4-boardStage.is-recoiling,
+    .l4-lane.is-cta-urgent .l4-laneCta,
+    .l4-lane.is-cta-max .l4-laneCta,
+    .l4-eyeCensor,
+    .l4-reviveFlash,
+    .l4-reviveStamp {
+      animation: none !important;
+    }
+    .l4-canvasStack .l4-ceiling {
+      transition: none !important;
+    }
+  }
 }

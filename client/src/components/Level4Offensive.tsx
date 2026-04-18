@@ -24,12 +24,20 @@ import mapPanelArt from "@/assets/l4/map_panel_art.png";
 type LaneId = 1 | 2 | 3;
 
 /**
- * Level 4 game loop (aligned with working Google AI Studio flow):
- * calm → descent → impact (fail) → revive → calm, or CTA success during calm/descent → resetting → calm|victory.
+ * Level 4 game loop — behavioral pressure model:
+ *   calm  (idle < 20 min OR outside work hours)
+ *   descent (20–50 min of idle; crusher lowers, vignette tightens, telemetry decays)
+ *   impact (≥50 min idle OR ceiling hit bottom; blackout + eye censor + locked revive CTA)
+ *   resetting (post-success flash/stamp/recoil)
+ *   victory (all 3 lanes cleared for the day)
+ *
+ * Transitions are driven by real wall-clock idle time stored in localStorage, so
+ * page refresh and re-entering /level4 do not reset the crusher.
  */
 type GamePhase = "calm" | "descent" | "impact" | "victory" | "resetting";
+type RevivePhase = "idle" | "flash" | "stamp";
 
-/** Maps phase → existing ceiling CSS states (no layout/CSS rewrites). */
+/** Maps phase → existing ceiling CSS states. */
 function wallVisualFromPhase(phase: GamePhase): "top" | "descending" | "bottomed" | "resetting" {
   if (phase === "resetting") return "resetting";
   if (phase === "descent") return "descending";
@@ -37,12 +45,46 @@ function wallVisualFromPhase(phase: GamePhase): "top" | "descending" | "bottomed
   return "top";
 }
 
-/** Tuned so a full lane cycle fits ~20–25s — impact is reachable without a 30s+ wait. */
-const L4_CALM_LANE1_MS = 6_000;
-const L4_CALM_LANE23_MS = 5_000;
-const L4_DESCENT_DURATION_MS = 14_000;
-const L4_WALL_RESET_SNAP_MS = 420;
+/** Behavioral timing — real minutes on a wall clock. */
+const L4_MIN = 60_000;
+const L4_IDLE_TO_THREAT_MS = 20 * L4_MIN;
+const L4_THREAT_DURATION_MS = 30 * L4_MIN;
+const L4_IMPACT_THRESHOLD_MS = L4_IDLE_TO_THREAT_MS + L4_THREAT_DURATION_MS;
+const L4_PARTIAL_RELIEF_MS = 0.15 * L4_IDLE_TO_THREAT_MS;
+/** Work hours window [start, end) in local time. Outside this, crusher is frozen in calm. */
+const L4_WORK_HOUR_START = 8;
+const L4_WORK_HOUR_END = 19;
+/** Render tick rate — the telemetry counter updates at this cadence (~10 Hz). */
+const L4_TICK_MS = 100;
+
+/** Revive choreography durations. */
+const L4_FLASH_DURATION_MS = 150;
+const L4_STAMP_DURATION_MS = 1_500;
+const L4_WALL_RESET_SNAP_MS = 200;
 const L4_FAILURE_PAUSE_MS = 3_000;
+
+/** localStorage keys — survive refresh so crusher state cannot be reset by leaving the page. */
+const L4_LS_LAST_ACTION = "l4.lastMeaningfulActionAt";
+const L4_LS_COMPLETED = "l4.completedLanes";
+const L4_LS_COMPLETED_DAY = "l4.completedDay";
+
+/** ?fast=1 URL flag compresses real minutes → seconds for visual QA. */
+function readFastFactor(): number {
+  if (typeof window === "undefined") return 1;
+  const p = new URLSearchParams(window.location.search).get("fast");
+  if (p === "1" || p === "true") return 60;
+  const n = p != null ? Number(p) : NaN;
+  return Number.isFinite(n) && n > 1 ? n : 1;
+}
+
+function isWorkHours(d = new Date()): boolean {
+  const h = d.getHours();
+  return h >= L4_WORK_HOUR_START && h < L4_WORK_HOUR_END;
+}
+
+function todayKey(d = new Date()): string {
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
 
 /** Max travel (px). Actual drop is clamped to the measured canvas stack so overflow:hidden never fully clips the crusher. */
 const L4_WALL_DROP_MAX_PX = 380;
@@ -142,31 +184,68 @@ export function Level4Offensive({
   lane3CtaLabel,
   lane3Stubbed = false,
 }: Level4OffensiveProps) {
+  const fastFactor = useMemo(readFastFactor, []);
+  const idleToThreatMs = L4_IDLE_TO_THREAT_MS / fastFactor;
+  const impactThresholdMs = L4_IMPACT_THRESHOLD_MS / fastFactor;
+  const partialReliefMs = L4_PARTIAL_RELIEF_MS / fastFactor;
+
   const [selectedNodeId, setSelectedNodeId] = useState<MapNodeId>("beaudry");
-  const [completedLanes, setCompletedLanes] = useState<Record<LaneId, boolean>>({
-    1: false,
-    2: false,
-    3: false,
+  const [completedLanes, setCompletedLanes] = useState<Record<LaneId, boolean>>(() => {
+    if (typeof window === "undefined") return { 1: false, 2: false, 3: false };
+    const savedDay = window.localStorage.getItem(L4_LS_COMPLETED_DAY);
+    const saved = window.localStorage.getItem(L4_LS_COMPLETED);
+    if (savedDay === todayKey() && saved) {
+      try {
+        const parsed = JSON.parse(saved) as Record<LaneId, boolean>;
+        return { 1: !!parsed[1], 2: !!parsed[2], 3: !!parsed[3] };
+      } catch {
+        /* fall through */
+      }
+    }
+    return { 1: false, 2: false, 3: false };
   });
   const [gamePhase, setGamePhase] = useState<GamePhase>("calm");
-  const [cycleNonce, setCycleNonce] = useState(0);
+  const [revivePhase, setRevivePhase] = useState<RevivePhase>("idle");
+  const [reviveLane, setReviveLane] = useState<LaneId | null>(null);
   const [lane1Pulse, setLane1Pulse] = useState(false);
   const [ctaErrorLane, setCtaErrorLane] = useState<LaneId | null>(null);
-  /** Unwired deploy lane clicked during calm — must wait for threat to arm (descent). */
   const [ctaWaitLane, setCtaWaitLane] = useState<LaneId | null>(null);
   const [descentPaused, setDescentPaused] = useState(false);
+
+  /** Wall-clock anchor for idle pressure. Persisted across refresh. */
+  const [lastActionAt, setLastActionAt] = useState<number>(() => {
+    if (typeof window === "undefined") return Date.now();
+    const raw = window.localStorage.getItem(L4_LS_LAST_ACTION);
+    const n = raw ? Number(raw) : NaN;
+    if (!Number.isFinite(n)) {
+      const now = Date.now();
+      window.localStorage.setItem(L4_LS_LAST_ACTION, String(now));
+      return now;
+    }
+    return n;
+  });
+  /** Tick value — drives telemetry counter and threshold transitions. */
+  const [nowTick, setNowTick] = useState(() => Date.now());
 
   const timersRef = useRef<number[]>([]);
   const canvasStackRef = useRef<HTMLDivElement | null>(null);
   const lane1Ref = useRef<HTMLDivElement | null>(null);
   const resetInFlightRef = useRef(false);
   const descentPausedRef = useRef(false);
-  /** Wall hits impact at this time (ms since epoch); extended when descent is paused for deploy failure. */
-  const impactDeadlineRef = useRef<number | null>(null);
 
   descentPausedRef.current = descentPaused;
   const wallVisual = wallVisualFromPhase(gamePhase);
   const spikeGradientId = `l4-spike-metal-${useId().replace(/:/g, "")}`;
+
+  /** Idle ms since last meaningful action, clamped at 0. */
+  const idleMs = Math.max(0, nowTick - lastActionAt);
+  /** 0 during calm, 0..1 during descent, 1 at/after impact threshold. */
+  const descentProgress =
+    idleMs <= idleToThreatMs
+      ? 0
+      : Math.min(1, (idleMs - idleToThreatMs) / (impactThresholdMs - idleToThreatMs));
+  const structuralIntegrity = Math.max(0, 100 - descentProgress * 100);
+  const workHoursActive = isWorkHours(new Date(nowTick));
 
   const syncWallDropToTrack = useCallback(() => {
     const el = canvasStackRef.current;
@@ -198,13 +277,24 @@ export function Level4Offensive({
 
   const activeLane = useMemo(() => nextActiveLane(completedLanes), [completedLanes]);
 
-  /** Parent can flag L1 done; never merge while wall reset timers are in flight. */
+  /** Tick — drives telemetry counter and wall-clock threshold transitions. */
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), L4_TICK_MS);
+    return () => window.clearInterval(id);
+  }, []);
+
+  /** Parent can flag L1 done; persist to localStorage so refresh does not undo completion. */
   useEffect(() => {
     if (!lane1Executed) return;
     setCompletedLanes((p) => {
       if (p[1]) return p;
       if (resetInFlightRef.current) return p;
-      return { ...p, 1: true };
+      const next = { ...p, 1: true } as Record<LaneId, boolean>;
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(L4_LS_COMPLETED, JSON.stringify(next));
+        window.localStorage.setItem(L4_LS_COMPLETED_DAY, todayKey());
+      }
+      return next;
     });
   }, [lane1Executed]);
 
@@ -212,71 +302,89 @@ export function Level4Offensive({
     if (gamePhase === "descent") setCtaWaitLane(null);
   }, [gamePhase]);
 
-  /** Primary game loop: calm → descent (timer), descent → impact (deadline), victory freezes the loop. */
+  /**
+   * Behavioral phase derivation — reads wall-clock idle, not a timer schedule.
+   * calm     : idleMs < idleToThreatMs  OR  outside work hours
+   * descent  : idleToThreatMs ≤ idleMs < impactThresholdMs
+   * impact   : idleMs ≥ impactThresholdMs
+   * victory  : all 3 lanes cleared today
+   * resetting: driven by runReviveSequence (flash/stamp)
+   */
   useEffect(() => {
     if (resetInFlightRef.current) return;
-    clearTimers();
+    if (revivePhase !== "idle") return;
 
     if (allLanesCleared(completedLanes)) {
-      setGamePhase("victory");
-      impactDeadlineRef.current = null;
-      return clearTimers;
+      if (gamePhase !== "victory") setGamePhase("victory");
+      return;
     }
 
-    if (activeLane === null) {
-      return clearTimers;
+    if (!workHoursActive) {
+      if (gamePhase !== "calm") setGamePhase("calm");
+      return;
     }
 
-    if (gamePhase === "victory" || gamePhase === "resetting" || gamePhase === "impact") {
-      return clearTimers;
+    if (descentPaused && gamePhase === "descent") return;
+
+    if (idleMs >= impactThresholdMs) {
+      if (gamePhase !== "impact") setGamePhase("impact");
+    } else if (idleMs >= idleToThreatMs) {
+      if (gamePhase !== "descent") setGamePhase("descent");
+    } else {
+      if (gamePhase !== "calm") setGamePhase("calm");
     }
+  }, [
+    idleMs,
+    idleToThreatMs,
+    impactThresholdMs,
+    workHoursActive,
+    descentPaused,
+    completedLanes,
+    gamePhase,
+    revivePhase,
+  ]);
 
-    if (gamePhase === "calm") {
-      const calmMs = activeLane === 1 ? L4_CALM_LANE1_MS : L4_CALM_LANE23_MS;
-      schedule(() => {
-        if (resetInFlightRef.current) return;
-        impactDeadlineRef.current = Date.now() + L4_DESCENT_DURATION_MS;
-        setGamePhase("descent");
-      }, calmMs);
-      return clearTimers;
-    }
-
-    if (gamePhase === "descent") {
-      if (descentPaused) {
-        return clearTimers;
-      }
-      const deadline = impactDeadlineRef.current ?? Date.now() + L4_DESCENT_DURATION_MS;
-      if (!impactDeadlineRef.current) {
-        impactDeadlineRef.current = deadline;
-      }
-      const remaining = Math.max(0, impactDeadlineRef.current - Date.now());
-      schedule(() => {
-        if (resetInFlightRef.current || descentPausedRef.current) return;
-        setGamePhase("impact");
-      }, remaining);
-      return clearTimers;
-    }
-
-    return clearTimers;
-  }, [gamePhase, activeLane, cycleNonce, completedLanes, descentPaused, clearTimers, schedule]);
-
-  const runWallResetAfterSuccess = useCallback(
+  /**
+   * FULL RESET sequence on successful deploy/execute:
+   *   150ms flash → 1500ms stamp → lane locked green, crusher snaps to top, idle clock resets.
+   */
+  const runReviveSequence = useCallback(
     (lane: LaneId) => {
       resetInFlightRef.current = true;
       clearTimers();
       setDescentPaused(false);
-      impactDeadlineRef.current = null;
+      setReviveLane(lane);
+      setRevivePhase("flash");
       setGamePhase("resetting");
+
+      const now = Date.now();
+      setLastActionAt(now);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(L4_LS_LAST_ACTION, String(now));
+      }
+
+      schedule(() => {
+        setRevivePhase("stamp");
+      }, L4_FLASH_DURATION_MS);
+
       schedule(() => {
         setCompletedLanes((p) => {
           const next = { ...p, [lane]: true };
-          const allDone = next[1] && next[2] && next[3];
-          setGamePhase(allDone ? "victory" : "calm");
-          resetInFlightRef.current = false;
-          setCycleNonce((n) => n + 1);
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem(L4_LS_COMPLETED, JSON.stringify(next));
+            window.localStorage.setItem(L4_LS_COMPLETED_DAY, todayKey());
+          }
           return next;
         });
-      }, L4_WALL_RESET_SNAP_MS);
+        setRevivePhase("idle");
+        setReviveLane(null);
+        resetInFlightRef.current = false;
+        const final = Date.now();
+        setLastActionAt(final);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(L4_LS_LAST_ACTION, String(final));
+        }
+      }, L4_FLASH_DURATION_MS + L4_STAMP_DURATION_MS);
     },
     [clearTimers, schedule]
   );
@@ -284,31 +392,22 @@ export function Level4Offensive({
   async function tryCompleteLane(lane: LaneId) {
     if (activeLane !== lane) return;
     if (resetInFlightRef.current) return;
-    if (gamePhase === "resetting") return;
-
-    if (gamePhase === "impact") {
-      clearTimers();
-      impactDeadlineRef.current = null;
-      setDescentPaused(false);
-      setCtaErrorLane(null);
-      setGamePhase("calm");
-      setCycleNonce((n) => n + 1);
-      return;
-    }
-
-    if (gamePhase !== "calm" && gamePhase !== "descent") return;
+    if (revivePhase !== "idle") return;
 
     const fn = lane === 1 ? onDeployLane1 : lane === 2 ? onDeployLane2 : onDeployLane3;
 
-    // No deploy hook: do not allow a silent one-click clear during calm (that made L2/L3 feel like no game).
+    // No wired deploy hook: treat the click as the full success path.
     if (!fn) {
-      if (gamePhase === "calm") {
-        setCtaWaitLane(lane);
-        window.setTimeout(() => setCtaWaitLane(null), 1_400);
-        return;
-      }
-      runWallResetAfterSuccess(lane);
+      runReviveSequence(lane);
       return;
+    }
+
+    // PARTIAL RELIEF: opening a preview / drafting pushes idle back by +15% of idle-to-threat.
+    const now = Date.now();
+    const boosted = Math.min(now, lastActionAt + partialReliefMs);
+    setLastActionAt(boosted);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(L4_LS_LAST_ACTION, String(boosted));
     }
 
     const ok = await resolveDeploy(fn);
@@ -316,14 +415,12 @@ export function Level4Offensive({
       setCtaErrorLane(lane);
       window.setTimeout(() => setCtaErrorLane(null), L4_FAILURE_PAUSE_MS);
       setDescentPaused(true);
-      impactDeadlineRef.current =
-        (impactDeadlineRef.current ?? Date.now() + L4_DESCENT_DURATION_MS) + L4_FAILURE_PAUSE_MS;
       window.setTimeout(() => setDescentPaused(false), L4_FAILURE_PAUSE_MS);
       return;
     }
 
     setCtaErrorLane(null);
-    runWallResetAfterSuccess(lane);
+    runReviveSequence(lane);
   }
 
   function scrollToLane1() {
@@ -344,9 +441,10 @@ export function Level4Offensive({
         "--l4-hud-plate": `url(${hudPlate})`,
         "--l4-you-are-here": `url(${youAreHereBadge})`,
         "--l4-map-art": `url(${mapPanelArt})`,
-        "--l4-descent-duration": `${L4_DESCENT_DURATION_MS}ms`,
         "--l4-wall-reset": `${L4_WALL_RESET_SNAP_MS}ms`,
         "--l4-wall-drop": `${L4_WALL_DROP_MAX_PX}px`,
+        "--l4-flash-duration": `${L4_FLASH_DURATION_MS}ms`,
+        "--l4-stamp-duration": `${L4_STAMP_DURATION_MS}ms`,
         "--l4-ceiling-rig-h": "4.5rem",
       }) as CSSProperties,
     []
@@ -383,20 +481,24 @@ export function Level4Offensive({
     };
   }, [selectedNode.id]);
 
-  const ceilingStatusLabel =
-    gamePhase === "calm"
-      ? "TOP"
-      : gamePhase === "descent"
-        ? "DESCENDING"
-        : gamePhase === "impact"
-          ? "IMPACT"
-          : gamePhase === "resetting"
-            ? "RESET"
-            : gamePhase === "victory"
-              ? "CLEAR"
-              : "TOP";
+  const ceilingStatusLabel = !workHoursActive
+    ? "OFF-HOURS"
+    : revivePhase !== "idle"
+      ? "REVIVE"
+      : gamePhase === "calm"
+        ? "TOP"
+        : gamePhase === "descent"
+          ? "DESCENDING"
+          : gamePhase === "impact"
+            ? "IMPACT"
+            : gamePhase === "resetting"
+              ? "RESET"
+              : gamePhase === "victory"
+                ? "CLEAR"
+                : "TOP";
 
   const boardTone = gamePhase === "impact" ? "is-board-dim" : "is-board-warm";
+  const vignetteOpacity = gamePhase === "impact" ? 1 : descentProgress;
 
   const laneUrgency = (lane: LaneId) => {
     if (activeLane !== lane) return "";
@@ -461,17 +563,34 @@ export function Level4Offensive({
           <div className="l4-threatCeiling">
             <div className="l4-ceilingBadge">
               <span className="l4-ceilingBadgeIcon" aria-hidden>
-                {gamePhase === "resetting" ? "↑" : "↓"}
+                {revivePhase !== "idle" ? "↑" : gamePhase === "resetting" ? "↑" : "↓"}
               </span>
               <span className="l4-ceilingBadgeLabel">CEILING STATUS:</span>
               <span className="l4-ceilingBadgeValue">{ceilingStatusLabel}</span>
             </div>
+            <div
+              className={cn(
+                "l4-telemetry",
+                (gamePhase === "descent" || gamePhase === "impact") && "is-active"
+              )}
+              aria-hidden
+            >
+              STRUCTURAL INTEGRITY: {structuralIntegrity.toFixed(3)}%
+            </div>
           </div>
 
-          <div ref={canvasStackRef} className="l4-canvasStack">
+          <div
+            ref={canvasStackRef}
+            className="l4-canvasStack"
+            style={{ ["--l4-descent-progress" as any]: String(descentProgress) }}
+          >
             <div className="l4-ceilingSpacer" aria-hidden />
             <div
-              className={cn("l4-boardStage", boardTone)}
+              className={cn(
+                "l4-boardStage",
+                boardTone,
+                revivePhase !== "idle" && "is-recoiling"
+              )}
               style={{ backgroundImage: `url(${boardPng})` }}
             >
             {showDebugZones && (
@@ -505,7 +624,14 @@ export function Level4Offensive({
               <div className="l4-overlayRow3">Impending hope of bought house and marriage</div>
             </div>
 
-            <div className="l4-avatarLayer" aria-hidden>
+            <div
+              className={cn(
+                "l4-avatarLayer",
+                gamePhase === "descent" && "is-threat",
+                gamePhase === "impact" && "is-impact"
+              )}
+              aria-hidden
+            >
               <img
                 src={manFigure}
                 alt=""
@@ -524,12 +650,32 @@ export function Level4Offensive({
               YOU ARE HERE
             </div>
 
+            <div
+              className="l4-vignette"
+              style={{ opacity: vignetteOpacity }}
+              aria-hidden
+            />
+
             {gamePhase === "impact" && (
-              <div className="l4-impactOverlay" role="alert" aria-live="assertive">
-                <div className="l4-impactOverlayInner">
-                  <span className="l4-impactTitle">IMPACT</span>
-                  <span className="l4-impactSub">Use REVIVE on the active lane to reset the threat.</span>
+              <>
+                <div className="l4-eyeCensor" aria-hidden>
+                  [ SIGNAL LOST ]
                 </div>
+                <div className="l4-impactOverlay" role="alert" aria-live="assertive">
+                  <div className="l4-impactOverlayInner">
+                    <span className="l4-impactTitle">EXTRACTION FAILED // CYCLE BROKEN</span>
+                    <span className="l4-impactSub">Use REVIVE on the active lane to reset the threat.</span>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {revivePhase === "flash" && (
+              <div className="l4-reviveFlash" aria-hidden />
+            )}
+            {revivePhase === "stamp" && (
+              <div className="l4-reviveStamp" role="status" aria-live="polite">
+                [ THREAT NEUTRALIZED. FUTURE SECURED. ]
               </div>
             )}
           </div>
@@ -685,7 +831,7 @@ export function Level4Offensive({
                   : ctaErrorLane === 1
                     ? "RETRY →"
                     : gamePhase === "impact" && activeLane === 1
-                      ? "REVIVE →"
+                      ? "[ REVIVE / EXECUTE ]"
                       : (lane1CtaLabel ?? "DEPLOY SMS →")}
             </button>
           </div>
@@ -729,7 +875,7 @@ export function Level4Offensive({
                   : ctaErrorLane === 2
                     ? "RETRY →"
                     : gamePhase === "impact" && activeLane === 2
-                      ? "REVIVE →"
+                      ? "[ REVIVE / EXECUTE ]"
                       : (lane2CtaLabel ?? "INTEGRATE STEP →")}
             </button>
           </div>
@@ -766,7 +912,7 @@ export function Level4Offensive({
                   : ctaErrorLane === 3
                     ? "RETRY →"
                     : gamePhase === "impact" && activeLane === 3
-                      ? "REVIVE →"
+                      ? "[ REVIVE / EXECUTE ]"
                       : (lane3CtaLabel ?? (lane3Stubbed ? "ACKNOWLEDGE STUB →" : "GENERATE FLYER →"))}
             </button>
           </div>
