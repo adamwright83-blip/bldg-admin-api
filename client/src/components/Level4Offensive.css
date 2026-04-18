@@ -1011,24 +1011,77 @@
     filter: brightness(.35) saturate(.55);
   }
 
-  /* STATE 4 — REVIVE: hard white flashbang, hold ~260ms, then fade through neon green.
-     Deliberately longer than the 150ms spec because a 150ms flash reads as "UI hiccup"
-     during a deploy flow. This needs to be felt as an event. */
-  .l4-reviveFlash {
-    position: absolute;
+  /* STATE 4 — REVIVE FLASHBANG. Rendered at SECTION level (sibling of .l4-grid), not
+     inside .l4-boardStage, because boardStage has overflow:hidden and gets a CSS
+     filter during recoil — filters create a stacking context that clips children
+     and isolates mix-blend-mode. Section-level + position:fixed + z-index:10000
+     guarantees the flash paints over the whole surface including the closing
+     Radix dialog backdrop. 150ms hard white, then 320ms fade through neon green. */
+  .l4-reviveFlashLayer {
+    position: fixed;
     inset: 0;
-    z-index: 30;
+    z-index: 10000;
     pointer-events: none;
-    animation: l4-reviveFlash 620ms cubic-bezier(.2, .9, .3, 1) forwards;
-    mix-blend-mode: screen;
+    animation: l4-reviveFlashLayer 470ms linear forwards;
   }
-  @keyframes l4-reviveFlash {
+  @keyframes l4-reviveFlashLayer {
     0%   { background: rgba(255, 255, 255, 1); }
-    25%  { background: rgba(255, 255, 255, .98); }
-    48%  { background: rgba(220, 255, 220, .92); }
-    70%  { background: rgba(120, 255, 170, .62); }
+    32%  { background: rgba(255, 255, 255, 1); }
+    50%  { background: rgba(180, 255, 195, .95); }
+    72%  { background: rgba(40, 255, 140, .75); }
     100% { background: rgba(0, 255, 140, 0); }
   }
+
+  /* Legacy inline flash (kept as a no-op fallback; new flow uses l4-reviveFlashLayer). */
+  .l4-reviveFlash { display: none; }
+
+  /* Section-level stamp layer — full viewport centered reward text. */
+  .l4-reviveStampLayer {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    animation: l4-reviveStampLayerIn 1500ms cubic-bezier(.2, .9, .3, 1) forwards;
+  }
+  .l4-reviveStampInner {
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+    font-weight: 900;
+    font-size: clamp(22px, 3.2vw, 44px);
+    letter-spacing: .26em;
+    color: #00ff8c;
+    padding: 14px 36px;
+    border: 2px solid #00ff8c;
+    background: rgba(0, 24, 12, .92);
+    text-shadow:
+      0 0 8px rgba(0, 255, 140, .85),
+      0 0 28px rgba(0, 255, 140, .5);
+    box-shadow:
+      0 0 0 2px rgba(0, 0, 0, .9),
+      0 0 60px rgba(0, 255, 140, .65),
+      0 0 180px rgba(0, 255, 140, .35);
+  }
+  .l4-reviveStampSub {
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: .2em;
+    color: rgba(0, 255, 140, .75);
+    text-transform: uppercase;
+  }
+  @keyframes l4-reviveStampLayerIn {
+    0%   { opacity: 0; transform: scale(.92); }
+    10%  { opacity: 1; transform: scale(1.03); }
+    22%  { transform: scale(1); }
+    82%  { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  /* Legacy inline stamp (kept as no-op fallback). */
+  .l4-reviveStamp { display: none; }
 
   .l4-reviveStamp {
     position: absolute;
@@ -1058,9 +1111,11 @@
     100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
   }
 
-  /* Board recoil — rapid, jagged pixel translations. Reads as heavy mechanical impact,
-     not a soft wiggle. Step count is high and offsets change direction every beat so it
-     never eases — every frame snaps. */
+  /* Board recoil — rapid, jagged pixel translations on the entire canvas stack
+     (not just boardStage), so the crusher, ceiling badge, and avatars all shake
+     together. Reads as heavy mechanical impact, not a soft wiggle. steps(1, end)
+     means no easing — every frame snaps. */
+  .l4-canvasStack.is-recoiling,
   .l4-boardStage.is-recoiling {
     animation: l4-boardRecoil 540ms steps(1, end) both;
     will-change: transform, filter;

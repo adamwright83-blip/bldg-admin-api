@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Level4Offensive } from "./Level4Offensive";
+import { Level4Offensive, type Level4OffensiveHandle } from "./Level4Offensive";
 
 type GeneratedCopy = {
   headline: string;
@@ -90,6 +90,9 @@ export function Level4OffensiveHost() {
   const [modalError, setModalError] = useState<string | null>(null);
   /** Resolves the crusher-game promise once the modal is dismissed or deploy completes. */
   const resolverRef = useRef<((ok: boolean) => void) | null>(null);
+  /** Imperative handle to the crusher UI — used to force-fire revive from the deploy
+   *  success path even if the promise-driven child trigger ever loses its resolution. */
+  const l4Ref = useRef<Level4OffensiveHandle>(null);
   /** When true, lane 2 runs on a client-only candidate with a no-op deploy. */
   const [syntheticLane2Active, setSyntheticLane2Active] = useState(false);
 
@@ -235,14 +238,23 @@ export function Level4OffensiveHost() {
     []
   );
 
+  const laneForModal = useCallback((m: NonNullable<ModalState>): 1 | 2 | 3 => {
+    if (m.kind === "building_penetration") return 1;
+    if (m.kind === "referral_request") return 2;
+    return 3;
+  }, []);
+
   const confirmDeploy = useCallback(async () => {
     if (!modal) return;
+    const lane = laneForModal(modal);
     // SYNTHETIC LANE 2 path: short visual pause, no mutation, no cache invalidate.
     if (modal.kind === "referral_request" && syntheticLane2Active) {
       setModalBusy("deploying");
       setModalError(null);
       await new Promise((r) => setTimeout(r, 280));
       closeModal(true);
+      // Belt-and-suspenders: force the revive from here so the payoff is guaranteed.
+      queueMicrotask(() => l4Ref.current?.forceRevive(lane));
       return;
     }
     setModalBusy("deploying");
@@ -271,11 +283,15 @@ export function Level4OffensiveHost() {
       }
       await utils.admin.getLevel4OffensiveState.invalidate();
       closeModal(true);
+      // Belt-and-suspenders: force revive so the dopamine hit fires even if the
+      // promise-driven path in tryCompleteLane loses its resolution across the
+      // tRPC invalidation cycle. runReviveSequence is guarded against double-fire.
+      queueMicrotask(() => l4Ref.current?.forceRevive(lane));
     } catch (e) {
       setModalBusy("idle");
       setModalError(e instanceof Error ? e.message : "Deploy failed.");
     }
-  }, [modal, execAction, utils, closeModal, syntheticLane2Active]);
+  }, [modal, execAction, utils, closeModal, syntheticLane2Active, laneForModal]);
 
   // Honest lane labels derived from real state.
   const lane1Title = topBuilding
@@ -313,6 +329,7 @@ export function Level4OffensiveHost() {
   return (
     <>
       <Level4Offensive
+        ref={l4Ref}
         onDeployLane1={openBuildingPenetration}
         onDeployLane2={openReferralRequest}
         onDeployLane3={openMarketHole}

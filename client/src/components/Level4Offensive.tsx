@@ -1,8 +1,11 @@
 import {
   type CSSProperties,
+  type ForwardedRef,
+  forwardRef,
   useCallback,
   useEffect,
   useId,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -169,28 +172,39 @@ export type Level4OffensiveProps = {
   syntheticLane2Active?: boolean;
 };
 
-export function Level4Offensive({
-  className,
-  soberDays = 2114,
-  onDeployLane1,
-  onDeployLane2,
-  onDeployLane3,
-  lane1Executed = false,
-  lane1Title,
-  lane1Body,
-  lane1CtaLabel,
-  lane2Title,
-  lane2Body,
-  lane2CtaLabel,
-  lane2Disabled = false,
-  lane3Title,
-  lane3Body,
-  lane3CtaLabel,
-  lane3Stubbed = false,
-  onInjectSyntheticLane2,
-  onResetSyntheticLane2,
-  syntheticLane2Active = false,
-}: Level4OffensiveProps) {
+/** Imperative handle so the Host can force revive / reset from the deploy-success path
+ *  as belt-and-suspenders if the promise-driven trigger ever loses its resolution. */
+export type Level4OffensiveHandle = {
+  forceRevive: (lane?: LaneId) => void;
+  forcePhase: (phase: GamePhase | null) => void;
+  resetCycle: () => void;
+};
+
+export const Level4Offensive = forwardRef(function Level4Offensive(
+  {
+    className,
+    soberDays = 2114,
+    onDeployLane1,
+    onDeployLane2,
+    onDeployLane3,
+    lane1Executed = false,
+    lane1Title,
+    lane1Body,
+    lane1CtaLabel,
+    lane2Title,
+    lane2Body,
+    lane2CtaLabel,
+    lane2Disabled = false,
+    lane3Title,
+    lane3Body,
+    lane3CtaLabel,
+    lane3Stubbed = false,
+    onInjectSyntheticLane2,
+    onResetSyntheticLane2,
+    syntheticLane2Active = false,
+  }: Level4OffensiveProps,
+  handleRef: ForwardedRef<Level4OffensiveHandle>
+) {
   /** ?fast=N is the initial seed; Simulation Override can change it at runtime. */
   const [fastFactor, setFastFactor] = useState<number>(readFastFactor);
   const idleToThreatMs = L4_IDLE_TO_THREAT_MS / fastFactor;
@@ -373,10 +387,13 @@ export function Level4Offensive({
 
   /**
    * FULL RESET sequence on successful deploy/execute:
-   *   150ms flash → 1500ms stamp → lane locked green, crusher snaps to top, idle clock resets.
+   *   620ms flash → 1500ms stamp → lane locked green, crusher snaps to top, idle clock resets.
+   * Guarded against double-fire so the child-promise path and the Host imperative ref path
+   * are safely idempotent when both try to kick off a revive for the same deploy.
    */
   const runReviveSequence = useCallback(
     (lane: LaneId) => {
+      if (resetInFlightRef.current) return;
       resetInFlightRef.current = true;
       clearTimers();
       setDescentPaused(false);
@@ -493,6 +510,20 @@ export function Level4Offensive({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [simOpen]);
+
+  useImperativeHandle(
+    handleRef,
+    (): Level4OffensiveHandle => ({
+      forceRevive: (lane) => {
+        const target = lane ?? nextActiveLane(completedLanes) ?? 1;
+        setForcedPhase(null);
+        runReviveSequence(target);
+      },
+      forcePhase,
+      resetCycle,
+    }),
+    [completedLanes, runReviveSequence, forcePhase, resetCycle]
+  );
 
   async function tryCompleteLane(lane: LaneId) {
     if (activeLane !== lane) return;
@@ -686,16 +717,12 @@ export function Level4Offensive({
 
           <div
             ref={canvasStackRef}
-            className="l4-canvasStack"
+            className={cn("l4-canvasStack", revivePhase !== "idle" && "is-recoiling")}
             style={{ ["--l4-descent-progress" as any]: String(descentProgress) }}
           >
             <div className="l4-ceilingSpacer" aria-hidden />
             <div
-              className={cn(
-                "l4-boardStage",
-                boardTone,
-                revivePhase !== "idle" && "is-recoiling"
-              )}
+              className={cn("l4-boardStage", boardTone)}
               style={{ backgroundImage: `url(${boardPng})` }}
             >
             {showDebugZones && (
@@ -773,15 +800,6 @@ export function Level4Offensive({
                   </div>
                 </div>
               </>
-            )}
-
-            {revivePhase === "flash" && (
-              <div className="l4-reviveFlash" aria-hidden />
-            )}
-            {revivePhase === "stamp" && (
-              <div className="l4-reviveStamp" role="status" aria-live="polite">
-                [ THREAT NEUTRALIZED. FUTURE SECURED. ]
-              </div>
             )}
           </div>
 
@@ -1029,6 +1047,18 @@ export function Level4Offensive({
         </div>
       </div>
 
+      {/* Section-level payoff overlays — lifted OUT of .l4-boardStage so they are not
+          clipped by its overflow/filter stacking context and so they paint over the
+          closing Radix dialog backdrop during a successful deploy. position: fixed
+          guarantees full-viewport coverage regardless of scroll or ancestor overflow. */}
+      {revivePhase === "flash" && <div className="l4-reviveFlashLayer" aria-hidden />}
+      {revivePhase === "stamp" && (
+        <div className="l4-reviveStampLayer" role="status" aria-live="polite">
+          <div className="l4-reviveStampInner">[ THREAT NEUTRALIZED ]</div>
+          <div className="l4-reviveStampSub">target secured · future reclaimed</div>
+        </div>
+      )}
+
       {/* Discreet footer trigger — double-chevron matches the tactical chrome. */}
       <button
         type="button"
@@ -1061,7 +1091,7 @@ export function Level4Offensive({
       )}
     </section>
   );
-}
+});
 
 type SimulationOverrideProps = {
   onClose: () => void;
