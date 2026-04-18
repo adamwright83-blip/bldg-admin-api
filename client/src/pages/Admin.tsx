@@ -8,7 +8,7 @@ import { CustomerProfileDrawer } from "@/components/CustomerProfileDrawer";
 import { CustomersTab } from "@/components/CustomersTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, Check, Copy, AlertCircle, ChevronLeft, ChevronRight, MapPin, Phone, MessageSquare, Package, Menu } from "lucide-react";
+import { Loader2, Search, Check, Copy, AlertCircle, ChevronLeft, ChevronRight, MapPin, Phone, MessageSquare, Package, Menu, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -828,8 +828,17 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
 
   // Wash & fold state
   const [weightLbs, setWeightLbs] = useState("");
+  const [bags, setBags] = useState<number[]>([]);
   const [selectedUpcharges, setSelectedUpcharges] = useState<Record<string, boolean>>({});
   const [flatRateQtys, setFlatRateQtys] = useState<Record<string, number>>({});
+
+  // Running weight = saved bags + current valid unsaved input. Single source of truth
+  // fed into existing W&F pricing + saveIntake so multi-bag intake doesn't touch schema.
+  const currentInputWeight = (() => {
+    const n = parseFloat(weightLbs);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  })();
+  const effectiveWeightLbs = bags.reduce((s, b) => s + b, 0) + currentInputWeight;
 
   // Dry cleaning state
   const [dcQtys, setDcQtys] = useState<Record<string, number>>({});
@@ -866,7 +875,7 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
     const disc = parseFloat(discountPercent) || 0;
 
     // Calculate W&F section
-    const w = parseFloat(weightLbs) || 0;
+    const w = effectiveWeightLbs;
     const upcharges: Record<string, UpchargeEntry> = {};
     WF_UPCHARGES.forEach((u) => {
       if (selectedUpcharges[u.id]) {
@@ -901,7 +910,7 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
       subtotalCents: wfTotal.subtotalCents,
       totalCents: wfTotal.totalCents,
     };
-  }, [order, weightLbs, selectedUpcharges, flatRateQtys, dcQtys, discountPercent, catalogRows]);
+  }, [order, effectiveWeightLbs, selectedUpcharges, flatRateQtys, dcQtys, discountPercent, catalogRows]);
 
   const handleCharge = async () => {
     if (!order) return;
@@ -929,7 +938,7 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
     // Save intake data first
     await saveIntake.mutateAsync({
       orderId: order.id,
-      weightLbs: isWF ? parseFloat(weightLbs) || 0 : undefined,
+      weightLbs: isWF ? effectiveWeightLbs : undefined,
       subtotal: centsToDollars(totals.subtotalCents),
       discountPercent: discountPercent || "0",
       total: centsToDollars(totals.totalCents),
@@ -1057,6 +1066,9 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
           <WashFoldIntake
             weightLbs={weightLbs}
             setWeightLbs={setWeightLbs}
+            bags={bags}
+            setBags={setBags}
+            effectiveWeightLbs={effectiveWeightLbs}
             selectedUpcharges={selectedUpcharges}
             setSelectedUpcharges={setSelectedUpcharges}
             flatRateQtys={flatRateQtys}
@@ -1127,31 +1139,90 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
 }
 
 /* ===== WASH & FOLD INTAKE ===== */
+function formatBagWeight(n: number): string {
+  return `${n}lb`;
+}
+
 function WashFoldIntake({
-  weightLbs, setWeightLbs, selectedUpcharges, setSelectedUpcharges, flatRateQtys, setFlatRateQtys,
+  weightLbs, setWeightLbs, bags, setBags, effectiveWeightLbs,
+  selectedUpcharges, setSelectedUpcharges, flatRateQtys, setFlatRateQtys,
 }: {
   weightLbs: string;
   setWeightLbs: (v: string) => void;
+  bags: number[];
+  setBags: (v: number[]) => void;
+  effectiveWeightLbs: number;
   selectedUpcharges: Record<string, boolean>;
   setSelectedUpcharges: (v: Record<string, boolean>) => void;
   flatRateQtys: Record<string, number>;
   setFlatRateQtys: (v: Record<string, number>) => void;
 }) {
+  const weightInputRef = useRef<HTMLInputElement>(null);
+
+  const addBag = () => {
+    const n = parseFloat(weightLbs);
+    if (!Number.isFinite(n) || n <= 0) return;
+    setBags([...bags, n]);
+    setWeightLbs("");
+    weightInputRef.current?.focus();
+  };
+
+  const removeBag = (idx: number) => {
+    setBags(bags.filter((_, i) => i !== idx));
+  };
+
   return (
     <>
       <div className="mb-6">
         <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">Weight (lbs)</label>
-        <Input
-          type="number"
-          step="0.1"
-          value={weightLbs}
-          onChange={(e) => setWeightLbs(e.target.value)}
-          placeholder="0.0"
-          className="w-40 bg-white border-black/20"
-        />
-        {parseFloat(weightLbs) > 0 && (
+        <div className="flex items-center gap-2">
+          <Input
+            ref={weightInputRef}
+            type="number"
+            step="0.1"
+            value={weightLbs}
+            onChange={(e) => setWeightLbs(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addBag();
+              }
+            }}
+            placeholder="0.0"
+            className="w-40 bg-white border-black/20"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={addBag}
+            className="border-black text-black h-9 px-3 text-sm"
+          >
+            Next Bag
+          </Button>
+        </div>
+        {bags.length > 0 && (
+          <ul className="mt-2 space-y-1">
+            {bags.map((b, i) => (
+              <li
+                key={`${i}-${b}`}
+                className="flex items-center justify-between w-40 text-sm text-black/80 border border-black/10 px-2 py-1"
+              >
+                <span>{formatBagWeight(b)}</span>
+                <button
+                  type="button"
+                  onClick={() => removeBag(i)}
+                  aria-label={`Remove bag ${i + 1}`}
+                  className="text-black/40 hover:text-red-600"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {effectiveWeightLbs > 0 && (
           <p className="text-xs text-black/40 mt-1">
-            Base: {weightLbs} lbs × $2.50 = ${centsToDollars(Math.round(parseFloat(weightLbs) * WF_RATE_PER_LB_CENTS))}
+            Base: {effectiveWeightLbs} lbs × $2.50 = ${centsToDollars(Math.round(effectiveWeightLbs * WF_RATE_PER_LB_CENTS))}
           </p>
         )}
       </div>
