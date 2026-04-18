@@ -69,6 +69,25 @@ export default function AdminHostApp() {
     return <LoginForm role="admin" onSuccess={() => window.location.reload()} />;
   }
 
+  if (isLevel4) {
+    return (
+      <div
+        className="l4-dedicated min-h-screen w-full bg-[#0e1111] text-[#d1d5db]"
+        style={{ fontFamily: '"Inter", system-ui, sans-serif' }}
+      >
+        <Link
+          href="/"
+          className="fixed top-3 left-3 z-50 inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-black/40 px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-white/65 hover:text-white hover:border-white/25 hover:bg-black/60 backdrop-blur-sm transition-colors"
+        >
+          ← Exit Level 4
+        </Link>
+        <div className="mx-auto w-full max-w-[1480px] px-3 pt-14 pb-6">
+          <Level4OffensiveHost />
+        </div>
+      </div>
+    );
+  }
+
   function sidebarLinkClass(hrefPath: string) {
     const active = path === hrefPath;
     return `block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -185,10 +204,6 @@ export default function AdminHostApp() {
 
         {isHome ? (
           <AdminHome />
-        ) : isLevel4 ? (
-          <div className="px-4 sm:px-6 py-6 w-full">
-            <Level4OffensiveHost />
-          </div>
         ) : activeTab ? (
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full">
             <AdminTabPanels
