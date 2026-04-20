@@ -7,6 +7,17 @@
  * To add a new building: append an entry to BUILDINGS below.
  */
 
+import type { TenantId } from "./tenantConfig";
+
+/**
+ * Outreach artifact type for this building's Lane 1 (building_penetration).
+ * "sms" — LLM-generated SMS-style outreach (default).
+ * "card" — deterministic print-friendly handoff card / order-insert. No LLM call,
+ *          no unsolicited text suggestion. Used for buildings where operator-initiated
+ *          SMS outreach would create a relationship risk with management.
+ */
+export type BuildingDeliverable = "sms" | "card";
+
 export interface BuildingConfig {
   /** Stable building identifier */
   id: string;
@@ -30,6 +41,18 @@ export interface BuildingConfig {
    * signups and paid users across this family.
    */
   slugAliases: string[];
+  /**
+   * Lane 1 outreach artifact for this building. Defaults to "sms" when omitted.
+   * Set to "card" for buildings where unsolicited SMS to residents would risk the
+   * management relationship — the admin gets a printed handoff card instead.
+   */
+  deliverable?: BuildingDeliverable;
+  /**
+   * Brands the admin may select for Lane 1 outreach at this building. Order is
+   * significant: the first entry is the default. Omitting this implies ["default"]
+   * (Laundry Butler only).
+   */
+  allowedBrands?: TenantId[];
 }
 
 export const BUILDINGS: BuildingConfig[] = [
@@ -64,6 +87,11 @@ export const BUILDINGS: BuildingConfig[] = [
     defaultAddress: "2170 Century Park E, Los Angeles, CA 90067",
     total_units: 576,
     slugAliases: ["centuryparkeast", "century-park-east", "cpe-south", "cpe-north", "2170", "2160"],
+    // CPE Lane 1 is a printed resident-safe referral card / order-insert — NOT SMS.
+    // Unsolicited texts to residents here risk the management relationship.
+    deliverable: "card",
+    // Butler is the default brand. Laundry Farm is a manual override only.
+    allowedBrands: ["default", "laundry_farm"],
   },
 ];
 

@@ -10,14 +10,45 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { BUILDINGS } from "@shared/buildings";
+import { TENANT_CONFIG, type TenantId } from "@shared/tenantConfig";
 import { Level4Offensive, type Level4OffensiveHandle } from "./Level4Offensive";
+
+type Deliverable = "sms" | "card";
 
 type GeneratedCopy = {
   headline: string;
   body: string;
-  smsCopy: string;
+  primaryCopy: string;
   internalNote: string;
+  deliverable: Deliverable;
+  brandId: TenantId;
 };
+
+function brandDisplayName(id: TenantId): string {
+  return TENANT_CONFIG[id].brandName;
+}
+
+function brandHasRequiredFields(id: TenantId): boolean {
+  const t = TENANT_CONFIG[id];
+  return Boolean(t.supportPhone && t.hostname && t.brandName);
+}
+
+/**
+ * Allowed brands for this building's Lane 1. Order matters — first entry is
+ * the default. Unknown / unconfigured buildings fall back to Butler only.
+ */
+function allowedBrandsForBuilding(slug: string | undefined | null): TenantId[] {
+  if (!slug) return ["default"];
+  const b = BUILDINGS.find((x) => x.slug === slug);
+  return b?.allowedBrands ?? ["default"];
+}
+
+function deliverableForBuilding(slug: string | undefined | null): Deliverable {
+  if (!slug) return "sms";
+  const b = BUILDINGS.find((x) => x.slug === slug);
+  return b?.deliverable ?? "sms";
+}
 
 /**
  * Modal payload: bundles the block + click-time context + the generated copy.
@@ -116,11 +147,14 @@ export function Level4OffensiveHost() {
       setModalError("No building candidate available.");
       return false;
     }
+    const brands = allowedBrandsForBuilding(topBuilding.buildingSlug);
+    const defaultBrand: TenantId = brands[0] ?? "default";
     setModalError(null);
     setModalBusy("generating");
     try {
       const out = await generateCopy.mutateAsync({
         block: "building_penetration",
+        brand: defaultBrand,
         payload: {
           buildingSlug: topBuilding.buildingSlug,
           buildingName: topBuilding.buildingName,
@@ -158,6 +192,58 @@ export function Level4OffensiveHost() {
     });
   }, [topBuilding, generateCopy]);
 
+  /**
+   * Brand toggle inside the preview — regenerates copy with the new brand and
+   * swaps it in place. No-op when the requested brand is already active.
+   */
+  const switchBrandInPreview = useCallback(
+    async (nextBrand: TenantId) => {
+      if (!modal) return;
+      if (modal.kind !== "building_penetration" && modal.kind !== "referral_request") return;
+      if (modal.copy && modal.copy.brandId === nextBrand) return;
+      setModalBusy("generating");
+      setModalError(null);
+      try {
+        if (modal.kind === "building_penetration") {
+          const out = await generateCopy.mutateAsync({
+            block: "building_penetration",
+            brand: nextBrand,
+            payload: {
+              buildingSlug: modal.buildingSlug,
+              buildingName: modal.buildingName,
+              convertedUsers: modal.metadata.convertedUsers,
+              convertedPaidUsers: modal.metadata.convertedPaidUsers,
+              total: modal.metadata.total,
+              unconverted: modal.metadata.unconverted,
+              penetrationPct: modal.metadata.penetrationPct,
+              paidPenetrationPct: modal.metadata.paidPenetrationPct,
+            },
+          });
+          if (out.block !== "building_penetration" || !out.copy) throw new Error("No copy returned.");
+          setModal({ ...modal, copy: out.copy });
+        } else {
+          const out = await generateCopy.mutateAsync({
+            block: "referral_request",
+            brand: nextBrand,
+            payload: {
+              firstName: modal.firstName,
+              lastInitial: modal.lastInitial,
+              orderCount: modal.orderCount,
+              ltvCents: modal.ltvCents,
+            },
+          });
+          if (out.block !== "referral_request" || !out.copy) throw new Error("No copy returned.");
+          setModal({ ...modal, copy: out.copy });
+        }
+      } catch (e) {
+        setModalError(e instanceof Error ? e.message : "Brand switch failed.");
+      } finally {
+        setModalBusy("idle");
+      }
+    },
+    [modal, generateCopy]
+  );
+
   const openReferralRequest = useCallback(async (): Promise<boolean> => {
     if (!referralCandidate) {
       setModalError("No referral candidate available.");
@@ -177,8 +263,10 @@ export function Level4OffensiveHost() {
         copy: {
           headline: "Refer a neighbor — both get $15",
           body: "Synthetic preview copy. Deploy is stubbed; nothing is sent.",
-          smsCopy: "Hey {FIRST}, know someone who'd love our service? You'll both get $15.",
+          primaryCopy: "Hey {FIRST}, know someone who'd love our service? You'll both get $15.",
           internalNote: "SIMULATION: no execAction, no admin_action_log row.",
+          deliverable: "sms",
+          brandId: "default",
         },
       });
       return new Promise<boolean>((resolve) => {
@@ -190,6 +278,7 @@ export function Level4OffensiveHost() {
     try {
       const out = await generateCopy.mutateAsync({
         block: "referral_request",
+        brand: "default",
         payload: {
           firstName: referralCandidate.firstName,
           lastInitial: referralCandidate.lastInitial,
@@ -297,12 +386,19 @@ export function Level4OffensiveHost() {
   const lane1Title = topBuilding
     ? `LANE 1 | BLOCK A | ${topBuilding.buildingName}`
     : "LANE 1 | BLOCK A | Building penetration";
+  const lane1Deliverable = deliverableForBuilding(topBuilding?.buildingSlug);
+  const lane1BrandDefault: TenantId = allowedBrandsForBuilding(topBuilding?.buildingSlug)[0] ?? "default";
+  const lane1AssetLabel = lane1Deliverable === "card" ? "Resident-safe card" : "SMS outreach";
   const lane1Body = topBuilding
-    ? `${topBuilding.convertedUsers}/${topBuilding.total} signed up (${topBuilding.penetrationPct}%) · ${topBuilding.convertedPaidUsers} paying · ${topBuilding.unconverted} unconverted.`
+    ? `${topBuilding.convertedUsers}/${topBuilding.total} signed up (${topBuilding.penetrationPct}%) · ${topBuilding.convertedPaidUsers} paying · ${topBuilding.unconverted} unconverted. · ${lane1AssetLabel} · Brand: ${brandDisplayName(lane1BrandDefault)}`
     : state.isLoading
       ? "Loading building penetration…"
       : "No building candidate.";
-  const lane1CtaLabel = topBuilding ? "GENERATE OUTREACH →" : "NO TARGET";
+  const lane1CtaLabel = topBuilding
+    ? lane1Deliverable === "card"
+      ? "GENERATE CARD →"
+      : "GENERATE OUTREACH →"
+    : "NO TARGET";
 
   const lane2Title = referralCandidate
     ? syntheticLane2Active
@@ -367,6 +463,12 @@ export function Level4OffensiveHost() {
                   building_penetration · {modal.metadata.convertedUsers}/{modal.metadata.total} signed up · {modal.metadata.convertedPaidUsers} paying
                 </DialogDescription>
               </DialogHeader>
+              <BrandToggle
+                copy={modal.copy}
+                allowedBrands={allowedBrandsForBuilding(modal.buildingSlug)}
+                disabled={modalBusy !== "idle"}
+                onSwitch={(id) => void switchBrandInPreview(id)}
+              />
               <CopyPreview copy={modal.copy} />
             </>
           )}
@@ -401,6 +503,13 @@ export function Level4OffensiveHost() {
             <p className="text-sm text-[var(--red)] font-sans">{modalError}</p>
           )}
 
+          {modal && (modal.kind === "building_penetration" || modal.kind === "referral_request") && modal.copy && !brandHasRequiredFields(modal.copy.brandId) && (
+            <p className="text-sm text-[var(--red)] font-sans border border-[var(--red)] px-3 py-2 rounded">
+              Branding incomplete for {brandDisplayName(modal.copy.brandId)}: missing phone or website.
+              Deploy blocked until configured in <code className="font-mono text-xs">shared/tenantConfig.ts</code>.
+            </p>
+          )}
+
           <DialogFooter className="gap-2">
             <Button
               type="button"
@@ -412,7 +521,15 @@ export function Level4OffensiveHost() {
             </Button>
             <Button
               type="button"
-              disabled={modalBusy !== "idle"}
+              disabled={
+                modalBusy !== "idle" ||
+                Boolean(
+                  modal &&
+                    (modal.kind === "building_penetration" || modal.kind === "referral_request") &&
+                    modal.copy &&
+                    !brandHasRequiredFields(modal.copy.brandId)
+                )
+              }
               onClick={() => void confirmDeploy()}
             >
               {modalBusy === "deploying" ? (
@@ -441,12 +558,85 @@ export function Level4OffensiveHost() {
 }
 
 function CopyPreview({ copy }: { copy: GeneratedCopy }) {
+  if (copy.deliverable === "card") {
+    return (
+      <div className="space-y-3 text-sm">
+        <CardMockup copy={copy} />
+        <Field label="Headline" value={copy.headline} />
+        <Field label="Body" value={copy.body} />
+        <Field label="Footer" value={copy.primaryCopy} mono />
+        <Field label="Internal note" value={copy.internalNote} />
+      </div>
+    );
+  }
   return (
     <div className="space-y-3 text-sm">
       <Field label="Headline" value={copy.headline} />
       <Field label="Body" value={copy.body} />
-      <Field label="SMS copy" value={copy.smsCopy} mono />
+      <Field label="SMS copy" value={copy.primaryCopy} mono />
       <Field label="Internal note" value={copy.internalNote} />
+    </div>
+  );
+}
+
+/**
+ * Print-style mockup of the handoff card. Card-deliverable copy only. Shows
+ * the active brand name prominently so the admin can confirm which brand the
+ * resident-facing artifact represents.
+ */
+function CardMockup({ copy }: { copy: GeneratedCopy }) {
+  return (
+    <div className="border border-[var(--ink)] rounded bg-[var(--card)] p-4 space-y-2 font-sans">
+      <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--ink-muted)]">
+        {brandDisplayName(copy.brandId)} · Resident card preview
+      </p>
+      <p className="text-base font-semibold leading-snug">{copy.headline}</p>
+      <p className="text-sm leading-relaxed">{copy.body}</p>
+      <p className="text-xs font-mono pt-2 border-t border-[var(--border)]">{copy.primaryCopy}</p>
+    </div>
+  );
+}
+
+function BrandToggle({
+  copy,
+  allowedBrands,
+  disabled,
+  onSwitch,
+}: {
+  copy: GeneratedCopy | null;
+  allowedBrands: TenantId[];
+  disabled: boolean;
+  onSwitch: (id: TenantId) => void;
+}) {
+  if (!copy) return null;
+  if (allowedBrands.length <= 1) {
+    return (
+      <p className="text-[10px] font-mono uppercase tracking-wide text-[var(--ink-muted)]">
+        Brand: {brandDisplayName(copy.brandId)}
+      </p>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="font-mono uppercase tracking-wide text-[var(--ink-muted)]">Brand:</span>
+      {allowedBrands.map((id) => {
+        const active = id === copy.brandId;
+        return (
+          <button
+            key={id}
+            type="button"
+            disabled={disabled || active}
+            onClick={() => onSwitch(id)}
+            className={
+              active
+                ? "px-2 py-1 border border-[var(--ink)] bg-[var(--ink)] text-[var(--bg)] rounded font-mono uppercase"
+                : "px-2 py-1 border border-[var(--border)] rounded font-mono uppercase hover:border-[var(--ink)]"
+            }
+          >
+            {brandDisplayName(id)}
+          </button>
+        );
+      })}
     </div>
   );
 }

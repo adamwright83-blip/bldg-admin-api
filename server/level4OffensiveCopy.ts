@@ -1,3 +1,5 @@
+import { BUILDINGS, type BuildingConfig } from "@shared/buildings";
+import { TENANT_CONFIG, type TenantId } from "@shared/tenantConfig";
 import { invokeLLM, type InvokeResult } from "./_core/llm";
 import {
   describeViolations,
@@ -7,9 +9,12 @@ import {
 } from "./level4OffensiveCopySanitizer";
 
 /**
- * SYSTEM PROMPT — sent verbatim with every Level 4 copy-generation call.
+ * SYSTEM PROMPT — sent verbatim with every Level 4 LLM copy-generation call.
  * Single source of truth: do not duplicate this string in tests / scripts —
  * import it instead so any change is reflected everywhere.
+ *
+ * Only SMS-deliverable blocks reach the LLM. Card-deliverable blocks take the
+ * deterministic template path in `buildDeterministicCardCopy` and never prompt.
  */
 export const LEVEL4_COPY_SYSTEM_PROMPT = `You are an outreach copywriter for an internal sales-operations dashboard at a building-services startup (laundry, dry cleaning, alterations).
 
@@ -38,7 +43,7 @@ ABSOLUTE NEGATIVE CONSTRAINTS — these are non-negotiable:
 Output strictly the four fields requested:
 - headline: <= 10 words, dashboard tile label, no period.
 - body: 2 sentences max, briefs the admin on what this opportunity is and why it scores high right now. Reference the data.
-- smsCopy: the actual outbound SMS draft the admin will review before sending.
+- primaryCopy: the actual outbound SMS draft the admin will review before sending.
 - internalNote: one short tactical note (<= 20 words) for the admin — what to watch for, what to follow up with.`;
 
 const COPY_OUTPUT_SCHEMA = {
@@ -46,25 +51,36 @@ const COPY_OUTPUT_SCHEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["headline", "body", "smsCopy", "internalNote"],
+    required: ["headline", "body", "primaryCopy", "internalNote"],
     properties: {
       headline: { type: "string", minLength: 3, maxLength: 80 },
       body: { type: "string", minLength: 10, maxLength: 600 },
-      smsCopy: { type: "string", minLength: 10, maxLength: 320 },
+      primaryCopy: { type: "string", minLength: 10, maxLength: 320 },
       internalNote: { type: "string", minLength: 5, maxLength: 240 },
     },
   },
 } as const;
 
+export type BuildingDeliverable = "sms" | "card";
+
 export type GeneratedCopy = {
   headline: string;
   body: string;
-  smsCopy: string;
+  /**
+   * Deliverable-specific actionable copy.
+   * - `deliverable: "sms"` — the SMS message draft.
+   * - `deliverable: "card"` — the footer line (phone · URL) for the printed card.
+   */
+  primaryCopy: string;
   internalNote: string;
+  deliverable: BuildingDeliverable;
+  /** Brand this copy was generated for. Frozen at generation time; preview toggle regenerates. */
+  brandId: TenantId;
 };
 
 export type BuildingPenetrationCopyInput = {
   block: "building_penetration";
+  brand: TenantId;
   payload: {
     buildingSlug: string;
     buildingName: string;
@@ -79,6 +95,7 @@ export type BuildingPenetrationCopyInput = {
 
 export type ReferralRequestCopyInput = {
   block: "referral_request";
+  brand: TenantId;
   payload: {
     firstName: string;
     lastInitial: string;
@@ -89,6 +106,7 @@ export type ReferralRequestCopyInput = {
 
 export type MarketHoleCopyInput = {
   block: "market_hole";
+  brand?: TenantId;
   payload: Record<string, never>;
 };
 
@@ -117,8 +135,62 @@ function dollarsFromCents(cents: number): string {
   return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
-function buildUserPromptForBuildingPenetration(p: BuildingPenetrationCopyInput["payload"]): string {
+function resolveBrand(brandId: TenantId): {
+  id: TenantId;
+  name: string;
+  phone: string;
+  websiteUrl: string;
+} {
+  const t = TENANT_CONFIG[brandId];
+  return {
+    id: t.id,
+    name: t.brandName,
+    phone: t.supportPhone,
+    websiteUrl: t.hostname,
+  };
+}
+
+function findBuilding(slug: string): BuildingConfig | undefined {
+  return BUILDINGS.find((b) => b.slug === slug);
+}
+
+function resolveDeliverable(slug: string): BuildingDeliverable {
+  return findBuilding(slug)?.deliverable ?? "sms";
+}
+
+/**
+ * Deterministic card template. No LLM, no sanitizer. Used when a building's
+ * `deliverable` is "card" — currently only Century Park East. Returns copy
+ * that satisfies the card-size rules up front: 1 offer, 1 CTA, 1 proof,
+ * headline ≤12 words, body ≤24 words. Any change to wording should preserve
+ * those caps.
+ */
+function buildDeterministicCardCopy(
+  buildingSlug: string,
+  brand: ReturnType<typeof resolveBrand>
+): GeneratedCopy | null {
+  if (buildingSlug === "centuryparkeast") {
+    const building = findBuilding(buildingSlug);
+    const buildingName = building?.name ?? "Century Park East";
+    return {
+      headline: "Share our service with a neighbor and get 30% off your next order.",
+      body:
+        "If they place an order, have them mention your name — or text us first and we'll make sure your 30% is applied.",
+      primaryCopy: `${brand.phone} · ${brand.websiteUrl}`,
+      internalNote: `Use as a handoff card or attach to completed orders for ${buildingName} customers. Do not use as unsolicited resident outreach.`,
+      deliverable: "card",
+      brandId: brand.id,
+    };
+  }
+  return null;
+}
+
+function buildUserPromptForBuildingPenetration(
+  p: BuildingPenetrationCopyInput["payload"],
+  brand: ReturnType<typeof resolveBrand>
+): string {
   return [
+    `Brand: ${brand.name} (phone ${brand.phone}, web ${brand.websiteUrl})`,
     `Block: BUILDING PENETRATION`,
     `Building: ${p.buildingName} (slug=${p.buildingSlug})`,
     `Total units in building: ${p.total}`,
@@ -126,22 +198,28 @@ function buildUserPromptForBuildingPenetration(p: BuildingPenetrationCopyInput["
     `Paying residents (≥1 paid order): ${p.convertedPaidUsers} (${p.paidPenetrationPct}% of building)`,
     `Unconverted residents (estimate): ${p.unconverted}`,
     ``,
-    `Task: produce outreach copy for a building-penetration campaign — getting more residents in this building to sign up and place a first order. The dashboard tile is for the admin; the SMS draft is what the admin will (after review) send to a building-wide list or to property-management contacts.`,
+    `Task: produce outreach copy for a building-penetration campaign — getting more residents in this building to sign up and place a first order. The dashboard tile is for the admin; the primaryCopy field is the SMS draft the admin will (after review) send to a building-wide list or to property-management contacts.`,
   ].join("\n");
 }
 
-function buildUserPromptForReferralRequest(p: ReferralRequestCopyInput["payload"]): string {
+function buildUserPromptForReferralRequest(
+  p: ReferralRequestCopyInput["payload"],
+  brand: ReturnType<typeof resolveBrand>
+): string {
   return [
+    `Brand: ${brand.name} (phone ${brand.phone}, web ${brand.websiteUrl})`,
     `Block: REFERRAL REQUEST`,
     `Customer: ${p.firstName} ${p.lastInitial}.`,
     `Lifetime paid orders: ${p.orderCount}`,
     `Lifetime value: ${dollarsFromCents(p.ltvCents)}`,
     ``,
-    `Task: produce outreach copy for a personal referral ask. The dashboard tile briefs the admin; the SMS draft is what the admin will (after review) send directly to this customer asking them to refer a neighbor or friend. Address the customer by first name in the SMS only.`,
+    `Task: produce outreach copy for a personal referral ask. The dashboard tile briefs the admin; the primaryCopy field is the SMS draft the admin will (after review) send directly to this customer asking them to refer a neighbor or friend. Address the customer by first name in the SMS only.`,
   ].join("\n");
 }
 
-async function callLLMOnce(userPrompt: string): Promise<GeneratedCopy> {
+type LLMCopy = { headline: string; body: string; primaryCopy: string; internalNote: string };
+
+async function callLLMOnce(userPrompt: string): Promise<LLMCopy> {
   const result = await invokeLLM({
     messages: [
       { role: "system", content: LEVEL4_COPY_SYSTEM_PROMPT },
@@ -155,9 +233,9 @@ async function callLLMOnce(userPrompt: string): Promise<GeneratedCopy> {
   if (!text.trim()) {
     throw new Error("Level 4 copy: empty model output after Anthropic tool_use.");
   }
-  let parsed: GeneratedCopy;
+  let parsed: LLMCopy;
   try {
-    parsed = JSON.parse(text) as GeneratedCopy;
+    parsed = JSON.parse(text) as LLMCopy;
   } catch {
     throw new Error(
       `Level 4 copy returned invalid JSON (first 240 chars): ${text.slice(0, 240)}`
@@ -166,10 +244,10 @@ async function callLLMOnce(userPrompt: string): Promise<GeneratedCopy> {
   if (
     typeof parsed.headline !== "string" ||
     typeof parsed.body !== "string" ||
-    typeof parsed.smsCopy !== "string" ||
+    typeof parsed.primaryCopy !== "string" ||
     typeof parsed.internalNote !== "string"
   ) {
-    throw new Error("Level 4 copy missing required fields (headline/body/smsCopy/internalNote).");
+    throw new Error("Level 4 copy missing required fields (headline/body/primaryCopy/internalNote).");
   }
   return parsed;
 }
@@ -193,10 +271,26 @@ export async function generateOffensiveCopy(
     return { block: "market_hole", status: "stubbed_for_v1", copy: null };
   }
 
+  const brand = resolveBrand(input.brand);
+
+  // Card-deliverable: deterministic template, no LLM, no sanitizer.
+  if (input.block === "building_penetration") {
+    const deliverable = resolveDeliverable(input.payload.buildingSlug);
+    if (deliverable === "card") {
+      const card = buildDeterministicCardCopy(input.payload.buildingSlug, brand);
+      if (!card) {
+        throw new Error(
+          `Level 4 card copy: no deterministic template registered for building slug "${input.payload.buildingSlug}".`
+        );
+      }
+      return { block: "building_penetration", copy: card };
+    }
+  }
+
   const userPrompt =
     input.block === "building_penetration"
-      ? buildUserPromptForBuildingPenetration(input.payload)
-      : buildUserPromptForReferralRequest(input.payload);
+      ? buildUserPromptForBuildingPenetration(input.payload, brand)
+      : buildUserPromptForReferralRequest(input.payload, brand);
 
   // Per-block allowed lists for the sanitizer. Current payloads carry no
   // service-category or timing fields, so both are empty — the model may not
@@ -208,12 +302,12 @@ export async function generateOffensiveCopy(
     allowedTimingPhrases: [],
   };
 
-  let copy = await callLLMOnce(userPrompt);
-  let result = sanitizeCopy(copy, sanitizerCtx);
+  let llmCopy = await callLLMOnce(userPrompt);
+  let result = sanitizeCopy(llmCopy, sanitizerCtx);
   if (!result.ok) {
     const retryPrompt = buildRetryPrompt(userPrompt, result.violations);
-    copy = await callLLMOnce(retryPrompt);
-    result = sanitizeCopy(copy, sanitizerCtx);
+    llmCopy = await callLLMOnce(retryPrompt);
+    result = sanitizeCopy(llmCopy, sanitizerCtx);
     if (!result.ok) {
       throw new Error(
         "Level 4 copy failed safety sanitization after one re-prompt. Violations: " +
@@ -224,5 +318,13 @@ export async function generateOffensiveCopy(
     }
   }
 
+  const copy: GeneratedCopy = {
+    headline: llmCopy.headline,
+    body: llmCopy.body,
+    primaryCopy: llmCopy.primaryCopy,
+    internalNote: llmCopy.internalNote,
+    deliverable: "sms",
+    brandId: brand.id,
+  };
   return { block: input.block, copy };
 }

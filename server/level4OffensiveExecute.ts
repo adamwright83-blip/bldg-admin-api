@@ -16,12 +16,28 @@
 
 import { and, eq, gte, lt } from "drizzle-orm";
 import { adminActionLog } from "../drizzle/schema";
+import type { TenantId } from "@shared/tenantConfig";
 import { getDb } from "./db";
 import { getDashboardBusinessDayBoundsUtc } from "./revenueIntervention";
 
 const ACTION_BUILDING_PENETRATION = "building_penetration" as const;
 const ACTION_REFERRAL_REQUEST = "referral_request" as const;
 const ACTION_MARKET_HOLE = "market_hole_outreach" as const;
+
+/**
+ * Admin-reviewed copy captured in the preview modal.
+ * `deliverable` and `brandId` are present from the brand-selection pass forward.
+ * Historical rows written before that may contain only the four text fields;
+ * readers should tolerate the missing discriminators.
+ */
+export type GeneratedCopyForExec = {
+  headline: string;
+  body: string;
+  primaryCopy: string;
+  internalNote: string;
+  deliverable: "sms" | "card";
+  brandId: TenantId;
+};
 
 export type ExecuteOffensiveInput =
   | {
@@ -37,8 +53,7 @@ export type ExecuteOffensiveInput =
         penetrationPct?: number;
         paidPenetrationPct?: number;
       };
-      /** Admin-reviewed copy captured in the preview modal. */
-      generatedCopy: { headline: string; body: string; smsCopy: string; internalNote: string };
+      generatedCopy: GeneratedCopyForExec;
     }
   | {
       block: "referral_request";
@@ -47,13 +62,32 @@ export type ExecuteOffensiveInput =
       lastInitial: string;
       orderCount: number;
       ltvCents: number;
-      generatedCopy: { headline: string; body: string; smsCopy: string; internalNote: string };
+      generatedCopy: GeneratedCopyForExec;
     }
   | {
       block: "market_hole_outreach";
       /** Block C is stubbed for v1 — no LLM call — but the admin click still logs. */
       note?: string;
     };
+
+/**
+ * Reads the primary-copy text from either the new `primaryCopy` field or the
+ * legacy `smsCopy` field. Historical admin_action_log rows serialized the
+ * latter; no migration is planned, so every reader that inspects stored copy
+ * metadata should route through this helper.
+ */
+export function readPrimaryCopyField(
+  stored: { primaryCopy?: unknown; smsCopy?: unknown } | null | undefined
+): string | null {
+  if (!stored) return null;
+  if (typeof stored.primaryCopy === "string" && stored.primaryCopy.length > 0) {
+    return stored.primaryCopy;
+  }
+  if (typeof stored.smsCopy === "string" && stored.smsCopy.length > 0) {
+    return stored.smsCopy;
+  }
+  return null;
+}
 
 export type ExecuteOffensiveResult =
   | { ok: true; deduped: boolean; logId: number | null; actionType: string }

@@ -1,12 +1,15 @@
 /**
  * Deterministic post-LLM safety sanitizer for Level 4 offensive copy.
  *
- * Inspects `smsCopy` and `body` fields. Reports any of:
+ * Inspects `primaryCopy` and `body` fields. Reports any of:
  *   - bracket placeholder tokens ([link], [url], [name], etc.)
  *   - offer / discount / promo / free / credit / coupon language
  *   - timing claims (numeric or qualitative) not authorized by the payload
  *   - qualitative social-proof phrasing (e.g. "your neighbors are using")
  *   - mentions of specific service categories not in the per-block allowed list
+ *
+ * Only LLM-path (SMS-deliverable) copy reaches this sanitizer. Card-deliverable
+ * copy is deterministic and pre-reviewed; it bypasses sanitization upstream.
  *
  * Output is a structured violation list — caller decides whether to repair,
  * re-prompt, or hard-fail.
@@ -15,7 +18,7 @@
 export type GeneratedCopyShape = {
   headline: string;
   body: string;
-  smsCopy: string;
+  primaryCopy: string;
   internalNote: string;
 };
 
@@ -27,7 +30,7 @@ export type SanitizerInputContext = {
 };
 
 export type SanitizeViolation = {
-  field: "smsCopy" | "body";
+  field: "primaryCopy" | "body";
   rule:
     | "bracket_placeholder"
     | "offer_or_discount"
@@ -152,7 +155,7 @@ function termOccursAsWord(text: string, term: string): string | null {
 }
 
 function inspectField(
-  field: "smsCopy" | "body",
+  field: "primaryCopy" | "body",
   text: string,
   ctx: SanitizerInputContext
 ): SanitizeViolation[] {
@@ -215,7 +218,7 @@ export function sanitizeCopy(
   ctx: SanitizerInputContext = {}
 ): SanitizeResult {
   const violations: SanitizeViolation[] = [
-    ...inspectField("smsCopy", copy.smsCopy, ctx),
+    ...inspectField("primaryCopy", copy.primaryCopy, ctx),
     ...inspectField("body", copy.body, ctx),
   ];
   if (violations.length === 0) return { ok: true };

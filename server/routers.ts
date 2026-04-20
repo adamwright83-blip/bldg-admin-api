@@ -739,6 +739,7 @@ export const appRouter = router({
         z.discriminatedUnion("block", [
           z.object({
             block: z.literal("building_penetration"),
+            brand: z.enum(["default", "laundry_farm"]),
             payload: z.object({
               buildingSlug: z.string().min(1),
               buildingName: z.string().min(1),
@@ -752,6 +753,7 @@ export const appRouter = router({
           }),
           z.object({
             block: z.literal("referral_request"),
+            brand: z.enum(["default", "laundry_farm"]),
             payload: z.object({
               firstName: z.string().min(1),
               lastInitial: z.string().min(0).max(1),
@@ -761,6 +763,7 @@ export const appRouter = router({
           }),
           z.object({
             block: z.literal("market_hole"),
+            brand: z.enum(["default", "laundry_farm"]).optional(),
             payload: z.object({}).strict(),
           }),
         ])
@@ -799,8 +802,10 @@ export const appRouter = router({
             generatedCopy: z.object({
               headline: z.string().min(1),
               body: z.string().min(1),
-              smsCopy: z.string().min(1),
+              primaryCopy: z.string().min(1),
               internalNote: z.string().min(1),
+              deliverable: z.enum(["sms", "card"]),
+              brandId: z.enum(["default", "laundry_farm"]),
             }),
           }),
           z.object({
@@ -813,8 +818,10 @@ export const appRouter = router({
             generatedCopy: z.object({
               headline: z.string().min(1),
               body: z.string().min(1),
-              smsCopy: z.string().min(1),
+              primaryCopy: z.string().min(1),
               internalNote: z.string().min(1),
+              deliverable: z.enum(["sms", "card"]),
+              brandId: z.enum(["default", "laundry_farm"]),
             }),
           }),
           z.object({

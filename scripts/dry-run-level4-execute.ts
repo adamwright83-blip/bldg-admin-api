@@ -48,6 +48,7 @@ async function main() {
     process.stdout.write(`\n[2A] generateOffensiveCopy block=building_penetration → ${topBuilding.buildingName}\n`);
     const gen = await generateOffensiveCopy({
       block: "building_penetration",
+      brand: "default",
       payload: {
         buildingSlug: topBuilding.buildingSlug,
         buildingName: topBuilding.buildingName,
@@ -60,7 +61,8 @@ async function main() {
       },
     });
     if (gen.block !== "building_penetration" || !gen.copy) throw new Error("bad A copy");
-    process.stdout.write(`     smsCopy: ${gen.copy.smsCopy}\n`);
+    process.stdout.write(`     deliverable: ${gen.copy.deliverable}  brand: ${gen.copy.brandId}\n`);
+    process.stdout.write(`     primaryCopy: ${gen.copy.primaryCopy}\n`);
 
     process.stdout.write(`\n[3A] executeOffensiveAction block=building_penetration (first call)\n`);
     const r1 = await executeOffensiveAction(TENANT, {
@@ -107,6 +109,7 @@ async function main() {
     process.stdout.write(`\n[2B] live referral candidate → ${r.firstName} ${r.lastInitial}. (userId=${r.userId})\n`);
     const gen = await generateOffensiveCopy({
       block: "referral_request",
+      brand: "default",
       payload: {
         firstName: r.firstName,
         lastInitial: r.lastInitial,
@@ -115,7 +118,8 @@ async function main() {
       },
     });
     if (gen.block !== "referral_request" || !gen.copy) throw new Error("bad B copy");
-    process.stdout.write(`     smsCopy: ${gen.copy.smsCopy}\n`);
+    process.stdout.write(`     deliverable: ${gen.copy.deliverable}  brand: ${gen.copy.brandId}\n`);
+    process.stdout.write(`     primaryCopy: ${gen.copy.primaryCopy}\n`);
 
     process.stdout.write(`\n[3B] executeOffensiveAction block=referral_request (first call)\n`);
     const rr = await executeOffensiveAction(TENANT, {
