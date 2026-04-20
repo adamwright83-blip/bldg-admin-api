@@ -346,6 +346,10 @@ export function Level4OffensiveHost() {
         syntheticLane2Active={syntheticLane2Active}
         onInjectSyntheticLane2={() => setSyntheticLane2Active(true)}
         onResetSyntheticLane2={() => setSyntheticLane2Active(false)}
+        // HOLD→UNSTABLE timer starts only when the preview is actually on screen;
+        // during copy generation we intentionally keep HOLD stable. The Dialog is
+        // rendered when `modal != null`, which covers the three preview kinds.
+        previewOpen={modal != null}
       />
 
       <Dialog

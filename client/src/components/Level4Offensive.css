@@ -888,10 +888,15 @@
      holds still so these signals read as real threat, not decoration.
      ============================================================ */
 
-  /* Crusher Y is derived from wall-clock idle via --l4-descent-progress.
-     Override the keyframe-driven transforms in the legacy is-wall-* classes
-     so a single deterministic source drives vertical position. */
-  .l4-canvasStack { --l4-descent-progress: 0; }
+  /* Crusher Y is derived from session progress via --l4-descent-progress.
+     During HOLD/UNSTABLE, --l4-hold-y pins the Y at click-time progress so the
+     crusher freezes in place regardless of the idle clock. Override the
+     keyframe-driven transforms in the legacy is-wall-* classes so a single
+     deterministic source drives vertical position. */
+  .l4-canvasStack {
+    --l4-descent-progress: 0;
+    --l4-hold-y: 0;
+  }
   .l4-canvasStack .l4-ceiling.is-wall-top,
   .l4-canvasStack .l4-ceiling.is-wall-descending,
   .l4-canvasStack .l4-ceiling.is-wall-bottomed {
@@ -906,6 +911,101 @@
     animation: none !important;
     transform: translateY(0);
     transition: transform var(--l4-wall-reset, 200ms) cubic-bezier(.22, 1, .28, 1);
+  }
+
+  /* ---------- HOLD ----------
+     Pinned at the click-time Y; subtle mechanical hover ±4px. The translate
+     combines pin + hover so the transition between descent and hold is seamless.
+     Strictly translate-based — no CSS filter — so we don't create a stacking
+     context that would clip the section-level flashbang/stamp overlays. */
+  .l4-canvasStack .l4-ceiling.is-wall-holding {
+    animation: l4-wall-hover 1200ms ease-in-out infinite;
+    transition: transform 220ms cubic-bezier(.22, 1, .28, 1);
+  }
+  @keyframes l4-wall-hover {
+    0%   { transform: translateY(calc(var(--l4-wall-drop, 380px) * var(--l4-hold-y, 0) - 4px)); }
+    50%  { transform: translateY(calc(var(--l4-wall-drop, 380px) * var(--l4-hold-y, 0) + 4px)); }
+    100% { transform: translateY(calc(var(--l4-wall-drop, 380px) * var(--l4-hold-y, 0) - 4px)); }
+  }
+
+  /* ---------- UNSTABLE ----------
+     Still pinned at hold-Y, but shuddering. Translate-only so stacking context
+     for the flashbang stays intact. Red bleeds back into the threat text. */
+  .l4-canvasStack .l4-ceiling.is-wall-unstable {
+    animation: l4-wall-shudder 140ms steps(2, jump-end) infinite;
+    transition: transform 120ms linear;
+  }
+  @keyframes l4-wall-shudder {
+    0%   { transform: translateY(calc(var(--l4-wall-drop, 380px) * var(--l4-hold-y, 0) - 2px)) translateX(-1.5px); }
+    25%  { transform: translateY(calc(var(--l4-wall-drop, 380px) * var(--l4-hold-y, 0) + 2px)) translateX(1.5px); }
+    50%  { transform: translateY(calc(var(--l4-wall-drop, 380px) * var(--l4-hold-y, 0) - 1px)) translateX(-1px); }
+    75%  { transform: translateY(calc(var(--l4-wall-drop, 380px) * var(--l4-hold-y, 0) + 1px)) translateX(1px); }
+    100% { transform: translateY(calc(var(--l4-wall-drop, 380px) * var(--l4-hold-y, 0) - 2px)) translateX(-1.5px); }
+  }
+
+  /* ---------- Threat text tint during HOLD/UNSTABLE ---------- */
+  .l4-canvasStack .l4-ceiling.is-wall-holding .l4-threatText {
+    color: #f5d08a; /* amber / warning-white mix — reads as "working", not red */
+    text-shadow: 0 0 10px rgba(245, 208, 138, .35), 0 1px 0 #000;
+    animation: none;
+  }
+  .l4-canvasStack .l4-ceiling.is-wall-unstable .l4-threatText {
+    color: #f0a07a; /* amber bleeding back toward red */
+    text-shadow: 0 0 12px rgba(239, 68, 68, .45), 0 1px 0 #000;
+    animation: l4-textFlicker 1.2s ease-in-out infinite;
+  }
+
+  /* ---------- Crusher PNG ----------
+     Replaces the legacy SVG spike strip. The image has the iron body + spikes
+     baked in. Chain continuity is knowingly imperfect for V1; anchor at top of
+     the .l4-ceiling container and let the spike fringe hang into the stage. */
+  .l4-crusher {
+    position: relative;
+    display: block;
+    width: 100%;
+    pointer-events: none;
+  }
+  .l4-crusherImg {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 260px;
+    object-fit: contain;
+    object-position: top center;
+    user-select: none;
+    pointer-events: none;
+    filter: drop-shadow(0 8px 14px rgba(0,0,0,.55));
+  }
+  .l4-crusher .l4-threatText {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 14%;
+    margin: 0;
+    padding: 0 16px;
+    text-align: center;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  /* ---------- Board tones for HOLD / UNSTABLE ---------- */
+  .l4-boardStage.is-board-hold::before {
+    /* Temporary relief — shift warm reds toward desaturated amber/warning-white. */
+    background:
+      radial-gradient(120% 90% at 50% 40%,
+        rgba(245, 208, 138, .14) 0%,
+        rgba(64, 60, 56, 0) 55%,
+        rgba(0, 0, 0, .25) 100%);
+    mix-blend-mode: normal;
+  }
+  .l4-boardStage.is-board-unstable::before {
+    /* Rescue failing — amber bleeding back toward red. */
+    background:
+      radial-gradient(120% 90% at 50% 40%,
+        rgba(240, 160, 122, .18) 0%,
+        rgba(140, 30, 30, .08) 40%,
+        rgba(0, 0, 0, .3) 100%);
+    mix-blend-mode: normal;
   }
 
   /* STATE 2 — THREAT: vignette tightens as crusher descends. */

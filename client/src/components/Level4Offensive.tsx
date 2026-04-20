@@ -4,7 +4,6 @@ import {
   forwardRef,
   useCallback,
   useEffect,
-  useId,
   useImperativeHandle,
   useLayoutEffect,
   useMemo,
@@ -23,37 +22,63 @@ import centerGrit from "@/assets/l4/center_grit_bg_1920.png";
 import hudPlate from "@/assets/l4/hud_overlay_plate.png";
 import youAreHereBadge from "@/assets/l4/you_are_here_badge.png";
 import mapPanelArt from "@/assets/l4/map_panel_art.png";
+import crusherPng from "@/assets/l4/crusher.png";
 
 type LaneId = 1 | 2 | 3;
 
 /**
- * Level 4 game loop — behavioral pressure model:
- *   calm  (idle < 20 min OR outside work hours)
- *   descent (20–50 min of idle; crusher lowers, vignette tightens, telemetry decays)
- *   impact (≥50 min idle OR ceiling hit bottom; blackout + eye censor + locked revive CTA)
- *   resetting (post-success flash/stamp/recoil)
- *   victory (all 3 lanes cleared for the day)
+ * Level 4 game loop — short-round pressure model.
  *
- * Transitions are driven by real wall-clock idle time stored in localStorage, so
- * page refresh and re-entering /level4 do not reset the crusher.
+ *   calm      : round freshly armed; crusher at top (pre-descent or outside work hours)
+ *   descent   : visible descent began; pressure ramping toward impact
+ *   holding   : user committed to a lane; crusher pins at current Y, subtle hover loop
+ *   unstable  : HOLD budget spent; red bleeds back in, small shudder
+ *   impact    : threshold crossed; blackout + eye censor + locked revive CTA
+ *   resetting : post-success flash/stamp/recoil (SECURED)
+ *   victory   : all 3 lanes cleared for the day
+ *
+ * Timing is session-based (seconds, not minutes). Round arms on cold entry. A short
+ * L4_SESSION_GRACE_MS window preserves round state across refresh so users cannot
+ * cheese the pressure by reloading mid-round.
  */
-type GamePhase = "calm" | "descent" | "impact" | "victory" | "resetting";
+type GamePhase =
+  | "calm"
+  | "descent"
+  | "holding"
+  | "unstable"
+  | "impact"
+  | "victory"
+  | "resetting";
 type RevivePhase = "idle" | "flash" | "stamp";
 
-/** Maps phase → existing ceiling CSS states. */
-function wallVisualFromPhase(phase: GamePhase): "top" | "descending" | "bottomed" | "resetting" {
+/** Maps phase → ceiling CSS wall bucket. */
+function wallVisualFromPhase(
+  phase: GamePhase
+): "top" | "descending" | "holding" | "unstable" | "bottomed" | "resetting" {
   if (phase === "resetting") return "resetting";
+  if (phase === "holding") return "holding";
+  if (phase === "unstable") return "unstable";
   if (phase === "descent") return "descending";
   if (phase === "impact") return "bottomed";
   return "top";
 }
 
-/** Behavioral timing — real minutes on a wall clock. */
-const L4_MIN = 60_000;
-const L4_IDLE_TO_THREAT_MS = 20 * L4_MIN;
-const L4_THREAT_DURATION_MS = 30 * L4_MIN;
+/** Session-based timing. Round arms on entry; descent visible ~3s, impact at ~30s. */
+const L4_IDLE_TO_THREAT_MS = 3_000;
+const L4_THREAT_DURATION_MS = 27_000;
 const L4_IMPACT_THRESHOLD_MS = L4_IDLE_TO_THREAT_MS + L4_THREAT_DURATION_MS;
-const L4_PARTIAL_RELIEF_MS = 0.15 * L4_IDLE_TO_THREAT_MS;
+/**
+ * Refresh-preserve window: if the stored round anchor is newer than this, the
+ * current round is restored across reload. Anything older is treated as a fresh
+ * session and the round re-arms at the top.
+ */
+const L4_SESSION_GRACE_MS = 60_000;
+/** HOLD budget once the preview is visible. */
+const L4_HOLD_BUDGET_MS = 7_000;
+/** UNSTABLE window before descent resumes if user still hasn't committed. */
+const L4_UNSTABLE_BUDGET_MS = 3_000;
+/** Small slip penalty on cancel so backing out never feels free. */
+const L4_CANCEL_SLIP_MS = 600;
 /** Work hours window [start, end) in local time. Outside this, crusher is frozen in calm. */
 const L4_WORK_HOUR_START = 8;
 const L4_WORK_HOUR_END = 19;
@@ -91,8 +116,8 @@ function todayKey(d = new Date()): string {
 
 /** Max travel (px). Actual drop is clamped to the measured canvas stack so overflow:hidden never fully clips the crusher. */
 const L4_WALL_DROP_MAX_PX = 380;
-/** Bar + spike strip + margins — must stay inside the track at max translate. */
-const L4_WALL_BAR_EST_PX = 76;
+/** Crusher PNG max height (see .l4-crusherImg max-height). Drop clamps subtract this so the spikes stay inside the stage at max translate. */
+const L4_WALL_BAR_EST_PX = 220;
 
 type MapNodeId = "opus" | "century" | "beaudry";
 
@@ -119,20 +144,6 @@ function nextActiveLane(completed: Record<LaneId, boolean>): LaneId | null {
 function allLanesCleared(completed: Record<LaneId, boolean>) {
   return completed[1] && completed[2] && completed[3];
 }
-
-/** Saw-tooth path for SVG spike strip (sharp points down — reads as danger, not a flat trim). */
-function buildCeilingSpikePath(teeth: number, width: number, peakY: number): string {
-  const step = width / teeth;
-  let d = "M 0 0";
-  for (let i = 0; i < teeth; i++) {
-    const x = i * step;
-    d += ` L ${x + step / 2} ${peakY} L ${x + step} 0`;
-  }
-  d += ` L ${width} 0 Z`;
-  return d;
-}
-
-const L4_SPIKE_PATH = buildCeilingSpikePath(72, 240, 20);
 
 async function resolveDeploy(fn?: () => void | Promise<boolean | void>): Promise<boolean> {
   if (!fn) return true;
@@ -170,6 +181,12 @@ export type Level4OffensiveProps = {
   onInjectSyntheticLane2?: () => void;
   onResetSyntheticLane2?: () => void;
   syntheticLane2Active?: boolean;
+  /**
+   * True once the preview/modal is visibly on screen. Gates the HOLD→UNSTABLE
+   * timer: while a copy generation is in flight and the modal is not yet shown,
+   * HOLD stays stable indefinitely so slow LLM latency never punishes the user.
+   */
+  previewOpen?: boolean;
 };
 
 /** Imperative handle so the Host can force revive / reset from the deploy-success path
@@ -202,6 +219,7 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
     onInjectSyntheticLane2,
     onResetSyntheticLane2,
     syntheticLane2Active = false,
+    previewOpen = false,
   }: Level4OffensiveProps,
   handleRef: ForwardedRef<Level4OffensiveHandle>
 ) {
@@ -209,7 +227,6 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
   const [fastFactor, setFastFactor] = useState<number>(readFastFactor);
   const idleToThreatMs = L4_IDLE_TO_THREAT_MS / fastFactor;
   const impactThresholdMs = L4_IMPACT_THRESHOLD_MS / fastFactor;
-  const partialReliefMs = L4_PARTIAL_RELIEF_MS / fastFactor;
 
   /** Simulation Override forcing a fixed phase — bypasses idle/work-hour derivation. null = live. */
   const [forcedPhase, setForcedPhase] = useState<GamePhase | null>(null);
@@ -241,17 +258,24 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
   const [ctaWaitLane, setCtaWaitLane] = useState<LaneId | null>(null);
   const [descentPaused, setDescentPaused] = useState(false);
 
-  /** Wall-clock anchor for idle pressure. Persisted across refresh. */
+  /**
+   * Round anchor for descent pressure.
+   *
+   * On mount: if the stored anchor is within L4_SESSION_GRACE_MS we preserve
+   * the in-flight round (refresh does not reset pressure); otherwise we arm a
+   * fresh round at Date.now(). This is the "short-window refresh preserve"
+   * behavior — longer absences always re-arm.
+   */
   const [lastActionAt, setLastActionAt] = useState<number>(() => {
     if (typeof window === "undefined") return Date.now();
     const raw = window.localStorage.getItem(L4_LS_LAST_ACTION);
     const n = raw ? Number(raw) : NaN;
-    if (!Number.isFinite(n)) {
-      const now = Date.now();
-      window.localStorage.setItem(L4_LS_LAST_ACTION, String(now));
-      return now;
+    const now = Date.now();
+    if (Number.isFinite(n) && now - n < L4_SESSION_GRACE_MS) {
+      return n;
     }
-    return n;
+    window.localStorage.setItem(L4_LS_LAST_ACTION, String(now));
+    return now;
   });
   /** Tick value — drives telemetry counter and threshold transitions. */
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -261,10 +285,13 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
   const lane1Ref = useRef<HTMLDivElement | null>(null);
   const resetInFlightRef = useRef(false);
   const descentPausedRef = useRef(false);
+  /** Descent progress (0..1) captured at HOLD start — crusher Y pins here until HOLD exits. */
+  const holdYRef = useRef<number>(0);
+  /** Date.now() at HOLD start — used to shift lastActionAt when HOLD exits. */
+  const holdStartedAtRef = useRef<number | null>(null);
 
   descentPausedRef.current = descentPaused;
   const wallVisual = wallVisualFromPhase(gamePhase);
-  const spikeGradientId = `l4-spike-metal-${useId().replace(/:/g, "")}`;
 
   /** Idle ms since last meaningful action, clamped at 0. */
   const idleMs = Math.max(0, nowTick - lastActionAt);
@@ -354,6 +381,11 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
       return;
     }
 
+    // HOLD and UNSTABLE are user-driven sub-states; idle-based derivation must not
+    // overwrite them. HOLD exits via tryCompleteLane success/cancel; UNSTABLE exits
+    // via the unstable-budget effect, which rewinds lastActionAt and flips phase.
+    if (gamePhase === "holding" || gamePhase === "unstable") return;
+
     if (allLanesCleared(completedLanes)) {
       if (gamePhase !== "victory") setGamePhase("victory");
       return;
@@ -386,6 +418,42 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
   ]);
 
   /**
+   * HOLD budget — starts only once the preview is actually visible. While copy
+   * generation is in flight (modal not yet shown), HOLD stays stable so slow
+   * LLM latency never punishes the user.
+   */
+  useEffect(() => {
+    if (gamePhase !== "holding" || !previewOpen) return;
+    const id = window.setTimeout(() => {
+      setGamePhase("unstable");
+    }, L4_HOLD_BUDGET_MS);
+    return () => window.clearTimeout(id);
+  }, [gamePhase, previewOpen]);
+
+  /**
+   * UNSTABLE budget — after this window, descent resumes from the pinned Y.
+   * lastActionAt is advanced by the full HOLD duration so the crusher picks up
+   * where it paused rather than snapping to where it "would have been".
+   */
+  useEffect(() => {
+    if (gamePhase !== "unstable") return;
+    const id = window.setTimeout(() => {
+      const hs = holdStartedAtRef.current ?? Date.now();
+      const held = Date.now() - hs;
+      holdStartedAtRef.current = null;
+      setLastActionAt((prev) => {
+        const next = prev + held;
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(L4_LS_LAST_ACTION, String(next));
+        }
+        return next;
+      });
+      setGamePhase("descent");
+    }, L4_UNSTABLE_BUDGET_MS);
+    return () => window.clearTimeout(id);
+  }, [gamePhase]);
+
+  /**
    * FULL RESET sequence on successful deploy/execute:
    *   620ms flash → 1500ms stamp → lane locked green, crusher snaps to top, idle clock resets.
    * Guarded against double-fire so the child-promise path and the Host imperative ref path
@@ -397,6 +465,8 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
       resetInFlightRef.current = true;
       clearTimers();
       setDescentPaused(false);
+      holdStartedAtRef.current = null;
+      setCtaWaitLane(null);
       setReviveLane(lane);
       setRevivePhase("flash");
       setGamePhase("resetting");
@@ -437,6 +507,7 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
   const resetCycle = useCallback(() => {
     clearTimers();
     resetInFlightRef.current = false;
+    holdStartedAtRef.current = null;
     setForcedPhase(null);
     setWorkHoursOverride("auto");
     setFastFactor(1);
@@ -462,9 +533,11 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
     (phase: GamePhase | null) => {
       clearTimers();
       resetInFlightRef.current = false;
+      holdStartedAtRef.current = null;
       setRevivePhase("idle");
       setReviveLane(null);
       setDescentPaused(false);
+      setCtaWaitLane(null);
       if (phase === null) {
         setForcedPhase(null);
         return;
@@ -482,8 +555,19 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
         setLastActionAt(now);
         window.localStorage.setItem(L4_LS_LAST_ACTION, String(now));
       }
+      // For forced HOLD/UNSTABLE, pin holdY at current descent progress so the
+      // override reads visually like a real click.
+      if ((phase === "holding" || phase === "unstable") && canvasStackRef.current) {
+        const p =
+          idleMs <= idleToThreatMs
+            ? 0
+            : Math.min(1, (idleMs - idleToThreatMs) / (impactThresholdMs - idleToThreatMs));
+        holdYRef.current = p;
+        holdStartedAtRef.current = Date.now();
+        canvasStackRef.current.style.setProperty("--l4-hold-y", String(p));
+      }
     },
-    [clearTimers, impactThresholdMs]
+    [clearTimers, impactThresholdMs, idleMs, idleToThreatMs]
   );
 
   /** Simulation Override: run the full revive choreography on the active lane (or L1 fallback). */
@@ -529,6 +613,8 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
     if (activeLane !== lane) return;
     if (resetInFlightRef.current) return;
     if (revivePhase !== "idle") return;
+    // Re-entry guard: already mid-HOLD for this lane.
+    if (gamePhase === "holding" || gamePhase === "unstable") return;
 
     const fn = lane === 1 ? onDeployLane1 : lane === 2 ? onDeployLane2 : onDeployLane3;
 
@@ -538,23 +624,42 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
       return;
     }
 
-    // PARTIAL RELIEF: opening a preview / drafting pushes idle back by +15% of idle-to-threat.
-    const now = Date.now();
-    const boosted = Math.min(now, lastActionAt + partialReliefMs);
-    setLastActionAt(boosted);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(L4_LS_LAST_ACTION, String(boosted));
+    // HOLD: pin crusher Y immediately, before any async generation. UNSTABLE
+    // timer is gated on previewOpen via effect — slow copy-gen keeps HOLD stable.
+    holdYRef.current = descentProgress;
+    holdStartedAtRef.current = Date.now();
+    if (canvasStackRef.current) {
+      canvasStackRef.current.style.setProperty("--l4-hold-y", String(descentProgress));
     }
+    setCtaWaitLane(lane);
+    setCtaErrorLane(null);
+    setGamePhase("holding");
 
     const ok = await resolveDeploy(fn);
+
     if (!ok) {
+      // Cancel / error → exit HOLD with a small slip penalty so backing out never
+      // feels free. lastActionAt shifts forward by the HOLD duration so the crusher
+      // resumes from (pinned Y + slip) rather than snapping to the would-be position.
+      const hs = holdStartedAtRef.current ?? Date.now();
+      const held = Date.now() - hs;
+      holdStartedAtRef.current = null;
+      setLastActionAt((prev) => {
+        const next = prev + held - L4_CANCEL_SLIP_MS;
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(L4_LS_LAST_ACTION, String(next));
+        }
+        return next;
+      });
+      setCtaWaitLane(null);
       setCtaErrorLane(lane);
       window.setTimeout(() => setCtaErrorLane(null), L4_FAILURE_PAUSE_MS);
-      setDescentPaused(true);
-      window.setTimeout(() => setDescentPaused(false), L4_FAILURE_PAUSE_MS);
+      setGamePhase("descent");
       return;
     }
 
+    // Success: runReviveSequence fully resets state including holdStartedAtRef.
+    holdStartedAtRef.current = null;
     setCtaErrorLane(null);
     runReviveSequence(lane);
   }
@@ -620,27 +725,54 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
   const ceilingStatusLabel = !workHoursActive
     ? "OFF-HOURS"
     : revivePhase !== "idle"
-      ? "REVIVE"
+      ? "SECURED"
       : gamePhase === "calm"
-        ? "TOP"
+        ? "ARMED"
         : gamePhase === "descent"
           ? "DESCENDING"
-          : gamePhase === "impact"
-            ? "IMPACT"
-            : gamePhase === "resetting"
-              ? "RESET"
-              : gamePhase === "victory"
-                ? "CLEAR"
-                : "TOP";
+          : gamePhase === "holding"
+            ? "HOLDING"
+            : gamePhase === "unstable"
+              ? "UNSTABLE"
+              : gamePhase === "impact"
+                ? "IMPACT"
+                : gamePhase === "resetting"
+                  ? "SECURED"
+                  : gamePhase === "victory"
+                    ? "CLEAR"
+                    : "ARMED";
 
-  const boardTone = gamePhase === "impact" ? "is-board-dim" : "is-board-warm";
-  const vignetteOpacity = gamePhase === "impact" ? 1 : descentProgress;
+  const boardTone =
+    gamePhase === "impact"
+      ? "is-board-dim"
+      : gamePhase === "holding"
+        ? "is-board-hold"
+        : gamePhase === "unstable"
+          ? "is-board-unstable"
+          : "is-board-warm";
+  const vignetteOpacity =
+    gamePhase === "impact"
+      ? 1
+      : gamePhase === "holding" || gamePhase === "unstable"
+        ? holdYRef.current
+        : descentProgress;
 
   const laneUrgency = (lane: LaneId) => {
     if (activeLane !== lane) return "";
     if (gamePhase === "impact") return "is-cta-max";
-    if (gamePhase === "descent") return "is-cta-urgent";
+    if (gamePhase === "descent" || gamePhase === "unstable") return "is-cta-urgent";
     return "";
+  };
+
+  /** Verb shown on the CTA while the lane is in HOLD. Per-lane so it reads as contextual work. */
+  const holdVerb = (lane: LaneId): string => {
+    if (lane === 1) return "COMPOSING";
+    if (lane === 2) return "PREPARING";
+    return "ACKNOWLEDGING";
+  };
+  const ctaHoldLabel = (lane: LaneId): string => {
+    if (gamePhase === "unstable") return "UNSTABLE —";
+    return `${holdVerb(lane)} —`;
   };
 
   return (
@@ -699,7 +831,11 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
           <div className="l4-threatCeiling">
             <div className="l4-ceilingBadge">
               <span className="l4-ceilingBadgeIcon" aria-hidden>
-                {revivePhase !== "idle" ? "↑" : gamePhase === "resetting" ? "↑" : "↓"}
+                {revivePhase !== "idle" || gamePhase === "resetting"
+                  ? "↑"
+                  : gamePhase === "holding" || gamePhase === "unstable"
+                    ? "◆"
+                    : "↓"}
               </span>
               <span className="l4-ceilingBadgeLabel">CEILING STATUS:</span>
               <span className="l4-ceilingBadgeValue">{ceilingStatusLabel}</span>
@@ -809,39 +945,29 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
                   "l4-ceiling",
                   wallVisual === "top" && "is-wall-top",
                   wallVisual === "descending" && "is-wall-descending",
+                  wallVisual === "holding" && "is-wall-holding",
+                  wallVisual === "unstable" && "is-wall-unstable",
                   wallVisual === "bottomed" && "is-wall-bottomed",
                   wallVisual === "resetting" && "is-wall-resetting",
                   descentPaused && wallVisual === "descending" && "is-descent-paused"
                 )}
               >
-                <div className="l4-ceilingBar is-spikey-bar">
+                <div className="l4-crusher">
+                  {/* Spikey crusher PNG — chain continuity is knowingly imperfect for V1.
+                      See the team's design note: the result reads as a real threat rather
+                      than a saw-tooth SVG trim. */}
+                  <img
+                    src={crusherPng}
+                    className="l4-crusherImg"
+                    alt=""
+                    aria-hidden
+                    draggable={false}
+                  />
                   <p className={cn("l4-threatText", gamePhase === "impact" && "is-impact")}>
                     {gamePhase === "impact"
                       ? "Impact. The future is crushed unless you revive."
                       : "Stagnation will be the death of you."}
                   </p>
-                  <svg
-                    className="l4-ceilingSpikeStrip"
-                    viewBox="0 0 240 20"
-                    preserveAspectRatio="none"
-                    aria-hidden
-                  >
-                    <defs>
-                      <linearGradient id={spikeGradientId} x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#8a8580" />
-                        <stop offset="25%" stopColor="#4a4542" />
-                        <stop offset="55%" stopColor="#1f1c1a" />
-                        <stop offset="100%" stopColor="#0a0908" />
-                      </linearGradient>
-                    </defs>
-                    <path
-                      d={L4_SPIKE_PATH}
-                      fill={`url(#${spikeGradientId})`}
-                      stroke="rgba(0,0,0,0.65)"
-                      strokeWidth="0.35"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  </svg>
                 </div>
               </div>
             </div>
@@ -950,7 +1076,7 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
               {completedLanes[1]
                 ? "DONE ✓"
                 : ctaWaitLane === 1
-                  ? "WAIT —"
+                  ? ctaHoldLabel(1)
                   : ctaErrorLane === 1
                     ? "RETRY →"
                     : gamePhase === "impact" && activeLane === 1
@@ -994,7 +1120,7 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
               {completedLanes[2]
                 ? "DONE ✓"
                 : ctaWaitLane === 2
-                  ? "WAIT —"
+                  ? ctaHoldLabel(2)
                   : ctaErrorLane === 2
                     ? "RETRY →"
                     : gamePhase === "impact" && activeLane === 2
@@ -1031,7 +1157,7 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
               {completedLanes[3]
                 ? "DONE ✓"
                 : ctaWaitLane === 3
-                  ? "WAIT —"
+                  ? ctaHoldLabel(3)
                   : ctaErrorLane === 3
                     ? "RETRY →"
                     : gamePhase === "impact" && activeLane === 3
@@ -1155,6 +1281,12 @@ function SimulationOverride(p: SimulationOverrideProps) {
             </button>
             <button type="button" className="l4-simOverrideBtn" onClick={() => p.onForcePhase("descent")}>
               [ FORCE: THREAT ]
+            </button>
+            <button type="button" className="l4-simOverrideBtn" onClick={() => p.onForcePhase("holding")}>
+              [ FORCE: HOLD ]
+            </button>
+            <button type="button" className="l4-simOverrideBtn" onClick={() => p.onForcePhase("unstable")}>
+              [ FORCE: UNSTABLE ]
             </button>
             <button type="button" className="l4-simOverrideBtn is-warn" onClick={() => p.onForcePhase("impact")}>
               [ FORCE: IMPACT ]
