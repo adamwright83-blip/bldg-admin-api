@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, MapPin, Phone, MessageSquare, Package } from "lucide-react";
 import type { Order } from "@shared/types";
 import { matchBuilding } from "@shared/buildings";
+import { DriverPrepMechanic } from "@/components/driver/DriverPrepMechanic";
 
 /** Returns the delivery date string: pickupDate + 1 calendar day */
 function computeDeliveryDate(pickupDate: string): string {
@@ -41,14 +42,12 @@ export default function Driver() {
 
   const updateStatus = trpc.admin.updateStatus.useMutation();
 
-  const handlePickedUp = async (orderId: number) => {
-    await updateStatus.mutateAsync({ orderId, status: "collected" });
-    pickupQuery.refetch();
-  };
-
-  const handleDelivered = async (orderId: number) => {
-    await updateStatus.mutateAsync({ orderId, status: "delivered" });
-    deliveryQuery.refetch();
+  const handleResolveOrder = async (
+    orderId: number,
+    status: "collected" | "delivered"
+  ) => {
+    await updateStatus.mutateAsync({ orderId, status });
+    await Promise.all([pickupQuery.refetch(), deliveryQuery.refetch()]);
   };
 
   if (authLoading) {
@@ -94,7 +93,7 @@ export default function Driver() {
                   datePrefix="Pickup"
                   timeWindow={o.pickupTimeWindow}
                   actionLabel="Mark Picked Up"
-                  onAction={() => handlePickedUp(o.id)}
+                  onAction={() => handleResolveOrder(o.id, "collected")}
                   isPending={updateStatus.isPending}
                 />
               ))}
@@ -123,7 +122,7 @@ export default function Driver() {
                   datePrefix="Delivery"
                   timeWindow={o.pickupTimeWindow}
                   actionLabel="Mark Delivered"
-                  onAction={() => handleDelivered(o.id)}
+                  onAction={() => handleResolveOrder(o.id, "delivered")}
                   isPending={updateStatus.isPending}
                   showBags
                 />
@@ -133,6 +132,13 @@ export default function Driver() {
         </div>
 
       </div>
+
+      <DriverPrepMechanic
+        pickups={pickupQuery.data}
+        deliveries={deliveryQuery.data}
+        isLoading={pickupQuery.isLoading || deliveryQuery.isLoading || updateStatus.isPending}
+        onResolveOrder={handleResolveOrder}
+      />
     </div>
   );
 }
