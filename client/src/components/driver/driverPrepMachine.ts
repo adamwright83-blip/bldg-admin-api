@@ -20,7 +20,7 @@ export type VerificationFailureReason =
   | "manual_test_failure";
 
 export type PrepUploadSlot = {
-  status: "empty" | "uploaded";
+  status: "empty" | "previewed" | "secured";
   previewDataUrl: string | null;
   completedAt: string | null;
 };
@@ -87,7 +87,8 @@ export type DriverPrepState = {
 export type DriverPrepAction =
   | { type: "HYDRATE"; state: DriverPrepState }
   | { type: "ROLL_TO_NEXT_DAY"; todayKey: string }
-  | { type: "UPLOAD_PREP"; tier: 1 | 2 | 3; previewDataUrl: string; now: string }
+  | { type: "SET_PREP_PREVIEW"; tier: 1 | 2 | 3; previewDataUrl: string }
+  | { type: "SECURE_PREP_TASK"; tier: 1 | 2 | 3; now: string }
   | { type: "ADVANCE_PREP_COMPLETE" }
   | { type: "ARM_SWEEP" }
   | { type: "SELECT_SWEEP_CELL"; index: number }
@@ -246,6 +247,38 @@ export function createInitialDriverPrepState(
   };
 }
 
+function normalizePrepUploadSlot(
+  slot:
+    | PrepUploadSlot
+    | {
+        status?: string;
+        previewDataUrl?: string | null;
+        completedAt?: string | null;
+      }
+    | undefined
+): PrepUploadSlot {
+  if (!slot) return createEmptyUploadSlot();
+  const normalizedStatus =
+    slot.status === "secured" || slot.status === "previewed" || slot.status === "empty"
+      ? slot.status
+      : slot.status === "uploaded"
+        ? "previewed"
+        : "empty";
+
+  return {
+    status: normalizedStatus,
+    previewDataUrl: slot.previewDataUrl ?? null,
+    completedAt: normalizedStatus === "secured" ? slot.completedAt ?? null : null,
+  };
+}
+
+function firstPendingPrepPhase(state: DriverPrepState["prepUploads"]): DriverPrepPhase | null {
+  if (state.t1.status !== "secured") return "prep_t1";
+  if (state.t2.status !== "secured") return "prep_t2";
+  if (state.t3.status !== "secured") return "prep_t3";
+  return null;
+}
+
 function advanceMissionForNewDay(state: DriverPrepState, todayKey: string): DriverPrepState {
   const nextMissionNumber = getNextMissionNumber(state.missionNumber);
   return createInitialDriverPrepState(nextMissionNumber, todayKey, state.history);
@@ -266,9 +299,9 @@ function sanitizeState(candidate: DriverPrepState): DriverPrepState {
     currentPayloadIndex,
     completedPayloadsCurrentMission,
     prepUploads: {
-      t1: candidate.prepUploads?.t1 ?? createEmptyUploadSlot(),
-      t2: candidate.prepUploads?.t2 ?? createEmptyUploadSlot(),
-      t3: candidate.prepUploads?.t3 ?? createEmptyUploadSlot(),
+      t1: normalizePrepUploadSlot(candidate.prepUploads?.t1),
+      t2: normalizePrepUploadSlot(candidate.prepUploads?.t2),
+      t3: normalizePrepUploadSlot(candidate.prepUploads?.t3),
     },
     deployment: candidate.deployment ?? createEmptyDeploymentProof(),
     verification: candidate.verification ?? createEmptyVerificationState(),
@@ -301,6 +334,27 @@ export function normalizeHydratedDriverPrepState(
   }
 
   const sanitized = sanitizeState(parsed);
+  const pendingPrepPhase = firstPendingPrepPhase(sanitized.prepUploads);
+  if (
+    pendingPrepPhase &&
+    !sanitized.missionCompletedForDay &&
+    !sanitized.phase.startsWith("prep_")
+  ) {
+    return {
+      ...sanitized,
+      phase: pendingPrepPhase,
+      currentPayloadIndex: 1,
+      completedPayloadsCurrentMission: 0,
+      deployment: createEmptyDeploymentProof(),
+      verification: createEmptyVerificationState(),
+      postVerifyPhase: null,
+      resolvedOrderIdsCurrentMission: [],
+      nextTargetLaunchPending: false,
+      pendingOrderResolution: null,
+      sweep: buildSweepState(sanitized.missionNumber, 1),
+    };
+  }
+
   if (
     sanitized.missionCompletedForDay &&
     sanitized.history.lastCompletedDayKey &&
@@ -333,7 +387,22 @@ export function driverPrepReducer(
       if (!state.missionCompletedForDay) return state;
       if (state.history.lastCompletedDayKey === action.todayKey) return state;
       return advanceMissionForNewDay(state, action.todayKey);
-    case "UPLOAD_PREP": {
+    case "SET_PREP_PREVIEW": {
+      const key = `t${action.tier}` as "t1" | "t2" | "t3";
+      return stampUpdatedAt({
+        ...state,
+        prepUploads: {
+          ...state.prepUploads,
+          [key]: {
+            ...state.prepUploads[key],
+            status: "previewed",
+            previewDataUrl: action.previewDataUrl,
+            completedAt: null,
+          },
+        },
+      });
+    }
+    case "SECURE_PREP_TASK": {
       const key = `t${action.tier}` as "t1" | "t2" | "t3";
       const phase = nextPrepPhase(action.tier);
       return stampUpdatedAt({
@@ -341,8 +410,8 @@ export function driverPrepReducer(
         prepUploads: {
           ...state.prepUploads,
           [key]: {
-            status: "uploaded",
-            previewDataUrl: action.previewDataUrl,
+            ...state.prepUploads[key],
+            status: "secured",
             completedAt: action.now,
           },
         },
@@ -381,6 +450,8 @@ export function driverPrepReducer(
         deployment: createEmptyDeploymentProof(),
         verification: createEmptyVerificationState(),
         postVerifyPhase: null,
+        resolvedOrderIdsCurrentMission: [],
+        pendingOrderResolution: null,
         nextTargetLaunchPending: false,
       });
     case "UPLOAD_DEPLOY_PROOF":

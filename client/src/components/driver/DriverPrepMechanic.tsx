@@ -34,6 +34,7 @@ import {
 } from "./driverMissionStorage";
 import {
   buildDriverMissionStops,
+  deriveResolutionStop,
   deriveMissionTarget,
 } from "./driverMissionModel";
 import "./driver-prep-mechanic.css";
@@ -163,6 +164,18 @@ export function DriverPrepMechanic({
       stops,
     ]
   );
+  const resolutionStop = useMemo(
+    () => deriveResolutionStop(stops, state.resolvedOrderIdsCurrentMission),
+    [state.resolvedOrderIdsCurrentMission, stops]
+  );
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -259,18 +272,17 @@ export function DriverPrepMechanic({
       type: "RESOLVE_VERIFY_SUCCESS",
       now: new Date().toISOString(),
       resolvedOrder:
-        missionTarget.kind === "real" &&
-        missionTarget.orderId &&
-        missionTarget.nextStatus
+        resolutionStop?.orderId &&
+        resolutionStop?.nextStatus
           ? {
-              orderId: missionTarget.orderId,
-              nextStatus: missionTarget.nextStatus,
+              orderId: resolutionStop.orderId,
+              nextStatus: resolutionStop.nextStatus,
             }
           : undefined,
     });
   }, [
-    missionTarget,
     nowTick,
+    resolutionStop,
     runtimeFlags.fastMode,
     runtimeFlags.manualVerifyFail,
     runtimeFlags.manualVerifyTimeout,
@@ -356,13 +368,14 @@ export function DriverPrepMechanic({
       const previewDataUrl = await compressImageForMissionPreview(file);
       const now = new Date().toISOString();
       if (pickerMode === "prep_t1") {
-        dispatch({ type: "UPLOAD_PREP", tier: 1, previewDataUrl, now });
+        dispatch({ type: "SET_PREP_PREVIEW", tier: 1, previewDataUrl });
       } else if (pickerMode === "prep_t2") {
-        dispatch({ type: "UPLOAD_PREP", tier: 2, previewDataUrl, now });
+        dispatch({ type: "SET_PREP_PREVIEW", tier: 2, previewDataUrl });
       } else if (pickerMode === "prep_t3") {
-        dispatch({ type: "UPLOAD_PREP", tier: 3, previewDataUrl, now });
+        dispatch({ type: "SET_PREP_PREVIEW", tier: 3, previewDataUrl });
       } else if (pickerMode === "deploy_live") {
         dispatch({ type: "UPLOAD_DEPLOY_PROOF", previewDataUrl, now });
+        dispatch({ type: "LOCK_DEPLOY_PROOF" });
       }
     } catch (error) {
       console.warn("[DriverPrep] Failed to compress image:", error);
@@ -380,12 +393,20 @@ export function DriverPrepMechanic({
   const passPrepTask = (tier: 1 | 2 | 3) => {
     if (!runtimeFlags.cheatMode) return;
     dispatch({
-      type: "UPLOAD_PREP",
+      type: "SECURE_PREP_TASK",
       tier,
-      previewDataUrl: "",
       now: new Date().toISOString(),
     });
   };
+
+  useEffect(() => {
+    if (state.phase !== "deploy_resolved") return;
+    const timeoutId = window.setTimeout(
+      () => startVerification(),
+      runtimeFlags.fastMode ? 260 : 720
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [runtimeFlags.fastMode, state.phase]);
 
   const startVerification = () => {
     const startedAt = new Date().toISOString();
@@ -416,9 +437,9 @@ export function DriverPrepMechanic({
   const phaseToneClass = getPhaseToneClass(state.phase);
 
   const checkStates = [
-    state.prepUploads.t1.status === "uploaded",
-    state.prepUploads.t2.status === "uploaded",
-    state.prepUploads.t3.status === "uploaded",
+    state.prepUploads.t1.status === "secured",
+    state.prepUploads.t2.status === "secured",
+    state.prepUploads.t3.status === "secured",
   ];
 
   const surface = (() => {
@@ -455,9 +476,17 @@ export function DriverPrepMechanic({
             </div>
             <DriverProofUpload
               title={`Upload Prep Asset ${tier}`}
-              subtitle="Flyer proof only. Lock the current prep tier before advancing."
+              subtitle={
+                runtimeFlags.cheatMode
+                  ? "Flyer proof stays preview-only unless you explicitly pass the task in cheat mode."
+                  : "Flyer proof is preview-only in normal mode until a real verification path exists."
+              }
               statusLabel={
-                slot.status === "uploaded" ? "Asset secured" : "Awaiting proof image"
+                slot.status === "secured"
+                  ? "Task secured"
+                  : slot.status === "previewed"
+                    ? "Preview captured — pending verification"
+                    : "Awaiting proof image"
               }
               previewDataUrl={slot.previewDataUrl}
               actionLabel={`Upload Asset ${tier}`}
@@ -628,14 +657,12 @@ export function DriverPrepMechanic({
               actionLabel="Replace Proof Image"
               onPick={() => openPicker("deploy_live")}
             />
-            <button
-              type="button"
-              className="driver-prep-actionBar"
-              onClick={startVerification}
-            >
-              <ShieldCheck className="driver-prep-actionIcon" />
-              Initiate Verification
-            </button>
+            <div className="driver-prep-statusBanner">
+              <p className="driver-prep-proofTitle">Verification Auto-Initiating</p>
+              <p className="driver-prep-subtitle">
+                Proof locked. Hold position while the countdown takes over.
+              </p>
+            </div>
           </div>
         );
       case "verify_countdown":
