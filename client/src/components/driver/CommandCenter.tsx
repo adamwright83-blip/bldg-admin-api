@@ -14,10 +14,14 @@ import {
   Flame,
   Zap,
   Trophy,
+  Building2,
 } from "lucide-react";
 import type { GameOrder, GameStateSnapshot } from "./driverGameTypes";
 import { sounds } from "./driverSounds";
 import { haptics } from "./driverHaptics";
+
+const HERO_CITYSCAPE =
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663281332025/bVTWnxw2cr9EUVzVBCF5PW/hero-cityscape-ibzWyN4yDNboMUDQd8P4Lh.webp";
 
 interface Props {
   orders: GameOrder[];
@@ -57,6 +61,18 @@ export default function CommandCenter({
     >
       <div className="heartbeat-bar w-full" />
 
+      <div
+        className="absolute inset-x-0 top-0 h-[340px] pointer-events-none opacity-[0.18]"
+        style={{
+          backgroundImage: `url(${HERO_CITYSCAPE})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center top",
+          maskImage:
+            "linear-gradient(180deg, black 0%, black 45%, transparent 100%)",
+          WebkitMaskImage:
+            "linear-gradient(180deg, black 0%, black 45%, transparent 100%)",
+        }}
+      />
       <div
         className="absolute inset-0 pointer-events-none opacity-[0.03]"
         style={{
@@ -199,6 +215,14 @@ export default function CommandCenter({
                   <p className="font-display font-bold text-[15px] text-foreground mb-1 uppercase tracking-wide">
                     {order.customerName}
                   </p>
+                  {order.buildingName ? (
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Building2 className="w-3 h-3 text-neon/50 shrink-0" />
+                      <p className="text-[9px] tracking-[0.18em] text-neon/70 uppercase font-semibold truncate">
+                        {order.buildingName}
+                      </p>
+                    </div>
+                  ) : null}
                   <div className="flex items-start gap-1.5">
                     <MapPin className="w-3 h-3 text-neon/40 mt-0.5 shrink-0" />
                     <p className="text-[10px] text-muted-foreground leading-tight">

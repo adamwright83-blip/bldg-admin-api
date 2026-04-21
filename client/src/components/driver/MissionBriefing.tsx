@@ -6,10 +6,19 @@
  */
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Navigation, MapPin, Crosshair, ExternalLink } from "lucide-react";
+import {
+  Navigation,
+  MapPin,
+  Crosshair,
+  ExternalLink,
+  Radar,
+} from "lucide-react";
 import type { GameMissionTarget } from "./driverGameTypes";
 import { sounds } from "./driverSounds";
 import { haptics } from "./driverHaptics";
+
+const BRIEFING_BG =
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663281332025/bVTWnxw2cr9EUVzVBCF5PW/mission-briefing-bg-jmkSHSaQsAxCSTHWVfjiTD.webp";
 
 interface Props {
   mission: GameMissionTarget;
@@ -48,10 +57,10 @@ export default function MissionBriefing({ mission, onStartOverride }: Props) {
   };
 
   const protocolSteps = [
-    "Navigate to target location",
-    "Post flyer at business entrance",
-    "Confirm flyer deployed",
-    "Complete signal override",
+    "Navigate to the target address",
+    "Post the BLDG flyer at the lobby or entrance",
+    "Snap a mental note — you'll confirm below",
+    "Return to this screen and begin override",
   ];
 
   return (
@@ -63,6 +72,18 @@ export default function MissionBriefing({ mission, onStartOverride }: Props) {
     >
       <div className="heartbeat-bar w-full" />
 
+      <div
+        className="absolute inset-x-0 top-0 h-[320px] pointer-events-none opacity-[0.20]"
+        style={{
+          backgroundImage: `url(${BRIEFING_BG})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          maskImage:
+            "linear-gradient(180deg, black 0%, black 35%, transparent 100%)",
+          WebkitMaskImage:
+            "linear-gradient(180deg, black 0%, black 35%, transparent 100%)",
+        }}
+      />
       <div
         className="absolute inset-0 pointer-events-none opacity-[0.03]"
         style={{
@@ -109,10 +130,13 @@ export default function MissionBriefing({ mission, onStartOverride }: Props) {
 
             <div className="flex items-center gap-3 mb-2">
               <div className="border border-border/30 bg-void-light/30 px-4 py-3 flex-1">
-                <p className="text-[7px] tracking-[0.2em] text-muted-foreground uppercase mb-1">
-                  Distance
-                </p>
-                <p className="text-xl font-bold text-amber">
+                <div className="flex items-center gap-1 mb-1">
+                  <Radar className="w-3 h-3 text-amber/70" />
+                  <p className="text-[7px] tracking-[0.2em] text-muted-foreground uppercase">
+                    Proximity
+                  </p>
+                </div>
+                <p className="text-[13px] font-bold text-amber uppercase tracking-wider leading-none">
                   {mission.distance}
                 </p>
               </div>
@@ -191,10 +215,14 @@ export default function MissionBriefing({ mission, onStartOverride }: Props) {
 
             <button
               onClick={handleOverride}
-              className="w-full bg-neon text-void py-4 font-display font-extrabold text-lg uppercase tracking-wider
-                         active:scale-[0.98] transition-transform shadow-[0_0_20px_oklch(0.85_0.25_155/0.3)]"
+              className="w-full bg-neon text-void py-4 font-display font-extrabold text-base uppercase tracking-wider
+                         active:scale-[0.98] transition-transform shadow-[0_0_24px_oklch(0.85_0.25_155/0.35)]
+                         flex flex-col items-center leading-tight"
             >
-              Flyer Posted — Begin Override
+              <span>Flyer Posted — Begin Override</span>
+              <span className="text-[9px] tracking-[0.3em] opacity-70 font-bold mt-0.5">
+                Only tap once the flyer is up
+              </span>
             </button>
           </motion.div>
         )}

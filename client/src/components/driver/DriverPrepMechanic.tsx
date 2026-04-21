@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { motion } from "framer-motion";
+import { AlertTriangle, RotateCw, Radio, ChevronRight } from "lucide-react";
 import type { Order } from "@shared/types";
+import { matchBuilding } from "@shared/buildings";
 import {
   driverPrepReducer,
   getMissionDayKey,
@@ -21,6 +24,8 @@ import type {
   GameOrder,
   GameStateSnapshot,
 } from "./driverGameTypes";
+import { sounds } from "./driverSounds";
+import { haptics } from "./driverHaptics";
 import CommandCenter from "./CommandCenter";
 import OrderDetail from "./OrderDetail";
 import AssetVerification from "./AssetVerification";
@@ -40,7 +45,7 @@ type Props = {
 };
 
 const OVERRIDE_TIMEOUT_MS = 8000;
-const VERIFY_FAILED_AUTO_ACK_MS = 2400;
+const NEXT_TARGET_CINEMATIC_MS = 2200;
 
 /** Map the in-flight payload index → XP award tier. */
 function xpForPayload(payloadIndex: number, payloadCount: number): number {
@@ -82,6 +87,7 @@ function computeDeliveryDate(pickupDate: string): string {
 
 function orderToGameOrder(order: Order): GameOrder {
   const isDelivery = order.status === "ready";
+  const building = matchBuilding(order.address);
   return {
     id: order.id,
     type: isDelivery ? "DELIVERY" : "PICKUP",
@@ -91,7 +97,7 @@ function orderToGameOrder(order: Order): GameOrder {
     timeWindow: order.pickupTimeWindow || "—",
     nextStatus: nextStatusForOrder(order.status),
     unit: order.unit ?? null,
-    buildingName: null,
+    buildingName: building?.name ?? null,
     dateLabel: isDelivery
       ? formatPickupDate(computeDeliveryDate(order.pickupDate))
       : formatPickupDate(order.pickupDate),
@@ -108,7 +114,10 @@ function missionTargetToGameMission(
     address: target.address,
     mapsUrl: target.mapsUrl,
     intel: target.intel,
-    distance: target.kind === "real" ? "≤ 0.5 mi" : "—",
+    distance:
+      target.kind === "real"
+        ? "ON ROUTE · NEXT STOP"
+        : "ZONE CORRIDOR · NEARBY",
     reward: xpForPayload(payloadIndex, payloadCount),
     kind: target.kind,
   };
@@ -250,19 +259,13 @@ export function DriverPrepMechanic({
     })();
   }, [state.pendingOrderResolution, onResolveOrder]);
 
-  // Auto-ack the verify_failed screen back into laundry_run after a beat.
-  useEffect(() => {
-    if (state.phase !== "verify_failed") return;
-    const t = setTimeout(() => {
-      dispatch({ type: "ACK_VERIFY_FAILURE" });
-    }, VERIFY_FAILED_AUTO_ACK_MS);
-    return () => clearTimeout(t);
-  }, [state.phase]);
-
-  // Auto-advance the "next_target" transitional phase back into laundry_run.
+  // Cinematic beat before rolling to the next payload.
   useEffect(() => {
     if (state.phase !== "next_target") return;
-    dispatch({ type: "ADVANCE_WITHOUT_MAP" });
+    const t = setTimeout(() => {
+      dispatch({ type: "ADVANCE_WITHOUT_MAP" });
+    }, NEXT_TARGET_CINEMATIC_MS);
+    return () => clearTimeout(t);
   }, [state.phase]);
 
   // Auto-jump from prep_complete into laundry_run.
@@ -352,6 +355,10 @@ export function DriverPrepMechanic({
     }
   }, [state.phase]);
 
+  const handleRetryFailure = useCallback(() => {
+    dispatch({ type: "ACK_VERIFY_FAILURE" });
+  }, []);
+
   const scansCompleted = scansCompletedFromState(state);
 
   return (
@@ -372,6 +379,7 @@ export function DriverPrepMechanic({
         handleStartOverride,
         handleOverrideComplete,
         handleDebriefReturn,
+        handleRetryFailure,
       })}
     </div>
   );
@@ -396,6 +404,7 @@ type RenderArgs = {
   handleStartOverride: () => void;
   handleOverrideComplete: (success: boolean) => void;
   handleDebriefReturn: () => void;
+  handleRetryFailure: () => void;
 };
 
 function renderPhase(phase: DriverPrepPhase, args: RenderArgs) {
@@ -458,9 +467,9 @@ function renderPhase(phase: DriverPrepPhase, args: RenderArgs) {
         />
       );
     case "verify_failed":
-      return <VerifyFailedScreen />;
+      return <VerifyFailedScreen onRetry={args.handleRetryFailure} />;
     case "next_target":
-      return <TransitionScreen label="Queueing Next Payload" />;
+      return <NextPayloadTransition nextMission={args.missionTarget} />;
     case "mission_complete":
       return (
         <MissionDebrief
@@ -471,32 +480,182 @@ function renderPhase(phase: DriverPrepPhase, args: RenderArgs) {
         />
       );
     default:
-      return <TransitionScreen label="Loading" />;
+      return (
+        <div className="min-h-screen bg-black flex items-center justify-center">
+          <p className="text-[10px] tracking-[0.5em] text-neon/60 uppercase font-semibold">
+            Loading…
+          </p>
+        </div>
+      );
   }
 }
 
-function VerifyFailedScreen() {
+function VerifyFailedScreen({ onRetry }: { onRetry: () => void }) {
+  useEffect(() => {
+    sounds.overrideFail();
+    haptics.error();
+  }, []);
+
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
-      <p className="text-[9px] tracking-[0.5em] text-danger uppercase mb-3 font-semibold">
-        Override Failed
-      </p>
-      <p className="font-display font-extrabold text-[32px] uppercase tracking-wider text-danger mb-3 text-center">
-        Payload Loop Reset
-      </p>
-      <p className="text-[11px] text-muted-foreground text-center max-w-[260px] leading-relaxed">
-        Signal lost. Restarting from payload 1. Prep remains secured.
-      </p>
-    </div>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="min-h-screen bg-black relative overflow-hidden flex flex-col"
+    >
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.06]"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(0deg, transparent, transparent 2px, oklch(0.65 0.28 25 / 0.25) 2px, oklch(0.65 0.28 25 / 0.25) 4px)",
+        }}
+      />
+      <div
+        className="absolute inset-0 pointer-events-none animate-pulse-neon"
+        style={{
+          boxShadow:
+            "inset 0 0 80px oklch(0.65 0.28 25 / 0.25), inset 0 0 160px oklch(0.65 0.28 25 / 0.08)",
+        }}
+      />
+
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-6">
+        <motion.div
+          initial={{ scale: 0.7, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", damping: 12 }}
+          className="mb-6"
+        >
+          <div className="w-16 h-16 border-2 border-danger/60 flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-8 h-8 text-danger" />
+          </div>
+        </motion.div>
+
+        <motion.p
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="text-[9px] tracking-[0.5em] text-danger uppercase mb-3 font-semibold"
+        >
+          Override Failed
+        </motion.p>
+
+        <motion.h1
+          initial={{ x: 0 }}
+          animate={{ x: [0, -6, 6, -4, 4, 0] }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="font-display font-extrabold text-[36px] uppercase tracking-wider text-danger mb-4 text-center leading-none"
+        >
+          Payload Loop Reset
+        </motion.h1>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="text-[11px] text-muted-foreground text-center max-w-[280px] leading-relaxed mb-10"
+        >
+          Signal lost. Restarting from payload 1. Prep remains secured — gear up
+          and try the override again.
+        </motion.p>
+
+        <motion.button
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          onClick={() => {
+            sounds.press();
+            haptics.impact();
+            onRetry();
+          }}
+          className="w-full max-w-xs border border-danger/50 hover:border-danger bg-danger/[0.04]
+                     py-4 flex items-center justify-center gap-3
+                     transition-all duration-200 active:bg-danger/10 group"
+        >
+          <RotateCw className="w-5 h-5 text-danger/80 group-hover:text-danger transition-colors" />
+          <span className="font-display font-extrabold text-lg uppercase tracking-wider text-danger">
+            Retry Payload
+          </span>
+        </motion.button>
+      </div>
+    </motion.div>
   );
 }
 
-function TransitionScreen({ label }: { label: string }) {
+function NextPayloadTransition({ nextMission }: { nextMission: GameMissionTarget }) {
+  useEffect(() => {
+    sounds.missionAssign();
+    haptics.countdown();
+  }, []);
+
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center">
-      <p className="text-[10px] tracking-[0.5em] text-neon/60 uppercase font-semibold">
-        {label}…
-      </p>
-    </div>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="min-h-screen bg-black relative overflow-hidden flex items-center justify-center"
+    >
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.04]"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,136,0.2) 2px, rgba(0,255,136,0.2) 4px)",
+        }}
+      />
+
+      <div className="relative z-10 text-center px-6">
+        <motion.div
+          initial={{ scale: 0, rotate: -90, opacity: 0 }}
+          animate={{ scale: 1, rotate: 0, opacity: 1 }}
+          transition={{ type: "spring", damping: 12 }}
+          className="mb-5 inline-flex"
+        >
+          <Radio className="w-10 h-10 text-neon glow-neon" />
+        </motion.div>
+
+        <motion.p
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="text-[9px] tracking-[0.5em] text-neon/60 uppercase mb-3 font-semibold"
+        >
+          Incoming Transmission
+        </motion.p>
+
+        <motion.h1
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="font-display font-extrabold text-4xl uppercase tracking-wider text-foreground mb-3 leading-none"
+        >
+          Queueing Next Payload
+        </motion.h1>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          className="text-[11px] text-muted-foreground tracking-wider max-w-[260px] mx-auto"
+        >
+          {nextMission.kind === "real"
+            ? "Locking coordinates on next target"
+            : "Scanning zone for nearest target"}
+        </motion.p>
+
+        <motion.div
+          initial={{ width: 0, opacity: 0 }}
+          animate={{ width: "100%", opacity: 1 }}
+          transition={{ delay: 0.8, duration: 1.2, ease: "easeOut" }}
+          className="h-px bg-gradient-to-r from-transparent via-neon/60 to-transparent mt-6 mx-auto max-w-[220px]"
+        />
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.1 }}
+          className="flex items-center justify-center gap-1.5 mt-5 text-[10px] tracking-[0.3em] text-neon/70 uppercase font-semibold"
+        >
+          <span>Stand By</span>
+          <ChevronRight className="w-3 h-3 animate-pulse-neon" />
+        </motion.div>
+      </div>
+    </motion.div>
   );
 }

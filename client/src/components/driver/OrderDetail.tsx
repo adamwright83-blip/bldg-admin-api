@@ -12,10 +12,14 @@ import {
   Package,
   Clock,
   ExternalLink,
+  Building2,
 } from "lucide-react";
 import type { GameOrder } from "./driverGameTypes";
 import { sounds } from "./driverSounds";
 import { haptics } from "./driverHaptics";
+
+const BRIEFING_BG =
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663281332025/bVTWnxw2cr9EUVzVBCF5PW/mission-briefing-bg-jmkSHSaQsAxCSTHWVfjiTD.webp";
 
 interface Props {
   order: GameOrder;
@@ -73,6 +77,18 @@ export default function OrderDetail({
     >
       <div className="heartbeat-bar w-full" />
 
+      <div
+        className="absolute inset-x-0 top-0 h-[280px] pointer-events-none opacity-[0.12]"
+        style={{
+          backgroundImage: `url(${BRIEFING_BG})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          maskImage:
+            "linear-gradient(180deg, black 0%, black 40%, transparent 100%)",
+          WebkitMaskImage:
+            "linear-gradient(180deg, black 0%, black 40%, transparent 100%)",
+        }}
+      />
       <div
         className="absolute inset-0 pointer-events-none opacity-[0.02]"
         style={{
@@ -136,14 +152,17 @@ export default function OrderDetail({
         </motion.div>
 
         {order.buildingName ? (
-          <motion.p
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3 }}
-            className="text-[10px] tracking-[0.2em] text-neon/60 uppercase ml-6 mb-8"
+            className="flex items-center gap-2 ml-6 mb-8"
           >
-            {order.buildingName}
-          </motion.p>
+            <Building2 className="w-3.5 h-3.5 text-neon/70" />
+            <p className="text-[10px] tracking-[0.25em] text-neon/80 uppercase font-semibold">
+              {order.buildingName}
+            </p>
+          </motion.div>
         ) : (
           <div className="mb-8" />
         )}

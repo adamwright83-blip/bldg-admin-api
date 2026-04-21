@@ -10,6 +10,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { sounds } from "./driverSounds";
 import { haptics } from "./driverHaptics";
 
+const REWARD_BURST =
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663281332025/bVTWnxw2cr9EUVzVBCF5PW/reward-burst-e4UbdjcEQqGPVjeTGQDyXs.webp";
+
 interface Props {
   onComplete: (success: boolean) => void;
 }
@@ -176,6 +179,22 @@ export default function SignalOverride({ onComplete }: Props) {
               transition={{ type: "spring", damping: 10, delay: 0.2 }}
               className="absolute inset-0 z-30 flex flex-col items-center justify-center"
             >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.4 }}
+                animate={{ opacity: 0.45, scale: 1.1 }}
+                transition={{ duration: 1.2, ease: "easeOut", delay: 0.1 }}
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  backgroundImage: `url(${REWARD_BURST})`,
+                  backgroundSize: "120% auto",
+                  backgroundPosition: "center",
+                  backgroundRepeat: "no-repeat",
+                  maskImage:
+                    "radial-gradient(ellipse at center, black 0%, black 35%, transparent 70%)",
+                  WebkitMaskImage:
+                    "radial-gradient(ellipse at center, black 0%, black 35%, transparent 70%)",
+                }}
+              />
               <div className="relative z-10 text-center">
                 <motion.p
                   initial={{ y: 20, opacity: 0 }}

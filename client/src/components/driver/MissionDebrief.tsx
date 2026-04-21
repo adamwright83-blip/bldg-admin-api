@@ -22,6 +22,9 @@ import type {
 import { sounds } from "./driverSounds";
 import { haptics } from "./driverHaptics";
 
+const REWARD_BURST =
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663281332025/bVTWnxw2cr9EUVzVBCF5PW/reward-burst-e4UbdjcEQqGPVjeTGQDyXs.webp";
+
 interface Props {
   state: GameStateSnapshot;
   mission: GameMissionTarget;
@@ -103,6 +106,25 @@ export default function MissionDebrief({
       className="min-h-screen bg-black relative overflow-hidden flex flex-col"
     >
       <div className="heartbeat-bar w-full" />
+
+      {state.overrideSuccess && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.6 }}
+          animate={{ opacity: 0.35, scale: 1 }}
+          transition={{ duration: 1.4, ease: "easeOut" }}
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            backgroundImage: `url(${REWARD_BURST})`,
+            backgroundSize: "140% auto",
+            backgroundPosition: "center 30%",
+            backgroundRepeat: "no-repeat",
+            maskImage:
+              "radial-gradient(ellipse at center, black 0%, black 40%, transparent 75%)",
+            WebkitMaskImage:
+              "radial-gradient(ellipse at center, black 0%, black 40%, transparent 75%)",
+          }}
+        />
+      )}
 
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 py-12">
         <motion.div
