@@ -4,7 +4,8 @@
  * `DriverPrepMechanic`. Renders inside `.driver-game` so Tactical Noir tokens
  * apply without touching admin/customer/vendor themes.
  */
-import { motion } from "framer-motion";
+import React from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   MapPin,
   Package,
@@ -19,6 +20,7 @@ import {
 import type { GameOrder, GameStateSnapshot } from "./driverGameTypes";
 import { sounds } from "./driverSounds";
 import { haptics } from "./driverHaptics";
+import TerritoryLeaderboard from "./TerritoryLeaderboard";
 
 const HERO_CITYSCAPE =
   "https://d2xsxph8kpxj0f.cloudfront.net/310519663281332025/bVTWnxw2cr9EUVzVBCF5PW/hero-cityscape-ibzWyN4yDNboMUDQd8P4Lh.webp";
@@ -28,6 +30,13 @@ interface Props {
   state: GameStateSnapshot;
   onSelectOrder: (order: GameOrder) => void;
   isLoading?: boolean;
+}
+
+/** Leaderboard overlay state — lives inside CommandCenter so it doesn't
+ *  pollute the main game state machine. */
+function useLeaderboardToggle() {
+  const [open, setOpen] = React.useState(false);
+  return { open, show: () => setOpen(true), hide: () => setOpen(false) };
 }
 
 function getRank(missions: number): { name: string } {
@@ -44,6 +53,8 @@ export default function CommandCenter({
   onSelectOrder,
   isLoading,
 }: Props) {
+  const leaderboard = useLeaderboardToggle();
+
   const handleSelect = (order: GameOrder) => {
     sounds.press();
     haptics.tap();
@@ -51,6 +62,21 @@ export default function CommandCenter({
   };
 
   const rank = getRank(state.missionsCompleted);
+
+  if (leaderboard.open) {
+    return (
+      <AnimatePresence>
+        <motion.div
+          initial={{ opacity: 0, x: 40 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 40 }}
+          transition={{ duration: 0.25 }}
+        >
+          <TerritoryLeaderboard onBack={leaderboard.hide} />
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
 
   return (
     <motion.div
@@ -145,6 +171,27 @@ export default function CommandCenter({
             </p>
           </div>
         </motion.div>
+
+        {/* Operations Board button */}
+        <motion.button
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.4 }}
+          onClick={() => {
+            sounds.press();
+            haptics.tap();
+            leaderboard.show();
+          }}
+          className="w-full mb-6 border border-neon/20 hover:border-neon/50 bg-neon/[0.03]
+                     py-3 flex items-center justify-center gap-2.5
+                     transition-all duration-200 active:bg-neon/[0.06] group"
+        >
+          <Trophy className="w-4 h-4 text-neon/60 group-hover:text-neon transition-colors" />
+          <span className="font-display font-bold text-[11px] uppercase tracking-[0.25em] text-neon/70 group-hover:text-neon transition-colors">
+            Operations Board
+          </span>
+          <ChevronRight className="w-3.5 h-3.5 text-neon/30 group-hover:text-neon/60 transition-colors" />
+        </motion.button>
 
         <motion.div
           initial={{ opacity: 0 }}

@@ -2,7 +2,7 @@
  * MISSION BRIEFING — bridge to the IRL flyer mission.
  * Displays the real `MissionTarget` derived from `driverMissionModel`.
  * Navigate button opens Google Maps; CTA confirms flyer posted and starts
- * the Signal Override.
+ * the Flyer Proof capture gate before Signal Override.
  */
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
@@ -22,10 +22,10 @@ const BRIEFING_BG =
 
 interface Props {
   mission: GameMissionTarget;
-  onStartOverride: () => void;
+  onFlyerPosted: () => void;
 }
 
-export default function MissionBriefing({ mission, onStartOverride }: Props) {
+export default function MissionBriefing({ mission, onFlyerPosted }: Props) {
   const [revealed, setRevealed] = useState(false);
   const [showProtocol, setShowProtocol] = useState(false);
   const [showActions, setShowActions] = useState(false);
@@ -50,17 +50,17 @@ export default function MissionBriefing({ mission, onStartOverride }: Props) {
     window.open(mission.mapsUrl, "_blank", "noopener,noreferrer");
   };
 
-  const handleOverride = () => {
+  const handleFlyerPosted = () => {
     sounds.press();
     haptics.slam();
-    onStartOverride();
+    onFlyerPosted();
   };
 
   const protocolSteps = [
     "Navigate to the target address",
     "Post the BLDG flyer at the lobby or entrance",
-    "Snap a mental note — you'll confirm below",
-    "Return to this screen and begin override",
+    "Capture proof photo to unlock override",
+    "Begin signal override",
   ];
 
   return (
@@ -214,12 +214,12 @@ export default function MissionBriefing({ mission, onStartOverride }: Props) {
             ) : null}
 
             <button
-              onClick={handleOverride}
+              onClick={handleFlyerPosted}
               className="w-full bg-neon text-void py-4 font-display font-extrabold text-base uppercase tracking-wider
                          active:scale-[0.98] transition-transform shadow-[0_0_24px_oklch(0.85_0.25_155/0.35)]
                          flex flex-col items-center leading-tight"
             >
-              <span>Flyer Posted — Begin Override</span>
+              <span>Flyer Posted — Capture Proof</span>
               <span className="text-[9px] tracking-[0.3em] opacity-70 font-bold mt-0.5">
                 Only tap once the flyer is up
               </span>

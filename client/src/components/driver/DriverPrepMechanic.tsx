@@ -31,6 +31,7 @@ import OrderDetail from "./OrderDetail";
 import AssetVerification from "./AssetVerification";
 import LaundryRun from "./LaundryRun";
 import MissionBriefing from "./MissionBriefing";
+import FlyerProofCapture from "./FlyerProofCapture";
 import SignalOverride from "./SignalOverride";
 import MissionDebrief from "./MissionDebrief";
 
@@ -308,14 +309,26 @@ export function DriverPrepMechanic({
     dispatch({ type: "COMPLETE_LAUNDRY_RUN", score });
   }, []);
 
-  const handleStartOverride = useCallback(() => {
-    const now = Date.now();
-    dispatch({
-      type: "START_SIGNAL_OVERRIDE",
-      startedAt: new Date(now).toISOString(),
-      deadlineAt: new Date(now + OVERRIDE_TIMEOUT_MS).toISOString(),
-    });
+  const handleFlyerPosted = useCallback(() => {
+    dispatch({ type: "ADVANCE_TO_FLYER_PROOF" });
   }, []);
+
+  const handleCompleteFlyerProof = useCallback(
+    (previewDataUrl?: string | null) => {
+      const now = Date.now();
+      const startedAt = new Date(now).toISOString();
+      dispatch({
+        type: "COMPLETE_FLYER_PROOF",
+        previewDataUrl,
+      });
+      dispatch({
+        type: "START_SIGNAL_OVERRIDE",
+        startedAt,
+        deadlineAt: new Date(now + OVERRIDE_TIMEOUT_MS).toISOString(),
+      });
+    },
+    []
+  );
 
   const handleOverrideComplete = useCallback(
     (success: boolean) => {
@@ -376,7 +389,8 @@ export function DriverPrepMechanic({
         handleStartVerification,
         handleCompleteScan,
         handleCompleteLaundryRun,
-        handleStartOverride,
+        handleFlyerPosted,
+        handleCompleteFlyerProof,
         handleOverrideComplete,
         handleDebriefReturn,
         handleRetryFailure,
@@ -401,7 +415,8 @@ type RenderArgs = {
     previewDataUrl?: string | null
   ) => void;
   handleCompleteLaundryRun: (score: number) => void;
-  handleStartOverride: () => void;
+  handleFlyerPosted: () => void;
+  handleCompleteFlyerProof: (previewDataUrl?: string | null) => void;
   handleOverrideComplete: (success: boolean) => void;
   handleDebriefReturn: () => void;
   handleRetryFailure: () => void;
@@ -452,7 +467,14 @@ function renderPhase(phase: DriverPrepPhase, args: RenderArgs) {
       return (
         <MissionBriefing
           mission={args.missionTarget}
-          onStartOverride={args.handleStartOverride}
+          onFlyerPosted={args.handleFlyerPosted}
+        />
+      );
+    case "flyer_proof":
+      return (
+        <FlyerProofCapture
+          mission={args.missionTarget}
+          onComplete={args.handleCompleteFlyerProof}
         />
       );
     case "signal_override":

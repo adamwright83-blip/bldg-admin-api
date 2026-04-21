@@ -7,6 +7,7 @@ export type DriverPrepPhase =
   | "prep_complete"
   | "laundry_run"
   | "mission_briefing"
+  | "flyer_proof"
   | "signal_override"
   | "verify_success"
   | "verify_failed"
@@ -87,6 +88,11 @@ export type DriverPrepAction =
   | { type: "SECURE_PREP_TASK"; tier: 1 | 2 | 3; now: string }
   | { type: "ADVANCE_PREP_COMPLETE" }
   | { type: "COMPLETE_LAUNDRY_RUN"; score: number }
+  | { type: "ADVANCE_TO_FLYER_PROOF" }
+  | {
+      type: "COMPLETE_FLYER_PROOF";
+      previewDataUrl?: string | null;
+    }
   | { type: "START_SIGNAL_OVERRIDE"; startedAt: string; deadlineAt: string }
   | {
       type: "RESOLVE_VERIFY_SUCCESS";
@@ -267,6 +273,7 @@ const VALID_PHASES: ReadonlySet<DriverPrepPhase> = new Set<DriverPrepPhase>([
   "prep_complete",
   "laundry_run",
   "mission_briefing",
+  "flyer_proof",
   "signal_override",
   "verify_success",
   "verify_failed",
@@ -278,6 +285,7 @@ const VALID_PHASES: ReadonlySet<DriverPrepPhase> = new Set<DriverPrepPhase>([
 const GAME_PHASES: ReadonlySet<DriverPrepPhase> = new Set<DriverPrepPhase>([
   "laundry_run",
   "mission_briefing",
+  "flyer_proof",
   "signal_override",
   "verify_success",
   "verify_failed",
@@ -470,7 +478,25 @@ export function driverPrepReducer(
         phase: "mission_briefing",
         laundryRunScore: Math.max(0, Math.floor(action.score)),
       });
+    case "ADVANCE_TO_FLYER_PROOF":
+      if (state.phase !== "mission_briefing") return state;
+      return stampUpdatedAt({
+        ...state,
+        phase: "flyer_proof",
+      });
+    case "COMPLETE_FLYER_PROOF":
+      if (state.phase !== "flyer_proof") return state;
+      return stampUpdatedAt({
+        ...state,
+        phase: "signal_override",
+        deployment: {
+          status: "uploaded",
+          previewDataUrl: action.previewDataUrl ?? null,
+          uploadedAt: new Date().toISOString(),
+        },
+      });
     case "START_SIGNAL_OVERRIDE":
+      if (state.phase !== "signal_override") return state;
       return stampUpdatedAt({
         ...state,
         phase: "signal_override",

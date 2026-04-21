@@ -3,6 +3,10 @@
  * 30-second loop: tap to jump over obstacles, hold to vacuum laundry.
  * Reports the final score up via `onComplete(score)` so the reducer can
  * dispatch `COMPLETE_LAUNDRY_RUN` and advance to the mission briefing.
+ *
+ * VISUAL DESIGN: Neon-outlined delivery van on a dark cyberpunk cityscape.
+ * Collectibles are glowing laundry bag shapes. Obstacles are red barrier blocks.
+ * Background uses a generated cityscape image with parallax scrolling.
  */
 import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,13 +18,12 @@ interface Props {
 }
 
 const GAME_DURATION = 30;
-const GROUND_Y_RATIO = 0.78;
-const PLAYER_SIZE = 0.06;
+const GROUND_Y_RATIO = 0.82;
 const GRAVITY = 0.0012;
 const JUMP_FORCE = -0.018;
-const SCROLL_SPEED = 0.004;
-const OBSTACLE_INTERVAL = 90;
-const LAUNDRY_INTERVAL = 40;
+const SCROLL_SPEED = 0.003;
+const OBSTACLE_INTERVAL = 100;
+const LAUNDRY_INTERVAL = 45;
 const VACUUM_RANGE = 0.15;
 
 interface Entity {
@@ -31,6 +34,7 @@ interface Entity {
   type: "obstacle" | "laundry";
   collected?: boolean;
   color?: string;
+  bobPhase?: number;
 }
 
 interface Particle {
@@ -44,6 +48,12 @@ interface Particle {
   size: number;
 }
 
+interface TrailDot {
+  x: number;
+  y: number;
+  alpha: number;
+}
+
 const LAUNDRY_COLORS = [
   "#00ff88",
   "#00ddff",
@@ -52,6 +62,191 @@ const LAUNDRY_COLORS = [
   "#aa88ff",
 ];
 
+const BG_IMAGE_URL =
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663281332025/bVTWnxw2cr9EUVzVBCF5PW/laundry-run-bg-layers-3rV9FKhr2n9GB6EBh8u7Ux.webp";
+
+/** Draw a delivery van shape (neon outlined) */
+function drawVan(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  glowIntensity: number
+) {
+  const cabW = w * 0.35;
+  const bodyH = h * 0.65;
+  const cabH = h * 0.45;
+  const wheelR = h * 0.12;
+
+  // Glow
+  ctx.shadowColor = "#00ff88";
+  ctx.shadowBlur = 8 + glowIntensity * 6;
+
+  // Van body (rear cargo)
+  ctx.fillStyle = "rgba(0, 20, 10, 0.7)";
+  ctx.strokeStyle = "#00ff88";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.rect(x, y + h - bodyH - wheelR * 2, w - cabW, bodyH);
+  ctx.fill();
+  ctx.stroke();
+
+  // Cab (front, shorter)
+  ctx.beginPath();
+  ctx.rect(x + w - cabW, y + h - cabH - wheelR * 2, cabW, cabH);
+  ctx.fill();
+  ctx.stroke();
+
+  // Windshield
+  ctx.fillStyle = "rgba(0, 255, 136, 0.15)";
+  ctx.strokeStyle = "rgba(0, 255, 136, 0.6)";
+  ctx.lineWidth = 1;
+  const wsX = x + w - cabW + 3;
+  const wsY = y + h - cabH - wheelR * 2 + 3;
+  const wsW = cabW - 6;
+  const wsH = cabH * 0.45;
+  ctx.beginPath();
+  ctx.moveTo(wsX, wsY + wsH);
+  ctx.lineTo(wsX + 2, wsY);
+  ctx.lineTo(wsX + wsW, wsY);
+  ctx.lineTo(wsX + wsW, wsY + wsH);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Cargo lines (horizontal stripes on body)
+  ctx.strokeStyle = "rgba(0, 255, 136, 0.15)";
+  ctx.lineWidth = 0.5;
+  const cargoTop = y + h - bodyH - wheelR * 2;
+  for (let ly = cargoTop + 6; ly < cargoTop + bodyH - 4; ly += 7) {
+    ctx.beginPath();
+    ctx.moveTo(x + 3, ly);
+    ctx.lineTo(x + w - cabW - 3, ly);
+    ctx.stroke();
+  }
+
+  // Wheels
+  ctx.shadowBlur = 4;
+  ctx.fillStyle = "#0a0a0a";
+  ctx.strokeStyle = "#00ff88";
+  ctx.lineWidth = 1.5;
+  const wheelY = y + h - wheelR;
+  // Rear wheel
+  ctx.beginPath();
+  ctx.arc(x + w * 0.2, wheelY, wheelR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Front wheel
+  ctx.beginPath();
+  ctx.arc(x + w * 0.75, wheelY, wheelR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // Headlight
+  ctx.fillStyle = "#00ff88";
+  ctx.shadowBlur = 12;
+  ctx.beginPath();
+  ctx.arc(x + w - 1, y + h - wheelR * 2 - cabH * 0.3, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
+}
+
+/** Draw a laundry bag shape */
+function drawLaundryBag(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+  bobOffset: number
+) {
+  const s = size;
+  const by = cy + bobOffset;
+
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 10;
+
+  // Bag body (rounded bottom)
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.85;
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.35, by - s * 0.15);
+  ctx.quadraticCurveTo(cx - s * 0.4, by + s * 0.45, cx, by + s * 0.5);
+  ctx.quadraticCurveTo(cx + s * 0.4, by + s * 0.45, cx + s * 0.35, by - s * 0.15);
+  ctx.closePath();
+  ctx.fill();
+
+  // Bag top (cinched)
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.35, by - s * 0.15);
+  ctx.quadraticCurveTo(cx - s * 0.15, by - s * 0.35, cx, by - s * 0.25);
+  ctx.quadraticCurveTo(cx + s * 0.15, by - s * 0.35, cx + s * 0.35, by - s * 0.15);
+  ctx.fill();
+
+  // Tie knot
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(cx, by - s * 0.3, s * 0.08, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Inner shine
+  ctx.globalAlpha = 0.3;
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.ellipse(cx - s * 0.1, by + s * 0.05, s * 0.08, s * 0.15, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+}
+
+/** Draw a red barrier obstacle */
+function drawBarrier(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  frame: number
+) {
+  ctx.shadowColor = "#ff2244";
+  ctx.shadowBlur = 8;
+
+  // Main barrier body
+  ctx.fillStyle = "rgba(255, 34, 68, 0.15)";
+  ctx.strokeStyle = "rgba(255, 34, 68, 0.7)";
+  ctx.lineWidth = 1.5;
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeRect(x, y, w, h);
+
+  // Hazard stripes
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.strokeStyle = "rgba(255, 34, 68, 0.35)";
+  ctx.lineWidth = 2;
+  const stripeSpacing = 8;
+  for (let i = -h; i < w + h; i += stripeSpacing) {
+    ctx.beginPath();
+    ctx.moveTo(x + i, y + h);
+    ctx.lineTo(x + i + h, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Pulsing top warning light
+  const pulse = 0.4 + Math.sin(frame * 0.12) * 0.4;
+  ctx.fillStyle = `rgba(255, 34, 68, ${pulse})`;
+  ctx.beginPath();
+  ctx.arc(x + w / 2, y - 2, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
+}
+
 export default function LaundryRun({ onComplete }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<
@@ -59,17 +254,29 @@ export default function LaundryRun({ onComplete }: Props) {
   >("countdown");
   const [countdown, setCountdown] = useState(3);
   const [score, setScore] = useState(0);
-  const [, setTimeLeft] = useState(GAME_DURATION);
+  const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
 
   const playerRef = useRef({ y: 0, vy: 0, grounded: true });
   const entitiesRef = useRef<Entity[]>([]);
   const particlesRef = useRef<Particle[]>([]);
+  const trailRef = useRef<TrailDot[]>([]);
   const frameRef = useRef(0);
   const scoreRef = useRef(0);
   const holdingRef = useRef(false);
   const scrollRef = useRef(0);
   const animRef = useRef<number>(0);
   const startTimeRef = useRef(0);
+  const bgImageRef = useRef<HTMLImageElement | null>(null);
+
+  // Preload background image
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = BG_IMAGE_URL;
+    img.onload = () => {
+      bgImageRef.current = img;
+    };
+  }, []);
 
   useEffect(() => {
     if (gameState !== "countdown") return;
@@ -83,8 +290,13 @@ export default function LaundryRun({ onComplete }: Props) {
     return () => clearTimeout(t);
   }, [countdown, gameState]);
 
+  // Ref so the native touch listeners can always read the latest gameState
+  // without being re-registered on every state change.
+  const gameStateRef = useRef(gameState);
+  useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
+
   const handlePointerDown = useCallback(() => {
-    if (gameState !== "playing") return;
+    if (gameStateRef.current !== "playing") return;
     const p = playerRef.current;
     if (p.grounded) {
       p.vy = JUMP_FORCE;
@@ -93,11 +305,35 @@ export default function LaundryRun({ onComplete }: Props) {
       haptics.tap();
     }
     holdingRef.current = true;
-  }, [gameState]);
+  }, []);
 
   const handlePointerUp = useCallback(() => {
     holdingRef.current = false;
   }, []);
+
+  // Native touch listeners on the canvas element — registered once on mount.
+  // This is the fix for iOS/Android where pointer events on a canvas with
+  // touchAction:none don't reliably bubble up to the parent div.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault(); // prevent scroll and double-tap zoom
+      handlePointerDown();
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      e.preventDefault();
+      handlePointerUp();
+    };
+    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+    canvas.addEventListener("touchend", onTouchEnd, { passive: false });
+    canvas.addEventListener("touchcancel", onTouchEnd, { passive: false });
+    return () => {
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchend", onTouchEnd);
+      canvas.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [handlePointerDown, handlePointerUp]);
 
   useEffect(() => {
     if (gameState !== "playing") return;
@@ -115,35 +351,18 @@ export default function LaundryRun({ onComplete }: Props) {
     const W = rect.width;
     const H = rect.height;
     const groundY = H * GROUND_Y_RATIO;
-    const playerSize = W * PLAYER_SIZE;
-    const playerX = W * 0.15;
+    const vanW = W * 0.16;
+    const vanH = W * 0.1;
+    const playerX = W * 0.12;
 
-    playerRef.current = { y: groundY - playerSize, vy: 0, grounded: true };
+    playerRef.current = { y: groundY - vanH, vy: 0, grounded: true };
     entitiesRef.current = [];
     particlesRef.current = [];
+    trailRef.current = [];
     frameRef.current = 0;
     scoreRef.current = 0;
     scrollRef.current = 0;
     startTimeRef.current = Date.now();
-
-    const buildings: { x: number; w: number; h: number; shade: number }[] = [];
-    for (let i = 0; i < 25; i++) {
-      buildings.push({
-        x: i * (W / 8) - W * 0.1,
-        w: W * (0.05 + Math.random() * 0.09),
-        h: H * (0.12 + Math.random() * 0.4),
-        shade: 0.06 + Math.random() * 0.05,
-      });
-    }
-
-    const stars: { x: number; y: number; brightness: number }[] = [];
-    for (let i = 0; i < 40; i++) {
-      stars.push({
-        x: Math.random() * W,
-        y: Math.random() * groundY * 0.6,
-        brightness: 0.1 + Math.random() * 0.3,
-      });
-    }
 
     function spawnParticles(
       x: number,
@@ -155,12 +374,12 @@ export default function LaundryRun({ onComplete }: Props) {
         particlesRef.current.push({
           x,
           y,
-          vx: (Math.random() - 0.5) * 3,
-          vy: (Math.random() - 0.5) * 3,
+          vx: (Math.random() - 0.5) * 4,
+          vy: (Math.random() - 1) * 3,
           life: 1,
-          maxLife: 0.5 + Math.random() * 0.5,
+          maxLife: 0.4 + Math.random() * 0.6,
           color,
-          size: 2 + Math.random() * 3,
+          size: 2 + Math.random() * 4,
         });
       }
     }
@@ -182,22 +401,24 @@ export default function LaundryRun({ onComplete }: Props) {
       const speed = SCROLL_SPEED * W;
       scrollRef.current += speed;
 
+      // Physics
       if (!p.grounded) {
         p.vy += GRAVITY * H;
         p.y += p.vy;
-        if (p.y >= groundY - playerSize) {
-          p.y = groundY - playerSize;
+        if (p.y >= groundY - vanH) {
+          p.y = groundY - vanH;
           p.vy = 0;
           p.grounded = true;
         }
       }
 
-      if (frame % OBSTACLE_INTERVAL === 0 && frame > 30) {
-        const h = H * (0.04 + Math.random() * 0.06);
+      // Spawn entities
+      if (frame % OBSTACLE_INTERVAL === 0 && frame > 40) {
+        const h = H * (0.05 + Math.random() * 0.06);
         entitiesRef.current.push({
           x: W + 20,
           y: groundY - h,
-          w: W * 0.04,
+          w: W * 0.05,
           h,
           type: "obstacle",
         });
@@ -205,21 +426,24 @@ export default function LaundryRun({ onComplete }: Props) {
       if (frame % LAUNDRY_INTERVAL === 0) {
         entitiesRef.current.push({
           x: W + 20 + Math.random() * W * 0.3,
-          y: groundY - H * (0.15 + Math.random() * 0.3),
-          w: W * 0.03,
-          h: W * 0.03,
+          y: groundY - H * (0.12 + Math.random() * 0.25),
+          w: W * 0.06,
+          h: W * 0.06,
           type: "laundry",
           collected: false,
           color:
             LAUNDRY_COLORS[Math.floor(Math.random() * LAUNDRY_COLORS.length)],
+          bobPhase: Math.random() * Math.PI * 2,
         });
       }
 
+      // Move entities
       entitiesRef.current = entitiesRef.current.filter((e) => {
         e.x -= speed;
-        return e.x > -50;
+        return e.x > -80;
       });
 
+      // Collision detection
       const px = playerX;
       const py = p.y;
       const vacuumRange = W * VACUUM_RANGE;
@@ -227,269 +451,251 @@ export default function LaundryRun({ onComplete }: Props) {
       entitiesRef.current.forEach((e) => {
         if (e.type === "obstacle") {
           if (
-            px + playerSize > e.x &&
-            px < e.x + e.w &&
-            py + playerSize > e.y
+            px + vanW > e.x + 4 &&
+            px < e.x + e.w - 4 &&
+            py + vanH > e.y + 4
           ) {
             p.vy = JUMP_FORCE * 0.5;
             p.grounded = false;
             sounds.crash();
             haptics.error();
-            spawnParticles(
-              px + playerSize,
-              py + playerSize / 2,
-              "#ff2244",
-              6
-            );
+            spawnParticles(px + vanW, py + vanH / 2, "#ff2244", 8);
           }
         }
         if (e.type === "laundry" && !e.collected) {
           const cx = e.x + e.w / 2;
           const cy = e.y + e.h / 2;
           const dist = Math.hypot(
-            px + playerSize / 2 - cx,
-            py + playerSize / 2 - cy
+            px + vanW / 2 - cx,
+            py + vanH / 2 - cy
           );
           if (holdingRef.current && dist < vacuumRange) {
-            e.x += (px - e.x) * 0.15;
-            e.y += (py - e.y) * 0.15;
+            e.x += (px + vanW / 2 - e.x) * 0.12;
+            e.y += (py + vanH / 2 - e.y) * 0.12;
           }
-          if (dist < playerSize) {
+          if (dist < vanW * 0.6) {
             e.collected = true;
             scoreRef.current++;
             setScore(scoreRef.current);
             sounds.collect();
             haptics.tap();
-            spawnParticles(cx, cy, e.color || "#00ff88", 8);
+            spawnParticles(cx, cy, e.color || "#00ff88", 10);
           }
         }
       });
 
+      // Update particles
       particlesRef.current = particlesRef.current.filter((pt) => {
         pt.x += pt.vx;
         pt.y += pt.vy;
+        pt.vy += 0.1; // gravity on particles
         pt.life -= 1 / 60 / pt.maxLife;
         return pt.life > 0;
       });
 
-      const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
-      skyGrad.addColorStop(0, "#050508");
-      skyGrad.addColorStop(0.6, "#080a10");
-      skyGrad.addColorStop(1, "#0a0e12");
-      ctx.fillStyle = skyGrad;
-      ctx.fillRect(0, 0, W, H);
-
-      stars.forEach((s) => {
-        const flicker = s.brightness + Math.sin(frame * 0.03 + s.x) * 0.05;
-        ctx.fillStyle = `rgba(0, 255, 136, ${flicker})`;
-        ctx.fillRect(s.x, s.y, 1.5, 1.5);
+      // Trail dots behind van
+      if (frame % 2 === 0) {
+        trailRef.current.push({
+          x: px - 2,
+          y: py + vanH * 0.7 + (Math.random() - 0.5) * 4,
+          alpha: 0.6,
+        });
+      }
+      trailRef.current = trailRef.current.filter((t) => {
+        t.x -= speed * 0.5;
+        t.alpha -= 0.015;
+        return t.alpha > 0 && t.x > -20;
       });
 
-      const parallax = scrollRef.current * 0.3;
-      buildings.forEach((b) => {
-        const bx = ((b.x - parallax) % (W * 3)) + W * 0.3;
-        const adjustedBx = bx < -b.w ? bx + W * 3 : bx;
-        ctx.fillStyle = `rgba(12, 18, 14, ${b.shade * 12})`;
-        ctx.fillRect(adjustedBx, groundY - b.h, b.w, b.h);
-        ctx.strokeStyle = "rgba(0, 255, 136, 0.04)";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(adjustedBx, groundY - b.h);
-        ctx.lineTo(adjustedBx + b.w, groundY - b.h);
-        ctx.stroke();
-        for (let wy = groundY - b.h + 10; wy < groundY - 6; wy += 16) {
-          for (let wx = adjustedBx + 4; wx < adjustedBx + b.w - 4; wx += 12) {
-            if (Math.random() > 0.55) {
-              ctx.fillStyle = `rgba(0, 255, 136, ${0.08 + Math.random() * 0.12})`;
-              ctx.fillRect(wx, wy, 5, 7);
-            }
-          }
+      // === RENDER ===
+
+      // Background image or fallback gradient
+      if (bgImageRef.current) {
+        const img = bgImageRef.current;
+        const imgW = img.width;
+        const imgH = img.height;
+        // Parallax scroll the background
+        const bgScale = H / imgH;
+        const scaledW = imgW * bgScale;
+        const offset = -(scrollRef.current * 0.15) % scaledW;
+        ctx.drawImage(img, offset, 0, scaledW, H);
+        ctx.drawImage(img, offset + scaledW, 0, scaledW, H);
+        if (offset + scaledW * 2 < W) {
+          ctx.drawImage(img, offset + scaledW * 2, 0, scaledW, H);
         }
-      });
+      } else {
+        // Fallback gradient
+        const skyGrad = ctx.createLinearGradient(0, 0, 0, H);
+        skyGrad.addColorStop(0, "#050508");
+        skyGrad.addColorStop(0.6, "#080a10");
+        skyGrad.addColorStop(1, "#0a0e12");
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, W, H);
+      }
 
-      const groundGrad = ctx.createLinearGradient(0, groundY, 0, H);
-      groundGrad.addColorStop(0, "#0c120e");
-      groundGrad.addColorStop(1, "#080a08");
+      // Ground overlay (darken below ground line for road)
+      const groundGrad = ctx.createLinearGradient(0, groundY - 4, 0, H);
+      groundGrad.addColorStop(0, "rgba(8, 12, 8, 0.9)");
+      groundGrad.addColorStop(0.3, "rgba(6, 10, 6, 0.95)");
+      groundGrad.addColorStop(1, "#050805");
       ctx.fillStyle = groundGrad;
-      ctx.fillRect(0, groundY, W, H - groundY);
+      ctx.fillRect(0, groundY - 4, W, H - groundY + 4);
 
-      ctx.strokeStyle = "rgba(0, 255, 136, 0.35)";
-      ctx.lineWidth = 1.5;
+      // Road surface line
+      ctx.strokeStyle = "rgba(0, 255, 136, 0.4)";
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(0, groundY);
       ctx.lineTo(W, groundY);
       ctx.stroke();
 
-      ctx.strokeStyle = "rgba(0, 255, 136, 0.12)";
+      // Road dashes (scrolling)
+      ctx.strokeStyle = "rgba(0, 255, 136, 0.15)";
       ctx.lineWidth = 2;
-      ctx.setLineDash([24, 36]);
+      ctx.setLineDash([20, 30]);
       ctx.lineDashOffset = -scrollRef.current;
       ctx.beginPath();
-      ctx.moveTo(0, groundY + (H - groundY) * 0.5);
-      ctx.lineTo(W, groundY + (H - groundY) * 0.5);
+      ctx.moveTo(0, groundY + (H - groundY) * 0.45);
+      ctx.lineTo(W, groundY + (H - groundY) * 0.45);
       ctx.stroke();
       ctx.setLineDash([]);
 
+      // Bottom road edge
+      ctx.strokeStyle = "rgba(0, 255, 136, 0.2)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, H - 2);
+      ctx.lineTo(W, H - 2);
+      ctx.stroke();
+
+      // Vacuum beam (when holding)
       if (holdingRef.current) {
-        ctx.globalAlpha = 0.08;
-        for (let i = 0; i < 5; i++) {
+        const beamGrad = ctx.createRadialGradient(
+          px + vanW / 2,
+          py + vanH / 2,
+          0,
+          px + vanW / 2,
+          py + vanH / 2,
+          vacuumRange
+        );
+        beamGrad.addColorStop(0, "rgba(0, 255, 136, 0.1)");
+        beamGrad.addColorStop(0.5, "rgba(0, 255, 136, 0.04)");
+        beamGrad.addColorStop(1, "rgba(0, 255, 136, 0)");
+        ctx.fillStyle = beamGrad;
+        ctx.beginPath();
+        ctx.arc(px + vanW / 2, py + vanH / 2, vacuumRange, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Pulsing vacuum ring
+        const ringRadius = vacuumRange * (0.5 + Math.sin(frame * 0.08) * 0.2);
+        ctx.strokeStyle = `rgba(0, 255, 136, ${0.12 + Math.sin(frame * 0.1) * 0.08})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(px + vanW / 2, py + vanH / 2, ringRadius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Scan lines when vacuuming
+        ctx.globalAlpha = 0.04;
+        for (let i = 0; i < 3; i++) {
           const ly = groundY * (0.3 + Math.random() * 0.5);
           ctx.strokeStyle = "#00ff88";
           ctx.lineWidth = 1;
           ctx.beginPath();
           ctx.moveTo(0, ly);
-          ctx.lineTo(W * (0.1 + Math.random() * 0.3), ly);
+          ctx.lineTo(W * (0.15 + Math.random() * 0.25), ly);
           ctx.stroke();
         }
         ctx.globalAlpha = 1;
       }
 
-      entitiesRef.current.forEach((e) => {
-        if (e.type === "obstacle") {
-          ctx.shadowColor = "#ff2244";
-          ctx.shadowBlur = 6;
-          ctx.fillStyle = "rgba(255, 34, 68, 0.5)";
-          ctx.fillRect(e.x, e.y, e.w, e.h);
-          ctx.shadowBlur = 0;
-          ctx.strokeStyle = "rgba(255, 34, 68, 0.7)";
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(e.x, e.y, e.w, e.h);
-          ctx.fillStyle = "rgba(255, 34, 68, 0.3)";
-          for (let sy = e.y + 3; sy < e.y + e.h - 3; sy += 6) {
-            ctx.fillRect(e.x + 2, sy, e.w - 4, 2);
-          }
-        }
-      });
-
-      entitiesRef.current.forEach((e) => {
-        if (e.type === "laundry" && !e.collected) {
-          const cx = e.x + e.w / 2;
-          const cy = e.y + e.h / 2;
-          ctx.shadowColor = e.color || "#00ff88";
-          ctx.shadowBlur = 10;
-          ctx.fillStyle = e.color || "#00ff88";
-          ctx.globalAlpha = 0.85;
-          ctx.save();
-          ctx.translate(cx, cy);
-          ctx.rotate(
-            Math.PI / 4 + Math.sin(frame * 0.04 + e.x) * 0.25
-          );
-          ctx.fillRect(-e.w / 2, -e.h / 2, e.w, e.h);
-          ctx.restore();
-          ctx.globalAlpha = 1;
-          ctx.shadowBlur = 0;
-        }
-      });
-
-      if (holdingRef.current) {
-        const beamGrad = ctx.createRadialGradient(
-          px + playerSize / 2,
-          py + playerSize / 2,
-          0,
-          px + playerSize / 2,
-          py + playerSize / 2,
-          vacuumRange
-        );
-        beamGrad.addColorStop(0, "rgba(0, 255, 136, 0.12)");
-        beamGrad.addColorStop(0.4, "rgba(0, 255, 136, 0.06)");
-        beamGrad.addColorStop(1, "rgba(0, 255, 136, 0)");
-        ctx.fillStyle = beamGrad;
+      // Trail dots
+      trailRef.current.forEach((t) => {
+        ctx.globalAlpha = t.alpha * 0.6;
+        ctx.fillStyle = "#00ff88";
         ctx.beginPath();
-        ctx.arc(
-          px + playerSize / 2,
-          py + playerSize / 2,
-          vacuumRange,
-          0,
-          Math.PI * 2
-        );
+        ctx.arc(t.x, t.y, 1.5, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = `rgba(0, 255, 136, ${
-          0.15 + Math.sin(frame * 0.1) * 0.1
-        })`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(
-          px + playerSize / 2,
-          py + playerSize / 2,
-          vacuumRange * (0.5 + Math.sin(frame * 0.08) * 0.2),
-          0,
-          Math.PI * 2
-        );
-        ctx.stroke();
-      }
-
-      particlesRef.current.forEach((pt) => {
-        ctx.globalAlpha = pt.life;
-        ctx.fillStyle = pt.color;
-        ctx.fillRect(
-          pt.x - pt.size / 2,
-          pt.y - pt.size / 2,
-          pt.size,
-          pt.size
-        );
       });
       ctx.globalAlpha = 1;
 
-      ctx.fillStyle = "#00ff88";
-      ctx.shadowColor = "#00ff88";
-      ctx.shadowBlur = 16;
-      ctx.beginPath();
-      ctx.moveTo(px, py + playerSize);
-      ctx.lineTo(px, py + playerSize * 0.35);
-      ctx.lineTo(px + playerSize * 0.35, py);
-      ctx.lineTo(px + playerSize, py + playerSize * 0.25);
-      ctx.lineTo(px + playerSize, py + playerSize);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
-      ctx.beginPath();
-      ctx.moveTo(px + playerSize * 0.15, py + playerSize * 0.35);
-      ctx.lineTo(px + playerSize * 0.35, py + playerSize * 0.1);
-      ctx.lineTo(px + playerSize * 0.7, py + playerSize * 0.25);
-      ctx.lineTo(px + playerSize * 0.55, py + playerSize * 0.45);
-      ctx.closePath();
-      ctx.fill();
+      // Draw obstacles
+      entitiesRef.current.forEach((e) => {
+        if (e.type === "obstacle") {
+          drawBarrier(ctx, e.x, e.y, e.w, e.h, frame);
+        }
+      });
+
+      // Draw laundry bags
+      entitiesRef.current.forEach((e) => {
+        if (e.type === "laundry" && !e.collected) {
+          const bob = Math.sin(frame * 0.04 + (e.bobPhase || 0)) * 4;
+          drawLaundryBag(
+            ctx,
+            e.x + e.w / 2,
+            e.y + e.h / 2,
+            e.w,
+            e.color || "#00ff88",
+            bob
+          );
+        }
+      });
+
+      // Draw particles
+      particlesRef.current.forEach((pt) => {
+        ctx.globalAlpha = pt.life;
+        ctx.shadowColor = pt.color;
+        ctx.shadowBlur = 4;
+        ctx.fillStyle = pt.color;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, pt.size / 2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
       ctx.shadowBlur = 0;
 
+      // Draw the van
+      const glowPulse = holdingRef.current ? 0.5 + Math.sin(frame * 0.1) * 0.5 : 0;
+      drawVan(ctx, px, py, vanW, vanH, glowPulse);
+
+      // Jump trail
       if (!p.grounded) {
-        ctx.fillStyle = "rgba(0, 255, 136, 0.15)";
-        for (let i = 1; i <= 3; i++) {
-          const trailAlpha = 0.15 - i * 0.04;
-          ctx.globalAlpha = trailAlpha;
-          ctx.fillRect(
-            px - i * 6,
-            py + playerSize * 0.3,
-            4,
-            playerSize * 0.4
-          );
+        for (let i = 1; i <= 4; i++) {
+          ctx.globalAlpha = 0.12 - i * 0.025;
+          ctx.fillStyle = "#00ff88";
+          ctx.beginPath();
+          ctx.arc(px + vanW * 0.2 - i * 5, py + vanH * 0.8, 2, 0, Math.PI * 2);
+          ctx.fill();
         }
         ctx.globalAlpha = 1;
       }
 
-      ctx.fillStyle = "#00ff88";
-      ctx.font = `bold ${W * 0.055}px "Barlow Condensed", sans-serif`;
-      ctx.textAlign = "right";
-      ctx.fillText(`${scoreRef.current}`, W - 16, 38);
-      ctx.font = `${W * 0.02}px "JetBrains Mono", monospace`;
-      ctx.fillStyle = "rgba(0, 255, 136, 0.4)";
-      ctx.fillText("COLLECTED", W - 16, 54);
-
+      // HUD: Timer
       ctx.textAlign = "left";
       const timerColor =
         remaining < 10
           ? "#ff2244"
           : remaining < 20
             ? "#ffaa00"
-            : "rgba(255,255,255,0.6)";
+            : "rgba(255,255,255,0.7)";
       ctx.fillStyle = timerColor;
-      ctx.font = `bold ${W * 0.045}px "Barlow Condensed", sans-serif`;
-      ctx.fillText(`${Math.ceil(remaining)}s`, 16, 38);
+      ctx.font = `bold ${W * 0.055}px "Barlow Condensed", sans-serif`;
+      ctx.fillText(`${Math.ceil(remaining)}s`, 16, 40);
 
+      // HUD: Score
+      ctx.textAlign = "right";
+      ctx.fillStyle = "#00ff88";
+      ctx.font = `bold ${W * 0.06}px "Barlow Condensed", sans-serif`;
+      ctx.fillText(`${scoreRef.current}`, W - 16, 40);
+      ctx.font = `${W * 0.022}px "JetBrains Mono", monospace`;
+      ctx.fillStyle = "rgba(0, 255, 136, 0.45)";
+      ctx.fillText("COLLECTED", W - 16, 56);
+
+      // HUD: Vacuum status
       if (holdingRef.current) {
-        ctx.fillStyle = "rgba(0, 255, 136, 0.5)";
-        ctx.font = `bold ${W * 0.018}px "JetBrains Mono", monospace`;
         ctx.textAlign = "center";
-        ctx.fillText("◆ VACUUM ACTIVE ◆", W / 2, H - 16);
+        ctx.fillStyle = "rgba(0, 255, 136, 0.6)";
+        ctx.font = `bold ${W * 0.02}px "JetBrains Mono", monospace`;
+        ctx.fillText("◆ VACUUM ACTIVE ◆", W / 2, H - 12);
       }
 
       animRef.current = requestAnimationFrame(drawFrame);
@@ -509,12 +715,7 @@ export default function LaundryRun({ onComplete }: Props) {
   }, [gameState, onComplete]);
 
   return (
-    <div
-      className="min-h-screen bg-black relative overflow-hidden flex flex-col"
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
-    >
+    <div className="min-h-screen bg-black relative overflow-hidden flex flex-col">
       <div className="heartbeat-bar w-full" />
 
       <AnimatePresence>
@@ -588,6 +789,10 @@ export default function LaundryRun({ onComplete }: Props) {
       <canvas
         ref={canvasRef}
         className="flex-1 w-full"
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onPointerLeave={handlePointerUp}
         style={{ touchAction: "none" }}
       />
 

@@ -55,6 +55,11 @@ function completeOnePayload(
   return run(
     next,
     { type: "COMPLETE_LAUNDRY_RUN", score: 7 },
+    { type: "ADVANCE_TO_FLYER_PROOF" },
+    {
+      type: "COMPLETE_FLYER_PROOF",
+      previewDataUrl: previewUrl,
+    },
     {
       type: "START_SIGNAL_OVERRIDE",
       startedAt: opts.now,
@@ -81,6 +86,51 @@ describe("driverPrepMachine — payload count", () => {
 });
 
 describe("driverPrepMachine — payload progression", () => {
+  it("gates Signal Override behind flyer proof capture", () => {
+    const previewUrl = "data:image/png;base64,AAA";
+    let state = createInitialDriverPrepState(1, "2026-04-20");
+    state = run(
+      state,
+      { type: "SELECT_ORDER", orderId: 77 },
+      { type: "START_RUN_FROM_ORDER" },
+      { type: "SET_PREP_PREVIEW", tier: 1, previewDataUrl: previewUrl },
+      { type: "SECURE_PREP_TASK", tier: 1, now: "2026-04-20T10:00Z" },
+      { type: "SET_PREP_PREVIEW", tier: 2, previewDataUrl: previewUrl },
+      { type: "SECURE_PREP_TASK", tier: 2, now: "2026-04-20T10:00Z" },
+      { type: "SET_PREP_PREVIEW", tier: 3, previewDataUrl: previewUrl },
+      { type: "SECURE_PREP_TASK", tier: 3, now: "2026-04-20T10:00Z" },
+      { type: "ADVANCE_PREP_COMPLETE" },
+      { type: "COMPLETE_LAUNDRY_RUN", score: 4 }
+    );
+    expect(state.phase).toBe("mission_briefing");
+
+    state = run(state, {
+      type: "START_SIGNAL_OVERRIDE",
+      startedAt: "2026-04-20T10:01Z",
+      deadlineAt: "2026-04-20T10:01:08Z",
+    });
+    expect(state.phase).toBe("mission_briefing");
+
+    state = run(state, { type: "ADVANCE_TO_FLYER_PROOF" });
+    expect(state.phase).toBe("flyer_proof");
+
+    state = run(state, {
+      type: "COMPLETE_FLYER_PROOF",
+      previewDataUrl: previewUrl,
+    });
+    expect(state.phase).toBe("signal_override");
+    expect(state.deployment.status).toBe("uploaded");
+    expect(state.deployment.previewDataUrl).toBe(previewUrl);
+
+    state = run(state, {
+      type: "START_SIGNAL_OVERRIDE",
+      startedAt: "2026-04-20T10:01Z",
+      deadlineAt: "2026-04-20T10:01:08Z",
+    });
+    expect(state.verification.startedAt).toBe("2026-04-20T10:01Z");
+    expect(state.verification.deadlineAt).toBe("2026-04-20T10:01:08Z");
+  });
+
   it("mission 3 requires three complete loops before missionCompletedForDay flips", () => {
     let state = createInitialDriverPrepState(3, "2026-04-20");
     expect(state.payloadCount).toBe(3);
@@ -112,6 +162,7 @@ describe("driverPrepMachine — payload progression", () => {
 
 describe("driverPrepMachine — hard reset on Signal Override failure", () => {
   it("RESOLVE_VERIFY_FAILURE resets payload loop to 1 but preserves prep, missionNumber, and lifetime history", () => {
+    const previewUrl = "data:image/png;base64,AAA";
     let state = createInitialDriverPrepState(5, "2026-04-20");
     // Complete two payloads of mission 5.
     state = completeOnePayload(state, { orderId: 201, now: "2026-04-20T10:00Z", xp: 75 });
@@ -129,6 +180,11 @@ describe("driverPrepMachine — hard reset on Signal Override failure", () => {
     state = run(
       state,
       { type: "COMPLETE_LAUNDRY_RUN", score: 5 },
+      { type: "ADVANCE_TO_FLYER_PROOF" },
+      {
+        type: "COMPLETE_FLYER_PROOF",
+        previewDataUrl: previewUrl,
+      },
       {
         type: "START_SIGNAL_OVERRIDE",
         startedAt: "2026-04-20T12:00Z",

@@ -30,6 +30,9 @@ export default function AssetVerification({
   const [isScanning, setIsScanning] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  // FUTURE: Replace this placeholder with a real AI vision API verdict.
+  // Until model wiring exists, denial is always false and this remains visual-only.
+  const [showDenied, setShowDenied] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [time, setTime] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -48,6 +51,7 @@ export default function AssetVerification({
 
   const processScan = useCallback(() => {
     setIsScanning(true);
+    setShowDenied(false);
     sounds.shutter();
     haptics.shutter();
     setShowFlash(true);
@@ -55,19 +59,29 @@ export default function AssetVerification({
 
     setTimeout(() => {
       setIsScanning(false);
-      setShowConfirm(true);
-      sounds.scanConfirm();
-      haptics.impact();
+      // PLACEHOLDER: replace with real model output once vision is wired.
+      const denied = false; // TODO: replace with: apiResult.confidence < 0.7
+      if (denied) {
+        setShowDenied(true);
+        sounds.overrideFail();
+        haptics.error();
+        setPreviewUrl(null);
+        previewUrlRef.current = null;
+        if (fileRef.current) fileRef.current.value = "";
+      } else {
+        setShowConfirm(true);
+        sounds.scanConfirm();
+        haptics.impact();
+        setTimeout(() => {
+          setShowConfirm(false);
+          const capturedPreview = previewUrlRef.current;
+          setPreviewUrl(null);
+          previewUrlRef.current = null;
+          onCompleteScan(tier, capturedPreview);
+          if (fileRef.current) fileRef.current.value = "";
+        }, 800);
+      }
     }, 1000);
-
-    setTimeout(() => {
-      setShowConfirm(false);
-      const capturedPreview = previewUrlRef.current;
-      setPreviewUrl(null);
-      previewUrlRef.current = null;
-      onCompleteScan(tier, capturedPreview);
-      if (fileRef.current) fileRef.current.value = "";
-    }, 1800);
   }, [onCompleteScan, tier]);
 
   const handleCapture = useCallback(() => {
@@ -119,6 +133,63 @@ export default function AssetVerification({
         )}
       </AnimatePresence>
 
+      {/* SCAN REJECTED overlay */}
+      <AnimatePresence>
+        {showDenied && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/95"
+            style={{
+              boxShadow:
+                "inset 0 0 120px rgba(255,0,0,0.22), inset 0 0 220px rgba(255,0,0,0.08)",
+            }}
+          >
+            <div
+              className="absolute inset-0 pointer-events-none opacity-[0.05]"
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,34,68,0.3) 2px, rgba(255,34,68,0.3) 4px)",
+              }}
+            />
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", damping: 10 }}
+              className="mb-8 relative w-40 h-40"
+            >
+              <div
+                className="absolute inset-0 border-[6px] border-danger/90"
+                style={{
+                  clipPath:
+                    "polygon(28% 0%, 72% 0%, 100% 28%, 100% 72%, 72% 100%, 28% 100%, 0% 72%, 0% 28%)",
+                  filter: "drop-shadow(0 0 18px rgba(255,34,68,0.75))",
+                }}
+              />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="relative w-16 h-16">
+                  <span className="absolute left-1/2 top-0 h-full w-2.5 -translate-x-1/2 rotate-45 bg-white" />
+                  <span className="absolute left-1/2 top-0 h-full w-2.5 -translate-x-1/2 -rotate-45 bg-white" />
+                </div>
+              </div>
+            </motion.div>
+            <p className="font-display font-extrabold text-5xl uppercase tracking-wider text-danger mb-4">
+              Scan Rejected
+            </p>
+            <p className="text-[11px] text-muted-foreground text-center max-w-[280px] leading-relaxed mb-10">
+              Image quality insufficient — retake required.
+            </p>
+            <button
+              onClick={() => setShowDenied(false)}
+              className="border border-danger/50 hover:border-danger px-12 py-3.5 transition-all active:bg-danger/10"
+            >
+              <span className="font-display font-bold text-lg uppercase tracking-[0.2em] text-danger">Retake</span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {showConfirm && (
           <motion.div
@@ -137,7 +208,7 @@ export default function AssetVerification({
                 <Check className="w-10 h-10 text-neon" />
               </motion.div>
               <p className="text-[10px] tracking-[0.4em] text-neon uppercase font-semibold">
-                Scan Verified
+                Capture Logged
               </p>
             </div>
           </motion.div>
@@ -270,7 +341,7 @@ export default function AssetVerification({
         >
           <Camera className="w-5 h-5 text-neon" />
           <span className="font-display font-extrabold text-lg uppercase tracking-wider text-neon">
-            {isScanning ? "Scanning..." : showConfirm ? "Verified" : "Capture"}
+            {isScanning ? "Scanning..." : showConfirm ? "Logged" : "Capture"}
           </span>
         </button>
       </div>
