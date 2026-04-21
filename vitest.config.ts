@@ -14,7 +14,12 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["server/**/*.test.ts", "server/**/*.spec.ts"],
+    include: [
+      "server/**/*.test.ts",
+      "server/**/*.spec.ts",
+      "client/**/*.test.ts",
+      "client/**/*.spec.ts",
+    ],
     /** HTTP/Twilio/DB-dependent suites live in `*.integration.test.ts` — run via `pnpm test:integration`. */
     exclude: ["**/node_modules/**", "**/dist/**", "**/*.integration.test.ts"],
   },

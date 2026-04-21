@@ -5,7 +5,7 @@ import {
   type DriverPrepState,
 } from "./driverPrepMachine";
 
-export const DRIVER_PREP_STORAGE_KEY = "driverPrepMechanic:v1";
+export const DRIVER_PREP_STORAGE_KEY = "driverPrepMechanic:v2";
 
 export function hydrateDriverPrepState(): DriverPrepState {
   const todayKey = getMissionDayKey();

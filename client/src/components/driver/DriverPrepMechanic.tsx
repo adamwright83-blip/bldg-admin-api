@@ -1,43 +1,33 @@
-import {
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-  type ChangeEvent,
-} from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import {
-  AlertTriangle,
-  Check,
-  Coins,
-  Flame,
-  MapPinned,
-  ShieldCheck,
-  Upload,
-  UserCircle2,
-} from "lucide-react";
-import { toast } from "sonner";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type { Order } from "@shared/types";
-import { DriverMinesweeper } from "./DriverMinesweeper";
-import { DriverProofUpload } from "./DriverProofUpload";
-import { DriverVerificationCountdown } from "./DriverVerificationCountdown";
 import {
   driverPrepReducer,
   getMissionDayKey,
+  type DriverPrepState,
+  type DriverPrepAction,
   type DriverPrepPhase,
 } from "./driverPrepMachine";
 import {
-  compressImageForMissionPreview,
   hydrateDriverPrepState,
   persistDriverPrepState,
 } from "./driverMissionStorage";
 import {
   buildDriverMissionStops,
-  deriveResolutionStop,
   deriveMissionTarget,
+  type MissionTarget,
 } from "./driverMissionModel";
-import "./driver-prep-mechanic.css";
+import type {
+  GameMissionTarget,
+  GameOrder,
+  GameStateSnapshot,
+} from "./driverGameTypes";
+import CommandCenter from "./CommandCenter";
+import OrderDetail from "./OrderDetail";
+import AssetVerification from "./AssetVerification";
+import LaundryRun from "./LaundryRun";
+import MissionBriefing from "./MissionBriefing";
+import SignalOverride from "./SignalOverride";
+import MissionDebrief from "./MissionDebrief";
 
 type Props = {
   pickups?: Order[];
@@ -49,86 +39,115 @@ type Props = {
   ) => Promise<void>;
 };
 
-type PickerMode = "prep_t1" | "prep_t2" | "prep_t3" | "deploy_live" | null;
+const OVERRIDE_TIMEOUT_MS = 8000;
+const VERIFY_FAILED_AUTO_ACK_MS = 2400;
 
-function getRuntimeFlags() {
-  if (typeof window === "undefined") {
-    return {
-      cheatMode: false,
-      fastMode: false,
-      manualVerifyFail: false,
-      manualVerifyTimeout: false,
-    };
-  }
-  const params = new URLSearchParams(window.location.search);
+/** Map the in-flight payload index → XP award tier. */
+function xpForPayload(payloadIndex: number, payloadCount: number): number {
+  if (payloadIndex >= payloadCount) return 100;
+  if (payloadIndex >= Math.ceil(payloadCount / 2)) return 75;
+  return 50;
+}
+
+function orderTypeFromStatus(status: Order["status"]): GameOrder["type"] {
+  if (status === "ready") return "DELIVERY";
+  return "PICKUP";
+}
+
+function nextStatusForOrder(
+  status: Order["status"]
+): "collected" | "delivered" {
+  return status === "ready" ? "delivered" : "collected";
+}
+
+function formatPickupDate(dateStr: string): string {
+  if (!dateStr) return "—";
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function computeDeliveryDate(pickupDate: string): string {
+  const [y, m, d] = pickupDate.split("-").map(Number);
+  const next = new Date(y, m - 1, d + 1);
+  return [
+    next.getFullYear(),
+    String(next.getMonth() + 1).padStart(2, "0"),
+    String(next.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function orderToGameOrder(order: Order): GameOrder {
+  const isDelivery = order.status === "ready";
   return {
-    cheatMode: params.get("cheat") === "1",
-    fastMode: params.get("fast") === "1",
-    manualVerifyFail: params.get("verifyFail") === "1",
-    manualVerifyTimeout: params.get("verifyTimeout") === "1",
+    id: order.id,
+    type: isDelivery ? "DELIVERY" : "PICKUP",
+    customerName: `${order.firstName} ${order.lastName}`.trim() || "Resident",
+    address: order.address,
+    items: Math.max(1, order.bagCount || 1),
+    timeWindow: order.pickupTimeWindow || "—",
+    nextStatus: nextStatusForOrder(order.status),
+    unit: order.unit ?? null,
+    buildingName: null,
+    dateLabel: isDelivery
+      ? formatPickupDate(computeDeliveryDate(order.pickupDate))
+      : formatPickupDate(order.pickupDate),
   };
 }
 
-function getHudStatusLine(phase: DriverPrepPhase): string {
-  switch (phase) {
-    case "prep_t1":
-    case "prep_t2":
-    case "prep_t3":
-      return "[GREEN] — STRIKE READINESS // CAR PREP IN PROGRESS";
-    case "prep_complete":
-      return "[GREEN] — STRIKE READINESS // CAR PREP COMPLETE // ASSETS SECURED";
-    case "sweep_armed":
-      return "[ARMED] — TARGET SWEEP // SELECT A LIVE CELL";
-    case "sweep_resolved_safe":
-      return "[GREEN] — MINE DIFFUSED // WINDOW SECURED";
-    case "sweep_resolved_explosion":
-      return "[RED] — DETONATION DETECTED // PAYLOAD LOOP RESET";
-    case "deploy_live":
-      return "[ARMED] — PAYLOAD DEPLOYMENT // PROOF REQUIRED";
-    case "deploy_resolved":
-      return "[GREEN] — PAYLOAD LOCKED // VERIFICATION READY";
-    case "verify_countdown":
-      return "[UNSTABLE] — VERIFICATION COUNTDOWN // HOLD STEADY";
-    case "verify_success":
-      return "[GREEN] — PAYLOAD VERIFIED // ROUTE PURITY RESTORED";
-    case "verify_failed":
-      return "[RED] — VERIFICATION FAILED // CORRECTIVE ACTION REQUIRED";
-    case "next_target":
-      return "[TARGET ACQUIRED] — SCANNING NEXT DEPLOYMENT WINDOW";
-    case "mission_complete":
-      return "[GREEN] — DAILY MISSION COMPLETE // ROUTE SECURED";
-    default:
-      return "[LIVE] — DRIVER PREP MECHANIC";
-  }
+function missionTargetToGameMission(
+  target: MissionTarget,
+  payloadIndex: number,
+  payloadCount: number
+): GameMissionTarget {
+  return {
+    label: target.label,
+    address: target.address,
+    mapsUrl: target.mapsUrl,
+    intel: target.intel,
+    distance: target.kind === "real" ? "≤ 0.5 mi" : "—",
+    reward: xpForPayload(payloadIndex, payloadCount),
+    kind: target.kind,
+  };
 }
 
-function getHudStatusParts(phase: DriverPrepPhase): [string, string] {
-  const [status, ...rest] = getHudStatusLine(phase).split(" — ");
-  return [status ?? "[LIVE]", rest.join(" — ")];
+function scansCompletedFromState(state: DriverPrepState): number {
+  let n = 0;
+  if (state.prepUploads.t1.status === "secured") n++;
+  if (state.prepUploads.t2.status === "secured") n++;
+  if (state.prepUploads.t3.status === "secured") n++;
+  return n;
 }
 
-function motionKey(phase: DriverPrepPhase, payloadIndex: number) {
-  return `${phase}-${payloadIndex}`;
+function gameSnapshotFromState(state: DriverPrepState): GameStateSnapshot {
+  return {
+    scansCompleted: scansCompletedFromState(state),
+    laundryScore: state.laundryRunScore,
+    overrideSuccess:
+      state.verification.result === "pending"
+        ? null
+        : state.verification.result === "success",
+    totalXP: state.history.totalXp,
+    streak: state.history.streakDays,
+    missionsCompleted: state.history.missionsCompletedLifetime,
+    missionNumber: state.missionNumber,
+    payloadCount: state.payloadCount,
+    currentPayloadIndex: state.currentPayloadIndex,
+    missionCompletedForDay: state.missionCompletedForDay,
+  };
 }
 
-function getPhaseToneClass(phase: DriverPrepPhase): string {
-  if (phase === "verify_countdown") return "is-countdown";
-  if (
-    phase === "sweep_resolved_explosion" ||
-    phase === "verify_failed"
-  ) {
-    return "is-danger";
-  }
-  if (phase === "next_target") return "is-target";
-  if (
-    phase === "prep_complete" ||
-    phase === "sweep_resolved_safe" ||
-    phase === "verify_success" ||
-    phase === "mission_complete"
-  ) {
-    return "is-success";
-  }
-  return "is-neutral";
+/** Resolve the currently-selected order (from state.currentOrderId) or null. */
+function pickCurrentOrder(
+  state: DriverPrepState,
+  ordersById: Map<number, Order>
+): GameOrder | null {
+  if (state.currentOrderId == null) return null;
+  const order = ordersById.get(state.currentOrderId);
+  return order ? orderToGameOrder(order) : null;
 }
 
 export function DriverPrepMechanic({
@@ -137,749 +156,347 @@ export function DriverPrepMechanic({
   isLoading,
   onResolveOrder,
 }: Props) {
-  const [state, dispatch] = useReducer(driverPrepReducer, undefined, hydrateDriverPrepState);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [pickerMode, setPickerMode] = useState<PickerMode>(null);
-  const [nowTick, setNowTick] = useState(Date.now());
-  const persistToastShownRef = useRef(false);
-  const mapDepartureSeenRef = useRef(false);
-  const runtimeFlags = useMemo(() => getRuntimeFlags(), []);
-
-  const stops = useMemo(
-    () => buildDriverMissionStops(pickups, deliveries),
-    [pickups, deliveries]
-  );
-  const missionTarget = useMemo(
-    () =>
-      deriveMissionTarget(
-        stops,
-        state.resolvedOrderIdsCurrentMission,
-        state.missionNumber,
-        state.currentPayloadIndex
-      ),
-    [
-      state.currentPayloadIndex,
-      state.missionNumber,
-      state.resolvedOrderIdsCurrentMission,
-      stops,
-    ]
-  );
-  const resolutionStop = useMemo(
-    () => deriveResolutionStop(stops, state.resolvedOrderIdsCurrentMission),
-    [state.resolvedOrderIdsCurrentMission, stops]
+  const [state, dispatch] = useReducer(
+    driverPrepReducer,
+    undefined,
+    hydrateDriverPrepState
   );
 
+  const didMountRef = useRef(false);
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, []);
-
-  useEffect(() => {
-    try {
-      persistDriverPrepState(state);
-      persistToastShownRef.current = false;
-    } catch (error) {
-      if (!persistToastShownRef.current) {
-        persistToastShownRef.current = true;
-        toast.warning("Current mission progress is live, but refresh restore may be limited on this device.");
-      }
-      console.warn("[DriverPrep] Failed to persist state:", error);
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
     }
+    persistDriverPrepState(state);
   }, [state]);
 
   useEffect(() => {
-    const checkForMissionDayAdvance = () => {
-      const todayKey = getMissionDayKey();
-      if (state.missionCompletedForDay && state.history.lastCompletedDayKey !== todayKey) {
-        dispatch({ type: "ROLL_TO_NEXT_DAY", todayKey });
-      }
-    };
+    const todayKey = getMissionDayKey();
+    if (
+      state.missionCompletedForDay &&
+      state.history.lastCompletedDayKey &&
+      state.history.lastCompletedDayKey !== todayKey &&
+      state.missionDayKey !== todayKey
+    ) {
+      dispatch({ type: "ROLL_TO_NEXT_DAY", todayKey });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    checkForMissionDayAdvance();
-    window.addEventListener("focus", checkForMissionDayAdvance);
-    document.addEventListener("visibilitychange", checkForMissionDayAdvance);
-    return () => {
-      window.removeEventListener("focus", checkForMissionDayAdvance);
-      document.removeEventListener("visibilitychange", checkForMissionDayAdvance);
-    };
-  }, [state.history.lastCompletedDayKey, state.missionCompletedForDay]);
+  const ordersById = useMemo(() => {
+    const map = new Map<number, Order>();
+    for (const o of pickups ?? []) map.set(o.id, o);
+    for (const o of deliveries ?? []) map.set(o.id, o);
+    return map;
+  }, [pickups, deliveries]);
 
-  useEffect(() => {
-    if (state.phase !== "sweep_resolved_safe") return;
-    const timeoutId = window.setTimeout(
-      () => dispatch({ type: "ADVANCE_AFTER_SAFE_HOLD" }),
-      runtimeFlags.fastMode ? 420 : 900
+  const availableOrders = useMemo<GameOrder[]>(() => {
+    const resolved = new Set(state.resolvedOrderIdsCurrentMission);
+    const combined: Order[] = [...(pickups ?? []), ...(deliveries ?? [])];
+    return combined
+      .filter((o) => !resolved.has(o.id))
+      .map(orderToGameOrder);
+  }, [pickups, deliveries, state.resolvedOrderIdsCurrentMission]);
+
+  const selectedOrder = useMemo(
+    () => pickCurrentOrder(state, ordersById),
+    [state, ordersById]
+  );
+
+  const missionStops = useMemo(
+    () => buildDriverMissionStops(pickups, deliveries),
+    [pickups, deliveries]
+  );
+
+  const missionTarget = useMemo<GameMissionTarget>(() => {
+    const real = deriveMissionTarget(
+      missionStops,
+      state.resolvedOrderIdsCurrentMission,
+      state.missionNumber,
+      state.currentPayloadIndex
     );
-    return () => window.clearTimeout(timeoutId);
-  }, [runtimeFlags.fastMode, state.phase]);
-
-  useEffect(() => {
-    if (state.phase !== "verify_success") return;
-    const timeoutId = window.setTimeout(
-      () => dispatch({ type: "ADVANCE_AFTER_VERIFY_SUCCESS" }),
-      runtimeFlags.fastMode ? 500 : 950
+    return missionTargetToGameMission(
+      real,
+      state.currentPayloadIndex,
+      state.payloadCount
     );
-    return () => window.clearTimeout(timeoutId);
-  }, [runtimeFlags.fastMode, state.phase]);
-
-  useEffect(() => {
-    if (state.phase !== "verify_countdown") return;
-    const intervalId = window.setInterval(() => {
-      setNowTick(Date.now());
-    }, runtimeFlags.fastMode ? 60 : 110);
-    return () => window.clearInterval(intervalId);
-  }, [runtimeFlags.fastMode, state.phase]);
-
-  useEffect(() => {
-    if (state.phase !== "verify_countdown") return;
-    if (!state.verification.startedAt || !state.verification.deadlineAt) return;
-
-    const deadlineAt = new Date(state.verification.deadlineAt).getTime();
-    if (nowTick < deadlineAt) return;
-
-    const overtime = nowTick - deadlineAt;
-    if (!state.deployment.previewDataUrl) {
-      dispatch({
-        type: "RESOLVE_VERIFY_FAILURE",
-        reason: "missing_upload",
-        now: new Date().toISOString(),
-      });
-      return;
-    }
-
-    if (runtimeFlags.manualVerifyTimeout || overtime > (runtimeFlags.fastMode ? 1500 : 3200)) {
-      dispatch({
-        type: "RESOLVE_VERIFY_FAILURE",
-        reason: "timeout",
-        now: new Date().toISOString(),
-      });
-      return;
-    }
-
-    if (runtimeFlags.manualVerifyFail) {
-      dispatch({
-        type: "RESOLVE_VERIFY_FAILURE",
-        reason: "manual_test_failure",
-        now: new Date().toISOString(),
-      });
-      return;
-    }
-
-    dispatch({
-      type: "RESOLVE_VERIFY_SUCCESS",
-      now: new Date().toISOString(),
-      resolvedOrder:
-        resolutionStop?.orderId &&
-        resolutionStop?.nextStatus
-          ? {
-              orderId: resolutionStop.orderId,
-              nextStatus: resolutionStop.nextStatus,
-            }
-          : undefined,
-    });
   }, [
-    nowTick,
-    resolutionStop,
-    runtimeFlags.fastMode,
-    runtimeFlags.manualVerifyFail,
-    runtimeFlags.manualVerifyTimeout,
-    state.deployment.previewDataUrl,
-    state.phase,
-    state.verification.deadlineAt,
-    state.verification.startedAt,
+    missionStops,
+    state.resolvedOrderIdsCurrentMission,
+    state.missionNumber,
+    state.currentPayloadIndex,
+    state.payloadCount,
   ]);
 
-  useEffect(() => {
-    if (!state.pendingOrderResolution) return;
-    let canceled = false;
+  const snapshot = useMemo(() => gameSnapshotFromState(state), [state]);
 
-    const run = async () => {
+  // Fire the real TRPC mutation whenever the reducer queues one.
+  const resolveInFlightRef = useRef(false);
+  useEffect(() => {
+    const pending = state.pendingOrderResolution;
+    if (!pending) return;
+    if (resolveInFlightRef.current) return;
+    resolveInFlightRef.current = true;
+    (async () => {
       try {
-        await onResolveOrder(
-          state.pendingOrderResolution!.orderId,
-          state.pendingOrderResolution!.nextStatus
-        );
-      } catch (error) {
-        console.warn("[DriverPrep] Failed to resolve live order:", error);
-        if (!canceled) {
-          toast.error("Live driver queue sync failed. Mission progress stayed local.");
-        }
+        await onResolveOrder(pending.orderId, pending.nextStatus);
+      } catch (err) {
+        console.error("Driver order resolution failed", err);
       } finally {
-        if (!canceled) dispatch({ type: "ACK_ORDER_RESOLUTION" });
+        resolveInFlightRef.current = false;
+        dispatch({ type: "ACK_ORDER_RESOLUTION" });
       }
-    };
+    })();
+  }, [state.pendingOrderResolution, onResolveOrder]);
 
-    void run();
-    return () => {
-      canceled = true;
-    };
-  }, [onResolveOrder, state.pendingOrderResolution]);
-
+  // Auto-ack the verify_failed screen back into laundry_run after a beat.
   useEffect(() => {
-    if (state.phase !== "next_target" || !state.nextTargetLaunchPending) return;
+    if (state.phase !== "verify_failed") return;
+    const t = setTimeout(() => {
+      dispatch({ type: "ACK_VERIFY_FAILURE" });
+    }, VERIFY_FAILED_AUTO_ACK_MS);
+    return () => clearTimeout(t);
+  }, [state.phase]);
 
-    const resume = () => {
-      if (document.visibilityState === "hidden") {
-        mapDepartureSeenRef.current = true;
-        return;
-      }
-
-      if (document.visibilityState === "visible" && mapDepartureSeenRef.current) {
-        mapDepartureSeenRef.current = false;
-        dispatch({ type: "RESUME_AFTER_MAP_RETURN" });
-      }
-    };
-
-    window.addEventListener("focus", resume);
-    document.addEventListener("visibilitychange", resume);
-    return () => {
-      window.removeEventListener("focus", resume);
-      document.removeEventListener("visibilitychange", resume);
-    };
-  }, [state.nextTargetLaunchPending, state.phase]);
-
-  const countdownValue = useMemo(() => {
-    if (state.phase !== "verify_countdown") return 3;
-    if (!state.verification.startedAt || !state.verification.deadlineAt) return 3;
-    const started = new Date(state.verification.startedAt).getTime();
-    const deadline = new Date(state.verification.deadlineAt).getTime();
-    const total = Math.max(1, deadline - started);
-    const remaining = Math.max(0, deadline - nowTick);
-    const segment = total / 3;
-    return Math.max(1, Math.min(3, Math.ceil(remaining / segment)));
-  }, [nowTick, state.phase, state.verification.deadlineAt, state.verification.startedAt]);
-
-  const missionCounter = `MISSION ${String(state.missionNumber).padStart(2, "0")}/30`;
-  const earnedDisplay = `${state.history.payloadsDiffusedLifetime * 250}`.replace(
-    /\B(?=(\d{3})+(?!\d))/g,
-    ","
-  );
-  const [hudStatus, hudLine] = getHudStatusParts(state.phase);
-
-  const handleFilePick = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || !pickerMode) return;
-
-    try {
-      const previewDataUrl = await compressImageForMissionPreview(file);
-      const now = new Date().toISOString();
-      if (pickerMode === "prep_t1") {
-        dispatch({ type: "SET_PREP_PREVIEW", tier: 1, previewDataUrl });
-      } else if (pickerMode === "prep_t2") {
-        dispatch({ type: "SET_PREP_PREVIEW", tier: 2, previewDataUrl });
-      } else if (pickerMode === "prep_t3") {
-        dispatch({ type: "SET_PREP_PREVIEW", tier: 3, previewDataUrl });
-      } else if (pickerMode === "deploy_live") {
-        dispatch({ type: "UPLOAD_DEPLOY_PROOF", previewDataUrl, now });
-        dispatch({ type: "LOCK_DEPLOY_PROOF" });
-      }
-    } catch (error) {
-      console.warn("[DriverPrep] Failed to compress image:", error);
-      toast.error("Image processing failed. Try another image.");
-    } finally {
-      setPickerMode(null);
-    }
-  };
-
-  const openPicker = (mode: PickerMode) => {
-    setPickerMode(mode);
-    fileInputRef.current?.click();
-  };
-
-  const passPrepTask = (tier: 1 | 2 | 3) => {
-    if (!runtimeFlags.cheatMode) return;
-    dispatch({
-      type: "SECURE_PREP_TASK",
-      tier,
-      now: new Date().toISOString(),
-    });
-  };
-
+  // Auto-advance the "next_target" transitional phase back into laundry_run.
   useEffect(() => {
-    if (state.phase !== "deploy_resolved") return;
-    const timeoutId = window.setTimeout(
-      () => startVerification(),
-      runtimeFlags.fastMode ? 260 : 720
-    );
-    return () => window.clearTimeout(timeoutId);
-  }, [runtimeFlags.fastMode, state.phase]);
-
-  const startVerification = () => {
-    const startedAt = new Date().toISOString();
-    const durationMs = runtimeFlags.fastMode ? 1800 : 3300;
-    const deadlineAt = new Date(Date.now() + durationMs).toISOString();
-    dispatch({ type: "START_VERIFY_COUNTDOWN", startedAt, deadlineAt });
-  };
-
-  const handleNextTargetCta = () => {
-    if (missionTarget.kind === "real" && missionTarget.mapsUrl) {
-      mapDepartureSeenRef.current = false;
-      dispatch({ type: "REGISTER_NEXT_TARGET_LAUNCH" });
-      const mapWindow = window.open(
-        missionTarget.mapsUrl,
-        "_blank",
-        "noopener,noreferrer"
-      );
-      if (!mapWindow) {
-        dispatch({ type: "CANCEL_NEXT_TARGET_LAUNCH" });
-        toast.error("Unable to launch Maps. Allow pop-ups or try again.");
-      }
-      return;
-    }
-
+    if (state.phase !== "next_target") return;
     dispatch({ type: "ADVANCE_WITHOUT_MAP" });
-  };
+  }, [state.phase]);
 
-  const phaseToneClass = getPhaseToneClass(state.phase);
+  // Auto-jump from prep_complete into laundry_run.
+  useEffect(() => {
+    if (state.phase !== "prep_complete") return;
+    dispatch({ type: "ADVANCE_PREP_COMPLETE" });
+  }, [state.phase]);
 
-  const checkStates = [
-    state.prepUploads.t1.status === "secured",
-    state.prepUploads.t2.status === "secured",
-    state.prepUploads.t3.status === "secured",
-  ];
+  const handleSelectOrder = useCallback((order: GameOrder) => {
+    dispatch({ type: "SELECT_ORDER", orderId: order.id });
+  }, []);
 
-  const surface = (() => {
-    switch (state.phase) {
-      case "prep_t1":
-      case "prep_t2":
-      case "prep_t3": {
-        const tier = state.phase === "prep_t1" ? 1 : state.phase === "prep_t2" ? 2 : 3;
-        const slot =
-          tier === 1
-            ? state.prepUploads.t1
-            : tier === 2
-              ? state.prepUploads.t2
-              : state.prepUploads.t3;
-        return (
-          <div className="driver-prep-surface">
-            <div className="driver-prep-headerBlock">
-              <span className="driver-prep-phaseLabel">Strike Readiness</span>
-              <h1 className="driver-prep-title">Prep T{tier}</h1>
-              <p className="driver-prep-subtitle">
-                Secure prep asset {tier} with hard visual proof. Only one live action surface remains on screen.
-              </p>
-            </div>
-            <div className="driver-prep-checkRow">
-              {["T1", "T2", "T3"].map((label, index) => (
-                <div
-                  key={label}
-                  className={`driver-prep-checkChip ${checkStates[index] ? "is-complete" : ""}`}
-                >
-                  <Check size={16} />
-                  {label}
-                </div>
-              ))}
-            </div>
-            <DriverProofUpload
-              title={`Upload Prep Asset ${tier}`}
-              subtitle={
-                runtimeFlags.cheatMode
-                  ? "Flyer proof stays preview-only unless you explicitly pass the task in cheat mode."
-                  : "Flyer proof is preview-only in normal mode until a real verification path exists."
-              }
-              statusLabel={
-                slot.status === "secured"
-                  ? "Task secured"
-                  : slot.status === "previewed"
-                    ? "Preview captured — pending verification"
-                    : "Awaiting proof image"
-              }
-              previewDataUrl={slot.previewDataUrl}
-              actionLabel={`Upload Asset ${tier}`}
-              onPick={() =>
-                openPicker(
-                  tier === 1 ? "prep_t1" : tier === 2 ? "prep_t2" : "prep_t3"
-                )
-              }
-            />
-            {runtimeFlags.cheatMode ? (
-              <button
-                type="button"
-                className="driver-prep-secondaryAction"
-                onClick={() => passPrepTask(tier)}
-              >
-                Pass Task
-              </button>
-            ) : null}
-          </div>
-        );
+  const handleBackToCommand = useCallback(() => {
+    dispatch({ type: "BACK_TO_COMMAND_CENTER" });
+  }, []);
+
+  const handleStartVerification = useCallback(() => {
+    dispatch({ type: "START_RUN_FROM_ORDER" });
+  }, []);
+
+  const handleCompleteScan = useCallback(
+    (tier: 1 | 2 | 3, previewDataUrl?: string | null) => {
+      if (previewDataUrl) {
+        dispatch({
+          type: "SET_PREP_PREVIEW",
+          tier,
+          previewDataUrl,
+        });
       }
-      case "prep_complete":
-        return (
-          <div className="driver-prep-surface">
-            <div className="driver-prep-headerBlock">
-              <span className="driver-prep-phaseLabel">Readiness Locked</span>
-              <h1 className="driver-prep-title is-success">Prep Complete</h1>
-              <p className="driver-prep-subtitle">
-                All prep assets are green. The mission begins now and prep will remain secured even if the payload loop collapses.
-              </p>
-            </div>
-            <div className="driver-prep-phaseCard">
-              <div className="driver-prep-checkRow">
-                {["Asset 1 Secure", "Asset 2 Secure", "Asset 3 Secure"].map((label) => (
-                  <div key={label} className="driver-prep-checkChip is-complete">
-                    <Check size={16} />
-                    {label}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="driver-prep-actionBar"
-              onClick={() => dispatch({ type: "ADVANCE_PREP_COMPLETE" })}
-            >
-              <ShieldCheck className="driver-prep-actionIcon" />
-              Arm Sweep
-            </button>
-          </div>
+      dispatch({
+        type: "SECURE_PREP_TASK",
+        tier,
+        now: new Date().toISOString(),
+      });
+    },
+    []
+  );
+
+  const handleCompleteLaundryRun = useCallback((score: number) => {
+    dispatch({ type: "COMPLETE_LAUNDRY_RUN", score });
+  }, []);
+
+  const handleStartOverride = useCallback(() => {
+    const now = Date.now();
+    dispatch({
+      type: "START_SIGNAL_OVERRIDE",
+      startedAt: new Date(now).toISOString(),
+      deadlineAt: new Date(now + OVERRIDE_TIMEOUT_MS).toISOString(),
+    });
+  }, []);
+
+  const handleOverrideComplete = useCallback(
+    (success: boolean) => {
+      if (success) {
+        const order = selectedOrder;
+        const xpAwarded = xpForPayload(
+          state.currentPayloadIndex,
+          state.payloadCount
         );
-      case "sweep_armed":
-        return (
-          <div className="driver-prep-surface">
-            <div className="driver-prep-headerBlock">
-              <span className="driver-prep-phaseLabel">
-                Payload {state.currentPayloadIndex}/{state.payloadCount}
-              </span>
-              <h1 className="driver-prep-title">Sweep Armed</h1>
-              <p className="driver-prep-subtitle">
-                Sweep one live square to clear the payload window. A mine hit resets this mission’s payload loop back to payload 1.
-              </p>
-            </div>
-            <DriverMinesweeper
-              sweep={state.sweep}
-              disabled={isLoading}
-              onSelectCell={(index) => dispatch({ type: "SELECT_SWEEP_CELL", index })}
-            />
-            <div className="driver-prep-counterRow">
-              <span>Current target: {missionTarget.label}</span>
-              <span>
-                Payloads diffused: {state.completedPayloadsCurrentMission}/{state.payloadCount}
-              </span>
-            </div>
-          </div>
-        );
-      case "sweep_resolved_safe":
-        return (
-          <div className="driver-prep-surface">
-            <div className="driver-prep-headerBlock">
-              <span className="driver-prep-phaseLabel">Mine Diffused</span>
-              <h1 className="driver-prep-title is-success">Safe Window</h1>
-            </div>
-            <div className="driver-prep-centerDominant">
-              <div className="driver-prep-winningCell">
-                <span className="driver-prep-winningValue">
-                  {(state.sweep.selectedIndex ?? 0) + 1}
-                </span>
-              </div>
-            </div>
-          </div>
-        );
-      case "sweep_resolved_explosion":
-        return (
-          <div className="driver-prep-surface">
-            <div className="driver-prep-headerBlock">
-              <span className="driver-prep-phaseLabel">Detonation Detected</span>
-              <h1 className="driver-prep-title is-failure">Payload Loop Reset</h1>
-              <p className="driver-prep-subtitle">
-                Prep stays green. Mission number stays locked. Current mission payload progress drops back to payload 1.
-              </p>
-            </div>
-            <div className="driver-prep-centerDominant">
-              <div className="driver-prep-explosionPanel">
-                <div className="driver-prep-explosionTile">X</div>
-                <button
-                  type="button"
-                  className="driver-prep-actionBar"
-                  onClick={() => dispatch({ type: "RESET_AFTER_EXPLOSION" })}
-                >
-                  <AlertTriangle className="driver-prep-actionIcon" />
-                  Re-Arm Payload 1
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      case "deploy_live":
-        return (
-          <div className="driver-prep-surface">
-            <div className="driver-prep-headerBlock">
-              <span className="driver-prep-phaseLabel">
-                Payload {state.currentPayloadIndex}/{state.payloadCount}
-              </span>
-              <h1 className="driver-prep-title">Deploy Live</h1>
-              <p className="driver-prep-subtitle">
-                Post the flyer, lock visual proof, then trigger verification. This surface replaces all routing UI by design.
-              </p>
-            </div>
-            <DriverProofUpload
-              title="Payload Proof"
-              subtitle={`Target: ${missionTarget.label}`}
-              statusLabel={
-                state.deployment.status === "uploaded"
-                  ? "Proof acquired"
-                  : "Pending proof image"
-              }
-              previewDataUrl={state.deployment.previewDataUrl}
-              actionLabel="Upload Proof Image"
-              onPick={() => openPicker("deploy_live")}
-            />
-            <button
-              type="button"
-              className="driver-prep-actionBar"
-              disabled={state.deployment.status !== "uploaded"}
-              onClick={() => dispatch({ type: "LOCK_DEPLOY_PROOF" })}
-            >
-              <Upload className="driver-prep-actionIcon" />
-              Lock Payload Proof
-            </button>
-          </div>
-        );
-      case "deploy_resolved":
-        return (
-          <div className="driver-prep-surface">
-            <div className="driver-prep-headerBlock">
-              <span className="driver-prep-phaseLabel">Proof Locked</span>
-              <h1 className="driver-prep-title is-success">Deploy Resolved</h1>
-              <p className="driver-prep-subtitle">
-                Proof is secured. Verification will be deterministic: no random rejection, only real failure reasons.
-              </p>
-            </div>
-            <DriverProofUpload
-              title="Payload Secured"
-              subtitle={`Target: ${missionTarget.label}`}
-              statusLabel="Payload proof locked"
-              previewDataUrl={state.deployment.previewDataUrl}
-              actionLabel="Replace Proof Image"
-              onPick={() => openPicker("deploy_live")}
-            />
-            <div className="driver-prep-statusBanner">
-              <p className="driver-prep-proofTitle">Verification Auto-Initiating</p>
-              <p className="driver-prep-subtitle">
-                Proof locked. Hold position while the countdown takes over.
-              </p>
-            </div>
-          </div>
-        );
-      case "verify_countdown":
-        return (
-          <div className="driver-prep-surface">
-            <div className="driver-prep-headerBlock">
-              <span className="driver-prep-phaseLabel">Verification</span>
-              <h1 className="driver-prep-title">Countdown</h1>
-            </div>
-            <DriverVerificationCountdown value={countdownValue} />
-          </div>
-        );
-      case "verify_success":
-        return (
-          <div className="driver-prep-surface">
-            <div className="driver-prep-headerBlock">
-              <span className="driver-prep-phaseLabel">Route Purity Restored</span>
-              <h1 className="driver-prep-title is-success">Verify Success</h1>
-            </div>
-            <div className="driver-prep-statusBanner">
-              <p className="driver-prep-proofTitle">
-                SAFE — NO DETONATION DETECTED
-              </p>
-              <p className="driver-prep-subtitle">
-                Payload secured. Route purity restored.
-              </p>
-            </div>
-          </div>
-        );
-      case "verify_failed":
-        return (
-          <div className="driver-prep-surface">
-            <div className="driver-prep-headerBlock">
-              <span className="driver-prep-phaseLabel">Verification Failed</span>
-              <h1 className="driver-prep-title is-failure">Corrective Action</h1>
-              <p className="driver-prep-subtitle">
-                {state.verification.failureReason === "timeout"
-                  ? "Verification timed out before the lock could be confirmed."
-                  : state.verification.failureReason === "missing_upload"
-                    ? "Proof upload is missing. Verification cannot proceed."
-                    : "Manual test failure forced this payload back into correction mode."}
-              </p>
-            </div>
-            <div className="driver-prep-statusBanner is-failure">
-              <p className="driver-prep-proofTitle">Verification Failed</p>
-              <p className="driver-prep-subtitle">
-                Failure reason: {state.verification.failureReason?.split("_").join(" ")}
-              </p>
-            </div>
-            <button
-              type="button"
-              className="driver-prep-actionBar"
-              onClick={() => dispatch({ type: "RETURN_TO_DEPLOY" })}
-            >
-              Retry Deployment
-            </button>
-          </div>
-        );
-      case "next_target":
-        return (
-          <div className="driver-prep-surface">
-            <div className="driver-prep-headerBlock">
-              <span className="driver-prep-phaseLabel">
-                Next Payload {state.currentPayloadIndex}/{state.payloadCount}
-              </span>
-              <h1 className="driver-prep-title is-success">Target Acquired</h1>
-              <p className="driver-prep-subtitle">
-                Scanning nearby deployment zones and feeding live operational data into the next payload window.
-              </p>
-            </div>
-            <div className="driver-prep-intelCard">
-              <div className="driver-prep-intelMap">
-                <div className="driver-prep-intelSweep" />
-              </div>
-              <div className="driver-prep-intelFooter">
-                <span className="driver-prep-intelEyebrow">Operational Intel</span>
-                <p className="driver-prep-targetTitle">{missionTarget.label}</p>
-                <p className="driver-prep-intelText">{missionTarget.intel}</p>
-                {missionTarget.customerName ? (
-                  <p className="driver-prep-targetAddress">
-                    Resident detected: {missionTarget.customerName}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="driver-prep-actionBar"
-              onClick={handleNextTargetCta}
-            >
-              <MapPinned className="driver-prep-actionIcon" />
-              {missionTarget.kind === "real" && missionTarget.address
-                ? `Deploy To Next Target (${missionTarget.address})`
-                : "Advance To Next Payload"}
-            </button>
-            {state.nextTargetLaunchPending ? (
-              <>
-                <div className="driver-prep-statusBanner">
-                  <p className="driver-prep-proofTitle">Maps Link Live</p>
-                  <p className="driver-prep-subtitle">
-                    Navigation launched. Return to the app to arm the next payload, or resume manually if your browser stays in place.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="driver-prep-secondaryAction"
-                  onClick={() => dispatch({ type: "RESUME_AFTER_MAP_RETURN" })}
-                >
-                  Resume After Navigation
-                </button>
-              </>
-            ) : null}
-          </div>
-        );
-      case "mission_complete":
-        return (
-          <div className="driver-prep-surface">
-            <div className="driver-prep-headerBlock">
-              <span className="driver-prep-phaseLabel">Daily Completion</span>
-              <h1 className="driver-prep-title is-success">
-                Mission {state.missionNumber} Complete
-              </h1>
-              <p className="driver-prep-subtitle">
-                Payloads {state.payloadCount}/{state.payloadCount} diffused. Route secured. Mission number advances on the next local day only.
-              </p>
-            </div>
-            <div className="driver-prep-messagePanel">
-              <p className="driver-prep-proofTitle">
-                MISSION {state.missionNumber} COMPLETE
-              </p>
-              <p className="driver-prep-copy">
-                PAYLOADS {state.payloadCount}/{state.payloadCount} DIFFUSED
-                <br />
-                ROUTE SECURED
-              </p>
-            </div>
-          </div>
-        );
-      default:
-        return (
-          <div className="driver-prep-emptyState">
-            <p className="driver-prep-emptyText">Driver prep mechanic is initializing.</p>
-          </div>
-        );
+        const resolvedOrder =
+          order != null
+            ? { orderId: order.id, nextStatus: order.nextStatus }
+            : undefined;
+        const action: DriverPrepAction = {
+          type: "RESOLVE_VERIFY_SUCCESS",
+          now: new Date().toISOString(),
+          xpAwarded,
+          resolvedOrder,
+        };
+        dispatch(action);
+      } else {
+        dispatch({
+          type: "RESOLVE_VERIFY_FAILURE",
+          reason: "manual_test_failure",
+          now: new Date().toISOString(),
+        });
+      }
+    },
+    [selectedOrder, state.currentPayloadIndex, state.payloadCount]
+  );
+
+  const handleDebriefReturn = useCallback(() => {
+    if (state.phase === "mission_complete") {
+      dispatch({ type: "BACK_TO_COMMAND_CENTER" });
+    } else {
+      dispatch({ type: "ADVANCE_AFTER_VERIFY_SUCCESS" });
     }
-  })();
+  }, [state.phase]);
+
+  const scansCompleted = scansCompletedFromState(state);
 
   return (
-    <div
-      className={`driver-prep-overlay ${phaseToneClass}`}
-      aria-label="Driver prep mechanic gameplay overlay"
-    >
-      <div className="driver-prep-backdrop" />
-      <div className="driver-prep-shell">
-        <div className="driver-prep-frame">
-          <div className="driver-prep-hud">
-            <div className="driver-prep-hudTop">
-              <div className="driver-prep-hudCluster">
-                <Flame className="driver-prep-hudFlame" />
-                <div className="driver-prep-hudStat">
-                  <span className="driver-prep-hudEyebrow">Fire Streak</span>
-                  <span className="driver-prep-hudValue">
-                    {state.completedPayloadsCurrentMission}/{state.payloadCount}
-                  </span>
-                </div>
-                <Coins className="driver-prep-hudCoin" />
-                <div className="driver-prep-hudStat">
-                  <span className="driver-prep-hudEyebrow">Earned</span>
-                  <span className="driver-prep-hudValue">{earnedDisplay} XP</span>
-                </div>
-              </div>
+    <div className="driver-game min-h-screen">
+      {renderPhase(state.phase, {
+        state: snapshot,
+        rawState: state,
+        orders: availableOrders,
+        selectedOrder,
+        missionTarget,
+        scansCompleted,
+        isLoading: Boolean(isLoading),
+        handleSelectOrder,
+        handleBackToCommand,
+        handleStartVerification,
+        handleCompleteScan,
+        handleCompleteLaundryRun,
+        handleStartOverride,
+        handleOverrideComplete,
+        handleDebriefReturn,
+      })}
+    </div>
+  );
+}
 
-              <div className="driver-prep-hudRight">
-                <div className="driver-prep-hudMission">
-                  <span className="driver-prep-hudMissionLabel">Mission Box</span>
-                  <span className="driver-prep-hudMissionValue">{missionCounter}</span>
-                </div>
-                {runtimeFlags.cheatMode ? (
-                  <div className="driver-prep-hudCheat">CHEAT MODE</div>
-                ) : null}
-                <div className="driver-prep-hudAvatarWrap">
-                  <UserCircle2 className="driver-prep-hudAvatar" />
-                </div>
-              </div>
-            </div>
+type RenderArgs = {
+  state: GameStateSnapshot;
+  rawState: DriverPrepState;
+  orders: GameOrder[];
+  selectedOrder: GameOrder | null;
+  missionTarget: GameMissionTarget;
+  scansCompleted: number;
+  isLoading: boolean;
+  handleSelectOrder: (order: GameOrder) => void;
+  handleBackToCommand: () => void;
+  handleStartVerification: () => void;
+  handleCompleteScan: (
+    tier: 1 | 2 | 3,
+    previewDataUrl?: string | null
+  ) => void;
+  handleCompleteLaundryRun: (score: number) => void;
+  handleStartOverride: () => void;
+  handleOverrideComplete: (success: boolean) => void;
+  handleDebriefReturn: () => void;
+};
 
-            <p className="driver-prep-hudTitle">
-              <strong>{hudStatus}</strong>
-              {" — "}
-              {hudLine}
-            </p>
-          </div>
+function renderPhase(phase: DriverPrepPhase, args: RenderArgs) {
+  switch (phase) {
+    case "command_center":
+      return (
+        <CommandCenter
+          orders={args.orders}
+          state={args.state}
+          onSelectOrder={args.handleSelectOrder}
+          isLoading={args.isLoading}
+        />
+      );
+    case "order_detail":
+      if (!args.selectedOrder) {
+        return (
+          <CommandCenter
+            orders={args.orders}
+            state={args.state}
+            onSelectOrder={args.handleSelectOrder}
+            isLoading={args.isLoading}
+          />
+        );
+      }
+      return (
+        <OrderDetail
+          order={args.selectedOrder}
+          onStartVerification={args.handleStartVerification}
+          onBack={args.handleBackToCommand}
+        />
+      );
+    case "prep_t1":
+    case "prep_t2":
+    case "prep_t3":
+    case "prep_complete":
+      return (
+        <AssetVerification
+          scansCompleted={args.scansCompleted}
+          onCompleteScan={args.handleCompleteScan}
+        />
+      );
+    case "laundry_run":
+      return <LaundryRun onComplete={args.handleCompleteLaundryRun} />;
+    case "mission_briefing":
+      return (
+        <MissionBriefing
+          mission={args.missionTarget}
+          onStartOverride={args.handleStartOverride}
+        />
+      );
+    case "signal_override":
+      return <SignalOverride onComplete={args.handleOverrideComplete} />;
+    case "verify_success":
+      return (
+        <MissionDebrief
+          state={args.state}
+          mission={args.missionTarget}
+          onReturn={args.handleDebriefReturn}
+          ctaLabel="Next Payload"
+        />
+      );
+    case "verify_failed":
+      return <VerifyFailedScreen />;
+    case "next_target":
+      return <TransitionScreen label="Queueing Next Payload" />;
+    case "mission_complete":
+      return (
+        <MissionDebrief
+          state={args.state}
+          mission={args.missionTarget}
+          onReturn={args.handleDebriefReturn}
+          ctaLabel="Return to Command Center"
+        />
+      );
+    default:
+      return <TransitionScreen label="Loading" />;
+  }
+}
 
-          <div className="driver-prep-body">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={motionKey(state.phase, state.currentPayloadIndex)}
-                initial={{ opacity: 0, y: 18, scale: 0.985 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -16, scale: 0.985 }}
-                transition={{ duration: runtimeFlags.fastMode ? 0.16 : 0.26, ease: "easeOut" }}
-                className="driver-prep-surface"
-              >
-                {surface}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </div>
-      </div>
+function VerifyFailedScreen() {
+  return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
+      <p className="text-[9px] tracking-[0.5em] text-danger uppercase mb-3 font-semibold">
+        Override Failed
+      </p>
+      <p className="font-display font-extrabold text-[32px] uppercase tracking-wider text-danger mb-3 text-center">
+        Payload Loop Reset
+      </p>
+      <p className="text-[11px] text-muted-foreground text-center max-w-[260px] leading-relaxed">
+        Signal lost. Restarting from payload 1. Prep remains secured.
+      </p>
+    </div>
+  );
+}
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="sr-only"
-        onChange={handleFilePick}
-      />
+function TransitionScreen({ label }: { label: string }) {
+  return (
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <p className="text-[10px] tracking-[0.5em] text-neon/60 uppercase font-semibold">
+        {label}…
+      </p>
     </div>
   );
 }

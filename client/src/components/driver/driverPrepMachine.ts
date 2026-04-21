@@ -1,14 +1,13 @@
 export type DriverPrepPhase =
+  | "command_center"
+  | "order_detail"
   | "prep_t1"
   | "prep_t2"
   | "prep_t3"
   | "prep_complete"
-  | "sweep_armed"
-  | "sweep_resolved_safe"
-  | "sweep_resolved_explosion"
-  | "deploy_live"
-  | "deploy_resolved"
-  | "verify_countdown"
+  | "laundry_run"
+  | "mission_briefing"
+  | "signal_override"
   | "verify_success"
   | "verify_failed"
   | "next_target"
@@ -43,15 +42,8 @@ export type LifetimeCampaignStats = {
   missionsCompletedLifetime: number;
   lastCompletedMissionNumber: number | null;
   lastCompletedDayKey: string | null;
-};
-
-export type SweepState = {
-  boardSeed: string;
-  mineIndex: number;
-  winningIndex: number;
-  selectedIndex: number | null;
-  resolution: "armed" | "safe" | "explosion";
-  preRevealed: number[];
+  totalXp: number;
+  streakDays: number;
 };
 
 export type PendingOrderResolution = {
@@ -60,7 +52,7 @@ export type PendingOrderResolution = {
 } | null;
 
 export type DriverPrepState = {
-  version: 1;
+  version: 2;
   missionNumber: number;
   payloadCount: number;
   currentPayloadIndex: number;
@@ -68,12 +60,13 @@ export type DriverPrepState = {
   missionDayKey: string;
   missionCompletedForDay: boolean;
   phase: DriverPrepPhase;
+  currentOrderId: number | null;
   prepUploads: {
     t1: PrepUploadSlot;
     t2: PrepUploadSlot;
     t3: PrepUploadSlot;
   };
-  sweep: SweepState;
+  laundryRunScore: number;
   deployment: DeploymentProof;
   verification: VerificationState;
   postVerifyPhase: "next_target" | "mission_complete" | null;
@@ -87,16 +80,14 @@ export type DriverPrepState = {
 export type DriverPrepAction =
   | { type: "HYDRATE"; state: DriverPrepState }
   | { type: "ROLL_TO_NEXT_DAY"; todayKey: string }
+  | { type: "SELECT_ORDER"; orderId: number }
+  | { type: "BACK_TO_COMMAND_CENTER" }
+  | { type: "START_RUN_FROM_ORDER" }
   | { type: "SET_PREP_PREVIEW"; tier: 1 | 2 | 3; previewDataUrl: string }
   | { type: "SECURE_PREP_TASK"; tier: 1 | 2 | 3; now: string }
   | { type: "ADVANCE_PREP_COMPLETE" }
-  | { type: "ARM_SWEEP" }
-  | { type: "SELECT_SWEEP_CELL"; index: number }
-  | { type: "ADVANCE_AFTER_SAFE_HOLD" }
-  | { type: "RESET_AFTER_EXPLOSION" }
-  | { type: "UPLOAD_DEPLOY_PROOF"; previewDataUrl: string; now: string }
-  | { type: "LOCK_DEPLOY_PROOF" }
-  | { type: "START_VERIFY_COUNTDOWN"; startedAt: string; deadlineAt: string }
+  | { type: "COMPLETE_LAUNDRY_RUN"; score: number }
+  | { type: "START_SIGNAL_OVERRIDE"; startedAt: string; deadlineAt: string }
   | {
       type: "RESOLVE_VERIFY_SUCCESS";
       now: string;
@@ -104,6 +95,7 @@ export type DriverPrepAction =
         orderId: number;
         nextStatus: "collected" | "delivered";
       };
+      xpAwarded?: number;
     }
   | {
       type: "RESOLVE_VERIFY_FAILURE";
@@ -111,14 +103,14 @@ export type DriverPrepAction =
       now: string;
     }
   | { type: "ADVANCE_AFTER_VERIFY_SUCCESS" }
-  | { type: "RETURN_TO_DEPLOY" }
+  | { type: "ACK_VERIFY_FAILURE" }
   | { type: "ACK_ORDER_RESOLUTION" }
   | { type: "REGISTER_NEXT_TARGET_LAUNCH" }
   | { type: "CANCEL_NEXT_TARGET_LAUNCH" }
   | { type: "RESUME_AFTER_MAP_RETURN" }
   | { type: "ADVANCE_WITHOUT_MAP" };
 
-const STORAGE_VERSION = 1 as const;
+const STORAGE_VERSION = 2 as const;
 
 export function createEmptyUploadSlot(): PrepUploadSlot {
   return {
@@ -145,46 +137,6 @@ export function createEmptyVerificationState(): VerificationState {
   };
 }
 
-function hashString(input: string): number {
-  let hash = 0;
-  for (let index = 0; index < input.length; index += 1) {
-    hash = (hash * 31 + input.charCodeAt(index)) | 0;
-  }
-  return Math.abs(hash);
-}
-
-function buildPreRevealedCells(seed: number, mineIndex: number, winningIndex: number): number[] {
-  const cells = new Set<number>();
-  let cursor = seed;
-  while (cells.size < 3) {
-    cursor = (cursor * 1664525 + 1013904223) % 0x100000000;
-    const next = cursor % 25;
-    if (next !== mineIndex && next !== winningIndex) cells.add(next);
-  }
-  return Array.from(cells);
-}
-
-export function buildSweepState(
-  missionNumber: number,
-  currentPayloadIndex: number
-): SweepState {
-  const boardSeed = `${missionNumber}-${currentPayloadIndex}`;
-  const seed = hashString(boardSeed);
-  const mineIndex = seed % 25;
-  let winningIndex = (seed * 7 + 11) % 25;
-  if (winningIndex === mineIndex) {
-    winningIndex = (winningIndex + 9) % 25;
-  }
-  return {
-    boardSeed,
-    mineIndex,
-    winningIndex,
-    selectedIndex: null,
-    resolution: "armed",
-    preRevealed: buildPreRevealedCells(seed, mineIndex, winningIndex),
-  };
-}
-
 export function getMissionDayKey(date: Date = new Date()): string {
   const timeZone =
     Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles";
@@ -205,6 +157,19 @@ export function getPayloadCountForMission(missionNumber: number): number {
   return safeMission;
 }
 
+/** True when `nextDayKey` is exactly one calendar day after `prevDayKey` (both YYYY-MM-DD). */
+export function isConsecutiveDay(
+  prevDayKey: string | null,
+  nextDayKey: string
+): boolean {
+  if (!prevDayKey) return false;
+  const prev = new Date(`${prevDayKey}T00:00:00`);
+  const next = new Date(`${nextDayKey}T00:00:00`);
+  if (Number.isNaN(prev.getTime()) || Number.isNaN(next.getTime())) return false;
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.round((next.getTime() - prev.getTime()) / dayMs) === 1;
+}
+
 function carryHistory(
   history?: Partial<LifetimeCampaignStats>
 ): LifetimeCampaignStats {
@@ -213,6 +178,8 @@ function carryHistory(
     missionsCompletedLifetime: history?.missionsCompletedLifetime ?? 0,
     lastCompletedMissionNumber: history?.lastCompletedMissionNumber ?? null,
     lastCompletedDayKey: history?.lastCompletedDayKey ?? null,
+    totalXp: history?.totalXp ?? 0,
+    streakDays: history?.streakDays ?? 0,
   };
 }
 
@@ -229,13 +196,14 @@ export function createInitialDriverPrepState(
     completedPayloadsCurrentMission: 0,
     missionDayKey,
     missionCompletedForDay: false,
-    phase: "prep_t1",
+    phase: "command_center",
+    currentOrderId: null,
     prepUploads: {
       t1: createEmptyUploadSlot(),
       t2: createEmptyUploadSlot(),
       t3: createEmptyUploadSlot(),
     },
-    sweep: buildSweepState(missionNumber, 1),
+    laundryRunScore: 0,
     deployment: createEmptyDeploymentProof(),
     verification: createEmptyVerificationState(),
     postVerifyPhase: null,
@@ -272,25 +240,62 @@ function normalizePrepUploadSlot(
   };
 }
 
-function firstPendingPrepPhase(state: DriverPrepState["prepUploads"]): DriverPrepPhase | null {
+/** First prep phase whose upload slot is not yet `secured`, or null if all three are done. */
+function firstPendingPrepPhase(
+  state: DriverPrepState["prepUploads"]
+): DriverPrepPhase | null {
   if (state.t1.status !== "secured") return "prep_t1";
   if (state.t2.status !== "secured") return "prep_t2";
   if (state.t3.status !== "secured") return "prep_t3";
   return null;
 }
 
-function advanceMissionForNewDay(state: DriverPrepState, todayKey: string): DriverPrepState {
+function advanceMissionForNewDay(
+  state: DriverPrepState,
+  todayKey: string
+): DriverPrepState {
   const nextMissionNumber = getNextMissionNumber(state.missionNumber);
   return createInitialDriverPrepState(nextMissionNumber, todayKey, state.history);
 }
 
+const VALID_PHASES: ReadonlySet<DriverPrepPhase> = new Set<DriverPrepPhase>([
+  "command_center",
+  "order_detail",
+  "prep_t1",
+  "prep_t2",
+  "prep_t3",
+  "prep_complete",
+  "laundry_run",
+  "mission_briefing",
+  "signal_override",
+  "verify_success",
+  "verify_failed",
+  "next_target",
+  "mission_complete",
+]);
+
+/** Phases that require prep to already be fully secured. */
+const GAME_PHASES: ReadonlySet<DriverPrepPhase> = new Set<DriverPrepPhase>([
+  "laundry_run",
+  "mission_briefing",
+  "signal_override",
+  "verify_success",
+  "verify_failed",
+  "next_target",
+  "mission_complete",
+]);
+
 function sanitizeState(candidate: DriverPrepState): DriverPrepState {
   const payloadCount = getPayloadCountForMission(candidate.missionNumber);
-  const currentPayloadIndex = Math.max(1, Math.min(payloadCount, candidate.currentPayloadIndex || 1));
+  const currentPayloadIndex = Math.max(
+    1,
+    Math.min(payloadCount, candidate.currentPayloadIndex || 1)
+  );
   const completedPayloadsCurrentMission = Math.max(
     0,
     Math.min(payloadCount, candidate.completedPayloadsCurrentMission || 0)
   );
+  const phase = VALID_PHASES.has(candidate.phase) ? candidate.phase : "command_center";
 
   return {
     ...candidate,
@@ -298,20 +303,18 @@ function sanitizeState(candidate: DriverPrepState): DriverPrepState {
     payloadCount,
     currentPayloadIndex,
     completedPayloadsCurrentMission,
+    phase,
+    currentOrderId:
+      typeof candidate.currentOrderId === "number" ? candidate.currentOrderId : null,
     prepUploads: {
       t1: normalizePrepUploadSlot(candidate.prepUploads?.t1),
       t2: normalizePrepUploadSlot(candidate.prepUploads?.t2),
       t3: normalizePrepUploadSlot(candidate.prepUploads?.t3),
     },
+    laundryRunScore: Math.max(0, Math.floor(candidate.laundryRunScore ?? 0)),
     deployment: candidate.deployment ?? createEmptyDeploymentProof(),
     verification: candidate.verification ?? createEmptyVerificationState(),
     postVerifyPhase: candidate.postVerifyPhase ?? null,
-    sweep:
-      candidate.sweep?.boardSeed &&
-      typeof candidate.sweep.mineIndex === "number" &&
-      typeof candidate.sweep.winningIndex === "number"
-        ? candidate.sweep
-        : buildSweepState(candidate.missionNumber, currentPayloadIndex),
     resolvedOrderIdsCurrentMission: candidate.resolvedOrderIdsCurrentMission ?? [],
     nextTargetLaunchPending: Boolean(candidate.nextTargetLaunchPending),
     pendingOrderResolution: candidate.pendingOrderResolution ?? null,
@@ -334,24 +337,28 @@ export function normalizeHydratedDriverPrepState(
   }
 
   const sanitized = sanitizeState(parsed);
+
+  // If we restored into a game phase (laundry_run → mission_complete) but prep
+  // isn't fully secured, bounce back to the first pending prep step so the
+  // reducer invariant "game phases require prep secured" holds.
   const pendingPrepPhase = firstPendingPrepPhase(sanitized.prepUploads);
   if (
     pendingPrepPhase &&
     !sanitized.missionCompletedForDay &&
-    !sanitized.phase.startsWith("prep_")
+    GAME_PHASES.has(sanitized.phase)
   ) {
     return {
       ...sanitized,
       phase: pendingPrepPhase,
       currentPayloadIndex: 1,
       completedPayloadsCurrentMission: 0,
+      laundryRunScore: 0,
       deployment: createEmptyDeploymentProof(),
       verification: createEmptyVerificationState(),
       postVerifyPhase: null,
       resolvedOrderIdsCurrentMission: [],
       nextTargetLaunchPending: false,
       pendingOrderResolution: null,
-      sweep: buildSweepState(sanitized.missionNumber, 1),
     };
   }
 
@@ -376,6 +383,22 @@ function stampUpdatedAt(state: DriverPrepState): DriverPrepState {
   return { ...state, updatedAt: new Date().toISOString() };
 }
 
+/** Shared reset used by both the hard failure penalty and the map-return refresh paths. */
+function resetPayloadLoopToOne(state: DriverPrepState): DriverPrepState {
+  return {
+    ...state,
+    currentPayloadIndex: 1,
+    completedPayloadsCurrentMission: 0,
+    laundryRunScore: 0,
+    deployment: createEmptyDeploymentProof(),
+    verification: createEmptyVerificationState(),
+    postVerifyPhase: null,
+    resolvedOrderIdsCurrentMission: [],
+    pendingOrderResolution: null,
+    nextTargetLaunchPending: false,
+  };
+}
+
 export function driverPrepReducer(
   state: DriverPrepState,
   action: DriverPrepAction
@@ -387,6 +410,27 @@ export function driverPrepReducer(
       if (!state.missionCompletedForDay) return state;
       if (state.history.lastCompletedDayKey === action.todayKey) return state;
       return advanceMissionForNewDay(state, action.todayKey);
+    case "SELECT_ORDER":
+      if (state.missionCompletedForDay) return state;
+      return stampUpdatedAt({
+        ...state,
+        phase: "order_detail",
+        currentOrderId: action.orderId,
+      });
+    case "BACK_TO_COMMAND_CENTER":
+      return stampUpdatedAt({
+        ...state,
+        phase: "command_center",
+        currentOrderId: null,
+      });
+    case "START_RUN_FROM_ORDER": {
+      if (state.missionCompletedForDay) return state;
+      const pendingPrep = firstPendingPrepPhase(state.prepUploads);
+      return stampUpdatedAt({
+        ...state,
+        phase: pendingPrep ?? "laundry_run",
+      });
+    }
     case "SET_PREP_PREVIEW": {
       const key = `t${action.tier}` as "t1" | "t2" | "t3";
       return stampUpdatedAt({
@@ -419,56 +463,17 @@ export function driverPrepReducer(
       });
     }
     case "ADVANCE_PREP_COMPLETE":
-      return stampUpdatedAt({ ...state, phase: "sweep_armed" });
-    case "ARM_SWEEP":
+      return stampUpdatedAt({ ...state, phase: "laundry_run" });
+    case "COMPLETE_LAUNDRY_RUN":
       return stampUpdatedAt({
         ...state,
-        phase: "sweep_armed",
-        sweep: buildSweepState(state.missionNumber, state.currentPayloadIndex),
+        phase: "mission_briefing",
+        laundryRunScore: Math.max(0, Math.floor(action.score)),
       });
-    case "SELECT_SWEEP_CELL": {
-      const isMine = action.index === state.sweep.mineIndex;
+    case "START_SIGNAL_OVERRIDE":
       return stampUpdatedAt({
         ...state,
-        phase: isMine ? "sweep_resolved_explosion" : "sweep_resolved_safe",
-        sweep: {
-          ...state.sweep,
-          selectedIndex: action.index,
-          resolution: isMine ? "explosion" : "safe",
-        },
-      });
-    }
-    case "ADVANCE_AFTER_SAFE_HOLD":
-      return stampUpdatedAt({ ...state, phase: "deploy_live" });
-    case "RESET_AFTER_EXPLOSION":
-      return stampUpdatedAt({
-        ...state,
-        currentPayloadIndex: 1,
-        completedPayloadsCurrentMission: 0,
-        phase: "sweep_armed",
-        sweep: buildSweepState(state.missionNumber, 1),
-        deployment: createEmptyDeploymentProof(),
-        verification: createEmptyVerificationState(),
-        postVerifyPhase: null,
-        resolvedOrderIdsCurrentMission: [],
-        pendingOrderResolution: null,
-        nextTargetLaunchPending: false,
-      });
-    case "UPLOAD_DEPLOY_PROOF":
-      return stampUpdatedAt({
-        ...state,
-        deployment: {
-          status: "uploaded",
-          previewDataUrl: action.previewDataUrl,
-          uploadedAt: action.now,
-        },
-      });
-    case "LOCK_DEPLOY_PROOF":
-      return stampUpdatedAt({ ...state, phase: "deploy_resolved" });
-    case "START_VERIFY_COUNTDOWN":
-      return stampUpdatedAt({
-        ...state,
-        phase: "verify_countdown",
+        phase: "signal_override",
         verification: {
           startedAt: action.startedAt,
           deadlineAt: action.deadlineAt,
@@ -483,12 +488,20 @@ export function driverPrepReducer(
       const nextPayloadIndex = isMissionComplete
         ? payloadCount
         : Math.min(payloadCount, completedPayloadsCurrentMission + 1);
+      const xpDelta = Math.max(0, Math.floor(action.xpAwarded ?? 0));
+
+      const nextStreak = isMissionComplete
+        ? isConsecutiveDay(state.history.lastCompletedDayKey, state.missionDayKey)
+          ? state.history.streakDays + 1
+          : 1
+        : state.history.streakDays;
 
       return stampUpdatedAt({
         ...state,
         completedPayloadsCurrentMission,
         currentPayloadIndex: nextPayloadIndex,
         phase: "verify_success",
+        laundryRunScore: 0,
         deployment: createEmptyDeploymentProof(),
         verification: {
           startedAt: state.verification.startedAt,
@@ -497,7 +510,6 @@ export function driverPrepReducer(
           failureReason: null,
         },
         postVerifyPhase: isMissionComplete ? "mission_complete" : "next_target",
-        sweep: buildSweepState(state.missionNumber, nextPayloadIndex),
         missionCompletedForDay: isMissionComplete,
         nextTargetLaunchPending: false,
         pendingOrderResolution: action.resolvedOrder ?? null,
@@ -516,12 +528,18 @@ export function driverPrepReducer(
           lastCompletedDayKey: isMissionComplete
             ? state.missionDayKey
             : state.history.lastCompletedDayKey,
+          totalXp: state.history.totalXp + xpDelta,
+          streakDays: nextStreak,
         },
       });
     }
     case "RESOLVE_VERIFY_FAILURE":
+      // Decision A: hard reset — payload loop snaps back to 1, keeping prep
+      // secured, mission number, and lifetime history untouched. User sees the
+      // failed verify screen first; ACK_VERIFY_FAILURE then sends them back to
+      // laundry_run to redo the full loop.
       return stampUpdatedAt({
-        ...state,
+        ...resetPayloadLoopToOne(state),
         phase: "verify_failed",
         verification: {
           startedAt: state.verification.startedAt,
@@ -529,8 +547,6 @@ export function driverPrepReducer(
           result: "failed",
           failureReason: action.reason,
         },
-        postVerifyPhase: null,
-        nextTargetLaunchPending: false,
       });
     case "ADVANCE_AFTER_VERIFY_SUCCESS":
       return stampUpdatedAt({
@@ -538,13 +554,11 @@ export function driverPrepReducer(
         phase: state.postVerifyPhase ?? "next_target",
         postVerifyPhase: null,
       });
-    case "RETURN_TO_DEPLOY":
+    case "ACK_VERIFY_FAILURE":
       return stampUpdatedAt({
         ...state,
-        phase: "deploy_live",
+        phase: "laundry_run",
         verification: createEmptyVerificationState(),
-        postVerifyPhase: null,
-        nextTargetLaunchPending: false,
       });
     case "ACK_ORDER_RESOLUTION":
       return stampUpdatedAt({ ...state, pendingOrderResolution: null });
@@ -556,12 +570,11 @@ export function driverPrepReducer(
     case "ADVANCE_WITHOUT_MAP":
       return stampUpdatedAt({
         ...state,
-        phase: "sweep_armed",
+        phase: "laundry_run",
         nextTargetLaunchPending: false,
         deployment: createEmptyDeploymentProof(),
         verification: createEmptyVerificationState(),
         postVerifyPhase: null,
-        sweep: buildSweepState(state.missionNumber, state.currentPayloadIndex),
       });
     default:
       return state;

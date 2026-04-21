@@ -43,6 +43,16 @@
   --font-sans: "DM Sans", system-ui, sans-serif;
   --font-display: "Fraunces", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Driver game (Tactical Noir) palette — utilities like bg-neon, text-amber, */
+  /* border-danger, bg-void-lighter, etc. are intended for use inside .driver-game. */
+  --color-neon: oklch(0.85 0.25 155);
+  --color-neon-dim: oklch(0.45 0.15 155);
+  --color-amber: oklch(0.78 0.18 75);
+  --color-danger: oklch(0.65 0.28 25);
+  --color-void: oklch(0.08 0.01 280);
+  --color-void-light: oklch(0.12 0.01 280);
+  --color-void-lighter: oklch(0.16 0.01 280);
 }
 
 :root {
@@ -167,4 +177,114 @@
       max-width: 1280px;
     }
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Driver Game — Tactical Noir theme
+ * Scoped under .driver-game so it does NOT affect admin / vendor /
+ * customer UIs. Token overrides here re-point Tailwind's base utilities
+ * (bg-background, text-foreground, border-border, etc.) to the dark
+ * palette inside the driver game only.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+.driver-game {
+  --background: oklch(0.08 0.01 280);
+  --foreground: oklch(0.92 0.01 100);
+  --card: oklch(0.11 0.01 280);
+  --card-foreground: oklch(0.92 0.01 100);
+  --popover: oklch(0.11 0.01 280);
+  --popover-foreground: oklch(0.92 0.01 100);
+  --primary: oklch(0.85 0.25 155);
+  --primary-foreground: oklch(0.08 0.01 280);
+  --secondary: oklch(0.16 0.01 280);
+  --secondary-foreground: oklch(0.7 0.01 100);
+  --muted: oklch(0.16 0.01 280);
+  --muted-foreground: oklch(0.5 0.01 100);
+  --accent: oklch(0.16 0.01 280);
+  --accent-foreground: oklch(0.92 0.01 100);
+  --destructive: oklch(0.65 0.28 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.2 0.01 280);
+  --input: oklch(0.2 0.01 280);
+  --ring: oklch(0.85 0.25 155);
+
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.driver-game .font-display {
+  font-family: "Barlow Condensed", ui-sans-serif, sans-serif;
+}
+
+.driver-game .text-neon { color: oklch(0.85 0.25 155); }
+.driver-game .text-amber { color: oklch(0.78 0.18 75); }
+.driver-game .text-danger { color: oklch(0.65 0.28 25); }
+.driver-game .bg-void { background-color: oklch(0.08 0.01 280); }
+.driver-game .bg-void-light { background-color: oklch(0.12 0.01 280); }
+.driver-game .bg-void-lighter { background-color: oklch(0.16 0.01 280); }
+
+.driver-game .glow-neon {
+  text-shadow:
+    0 0 8px oklch(0.85 0.25 155 / 0.6),
+    0 0 20px oklch(0.85 0.25 155 / 0.3);
+}
+
+.driver-game .glow-box-neon {
+  box-shadow:
+    0 0 8px oklch(0.85 0.25 155 / 0.3),
+    0 0 20px oklch(0.85 0.25 155 / 0.1);
+}
+
+@keyframes driver-scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+@keyframes driver-pulse-neon {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes driver-typewriter {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes driver-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+@keyframes driver-flash-white {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.driver-game .animate-scanline {
+  animation: driver-scanline 2s linear infinite;
+}
+
+.driver-game .animate-pulse-neon {
+  animation: driver-pulse-neon 2s ease-in-out infinite;
+}
+
+.driver-game .animate-shake {
+  animation: driver-shake 0.3s ease-in-out;
+}
+
+.driver-game .heartbeat-bar {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(0.85 0.25 155) 50%,
+    transparent 100%
+  );
+  animation: driver-pulse-neon 1.5s ease-in-out infinite;
 }
