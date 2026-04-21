@@ -58,7 +58,7 @@ interface SpriteBank {
 
 const GAME_DURATION = 30;
 const GROUND_Y_RATIO = 0.68;
-const PLAYER_HEIGHT_RATIO = 0.28;
+const PLAYER_HEIGHT_RATIO = 0.252; // 10% smaller than previous 0.28
 const START_SPEED_RATIO = 0.008;
 const SPEED_ACCEL_RATIO = 0.00004;
 const MAX_SPEED_RATIO = 0.018;
@@ -67,6 +67,8 @@ const OBSTACLE_MAX_FRAMES = 140;
 const BAG_MIN_FRAMES = 42;
 const BAG_MAX_FRAMES = 78;
 const SLIDE_DURATION_FRAMES = 45;
+const MAILBOX_POLICE_SCALE = 1.35;
+const LAUNDRY_BAG_SCALE = 1.75;
 const BEST_DISTANCE_KEY = "laundry-run-best-distance";
 const PLAYER_RUN_URL = playerRunUrl;
 const PLAYER_JUMP_URL = playerJumpUrl;
@@ -543,12 +545,18 @@ function drawBottomProgress(
 
 function getObstacleSize(type: ObstacleType, canvasWidth: number): { w: number; h: number } {
   if (type === "mailbox") {
-    return { w: canvasWidth * 0.08, h: canvasWidth * 0.14 };
+    return {
+      w: canvasWidth * 0.08 * MAILBOX_POLICE_SCALE,
+      h: canvasWidth * 0.14 * MAILBOX_POLICE_SCALE,
+    };
   }
   if (type === "hydrant") {
     return { w: canvasWidth * 0.055, h: canvasWidth * 0.09 };
   }
-  return { w: canvasWidth * 0.22, h: canvasWidth * 0.12 };
+  return {
+    w: canvasWidth * 0.22 * MAILBOX_POLICE_SCALE,
+    h: canvasWidth * 0.12 * MAILBOX_POLICE_SCALE,
+  };
 }
 
 export default function LaundryRun({ onComplete }: Props) {
@@ -919,7 +927,7 @@ export default function LaundryRun({ onComplete }: Props) {
 
       bagSpawnTimerRef.current -= 1;
       if (bagSpawnTimerRef.current <= 0) {
-        const bagW = Math.max(18, w * 0.04);
+        const bagW = Math.max(18 * LAUNDRY_BAG_SCALE, w * 0.04 * LAUNDRY_BAG_SCALE);
         const bagH = bagW * 1.12;
         const minY = h * 0.45;
         const maxY = Math.max(minY + 2, groundY - bagH);
