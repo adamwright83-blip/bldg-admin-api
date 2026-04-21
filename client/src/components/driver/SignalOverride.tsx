@@ -9,6 +9,10 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { sounds } from "./driverSounds";
 import { haptics } from "./driverHaptics";
+import hudBackgroundUrl from "@/assets/driver/signal-override/hud-background.png";
+import timingMeterPanelUrl from "@/assets/driver/signal-override/timing-meter-panel.png";
+import portraitCardUrl from "@/assets/driver/signal-override/portrait-card.png";
+import grungeTextureUrl from "@/assets/driver/signal-override/grunge-texture.png";
 
 const REWARD_BURST =
   "https://d2xsxph8kpxj0f.cloudfront.net/310519663281332025/bVTWnxw2cr9EUVzVBCF5PW/reward-burst-e4UbdjcEQqGPVjeTGQDyXs.webp";
@@ -32,6 +36,7 @@ export default function SignalOverride({ onComplete }: Props) {
   const startRef = useRef(0);
   const dirRef = useRef(1);
   const posRef = useRef(0);
+  const lastTouchAtRef = useRef(0);
 
   useEffect(() => {
     sounds.missionAssign();
@@ -89,8 +94,8 @@ export default function SignalOverride({ onComplete }: Props) {
   const handleTap = useCallback(() => {
     if (phase !== "active") return;
 
-    const pos = posRef.current;
-    const inSweet = Math.abs(pos - sweetSpotCenter) < SWEET_SPOT_WIDTH / 2;
+    // Evaluate against the rendered marker position users are reacting to.
+    const inSweet = Math.abs(barPosition - sweetSpotCenter) <= SWEET_SPOT_WIDTH / 2;
 
     if (inSweet) {
       cancelAnimationFrame(animRef.current);
@@ -99,70 +104,231 @@ export default function SignalOverride({ onComplete }: Props) {
       sounds.overrideSuccess();
       haptics.slam();
     } else {
+      cancelAnimationFrame(animRef.current);
       setMisses((m) => m + 1);
+      setResult("fail");
+      setPhase("result");
+      sounds.overrideFail();
       haptics.error();
-      sounds.crash();
     }
-  }, [phase, sweetSpotCenter]);
+  }, [phase, barPosition, sweetSpotCenter]);
 
   const dangerZone = timeLeft < 3;
+  const attemptsRemaining = Math.max(0, 3 - misses);
+  const sweetSpotLeft = (sweetSpotCenter - SWEET_SPOT_WIDTH / 2) * 100;
 
   return (
     <div
-      className="min-h-screen bg-black relative overflow-hidden flex flex-col items-center justify-center"
-      onClick={handleTap}
+      className="min-h-screen bg-black relative overflow-hidden flex items-stretch justify-center text-white"
+      onTouchStart={(event) => {
+        event.preventDefault();
+        lastTouchAtRef.current = Date.now();
+        handleTap();
+      }}
+      onMouseDown={(event) => {
+        event.preventDefault();
+        if (Date.now() - lastTouchAtRef.current < 450) return;
+        handleTap();
+      }}
       style={{ touchAction: "none" }}
     >
+      <div className="absolute inset-0 pointer-events-none">
+        <img
+          src={hudBackgroundUrl}
+          alt=""
+          className="h-full w-full object-cover opacity-[0.85]"
+          draggable={false}
+        />
+        <div className="absolute inset-0 bg-black/35" />
+        <div
+          className="absolute inset-0 opacity-[0.16] mix-blend-screen"
+          style={{
+            backgroundImage: `url(${grungeTextureUrl})`,
+            backgroundSize: "420px auto",
+            backgroundRepeat: "repeat",
+          }}
+        />
+        <div
+          className="absolute inset-0 opacity-[0.08]"
+          style={{
+            backgroundImage:
+              "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.35) 2px, rgba(255,255,255,0.35) 3px)",
+          }}
+        />
+      </div>
+
       {phase === "active" && dangerZone && (
         <div
-          className="absolute inset-0 pointer-events-none animate-pulse-neon"
+          className="absolute inset-0 pointer-events-none"
           style={{
             boxShadow:
-              "inset 0 0 60px oklch(0.65 0.28 25 / 0.3), inset 0 0 120px oklch(0.65 0.28 25 / 0.1)",
+              "inset 0 0 90px rgba(255, 22, 22, 0.22), inset 0 0 180px rgba(255, 22, 22, 0.14)",
           }}
         />
       )}
 
-      <AnimatePresence>
-        {phase === "intro" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 z-30 flex flex-col items-center justify-center"
-          >
-            <div
-              className="absolute inset-0 opacity-[0.04]"
-              style={{
-                backgroundImage:
-                  "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,136,0.15) 2px, rgba(0,255,136,0.15) 4px)",
-              }}
-            />
+      <div className="relative z-10 w-full max-w-[960px] min-h-screen px-4 py-5 sm:px-8 flex flex-col">
+        <div className="flex items-start justify-between text-[11px] sm:text-[12px] tracking-[0.14em] uppercase">
+          <div className="space-y-2">
+            <p className="text-red-500">
+              Target: <span className="text-zinc-300">10982 Roebling</span>
+            </p>
+            <p className="text-emerald-400">
+              Payload: <span className="text-zinc-300">1 of 3</span>
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-zinc-400">Attempts Remaining</p>
+            <div className="mt-2 flex gap-2 justify-end">
+              {[0, 1, 2].map((idx) => (
+                <span
+                  key={idx}
+                  className="h-4 w-4 rounded-full"
+                  style={{
+                    backgroundColor: idx < attemptsRemaining ? "#ff1f1f" : "rgba(255,31,31,0.2)",
+                    boxShadow:
+                      idx < attemptsRemaining
+                        ? "0 0 8px rgba(255,31,31,0.7)"
+                        : "inset 0 0 0 1px rgba(255,31,31,0.35)",
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 sm:mt-6 text-center">
+          <p className="text-[12px] sm:text-[14px] tracking-[0.28em] text-red-500 uppercase">
+            Signal Intercept
+          </p>
+          <h1 className="mt-4 text-[54px] leading-none sm:text-[88px] font-black tracking-[0.1em] text-emerald-400 drop-shadow-[0_0_22px_rgba(16,255,159,0.55)]">
+            SIGNAL OVERRIDE
+          </h1>
+          <p className="mt-3 text-zinc-300 text-[16px] sm:text-[22px] tracking-[0.2em] uppercase">
+            Timing Is Everything
+          </p>
+        </div>
+
+        <AnimatePresence>
+          {phase === "intro" && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.3, duration: 0.5 }}
-              className="text-center relative z-10"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="mt-6 sm:mt-8 text-center"
             >
-              <p className="text-[9px] tracking-[0.5em] text-danger/60 uppercase mb-4 font-semibold">
-                Override Required
+              <p className="text-red-500 text-[14px] sm:text-[18px] tracking-[0.14em] uppercase">
+                Syncing Override Channel...
               </p>
-              <p className="font-display font-extrabold text-4xl uppercase tracking-wider text-neon glow-neon">
-                Signal Override
+              <p className="mt-3 text-zinc-300 text-[13px] sm:text-[16px] tracking-[0.16em] uppercase">
+                Hold focus. One tap decides the payload.
               </p>
-              <p className="text-[10px] text-muted-foreground mt-4 max-w-[220px] mx-auto">
-                Tap when the bar enters the green zone
-              </p>
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: "100%" }}
-                transition={{ delay: 0.8, duration: 0.8 }}
-                className="h-px bg-neon/30 mt-6 mx-auto max-w-[200px]"
-              />
             </motion.div>
-          </motion.div>
+          )}
+        </AnimatePresence>
+
+        {phase === "active" && (
+          <>
+            <div className="mt-5 sm:mt-7 text-center">
+              <p className="text-zinc-200 text-[18px] sm:text-[26px] leading-tight tracking-[0.12em] uppercase">
+                Tap when the bar enters the <span className="text-emerald-400">green zone</span>
+              </p>
+            </div>
+
+            <div className="mt-4 sm:mt-6 text-center">
+              <p className="text-red-500 text-[15px] sm:text-[22px] tracking-[0.16em] uppercase">
+                Time Remaining
+              </p>
+              <p
+                className={`mt-1 text-[88px] sm:text-[150px] leading-none font-black tabular-nums ${
+                  dangerZone ? "text-red-500" : "text-red-500"
+                } drop-shadow-[0_0_20px_rgba(255,20,20,0.5)]`}
+              >
+                {timeLeft.toFixed(1)}
+              </p>
+            </div>
+
+            <div className="mt-2 sm:mt-4">
+              <div className="relative mx-auto w-full max-w-[900px]">
+                <img
+                  src={timingMeterPanelUrl}
+                  alt=""
+                  className="w-full h-auto pointer-events-none select-none"
+                  draggable={false}
+                />
+
+                <div className="absolute left-[4.4%] right-[4.4%] top-[23.5%] bottom-[18.5%]">
+                  <div className="absolute -top-8 left-0 right-0 flex justify-between text-[10px] sm:text-[14px] tracking-[0.14em] uppercase">
+                    <span className="text-red-500">Too Early</span>
+                    <span className="text-emerald-400">Green Zone</span>
+                    <span className="text-red-500">Too Late</span>
+                  </div>
+
+                  <div
+                    className="absolute top-0 bottom-0 border-x-2 border-emerald-400/80"
+                    style={{
+                      left: `${sweetSpotLeft}%`,
+                      width: `${SWEET_SPOT_WIDTH * 100}%`,
+                      background:
+                        "linear-gradient(90deg, rgba(0,255,145,0.22), rgba(0,255,145,0.14))",
+                      boxShadow: "0 0 20px rgba(0,255,145,0.2)",
+                    }}
+                  />
+
+                  <motion.div
+                    className="absolute top-[-8%] bottom-[-8%] w-[3px] bg-white"
+                    style={{
+                      left: `calc(${barPosition * 100}% - 1px)`,
+                      boxShadow: "0 0 12px #fff, 0 0 24px rgba(255,255,255,0.75)",
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 sm:mt-6 text-center">
+              <p className="text-[52px] sm:text-[74px] leading-none font-black tracking-[0.2em] text-emerald-400 drop-shadow-[0_0_18px_rgba(16,255,159,0.4)]">
+                TAP NOW
+              </p>
+              <p className="mt-2 text-zinc-300 text-[16px] sm:text-[26px] tracking-[0.16em] uppercase">
+                Commit The Override
+              </p>
+            </div>
+          </>
         )}
-      </AnimatePresence>
+
+        <div className="mt-auto mb-4 border border-red-500/40 bg-black/70 grid grid-cols-12 overflow-hidden">
+          <div className="col-span-4 border-r border-red-500/35 min-h-[110px]">
+            <img
+              src={portraitCardUrl}
+              alt=""
+              className="h-full w-full object-cover opacity-[0.85]"
+              draggable={false}
+            />
+          </div>
+          <div className="col-span-5 p-3 sm:p-4">
+            <p className="text-red-500 text-[18px] sm:text-[34px] tracking-[0.12em] uppercase font-bold">
+              Warning
+            </p>
+            <p className="mt-1 text-zinc-300 text-[11px] sm:text-[16px] tracking-[0.11em] uppercase">
+              Failure will reset payload loop
+            </p>
+            <p className="mt-1 text-red-500 text-[11px] sm:text-[16px] tracking-[0.12em] uppercase">
+              You will lose this opportunity
+            </p>
+          </div>
+          <div className="col-span-3 border-l border-red-500/35 p-3 sm:p-4 text-right">
+            <p className="text-emerald-400 text-[10px] sm:text-[14px] tracking-[0.12em] uppercase">
+              Success Window
+            </p>
+            <p className="text-emerald-400 text-[34px] sm:text-[54px] leading-none font-black">0.8s</p>
+            <p className="mt-2 text-zinc-300 text-[10px] sm:text-[12px] tracking-[0.08em] uppercase">
+              Connection Stability
+            </p>
+            <p className="text-amber-400 text-[30px] sm:text-[46px] leading-none font-black">62%</p>
+          </div>
+        </div>
+      </div>
 
       <AnimatePresence>
         {result === "success" && (
@@ -174,14 +340,14 @@ export default function SignalOverride({ onComplete }: Props) {
               className="absolute inset-0 z-40 bg-white"
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.5 }}
+              initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: "spring", damping: 10, delay: 0.2 }}
-              className="absolute inset-0 z-30 flex flex-col items-center justify-center"
+              transition={{ type: "spring", damping: 12, delay: 0.2 }}
+              className="absolute inset-0 z-40 flex flex-col items-center justify-center text-center px-6"
             >
               <motion.div
                 initial={{ opacity: 0, scale: 0.4 }}
-                animate={{ opacity: 0.45, scale: 1.1 }}
+                animate={{ opacity: 0.5, scale: 1.1 }}
                 transition={{ duration: 1.2, ease: "easeOut", delay: 0.1 }}
                 className="absolute inset-0 pointer-events-none"
                 style={{
@@ -195,24 +361,9 @@ export default function SignalOverride({ onComplete }: Props) {
                     "radial-gradient(ellipse at center, black 0%, black 35%, transparent 70%)",
                 }}
               />
-              <div className="relative z-10 text-center">
-                <motion.p
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.3 }}
-                  className="font-display font-extrabold text-3xl uppercase tracking-wider text-neon glow-neon mb-2"
-                >
-                  Override
-                </motion.p>
-                <motion.p
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.5 }}
-                  className="font-display font-extrabold text-5xl uppercase tracking-wider text-foreground"
-                >
-                  Successful
-                </motion.p>
-              </div>
+              <p className="relative z-10 text-emerald-400 text-[26px] sm:text-[40px] tracking-[0.15em] uppercase font-bold">
+                Override Successful
+              </p>
             </motion.div>
           </>
         )}
@@ -223,88 +374,23 @@ export default function SignalOverride({ onComplete }: Props) {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="absolute inset-0 z-30 flex flex-col items-center justify-center"
+            className="absolute inset-0 z-40 flex flex-col items-center justify-center text-center px-6"
           >
             <motion.div
               animate={{ x: [0, -6, 6, -4, 4, 0] }}
               transition={{ duration: 0.4 }}
-              className="text-center"
+              className="rounded-lg border border-red-500/40 bg-black/75 px-6 py-6"
             >
-              <p className="font-display font-extrabold text-4xl uppercase tracking-wider text-danger">
+              <p className="text-red-500 text-[28px] sm:text-[42px] font-black tracking-[0.12em] uppercase">
                 Signal Lost
               </p>
-              <p className="text-[11px] text-muted-foreground mt-3">
-                Payload loop reset — restart from payload 1
+              <p className="mt-3 text-zinc-300 text-[12px] sm:text-[16px] tracking-[0.11em] uppercase">
+                Payload loop reset. Restart from payload 1.
               </p>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {phase === "active" && (
-        <div className="w-full px-6 relative z-10">
-          <div className="text-center mb-10">
-            <p className="text-[8px] tracking-[0.4em] text-muted-foreground uppercase mb-2">
-              Time Remaining
-            </p>
-            <p
-              className={`font-display font-extrabold text-6xl tabular-nums ${
-                dangerZone ? "text-danger animate-pulse-neon" : "text-amber"
-              }`}
-            >
-              {timeLeft.toFixed(1)}
-            </p>
-          </div>
-
-          <div className="relative">
-            <div className="relative h-20 bg-void-light border border-border/20 overflow-hidden">
-              <div
-                className="absolute top-0 bottom-0 border-x-2 border-neon/60"
-                style={{
-                  left: `${(sweetSpotCenter - SWEET_SPOT_WIDTH / 2) * 100}%`,
-                  width: `${SWEET_SPOT_WIDTH * 100}%`,
-                  background:
-                    "linear-gradient(180deg, oklch(0.85 0.25 155 / 0.15), oklch(0.85 0.25 155 / 0.08))",
-                }}
-              >
-                <div className="absolute -top-5 left-1/2 -translate-x-1/2">
-                  <span className="text-[7px] text-neon/60 tracking-wider uppercase">
-                    Target
-                  </span>
-                </div>
-              </div>
-
-              <motion.div
-                className="absolute top-0 bottom-0 w-[3px]"
-                style={{
-                  left: `${barPosition * 100}%`,
-                  background: "white",
-                  boxShadow:
-                    "0 0 12px white, 0 0 24px oklch(0.85 0.25 155 / 0.5)",
-                }}
-              />
-
-              {[0.25, 0.5, 0.75].map((pos) => (
-                <div
-                  key={pos}
-                  className="absolute top-0 bottom-0 w-px bg-border/10"
-                  style={{ left: `${pos * 100}%` }}
-                />
-              ))}
-            </div>
-
-            {misses > 0 && (
-              <p className="text-center text-[9px] text-danger/60 mt-2 tracking-wider">
-                {misses} miss{misses > 1 ? "es" : ""}
-              </p>
-            )}
-          </div>
-
-          <p className="text-center text-[11px] text-muted-foreground mt-8 tracking-wider animate-pulse-neon">
-            TAP NOW
-          </p>
-        </div>
-      )}
     </div>
   );
 }
