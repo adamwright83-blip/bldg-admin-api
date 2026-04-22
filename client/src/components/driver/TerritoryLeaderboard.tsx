@@ -1,213 +1,678 @@
-/**
- * TERRITORY LEADERBOARD — The FOMO machine.
- *
- * Shows a dark tactical heat map of the city with claimed/contested/unclaimed
- * zones, weekly league standings, city-level rankings, and streak boards.
- * Designed to make laundromat owners feel like they're losing ground if they
- * don't sign up.
- *
- * V1: All data is mocked (front-end only). Future: wire to real driver stats API.
- */
-import { useState, useEffect, useRef, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  Trophy,
-  Flame,
-  MapPin,
-  ChevronRight,
-  Crown,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  Shield,
-  Target,
+  AlertTriangle,
+  ArrowDownRight,
   ArrowLeft,
-  Zap,
+  ArrowUpRight,
+  Building2,
+  ChevronRight,
+  Crosshair,
+  Minus,
+  TrendingUp,
 } from "lucide-react";
 import { sounds } from "./driverSounds";
 import { haptics } from "./driverHaptics";
 
-const TERRITORY_MAP_URL =
-  "https://d2xsxph8kpxj0f.cloudfront.net/310519663281332025/bVTWnxw2cr9EUVzVBCF5PW/laundry-run-territory-map-6rywxGwtdkWgVDtHuH7tfD.webp";
-
-// --- Mock Data ---
-
-interface LeaderboardDriver {
-  rank: number;
-  callsign: string;
-  company: string;
-  xp: number;
-  missions: number;
-  streak: number;
-  territory: string;
-  trend: "up" | "down" | "same";
-  isYou?: boolean;
-}
-
-interface Territory {
-  name: string;
-  status: "claimed" | "contested" | "unclaimed";
-  claimedBy?: string;
-  drivers: number;
-  missions: number;
-}
-
-const MOCK_WEEKLY_LEAGUE: LeaderboardDriver[] = [
-  { rank: 1, callsign: "GHOST-7", company: "CleanStar LA", xp: 4250, missions: 47, streak: 21, territory: "DTLA Corridor", trend: "up" },
-  { rank: 2, callsign: "VIPER-12", company: "FreshFold West", xp: 3890, missions: 42, streak: 18, territory: "Westside Sector", trend: "up" },
-  { rank: 3, callsign: "PHANTOM-3", company: "SpinCycle Pro", xp: 3640, missions: 39, streak: 15, territory: "Hollywood Grid", trend: "same" },
-  { rank: 4, callsign: "RAVEN-9", company: "CleanStar LA", xp: 3210, missions: 35, streak: 12, territory: "Valley North", trend: "down" },
-  { rank: 5, callsign: "HAWK-1", company: "BLDG Laundry", xp: 2980, missions: 32, streak: 14, territory: "Century Park", trend: "up", isYou: true },
-  { rank: 6, callsign: "WOLF-6", company: "LaundryNow", xp: 2750, missions: 30, streak: 9, territory: "Koreatown", trend: "down" },
-  { rank: 7, callsign: "COBRA-2", company: "FreshFold West", xp: 2540, missions: 28, streak: 11, territory: "Silver Lake", trend: "same" },
-  { rank: 8, callsign: "EAGLE-5", company: "WashPro", xp: 2310, missions: 25, streak: 7, territory: "Venice Beach", trend: "up" },
-  { rank: 9, callsign: "STORM-4", company: "SpinCycle Pro", xp: 2100, missions: 23, streak: 6, territory: "Culver City", trend: "down" },
-  { rank: 10, callsign: "BLADE-8", company: "CleanStar LA", xp: 1890, missions: 21, streak: 4, territory: "Inglewood", trend: "same" },
-];
-
-const MOCK_TERRITORIES: Territory[] = [
-  { name: "DTLA Corridor", status: "claimed", claimedBy: "CleanStar LA", drivers: 4, missions: 89 },
-  { name: "Westside Sector", status: "claimed", claimedBy: "FreshFold West", drivers: 3, missions: 72 },
-  { name: "Hollywood Grid", status: "contested", drivers: 5, missions: 65 },
-  { name: "Valley North", status: "claimed", claimedBy: "CleanStar LA", drivers: 2, missions: 48 },
-  { name: "Century Park", status: "contested", drivers: 3, missions: 41 },
-  { name: "Koreatown", status: "unclaimed", drivers: 1, missions: 18 },
-  { name: "Silver Lake", status: "unclaimed", drivers: 1, missions: 12 },
-  { name: "Venice Beach", status: "contested", drivers: 2, missions: 34 },
-  { name: "Culver City", status: "unclaimed", drivers: 0, missions: 0 },
-  { name: "Inglewood", status: "unclaimed", drivers: 0, missions: 0 },
-];
-
-type Tab = "league" | "territory" | "streak";
+type Tab = "market-yield" | "territory" | "performance";
+type OperatorKey = "you" | "operatorA" | "operatorB" | "operatorC";
 
 interface Props {
   onBack: () => void;
 }
 
-function TrendIcon({ trend }: { trend: "up" | "down" | "same" }) {
-  if (trend === "up") return <TrendingUp className="w-3 h-3 text-neon" />;
-  if (trend === "down") return <TrendingDown className="w-3 h-3 text-danger" />;
-  return <Minus className="w-3 h-3 text-muted-foreground" />;
+interface OperatorRow {
+  operator: string;
+  key: OperatorKey;
+  customerNodes: number;
+  trend: "up" | "down" | "flat";
+  trendLabel: string;
+  routeYield: string;
 }
 
-function RankBadge({ rank }: { rank: number }) {
-  if (rank === 1) return <Crown className="w-4 h-4 text-amber-400" />;
-  if (rank === 2) return <Crown className="w-4 h-4 text-gray-400" />;
-  if (rank === 3) return <Crown className="w-4 h-4 text-amber-700" />;
+interface AlertRow {
+  id: string;
+  tone: "risk" | "erosion" | "opportunity";
+  title: string;
+  body: string;
+}
+
+interface Footprint {
+  id: string;
+  operator: "you" | "operatorA" | "operatorB";
+  path: string;
+}
+
+interface NodePoint {
+  id: string;
+  x: number;
+  y: number;
+  operator: OperatorKey;
+  risk?: boolean;
+}
+
+const TAB_ITEMS: Array<{ id: Tab; label: string }> = [
+  { id: "market-yield", label: "Market Yield" },
+  { id: "territory", label: "Territory" },
+  { id: "performance", label: "Performance" },
+];
+
+const EXEC_ALERTS: AlertRow[] = [
+  {
+    id: "alert-risk",
+    tone: "risk",
+    title: "ALERT",
+    body:
+      "Operator B's route expansion in Koreatown overlaps 4 of your VIP nodes. Est. $1,250/mo recurring revenue at high risk of churn.",
+  },
+  {
+    id: "alert-erosion",
+    tone: "erosion",
+    title: "TERRITORY EROSION",
+    body:
+      "Operator A has increased drop density in Silver Lake by 40% over 14 days while your footprint remained flat.",
+  },
+  {
+    id: "alert-opportunity",
+    tone: "opportunity",
+    title: "HIGH YIELD OPPORTUNITY",
+    body:
+      "Mid City shows zero competitive routing. First operator to deploy secures estimated $3.5k/mo baseline demand.",
+  },
+];
+
+const OPERATOR_ROWS: OperatorRow[] = [
+  {
+    operator: "Operator A",
+    key: "operatorA",
+    customerNodes: 24,
+    trend: "up",
+    trendLabel: "+14%",
+    routeYield: "$18,400/mo",
+  },
+  {
+    operator: "Operator B",
+    key: "operatorB",
+    customerNodes: 17,
+    trend: "up",
+    trendLabel: "+8%",
+    routeYield: "$11,200/mo",
+  },
+  {
+    operator: "Operator C",
+    key: "operatorC",
+    customerNodes: 11,
+    trend: "flat",
+    trendLabel: "Flat",
+    routeYield: "$8,300/mo",
+  },
+  {
+    operator: "You",
+    key: "you",
+    customerNodes: 10,
+    trend: "down",
+    trendLabel: "-3%",
+    routeYield: "$6,100/mo",
+  },
+];
+
+const OPERATOR_COLORS: Record<OperatorKey, string> = {
+  you: "#1d8f57",
+  operatorA: "#2a69d1",
+  operatorB: "#d4a12f",
+  operatorC: "#6b7280",
+};
+
+const FOOTPRINTS: Footprint[] = [
+  {
+    id: "you-hollywood",
+    operator: "you",
+    path: "M120 170 L220 150 L270 195 L245 280 L155 295 L112 232 Z",
+  },
+  {
+    id: "you-silverlake",
+    operator: "you",
+    path: "M650 165 L760 145 L826 210 L798 304 L688 318 L626 250 Z",
+  },
+  {
+    id: "you-koreatown",
+    operator: "you",
+    path: "M334 354 L525 336 L606 418 L526 523 L362 528 L278 444 Z",
+  },
+  {
+    id: "opA-losfeliz",
+    operator: "operatorA",
+    path: "M430 148 L560 122 L630 173 L592 258 L473 268 L408 208 Z",
+  },
+  {
+    id: "opA-echopark",
+    operator: "operatorA",
+    path: "M575 272 L704 254 L758 322 L712 392 L588 402 L528 340 Z",
+  },
+  {
+    id: "opA-koreatown",
+    operator: "operatorA",
+    path: "M420 328 L573 309 L654 383 L620 472 L500 486 L396 432 Z",
+  },
+  {
+    id: "opB-centurypark",
+    operator: "operatorB",
+    path: "M690 409 L894 392 L962 472 L926 562 L732 582 L640 520 Z",
+  },
+  {
+    id: "opB-koreatown",
+    operator: "operatorB",
+    path: "M478 362 L564 346 L603 392 L578 451 L506 462 L466 411 Z",
+  },
+];
+
+const MAP_NODES: NodePoint[] = [
+  { id: "y1", operator: "you", x: 170, y: 220 },
+  { id: "y2", operator: "you", x: 208, y: 240 },
+  { id: "y3", operator: "you", x: 232, y: 205 },
+  { id: "y4", operator: "you", x: 702, y: 212, risk: true },
+  { id: "y5", operator: "you", x: 738, y: 236, risk: true },
+  { id: "y6", operator: "you", x: 775, y: 262 },
+  { id: "y7", operator: "you", x: 722, y: 286 },
+  { id: "y8", operator: "you", x: 336, y: 430 },
+  { id: "y9", operator: "you", x: 371, y: 446, risk: true },
+  { id: "y10", operator: "you", x: 432, y: 456, risk: true },
+  { id: "a1", operator: "operatorA", x: 502, y: 176 },
+  { id: "a2", operator: "operatorA", x: 541, y: 196 },
+  { id: "a3", operator: "operatorA", x: 579, y: 210 },
+  { id: "a4", operator: "operatorA", x: 470, y: 234 },
+  { id: "a5", operator: "operatorA", x: 623, y: 340 },
+  { id: "a6", operator: "operatorA", x: 658, y: 352 },
+  { id: "a7", operator: "operatorA", x: 612, y: 370 },
+  { id: "a8", operator: "operatorA", x: 563, y: 336 },
+  { id: "a9", operator: "operatorA", x: 452, y: 388 },
+  { id: "a10", operator: "operatorA", x: 496, y: 410 },
+  { id: "a11", operator: "operatorA", x: 557, y: 430 },
+  { id: "a12", operator: "operatorA", x: 620, y: 422 },
+  { id: "a13", operator: "operatorA", x: 640, y: 298 },
+  { id: "a14", operator: "operatorA", x: 700, y: 336 },
+  { id: "b1", operator: "operatorB", x: 734, y: 450 },
+  { id: "b2", operator: "operatorB", x: 770, y: 470 },
+  { id: "b3", operator: "operatorB", x: 810, y: 465 },
+  { id: "b4", operator: "operatorB", x: 850, y: 490 },
+  { id: "b5", operator: "operatorB", x: 792, y: 520 },
+  { id: "b6", operator: "operatorB", x: 744, y: 535 },
+  { id: "b7", operator: "operatorB", x: 882, y: 520 },
+  { id: "b8", operator: "operatorB", x: 905, y: 475 },
+  { id: "b9", operator: "operatorB", x: 846, y: 545 },
+  { id: "b10", operator: "operatorB", x: 533, y: 396 },
+  { id: "c1", operator: "operatorC", x: 308, y: 415 },
+  { id: "c2", operator: "operatorC", x: 410, y: 370 },
+  { id: "c3", operator: "operatorC", x: 688, y: 338 },
+  { id: "c4", operator: "operatorC", x: 560, y: 486 },
+];
+
+function alertStyles(tone: AlertRow["tone"]) {
+  if (tone === "risk") {
+    return {
+      icon: <AlertTriangle className="h-4 w-4 text-[#b91c1c]" />,
+      badgeClass: "text-[#b91c1c]",
+      iconWrapClass: "bg-[#fef2f2] border-[#fecaca]",
+    };
+  }
+  if (tone === "erosion") {
+    return {
+      icon: <TrendingUp className="h-4 w-4 text-[#b45309]" />,
+      badgeClass: "text-[#b45309]",
+      iconWrapClass: "bg-[#fff7ed] border-[#fed7aa]",
+    };
+  }
+  return {
+    icon: <Crosshair className="h-4 w-4 text-[#166534]" />,
+    badgeClass: "text-[#166534]",
+    iconWrapClass: "bg-[#f0fdf4] border-[#bbf7d0]",
+  };
+}
+
+function TrendCell({ trend, label }: { trend: OperatorRow["trend"]; label: string }) {
+  if (trend === "up") {
+    return (
+      <span className="inline-flex items-center gap-1 font-mono text-[13px] text-[#0f766e]">
+        {label} <ArrowUpRight className="h-3.5 w-3.5" />
+      </span>
+    );
+  }
+  if (trend === "down") {
+    return (
+      <span className="inline-flex items-center gap-1 font-mono text-[13px] text-[#b91c1c]">
+        {label} <ArrowDownRight className="h-3.5 w-3.5" />
+      </span>
+    );
+  }
   return (
-    <span className="text-[11px] font-mono text-muted-foreground w-4 text-center">
-      {rank}
+    <span className="inline-flex items-center gap-1 font-mono text-[13px] text-[#6b7280]">
+      {label} <Minus className="h-3.5 w-3.5" />
     </span>
   );
 }
 
-function StatusDot({ status }: { status: Territory["status"] }) {
-  const colors = {
-    claimed: "bg-neon",
-    contested: "bg-amber-500",
-    unclaimed: "bg-gray-600",
-  };
+function ExecutiveAlerts() {
   return (
-    <span className={`inline-block w-2 h-2 ${colors[status]}`} style={{
-      boxShadow: status === "claimed"
-        ? "0 0 6px rgba(0,255,136,0.6)"
-        : status === "contested"
-          ? "0 0 6px rgba(255,170,0,0.6)"
-          : "none",
-    }} />
+    <section className="space-y-2.5">
+      {EXEC_ALERTS.map((alert) => {
+        const styles = alertStyles(alert.tone);
+        return (
+          <div
+            key={alert.id}
+            className="rounded-sm border border-[#dde2eb] bg-white px-3 py-3.5 shadow-[0_1px_0_0_rgba(17,24,39,0.02)]"
+          >
+            <div className="flex items-start gap-3">
+              <span
+                className={`mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border ${styles.iconWrapClass}`}
+              >
+                {styles.icon}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] leading-5 text-[#374151]">
+                  <span className={`font-semibold tracking-[0.04em] ${styles.badgeClass}`}>
+                    {alert.title}:
+                  </span>{" "}
+                  {alert.body}
+                </p>
+              </div>
+              <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[#9ca3af]" />
+            </div>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function TerritoryMapCard() {
+  return (
+    <section className="mt-3 rounded-sm border border-[#dbe1e9] bg-white">
+      <div className="flex items-center justify-between border-b border-[#e5eaf1] px-3 py-2.5">
+        <div>
+          <p className="text-[11px] font-semibold tracking-[0.16em] text-[#1f2937] uppercase">
+            Territory Comparison Layer
+          </p>
+          <p className="mt-0.5 font-mono text-[11px] text-[#6b7280]">
+            Refreshed 09:41 PT
+          </p>
+        </div>
+        <span className="rounded-sm border border-[#e5e7eb] px-2 py-1 font-mono text-[11px] text-[#4b5563]">
+          Overlap Risk: 4 Nodes
+        </span>
+      </div>
+
+      <div className="p-3">
+        <div className="relative overflow-hidden rounded-sm border border-[#dbe1e9] bg-[#f4f6fa]">
+          <svg
+            className="h-auto w-full"
+            viewBox="0 0 1000 620"
+            role="img"
+            aria-label="Los Angeles territory map with operator overlap and customer nodes"
+          >
+            <rect x="0" y="0" width="1000" height="620" fill="#f3f5f8" />
+            <g stroke="#d7dde6" strokeWidth="2" fill="none" opacity="0.8">
+              <path d="M0 90 L1000 90" />
+              <path d="M0 170 L1000 170" />
+              <path d="M0 250 L1000 250" />
+              <path d="M0 330 L1000 330" />
+              <path d="M0 410 L1000 410" />
+              <path d="M0 490 L1000 490" />
+              <path d="M130 0 L130 620" />
+              <path d="M260 0 L260 620" />
+              <path d="M390 0 L390 620" />
+              <path d="M520 0 L520 620" />
+              <path d="M650 0 L650 620" />
+              <path d="M780 0 L780 620" />
+              <path d="M910 0 L910 620" />
+            </g>
+            <g stroke="#cfd6e0" strokeWidth="2" fill="none" opacity="0.7">
+              <path d="M40 300 C220 240 350 260 520 310 C690 360 820 350 960 320" />
+              <path d="M70 470 C240 430 370 420 540 460 C710 500 850 510 980 480" />
+              <path d="M120 120 C300 140 440 130 610 100 C760 70 870 80 960 120" />
+            </g>
+
+            {FOOTPRINTS.map((footprint) => {
+              const color = OPERATOR_COLORS[footprint.operator];
+              return (
+                <path
+                  key={footprint.id}
+                  d={footprint.path}
+                  fill={color}
+                  fillOpacity="0.10"
+                  stroke={color}
+                  strokeWidth="2"
+                  strokeOpacity="0.75"
+                />
+              );
+            })}
+
+            <g>
+              <rect
+                x="465"
+                y="384"
+                width="58"
+                height="40"
+                rx="6"
+                fill="none"
+                stroke="#d4a12f"
+                strokeWidth="1.5"
+                strokeDasharray="5 4"
+              />
+              <text x="494" y="409" textAnchor="middle" fontFamily="monospace" fontSize="16" fill="#6b7280">
+                7
+              </text>
+              <rect
+                x="804"
+                y="496"
+                width="58"
+                height="40"
+                rx="6"
+                fill="none"
+                stroke="#d4a12f"
+                strokeWidth="1.5"
+                strokeDasharray="5 4"
+              />
+              <text x="833" y="521" textAnchor="middle" fontFamily="monospace" fontSize="16" fill="#6b7280">
+                10
+              </text>
+            </g>
+
+            {MAP_NODES.map((node) => {
+              const color = OPERATOR_COLORS[node.operator];
+              return (
+                <g key={node.id}>
+                  <circle cx={node.x} cy={node.y} r="5.5" fill={color} fillOpacity="0.85" />
+                  {node.risk ? (
+                    <circle
+                      cx={node.x}
+                      cy={node.y}
+                      r="8"
+                      fill="none"
+                      stroke="#dc2626"
+                      strokeWidth="1.3"
+                      strokeOpacity="0.55"
+                    />
+                  ) : null}
+                </g>
+              );
+            })}
+
+            <g fontFamily="system-ui, sans-serif" fontSize="12" fill="#374151" letterSpacing="0.06em">
+              <text x="138" y="148">HOLLYWOOD</text>
+              <text x="440" y="118">LOS FELIZ</text>
+              <text x="665" y="160">SILVER LAKE</text>
+              <text x="584" y="286">ECHO PARK</text>
+              <text x="338" y="335">KOREATOWN</text>
+              <text x="722" y="440">CENTURY PARK EAST</text>
+            </g>
+
+            <g fontFamily="monospace">
+              <rect x="174" y="157" width="34" height="28" rx="8" fill="#ffffff" stroke="#d1d5db" />
+              <text x="191" y="176" textAnchor="middle" fontSize="14" fill="#111827">1</text>
+              <rect x="500" y="122" width="34" height="28" rx="8" fill="#ffffff" stroke="#d1d5db" />
+              <text x="517" y="141" textAnchor="middle" fontSize="14" fill="#111827">3</text>
+              <rect x="744" y="177" width="34" height="28" rx="8" fill="#ffffff" stroke="#d1d5db" />
+              <text x="761" y="196" textAnchor="middle" fontSize="14" fill="#111827">4</text>
+              <rect x="622" y="303" width="34" height="28" rx="8" fill="#ffffff" stroke="#d1d5db" />
+              <text x="639" y="322" textAnchor="middle" fontSize="14" fill="#111827">2</text>
+              <rect x="394" y="382" width="34" height="28" rx="8" fill="#ffffff" stroke="#d1d5db" />
+              <text x="411" y="401" textAnchor="middle" fontSize="14" fill="#111827">7</text>
+              <rect x="842" y="512" width="42" height="28" rx="8" fill="#ffffff" stroke="#d1d5db" />
+              <text x="863" y="531" textAnchor="middle" fontSize="14" fill="#111827">10</text>
+            </g>
+          </svg>
+        </div>
+
+        <div className="mt-3 grid gap-2 border border-[#e5eaf1] bg-[#fafbfd] p-2.5 text-[12px] text-[#374151] md:grid-cols-3">
+          <div className="flex items-center gap-2">
+            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: OPERATOR_COLORS.you }} />
+            <span>You</span>
+            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: OPERATOR_COLORS.operatorA }} />
+            <span>Operator A</span>
+            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: OPERATOR_COLORS.operatorB }} />
+            <span>Operator B</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="h-3 w-3 rounded-full bg-[#6b7280]" />
+            <span>Customer Node</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Building2 className="h-3.5 w-3.5 text-[#9ca3af]" />
+            <span>Building Foothold</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function OperatorTable() {
+  return (
+    <section className="mt-3 overflow-hidden rounded-sm border border-[#dbe1e9] bg-white">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="border-b border-[#e5eaf1] bg-[#fafbfd] text-left">
+            <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4b5563]">
+              Operator
+            </th>
+            <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4b5563]">
+              Customer Nodes
+            </th>
+            <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4b5563]">
+              30-Day Trend
+            </th>
+            <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4b5563]">
+              Est. Route Yield
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {OPERATOR_ROWS.map((row) => (
+            <tr
+              key={row.operator}
+              className={`border-b border-[#eef1f5] last:border-b-0 ${
+                row.key === "you" ? "bg-[#f9fafb]" : "bg-white"
+              }`}
+            >
+              <td className="px-3 py-3 text-[14px] text-[#111827]">
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: OPERATOR_COLORS[row.key] }}
+                  />
+                  {row.operator}
+                </span>
+              </td>
+              <td className="px-3 py-3 font-mono text-[14px] text-[#1f2937]">
+                {row.customerNodes}
+              </td>
+              <td className="px-3 py-3">
+                <TrendCell trend={row.trend} label={row.trendLabel} />
+              </td>
+              <td className="px-3 py-3 font-mono text-[14px] text-[#1f2937]">
+                {row.routeYield}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function TerritoryTab() {
+  return (
+    <div>
+      <ExecutiveAlerts />
+      <TerritoryMapCard />
+      <OperatorTable />
+
+      <section className="mt-3 rounded-sm border border-[#dbe1e9] bg-white p-3.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#1f2937]">
+          Revenue Exposure
+        </p>
+        <p className="mt-1.5 text-[14px] leading-6 text-[#374151]">
+          Competitive overlap in Koreatown and Silver Lake is now inside your active customer base.
+          Current exposure is concentrated in 4 VIP nodes with projected churn pressure of $1,250/mo.
+          Mid City remains the cleanest near-term deployment zone for defensive growth.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+function MarketYieldTab() {
+  return (
+    <div className="space-y-3">
+      <section className="grid gap-2 md:grid-cols-3">
+        <div className="rounded-sm border border-[#dbe1e9] bg-white p-3">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-[#6b7280]">Addressable Market</p>
+          <p className="mt-2 font-mono text-[24px] text-[#111827]">$39,200/mo</p>
+        </div>
+        <div className="rounded-sm border border-[#dbe1e9] bg-white p-3">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-[#6b7280]">Captured Yield</p>
+          <p className="mt-2 font-mono text-[24px] text-[#111827]">$6,100/mo</p>
+        </div>
+        <div className="rounded-sm border border-[#dbe1e9] bg-white p-3">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-[#6b7280]">At-Risk Recurring</p>
+          <p className="mt-2 font-mono text-[24px] text-[#b91c1c]">$1,250/mo</p>
+        </div>
+      </section>
+
+      <section className="rounded-sm border border-[#dbe1e9] bg-white p-3.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#1f2937]">
+          Competitive Yield Stack
+        </p>
+        <div className="mt-3 space-y-2.5">
+          {OPERATOR_ROWS.map((row) => {
+            const numeric = Number(row.routeYield.replace(/[^0-9]/g, ""));
+            const width = Math.max(22, Math.round((numeric / 18400) * 100));
+            return (
+              <div key={row.operator} className="grid grid-cols-[120px_1fr_100px] items-center gap-3">
+                <span className="text-[13px] text-[#374151]">{row.operator}</span>
+                <div className="h-2.5 w-full bg-[#eef1f5]">
+                  <div
+                    className="h-full"
+                    style={{
+                      width: `${width}%`,
+                      backgroundColor: OPERATOR_COLORS[row.key],
+                    }}
+                  />
+                </div>
+                <span className="text-right font-mono text-[12px] text-[#374151]">{row.routeYield}</span>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function PerformanceTab() {
+  return (
+    <div className="space-y-3">
+      <section className="rounded-sm border border-[#dbe1e9] bg-white p-3.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#1f2937]">
+          Operating Metrics
+        </p>
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          <div className="border border-[#e5eaf1] bg-[#fafbfd] p-3">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-[#6b7280]">Node Retention</p>
+            <p className="mt-2 font-mono text-[22px] text-[#111827]">84.1%</p>
+          </div>
+          <div className="border border-[#e5eaf1] bg-[#fafbfd] p-3">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-[#6b7280]">On-Time Fulfillment</p>
+            <p className="mt-2 font-mono text-[22px] text-[#111827]">92.4%</p>
+          </div>
+          <div className="border border-[#e5eaf1] bg-[#fafbfd] p-3">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-[#6b7280]">Churn Pressure</p>
+            <p className="mt-2 font-mono text-[22px] text-[#b91c1c]">18.0%</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-sm border border-[#dbe1e9] bg-white p-3.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#1f2937]">
+          Defensive Risk Watchlist
+        </p>
+        <div className="mt-2.5 divide-y divide-[#eef1f5]">
+          <div className="grid grid-cols-[1fr_auto] gap-3 py-2.5">
+            <p className="text-[14px] text-[#374151]">Koreatown overlap lanes now include your premium service customers.</p>
+            <span className="font-mono text-[12px] text-[#b91c1c]">$1,250/mo risk</span>
+          </div>
+          <div className="grid grid-cols-[1fr_auto] gap-3 py-2.5">
+            <p className="text-[14px] text-[#374151]">Silver Lake route density delta remains negative against Operator A growth.</p>
+            <span className="font-mono text-[12px] text-[#b91c1c]">-40% relative pace</span>
+          </div>
+          <div className="grid grid-cols-[1fr_auto] gap-3 py-2.5">
+            <p className="text-[14px] text-[#374151]">Mid City launch window still open with low incumbent pressure.</p>
+            <span className="font-mono text-[12px] text-[#0f766e]">$3,500/mo upside</span>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
 
 export default function TerritoryLeaderboard({ onBack }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>("league");
-  const [mapLoaded, setMapLoaded] = useState(false);
+  const [activeTab, setActiveTab] = useState<Tab>("territory");
 
   useEffect(() => {
     sounds.missionAssign();
     haptics.impact();
   }, []);
 
-  const claimedCount = MOCK_TERRITORIES.filter(t => t.status === "claimed").length;
-  const contestedCount = MOCK_TERRITORIES.filter(t => t.status === "contested").length;
-  const unclaimedCount = MOCK_TERRITORIES.filter(t => t.status === "unclaimed").length;
-
   return (
-    <div className="min-h-screen bg-void relative overflow-hidden">
-      {/* Scan lines overlay */}
-      <div
-        className="absolute inset-0 pointer-events-none opacity-[0.03] z-10"
-        style={{
-          backgroundImage:
-            "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,136,0.15) 2px, rgba(0,255,136,0.15) 4px)",
-        }}
-      />
-
-      {/* Heartbeat bar */}
-      <div className="heartbeat-bar w-full relative z-20" />
-
-      {/* Header */}
-      <div className="relative z-20 px-4 pt-4 pb-3">
-        <div className="flex items-center gap-3 mb-4">
-          <button
-            onClick={() => {
-              sounds.press();
-              haptics.tap();
-              onBack();
-            }}
-            className="w-8 h-8 border border-border/20 flex items-center justify-center
-                       hover:border-neon/30 transition-colors active:bg-neon/5"
-          >
-            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <div>
-            <h1 className="font-display font-extrabold text-xl uppercase tracking-wider text-foreground leading-none">
-              Operations Board
-            </h1>
-            <p className="text-[9px] tracking-[0.4em] text-neon/50 uppercase mt-0.5 font-semibold">
-              Los Angeles · Week 16
-            </p>
-          </div>
-        </div>
-
-        {/* Tab bar */}
-        <div className="flex gap-0 border border-border/15">
-          {(["league", "territory", "streak"] as Tab[]).map((tab) => (
+    <div className="min-h-screen bg-[#f4f6fa] text-[#111827]">
+      <div className="px-4 pb-24 pt-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-start gap-3">
             <button
-              key={tab}
               onClick={() => {
                 sounds.press();
                 haptics.tap();
-                setActiveTab(tab);
+                onBack();
               }}
-              className={`flex-1 py-2.5 text-[10px] tracking-[0.2em] uppercase font-semibold transition-all
-                ${activeTab === tab
-                  ? "bg-neon/[0.08] text-neon border-b-2 border-neon"
-                  : "text-muted-foreground hover:text-foreground"
-                }`}
+              className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-sm border border-[#d6dde6] bg-white text-[#4b5563] hover:bg-[#f9fafb]"
+              aria-label="Back"
             >
-              {tab === "league" && "League"}
-              {tab === "territory" && "Territory"}
-              {tab === "streak" && "Streaks"}
+              <ArrowLeft className="h-4 w-4" />
             </button>
-          ))}
+            <div>
+              <h1 className="text-[31px] font-black tracking-[0.02em] leading-none text-[#1f2937] uppercase">
+                Operations Board
+              </h1>
+              <p className="mt-1 font-mono text-[11px] tracking-[0.3em] text-[#6b7280] uppercase">
+                Los Angeles • Week 16
+              </p>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="relative z-20 px-4 pb-8">
+        <div className="mb-3 grid grid-cols-3 overflow-hidden rounded-sm border border-[#d7dee7] bg-white">
+          {TAB_ITEMS.map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  sounds.press();
+                  haptics.tap();
+                  setActiveTab(tab.id);
+                }}
+                className={`border-r border-[#e5eaf1] px-2 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] transition-colors last:border-r-0 ${
+                  active ? "bg-[#f8fafc] text-[#1f3a8a]" : "bg-white text-[#6b7280] hover:text-[#374151]"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
         <AnimatePresence mode="wait">
-          {activeTab === "league" && (
-            <motion.div
-              key="league"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-            >
-              <LeagueTab />
-            </motion.div>
-          )}
-          {activeTab === "territory" && (
+          {activeTab === "territory" ? (
             <motion.div
               key="territory"
               initial={{ opacity: 0, y: 8 }}
@@ -215,335 +680,34 @@ export default function TerritoryLeaderboard({ onBack }: Props) {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2 }}
             >
-              <TerritoryTab
-                claimedCount={claimedCount}
-                contestedCount={contestedCount}
-                unclaimedCount={unclaimedCount}
-              />
+              <TerritoryTab />
             </motion.div>
-          )}
-          {activeTab === "streak" && (
+          ) : null}
+
+          {activeTab === "market-yield" ? (
             <motion.div
-              key="streak"
+              key="market-yield"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2 }}
             >
-              <StreakTab />
+              <MarketYieldTab />
             </motion.div>
-          )}
+          ) : null}
+
+          {activeTab === "performance" ? (
+            <motion.div
+              key="performance"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+            >
+              <PerformanceTab />
+            </motion.div>
+          ) : null}
         </AnimatePresence>
-      </div>
-    </div>
-  );
-}
-
-function LeagueTab() {
-  return (
-    <div>
-      {/* League info banner */}
-      <div className="border border-neon/15 bg-neon/[0.03] p-3 mb-4">
-        <div className="flex items-center gap-2 mb-1.5">
-          <Shield className="w-3.5 h-3.5 text-neon" />
-          <span className="text-[10px] tracking-[0.3em] text-neon uppercase font-semibold">
-            Silver League
-          </span>
-        </div>
-        <p className="text-[10px] text-muted-foreground leading-relaxed">
-          Top 5 promote to Gold. Bottom 3 demote. Resets Monday 00:00.
-        </p>
-        <div className="flex items-center gap-4 mt-2">
-          <span className="text-[9px] text-muted-foreground font-mono">
-            30 DRIVERS · 4 DAYS LEFT
-          </span>
-        </div>
-      </div>
-
-      {/* Leaderboard */}
-      <div className="space-y-0">
-        {MOCK_WEEKLY_LEAGUE.map((driver, i) => (
-          <motion.div
-            key={driver.callsign}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.04 }}
-            className={`flex items-center gap-3 py-3 border-b border-border/8
-              ${driver.isYou ? "bg-neon/[0.04] -mx-4 px-4 border-l-2 border-l-neon" : ""}
-              ${driver.rank <= 5 ? "" : "opacity-70"}`}
-          >
-            <RankBadge rank={driver.rank} />
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className={`font-display font-bold text-[13px] uppercase tracking-wide
-                  ${driver.isYou ? "text-neon" : "text-foreground"}`}>
-                  {driver.callsign}
-                </span>
-                {driver.isYou && (
-                  <span className="text-[8px] tracking-[0.3em] text-neon/70 uppercase font-semibold border border-neon/30 px-1.5 py-0.5">
-                    You
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[9px] text-muted-foreground font-mono truncate">
-                  {driver.company}
-                </span>
-                <span className="text-[8px] text-muted-foreground/50">·</span>
-                <span className="text-[9px] text-muted-foreground/70 font-mono">
-                  {driver.territory}
-                </span>
-              </div>
-            </div>
-
-            <div className="text-right flex items-center gap-2">
-              <div>
-                <p className="text-[13px] font-display font-bold text-neon tabular-nums">
-                  {driver.xp.toLocaleString()}
-                </p>
-                <p className="text-[8px] text-muted-foreground font-mono">
-                  {driver.missions} MISSIONS
-                </p>
-              </div>
-              <TrendIcon trend={driver.trend} />
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Promotion zone indicator */}
-      <div className="mt-4 flex items-center gap-2">
-        <div className="flex-1 h-px bg-neon/20" />
-        <span className="text-[8px] tracking-[0.3em] text-neon/50 uppercase font-semibold">
-          Promotion Zone ↑
-        </span>
-        <div className="flex-1 h-px bg-neon/20" />
-      </div>
-    </div>
-  );
-}
-
-function TerritoryTab({
-  claimedCount,
-  contestedCount,
-  unclaimedCount,
-}: {
-  claimedCount: number;
-  contestedCount: number;
-  unclaimedCount: number;
-}) {
-  return (
-    <div>
-      {/* Territory map image */}
-      <div className="relative mb-4 border border-border/15 overflow-hidden" style={{ aspectRatio: "9/12" }}>
-        <img
-          src={TERRITORY_MAP_URL}
-          alt="Territory Map"
-          className="w-full h-full object-cover"
-          loading="eager"
-        />
-        {/* Overlay gradient for readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-void via-transparent to-void/30" />
-
-        {/* Map legend overlay */}
-        <div className="absolute bottom-3 left-3 right-3 flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <StatusDot status="claimed" />
-            <span className="text-[9px] text-foreground font-mono">{claimedCount} CLAIMED</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <StatusDot status="contested" />
-            <span className="text-[9px] text-amber-400 font-mono">{contestedCount} CONTESTED</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <StatusDot status="unclaimed" />
-            <span className="text-[9px] text-muted-foreground font-mono">{unclaimedCount} OPEN</span>
-          </div>
-        </div>
-
-        {/* Radar sweep animation */}
-        <motion.div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: "conic-gradient(from 0deg, transparent 0deg, rgba(0,255,136,0.06) 30deg, transparent 60deg)",
-            transformOrigin: "60% 40%",
-          }}
-          animate={{ rotate: 360 }}
-          transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-        />
-      </div>
-
-      {/* Territory list */}
-      <div className="space-y-0">
-        {MOCK_TERRITORIES.map((territory, i) => (
-          <motion.div
-            key={territory.name}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.04 }}
-            className="flex items-center gap-3 py-3 border-b border-border/8"
-          >
-            <StatusDot status={territory.status} />
-
-            <div className="flex-1 min-w-0">
-              <p className="font-display font-bold text-[12px] uppercase tracking-wide text-foreground">
-                {territory.name}
-              </p>
-              <div className="flex items-center gap-2 mt-0.5">
-                {territory.claimedBy ? (
-                  <span className="text-[9px] text-neon font-mono">
-                    {territory.claimedBy}
-                  </span>
-                ) : territory.status === "contested" ? (
-                  <span className="text-[9px] text-amber-400 font-mono">
-                    Multiple operators
-                  </span>
-                ) : (
-                  <span className="text-[9px] text-muted-foreground/50 font-mono italic">
-                    No presence
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="text-right">
-              <p className="text-[11px] font-mono text-foreground tabular-nums">
-                {territory.drivers} <span className="text-muted-foreground text-[9px]">DRV</span>
-              </p>
-              <p className="text-[9px] font-mono text-muted-foreground tabular-nums">
-                {territory.missions} msn
-              </p>
-            </div>
-
-            {territory.status === "unclaimed" && territory.drivers === 0 && (
-              <div className="border border-amber-500/30 px-2 py-1">
-                <span className="text-[8px] tracking-[0.2em] text-amber-400 uppercase font-semibold">
-                  Open
-                </span>
-              </div>
-            )}
-          </motion.div>
-        ))}
-      </div>
-
-      {/* FOMO banner */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="mt-5 border border-amber-500/20 bg-amber-500/[0.04] p-3"
-      >
-        <div className="flex items-start gap-2">
-          <Target className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
-          <div>
-            <p className="text-[10px] text-amber-400 font-display font-bold uppercase tracking-wider mb-1">
-              4 Territories Unclaimed
-            </p>
-            <p className="text-[9px] text-muted-foreground leading-relaxed">
-              Culver City and Inglewood have zero driver presence.
-              First operator to deploy gets exclusive territory claim.
-            </p>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
-function StreakTab() {
-  const streakLeaders = useMemo(() =>
-    [...MOCK_WEEKLY_LEAGUE]
-      .sort((a, b) => b.streak - a.streak)
-      .map((d, i) => ({ ...d, rank: i + 1 })),
-    []
-  );
-
-  return (
-    <div>
-      {/* Streak explanation */}
-      <div className="border border-border/15 bg-void-light p-3 mb-4">
-        <div className="flex items-center gap-2 mb-1.5">
-          <Flame className="w-3.5 h-3.5 text-amber-400" />
-          <span className="text-[10px] tracking-[0.3em] text-amber-400 uppercase font-semibold">
-            Consistency Wins
-          </span>
-        </div>
-        <p className="text-[10px] text-muted-foreground leading-relaxed">
-          Complete at least 1 mission per day to maintain your streak.
-          Longest active streak earns bonus XP multiplier.
-        </p>
-      </div>
-
-      {/* Streak multiplier tiers */}
-      <div className="grid grid-cols-4 gap-2 mb-4">
-        {[
-          { days: "7+", mult: "1.2x", active: true },
-          { days: "14+", mult: "1.5x", active: true },
-          { days: "21+", mult: "2.0x", active: false },
-          { days: "30+", mult: "3.0x", active: false },
-        ].map((tier) => (
-          <div
-            key={tier.days}
-            className={`border p-2 text-center
-              ${tier.active
-                ? "border-neon/30 bg-neon/[0.04]"
-                : "border-border/10 opacity-40"
-              }`}
-          >
-            <p className="text-[10px] font-display font-bold text-foreground">
-              {tier.mult}
-            </p>
-            <p className="text-[8px] font-mono text-muted-foreground mt-0.5">
-              {tier.days}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* Streak leaderboard */}
-      <div className="space-y-0">
-        {streakLeaders.map((driver, i) => (
-          <motion.div
-            key={driver.callsign}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.04 }}
-            className={`flex items-center gap-3 py-3 border-b border-border/8
-              ${driver.isYou ? "bg-neon/[0.04] -mx-4 px-4 border-l-2 border-l-neon" : ""}`}
-          >
-            <span className="text-[11px] font-mono text-muted-foreground w-4 text-center">
-              {driver.rank}
-            </span>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className={`font-display font-bold text-[13px] uppercase tracking-wide
-                  ${driver.isYou ? "text-neon" : "text-foreground"}`}>
-                  {driver.callsign}
-                </span>
-                {driver.isYou && (
-                  <span className="text-[8px] tracking-[0.3em] text-neon/70 uppercase font-semibold border border-neon/30 px-1.5 py-0.5">
-                    You
-                  </span>
-                )}
-              </div>
-              <span className="text-[9px] text-muted-foreground font-mono">
-                {driver.company}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <Flame className={`w-4 h-4 ${driver.streak >= 14 ? "text-amber-400" : "text-amber-600/60"}`} />
-              <span className="font-display font-bold text-[16px] text-foreground tabular-nums">
-                {driver.streak}
-              </span>
-              <span className="text-[8px] text-muted-foreground font-mono">
-                DAYS
-              </span>
-            </div>
-          </motion.div>
-        ))}
       </div>
     </div>
   );
