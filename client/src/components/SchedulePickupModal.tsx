@@ -1,14 +1,4 @@
-/**
- * Schedule Pickup Modal — 6-step wizard
- * 
- * Step 1: Service Selection (Wash & Fold / Dry Cleaning)
- * Step 2: Pickup Schedule (Date + Time Window)
- * Step 3: Address & Details
- * Step 4: Contact Info
- * Step 5: Card on File (Stripe Elements)
- * Step 6: Success
- */
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { trpc } from "@/lib/trpc";
 import { getResidentWebOrigin } from "@/const";
 import { useTenant } from "@/hooks/useTenant";
@@ -16,19 +6,46 @@ import { WF_RATE_PER_LB_CENTS, centsToDollars } from "@shared/pricing";
 import { useCatalogDryCleanMinCents } from "@/components/CatalogDryCleanPricing";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import {
+  ArrowLeft,
+  CalendarClock,
+  CheckCircle2,
+  Clock3,
+  Home,
+  Loader2,
+  Lock,
+  MapPin,
+  Phone,
+  Shirt,
+  User,
+  X,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import SchedulePickupModalClassic from "@/components/SchedulePickupModalClassic";
 
-const DEFAULT_LOGO_FULL = "https://files.manuscdn.com/user_upload_by_module/session_file/310419663029845795/WZKCbJMLcYxTxbBz.png";
+const DEFAULT_LOGO_FULL =
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310419663029845795/WZKCbJMLcYxTxbBz.png";
 
-const pf = { fontFamily: '"Playfair Display", Georgia, serif' };
-const cg = { fontFamily: '"Cormorant Garamond", Georgia, serif' };
+const TIME_WINDOWS = [
+  "7:00am – 9:00am",
+  "9:00am – 11:00am",
+  "11:00am – 1:00pm",
+  "7:00pm – 9:00pm",
+] as const;
+
+const STRIPE_TEST_HINT = "Stripe: test";
+const BUTLER_ACCENT = "#d42f76";
+const BUTLER_ACCENT_DARK = "#b21a5c";
 
 // Publishable key from env (live in prod, test in dev). Never commit keys.
 const stripePk = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ?? "";
 const stripePromise = stripePk ? loadStripe(stripePk) : Promise.resolve(null);
 
-/* ===== TYPES ===== */
+type ServiceType = "wash_fold" | "dry_cleaning";
+type Presentation = "modal" | "rail";
+
 interface FormData {
-  serviceType: "wash_fold" | "dry_cleaning" | null;
+  serviceType: ServiceType | null;
   pickupDate: string;
   pickupTimeWindow: string;
   address: string;
@@ -41,68 +58,146 @@ interface FormData {
 }
 
 interface SchedulePickupModalProps {
-  onClose: () => void;
+  onClose?: () => void;
+  presentation?: Presentation;
+  className?: string;
 }
 
-/* ===== SHARED UI COMPONENTS ===== */
+const STAGES = ["Service", "Preferences", "Date & Time", "Review"] as const;
 
-function BackButton({ onClick }: { onClick: () => void }) {
+function formatServiceLabel(serviceType: ServiceType | null): string {
+  if (serviceType === "wash_fold") return "Wash & Fold";
+  if (serviceType === "dry_cleaning") return "Dry Cleaning";
+  return "Select a service";
+}
+
+function getCurrentStage(step: number): number {
+  if (step <= 1) return 1;
+  if (step === 2) return 2;
+  if (step === 3) return 3;
+  return 4;
+}
+
+function DateWindowSummary({ formData }: { formData: FormData }) {
+  if (!formData.pickupDate && !formData.pickupTimeWindow) {
+    return <span className="text-[#876c77]">Choose your preferred time</span>;
+  }
+
   return (
-    <button
-      onClick={onClick}
-      className="absolute top-4 left-4 text-black/60 hover:text-black transition-colors cursor-pointer"
-      aria-label="Go back"
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="15 18 9 12 15 6" />
-      </svg>
-    </button>
+    <span className="text-[#321a24]">
+      {formData.pickupDate || "Date"}
+      {formData.pickupDate && formData.pickupTimeWindow ? " • " : ""}
+      {formData.pickupTimeWindow || "Window"}
+    </span>
   );
 }
 
-function BlackButton({
+function StagePills({ currentStage }: { currentStage: number }) {
+  return (
+    <ol className="grid grid-cols-4 gap-2" aria-label="Booking progress">
+      {STAGES.map((stage, index) => {
+        const stageIndex = index + 1;
+        const active = stageIndex === currentStage;
+        const complete = stageIndex < currentStage;
+
+        return (
+          <li key={stage} className="min-w-0">
+            <div
+              className={cn(
+                "rounded-full border px-2 py-1 text-center text-[11px] font-semibold tracking-[0.02em] transition-colors",
+                complete && "border-[#e17ca6] bg-[#ffe0ee] text-[#9f2c5f]",
+                active && "border-[#d42f76] bg-[#fff0f7] text-[#ad1d5b]",
+                !active && !complete && "border-[#ead7df] bg-white text-[#85636f]"
+              )}
+            >
+              <span className="truncate">{stage}</span>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function BookingSummary({ formData }: { formData: FormData }) {
+  return (
+    <div className="rounded-2xl border border-[#eedee5] bg-white p-3.5 text-sm shadow-[0_8px_20px_rgba(194,129,156,0.12)]">
+      <div className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.08em] text-[#946978]">
+        <span>Order Summary</span>
+        <span className="inline-flex items-center gap-1 text-[#b06f89]">
+          <Lock className="h-3 w-3" aria-hidden />
+          Secure
+        </span>
+      </div>
+      <dl className="space-y-1.5 text-[13px]">
+        <div className="flex items-center justify-between gap-2">
+          <dt className="text-[#8f6e7a]">Service</dt>
+          <dd className="font-medium text-[#311821]">{formatServiceLabel(formData.serviceType)}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <dt className="text-[#8f6e7a]">Pickup</dt>
+          <dd className="text-right font-medium">
+            <DateWindowSummary formData={formData} />
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <dt className="text-[#8f6e7a]">Location</dt>
+          <dd className="max-w-[68%] truncate text-right font-medium text-[#311821]">
+            {formData.address.trim() || "Add address in Preferences"}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
+function AccentButton({
   children,
   onClick,
   disabled = false,
+  loading = false,
   type = "button",
-  primaryColor = "#111111",
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
+  loading?: boolean;
   type?: "button" | "submit";
-  primaryColor?: string;
 }) {
   return (
     <button
       type={type}
       onClick={onClick}
-      disabled={disabled}
-      className="w-full text-white disabled:bg-black/40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+      disabled={disabled || loading}
+      className="inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-[14px] font-semibold tracking-[0.02em] text-white shadow-[0_12px_30px_rgba(183,36,98,0.35)] transition-all hover:-translate-y-0.5 hover:shadow-[0_16px_34px_rgba(183,36,98,0.4)] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
       style={{
-        ...cg,
-        backgroundColor: primaryColor,
-        fontSize: "0.95rem",
-        fontWeight: 500,
-        letterSpacing: "0.1em",
-        padding: "14px 28px",
-        borderRadius: "3px",
-        border: "none",
+        background: `linear-gradient(135deg, ${BUTLER_ACCENT} 0%, ${BUTLER_ACCENT_DARK} 100%)`,
       }}
     >
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
       {children}
     </button>
   );
 }
 
-function StepHeading({ children }: { children: React.ReactNode }) {
+function GhostButton({
+  children,
+  onClick,
+  disabled = false,
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
   return (
-    <h2
-      className="text-[1.4rem] md:text-[1.6rem] text-center mb-6"
-      style={{ ...pf, fontWeight: 500 }}
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex w-full items-center justify-center rounded-xl border border-[#e7d2dd] bg-white px-4 py-3 text-[14px] font-semibold text-[#7f5566] transition-colors hover:bg-[#fff7fb] disabled:cursor-not-allowed disabled:opacity-60"
     >
       {children}
-    </h2>
+    </button>
   );
 }
 
@@ -113,6 +208,7 @@ function InputField({
   placeholder = "",
   required = false,
   type = "text",
+  min,
 }: {
   label: string;
   value: string;
@@ -120,100 +216,135 @@ function InputField({
   placeholder?: string;
   required?: boolean;
   type?: string;
+  min?: string;
 }) {
   return (
-    <div className="mb-4">
-      <label className="block text-[0.85rem] text-black/60 mb-1" style={cg}>
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
+    <label className="block space-y-1.5">
+      <span className="text-[12px] font-medium tracking-[0.01em] text-[#785764]">
+        {label}
+        {required ? <span className="text-[#cc2f73]"> *</span> : null}
+      </span>
       <input
         type={type}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        min={min}
+        onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         required={required}
-        className="w-full border border-black/20 rounded px-3 py-2.5 text-[0.95rem] focus:outline-none focus:border-black/50 transition-colors bg-white"
-        style={cg}
+        className="w-full rounded-xl border border-[#e8d7df] bg-white px-3.5 py-2.5 text-[14px] text-[#2f1b24] outline-none transition-all placeholder:text-[#b69aa7] focus:border-[#d65a90] focus:ring-2 focus:ring-[#f6c8dd]"
       />
+    </label>
+  );
+}
+
+function StepFrame({
+  title,
+  subtitle,
+  icon,
+  children,
+  onBack,
+}: {
+  title: string;
+  subtitle: string;
+  icon: ReactNode;
+  children: ReactNode;
+  onBack?: () => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 rounded-xl bg-[#ffe7f1] p-2.5 text-[#c52a6b]">{icon}</div>
+          <div>
+            <h3 className="text-[23px] font-semibold leading-[1.15] text-[#2a1720]">{title}</h3>
+            <p className="mt-1 text-[13px] leading-relaxed text-[#88616f]">{subtitle}</p>
+          </div>
+        </div>
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#ead9e2] bg-white text-[#7f5868] transition-colors hover:bg-[#fff3f9]"
+            aria-label="Go back"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
+      {children}
     </div>
   );
 }
 
-/* ===== STEP 1: SERVICE SELECTION ===== */
-function Step1({
+function StepService({
   formData,
   setFormData,
   onNext,
-  brandName,
-  logoUrl,
-  primaryColor,
 }: {
   formData: FormData;
   setFormData: (d: FormData) => void;
   onNext: () => void;
-  brandName: string;
-  logoUrl: string;
-  primaryColor: string;
 }) {
   const dcMinCents = useCatalogDryCleanMinCents();
-  const select = (type: "wash_fold" | "dry_cleaning") => {
-    setFormData({ ...formData, serviceType: type });
+
+  const select = (serviceType: ServiceType) => {
+    setFormData({ ...formData, serviceType });
   };
 
+  const itemClass = (active: boolean) =>
+    cn(
+      "w-full rounded-2xl border px-4 py-3 text-left transition-all",
+      active
+        ? "border-[#d74b87] bg-[#fff0f7] shadow-[0_8px_20px_rgba(213,73,133,0.18)]"
+        : "border-[#e8d9e0] bg-white hover:border-[#dca0bc]"
+    );
+
   return (
-    <div>
-      {/* Logo */}
-      <div className="flex justify-center mb-6">
-        <img src={logoUrl} alt={brandName} className="w-[180px] h-auto" />
-      </div>
-
-      <StepHeading>What do you need?</StepHeading>
-
-      <div className="space-y-3 mb-8">
-        <button
-          onClick={() => select("wash_fold")}
-          className={`w-full text-left border rounded-md px-5 py-4 transition-all cursor-pointer ${
-            formData.serviceType === "wash_fold"
-              ? "border-black bg-black/5"
-              : "border-black/20 hover:border-black/40"
-          }`}
-        >
-          <div className="text-[1.1rem]" style={{ ...pf, fontWeight: 500 }}>
-            Wash &amp; Fold
+    <StepFrame
+      title="Book a Pickup"
+      subtitle="Choose your service to begin. Specialty Care remains pricing-only."
+      icon={<Shirt className="h-5 w-5" aria-hidden />}
+    >
+      <div className="space-y-3">
+        <button type="button" className={itemClass(formData.serviceType === "wash_fold")} onClick={() => select("wash_fold")}>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[16px] font-semibold text-[#2b1720]">Wash &amp; Fold</span>
+            <span className="rounded-full bg-[#ffe3ef] px-2.5 py-1 text-[12px] font-semibold text-[#b31d5f]">
+              ${centsToDollars(WF_RATE_PER_LB_CENTS)}/lb
+            </span>
           </div>
-          <div className="text-[0.9rem] text-black/60 mt-0.5" style={cg}>
-            ${centsToDollars(WF_RATE_PER_LB_CENTS)}/lb
-          </div>
+          <p className="mt-1 text-[13px] text-[#886170]">Premium wash + dry + fold with concierge pickup and return.</p>
         </button>
 
         <button
+          type="button"
+          className={itemClass(formData.serviceType === "dry_cleaning")}
           onClick={() => select("dry_cleaning")}
-          className={`w-full text-left border rounded-md px-5 py-4 transition-all cursor-pointer ${
-            formData.serviceType === "dry_cleaning"
-              ? "border-black bg-black/5"
-              : "border-black/20 hover:border-black/40"
-          }`}
         >
-          <div className="text-[1.1rem]" style={{ ...pf, fontWeight: 500 }}>
-            Dry Cleaning
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[16px] font-semibold text-[#2b1720]">Dry Cleaning</span>
+            <span className="rounded-full bg-[#ffe3ef] px-2.5 py-1 text-[12px] font-semibold text-[#b31d5f]">
+              {dcMinCents != null
+                ? `From $${centsToDollars(dcMinCents)}`
+                : "Per garment"}
+            </span>
           </div>
-          <div className="text-[0.9rem] text-black/60 mt-0.5" style={cg}>
-            {dcMinCents != null
-              ? `From $${centsToDollars(dcMinCents)} per garment`
-              : "Per garment — see price list on site"}
-          </div>
+          <p className="mt-1 text-[13px] text-[#886170]">Expert garment care for delicates, tailoring-grade finishes, and formalwear.</p>
         </button>
       </div>
 
-      <BlackButton onClick={onNext} disabled={!formData.serviceType} primaryColor={primaryColor}>
-        CONTINUE
-      </BlackButton>
-    </div>
+      <div className="rounded-xl border border-[#f2dde6] bg-[#fff7fb] px-3 py-2 text-[12px] text-[#8f6e7a]">
+        <span className="font-semibold text-[#6f4d5b]">Secure checkout:</span> card is saved on Stripe after order details are confirmed.
+      </div>
+
+      <AccentButton onClick={onNext} disabled={!formData.serviceType}>
+        Continue to Preferences
+      </AccentButton>
+    </StepFrame>
   );
 }
 
-/* ===== STEP 2: PICKUP SCHEDULE ===== */
-function Step2({
+function StepPreferences({
   formData,
   setFormData,
   onNext,
@@ -224,179 +355,202 @@ function Step2({
   onNext: () => void;
   onBack: () => void;
 }) {
-  // Get tomorrow's date as minimum
+  return (
+    <StepFrame
+      title="Pickup Preferences"
+      subtitle="Tell us where to collect and any concierge instructions."
+      icon={<Home className="h-5 w-5" aria-hidden />}
+      onBack={onBack}
+    >
+      <div className="space-y-3.5">
+        <InputField
+          label="Address"
+          value={formData.address}
+          onChange={(v) => setFormData({ ...formData, address: v })}
+          placeholder="123 Wilshire Blvd, Los Angeles, CA"
+          required
+        />
+        <InputField
+          label="Unit / Apt"
+          value={formData.unit}
+          onChange={(v) => setFormData({ ...formData, unit: v })}
+          placeholder="Unit 2401"
+        />
+        <label className="block space-y-1.5">
+          <span className="text-[12px] font-medium tracking-[0.01em] text-[#785764]">Special Instructions</span>
+          <textarea
+            value={formData.specialInstructions}
+            onChange={(event) =>
+              setFormData({ ...formData, specialInstructions: event.target.value })
+            }
+            placeholder="Leave with concierge, front desk notes, gate code, etc."
+            rows={3}
+            className="w-full resize-none rounded-xl border border-[#e8d7df] bg-white px-3.5 py-2.5 text-[14px] text-[#2f1b24] outline-none transition-all placeholder:text-[#b69aa7] focus:border-[#d65a90] focus:ring-2 focus:ring-[#f6c8dd]"
+          />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <GhostButton onClick={onBack}>Back</GhostButton>
+        <AccentButton onClick={onNext} disabled={!formData.address.trim()}>
+          Continue to Date &amp; Time
+        </AccentButton>
+      </div>
+    </StepFrame>
+  );
+}
+
+function StepDateTime({
+  formData,
+  setFormData,
+  onNext,
+  onBack,
+}: {
+  formData: FormData;
+  setFormData: (d: FormData) => void;
+  onNext: () => void;
+  onBack: () => void;
+}) {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const minDate = tomorrow.toISOString().split("T")[0];
 
   return (
-    <div>
-      <BackButton onClick={onBack} />
-      <StepHeading>Schedule Your Pickup</StepHeading>
-
-      <div className="mb-4">
-        <label className="block text-[0.85rem] text-black/60 mb-1" style={cg}>
-          Pickup Date <span className="text-red-500">*</span>
-        </label>
-        <input
+    <StepFrame
+      title="Date & Time"
+      subtitle="Pick a 2-hour window that works best for pickup."
+      icon={<CalendarClock className="h-5 w-5" aria-hidden />}
+      onBack={onBack}
+    >
+      <div className="space-y-3.5">
+        <InputField
           type="date"
+          label="Pickup Date"
           value={formData.pickupDate}
+          onChange={(v) => setFormData({ ...formData, pickupDate: v })}
           min={minDate}
-          onChange={(e) => setFormData({ ...formData, pickupDate: e.target.value })}
-          className="w-full border border-black/20 rounded px-3 py-2.5 text-[0.95rem] focus:outline-none focus:border-black/50 transition-colors bg-white"
-          style={cg}
+          required
         />
-      </div>
 
-      <div className="mb-8">
-        <label className="block text-[0.85rem] text-black/60 mb-2" style={cg}>
-          Time Window <span className="text-red-500">*</span>
-        </label>
-        <div className="space-y-2">
-          {["7:00am – 9:00am", "9:00am – 11:00am", "11:00am – 1:00pm", "7:00pm – 9:00pm"].map((window) => (
-            <button
-              key={window}
-              onClick={() => setFormData({ ...formData, pickupTimeWindow: window })}
-              className={`w-full text-left border rounded-md px-4 py-3 transition-all cursor-pointer text-[0.95rem] ${
-                formData.pickupTimeWindow === window
-                  ? "border-black bg-black/5"
-                  : "border-black/20 hover:border-black/40"
-              }`}
-              style={cg}
-            >
-              {window}
-            </button>
-          ))}
+        <div className="space-y-1.5">
+          <span className="text-[12px] font-medium tracking-[0.01em] text-[#785764]">
+            Time Window <span className="text-[#cc2f73]">*</span>
+          </span>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {TIME_WINDOWS.map((window) => {
+              const active = formData.pickupTimeWindow === window;
+              return (
+                <button
+                  key={window}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, pickupTimeWindow: window })}
+                  className={cn(
+                    "rounded-xl border px-3 py-2.5 text-left text-[13px] font-medium transition-colors",
+                    active
+                      ? "border-[#d74b87] bg-[#fff0f7] text-[#8b2550]"
+                      : "border-[#e8d7df] bg-white text-[#684754] hover:border-[#dca0bc]"
+                  )}
+                >
+                  {window}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      <BlackButton
-        onClick={onNext}
-        disabled={!formData.pickupDate || !formData.pickupTimeWindow}
-      >
-        CONTINUE
-      </BlackButton>
-    </div>
-  );
-}
-
-/* ===== STEP 3: ADDRESS & DETAILS ===== */
-function Step3({
-  formData,
-  setFormData,
-  onNext,
-  onBack,
-}: {
-  formData: FormData;
-  setFormData: (d: FormData) => void;
-  onNext: () => void;
-  onBack: () => void;
-}) {
-  return (
-    <div>
-      <BackButton onClick={onBack} />
-      <StepHeading>Pickup Details</StepHeading>
-
-      <InputField
-        label="Address"
-        value={formData.address}
-        onChange={(v) => setFormData({ ...formData, address: v })}
-        placeholder="123 Wilshire Blvd, Los Angeles, CA"
-        required
-      />
-
-      <InputField
-        label="Unit / Apt"
-        value={formData.unit}
-        onChange={(v) => setFormData({ ...formData, unit: v })}
-        placeholder="Unit 2401"
-      />
-
-      <div className="mb-6">
-        <label className="block text-[0.85rem] text-black/60 mb-1" style={cg}>
-          Special Instructions
-        </label>
-        <textarea
-          value={formData.specialInstructions}
-          onChange={(e) =>
-            setFormData({ ...formData, specialInstructions: e.target.value })
-          }
-          placeholder="Leave with concierge, etc."
-          rows={3}
-          className="w-full border border-black/20 rounded px-3 py-2.5 text-[0.95rem] focus:outline-none focus:border-black/50 transition-colors bg-white resize-none"
-          style={cg}
-        />
+      <div className="rounded-xl border border-[#f2dde6] bg-[#fff7fb] px-3 py-2 text-[12px] text-[#8f6e7a]">
+        Earliest pickup date is {minDate} to ensure routing and concierge handoff quality.
       </div>
 
-      <BlackButton onClick={onNext} disabled={!formData.address.trim()}>
-        CONTINUE
-      </BlackButton>
-    </div>
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <GhostButton onClick={onBack}>Back</GhostButton>
+        <AccentButton
+          onClick={onNext}
+          disabled={!formData.pickupDate || !formData.pickupTimeWindow}
+        >
+          Continue to Review
+        </AccentButton>
+      </div>
+    </StepFrame>
   );
 }
 
-/* ===== STEP 4: CONTACT INFO ===== */
-function Step4({
+function StepReview({
   formData,
   setFormData,
-  onNext,
+  onSubmit,
   onBack,
+  loading,
+  error,
 }: {
   formData: FormData;
   setFormData: (d: FormData) => void;
-  onNext: () => void;
+  onSubmit: () => void;
   onBack: () => void;
+  loading: boolean;
+  error: string | null;
 }) {
   const canContinue =
     formData.firstName.trim() && formData.lastName.trim() && formData.phone.trim();
 
   return (
-    <div>
-      <BackButton onClick={onBack} />
-      <StepHeading>Your Information</StepHeading>
-
-      <InputField
-        label="First Name"
-        value={formData.firstName}
-        onChange={(v) => setFormData({ ...formData, firstName: v })}
-        required
-      />
-
-      <InputField
-        label="Last Name"
-        value={formData.lastName}
-        onChange={(v) => setFormData({ ...formData, lastName: v })}
-        required
-      />
-
-      <InputField
-        label="Phone"
-        value={formData.phone}
-        onChange={(v) => setFormData({ ...formData, phone: v })}
-        type="tel"
-        placeholder="(310) 555-0100"
-        required
-      />
-
-      <InputField
-        label="Email"
-        value={formData.email}
-        onChange={(v) => setFormData({ ...formData, email: v })}
-        type="email"
-        placeholder="Optional"
-      />
-
-      <div className="mt-4">
-        <BlackButton onClick={onNext} disabled={!canContinue}>
-          CONTINUE
-        </BlackButton>
+    <StepFrame
+      title="Review & Contact"
+      subtitle="Final contact details before we save your card on file."
+      icon={<User className="h-5 w-5" aria-hidden />}
+      onBack={onBack}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <InputField
+          label="First Name"
+          value={formData.firstName}
+          onChange={(v) => setFormData({ ...formData, firstName: v })}
+          required
+        />
+        <InputField
+          label="Last Name"
+          value={formData.lastName}
+          onChange={(v) => setFormData({ ...formData, lastName: v })}
+          required
+        />
       </div>
-    </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <InputField
+          label="Phone"
+          value={formData.phone}
+          onChange={(v) => setFormData({ ...formData, phone: v })}
+          type="tel"
+          placeholder="(323) 555-0100"
+          required
+        />
+        <InputField
+          label="Email"
+          value={formData.email}
+          onChange={(v) => setFormData({ ...formData, email: v })}
+          type="email"
+          placeholder="Optional"
+        />
+      </div>
+
+      {error ? (
+        <p className="rounded-xl border border-[#f3d0df] bg-[#fff2f8] px-3 py-2 text-[12px] text-[#a52c61]" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <GhostButton onClick={onBack}>Back</GhostButton>
+        <AccentButton onClick={onSubmit} disabled={!canContinue} loading={loading}>
+          {loading ? "Creating Order..." : "Create Order"}
+        </AccentButton>
+      </div>
+    </StepFrame>
   );
 }
 
-/* ===== STEP 5: CARD ON FILE (Stripe Elements) ===== */
-function Step5Inner({
+function StepCardOnFile({
   formData,
   orderId,
   onSuccess,
@@ -409,16 +563,22 @@ function Step5Inner({
 }) {
   const stripe = useStripe();
   const elements = useElements();
+  const isDev = import.meta.env.DEV;
+  const isTestKey = stripePk.startsWith("pk_test_");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState<string | null>(null);
 
+  const initializedRef = useRef(false);
   const setupIntentMutation = trpc.orders.createSetupIntent.useMutation();
   const confirmCardMutation = trpc.orders.confirmCard.useMutation();
 
-  // Create SetupIntent when this step mounts
   useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
     setupIntentMutation.mutate(
       {
         orderId,
@@ -433,13 +593,12 @@ function Step5Inner({
           setCustomerId(data.customerId);
         },
         onError: (err) => {
-          setError("Failed to initialize payment. Please try again.");
           console.error("SetupIntent error:", err);
+          setError("Failed to initialize payment. Please try again.");
         },
       }
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [formData.email, formData.firstName, formData.lastName, formData.phone, orderId, setupIntentMutation]);
 
   const handleSubmit = async () => {
     if (!stripe || !elements || !clientSecret || !customerId) return;
@@ -447,135 +606,128 @@ function Step5Inner({
     setLoading(true);
     setError(null);
 
-    const cardElement = elements.getElement(CardElement);
-    if (!cardElement) {
-      setError("Card element not found.");
-      setLoading(false);
-      return;
-    }
+    try {
+      const cardElement = elements.getElement(CardElement);
+      if (!cardElement) {
+        setError("Card input failed to load. Please refresh and try again.");
+        setLoading(false);
+        return;
+      }
 
-    const result = await stripe.confirmCardSetup(clientSecret, {
-      payment_method: {
-        card: cardElement,
-        billing_details: {
-          name: `${formData.firstName} ${formData.lastName}`,
-          email: formData.email || undefined,
-          phone: formData.phone,
+      const result = await stripe.confirmCardSetup(clientSecret, {
+        payment_method: {
+          card: cardElement,
+          billing_details: {
+            name: `${formData.firstName} ${formData.lastName}`,
+            email: formData.email || undefined,
+            phone: formData.phone,
+          },
         },
-      },
-    });
-
-    if (result.error) {
-      setError(result.error.message || "Card setup failed.");
-      setLoading(false);
-      return;
-    }
-
-    // Save the payment method ID to the order
-    if (result.setupIntent?.payment_method) {
-      await confirmCardMutation.mutateAsync({
-        orderId,
-        stripeCustomerId: customerId,
-        stripePaymentMethodId:
-          typeof result.setupIntent.payment_method === "string"
-            ? result.setupIntent.payment_method
-            : result.setupIntent.payment_method.id,
       });
-    }
 
-    setLoading(false);
-    onSuccess();
+      if (result.error) {
+        setError(result.error.message || "Card setup failed.");
+        setLoading(false);
+        return;
+      }
+
+      if (result.setupIntent?.payment_method) {
+        await confirmCardMutation.mutateAsync({
+          orderId,
+          stripeCustomerId: customerId,
+          stripePaymentMethodId:
+            typeof result.setupIntent.payment_method === "string"
+              ? result.setupIntent.payment_method
+              : result.setupIntent.payment_method.id,
+        });
+      }
+
+      setLoading(false);
+      onSuccess();
+    } catch (err) {
+      console.error("Card confirmation error:", err);
+      setError("Unable to save card. Please try again.");
+      setLoading(false);
+    }
   };
 
   return (
-    <div>
-      <BackButton onClick={onBack} />
-      <StepHeading>Card on File</StepHeading>
+    <StepFrame
+      title="Secure Card on File"
+      subtitle="Your card will only be charged when your order is processed."
+      icon={<Lock className="h-5 w-5" aria-hidden />}
+      onBack={onBack}
+    >
+      {isDev && isTestKey ? (
+        <p className="rounded-xl border border-[#f3dfc3] bg-[#fff8eb] px-3 py-2 text-[12px] text-[#9f6d1f]">
+          {STRIPE_TEST_HINT}
+        </p>
+      ) : null}
 
-      <p
-        className="text-[0.9rem] text-black/60 text-center mb-6 leading-relaxed"
-        style={cg}
-      >
-        Your card will not be charged now. It will be kept
-        securely on file for when your order is processed.
-      </p>
+      {!stripePk ? (
+        <p className="rounded-xl border border-[#f3d0df] bg-[#fff2f8] px-3 py-2 text-[12px] text-[#a52c61]" role="alert">
+          Stripe publishable key is not configured.
+        </p>
+      ) : null}
 
-      <div className="border border-black/20 rounded px-4 py-3 mb-4 bg-white">
+      <div className="rounded-xl border border-[#e8d7df] bg-white px-4 py-3">
         <CardElement
           options={{
             style: {
               base: {
                 fontSize: "16px",
-                fontFamily: '"Cormorant Garamond", Georgia, serif',
-                color: "#1a1a1a",
+                color: "#2f1b24",
+                fontFamily: '"DM Sans", system-ui, sans-serif',
                 "::placeholder": {
-                  color: "#9ca3af",
+                  color: "#b69aa7",
                 },
               },
               invalid: {
-                color: "#dc2626",
+                color: "#b3265f",
               },
             },
           }}
         />
       </div>
 
-      {error && (
-        <p className="text-red-600 text-[0.85rem] mb-4 text-center" style={cg}>
+      {error ? (
+        <p className="rounded-xl border border-[#f3d0df] bg-[#fff2f8] px-3 py-2 text-[12px] text-[#a52c61]" role="alert">
           {error}
         </p>
-      )}
+      ) : null}
 
-      <BlackButton
-        onClick={handleSubmit}
-        disabled={loading || !stripe || !clientSecret}
-      >
-        {loading ? "SAVING..." : "SAVE CARD & PLACE ORDER"}
-      </BlackButton>
-    </div>
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <GhostButton onClick={onBack} disabled={loading}>
+          Back
+        </GhostButton>
+        <AccentButton
+          onClick={handleSubmit}
+          loading={loading}
+          disabled={!stripe || !clientSecret || confirmCardMutation.isPending || !stripePk}
+        >
+          {loading ? "Saving..." : "Save Card & Place Order"}
+        </AccentButton>
+      </div>
+    </StepFrame>
   );
 }
 
-function Step5(props: {
-  formData: FormData;
-  orderId: number;
-  onSuccess: () => void;
-  onBack: () => void;
-}) {
-  const isDev = import.meta.env.DEV;
-  const isTestKey = stripePk.startsWith("pk_test_");
-  return (
-    <div className="relative">
-      {isDev && isTestKey && (
-        <span className="absolute top-0 right-0 text-xs text-amber-600 bg-amber-100 px-2 py-0.5 rounded">
-          Stripe: test
-        </span>
-      )}
-      <Elements stripe={stripePromise}>
-        <Step5Inner {...props} />
-      </Elements>
-    </div>
-  );
-}
-
-/* ===== STEP 6: SUCCESS ===== */
-function Step6({
+function StepSuccess({
   orderId,
-  onClose,
   supportPhone,
-  primaryColor,
 }: {
   orderId: number;
-  onClose: () => void;
   supportPhone: string;
-  primaryColor: string;
 }) {
   const [loading, setLoading] = useState(false);
-  const supportPhoneHref = `tel:${supportPhone.replace(/[^\d+]/g, "")}`;
+  const [error, setError] = useState<string | null>(null);
   const generateTokenMutation = trpc.orders.generatePortalToken.useMutation();
+  const supportPhoneHref = `tel:${supportPhone.replace(/[^\d+]/g, "")}`;
 
   const handleContinue = async () => {
     setLoading(true);
+    setError(null);
+
     try {
       const { token } = await generateTokenMutation.mutateAsync({ orderId });
       const welcome = new URL("/welcome", `${getResidentWebOrigin()}/`);
@@ -584,49 +736,49 @@ function Step6({
     } catch (err) {
       console.error("Failed to generate portal token:", err);
       setLoading(false);
+      setError("Unable to continue right now. Please try again in a moment.");
     }
   };
 
   return (
-    <div className="text-center py-4">
-      {/* Rocket emoji as a fun break from formal branding */}
-      <div className="text-[4rem] mb-4">🚀</div>
+    <StepFrame
+      title="You’re Booked"
+      subtitle="Your pickup request was submitted successfully."
+      icon={<CheckCircle2 className="h-5 w-5" aria-hidden />}
+    >
+      <div className="rounded-2xl border border-[#e8d7df] bg-white p-4">
+        <p className="text-[14px] leading-relaxed text-[#724f5d]">
+          Need to update details? Call or text{" "}
+          <a href={supportPhoneHref} className="font-semibold text-[#b0215d] underline underline-offset-2">
+            {supportPhone}
+          </a>
+          .
+        </p>
+      </div>
 
-      <h2
-        className="text-[1.5rem] md:text-[1.7rem] mb-4"
-        style={{ ...pf, fontWeight: 500 }}
-      >
-        Congrats!
-      </h2>
-      <p
-        className="text-[1.05rem] text-black/70 mb-2 leading-relaxed"
-        style={cg}
-      >
-        Your order was placed successfully.
-      </p>
-      <p
-        className="text-[0.95rem] text-black/60 mb-8 leading-relaxed"
-        style={cg}
-      >
-        Call or text{" "}
-        <a href={supportPhoneHref} className="text-black underline">
-          {supportPhone}
-        </a>{" "}
-        if you have requests or questions.
-      </p>
+      {error ? (
+        <p className="rounded-xl border border-[#f3d0df] bg-[#fff2f8] px-3 py-2 text-[12px] text-[#a52c61]" role="alert">
+          {error}
+        </p>
+      ) : null}
 
-      <BlackButton onClick={handleContinue} disabled={loading} primaryColor={primaryColor}>
-        {loading ? "REDIRECTING..." : "CONTINUE"}
-      </BlackButton>
-    </div>
+      <AccentButton onClick={handleContinue} loading={loading}>
+        {loading ? "Redirecting..." : "Continue"}
+      </AccentButton>
+    </StepFrame>
   );
 }
 
-/* ===== MAIN MODAL ===== */
-export default function SchedulePickupModal({ onClose }: SchedulePickupModalProps) {
+function BookingExperience({
+  presentation = "modal",
+  className,
+  onClose,
+}: SchedulePickupModalProps) {
   const { tenant } = useTenant();
   const [step, setStep] = useState(1);
   const [orderId, setOrderId] = useState<number | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const [formData, setFormData] = useState<FormData>({
     serviceType: null,
     pickupDate: "",
@@ -641,10 +793,13 @@ export default function SchedulePickupModal({ onClose }: SchedulePickupModalProp
   });
 
   const createOrderMutation = trpc.orders.create.useMutation();
+  const currentStage = useMemo(() => getCurrentStage(step), [step]);
+  const isModal = presentation === "modal";
 
-  // After Step 4 (contact info), create the order in the database
-  const handleStep4Next = async () => {
+  const handleCreateOrder = async () => {
     if (!formData.serviceType) return;
+
+    setSubmitError(null);
 
     try {
       const result = await createOrderMutation.mutateAsync({
@@ -663,84 +818,145 @@ export default function SchedulePickupModal({ onClose }: SchedulePickupModalProp
       setStep(5);
     } catch (err) {
       console.error("Failed to create order:", err);
-      alert("Failed to create order. Please try again.");
+      setSubmitError("Unable to create your order. Please verify details and try again.");
     }
   };
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
+  const panelBody = (
+    <section
+      className={cn(
+        "relative flex w-full flex-col overflow-hidden border border-[#ead9e1] bg-[#fff9f7] shadow-[0_24px_40px_rgba(149,77,110,0.22)]",
+        isModal ? "h-full rounded-none sm:h-auto sm:max-h-[94vh] sm:max-w-[560px] sm:rounded-[28px]" : "rounded-[28px]",
+        className
+      )}
+      role={isModal ? "dialog" : undefined}
+      aria-modal={isModal ? true : undefined}
+      aria-label="Book a pickup"
+      onClick={(event) => event.stopPropagation()}
     >
-      <div
-        className="bg-white rounded-lg w-full max-w-[420px] max-h-[90vh] overflow-y-auto relative"
-        style={{ padding: "32px 28px" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-black/40 hover:text-black transition-colors cursor-pointer"
-          aria-label="Close"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
+      <div className="sticky top-0 z-10 border-b border-[#ead9e1] bg-[#fff9f7]/95 px-4 py-3 backdrop-blur sm:px-5">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <img
+              src={tenant.logoUrl || DEFAULT_LOGO_FULL}
+              alt={tenant.brandName}
+              className="h-9 w-auto max-w-[160px] object-contain"
+            />
+            <span className="rounded-full bg-[#ffe6f1] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#b11f5c]">
+              Book a Pickup
+            </span>
+          </div>
+          {isModal && onClose ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#ead9e1] bg-white text-[#7f5868] transition-colors hover:bg-[#fff3f9]"
+              aria-label="Close booking"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
 
-        {/* Step content */}
-        {step === 1 && (
-          <Step1
-            formData={formData}
-            setFormData={setFormData}
-            onNext={() => setStep(2)}
-            brandName={tenant.brandName}
-            logoUrl={tenant.logoUrl || DEFAULT_LOGO_FULL}
-            primaryColor={tenant.primaryColor}
-          />
-        )}
-        {step === 2 && (
-          <Step2
+        <StagePills currentStage={currentStage} />
+      </div>
+
+      <div className={cn("space-y-4 px-4 pb-5 pt-4 sm:px-5", isModal ? "overflow-y-auto" : "")}> 
+        <BookingSummary formData={formData} />
+
+        {step === 1 ? (
+          <StepService formData={formData} setFormData={setFormData} onNext={() => setStep(2)} />
+        ) : null}
+
+        {step === 2 ? (
+          <StepPreferences
             formData={formData}
             setFormData={setFormData}
             onNext={() => setStep(3)}
             onBack={() => setStep(1)}
           />
-        )}
-        {step === 3 && (
-          <Step3
+        ) : null}
+
+        {step === 3 ? (
+          <StepDateTime
             formData={formData}
             setFormData={setFormData}
             onNext={() => setStep(4)}
             onBack={() => setStep(2)}
           />
-        )}
-        {step === 4 && (
-          <Step4
+        ) : null}
+
+        {step === 4 ? (
+          <StepReview
             formData={formData}
             setFormData={setFormData}
-            onNext={handleStep4Next}
+            onSubmit={handleCreateOrder}
             onBack={() => setStep(3)}
+            loading={createOrderMutation.isPending}
+            error={submitError}
           />
-        )}
-        {step === 5 && orderId && (
-          <Step5
-            formData={formData}
-            orderId={orderId}
-            onSuccess={() => setStep(6)}
-            onBack={() => setStep(4)}
-          />
-        )}
-        {step === 6 && orderId && (
-          <Step6
-            orderId={orderId}
-            onClose={onClose}
-            supportPhone={tenant.supportPhone}
-            primaryColor={tenant.primaryColor}
-          />
-        )}
+        ) : null}
+
+        {step === 5 && orderId ? (
+          <Elements stripe={stripePromise}>
+            <StepCardOnFile
+              formData={formData}
+              orderId={orderId}
+              onSuccess={() => setStep(6)}
+              onBack={() => setStep(4)}
+            />
+          </Elements>
+        ) : null}
+
+        {step === 6 && orderId ? (
+          <StepSuccess orderId={orderId} supportPhone={tenant.supportPhone} />
+        ) : null}
       </div>
+
+      <div className="grid grid-cols-3 border-t border-[#ead9e1] bg-white/80 px-3 py-2 text-[11px] text-[#7f606d] sm:px-5 sm:text-[11px]">
+        <div className="inline-flex items-center justify-center gap-1.5">
+          <MapPin className="h-3.5 w-3.5" aria-hidden />
+          Beverly Hills + Century City
+        </div>
+        <div className="inline-flex items-center justify-center gap-1.5 border-x border-[#ead9e1]">
+          <Clock3 className="h-3.5 w-3.5" aria-hidden />
+          2-Hour Window
+        </div>
+        <a
+          className="inline-flex items-center justify-center gap-1.5 hover:text-[#b3225f]"
+          href={`tel:${tenant.supportPhone.replace(/[^\d+]/g, "")}`}
+        >
+          <Phone className="h-3.5 w-3.5" aria-hidden />
+          {tenant.supportPhone}
+        </a>
+      </div>
+    </section>
+  );
+
+  if (!isModal) {
+    return panelBody;
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[#1e101640] p-0 sm:items-center sm:bg-black/55 sm:p-4"
+      onClick={onClose}
+    >
+      {panelBody}
     </div>
   );
+}
+
+export function SchedulePickupRail({ className }: { className?: string }) {
+  return <BookingExperience presentation="rail" className={className} />;
+}
+
+export default function SchedulePickupModal({ onClose }: SchedulePickupModalProps) {
+  const { tenant } = useTenant();
+
+  if (tenant.templateType !== "butler") {
+    return <SchedulePickupModalClassic onClose={onClose ?? (() => {})} />;
+  }
+
+  return <BookingExperience presentation="modal" onClose={onClose} />;
 }
