@@ -63,18 +63,6 @@ export function CatalogDryCleanPricing({
     return byCategory.map(([cat, rows]) => [cat, rows.slice(0, previewRowsPerCategory)] as const);
   }, [byCategory, expanded, previewRowsPerCategory, showPreview]);
 
-  if (isLoading) {
-    return (
-      <div className={`text-sm text-black/40 ${className}`} aria-busy="true">
-        Loading prices…
-      </div>
-    );
-  }
-
-  if (isError || !dryCleanRows.length) {
-    return null;
-  }
-
   const hasOverflow = useMemo(() => {
     if (!showPreview) return false;
     return byCategory.some(([, rows]) => rows.length > previewRowsPerCategory);
@@ -89,6 +77,18 @@ export function CatalogDryCleanPricing({
     }
     return map;
   }, [byCategory, expanded, previewRowsPerCategory, showPreview]);
+
+  if (isLoading) {
+    return (
+      <div className={`text-sm text-black/40 ${className}`} aria-busy="true">
+        Loading prices…
+      </div>
+    );
+  }
+
+  if (isError || !dryCleanRows.length) {
+    return null;
+  }
 
   if (!isLf) {
     return (
