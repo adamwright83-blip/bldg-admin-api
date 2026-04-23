@@ -260,118 +260,141 @@ export default function Home() {
             }}
           />
 
-          <div className="relative mx-auto grid max-w-[1320px] gap-5 px-4 py-8 sm:px-6 lg:grid-cols-12 lg:px-8 lg:py-10">
-            <div className="lg:col-span-4">
-              <div
-                className="rounded-[30px] border bg-[rgba(255,251,249,0.95)] p-5 shadow-[0_22px_38px_rgba(149,77,110,0.18)] sm:p-6"
-                style={{ borderColor: C.border }}
-              >
-                <span
-                  className="inline-flex items-center rounded-full border px-3 py-1 text-[10.5px] font-semibold uppercase tracking-[0.12em]"
-                  style={{ borderColor: "#edcddc", background: "#fff", color: "#966273" }}
-                >
-                  Experience a standard of care
-                </span>
+          <div className="relative mx-auto max-w-[1320px] px-4 py-7 sm:px-6 lg:px-8 lg:py-10">
+            <div
+              className="relative overflow-hidden rounded-[34px] border shadow-[0_24px_46px_rgba(149,77,110,0.2)]"
+              style={{ borderColor: C.border, background: "linear-gradient(150deg, #fffbfa 0%, #fff0f4 100%)" }}
+            >
+              <div className="pointer-events-none absolute inset-0 hidden lg:block" aria-hidden>
+                <img
+                  src={ASSETS.hero}
+                  alt=""
+                  className="h-full w-full object-cover object-[57%_42%]"
+                />
+                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,248,246,0.82)_0%,rgba(255,248,246,0.56)_25%,rgba(255,248,246,0.08)_54%,rgba(255,248,246,0.3)_100%)]" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_15%,rgba(255,235,244,0.62),transparent_45%)]" />
+                <div className="absolute inset-y-0 right-0 w-[46%] bg-gradient-to-l from-[rgba(255,247,245,0.65)] via-[rgba(255,247,245,0.4)] to-transparent" />
+              </div>
 
-                <h1
-                  className="mt-4 text-[clamp(36px,5.2vw,62px)] leading-[0.94] tracking-[-0.02em] text-[#2f1a24]"
-                  style={{ fontFamily: '"Fraunces", "Playfair Display", serif' }}
-                >
-                  Impeccable care.
-                  <br />
-                  <span className="italic text-[#c22b6a]">Effortless living.</span>
-                </h1>
-
-                <p className="mt-4 max-w-[32ch] text-[15px] leading-relaxed" style={{ color: C.textMuted }}>
-                  Concierge laundry &amp; dry cleaning for Beverly Hills and Century City residences.
-                </p>
-
-                <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={openBooking}
-                    className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-[15px] font-semibold text-white shadow-[0_14px_26px_rgba(178,31,97,0.36)] transition-all hover:-translate-y-0.5"
-                    style={{ background: `linear-gradient(135deg, ${C.pink} 0%, ${C.pinkDeep} 100%)` }}
+              <div className="relative grid gap-5 p-4 sm:p-5 lg:min-h-[640px] lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)_minmax(0,390px)] lg:gap-6 lg:p-6">
+                <div className="lg:relative lg:z-10 lg:flex lg:items-start">
+                  <div
+                    className="w-full rounded-[30px] border bg-[rgba(255,251,249,0.94)] p-5 shadow-[0_22px_38px_rgba(149,77,110,0.18)] backdrop-blur-[1.2px] sm:p-6 lg:max-w-[390px] lg:pt-7"
+                    style={{ borderColor: C.border }}
                   >
-                    Schedule Pickup
-                    <ArrowRight className="h-4 w-4" aria-hidden />
-                  </button>
+                    <span
+                      className="inline-flex items-center rounded-full border px-3 py-1 text-[10.5px] font-semibold uppercase tracking-[0.12em]"
+                      style={{ borderColor: "#edcddc", background: "#fff", color: "#966273" }}
+                    >
+                      Experience a standard of care
+                    </span>
 
-                  <a
-                    href="#pricing-menu"
-                    className="inline-flex items-center gap-1 rounded-full border px-4 py-2.5 text-[14px] font-medium transition-colors hover:bg-[#fff2f8]"
-                    style={{ borderColor: C.border, color: "#734f5e" }}
-                  >
-                    View pricing
-                  </a>
+                    <h1
+                      className="mt-4 text-[clamp(36px,4.65vw,64px)] leading-[0.92] tracking-[-0.02em] text-[#2f1a24]"
+                      style={{ fontFamily: '"Fraunces", "Playfair Display", serif' }}
+                    >
+                      <span className="block">Impeccable care.</span>
+                      <span className="mt-1 block italic text-[#c22b6a]">Effortless living.</span>
+                    </h1>
+
+                    <p className="mt-4 max-w-[31ch] text-[15px] leading-relaxed text-[#755564]">
+                      Concierge laundry &amp; dry cleaning for Beverly Hills and Century City residences.
+                    </p>
+
+                    <div className="mt-6 flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={openBooking}
+                        className="inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-[15px] font-semibold text-white shadow-[0_16px_28px_rgba(178,31,97,0.38)] transition-all hover:-translate-y-0.5"
+                        style={{ background: `linear-gradient(135deg, ${C.pink} 0%, ${C.pinkDeep} 100%)` }}
+                      >
+                        Schedule Pickup
+                        <ArrowRight className="h-4 w-4" aria-hidden />
+                      </button>
+
+                      <a
+                        href="#pricing-menu"
+                        className="inline-flex items-center gap-1 rounded-full border px-4 py-2.5 text-[14px] font-medium transition-colors hover:bg-[#fff2f8]"
+                        style={{ borderColor: C.border, color: "#734f5e" }}
+                      >
+                        View pricing
+                      </a>
+                    </div>
+
+                    <div className="mt-6 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
+                      {[
+                        [ShieldCheck, "Door-to-door service"],
+                        [Sparkles, "Expert garment care"],
+                        [Star, "Five-star trusted"],
+                      ].map(([Icon, label]) => (
+                        <div
+                          key={label}
+                          className="inline-flex items-center gap-2 rounded-2xl border bg-white px-3 py-2 text-[12.5px]"
+                          style={{ borderColor: C.border, color: "#7c5868" }}
+                        >
+                          <Icon className="h-3.5 w-3.5 text-[#bd2b69]" aria-hidden />
+                          {label}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="mt-6 grid gap-2 sm:grid-cols-3">
+                <div className="relative h-full min-h-[430px] overflow-hidden rounded-[30px] border shadow-[0_20px_34px_rgba(149,77,110,0.2)] lg:hidden" style={{ borderColor: C.border }}>
+                  <img
+                    src={ASSETS.hero}
+                    alt="Laundry Butler concierge preparing a garment in a luxury residence"
+                    className="h-full w-full object-cover object-[56%_45%]"
+                  />
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/28 via-black/0 to-black/0" />
+                  <div className="absolute bottom-4 left-4 rounded-full bg-white/88 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#674652] backdrop-blur">
+                    Concierge Service
+                  </div>
+                </div>
+
+                <div className="hidden lg:block" aria-hidden />
+
+                <div className="hidden lg:block" id="booking" ref={bookingRef}>
+                  <SchedulePickupRail className="sticky top-[108px]" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="border-b py-5" style={{ borderColor: C.border, background: "#fff" }}>
+          <div className="mx-auto max-w-[1320px] px-4 sm:px-6 lg:px-8">
+            <div
+              className="rounded-[22px] border px-3 py-3 sm:px-4 sm:py-3.5 lg:px-5"
+              style={{ borderColor: C.border, background: "linear-gradient(150deg, #fffdfa 0%, #fff3f6 100%)" }}
+            >
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
+                <p className="text-[13.5px] font-medium leading-relaxed text-[#5f3f4e] lg:w-[36%] lg:pr-2">
+                  Trusted by busy professionals and families in Beverly Hills &amp; Century City
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2 lg:w-[64%] lg:grid-cols-4">
                   {[
-                    [ShieldCheck, "Door-to-door service"],
-                    [Sparkles, "Expert garment care"],
-                    [Star, "Five-star trusted"],
+                    [Clock3, "2-Hour Pickup"],
+                    [PackageCheck, "Same-Day Return"],
+                    [Star, "5.0 Client Rating"],
+                    [Leaf, "Sustainably Minded"],
                   ].map(([Icon, label]) => (
                     <div
                       key={label}
-                      className="inline-flex items-center gap-2 rounded-2xl border bg-white px-3 py-2 text-[12px]"
-                      style={{ borderColor: C.border, color: "#7c5868" }}
+                      className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold"
+                      style={{ borderColor: C.border, background: "#fff", color: "#765765" }}
                     >
-                      <Icon className="h-3.5 w-3.5 text-[#bd2b69]" aria-hidden />
+                      <Icon className="h-3.5 w-3.5 text-[#b22b66]" aria-hidden />
                       {label}
                     </div>
                   ))}
                 </div>
               </div>
             </div>
-
-            <div className="lg:col-span-4">
-              <div
-                className="relative h-full min-h-[430px] overflow-hidden rounded-[30px] border shadow-[0_22px_38px_rgba(149,77,110,0.2)]"
-                style={{ borderColor: C.border }}
-              >
-                <img
-                  src={ASSETS.hero}
-                  alt="Laundry Butler concierge preparing a garment in a luxury residence"
-                  className="h-full w-full object-cover object-[56%_45%]"
-                />
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/28 via-black/0 to-black/0" />
-                <div className="absolute bottom-4 left-4 rounded-full bg-white/88 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#674652] backdrop-blur">
-                  Concierge Service
-                </div>
-              </div>
-            </div>
-
-            <div className="hidden lg:col-span-4 lg:block" id="booking" ref={bookingRef}>
-              <SchedulePickupRail className="sticky top-[110px]" />
-            </div>
           </div>
         </section>
 
-        <section className="border-b py-4" style={{ borderColor: C.border, background: "#fff" }}>
-          <div className="mx-auto grid max-w-[1300px] gap-2 px-4 sm:px-6 lg:grid-cols-[1.7fr_repeat(4,minmax(0,1fr))] lg:items-center lg:px-8">
-            <p className="text-[13.5px] font-medium" style={{ color: "#5f3f4e" }}>
-              Trusted by busy professionals and families in Beverly Hills &amp; Century City
-            </p>
-            {[
-              [Clock3, "2-Hour Pickup Window"],
-              [PackageCheck, "Same Day Return Available"],
-              [Star, "5.0 ★★★★★ Client Rating"],
-              [Leaf, "Sustainably Minded"],
-            ].map(([Icon, label]) => (
-              <div
-                key={label}
-                className="inline-flex items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-[11.5px] font-semibold"
-                style={{ borderColor: C.border, background: C.surface, color: "#765765" }}
-              >
-                <Icon className="h-3.5 w-3.5 text-[#b22b66]" aria-hidden />
-                {label}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section id="services" className="mx-auto max-w-[1300px] px-4 py-14 sm:px-6 lg:px-8">
+        <section id="services" className="mx-auto max-w-[1300px] px-4 py-14 sm:px-6 lg:px-8 lg:py-16">
           <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: "#a77085" }}>
@@ -392,11 +415,11 @@ export default function Home() {
             </button>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid items-stretch gap-4 md:grid-cols-3 lg:gap-5">
             {SERVICE_CARDS.map((service) => (
               <article
                 key={service.title}
-                className="rounded-[26px] border p-5 shadow-[0_12px_28px_rgba(149,77,110,0.1)]"
+                className="flex h-full flex-col rounded-[26px] border p-5 shadow-[0_12px_28px_rgba(149,77,110,0.1)]"
                 style={{ borderColor: C.border, background: service.gradient }}
               >
                 <div
@@ -409,9 +432,9 @@ export default function Home() {
                 <p className="mt-1 text-[17px] font-semibold" style={{ color: service.accent }}>
                   {service.price}
                 </p>
-                <ul className="mt-4 space-y-2">
+                <ul className="mt-4 space-y-2.5">
                   {service.bullets.map((bullet) => (
-                    <li key={bullet} className="inline-flex items-start gap-2 text-[14px] leading-relaxed" style={{ color: C.textMuted }}>
+                    <li key={bullet} className="flex items-start gap-2 text-[14px] leading-relaxed" style={{ color: C.textMuted }}>
                       <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#ba2b66]" aria-hidden />
                       {bullet}
                     </li>
@@ -419,7 +442,7 @@ export default function Home() {
                 </ul>
                 <a
                   href={service.href}
-                  className="mt-5 inline-flex items-center gap-1 rounded-full border px-3.5 py-1.5 text-[13px] font-semibold"
+                  className="mt-6 inline-flex items-center gap-1 rounded-full border px-3.5 py-1.5 text-[13px] font-semibold"
                   style={{ borderColor: "#ebcddd", color: service.accent }}
                 >
                   {service.cta}
@@ -451,7 +474,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="how-it-works" className="border-y py-14" style={{ borderColor: C.border, background: C.surface }}>
+        <section id="how-it-works" className="border-y py-14 lg:py-16" style={{ borderColor: C.border, background: C.surface }}>
           <div className="mx-auto max-w-[1300px] px-4 sm:px-6 lg:px-8">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: "#a77085" }}>
               How It Works
@@ -460,7 +483,7 @@ export default function Home() {
               Four simple steps.
             </h2>
 
-            <div className="mt-7 grid gap-3 md:grid-cols-4">
+            <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:hidden">
               {HOW_IT_WORKS.map((step) => {
                 const Icon = step.icon;
                 return (
@@ -476,6 +499,44 @@ export default function Home() {
                   </article>
                 );
               })}
+            </div>
+
+            <div className="relative mt-10 hidden lg:block">
+              <div
+                className="pointer-events-none absolute left-[9%] right-[9%] top-[58px] h-px"
+                style={{ background: "linear-gradient(90deg, transparent 0%, #e7cfda 16%, #e7cfda 84%, transparent 100%)" }}
+                aria-hidden
+              />
+
+              <div className="grid grid-cols-4 gap-4">
+                {HOW_IT_WORKS.map((step, index) => {
+                  const Icon = step.icon;
+                  return (
+                    <article
+                      key={step.number}
+                      className="relative rounded-[24px] border bg-white px-5 pb-5 pt-4 shadow-[0_12px_24px_rgba(147,76,110,0.08)]"
+                      style={{ borderColor: C.border }}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#b22966]">
+                          {step.number}
+                        </span>
+                        <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-[#f0d5e1] bg-[#fff1f8] text-[#b22966]">
+                          <Icon className="h-4.5 w-4.5" aria-hidden />
+                        </div>
+                      </div>
+                      <h3 className="mt-4 text-[20px] font-semibold text-[#35202a]">{step.title}</h3>
+                      <p className="mt-2 text-[14px] leading-relaxed text-[#7f5f6d]">{step.body}</p>
+                      {index < HOW_IT_WORKS.length - 1 ? (
+                        <span
+                          className="pointer-events-none absolute -right-2 top-[52px] h-4 w-4 rounded-full border border-[#e8d3dd] bg-white"
+                          aria-hidden
+                        />
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </section>
