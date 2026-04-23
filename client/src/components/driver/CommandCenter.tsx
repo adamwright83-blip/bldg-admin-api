@@ -12,6 +12,7 @@ import {
   Clock,
   ChevronRight,
   Shield,
+  Plus,
   Flame,
   Zap,
   Trophy,
@@ -21,6 +22,7 @@ import type { GameOrder, GameStateSnapshot } from "./driverGameTypes";
 import { sounds } from "./driverSounds";
 import { haptics } from "./driverHaptics";
 import TerritoryLeaderboard from "./TerritoryLeaderboard";
+import { QuickNewOrderSheet } from "./QuickNewOrderSheet";
 
 const HERO_CITYSCAPE =
   "https://d2xsxph8kpxj0f.cloudfront.net/310519663281332025/bVTWnxw2cr9EUVzVBCF5PW/hero-cityscape-ibzWyN4yDNboMUDQd8P4Lh.webp";
@@ -29,6 +31,7 @@ interface Props {
   orders: GameOrder[];
   state: GameStateSnapshot;
   onSelectOrder: (order: GameOrder) => void;
+  onOrderCreated?: () => Promise<void> | void;
   isLoading?: boolean;
 }
 
@@ -51,9 +54,11 @@ export default function CommandCenter({
   orders,
   state,
   onSelectOrder,
+  onOrderCreated,
   isLoading,
 }: Props) {
   const leaderboard = useLeaderboardToggle();
+  const [quickOrderOpen, setQuickOrderOpen] = React.useState(false);
 
   const handleSelect = (order: GameOrder) => {
     sounds.press();
@@ -123,7 +128,19 @@ export default function CommandCenter({
                 Command Center
               </h1>
             </div>
-            <div className="flex items-center gap-1.5 mt-1">
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.press();
+                  haptics.tap();
+                  setQuickOrderOpen(true);
+                }}
+                className="h-9 w-9 border border-neon/35 bg-neon/[0.08] text-neon hover:border-neon/60 hover:bg-neon/[0.14] transition-colors flex items-center justify-center"
+                aria-label="Create new order"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
               <Shield className="w-3.5 h-3.5 text-neon/60" />
               <span className="text-[8px] tracking-[0.2em] text-neon/60 uppercase">
                 {rank.name}
@@ -295,6 +312,11 @@ export default function CommandCenter({
           </div>
         )}
       </div>
+      <QuickNewOrderSheet
+        open={quickOrderOpen}
+        onOpenChange={setQuickOrderOpen}
+        onOrderCreated={onOrderCreated}
+      />
     </motion.div>
   );
 }

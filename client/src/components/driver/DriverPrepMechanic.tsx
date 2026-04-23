@@ -39,6 +39,7 @@ type Props = {
   pickups?: Order[];
   deliveries?: Order[];
   isLoading?: boolean;
+  onOrderCreated?: () => Promise<void> | void;
   onResolveOrder: (
     orderId: number,
     nextStatus: "collected" | "delivered"
@@ -164,6 +165,7 @@ export function DriverPrepMechanic({
   pickups,
   deliveries,
   isLoading,
+  onOrderCreated,
   onResolveOrder,
 }: Props) {
   const [state, dispatch] = useReducer(
@@ -385,6 +387,7 @@ export function DriverPrepMechanic({
         scansCompleted,
         isLoading: Boolean(isLoading),
         handleSelectOrder,
+        onOrderCreated,
         handleBackToCommand,
         handleStartVerification,
         handleCompleteScan,
@@ -408,6 +411,7 @@ type RenderArgs = {
   scansCompleted: number;
   isLoading: boolean;
   handleSelectOrder: (order: GameOrder) => void;
+  onOrderCreated?: () => Promise<void> | void;
   handleBackToCommand: () => void;
   handleStartVerification: () => void;
   handleCompleteScan: (
@@ -430,6 +434,7 @@ function renderPhase(phase: DriverPrepPhase, args: RenderArgs) {
           orders={args.orders}
           state={args.state}
           onSelectOrder={args.handleSelectOrder}
+          onOrderCreated={args.onOrderCreated}
           isLoading={args.isLoading}
         />
       );
@@ -440,6 +445,7 @@ function renderPhase(phase: DriverPrepPhase, args: RenderArgs) {
             orders={args.orders}
             state={args.state}
             onSelectOrder={args.handleSelectOrder}
+            onOrderCreated={args.onOrderCreated}
             isLoading={args.isLoading}
           />
         );

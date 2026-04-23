@@ -19,6 +19,10 @@ export default function Driver() {
     await Promise.all([pickupQuery.refetch(), deliveryQuery.refetch()]);
   };
 
+  const handleOrderCreated = async () => {
+    await Promise.all([pickupQuery.refetch(), deliveryQuery.refetch()]);
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -40,6 +44,7 @@ export default function Driver() {
         deliveryQuery.isLoading ||
         updateStatus.isPending
       }
+      onOrderCreated={handleOrderCreated}
       onResolveOrder={handleResolveOrder}
     />
   );
