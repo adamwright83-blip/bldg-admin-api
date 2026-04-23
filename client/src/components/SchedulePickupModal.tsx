@@ -81,17 +81,17 @@ function getCurrentStage(step: number): number {
 
 function StageStepper({ currentStage }: { currentStage: number }) {
   return (
-    <ol className="flex items-center gap-1" aria-label="Booking progress">
+    <ol className="flex items-center gap-1.5 lg:gap-2" aria-label="Booking progress">
       {STAGES.map((stage, index) => {
         const stageIndex = index + 1;
         const complete = stageIndex < currentStage;
         const active = stageIndex === currentStage;
 
         return (
-          <li key={stage} className="flex min-w-0 flex-1 items-center gap-1">
+          <li key={stage} className="flex min-w-0 flex-1 items-center gap-1.5">
             <div
               className={cn(
-                "inline-flex min-w-0 items-center gap-1 rounded-full border px-2 py-1 text-[10.5px] font-semibold transition-colors",
+                "inline-flex min-w-0 items-center gap-1 rounded-full border px-2 py-1 text-[10.5px] font-semibold transition-colors lg:rounded-[14px] lg:px-2.5 lg:py-1.5 lg:text-[11.5px]",
                 complete && "border-[#de80a8] bg-[#ffe7f2] text-[#9c2a5c]",
                 active && "border-[#d24784] bg-[#fff3f9] text-[#a8205c]",
                 !active && !complete && "border-[#ead8e0] bg-white text-[#896775]"
@@ -99,7 +99,7 @@ function StageStepper({ currentStage }: { currentStage: number }) {
             >
               <span
                 className={cn(
-                  "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px]",
+                  "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] lg:h-5 lg:w-5 lg:text-[10px]",
                   active && "bg-[#ffd9ea] text-[#a8205c]",
                   complete && "bg-[#ffd9ea] text-[#a8205c]",
                   !active && !complete && "bg-[#f7edf2] text-[#8f6b7a]"
@@ -110,7 +110,7 @@ function StageStepper({ currentStage }: { currentStage: number }) {
               <span className="truncate">{stage}</span>
             </div>
             {index < STAGES.length - 1 ? (
-              <span className="h-px w-2 shrink-0 bg-[#e8d6df]" aria-hidden />
+              <span className="h-px w-2 shrink-0 bg-[#e8d6df] lg:w-3" aria-hidden />
             ) : null}
           </li>
         );
@@ -192,7 +192,7 @@ function PrimaryButton({
       type="button"
       onClick={onClick}
       disabled={disabled || loading}
-      className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl px-4 text-[14px] font-semibold text-white shadow-[0_14px_24px_rgba(178,31,97,0.34)] transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_28px_rgba(178,31,97,0.42)] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+      className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl px-4 text-[14px] font-semibold text-white shadow-[0_14px_24px_rgba(178,31,97,0.34)] transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_28px_rgba(178,31,97,0.42)] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 lg:h-[58px] lg:rounded-[19px] lg:text-[16px]"
       style={{ background: `linear-gradient(135deg, ${ACCENT} 0%, ${ACCENT_DEEP} 100%)` }}
     >
       {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
@@ -215,7 +215,7 @@ function SecondaryButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex h-11 w-full items-center justify-center rounded-2xl border border-[#e7d1dc] bg-white px-4 text-[14px] font-semibold text-[#7f5868] transition-colors hover:bg-[#fff5fa] disabled:cursor-not-allowed disabled:opacity-60"
+      className="inline-flex h-11 w-full items-center justify-center rounded-2xl border border-[#e7d1dc] bg-white px-4 text-[14px] font-semibold text-[#7f5868] transition-colors hover:bg-[#fff5fa] disabled:cursor-not-allowed disabled:opacity-60 lg:h-[52px] lg:rounded-[16px] lg:text-[15px]"
     >
       {children}
     </button>
@@ -252,7 +252,7 @@ function InputField({
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         required={required}
-        className="h-10 w-full rounded-xl border border-[#e8d7df] bg-white px-3.5 text-[14px] text-[#2f1b24] outline-none transition-all placeholder:text-[#b99eaa] focus:border-[#d65a90] focus:ring-2 focus:ring-[#f6c8dd]"
+        className="h-10 w-full rounded-xl border border-[#e8d7df] bg-white px-3.5 text-[14px] text-[#2f1b24] outline-none transition-all placeholder:text-[#b99eaa] focus:border-[#d65a90] focus:ring-2 focus:ring-[#f6c8dd] lg:h-[52px] lg:rounded-[14px] lg:text-[14.5px]"
       />
     </label>
   );
@@ -329,7 +329,7 @@ function StepService({
       icon={<Shirt className="h-4.5 w-4.5" aria-hidden />}
     >
       <div className="space-y-2.5">
-        <button type="button" className={tileClass(formData.serviceType === "wash_fold")} onClick={() => select("wash_fold")}>
+        <button type="button" className={`${tileClass(formData.serviceType === "wash_fold")} min-h-[76px] lg:rounded-[18px]`} onClick={() => select("wash_fold")}>
           <div className="flex items-center justify-between gap-2">
             <span className="text-[16px] font-semibold text-[#2b1720]">Wash &amp; Fold</span>
             <span className="rounded-full bg-[#ffe3ef] px-2.5 py-1 text-[11px] font-semibold text-[#ad1d5d]">
@@ -339,7 +339,7 @@ function StepService({
           <p className="mt-1 text-[13px] text-[#886170]">Premium wash + dry + fold with concierge pickup and return.</p>
         </button>
 
-        <button type="button" className={tileClass(formData.serviceType === "dry_cleaning")} onClick={() => select("dry_cleaning")}>
+        <button type="button" className={`${tileClass(formData.serviceType === "dry_cleaning")} min-h-[76px] lg:rounded-[18px]`} onClick={() => select("dry_cleaning")}>
           <div className="flex items-center justify-between gap-2">
             <span className="text-[16px] font-semibold text-[#2b1720]">Dry Cleaning</span>
             <span className="rounded-full bg-[#ffe3ef] px-2.5 py-1 text-[11px] font-semibold text-[#ad1d5d]">
@@ -463,7 +463,7 @@ function StepDateTime({
                     type="button"
                     onClick={() => setFormData({ ...formData, pickupTimeWindow: window })}
                     className={cn(
-                      "h-10 rounded-xl border px-3 text-left text-[13px] font-medium transition-colors",
+                      "h-10 rounded-xl border px-3 text-left text-[13px] font-medium transition-colors lg:h-[52px] lg:rounded-[14px] lg:text-[13.5px]",
                       active
                         ? "border-[#d74b87] bg-[#fff0f7] text-[#8b2550]"
                         : "border-[#e8d7df] bg-white text-[#6a4957] hover:border-[#dca0bc]"
@@ -851,7 +851,7 @@ function BookingExperience({
       onClick={(event) => event.stopPropagation()}
     >
       <div className="sticky top-0 z-10 border-b border-[#ead9e1] bg-[#fff9f7]/97 px-4 py-3 backdrop-blur sm:px-5">
-        <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="mb-2 flex items-center justify-between gap-3 lg:mb-5">
           <div className="flex min-w-0 items-center gap-2.5">
             <img
               src={tenant.logoUrl || DEFAULT_LOGO_FULL}

@@ -173,13 +173,25 @@ export default function Home() {
         className="sticky top-0 z-40 border-b backdrop-blur-xl"
         style={{ borderColor: C.border, background: "rgba(255,247,245,0.92)" }}
       >
-        <div className="mx-auto flex h-[78px] max-w-[1300px] items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
-          <a href="#top" className="flex min-w-0 items-center">
-            <img
-              src={tenant.logoUrl || ASSETS.logoFull}
-              alt={tenant.brandName}
-              className="h-10 w-auto max-w-[215px] object-contain"
-            />
+        <div className="mx-auto flex h-[86px] max-w-[1300px] items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
+          <a href="#top" className="inline-flex min-w-[260px] items-center gap-3">
+            <span
+              className="relative inline-flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-[linear-gradient(145deg,#1d2f2a_0%,#12221d_100%)] text-[#f9e6cf] shadow-[0_8px_18px_rgba(20,36,30,0.25)]"
+              style={{ borderColor: "rgba(195,147,93,0.45)" }}
+              aria-hidden
+            >
+              <span className="text-[21px] font-semibold tracking-[-0.02em]" style={{ fontFamily: '"Fraunces", "Playfair Display", serif' }}>
+                LB
+              </span>
+            </span>
+            <span className="leading-none">
+              <span className="block text-[17px] font-semibold tracking-[0.1em] text-[#2f1b24]">
+                LAUNDRY BUTLER
+              </span>
+              <span className="mt-1 block text-[10.5px] uppercase tracking-[0.16em] text-[#8a6676]">
+                Concierge Care
+              </span>
+            </span>
           </a>
 
           <nav className="hidden items-center gap-7 text-[14px] font-medium lg:flex" style={{ color: C.textMuted }}>
@@ -260,68 +272,65 @@ export default function Home() {
             }}
           />
 
-          <div className="relative mx-auto max-w-[1320px] px-4 py-7 sm:px-6 lg:px-8 lg:py-10">
+          <div className="relative mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8 lg:py-[28px]">
             <div
-              className="relative overflow-hidden rounded-[34px] border shadow-[0_24px_46px_rgba(149,77,110,0.2)]"
-              style={{ borderColor: C.border, background: "linear-gradient(150deg, #fffbfa 0%, #fff0f4 100%)" }}
+              className="relative overflow-hidden rounded-[28px] border shadow-[0_18px_34px_rgba(136,73,104,0.16)]"
+              style={{ borderColor: C.border, background: "linear-gradient(160deg, #fff8f6 0%, #fff2ef 100%)" }}
             >
               <div className="pointer-events-none absolute inset-0 hidden lg:block" aria-hidden>
-                <img
-                  src={ASSETS.hero}
-                  alt=""
-                  className="h-full w-full object-cover object-[57%_42%]"
-                />
-                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,248,246,0.82)_0%,rgba(255,248,246,0.56)_25%,rgba(255,248,246,0.08)_54%,rgba(255,248,246,0.3)_100%)]" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_15%,rgba(255,235,244,0.62),transparent_45%)]" />
-                <div className="absolute inset-y-0 right-0 w-[46%] bg-gradient-to-l from-[rgba(255,247,245,0.65)] via-[rgba(255,247,245,0.4)] to-transparent" />
+                <img src={ASSETS.hero} alt="" className="h-full w-full object-cover object-[52%_42%]" />
+                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,247,245,0.68)_0%,rgba(255,247,245,0.34)_22%,rgba(255,247,245,0.08)_46%,rgba(255,247,245,0.08)_60%,rgba(255,247,245,0.32)_80%,rgba(255,247,245,0.62)_100%)]" />
               </div>
 
-              <div className="relative grid gap-5 p-4 sm:p-5 lg:min-h-[640px] lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)_minmax(0,390px)] lg:gap-6 lg:p-6">
-                <div className="lg:relative lg:z-10 lg:flex lg:items-start">
-                  <div
-                    className="w-full rounded-[30px] border bg-[rgba(255,251,249,0.94)] p-5 shadow-[0_22px_38px_rgba(149,77,110,0.18)] backdrop-blur-[1.2px] sm:p-6 lg:max-w-[390px] lg:pt-7"
-                    style={{ borderColor: C.border }}
-                  >
+              <div data-hero-grid className="relative grid gap-5 p-4 sm:p-5 lg:min-h-[676px] lg:grid-cols-[34fr_38fr_28fr] lg:items-start lg:gap-5 lg:p-7">
+                <div
+                  data-hero-left
+                  className="flex rounded-[28px] border bg-[linear-gradient(155deg,#fffdfb_0%,#fff3f7_100%)] shadow-[0_16px_28px_rgba(136,73,104,0.14)] lg:h-[556px]"
+                  style={{ borderColor: C.border }}
+                >
+                  <div className="flex h-full w-full flex-col px-6 pb-6 pt-7 lg:px-[28px] lg:pb-[26px] lg:pt-[30px]">
                     <span
-                      className="inline-flex items-center rounded-full border px-3 py-1 text-[10.5px] font-semibold uppercase tracking-[0.12em]"
+                      className="mb-7 inline-flex items-center rounded-full border px-3 py-1 text-[10.5px] font-semibold uppercase tracking-[0.12em]"
                       style={{ borderColor: "#edcddc", background: "#fff", color: "#966273" }}
                     >
                       Experience a standard of care
                     </span>
 
                     <h1
-                      className="mt-4 text-[clamp(36px,4.65vw,64px)] leading-[0.92] tracking-[-0.02em] text-[#2f1a24]"
+                      className="max-w-[88%] text-[clamp(50px,4.15vw,62px)] leading-[0.95] tracking-[-0.024em] text-[#2f1a24]"
                       style={{ fontFamily: '"Fraunces", "Playfair Display", serif' }}
                     >
-                      <span className="block">Impeccable care.</span>
-                      <span className="mt-1 block italic text-[#c22b6a]">Effortless living.</span>
+                      <span className="block">Impeccable</span>
+                      <span className="block">care.</span>
+                      <span className="mt-1 block whitespace-nowrap text-[0.66em] italic text-[#c22b6a]">Effortless living.</span>
                     </h1>
 
-                    <p className="mt-4 max-w-[31ch] text-[15px] leading-relaxed text-[#755564]">
+                    <p className="mb-[26px] mt-[18px] max-w-[92%] text-[17px] leading-[1.46] text-[#755564] lg:text-[18px]">
                       Concierge laundry &amp; dry cleaning for Beverly Hills and Century City residences.
                     </p>
 
-                    <div className="mt-6 flex flex-wrap items-center gap-3">
+                    <div className="mb-7 flex items-center gap-2 lg:flex-nowrap">
                       <button
+                        data-hero-primary-cta
                         type="button"
                         onClick={openBooking}
-                        className="inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-[15px] font-semibold text-white shadow-[0_16px_28px_rgba(178,31,97,0.38)] transition-all hover:-translate-y-0.5"
+                        className="inline-flex h-[62px] w-[220px] min-w-[220px] items-center justify-center gap-2 rounded-full px-7 text-[19px] font-semibold text-white shadow-[0_16px_30px_rgba(178,31,97,0.38)] transition-all hover:-translate-y-0.5"
                         style={{ background: `linear-gradient(135deg, ${C.pink} 0%, ${C.pinkDeep} 100%)` }}
                       >
                         Schedule Pickup
-                        <ArrowRight className="h-4 w-4" aria-hidden />
+                        <ArrowRight className="h-5 w-5" aria-hidden />
                       </button>
 
                       <a
                         href="#pricing-menu"
-                        className="inline-flex items-center gap-1 rounded-full border px-4 py-2.5 text-[14px] font-medium transition-colors hover:bg-[#fff2f8]"
+                        className="inline-flex h-[50px] items-center gap-1 rounded-full border px-3.5 text-[13px] font-medium transition-colors hover:bg-[#fff2f8]"
                         style={{ borderColor: C.border, color: "#734f5e" }}
                       >
                         View pricing
                       </a>
                     </div>
 
-                    <div className="mt-6 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
+                    <div className="mt-auto grid grid-cols-1 gap-2.5 sm:grid-cols-3">
                       {[
                         [ShieldCheck, "Door-to-door service"],
                         [Sparkles, "Expert garment care"],
@@ -329,33 +338,33 @@ export default function Home() {
                       ].map(([Icon, label]) => (
                         <div
                           key={label}
-                          className="inline-flex items-center gap-2 rounded-2xl border bg-white px-3 py-2 text-[12.5px]"
+                          className="flex min-h-[86px] flex-col rounded-[20px] border bg-white px-3 py-3"
                           style={{ borderColor: C.border, color: "#7c5868" }}
                         >
-                          <Icon className="h-3.5 w-3.5 text-[#bd2b69]" aria-hidden />
-                          {label}
+                          <Icon className="h-4 w-4 text-[#bd2b69]" aria-hidden />
+                          <span className="mt-2 text-[12px] font-medium leading-[1.28]">{label}</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 </div>
 
-                <div className="relative h-full min-h-[430px] overflow-hidden rounded-[30px] border shadow-[0_20px_34px_rgba(149,77,110,0.2)] lg:hidden" style={{ borderColor: C.border }}>
+                <div data-hero-center className="hidden lg:block" aria-hidden />
+
+                <div data-hero-right className="hidden lg:block lg:h-[556px]" id="booking" ref={bookingRef}>
+                  <SchedulePickupRail className="h-full rounded-[28px] border-[#e9d8e0] bg-[linear-gradient(180deg,#fffaf8_0%,#fff5f8_100%)] shadow-[0_16px_30px_rgba(136,73,104,0.14)] [&>div:nth-child(1)]:px-6 [&>div:nth-child(1)]:pb-5 [&>div:nth-child(1)]:pt-[26px] [&>div:nth-child(2)]:overflow-y-auto [&>div:nth-child(2)]:px-6 [&>div:nth-child(2)]:pb-4 [&>div:nth-child(2)]:pt-5 [&>div:nth-child(3)]:px-6 [&>div:nth-child(3)]:pb-4 [&>div:nth-child(3)]:pt-3" />
+                </div>
+
+                <div className="relative min-h-[430px] overflow-hidden rounded-[28px] border shadow-[0_18px_30px_rgba(136,73,104,0.14)] lg:hidden" style={{ borderColor: C.border }}>
                   <img
                     src={ASSETS.hero}
                     alt="Laundry Butler concierge preparing a garment in a luxury residence"
-                    className="h-full w-full object-cover object-[56%_45%]"
+                    className="h-full w-full object-cover object-[52%_42%]"
                   />
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/28 via-black/0 to-black/0" />
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/24 via-black/0 to-black/0" />
                   <div className="absolute bottom-4 left-4 rounded-full bg-white/88 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#674652] backdrop-blur">
                     Concierge Service
                   </div>
-                </div>
-
-                <div className="hidden lg:block" aria-hidden />
-
-                <div className="hidden lg:block" id="booking" ref={bookingRef}>
-                  <SchedulePickupRail className="sticky top-[108px]" />
                 </div>
               </div>
             </div>
