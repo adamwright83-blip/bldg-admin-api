@@ -55,6 +55,14 @@ export function CatalogDryCleanPricing({
     return Math.min(...dryCleanRows.map((r) => r.standardPriceCents));
   }, [dryCleanRows]);
 
+  const isLf = variant === "laundryfarm";
+  const showPreview = !isLf && preview;
+
+  const byCategoryDisplay = useMemo(() => {
+    if (!showPreview || expanded) return byCategory;
+    return byCategory.map(([cat, rows]) => [cat, rows.slice(0, previewRowsPerCategory)] as const);
+  }, [byCategory, expanded, previewRowsPerCategory, showPreview]);
+
   if (isLoading) {
     return (
       <div className={`text-sm text-black/40 ${className}`} aria-busy="true">
@@ -66,14 +74,6 @@ export function CatalogDryCleanPricing({
   if (isError || !dryCleanRows.length) {
     return null;
   }
-
-  const isLf = variant === "laundryfarm";
-  const showPreview = !isLf && preview;
-
-  const byCategoryDisplay = useMemo(() => {
-    if (!showPreview || expanded) return byCategory;
-    return byCategory.map(([cat, rows]) => [cat, rows.slice(0, previewRowsPerCategory)] as const);
-  }, [byCategory, expanded, previewRowsPerCategory, showPreview]);
 
   const hasOverflow = useMemo(() => {
     if (!showPreview) return false;
