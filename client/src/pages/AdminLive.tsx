@@ -63,6 +63,11 @@ function isToday(date?: string | null) {
   return !!date && date === todayYmd();
 }
 
+function isActionableDelivered(order: Order) {
+  const hasPositiveTotal = amountCents(order) >= 50;
+  return !order.paid || (!order.paid && hasPositiveTotal) || isToday(order.deliveryDate);
+}
+
 function olderThan24Hours(date: Date | string | null | undefined) {
   if (!date) return false;
   return Date.now() - new Date(date).getTime() > 24 * 60 * 60 * 1000;
@@ -118,6 +123,11 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
   ]);
 
   const unpaidDelivered = ordersByStatus.delivered.filter((o) => !o.paid);
+  const actionableDelivered = ordersByStatus.delivered.filter(isActionableDelivered);
+  const liveLaneOrders: Record<LiveStatus, Order[]> = {
+    ...ordersByStatus,
+    delivered: actionableDelivered,
+  };
   const readyDueToday = ordersByStatus.ready.filter((o) => isToday(o.deliveryDate));
   const readyToCharge = [...ordersByStatus.ready, ...ordersByStatus.delivered].filter((o) => !o.paid && amountCents(o) >= 50);
   const blocked = unpaidDelivered.filter((o) => olderThan24Hours(o.updatedAt ?? o.createdAt));
@@ -258,13 +268,21 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
                   <section key={lane.status} className="flex min-h-[320px] flex-col md:min-h-[620px]">
                     <div className="flex items-center justify-between border-b border-[#D8D1C4] px-3 py-3">
                       <h2 className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/75">{lane.title}</h2>
-                      <span className="font-mono text-xs text-black/55">{ordersByStatus[lane.status].length}</span>
+                      <span className="font-mono text-xs text-black/55">{liveLaneOrders[lane.status].length}</span>
                     </div>
                     <div className="flex-1 space-y-3 p-3">
-                      {ordersByStatus[lane.status].length ? ordersByStatus[lane.status].map((order) => <OrderCard key={order.id} order={order} lane={lane} />) : (
+                      {liveLaneOrders[lane.status].length ? liveLaneOrders[lane.status].map((order) => <OrderCard key={order.id} order={order} lane={lane} />) : (
                         <div className="border border-dashed border-[#D8D1C4] px-3 py-8 text-center text-[11px] uppercase tracking-[0.12em] text-black/35">Clear</div>
                       )}
                     </div>
+                    {lane.status === "delivered" ? (
+                      <button
+                        type="button"
+                        className="border-t border-[#D8D1C4] px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-black/50 hover:bg-white hover:text-black"
+                      >
+                        View history &gt;
+                      </button>
+                    ) : null}
                   </section>
                 ))}
               </div>
@@ -291,7 +309,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
                 <MiniStat label="Stops" value={String(ordersByStatus.new.length + ordersByStatus.ready.length)} />
                 <MiniStat label="Pickup" value={String(ordersByStatus.new.length)} />
                 <MiniStat label="Return" value={String(ordersByStatus.ready.length)} />
-                <MiniStat label="Done" value={String(ordersByStatus.delivered.length)} />
+                <MiniStat label="Done" value={String(actionableDelivered.length)} />
               </div>
             </div>
           </div>

@@ -166,6 +166,15 @@ export default function AdminHostApp() {
             Board
           </Link>
           <Link
+            href="/level4"
+            className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              isLevel4 ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
+            }`}
+            onClick={() => setMobileNavOpen(false)}
+          >
+            Level 4
+          </Link>
+          <Link
             href="/live"
             className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
               isLive ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
