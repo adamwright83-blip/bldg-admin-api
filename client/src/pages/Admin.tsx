@@ -700,11 +700,15 @@ function NewOrderTab({
 }
 
 /* ===== INTAKE TAB ===== */
-function IntakeTab() {
+function IntakeTab({ initialSelectedOrderId = null }: { initialSelectedOrderId?: number | null }) {
   const { data: orders, isLoading, refetch } = trpc.admin.listByStatus.useQuery({ status: "collected" });
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(initialSelectedOrderId);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const deleteOrder = trpc.admin.deleteOrder.useMutation();
+
+  useEffect(() => {
+    setSelectedId(initialSelectedOrderId);
+  }, [initialSelectedOrderId]);
 
   const handleDelete = async (orderId: number) => {
     await deleteOrder.mutateAsync({ orderId });
@@ -712,12 +716,12 @@ function IntakeTab() {
     refetch();
   };
 
-  if (isLoading) return <Loader2 className="animate-spin w-6 h-6 text-black/30 mx-auto mt-10" />;
-  if (!orders?.length) return <p className="text-black/40 text-center mt-10">No collected orders awaiting intake.</p>;
-
   if (selectedId) {
     return <IntakeDetail orderId={selectedId} onBack={() => { setSelectedId(null); refetch(); }} />;
   }
+
+  if (isLoading) return <Loader2 className="animate-spin w-6 h-6 text-black/30 mx-auto mt-10" />;
+  if (!orders?.length) return <p className="text-black/40 text-center mt-10">No collected orders awaiting intake.</p>;
 
   return (
     <div>
@@ -2663,11 +2667,13 @@ export function AdminTabPanels({
   setProfilePhone,
   newOrderPhoneSeed,
   onConsumePhoneSeed,
+  initialSelectedOrderId,
 }: {
   activeTab: Tab;
   setProfilePhone: (p: string) => void;
   newOrderPhoneSeed: string | null;
   onConsumePhoneSeed: () => void;
+  initialSelectedOrderId?: number | null;
 }) {
   return (
     <>
@@ -2679,7 +2685,7 @@ export function AdminTabPanels({
         />
       )}
       {activeTab === "Customers" && <CustomersTab onOpenProfile={(p) => setProfilePhone(p)} />}
-      {activeTab === "Intake" && <IntakeTab />}
+      {activeTab === "Intake" && <IntakeTab initialSelectedOrderId={initialSelectedOrderId} />}
       {activeTab === "Processing" && <ProcessingTab />}
       {activeTab === "Ready" && <ReadyTab />}
       {activeTab === "Pickups" && <PickupsTab />}
