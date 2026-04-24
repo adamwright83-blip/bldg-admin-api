@@ -22,6 +22,20 @@ function normalizePath(loc: string): string {
   return p === "" ? "/" : p;
 }
 
+function parseOrderIdFromLocation(loc: string): number | null {
+  const queryString = loc.split("?")[1] ?? "";
+  const raw = new URLSearchParams(queryString).get("orderId");
+  const orderId = raw ? Number(raw) : NaN;
+  return Number.isInteger(orderId) && orderId > 0 ? orderId : null;
+}
+
+function parseOrderIdFromWindowSearch(): number | null {
+  if (typeof window === "undefined") return null;
+  const raw = new URLSearchParams(window.location.search).get("orderId");
+  const orderId = raw ? Number(raw) : NaN;
+  return Number.isInteger(orderId) && orderId > 0 ? orderId : null;
+}
+
 export default function AdminHostApp() {
   const [loc, navigate] = useLocation();
   const path = normalizePath(loc);
@@ -47,6 +61,8 @@ export default function AdminHostApp() {
   const isHome = isAdminCommandCenterPath(path);
   const isLevel4 = path === "/level4";
   const activeTab = adminPathToTab(path);
+  const initialSelectedOrderId =
+    path === "/intake" ? parseOrderIdFromLocation(loc) ?? parseOrderIdFromWindowSearch() : null;
 
   useEffect(() => {
     if (path === "/admin") return;
@@ -145,16 +161,7 @@ export default function AdminHostApp() {
             }`}
             onClick={() => setMobileNavOpen(false)}
           >
-            Home
-          </Link>
-          <Link
-            href="/level4"
-            className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-              isLevel4 ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
-            }`}
-            onClick={() => setMobileNavOpen(false)}
-          >
-            Level 4
+            Board
           </Link>
           {ADMIN_WORKSPACE_TABS.map((tab) => (
             <Link
@@ -177,33 +184,42 @@ export default function AdminHostApp() {
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-black/10 bg-white px-4 py-2 md:py-3 md:px-6">
-          <button
-            type="button"
-            className="md:hidden rounded-md border border-black/15 p-2 text-black"
-            onClick={() => setMobileNavOpen(true)}
-            aria-label="Open navigation"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-          <span className="text-xs text-black/40 ml-auto">{user?.name || "Admin"}</span>
-        </header>
+        {!isHome ? (
+          <>
+            <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-black/10 bg-white px-4 py-2 md:py-3 md:px-6">
+              <button
+                type="button"
+                className="md:hidden rounded-md border border-black/15 p-2 text-black"
+                onClick={() => setMobileNavOpen(true)}
+                aria-label="Open navigation"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+              <span className="text-xs text-black/40 ml-auto">{user?.name || "Admin"}</span>
+            </header>
 
-        <AdminCustomerSearchBlock
-          customerSearchQuery={customerSearchQuery}
-          setCustomerSearchQuery={setCustomerSearchQuery}
-          debouncedCustomerQuery={debouncedCustomerQuery}
-          searchOrders={searchOrders}
-          setProfilePhone={setProfilePhone}
-          onPrefillNewOrder={(phone) => {
-            setNewOrderPhoneSeed(phone);
-            navigate("/new-order");
-            setCustomerSearchQuery("");
-          }}
-        />
+            <AdminCustomerSearchBlock
+              customerSearchQuery={customerSearchQuery}
+              setCustomerSearchQuery={setCustomerSearchQuery}
+              debouncedCustomerQuery={debouncedCustomerQuery}
+              searchOrders={searchOrders}
+              setProfilePhone={setProfilePhone}
+              onPrefillNewOrder={(phone) => {
+                setNewOrderPhoneSeed(phone);
+                navigate("/new-order");
+                setCustomerSearchQuery("");
+              }}
+            />
+          </>
+        ) : null}
 
         {isHome ? (
-          <AdminHome />
+          <AdminHome
+            operatorName={user?.name || "Admin"}
+            onOpenMobileNav={() => setMobileNavOpen(true)}
+            onNavigate={(path) => navigate(path)}
+            onOpenCustomer={(phone) => setProfilePhone(phone)}
+          />
         ) : activeTab ? (
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full">
             <AdminTabPanels
@@ -211,6 +227,7 @@ export default function AdminHostApp() {
               setProfilePhone={setProfilePhone}
               newOrderPhoneSeed={newOrderPhoneSeed}
               onConsumePhoneSeed={() => setNewOrderPhoneSeed(null)}
+              initialSelectedOrderId={initialSelectedOrderId}
             />
           </div>
         ) : null}
