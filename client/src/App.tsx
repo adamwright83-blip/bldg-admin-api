@@ -21,6 +21,7 @@ function AdminHostRouter() {
       <Route path="/catalog" component={AdminCatalog} />
       <Route path="/admin" component={AdminHostApp} />
       <Route path="/home" component={AdminHostApp} />
+      <Route path="/live" component={AdminHostApp} />
       <Route path="/new-order" component={AdminHostApp} />
       <Route path="/customers" component={AdminHostApp} />
       <Route path="/intake" component={AdminHostApp} />

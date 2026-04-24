@@ -14,6 +14,7 @@ import {
   type AdminWorkspaceTab,
 } from "@/admin/adminPaths";
 import AdminHome from "./AdminHome";
+import AdminLive from "./AdminLive";
 import { Level4OffensiveHost } from "@/components/Level4OffensiveHost";
 import { AdminCustomerSearchBlock, AdminTabPanels } from "./Admin";
 
@@ -59,6 +60,7 @@ export default function AdminHostApp() {
   }, [path, navigate]);
 
   const isHome = isAdminCommandCenterPath(path);
+  const isLive = path === "/live";
   const isLevel4 = path === "/level4";
   const activeTab = adminPathToTab(path);
   const initialSelectedOrderId =
@@ -66,8 +68,8 @@ export default function AdminHostApp() {
 
   useEffect(() => {
     if (path === "/admin") return;
-    if (!isHome && !isLevel4 && activeTab === null) navigate("/", { replace: true });
-  }, [isHome, isLevel4, activeTab, path, navigate]);
+    if (!isHome && !isLive && !isLevel4 && activeTab === null) navigate("/", { replace: true });
+  }, [isHome, isLive, isLevel4, activeTab, path, navigate]);
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -163,6 +165,15 @@ export default function AdminHostApp() {
           >
             Board
           </Link>
+          <Link
+            href="/live"
+            className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              isLive ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
+            }`}
+            onClick={() => setMobileNavOpen(false)}
+          >
+            Live
+          </Link>
           {ADMIN_WORKSPACE_TABS.map((tab) => (
             <Link
               key={tab}
@@ -198,18 +209,20 @@ export default function AdminHostApp() {
               <span className="text-xs text-black/40 ml-auto">{user?.name || "Admin"}</span>
             </header>
 
-            <AdminCustomerSearchBlock
-              customerSearchQuery={customerSearchQuery}
-              setCustomerSearchQuery={setCustomerSearchQuery}
-              debouncedCustomerQuery={debouncedCustomerQuery}
-              searchOrders={searchOrders}
-              setProfilePhone={setProfilePhone}
-              onPrefillNewOrder={(phone) => {
-                setNewOrderPhoneSeed(phone);
-                navigate("/new-order");
-                setCustomerSearchQuery("");
-              }}
-            />
+            {!isLive ? (
+              <AdminCustomerSearchBlock
+                customerSearchQuery={customerSearchQuery}
+                setCustomerSearchQuery={setCustomerSearchQuery}
+                debouncedCustomerQuery={debouncedCustomerQuery}
+                searchOrders={searchOrders}
+                setProfilePhone={setProfilePhone}
+                onPrefillNewOrder={(phone) => {
+                  setNewOrderPhoneSeed(phone);
+                  navigate("/new-order");
+                  setCustomerSearchQuery("");
+                }}
+              />
+            ) : null}
           </>
         ) : null}
 
@@ -217,6 +230,11 @@ export default function AdminHostApp() {
           <AdminHome
             operatorName={user?.name || "Admin"}
             onOpenMobileNav={() => setMobileNavOpen(true)}
+            onNavigate={(path) => navigate(path)}
+            onOpenCustomer={(phone) => setProfilePhone(phone)}
+          />
+        ) : isLive ? (
+          <AdminLive
             onNavigate={(path) => navigate(path)}
             onOpenCustomer={(phone) => setProfilePhone(phone)}
           />
