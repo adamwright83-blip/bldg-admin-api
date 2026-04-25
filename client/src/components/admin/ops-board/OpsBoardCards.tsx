@@ -101,6 +101,17 @@ export function StatusStrip({ data, includeRunRate = true }: { data: AdminHomeDa
           <i />
           <b />
         </div>
+        <div className="ops-daily-xp" aria-label={`Daily XP ${data.butlerRating.dailyXp.value} of ${data.butlerRating.dailyXp.target}`}>
+          <div className="ops-daily-xp-head">
+            <span>DAILY XP</span>
+            <strong>
+              {data.butlerRating.dailyXp.value.toLocaleString("en-US")} / {data.butlerRating.dailyXp.target.toLocaleString("en-US")}
+            </strong>
+          </div>
+          <div className="ops-daily-xp-bar" aria-hidden>
+            <span style={{ width: `${data.butlerRating.dailyXp.percent}%` }} />
+          </div>
+        </div>
       </div>
       {includeRunRate ? <RunRateCard data={data} compact /> : null}
     </section>

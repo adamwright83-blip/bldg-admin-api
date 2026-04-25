@@ -495,6 +495,43 @@
   border-top: 5px solid var(--lb-ink);
 }
 
+.ops-daily-xp {
+  display: grid;
+  gap: 5px;
+  margin-top: 1px;
+}
+
+.ops-daily-xp-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 900;
+  color: var(--lb-muted);
+  letter-spacing: 0.08em;
+}
+
+.ops-daily-xp-head strong {
+  color: var(--lb-green-deep);
+  letter-spacing: 0;
+}
+
+.ops-daily-xp-bar {
+  height: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 107, 68, 0.22);
+  border-radius: 3px;
+  background: rgba(16, 24, 32, 0.08);
+}
+
+.ops-daily-xp-bar span {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  background: linear-gradient(90deg, var(--lb-green), var(--lb-amber));
+}
+
 .ops-hero {
   position: relative;
   height: 286px;

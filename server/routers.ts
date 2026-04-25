@@ -102,6 +102,7 @@ import {
   executeOffensiveAction as executeLevel4OffensiveAction,
   type ExecuteOffensiveInput,
 } from "./level4OffensiveExecute";
+import { getLevel4GateState as loadLevel4GateState } from "./level4Gate";
 
 const STRIPE_API_VERSION = "2025-03-31.basil" as const;
 
@@ -605,6 +606,15 @@ export const appRouter = router({
         dbAvailable: true,
         timestampBasis: "paidAt" as const,
       };
+    }),
+
+    /**
+     * Level 4 v1.6 gate — read-only, schema-free business truth.
+     * Uses orders + admin_action_log only. Stale items surface as decay warnings
+     * but do not block today's boss unlock.
+     */
+    getLevel4GateState: adminProcedure.query(async ({ ctx }) => {
+      return loadLevel4GateState(ctx.tenantId);
     }),
 
     /** Static UI hints (env-backed); delivery truth remains on admin_action_log + webhooks. */

@@ -821,6 +821,7 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
       <Level4BoardScene
         gateState={gateState}
         activeChallenge={activeChallenge}
+        dailyXp={dailyXp}
         completionState={{
           isCompleting: completion != null,
           completedChallengeId: completion?.challengeId,

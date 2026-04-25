@@ -14,7 +14,8 @@ import { BUILDINGS } from "@shared/buildings";
 import { TENANT_CONFIG, type TenantId } from "@shared/tenantConfig";
 import { Level4Offensive, type Level4OffensiveHandle } from "./Level4Offensive";
 import { Level4BoardScene, type Level4ActiveChallenge } from "./Level4BoardScene";
-import type { Order } from "@shared/types";
+import type { inferRouterOutputs } from "@trpc/server";
+import type { AppRouter } from "../../../server/routers";
 
 type Deliverable = "sms" | "card";
 
@@ -27,26 +28,9 @@ type GeneratedCopy = {
   brandId: TenantId;
 };
 
-type GateState = "LOCKED" | "UNLOCKED" | "COMPLETE_TODAY" | "COLD_CASE_VISUAL_ONLY";
-type GateLaneState = "CLEARED" | "QUIET" | "BLOCKED" | "DEGRADED";
-
-type GateLane = {
-  key: "collections" | "vagueness" | "dispatch";
-  title: string;
-  count: number;
-  state: GateLaneState;
-  cta: string;
-  path: string;
-  orderId?: number;
-  target?: string;
-  intel?: string;
-};
-
-type Level4Gate = {
-  state: GateState;
-  lanes: GateLane[];
-  dailyXp: number;
-};
+type RouterOutput = inferRouterOutputs<AppRouter>;
+type Level4Gate = RouterOutput["admin"]["getLevel4GateState"];
+type GateLane = Level4Gate["lanes"][number];
 
 function brandDisplayName(id: TenantId): string {
   return TENANT_CONFIG[id].brandName;
@@ -112,26 +96,6 @@ function formatUsdCents(cents: number) {
   return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
-function todayYmd() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function orderTotalCents(order: Order) {
-  const n = Number(order.total ?? 0);
-  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0;
-}
-
-function customerLabel(order: Order) {
-  return `${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() || `Order #${order.id}`;
-}
-
-function ageDays(order: Order) {
-  const d = order.updatedAt ?? order.createdAt;
-  if (!d) return 0;
-  return Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86_400_000));
-}
-
 function decayLabel(kind: "collection" | "vagueness" | "target", days: number) {
   if (kind === "vagueness") {
     if (days <= 2) return "ACTIVE";
@@ -152,12 +116,6 @@ function decayLabel(kind: "collection" | "vagueness" | "target", days: number) {
   return "COLD CASE VISUAL_ONLY";
 }
 
-function isDueTodayOrFallback(order: Order, field: "pickupDate" | "deliveryDate") {
-  const value = order[field];
-  if (!value) return true;
-  return value <= todayYmd();
-}
-
 /**
  * Phase 2:
  * - operator_xp_transactions table
@@ -168,79 +126,6 @@ function isDueTodayOrFallback(order: Order, field: "pickupDate" | "deliveryDate"
  * - relationship warmth metadata for building targets
  * - copy performance tracking
  */
-function computeLevel4GateState(input: {
-  newOrders: Order[];
-  collected: Order[];
-  processing: Order[];
-  ready: Order[];
-  delivered: Order[];
-  actedOnTodayCents: number;
-  bossTargetDays: number | null;
-  bossTargetsAvailable: boolean;
-}): Level4Gate {
-  const collections = [...input.ready, ...input.delivered].filter((o) => !o.paid && orderTotalCents(o) > 0);
-  const vagueness = [...input.collected, ...input.processing, ...input.ready].filter((o) => !o.paid && orderTotalCents(o) === 0);
-  const dispatch = [
-    ...input.newOrders.filter((o) => isDueTodayOrFallback(o, "pickupDate")),
-    ...input.ready.filter((o) => isDueTodayOrFallback(o, "deliveryDate")),
-  ];
-
-  const collectionTouchRequired = collections.length > 0;
-  const collectionsBlocked = collections.length > 0 || (collectionTouchRequired && input.actedOnTodayCents <= 0);
-  const lanes: GateLane[] = [
-    {
-      key: "collections",
-      title: "LANE 1 · COLLECTIONS",
-      count: collections.length,
-      state: collectionsBlocked ? "BLOCKED" : collections.length === 0 ? "QUIET" : "CLEARED",
-      cta: "OPEN LIVE →",
-      path: "/live",
-      orderId: collections[0]?.id,
-      target: collections[0] ? `${customerLabel(collections[0])} — Order #${collections[0].id}` : undefined,
-      intel: collections[0]
-        ? `${decayLabel("collection", ageDays(collections[0]))} · ${formatUsdCents(orderTotalCents(collections[0]))} known exposure`
-        : "No known-dollar collection blocker.",
-    },
-    {
-      key: "vagueness",
-      title: "LANE 2 · VAGUENESS / INTAKE",
-      count: vagueness.length,
-      state: vagueness.length > 0 ? (ageDays(vagueness[0]) >= 3 ? "DEGRADED" : "BLOCKED") : "QUIET",
-      cta: "RESTORE CLARITY →",
-      path: vagueness[0] ? `/intake?orderId=${vagueness[0].id}` : "/intake",
-      orderId: vagueness[0]?.id,
-      target: vagueness[0] ? `${customerLabel(vagueness[0])} — Order #${vagueness[0].id}` : undefined,
-      intel: vagueness[0]
-        ? `${decayLabel("vagueness", ageDays(vagueness[0]))} · Order contents or price are unknown. Revenue exposure uncomputed.`
-        : "No vague intake blocker.",
-    },
-    {
-      key: "dispatch",
-      title: "LANE 3 · DISPATCH",
-      count: dispatch.length,
-      state: dispatch.length > 0 ? "BLOCKED" : "QUIET",
-      cta: "OPEN ROUTES →",
-      path: "/pickups",
-      orderId: dispatch[0]?.id,
-      target: dispatch[0] ? `${customerLabel(dispatch[0])} — Order #${dispatch[0].id}` : undefined,
-      intel: dispatch[0] ? "Physical movement still needs action today." : "No dispatch blocker.",
-    },
-  ];
-  const locked = lanes.some((lane) => lane.count > 0);
-  const coldCase = (input.bossTargetDays ?? 0) >= 45;
-  return {
-    state: locked
-      ? "LOCKED"
-      : !input.bossTargetsAvailable
-        ? "COMPLETE_TODAY"
-        : coldCase
-          ? "COLD_CASE_VISUAL_ONLY"
-          : "UNLOCKED",
-    lanes,
-    // Phase 2: persist operator XP/rating ledger with immutable xp_transactions table.
-    dailyXp: input.actedOnTodayCents > 0 ? 25 : 0,
-  };
-}
 
 function challengeFromGate(gate: Level4Gate): Level4ActiveChallenge | null {
   const lane = gate.lanes.find((item) => item.count > 0);
@@ -338,12 +223,7 @@ const SYNTHETIC_LANE2_CANDIDATE = {
 
 export function Level4OffensiveHost() {
   const state = trpc.admin.getLevel4OffensiveState.useQuery();
-  const newOrders = trpc.admin.listByStatus.useQuery({ status: "new" });
-  const collectedOrders = trpc.admin.listByStatus.useQuery({ status: "collected" });
-  const processingOrders = trpc.admin.listByStatus.useQuery({ status: "processing" });
-  const readyOrders = trpc.admin.listByStatus.useQuery({ status: "ready" });
-  const deliveredOrders = trpc.admin.listByStatus.useQuery({ status: "delivered" });
-  const actedOnToday = trpc.admin.getActedOnToday.useQuery();
+  const gateQuery = trpc.admin.getLevel4GateState.useQuery();
   const generateCopy = trpc.admin.generateOffensiveCopy.useMutation();
   const execAction = trpc.admin.executeOffensiveAction.useMutation();
   const utils = trpc.useUtils();
@@ -381,26 +261,7 @@ export function Level4OffensiveHost() {
     return null;
   }, [state.data, syntheticLane2Active]);
 
-  const gate = useMemo(() => computeLevel4GateState({
-    newOrders: newOrders.data ?? [],
-    collected: collectedOrders.data ?? [],
-    processing: processingOrders.data ?? [],
-    ready: readyOrders.data ?? [],
-    delivered: deliveredOrders.data ?? [],
-    actedOnTodayCents: actedOnToday.data?.cents ?? 0,
-    bossTargetsAvailable: Boolean(topBuilding || referralCandidate || state.data?.marketHole.status === "stubbed_for_v1"),
-    bossTargetDays: topBuilding?.daysSinceLastTouch ?? null,
-  }), [
-    newOrders.data,
-    collectedOrders.data,
-    processingOrders.data,
-    readyOrders.data,
-    deliveredOrders.data,
-    actedOnToday.data?.cents,
-    topBuilding,
-    referralCandidate,
-    state.data?.marketHole.status,
-  ]);
+  const gate = gateQuery.data;
 
   const openBuildingPenetration = useCallback(async (): Promise<boolean> => {
     if (!topBuilding) {
@@ -619,10 +480,10 @@ export function Level4OffensiveHost() {
         });
         setCompletion({
           lane,
-          deduped: result.ok ? result.deduped : false,
-          xp: result.ok && !result.deduped ? 500 : 0,
-          message: result.ok && result.deduped ? "ALREADY LOGGED TODAY" : "BUILDING PENETRATION LOGGED",
-          challengeId: `building_penetration:${modal.buildingSlug}:${result.ok ? result.logId ?? "deduped" : "error"}`,
+          deduped: result.deduped,
+          xp: !result.deduped ? 500 : 0,
+          message: result.deduped ? "ALREADY LOGGED TODAY" : "BUILDING PENETRATION LOGGED",
+          challengeId: `building_penetration:${modal.buildingSlug}:${result.logId ?? "deduped"}`,
         });
       } else if (modal.kind === "referral_request") {
         const result = await execAction.mutateAsync({
@@ -636,19 +497,19 @@ export function Level4OffensiveHost() {
         });
         setCompletion({
           lane,
-          deduped: result.ok ? result.deduped : false,
-          xp: result.ok && !result.deduped ? 300 : 0,
-          message: result.ok && result.deduped ? "ALREADY LOGGED TODAY" : "TARGET ENGAGED",
-          challengeId: `referral_request:${modal.userId}:${result.ok ? result.logId ?? "deduped" : "error"}`,
+          deduped: result.deduped,
+          xp: !result.deduped ? 500 : 0,
+          message: result.deduped ? "ALREADY LOGGED TODAY" : "TARGET ENGAGED",
+          challengeId: `referral_request:${modal.userId}:${result.logId ?? "deduped"}`,
         });
       } else {
         const result = await execAction.mutateAsync({ block: "market_hole_outreach" });
         setCompletion({
           lane,
-          deduped: result.ok ? result.deduped : false,
-          xp: result.ok && !result.deduped ? 100 : 0,
-          message: result.ok && result.deduped ? "ALREADY LOGGED TODAY" : "TERRITORY PRESSURE REDUCED",
-          challengeId: `market_hole_outreach:${result.ok ? result.logId ?? "deduped" : "error"}`,
+          deduped: result.deduped,
+          xp: !result.deduped ? 500 : 0,
+          message: result.deduped ? "ALREADY LOGGED TODAY" : "TERRITORY PRESSURE REDUCED",
+          challengeId: `market_hole_outreach:${result.logId ?? "deduped"}`,
         });
       }
       closeModal(true);
@@ -662,12 +523,23 @@ export function Level4OffensiveHost() {
     }
   }, [modal, execAction, utils, closeModal, syntheticLane2Active, laneForModal]);
 
-  // Honest lane labels derived from real state.
-  if (state.isLoading || newOrders.isLoading || collectedOrders.isLoading || processingOrders.isLoading || readyOrders.isLoading || deliveredOrders.isLoading) {
+  // Honest lane labels derived from the read-only server gate.
+  if (state.isLoading || gateQuery.isLoading) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-white/50" />
       </div>
+    );
+  }
+
+  if (!gate) {
+    return (
+      <section className="min-h-screen bg-[#0e1111] text-[#e5e7eb] px-4 py-12 font-mono">
+        <div className="mx-auto max-w-3xl border border-red-500/45 bg-black/35 p-8 text-center">
+          <div className="text-[11px] uppercase tracking-[0.22em] text-red-300">LEVEL 4 GATE UNAVAILABLE</div>
+          <p className="mt-4 text-sm text-white/60">The read-only gate could not load. No Level 4 action was executed.</p>
+        </div>
+      </section>
     );
   }
 
@@ -761,7 +633,7 @@ export function Level4OffensiveHost() {
         onCompletionHoldDone={() => {
           setCompletion(null);
           void utils.admin.getLevel4OffensiveState.invalidate();
-          void actedOnToday.refetch();
+          void utils.admin.getLevel4GateState.invalidate();
         }}
       />
 
@@ -979,47 +851,34 @@ function Level4GateLocked({
           <Level4BoardScene
             gateState="LOCKED"
             activeChallenge={activeChallenge}
+            dailyXp={gate.dailyXp}
             onPrimaryAction={() => {
               if (primaryLane) onNavigate(primaryLane.path);
             }}
           />
         </div>
-        <div className="grid gap-px bg-red-500/20 md:grid-cols-3">
+        <div className="l4-gateLaneStrip">
           {gate.lanes.map((lane) => (
-            <article key={lane.key} className="bg-[#101414] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-xs font-bold uppercase tracking-[0.16em]">{lane.title}</h2>
-                <span className={lane.state === "QUIET" ? "text-blue-300" : lane.state === "DEGRADED" ? "text-amber-300" : "text-red-300"}>
+            <article key={lane.key} className="l4-gateLane">
+              <div className="l4-gateLaneTop">
+                <h2>{lane.title.replace("LANE ", "LANE 0")}</h2>
+                <span className={lane.state === "QUIET" ? "is-quiet" : lane.state === "DEGRADED" ? "is-degraded" : "is-blocked"}>
                   {lane.state}
                 </span>
               </div>
-              <div className="mt-6 text-4xl font-semibold">{lane.count}</div>
-              <div className="mt-1 text-xs uppercase tracking-[0.12em] text-white/45">remaining</div>
-              {lane.key === "vagueness" && lane.target ? (
-                <div className="mt-5 border border-amber-400/40 bg-amber-950/20 p-3 text-xs leading-relaxed">
-                  <div className="text-amber-200">MISSION CRITICAL · VAGUENESS DETECTED</div>
-                  <div className="mt-3 text-white/70">TARGET:</div>
-                  <div>{lane.target}</div>
-                  <div className="mt-3 text-white/70">STATUS:</div>
-                  <div>NOT YET CLEAR</div>
-                  <div className="mt-3 text-white/70">INTEL:</div>
-                  <div>{lane.intel}</div>
-                  <div className="mt-3 text-white/70">MISSION BLOCKER:</div>
-                  <div>Intake required before collection.</div>
-                </div>
-              ) : (
-                <div className="mt-5 min-h-20 text-xs leading-relaxed text-white/65">
-                  {lane.target ? <div className="text-white">{lane.target}</div> : null}
-                  <div className="mt-2">{lane.intel}</div>
-                </div>
-              )}
-              <button
-                type="button"
-                className="mt-5 w-full border border-white/20 bg-white/5 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white hover:text-black"
-                onClick={() => onNavigate(lane.path)}
-              >
-                {lane.key === "vagueness" && lane.target ? "INTAKE ORDER → RESTORE CLARITY" : lane.cta}
-              </button>
+              <div className="l4-gateLaneMid">
+                <strong>{lane.count}</strong>
+                <span>{lane.key === "dispatch" ? "PENDING" : "REMAINING"}</span>
+              </div>
+              <p>{lane.key === "vagueness" && lane.count > 0 ? "Revenue exposure uncomputed." : lane.intel}</p>
+              {lane.warningCount > 0 && lane.warningIntel ? (
+                <p className="l4-gateLaneWarning">{lane.warningCount} decay warning · {lane.warningIntel}</p>
+              ) : null}
+              {lane.count > 0 ? (
+                <button type="button" onClick={() => onNavigate(lane.path)}>
+                  {lane.key === "vagueness" ? "RESTORE CLARITY" : lane.key === "dispatch" ? "OPEN ROUTES" : "OPEN LIVE"}
+                </button>
+              ) : null}
             </article>
           ))}
         </div>

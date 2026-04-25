@@ -8,6 +8,11 @@ export type AdminHomeData = {
     level: number;
     score: number;
     band: ButlerBand;
+    dailyXp: {
+      value: number;
+      target: number;
+      percent: number;
+    };
   };
   runRate: {
     monthly: number;

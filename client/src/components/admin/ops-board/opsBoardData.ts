@@ -38,12 +38,20 @@ type Level2Like = {
   dbAvailable?: boolean | null;
 };
 
+type Level4GateLike = {
+  dailyXp?: number | null;
+  dailyXpTarget?: number | null;
+  dailyXpProgressPct?: number | null;
+  dbAvailable?: boolean | null;
+};
+
 export type BuildOpsBoardDataInput = {
   dashboard?: DashboardSummaryLike | null;
   collected?: CollectedTodayLike | null;
   awaiting?: AwaitingPaymentLike | null;
   apex?: ApexLike | null;
   level2?: Level2Like | null;
+  level4Gate?: Level4GateLike | null;
   now?: Date;
 };
 
@@ -204,6 +212,12 @@ export function buildOpsBoardData(input: BuildOpsBoardDataInput): AdminHomeData 
   const monthlyRunRate = Number.isFinite(monthlyLive) && monthlyLive > 0 ? monthlyLive : 18_400;
   const runRateTarget = 24_000;
   const runRatePercent = Math.max(0, Math.min(100, Math.floor((monthlyRunRate / runRateTarget) * 100)));
+  const dailyXp = Math.max(0, Number(input.level4Gate?.dailyXp ?? 0));
+  const dailyXpTarget = Math.max(1, Number(input.level4Gate?.dailyXpTarget ?? 1_500));
+  const dailyXpPercent = Math.max(
+    0,
+    Math.min(100, Math.round(Number(input.level4Gate?.dailyXpProgressPct ?? (dailyXp / dailyXpTarget) * 100)))
+  );
 
   const danielLive = riskAccounts.find((account) => account.name.toLowerCase().includes("daniel"));
   const danielAccount = danielLive ?? FALLBACK_RISK_ACCOUNTS[0];
@@ -218,6 +232,11 @@ export function buildOpsBoardData(input: BuildOpsBoardDataInput): AdminHomeData 
       level: 4,
       score: 782,
       band: "STRONG",
+      dailyXp: {
+        value: dailyXp,
+        target: dailyXpTarget,
+        percent: dailyXpPercent,
+      },
     },
     runRate: {
       monthly: monthlyRunRate,

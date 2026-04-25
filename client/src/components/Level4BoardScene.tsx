@@ -26,6 +26,7 @@ type Level4BoardSceneProps = {
     completionLabel?: string;
   };
   visualProgressIndex?: number;
+  dailyXp?: number;
   onPrimaryAction?: () => void;
   onPromiseClick?: () => void;
 };
@@ -80,6 +81,7 @@ export function Level4BoardScene({
   activeChallenge,
   completionState,
   visualProgressIndex,
+  dailyXp = 0,
   onPrimaryAction,
   onPromiseClick,
 }: Level4BoardSceneProps) {
@@ -123,10 +125,65 @@ export function Level4BoardScene({
   const heroAnchor = HERO_STEPS[progressIndex] ?? HERO_STEPS[0];
   const currentHeroSrc = heroPose === "back" ? "/assets/level4/hero_back.png" : "/assets/level4/hero_front.png";
   const particles = useMemo(() => Array.from({ length: 16 }, (_, i) => i), []);
+  const isBossChallenge = activeChallenge?.severity === "boss";
+  const bossStatus = gateState === "LOCKED" ? "LOCKED" : gateState === "COMPLETE_TODAY" ? "CLEARED" : "ENGAGED";
+  const threatLabel =
+    activeChallenge?.severity === "reckoning"
+      ? "RECKONING"
+      : activeChallenge?.severity === "degraded"
+        ? "HIGH"
+        : activeChallenge
+          ? "ACTIVE"
+          : "CLEAR";
+  const payloadLabel =
+    activeChallenge?.kind === "building_penetration" || activeChallenge?.kind === "referral_request"
+      ? "Building 3 intro ask"
+      : activeChallenge?.missionLabel ?? "No active payload";
 
   return (
     <section className={cn("level4-scene", gateState === "COMPLETE_TODAY" && "is-complete")}>
       <img className="level4-scene__background" src="/assets/level4/emptygameboard.png" alt="" />
+
+      <div className="level4-scene__hud-layer">
+        <div className="level4-scene__mission-card">
+          <div className="level4-scene__hud-header">LEVEL 04 · BOSS ENCOUNTER</div>
+          <dl>
+            <div><dt>TARGET</dt><dd>The Procrastinator</dd></div>
+            <div><dt>PATTERN</dt><dd>Delay loop · "later"</dd></div>
+            <div><dt>WEAKNESS</dt><dd>Specific action + time</dd></div>
+            <div><dt>RECORD</dt><dd>Today: +{dailyXp.toLocaleString("en-US")} XP</dd></div>
+          </dl>
+          <div className="level4-scene__hud-status">ENGAGE WHEN READY</div>
+        </div>
+
+        <div className="level4-scene__boss-title" aria-label="Boss encounter: The Procrastinator">
+          <div className="level4-scene__boss-kicker">△ BOSS ENCOUNTER △</div>
+          <div className="level4-scene__boss-name">THE PROCRASTINATOR</div>
+          <div className="level4-scene__boss-subtitle">"Tomorrow's Champion"</div>
+        </div>
+
+        <div className="level4-scene__telemetry">
+          <div className="level4-scene__hud-header level4-scene__hud-header--gold">SYSTEM TELEMETRY</div>
+          <dl>
+            <div><dt>BOSS</dt><dd className={bossStatus === "ENGAGED" ? "is-hot" : ""}>{bossStatus}</dd></div>
+            <div><dt>COOLDOWN</dt><dd>UNKNOWN</dd></div>
+            <div><dt>OPPORTUNITY</dt><dd>{activeChallenge ? "OPEN" : "QUIET"}</dd></div>
+            <div><dt>TERRITORY</dt><dd>REAL DATA</dd></div>
+            <div><dt>THREAT</dt><dd className={threatLabel === "HIGH" || threatLabel === "RECKONING" ? "is-hot" : ""}>{threatLabel}</dd></div>
+          </dl>
+          <div className="level4-scene__telemetry-footer">PRESS [STRIKE] TO ENGAGE</div>
+        </div>
+
+        <div className="level4-scene__operator-label">OPERATOR-04 · ORIGIN</div>
+        <div className="level4-scene__family-label">
+          <strong>HOME · FAMILY · FREEDOM</strong>
+          <span>"the prize"</span>
+        </div>
+
+        <div className="level4-scene__speech level4-scene__speech--one">it can wait!</div>
+        <div className="level4-scene__speech level4-scene__speech--two">monday's better</div>
+        <div className="level4-scene__speech level4-scene__speech--three">you don't wanna seem pushy...</div>
+      </div>
 
       <div className="level4-scene__actors-layer">
         <img
@@ -168,18 +225,22 @@ export function Level4BoardScene({
             style={anchorStyle(LEVEL4_ANCHORS.firstTask)}
           >
             <div className="level4-scene__task-kicker">
-              {activeChallenge.severity === "boss" ? "BOSS KEY" : "MISSION BLOCKER"}
+              {isBossChallenge ? "WEAPON LOADED" : "MISSION BLOCKER"}
             </div>
-            <div className="level4-scene__task-title">{activeChallenge.title}</div>
-            <div className="level4-scene__task-target">{activeChallenge.targetLabel}</div>
-            <div className="level4-scene__task-mission">{activeChallenge.missionLabel}</div>
+            <div className="level4-scene__task-title">{isBossChallenge ? "OUTREACH MISSILE" : activeChallenge.title}</div>
+            <div className="level4-scene__task-target">
+              <span>TARGET:</span> {activeChallenge.targetLabel}
+            </div>
+            <div className="level4-scene__task-mission">
+              <span>{isBossChallenge ? "PAYLOAD:" : "INTEL:"}</span> {isBossChallenge ? payloadLabel : activeChallenge.missionLabel}
+            </div>
             <button
               type="button"
               className="level4-scene__task-cta"
               disabled={completionState?.isCompleting}
               onClick={onPrimaryAction}
             >
-              {completionState?.isCompleting ? "EXECUTING" : activeChallenge.ctaLabel}
+              {completionState?.isCompleting ? "EXECUTING" : isBossChallenge ? "[ STRIKE ]" : activeChallenge.ctaLabel.replace("→", "")}
             </button>
           </div>
         ) : null}
@@ -193,6 +254,17 @@ export function Level4BoardScene({
       </div>
 
       <div className="level4-scene__fx-layer">
+        <div className="level4-scene__bridge-tiles" aria-hidden>
+          {Array.from({ length: 14 }, (_, index) => (
+            <span
+              key={index}
+              className={cn(
+                "level4-scene__bridge-tile",
+                index < progressIndex ? "is-complete" : index === progressIndex ? "is-current" : "is-future"
+              )}
+            />
+          ))}
+        </div>
         {pathGlow ? <div className={cn("level4-scene__path-glow", `level4-scene__path-glow--${pathGlow}`)} /> : null}
         {isDefeating
           ? particles.map((i) => (
