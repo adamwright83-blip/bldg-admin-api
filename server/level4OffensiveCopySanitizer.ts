@@ -40,7 +40,8 @@ export type SanitizeViolation = {
     | "timing_claim"
     | "social_proof_qualitative"
     | "service_category_unsupported"
-    | "service_delivery_mechanic";
+    | "service_delivery_mechanic"
+    | "generic_sales_phrase";
   match: string;
 };
 
@@ -67,6 +68,18 @@ const OFFER_PATTERNS: RegExp[] = [
 const FREE_PATTERN = /\bfree\b/gi;
 const PROMO_CODE_PATTERN = /\b(?:promo|coupon|referral)\s+code\b/gi;
 const SAVE_AMOUNT_PATTERN = /\bsave\s+\$?\d+/gi;
+
+const GENERIC_SALES_PHRASES: RegExp[] = [
+  /\bjust\s+checking\s+in\b/gi,
+  /\bhope\s+you(?:'| a)?re\s+well\b/gi,
+  /\bwanted\s+to\s+reach\s+out\b/gi,
+  /\bcircle\s+back\b/gi,
+  /\bfollowing\s+up\b/gi,
+  /\bpremium\b/gi,
+  /\bseamless\b/gi,
+  /\belevated\b/gi,
+  /\bdelighted\b/gi,
+];
 
 const TIMING_PATTERNS: RegExp[] = [
   /\b\d+\s*(?:second|sec|minute|min|hour|hr|day|week|month)s?\b/gi,
@@ -178,6 +191,11 @@ function inspectField(
   for (const m of collectMatches(text, SAVE_AMOUNT_PATTERN)) {
     violations.push({ field, rule: "save_amount", match: m });
   }
+  for (const re of GENERIC_SALES_PHRASES) {
+    for (const m of collectMatches(text, re)) {
+      violations.push({ field, rule: "generic_sales_phrase", match: m });
+    }
+  }
 
   const allowedTimings = (ctx.allowedTimingPhrases ?? []).map((p) => p.toLowerCase());
   for (const re of TIMING_PATTERNS) {
@@ -239,6 +257,7 @@ export function describeViolations(violations: SanitizeViolation[]): string {
     social_proof_qualitative: 'qualitative social-proof phrasing (e.g. "your neighbors are using")',
     service_category_unsupported: "a specific service-category term not authorized by the payload",
     service_delivery_mechanic: 'a service-delivery mechanic (e.g. "pickup", "delivery", "doorstep") not authorized by the payload',
+    generic_sales_phrase: "generic sales phrase banned by the Level 4 copy contract",
   };
   return violations
     .map((v) => `- in ${v.field}: ${ruleLabels[v.rule]} — matched "${v.match}"`)

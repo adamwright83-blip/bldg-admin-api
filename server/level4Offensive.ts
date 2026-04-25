@@ -1,7 +1,8 @@
-import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
 import { adminActionLog, bldgUsers, orders } from "../drizzle/schema";
 import { getDb } from "./db";
 import { BUILDINGS } from "@shared/buildings";
+import { getDashboardBusinessDayBoundsUtc } from "./revenueIntervention";
 
 export type BuildingPenetrationBlock = {
   block: "building_penetration";
@@ -20,6 +21,8 @@ export type BuildingPenetrationBlock = {
   provisional: boolean;
   /** Slug aliases that contributed to convertedUsers / convertedPaidUsers — useful for UI debug. */
   slugAliases: string[];
+  lastTouchAt: Date | null;
+  daysSinceLastTouch: number | null;
 };
 
 export type ReferralRequestBlock = {
@@ -118,6 +121,39 @@ async function loadBuildingPenetration(
     paidUserCountsByAlias.set(r.buildingSlug, Number(r.paidUsers ?? 0));
   }
 
+  const touchRows = await db
+    .select({
+      entityId: adminActionLog.entityId,
+      lastTouchAt: sql<Date>`MAX(${adminActionLog.createdAt})`,
+    })
+    .from(adminActionLog)
+    .where(
+      and(
+        eq(adminActionLog.tenantId, tenantId),
+        eq(adminActionLog.actionType, "building_penetration"),
+        eq(adminActionLog.entityType, "building")
+      )
+    )
+    .groupBy(adminActionLog.entityId);
+  const lastTouchBySlug = new Map<string, Date>();
+  for (const r of touchRows) {
+    if (r.entityId && r.lastTouchAt) lastTouchBySlug.set(r.entityId, new Date(r.lastTouchAt));
+  }
+  const bounds = getDashboardBusinessDayBoundsUtc();
+  const touchedToday = await db
+    .select({ entityId: adminActionLog.entityId })
+    .from(adminActionLog)
+    .where(
+      and(
+        eq(adminActionLog.tenantId, tenantId),
+        eq(adminActionLog.actionType, "building_penetration"),
+        eq(adminActionLog.entityType, "building"),
+        gte(adminActionLog.createdAt, bounds.startUtc),
+        lt(adminActionLog.createdAt, bounds.endUtc)
+      )
+    );
+  const touchedTodaySlugs = new Set(touchedToday.map((r) => r.entityId));
+
   return BUILDINGS.map((b) => {
     let convertedUsers = 0;
     let convertedPaidUsers = 0;
@@ -131,6 +167,10 @@ async function loadBuildingPenetration(
       total > 0 ? Math.round((convertedUsers / total) * 1000) / 10 : 0;
     const paidPenetrationPct =
       total > 0 ? Math.round((convertedPaidUsers / total) * 1000) / 10 : 0;
+    const lastTouchAt = lastTouchBySlug.get(b.slug) ?? null;
+    const daysSinceLastTouch = lastTouchAt
+      ? Math.max(0, Math.floor((Date.now() - lastTouchAt.getTime()) / 86_400_000))
+      : null;
     return {
       block: "building_penetration" as const,
       buildingSlug: b.slug,
@@ -143,8 +183,22 @@ async function loadBuildingPenetration(
       paidPenetrationPct,
       provisional: b.needsVerification === true,
       slugAliases: b.slugAliases,
+      lastTouchAt,
+      daysSinceLastTouch,
     };
-  });
+  })
+    .filter((b) => !touchedTodaySlugs.has(b.buildingSlug))
+    .sort((a, b) => {
+      // Future: add relationship warmth / promised intro metadata for Christopher-style targets.
+      const aDays = a.daysSinceLastTouch ?? -1;
+      const bDays = b.daysSinceLastTouch ?? -1;
+      return (
+        bDays - aDays ||
+        b.unconverted - a.unconverted ||
+        a.paidPenetrationPct - b.paidPenetrationPct ||
+        b.total - a.total
+      );
+    });
 }
 
 async function loadReferralRequest(

@@ -1456,3 +1456,135 @@
     padding-top: 8px;
   }
 }
+
+.l4-dailyXp {
+  align-self: center;
+  margin-left: auto;
+  border: 1px solid rgba(0, 255, 140, .38);
+  background: rgba(0, 255, 140, .08);
+  color: #b8ffcb;
+  padding: 7px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .16em;
+  white-space: nowrap;
+}
+
+.l4-completionCeremony {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at center, rgba(0, 255, 140, .32), rgba(0, 255, 140, 0) 34%),
+    rgba(0, 0, 0, .08);
+  animation: l4CompletionGlow 3200ms cubic-bezier(.2, .8, .2, 1) both;
+}
+
+.l4-completionCeremony::before {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 46%;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #00ff8c, transparent);
+  transform-origin: left center;
+  animation: l4StrikeScan 400ms cubic-bezier(.2, .8, .2, 1) 150ms both;
+}
+
+.l4-completionCheck {
+  width: 96px;
+  height: 96px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #00ff8c;
+  border-radius: 50%;
+  color: #00ff8c;
+  background: rgba(0, 10, 6, .72);
+  font-size: 54px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  box-shadow: 0 0 42px rgba(0, 255, 140, .45);
+  animation: l4CheckBloom 600ms cubic-bezier(.2, .8, .2, 1) 250ms both;
+}
+
+.l4-completionTitle,
+.l4-completionXp,
+.l4-completionSub {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-align: center;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.l4-completionTitle {
+  top: calc(50% + 68px);
+  color: #e8efe9;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.l4-completionXp {
+  top: calc(50% + 102px);
+  color: #00ff8c;
+  border: 1px solid rgba(0, 255, 140, .45);
+  background: rgba(0, 0, 0, .65);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 900;
+  animation: l4XpChip 400ms ease-out 800ms both;
+}
+
+.l4-completionSub {
+  top: calc(50% + 146px);
+  color: rgba(232, 239, 233, .62);
+  font-size: 10px;
+}
+
+@keyframes l4StrikeScan {
+  from { transform: scaleX(0); opacity: 0; }
+  20% { opacity: 1; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+@keyframes l4CheckBloom {
+  0% { transform: scale(0); opacity: 0; }
+  65% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes l4CompletionGlow {
+  0% { opacity: 0; }
+  8% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes l4XpChip {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@media (max-width: 640px) {
+  .l4-completionCheck {
+    width: 72px;
+    height: 72px;
+    font-size: 40px;
+  }
+  .l4-completionTitle {
+    top: calc(50% + 54px);
+    font-size: 14px;
+  }
+  .l4-completionXp {
+    top: calc(50% + 84px);
+  }
+  .l4-completionSub {
+    top: calc(50% + 126px);
+  }
+}

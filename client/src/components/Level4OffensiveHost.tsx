@@ -13,6 +13,7 @@ import {
 import { BUILDINGS } from "@shared/buildings";
 import { TENANT_CONFIG, type TenantId } from "@shared/tenantConfig";
 import { Level4Offensive, type Level4OffensiveHandle } from "./Level4Offensive";
+import type { Order } from "@shared/types";
 
 type Deliverable = "sms" | "card";
 
@@ -23,6 +24,26 @@ type GeneratedCopy = {
   internalNote: string;
   deliverable: Deliverable;
   brandId: TenantId;
+};
+
+type GateState = "LOCKED" | "UNLOCKED" | "COMPLETE_TODAY" | "COLD_CASE_VISUAL_ONLY";
+type GateLaneState = "CLEARED" | "QUIET" | "BLOCKED" | "DEGRADED";
+
+type GateLane = {
+  key: "collections" | "vagueness" | "dispatch";
+  title: string;
+  count: number;
+  state: GateLaneState;
+  cta: string;
+  path: string;
+  target?: string;
+  intel?: string;
+};
+
+type Level4Gate = {
+  state: GateState;
+  lanes: GateLane[];
+  dailyXp: number;
 };
 
 function brandDisplayName(id: TenantId): string {
@@ -89,6 +110,133 @@ function formatUsdCents(cents: number) {
   return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
+function todayYmd() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function orderTotalCents(order: Order) {
+  const n = Number(order.total ?? 0);
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0;
+}
+
+function customerLabel(order: Order) {
+  return `${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() || `Order #${order.id}`;
+}
+
+function ageDays(order: Order) {
+  const d = order.updatedAt ?? order.createdAt;
+  if (!d) return 0;
+  return Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86_400_000));
+}
+
+function decayLabel(kind: "collection" | "vagueness" | "target", days: number) {
+  if (kind === "vagueness") {
+    if (days <= 2) return "ACTIVE";
+    if (days <= 6) return "DEGRADED";
+    if (days <= 13) return "STALE VAGUENESS";
+    return "RECKONING";
+  }
+  if (kind === "collection") {
+    if (days <= 2) return "ACTIVE";
+    if (days <= 6) return "ASSET COOLING";
+    if (days <= 13) return "EXTRACTION WINDOW CLOSING";
+    return "ASSET IN THE COLD";
+  }
+  if (days <= 6) return "ACTIVE TARGET";
+  if (days <= 13) return "TARGET COOLING";
+  if (days <= 29) return "EXTRACTION WINDOW CLOSING";
+  if (days <= 44) return "COLD CASE WARNING";
+  return "COLD CASE VISUAL_ONLY";
+}
+
+function isDueTodayOrFallback(order: Order, field: "pickupDate" | "deliveryDate") {
+  const value = order[field];
+  if (!value) return true;
+  return value <= todayYmd();
+}
+
+/**
+ * Phase 2:
+ * - operator_xp_transactions table
+ * - persistent Butler Rating
+ * - immutable XP events
+ * - anti-gaming validation server-side
+ * - cold-case persistence
+ * - relationship warmth metadata for building targets
+ * - copy performance tracking
+ */
+function computeLevel4GateState(input: {
+  newOrders: Order[];
+  collected: Order[];
+  processing: Order[];
+  ready: Order[];
+  delivered: Order[];
+  actedOnTodayCents: number;
+  bossTargetDays: number | null;
+  bossTargetsAvailable: boolean;
+}): Level4Gate {
+  const collections = [...input.ready, ...input.delivered].filter((o) => !o.paid && orderTotalCents(o) > 0);
+  const vagueness = [...input.collected, ...input.processing, ...input.ready].filter((o) => !o.paid && orderTotalCents(o) === 0);
+  const dispatch = [
+    ...input.newOrders.filter((o) => isDueTodayOrFallback(o, "pickupDate")),
+    ...input.ready.filter((o) => isDueTodayOrFallback(o, "deliveryDate")),
+  ];
+
+  const collectionTouchRequired = collections.length > 0;
+  const collectionsBlocked = collections.length > 0 || (collectionTouchRequired && input.actedOnTodayCents <= 0);
+  const lanes: GateLane[] = [
+    {
+      key: "collections",
+      title: "LANE 1 · COLLECTIONS",
+      count: collections.length,
+      state: collectionsBlocked ? "BLOCKED" : collections.length === 0 ? "QUIET" : "CLEARED",
+      cta: "OPEN LIVE →",
+      path: "/live",
+      target: collections[0] ? `${customerLabel(collections[0])} — Order #${collections[0].id}` : undefined,
+      intel: collections[0]
+        ? `${decayLabel("collection", ageDays(collections[0]))} · ${formatUsdCents(orderTotalCents(collections[0]))} known exposure`
+        : "No known-dollar collection blocker.",
+    },
+    {
+      key: "vagueness",
+      title: "LANE 2 · VAGUENESS / INTAKE",
+      count: vagueness.length,
+      state: vagueness.length > 0 ? (ageDays(vagueness[0]) >= 3 ? "DEGRADED" : "BLOCKED") : "QUIET",
+      cta: "RESTORE CLARITY →",
+      path: vagueness[0] ? `/intake?orderId=${vagueness[0].id}` : "/intake",
+      target: vagueness[0] ? `${customerLabel(vagueness[0])} — Order #${vagueness[0].id}` : undefined,
+      intel: vagueness[0]
+        ? `${decayLabel("vagueness", ageDays(vagueness[0]))} · Order contents or price are unknown. Revenue exposure uncomputed.`
+        : "No vague intake blocker.",
+    },
+    {
+      key: "dispatch",
+      title: "LANE 3 · DISPATCH",
+      count: dispatch.length,
+      state: dispatch.length > 0 ? "BLOCKED" : "QUIET",
+      cta: "OPEN ROUTES →",
+      path: "/pickups",
+      target: dispatch[0] ? `${customerLabel(dispatch[0])} — Order #${dispatch[0].id}` : undefined,
+      intel: dispatch[0] ? "Physical movement still needs action today." : "No dispatch blocker.",
+    },
+  ];
+  const locked = lanes.some((lane) => lane.count > 0);
+  const coldCase = (input.bossTargetDays ?? 0) >= 45;
+  return {
+    state: locked
+      ? "LOCKED"
+      : !input.bossTargetsAvailable
+        ? "COMPLETE_TODAY"
+        : coldCase
+          ? "COLD_CASE_VISUAL_ONLY"
+          : "UNLOCKED",
+    lanes,
+    // Phase 2: persist operator XP/rating ledger with immutable xp_transactions table.
+    dailyXp: input.actedOnTodayCents > 0 ? 25 : 0,
+  };
+}
+
 /**
  * Live wrapper for <Level4Offensive />. Owns the tRPC queries/mutations,
  * renders the lane labels from real state, and runs the preview → execute flow.
@@ -112,6 +260,12 @@ const SYNTHETIC_LANE2_CANDIDATE = {
 
 export function Level4OffensiveHost() {
   const state = trpc.admin.getLevel4OffensiveState.useQuery();
+  const newOrders = trpc.admin.listByStatus.useQuery({ status: "new" });
+  const collectedOrders = trpc.admin.listByStatus.useQuery({ status: "collected" });
+  const processingOrders = trpc.admin.listByStatus.useQuery({ status: "processing" });
+  const readyOrders = trpc.admin.listByStatus.useQuery({ status: "ready" });
+  const deliveredOrders = trpc.admin.listByStatus.useQuery({ status: "delivered" });
+  const actedOnToday = trpc.admin.getActedOnToday.useQuery();
   const generateCopy = trpc.admin.generateOffensiveCopy.useMutation();
   const execAction = trpc.admin.executeOffensiveAction.useMutation();
   const utils = trpc.useUtils();
@@ -126,12 +280,18 @@ export function Level4OffensiveHost() {
   const l4Ref = useRef<Level4OffensiveHandle>(null);
   /** When true, lane 2 runs on a client-only candidate with a no-op deploy. */
   const [syntheticLane2Active, setSyntheticLane2Active] = useState(false);
+  const [completion, setCompletion] = useState<{
+    lane: 1 | 2 | 3;
+    deduped: boolean;
+    xp: number;
+    message: string;
+  } | null>(null);
 
   // Pick the top building-penetration target by unconverted desc.
   const topBuilding = useMemo(() => {
     const list = state.data?.buildingPenetration ?? [];
     if (list.length === 0) return null;
-    return [...list].sort((a, b) => b.unconverted - a.unconverted)[0];
+    return list[0];
   }, [state.data]);
 
   const referralCandidate = useMemo(() => {
@@ -141,6 +301,27 @@ export function Level4OffensiveHost() {
     if ("userId" in r) return r;
     return null;
   }, [state.data, syntheticLane2Active]);
+
+  const gate = useMemo(() => computeLevel4GateState({
+    newOrders: newOrders.data ?? [],
+    collected: collectedOrders.data ?? [],
+    processing: processingOrders.data ?? [],
+    ready: readyOrders.data ?? [],
+    delivered: deliveredOrders.data ?? [],
+    actedOnTodayCents: actedOnToday.data?.cents ?? 0,
+    bossTargetsAvailable: Boolean(topBuilding || referralCandidate || state.data?.marketHole.status === "stubbed_for_v1"),
+    bossTargetDays: topBuilding?.daysSinceLastTouch ?? null,
+  }), [
+    newOrders.data,
+    collectedOrders.data,
+    processingOrders.data,
+    readyOrders.data,
+    deliveredOrders.data,
+    actedOnToday.data?.cents,
+    topBuilding,
+    referralCandidate,
+    state.data?.marketHole.status,
+  ]);
 
   const openBuildingPenetration = useCallback(async (): Promise<boolean> => {
     if (!topBuilding) {
@@ -261,9 +442,9 @@ export function Level4OffensiveHost() {
         orderCount: referralCandidate.orderCount,
         ltvCents: referralCandidate.ltvCents,
         copy: {
-          headline: "Refer a neighbor — both get $15",
+          headline: "Ask for one referral",
           body: "Synthetic preview copy. Deploy is stubbed; nothing is sent.",
-          primaryCopy: "Hey {FIRST}, know someone who'd love our service? You'll both get $15.",
+          primaryCopy: "Sim, can you intro me to one resident who should know about bldg?",
           internalNote: "SIMULATION: no execAction, no admin_action_log row.",
           deliverable: "sms",
           brandId: "default",
@@ -350,15 +531,21 @@ export function Level4OffensiveHost() {
     setModalError(null);
     try {
       if (modal.kind === "building_penetration") {
-        await execAction.mutateAsync({
+        const result = await execAction.mutateAsync({
           block: "building_penetration",
           buildingSlug: modal.buildingSlug,
           buildingName: modal.buildingName,
           metadata: modal.metadata,
           generatedCopy: modal.copy,
         });
+        setCompletion({
+          lane,
+          deduped: result.ok ? result.deduped : false,
+          xp: result.ok && !result.deduped ? 500 : 0,
+          message: result.ok && result.deduped ? "ALREADY LOGGED TODAY" : "BUILDING PENETRATION LOGGED",
+        });
       } else if (modal.kind === "referral_request") {
-        await execAction.mutateAsync({
+        const result = await execAction.mutateAsync({
           block: "referral_request",
           userId: modal.userId,
           firstName: modal.firstName,
@@ -367,10 +554,21 @@ export function Level4OffensiveHost() {
           ltvCents: modal.ltvCents,
           generatedCopy: modal.copy,
         });
+        setCompletion({
+          lane,
+          deduped: result.ok ? result.deduped : false,
+          xp: result.ok && !result.deduped ? 300 : 0,
+          message: result.ok && result.deduped ? "ALREADY LOGGED TODAY" : "TARGET ENGAGED",
+        });
       } else {
-        await execAction.mutateAsync({ block: "market_hole_outreach" });
+        const result = await execAction.mutateAsync({ block: "market_hole_outreach" });
+        setCompletion({
+          lane,
+          deduped: result.ok ? result.deduped : false,
+          xp: result.ok && !result.deduped ? 100 : 0,
+          message: result.ok && result.deduped ? "ALREADY LOGGED TODAY" : "TERRITORY PRESSURE REDUCED",
+        });
       }
-      await utils.admin.getLevel4OffensiveState.invalidate();
       closeModal(true);
       // Belt-and-suspenders: force revive so the dopamine hit fires even if the
       // promise-driven path in tryCompleteLane loses its resolution across the
@@ -383,14 +581,34 @@ export function Level4OffensiveHost() {
   }, [modal, execAction, utils, closeModal, syntheticLane2Active, laneForModal]);
 
   // Honest lane labels derived from real state.
+  if (state.isLoading || newOrders.isLoading || collectedOrders.isLoading || processingOrders.isLoading || readyOrders.isLoading || deliveredOrders.isLoading) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-white/50" />
+      </div>
+    );
+  }
+
+  if (gate.state === "LOCKED") {
+    return <Level4GateLocked gate={gate} onNavigate={(path) => { window.location.href = path; }} />;
+  }
+
+  if (gate.state === "COMPLETE_TODAY") {
+    return <Level4Complete dailyXp={gate.dailyXp} />;
+  }
+
+  const targetAgeLabel = topBuilding?.daysSinceLastTouch != null
+    ? decayLabel("target", topBuilding.daysSinceLastTouch)
+    : "ACTIVE TARGET";
+
   const lane1Title = topBuilding
-    ? `LANE 1 | BLOCK A | ${topBuilding.buildingName}`
+    ? `BOSS ENCOUNTER · BUILDING GROWTH · ${topBuilding.buildingName}`
     : "LANE 1 | BLOCK A | Building penetration";
   const lane1Deliverable = deliverableForBuilding(topBuilding?.buildingSlug);
   const lane1BrandDefault: TenantId = allowedBrandsForBuilding(topBuilding?.buildingSlug)[0] ?? "default";
   const lane1AssetLabel = lane1Deliverable === "card" ? "Resident-safe card" : "SMS outreach";
   const lane1Body = topBuilding
-    ? `${topBuilding.convertedUsers}/${topBuilding.total} signed up (${topBuilding.penetrationPct}%) · ${topBuilding.convertedPaidUsers} paying · ${topBuilding.unconverted} unconverted. · ${lane1AssetLabel} · Brand: ${brandDisplayName(lane1BrandDefault)}`
+    ? `TARGET: ${topBuilding.buildingName}. OBJECTIVE: Secure next building intro or resident acquisition path. INTEL: ${topBuilding.convertedUsers}/${topBuilding.total} converted, ${topBuilding.convertedPaidUsers} paying, ${topBuilding.paidPenetrationPct}% paid penetration, ${topBuilding.unconverted} unconverted. ${targetAgeLabel}. WEAPON: ${lane1AssetLabel}. Brand: ${brandDisplayName(lane1BrandDefault)}`
     : state.isLoading
       ? "Loading building penetration…"
       : "No building candidate.";
@@ -446,6 +664,13 @@ export function Level4OffensiveHost() {
         // during copy generation we intentionally keep HOLD stable. The Dialog is
         // rendered when `modal != null`, which covers the three preview kinds.
         previewOpen={modal != null}
+        dailyXp={gate.dailyXp + (completion?.xp ?? 0)}
+        completion={completion}
+        onCompletionHoldDone={() => {
+          setCompletion(null);
+          void utils.admin.getLevel4OffensiveState.invalidate();
+          void actedOnToday.refetch();
+        }}
       />
 
       <Dialog
@@ -535,7 +760,7 @@ export function Level4OffensiveHost() {
               {modalBusy === "deploying" ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                  Deploying…
+                  EXECUTING
                 </>
               ) : (
                 "Deploy"
@@ -638,6 +863,76 @@ function BrandToggle({
         );
       })}
     </div>
+  );
+}
+
+function Level4GateLocked({ gate, onNavigate }: { gate: Level4Gate; onNavigate: (path: string) => void }) {
+  return (
+    <section className="min-h-screen bg-[#0e1111] text-[#e5e7eb] px-4 py-8 font-mono">
+      <div className="mx-auto max-w-5xl border border-red-500/40 bg-black/35">
+        <div className="border-b border-red-500/30 p-5">
+          <div className="text-[11px] uppercase tracking-[0.2em] text-red-300">LEVEL 4 LOCKED</div>
+          <h1 className="mt-2 text-2xl font-semibold tracking-[0.12em]">Clear operational lanes to unlock boss encounter.</h1>
+        </div>
+        <div className="grid gap-px bg-red-500/20 md:grid-cols-3">
+          {gate.lanes.map((lane) => (
+            <article key={lane.key} className="bg-[#101414] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-xs font-bold uppercase tracking-[0.16em]">{lane.title}</h2>
+                <span className={lane.state === "QUIET" ? "text-blue-300" : lane.state === "DEGRADED" ? "text-amber-300" : "text-red-300"}>
+                  {lane.state}
+                </span>
+              </div>
+              <div className="mt-6 text-4xl font-semibold">{lane.count}</div>
+              <div className="mt-1 text-xs uppercase tracking-[0.12em] text-white/45">remaining</div>
+              {lane.key === "vagueness" && lane.target ? (
+                <div className="mt-5 border border-amber-400/40 bg-amber-950/20 p-3 text-xs leading-relaxed">
+                  <div className="text-amber-200">MISSION CRITICAL · VAGUENESS DETECTED</div>
+                  <div className="mt-3 text-white/70">TARGET:</div>
+                  <div>{lane.target}</div>
+                  <div className="mt-3 text-white/70">STATUS:</div>
+                  <div>NOT YET CLEAR</div>
+                  <div className="mt-3 text-white/70">INTEL:</div>
+                  <div>{lane.intel}</div>
+                  <div className="mt-3 text-white/70">MISSION BLOCKER:</div>
+                  <div>Intake required before collection.</div>
+                </div>
+              ) : (
+                <div className="mt-5 min-h-20 text-xs leading-relaxed text-white/65">
+                  {lane.target ? <div className="text-white">{lane.target}</div> : null}
+                  <div className="mt-2">{lane.intel}</div>
+                </div>
+              )}
+              <button
+                type="button"
+                className="mt-5 w-full border border-white/20 bg-white/5 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white hover:text-black"
+                onClick={() => onNavigate(lane.path)}
+              >
+                {lane.key === "vagueness" && lane.target ? "INTAKE ORDER → RESTORE CLARITY" : lane.cta}
+              </button>
+            </article>
+          ))}
+        </div>
+        <div className="border-t border-red-500/30 p-4 text-center text-xs uppercase tracking-[0.16em] text-white/45">
+          Boss encounter appears when the territory is stabilized.
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Level4Complete({ dailyXp }: { dailyXp: number }) {
+  return (
+    <section className="min-h-screen bg-[#0e1111] text-[#e5e7eb] px-4 py-12 font-mono">
+      <div className="mx-auto max-w-3xl border border-emerald-500/45 bg-black/35 p-8 text-center">
+        <div className="text-[11px] uppercase tracking-[0.22em] text-emerald-300">LEVEL 4 COMPLETE FOR TODAY</div>
+        <h1 className="mt-4 text-3xl font-semibold tracking-[0.12em]">TERRITORY PRESSURE REDUCED</h1>
+        <p className="mt-4 text-sm text-white/60">No boss target is currently available from real Level 4 data.</p>
+        <div className="mt-8 inline-flex border border-emerald-400/40 px-4 py-2 text-sm text-emerald-200">
+          TODAY: +{dailyXp.toLocaleString("en-US")} XP
+        </div>
+      </div>
+    </section>
   );
 }
 

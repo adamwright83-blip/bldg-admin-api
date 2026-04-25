@@ -181,6 +181,14 @@ export type Level4OffensiveProps = {
   onInjectSyntheticLane2?: () => void;
   onResetSyntheticLane2?: () => void;
   syntheticLane2Active?: boolean;
+  dailyXp?: number;
+  completion?: {
+    lane: LaneId;
+    deduped: boolean;
+    xp: number;
+    message: string;
+  } | null;
+  onCompletionHoldDone?: () => void;
   /**
    * True once the preview/modal is visibly on screen. Gates the HOLD→UNSTABLE
    * timer: while a copy generation is in flight and the modal is not yet shown,
@@ -219,6 +227,9 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
     onInjectSyntheticLane2,
     onResetSyntheticLane2,
     syntheticLane2Active = false,
+    dailyXp = 0,
+    completion = null,
+    onCompletionHoldDone,
     previewOpen = false,
   }: Level4OffensiveProps,
   handleRef: ForwardedRef<Level4OffensiveHandle>
@@ -362,6 +373,14 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
   useEffect(() => {
     if (gamePhase === "descent") setCtaWaitLane(null);
   }, [gamePhase]);
+
+  useEffect(() => {
+    if (!completion) return;
+    const id = window.setTimeout(() => {
+      onCompletionHoldDone?.();
+    }, 3_200);
+    return () => window.clearTimeout(id);
+  }, [completion, onCompletionHoldDone]);
 
   /**
    * Behavioral phase derivation — reads wall-clock idle, not a timer schedule.
@@ -782,6 +801,9 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
           <div className="l4-topTitle">Three buildings away from a different life.</div>
           <div className="l4-topSubtitle">Every action today moves you closer or keeps where you are.</div>
         </div>
+        <div className="l4-dailyXp" title="Phase 2 persists XP/rating in an immutable ledger.">
+          TODAY: +{dailyXp.toLocaleString("en-US")} XP
+        </div>
       </header>
 
       {allLanesCleared(completedLanes) && (
@@ -1076,7 +1098,7 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
               {completedLanes[1]
                 ? "DONE ✓"
                 : ctaWaitLane === 1
-                  ? ctaHoldLabel(1)
+                  ? "EXECUTING"
                   : ctaErrorLane === 1
                     ? "RETRY →"
                     : gamePhase === "impact" && activeLane === 1
@@ -1120,7 +1142,7 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
               {completedLanes[2]
                 ? "DONE ✓"
                 : ctaWaitLane === 2
-                  ? ctaHoldLabel(2)
+                  ? "EXECUTING"
                   : ctaErrorLane === 2
                     ? "RETRY →"
                     : gamePhase === "impact" && activeLane === 2
@@ -1157,7 +1179,7 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
               {completedLanes[3]
                 ? "DONE ✓"
                 : ctaWaitLane === 3
-                  ? ctaHoldLabel(3)
+                  ? "EXECUTING"
                   : ctaErrorLane === 3
                     ? "RETRY →"
                     : gamePhase === "impact" && activeLane === 3
@@ -1180,8 +1202,19 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
       {revivePhase === "flash" && <div className="l4-reviveFlashLayer" aria-hidden />}
       {revivePhase === "stamp" && (
         <div className="l4-reviveStampLayer" role="status" aria-live="polite">
-          <div className="l4-reviveStampInner">[ THREAT NEUTRALIZED ]</div>
-          <div className="l4-reviveStampSub">target secured · future reclaimed</div>
+          <div className="l4-reviveStampInner">[ SECURED ]</div>
+          <div className="l4-reviveStampSub">{completion?.message ?? "TARGET ENGAGED"}</div>
+        </div>
+      )}
+
+      {completion && (
+        <div className="l4-completionCeremony" role="status" aria-live="polite">
+          <div className="l4-completionCheck">✓</div>
+          <div className="l4-completionTitle">{completion.message}</div>
+          <div className="l4-completionXp">
+            {completion.deduped ? "ALREADY LOGGED TODAY · NO XP" : `+${completion.xp} XP · LEVEL 4 ACTION`}
+          </div>
+          <div className="l4-completionSub">TODAY: +{dailyXp.toLocaleString("en-US")} XP · LEVEL 4 ACTION LOGGED</div>
         </div>
       )}
 
