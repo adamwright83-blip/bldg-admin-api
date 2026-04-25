@@ -142,7 +142,7 @@ export function Level4BoardScene({
 
   return (
     <section className={cn("level4-scene", gateState === "COMPLETE_TODAY" && "is-complete")}>
-      <img className="level4-scene__background" src="/assets/level4/emptygameboard.png" alt="" />
+      <img className="level4-scene__background" src="/assets/level4/level4-boss-scene.png" alt="" />
 
       <div className="level4-scene__hud-layer">
         <div className="level4-scene__mission-card">
