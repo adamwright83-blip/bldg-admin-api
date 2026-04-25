@@ -1471,6 +1471,364 @@
   white-space: nowrap;
 }
 
+.level4-scene {
+  position: relative;
+  width: min(100%, 1520px);
+  aspect-ratio: 16 / 9;
+  max-height: calc(100vh - 160px);
+  min-height: 360px;
+  margin: 10px auto 18px;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(244, 177, 76, .28);
+  background: #090807;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .04);
+}
+
+.level4-scene::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, .38) 0 30%, rgba(0, 0, 0, .05) 48%, rgba(255, 224, 146, .13) 100%),
+    linear-gradient(180deg, rgba(255, 245, 194, .18), rgba(255, 255, 255, 0) 42%);
+  mix-blend-mode: screen;
+  opacity: .68;
+  transition: opacity 180ms ease;
+}
+
+.level4-scene:has(.level4-scene__promise-zone:hover)::after,
+.level4-scene:has(.level4-scene__promise-zone:focus-visible)::after {
+  opacity: .95;
+}
+
+.level4-scene__background,
+.level4-scene__actors-layer,
+.level4-scene__task-layer,
+.level4-scene__fx-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.level4-scene__background {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+  user-select: none;
+}
+
+.level4-scene__actors-layer {
+  z-index: 3;
+  pointer-events: none;
+}
+
+.level4-scene__hero,
+.level4-scene__villain,
+.level4-scene__family {
+  position: absolute;
+  left: calc(var(--x) * 1%);
+  top: calc(var(--y) * 1%);
+  transform: translate(-50%, -50%);
+  transform-origin: 50% 90%;
+  user-select: none;
+  filter: drop-shadow(0 18px 18px rgba(0, 0, 0, .62));
+}
+
+.level4-scene__hero {
+  width: 12.5%;
+  min-width: 82px;
+  z-index: 5;
+  transition: left 420ms cubic-bezier(.2, .8, .2, 1), top 420ms cubic-bezier(.2, .8, .2, 1);
+}
+
+.level4-scene__hero--front {
+  animation: level4HeroSettle 400ms ease-out both;
+}
+
+.level4-scene__hero--back,
+.level4-scene__hero--moving {
+  animation: level4HeroStep 1000ms cubic-bezier(.2, .8, .2, 1) both;
+}
+
+.level4-scene__villain {
+  width: 20%;
+  min-width: 132px;
+  z-index: 4;
+}
+
+.level4-scene__family {
+  width: 18%;
+  min-width: 120px;
+  z-index: 4;
+  transition: filter 180ms ease, transform 180ms ease;
+}
+
+.level4-scene:has(.level4-scene__promise-zone:hover) .level4-scene__family,
+.level4-scene:has(.level4-scene__promise-zone:focus-visible) .level4-scene__family {
+  filter: drop-shadow(0 0 28px rgba(255, 235, 170, .75)) saturate(1.2) contrast(1.08);
+  transform: translate(-50%, -50%) scale(1.035);
+}
+
+.level4-scene__task-layer {
+  z-index: 6;
+  pointer-events: none;
+}
+
+.level4-scene__task-token {
+  position: absolute;
+  left: calc(var(--x) * 1%);
+  top: calc(var(--y) * 1%);
+  width: clamp(190px, 19vw, 270px);
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(255, 180, 68, .7);
+  background:
+    linear-gradient(180deg, rgba(35, 31, 25, .96), rgba(13, 10, 9, .98)),
+    radial-gradient(circle at 50% 0%, rgba(255, 177, 64, .22), transparent 60%);
+  color: #f8ead2;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  box-shadow: 0 0 24px rgba(255, 143, 32, .22), inset 0 0 0 1px rgba(255, 255, 255, .05);
+  pointer-events: auto;
+  animation: level4TaskMaterialize 500ms cubic-bezier(.2, .8, .2, 1) both;
+}
+
+.level4-scene__task-token--boss {
+  border-color: rgba(0, 255, 140, .72);
+  box-shadow: 0 0 26px rgba(0, 255, 140, .24), inset 0 0 0 1px rgba(255, 255, 255, .05);
+}
+
+.level4-scene__task-token--defeating {
+  animation:
+    level4TaskShake 320ms ease-in-out,
+    level4TaskCollapse 240ms ease-in 1.02s forwards;
+}
+
+.level4-scene__task-token--defeating::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  background:
+    linear-gradient(35deg, transparent 44%, rgba(255, 76, 34, .9) 45% 46%, transparent 47%),
+    linear-gradient(115deg, transparent 54%, rgba(255, 177, 64, .75) 55% 56%, transparent 57%);
+  animation: level4TaskCrack 180ms ease-out 320ms both;
+  pointer-events: none;
+}
+
+.level4-scene__task-kicker {
+  color: #ffb24d;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .18em;
+}
+
+.level4-scene__task-title {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.level4-scene__task-target {
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(248, 234, 210, .92);
+}
+
+.level4-scene__task-mission {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(248, 234, 210, .68);
+}
+
+.level4-scene__task-cta {
+  width: 100%;
+  margin-top: 10px;
+  padding: 7px 8px;
+  border: 1px solid rgba(255, 180, 68, .7);
+  background: rgba(255, 180, 68, .1);
+  color: #fff7df;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  cursor: pointer;
+}
+
+.level4-scene__task-cta:disabled {
+  cursor: wait;
+  opacity: .72;
+}
+
+.level4-scene__fx-layer {
+  z-index: 7;
+  pointer-events: none;
+}
+
+.level4-scene__particle {
+  position: absolute;
+  left: calc(30% - 4px);
+  top: calc(50% - 4px);
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ffb24d;
+  box-shadow: 0 0 16px rgba(0, 255, 140, .8);
+  transform: rotate(var(--angle)) translateX(0);
+  animation: level4ParticleBurst 700ms ease-out 500ms both;
+}
+
+.level4-scene__path-glow {
+  position: absolute;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 140, .95), transparent);
+  box-shadow: 0 0 28px rgba(0, 255, 140, .8);
+  opacity: 0;
+  transform-origin: left center;
+  animation: level4PathGlow 900ms cubic-bezier(.2, .8, .2, 1) 700ms both;
+}
+
+.level4-scene__path-glow--preboss {
+  left: 22%;
+  top: 59%;
+  width: 29%;
+  --path-rotate: -34deg;
+  transform: rotate(-34deg) scaleX(0);
+}
+
+.level4-scene__path-glow--postboss {
+  left: 51%;
+  top: 39%;
+  width: 28%;
+  --path-rotate: 34deg;
+  transform: rotate(34deg) scaleX(0);
+}
+
+.level4-scene__promise-zone {
+  position: absolute;
+  z-index: 8;
+  left: 68%;
+  top: 36%;
+  width: 28%;
+  height: 50%;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.level4-scene__promise-zone span {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  transform: translateX(-50%) translateY(8px);
+  width: max-content;
+  max-width: 260px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 231, 170, .48);
+  background: rgba(22, 17, 10, .74);
+  color: #fff1c6;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: .08em;
+  opacity: 0;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.level4-scene__promise-zone:hover span,
+.level4-scene__promise-zone:focus-visible span {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.level4-scene__complete-today {
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  gap: 8px;
+  text-align: center;
+  color: #b8ffcb;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  background: rgba(0, 0, 0, .58);
+  border: 1px solid rgba(0, 255, 140, .45);
+  padding: 16px 18px;
+}
+
+.level4-scene__complete-today strong {
+  color: #e8efe9;
+  font-size: 12px;
+}
+
+@keyframes level4TaskMaterialize {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 12px)) scale(.8); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes level4TaskShake {
+  0% { transform: translate(-50%, -50%) translateX(0); }
+  24% { transform: translate(-50%, -50%) translateX(-3px); }
+  52% { transform: translate(-50%, -50%) translateX(3px); }
+  76% { transform: translate(-50%, -50%) translateX(-2px); }
+  100% { transform: translate(-50%, -50%) translateX(0); }
+}
+
+@keyframes level4TaskCrack {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes level4TaskCollapse {
+  to { opacity: 0; transform: translate(-50%, -50%) scale(.72); filter: blur(6px); }
+}
+
+@keyframes level4ParticleBurst {
+  from { opacity: 1; transform: rotate(var(--angle)) translateX(0) scale(1); }
+  to { opacity: 0; transform: rotate(var(--angle)) translateX(var(--travel)) scale(.2); }
+}
+
+@keyframes level4PathGlow {
+  0% { opacity: 0; transform: rotate(var(--path-rotate, 0deg)) scaleX(0); }
+  18% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--path-rotate, 0deg)) scaleX(1); }
+}
+
+@keyframes level4HeroStep {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.94); }
+  18% { opacity: 1; }
+  82% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.02); }
+}
+
+@keyframes level4HeroSettle {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.96); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .level4-scene__task-token,
+  .level4-scene__task-token--defeating,
+  .level4-scene__task-token--defeating::after,
+  .level4-scene__particle,
+  .level4-scene__path-glow,
+  .level4-scene__hero--front,
+  .level4-scene__hero--back,
+  .level4-scene__hero--moving {
+    animation: none !important;
+    transition: none !important;
+  }
+  .level4-scene__particle,
+  .level4-scene__path-glow {
+    display: none;
+  }
+}
+
 .l4-completionCeremony {
   position: fixed;
   inset: 0;

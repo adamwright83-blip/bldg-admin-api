@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { cn } from "@/lib/utils";
+import { Level4BoardScene, type Level4ActiveChallenge } from "./Level4BoardScene";
 import "./Level4Offensive.css";
 
 import boardPng from "@/assets/l4/board.png";
@@ -187,8 +188,11 @@ export type Level4OffensiveProps = {
     deduped: boolean;
     xp: number;
     message: string;
+    challengeId?: string;
   } | null;
   onCompletionHoldDone?: () => void;
+  gateState?: "LOCKED" | "UNLOCKED" | "COMPLETE_TODAY" | "COLD_CASE_VISUAL_ONLY";
+  activeChallenge?: Level4ActiveChallenge | null;
   /**
    * True once the preview/modal is visibly on screen. Gates the HOLD→UNSTABLE
    * timer: while a copy generation is in flight and the modal is not yet shown,
@@ -230,6 +234,8 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
     dailyXp = 0,
     completion = null,
     onCompletionHoldDone,
+    gateState = "UNLOCKED",
+    activeChallenge = null,
     previewOpen = false,
   }: Level4OffensiveProps,
   handleRef: ForwardedRef<Level4OffensiveHandle>
@@ -811,6 +817,21 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
           ALL LANES CLEARED. EMPIRE EXPANDING.
         </div>
       )}
+
+      <Level4BoardScene
+        gateState={gateState}
+        activeChallenge={activeChallenge}
+        completionState={{
+          isCompleting: completion != null,
+          completedChallengeId: completion?.challengeId,
+          completionLabel: completion?.message,
+        }}
+        onPrimaryAction={() => {
+          const lane = activeLane;
+          if (!lane) return;
+          void tryCompleteLane(lane);
+        }}
+      />
 
       <div className="l4-grid">
         <aside className="l4-panel l4-left">

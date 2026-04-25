@@ -13,6 +13,7 @@ import {
 import { BUILDINGS } from "@shared/buildings";
 import { TENANT_CONFIG, type TenantId } from "@shared/tenantConfig";
 import { Level4Offensive, type Level4OffensiveHandle } from "./Level4Offensive";
+import { Level4BoardScene, type Level4ActiveChallenge } from "./Level4BoardScene";
 import type { Order } from "@shared/types";
 
 type Deliverable = "sms" | "card";
@@ -36,6 +37,7 @@ type GateLane = {
   state: GateLaneState;
   cta: string;
   path: string;
+  orderId?: number;
   target?: string;
   intel?: string;
 };
@@ -193,6 +195,7 @@ function computeLevel4GateState(input: {
       state: collectionsBlocked ? "BLOCKED" : collections.length === 0 ? "QUIET" : "CLEARED",
       cta: "OPEN LIVE →",
       path: "/live",
+      orderId: collections[0]?.id,
       target: collections[0] ? `${customerLabel(collections[0])} — Order #${collections[0].id}` : undefined,
       intel: collections[0]
         ? `${decayLabel("collection", ageDays(collections[0]))} · ${formatUsdCents(orderTotalCents(collections[0]))} known exposure`
@@ -205,6 +208,7 @@ function computeLevel4GateState(input: {
       state: vagueness.length > 0 ? (ageDays(vagueness[0]) >= 3 ? "DEGRADED" : "BLOCKED") : "QUIET",
       cta: "RESTORE CLARITY →",
       path: vagueness[0] ? `/intake?orderId=${vagueness[0].id}` : "/intake",
+      orderId: vagueness[0]?.id,
       target: vagueness[0] ? `${customerLabel(vagueness[0])} — Order #${vagueness[0].id}` : undefined,
       intel: vagueness[0]
         ? `${decayLabel("vagueness", ageDays(vagueness[0]))} · Order contents or price are unknown. Revenue exposure uncomputed.`
@@ -217,6 +221,7 @@ function computeLevel4GateState(input: {
       state: dispatch.length > 0 ? "BLOCKED" : "QUIET",
       cta: "OPEN ROUTES →",
       path: "/pickups",
+      orderId: dispatch[0]?.id,
       target: dispatch[0] ? `${customerLabel(dispatch[0])} — Order #${dispatch[0].id}` : undefined,
       intel: dispatch[0] ? "Physical movement still needs action today." : "No dispatch blocker.",
     },
@@ -234,6 +239,79 @@ function computeLevel4GateState(input: {
     lanes,
     // Phase 2: persist operator XP/rating ledger with immutable xp_transactions table.
     dailyXp: input.actedOnTodayCents > 0 ? 25 : 0,
+  };
+}
+
+function challengeFromGate(gate: Level4Gate): Level4ActiveChallenge | null {
+  const lane = gate.lanes.find((item) => item.count > 0);
+  if (!lane) return null;
+  if (lane.key === "collections") {
+    return {
+      id: `collections:${lane.orderId ?? "live"}`,
+      kind: "collections",
+      title: "COLLECTIONS DETECTED",
+      targetLabel: lane.target ?? "Known-dollar order",
+      missionLabel: lane.intel ?? "Collect or recover known revenue.",
+      ctaLabel: "OPEN LIVE →",
+      severity: lane.state === "DEGRADED" ? "degraded" : "active",
+    };
+  }
+  if (lane.key === "vagueness") {
+    return {
+      id: `vagueness:${lane.orderId ?? "intake"}`,
+      kind: "vagueness",
+      title: "VAGUENESS DETECTED",
+      targetLabel: lane.target ?? "Order not yet clear",
+      missionLabel: "Revenue exposure uncomputed.",
+      ctaLabel: "RESTORE CLARITY →",
+      severity: lane.state === "DEGRADED" ? "degraded" : "active",
+    };
+  }
+  return {
+    id: `dispatch:${lane.orderId ?? "routes"}`,
+    kind: "dispatch",
+    title: "DISPATCH BLOCKER",
+    targetLabel: lane.target ?? "Route action required",
+    missionLabel: lane.intel ?? "Physical movement still needs action today.",
+    ctaLabel: "OPEN ROUTES →",
+    severity: "active",
+  };
+}
+
+function challengeFromBoss(params: {
+  topBuilding: { buildingSlug: string; buildingName: string; unconverted: number; paidPenetrationPct: number } | null;
+  referralCandidate: { userId: number; firstName: string; lastInitial: string; orderCount: number } | null;
+}): Level4ActiveChallenge | null {
+  if (params.topBuilding) {
+    return {
+      id: `building_penetration:${params.topBuilding.buildingSlug}`,
+      kind: "building_penetration",
+      title: "BUILDING GROWTH",
+      targetLabel: params.topBuilding.buildingName,
+      missionLabel: `${params.topBuilding.unconverted} unconverted / ${params.topBuilding.paidPenetrationPct}% paid penetration`,
+      ctaLabel: "DRAW WEAPON →",
+      severity: "boss",
+    };
+  }
+  if (params.referralCandidate) {
+    return {
+      id: `referral_request:${params.referralCandidate.userId}`,
+      kind: "referral_request",
+      title: "REFERRAL REQUEST",
+      targetLabel: `${params.referralCandidate.firstName} ${params.referralCandidate.lastInitial}.`,
+      missionLabel: `${params.referralCandidate.orderCount} paid orders. Ask for one intro.`,
+      ctaLabel: "DRAW WEAPON →",
+      severity: "boss",
+    };
+  }
+  return {
+    id: "market_hole_outreach:stubbed_for_v1",
+    kind: "market_hole_outreach",
+    title: "MARKET HOLE",
+    targetLabel: "Stubbed for v1",
+    missionLabel: "Acknowledge the market-hole lane only.",
+    ctaLabel: "ACKNOWLEDGE →",
+    severity: "boss",
   };
 }
 
@@ -285,6 +363,7 @@ export function Level4OffensiveHost() {
     deduped: boolean;
     xp: number;
     message: string;
+    challengeId?: string;
   } | null>(null);
 
   // Pick the top building-penetration target by unconverted desc.
@@ -543,6 +622,7 @@ export function Level4OffensiveHost() {
           deduped: result.ok ? result.deduped : false,
           xp: result.ok && !result.deduped ? 500 : 0,
           message: result.ok && result.deduped ? "ALREADY LOGGED TODAY" : "BUILDING PENETRATION LOGGED",
+          challengeId: `building_penetration:${modal.buildingSlug}:${result.ok ? result.logId ?? "deduped" : "error"}`,
         });
       } else if (modal.kind === "referral_request") {
         const result = await execAction.mutateAsync({
@@ -559,6 +639,7 @@ export function Level4OffensiveHost() {
           deduped: result.ok ? result.deduped : false,
           xp: result.ok && !result.deduped ? 300 : 0,
           message: result.ok && result.deduped ? "ALREADY LOGGED TODAY" : "TARGET ENGAGED",
+          challengeId: `referral_request:${modal.userId}:${result.ok ? result.logId ?? "deduped" : "error"}`,
         });
       } else {
         const result = await execAction.mutateAsync({ block: "market_hole_outreach" });
@@ -567,6 +648,7 @@ export function Level4OffensiveHost() {
           deduped: result.ok ? result.deduped : false,
           xp: result.ok && !result.deduped ? 100 : 0,
           message: result.ok && result.deduped ? "ALREADY LOGGED TODAY" : "TERRITORY PRESSURE REDUCED",
+          challengeId: `market_hole_outreach:${result.ok ? result.logId ?? "deduped" : "error"}`,
         });
       }
       closeModal(true);
@@ -590,7 +672,14 @@ export function Level4OffensiveHost() {
   }
 
   if (gate.state === "LOCKED") {
-    return <Level4GateLocked gate={gate} onNavigate={(path) => { window.location.href = path; }} />;
+    const lockedChallenge = challengeFromGate(gate);
+    return (
+      <Level4GateLocked
+        gate={gate}
+        activeChallenge={lockedChallenge}
+        onNavigate={(path) => { window.location.href = path; }}
+      />
+    );
   }
 
   if (gate.state === "COMPLETE_TODAY") {
@@ -639,6 +728,7 @@ export function Level4OffensiveHost() {
 
   const lane3Title = "LANE 3 | BLOCK C | Market hole";
   const lane3Body = "Scoring engine not built yet.";
+  const activeChallenge = challengeFromBoss({ topBuilding, referralCandidate });
 
   return (
     <>
@@ -666,6 +756,8 @@ export function Level4OffensiveHost() {
         previewOpen={modal != null}
         dailyXp={gate.dailyXp + (completion?.xp ?? 0)}
         completion={completion}
+        gateState={gate.state}
+        activeChallenge={activeChallenge}
         onCompletionHoldDone={() => {
           setCompletion(null);
           void utils.admin.getLevel4OffensiveState.invalidate();
@@ -866,13 +958,31 @@ function BrandToggle({
   );
 }
 
-function Level4GateLocked({ gate, onNavigate }: { gate: Level4Gate; onNavigate: (path: string) => void }) {
+function Level4GateLocked({
+  gate,
+  activeChallenge,
+  onNavigate,
+}: {
+  gate: Level4Gate;
+  activeChallenge: Level4ActiveChallenge | null;
+  onNavigate: (path: string) => void;
+}) {
+  const primaryLane = gate.lanes.find((lane) => lane.count > 0);
   return (
     <section className="min-h-screen bg-[#0e1111] text-[#e5e7eb] px-4 py-8 font-mono">
       <div className="mx-auto max-w-5xl border border-red-500/40 bg-black/35">
         <div className="border-b border-red-500/30 p-5">
           <div className="text-[11px] uppercase tracking-[0.2em] text-red-300">LEVEL 4 LOCKED</div>
           <h1 className="mt-2 text-2xl font-semibold tracking-[0.12em]">Clear operational lanes to unlock boss encounter.</h1>
+        </div>
+        <div className="border-b border-red-500/30 p-4">
+          <Level4BoardScene
+            gateState="LOCKED"
+            activeChallenge={activeChallenge}
+            onPrimaryAction={() => {
+              if (primaryLane) onNavigate(primaryLane.path);
+            }}
+          />
         </div>
         <div className="grid gap-px bg-red-500/20 md:grid-cols-3">
           {gate.lanes.map((lane) => (
@@ -927,6 +1037,9 @@ function Level4Complete({ dailyXp }: { dailyXp: number }) {
       <div className="mx-auto max-w-3xl border border-emerald-500/45 bg-black/35 p-8 text-center">
         <div className="text-[11px] uppercase tracking-[0.22em] text-emerald-300">LEVEL 4 COMPLETE FOR TODAY</div>
         <h1 className="mt-4 text-3xl font-semibold tracking-[0.12em]">TERRITORY PRESSURE REDUCED</h1>
+        <div className="mt-6">
+          <Level4BoardScene gateState="COMPLETE_TODAY" activeChallenge={null} />
+        </div>
         <p className="mt-4 text-sm text-white/60">No boss target is currently available from real Level 4 data.</p>
         <div className="mt-8 inline-flex border border-emerald-400/40 px-4 py-2 text-sm text-emerald-200">
           TODAY: +{dailyXp.toLocaleString("en-US")} XP
