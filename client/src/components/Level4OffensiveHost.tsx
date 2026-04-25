@@ -841,13 +841,13 @@ function Level4GateLocked({
 }) {
   const primaryLane = gate.lanes.find((lane) => lane.count > 0);
   return (
-    <section className="min-h-screen bg-[#0e1111] text-[#e5e7eb] px-4 py-8 font-mono">
-      <div className="mx-auto max-w-5xl border border-red-500/40 bg-black/35">
-        <div className="border-b border-red-500/30 p-5">
-          <div className="text-[11px] uppercase tracking-[0.2em] text-red-300">LEVEL 4 LOCKED</div>
-          <h1 className="mt-2 text-2xl font-semibold tracking-[0.12em]">Clear operational lanes to unlock boss encounter.</h1>
+    <section className="l4-encounterPage">
+      <div className="l4-encounterShell">
+        <div className="l4-encounterStatus">
+          <span>LEVEL 4 LOCKED</span>
+          <strong>Clear operational lanes to unlock boss encounter.</strong>
         </div>
-        <div className="border-b border-red-500/30 p-4">
+        <div className="l4-encounterSceneFrame">
           <Level4BoardScene
             gateState="LOCKED"
             activeChallenge={activeChallenge}
@@ -882,7 +882,7 @@ function Level4GateLocked({
             </article>
           ))}
         </div>
-        <div className="border-t border-red-500/30 p-4 text-center text-xs uppercase tracking-[0.16em] text-white/45">
+        <div className="l4-encounterFooter">
           Boss encounter appears when the territory is stabilized.
         </div>
       </div>

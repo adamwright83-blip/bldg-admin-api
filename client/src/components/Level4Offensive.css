@@ -1475,11 +1475,11 @@
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
-  max-height: calc(100vh - 180px);
-  min-height: 520px;
-  margin: 8px auto 18px;
+  min-height: 0;
+  margin: 0 auto;
   overflow: hidden;
   isolation: isolate;
+  container-type: inline-size;
   border: 1px solid rgba(91, 212, 255, .42);
   background: #090807;
   box-shadow:
@@ -1525,14 +1525,14 @@
 .level4-scene__mission-card,
 .level4-scene__telemetry {
   position: absolute;
-  top: 2.4%;
-  width: clamp(240px, 23vw, 390px);
+  top: 2%;
+  width: clamp(220px, 23cqw, 390px);
   border: 1px solid rgba(91, 212, 255, .62);
   background:
     linear-gradient(180deg, rgba(8, 18, 24, .82), rgba(7, 12, 16, .72)),
     repeating-linear-gradient(0deg, rgba(91, 212, 255, .055) 0 1px, transparent 1px 5px);
   color: #dfffee;
-  padding: 13px 15px 12px;
+  padding: clamp(10px, 1.05cqw, 17px) clamp(11px, 1.15cqw, 18px);
   box-shadow: 0 0 24px rgba(91, 212, 255, .16), inset 0 0 0 1px rgba(255, 255, 255, .04);
   backdrop-filter: blur(12px);
   clip-path: polygon(0 8px, 8px 0, calc(100% - 16px) 0, 100% 14px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
@@ -1551,7 +1551,7 @@
   border-bottom: 1px solid rgba(91, 212, 255, .35);
   padding-bottom: 7px;
   color: #bfffe5;
-  font-size: clamp(10px, .82vw, 14px);
+  font-size: clamp(9px, .86cqw, 14px);
   font-weight: 900;
   letter-spacing: .16em;
 }
@@ -1563,15 +1563,15 @@
 
 .level4-scene__mission-card dl,
 .level4-scene__telemetry dl {
-  margin: 10px 0 0;
+  margin: clamp(7px, .8cqw, 11px) 0 0;
   display: grid;
-  gap: 7px;
+  gap: clamp(4px, .55cqw, 8px);
 }
 
 .level4-scene__mission-card dl div,
 .level4-scene__telemetry dl div {
   display: grid;
-  grid-template-columns: 88px 1fr;
+  grid-template-columns: clamp(68px, 6.9cqw, 98px) 1fr;
   gap: 8px;
   align-items: baseline;
   border-bottom: 1px solid rgba(91, 212, 255, .17);
@@ -1579,12 +1579,12 @@
 }
 
 .level4-scene__telemetry dl div {
-  grid-template-columns: 110px 1fr;
+  grid-template-columns: clamp(76px, 8cqw, 116px) 1fr;
 }
 
 .level4-scene__mission-card dt,
 .level4-scene__telemetry dt {
-  font-size: clamp(9px, .68vw, 11px);
+  font-size: clamp(8px, .68cqw, 11px);
   letter-spacing: .14em;
   color: #7f9fb2;
 }
@@ -1592,7 +1592,7 @@
 .level4-scene__mission-card dd,
 .level4-scene__telemetry dd {
   margin: 0;
-  font-size: clamp(10px, .85vw, 14px);
+  font-size: clamp(9px, .86cqw, 14px);
   font-weight: 800;
   color: #f6fff8;
 }
@@ -1609,9 +1609,9 @@
 
 .level4-scene__hud-status,
 .level4-scene__telemetry-footer {
-  margin-top: 10px;
+  margin-top: clamp(7px, .72cqw, 11px);
   color: #ffcf56;
-  font-size: clamp(9px, .7vw, 12px);
+  font-size: clamp(8px, .68cqw, 12px);
   font-weight: 900;
   letter-spacing: .16em;
 }
@@ -1624,17 +1624,17 @@
 .level4-scene__boss-title {
   position: absolute;
   left: 50%;
-  top: 1.6%;
+  top: 1.2%;
   transform: translateX(-50%);
   text-align: center;
-  width: min(42vw, 720px);
+  width: min(44cqw, 720px);
   text-shadow: 0 2px 0 rgba(0, 0, 0, .75), 0 0 26px rgba(255, 184, 0, .3);
 }
 
 .level4-scene__boss-kicker {
   color: #ffcf56;
   font-family: "Impact", "Arial Narrow", sans-serif;
-  font-size: clamp(14px, 1.6vw, 28px);
+  font-size: clamp(13px, 1.65cqw, 28px);
   font-weight: 900;
   letter-spacing: .22em;
 }
@@ -1642,27 +1642,27 @@
 .level4-scene__boss-name {
   color: #ffcf56;
   font-family: "Impact", "Arial Narrow", "Inter Tight", sans-serif;
-  font-size: clamp(34px, 5.6vw, 92px);
+  font-size: clamp(34px, 5.15cqw, 92px);
   line-height: .9;
-  letter-spacing: .05em;
+  letter-spacing: .035em;
 }
 
 .level4-scene__boss-subtitle {
   color: #ffe3a0;
   font-family: "Cormorant Garamond", Georgia, serif;
-  font-size: clamp(15px, 1.7vw, 30px);
+  font-size: clamp(15px, 1.65cqw, 30px);
   font-style: italic;
 }
 
 .level4-scene__operator-label {
   position: absolute;
   left: 10%;
-  top: 28%;
+  top: 27.5%;
   border: 1px solid rgba(91, 212, 255, .55);
   background: rgba(8, 18, 24, .62);
   padding: 7px 12px;
   color: #c7fff5;
-  font-size: clamp(9px, .82vw, 13px);
+  font-size: clamp(8px, .78cqw, 13px);
   font-weight: 900;
   letter-spacing: .16em;
   box-shadow: 0 0 18px rgba(91, 212, 255, .16);
@@ -1670,17 +1670,17 @@
 
 .level4-scene__family-label {
   position: absolute;
-  right: 3.5%;
-  bottom: 13%;
+  right: 3%;
+  bottom: 12.5%;
   display: grid;
   gap: 2px;
   border: 1px solid rgba(255, 231, 170, .48);
   background: rgba(15, 20, 18, .58);
-  padding: 10px 16px;
+  padding: clamp(7px, .75cqw, 11px) clamp(10px, 1.1cqw, 18px);
   text-align: center;
   color: #f4c97a;
   font-family: "Cormorant Garamond", Georgia, serif;
-  font-size: clamp(16px, 1.55vw, 28px);
+  font-size: clamp(15px, 1.48cqw, 28px);
   letter-spacing: .12em;
 }
 
@@ -1694,13 +1694,13 @@
 .level4-scene__speech {
   position: absolute;
   z-index: 12;
-  max-width: 190px;
-  padding: 9px 14px;
+  max-width: clamp(112px, 13.8cqw, 210px);
+  padding: clamp(7px, .72cqw, 11px) clamp(10px, .95cqw, 16px);
   background: rgba(255, 255, 246, .92);
   color: #20160f;
   border: 2px solid #120b08;
   font-family: "Impact", "Arial Narrow", sans-serif;
-  font-size: clamp(14px, 1.35vw, 25px);
+  font-size: clamp(14px, 1.55cqw, 27px);
   line-height: .95;
   text-align: center;
   filter: drop-shadow(3px 4px 0 rgba(255, 50, 42, .35));
@@ -1709,20 +1709,20 @@
 }
 
 .level4-scene__speech--one {
-  left: 34%;
-  top: 20%;
+  left: 34.2%;
+  top: 18.4%;
   transform: rotate(-7deg);
 }
 
 .level4-scene__speech--two {
-  left: 57%;
-  top: 22%;
+  left: 58.5%;
+  top: 20%;
   transform: rotate(6deg);
 }
 
 .level4-scene__speech--three {
-  left: 38%;
-  top: 43%;
+  left: 37.2%;
+  top: 39.5%;
   transform: rotate(-3deg);
 }
 
@@ -1759,15 +1759,14 @@
   position: absolute;
   left: calc(var(--x) * 1%);
   top: calc(var(--y) * 1%);
-  transform: translate(-50%, -50%);
   transform-origin: 50% 90%;
   user-select: none;
   filter: drop-shadow(0 18px 18px rgba(0, 0, 0, .62));
 }
 
 .level4-scene__hero {
-  width: 13.5%;
-  min-width: 82px;
+  width: clamp(120px, 16.3cqw, 304px);
+  transform: translate(-50%, -76%);
   z-index: 5;
   transition: left 420ms cubic-bezier(.2, .8, .2, 1), top 420ms cubic-bezier(.2, .8, .2, 1);
 }
@@ -1782,14 +1781,14 @@
 }
 
 .level4-scene__villain {
-  width: 19%;
-  min-width: 132px;
-  z-index: 4;
+  width: clamp(142px, 18.4cqw, 345px);
+  transform: translate(-50%, -51%);
+  z-index: 5;
 }
 
 .level4-scene__family {
-  width: 17%;
-  min-width: 120px;
+  width: clamp(122px, 15.2cqw, 282px);
+  transform: translate(-50%, -66%);
   z-index: 4;
   transition: filter 180ms ease, transform 180ms ease;
 }
@@ -1797,11 +1796,11 @@
 .level4-scene:has(.level4-scene__promise-zone:hover) .level4-scene__family,
 .level4-scene:has(.level4-scene__promise-zone:focus-visible) .level4-scene__family {
   filter: drop-shadow(0 0 28px rgba(255, 235, 170, .75)) saturate(1.2) contrast(1.08);
-  transform: translate(-50%, -50%) scale(1.035);
+  transform: translate(-50%, -66%) scale(1.035);
 }
 
 .level4-scene__task-layer {
-  z-index: 6;
+  z-index: 13;
   pointer-events: none;
 }
 
@@ -1809,7 +1808,7 @@
   position: absolute;
   left: calc(var(--x) * 1%);
   top: calc(var(--y) * 1%);
-  width: clamp(240px, 21vw, 360px);
+  width: clamp(220px, 21.5cqw, 380px);
   transform: translate(-50%, -50%);
   border: 2px solid rgba(255, 184, 0, .84);
   background:
@@ -1817,7 +1816,7 @@
     radial-gradient(circle at 50% 0%, rgba(255, 184, 0, .28), transparent 62%),
     repeating-linear-gradient(0deg, rgba(91, 212, 255, .05) 0 1px, transparent 1px 5px);
   color: #f8ead2;
-  padding: 16px 18px;
+  padding: clamp(12px, 1.15cqw, 18px) clamp(13px, 1.25cqw, 20px);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   box-shadow: 0 0 24px rgba(255, 143, 32, .22), inset 0 0 0 1px rgba(255, 255, 255, .05);
   pointer-events: auto;
@@ -1856,20 +1855,20 @@
 .level4-scene__task-title {
   margin-top: 8px;
   font-family: "Impact", "Arial Narrow", sans-serif;
-  font-size: clamp(20px, 1.8vw, 31px);
+  font-size: clamp(19px, 1.85cqw, 32px);
   font-weight: 900;
   letter-spacing: .08em;
 }
 
 .level4-scene__task-target {
   margin-top: 10px;
-  font-size: 13px;
+  font-size: clamp(10px, .82cqw, 13px);
   color: rgba(248, 234, 210, .92);
 }
 
 .level4-scene__task-mission {
   margin-top: 5px;
-  font-size: 13px;
+  font-size: clamp(10px, .82cqw, 13px);
   line-height: 1.35;
   color: rgba(248, 234, 210, .68);
 }
@@ -1884,13 +1883,13 @@
 .level4-scene__task-cta {
   width: 100%;
   margin-top: 10px;
-  padding: 12px 10px;
+  padding: clamp(9px, .9cqw, 13px) 10px;
   border: 2px solid #ffe08a;
   background: linear-gradient(180deg, #ffcf56, #ff8a00);
   color: #1a0f00;
   font: inherit;
   font-family: "Impact", "Arial Narrow", sans-serif;
-  font-size: clamp(18px, 1.5vw, 25px);
+  font-size: clamp(18px, 1.55cqw, 26px);
   font-weight: 900;
   letter-spacing: .12em;
   cursor: pointer;
@@ -1915,17 +1914,17 @@
 
 .level4-scene__bridge-tiles {
   position: absolute;
-  left: 27%;
-  bottom: 9.5%;
-  width: 48%;
+  left: 30.5%;
+  bottom: 10.2%;
+  width: 43%;
   display: flex;
-  gap: .42vw;
+  gap: .42cqw;
   transform: perspective(460px) rotateX(58deg) rotateZ(-2deg);
   transform-origin: center;
 }
 
 .level4-scene__bridge-tile {
-  width: clamp(18px, 2.4vw, 44px);
+  width: clamp(16px, 2.15cqw, 42px);
   aspect-ratio: 1;
   border: 1px solid rgba(91, 212, 255, .34);
   background: rgba(91, 212, 255, .08);
@@ -1969,28 +1968,28 @@
 }
 
 .level4-scene__path-glow--preboss {
-  left: 22%;
-  top: 59%;
-  width: 29%;
-  --path-rotate: -34deg;
-  transform: rotate(-34deg) scaleX(0);
+  left: 25%;
+  top: 58%;
+  width: 28%;
+  --path-rotate: -31deg;
+  transform: rotate(-31deg) scaleX(0);
 }
 
 .level4-scene__path-glow--postboss {
   left: 51%;
-  top: 39%;
+  top: 42%;
   width: 28%;
-  --path-rotate: 34deg;
-  transform: rotate(34deg) scaleX(0);
+  --path-rotate: 31deg;
+  transform: rotate(31deg) scaleX(0);
 }
 
 .level4-scene__promise-zone {
   position: absolute;
   z-index: 8;
   left: 68%;
-  top: 36%;
-  width: 28%;
-  height: 50%;
+  top: 34%;
+  width: 30%;
+  height: 55%;
   border: 0;
   background: transparent;
   cursor: default;
@@ -2076,15 +2075,15 @@
 }
 
 @keyframes level4HeroStep {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(.94); }
+  0% { opacity: 0; transform: translate(-50%, -76%) scale(.94); }
   18% { opacity: 1; }
   82% { opacity: 1; }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.02); }
+  100% { opacity: 0; transform: translate(-50%, -76%) scale(1.02); }
 }
 
 @keyframes level4HeroSettle {
-  from { opacity: 0; transform: translate(-50%, -50%) scale(.96); }
-  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  from { opacity: 0; transform: translate(-50%, -76%) scale(.96); }
+  to { opacity: 1; transform: translate(-50%, -76%) scale(1); }
 }
 
 @keyframes level4HudBlink {
@@ -2106,6 +2105,67 @@
 @keyframes level4TilePulse {
   0%, 100% { box-shadow: 0 0 14px rgba(255, 184, 0, .35), inset 0 0 8px rgba(255, 255, 255, .15); }
   50% { box-shadow: 0 0 30px rgba(255, 184, 0, .9), inset 0 0 14px rgba(255, 255, 255, .28); }
+}
+
+.l4-encounterPage {
+  min-height: 100vh;
+  padding: clamp(10px, 1.4vw, 22px);
+  background:
+    radial-gradient(circle at 50% 0, rgba(255, 184, 0, .08), transparent 42%),
+    linear-gradient(180deg, #080b0d, #050606);
+  color: #e8efe9;
+  font-family: "IBM Plex Mono", "Berkeley Mono", SFMono-Regular, ui-monospace, monospace;
+}
+
+.l4-encounterShell {
+  width: min(100%, 1680px);
+  margin: 0 auto;
+}
+
+.l4-encounterStatus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 8px;
+  border: 1px solid rgba(91, 212, 255, .28);
+  background: rgba(8, 18, 24, .62);
+  padding: 8px 11px;
+  text-transform: uppercase;
+  letter-spacing: .16em;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .03);
+}
+
+.l4-encounterStatus span {
+  color: #ff6b60;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.l4-encounterStatus strong {
+  color: rgba(232, 239, 233, .76);
+  font-size: 10px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.l4-encounterSceneFrame {
+  border: 1px solid rgba(91, 212, 255, .35);
+  background: #050606;
+  box-shadow: 0 0 32px rgba(91, 212, 255, .1);
+}
+
+.l4-encounterFooter {
+  border: 1px solid rgba(91, 212, 255, .24);
+  border-top: 0;
+  background: rgba(8, 18, 24, .72);
+  padding: 9px 12px;
+  text-align: center;
+  color: rgba(232, 239, 233, .45);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .16em;
+  text-transform: uppercase;
 }
 
 .l4-gateLaneStrip {

@@ -123,7 +123,7 @@ export function Level4BoardScene({
   }, [completionState?.isCompleting, completionState?.completedChallengeId, activeChallenge?.severity, progressIndex]);
 
   const heroAnchor = HERO_STEPS[progressIndex] ?? HERO_STEPS[0];
-  const currentHeroSrc = heroPose === "back" ? "/assets/level4/hero_back.png" : "/assets/level4/hero_front.png";
+  const currentHeroSrc = "/assets/level4/operator-back.png";
   const particles = useMemo(() => Array.from({ length: 16 }, (_, i) => i), []);
   const isBossChallenge = activeChallenge?.severity === "boss";
   const bossStatus = gateState === "LOCKED" ? "LOCKED" : gateState === "COMPLETE_TODAY" ? "CLEARED" : "ENGAGED";
@@ -153,14 +153,14 @@ export function Level4BoardScene({
       <div className="level4-scene__actors-layer">
         <img
           className="level4-scene__villain"
-          src="/assets/level4/villain.png"
+          src="/assets/level4/procrastinator-villain.png"
           alt=""
           style={anchorStyle(LEVEL4_ANCHORS.villain)}
           draggable={false}
         />
         <img
           className="level4-scene__family"
-          src="/assets/level4/family.png"
+          src="/assets/level4/family-back-side.png"
           alt=""
           style={anchorStyle(LEVEL4_ANCHORS.family)}
           draggable={false}
