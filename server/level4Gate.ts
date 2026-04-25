@@ -241,6 +241,23 @@ function formatUsdCents(cents: number): string {
   return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
+/** v1.6 schema-free guard: only explicit order payment/charge failures can block collections. */
+function isPaymentFailureLog(log: {
+  actionType: string;
+  entityType: "order" | "customer" | "building";
+  status: "attempted" | "delivered" | "failed" | "paid" | "reversed";
+  metadata: unknown;
+}): boolean {
+  if (log.status !== "failed" || log.entityType !== "order") return false;
+  const action = log.actionType.toLowerCase();
+  if (action.includes("payment") || action.includes("charge")) return true;
+  if (!log.metadata || typeof log.metadata !== "object") return false;
+  const metadata = log.metadata as Record<string, unknown>;
+  const failureKind = String(metadata.failureKind ?? metadata.kind ?? metadata.type ?? "").toLowerCase();
+  return failureKind.includes("payment") || failureKind.includes("charge") || Boolean(metadata.paymentIntentId);
+}
+
+/** v1.6 schema-free proxy: updatedAt + known total stands in for intakeCompletedAt until v1.7. */
 function pickupWasWithin24hProxy(order: Order, bounds: DashboardBusinessDayBounds): boolean {
   if (order.paid || order.status === "new") return false;
   if (!isKnownDollarOrder(order) || !isDateInBusinessDay(order.updatedAt, bounds)) return false;
@@ -277,6 +294,7 @@ export async function getLevel4GateState(tenantId: string, now: Date = new Date(
         entityType: adminActionLog.entityType,
         entityId: adminActionLog.entityId,
         status: adminActionLog.status,
+        metadata: adminActionLog.metadata,
         createdAt: adminActionLog.createdAt,
       })
       .from(adminActionLog)
@@ -314,7 +332,7 @@ export async function getLevel4GateState(tenantId: string, now: Date = new Date(
       isKnownDollarOrder(order) &&
       (isDateInBusinessDay(order.updatedAt, bounds) || isScheduleToday(order.deliveryDate, bounds.ymd))
   );
-  const failedPaymentLogsToday = todayLogs.filter((log) => log.status === "failed");
+  const failedPaymentLogsToday = todayLogs.filter(isPaymentFailureLog);
 
   const staleCollectionWarnings = allOrders.filter(
     (order) =>
