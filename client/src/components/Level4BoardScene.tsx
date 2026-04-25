@@ -32,12 +32,13 @@ type Level4BoardSceneProps = {
 };
 
 const LEVEL4_ANCHORS = {
-  heroStart: { x: 24, y: 66 },
+  heroStart: { x: 23.5, y: 75 },
   heroStep1: { x: 34, y: 55 },
   heroStep2: { x: 43, y: 43 },
-  villain: { x: 50, y: 28 },
-  family: { x: 80, y: 65 },
+  villain: { x: 50, y: 52 },
+  family: { x: 81, y: 76 },
   firstTask: { x: 37, y: 48 },
+  bossTask: { x: 50, y: 66 },
   postVillainBridge: { x: 64, y: 49 },
 };
 
@@ -123,9 +124,10 @@ export function Level4BoardScene({
   }, [completionState?.isCompleting, completionState?.completedChallengeId, activeChallenge?.severity, progressIndex]);
 
   const heroAnchor = HERO_STEPS[progressIndex] ?? HERO_STEPS[0];
-  const currentHeroSrc = "/assets/level4/operator-back.png";
+  const currentHeroSrc = "/assets/level4/level4-hero.png";
   const particles = useMemo(() => Array.from({ length: 16 }, (_, i) => i), []);
   const isBossChallenge = activeChallenge?.severity === "boss";
+  const taskAnchor = isBossChallenge ? LEVEL4_ANCHORS.bossTask : LEVEL4_ANCHORS.firstTask;
   const bossStatus = gateState === "LOCKED" ? "LOCKED" : gateState === "COMPLETE_TODAY" ? "CLEARED" : "ENGAGED";
   const threatLabel =
     activeChallenge?.severity === "reckoning"
@@ -202,26 +204,42 @@ export function Level4BoardScene({
               activeChallenge.severity === "boss" && "level4-scene__task-token--boss",
               isDefeating && "level4-scene__task-token--defeating"
             )}
-            style={anchorStyle(LEVEL4_ANCHORS.firstTask)}
+            style={anchorStyle(taskAnchor)}
           >
-            <div className="level4-scene__task-kicker">
-              {isBossChallenge ? "WEAPON LOADED" : "MISSION BLOCKER"}
-            </div>
-            <div className="level4-scene__task-title">{isBossChallenge ? "OUTREACH MISSILE" : activeChallenge.title}</div>
-            <div className="level4-scene__task-target">
-              <span>TARGET:</span> {activeChallenge.targetLabel}
-            </div>
-            <div className="level4-scene__task-mission">
-              <span>{isBossChallenge ? "PAYLOAD:" : "INTEL:"}</span> {isBossChallenge ? payloadLabel : activeChallenge.missionLabel}
-            </div>
-            <button
-              type="button"
-              className="level4-scene__task-cta"
-              disabled={completionState?.isCompleting}
-              onClick={onPrimaryAction}
-            >
-              {completionState?.isCompleting ? "EXECUTING" : isBossChallenge ? "[ STRIKE ]" : activeChallenge.ctaLabel.replace("→", "")}
-            </button>
+            {isBossChallenge ? (
+              <button
+                type="button"
+                className="level4-scene__weapon-artButton"
+                disabled={completionState?.isCompleting}
+                onClick={onPrimaryAction}
+                aria-label={`Strike ${activeChallenge.targetLabel}: ${payloadLabel}`}
+              >
+                <img src="/assets/level4/level4-weaponloaded-strike.png" alt="" draggable={false} />
+                <span className="sr-only">
+                  Weapon loaded. Outreach missile. Target: {activeChallenge.targetLabel}. Payload: {payloadLabel}.
+                </span>
+                {completionState?.isCompleting ? <span className="level4-scene__weapon-executing">EXECUTING</span> : null}
+              </button>
+            ) : (
+              <>
+                <div className="level4-scene__task-kicker">MISSION BLOCKER</div>
+                <div className="level4-scene__task-title">{activeChallenge.title}</div>
+                <div className="level4-scene__task-target">
+                  <span>TARGET:</span> {activeChallenge.targetLabel}
+                </div>
+                <div className="level4-scene__task-mission">
+                  <span>INTEL:</span> {activeChallenge.missionLabel}
+                </div>
+                <button
+                  type="button"
+                  className="level4-scene__task-cta"
+                  disabled={completionState?.isCompleting}
+                  onClick={onPrimaryAction}
+                >
+                  {completionState?.isCompleting ? "EXECUTING" : activeChallenge.ctaLabel.replace("→", "")}
+                </button>
+              </>
+            )}
           </div>
         ) : null}
 
@@ -234,47 +252,58 @@ export function Level4BoardScene({
       </div>
 
       <div className="level4-scene__hud-layer">
-        <div className="level4-scene__mission-card">
-          <div className="level4-scene__hud-header">LEVEL 04 · BOSS ENCOUNTER</div>
-          <dl>
-            <div><dt>TARGET</dt><dd>The Procrastinator</dd></div>
-            <div><dt>PATTERN</dt><dd>Delay loop · "later"</dd></div>
-            <div><dt>WEAKNESS</dt><dd>Specific action + time</dd></div>
-            <div><dt>RECORD</dt><dd>Today: +{dailyXp.toLocaleString("en-US")} XP</dd></div>
-          </dl>
-          <div className="level4-scene__hud-status">ENGAGE WHEN READY</div>
+        <div
+          className="level4-scene__mission-card"
+          aria-label={`Level 04 boss encounter. Target The Procrastinator. Today: plus ${dailyXp.toLocaleString("en-US")} XP.`}
+        >
+          <img src="/assets/level4/level4-mission-card.png" alt="" draggable={false} />
         </div>
 
         <div className="level4-scene__boss-title" aria-label="Boss encounter: The Procrastinator">
-          <div className="level4-scene__boss-kicker">△ BOSS ENCOUNTER △</div>
-          <div className="level4-scene__boss-name">THE PROCRASTINATOR</div>
-          <div className="level4-scene__boss-subtitle">"Tomorrow's Champion"</div>
+          <img src="/assets/level4/level4-titletext.png" alt="" draggable={false} />
         </div>
 
-        <div className="level4-scene__telemetry">
-          <div className="level4-scene__hud-header level4-scene__hud-header--gold">SYSTEM TELEMETRY</div>
-          <dl>
-            <div><dt>BOSS</dt><dd className={bossStatus === "ENGAGED" ? "is-hot" : ""}>{bossStatus}</dd></div>
-            <div><dt>COOLDOWN</dt><dd>UNKNOWN</dd></div>
-            <div><dt>OPPORTUNITY</dt><dd>{activeChallenge ? "OPEN" : "QUIET"}</dd></div>
-            <div><dt>TERRITORY</dt><dd>REAL DATA</dd></div>
-            <div><dt>THREAT</dt><dd className={threatLabel === "HIGH" || threatLabel === "RECKONING" ? "is-hot" : ""}>{threatLabel}</dd></div>
-          </dl>
-          <div className="level4-scene__telemetry-footer">PRESS [STRIKE] TO ENGAGE</div>
+        <div
+          className="level4-scene__telemetry"
+          aria-label={`System telemetry. Boss ${bossStatus}. Opportunity ${activeChallenge ? "open" : "quiet"}. Threat ${threatLabel}.`}
+        >
+          <img src="/assets/level4/level4-system-telemetry.png" alt="" draggable={false} />
         </div>
 
-        <div className="level4-scene__operator-label">OPERATOR-04 · ORIGIN</div>
         <div className="level4-scene__family-label">
           <strong>HOME · FAMILY · FREEDOM</strong>
           <span>"the prize"</span>
         </div>
 
-        <div className="level4-scene__speech level4-scene__speech--one">it can wait!</div>
-        <div className="level4-scene__speech level4-scene__speech--two">monday's better</div>
-        <div className="level4-scene__speech level4-scene__speech--three">you don't wanna seem pushy...</div>
+        <img
+          className="level4-scene__speech level4-scene__speech--one"
+          src="/assets/level4/level4-speech-itcanwait.png"
+          alt="it can wait!"
+          draggable={false}
+        />
+        <img
+          className="level4-scene__speech level4-scene__speech--two"
+          src="/assets/level4/level4-speech-mondaysbetter.png"
+          alt="monday's better"
+          draggable={false}
+        />
+        <img
+          className="level4-scene__speech level4-scene__speech--three"
+          src="/assets/level4/level4-speech-pushy.png"
+          alt="you don't wanna seem pushy..."
+          draggable={false}
+        />
       </div>
 
-      <div className="level4-scene__fx-layer">
+      <div
+        className="level4-scene__fx-layer"
+        style={
+          {
+            "--particle-x": String(taskAnchor.x),
+            "--particle-y": String(taskAnchor.y),
+          } as CSSProperties
+        }
+      >
         {isDefeating
           ? particles.map((i) => (
               <span

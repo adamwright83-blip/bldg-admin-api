@@ -1525,26 +1525,37 @@
 .level4-scene__mission-card,
 .level4-scene__telemetry {
   position: absolute;
-  top: 2%;
-  width: clamp(220px, 23cqw, 390px);
-  border: 1px solid rgba(91, 212, 255, .62);
-  background:
-    linear-gradient(180deg, rgba(8, 18, 24, .82), rgba(7, 12, 16, .72)),
-    repeating-linear-gradient(0deg, rgba(91, 212, 255, .055) 0 1px, transparent 1px 5px);
+  top: 1.4%;
+  border: 0;
+  background: transparent;
   color: #dfffee;
-  padding: clamp(10px, 1.05cqw, 17px) clamp(11px, 1.15cqw, 18px);
-  box-shadow: 0 0 24px rgba(91, 212, 255, .16), inset 0 0 0 1px rgba(255, 255, 255, .04);
-  backdrop-filter: blur(12px);
-  clip-path: polygon(0 8px, 8px 0, calc(100% - 16px) 0, 100% 14px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+  padding: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  clip-path: none;
+  filter: drop-shadow(0 0 18px rgba(91, 212, 255, .22));
 }
 
 .level4-scene__mission-card {
-  left: 2.2%;
+  left: 1.25%;
+  width: clamp(230px, 24cqw, 430px);
 }
 
 .level4-scene__telemetry {
-  right: 2.2%;
-  border-color: rgba(255, 184, 0, .62);
+  right: 1.1%;
+  width: clamp(205px, 19.5cqw, 360px);
+  filter: drop-shadow(0 0 18px rgba(255, 184, 0, .18));
+}
+
+.level4-scene__mission-card img,
+.level4-scene__telemetry img,
+.level4-scene__boss-title img,
+.level4-scene__weapon-artButton img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .level4-scene__hud-header {
@@ -1624,11 +1635,12 @@
 .level4-scene__boss-title {
   position: absolute;
   left: 50%;
-  top: 1.2%;
+  top: .4%;
   transform: translateX(-50%);
   text-align: center;
-  width: min(44cqw, 720px);
-  text-shadow: 0 2px 0 rgba(0, 0, 0, .75), 0 0 26px rgba(255, 184, 0, .3);
+  width: clamp(350px, 45cqw, 800px);
+  filter: drop-shadow(0 0 20px rgba(255, 184, 0, .26));
+  text-shadow: none;
 }
 
 .level4-scene__boss-kicker {
@@ -1671,7 +1683,7 @@
 .level4-scene__family-label {
   position: absolute;
   right: 3%;
-  bottom: 12.5%;
+  bottom: 10.6%;
   display: grid;
   gap: 2px;
   border: 1px solid rgba(255, 231, 170, .48);
@@ -1694,35 +1706,38 @@
 .level4-scene__speech {
   position: absolute;
   z-index: 12;
-  max-width: clamp(112px, 13.8cqw, 210px);
-  padding: clamp(7px, .72cqw, 11px) clamp(10px, .95cqw, 16px);
-  background: rgba(255, 255, 246, .92);
-  color: #20160f;
-  border: 2px solid #120b08;
-  font-family: "Impact", "Arial Narrow", sans-serif;
-  font-size: clamp(14px, 1.55cqw, 27px);
-  line-height: .95;
-  text-align: center;
-  filter: drop-shadow(3px 4px 0 rgba(255, 50, 42, .35));
-  clip-path: polygon(7% 0, 100% 8%, 94% 87%, 60% 82%, 48% 100%, 38% 82%, 0 88%);
+  width: clamp(100px, 13cqw, 230px);
+  max-width: none;
+  padding: 0;
+  background: transparent;
+  color: transparent;
+  border: 0;
+  font-size: 0;
+  line-height: 0;
+  text-align: left;
+  filter: drop-shadow(3px 4px 0 rgba(255, 50, 42, .25));
+  clip-path: none;
   animation: level4SpeechGlitch 6.8s steps(2, end) infinite;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .level4-scene__speech--one {
-  left: 34.2%;
-  top: 18.4%;
+  left: 34%;
+  top: 19%;
   transform: rotate(-7deg);
 }
 
 .level4-scene__speech--two {
-  left: 58.5%;
-  top: 20%;
+  left: 58%;
+  top: 20.5%;
   transform: rotate(6deg);
 }
 
 .level4-scene__speech--three {
-  left: 37.2%;
-  top: 39.5%;
+  left: 36.5%;
+  top: 37.2%;
+  width: clamp(120px, 15cqw, 260px);
   transform: rotate(-3deg);
 }
 
@@ -1749,7 +1764,7 @@
 }
 
 .level4-scene__actors-layer {
-  z-index: 3;
+  z-index: 6;
   pointer-events: none;
 }
 
@@ -1765,9 +1780,9 @@
 }
 
 .level4-scene__hero {
-  width: clamp(120px, 16.3cqw, 304px);
-  transform: translate(-50%, -76%);
-  z-index: 5;
+  width: clamp(145px, 18.2cqw, 360px);
+  transform: translate(-50%, -78%);
+  z-index: 7;
   transition: left 420ms cubic-bezier(.2, .8, .2, 1), top 420ms cubic-bezier(.2, .8, .2, 1);
 }
 
@@ -1781,14 +1796,14 @@
 }
 
 .level4-scene__villain {
-  width: clamp(142px, 18.4cqw, 345px);
-  transform: translate(-50%, -51%);
-  z-index: 5;
+  width: clamp(145px, 16.8cqw, 330px);
+  transform: translate(-50%, -63%);
+  z-index: 6;
 }
 
 .level4-scene__family {
-  width: clamp(122px, 15.2cqw, 282px);
-  transform: translate(-50%, -66%);
+  width: clamp(130px, 15.2cqw, 300px);
+  transform: translate(-50%, -74%);
   z-index: 4;
   transition: filter 180ms ease, transform 180ms ease;
 }
@@ -1796,11 +1811,11 @@
 .level4-scene:has(.level4-scene__promise-zone:hover) .level4-scene__family,
 .level4-scene:has(.level4-scene__promise-zone:focus-visible) .level4-scene__family {
   filter: drop-shadow(0 0 28px rgba(255, 235, 170, .75)) saturate(1.2) contrast(1.08);
-  transform: translate(-50%, -66%) scale(1.035);
+  transform: translate(-50%, -74%) scale(1.035);
 }
 
 .level4-scene__task-layer {
-  z-index: 13;
+  z-index: 5;
   pointer-events: none;
 }
 
@@ -1808,7 +1823,7 @@
   position: absolute;
   left: calc(var(--x) * 1%);
   top: calc(var(--y) * 1%);
-  width: clamp(220px, 21.5cqw, 380px);
+  width: clamp(210px, 20.5cqw, 360px);
   transform: translate(-50%, -50%);
   border: 2px solid rgba(255, 184, 0, .84);
   background:
@@ -1824,8 +1839,12 @@
 }
 
 .level4-scene__task-token--boss {
-  border-color: rgba(255, 184, 0, .88);
-  box-shadow: 0 0 34px rgba(255, 184, 0, .36), inset 0 0 0 1px rgba(255, 255, 255, .06);
+  width: clamp(250px, 28cqw, 500px);
+  border: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+  filter: drop-shadow(0 0 24px rgba(255, 184, 0, .26));
 }
 
 .level4-scene__task-token--defeating {
@@ -1902,6 +1921,45 @@
   opacity: .72;
 }
 
+.level4-scene__weapon-artButton {
+  position: relative;
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+  filter: saturate(1.04);
+  transition: transform 140ms ease, filter 140ms ease;
+}
+
+.level4-scene__weapon-artButton:hover,
+.level4-scene__weapon-artButton:focus-visible {
+  transform: scale(1.025);
+  filter: saturate(1.12) drop-shadow(0 0 28px rgba(255, 184, 0, .45));
+}
+
+.level4-scene__weapon-artButton:disabled {
+  cursor: wait;
+  opacity: .86;
+}
+
+.level4-scene__weapon-executing {
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  transform: translateX(-50%);
+  border: 1px solid rgba(0, 255, 140, .75);
+  background: rgba(1, 18, 10, .86);
+  padding: .35em .75em;
+  color: #b8ffcb;
+  font-size: clamp(9px, .9cqw, 13px);
+  font-weight: 900;
+  letter-spacing: .16em;
+}
+
 .level4-scene__fx-layer {
   z-index: 11;
   pointer-events: none;
@@ -1945,8 +2003,8 @@
 
 .level4-scene__particle {
   position: absolute;
-  left: calc(37% - 4px);
-  top: calc(48% - 4px);
+  left: calc(var(--particle-x, 37) * 1% - 4px);
+  top: calc(var(--particle-y, 48) * 1% - 4px);
   width: 8px;
   height: 8px;
   border-radius: 999px;
@@ -2075,15 +2133,15 @@
 }
 
 @keyframes level4HeroStep {
-  0% { opacity: 0; transform: translate(-50%, -76%) scale(.94); }
+  0% { opacity: 0; transform: translate(-50%, -78%) scale(.94); }
   18% { opacity: 1; }
   82% { opacity: 1; }
-  100% { opacity: 0; transform: translate(-50%, -76%) scale(1.02); }
+  100% { opacity: 0; transform: translate(-50%, -78%) scale(1.02); }
 }
 
 @keyframes level4HeroSettle {
-  from { opacity: 0; transform: translate(-50%, -76%) scale(.96); }
-  to { opacity: 1; transform: translate(-50%, -76%) scale(1); }
+  from { opacity: 0; transform: translate(-50%, -78%) scale(.96); }
+  to { opacity: 1; transform: translate(-50%, -78%) scale(1); }
 }
 
 @keyframes level4HudBlink {
