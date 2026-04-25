@@ -32,13 +32,13 @@ type Level4BoardSceneProps = {
 };
 
 const LEVEL4_ANCHORS = {
-  heroStart: { x: 19, y: 67 },
-  heroStep1: { x: 28, y: 57 },
-  heroStep2: { x: 38, y: 46 },
-  villain: { x: 50, y: 31 },
-  family: { x: 80, y: 62 },
-  firstTask: { x: 30, y: 50 },
-  postVillainBridge: { x: 63, y: 50 },
+  heroStart: { x: 24, y: 66 },
+  heroStep1: { x: 34, y: 55 },
+  heroStep2: { x: 43, y: 43 },
+  villain: { x: 50, y: 28 },
+  family: { x: 80, y: 65 },
+  firstTask: { x: 37, y: 48 },
+  postVillainBridge: { x: 64, y: 49 },
 };
 
 const HERO_STEPS = [
@@ -142,48 +142,13 @@ export function Level4BoardScene({
 
   return (
     <section className={cn("level4-scene", gateState === "COMPLETE_TODAY" && "is-complete")}>
-      <img className="level4-scene__background" src="/assets/level4/level4-boss-scene.png" alt="" />
-
-      <div className="level4-scene__hud-layer">
-        <div className="level4-scene__mission-card">
-          <div className="level4-scene__hud-header">LEVEL 04 · BOSS ENCOUNTER</div>
-          <dl>
-            <div><dt>TARGET</dt><dd>The Procrastinator</dd></div>
-            <div><dt>PATTERN</dt><dd>Delay loop · "later"</dd></div>
-            <div><dt>WEAKNESS</dt><dd>Specific action + time</dd></div>
-            <div><dt>RECORD</dt><dd>Today: +{dailyXp.toLocaleString("en-US")} XP</dd></div>
-          </dl>
-          <div className="level4-scene__hud-status">ENGAGE WHEN READY</div>
-        </div>
-
-        <div className="level4-scene__boss-title" aria-label="Boss encounter: The Procrastinator">
-          <div className="level4-scene__boss-kicker">△ BOSS ENCOUNTER △</div>
-          <div className="level4-scene__boss-name">THE PROCRASTINATOR</div>
-          <div className="level4-scene__boss-subtitle">"Tomorrow's Champion"</div>
-        </div>
-
-        <div className="level4-scene__telemetry">
-          <div className="level4-scene__hud-header level4-scene__hud-header--gold">SYSTEM TELEMETRY</div>
-          <dl>
-            <div><dt>BOSS</dt><dd className={bossStatus === "ENGAGED" ? "is-hot" : ""}>{bossStatus}</dd></div>
-            <div><dt>COOLDOWN</dt><dd>UNKNOWN</dd></div>
-            <div><dt>OPPORTUNITY</dt><dd>{activeChallenge ? "OPEN" : "QUIET"}</dd></div>
-            <div><dt>TERRITORY</dt><dd>REAL DATA</dd></div>
-            <div><dt>THREAT</dt><dd className={threatLabel === "HIGH" || threatLabel === "RECKONING" ? "is-hot" : ""}>{threatLabel}</dd></div>
-          </dl>
-          <div className="level4-scene__telemetry-footer">PRESS [STRIKE] TO ENGAGE</div>
-        </div>
-
-        <div className="level4-scene__operator-label">OPERATOR-04 · ORIGIN</div>
-        <div className="level4-scene__family-label">
-          <strong>HOME · FAMILY · FREEDOM</strong>
-          <span>"the prize"</span>
-        </div>
-
-        <div className="level4-scene__speech level4-scene__speech--one">it can wait!</div>
-        <div className="level4-scene__speech level4-scene__speech--two">monday's better</div>
-        <div className="level4-scene__speech level4-scene__speech--three">you don't wanna seem pushy...</div>
-      </div>
+      {/* ASSET CONTRACT:
+       * The Level 4 background must be clean scene art only.
+       * Do not use composited mockups with baked HUD/title/buttons/text.
+       * React owns all live HUD, telemetry, speech bubbles, challenge panels,
+       * lane strips, CTAs, actors, and data-bound labels.
+       */}
+      <img className="level4-scene__background" src="/assets/level4/level4-clean-scene.png" alt="" />
 
       <div className="level4-scene__actors-layer">
         <img
@@ -211,6 +176,21 @@ export function Level4BoardScene({
           style={anchorStyle(heroAnchor)}
           draggable={false}
         />
+      </div>
+
+      <div className="level4-scene__path-layer">
+        <div className="level4-scene__bridge-tiles" aria-hidden>
+          {Array.from({ length: 14 }, (_, index) => (
+            <span
+              key={index}
+              className={cn(
+                "level4-scene__bridge-tile",
+                index < progressIndex ? "is-complete" : index === progressIndex ? "is-current" : "is-future"
+              )}
+            />
+          ))}
+        </div>
+        {pathGlow ? <div className={cn("level4-scene__path-glow", `level4-scene__path-glow--${pathGlow}`)} /> : null}
       </div>
 
       <div className="level4-scene__task-layer">
@@ -253,19 +233,48 @@ export function Level4BoardScene({
         ) : null}
       </div>
 
-      <div className="level4-scene__fx-layer">
-        <div className="level4-scene__bridge-tiles" aria-hidden>
-          {Array.from({ length: 14 }, (_, index) => (
-            <span
-              key={index}
-              className={cn(
-                "level4-scene__bridge-tile",
-                index < progressIndex ? "is-complete" : index === progressIndex ? "is-current" : "is-future"
-              )}
-            />
-          ))}
+      <div className="level4-scene__hud-layer">
+        <div className="level4-scene__mission-card">
+          <div className="level4-scene__hud-header">LEVEL 04 · BOSS ENCOUNTER</div>
+          <dl>
+            <div><dt>TARGET</dt><dd>The Procrastinator</dd></div>
+            <div><dt>PATTERN</dt><dd>Delay loop · "later"</dd></div>
+            <div><dt>WEAKNESS</dt><dd>Specific action + time</dd></div>
+            <div><dt>RECORD</dt><dd>Today: +{dailyXp.toLocaleString("en-US")} XP</dd></div>
+          </dl>
+          <div className="level4-scene__hud-status">ENGAGE WHEN READY</div>
         </div>
-        {pathGlow ? <div className={cn("level4-scene__path-glow", `level4-scene__path-glow--${pathGlow}`)} /> : null}
+
+        <div className="level4-scene__boss-title" aria-label="Boss encounter: The Procrastinator">
+          <div className="level4-scene__boss-kicker">△ BOSS ENCOUNTER △</div>
+          <div className="level4-scene__boss-name">THE PROCRASTINATOR</div>
+          <div className="level4-scene__boss-subtitle">"Tomorrow's Champion"</div>
+        </div>
+
+        <div className="level4-scene__telemetry">
+          <div className="level4-scene__hud-header level4-scene__hud-header--gold">SYSTEM TELEMETRY</div>
+          <dl>
+            <div><dt>BOSS</dt><dd className={bossStatus === "ENGAGED" ? "is-hot" : ""}>{bossStatus}</dd></div>
+            <div><dt>COOLDOWN</dt><dd>UNKNOWN</dd></div>
+            <div><dt>OPPORTUNITY</dt><dd>{activeChallenge ? "OPEN" : "QUIET"}</dd></div>
+            <div><dt>TERRITORY</dt><dd>REAL DATA</dd></div>
+            <div><dt>THREAT</dt><dd className={threatLabel === "HIGH" || threatLabel === "RECKONING" ? "is-hot" : ""}>{threatLabel}</dd></div>
+          </dl>
+          <div className="level4-scene__telemetry-footer">PRESS [STRIKE] TO ENGAGE</div>
+        </div>
+
+        <div className="level4-scene__operator-label">OPERATOR-04 · ORIGIN</div>
+        <div className="level4-scene__family-label">
+          <strong>HOME · FAMILY · FREEDOM</strong>
+          <span>"the prize"</span>
+        </div>
+
+        <div className="level4-scene__speech level4-scene__speech--one">it can wait!</div>
+        <div className="level4-scene__speech level4-scene__speech--two">monday's better</div>
+        <div className="level4-scene__speech level4-scene__speech--three">you don't wanna seem pushy...</div>
+      </div>
+
+      <div className="level4-scene__fx-layer">
         {isDefeating
           ? particles.map((i) => (
               <span

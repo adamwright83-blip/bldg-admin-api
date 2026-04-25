@@ -1733,6 +1733,7 @@
 
 .level4-scene__background,
 .level4-scene__actors-layer,
+.level4-scene__path-layer,
 .level4-scene__task-layer,
 .level4-scene__fx-layer {
   position: absolute;
@@ -1903,7 +1904,12 @@
 }
 
 .level4-scene__fx-layer {
-  z-index: 7;
+  z-index: 11;
+  pointer-events: none;
+}
+
+.level4-scene__path-layer {
+  z-index: 4;
   pointer-events: none;
 }
 
@@ -1940,8 +1946,8 @@
 
 .level4-scene__particle {
   position: absolute;
-  left: calc(30% - 4px);
-  top: calc(50% - 4px);
+  left: calc(37% - 4px);
+  top: calc(48% - 4px);
   width: 8px;
   height: 8px;
   border-radius: 999px;
