@@ -8,6 +8,7 @@ import { BUILDINGS } from "@shared/buildings";
 type RecencyStatus = "new" | "active" | "warm" | "cooling" | "lapsed";
 type Tier = "vip" | "standard";
 type BuildingSort = "revenue" | "orders" | "active";
+type PropertyGroup = "opus_la" | "century_park_east" | "unknown";
 
 type Props = {
   onOpenProfile: (phone: string) => void;
@@ -28,6 +29,19 @@ type CustomerRow = {
   recencyStatus: RecencyStatus;
   tier: Tier;
   statusColor: string;
+  propertyGroup?: PropertyGroup;
+  propertyDisplayName?: string;
+  towerKey?: string;
+  towerDisplayName?: string;
+  buildingAddressCanonical?: string | null;
+  stripeVerifiedRevenue?: number;
+  legacyCleanCloudRevenue?: number;
+  totalOperationalRevenue?: number;
+  source?: string;
+  paymentProcessor?: string;
+  includedInStripe?: boolean;
+  cleanCloudLegacyBadge?: string;
+  cleanCloudStripeStatus?: string;
 };
 
 type BuildingSummaryEntry = {
@@ -102,6 +116,9 @@ export function CustomersTab({ onOpenProfile }: Props) {
   /** Default All — only send tier to API when VIP or Standard is explicitly chosen. */
   const [tierFilter, setTierFilter] = useState<Tier | "">("");
   const [buildingSort, setBuildingSort] = useState<BuildingSort>("revenue");
+  const [includeLegacyCleanCloud, setIncludeLegacyCleanCloud] = useState(true);
+  const [propertyFilter, setPropertyFilter] = useState<PropertyGroup | "">("");
+  const [towerFilter, setTowerFilter] = useState("");
   const debouncedSearch = useDebounce(search, 300);
 
   const tierForApi = tierFilter === "" ? undefined : tierFilter;
@@ -111,6 +128,9 @@ export function CustomersTab({ onOpenProfile }: Props) {
     sortBy: "lastOrder",
     status: statusFilter || undefined,
     tier: tierForApi,
+    propertyGroup: propertyFilter || undefined,
+    towerKey: towerFilter || undefined,
+    includeLegacyCleanCloud,
   });
 
   const customers: CustomerRow[] = (list.data?.customers ?? []).map((row) => ({
@@ -124,6 +144,55 @@ export function CustomersTab({ onOpenProfile }: Props) {
     string,
     BuildingSummaryEntry
   >;
+  const contestTotals = list.data?.contestTotals as
+    | {
+        stripeOnlyHelperText: string;
+        legacyHelperText: string;
+        grand: {
+          stripeVerifiedRevenue: number;
+          legacyCleanCloudRevenue: number;
+          totalOperationalRevenue: number;
+        };
+        properties: Record<
+          string,
+          {
+            propertyDisplayName: string;
+            stripeVerifiedRevenue: number;
+            legacyCleanCloudRevenue: number;
+            totalOperationalRevenue: number;
+            towers: Record<
+              string,
+              {
+                towerDisplayName: string;
+                buildingAddressCanonical: string | null;
+                stripeVerifiedRevenue: number;
+                legacyCleanCloudRevenue: number;
+                totalOperationalRevenue: number;
+              }
+            >;
+          }
+        >;
+      }
+    | undefined;
+
+  const towerOptions = useMemo(() => {
+    if (propertyFilter === "opus_la") {
+      return [
+        ["", "All OPUS LA"],
+        ["opus_south_3545", "South Tower / 3545"],
+        ["opus_north_3650", "North Tower / 3650"],
+        ["unknown", "Unknown Tower"],
+      ] as const;
+    }
+    if (propertyFilter === "century_park_east") {
+      return [
+        ["", "All Century Park East"],
+        ["cpe_south_2170", "South Tower / 2170"],
+        ["cpe_north_2160", "North Tower / 2160"],
+      ] as const;
+    }
+    return [["", "All towers"]] as const;
+  }, [propertyFilter]);
 
   const resolvedCustomers = useMemo(
     () =>
@@ -232,6 +301,85 @@ export function CustomersTab({ onOpenProfile }: Props) {
     <div className="space-y-4">
       <h2 className="text-2xl font-semibold text-black">Building Leaderboard</h2>
 
+      <div className="rounded-md border border-black/10 bg-white px-4 py-3 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <label className="inline-flex items-center gap-2 text-sm font-medium text-black">
+            <input
+              type="checkbox"
+              checked={includeLegacyCleanCloud}
+              onChange={(e) => setIncludeLegacyCleanCloud(e.target.checked)}
+              className="h-4 w-4 rounded border-black/30"
+            />
+            Include legacy CleanCloud orders
+          </label>
+          <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-black/65">
+            {includeLegacyCleanCloud ? "Operational performance view" : "Stripe verified only"}
+          </span>
+        </div>
+        <p className="text-xs text-black/55">
+          {includeLegacyCleanCloud
+            ? contestTotals?.legacyHelperText
+            : contestTotals?.stripeOnlyHelperText}
+        </p>
+      </div>
+
+      {contestTotals && (
+        <div className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-md border border-black/10 bg-white p-3">
+              <p className="text-xs uppercase tracking-wider text-black/45">Stripe verified revenue</p>
+              <p className="text-2xl font-semibold text-black">${contestTotals.grand.stripeVerifiedRevenue.toFixed(2)}</p>
+            </div>
+            <div className="rounded-md border border-black/10 bg-white p-3">
+              <p className="text-xs uppercase tracking-wider text-black/45">Legacy CleanCloud revenue</p>
+              <p className="text-2xl font-semibold text-black">${contestTotals.grand.legacyCleanCloudRevenue.toFixed(2)}</p>
+            </div>
+            <div className="rounded-md border border-black/10 bg-white p-3">
+              <p className="text-xs uppercase tracking-wider text-black/45">Total operational revenue</p>
+              <p className="text-2xl font-semibold text-black">${contestTotals.grand.totalOperationalRevenue.toFixed(2)}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            {(["opus_la", "century_park_east"] as const).map((key) => {
+              const prop = contestTotals.properties[key];
+              const towerKeys =
+                key === "opus_la"
+                  ? ["opus_south_3545", "opus_north_3650", "unknown"]
+                  : ["cpe_south_2170", "cpe_north_2160"];
+              return (
+                <section key={key} className="rounded-md border border-black/10 bg-white p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold text-black">{prop.propertyDisplayName}</h3>
+                      <p className="text-2xl font-semibold text-black">${prop.totalOperationalRevenue.toFixed(2)}</p>
+                    </div>
+                    <div className="text-right text-xs text-black/55">
+                      <div>Stripe ${prop.stripeVerifiedRevenue.toFixed(2)}</div>
+                      <div>CleanCloud ${prop.legacyCleanCloudRevenue.toFixed(2)}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 divide-y divide-black/5">
+                    {towerKeys.map((towerKey) => {
+                      const tower = prop.towers[towerKey];
+                      return (
+                        <div key={towerKey} className="flex items-center justify-between gap-3 py-2 text-sm">
+                          <span className="text-black/75">
+                            {tower.towerDisplayName}
+                            {tower.buildingAddressCanonical ? ` / ${tower.buildingAddressCanonical.split(" ")[0]}` : ""}
+                          </span>
+                          <span className="font-medium text-black">${tower.totalOperationalRevenue.toFixed(2)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row gap-3 sm:items-end flex-wrap">
         <div className="max-w-xs flex-1">
           <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
@@ -243,6 +391,39 @@ export function CustomersTab({ onOpenProfile }: Props) {
             placeholder="Name, phone, email"
             className="bg-white border-black/20"
           />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
+            Property
+          </label>
+          <select
+            value={propertyFilter}
+            onChange={(e) => {
+              setPropertyFilter(e.target.value as PropertyGroup | "");
+              setTowerFilter("");
+            }}
+            className="rounded-md border border-black/20 bg-white px-3 py-2 text-sm min-w-[160px]"
+          >
+            <option value="">All properties</option>
+            <option value="opus_la">OPUS LA</option>
+            <option value="century_park_east">Century Park East</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
+            Tower
+          </label>
+          <select
+            value={towerFilter}
+            onChange={(e) => setTowerFilter(e.target.value)}
+            className="rounded-md border border-black/20 bg-white px-3 py-2 text-sm min-w-[170px]"
+          >
+            {towerOptions.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
@@ -348,10 +529,11 @@ export function CustomersTab({ onOpenProfile }: Props) {
               </div>
 
               <div className="divide-y divide-black/5">
-                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-2 items-center px-4 py-2 text-[11px] uppercase tracking-wider text-black/45 bg-white/60">
+                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-2 items-center px-4 py-2 text-[11px] uppercase tracking-wider text-black/45 bg-white/60">
                   <div>Name</div>
                   <div>Unit</div>
                   <div>Spend</div>
+                  <div>Source</div>
                   <div>Last Order</div>
                   <div>Status</div>
                   <div>Tier</div>
@@ -364,14 +546,31 @@ export function CustomersTab({ onOpenProfile }: Props) {
                     className="w-full px-4 py-2 text-left hover:bg-black/[0.02] focus:outline-none focus:ring-2 focus:ring-black/20"
                     aria-label={`Open profile for ${r.firstName} ${r.lastName}`}
                   >
-                    <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-2 items-center text-sm">
+                    <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-2 items-center text-sm">
                       <div className="min-w-0">
                         <p className="font-medium text-black truncate">
                           {r.firstName} {r.lastName}
                         </p>
+                        <p className="text-xs text-black/45 truncate">
+                          {[r.propertyDisplayName, r.towerDisplayName, r.buildingAddressCanonical]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
                       </div>
                       <div className="text-black/70">{r.unit || "—"}</div>
                       <div className="text-black/80 font-medium">${r.lifetimeSpend.toFixed(2)}</div>
+                      <div className="space-y-1">
+                        {(r.legacyCleanCloudRevenue ?? 0) > 0 ? (
+                          <>
+                            <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                              LEGACY · CLEANCLOUD
+                            </span>
+                            <div className="text-[11px] font-medium text-black/60">Not in Stripe</div>
+                          </>
+                        ) : (
+                          <span className="text-xs text-black/45">Stripe</span>
+                        )}
+                      </div>
                       <div className="text-black/60 text-xs">
                         {formatLastOrder(r.lastOrderAt)}
                       </div>

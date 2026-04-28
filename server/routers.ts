@@ -83,6 +83,8 @@ import { z } from "zod";
 import Stripe from "stripe";
 import * as jose from "jose";
 import { matchBuilding } from "@shared/buildings";
+import { normalizePropertyTower, TOWER_DEFINITIONS } from "@shared/propertyTowers";
+import { cleanCloudLegacyCustomers } from "./cleancloudLegacy";
 import {
   getActedOnTodayCents,
   getAwaitingPaymentCents,
@@ -916,6 +918,9 @@ export const appRouter = router({
             status: z.enum(["new", "active", "warm", "cooling", "lapsed"]).optional(),
             tier: z.enum(["vip", "standard"]).optional(),
             buildingSlug: z.string().max(100).optional(),
+            propertyGroup: z.enum(["opus_la", "century_park_east", "unknown"]).optional(),
+            towerKey: z.string().max(100).optional(),
+            includeLegacyCleanCloud: z.boolean().default(true),
           })
           .optional()
       )
@@ -927,7 +932,110 @@ export const appRouter = router({
           listAdminCustomerAggregates(),
           listPaidOrdersForBuildingRevenue(),
         ]);
-        let rows = hydrateCustomerAggregates(aggregateRows);
+        const includeLegacyCleanCloud = input?.includeLegacyCleanCloud ?? true;
+        let rows: any[] = hydrateCustomerAggregates(aggregateRows).map((row) => {
+          const tower = normalizePropertyTower(row.address);
+          return {
+            ...row,
+            propertyGroup: tower.propertyGroup,
+            propertyDisplayName: tower.propertyDisplayName,
+            towerKey: tower.towerKey,
+            towerDisplayName: tower.towerDisplayName,
+            buildingAddressCanonical: tower.buildingAddressCanonical,
+            stripeVerifiedRevenue: row.lifetimeSpend,
+            legacyCleanCloudRevenue: 0,
+            totalOperationalRevenue: row.lifetimeSpend,
+            source: "stripe",
+            paymentProcessor: "stripe",
+            includedInStripe: true,
+            includedInOperationalRevenue: true,
+            stripePaymentIntentId: null,
+          };
+        });
+
+        let abeDedupedOrLinked = false;
+        if (includeLegacyCleanCloud) {
+          for (const legacy of cleanCloudLegacyCustomers) {
+            const legacyEmail = legacy.email?.trim().toLowerCase() || "";
+            const legacyPhoneDigits = legacy.phone.replace(/\D/g, "");
+            const existing = rows.find((row) => {
+              const rowEmail = row.email?.trim().toLowerCase() || "";
+              const rowPhoneDigits = row.phone.replace(/\D/g, "");
+              return (
+                (legacyEmail && rowEmail === legacyEmail) ||
+                (legacyPhoneDigits.length >= 7 && rowPhoneDigits === legacyPhoneDigits)
+              );
+            });
+
+            if (existing) {
+              existing.legacyCleanCloudRevenue =
+                Math.round((existing.legacyCleanCloudRevenue + legacy.totalSpend) * 100) / 100;
+              existing.totalOperationalRevenue =
+                Math.round((existing.stripeVerifiedRevenue + existing.legacyCleanCloudRevenue) * 100) / 100;
+              existing.totalOrders += legacy.orderCount;
+              existing.lifetimeSpend = existing.totalOperationalRevenue;
+              existing.cleancloudCustomerId = legacy.cleancloudCustomerId;
+              existing.source = "stripe_plus_cleancloud_legacy";
+              existing.paymentProcessor = "stripe,cleancloud";
+              existing.includedInStripe = true;
+              existing.includedInOperationalRevenue = true;
+              existing.legacyImportNote = legacy.legacyImportNote;
+              existing.cleanCloudLegacyBadge = "LEGACY · CLEANCLOUD";
+              existing.cleanCloudStripeStatus = "Not in Stripe";
+              if (legacy.email === "abectunes@gmail.com" || legacy.phone === "5165871292") {
+                abeDedupedOrLinked = true;
+              }
+              continue;
+            }
+
+            rows.push({
+              phone: legacy.phone,
+              firstName: legacy.firstName,
+              lastName: legacy.lastName,
+              email: legacy.email,
+              unit: legacy.unit,
+              buildingSlug:
+                legacy.propertyGroup === "opus_la"
+                  ? "opusla"
+                  : legacy.propertyGroup === "century_park_east"
+                    ? "centuryparkeast"
+                    : null,
+              floorNumber: deriveFloorNumber(legacy.unit),
+              address: legacy.address,
+              totalOrders: legacy.orderCount,
+              lifetimeSpend: legacy.totalSpend,
+              firstOrderAt: new Date(`${legacy.firstOrderDate}T12:00:00Z`),
+              lastOrderAt: new Date(`${legacy.lastOrderDate}T12:00:00Z`),
+              lastOrderId: 0,
+              avgOrderValue: Math.round((legacy.totalSpend / legacy.orderCount) * 100) / 100,
+              daysSinceLastOrder: 0,
+              ordersLast30Days: 0,
+              ordersLast90Days: 0,
+              recencyStatus: "lapsed",
+              tier: legacy.totalSpend >= 150 ? "vip" : "standard",
+              statusColor: "muted",
+              bldgUserIds: [],
+              propertyGroup: legacy.propertyGroup,
+              propertyDisplayName: legacy.propertyDisplayName,
+              towerKey: legacy.towerKey,
+              towerDisplayName: legacy.towerDisplayName,
+              buildingAddressCanonical: legacy.buildingAddressCanonical,
+              stripeVerifiedRevenue: 0,
+              legacyCleanCloudRevenue: legacy.totalSpend,
+              totalOperationalRevenue: legacy.totalSpend,
+              source: legacy.source,
+              paymentProcessor: legacy.paymentProcessor,
+              includedInStripe: false,
+              includedInOperationalRevenue: true,
+              stripePaymentIntentId: null,
+              cleancloudCustomerId: legacy.cleancloudCustomerId,
+              legacyImportNote: legacy.legacyImportNote,
+              cleanCloudLegacyBadge: "LEGACY · CLEANCLOUD",
+              cleanCloudStripeStatus: "Not in Stripe",
+              note: legacy.note,
+            });
+          }
+        }
         const q = input?.search?.trim().toLowerCase();
         if (q) {
           rows = rows.filter(
@@ -945,6 +1053,12 @@ export const appRouter = router({
         }
         if (input?.buildingSlug) {
           rows = rows.filter((r) => r.buildingSlug === input.buildingSlug);
+        }
+        if (input?.propertyGroup) {
+          rows = rows.filter((r) => r.propertyGroup === input.propertyGroup);
+        }
+        if (input?.towerKey) {
+          rows = rows.filter((r) => r.towerKey === input.towerKey);
         }
         const sortBy = input?.sortBy ?? "lastOrder";
         if (sortBy === "spend") {
@@ -1016,6 +1130,74 @@ export const appRouter = router({
           buildingSummaryMap.set(key, existing);
         }
 
+        const contestTotals = {
+          stripeOnlyHelperText: "Stripe-only view excludes legacy CleanCloud orders.",
+          legacyHelperText:
+            "Legacy CleanCloud orders are included for operational history only. They are not Stripe transactions and will not appear in Stripe reports.",
+          includeLegacyCleanCloud,
+          abeDedupedOrLinked,
+          grand: {
+            stripeVerifiedRevenue: 0,
+            legacyCleanCloudRevenue: 0,
+            totalOperationalRevenue: 0,
+          },
+          properties: {
+            opus_la: {
+              propertyDisplayName: "OPUS LA",
+              stripeVerifiedRevenue: 0,
+              legacyCleanCloudRevenue: 0,
+              totalOperationalRevenue: 0,
+              towers: {
+                opus_south_3545: { ...TOWER_DEFINITIONS.opus_south_3545, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, totalOperationalRevenue: 0 },
+                opus_north_3650: { ...TOWER_DEFINITIONS.opus_north_3650, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, totalOperationalRevenue: 0 },
+                unknown: { ...TOWER_DEFINITIONS.unknown, propertyGroup: "opus_la", propertyDisplayName: "OPUS LA", stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, totalOperationalRevenue: 0 },
+              },
+            },
+            century_park_east: {
+              propertyDisplayName: "Century Park East",
+              stripeVerifiedRevenue: 0,
+              legacyCleanCloudRevenue: 0,
+              totalOperationalRevenue: 0,
+              towers: {
+                cpe_south_2170: { ...TOWER_DEFINITIONS.cpe_south_2170, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, totalOperationalRevenue: 0 },
+                cpe_north_2160: { ...TOWER_DEFINITIONS.cpe_north_2160, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, totalOperationalRevenue: 0 },
+              },
+            },
+          },
+        };
+
+        for (const row of rows) {
+          if (row.propertyGroup !== "opus_la" && row.propertyGroup !== "century_park_east") continue;
+          const prop = contestTotals.properties[row.propertyGroup];
+          const stripe = Number(row.stripeVerifiedRevenue ?? 0);
+          const legacy = includeLegacyCleanCloud ? Number(row.legacyCleanCloudRevenue ?? 0) : 0;
+          const operational = stripe + legacy;
+          prop.stripeVerifiedRevenue += stripe;
+          prop.legacyCleanCloudRevenue += legacy;
+          prop.totalOperationalRevenue += operational;
+          contestTotals.grand.stripeVerifiedRevenue += stripe;
+          contestTotals.grand.legacyCleanCloudRevenue += legacy;
+          contestTotals.grand.totalOperationalRevenue += operational;
+          const towers = prop.towers as Record<string, { stripeVerifiedRevenue: number; legacyCleanCloudRevenue: number; totalOperationalRevenue: number }>;
+          const towerKey = row.towerKey in towers ? row.towerKey : "unknown";
+          if (towers[towerKey]) {
+            towers[towerKey].stripeVerifiedRevenue += stripe;
+            towers[towerKey].legacyCleanCloudRevenue += legacy;
+            towers[towerKey].totalOperationalRevenue += operational;
+          }
+        }
+
+        const roundTotals = (obj: Record<string, unknown>) => {
+          for (const key of ["stripeVerifiedRevenue", "legacyCleanCloudRevenue", "totalOperationalRevenue"]) {
+            if (typeof obj[key] === "number") obj[key] = Math.round((obj[key] as number) * 100) / 100;
+          }
+        };
+        roundTotals(contestTotals.grand);
+        for (const prop of Object.values(contestTotals.properties)) {
+          roundTotals(prop as unknown as Record<string, unknown>);
+          for (const tower of Object.values(prop.towers)) roundTotals(tower as unknown as Record<string, unknown>);
+        }
+
         const buildingSummary = Object.fromEntries(
           Array.from(buildingSummaryMap.entries()).map(([slug, val]) => [
             slug,
@@ -1035,7 +1217,7 @@ export const appRouter = router({
           ])
         );
 
-        return { customers: rows, buildingSummary };
+        return { customers: rows, buildingSummary, contestTotals };
       }),
 
     /** Create order manually (admin new order tab) */
