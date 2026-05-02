@@ -280,11 +280,11 @@ function CatalogProductCard({
 
       <div className="mt-auto space-y-1.5 border-t border-black/6 pt-2">
         <div className="flex justify-between gap-2 font-mono text-[11px] tabular-nums">
-          <span className="text-black/45">Std</span>
+          <span className="text-black/45">Charge</span>
           <span className="text-black">{formatMoneyCents(row.standardPriceCents)}</span>
         </div>
         <div className="flex justify-between gap-2 font-mono text-[11px] tabular-nums">
-          <span className="text-black/45">Cost</span>
+          <span className="text-black/45">Partner</span>
           <span className="text-black">{formatMoneyCents(row.costCents ?? null)}</span>
         </div>
         {margin.pct != null ? (
@@ -538,8 +538,8 @@ export default function AdminCatalog() {
               ← Admin
             </Link>
             <div>
-              <h1 className="text-sm font-semibold tracking-tight">Catalog</h1>
-              <p className="text-[10px] text-black/40">Revenue control</p>
+              <h1 className="text-sm font-semibold tracking-tight">Catalog &amp; Pricing</h1>
+              <p className="text-[10px] text-black/40">Garment pricing + partner cost</p>
             </div>
             <div className="hidden h-6 w-px bg-black/10 sm:block" />
             <div className="flex flex-wrap gap-4 sm:gap-5">
@@ -626,10 +626,10 @@ export default function AdminCatalog() {
           >
             <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-black/8 pb-2">
               <h2 className="font-mono text-[13px] font-semibold uppercase tracking-[0.14em] text-black">
-                Catalog Composer
+                Garment Price Composer
               </h2>
               <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-black/40">
-                // natural language catalog control
+                // customer charge + dry cleaner cost
               </span>
               {composerForm && (
                 <Badge
@@ -643,7 +643,7 @@ export default function AdminCatalog() {
 
             <ol className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-black/75">
               {[
-                "Tell BLDG what to change",
+                "Type the garment and economics",
                 "Parse",
                 "Review editable preview",
                 "Apply changes",
@@ -659,7 +659,7 @@ export default function AdminCatalog() {
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
               <Input
-                placeholder="Tell BLDG what to change…"
+                placeholder="Example: cotton pants sell for $9, I pay dry cleaner 30% before any customer discount"
                 value={commandText}
                 onChange={(e) => setCommandText(e.target.value)}
                 className="h-10 flex-1 rounded-md text-sm"
@@ -698,7 +698,7 @@ export default function AdminCatalog() {
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {[
                 { label: "Raise price", prefill: "Raise <slug> price to $" },
-                { label: "Create SKU", prefill: "Add <item>. price $ cost $" },
+                { label: "Create garment", prefill: "Add cotton pants. sell $9, pay dry cleaner 30%" },
                 { label: "Archive item", prefill: "Archive <slug>" },
                 { label: "Take item offline", prefill: "Take <slug> offline" },
                 { label: "Bulk margin update", prefill: "Set all <category> margin to %" },
@@ -715,8 +715,8 @@ export default function AdminCatalog() {
             </div>
 
             <p className="mt-2.5 text-[10px] leading-snug text-black/40">
-              Examples: Add pants zipper alteration. price $26 cost $22 · Set 2pc suit price to $28 · Archive old rug
-              cleaning · Take dress hem offline
+              Examples: Add cotton pants. sell $9, pay dry cleaner 30% before discounts · Add pants zipper alteration.
+              price $26 cost $22 · Set 2pc suit price to $28 · Take dress hem offline
             </p>
 
             <div className="mt-3 border-t border-black/6 pt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-black/35">
@@ -776,7 +776,7 @@ export default function AdminCatalog() {
                   </Select>
                 </div>
                 <div className="grid gap-1">
-                  <Label className="text-[10px] text-black/50">Standard ($)</Label>
+                  <Label className="text-[10px] text-black/50">Customer price ($)</Label>
                   <Input
                     inputMode="decimal"
                     className="h-8 font-mono text-xs tabular-nums"
@@ -799,7 +799,7 @@ export default function AdminCatalog() {
                   />
                 </div>
                 <div className="grid gap-1">
-                  <Label className="text-[10px] text-black/50">Cost ($)</Label>
+                  <Label className="text-[10px] text-black/50">Partner cost ($)</Label>
                   <Input
                     inputMode="decimal"
                     className="h-8 font-mono text-xs tabular-nums"
@@ -929,9 +929,9 @@ export default function AdminCatalog() {
                   <TableHead className="w-[140px] text-[10px] font-semibold">Name</TableHead>
                   <TableHead className="text-[10px] font-semibold">Category</TableHead>
                   <TableHead className="w-[120px] text-[10px] font-semibold">Service</TableHead>
-                  <TableHead className="w-[72px] text-[10px] font-semibold">Std $</TableHead>
+                  <TableHead className="w-[78px] text-[10px] font-semibold">Charge $</TableHead>
                   <TableHead className="w-[72px] text-[10px] font-semibold">Expr $</TableHead>
-                  <TableHead className="w-[72px] text-[10px] font-semibold">Cost $</TableHead>
+                  <TableHead className="w-[82px] text-[10px] font-semibold">Partner $</TableHead>
                   <TableHead className="w-[80px] text-[10px] font-semibold">Margin</TableHead>
                   <TableHead className="w-[100px] text-[10px] font-semibold">Dup</TableHead>
                   <TableHead className="w-[56px] text-center text-[10px] font-semibold">On</TableHead>

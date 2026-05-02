@@ -450,6 +450,7 @@ export function QuickActions({ onNavigate, onOpenModal }: Pick<BoardActionProps,
   const actions = [
     { label: "New Intake", icon: ClipboardList, run: () => onNavigate("/intake") },
     { label: "Create Order", icon: FilePlus2, run: () => onNavigate("/new-order") },
+    { label: "Catalog & Pricing", icon: Receipt, run: () => onNavigate("/catalog") },
     { label: "Schedule Pickup", icon: CalendarDays, run: () => onNavigate("/pickups") },
     { label: "Record Payment", icon: CreditCard, run: () => onOpenModal({ kind: "pipeline_action" }) },
   ] as const;

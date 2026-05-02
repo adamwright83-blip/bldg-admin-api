@@ -198,7 +198,7 @@ export default function AdminHostApp() {
             className="block rounded-md px-3 py-2 text-sm font-medium transition-colors text-black/70 hover:bg-black/5 hover:text-black"
             onClick={() => setMobileNavOpen(false)}
           >
-            Pricing
+            Catalog & Pricing
           </a>
         </nav>
       </aside>

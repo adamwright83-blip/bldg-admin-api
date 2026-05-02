@@ -86,6 +86,7 @@ export function OpsBoardHome({
         <TerritoryProgression data={data} />
         <RevenueAtRisk data={data} onOpenModal={setModal} />
         <PerformanceGauges data={data} />
+        <QuickActions onNavigate={onNavigate} onOpenModal={setModal} />
         <MobileBottomNav onNavigate={onNavigate} />
       </div>
 

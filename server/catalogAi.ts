@@ -104,6 +104,11 @@ export type ParsedCommandDraft = {
   notes: string | null;
 };
 
+export type DerivedPartnerCost = {
+  percent: number;
+  costCents: number;
+};
+
 function getMessageText(result: InvokeResult): string {
   const raw = result.choices[0]?.message?.content;
   if (typeof raw === "string") return raw;
@@ -124,6 +129,72 @@ export function slugifyCatalogName(name: string): string {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 120) || "item";
+}
+
+function inferCatalogCategory(name: string | null): string | null {
+  if (!name) return null;
+  const lower = name.toLowerCase();
+  if (/\b(suit|tuxedo)\b/.test(lower)) return "Suits";
+  if (/\b(pants|jeans|shorts|trousers?)\b/.test(lower)) return "Pants";
+  if (/\b(dress|gown)\b/.test(lower)) return "Dresses";
+  if (/\b(skirt)\b/.test(lower)) return "Skirts";
+  if (/\b(shirt|blouse|cardigan|sweater|top|vest|jersey|turtleneck)\b/.test(lower)) return "Tops";
+  if (/\b(coat|jacket|outerwear)\b/.test(lower)) return "Outerwear";
+  if (/\b(comforter|duvet|blanket|sheet|pillow|bedspread)\b/.test(lower)) return "Bedding";
+  if (/\b(hem|zipper|alteration|repair|tailor)\b/.test(lower)) return "Alterations";
+  return null;
+}
+
+export function derivePartnerCostFromCommand(
+  command: string,
+  standardPriceCents: number | null | undefined
+): DerivedPartnerCost | null {
+  if (standardPriceCents == null || standardPriceCents <= 0) return null;
+
+  const percentRe = /(\d+(?:\.\d+)?)\s*(?:%|percent\b|per\s*cent\b)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = percentRe.exec(command)) !== null) {
+    const rawPercent = Number(match[1]);
+    if (!Number.isFinite(rawPercent) || rawPercent < 0 || rawPercent > 100) continue;
+
+    const start = Math.max(0, match.index - 80);
+    const end = Math.min(command.length, match.index + match[0].length + 80);
+    const nearby = command.slice(start, end).toLowerCase();
+    const mentionsPartnerCost =
+      /\b(pay|paid|pays|payout|cost|owed|give|gets?|receives?|keeps?)\b/.test(nearby) &&
+      /\b(dry\s*clean(?:er|ing)?|cleaner|partner|vendor|provider|wholesale)\b/.test(nearby);
+
+    if (!mentionsPartnerCost) continue;
+
+    return {
+      percent: rawPercent,
+      costCents: Math.round(standardPriceCents * (rawPercent / 100)),
+    };
+  }
+
+  return null;
+}
+
+export function normalizeParsedCatalogCommand(
+  command: string,
+  draft: ParsedCommandDraft
+): ParsedCommandDraft {
+  const next: ParsedCommandDraft = { ...draft };
+
+  if (next.intent === "create") {
+    next.serviceType = next.serviceType ?? "dry_clean";
+    next.category = next.category ?? inferCatalogCategory(next.name) ?? "Garments";
+  }
+
+  const derivedPartnerCost = derivePartnerCostFromCommand(command, next.standardPriceCents);
+  if (derivedPartnerCost) {
+    next.costCents = derivedPartnerCost.costCents;
+    const dollars = (derivedPartnerCost.costCents / 100).toFixed(2);
+    const summary = `Partner cost set to ${derivedPartnerCost.percent}% of sell price ($${dollars}) before customer discounts.`;
+    next.notes = next.notes?.trim() ? `${next.notes.trim()} ${summary}` : summary;
+  }
+
+  return next;
 }
 
 export async function parseMenuFileWithLLM(params: {
@@ -212,7 +283,12 @@ export async function parseCatalogCommandWithLLM(params: {
           "\n\nCommand:\n" +
           params.command +
           "\n\nParse into one intent: create | update_price | archive | toggle_online. " +
+          "If a command names a garment/item and gives a sell price but does not say add/create, infer create unless it clearly matches one existing row. " +
+          "New dry-cleaning garments default to serviceType dry_clean. " +
           "For create: fill name, category, serviceType, standardPriceCents, costCents (null if unknown), slug null (we derive). " +
+          "standardPriceCents is the customer sell price before discounts. costCents is what we pay the dry-clean partner/vendor before any customer discount. " +
+          "If the admin says they pay the dry cleaner/partner/vendor N%, compute costCents as N% of standardPriceCents; e.g. sell $9 and pay dry cleaner 30% means standardPriceCents 900 and costCents 270. " +
+          "Do not treat partner cost percentage as customer discount or margin. " +
           "For update_price: set slug to match an existing slug from the list, standardPriceCents new value. " +
           "For archive: set slug to the item to archive. " +
           "For toggle_online: slug and isOnline true/false. " +
@@ -234,5 +310,5 @@ export async function parseCatalogCommandWithLLM(params: {
       `Command parse returned invalid JSON (first 240 chars): ${text.slice(0, 240)}`
     );
   }
-  return parsed;
+  return normalizeParsedCatalogCommand(params.command, parsed);
 }

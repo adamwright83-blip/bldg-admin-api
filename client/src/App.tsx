@@ -19,6 +19,7 @@ function AdminHostRouter() {
     <Switch>
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
+      <Route path="/pricing" component={AdminCatalog} />
       <Route path="/admin" component={AdminHostApp} />
       <Route path="/home" component={AdminHostApp} />
       <Route path="/live" component={AdminHostApp} />
@@ -55,6 +56,7 @@ function Router() {
     <Switch>
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
+      <Route path="/pricing" component={AdminCatalog} />
       <Route
         path={"/"}
         component={
