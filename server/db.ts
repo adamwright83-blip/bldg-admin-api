@@ -10,6 +10,8 @@ import {
   bldgUsers, BldgUser,
   leads, Lead, InsertLead,
   catalogItems, CatalogItem,
+  agentEvents, InsertAgentEvent, AgentEvent,
+  tenantAiUsage, TenantAiUsage,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { matchBuilding } from "@shared/buildings";
@@ -494,6 +496,96 @@ export async function updateOrderStatus(
   if (!db) throw new Error("Database not available");
 
   await db.update(orders).set({ status }).where(eq(orders.id, orderId));
+}
+
+export async function listRecentAgentEvents(
+  tenantId = "default",
+  limit = 100
+): Promise<AgentEvent[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(agentEvents)
+    .where(eq(agentEvents.tenantId, tenantId))
+    .orderBy(desc(agentEvents.createdAt), desc(agentEvents.id))
+    .limit(Math.min(Math.max(limit, 1), 500));
+}
+
+export async function createAgentEvent(event: InsertAgentEvent): Promise<number | null> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[AgentEvents] Database not available; event not persisted", {
+      toolName: event.toolName,
+      status: event.status,
+    });
+    return null;
+  }
+
+  const result = await db.insert(agentEvents).values(event);
+  return Number(result[0].insertId);
+}
+
+export function currentAiUsageMonth(now = new Date()): string {
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+export async function getTenantAiUsage(
+  tenantId = "default",
+  month = currentAiUsageMonth()
+): Promise<TenantAiUsage | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db
+    .select()
+    .from(tenantAiUsage)
+    .where(and(eq(tenantAiUsage.tenantId, tenantId), eq(tenantAiUsage.month, month)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function incrementTenantAiUsage(input: {
+  tenantId?: string;
+  month?: string;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostCents: number;
+  warningLimitCents?: number;
+  hardLimitCents?: number;
+}): Promise<TenantAiUsage | null> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[AiUsage] Database not available; usage not persisted");
+    return null;
+  }
+
+  const tenantId = input.tenantId ?? "default";
+  const month = input.month ?? currentAiUsageMonth();
+  await db
+    .insert(tenantAiUsage)
+    .values({
+      tenantId,
+      month,
+      inputTokens: input.inputTokens,
+      outputTokens: input.outputTokens,
+      estimatedCostCents: input.estimatedCostCents,
+      requestCount: 1,
+      warningLimitCents: input.warningLimitCents ?? 5000,
+      hardLimitCents: input.hardLimitCents ?? 10000,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        inputTokens: sql`${tenantAiUsage.inputTokens} + ${input.inputTokens}`,
+        outputTokens: sql`${tenantAiUsage.outputTokens} + ${input.outputTokens}`,
+        estimatedCostCents: sql`${tenantAiUsage.estimatedCostCents} + ${input.estimatedCostCents}`,
+        requestCount: sql`${tenantAiUsage.requestCount} + 1`,
+        updatedAt: new Date(),
+      },
+    });
+
+  return getTenantAiUsage(tenantId, month);
 }
 
 export async function updateOrderIntake(

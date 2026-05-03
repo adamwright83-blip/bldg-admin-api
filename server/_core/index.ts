@@ -19,6 +19,7 @@ import { resolveTenantIdFromHeaders } from "@shared/tenantConfig";
 import bcrypt from "bcryptjs";
 import { SignJWT } from "jose";
 import { getVendorBySlug, getVendorUserByVendorIdAndEmail } from "../db";
+import { createAgentS2SRunToolHandler } from "../agents/s2sEndpoint";
 
 const warnedUnknownTenantHosts = new Set<string>();
 
@@ -194,7 +195,7 @@ async function startServer() {
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "x-trpc-source"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-trpc-source", "x-agent-shared-secret"],
   };
   
   // Apply cors middleware to all paths (leads REST endpoint is handled above, before this)
@@ -206,6 +207,8 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
+  app.post("/api/agent/s2s/run-tool", createAgentS2SRunToolHandler());
 
   // Direct password login — bypasses OAuth portal entirely.
   // Set ADMIN_PASSWORD in Railway env. Falls back to APP_SHARED_API_SECRET.

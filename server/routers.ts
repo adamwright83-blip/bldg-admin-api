@@ -105,6 +105,11 @@ import {
   type ExecuteOffensiveInput,
 } from "./level4OffensiveExecute";
 import { getLevel4GateState as loadLevel4GateState } from "./level4Gate";
+import { runAgentTool, runOperatorVoiceCommand } from "./agents/agentRuntime";
+import { getAgentEventTimeline } from "./agents/agentEvents";
+import { getTenantAiLimitState } from "./agents/costTracking";
+import { listAgentTools } from "./agents/toolRegistry";
+import type { AgentType, ActorType } from "./agents/permissions";
 
 const STRIPE_API_VERSION = "2025-03-31.basil" as const;
 
@@ -240,19 +245,19 @@ export const appRouter = router({
       };
     }),
     listOrders: vendorProcedure
-      .input(z.object({ status: z.enum(["new", "collected", "processing", "ready", "delivered"]).optional() }))
+      .input(z.object({ status: z.enum(["new", "intake-pending", "collected", "processing", "ready", "delivered"]).optional() }))
       .query(async ({ ctx, input }) => {
         return getOrdersByVendorId(ctx.vendorSession.vendorId, input.status);
       }),
     listByStatus: vendorProcedure
-      .input(z.object({ status: z.enum(["new", "collected", "processing", "ready", "delivered"]) }))
+      .input(z.object({ status: z.enum(["new", "intake-pending", "collected", "processing", "ready", "delivered"]) }))
       .query(async ({ ctx, input }) => {
         return getOrdersByVendorId(ctx.vendorSession.vendorId, input.status);
       }),
     listByDate: vendorProcedure
       .input(z.object({
         date: z.string(),
-        status: z.enum(["new", "collected", "processing", "ready", "delivered"]),
+        status: z.enum(["new", "intake-pending", "collected", "processing", "ready", "delivered"]),
         dateField: z.enum(["pickupDate", "deliveryDate"]).default("pickupDate"),
       }))
       .query(async ({ ctx, input }) => {
@@ -479,7 +484,7 @@ export const appRouter = router({
   admin: router({
     /** List orders by status — platform or vendor (vendor gets scoped list) */
     listByStatus: platformOrVendorProcedure
-      .input(z.object({ status: z.enum(["new", "collected", "processing", "ready", "delivered"]) }))
+      .input(z.object({ status: z.enum(["new", "intake-pending", "collected", "processing", "ready", "delivered"]) }))
       .query(async ({ ctx, input }) => {
         const vendorId = ctx.vendorSession?.vendorId;
         return getOrdersByStatus(input.status, vendorId);
@@ -489,7 +494,7 @@ export const appRouter = router({
     listByDate: platformOrVendorProcedure
       .input(z.object({
         date: z.string(),
-        status: z.enum(["new", "collected", "processing", "ready", "delivered"]),
+        status: z.enum(["new", "intake-pending", "collected", "processing", "ready", "delivered"]),
         dateField: z.enum(["pickupDate", "deliveryDate"]).default("pickupDate"),
       }))
       .query(async ({ ctx, input }) => {
@@ -617,6 +622,62 @@ export const appRouter = router({
      */
     getLevel4GateState: adminProcedure.query(async ({ ctx }) => {
       return loadLevel4GateState(ctx.tenantId);
+    }),
+
+    agent: router({
+      listTools: adminProcedure.query(() => listAgentTools()),
+      events: adminProcedure
+        .input(z.object({ limit: z.number().int().min(1).max(500).default(100) }))
+        .query(async ({ ctx, input }) => getAgentEventTimeline(ctx.tenantId, input.limit)),
+      aiUsageState: adminProcedure.query(async ({ ctx }) => getTenantAiLimitState(ctx.tenantId)),
+      runTool: adminProcedure
+        .input(z.object({
+          toolName: z.string().min(1),
+          input: z.unknown().default({}),
+          agentType: z.enum([
+            "resident_agent",
+            "operator_voice_agent",
+            "vendor_agent",
+            "driver_agent",
+            "gm_agent",
+            "building_agent",
+            "collections_agent",
+          ]),
+          actorType: z.enum(["human", "voice", "resident_chat", "driver", "vendor", "ai_agent", "system"]).default("human"),
+          sessionId: z.string().optional(),
+          conversationId: z.string().optional(),
+          approvedByUserId: z.string().optional(),
+          trustedUiFlow: z.boolean().optional(),
+        }))
+        .mutation(async ({ ctx, input }) => {
+          return runAgentTool(input.toolName, input.input, {
+            tenantId: ctx.tenantId,
+            sessionId: input.sessionId ?? null,
+            conversationId: input.conversationId ?? null,
+            agentType: input.agentType as AgentType,
+            actorType: input.actorType as ActorType,
+            actorId: ctx.user?.id != null ? String(ctx.user.id) : null,
+            approvedByUserId: input.approvedByUserId ?? null,
+            trustedUiFlow: input.trustedUiFlow ?? false,
+          });
+        }),
+      runOperatorVoiceCommand: adminProcedure
+        .input(z.object({
+          note: z.string().min(1),
+          sessionId: z.string().optional(),
+          conversationId: z.string().optional(),
+        }))
+        .mutation(async ({ ctx, input }) => {
+          return runOperatorVoiceCommand(input.note, {
+            tenantId: ctx.tenantId,
+            sessionId: input.sessionId ?? null,
+            conversationId: input.conversationId ?? null,
+            agentType: "operator_voice_agent",
+            actorType: "voice",
+            actorId: ctx.user?.id != null ? String(ctx.user.id) : null,
+            trustedUiFlow: true,
+          });
+        }),
     }),
 
     /** Static UI hints (env-backed); delivery truth remains on admin_action_log + webhooks. */
@@ -1291,7 +1352,7 @@ export const appRouter = router({
     updateStatus: platformOrVendorProcedure
       .input(z.object({
         orderId: z.number(),
-        status: z.enum(["new", "collected", "processing", "ready", "delivered"]),
+        status: z.enum(["new", "intake-pending", "collected", "processing", "ready", "delivered"]),
       }))
       .mutation(async ({ ctx, input }) => {
         const order = await getOrderById(input.orderId);

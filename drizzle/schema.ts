@@ -59,7 +59,7 @@ export const orders = mysqlTable("orders", {
   stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 255 }),
 
   /* Order status */
-  status: mysqlEnum("status", ["new", "collected", "processing", "ready", "delivered"])
+  status: mysqlEnum("status", ["new", "intake-pending", "collected", "processing", "ready", "delivered"])
     .default("new")
     .notNull(),
 
@@ -324,3 +324,61 @@ export const catalogItems = mysqlTable(
 
 export type CatalogItem = typeof catalogItems.$inferSelect;
 export type InsertCatalogItem = typeof catalogItems.$inferInsert;
+
+export const agentEvents = mysqlTable("agent_events", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  sessionId: varchar("sessionId", { length: 128 }),
+  conversationId: varchar("conversationId", { length: 128 }),
+  agentType: mysqlEnum("agentType", [
+    "resident_agent",
+    "operator_voice_agent",
+    "vendor_agent",
+    "driver_agent",
+    "gm_agent",
+    "building_agent",
+    "collections_agent",
+  ]).notNull(),
+  actorType: mysqlEnum("actorType", ["human", "voice", "resident_chat", "driver", "vendor", "ai_agent", "system"]).notNull(),
+  actorId: varchar("actorId", { length: 128 }),
+  toolName: varchar("toolName", { length: 128 }).notNull(),
+  entityType: varchar("entityType", { length: 64 }),
+  entityId: varchar("entityId", { length: 128 }),
+  inputJson: json("inputJson"),
+  outputJson: json("outputJson"),
+  status: mysqlEnum("status", ["success", "failed", "approval_required", "blocked"]).notNull(),
+  errorMessage: text("errorMessage"),
+  latencyMs: int("latencyMs"),
+  modelUsed: varchar("modelUsed", { length: 128 }),
+  inputTokens: int("inputTokens").default(0).notNull(),
+  outputTokens: int("outputTokens").default(0).notNull(),
+  estimatedCostCents: int("estimatedCostCents").default(0).notNull(),
+  requiresHumanApproval: boolean("requiresHumanApproval").default(false).notNull(),
+  approvedByUserId: varchar("approvedByUserId", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AgentEvent = typeof agentEvents.$inferSelect;
+export type InsertAgentEvent = typeof agentEvents.$inferInsert;
+
+export const tenantAiUsage = mysqlTable(
+  "tenant_ai_usage",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    month: varchar("month", { length: 7 }).notNull(),
+    inputTokens: int("inputTokens").default(0).notNull(),
+    outputTokens: int("outputTokens").default(0).notNull(),
+    estimatedCostCents: int("estimatedCostCents").default(0).notNull(),
+    requestCount: int("requestCount").default(0).notNull(),
+    warningLimitCents: int("warningLimitCents").default(5000).notNull(),
+    hardLimitCents: int("hardLimitCents").default(10000).notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    uqTenantMonth: uniqueIndex("uq_tenant_ai_usage_tenant_month").on(table.tenantId, table.month),
+  })
+);
+
+export type TenantAiUsage = typeof tenantAiUsage.$inferSelect;
+export type InsertTenantAiUsage = typeof tenantAiUsage.$inferInsert;

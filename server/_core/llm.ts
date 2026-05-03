@@ -4,6 +4,7 @@ import Anthropic, {
   RateLimitError,
 } from "@anthropic-ai/sdk";
 import { ENV } from "./env";
+import { assertAiSpendAvailable, trackModelUsage } from "../agents/costTracking";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -59,6 +60,7 @@ export type ToolChoice = ToolChoicePrimitive | ToolChoiceByName | ToolChoiceExpl
 
 export type InvokeParams = {
   messages: Message[];
+  tenantId?: string;
   tools?: Tool[];
   toolChoice?: ToolChoice;
   tool_choice?: ToolChoice;
@@ -265,6 +267,8 @@ export function toAnthropicCallerError(err: unknown): Error {
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   assertAnthropicApiKey();
+  const tenantId = params.tenantId ?? "default";
+  await assertAiSpendAvailable(tenantId);
 
   if (params.tools?.length) {
     throw new Error("invokeLLM with Anthropic does not support custom tools; use outputSchema only.");
@@ -360,14 +364,14 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
       throw new Error("Anthropic tool returned empty input object.");
     }
 
-    return {
+    const result: InvokeResult = {
       id: response.id,
       created: Date.now(),
       model: response.model,
       choices: [
         {
           index: 0,
-          message: { role: "assistant", content: jsonStr },
+          message: { role: "assistant" as const, content: jsonStr },
           finish_reason: response.stop_reason,
         },
       ],
@@ -379,6 +383,15 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
           }
         : undefined,
     };
+    if (result.usage) {
+      await trackModelUsage({
+        tenantId,
+        modelUsed: result.model,
+        inputTokens: result.usage.prompt_tokens,
+        outputTokens: result.usage.completion_tokens,
+      });
+    }
+    return result;
   } catch (e) {
     throw toAnthropicCallerError(e);
   }
