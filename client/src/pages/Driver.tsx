@@ -3,12 +3,30 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
 import { Loader2 } from "lucide-react";
 import { DriverPrepMechanic } from "@/components/driver/DriverPrepMechanic";
+import { useState } from "react";
+
+function getLocalYmd(date = new Date()): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
 
 export default function Driver() {
   const { loading: authLoading, isAuthenticated } = useAuth();
+  const [selectedDate, setSelectedDate] = useState(() => getLocalYmd());
 
-  const pickupQuery = trpc.admin.listByStatus.useQuery({ status: "new" });
-  const deliveryQuery = trpc.admin.listByStatus.useQuery({ status: "ready" });
+  const pickupQuery = trpc.admin.listByDate.useQuery({
+    date: selectedDate,
+    status: "new",
+    dateField: "pickupDate",
+  });
+  const deliveryQuery = trpc.admin.listByDate.useQuery({
+    date: selectedDate,
+    status: "ready",
+    dateField: "deliveryDate",
+  });
   const updateStatus = trpc.admin.updateStatus.useMutation();
 
   const handleResolveOrder = async (
@@ -39,6 +57,8 @@ export default function Driver() {
     <DriverPrepMechanic
       pickups={pickupQuery.data}
       deliveries={deliveryQuery.data}
+      selectedDate={selectedDate}
+      onSelectedDateChange={setSelectedDate}
       isLoading={
         pickupQuery.isLoading ||
         deliveryQuery.isLoading ||

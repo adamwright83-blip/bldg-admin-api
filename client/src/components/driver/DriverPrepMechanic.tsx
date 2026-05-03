@@ -38,6 +38,8 @@ import MissionDebrief from "./MissionDebrief";
 type Props = {
   pickups?: Order[];
   deliveries?: Order[];
+  selectedDate: string;
+  onSelectedDateChange: (date: string) => void;
   isLoading?: boolean;
   onOrderCreated?: () => Promise<void> | void;
   onResolveOrder: (
@@ -164,6 +166,8 @@ function pickCurrentOrder(
 export function DriverPrepMechanic({
   pickups,
   deliveries,
+  selectedDate,
+  onSelectedDateChange,
   isLoading,
   onOrderCreated,
   onResolveOrder,
@@ -382,6 +386,10 @@ export function DriverPrepMechanic({
         state: snapshot,
         rawState: state,
         orders: availableOrders,
+        selectedDate,
+        onSelectedDateChange,
+        pickupCount: pickups?.length ?? 0,
+        deliveryCount: deliveries?.length ?? 0,
         selectedOrder,
         missionTarget,
         scansCompleted,
@@ -406,6 +414,10 @@ type RenderArgs = {
   state: GameStateSnapshot;
   rawState: DriverPrepState;
   orders: GameOrder[];
+  selectedDate: string;
+  onSelectedDateChange: (date: string) => void;
+  pickupCount: number;
+  deliveryCount: number;
   selectedOrder: GameOrder | null;
   missionTarget: GameMissionTarget;
   scansCompleted: number;
@@ -433,6 +445,10 @@ function renderPhase(phase: DriverPrepPhase, args: RenderArgs) {
         <CommandCenter
           orders={args.orders}
           state={args.state}
+          selectedDate={args.selectedDate}
+          onSelectedDateChange={args.onSelectedDateChange}
+          pickupCount={args.pickupCount}
+          deliveryCount={args.deliveryCount}
           onSelectOrder={args.handleSelectOrder}
           onOrderCreated={args.onOrderCreated}
           isLoading={args.isLoading}
@@ -444,6 +460,10 @@ function renderPhase(phase: DriverPrepPhase, args: RenderArgs) {
           <CommandCenter
             orders={args.orders}
             state={args.state}
+            selectedDate={args.selectedDate}
+            onSelectedDateChange={args.onSelectedDateChange}
+            pickupCount={args.pickupCount}
+            deliveryCount={args.deliveryCount}
             onSelectOrder={args.handleSelectOrder}
             onOrderCreated={args.onOrderCreated}
             isLoading={args.isLoading}

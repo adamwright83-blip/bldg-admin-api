@@ -17,6 +17,8 @@ import {
   Zap,
   Trophy,
   Building2,
+  CalendarDays,
+  ChevronLeft,
 } from "lucide-react";
 import type { GameOrder, GameStateSnapshot } from "./driverGameTypes";
 import { sounds } from "./driverSounds";
@@ -30,6 +32,10 @@ const HERO_CITYSCAPE =
 interface Props {
   orders: GameOrder[];
   state: GameStateSnapshot;
+  selectedDate: string;
+  onSelectedDateChange: (date: string) => void;
+  pickupCount: number;
+  deliveryCount: number;
   onSelectOrder: (order: GameOrder) => void;
   onOrderCreated?: () => Promise<void> | void;
   isLoading?: boolean;
@@ -50,9 +56,180 @@ function getRank(missions: number): { name: string } {
   return { name: "RECRUIT" };
 }
 
+function localYmd(date = new Date()): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function parseYmd(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function addDays(value: string, days: number): string {
+  const date = parseYmd(value);
+  date.setDate(date.getDate() + days);
+  return localYmd(date);
+}
+
+function formatSelectedDate(value: string): string {
+  return parseYmd(value).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function buildDateRail(selectedDate: string) {
+  return Array.from({ length: 7 }, (_, i) => {
+    const offset = i - 3;
+    const value = addDays(selectedDate, offset);
+    const date = parseYmd(value);
+    return {
+      value,
+      day: date.toLocaleDateString("en-US", { weekday: "short" }),
+      date: date.toLocaleDateString("en-US", { day: "numeric" }),
+      isToday: value === localYmd(),
+      isSelected: value === selectedDate,
+    };
+  });
+}
+
+function ScheduleDateSelector({
+  selectedDate,
+  onSelectedDateChange,
+  pickupCount,
+  deliveryCount,
+}: Pick<
+  Props,
+  "selectedDate" | "onSelectedDateChange" | "pickupCount" | "deliveryCount"
+>) {
+  const days = React.useMemo(() => buildDateRail(selectedDate), [selectedDate]);
+  const total = pickupCount + deliveryCount;
+
+  const jump = (daysDelta: number) => {
+    sounds.press();
+    haptics.tap();
+    onSelectedDateChange(addDays(selectedDate, daysDelta));
+  };
+
+  const choose = (value: string) => {
+    sounds.press();
+    haptics.tap();
+    onSelectedDateChange(value);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.18, duration: 0.35 }}
+      className="mb-6 border border-border/40 bg-void-light/45 p-3"
+    >
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <CalendarDays className="w-3.5 h-3.5 text-neon/65 shrink-0" />
+            <p className="text-[8px] tracking-[0.24em] text-neon/65 uppercase font-semibold">
+              Route Date
+            </p>
+          </div>
+          <p className="font-display text-[18px] font-bold text-foreground uppercase tracking-wide truncate">
+            {formatSelectedDate(selectedDate)}
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => jump(-1)}
+            className="h-9 w-9 border border-border/50 bg-void/60 text-muted-foreground hover:text-neon hover:border-neon/40 transition-colors flex items-center justify-center"
+            aria-label="Previous day"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => choose(localYmd())}
+            className="h-9 px-3 border border-neon/25 bg-neon/[0.06] text-[8px] tracking-[0.2em] text-neon/75 hover:border-neon/55 hover:text-neon uppercase font-bold transition-colors"
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            onClick={() => jump(1)}
+            className="h-9 w-9 border border-border/50 bg-void/60 text-muted-foreground hover:text-neon hover:border-neon/40 transition-colors flex items-center justify-center"
+            aria-label="Next day"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1.5 mb-3">
+        {days.map((day) => (
+          <button
+            key={day.value}
+            type="button"
+            onClick={() => choose(day.value)}
+            className={`h-[58px] border transition-colors flex flex-col items-center justify-center ${
+              day.isSelected
+                ? "border-neon bg-neon/[0.12] text-neon shadow-[0_0_16px_rgba(0,255,136,0.12)]"
+                : day.isToday
+                  ? "border-amber/45 bg-amber/[0.07] text-amber"
+                  : "border-border/35 bg-void/45 text-muted-foreground hover:border-neon/35 hover:text-foreground"
+            }`}
+            aria-label={`Show route for ${day.value}`}
+          >
+            <span className="text-[7px] tracking-[0.18em] uppercase font-semibold">
+              {day.day}
+            </span>
+            <span className="font-display text-[18px] font-bold leading-none mt-1">
+              {day.date}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-3 gap-1.5">
+        <div className="border border-neon/20 bg-neon/[0.04] px-2 py-2">
+          <p className="text-[7px] tracking-[0.18em] text-neon/55 uppercase">
+            Pickups
+          </p>
+          <p className="font-display text-lg font-bold text-neon leading-none">
+            {pickupCount}
+          </p>
+        </div>
+        <div className="border border-amber/20 bg-amber/[0.04] px-2 py-2">
+          <p className="text-[7px] tracking-[0.18em] text-amber/60 uppercase">
+            Dropoffs
+          </p>
+          <p className="font-display text-lg font-bold text-amber leading-none">
+            {deliveryCount}
+          </p>
+        </div>
+        <div className="border border-border/35 bg-void/45 px-2 py-2">
+          <p className="text-[7px] tracking-[0.18em] text-muted-foreground uppercase">
+            Total
+          </p>
+          <p className="font-display text-lg font-bold text-foreground leading-none">
+            {total}
+          </p>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function CommandCenter({
   orders,
   state,
+  selectedDate,
+  onSelectedDateChange,
+  pickupCount,
+  deliveryCount,
   onSelectOrder,
   onOrderCreated,
   isLoading,
@@ -149,6 +326,13 @@ export default function CommandCenter({
           </div>
           <div className="mt-3 h-px bg-gradient-to-r from-neon/50 via-neon/20 to-transparent" />
         </motion.div>
+
+        <ScheduleDateSelector
+          selectedDate={selectedDate}
+          onSelectedDateChange={onSelectedDateChange}
+          pickupCount={pickupCount}
+          deliveryCount={deliveryCount}
+        />
 
         <motion.div
           initial={{ opacity: 0, y: 10 }}
