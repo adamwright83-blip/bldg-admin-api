@@ -3,7 +3,7 @@ import {
   updateVendorBranding,
   updateVendorSlug,
 } from "../../db";
-import { detectVendorCategoryPreset, getVendorCategoryPreset, type VendorTrafficProtectionMode } from "../vendorCategoryPresets";
+import { detectVendorCategoryPreset, getVendorCategoryPreset, vendorCategoryPresets, type VendorTrafficProtectionMode } from "../vendorCategoryPresets";
 
 export function slugify(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "vendor";
@@ -30,7 +30,9 @@ export function normalizeTrafficMode(value: unknown): VendorTrafficProtectionMod
 }
 
 export function inferCategoryKey(input: Record<string, any>): string {
-  return input.categoryPresetKey ?? input.vendorCategory ?? detectVendorCategoryPreset(JSON.stringify(input));
+  const explicit = input.categoryPresetKey ?? input.vendorCategory;
+  if (explicit && String(explicit) in vendorCategoryPresets) return String(explicit);
+  return detectVendorCategoryPreset(String(explicit ?? JSON.stringify(input)));
 }
 
 export function missingVendorFields(input: Record<string, any>): string[] {

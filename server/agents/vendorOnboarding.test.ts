@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { listAgentTools } from "./toolRegistry";
+import { inferCategoryKey } from "./tools/vendorToolUtils";
 import {
   detectVendorCategoryPreset,
   detectVendorOnboardingIntent,
@@ -20,6 +21,7 @@ describe("universal vendor onboarding presets", () => {
     expect(detectVendorCategoryPreset("I run an auto detailing business")).toBe("auto_detail");
     expect(detectVendorCategoryPreset("I offer pet grooming")).toBe("pet_care");
     expect(detectVendorCategoryPreset("Laundry and dry cleaning pickup route")).toBe("route_operator");
+    expect(inferCategoryKey({ vendorCategory: "hair stylist" })).toBe("beauty_mobile");
   });
 
   it("generates correct enabled surfaces from preset enable-lists", () => {
