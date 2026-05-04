@@ -16,6 +16,26 @@ import { createDriverMissionTool } from "./tools/createDriverMissionTool";
 import { getResidentContextTool } from "./tools/getResidentContextTool";
 import { requestVendorConfirmationTool } from "./tools/requestVendorConfirmationTool";
 import { createVendorOnboardingSessionTool } from "./tools/createVendorOnboardingSessionTool";
+import { prefillVendorFromWebTool } from "./tools/prefillVendorFromWebTool";
+import { collectVendorDetailsTool } from "./tools/collectVendorDetailsTool";
+import { createVendorProfileTool } from "./tools/createVendorProfileTool";
+import { createVendorServiceCatalogTool } from "./tools/createVendorServiceCatalogTool";
+import { setVendorAvailabilityTool } from "./tools/setVendorAvailabilityTool";
+import { configureVendorGeoClusteringTool } from "./tools/configureVendorGeoClusteringTool";
+import { configureVendorBookingRulesTool } from "./tools/configureVendorBookingRulesTool";
+import { configureVendorAdminTool } from "./tools/configureVendorAdminTool";
+import { setVendorAdminThemeTool } from "./tools/setVendorAdminThemeTool";
+import { createVendorPricingRecommendationTool } from "./tools/createVendorPricingRecommendationTool";
+import { createVendorDirectBookingSessionTool } from "./tools/createVendorDirectBookingSessionTool";
+import { createVendorGuestBookingSessionTool } from "./tools/createVendorGuestBookingSessionTool";
+import { createVendorPeerServiceRequestTool } from "./tools/createVendorPeerServiceRequestTool";
+import { searchNetworkVendorsTool } from "./tools/searchNetworkVendorsTool";
+import { requestVendorBookingConfirmationTool } from "./tools/requestVendorBookingConfirmationTool";
+import { expireVendorPeerServiceRequestTool } from "./tools/expireVendorPeerServiceRequestTool";
+import { exportVendorDataTool } from "./tools/exportVendorDataTool";
+import { createVendorAdminCommandTool } from "./tools/createVendorAdminCommandTool";
+import { logVendorOnboardingAbandonmentTool } from "./tools/logVendorOnboardingAbandonmentTool";
+import { scanAbandonedVendorOnboardingSessionsTool } from "./tools/scanAbandonedVendorOnboardingSessionsTool";
 
 export type AgentToolResult<TOutput = unknown> = {
   entityType?: string | null;
@@ -48,6 +68,26 @@ const tools = [
   getResidentContextTool,
   requestVendorConfirmationTool,
   createVendorOnboardingSessionTool,
+  prefillVendorFromWebTool,
+  collectVendorDetailsTool,
+  createVendorProfileTool,
+  createVendorServiceCatalogTool,
+  setVendorAvailabilityTool,
+  configureVendorGeoClusteringTool,
+  configureVendorBookingRulesTool,
+  configureVendorAdminTool,
+  setVendorAdminThemeTool,
+  createVendorPricingRecommendationTool,
+  createVendorDirectBookingSessionTool,
+  createVendorGuestBookingSessionTool,
+  createVendorPeerServiceRequestTool,
+  searchNetworkVendorsTool,
+  requestVendorBookingConfirmationTool,
+  expireVendorPeerServiceRequestTool,
+  exportVendorDataTool,
+  createVendorAdminCommandTool,
+  logVendorOnboardingAbandonmentTool,
+  scanAbandonedVendorOnboardingSessionsTool,
 ] satisfies AgentTool[];
 
 export const toolRegistry = new Map<string, AgentTool>(

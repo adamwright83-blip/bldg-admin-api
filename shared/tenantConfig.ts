@@ -38,6 +38,7 @@ export const TENANT_CONFIG: Readonly<Record<TenantId, TenantConfig>> = {
       "admin.bldg.chat",
       "driver.bldg.chat",
       "vendor.bldg.chat",
+      "vendorsignup.bldg.chat",
       "contact.bldg.chat",
       "localhost:3000",
       "127.0.0.1:3000",
@@ -198,4 +199,3 @@ export const getHostFromHeaders = (headers: HeaderRecord): string | null => {
 export const resolveTenantIdFromHeaders = (
   headers: HeaderRecord
 ): TenantResolution => resolveTenantIdFromHost(getHostFromHeaders(headers));
-

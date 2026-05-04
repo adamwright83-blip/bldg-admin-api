@@ -12,6 +12,15 @@ import {
   catalogItems, CatalogItem,
   agentEvents, InsertAgentEvent, AgentEvent,
   tenantAiUsage, TenantAiUsage,
+  vendorProfiles, InsertVendorProfile, VendorProfile,
+  vendorServices, InsertVendorService, VendorService,
+  vendorAvailabilityWindows, InsertVendorAvailabilityWindow, VendorAvailabilityWindow,
+  vendorAdminConfigs, InsertVendorAdminConfig, VendorAdminConfig,
+  vendorPeerServiceRequests, InsertVendorPeerServiceRequest, VendorPeerServiceRequest,
+  vendorPricingRecommendations, InsertVendorPricingRecommendation, VendorPricingRecommendation,
+  vendorDataExports, InsertVendorDataExport, VendorDataExport,
+  vendorGuestBookingSessions, InsertVendorGuestBookingSession, VendorGuestBookingSession,
+  vendorOnboardingSessions, InsertVendorOnboardingSession, VendorOnboardingSession,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { matchBuilding } from "@shared/buildings";
@@ -894,6 +903,291 @@ export async function updateVendorConnectStatus(
     pastDue: status.pastDue,
     disabledReason: status.disabledReason,
   }).where(eq(vendors.id, id));
+}
+
+/* ===== UNIVERSAL VENDOR ONBOARDING HELPERS ===== */
+
+export async function createVendorProfile(data: InsertVendorProfile): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(vendorProfiles).values(data);
+  return Number(result[0].insertId);
+}
+
+export async function getVendorProfileByVendorId(
+  tenantId: string,
+  vendorId: number
+): Promise<VendorProfile | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select()
+    .from(vendorProfiles)
+    .where(and(eq(vendorProfiles.tenantId, tenantId), eq(vendorProfiles.vendorId, vendorId)))
+    .limit(1);
+  return rows[0];
+}
+
+export async function updateVendorProfileByVendorId(
+  tenantId: string,
+  vendorId: number,
+  data: Partial<InsertVendorProfile>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(vendorProfiles)
+    .set(data)
+    .where(and(eq(vendorProfiles.tenantId, tenantId), eq(vendorProfiles.vendorId, vendorId)));
+}
+
+export async function createVendorServices(data: InsertVendorService[]): Promise<number[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (data.length === 0) return [];
+  const ids: number[] = [];
+  for (const item of data) {
+    const result = await db.insert(vendorServices).values(item);
+    ids.push(Number(result[0].insertId));
+  }
+  return ids;
+}
+
+export async function listVendorServices(
+  tenantId: string,
+  vendorId: number
+): Promise<VendorService[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(vendorServices)
+    .where(and(eq(vendorServices.tenantId, tenantId), eq(vendorServices.vendorId, vendorId)))
+    .orderBy(asc(vendorServices.serviceName));
+}
+
+export async function createVendorAvailabilityWindows(
+  data: InsertVendorAvailabilityWindow[]
+): Promise<number[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const ids: number[] = [];
+  for (const item of data) {
+    const result = await db.insert(vendorAvailabilityWindows).values(item);
+    ids.push(Number(result[0].insertId));
+  }
+  return ids;
+}
+
+export async function listVendorAvailabilityWindows(
+  tenantId: string,
+  vendorId: number
+): Promise<VendorAvailabilityWindow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(vendorAvailabilityWindows)
+    .where(and(eq(vendorAvailabilityWindows.tenantId, tenantId), eq(vendorAvailabilityWindows.vendorId, vendorId)))
+    .orderBy(asc(vendorAvailabilityWindows.dayOfWeek), asc(vendorAvailabilityWindows.startTime));
+}
+
+export async function createVendorAdminConfig(data: InsertVendorAdminConfig): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(vendorAdminConfigs).values(data);
+  return Number(result[0].insertId);
+}
+
+export async function getVendorAdminConfig(
+  tenantId: string,
+  vendorId: number
+): Promise<VendorAdminConfig | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select()
+    .from(vendorAdminConfigs)
+    .where(and(eq(vendorAdminConfigs.tenantId, tenantId), eq(vendorAdminConfigs.vendorId, vendorId)))
+    .limit(1);
+  return rows[0];
+}
+
+export async function updateVendorAdminConfig(
+  tenantId: string,
+  vendorId: number,
+  data: Partial<InsertVendorAdminConfig>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(vendorAdminConfigs)
+    .set(data)
+    .where(and(eq(vendorAdminConfigs.tenantId, tenantId), eq(vendorAdminConfigs.vendorId, vendorId)));
+}
+
+export async function createVendorPeerServiceRequest(
+  data: InsertVendorPeerServiceRequest
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(vendorPeerServiceRequests).values(data);
+  return Number(result[0].insertId);
+}
+
+export async function getVendorPeerServiceRequest(
+  tenantId: string,
+  id: number
+): Promise<VendorPeerServiceRequest | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select()
+    .from(vendorPeerServiceRequests)
+    .where(and(eq(vendorPeerServiceRequests.tenantId, tenantId), eq(vendorPeerServiceRequests.id, id)))
+    .limit(1);
+  return rows[0];
+}
+
+export async function updateVendorPeerServiceRequest(
+  tenantId: string,
+  id: number,
+  data: Partial<InsertVendorPeerServiceRequest>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(vendorPeerServiceRequests)
+    .set(data)
+    .where(and(eq(vendorPeerServiceRequests.tenantId, tenantId), eq(vendorPeerServiceRequests.id, id)));
+}
+
+export async function listVendorPeerServiceProviders(input: {
+  tenantId: string;
+  serviceCategory: string;
+  excludeVendorId?: number | null;
+  limit?: number;
+}): Promise<Array<Vendor & { profile?: VendorProfile | null; adminConfig?: VendorAdminConfig | null }>> {
+  const all = await listVendors();
+  const providers = [];
+  for (const vendor of all) {
+    if (input.excludeVendorId != null && vendor.id === input.excludeVendorId) continue;
+    const profile = await getVendorProfileByVendorId(input.tenantId, vendor.id);
+    if (profile && profile.vendorCategory !== input.serviceCategory) continue;
+    const adminConfig = await getVendorAdminConfig(input.tenantId, vendor.id);
+    providers.push({ ...vendor, profile: profile ?? null, adminConfig: adminConfig ?? null });
+    if (providers.length >= (input.limit ?? 3)) break;
+  }
+  return providers;
+}
+
+export async function createVendorPricingRecommendation(
+  data: InsertVendorPricingRecommendation
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(vendorPricingRecommendations).values(data);
+  return Number(result[0].insertId);
+}
+
+export async function listVendorPricingRecommendations(
+  tenantId: string,
+  vendorId: number
+): Promise<VendorPricingRecommendation[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(vendorPricingRecommendations)
+    .where(and(eq(vendorPricingRecommendations.tenantId, tenantId), eq(vendorPricingRecommendations.vendorId, vendorId)))
+    .orderBy(desc(vendorPricingRecommendations.createdAt));
+}
+
+export async function createVendorDataExport(data: InsertVendorDataExport): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(vendorDataExports).values(data);
+  return Number(result[0].insertId);
+}
+
+export async function getVendorDataExport(
+  tenantId: string,
+  id: number
+): Promise<VendorDataExport | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select()
+    .from(vendorDataExports)
+    .where(and(eq(vendorDataExports.tenantId, tenantId), eq(vendorDataExports.id, id)))
+    .limit(1);
+  return rows[0];
+}
+
+export async function createVendorGuestBookingSession(
+  data: InsertVendorGuestBookingSession
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(vendorGuestBookingSessions).values(data);
+  return Number(result[0].insertId);
+}
+
+export async function getVendorGuestBookingSession(
+  tenantId: string,
+  id: number
+): Promise<VendorGuestBookingSession | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select()
+    .from(vendorGuestBookingSessions)
+    .where(and(eq(vendorGuestBookingSessions.tenantId, tenantId), eq(vendorGuestBookingSessions.id, id)))
+    .limit(1);
+  return rows[0];
+}
+
+export async function createVendorOnboardingSession(
+  data: InsertVendorOnboardingSession
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(vendorOnboardingSessions).values(data);
+  return Number(result[0].insertId);
+}
+
+export async function updateVendorOnboardingSession(
+  tenantId: string,
+  id: number,
+  data: Partial<InsertVendorOnboardingSession>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(vendorOnboardingSessions)
+    .set(data)
+    .where(and(eq(vendorOnboardingSessions.tenantId, tenantId), eq(vendorOnboardingSessions.id, id)));
+}
+
+export async function listAbandonedVendorOnboardingCandidates(
+  tenantId: string,
+  now = new Date()
+): Promise<VendorOnboardingSession[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const twoHours = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+  return db
+    .select()
+    .from(vendorOnboardingSessions)
+    .where(
+      and(
+        eq(vendorOnboardingSessions.tenantId, tenantId),
+        inArray(vendorOnboardingSessions.status, ["started", "collecting_details", "pricing_setup", "availability_setup", "payment_setup", "admin_configured"]),
+        lt(vendorOnboardingSessions.updatedAt, twoHours)
+      )
+    )
+    .orderBy(asc(vendorOnboardingSessions.updatedAt))
+    .limit(200);
 }
 
 /* ===== VENDOR SERVICE COVERAGE HELPERS (Phase 2) ===== */

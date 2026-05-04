@@ -382,3 +382,214 @@ export const tenantAiUsage = mysqlTable(
 
 export type TenantAiUsage = typeof tenantAiUsage.$inferSelect;
 export type InsertTenantAiUsage = typeof tenantAiUsage.$inferInsert;
+
+export const vendorProfiles = mysqlTable("vendor_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  vendorId: int("vendorId").notNull(),
+  businessName: varchar("businessName", { length: 255 }).notNull(),
+  vendorCategory: varchar("vendorCategory", { length: 100 }).notNull(),
+  contactName: varchar("contactName", { length: 255 }),
+  phone: varchar("phone", { length: 30 }),
+  email: varchar("email", { length: 320 }),
+  serviceModel: mysqlEnum("serviceModel", ["mobile", "fixed_location", "both"]).notNull().default("mobile"),
+  buildingNativeServiceAvailable: boolean("buildingNativeServiceAvailable").notNull().default(true),
+  serviceAreaJson: json("serviceAreaJson"),
+  buildingsJson: json("buildingsJson"),
+  trafficProtectionMode: mysqlEnum("trafficProtectionMode", ["back_to_back", "breathing_room", "geo_clustered"]).notNull().default("geo_clustered"),
+  resetTimeMinutes: int("resetTimeMinutes").notNull().default(15),
+  geoClusteringEnabled: boolean("geoClusteringEnabled").notNull().default(true),
+  bookingLeadTimeHours: int("bookingLeadTimeHours").notNull().default(24),
+  providerResponseTimeoutMinutes: int("providerResponseTimeoutMinutes").notNull().default(120),
+  calendarConnectionStatus: varchar("calendarConnectionStatus", { length: 64 }).notNull().default("not_connected"),
+  payoutSetupStatus: varchar("payoutSetupStatus", { length: 64 }).notNull().default("not_started"),
+  onboardingStatus: mysqlEnum("onboardingStatus", [
+    "started",
+    "collecting_details",
+    "pricing_setup",
+    "availability_setup",
+    "payment_setup",
+    "admin_configured",
+    "completed",
+    "abandoned",
+  ]).notNull().default("started"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type VendorProfile = typeof vendorProfiles.$inferSelect;
+export type InsertVendorProfile = typeof vendorProfiles.$inferInsert;
+
+export const vendorServices = mysqlTable("vendor_services", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  vendorId: int("vendorId").notNull(),
+  serviceName: varchar("serviceName", { length: 255 }).notNull(),
+  serviceCategory: varchar("serviceCategory", { length: 100 }).notNull(),
+  description: text("description"),
+  basePriceCents: int("basePriceCents").notNull(),
+  recommendedPriceCents: int("recommendedPriceCents"),
+  durationMinutes: int("durationMinutes").notNull(),
+  isMobile: boolean("isMobile").notNull().default(true),
+  isBuildingNative: boolean("isBuildingNative").notNull().default(true),
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type VendorService = typeof vendorServices.$inferSelect;
+export type InsertVendorService = typeof vendorServices.$inferInsert;
+
+export const vendorAvailabilityWindows = mysqlTable("vendor_availability_windows", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  vendorId: int("vendorId").notNull(),
+  dayOfWeek: int("dayOfWeek").notNull(),
+  startTime: varchar("startTime", { length: 10 }).notNull(),
+  endTime: varchar("endTime", { length: 10 }).notNull(),
+  timezone: varchar("timezone", { length: 64 }).notNull().default("America/Los_Angeles"),
+  buildingScopeJson: json("buildingScopeJson"),
+  neighborhoodScopeJson: json("neighborhoodScopeJson"),
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type VendorAvailabilityWindow = typeof vendorAvailabilityWindows.$inferSelect;
+export type InsertVendorAvailabilityWindow = typeof vendorAvailabilityWindows.$inferInsert;
+
+export const vendorAdminConfigs = mysqlTable("vendor_admin_configs", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  vendorId: int("vendorId").notNull(),
+  categoryPresetKey: varchar("categoryPresetKey", { length: 100 }).notNull(),
+  themeKey: mysqlEnum("themeKey", ["clinical_minimalist", "pixel_operations", "standard"]).notNull().default("standard"),
+  enabledSurfacesJson: json("enabledSurfacesJson"),
+  navConfigJson: json("navConfigJson"),
+  brandConfigJson: json("brandConfigJson"),
+  externalBookingBrandMode: varchar("externalBookingBrandMode", { length: 64 }).notNull().default("vendor_primary"),
+  publicBookingSlug: varchar("publicBookingSlug", { length: 128 }).notNull(),
+  customDomain: varchar("customDomain", { length: 255 }),
+  customDomainStatus: varchar("customDomainStatus", { length: 64 }).notNull().default("not_configured"),
+  brandName: varchar("brandName", { length: 255 }),
+  brandLogoUrl: varchar("brandLogoUrl", { length: 512 }),
+  brandAccentColor: varchar("brandAccentColor", { length: 32 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type VendorAdminConfig = typeof vendorAdminConfigs.$inferSelect;
+export type InsertVendorAdminConfig = typeof vendorAdminConfigs.$inferInsert;
+
+export const vendorPeerServiceRequests = mysqlTable("vendor_peer_service_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  requestingVendorId: int("requestingVendorId").notNull(),
+  providerVendorId: int("providerVendorId"),
+  serviceCategory: varchar("serviceCategory", { length: 100 }).notNull(),
+  serviceRequested: text("serviceRequested").notNull(),
+  buildingName: varchar("buildingName", { length: 255 }),
+  locationDetailsJson: json("locationDetailsJson"),
+  preferredWindowStart: timestamp("preferredWindowStart"),
+  preferredWindowEnd: timestamp("preferredWindowEnd"),
+  recommendedPriceCents: int("recommendedPriceCents"),
+  status: mysqlEnum("status", [
+    "request_pending_provider_confirmation",
+    "accepted",
+    "declined",
+    "expired",
+    "cancelled",
+    "completed",
+  ]).notNull().default("request_pending_provider_confirmation"),
+  responseTimeoutMinutes: int("responseTimeoutMinutes").notNull().default(120),
+  expiresAt: timestamp("expiresAt"),
+  expiredAt: timestamp("expiredAt"),
+  timeoutReason: varchar("timeoutReason", { length: 255 }),
+  replacementOptionsJson: json("replacementOptionsJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type VendorPeerServiceRequest = typeof vendorPeerServiceRequests.$inferSelect;
+export type InsertVendorPeerServiceRequest = typeof vendorPeerServiceRequests.$inferInsert;
+
+export const vendorPricingRecommendations = mysqlTable("vendor_pricing_recommendations", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  vendorId: int("vendorId").notNull(),
+  serviceId: int("serviceId"),
+  basePriceCents: int("basePriceCents").notNull(),
+  recommendedPriceCents: int("recommendedPriceCents").notNull(),
+  conveniencePremiumPercent: int("conveniencePremiumPercent").notNull().default(10),
+  travelTimeMinutesAssumed: int("travelTimeMinutesAssumed").notNull().default(20),
+  estimatedBookingsPerDay: int("estimatedBookingsPerDay").notNull().default(4),
+  comparablePricingJson: json("comparablePricingJson"),
+  reasoning: text("reasoning").notNull(),
+  status: mysqlEnum("status", ["draft", "accepted", "rejected"]).notNull().default("draft"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  acceptedAt: timestamp("acceptedAt"),
+  rejectedAt: timestamp("rejectedAt"),
+});
+
+export type VendorPricingRecommendation = typeof vendorPricingRecommendations.$inferSelect;
+export type InsertVendorPricingRecommendation = typeof vendorPricingRecommendations.$inferInsert;
+
+export const vendorDataExports = mysqlTable("vendor_data_exports", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  vendorId: int("vendorId").notNull(),
+  exportType: mysqlEnum("exportType", ["clients", "bookings", "services"]).notNull(),
+  exportUrl: text("exportUrl").notNull(),
+  requestedByUserId: varchar("requestedByUserId", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type VendorDataExport = typeof vendorDataExports.$inferSelect;
+export type InsertVendorDataExport = typeof vendorDataExports.$inferInsert;
+
+export const vendorGuestBookingSessions = mysqlTable("vendor_guest_booking_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  vendorId: int("vendorId").notNull(),
+  phone: varchar("phone", { length: 30 }),
+  otpVerified: boolean("otpVerified").notNull().default(false),
+  trustedDeviceHash: varchar("trustedDeviceHash", { length: 255 }),
+  serviceId: int("serviceId"),
+  requestedWindowJson: json("requestedWindowJson"),
+  status: varchar("status", { length: 64 }).notNull().default("started"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type VendorGuestBookingSession = typeof vendorGuestBookingSessions.$inferSelect;
+export type InsertVendorGuestBookingSession = typeof vendorGuestBookingSessions.$inferInsert;
+
+export const vendorOnboardingSessions = mysqlTable("vendor_onboarding_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  vendorId: int("vendorId"),
+  sessionId: varchar("sessionId", { length: 128 }).notNull(),
+  conversationId: varchar("conversationId", { length: 128 }),
+  vendorCategory: varchar("vendorCategory", { length: 100 }),
+  status: mysqlEnum("status", [
+    "started",
+    "collecting_details",
+    "pricing_setup",
+    "availability_setup",
+    "payment_setup",
+    "admin_configured",
+    "completed",
+    "abandoned",
+  ]).notNull().default("started"),
+  lastCompletedStep: varchar("lastCompletedStep", { length: 128 }),
+  missingFieldsJson: json("missingFieldsJson"),
+  abandoned2hLoggedAt: timestamp("abandoned2hLoggedAt"),
+  abandoned24hLoggedAt: timestamp("abandoned24hLoggedAt"),
+  abandoned7dLoggedAt: timestamp("abandoned7dLoggedAt"),
+  abandonedAt: timestamp("abandonedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type VendorOnboardingSession = typeof vendorOnboardingSessions.$inferSelect;
+export type InsertVendorOnboardingSession = typeof vendorOnboardingSessions.$inferInsert;

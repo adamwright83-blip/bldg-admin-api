@@ -1,48 +1,45 @@
-import { createVendor, updateVendorBranding, updateVendorSlug } from "../../db";
+import { createVendorOnboardingSession, updateVendorProfileByVendorId } from "../../db";
 import type { AgentTool } from "../toolRegistry";
-
-function slugify(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "vendor";
-}
+import { detectVendorCategoryPreset, detectVendorOnboardingIntent, noPublicSourceFallback, vendorOnboardingFirstQuestion } from "../vendorCategoryPresets";
+import { ensureVendor, inferCategoryKey, slugify } from "./vendorToolUtils";
 
 export const createVendorOnboardingSessionTool: AgentTool<Record<string, any>> = {
   name: "createVendorOnboardingSessionTool",
-  description: "Create a vendor onboarding session for solo contractors, defaulting to confirmation-required when calendar access is unavailable.",
-  async execute(input) {
-    const vendorId = await createVendor({
-      name: String(input.name),
-      email: input.email ?? null,
-      country: input.country ?? "US",
-      platformFeePercent: input.platformFeePercent ?? null,
+  description: "Start a universal vendor onboarding session and ask for website/Instagram/booking page first.",
+  async execute(input, ctx) {
+    const shouldCreateVendor = Boolean(input.businessName ?? input.name ?? input.email);
+    const vendorId = shouldCreateVendor ? await ensureVendor(input, ctx.tenantId) : input.vendorId != null ? Number(input.vendorId) : null;
+    const categoryPresetKey = input.vendorCategory || input.categoryPresetKey
+      ? inferCategoryKey(input)
+      : detectVendorCategoryPreset(String(input.intent ?? input.message ?? ""));
+    const sessionId = String(input.sessionId ?? ctx.sessionId ?? `vendor_${Date.now()}`);
+    const conversationId = input.conversationId ?? ctx.conversationId ?? null;
+    const onboardingSessionId = await createVendorOnboardingSession({
+      tenantId: ctx.tenantId,
+      vendorId,
+      sessionId,
+      conversationId,
+      vendorCategory: categoryPresetKey,
+      status: "started",
+      lastCompletedStep: "intent_detected",
+      missingFieldsJson: input.missingFields ?? null,
     });
-    const slug = input.slug ? slugify(String(input.slug)) : slugify(String(input.name));
-    await updateVendorSlug(vendorId, slug);
-    if (input.brandName || input.logoUrl) {
-      await updateVendorBranding(vendorId, {
-        brandName: input.brandName ?? input.name,
-        logoUrl: input.logoUrl ?? null,
-      });
+    if (vendorId != null) {
+      await updateVendorProfileByVendorId(ctx.tenantId, vendorId, { onboardingStatus: "started" }).catch(() => undefined);
     }
-
-    const calendarProvider = input.calendarProvider ?? null;
-    const calendarAccessible = input.calendarAccessible === true;
-    const bookingMode = calendarAccessible ? "calendar_backed" : "confirmation_required";
     return {
-      entityType: "vendor",
-      entityId: vendorId,
+      entityType: "vendor_onboarding_session",
+      entityId: onboardingSessionId,
       output: {
+        onboardingSessionId,
         vendorId,
-        slug,
-        servicesOffered: input.servicesOffered ?? [],
-        pricing: input.pricing ?? [],
-        serviceArea: input.serviceArea ?? null,
-        travelBufferMinutes: input.travelBufferMinutes ?? null,
-        preferredLeadTimeMinutes: input.preferredLeadTimeMinutes ?? null,
-        calendarProvider,
-        calendarAccessible,
-        bookingMode,
-        stripeConnectSetupStatus: input.stripeConnectSetupStatus ?? "not_started",
-        eligibleBuildings: input.eligibleBuildings ?? [],
+        sessionId,
+        conversationId,
+        intentDetected: detectVendorOnboardingIntent(String(input.intent ?? input.message ?? "")),
+        categoryPresetKey,
+        firstQuestion: input.hasNoPublicSource ? noPublicSourceFallback : vendorOnboardingFirstQuestion,
+        publicBookingSlug: slugify(String(input.publicBookingSlug ?? input.brandName ?? input.businessName ?? input.name ?? "vendor")),
+        onboardingStatus: "started",
       },
     };
   },

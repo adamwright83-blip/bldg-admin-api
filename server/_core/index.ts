@@ -2,6 +2,7 @@ if (process.env.NODE_ENV !== "production") {
   await import("dotenv/config");
 }
 import cors from "cors";
+import crypto from "crypto";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
@@ -20,8 +21,31 @@ import bcrypt from "bcryptjs";
 import { SignJWT } from "jose";
 import { getVendorBySlug, getVendorUserByVendorIdAndEmail } from "../db";
 import { createAgentS2SRunToolHandler } from "../agents/s2sEndpoint";
+import { runAgentTool } from "../agents/agentRuntime";
+import { z } from "zod";
 
 const warnedUnknownTenantHosts = new Set<string>();
+const vendorOnboardingRateLimit = new Map<string, { count: number; resetAt: number }>();
+
+function rateLimitKey(req: express.Request, email?: string) {
+  const ip = req.ip || req.socket.remoteAddress || "unknown-ip";
+  return `${ip}:${email?.toLowerCase().trim() || "unknown-email"}`;
+}
+
+function isVendorOnboardingRateLimited(req: express.Request, email?: string, now = Date.now()) {
+  const key = rateLimitKey(req, email);
+  const existing = vendorOnboardingRateLimit.get(key);
+  if (!existing || existing.resetAt <= now) {
+    vendorOnboardingRateLimit.set(key, { count: 1, resetAt: now + 60 * 60 * 1000 });
+    return false;
+  }
+  existing.count += 1;
+  return existing.count > 5;
+}
+
+function createPublicSessionToken() {
+  return `von_${crypto.randomBytes(24).toString("base64url")}`;
+}
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -209,6 +233,70 @@ async function startServer() {
   registerOAuthRoutes(app);
 
   app.post("/api/agent/s2s/run-tool", createAgentS2SRunToolHandler());
+
+  const vendorOnboardingStartSchema = z.object({
+    email: z.string().email().max(320),
+    phone: z.string().max(30).optional().nullable(),
+    websiteOrInstagram: z.string().url().max(512),
+    vendorCategory: z.string().max(100).optional().nullable(),
+    source: z.string().max(100).default("vendor_signup"),
+  });
+
+  app.post("/api/vendor-onboarding/start", async (req, res) => {
+    const parsed = vendorOnboardingStartSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Invalid vendor onboarding input",
+        code: "VENDOR_ONBOARDING_BAD_REQUEST",
+        issues: parsed.error.issues,
+      });
+    }
+
+    const input = parsed.data;
+    if (isVendorOnboardingRateLimited(req, input.email)) {
+      return res.status(429).json({
+        error: "Too many vendor onboarding attempts. Please try again later.",
+        code: "VENDOR_ONBOARDING_RATE_LIMITED",
+      });
+    }
+
+    const tenantId = resolveTenantIdFromHeaders(req.headers).tenantId;
+    const sessionToken = createPublicSessionToken();
+    const conversationId = `vendor_signup_${crypto.randomBytes(10).toString("base64url")}`;
+
+    try {
+      const output = await runAgentTool("createVendorOnboardingSessionTool", {
+        email: input.email,
+        phone: input.phone ?? null,
+        sourceUrl: input.websiteOrInstagram,
+        websiteOrInstagram: input.websiteOrInstagram,
+        vendorCategory: input.vendorCategory ?? undefined,
+        source: input.source,
+        sessionId: sessionToken,
+        conversationId,
+      }, {
+        tenantId,
+        sessionId: sessionToken,
+        conversationId,
+        agentType: "vendor_agent",
+        actorType: "system",
+        actorId: "public_vendor_signup",
+      });
+
+      return res.status(200).json({
+        sessionToken,
+        onboardingUrl: `https://vendorsignup.bldg.chat/onboarding?session=${encodeURIComponent(sessionToken)}`,
+        status: "started",
+        vendorOnboarding: output,
+      });
+    } catch (err) {
+      console.error("[VendorOnboarding] start failed:", err);
+      return res.status(500).json({
+        error: "Vendor onboarding could not be started",
+        code: "VENDOR_ONBOARDING_START_FAILED",
+      });
+    }
+  });
 
   // Direct password login — bypasses OAuth portal entirely.
   // Set ADMIN_PASSWORD in Railway env. Falls back to APP_SHARED_API_SECRET.

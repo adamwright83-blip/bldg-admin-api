@@ -3,6 +3,7 @@ import type { AgentContext } from "./permissions";
 export const approvalRequiredToolNames = new Set([
   "sendCustomerReminderTool",
   "requestVendorConfirmationTool",
+  "requestVendorBookingConfirmationTool",
   "chargeCardTool",
   "refundCardTool",
   "cancelOrderTool",
