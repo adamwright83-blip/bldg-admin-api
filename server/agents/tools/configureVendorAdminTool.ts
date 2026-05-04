@@ -1,13 +1,14 @@
 import { createVendorAdminConfig, updateVendorProfileByVendorId } from "../../db";
 import type { AgentTool } from "../toolRegistry";
-import { buildAdminConfig } from "./vendorToolUtils";
+import { buildAdminConfig, generateUniqueVendorPublicBookingSlug } from "./vendorToolUtils";
 
 export const configureVendorAdminTool: AgentTool<Record<string, any>> = {
   name: "configureVendorAdminTool",
   description: "Create config-driven vendor admin surfaces from an enable-list category preset.",
   async execute(input, ctx) {
     const vendorId = Number(input.vendorId);
-    const config = buildAdminConfig(input);
+    const publicBookingSlug = await generateUniqueVendorPublicBookingSlug(input, ctx.tenantId, vendorId);
+    const config = buildAdminConfig({ ...input, publicBookingSlug });
     const configId = await createVendorAdminConfig({ tenantId: ctx.tenantId, vendorId, ...config });
     await updateVendorProfileByVendorId(ctx.tenantId, vendorId, { onboardingStatus: "admin_configured" });
     return {

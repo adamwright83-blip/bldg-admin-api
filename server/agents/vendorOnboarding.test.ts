@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { listAgentTools } from "./toolRegistry";
-import { inferCategoryKey } from "./tools/vendorToolUtils";
+import {
+  generateUniqueVendorPublicBookingSlug,
+  generateVendorPublicBookingSlug,
+  inferCategoryKey,
+} from "./tools/vendorToolUtils";
 import {
   detectVendorCategoryPreset,
   detectVendorOnboardingIntent,
@@ -103,5 +107,51 @@ describe("vendor agent tool registration", () => {
     expect(listAgentTools().find((tool) => tool.name === "requestVendorBookingConfirmationTool")).toMatchObject({
       requiresHumanApproval: true,
     });
+  });
+});
+
+describe("vendor public booking slug generation", () => {
+  it("uses businessName first and removes accents", () => {
+    expect(generateVendorPublicBookingSlug({ businessName: "Lumière Hair Studio" })).toBe("lumiere-hair-studio");
+    expect(generateVendorPublicBookingSlug({ businessName: "J.R. Luxury Detail" })).toBe("jr-luxury-detail");
+    expect(generateVendorPublicBookingSlug({ businessName: "  Luxe___Hair!!! " })).toBe("luxe-hair");
+  });
+
+  it("derives from normal domains when businessName is missing", () => {
+    expect(generateVendorPublicBookingSlug({ websiteOrInstagram: "https://www.luxehair.studio" })).toBe("luxehair");
+    expect(generateVendorPublicBookingSlug({ sourceUrl: "https://www.lumierehair.com" })).toBe("lumierehair");
+  });
+
+  it("derives from Instagram URLs and handles", () => {
+    expect(generateVendorPublicBookingSlug({ websiteOrInstagram: "https://instagram.com/lumierehairstudio" })).toBe("lumierehairstudio");
+    expect(generateVendorPublicBookingSlug({ websiteOrInstagram: "@lumierehairstudio" })).toBe("lumierehairstudio");
+  });
+
+  it("extracts path handles from generic booking platforms instead of platform hosts", () => {
+    expect(generateVendorPublicBookingSlug({ websiteOrInstagram: "https://www.vagaro.com/luxehairla" })).toBe("luxehairla");
+    expect(generateVendorPublicBookingSlug({ websiteOrInstagram: "https://www.styleseat.com/m/lumierehairstudio" })).toBe("lumierehairstudio");
+    expect(generateVendorPublicBookingSlug({ websiteOrInstagram: "https://glossgenius.com/lumierehair" })).toBe("lumierehair");
+  });
+
+  it("falls back to category plus suffix for unusable inputs and never returns plain vendor", () => {
+    expect(generateVendorPublicBookingSlug({ websiteOrInstagram: "https://www.vagaro.com", vendorCategory: "hair stylist" })).toMatch(/^hair-stylist-[a-f0-9]{4}$/);
+    expect(generateVendorPublicBookingSlug({ vendorCategory: "hair stylist" })).toMatch(/^hair-stylist-[a-f0-9]{4}$/);
+    expect(generateVendorPublicBookingSlug({ websiteOrInstagram: "https://www.vagaro.com" })).not.toBe("vendor");
+  });
+
+  it("uses email local part only as a last brand-like fallback", () => {
+    expect(generateVendorPublicBookingSlug({ email: "hello@lumierehair.com", vendorCategory: "hair stylist" })).toMatch(/^hair-stylist-[a-f0-9]{4}$/);
+    expect(generateVendorPublicBookingSlug({ email: "lumierehair@gmail.com" })).toBe("lumierehair");
+  });
+
+  it("appends a numeric suffix when a slug is taken", async () => {
+    const slug = await generateUniqueVendorPublicBookingSlug(
+      {
+        businessName: "Lumière Hair Studio",
+        isSlugTaken: (candidate: string) => candidate === "lumiere-hair-studio",
+      },
+      "default"
+    );
+    expect(slug).toBe("lumiere-hair-studio-2");
   });
 });

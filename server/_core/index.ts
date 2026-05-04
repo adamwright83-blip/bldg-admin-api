@@ -235,6 +235,7 @@ async function startServer() {
   app.post("/api/agent/s2s/run-tool", createAgentS2SRunToolHandler());
 
   const vendorOnboardingStartSchema = z.object({
+    businessName: z.string().max(255).optional().nullable(),
     email: z.string().email().max(320),
     phone: z.string().max(30).optional().nullable(),
     websiteOrInstagram: z.string().url().max(512),
@@ -266,6 +267,7 @@ async function startServer() {
 
     try {
       const output = await runAgentTool("createVendorOnboardingSessionTool", {
+        businessName: input.businessName ?? undefined,
         email: input.email,
         phone: input.phone ?? null,
         sourceUrl: input.websiteOrInstagram,
@@ -286,6 +288,7 @@ async function startServer() {
       return res.status(200).json({
         sessionToken,
         onboardingUrl: `https://vendorsignup.bldg.chat/onboarding?session=${encodeURIComponent(sessionToken)}`,
+        publicBookingSlug: (output as { publicBookingSlug?: string }).publicBookingSlug ?? null,
         status: "started",
         vendorOnboarding: output,
       });

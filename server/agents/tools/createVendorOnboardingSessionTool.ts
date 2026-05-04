@@ -1,14 +1,15 @@
 import { createVendorOnboardingSession, updateVendorProfileByVendorId } from "../../db";
 import type { AgentTool } from "../toolRegistry";
 import { detectVendorCategoryPreset, detectVendorOnboardingIntent, noPublicSourceFallback, vendorOnboardingFirstQuestion } from "../vendorCategoryPresets";
-import { ensureVendor, inferCategoryKey, slugify } from "./vendorToolUtils";
+import { ensureVendor, generateUniqueVendorPublicBookingSlug, inferCategoryKey } from "./vendorToolUtils";
 
 export const createVendorOnboardingSessionTool: AgentTool<Record<string, any>> = {
   name: "createVendorOnboardingSessionTool",
   description: "Start a universal vendor onboarding session and ask for website/Instagram/booking page first.",
   async execute(input, ctx) {
     const shouldCreateVendor = Boolean(input.businessName ?? input.name ?? input.email);
-    const vendorId = shouldCreateVendor ? await ensureVendor(input, ctx.tenantId) : input.vendorId != null ? Number(input.vendorId) : null;
+    const publicBookingSlug = await generateUniqueVendorPublicBookingSlug(input, ctx.tenantId, input.vendorId != null ? Number(input.vendorId) : null);
+    const vendorId = shouldCreateVendor ? await ensureVendor({ ...input, publicBookingSlug }, ctx.tenantId) : input.vendorId != null ? Number(input.vendorId) : null;
     const categoryPresetKey = input.vendorCategory || input.categoryPresetKey
       ? inferCategoryKey(input)
       : detectVendorCategoryPreset(String(input.intent ?? input.message ?? ""));
@@ -38,7 +39,8 @@ export const createVendorOnboardingSessionTool: AgentTool<Record<string, any>> =
         intentDetected: detectVendorOnboardingIntent(String(input.intent ?? input.message ?? "")),
         categoryPresetKey,
         firstQuestion: input.hasNoPublicSource ? noPublicSourceFallback : vendorOnboardingFirstQuestion,
-        publicBookingSlug: slugify(String(input.publicBookingSlug ?? input.brandName ?? input.businessName ?? input.name ?? "vendor")),
+        publicBookingSlug,
+        proposedPublicBookingSlug: publicBookingSlug,
         onboardingStatus: "started",
       },
     };

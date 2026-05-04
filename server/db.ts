@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, max, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, max, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users,
@@ -791,6 +791,37 @@ export async function getVendorBySlug(slug: string): Promise<Vendor | undefined>
 
   const result = await db.select().from(vendors).where(eq(vendors.slug, slug)).limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+export async function isVendorPublicBookingSlugTaken(input: {
+  tenantId: string;
+  slug: string;
+  excludeVendorId?: number | null;
+}): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const normalized = input.slug.trim().toLowerCase();
+  const vendorConditions = [eq(vendors.slug, normalized)];
+  if (input.excludeVendorId != null) {
+    vendorConditions.push(ne(vendors.id, input.excludeVendorId));
+  }
+  const vendorRows = await db.select({ id: vendors.id }).from(vendors).where(and(...vendorConditions)).limit(1);
+  if (vendorRows.length > 0) return true;
+
+  const configConditions = [
+    eq(vendorAdminConfigs.tenantId, input.tenantId),
+    eq(vendorAdminConfigs.publicBookingSlug, normalized),
+  ];
+  if (input.excludeVendorId != null) {
+    configConditions.push(ne(vendorAdminConfigs.vendorId, input.excludeVendorId));
+  }
+  const configRows = await db
+    .select({ id: vendorAdminConfigs.id })
+    .from(vendorAdminConfigs)
+    .where(and(...configConditions))
+    .limit(1);
+  return configRows.length > 0;
 }
 
 export async function getVendorUserByVendorIdAndEmail(
