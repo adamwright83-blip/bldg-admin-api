@@ -21,6 +21,7 @@ import {
   vendorDataExports, InsertVendorDataExport, VendorDataExport,
   vendorGuestBookingSessions, InsertVendorGuestBookingSession, VendorGuestBookingSession,
   vendorOnboardingSessions, InsertVendorOnboardingSession, VendorOnboardingSession,
+  vendorOnboardingMessages, InsertVendorOnboardingMessage, VendorOnboardingMessage,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { matchBuilding } from "@shared/buildings";
@@ -1187,6 +1188,20 @@ export async function createVendorOnboardingSession(
   return Number(result[0].insertId);
 }
 
+export async function getVendorOnboardingSessionByToken(
+  tenantId: string,
+  sessionToken: string
+): Promise<VendorOnboardingSession | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select()
+    .from(vendorOnboardingSessions)
+    .where(and(eq(vendorOnboardingSessions.tenantId, tenantId), eq(vendorOnboardingSessions.sessionId, sessionToken)))
+    .limit(1);
+  return rows[0];
+}
+
 export async function updateVendorOnboardingSession(
   tenantId: string,
   id: number,
@@ -1198,6 +1213,30 @@ export async function updateVendorOnboardingSession(
     .update(vendorOnboardingSessions)
     .set(data)
     .where(and(eq(vendorOnboardingSessions.tenantId, tenantId), eq(vendorOnboardingSessions.id, id)));
+}
+
+export async function createVendorOnboardingMessage(
+  data: InsertVendorOnboardingMessage
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(vendorOnboardingMessages).values(data);
+  return Number(result[0].insertId);
+}
+
+export async function listVendorOnboardingMessages(
+  tenantId: string,
+  sessionId: number,
+  limit = 100
+): Promise<VendorOnboardingMessage[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(vendorOnboardingMessages)
+    .where(and(eq(vendorOnboardingMessages.tenantId, tenantId), eq(vendorOnboardingMessages.sessionId, sessionId)))
+    .orderBy(asc(vendorOnboardingMessages.createdAt), asc(vendorOnboardingMessages.id))
+    .limit(Math.min(Math.max(limit, 1), 500));
 }
 
 export async function listAbandonedVendorOnboardingCandidates(

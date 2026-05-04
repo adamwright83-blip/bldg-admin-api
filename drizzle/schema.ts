@@ -1,4 +1,4 @@
-import { boolean, decimal, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { boolean, decimal, index, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -570,6 +570,7 @@ export const vendorOnboardingSessions = mysqlTable("vendor_onboarding_sessions",
   vendorId: int("vendorId"),
   sessionId: varchar("sessionId", { length: 128 }).notNull(),
   conversationId: varchar("conversationId", { length: 128 }),
+  publicSourceUrl: varchar("publicSourceUrl", { length: 512 }),
   vendorCategory: varchar("vendorCategory", { length: 100 }),
   status: mysqlEnum("status", [
     "started",
@@ -589,7 +590,25 @@ export const vendorOnboardingSessions = mysqlTable("vendor_onboarding_sessions",
   abandonedAt: timestamp("abandonedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  sessionTokenIdx: index("idx_vendor_onboarding_sessions_tenant_session").on(table.tenantId, table.sessionId),
+}));
 
 export type VendorOnboardingSession = typeof vendorOnboardingSessions.$inferSelect;
 export type InsertVendorOnboardingSession = typeof vendorOnboardingSessions.$inferInsert;
+
+export const vendorOnboardingMessages = mysqlTable("vendor_onboarding_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  sessionId: int("sessionId").notNull(),
+  conversationId: varchar("conversationId", { length: 128 }),
+  role: mysqlEnum("role", ["vendor", "agent", "system"]).notNull(),
+  content: text("content").notNull(),
+  metadataJson: json("metadataJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  sessionIdx: index("idx_vendor_onboarding_messages_tenant_session").on(table.tenantId, table.sessionId),
+}));
+
+export type VendorOnboardingMessage = typeof vendorOnboardingMessages.$inferSelect;
+export type InsertVendorOnboardingMessage = typeof vendorOnboardingMessages.$inferInsert;

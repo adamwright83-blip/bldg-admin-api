@@ -22,6 +22,7 @@ import { SignJWT } from "jose";
 import { getVendorBySlug, getVendorUserByVendorIdAndEmail } from "../db";
 import { createAgentS2SRunToolHandler } from "../agents/s2sEndpoint";
 import { runAgentTool } from "../agents/agentRuntime";
+import { registerVendorOnboardingSessionRoutes } from "../vendorOnboardingSessionApi";
 import { z } from "zod";
 
 const warnedUnknownTenantHosts = new Set<string>();
@@ -78,6 +79,7 @@ async function startServer() {
   const PUBLIC_FORM_ORIGINS = [
     "https://buildings.bldg.chat",
     "https://contact.bldg.chat",
+    "https://vendorsignup.bldg.chat",
   ];
 
   // All allowed origins for the admin API
@@ -233,6 +235,7 @@ async function startServer() {
   registerOAuthRoutes(app);
 
   app.post("/api/agent/s2s/run-tool", createAgentS2SRunToolHandler());
+  registerVendorOnboardingSessionRoutes(app);
 
   const vendorOnboardingStartSchema = z.object({
     businessName: z.string().max(255).optional().nullable(),

@@ -113,6 +113,13 @@
       "when": 1777900000000,
       "tag": "0015_universal_vendor_onboarding",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1777939200000,
+      "tag": "0016_vendor_onboarding_messages",
+      "breakpoints": true
     }
   ]
 }

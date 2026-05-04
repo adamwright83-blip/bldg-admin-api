@@ -20,6 +20,7 @@ export const createVendorOnboardingSessionTool: AgentTool<Record<string, any>> =
       vendorId,
       sessionId,
       conversationId,
+      publicSourceUrl: input.websiteOrInstagram ?? input.sourceUrl ?? input.bookingLink ?? input.instagram ?? null,
       vendorCategory: categoryPresetKey,
       status: "started",
       lastCompletedStep: "intent_detected",
