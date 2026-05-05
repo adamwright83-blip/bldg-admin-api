@@ -7,14 +7,20 @@ import {
   getVendorById,
   getVendorOnboardingSessionByToken,
   getVendorProfileByVendorId,
+  listVendorAvailabilityWindows,
   listVendorOnboardingMessages,
+  listVendorServices,
   updateVendorOnboardingSession,
 } from "./db";
-import { runAgentTool } from "./agents/agentRuntime";
 import { detectVendorCategoryPreset, getVendorCategoryPreset, vendorOnboardingFirstQuestion } from "./agents/vendorCategoryPresets";
 import { resolveTenantIdFromHeaders } from "@shared/tenantConfig";
+import {
+  buildVendorOnboardingState,
+  loadVendorOnboardingContextForSession,
+  runVendorOnboardingTurn,
+  type VendorOnboardingAgentDeps,
+} from "./agents/vendorOnboardingAgent";
 
-type OnboardingStatus = VendorOnboardingSession["status"];
 type OnboardingMessageRole = VendorOnboardingMessage["role"];
 
 type LoadedSession = {
@@ -23,6 +29,8 @@ type LoadedSession = {
   vendor?: Vendor;
   profile?: VendorProfile;
   adminConfig?: VendorAdminConfig;
+  services: Awaited<ReturnType<typeof listVendorServices>>;
+  availability: Awaited<ReturnType<typeof listVendorAvailabilityWindows>>;
   messages: VendorOnboardingMessage[];
 };
 
@@ -31,10 +39,12 @@ export type VendorOnboardingSessionDeps = {
   getVendorById: typeof getVendorById;
   getVendorProfileByVendorId: typeof getVendorProfileByVendorId;
   getVendorAdminConfig: typeof getVendorAdminConfig;
+  listServices: typeof listVendorServices;
+  listAvailability: typeof listVendorAvailabilityWindows;
   listMessages: typeof listVendorOnboardingMessages;
   createMessage: typeof createVendorOnboardingMessage;
   updateSession: typeof updateVendorOnboardingSession;
-  runTool: typeof runAgentTool;
+  runTurn: typeof runVendorOnboardingTurn;
 };
 
 export const defaultVendorOnboardingSessionDeps: VendorOnboardingSessionDeps = {
@@ -42,10 +52,12 @@ export const defaultVendorOnboardingSessionDeps: VendorOnboardingSessionDeps = {
   getVendorById,
   getVendorProfileByVendorId,
   getVendorAdminConfig,
+  listServices: listVendorServices,
+  listAvailability: listVendorAvailabilityWindows,
   listMessages: listVendorOnboardingMessages,
   createMessage: createVendorOnboardingMessage,
   updateSession: updateVendorOnboardingSession,
-  runTool: runAgentTool,
+  runTurn: runVendorOnboardingTurn,
 };
 
 const sessionQuerySchema = z.object({
@@ -163,53 +175,11 @@ async function loadSessionOrRespond(
   const vendor = session.vendorId != null ? await deps.getVendorById(session.vendorId) : undefined;
   const profile = session.vendorId != null ? await deps.getVendorProfileByVendorId(tenantId, session.vendorId) : undefined;
   const adminConfig = session.vendorId != null ? await deps.getVendorAdminConfig(tenantId, session.vendorId) : undefined;
+  const services = session.vendorId != null ? await deps.listServices(tenantId, session.vendorId) : [];
+  const availability = session.vendorId != null ? await deps.listAvailability(tenantId, session.vendorId) : [];
   const messages = await deps.listMessages(tenantId, session.id);
 
-  return { tenantId, session, vendor, profile, adminConfig, messages };
-}
-
-function buildAssistantStep(loaded: LoadedSession, vendorMessage: string) {
-  const text = vendorMessage.toLowerCase();
-  const yes = /\b(yes|yeah|yep|sure|ok|okay|please|use it|go ahead|correct)\b/.test(text);
-  const no = /\b(no|nope|don't|do not|manual|skip)\b/.test(text);
-  const parsedFields = lastParsedFields(loaded.messages);
-
-  if (loaded.session.publicSourceUrl && loaded.session.lastCompletedStep !== "website_confirmed" && yes) {
-    return {
-      status: "collecting_details" as OnboardingStatus,
-      lastCompletedStep: "website_confirmed",
-      missingFields: ["services", "pricing", "durations"],
-      assistantMessage: "I’ll prepare the setup from your link. For now, tell me your core services, prices, and durations.",
-      nextQuestion: "What are your core services, prices, and durations?",
-      parsedFields: { ...parsedFields, websiteOrInstagram: loaded.session.publicSourceUrl, prefillApproved: true },
-      toolCall: {
-        toolName: "prefillVendorFromWebTool",
-        input: { sourceUrl: loaded.session.publicSourceUrl },
-      },
-    };
-  }
-
-  if (loaded.session.publicSourceUrl && loaded.session.lastCompletedStep !== "website_confirmed" && no) {
-    return {
-      status: "collecting_details" as OnboardingStatus,
-      lastCompletedStep: "manual_details_requested",
-      missingFields: ["services", "pricing", "durations"],
-      assistantMessage: "No problem. Tell me your core services, prices, and durations.",
-      nextQuestion: "What are your core services, prices, and durations?",
-      parsedFields: { ...parsedFields, prefillApproved: false },
-      toolCall: null,
-    };
-  }
-
-  return {
-    status: "collecting_details" as OnboardingStatus,
-    lastCompletedStep: loaded.session.lastCompletedStep ?? "collecting_details",
-    missingFields: ["services", "pricing", "durations"],
-    assistantMessage: "Got it. To set up your booking menu, tell me your core services, prices, and durations.",
-    nextQuestion: "What are your core services, prices, and durations?",
-    parsedFields,
-    toolCall: null,
-  };
+  return { tenantId, session, vendor, profile, adminConfig, services, availability, messages };
 }
 
 export function createVendorOnboardingSessionHandlers(deps = defaultVendorOnboardingSessionDeps) {
@@ -225,7 +195,14 @@ export function createVendorOnboardingSessionHandlers(deps = defaultVendorOnboar
 
       const loaded = await loadSessionOrRespond(req, res, parsed.data.session, deps);
       if (!loaded) return;
-      return res.status(200).json({ ok: true, session: buildVendorOnboardingSessionState(loaded) });
+      const context = await loadVendorOnboardingContextForSession(loaded.tenantId, parsed.data.session, deps as unknown as VendorOnboardingAgentDeps);
+      return res.status(200).json({
+        ok: true,
+        session: {
+          ...buildVendorOnboardingSessionState(loaded),
+          ...(context ? buildVendorOnboardingState(context) : {}),
+        },
+      });
     },
     postMessage: async (req: Request, res: Response) => {
       const parsed = messageBodySchema.safeParse(req.body ?? {});
@@ -236,61 +213,22 @@ export function createVendorOnboardingSessionHandlers(deps = defaultVendorOnboar
         return res.status(429).json({ ok: false, error: "Too many onboarding session requests", code: "VENDOR_ONBOARDING_RATE_LIMITED" });
       }
 
-      const loaded = await loadSessionOrRespond(req, res, parsed.data.session, deps);
-      if (!loaded) return;
-
-      await deps.createMessage({
-        tenantId: loaded.tenantId,
-        sessionId: loaded.session.id,
-        conversationId: loaded.session.conversationId ?? null,
-        role: "vendor",
-        content: parsed.data.message,
-        metadataJson: null,
-      });
-
-      const step = buildAssistantStep(loaded, parsed.data.message);
-      await deps.updateSession(loaded.tenantId, loaded.session.id, {
-        status: step.status,
-        lastCompletedStep: step.lastCompletedStep,
-        missingFieldsJson: step.missingFields,
-      });
-
-      if (step.toolCall) {
-        const output = await deps.runTool(step.toolCall.toolName, step.toolCall.input, {
-            tenantId: loaded.tenantId,
-            sessionId: loaded.session.sessionId,
-            conversationId: loaded.session.conversationId,
-            agentType: "vendor_agent",
-            actorType: "ai_agent",
-            actorId: "vendor_onboarding_live_session",
-          });
-        step.parsedFields = { ...step.parsedFields, prefill: output };
+      const tenantId = resolveTenantIdFromHeaders(req.headers).tenantId;
+      const session = await deps.getSessionByToken(tenantId, parsed.data.session);
+      if (!session) {
+        return res.status(404).json({ ok: false, error: "Vendor onboarding session not found", code: "VENDOR_ONBOARDING_SESSION_NOT_FOUND" });
       }
-
-      await deps.createMessage({
-        tenantId: loaded.tenantId,
-        sessionId: loaded.session.id,
-        conversationId: loaded.session.conversationId ?? null,
-        role: "agent",
-        content: step.assistantMessage,
-        metadataJson: {
-          nextQuestion: step.nextQuestion,
-          parsedFields: step.parsedFields,
-          missingFields: step.missingFields,
-          lastCompletedStep: step.lastCompletedStep,
-        },
+      const result = await deps.runTurn({
+        tenantId,
+        sessionToken: parsed.data.session,
+        message: parsed.data.message,
+        actorIp: getIp(req),
       });
 
       return res.status(200).json({
         ok: true,
-        assistantMessage: step.assistantMessage,
-        state: {
-          status: step.status,
-          lastCompletedStep: step.lastCompletedStep,
-          nextQuestion: step.nextQuestion,
-          parsedFields: step.parsedFields,
-          missingFields: step.missingFields,
-        },
+        assistantMessage: result.assistantMessage,
+        state: result.state,
       });
     },
   };

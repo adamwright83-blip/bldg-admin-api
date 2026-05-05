@@ -58,10 +58,24 @@ function deps(overrides: Partial<VendorOnboardingSessionDeps> = {}) {
       categoryPresetKey: "beauty_mobile",
       publicBookingSlug: "luxehair",
     } as any),
+    listServices: vi.fn().mockResolvedValue([]),
+    listAvailability: vi.fn().mockResolvedValue([]),
     listMessages: vi.fn().mockResolvedValue([]),
     createMessage: vi.fn().mockResolvedValue(101),
     updateSession: vi.fn().mockResolvedValue(undefined),
-    runTool: vi.fn().mockResolvedValue({ sourceUrl: "https://luxehair.example", services: [] }),
+    runTurn: vi.fn().mockResolvedValue({
+      assistantMessage: "I’ll use that link for a first pass. If I can’t pull a full menu from it, send your core services, prices, and durations.",
+      state: {
+        status: "collecting_details",
+        lastCompletedStep: "website_confirmed",
+        nextQuestion: "I’ll use that link for a first pass. If I can’t pull a full menu from it, send your core services, prices, and durations.",
+        parsedFields: { websiteOrInstagram: "https://luxehair.example" },
+        missingFields: ["services", "pricing", "durations", "availability", "booking_rules"],
+      },
+      toolResults: [{ toolName: "prefillVendorFromWebTool", output: { sourceUrl: "https://luxehair.example", services: [] } }],
+      usedLLM: false,
+      fallbackUsed: true,
+    }),
     ...overrides,
   } as unknown as VendorOnboardingSessionDeps;
 }
@@ -99,7 +113,7 @@ describe("vendor onboarding live session API", () => {
     expect(response.body.session.nextQuestion).toContain("use it to prefill");
   });
 
-  it("persists a vendor message, logs the prefill step, and returns the next agent question", async () => {
+  it("delegates vendor messages to vendorOnboardingAgent and returns updated state", async () => {
     const testDeps = deps();
     const handlers = createVendorOnboardingSessionHandlers(testDeps);
     const response = mockResponse();
@@ -112,35 +126,21 @@ describe("vendor onboarding live session API", () => {
     } as unknown as Request, response.res);
 
     expect(response.statusCode).toBe(200);
-    expect(testDeps.createMessage).toHaveBeenCalledWith(expect.objectContaining({
-      sessionId: 42,
-      role: "vendor",
-      content: "Yes, use my website.",
-    }));
-    expect(testDeps.updateSession).toHaveBeenCalledWith("default", 42, {
-      status: "collecting_details",
-      lastCompletedStep: "website_confirmed",
-      missingFieldsJson: ["services", "pricing", "durations"],
-    });
-    expect(testDeps.runTool).toHaveBeenCalledWith(
-      "prefillVendorFromWebTool",
-      { sourceUrl: "https://luxehair.example" },
-      expect.objectContaining({
+    expect(testDeps.runTurn).toHaveBeenCalledWith(
+      {
         tenantId: "default",
-        sessionId: "von_testsession123",
-        conversationId: "conv_123",
-        agentType: "vendor_agent",
-        actorType: "ai_agent",
-      })
+        sessionToken: "von_testsession123",
+        message: "Yes, use my website.",
+        actorIp: "10.0.0.2",
+      }
     );
     expect(response.body).toMatchObject({
       ok: true,
-      assistantMessage: "I’ll prepare the setup from your link. For now, tell me your core services, prices, and durations.",
+      assistantMessage: "I’ll use that link for a first pass. If I can’t pull a full menu from it, send your core services, prices, and durations.",
       state: {
         status: "collecting_details",
         lastCompletedStep: "website_confirmed",
-        nextQuestion: "What are your core services, prices, and durations?",
-        missingFields: ["services", "pricing", "durations"],
+        missingFields: ["services", "pricing", "durations", "availability", "booking_rules"],
       },
     });
   });

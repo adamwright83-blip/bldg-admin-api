@@ -61,11 +61,13 @@ export type ToolChoice = ToolChoicePrimitive | ToolChoiceByName | ToolChoiceExpl
 export type InvokeParams = {
   messages: Message[];
   tenantId?: string;
+  model?: string;
   tools?: Tool[];
   toolChoice?: ToolChoice;
   tool_choice?: ToolChoice;
   maxTokens?: number;
   max_tokens?: number;
+  temperature?: number;
   outputSchema?: OutputSchema;
   output_schema?: OutputSchema;
   responseFormat?: ResponseFormat;
@@ -321,13 +323,14 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   }
 
   const client = new Anthropic({ apiKey: ENV.anthropicApiKey });
-  const model = ENV.anthropicModel;
+  const model = params.model ?? ENV.anthropicModel;
   const maxTokens = Math.min(params.maxTokens ?? params.max_tokens ?? 8192, 8192);
 
   try {
     const response = await client.messages.create({
       model,
       max_tokens: maxTokens,
+      temperature: params.temperature ?? 0,
       ...(systemParts.length ? { system: systemParts.join("\n\n") } : {}),
       messages: anthropicMessages,
       tools: [

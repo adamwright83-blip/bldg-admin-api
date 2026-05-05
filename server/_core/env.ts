@@ -10,6 +10,7 @@ export const ENV = {
   /** Anthropic (catalog AI). Forge is unused for invokeLLM. */
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
   anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514",
+  anthropicModelVendorOnboarding: process.env.ANTHROPIC_MODEL_VENDOR_ONBOARDING ?? "",
   platformFeePercent: parseFloat(process.env.PLATFORM_FEE_PERCENT ?? "5"),
   adminBaseUrl: process.env.ADMIN_BASE_URL ?? "https://admin.bldg.chat",
   /**
