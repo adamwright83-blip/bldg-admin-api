@@ -1045,6 +1045,23 @@ export async function getVendorAdminConfig(
   return rows[0];
 }
 
+export async function getVendorAdminConfigBySlug(
+  tenantId: string,
+  publicBookingSlug: string
+): Promise<VendorAdminConfig | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select()
+    .from(vendorAdminConfigs)
+    .where(and(
+      eq(vendorAdminConfigs.tenantId, tenantId),
+      eq(vendorAdminConfigs.publicBookingSlug, publicBookingSlug.trim().toLowerCase())
+    ))
+    .limit(1);
+  return rows[0];
+}
+
 export async function updateVendorAdminConfig(
   tenantId: string,
   vendorId: number,

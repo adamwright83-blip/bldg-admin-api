@@ -120,6 +120,13 @@
       "when": 1777939200000,
       "tag": "0016_vendor_onboarding_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1778025600000,
+      "tag": "0017_vendor_booking_page_contract",
+      "breakpoints": true
     }
   ]
 }

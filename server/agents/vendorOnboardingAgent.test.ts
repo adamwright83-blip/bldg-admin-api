@@ -95,10 +95,10 @@ function makeDeps(options: {
         return { vendorId: input.vendorId, bookingConfirmationMode: input.bookingConfirmationMode ?? "hybrid" };
       }
       if (toolName === "configureVendorAdminTool") {
-        return { vendorId: input.vendorId, configId: 99, publicBookingUrl: "luxehair.bldg.chat" };
+        return { vendorId: input.vendorId, configId: 99, publicBookingUrl: "https://vendorsignup.bldg.chat/book/luxehair", publicBookingPageLive: false };
       }
       if (toolName === "createVendorDirectBookingSessionTool") {
-        return { vendorId: input.vendorId, publicBookingSlug: "luxehair", bookingUrl: "https://luxehair.bldg.chat" };
+        return { vendorId: input.vendorId, publicBookingSlug: "luxehair", bookingUrl: "https://vendorsignup.bldg.chat/book/luxehair", publicBookingPageLive: false };
       }
       return {};
     }),

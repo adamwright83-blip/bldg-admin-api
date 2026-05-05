@@ -886,7 +886,12 @@ export async function runVendorOnboardingTurn(
   }
   const bookingRulesOutput = toolResults.find((result) => result.ok && result.toolName === "configureVendorBookingRulesTool")?.output as Record<string, any> | undefined;
   if (bookingRulesOutput) {
-    assistantMessage = "Your draft vendor setup is configured. I’ll keep it offline until you approve it.";
+    assistantMessage = `Your draft booking page is ready for review. Preview it from the onboarding flow: https://vendorsignup.bldg.chat/booking-preview?session=${encodeURIComponent(input.sessionToken)}. It is not live until you approve and publish it.`;
+    plan.parsedFields = {
+      ...plan.parsedFields,
+      previewUrl: `https://vendorsignup.bldg.chat/booking-preview?session=${encodeURIComponent(input.sessionToken)}`,
+      publicBookingPageLive: false,
+    };
   }
   plan.assistantMessage = assistantMessage;
 

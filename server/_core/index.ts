@@ -23,6 +23,7 @@ import { getVendorBySlug, getVendorUserByVendorIdAndEmail } from "../db";
 import { createAgentS2SRunToolHandler } from "../agents/s2sEndpoint";
 import { runAgentTool } from "../agents/agentRuntime";
 import { registerVendorOnboardingSessionRoutes } from "../vendorOnboardingSessionApi";
+import { registerVendorBookingPublicRoutes } from "../vendorBookingPublicApi";
 import { z } from "zod";
 
 const warnedUnknownTenantHosts = new Set<string>();
@@ -236,6 +237,7 @@ async function startServer() {
 
   app.post("/api/agent/s2s/run-tool", createAgentS2SRunToolHandler());
   registerVendorOnboardingSessionRoutes(app);
+  registerVendorBookingPublicRoutes(app);
 
   const vendorOnboardingStartSchema = z.object({
     businessName: z.string().max(255).optional().nullable(),
