@@ -32,10 +32,14 @@ function makeDeps(options: {
   session?: any;
   services?: any[];
   availability?: any[];
+  adminConfig?: any;
+  messages?: any[];
+  failTools?: Record<string, string>;
   invokePlan?: VendorOnboardingAgentDeps["invokePlan"];
+  prefillOutput?: Record<string, any>;
 } = {}) {
   let session = options.session ?? baseSession();
-  const messages: any[] = [];
+  const messages: any[] = [...(options.messages ?? [])];
   const services = [...(options.services ?? [])];
   const availability = [...(options.availability ?? [])];
   const toolEvents: any[] = [];
@@ -43,7 +47,7 @@ function makeDeps(options: {
     getSessionByToken: vi.fn().mockImplementation(async () => session),
     getVendorById: vi.fn().mockResolvedValue({ id: 7, name: "Luxe Hair", slug: "luxehair" } as any),
     getVendorProfileByVendorId: vi.fn().mockResolvedValue({ id: 1, tenantId: "default", vendorId: 7, businessName: "Luxe Hair", vendorCategory: "hair stylist" } as any),
-    getVendorAdminConfig: vi.fn().mockResolvedValue({ id: 1, tenantId: "default", vendorId: 7, categoryPresetKey: "beauty_mobile", publicBookingSlug: "luxehair" } as any),
+    getVendorAdminConfig: vi.fn().mockResolvedValue(options.adminConfig === undefined ? { id: 1, tenantId: "default", vendorId: 7, categoryPresetKey: "beauty_mobile", publicBookingSlug: "luxehair" } as any : options.adminConfig),
     listServices: vi.fn().mockImplementation(async () => services),
     listAvailability: vi.fn().mockImplementation(async () => availability),
     listMessages: vi.fn().mockImplementation(async () => messages),
@@ -56,8 +60,11 @@ function makeDeps(options: {
     }),
     runTool: vi.fn().mockImplementation(async (toolName: string, input: any) => {
       toolEvents.push({ toolName, input });
+      if (options.failTools?.[toolName]) {
+        throw new Error(options.failTools[toolName]);
+      }
       if (toolName === "prefillVendorFromWebTool") {
-        return { sourceUrl: input.sourceUrl, services: [] };
+        return options.prefillOutput ?? { ok: false, sourceUrl: input.sourceUrl, extractionStatus: "failed", services: [], pricingItems: [], businessDetails: {}, warnings: ["No visible service pricing was extracted."] };
       }
       if (toolName === "createVendorServiceCatalogTool") {
         for (const service of input.services ?? []) {
@@ -86,6 +93,12 @@ function makeDeps(options: {
       }
       if (toolName === "configureVendorBookingRulesTool") {
         return { vendorId: input.vendorId, bookingConfirmationMode: input.bookingConfirmationMode ?? "hybrid" };
+      }
+      if (toolName === "configureVendorAdminTool") {
+        return { vendorId: input.vendorId, configId: 99, publicBookingUrl: "luxehair.bldg.chat" };
+      }
+      if (toolName === "createVendorDirectBookingSessionTool") {
+        return { vendorId: input.vendorId, publicBookingSlug: "luxehair", bookingUrl: "https://luxehair.bldg.chat" };
       }
       return {};
     }),
@@ -136,13 +149,139 @@ describe("vendorOnboardingAgent", () => {
     expect(result.state.lastCompletedStep).toBe("website_confirmed");
   });
 
+  it("does not return fake analyzing copy without a completed prefill result", async () => {
+    const plan: VendorOnboardingPlan = {
+      intent: "approve_prefill",
+      confidence: 0.9,
+      currentStep: "started",
+      nextStep: "collecting_details",
+      assistantMessage: "I’m analyzing your website right now. This takes 30–60 seconds.",
+      toolCalls: [],
+      statePatch: { status: "collecting_details", lastCompletedStep: "website_confirmed", missingFields: ["services"] },
+      parsedFields: {},
+      needsHumanClarification: true,
+    };
+    const { deps } = makeDeps({ invokePlan: vi.fn().mockResolvedValue(plan) });
+    const result = await run("Yes, use my website.", deps);
+    expect(result.assistantMessage).not.toMatch(/analyzing|30–60|30-60/i);
+    expect(result.assistantMessage).toContain("Paste your services");
+  });
+
+  it("does not return fake created/saved copy without a completed tool result", async () => {
+    const plan: VendorOnboardingPlan = {
+      intent: "claim_work",
+      confidence: 0.9,
+      currentStep: "started",
+      nextStep: "collecting_details",
+      assistantMessage: "I created your booking page and saved your pricing.",
+      toolCalls: [],
+      statePatch: { status: "collecting_details", lastCompletedStep: "fake_work", missingFields: ["services"] },
+      parsedFields: {},
+      needsHumanClarification: true,
+    };
+    const { deps } = makeDeps({ invokePlan: vi.fn().mockResolvedValue(plan) });
+    const result = await run("Yes, use my website.", deps);
+    expect(result.assistantMessage).not.toMatch(/created|saved|booking page/i);
+    expect(result.assistantMessage).toContain("Paste your services");
+  });
+
+  it("failed website extraction returns honest failure copy", async () => {
+    const { deps } = makeDeps({
+      prefillOutput: { ok: false, sourceUrl: "https://laundry.farm/", extractionStatus: "failed", services: [], pricingItems: [], businessDetails: {}, warnings: ["No visible service pricing was extracted."] },
+    });
+    const result = await run("Yes, use my website.", deps);
+    expect(result.assistantMessage).toBe("I couldn’t extract usable pricing from the site. Paste your pricing and I’ll structure it.");
+  });
+
+  it("partial website extraction asks for missing pricing", async () => {
+    const { deps } = makeDeps({
+      prefillOutput: { ok: true, sourceUrl: "https://laundry.farm/", extractionStatus: "partial", services: [], pricingItems: [], businessDetails: { businessName: "Laundry Farm" }, warnings: ["No visible service pricing was extracted."] },
+    });
+    const result = await run("Yes, use my website.", deps);
+    expect(result.assistantMessage).toBe("I found your business details, but pricing was not visible. Paste your services/prices and I’ll structure them.");
+  });
+
+  it("successful website extraction reports extracted service count before saving", async () => {
+    const { deps } = makeDeps({
+      prefillOutput: {
+        ok: true,
+        sourceUrl: "https://laundry.farm/",
+        extractionStatus: "success",
+        services: [{ serviceName: "Wash & Fold", basePriceCents: 250, durationMinutes: 15 }],
+        pricingItems: [{ serviceName: "Wash & Fold", basePriceCents: 250 }],
+        businessDetails: { businessName: "Laundry Farm" },
+        warnings: [],
+      },
+    });
+    const result = await run("Yes, use my website.", deps);
+    expect(result.assistantMessage).toBe("I extracted 1 service from https://laundry.farm/. Review these before I save them.");
+  });
+
+  it("saves previously extracted website services only after vendor confirms", async () => {
+    const { deps, services, toolEvents } = makeDeps({
+      session: baseSession({ status: "collecting_details", lastCompletedStep: "website_confirmed" }),
+      messages: [{
+        id: 1,
+        tenantId: "default",
+        sessionId: 42,
+        role: "agent",
+        content: "I extracted 2 services from https://laundry.farm/. Review these before I save them.",
+        metadataJson: {
+          parsedFields: {
+            services: [
+              { serviceName: "Wash & Fold", basePriceCents: 250, durationMinutes: 15, pricingUnit: "pound" },
+              { serviceName: "Dress Shirt", basePriceCents: 600, durationMinutes: 60 },
+            ],
+          },
+        },
+        createdAt: new Date(),
+      }],
+    });
+    const result = await run("Looks good, save them.", deps);
+    expect(toolEvents.map((event) => event.toolName)).toContain("createVendorServiceCatalogTool");
+    expect(services).toHaveLength(2);
+    expect(result.assistantMessage).toContain("I added 2 services");
+    expect(result.state.status).toBe("availability_setup");
+  });
+
   it("services text creates vendor_services rows and advances to availability", async () => {
     const { deps, services } = makeDeps({ session: baseSession({ status: "collecting_details", lastCompletedStep: "website_confirmed" }) });
     const result = await run("Haircuts $100, 60 min. Blowouts $75, 45 min. Balayage starts at $250, 2.5 hours.", deps);
     expect(services).toHaveLength(3);
     expect(result.state.status).toBe("availability_setup");
     expect(result.state.lastCompletedStep).toBe("services_configured");
-    expect(result.assistantMessage).toContain("Next, when should BLDG.chat offer these services?");
+    expect(result.assistantMessage).toContain("I added 3 services");
+    expect(result.assistantMessage).toContain("Next: when should BLDG.chat offer these services?");
+  });
+
+  it("large pasted laundry pricing creates vendor_services rows with exact count", async () => {
+    const pasted = [
+      "Premium Laundry. Unmatched Prices.",
+      "Wash & Fold $2.50/lb",
+      "Rug Extra Large $35",
+      "Rug Large $20",
+      "Rug Small $15",
+      "Sleeping Bag $24",
+      "Dress Shirt $6",
+      "Jeans $10",
+      "Comforter King $46",
+    ].join("\n");
+    const { deps, services } = makeDeps({
+      session: baseSession({ status: "collecting_details", lastCompletedStep: "website_confirmed" }),
+    });
+    const result = await run(pasted, deps);
+    expect(services.map((service) => service.serviceName)).toEqual(expect.arrayContaining([
+      "Wash & Fold",
+      "Rug Extra Large",
+      "Rug Large",
+      "Rug Small",
+      "Sleeping Bag",
+      "Dress Shirt",
+      "Jeans",
+      "Comforter King",
+    ]));
+    expect(result.assistantMessage).toContain(`I added ${services.length} services`);
+    expect(result.state.status).toBe("availability_setup");
   });
 
   it("does not repeat services question when vendor_services already exist", async () => {
@@ -205,5 +344,74 @@ describe("vendorOnboardingAgent", () => {
     const result = await run("Consultation is $50 for 30 min.", deps);
     expect(result.usedLLM).toBe(true);
     expect(toolEvents.map((event) => event.toolName)).toEqual(["createVendorServiceCatalogTool"]);
+  });
+
+  it("LLM service plans ensure draft admin and direct booking config when missing", async () => {
+    const plan: VendorOnboardingPlan = {
+      intent: "provide_services",
+      confidence: 0.91,
+      currentStep: "collecting_details",
+      nextStep: "availability_setup",
+      assistantMessage: "I created a live booking page.",
+      toolCalls: [
+        { toolName: "createVendorServiceCatalogTool", input: { services: [{ serviceName: "Dress Shirt", basePriceCents: 600, durationMinutes: 60 }] }, requiresApproval: false },
+      ],
+      statePatch: { status: "availability_setup", lastCompletedStep: "services_configured", missingFields: ["availability", "booking_rules"] },
+      parsedFields: { services: [{ serviceName: "Dress Shirt" }] },
+      needsHumanClarification: true,
+    };
+    const { deps, toolEvents } = makeDeps({ adminConfig: null, invokePlan: vi.fn().mockResolvedValue(plan) });
+    const result = await run("Dress Shirt $6", deps);
+    expect(toolEvents.map((event) => event.toolName)).toEqual([
+      "createVendorServiceCatalogTool",
+      "configureVendorAdminTool",
+      "createVendorDirectBookingSessionTool",
+    ]);
+    expect(result.assistantMessage).toContain("public booking page is not live until you approve and publish it");
+    expect(result.assistantMessage).not.toContain("live booking page");
+  });
+
+  it("does not claim a booking page is live after draft admin setup", async () => {
+    const { deps } = makeDeps({
+      session: baseSession({ status: "collecting_details", lastCompletedStep: "website_confirmed" }),
+      adminConfig: null,
+    });
+    const result = await run("Dress Shirt $6\nJeans $10", deps);
+    expect(result.assistantMessage).toContain("public booking page is not live until you approve and publish it");
+    expect(result.assistantMessage).not.toMatch(/\blive booking page\b|users can open/i);
+  });
+
+  it("runs every mutation through the agent runtime dependency for agent_events", async () => {
+    const { deps, toolEvents } = makeDeps({
+      session: baseSession({ status: "collecting_details", lastCompletedStep: "website_confirmed" }),
+    });
+    await run("Dress Shirt $6\nJeans $10", deps);
+    expect(toolEvents.map((event) => event.toolName)).toEqual(expect.arrayContaining([
+      "createVendorServiceCatalogTool",
+    ]));
+    expect(deps.runTool).toHaveBeenCalled();
+  });
+
+  it("does not advance state when service catalog write fails", async () => {
+    const { deps } = makeDeps({
+      session: baseSession({ status: "collecting_details", lastCompletedStep: "website_confirmed", missingFieldsJson: ["services"] }),
+      failTools: { createVendorServiceCatalogTool: "database unavailable" },
+    });
+    const result = await run("Dress Shirt $6\nJeans $10", deps);
+    expect(result.assistantMessage).toContain("service catalog tool failed");
+    expect(result.state.status).toBe("collecting_details");
+    expect(result.state.lastCompletedStep).toBe("website_confirmed");
+  });
+
+  it("does not advance state when availability write fails", async () => {
+    const { deps } = makeDeps({
+      session: baseSession({ status: "availability_setup", lastCompletedStep: "services_configured", missingFieldsJson: ["availability", "booking_rules"] }),
+      services: [{ id: 1, tenantId: "default", vendorId: 7, serviceName: "Haircut", basePriceCents: 10000, durationMinutes: 60 }],
+      failTools: { setVendorAvailabilityTool: "database unavailable" },
+    });
+    const result = await run("Tuesdays 2-6 PM in Century City.", deps);
+    expect(result.assistantMessage).toContain("availability tool failed");
+    expect(result.state.status).toBe("availability_setup");
+    expect(result.state.lastCompletedStep).toBe("services_configured");
   });
 });

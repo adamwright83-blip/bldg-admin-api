@@ -69,9 +69,16 @@ export type RunVendorOnboardingTurnInput = {
 export type RunVendorOnboardingTurnResult = {
   assistantMessage: string;
   state: ReturnType<typeof buildVendorOnboardingState>;
-  toolResults: Array<{ toolName: string; output: unknown }>;
+  toolResults: VendorOnboardingToolResult[];
   usedLLM: boolean;
   fallbackUsed: boolean;
+};
+
+type VendorOnboardingToolResult = {
+  toolName: string;
+  output: unknown;
+  ok: boolean;
+  errorMessage?: string;
 };
 
 export type VendorOnboardingAgentDeps = {
@@ -132,6 +139,14 @@ function lastParsedFields(messages: VendorOnboardingMessage[]) {
   return {};
 }
 
+function lastToolResults(messages: VendorOnboardingMessage[]) {
+  for (const message of [...messages].reverse()) {
+    const toolResults = metadataObject(message.metadataJson).toolResults;
+    if (Array.isArray(toolResults)) return toolResults as VendorOnboardingToolResult[];
+  }
+  return [];
+}
+
 function lastAssistantNextQuestion(messages: VendorOnboardingMessage[]) {
   const agent = [...messages].reverse().find((message) => message.role === "agent");
   const nextQuestion = metadataObject(agent?.metadataJson).nextQuestion;
@@ -161,6 +176,7 @@ function durationToMinutes(raw: string | undefined, unit?: string) {
 
 function titleCaseService(value: string) {
   const titled = value
+    .replace(/[-–—]+/g, " ")
     .replace(/&/g, " & ")
     .replace(/\s+/g, " ")
     .trim()
@@ -168,7 +184,10 @@ function titleCaseService(value: string) {
     .replace(/\bAnd\b/g, "&");
   return titled
     .replace(/^Haircuts$/i, "Haircut")
-    .replace(/^Blowouts$/i, "Blowout");
+    .replace(/^Blowouts$/i, "Blowout")
+    .replace(/^Wash Fold(?: Dry)?$/i, "Wash & Fold")
+    .replace(/^Fluff & Fold Same Day \/ Delivery$/i, "Fluff & Fold Same Day Delivery")
+    .replace(/^Same Day Delivery$/i, "Same-Day Delivery");
 }
 
 export function parseServicesFromText(text: string) {
@@ -191,7 +210,7 @@ export function parseServicesFromText(text: string) {
     });
   }
   const rugSection = text.match(/\brugs?\s+([^.;\n]+)/i)?.[1] ?? "";
-  for (const rug of rugSection.matchAll(/\b(small|medium|large)\s*\$?(\d+(?:\.\d{1,2})?)/gi)) {
+  for (const rug of `${rugSection}\n${text}`.matchAll(/\b(extra large|small|medium|large)\s*\$?(\d+(?:\.\d{1,2})?)/gi)) {
     push({ serviceName: `Rug ${rug[1]}`, basePriceCents: priceToCents(rug[2]), durationMinutes: 15 });
   }
   const sleepingBagPrice = text.match(/\bsleeping bags?\s*\$?(\d+(?:\.\d{1,2})?)/i)?.[1];
@@ -202,6 +221,22 @@ export function parseServicesFromText(text: string) {
     const sameDayText = text.match(/\bsame[-\s]?day delivery([^.;\n]*)/i)?.[1] ?? "";
     const price = sameDayText.match(/\$?(\d+(?:\.\d{1,2})?)/)?.[1];
     push({ serviceName: "Same-Day Delivery", basePriceCents: priceToCents(price), durationMinutes: 15, needsPriceClarification: !price });
+  }
+
+  const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const next = lines[i + 1] ?? "";
+    const nextPrice = next.match(/^\$?(\d+(?:\.\d{1,2})?)(?:\s*\/\s*(lb|pound))?$/i);
+    if (nextPrice && /[A-Za-z]/.test(line) && !/^(premium|unmatched|prices?|delivery|same day|bedding & rugs)$/i.test(line)) {
+      push({
+        serviceName: line,
+        basePriceCents: priceToCents(nextPrice[1]),
+        pricingUnit: nextPrice[2] ? "pound" : undefined,
+        durationMinutes: 60,
+      });
+      i += 1;
+    }
   }
 
   const chunks = text.split(/[;\n]+|(?<!\d)\.(?!\d)/).map((chunk) => chunk.trim()).filter(Boolean);
@@ -220,6 +255,23 @@ export function parseServicesFromText(text: string) {
     });
   }
   return services;
+}
+
+function inferServiceCategories(services: Array<Record<string, any>>) {
+  const labels = new Set<string>();
+  for (const service of services) {
+    const name = String(service.serviceName ?? "").toLowerCase();
+    if (/wash|fold|fluff/.test(name)) labels.add("Wash & Fold");
+    else if (/rug|comforter|sleeping|bedding|blanket|sheet|duvet/.test(name)) labels.add("Bedding & Rugs");
+    else if (/shirt|blouse|top/.test(name)) labels.add("Tops");
+    else if (/jean|pant|short/.test(name)) labels.add("Pants");
+    else if (/dress|gown|skirt/.test(name)) labels.add("Dresses");
+    else if (/coat|jacket|outerwear/.test(name)) labels.add("Outerwear");
+    else if (/alter|hem|repair|tailor/.test(name)) labels.add("Alterations");
+    else if (/tie|scarf|hat|bag|accessor/.test(name)) labels.add("Accessories");
+    else if (/dry clean|press/.test(name)) labels.add("Dry Cleaning");
+  }
+  return Array.from(labels);
 }
 
 function parseAvailabilityFromText(text: string) {
@@ -311,10 +363,80 @@ function existingServicesSummary(services: VendorService[]) {
   }).join(", ");
 }
 
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function prefillGroundedMessage(output: Record<string, any>) {
+  const sourceUrl = String(output.sourceUrl ?? "the site");
+  const status = output.extractionStatus ?? "failed";
+  const services = Array.isArray(output.services) ? output.services : [];
+  const businessDetails = metadataObject(output.businessDetails);
+  if (status === "success" && services.length > 0) {
+    return `I extracted ${pluralize(services.length, "service")} from ${sourceUrl}. Review these before I save them.`;
+  }
+  if (status === "partial" || Object.values(businessDetails).some(Boolean)) {
+    return "I found your business details, but pricing was not visible. Paste your services/prices and I’ll structure them.";
+  }
+  return "I couldn’t extract usable pricing from the site. Paste your pricing and I’ll structure it.";
+}
+
+function serviceCatalogGroundedMessage(output: Record<string, any>, parsedFields: Record<string, any>, adminConfigured: boolean) {
+  const count = Number(output.servicesCreated ?? (Array.isArray(output.serviceIds) ? output.serviceIds.length : 0));
+  const categories = Array.isArray(parsedFields.serviceCategories) && parsedFields.serviceCategories.length > 0
+    ? ` across ${parsedFields.serviceCategories.join(", ")}`
+    : "";
+  const adminCopy = adminConfigured
+    ? " Your draft booking menu is created. The public booking page is not live until you approve and publish it."
+    : "";
+  return `I added ${count} services to your draft booking menu${categories}.${adminCopy} Next: when should BLDG.chat offer these services?`;
+}
+
+function safeQuestionMessage(plan: VendorOnboardingPlan, ctx: VendorOnboardingContext) {
+  const copy = plan.assistantMessage;
+  if (/\b(i'?m|i’m|i am|i’ll|i will|i)\s+(analyz|analyzed|extract|extracted|creat|created|configur|configured|sav|saved|build|built|organiz|organized|added)/i.test(copy)) {
+    if (!ctx.session.publicSourceUrl) return "Send your website, Instagram, or current booking page.";
+    if (ctx.services.length > 0) return `Your draft services are already saved: ${existingServicesSummary(ctx.services)}. Next, when should BLDG.chat offer these services?`;
+    return "Paste your services, prices, and durations and I’ll structure them.";
+  }
+  return copy;
+}
+
+function serviceCatalogToolCalls(ctx: VendorOnboardingContext, services: Array<Record<string, any>>): VendorOnboardingToolCall[] {
+  const toolCalls: VendorOnboardingToolCall[] = [
+    { toolName: "createVendorServiceCatalogTool", input: { vendorId: ctx.session.vendorId, categoryPresetKey: ctx.categoryPresetKey, services }, requiresApproval: false },
+  ];
+  if (!ctx.adminConfig) {
+    toolCalls.push(
+      {
+        toolName: "configureVendorAdminTool",
+        input: {
+          vendorId: ctx.session.vendorId,
+          categoryPresetKey: ctx.categoryPresetKey,
+          businessName: ctx.profile?.businessName ?? ctx.vendor?.name ?? "Draft Vendor",
+          publicBookingSlug: ctx.vendor?.slug ?? undefined,
+        },
+        requiresApproval: false,
+      },
+      {
+        toolName: "createVendorDirectBookingSessionTool",
+        input: {
+          vendorId: ctx.session.vendorId,
+          brandName: ctx.profile?.businessName ?? ctx.vendor?.name ?? "Draft Vendor",
+          publicBookingSlug: ctx.vendor?.slug ?? undefined,
+        },
+        requiresApproval: false,
+      }
+    );
+  }
+  return toolCalls;
+}
+
 function deterministicPlan(ctx: VendorOnboardingContext, vendorMessage: string): VendorOnboardingPlan {
   const parsedFields = lastParsedFields(ctx.messages);
+  const previousServices = Array.isArray(parsedFields.services) ? parsedFields.services : [];
   const publicSourceUrl = ctx.session.publicSourceUrl ?? extractUrlOrHandle(vendorMessage);
-  const saysYes = /\b(yes|yeah|yep|sure|ok|okay|please|use it|go ahead|correct)\b/i.test(vendorMessage);
+  const saysYes = /\b(yes|yeah|yep|sure|ok|okay|please|use it|go ahead|correct|looks good|confirm|confirmed|save|add them|use these)\b/i.test(vendorMessage);
   const services = parseServicesFromText(vendorMessage);
   const availability = parseAvailabilityFromText(vendorMessage);
   const bookingRules = parseBookingRulesFromText(vendorMessage);
@@ -349,15 +471,32 @@ function deterministicPlan(ctx: VendorOnboardingContext, vendorMessage: string):
   }
 
   if (services.length > 0 && ctx.session.vendorId != null) {
+    const toolCalls = serviceCatalogToolCalls(ctx, services);
     return {
       intent: "provide_services",
       confidence: 0.88,
       currentStep: ctx.session.status,
       nextStep: "availability_setup",
       assistantMessage: `I added these services to your draft booking menu: ${serviceSummary(services)}. Next, when should BLDG.chat offer these services?`,
-      toolCalls: [{ toolName: "createVendorServiceCatalogTool", input: { vendorId: ctx.session.vendorId, categoryPresetKey: ctx.categoryPresetKey, services }, requiresApproval: false }],
+      toolCalls,
       statePatch: { status: "availability_setup", lastCompletedStep: "services_configured", missingFields: ["availability", "booking_rules"] },
-      parsedFields: { ...parsedFields, services },
+      parsedFields: { ...parsedFields, services, serviceCategories: inferServiceCategories(services) },
+      needsHumanClarification: true,
+    };
+  }
+
+  if (ctx.services.length === 0 && previousServices.length > 0 && saysYes && ctx.session.vendorId != null) {
+    const servicesToSave = previousServices.map((service) => metadataObject(service));
+    const toolCalls = serviceCatalogToolCalls(ctx, servicesToSave);
+    return {
+      intent: "confirm_prefilled_services",
+      confidence: 0.88,
+      currentStep: ctx.session.status,
+      nextStep: "availability_setup",
+      assistantMessage: "I added the reviewed services to your draft booking menu. Next, when should BLDG.chat offer these services?",
+      toolCalls,
+      statePatch: { status: "availability_setup", lastCompletedStep: "services_configured", missingFields: ["availability", "booking_rules"] },
+      parsedFields: { ...parsedFields, services: servicesToSave, serviceCategories: inferServiceCategories(servicesToSave) },
       needsHumanClarification: true,
     };
   }
@@ -486,6 +625,7 @@ async function invokeVendorOnboardingPlanner(ctx: VendorOnboardingContext, vendo
           "You are vendorOnboardingAgent for BLDG.chat. Return JSON only through the structured schema.",
           "You do not mutate the database. You recommend tool calls. The backend executes only registered approved tools.",
           "Never activate a vendor publicly, charge payment, send SMS/email, expose other vendors, or request cross-vendor data.",
+          "Never claim you are doing, analyzing, extracting, creating, configuring, saving, or building something. Only ask for missing input or recommend tool calls; backend will write grounded copy after tools finish.",
           "Ask one clear next question. Do not repeat the services question when services already exist.",
           "Parse messy business text into services, prices in cents, durations in minutes, availability windows, and booking rules.",
         ].join("\n"),
@@ -497,6 +637,8 @@ async function invokeVendorOnboardingPlanner(ctx: VendorOnboardingContext, vendo
             status: ctx.session.status,
             lastCompletedStep: ctx.session.lastCompletedStep,
             missingFields: normalizedMissingFields(ctx.session.missingFieldsJson),
+            parsedConversationState: lastParsedFields(ctx.messages),
+            previousToolResults: lastToolResults(ctx.messages),
             publicSourceUrl: ctx.session.publicSourceUrl,
             vendorId: ctx.session.vendorId,
             vendor: ctx.vendor,
@@ -546,6 +688,33 @@ function sanitizePlan(rawPlan: VendorOnboardingPlan, ctx: VendorOnboardingContex
           requiresApproval: false,
         }))
     : [];
+  if (!ctx.adminConfig && toolCalls.some((call) => call.toolName === "createVendorServiceCatalogTool") && ctx.session.vendorId != null) {
+    const hasAdmin = toolCalls.some((call) => call.toolName === "configureVendorAdminTool");
+    const hasDirectSession = toolCalls.some((call) => call.toolName === "createVendorDirectBookingSessionTool");
+    if (!hasAdmin) {
+      toolCalls.push({
+        toolName: "configureVendorAdminTool",
+        input: {
+          vendorId: ctx.session.vendorId,
+          categoryPresetKey: ctx.categoryPresetKey,
+          businessName: ctx.profile?.businessName ?? ctx.vendor?.name ?? "Draft Vendor",
+          publicBookingSlug: ctx.vendor?.slug ?? undefined,
+        },
+        requiresApproval: false,
+      });
+    }
+    if (!hasDirectSession) {
+      toolCalls.push({
+        toolName: "createVendorDirectBookingSessionTool",
+        input: {
+          vendorId: ctx.session.vendorId,
+          brandName: ctx.profile?.businessName ?? ctx.vendor?.name ?? "Draft Vendor",
+          publicBookingSlug: ctx.vendor?.slug ?? undefined,
+        },
+        requiresApproval: false,
+      });
+    }
+  }
   return {
     intent: String(rawPlan.intent ?? fallback.intent),
     confidence: Number(rawPlan.confidence ?? fallback.confidence),
@@ -585,8 +754,8 @@ async function loadContext(tenantId: string, sessionToken: string, deps: VendorO
   };
 }
 
-export function buildVendorOnboardingState(ctx: VendorOnboardingContext, plan?: VendorOnboardingPlan, toolResults: Array<{ toolName: string; output: unknown }> = []) {
-  const prefillOutput = toolResults.find((result) => result.toolName === "prefillVendorFromWebTool")?.output as Record<string, any> | undefined;
+export function buildVendorOnboardingState(ctx: VendorOnboardingContext, plan?: VendorOnboardingPlan, toolResults: VendorOnboardingToolResult[] = []) {
+  const prefillOutput = toolResults.find((result) => result.ok && result.toolName === "prefillVendorFromWebTool")?.output as Record<string, any> | undefined;
   const servicesFromPlan = Array.isArray(plan?.parsedFields?.services) ? plan?.parsedFields.services : undefined;
   const services = ctx.services.length > 0
     ? ctx.services
@@ -649,29 +818,75 @@ export async function runVendorOnboardingTurn(
     plan = deterministicPlan(ctx, input.message);
   }
 
-  const toolResults: Array<{ toolName: string; output: unknown }> = [];
+  const toolResults: VendorOnboardingToolResult[] = [];
   for (const call of plan.toolCalls) {
-    const output = await deps.runTool(call.toolName, call.input, {
-      tenantId: input.tenantId,
-      sessionId: ctx.session.sessionId,
-      conversationId: ctx.session.conversationId,
-      agentType: "vendor_agent",
-      actorType: "ai_agent",
-      actorId: "vendor_onboarding_agent",
-    });
-    toolResults.push({ toolName: call.toolName, output });
+    try {
+      const output = await deps.runTool(call.toolName, call.input, {
+        tenantId: input.tenantId,
+        sessionId: ctx.session.sessionId,
+        conversationId: ctx.session.conversationId,
+        agentType: "vendor_agent",
+        actorType: "ai_agent",
+        actorId: "vendor_onboarding_agent",
+      });
+      toolResults.push({ toolName: call.toolName, output, ok: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toolResults.push({
+        toolName: call.toolName,
+        ok: false,
+        errorMessage: message,
+        output: { ok: false, errorMessage: message },
+      });
+      if (call.toolName === "createVendorServiceCatalogTool") break;
+    }
   }
 
-  let assistantMessage = plan.assistantMessage;
+  let assistantMessage = safeQuestionMessage(plan, ctx);
+  const failedServiceCatalog = toolResults.find((result) => !result.ok && result.toolName === "createVendorServiceCatalogTool");
+  const failedAvailability = toolResults.find((result) => !result.ok && result.toolName === "setVendorAvailabilityTool");
+  const failedBookingRules = toolResults.find((result) => !result.ok && result.toolName === "configureVendorBookingRulesTool");
   const prefillOutput = toolResults.find((result) => result.toolName === "prefillVendorFromWebTool")?.output as Record<string, any> | undefined;
-  if (Array.isArray(prefillOutput?.services) && prefillOutput.services.length > 0) {
-    const foundServices = prefillOutput.services
-      .map((service: Record<string, any>) => service.serviceName ?? service.name)
-      .filter(Boolean)
-      .slice(0, 8)
-      .join(", ");
-    assistantMessage = `I found these services from your link: ${foundServices}. Confirm or edit this draft menu?`;
+  if (prefillOutput) {
+    assistantMessage = prefillGroundedMessage(prefillOutput);
     plan.parsedFields = { ...plan.parsedFields, services: prefillOutput.services, prefill: prefillOutput };
+  }
+  const serviceCatalogOutput = toolResults.find((result) => result.ok && result.toolName === "createVendorServiceCatalogTool")?.output as Record<string, any> | undefined;
+  if (serviceCatalogOutput) {
+    const adminConfigured = toolResults.some((result) => result.ok && result.toolName === "configureVendorAdminTool");
+    assistantMessage = serviceCatalogGroundedMessage(serviceCatalogOutput, plan.parsedFields, adminConfigured);
+  }
+  if (failedServiceCatalog) {
+    assistantMessage = `I tried to save those services, but the service catalog tool failed: ${failedServiceCatalog.errorMessage}. Nothing was marked complete.`;
+    plan.statePatch = {
+      status: ctx.session.status,
+      lastCompletedStep: ctx.session.lastCompletedStep ?? "services_save_failed",
+      missingFields: normalizedMissingFields(ctx.session.missingFieldsJson),
+    };
+  }
+  if (failedAvailability) {
+    assistantMessage = `I tried to save that availability, but the availability tool failed: ${failedAvailability.errorMessage}. Nothing was marked complete.`;
+    plan.statePatch = {
+      status: ctx.session.status,
+      lastCompletedStep: ctx.session.lastCompletedStep ?? "availability_save_failed",
+      missingFields: normalizedMissingFields(ctx.session.missingFieldsJson),
+    };
+  }
+  if (failedBookingRules) {
+    assistantMessage = `I tried to save those booking rules, but the booking rules tool failed: ${failedBookingRules.errorMessage}. Nothing was marked complete.`;
+    plan.statePatch = {
+      status: ctx.session.status,
+      lastCompletedStep: ctx.session.lastCompletedStep ?? "booking_rules_save_failed",
+      missingFields: normalizedMissingFields(ctx.session.missingFieldsJson),
+    };
+  }
+  const availabilityOutput = toolResults.find((result) => result.ok && result.toolName === "setVendorAvailabilityTool")?.output as Record<string, any> | undefined;
+  if (availabilityOutput) {
+    assistantMessage = "I saved that draft availability. Should normal bookings auto-confirm, require your approval, or use hybrid confirmation?";
+  }
+  const bookingRulesOutput = toolResults.find((result) => result.ok && result.toolName === "configureVendorBookingRulesTool")?.output as Record<string, any> | undefined;
+  if (bookingRulesOutput) {
+    assistantMessage = "Your draft vendor setup is configured. I’ll keep it offline until you approve it.";
   }
   plan.assistantMessage = assistantMessage;
 
