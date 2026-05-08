@@ -203,6 +203,28 @@ export async function updateOrderBuildingSlug(
   await db.update(orders).set({ buildingSlug }).where(eq(orders.id, orderId));
 }
 
+export async function updateOrderBuildingSlugForCustomer(input: {
+  phone: string;
+  buildingSlug: string;
+  scope: "latest" | "all";
+  latestOrderId?: number;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const where =
+    input.scope === "latest"
+      ? and(eq(orders.phone, input.phone), eq(orders.id, input.latestOrderId ?? 0))
+      : eq(orders.phone, input.phone);
+
+  const result = await db
+    .update(orders)
+    .set({ buildingSlug: input.buildingSlug })
+    .where(where);
+
+  return Number(result[0]?.affectedRows ?? 0);
+}
+
 export async function getOrderById(id: number): Promise<Order | undefined> {
   const db = await getDb();
   if (!db) return undefined;

@@ -1,6 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   Sheet,
   SheetContent,
@@ -8,7 +9,15 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { Loader2, Copy, ExternalLink, FileText, Mail, MessageSquare, Phone } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { AlertTriangle, Building2, Loader2, Copy, ExternalLink, FileText, Mail, MessageSquare, Phone } from "lucide-react";
+import { BUILDINGS, matchBuilding } from "@shared/buildings";
 
 function formatMoney(n: number) {
   return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -70,16 +79,59 @@ export function CustomerProfileDrawer({
   onPrefillNewOrder,
 }: Props) {
   const [orderWindow, setOrderWindow] = useState<"all" | "30d" | "90d">("all");
+  const [buildingEditorOpen, setBuildingEditorOpen] = useState(false);
+  const [buildingScope, setBuildingScope] = useState<"latest" | "all">("all");
+  const [buildingSlug, setBuildingSlug] = useState(BUILDINGS[0]?.slug ?? "");
+  const utils = trpc.useUtils();
   const profile = trpc.admin.getCustomerProfile.useQuery(
     { phone: phone ?? "" },
     { enabled: open && !!phone && phone.length >= 3 }
   );
+  const updateBuilding = trpc.admin.updateCustomerBuilding.useMutation();
+
+  const currentBuildingSlug = profile.data?.overview.buildingSlug?.trim() || "";
+  const addressMatchedBuilding = matchBuilding(profile.data?.overview.address ?? "");
+  const hasBuildingMismatch =
+    !!addressMatchedBuilding &&
+    currentBuildingSlug !== addressMatchedBuilding.slug;
+
+  useEffect(() => {
+    if (!profile.data) return;
+    const suggested = addressMatchedBuilding?.slug;
+    setBuildingSlug(suggested || currentBuildingSlug || BUILDINGS[0]?.slug || "");
+    setBuildingScope("all");
+    setBuildingEditorOpen(false);
+  }, [profile.data?.phone, profile.data?.overview.lastOrderId, currentBuildingSlug, addressMatchedBuilding?.slug]);
 
   const copy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
       /* ignore */
+    }
+  };
+
+  const saveBuilding = async () => {
+    if (!profile.data || !buildingSlug) return;
+    try {
+      const result = await updateBuilding.mutateAsync({
+        phone: profile.data.phone,
+        buildingSlug,
+        scope: buildingScope,
+        latestOrderId:
+          buildingScope === "latest" ? profile.data.overview.lastOrderId ?? undefined : undefined,
+      });
+      await Promise.all([
+        utils.admin.getCustomerProfile.invalidate({ phone: profile.data.phone }),
+        utils.admin.listCustomers.invalidate(),
+        utils.admin.dashboardSummary.invalidate(),
+        utils.admin.listByStatus.invalidate(),
+        utils.admin.listByDate.invalidate(),
+      ]);
+      toast.success(`Saved. ${result.updatedCount} order${result.updatedCount === 1 ? "" : "s"} moved to ${result.buildingName}.`);
+      setBuildingEditorOpen(false);
+    } catch (error: any) {
+      toast.error(error?.message || "Could not save building.");
     }
   };
 
@@ -145,6 +197,102 @@ export function CustomerProfileDrawer({
                   <p className="text-black/50 text-xs leading-relaxed">
                     {profile.data.overview.address}
                   </p>
+                  {hasBuildingMismatch && addressMatchedBuilding ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <div>
+                          <p className="font-medium">Address appears to match {addressMatchedBuilding.name}.</p>
+                          <p className="mt-0.5 text-amber-800/80">
+                            Current saved building is {currentBuildingSlug || "unknown"}.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="flex items-center gap-1.5 text-[10px] uppercase text-black/40">
+                          <Building2 className="h-3.5 w-3.5" />
+                          Building attribution
+                        </p>
+                        <p className="mt-1 truncate text-sm font-medium text-black">
+                          {currentBuildingSlug || "—"}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 border-black/20"
+                        onClick={() => setBuildingEditorOpen((v) => !v)}
+                      >
+                        Change building
+                      </Button>
+                    </div>
+                    {buildingEditorOpen ? (
+                      <div className="mt-3 space-y-3 border-t border-black/10 pt-3">
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <div>
+                            <label className="mb-1 block text-[10px] uppercase text-black/40">
+                              New building
+                            </label>
+                            <Select value={buildingSlug} onValueChange={setBuildingSlug}>
+                              <SelectTrigger className="w-full border-black/15 bg-white">
+                                <SelectValue placeholder="Select building" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {BUILDINGS.map((building) => (
+                                  <SelectItem key={building.slug} value={building.slug}>
+                                    {building.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-[10px] uppercase text-black/40">
+                              Apply to
+                            </label>
+                            <Select value={buildingScope} onValueChange={(value) => setBuildingScope(value as "latest" | "all")}>
+                              <SelectTrigger className="w-full border-black/15 bg-white">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All orders for this phone</SelectItem>
+                                <SelectItem value="latest">Latest order only</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <p className="text-xs text-black/50">
+                          This updates order building attribution, which moves revenue totals for the selected scope.
+                        </p>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="bg-black text-white hover:bg-black/90"
+                            disabled={updateBuilding.isPending || !buildingSlug}
+                            onClick={saveBuilding}
+                          >
+                            {updateBuilding.isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                            Save building
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-black/20"
+                            onClick={() => setBuildingEditorOpen(false)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                   <div className="grid grid-cols-2 gap-2 pt-2 border-t border-black/10 mt-2">
                     <div>
                       <p className="text-[10px] uppercase text-black/40">Lifetime spend</p>

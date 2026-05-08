@@ -12,6 +12,7 @@ import {
   getOrdersByStatus,
   getOrdersByDateAndStatus,
   updateOrderStatus,
+  updateOrderBuildingSlugForCustomer,
   updateOrderIntake,
   searchCustomerByPhone,
   searchOrdersForReceipt,
@@ -83,7 +84,7 @@ import { centsToDollars } from "@shared/pricing";
 import { z } from "zod";
 import Stripe from "stripe";
 import * as jose from "jose";
-import { matchBuilding } from "@shared/buildings";
+import { BUILDINGS, matchBuilding } from "@shared/buildings";
 import { normalizePropertyTower, TOWER_DEFINITIONS } from "@shared/propertyTowers";
 import { cleanCloudLegacyCustomers } from "./cleancloudLegacy";
 import {
@@ -1407,6 +1408,44 @@ export const appRouter = router({
         }
 
         return { success: true };
+      }),
+
+    /** Correct customer/order building attribution for revenue and profile rollups. */
+    updateCustomerBuilding: protectedProcedure
+      .input(z.object({
+        phone: z.string().min(3),
+        buildingSlug: z.string().min(1).max(100),
+        scope: z.enum(["latest", "all"]),
+        latestOrderId: z.number().int().positive().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const building = BUILDINGS.find((b) => b.slug === input.buildingSlug);
+        if (!building) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Unsupported building.",
+          });
+        }
+        if (input.scope === "latest" && !input.latestOrderId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Latest order id is required for latest-order updates.",
+          });
+        }
+
+        const updatedCount = await updateOrderBuildingSlugForCustomer({
+          phone: input.phone,
+          buildingSlug: building.slug,
+          scope: input.scope,
+          latestOrderId: input.latestOrderId,
+        });
+
+        return {
+          success: true,
+          updatedCount,
+          buildingSlug: building.slug,
+          buildingName: building.name,
+        };
       }),
 
     /** Save intake data — platform or vendor (chargeCard stays platform-only) */

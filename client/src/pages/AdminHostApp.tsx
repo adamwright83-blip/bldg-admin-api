@@ -18,6 +18,13 @@ import AdminLive from "./AdminLive";
 import { Level4OffensiveHost } from "@/components/Level4OffensiveHost";
 import { AdminCustomerSearchBlock, AdminTabPanels } from "./Admin";
 
+const LIVE_INTERNAL_TABS = new Set<AdminWorkspaceTab>([
+  "Intake",
+  "Processing",
+  "Ready",
+  "Pickups",
+]);
+
 function normalizePath(loc: string): string {
   const p = loc.split("?")[0]?.replace(/\/$/, "") || "";
   return p === "" ? "/" : p;
@@ -63,6 +70,7 @@ export default function AdminHostApp() {
   const isLive = path === "/live";
   const isLevel4 = path === "/level4";
   const activeTab = adminPathToTab(path);
+  const isLiveNavActive = isLive || (activeTab !== null && LIVE_INTERNAL_TABS.has(activeTab));
   const initialSelectedOrderId =
     path === "/intake" ? parseOrderIdFromLocation(loc) ?? parseOrderIdFromWindowSearch() : null;
 
@@ -177,13 +185,13 @@ export default function AdminHostApp() {
           <Link
             href="/live"
             className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-              isLive ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
+              isLiveNavActive ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
             }`}
             onClick={() => setMobileNavOpen(false)}
           >
             Live
           </Link>
-          {ADMIN_WORKSPACE_TABS.map((tab) => (
+          {ADMIN_WORKSPACE_TABS.filter((tab) => !LIVE_INTERNAL_TABS.has(tab)).map((tab) => (
             <Link
               key={tab}
               href={TAB_PATH[tab]}

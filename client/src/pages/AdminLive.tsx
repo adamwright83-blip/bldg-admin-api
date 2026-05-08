@@ -332,6 +332,19 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
             ) : <div className="text-sm text-black/45">No critical action.</div>}
           </CommandPanel>
 
+          <CommandPanel title="LIVE TOOLS">
+            {[
+              ["Intake", "/intake"],
+              ["Processing", "/processing"],
+              ["Ready", "/ready"],
+              ["Pickups & Deliveries", "/pickups"],
+            ].map(([label, path]) => (
+              <button key={label} className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white" onClick={() => onNavigate(path)}>
+                <span>{label}</span><span>&gt;</span>
+              </button>
+            ))}
+          </CommandPanel>
+
           <CommandPanel title="DRIVER ACTIVE">
             <div className="flex items-center justify-between">
               <span className="text-xs uppercase tracking-[0.12em] text-black/60">Stops remaining</span>
