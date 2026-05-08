@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   derivePartnerCostFromCommand,
+  normalizeCatalogCategory,
   normalizeParsedCatalogCommand,
   type ParsedCommandDraft,
 } from "./catalogAi";
@@ -55,5 +56,22 @@ describe("catalog AI command normalization", () => {
       costCents: 270,
     });
     expect(normalized.notes).toContain("before customer discounts");
+  });
+
+  it("canonicalizes shirts and tops aliases to the existing Tops category", () => {
+    expect(normalizeCatalogCategory("SHIRTS & TOPS")).toBe("Tops");
+
+    const normalized = normalizeParsedCatalogCommand(
+      "Add blouse - press only. sell $5. pay partner $3",
+      {
+        ...baseDraft,
+        name: "Blouse - Press Only",
+        category: "Shirts & Tops",
+        standardPriceCents: 500,
+        costCents: 300,
+      }
+    );
+
+    expect(normalized.category).toBe("Tops");
   });
 });

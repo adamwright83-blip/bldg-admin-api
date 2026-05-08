@@ -66,6 +66,7 @@ import {
   resolveActiveCatalogItemBySlugOrName,
 } from "./db";
 import {
+  normalizeCatalogCategory,
   parseMenuFileWithLLM,
   parseCatalogCommandWithLLM,
   slugifyCatalogName,
@@ -2203,7 +2204,7 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
 
           if (input.intent === "create") {
             const name = input.name?.trim();
-            const cat = input.category?.trim();
+            const cat = normalizeCatalogCategory(input.category);
             if (!name || !cat) {
               throw new TRPCError({
                 code: "BAD_REQUEST",

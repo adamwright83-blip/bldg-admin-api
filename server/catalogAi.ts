@@ -131,6 +131,55 @@ export function slugifyCatalogName(name: string): string {
     .slice(0, 120) || "item";
 }
 
+export function normalizeCatalogCategory(category: string | null | undefined): string | null {
+  const raw = category?.trim();
+  if (!raw) return null;
+
+  const key = raw
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+
+  const aliases: Record<string, string> = {
+    accessory: "Accessories",
+    accessories: "Accessories",
+    alteration: "Alterations",
+    alterations: "Alterations",
+    bedding: "Bedding",
+    "bed linens": "Bedding",
+    dress: "Dresses",
+    dresses: "Dresses",
+    garment: "Garments",
+    garments: "Garments",
+    outerwear: "Outerwear",
+    coats: "Outerwear",
+    jackets: "Outerwear",
+    pants: "Pants",
+    bottoms: "Pants",
+    shirt: "Tops",
+    shirts: "Tops",
+    "shirts and tops": "Tops",
+    "tops and shirts": "Tops",
+    "shirts tops": "Tops",
+    top: "Tops",
+    tops: "Tops",
+    blouse: "Tops",
+    blouses: "Tops",
+    skirt: "Skirts",
+    skirts: "Skirts",
+    suit: "Suits",
+    suits: "Suits",
+    uniform: "Uniforms",
+    uniforms: "Uniforms",
+    "other textiles": "Other Textiles",
+    textiles: "Other Textiles",
+  };
+
+  return aliases[key] ?? raw;
+}
+
 function inferCatalogCategory(name: string | null): string | null {
   if (!name) return null;
   const lower = name.toLowerCase();
@@ -183,7 +232,7 @@ export function normalizeParsedCatalogCommand(
 
   if (next.intent === "create") {
     next.serviceType = next.serviceType ?? "dry_clean";
-    next.category = next.category ?? inferCatalogCategory(next.name) ?? "Garments";
+    next.category = normalizeCatalogCategory(next.category) ?? inferCatalogCategory(next.name) ?? "Garments";
   }
 
   const derivedPartnerCost = derivePartnerCostFromCommand(command, next.standardPriceCents);
@@ -264,6 +313,7 @@ export async function parseMenuFileWithLLM(params: {
   }
   return parsed.items.map((it) => ({
     ...it,
+    category: normalizeCatalogCategory(it.category) ?? inferCatalogCategory(it.name) ?? "Garments",
     expressPriceCents: it.expressPriceCents ?? null,
     costCents: it.costCents ?? null,
   }));
