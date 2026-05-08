@@ -231,8 +231,13 @@ export function normalizeParsedCatalogCommand(
   const next: ParsedCommandDraft = { ...draft };
 
   if (next.intent === "create") {
+    const inferredCategory = inferCatalogCategory(next.name);
+    const rawServiceType = next.serviceType;
     next.serviceType = next.serviceType ?? "dry_clean";
-    next.category = normalizeCatalogCategory(next.category) ?? inferCatalogCategory(next.name) ?? "Garments";
+    next.category = normalizeCatalogCategory(next.category) ?? inferredCategory ?? "Garments";
+    if (rawServiceType === "other" && inferredCategory && inferredCategory !== "Garments") {
+      next.serviceType = inferredCategory === "Alterations" ? "alteration" : "dry_clean";
+    }
   }
 
   const derivedPartnerCost = derivePartnerCostFromCommand(command, next.standardPriceCents);

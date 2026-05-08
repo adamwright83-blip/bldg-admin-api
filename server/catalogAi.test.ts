@@ -74,4 +74,20 @@ describe("catalog AI command normalization", () => {
 
     expect(normalized.category).toBe("Tops");
   });
+
+  it("treats press-only garments as dry-clean intake SKUs when the model says other", () => {
+    const normalized = normalizeParsedCatalogCommand(
+      "Add blouse - press only. sell $5. pay partner $3",
+      {
+        ...baseDraft,
+        name: "Blouse - Press Only",
+        category: "Tops",
+        serviceType: "other",
+        standardPriceCents: 500,
+        costCents: 300,
+      }
+    );
+
+    expect(normalized.serviceType).toBe("dry_clean");
+  });
 });
