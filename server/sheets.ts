@@ -171,14 +171,22 @@ export type WriteOrderToSheetResult =
   | { ok: true; tabName: string }
   | { ok: false; reason: string };
 
-export async function writeOrderToSheet(
-  order: OrderForSheet,
-  amountCents: number,
-): Promise<WriteOrderToSheetResult> {
+async function getSheetsContext(date: Date): Promise<
+  | {
+      auth: Auth.JWT;
+      spreadsheetId: string;
+      tabName: string;
+      values: unknown[][];
+      dayCol0: number;
+      col1: number;
+      colLetter: string;
+    }
+  | { error: string }
+> {
   const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID?.trim();
   if (!spreadsheetId) {
     console.warn("[Sheets] Skipped: GOOGLE_SHEETS_SPREADSHEET_ID not configured");
-    return { ok: false, reason: "GOOGLE_SHEETS_SPREADSHEET_ID not configured" };
+    return { error: "GOOGLE_SHEETS_SPREADSHEET_ID not configured" };
   }
 
   const clientEmail = process.env.GOOGLE_SHEETS_CLIENT_EMAIL?.trim();
@@ -188,10 +196,7 @@ export async function writeOrderToSheet(
     console.warn(
       "[Sheets] Skipped: missing GOOGLE_SHEETS_CLIENT_EMAIL or GOOGLE_SHEETS_PRIVATE_KEY",
     );
-    return {
-      ok: false,
-      reason: "Missing GOOGLE_SHEETS_CLIENT_EMAIL or GOOGLE_SHEETS_PRIVATE_KEY",
-    };
+    return { error: "Missing GOOGLE_SHEETS_CLIENT_EMAIL or GOOGLE_SHEETS_PRIVATE_KEY" };
   }
 
   const auth = new google.auth.JWT({
@@ -201,15 +206,14 @@ export async function writeOrderToSheet(
   });
 
   const sheets = google.sheets({ version: "v4", auth });
-  const chargeDate = new Date();
-  const tabName = getMonthlyTabName(chargeDate);
+  const tabName = getMonthlyTabName(date);
 
   const meta = await sheets.spreadsheets.get({ spreadsheetId, auth });
   const titles =
     meta.data.sheets?.map((s) => s.properties?.title).filter(Boolean) as string[];
   if (!titles.includes(tabName)) {
     console.warn(`[Sheets] Skipped: monthly tab "${tabName}" not found`);
-    return { ok: false, reason: `Monthly tab "${tabName}" not found` };
+    return { error: `Monthly tab "${tabName}" not found` };
   }
 
   const gridRange = `${escapeSheetName(tabName)}!A1:ZZ1000`;
@@ -221,21 +225,37 @@ export async function writeOrderToSheet(
   const values = grid.data.values ?? [];
   if (values.length === 0) {
     console.warn(`[Sheets] Skipped: empty tab "${tabName}"`);
-    return { ok: false, reason: `Empty tab "${tabName}"` };
+    return { error: `Empty tab "${tabName}"` };
   }
 
   const headerRow = values[0] ?? [];
-  const dayCol0 = findDayColumn(headerRow, chargeDate);
+  const dayCol0 = findDayColumn(headerRow, date);
   if (dayCol0 == null) {
-    console.warn(`[Sheets] Skipped: no column found for ${format(chargeDate, "yyyy-MM-dd")}`);
-    return {
-      ok: false,
-      reason: `No column found for ${format(chargeDate, "yyyy-MM-dd")}`,
-    };
+    console.warn(`[Sheets] Skipped: no column found for ${format(date, "yyyy-MM-dd")}`);
+    return { error: `No column found for ${format(date, "yyyy-MM-dd")}` };
   }
 
+  return {
+    auth,
+    spreadsheetId,
+    tabName,
+    values,
+    dayCol0,
+    col1: dayCol0 + 1,
+    colLetter: colIndex0ToLetter(dayCol0),
+  };
+}
+
+export async function writeOrderToSheet(
+  order: OrderForSheet,
+  amountCents: number,
+): Promise<WriteOrderToSheetResult> {
+  const chargeDate = new Date();
+  const context = await getSheetsContext(chargeDate);
+  if ("error" in context) return { ok: false, reason: context.error };
+
+  const { auth, spreadsheetId, tabName, values, col1, colLetter } = context;
   const columnA = values.map((row) => row?.[0]);
-  const colLetter = colIndex0ToLetter(dayCol0);
   const dollars = amountCents / 100;
 
   if (order.serviceType === "wash_fold") {
@@ -245,7 +265,6 @@ export async function writeOrderToSheet(
       return { ok: false, reason: 'Row label "LB Laundry Rev" not found' };
     }
     const revRow1 = revRow0 + 1;
-    const col1 = dayCol0 + 1;
 
     console.log(
       `[Sheets] Writing wash_fold charge: ${formatMoney(dollars)} to ${tabName}, column ${colLetter}`,
@@ -274,7 +293,6 @@ export async function writeOrderToSheet(
       return { ok: false, reason: 'Row label "LB Dry Clean Rev" not found' };
     }
     const revRow1 = revRow0 + 1;
-    const col1 = dayCol0 + 1;
 
     console.log(
       `[Sheets] Writing dry_cleaning charge: ${formatMoney(dollars)} to ${tabName}, column ${colLetter}`,
@@ -288,4 +306,100 @@ export async function writeOrderToSheet(
 
   console.warn(`[Sheets] Skipped: unknown serviceType "${order.serviceType}"`);
   return { ok: false, reason: `Unknown serviceType "${order.serviceType}"` };
+}
+
+export type WriteDriverExpenseInput = {
+  amountCents: number;
+  vendorName?: string | null;
+  category?: string | null;
+  receiptDate?: string | null;
+  note?: string | null;
+};
+
+export async function writeDriverExpenseToSheet(
+  input: WriteDriverExpenseInput,
+): Promise<WriteOrderToSheetResult & { note?: string }> {
+  const amountCents = Math.max(0, Math.round(input.amountCents));
+  if (amountCents <= 0) {
+    return { ok: false, reason: "Expense amount must be greater than zero" };
+  }
+
+  const expenseDate = input.receiptDate ? new Date(input.receiptDate) : new Date();
+  const targetDate = Number.isNaN(expenseDate.getTime()) ? new Date() : expenseDate;
+  const context = await getSheetsContext(targetDate);
+  if ("error" in context) return { ok: false, reason: context.error };
+
+  const { auth, spreadsheetId, tabName, values, col1, colLetter } = context;
+  const columnA = values.map((row) => row?.[0]);
+  const expensesRow0 = findRowByLabel(columnA, "Other Expenses");
+  if (expensesRow0 == null) {
+    console.warn('[Sheets] Skipped: row label "Other Expenses" not found');
+    return { ok: false, reason: 'Row label "Other Expenses" not found' };
+  }
+
+  const dollars = amountCents / 100;
+  console.log(
+    `[Sheets] Writing driver expense: ${formatMoney(dollars)} to ${tabName}, column ${colLetter}`,
+  );
+  await incrementCell(auth, spreadsheetId, tabName, expensesRow0 + 1, col1, dollars, {
+    logLabel: "Other Expenses",
+  });
+
+  const vendor = input.vendorName?.trim() || "Unknown vendor";
+  const category = input.category?.trim().toUpperCase() || "EXPENSE";
+  const note = `${category} - ${vendor} - ${formatMoney(dollars)}`;
+  const noteRow0 = findRowByLabel(columnA, "Other Expense Spend");
+  if (noteRow0 != null) {
+    const sheets = google.sheets({ version: "v4", auth });
+    const a1 = `${colLetter}${noteRow0 + 1}`;
+    const range = `${escapeSheetName(tabName)}!${a1}`;
+    const got = await sheets.spreadsheets.values.get({ spreadsheetId, range, auth });
+    const previous = String(got.data.values?.[0]?.[0] ?? "").trim();
+    const next = previous ? `${previous} | ${note}` : note;
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: [[next]] },
+      auth,
+    });
+    console.log(`[Sheets] Other Expense Spend note updated: ${note}`);
+  } else {
+    console.warn('[Sheets] Row label "Other Expense Spend" not found; numeric expense was still written');
+  }
+
+  return { ok: true, tabName, note };
+}
+
+export async function writeDryCleaningCostToSheet(input: {
+  costCents: number;
+  receiptDate?: string | null;
+}): Promise<WriteOrderToSheetResult> {
+  const costCents = Math.max(0, Math.round(input.costCents));
+  if (costCents <= 0) {
+    return { ok: false, reason: "Dry-cleaning cost must be greater than zero" };
+  }
+
+  const receiptDate = input.receiptDate ? new Date(input.receiptDate) : new Date();
+  const targetDate = Number.isNaN(receiptDate.getTime()) ? new Date() : receiptDate;
+  const context = await getSheetsContext(targetDate);
+  if ("error" in context) return { ok: false, reason: context.error };
+
+  const { auth, spreadsheetId, tabName, values, col1, colLetter } = context;
+  const columnA = values.map((row) => row?.[0]);
+  const costRow0 = findRowByLabel(columnA, "LB Cost of Dry Cleaning");
+  if (costRow0 == null) {
+    console.warn('[Sheets] Skipped: row label "LB Cost of Dry Cleaning" not found');
+    return { ok: false, reason: 'Row label "LB Cost of Dry Cleaning" not found' };
+  }
+
+  const dollars = costCents / 100;
+  console.log(
+    `[Sheets] Writing dry_cleaning partner cost: ${formatMoney(dollars)} to ${tabName}, column ${colLetter}`,
+  );
+  await incrementCell(auth, spreadsheetId, tabName, costRow0 + 1, col1, dollars, {
+    logLabel: "LB Cost of Dry Cleaning",
+  });
+
+  return { ok: true, tabName };
 }

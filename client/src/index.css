@@ -549,6 +549,39 @@
   object-position: 48% center;
 }
 
+.ops-hero-quick-input {
+  position: absolute;
+  right: 13px;
+  bottom: 26px;
+  z-index: 3;
+  width: 116px;
+  min-height: 58px;
+  border: 2px solid rgba(89, 59, 27, 0.82);
+  border-radius: 4px;
+  background: rgba(255, 248, 226, 0.96);
+  color: #3d2a14;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 7px;
+  padding: 7px 8px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  line-height: 1.08;
+  text-align: center;
+  transform: rotate(-2deg);
+  box-shadow: 0 9px 18px rgba(60, 36, 18, 0.22);
+}
+
+.ops-hero-quick-input:hover {
+  background: #fff7d6;
+  border-color: #3d2a14;
+}
+
 .ops-run-rate-card {
   display: grid;
   align-content: center;
@@ -847,6 +880,179 @@ button.ops-kpi-card:hover {
 
 .ops-link-button.red {
   color: var(--lb-red-deep);
+}
+
+.ops-emergency-composer {
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  background: #fffdf8;
+  border-color: rgba(16, 24, 32, 0.16);
+}
+
+.ops-emergency-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ops-emergency-head .ops-section-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--lb-red-deep);
+}
+
+.ops-emergency-head h2 {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 1;
+  color: var(--lb-ink);
+}
+
+.ops-emergency-head > span {
+  min-width: 68px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(22, 22, 22, 0.12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--lb-ink-soft);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ops-emergency-input {
+  display: grid;
+  gap: 8px;
+}
+
+.ops-emergency-input textarea {
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+  border: 1px solid var(--lb-border);
+  border-radius: 7px;
+  background: #fffaf1;
+  color: var(--lb-ink);
+  padding: 11px 12px;
+  font-size: 14px;
+  line-height: 1.35;
+  outline: none;
+}
+
+.ops-emergency-input textarea:focus {
+  border-color: var(--lb-green);
+  box-shadow: 0 0 0 3px rgba(22, 138, 88, 0.12);
+}
+
+.ops-emergency-input textarea::placeholder {
+  color: rgba(57, 65, 74, 0.55);
+}
+
+.ops-emergency-levels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ops-emergency-level {
+  min-height: 118px;
+  border: 1px solid var(--lb-border-soft);
+  border-radius: 7px;
+  padding: 9px;
+  background: #fffdfa;
+}
+
+.ops-emergency-level-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.ops-emergency-level-head span {
+  width: 28px;
+  height: 24px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.ops-emergency-level.cash .ops-emergency-level-head span {
+  background: var(--lb-green);
+}
+
+.ops-emergency-level.followup .ops-emergency-level-head span {
+  background: var(--lb-blue);
+}
+
+.ops-emergency-level.system .ops-emergency-level-head span {
+  background: var(--lb-gold-deep);
+}
+
+.ops-emergency-level.boss .ops-emergency-level-head span {
+  background: var(--lb-red);
+}
+
+.ops-emergency-level-head strong {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--lb-ink);
+}
+
+.ops-emergency-level ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.ops-emergency-level li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ops-emergency-level li button {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--lb-border);
+  background: white;
+  color: var(--lb-green-deep);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ops-emergency-level li span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--lb-ink-soft);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.ops-emergency-level p {
+  margin: 0;
+  color: rgba(125, 116, 103, 0.76);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .ops-territory-card {
@@ -1329,6 +1535,31 @@ button.ops-kpi-card:hover {
 
   .ops-desktop-board .ops-run-rate-card {
     grid-column: span 4;
+  }
+
+  .ops-desktop-board .ops-emergency-composer {
+    grid-template-columns: minmax(260px, 0.78fr) minmax(360px, 1.22fr);
+    align-items: stretch;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .ops-desktop-board .ops-emergency-head {
+    grid-column: 1;
+  }
+
+  .ops-desktop-board .ops-emergency-input {
+    grid-column: 1;
+  }
+
+  .ops-desktop-board .ops-emergency-levels {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .ops-desktop-board .ops-emergency-level {
+    min-height: 136px;
   }
 
   .ops-date-card,

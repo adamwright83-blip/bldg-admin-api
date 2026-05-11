@@ -8,7 +8,7 @@ import { CustomerProfileDrawer } from "@/components/CustomerProfileDrawer";
 import { CustomersTab } from "@/components/CustomersTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, Check, Copy, AlertCircle, ChevronLeft, ChevronRight, MapPin, Phone, MessageSquare, Package, Menu, Trash2 } from "lucide-react";
+import { Loader2, Search, Check, Copy, AlertCircle, ChevronLeft, ChevronRight, MapPin, Phone, MessageSquare, Package, Menu, Trash2, Camera, Mic, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -105,6 +105,58 @@ function formatDate(d: string) {
   if (!d) return "—";
   const dt = new Date(d + "T00:00:00");
   return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+type ReceiptCustomer = {
+  orderId?: number | null;
+  orderStatus?: string | null;
+  serviceType?: string | null;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string | null;
+  unit: string | null;
+  address: string;
+  buildingSlug: string | null;
+  stripeCustomerId: string | null;
+  stripePaymentMethodId: string | null;
+};
+
+type ParsedReceipt = {
+  receiptIntakeId?: number;
+  receiptImageUrl?: string | null;
+  vendorName: string | null;
+  receiptNumber: string | null;
+  lines: Array<{ rawLabel: string; qty: number; unitPriceCents: number | null; lineTotalCents: number | null }>;
+  dryCleanerRetailTotalCents: number;
+  confidence: number;
+  warnings: string[];
+};
+
+type ReceiptMatch = {
+  rawLabel: string;
+  matchedCatalogSlug: string | null;
+  matchedCatalogName: string | null;
+  category: string | null;
+  qty: number;
+  dryCleanerRetailLineTotalCents: number | null;
+  laundryButlerUnitPriceCents: number | null;
+  laundryButlerLineTotalCents: number;
+  confidence: number;
+  warning: string | null;
+};
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function money(cents: number | null | undefined): string {
+  return `$${centsToDollars(cents ?? 0)}`;
 }
 
 function ResendSheetsButton({ orderId }: { orderId: number }) {
@@ -700,7 +752,270 @@ function NewOrderTab({
 }
 
 /* ===== INTAKE TAB ===== */
-function IntakeTab({ initialSelectedOrderId = null }: { initialSelectedOrderId?: number | null }) {
+function DryCleanReceiptIntakeCard({
+  onCreated,
+  autoOpen = false,
+}: {
+  onCreated: (orderId: number) => void;
+  autoOpen?: boolean;
+}) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [photoData, setPhotoData] = useState<{ mimeType: "image/jpeg" | "image/png" | "image/webp"; base64: string } | null>(null);
+  const [parsed, setParsed] = useState<ParsedReceipt | null>(null);
+  const [matches, setMatches] = useState<ReceiptMatch[]>([]);
+  const [query, setQuery] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState<ReceiptCustomer | null>(null);
+  const [summary, setSummary] = useState<{
+    dryCleanerRetailTotalCents: number;
+    partnerCostCents: number;
+    laundryButlerRetailSubtotalCents: number;
+    customerTotalCentsAtDraft: number;
+    estimatedGrossMarginCents: number;
+    warnings: string[];
+  } | null>(null);
+  const [open, setOpen] = useState(false);
+  const debouncedQuery = useDebounce(query, 250);
+  const parseReceipt = trpc.admin.dryCleanReceipt.parseReceipt.useMutation();
+  const matchReceipt = trpc.admin.dryCleanReceipt.matchReceiptToCatalog.useMutation();
+  const createDraft = trpc.admin.dryCleanReceipt.createOrderFromReceipt.useMutation();
+  const customerQuery = trpc.admin.searchCustomersForAssignment.useQuery(
+    { search: debouncedQuery },
+    { enabled: open && debouncedQuery.trim().length >= 2 && !selectedCustomer }
+  );
+  const catalogQuery = trpc.admin.catalog.list.useQuery({ includeArchived: false }, { enabled: open && !!summary });
+  const catalogRows = useMemo(
+    () => (catalogQuery.data ?? []).filter((r) => (r.serviceType ?? "dry_clean") === "dry_clean" || r.serviceType === "alteration"),
+    [catalogQuery.data]
+  );
+
+  useEffect(() => {
+    if (autoOpen) setOpen(true);
+  }, [autoOpen]);
+
+  const refreshSummary = useCallback((nextMatches: ReceiptMatch[], dryTotal?: number) => {
+    const dryCleanerRetailTotalCents = dryTotal ?? nextMatches.reduce((s, m) => s + (m.dryCleanerRetailLineTotalCents ?? 0), 0);
+    const laundryButlerRetailSubtotalCents = nextMatches.reduce((s, m) => s + m.laundryButlerLineTotalCents, 0);
+    const partnerCostCents = Math.round(dryCleanerRetailTotalCents * 0.6);
+    setSummary({
+      dryCleanerRetailTotalCents,
+      partnerCostCents,
+      laundryButlerRetailSubtotalCents,
+      customerTotalCentsAtDraft: laundryButlerRetailSubtotalCents,
+      estimatedGrossMarginCents: laundryButlerRetailSubtotalCents - partnerCostCents,
+      warnings: nextMatches.map((m) => m.warning).filter((w): w is string => !!w),
+    });
+  }, []);
+
+  const handleFile = async (file: File | undefined) => {
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      toast.error("Use a JPEG, PNG, or WebP receipt photo.");
+      return;
+    }
+    setOpen(true);
+    setPreviewUrl(URL.createObjectURL(file));
+    setParsed(null);
+    setMatches([]);
+    setSummary(null);
+    setSelectedCustomer(null);
+    setPhotoData(null);
+    const base64 = await fileToBase64(file);
+    setPhotoData({ mimeType: file.type as "image/jpeg" | "image/png" | "image/webp", base64 });
+  };
+
+  const runSpeech = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error("Speech recognition is not available in this browser.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.onresult = (event: any) => setQuery(event.results?.[0]?.[0]?.transcript ?? "");
+    recognition.start();
+  };
+
+  const selectCustomer = async (customer: ReceiptCustomer) => {
+    if (!photoData && !parsed) return;
+    setSelectedCustomer(customer);
+    setQuery(`${customer.firstName} ${customer.lastName}`);
+    const parsedReceipt = parsed ?? await parseReceipt.mutateAsync(photoData!);
+    setParsed(parsedReceipt);
+    const result = await matchReceipt.mutateAsync({
+      receiptIntakeId: parsedReceipt.receiptIntakeId,
+      lines: parsedReceipt.lines,
+      dryCleanerRetailTotalCents: parsedReceipt.dryCleanerRetailTotalCents,
+    });
+    setMatches(result.matches);
+    setSummary(result);
+  };
+
+  const setLineMatch = (idx: number, slug: string) => {
+    const item = catalogRows.find((r) => r.slug === slug);
+    const next = matches.map((m, i) => i === idx ? {
+      ...m,
+      matchedCatalogSlug: item?.slug ?? null,
+      matchedCatalogName: item?.name ?? null,
+      category: item?.category ?? null,
+      laundryButlerUnitPriceCents: item?.standardPriceCents ?? null,
+      laundryButlerLineTotalCents: item ? item.standardPriceCents * m.qty : 0,
+      confidence: item ? 1 : 0,
+      warning: item ? null : "No Laundry Butler catalog item selected.",
+    } : m);
+    setMatches(next);
+    refreshSummary(next, summary?.dryCleanerRetailTotalCents ?? parsed?.dryCleanerRetailTotalCents);
+  };
+
+  const setLineQty = (idx: number, qty: number) => {
+    const next = matches.map((m, i) => {
+      if (i !== idx) return m;
+      const cleanQty = Math.max(0, Math.round(qty || 0));
+      return { ...m, qty: cleanQty, laundryButlerLineTotalCents: (m.laundryButlerUnitPriceCents ?? 0) * cleanQty };
+    });
+    setMatches(next);
+    refreshSummary(next, summary?.dryCleanerRetailTotalCents ?? parsed?.dryCleanerRetailTotalCents);
+  };
+
+  const handleCreateDraft = async () => {
+    if (!parsed?.receiptIntakeId || !selectedCustomer || !summary) return;
+    const res = await createDraft.mutateAsync({
+      receiptIntakeId: parsed.receiptIntakeId,
+      selectedCustomer,
+      reviewedMatches: matches,
+      dryCleanerRetailTotalCents: summary.dryCleanerRetailTotalCents,
+      partnerCostCents: summary.partnerCostCents,
+      laundryButlerRetailSubtotalCents: summary.laundryButlerRetailSubtotalCents,
+      customerTotalCentsAtDraft: summary.customerTotalCentsAtDraft,
+      receiptNumber: parsed.receiptNumber,
+      parseJson: parsed,
+      warnings: [...(parsed.warnings ?? []), ...(summary.warnings ?? [])],
+    });
+    if (res.dryCleaningCostSheet?.ok) {
+      toast.success("Intake draft created. Dry-cleaning cost sent to Sheets.");
+    } else {
+      toast.success("Intake draft created. No card was charged.");
+      if (res.dryCleaningCostSheet && !res.dryCleaningCostSheet.ok) {
+        toast.error(`Cost sheet write skipped: ${res.dryCleaningCostSheet.reason}`);
+      }
+    }
+    onCreated(res.orderId);
+  };
+
+  return (
+    <div className="mb-6 border border-black/10 bg-black/[0.02] p-3 sm:p-4">
+      <label className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-md border border-black bg-black px-4 py-4 text-center text-sm font-semibold text-white hover:bg-black/90">
+        {parseReceipt.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
+        Convert dry clean receipt to order intake
+        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void handleFile(e.target.files?.[0])} />
+      </label>
+
+      {open && (
+        <div className="mt-4 space-y-4">
+          <div className="flex items-start gap-3">
+            {previewUrl ? <img src={previewUrl} alt="Dry-clean receipt preview" className="h-24 w-20 rounded object-cover border border-black/10" /> : null}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">Who does this belong to?</p>
+              <p className="text-xs text-black/50">Pick the Laundry Butler customer before matching catalog prices.</p>
+            </div>
+            <button type="button" aria-label="Close receipt intake" onClick={() => setOpen(false)} className="rounded p-2 text-black/45 hover:bg-black/5">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="flex gap-2">
+            <Input value={query} onChange={(e) => { setQuery(e.target.value); setSelectedCustomer(null); }} placeholder="Search name, phone, unit, email, building" className="bg-white border-black/20" />
+            <Button type="button" variant="outline" className="shrink-0 border-black/20" onClick={runSpeech} title="Speak customer name">
+              <Mic className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {!selectedCustomer && (customerQuery.data?.length ?? 0) > 0 && (
+            <div className="divide-y divide-black/5 border border-black/10 bg-white">
+              {customerQuery.data!.map((c) => (
+                <button key={`${c.phone}-${c.unit ?? ""}`} type="button" onClick={() => void selectCustomer(c)} className="block w-full px-3 py-3 text-left hover:bg-black/[0.03]">
+                  <span className="block text-sm font-medium">{c.firstName} {c.lastName}</span>
+                  <span className="block text-xs text-black/50">
+                    {c.phone} · Unit {c.unit || "—"} · {c.buildingSlug || c.address || "—"}
+                    {c.orderId ? ` · Order #${c.orderId}${c.serviceType === "dry_cleaning" ? " dry clean" : ""}` : ""}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {selectedCustomer && (
+            <div className="rounded-md border border-black/10 bg-white p-3 text-sm">
+              Selected: <strong>{selectedCustomer.firstName} {selectedCustomer.lastName}</strong>
+              <span className="text-black/50"> · Unit {selectedCustomer.unit || "—"} · {selectedCustomer.phone}</span>
+            </div>
+          )}
+
+          {(parseReceipt.isPending || matchReceipt.isPending) && (
+            <div className="flex items-center gap-2 text-sm text-black/55"><Loader2 className="h-4 w-4 animate-spin" /> Reading receipt and matching catalog items...</div>
+          )}
+
+          {parsed && summary && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="border border-black/10 bg-white p-3 text-sm">
+                  <p>Dry cleaner retail: <strong>{money(summary.dryCleanerRetailTotalCents)}</strong></p>
+                  <p>Laundry Butler partner cost: <strong>{money(summary.partnerCostCents)}</strong></p>
+                  <p className="mt-1 text-xs text-black/55">Because partner discount is 40%, Laundry Butler pays 60% of dry cleaner retail.</p>
+                </div>
+                <div className="border border-black/10 bg-white p-3 text-sm">
+                  <p>Laundry Butler retail subtotal: <strong>{money(summary.laundryButlerRetailSubtotalCents)}</strong></p>
+                  <p>Customer discount: <strong>entered later on intake screen</strong></p>
+                  <p>Estimated margin before customer discount: <strong>{money(summary.estimatedGrossMarginCents)}</strong></p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {matches.map((m, idx) => (
+                  <div key={`${m.rawLabel}-${idx}`} className="border border-black/10 bg-white p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">{m.rawLabel}</p>
+                        <p className="text-xs text-black/50">Dry cleaner line: {money(m.dryCleanerRetailLineTotalCents)} · AI confidence {Math.round(m.confidence * 100)}%</p>
+                      </div>
+                      <Input type="number" min={0} value={m.qty} onChange={(e) => setLineQty(idx, Number(e.target.value))} className="w-20 border-black/20 bg-white text-sm" />
+                    </div>
+                    <select value={m.matchedCatalogSlug ?? ""} onChange={(e) => setLineMatch(idx, e.target.value)} className="mt-3 w-full rounded border border-black/20 bg-white px-3 py-2 text-sm">
+                      <option value="">Choose Laundry Butler item</option>
+                      {catalogRows.map((r) => <option key={r.slug} value={r.slug}>{r.name} · {money(r.standardPriceCents)}</option>)}
+                    </select>
+                    <p className="mt-2 text-sm">Laundry Butler line total: <strong>{money(m.laundryButlerLineTotalCents)}</strong></p>
+                    {m.warning ? <p className="mt-2 text-xs text-amber-700">{m.warning}</p> : null}
+                  </div>
+                ))}
+              </div>
+
+              {[...(parsed.warnings ?? []), ...(summary.warnings ?? [])].length > 0 && (
+                <div className="border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                  {[...(parsed.warnings ?? []), ...(summary.warnings ?? [])].map((w, i) => <p key={`${w}-${i}`}>{w}</p>)}
+                </div>
+              )}
+
+              <Button className="w-full bg-black text-white hover:bg-black/90" onClick={handleCreateDraft} disabled={!selectedCustomer || createDraft.isPending || matches.every((m) => !m.matchedCatalogSlug)}>
+                {createDraft.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Create intake draft
+              </Button>
+              <p className="text-center text-xs text-black/45">No customer discount is applied here, and no card is charged.</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IntakeTab({
+  initialSelectedOrderId = null,
+  quickReceiptOpen = false,
+}: {
+  initialSelectedOrderId?: number | null;
+  quickReceiptOpen?: boolean;
+}) {
   const { data: orders, isLoading, refetch } = trpc.admin.listByStatus.useQuery({ status: "collected" });
   const [selectedId, setSelectedId] = useState<number | null>(initialSelectedOrderId);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
@@ -721,11 +1036,30 @@ function IntakeTab({ initialSelectedOrderId = null }: { initialSelectedOrderId?:
   }
 
   if (isLoading) return <Loader2 className="animate-spin w-6 h-6 text-black/30 mx-auto mt-10" />;
-  if (!orders?.length) return <p className="text-black/40 text-center mt-10">No collected orders awaiting intake.</p>;
+  const receiptCta = (
+    <DryCleanReceiptIntakeCard
+      autoOpen={quickReceiptOpen}
+      onCreated={(orderId) => {
+        window.history.pushState(null, "", `/intake?orderId=${orderId}`);
+        setSelectedId(orderId);
+        void refetch();
+      }}
+    />
+  );
+  if (!orders?.length) {
+    return (
+      <div>
+        <h2 className="text-lg font-semibold mb-4">Intake</h2>
+        {receiptCta}
+        <p className="text-black/40 text-center mt-10">No collected orders awaiting intake.</p>
+      </div>
+    );
+  }
 
   return (
     <div>
       <h2 className="text-lg font-semibold mb-4">Intake</h2>
+      {receiptCta}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -2668,12 +3002,14 @@ export function AdminTabPanels({
   newOrderPhoneSeed,
   onConsumePhoneSeed,
   initialSelectedOrderId,
+  quickReceiptOpen,
 }: {
   activeTab: Tab;
   setProfilePhone: (p: string) => void;
   newOrderPhoneSeed: string | null;
   onConsumePhoneSeed: () => void;
   initialSelectedOrderId?: number | null;
+  quickReceiptOpen?: boolean;
 }) {
   return (
     <>
@@ -2685,7 +3021,12 @@ export function AdminTabPanels({
         />
       )}
       {activeTab === "Customers" && <CustomersTab onOpenProfile={(p) => setProfilePhone(p)} />}
-      {activeTab === "Intake" && <IntakeTab initialSelectedOrderId={initialSelectedOrderId} />}
+      {activeTab === "Intake" && (
+        <IntakeTab
+          initialSelectedOrderId={initialSelectedOrderId}
+          quickReceiptOpen={quickReceiptOpen}
+        />
+      )}
       {activeTab === "Processing" && <ProcessingTab />}
       {activeTab === "Ready" && <ReadyTab />}
       {activeTab === "Pickups" && <PickupsTab />}

@@ -15,6 +15,7 @@ import {
 } from "@/admin/adminPaths";
 import AdminHome from "./AdminHome";
 import AdminLive from "./AdminLive";
+import OperatorReflection from "./OperatorReflection";
 import { Level4OffensiveHost } from "@/components/Level4OffensiveHost";
 import { AdminCustomerSearchBlock, AdminTabPanels } from "./Admin";
 
@@ -35,6 +36,12 @@ function parseOrderIdFromLocation(loc: string): number | null {
   const raw = new URLSearchParams(queryString).get("orderId");
   const orderId = raw ? Number(raw) : NaN;
   return Number.isInteger(orderId) && orderId > 0 ? orderId : null;
+}
+
+function parseQuickReceiptFromLocation(loc: string): boolean {
+  const queryString = loc.split("?")[1] ?? "";
+  const raw = new URLSearchParams(queryString).get("quickReceipt");
+  return raw === "1" || raw === "true";
 }
 
 function parseOrderIdFromWindowSearch(): number | null {
@@ -69,15 +76,17 @@ export default function AdminHostApp() {
   const isHome = isAdminCommandCenterPath(path);
   const isLive = path === "/live";
   const isLevel4 = path === "/level4";
+  const isOperatorReflection = path === "/operator-reflection";
   const activeTab = adminPathToTab(path);
   const isLiveNavActive = isLive || (activeTab !== null && LIVE_INTERNAL_TABS.has(activeTab));
   const initialSelectedOrderId =
     path === "/intake" ? parseOrderIdFromLocation(loc) ?? parseOrderIdFromWindowSearch() : null;
+  const quickReceiptOpen = path === "/intake" && parseQuickReceiptFromLocation(loc);
 
   useEffect(() => {
     if (path === "/admin") return;
-    if (!isHome && !isLive && !isLevel4 && activeTab === null) navigate("/", { replace: true });
-  }, [isHome, isLive, isLevel4, activeTab, path, navigate]);
+    if (!isHome && !isLive && !isLevel4 && !isOperatorReflection && activeTab === null) navigate("/", { replace: true });
+  }, [isHome, isLive, isLevel4, isOperatorReflection, activeTab, path, navigate]);
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -183,6 +192,15 @@ export default function AdminHostApp() {
             Level 4
           </Link>
           <Link
+            href="/operator-reflection"
+            className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              isOperatorReflection ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
+            }`}
+            onClick={() => setMobileNavOpen(false)}
+          >
+            Operator Reflection
+          </Link>
+          <Link
             href="/live"
             className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
               isLiveNavActive ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
@@ -226,7 +244,7 @@ export default function AdminHostApp() {
               <span className="text-xs text-black/40 ml-auto">{user?.name || "Admin"}</span>
             </header>
 
-            {!isLive ? (
+            {!isLive && !isOperatorReflection ? (
               <AdminCustomerSearchBlock
                 customerSearchQuery={customerSearchQuery}
                 setCustomerSearchQuery={setCustomerSearchQuery}
@@ -255,6 +273,8 @@ export default function AdminHostApp() {
             onNavigate={(path) => navigate(path)}
             onOpenCustomer={(phone) => setProfilePhone(phone)}
           />
+        ) : isOperatorReflection ? (
+          <OperatorReflection />
         ) : activeTab ? (
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full">
             <AdminTabPanels
@@ -263,6 +283,7 @@ export default function AdminHostApp() {
               newOrderPhoneSeed={newOrderPhoneSeed}
               onConsumePhoneSeed={() => setNewOrderPhoneSeed(null)}
               initialSelectedOrderId={initialSelectedOrderId}
+              quickReceiptOpen={quickReceiptOpen}
             />
           </div>
         ) : null}

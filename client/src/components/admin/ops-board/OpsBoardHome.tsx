@@ -14,6 +14,7 @@ import {
   TerritoryProgression,
 } from "./OpsBoardCards";
 import { OpsBoardModals } from "./OpsBoardModals";
+import { EmergencyTaskComposer } from "./EmergencyTaskComposer";
 import type { AdminHomeData, LogOutreachPayload, OpsBoardModal } from "./types";
 
 type OpsBoardHomeProps = {
@@ -60,6 +61,10 @@ export function OpsBoardHome({
     setModal({ kind: "collect_daniel" });
   };
 
+  const openQuickReceiptInput = () => {
+    onNavigate("/intake?quickReceipt=1");
+  };
+
   if (loading) {
     return (
       <div className="ops-board-home ops-board-loading">
@@ -79,7 +84,8 @@ export function OpsBoardHome({
       <div className="ops-mobile-board">
         <MobileTopBar operatorName={operatorName} onOpenMobileNav={onOpenMobileNav} />
         <StatusStrip data={data} includeRunRate={false} />
-        <HeroCard />
+        <EmergencyTaskComposer />
+        <HeroCard onQuickInput={openQuickReceiptInput} />
         <RunRateCard data={data} />
         <KpiGrid data={data} onNavigate={onNavigate} />
         <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} />
@@ -92,8 +98,9 @@ export function OpsBoardHome({
 
       <div className="ops-desktop-board">
         <StatusStrip data={data} />
+        <EmergencyTaskComposer />
         <div className="ops-desktop-hero-row">
-          <HeroCard />
+          <HeroCard onQuickInput={openQuickReceiptInput} />
           <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} />
         </div>
         <KpiGrid data={data} onNavigate={onNavigate} />

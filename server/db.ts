@@ -11,6 +11,7 @@ import {
   leads, Lead, InsertLead,
   catalogItems, CatalogItem,
   agentEvents, InsertAgentEvent, AgentEvent,
+  operatorTasks, InsertOperatorTask, OperatorTask,
   tenantAiUsage, TenantAiUsage,
   vendorProfiles, InsertVendorProfile, VendorProfile,
   vendorServices, InsertVendorService, VendorService,
@@ -557,6 +558,63 @@ export async function createAgentEvent(event: InsertAgentEvent): Promise<number 
 
   const result = await db.insert(agentEvents).values(event);
   return Number(result[0].insertId);
+}
+
+export type OperatorTaskLevel = OperatorTask["level"];
+export type OperatorTaskStatus = OperatorTask["status"];
+
+export async function createOperatorTask(task: InsertOperatorTask): Promise<OperatorTask | null> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[OperatorTasks] Database not available; task not persisted", {
+      level: task.level,
+      title: task.title,
+    });
+    return null;
+  }
+
+  const result = await db.insert(operatorTasks).values(task);
+  const insertId = Number(result[0].insertId);
+  const rows = await db.select().from(operatorTasks).where(eq(operatorTasks.id, insertId)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listOperatorTasks(input: {
+  tenantId?: string;
+  status?: OperatorTaskStatus | "active";
+  limit?: number;
+} = {}): Promise<OperatorTask[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const tenantId = input.tenantId ?? "default";
+  const limit = Math.min(Math.max(input.limit ?? 80, 1), 200);
+  const status = input.status ?? "active";
+  const statusWhere =
+    status === "active"
+      ? inArray(operatorTasks.status, ["open", "in_progress", "blocked"])
+      : eq(operatorTasks.status, status);
+
+  return db
+    .select()
+    .from(operatorTasks)
+    .where(and(eq(operatorTasks.tenantId, tenantId), statusWhere))
+    .orderBy(desc(operatorTasks.createdAt), desc(operatorTasks.id))
+    .limit(limit);
+}
+
+export async function updateOperatorTaskStatus(input: {
+  tenantId?: string;
+  id: number;
+  status: OperatorTaskStatus;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(operatorTasks)
+    .set({ status: input.status })
+    .where(and(eq(operatorTasks.id, input.id), eq(operatorTasks.tenantId, input.tenantId ?? "default")));
 }
 
 export function currentAiUsageMonth(now = new Date()): string {

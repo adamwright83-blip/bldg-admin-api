@@ -1,5 +1,5 @@
 import { getDashboardTimeZone } from "./dashboardZoned";
-import { writeOrderToSheet } from "./sheets";
+import { writeDriverExpenseToSheet, writeDryCleaningCostToSheet, writeOrderToSheet } from "./sheets";
 import { COOKIE_NAME, VENDOR_COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -65,6 +65,8 @@ import {
   bulkApplyCatalogImport,
   getCatalogItemBySlugForTenant,
   resolveActiveCatalogItemBySlugOrName,
+  listOperatorTasks,
+  updateOperatorTaskStatus,
 } from "./db";
 import {
   normalizeCatalogCategory,
@@ -72,6 +74,15 @@ import {
   parseCatalogCommandWithLLM,
   slugifyCatalogName,
 } from "./catalogAi";
+import {
+  buildDraftMath,
+  buildDrycleanItemsJsonFromReviewed,
+  matchReceiptLinesToCatalog,
+  parseDryCleanReceiptPhoto,
+  searchCustomersForAssignment,
+  updateReceiptIntakeAfterMatch,
+  updateReceiptIntakeAfterOrder,
+} from "./dryCleanReceiptIntake";
 import {
   buildCustomerProfile,
   deriveFloorNumber,
@@ -108,6 +119,23 @@ import {
 } from "./level4OffensiveExecute";
 import { getLevel4GateState as loadLevel4GateState } from "./level4Gate";
 import { runAgentTool, runOperatorVoiceCommand } from "./agents/agentRuntime";
+import { parseEmergencyTaskIntake, runEmergencyTaskIntake } from "./operatorTaskIntake";
+import { isGasExpense, parseDriverExpenseReceiptPhoto } from "./expenseReceipt";
+import {
+  OPS_TASK_LANES,
+  OPS_TASK_LEVELS,
+  OPS_TASK_STATUSES,
+  completeOpsTask,
+  createOpsTask,
+  createOrCompleteLevel4OpsTask,
+  getPerformanceMetrics,
+  getWeeklyOperatorReflection,
+  listOpsTasks,
+  updateOpsTaskStatus,
+  type OpsTaskLevel,
+  type OpsTaskLane,
+  type OpsTaskStatus,
+} from "./opsTasks";
 import { getAgentEventTimeline } from "./agents/agentEvents";
 import { getTenantAiLimitState } from "./agents/costTracking";
 import { listAgentTools } from "./agents/toolRegistry";
@@ -178,6 +206,47 @@ function throwCatalogAiAsTrpc(e: unknown): never {
     throw new TRPCError({ code: "BAD_REQUEST", message: clip(msg) });
   }
   throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: clip(msg) });
+}
+
+const receiptLineInputSchema = z.object({
+  rawLabel: z.string(),
+  qty: z.number(),
+  unitPriceCents: z.number().int().nullable().optional(),
+  lineTotalCents: z.number().int().nullable().optional(),
+});
+
+const assignmentCustomerSchema = z.object({
+  orderId: z.number().int().positive().nullable().optional(),
+  orderStatus: z.string().nullable().optional(),
+  serviceType: z.string().nullable().optional(),
+  firstName: z.string().min(1),
+  lastName: z.string().default(""),
+  phone: z.string().min(1),
+  email: z.string().nullable().optional(),
+  unit: z.string().nullable().optional(),
+  address: z.string().default(""),
+  buildingSlug: z.string().nullable().optional(),
+  stripeCustomerId: z.string().nullable().optional(),
+  stripePaymentMethodId: z.string().nullable().optional(),
+});
+
+const reviewedReceiptMatchSchema = z.object({
+  rawLabel: z.string(),
+  matchedCatalogSlug: z.string().nullable(),
+  matchedCatalogName: z.string().nullable(),
+  category: z.string().nullable(),
+  qty: z.number().int().min(0),
+  dryCleanerRetailLineTotalCents: z.number().int().nullable().optional(),
+  laundryButlerUnitPriceCents: z.number().int().nullable(),
+  laundryButlerLineTotalCents: z.number().int().min(0),
+  confidence: z.number(),
+  warning: z.string().nullable().optional(),
+});
+
+function localYmd(offsetDays = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export const appRouter = router({
@@ -484,6 +553,81 @@ export const appRouter = router({
 
   /* ===== ADMIN ROUTES (protected — owner only) ===== */
   admin: router({
+    opsTasks: router({
+      list: adminProcedure
+        .input(z.object({
+          status: z.union([z.enum(OPS_TASK_STATUSES), z.array(z.enum(OPS_TASK_STATUSES))]).optional(),
+          lane: z.enum(OPS_TASK_LANES).optional(),
+          level: z.enum(OPS_TASK_LEVELS).optional(),
+          dateFrom: z.string().datetime().optional(),
+          dateTo: z.string().datetime().optional(),
+          tenantId: z.string().min(1).optional(),
+          limit: z.number().int().min(1).max(500).default(200),
+        }).optional())
+        .query(async ({ ctx, input }) => listOpsTasks({
+          tenantId: input?.tenantId ?? ctx.tenantId,
+          status: input?.status as OpsTaskStatus | OpsTaskStatus[] | undefined,
+          lane: input?.lane as OpsTaskLane | undefined,
+          level: input?.level as OpsTaskLevel | undefined,
+          dateFrom: input?.dateFrom ? new Date(input.dateFrom) : null,
+          dateTo: input?.dateTo ? new Date(input.dateTo) : null,
+          limit: input?.limit ?? 200,
+        })),
+      complete: adminProcedure
+        .input(z.object({
+          taskId: z.number().int().positive(),
+          outcome: z.string().max(2000).optional(),
+          revenueRecoveredCents: z.number().int().min(0).optional(),
+          completedBy: z.string().max(128).optional(),
+        }))
+        .mutation(async ({ ctx, input }) => completeOpsTask({
+          tenantId: ctx.tenantId,
+          taskId: input.taskId,
+          outcome: input.outcome ?? null,
+          revenueRecoveredCents: input.revenueRecoveredCents,
+          completedBy: input.completedBy ?? (ctx.user?.id != null ? String(ctx.user.id) : null),
+        })),
+      dismiss: adminProcedure
+        .input(z.object({
+          taskId: z.number().int().positive(),
+          reason: z.string().max(2000).optional(),
+        }))
+        .mutation(async ({ ctx, input }) => updateOpsTaskStatus({
+          tenantId: ctx.tenantId,
+          taskId: input.taskId,
+          status: "dismissed",
+          actorId: ctx.user?.id != null ? String(ctx.user.id) : null,
+          note: input.reason ?? null,
+        })),
+      createManual: adminProcedure
+        .input(z.object({
+          title: z.string().min(1).max(255),
+          description: z.string().max(4000).optional(),
+          lane: z.enum(OPS_TASK_LANES),
+          level: z.enum(OPS_TASK_LEVELS),
+          priority: z.enum(["low", "normal", "high", "emergency"]).default("normal"),
+          revenueAtRiskCents: z.number().int().min(0).optional(),
+          customerId: z.number().int().positive().optional(),
+          orderId: z.number().int().positive().optional(),
+        }))
+        .mutation(async ({ ctx, input }) => createOpsTask({
+          tenantId: ctx.tenantId,
+          title: input.title,
+          description: input.description ?? null,
+          lane: input.lane,
+          level: input.level,
+          priority: input.priority,
+          revenueAtRiskCents: input.revenueAtRiskCents ?? 0,
+          customerId: input.customerId ?? null,
+          orderId: input.orderId ?? null,
+          taskType: "manual_operator_task",
+          source: "manual",
+          createdBy: ctx.user?.id != null ? String(ctx.user.id) : null,
+        })),
+      weeklyReflection: adminProcedure.query(async ({ ctx }) => getWeeklyOperatorReflection(ctx.tenantId)),
+      performanceMetrics: adminProcedure.query(async ({ ctx }) => getPerformanceMetrics(ctx.tenantId)),
+    }),
+
     /** List orders by status — platform or vendor (vendor gets scoped list) */
     listByStatus: platformOrVendorProcedure
       .input(z.object({ status: z.enum(["new", "intake-pending", "collected", "processing", "ready", "delivered"]) }))
@@ -644,6 +788,7 @@ export const appRouter = router({
             "gm_agent",
             "building_agent",
             "collections_agent",
+            "operator_task_agent",
           ]),
           actorType: z.enum(["human", "voice", "resident_chat", "driver", "vendor", "ai_agent", "system"]).default("human"),
           sessionId: z.string().optional(),
@@ -679,6 +824,46 @@ export const appRouter = router({
             actorId: ctx.user?.id != null ? String(ctx.user.id) : null,
             trustedUiFlow: true,
           });
+        }),
+      previewEmergencyTaskIntake: adminProcedure
+        .input(z.object({ note: z.string().min(1).max(4000) }))
+        .query(({ input }) => ({ tasks: parseEmergencyTaskIntake(input.note) })),
+      runEmergencyTaskIntake: adminProcedure
+        .input(z.object({
+          note: z.string().min(1).max(4000),
+          sessionId: z.string().optional(),
+          conversationId: z.string().optional(),
+        }))
+        .mutation(async ({ ctx, input }) => {
+          return runEmergencyTaskIntake(input.note, {
+            tenantId: ctx.tenantId,
+            sessionId: input.sessionId ?? null,
+            conversationId: input.conversationId ?? null,
+            actorId: ctx.user?.id != null ? String(ctx.user.id) : null,
+          });
+        }),
+      listOperatorTasks: adminProcedure
+        .input(z.object({
+          status: z.enum(["active", "open", "in_progress", "done", "blocked"]).default("active"),
+          limit: z.number().int().min(1).max(200).default(80),
+        }))
+        .query(async ({ ctx, input }) => listOperatorTasks({
+          tenantId: ctx.tenantId,
+          status: input.status,
+          limit: input.limit,
+        })),
+      updateOperatorTaskStatus: adminProcedure
+        .input(z.object({
+          id: z.number().int().positive(),
+          status: z.enum(["open", "in_progress", "done", "blocked"]),
+        }))
+        .mutation(async ({ ctx, input }) => {
+          await updateOperatorTaskStatus({
+            tenantId: ctx.tenantId,
+            id: input.id,
+            status: input.status,
+          });
+          return { ok: true as const };
         }),
     }),
 
@@ -912,6 +1097,33 @@ export const appRouter = router({
         );
         if (!out.ok) {
           throw new TRPCError({ code: "BAD_REQUEST", message: out.error });
+        }
+        if (!out.deduped) {
+          try {
+            const title =
+              input.block === "building_penetration"
+                ? `Level 4 building follow-up: ${input.buildingName}`
+                : input.block === "referral_request"
+                  ? `Level 4 referral ask: ${input.firstName} ${input.lastInitial}.`
+                  : "Level 4 market-hole acknowledgement";
+            await createOrCompleteLevel4OpsTask({
+              tenantId: ctx.tenantId,
+              actionType: out.actionType,
+              title,
+              description: input.block === "market_hole_outreach"
+                ? input.note ?? null
+                : input.generatedCopy.internalNote,
+              customerId: input.block === "referral_request" ? input.userId : null,
+              revenueAtRiskCents: input.block === "referral_request" ? input.ltvCents : 0,
+              completedBy: ctx.user?.id != null ? String(ctx.user.id) : null,
+              metadataJson: {
+                adminActionLogId: out.logId,
+                level4Input: input,
+              },
+            });
+          } catch (error) {
+            console.warn("[OpsTasks] Failed to log Level 4 completion:", error);
+          }
         }
         return {
           deduped: out.deduped,
@@ -1667,6 +1879,35 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
             console.warn('[Sheets] Failed to write revenue:', err);
           }
 
+          try {
+            const task = await createOpsTask({
+              tenantId: order.tenantId ?? "default",
+              lane: "lane_3",
+              level: "3",
+              taskType: "unpaid_order",
+              title: `Collected payment for order #${order.id}`,
+              description: `${order.firstName} ${order.lastName} charged ${centsToDollars(input.amountCents)}.`,
+              source: "system_detected",
+              priority: "high",
+              revenueAtRiskCents: input.amountCents,
+              orderId: order.id,
+              customerId: order.bldgUserId ?? null,
+              metadataJson: {
+                stripePaymentIntentId: paymentIntent.id,
+                serviceType: order.serviceType,
+              },
+            });
+            await completeOpsTask({
+              tenantId: order.tenantId ?? "default",
+              taskId: task.id,
+              outcome: "Customer card charged successfully.",
+              revenueRecoveredCents: input.amountCents,
+              completedBy: "stripe_charge_path",
+            });
+          } catch (err) {
+            console.warn("[OpsTasks] Failed to log revenue recovery:", err);
+          }
+
           return {
             success: true,
             paymentIntentId: paymentIntent.id,
@@ -1723,6 +1964,55 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
         }
       }),
 
+    uploadDriverExpenseReceipt: protectedProcedure
+      .input(
+        z.object({
+          mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+          base64: z.string().max(12_000_000),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        let parsed;
+        try {
+          parsed = await parseDriverExpenseReceiptPhoto({
+            tenantId: ctx.tenantId,
+            mimeType: input.mimeType,
+            base64: input.base64,
+          });
+        } catch (e) {
+          throwCatalogAiAsTrpc(e);
+        }
+
+        if (!isGasExpense(parsed)) {
+          return {
+            success: false as const,
+            parsed,
+            error:
+              parsed.category === "gas"
+                ? "Gas receipt total could not be read confidently."
+                : `Receipt was parsed as ${parsed.category}, not gas.`,
+          };
+        }
+
+        const sheetResult = await writeDriverExpenseToSheet({
+          amountCents: parsed.totalCents,
+          vendorName: parsed.vendorName,
+          category: "GAS",
+          receiptDate: parsed.receiptDate,
+        });
+
+        if (!sheetResult.ok) {
+          return { success: false as const, parsed, error: sheetResult.reason };
+        }
+
+        return {
+          success: true as const,
+          parsed,
+          tabName: sheetResult.tabName,
+          note: sheetResult.note,
+        };
+      }),
+
     /** Delete order */
     deleteOrder: protectedProcedure
       .input(z.object({ orderId: z.number() }))
@@ -1730,6 +2020,232 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
         await deleteOrder(input.orderId);
         return { success: true };
       }),
+
+    searchCustomersForAssignment: protectedProcedure
+      .input(z.object({ search: z.string().min(2).max(120) }))
+      .query(async ({ input }) => {
+        return searchCustomersForAssignment(input.search);
+      }),
+
+    dryCleanReceipt: router({
+      parseReceipt: protectedProcedure
+        .input(
+          z.object({
+            mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+            base64: z.string().max(12_000_000),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          try {
+            return await parseDryCleanReceiptPhoto({
+              tenantId: ctx.tenantId,
+              mimeType: input.mimeType,
+              base64: input.base64,
+            });
+          } catch (e) {
+            throwCatalogAiAsTrpc(e);
+          }
+        }),
+
+      matchReceiptToCatalog: protectedProcedure
+        .input(
+          z.object({
+            receiptIntakeId: z.number().int().positive().optional(),
+            lines: z.array(receiptLineInputSchema),
+            dryCleanerRetailTotalCents: z.number().int().min(0).optional(),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const catalogRows = await listCatalogItemsForAdmin(ctx.tenantId, { includeArchived: false });
+          const match = matchReceiptLinesToCatalog(
+            input.lines.map((line) => ({
+              rawLabel: line.rawLabel,
+              qty: line.qty,
+              unitPriceCents: line.unitPriceCents ?? null,
+              lineTotalCents: line.lineTotalCents ?? null,
+            })),
+            catalogRows,
+            input.dryCleanerRetailTotalCents
+          );
+          if (input.receiptIntakeId) {
+            await updateReceiptIntakeAfterMatch({ receiptIntakeId: input.receiptIntakeId, match });
+          }
+          return match;
+        }),
+
+      createOrderFromReceipt: protectedProcedure
+        .input(
+          z.object({
+            receiptIntakeId: z.number().int().positive(),
+            selectedCustomer: assignmentCustomerSchema,
+            reviewedMatches: z.array(reviewedReceiptMatchSchema),
+            dryCleanerRetailTotalCents: z.number().int().min(0),
+            partnerCostCents: z.number().int().min(0),
+            laundryButlerRetailSubtotalCents: z.number().int().min(0),
+            customerTotalCentsAtDraft: z.number().int().min(0),
+            receiptNumber: z.string().nullable().optional(),
+            parseJson: z.any().optional(),
+            notes: z.string().optional(),
+            warnings: z.array(z.string()).optional(),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const selected = input.selectedCustomer;
+          const math = buildDraftMath({
+            dryCleanerRetailTotalCents: input.dryCleanerRetailTotalCents,
+            laundryButlerRetailSubtotalCents: input.laundryButlerRetailSubtotalCents,
+          });
+          if (math.partnerCostCents !== input.partnerCostCents) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Partner cost must be 60% of dry-cleaner retail total." });
+          }
+          if (input.customerTotalCentsAtDraft !== math.customerTotalCentsAtDraft) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Draft customer total must equal Laundry Butler retail subtotal before manual customer discount.",
+            });
+          }
+
+          const drycleanItemsJson = buildDrycleanItemsJsonFromReviewed(
+            input.reviewedMatches.map((m) => ({
+              rawLabel: m.rawLabel,
+              matchedCatalogSlug: m.matchedCatalogSlug,
+              matchedCatalogName: m.matchedCatalogName,
+              category: m.category,
+              qty: m.qty,
+              dryCleanerRetailLineTotalCents: m.dryCleanerRetailLineTotalCents ?? null,
+              laundryButlerUnitPriceCents: m.laundryButlerUnitPriceCents,
+              laundryButlerLineTotalCents: m.laundryButlerLineTotalCents,
+              confidence: m.confidence,
+              warning: m.warning ?? null,
+            }))
+          );
+          const subtotalFromReviewed = Object.values(drycleanItemsJson).reduce(
+            (sum, item: any) => sum + Number(item.total_cents || 0),
+            0
+          );
+          if (subtotalFromReviewed !== math.laundryButlerRetailSubtotalCents) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Reviewed Laundry Butler line totals do not match subtotal." });
+          }
+
+          const buildingSlug = selected.buildingSlug?.trim() || "";
+          const vendor = buildingSlug ? await getVendorForOrder(buildingSlug, "dry_cleaning") : null;
+          const specialInstructions = [
+            "Created from dry cleaner receipt photo",
+            input.receiptNumber ? `Receipt #${input.receiptNumber}` : "",
+            input.notes?.trim() || "",
+            ...(input.warnings ?? []).map((w) => `Receipt warning: ${w}`),
+          ].filter(Boolean).join("\n");
+
+          const existingOrderId =
+            selected.orderId && selected.serviceType === "dry_cleaning"
+              ? selected.orderId
+              : null;
+          const orderId = existingOrderId ?? await createOrder({
+            tenantId: ctx.tenantId,
+            serviceType: "dry_cleaning",
+            pickupDate: localYmd(0),
+            pickupTimeWindow: "Dry clean receipt intake",
+            deliveryDate: localYmd(1),
+            deliveryTimeWindow: "Dry clean receipt intake",
+            address: selected.address || buildingSlug || "Dry clean receipt intake",
+            unit: selected.unit ?? null,
+            specialInstructions,
+            firstName: selected.firstName,
+            lastName: selected.lastName || "",
+            phone: selected.phone,
+            email: selected.email ?? null,
+            stripeCustomerId: selected.stripeCustomerId ?? null,
+            stripePaymentMethodId: selected.stripePaymentMethodId ?? null,
+            buildingSlug,
+            vendorId: vendor?.id ?? null,
+            status: "collected",
+          });
+
+          await updateOrderIntake(orderId, {
+            ...(existingOrderId ? { specialInstructions } : {}),
+            weightLbs: null,
+            subtotal: centsToDollars(math.laundryButlerRetailSubtotalCents),
+            discountPercent: "0",
+            total: centsToDollars(math.customerTotalCentsAtDraft),
+            upchargesJson: null,
+            drycleanItemsJson,
+            status: "collected",
+          });
+
+          await updateReceiptIntakeAfterOrder({
+            receiptIntakeId: input.receiptIntakeId,
+            orderId,
+            customer: {
+              orderId: selected.orderId ?? null,
+              orderStatus: selected.orderStatus ?? null,
+              serviceType: selected.serviceType ?? null,
+              firstName: selected.firstName,
+              lastName: selected.lastName,
+              phone: selected.phone,
+              email: selected.email ?? null,
+              unit: selected.unit ?? null,
+              address: selected.address,
+              buildingSlug: selected.buildingSlug ?? null,
+              stripeCustomerId: selected.stripeCustomerId ?? null,
+              stripePaymentMethodId: selected.stripePaymentMethodId ?? null,
+            },
+            matchJson: input.reviewedMatches,
+            parseJson: input.parseJson,
+            dryCleanerRetailTotalCents: math.dryCleanerRetailTotalCents,
+            partnerCostCents: math.partnerCostCents,
+            laundryButlerRetailSubtotalCents: math.laundryButlerRetailSubtotalCents,
+            customerTotalCentsAtDraft: math.customerTotalCentsAtDraft,
+          });
+
+          const sheetResult = await writeDryCleaningCostToSheet({
+            costCents: math.partnerCostCents,
+            receiptDate:
+              typeof input.parseJson?.receiptDate === "string"
+                ? input.parseJson.receiptDate
+                : null,
+          });
+
+          try {
+            const task = await createOpsTask({
+              tenantId: ctx.tenantId,
+              lane: "lane_1",
+              level: "1",
+              taskType: "dry_clean_receipt_intake",
+              title: `Captured dry-clean receipt for order #${orderId}`,
+              description: `${selected.firstName} ${selected.lastName || ""}`.trim() || "Dry-clean receipt assigned to customer.",
+              source: "quick_input",
+              priority: "high",
+              revenueAtRiskCents: math.customerTotalCentsAtDraft,
+              orderId,
+              customerId: null,
+              metadataJson: {
+                receiptIntakeId: input.receiptIntakeId,
+                receiptNumber: input.receiptNumber ?? null,
+                partnerCostCents: math.partnerCostCents,
+                dryCleanerRetailTotalCents: math.dryCleanerRetailTotalCents,
+                laundryButlerRetailSubtotalCents: math.laundryButlerRetailSubtotalCents,
+                sheetWrite: sheetResult,
+              },
+              createdBy: ctx.user?.id != null ? String(ctx.user.id) : null,
+            });
+            await completeOpsTask({
+              tenantId: ctx.tenantId,
+              taskId: task.id,
+              outcome: "Dry-clean receipt captured, assigned, priced, and cost logged.",
+              completedBy: ctx.user?.id != null ? String(ctx.user.id) : "quick_input",
+            });
+          } catch (error) {
+            console.warn("[OpsTasks] Failed to log dry-clean receipt intake:", error);
+          }
+
+          return {
+            orderId,
+            dryCleaningCostSheet: sheetResult.ok
+              ? { ok: true as const, tabName: sheetResult.tabName }
+              : { ok: false as const, reason: sheetResult.reason },
+          };
+        }),
+    }),
 
     /** Manually assign/reassign vendor on an order */
     updateOrderVendor: protectedProcedure

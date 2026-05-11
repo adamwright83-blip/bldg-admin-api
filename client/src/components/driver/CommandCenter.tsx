@@ -13,18 +13,25 @@ import {
   ChevronRight,
   Shield,
   Plus,
+  Camera,
   Flame,
   Zap,
   Trophy,
   Building2,
   CalendarDays,
   ChevronLeft,
+  CheckCircle2,
+  Loader2,
+  ReceiptText,
 } from "lucide-react";
+import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
 import type { GameOrder, GameStateSnapshot } from "./driverGameTypes";
 import { sounds } from "./driverSounds";
 import { haptics } from "./driverHaptics";
 import TerritoryLeaderboard from "./TerritoryLeaderboard";
 import { QuickNewOrderSheet } from "./QuickNewOrderSheet";
+import { compressImageForMissionPreview } from "./driverMissionStorage";
 
 const HERO_CITYSCAPE =
   "https://d2xsxph8kpxj0f.cloudfront.net/310519663281332025/bVTWnxw2cr9EUVzVBCF5PW/hero-cityscape-ibzWyN4yDNboMUDQd8P4Lh.webp";
@@ -220,6 +227,100 @@ function ScheduleDateSelector({
         </div>
       </div>
     </motion.div>
+  );
+}
+
+function dataUrlToReceiptPayload(dataUrl: string): {
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+  base64: string;
+} {
+  const match = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,([\s\S]+)$/);
+  if (!match) throw new Error("Use a JPEG, PNG, or WebP receipt photo.");
+  return {
+    mimeType: match[1] as "image/jpeg" | "image/png" | "image/webp",
+    base64: match[2],
+  };
+}
+
+function DriverReceiptUpload() {
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const [lastResult, setLastResult] = React.useState<string | null>(null);
+  const uploadReceipt = trpc.admin.uploadDriverExpenseReceipt.useMutation({
+    onSuccess: (result) => {
+      if (result.success) {
+        const total = `$${(result.parsed.totalCents / 100).toFixed(2)}`;
+        const vendor = result.parsed.vendorName ?? "gas receipt";
+        setLastResult(`${vendor} ${total}`);
+        toast.success(`Gas receipt logged: ${vendor} ${total}`);
+        sounds.scanConfirm();
+        haptics.impact();
+        return;
+      }
+      setLastResult(null);
+      toast.error(result.error || "Receipt was not logged.");
+      sounds.overrideFail();
+      haptics.error();
+    },
+    onError: (error) => {
+      setLastResult(null);
+      toast.error(error.message || "Could not upload receipt.");
+      sounds.overrideFail();
+      haptics.error();
+    },
+  });
+
+  async function handleFile(file: File | undefined) {
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      toast.error("Use a JPEG, PNG, or WebP receipt photo.");
+      return;
+    }
+    try {
+      sounds.shutter();
+      haptics.shutter();
+      const compressed = await compressImageForMissionPreview(file);
+      uploadReceipt.mutate(dataUrlToReceiptPayload(compressed));
+      if (fileRef.current) fileRef.current.value = "";
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not read receipt photo.");
+    }
+  }
+
+  return (
+    <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+76px)] z-40 flex justify-center px-6 pointer-events-none">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(event) => void handleFile(event.target.files?.[0])}
+      />
+      <motion.button
+        type="button"
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.28, duration: 0.4 }}
+        onClick={() => fileRef.current?.click()}
+        disabled={uploadReceipt.isPending}
+        className="pointer-events-auto min-h-[70px] w-[min(300px,calc(100vw-64px))] rounded-full border-2 border-amber/75 bg-black/88 px-6 py-3 text-center shadow-[0_0_28px_rgba(255,190,80,0.22)] backdrop-blur transition-colors hover:border-amber hover:bg-black disabled:opacity-70"
+      >
+        <div className="flex items-center justify-center gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-amber/55 bg-amber/[0.12] text-amber">
+            {uploadReceipt.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+          </span>
+          <span className="min-w-0">
+            <span className="block font-display text-[18px] font-extrabold uppercase tracking-[0.08em] text-white">
+              Gas Receipt Upload
+            </span>
+            <span className="mt-1 flex items-center justify-center gap-1.5 text-[9px] uppercase tracking-[0.18em] text-amber/80">
+              {lastResult ? <CheckCircle2 className="h-3 w-3" /> : <ReceiptText className="h-3 w-3" />}
+              {lastResult ? `Logged ${lastResult}` : "Tap camera · row 16"}
+            </span>
+          </span>
+        </div>
+      </motion.button>
+    </div>
   );
 }
 
@@ -501,6 +602,7 @@ export default function CommandCenter({
         onOpenChange={setQuickOrderOpen}
         onOrderCreated={onOrderCreated}
       />
+      <DriverReceiptUpload />
     </motion.div>
   );
 }

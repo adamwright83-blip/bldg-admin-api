@@ -325,6 +325,132 @@ export const catalogItems = mysqlTable(
 export type CatalogItem = typeof catalogItems.$inferSelect;
 export type InsertCatalogItem = typeof catalogItems.$inferInsert;
 
+export const drycleanReceiptIntakes = mysqlTable("dryclean_receipt_intakes", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  orderId: int("orderId"),
+  receiptImageKey: varchar("receiptImageKey", { length: 512 }).notNull(),
+  receiptImageUrl: text("receiptImageUrl"),
+  assignedCustomerPhone: varchar("assignedCustomerPhone", { length: 30 }),
+  assignedCustomerName: varchar("assignedCustomerName", { length: 255 }),
+  assignedCustomerUnit: varchar("assignedCustomerUnit", { length: 50 }),
+  assignedBuildingSlug: varchar("assignedBuildingSlug", { length: 100 }),
+  dryCleanerRetailTotalCents: int("dryCleanerRetailTotalCents").notNull().default(0),
+  partnerDiscountPercent: int("partnerDiscountPercent").notNull().default(40),
+  partnerCostCents: int("partnerCostCents").notNull().default(0),
+  laundryButlerRetailSubtotalCents: int("laundryButlerRetailSubtotalCents").notNull().default(0),
+  customerDiscountPercentAtDraft: int("customerDiscountPercentAtDraft").notNull().default(0),
+  customerTotalCentsAtDraft: int("customerTotalCentsAtDraft").notNull().default(0),
+  estimatedGrossMarginCents: int("estimatedGrossMarginCents").notNull().default(0),
+  parseJson: json("parseJson"),
+  matchJson: json("matchJson"),
+  status: mysqlEnum("status", ["uploaded", "parsed", "reviewed", "order_created", "failed"]).notNull().default("uploaded"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DrycleanReceiptIntake = typeof drycleanReceiptIntakes.$inferSelect;
+export type InsertDrycleanReceiptIntake = typeof drycleanReceiptIntakes.$inferInsert;
+
+export const operatorTasks = mysqlTable("operator_tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  source: mysqlEnum("source", ["emergency_composer", "operator_voice", "manual"]).notNull().default("emergency_composer"),
+  level: mysqlEnum("level", ["level_1", "level_2", "level_3", "level_4"]).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  details: text("details"),
+  status: mysqlEnum("status", ["open", "in_progress", "done", "blocked"]).notNull().default("open"),
+  priority: mysqlEnum("priority", ["emergency", "high", "normal", "low"]).notNull().default("high"),
+  target: varchar("target", { length: 255 }),
+  sourceNote: text("sourceNote"),
+  createdByUserId: varchar("createdByUserId", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type OperatorTask = typeof operatorTasks.$inferSelect;
+export type InsertOperatorTask = typeof operatorTasks.$inferInsert;
+
+export const opsTasks = mysqlTable("ops_tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  lane: mysqlEnum("lane", ["lane_1", "lane_2", "lane_3", "level_4"]).notNull(),
+  level: mysqlEnum("level", ["1", "2", "3", "4"]).notNull(),
+  taskType: mysqlEnum("taskType", [
+    "intake_missing_price",
+    "unpaid_order",
+    "vague_intake",
+    "missed_pickup",
+    "stale_customer",
+    "revenue_leak",
+    "referral_ask",
+    "vendor_followup",
+    "gm_followup",
+    "manual_operator_task",
+    "dry_clean_receipt_intake",
+    "emergency_task",
+  ]).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  source: mysqlEnum("source", ["manual", "agent_suggested", "system_detected", "level_4", "voice", "quick_input"]).notNull().default("manual"),
+  createdBy: varchar("createdBy", { length: 128 }),
+  assignedTo: varchar("assignedTo", { length: 128 }),
+  status: mysqlEnum("status", ["open", "accepted", "in_progress", "completed", "dismissed", "expired"]).notNull().default("open"),
+  priority: mysqlEnum("priority", ["low", "normal", "high", "emergency"]).notNull().default("normal"),
+  revenueAtRiskCents: int("revenueAtRiskCents").notNull().default(0),
+  revenueRecoveredCents: int("revenueRecoveredCents").notNull().default(0),
+  customerId: int("customerId"),
+  orderId: int("orderId"),
+  agentEventId: int("agentEventId"),
+  metadataJson: json("metadataJson"),
+  outcome: text("outcome"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  completedAt: timestamp("completedAt"),
+  completedBy: varchar("completedBy", { length: 128 }),
+}, (table) => ({
+  tenantStatusIdx: index("idx_ops_tasks_tenant_status").on(table.tenantId, table.status),
+  tenantLaneIdx: index("idx_ops_tasks_tenant_lane").on(table.tenantId, table.lane),
+  tenantCompletedIdx: index("idx_ops_tasks_tenant_completed").on(table.tenantId, table.completedAt),
+  agentEventIdx: index("idx_ops_tasks_agent_event").on(table.agentEventId),
+  orderIdx: index("idx_ops_tasks_order").on(table.orderId),
+}));
+
+export type OpsTask = typeof opsTasks.$inferSelect;
+export type InsertOpsTask = typeof opsTasks.$inferInsert;
+
+export const opsTaskEvents = mysqlTable("ops_task_events", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  taskId: int("taskId").notNull(),
+  eventType: mysqlEnum("eventType", [
+    "created",
+    "viewed",
+    "accepted",
+    "completed",
+    "dismissed",
+    "expired",
+    "agent_suggested",
+    "human_approved",
+    "revenue_recovered",
+    "outcome_recorded",
+  ]).notNull(),
+  actorType: mysqlEnum("actorType", ["human", "voice", "resident_chat", "driver", "vendor", "ai_agent", "system"]).notNull().default("human"),
+  actorId: varchar("actorId", { length: 128 }),
+  agentEventId: int("agentEventId"),
+  beforeJson: json("beforeJson"),
+  afterJson: json("afterJson"),
+  note: text("note"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantTaskIdx: index("idx_ops_task_events_tenant_task").on(table.tenantId, table.taskId),
+  tenantEventIdx: index("idx_ops_task_events_tenant_event").on(table.tenantId, table.eventType),
+  agentEventIdx: index("idx_ops_task_events_agent_event").on(table.agentEventId),
+}));
+
+export type OpsTaskEvent = typeof opsTaskEvents.$inferSelect;
+export type InsertOpsTaskEvent = typeof opsTaskEvents.$inferInsert;
+
 export const agentEvents = mysqlTable("agent_events", {
   id: int("id").autoincrement().primaryKey(),
   tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
@@ -338,6 +464,7 @@ export const agentEvents = mysqlTable("agent_events", {
     "gm_agent",
     "building_agent",
     "collections_agent",
+    "operator_task_agent",
   ]).notNull(),
   actorType: mysqlEnum("actorType", ["human", "voice", "resident_chat", "driver", "vendor", "ai_agent", "system"]).notNull(),
   actorId: varchar("actorId", { length: 128 }),

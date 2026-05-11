@@ -5,7 +5,8 @@ export type AgentType =
   | "driver_agent"
   | "gm_agent"
   | "building_agent"
-  | "collections_agent";
+  | "collections_agent"
+  | "operator_task_agent";
 
 export type ActorType =
   | "human"
@@ -74,6 +75,7 @@ const agentToolAllowlist: Record<AgentType, Set<string>> = {
   gm_agent: new Set(["getLevel4GateStateTool", "getResidentContextTool", "draftCustomerMessageTool", "sendCustomerReminderTool", "logRevenueInterventionTool"]),
   building_agent: new Set(["getLevel4GateStateTool", "getResidentContextTool", "requestVendorConfirmationTool"]),
   collections_agent: new Set(["getLevel4GateStateTool", "getResidentContextTool", "draftCustomerMessageTool", "sendCustomerReminderTool", "logRevenueInterventionTool"]),
+  operator_task_agent: new Set(["logOperatorTaskTool", "draftCustomerMessageTool", "logRevenueInterventionTool"]),
 };
 
 export function assertToolPermission(ctx: AgentContext, toolName: string): void {

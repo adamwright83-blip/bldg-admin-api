@@ -15,6 +15,7 @@ import {
   PackageCheck,
   Plus,
   Receipt,
+  ScanLine,
   Route,
   Shield,
   Sun,
@@ -118,10 +119,21 @@ export function StatusStrip({ data, includeRunRate = true }: { data: AdminHomeDa
   );
 }
 
-export function HeroCard() {
+export function HeroCard({ onQuickInput }: { onQuickInput?: () => void }) {
   return (
     <section className="ops-hero" aria-label="Operational intelligence">
       <img src={HERO_ASSET} alt="" />
+      {onQuickInput ? (
+        <button
+          type="button"
+          className="ops-hero-quick-input"
+          onClick={onQuickInput}
+          aria-label="Quick input dry-cleaning receipt"
+        >
+          <ScanLine className="h-4 w-4" />
+          <span>Dry Clean Receipt</span>
+        </button>
+      ) : null}
       <div className="sr-only">
         <p>OPERATIONAL INTELLIGENCE</p>
         <h1>Three buildings away from a different life.</h1>
@@ -448,6 +460,8 @@ export function PerformanceGauges({ data }: { data: AdminHomeData }) {
 
 export function QuickActions({ onNavigate, onOpenModal }: Pick<BoardActionProps, "onNavigate" | "onOpenModal">) {
   const actions = [
+    { label: "Dry-Clean Receipt", icon: ScanLine, run: () => onNavigate("/intake?quickReceipt=1") },
+    { label: "Reflection", icon: Gauge, run: () => onNavigate("/operator-reflection") },
     { label: "New Intake", icon: ClipboardList, run: () => onNavigate("/intake") },
     { label: "Create Order", icon: FilePlus2, run: () => onNavigate("/new-order") },
     { label: "Catalog & Pricing", icon: Receipt, run: () => onNavigate("/catalog") },

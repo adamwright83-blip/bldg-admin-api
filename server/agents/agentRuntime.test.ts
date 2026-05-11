@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseOperatorVoiceCommand } from "./agentRuntime";
+import { parseEmergencyTaskIntake } from "../operatorTaskIntake";
 
 describe("parseOperatorVoiceCommand", () => {
   it("turns bank deposit voice notes into schedule and availability actions", () => {
@@ -39,5 +40,29 @@ describe("parseOperatorVoiceCommand", () => {
       stopType: "pickup",
       buildingName: "Century Park East",
     });
+  });
+});
+
+describe("parseEmergencyTaskIntake", () => {
+  it("turns one messy emergency note into levelized operator tasks", () => {
+    const tasks = parseEmergencyTaskIntake(
+      "Need to charge Daniel, call Karin, fix vendor signup, and test laundry order flow."
+    );
+
+    expect(tasks.map((task) => [task.level, task.title])).toEqual([
+      ["level_1", "Charge Daniel"],
+      ["level_2", "Call Karin"],
+      ["level_3", "Fix vendor signup"],
+      ["level_3", "Test laundry order flow."],
+    ]);
+  });
+
+  it("recognizes Level 4 boss work separately from product fixes", () => {
+    const tasks = parseEmergencyTaskIntake(
+      "Text Christopher for the Building 3 intro and fix admin.bldg.chat intake composer"
+    );
+
+    expect(tasks[0]).toMatchObject({ level: "level_4" });
+    expect(tasks[1]).toMatchObject({ level: "level_3" });
   });
 });
