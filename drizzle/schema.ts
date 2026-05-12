@@ -392,7 +392,7 @@ export const opsTasks = mysqlTable("ops_tasks", {
   ]).notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
-  source: mysqlEnum("source", ["manual", "agent_suggested", "system_detected", "level_4", "voice", "quick_input"]).notNull().default("manual"),
+  source: mysqlEnum("source", ["manual", "agent_suggested", "system_detected", "level_4", "voice", "quick_input", "emergency_composer"]).notNull().default("manual"),
   createdBy: varchar("createdBy", { length: 128 }),
   assignedTo: varchar("assignedTo", { length: 128 }),
   status: mysqlEnum("status", ["open", "accepted", "in_progress", "completed", "dismissed", "expired"]).notNull().default("open"),

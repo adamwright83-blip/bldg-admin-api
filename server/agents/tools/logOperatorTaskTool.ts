@@ -7,6 +7,8 @@ type OperatorTaskInput = {
   details?: string | null;
   priority?: "emergency" | "high" | "normal" | "low";
   target?: string | null;
+  taskType?: "intake_missing_price" | "unpaid_order" | "vague_intake" | "missed_pickup" | "stale_customer" | "revenue_leak" | "referral_ask" | "vendor_followup" | "gm_followup" | "manual_operator_task" | "dry_clean_receipt_intake" | "emergency_task";
+  classificationReason?: string | null;
   sourceNote?: string | null;
   source?: "emergency_composer" | "operator_voice" | "manual";
 };
@@ -23,10 +25,10 @@ export const logOperatorTaskTool: AgentTool<OperatorTaskInput> = {
       tenantId: ctx.tenantId,
       lane: mapped.lane,
       level: mapped.level,
-      taskType: "emergency_task",
+      taskType: input.taskType ?? "emergency_task",
       title: title.slice(0, 255),
       description: input.details ?? input.sourceNote ?? null,
-      source: input.source === "operator_voice" ? "voice" : "quick_input",
+      source: input.source === "operator_voice" ? "voice" : input.source === "emergency_composer" ? "emergency_composer" : "manual",
       status: "open",
       priority: input.priority ?? "high",
       createdBy: ctx.actorId ?? null,
@@ -35,6 +37,7 @@ export const logOperatorTaskTool: AgentTool<OperatorTaskInput> = {
         sourceNote: input.sourceNote ?? null,
         target: input.target ?? null,
         legacyLevel: input.level,
+        classificationReason: input.classificationReason ?? null,
       },
     });
 

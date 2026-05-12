@@ -28,7 +28,7 @@ export const OPS_TASK_TYPES = [
   "dry_clean_receipt_intake",
   "emergency_task",
 ] as const;
-export const OPS_TASK_SOURCES = ["manual", "agent_suggested", "system_detected", "level_4", "voice", "quick_input"] as const;
+export const OPS_TASK_SOURCES = ["manual", "agent_suggested", "system_detected", "level_4", "voice", "quick_input", "emergency_composer"] as const;
 export const OPS_TASK_EVENT_TYPES = [
   "created",
   "viewed",

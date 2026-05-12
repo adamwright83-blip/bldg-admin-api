@@ -46,15 +46,29 @@ describe("parseOperatorVoiceCommand", () => {
 describe("parseEmergencyTaskIntake", () => {
   it("turns one messy emergency note into levelized operator tasks", () => {
     const tasks = parseEmergencyTaskIntake(
-      "Need to charge Daniel, call Karin, fix vendor signup, and test laundry order flow."
+      "Charge Daniel, call Karin, fix vendor signup, test laundry order flow, create Laundry Farm flyer."
     );
 
     expect(tasks.map((task) => [task.level, task.title])).toEqual([
-      ["level_1", "Charge Daniel"],
+      ["level_3", "Charge Daniel"],
       ["level_2", "Call Karin"],
-      ["level_3", "Fix vendor signup"],
-      ["level_3", "Test laundry order flow."],
+      ["level_4", "Fix vendor signup"],
+      ["level_1", "Test laundry order flow"],
+      ["level_4", "Create Laundry Farm flyer"],
     ]);
+  });
+
+  it("classifies money and flyer tasks from sentence dumps", () => {
+    const tasks = parseEmergencyTaskIntake(
+      "Collect past due money from OPUS LA customer Ben. Order Laundry Farm flyer via Staples purchase. Create laundry farm flyer."
+    );
+
+    expect(tasks.map((task) => [task.level, task.title])).toEqual([
+      ["level_3", "Collect past due money from OPUS LA customer Ben"],
+      ["level_4", "Order Laundry Farm flyer via Staples purchase"],
+      ["level_4", "Create laundry farm flyer"],
+    ]);
+    expect(tasks.every((task) => task.classificationReason.length > 0)).toBe(true);
   });
 
   it("recognizes Level 4 boss work separately from product fixes", () => {
@@ -63,7 +77,7 @@ describe("parseEmergencyTaskIntake", () => {
     );
 
     expect(tasks[0]).toMatchObject({ level: "level_4" });
-    expect(tasks[1]).toMatchObject({ level: "level_3" });
+    expect(tasks[1]).toMatchObject({ level: "level_1" });
   });
 
   it("does not expose raw SQL errors to the emergency composer UI", () => {

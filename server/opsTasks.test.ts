@@ -12,6 +12,7 @@ import {
   type ListOpsTasksInput,
   type OpsTaskStore,
 } from "./opsTasks";
+import { parseEmergencyTaskIntake } from "./operatorTaskIntake";
 
 class MemoryOpsTaskStore implements OpsTaskStore {
   tasks: OpsTask[] = [];
@@ -217,5 +218,28 @@ describe("ops task proof layer", () => {
     } finally {
       process.env.NODE_ENV = oldEnv;
     }
+  });
+
+  it("persists emergency composer rows with correct lane, level, source, and classification metadata", async () => {
+    const store = new MemoryOpsTaskStore();
+    const draft = parseEmergencyTaskIntake("Create laundry farm flyer")[0];
+    const task = await createOpsTask({
+      tenantId: "default",
+      lane: "level_4",
+      level: "4",
+      taskType: draft.taskType,
+      title: draft.title,
+      source: "emergency_composer",
+      priority: draft.priority,
+      metadataJson: { classificationReason: draft.classificationReason },
+    }, store);
+
+    expect(task.level).toBe("4");
+    expect(task.lane).toBe("level_4");
+    expect(task.source).toBe("emergency_composer");
+    expect(task.metadataJson).toMatchObject({
+      classificationReason: expect.stringContaining("Level 4"),
+    });
+    expect(store.events[0].eventType).toBe("created");
   });
 });
