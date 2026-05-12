@@ -22,6 +22,44 @@ export function getMonthlyTabName(date: Date): string {
   return `${m} ${yy}`;
 }
 
+export function normalizeMonthlyTabTitle(title: string): string {
+  return title.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
+}
+
+export function resolveMonthlyTabName(titles: string[], requestedTabName: string): string | null {
+  const exact = titles.find((title) => title === requestedTabName);
+  if (exact) return exact;
+  const normalizedRequested = normalizeMonthlyTabTitle(requestedTabName);
+  return titles.find((title) => normalizeMonthlyTabTitle(title) === normalizedRequested) ?? null;
+}
+
+export function parseSheetTargetDate(raw: string | null | undefined, fallback = new Date()): Date {
+  const trimmed = raw?.trim();
+  if (!trimmed) return fallback;
+
+  const slashDate = trimmed.match(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})\b/);
+  if (slashDate) {
+    const month = Number(slashDate[1]);
+    const day = Number(slashDate[2]);
+    const rawYear = Number(slashDate[3]);
+    const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return new Date(year, month - 1, day);
+    }
+  }
+
+  const isoDate = trimmed.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (isoDate) {
+    const year = Number(isoDate[1]);
+    const month = Number(isoDate[2]);
+    const day = Number(isoDate[3]);
+    return new Date(year, month - 1, day);
+  }
+
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+}
+
 /** Google Sheets / Excel serial date → UTC calendar YYYY-MM-DD */
 function serialToYYYYMMDD(serial: number): string {
   const epochMs = (serial - 25569) * 86400 * 1000;
@@ -211,12 +249,16 @@ async function getSheetsContext(date: Date): Promise<
   const meta = await sheets.spreadsheets.get({ spreadsheetId, auth });
   const titles =
     meta.data.sheets?.map((s) => s.properties?.title).filter(Boolean) as string[];
-  if (!titles.includes(tabName)) {
-    console.warn(`[Sheets] Skipped: monthly tab "${tabName}" not found`);
+  const resolvedTabName = resolveMonthlyTabName(titles, tabName);
+  if (!resolvedTabName) {
+    const availableTabs = titles.join(", ");
+    console.warn(
+      `[Sheets] Skipped: monthly tab "${tabName}" not found. Available tabs: ${availableTabs}`,
+    );
     return { error: `Monthly tab "${tabName}" not found` };
   }
 
-  const gridRange = `${escapeSheetName(tabName)}!A1:ZZ1000`;
+  const gridRange = `${escapeSheetName(resolvedTabName)}!A1:ZZ1000`;
   const grid = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: gridRange,
@@ -224,8 +266,8 @@ async function getSheetsContext(date: Date): Promise<
   });
   const values = grid.data.values ?? [];
   if (values.length === 0) {
-    console.warn(`[Sheets] Skipped: empty tab "${tabName}"`);
-    return { error: `Empty tab "${tabName}"` };
+    console.warn(`[Sheets] Skipped: empty tab "${resolvedTabName}"`);
+    return { error: `Empty tab "${resolvedTabName}"` };
   }
 
   const headerRow = values[0] ?? [];
@@ -238,7 +280,7 @@ async function getSheetsContext(date: Date): Promise<
   return {
     auth,
     spreadsheetId,
-    tabName,
+    tabName: resolvedTabName,
     values,
     dayCol0,
     col1: dayCol0 + 1,
@@ -324,8 +366,7 @@ export async function writeDriverExpenseToSheet(
     return { ok: false, reason: "Expense amount must be greater than zero" };
   }
 
-  const expenseDate = input.receiptDate ? new Date(input.receiptDate) : new Date();
-  const targetDate = Number.isNaN(expenseDate.getTime()) ? new Date() : expenseDate;
+  const targetDate = parseSheetTargetDate(input.receiptDate);
   const context = await getSheetsContext(targetDate);
   if ("error" in context) return { ok: false, reason: context.error };
 
@@ -380,8 +421,7 @@ export async function writeDryCleaningCostToSheet(input: {
     return { ok: false, reason: "Dry-cleaning cost must be greater than zero" };
   }
 
-  const receiptDate = input.receiptDate ? new Date(input.receiptDate) : new Date();
-  const targetDate = Number.isNaN(receiptDate.getTime()) ? new Date() : receiptDate;
+  const targetDate = parseSheetTargetDate(input.receiptDate);
   const context = await getSheetsContext(targetDate);
   if ("error" in context) return { ok: false, reason: context.error };
 
