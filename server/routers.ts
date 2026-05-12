@@ -2016,10 +2016,33 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
             base64: input.base64,
           });
         } catch (e) {
+          console.warn("[DriverExpenseReceipt] Parse failed", {
+            tenantId: ctx.tenantId,
+            mimeType: input.mimeType,
+            error: e instanceof Error ? e.message : String(e),
+          });
           throwCatalogAiAsTrpc(e);
         }
 
+        console.log("[DriverExpenseReceipt] Parsed receipt", {
+          tenantId: ctx.tenantId,
+          category: parsed.category,
+          receiptDate: parsed.receiptDate,
+          totalCents: parsed.totalCents,
+          vendorName: parsed.vendorName,
+          confidence: parsed.confidence,
+          gasEvidence: parsed.gasEvidence,
+        });
+
         if (!isGasExpense(parsed)) {
+          console.warn("[DriverExpenseReceipt] Rejected receipt before Sheets write", {
+            tenantId: ctx.tenantId,
+            category: parsed.category,
+            receiptDate: parsed.receiptDate,
+            totalCents: parsed.totalCents,
+            confidence: parsed.confidence,
+            gasEvidence: parsed.gasEvidence,
+          });
           return {
             success: false as const,
             parsed,
@@ -2030,6 +2053,13 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
           };
         }
 
+        console.log("[DriverExpenseReceipt] Writing gas receipt to Sheets", {
+          tenantId: ctx.tenantId,
+          receiptDate: parsed.receiptDate,
+          totalCents: parsed.totalCents,
+          vendorName: parsed.vendorName,
+        });
+
         const sheetResult = await writeDriverExpenseToSheet({
           amountCents: parsed.totalCents,
           vendorName: parsed.vendorName,
@@ -2038,8 +2068,20 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
         });
 
         if (!sheetResult.ok) {
+          console.warn("[DriverExpenseReceipt] Sheets write failed", {
+            tenantId: ctx.tenantId,
+            receiptDate: parsed.receiptDate,
+            totalCents: parsed.totalCents,
+            reason: sheetResult.reason,
+          });
           return { success: false as const, parsed, error: sheetResult.reason };
         }
+
+        console.log("[DriverExpenseReceipt] Sheets write succeeded", {
+          tenantId: ctx.tenantId,
+          tabName: sheetResult.tabName,
+          note: sheetResult.note,
+        });
 
         return {
           success: true as const,
