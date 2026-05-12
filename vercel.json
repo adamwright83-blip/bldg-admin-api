@@ -12,6 +12,7 @@
     { "source": "/requests", "destination": "/index.html" },
     { "source": "/leads", "destination": "/index.html" },
     { "source": "/vendors", "destination": "/index.html" },
+    { "source": "/operator-reflection", "destination": "/index.html" },
     { "source": "/catalog", "destination": "/index.html" },
     { "source": "/catalog/:path*", "destination": "/index.html" },
     { "source": "/driver", "destination": "/index.html" },
