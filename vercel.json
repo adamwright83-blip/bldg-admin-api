@@ -3,6 +3,8 @@
     { "source": "/receipt/:path*", "destination": "/index.html" },
     { "source": "/admin", "destination": "/index.html" },
     { "source": "/home", "destination": "/index.html" },
+    { "source": "/live", "destination": "/index.html" },
+    { "source": "/level4", "destination": "/index.html" },
     { "source": "/new-order", "destination": "/index.html" },
     { "source": "/customers", "destination": "/index.html" },
     { "source": "/intake", "destination": "/index.html" },

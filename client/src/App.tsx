@@ -33,6 +33,7 @@ function AdminHostRouter() {
       <Route path="/leads" component={AdminHostApp} />
       <Route path="/vendors" component={AdminHostApp} />
       <Route path="/level4" component={AdminHostApp} />
+      <Route path="/operator-reflection" component={AdminHostApp} />
       <Route path="/" component={AdminHostApp} />
       <Route component={NotFound} />
     </Switch>
