@@ -1,0 +1,1 @@
+ALTER TABLE `agent_events` MODIFY COLUMN `agentType` enum('resident_agent','operator_voice_agent','vendor_agent','driver_agent','gm_agent','building_agent','collections_agent','operator_task_agent') NOT NULL;

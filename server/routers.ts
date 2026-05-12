@@ -65,8 +65,6 @@ import {
   bulkApplyCatalogImport,
   getCatalogItemBySlugForTenant,
   resolveActiveCatalogItemBySlugOrName,
-  listOperatorTasks,
-  updateOperatorTaskStatus,
 } from "./db";
 import {
   normalizeCatalogCategory,
@@ -119,7 +117,7 @@ import {
 } from "./level4OffensiveExecute";
 import { getLevel4GateState as loadLevel4GateState } from "./level4Gate";
 import { runAgentTool, runOperatorVoiceCommand } from "./agents/agentRuntime";
-import { parseEmergencyTaskIntake, runEmergencyTaskIntake } from "./operatorTaskIntake";
+import { parseEmergencyTaskIntake, publicEmergencyTaskErrorMessage, runEmergencyTaskIntake } from "./operatorTaskIntake";
 import { isGasExpense, parseDriverExpenseReceiptPhoto } from "./expenseReceipt";
 import {
   OPS_TASK_LANES,
@@ -835,34 +833,72 @@ export const appRouter = router({
           conversationId: z.string().optional(),
         }))
         .mutation(async ({ ctx, input }) => {
-          return runEmergencyTaskIntake(input.note, {
-            tenantId: ctx.tenantId,
-            sessionId: input.sessionId ?? null,
-            conversationId: input.conversationId ?? null,
-            actorId: ctx.user?.id != null ? String(ctx.user.id) : null,
-          });
+          try {
+            return await runEmergencyTaskIntake(input.note, {
+              tenantId: ctx.tenantId,
+              sessionId: input.sessionId ?? null,
+              conversationId: input.conversationId ?? null,
+              actorId: ctx.user?.id != null ? String(ctx.user.id) : null,
+            });
+          } catch (error) {
+            console.error("[EmergencyTaskIntake] Failed:", error);
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: publicEmergencyTaskErrorMessage(error),
+            });
+          }
         }),
       listOperatorTasks: adminProcedure
         .input(z.object({
           status: z.enum(["active", "open", "in_progress", "done", "blocked"]).default("active"),
           limit: z.number().int().min(1).max(200).default(80),
         }))
-        .query(async ({ ctx, input }) => listOperatorTasks({
-          tenantId: ctx.tenantId,
-          status: input.status,
-          limit: input.limit,
-        })),
+        .query(async ({ ctx, input }) => {
+          const statuses =
+            input.status === "active"
+              ? ["open", "accepted", "in_progress"] as const
+              : input.status === "done"
+                ? ["completed"] as const
+                : input.status === "blocked"
+                  ? ["open", "accepted", "in_progress"] as const
+                  : [input.status] as const;
+          const rows = await listOpsTasks({
+            tenantId: ctx.tenantId,
+            status: statuses as any,
+            limit: input.limit,
+          });
+          return rows.map((task) => ({
+            id: task.id,
+            level: `level_${task.level}` as const,
+            title: task.title,
+            status: task.status === "completed" ? "done" : task.status === "accepted" ? "in_progress" : task.status,
+            priority: task.priority,
+            target: typeof task.metadataJson === "object" && task.metadataJson && "target" in task.metadataJson
+              ? String((task.metadataJson as any).target ?? "")
+              : null,
+          }));
+        }),
       updateOperatorTaskStatus: adminProcedure
         .input(z.object({
           id: z.number().int().positive(),
           status: z.enum(["open", "in_progress", "done", "blocked"]),
         }))
         .mutation(async ({ ctx, input }) => {
-          await updateOperatorTaskStatus({
-            tenantId: ctx.tenantId,
-            id: input.id,
-            status: input.status,
-          });
+          if (input.status === "done") {
+            await completeOpsTask({
+              tenantId: ctx.tenantId,
+              taskId: input.id,
+              outcome: "Completed from Emergency Task Intake.",
+              completedBy: ctx.user?.id != null ? String(ctx.user.id) : null,
+            });
+          } else {
+            await updateOpsTaskStatus({
+              tenantId: ctx.tenantId,
+              taskId: input.id,
+              status: input.status === "in_progress" ? "in_progress" : "open",
+              actorId: ctx.user?.id != null ? String(ctx.user.id) : null,
+            });
+          }
           return { ok: true as const };
         }),
     }),

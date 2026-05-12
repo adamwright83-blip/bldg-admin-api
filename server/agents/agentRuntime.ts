@@ -2,6 +2,15 @@ import { logAgentEvent } from "./agentEvents";
 import { evaluateHumanApproval } from "./humanApproval";
 import { assertToolPermission, type AgentContext } from "./permissions";
 import { getAgentTool } from "./toolRegistry";
+import type { AgentEventWrite } from "./agentEvents";
+
+async function safeLogAgentEvent(event: AgentEventWrite): Promise<void> {
+  try {
+    await logAgentEvent(event);
+  } catch (error) {
+    console.warn("[AgentEvents] Failed to persist event:", error);
+  }
+}
 
 export async function runAgentTool<TOutput = unknown>(
   toolName: string,
@@ -23,7 +32,7 @@ export async function runAgentTool<TOutput = unknown>(
         toolName,
         reason: "Human approval is required before this action can run.",
       };
-      await logAgentEvent({
+      await safeLogAgentEvent({
         ctx,
         toolName,
         inputJson: input,
@@ -36,7 +45,7 @@ export async function runAgentTool<TOutput = unknown>(
     }
 
     const result = await tool.execute(input, ctx);
-    await logAgentEvent({
+    await safeLogAgentEvent({
       ctx,
       toolName,
       inputJson: input,
@@ -50,7 +59,7 @@ export async function runAgentTool<TOutput = unknown>(
     return result.output as TOutput;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await logAgentEvent({
+    await safeLogAgentEvent({
       ctx,
       toolName,
       inputJson: input,

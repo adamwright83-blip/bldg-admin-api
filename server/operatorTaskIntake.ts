@@ -128,3 +128,7 @@ export async function runEmergencyTaskIntake(note: string, ctx: Omit<AgentContex
       .join(" / "),
   };
 }
+
+export function publicEmergencyTaskErrorMessage(_error: unknown): string {
+  return "Task could not be saved. Please try again.";
+}

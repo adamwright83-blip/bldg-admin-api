@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseOperatorVoiceCommand } from "./agentRuntime";
-import { parseEmergencyTaskIntake } from "../operatorTaskIntake";
+import { parseEmergencyTaskIntake, publicEmergencyTaskErrorMessage } from "../operatorTaskIntake";
 
 describe("parseOperatorVoiceCommand", () => {
   it("turns bank deposit voice notes into schedule and availability actions", () => {
@@ -64,5 +64,10 @@ describe("parseEmergencyTaskIntake", () => {
 
     expect(tasks[0]).toMatchObject({ level: "level_4" });
     expect(tasks[1]).toMatchObject({ level: "level_3" });
+  });
+
+  it("does not expose raw SQL errors to the emergency composer UI", () => {
+    const raw = "Failed query: insert into `agent_events` values (...)";
+    expect(publicEmergencyTaskErrorMessage(new Error(raw))).toBe("Task could not be saved. Please try again.");
   });
 });

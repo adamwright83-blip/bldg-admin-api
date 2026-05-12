@@ -30,13 +30,13 @@ export function EmergencyTaskComposer() {
       await utils.admin.agent.listOperatorTasks.invalidate();
       toast.success(result.summary || "Emergency tasks captured.");
     },
-    onError: (error) => toast.error(error.message || "Could not capture tasks."),
+    onError: () => toast.error("Task could not be saved. Please try again."),
   });
   const updateStatus = trpc.admin.agent.updateOperatorTaskStatus.useMutation({
     onSuccess: async () => {
       await utils.admin.agent.listOperatorTasks.invalidate();
     },
-    onError: (error) => toast.error(error.message || "Could not update task."),
+    onError: () => toast.error("Task could not be saved. Please try again."),
   });
 
   const grouped = useMemo(() => {

@@ -8,6 +8,7 @@ import {
   getPerformanceMetrics,
   getWeeklyOperatorReflection,
   listOpsTasks,
+  mapLegacyLevelToOps,
   type ListOpsTasksInput,
   type OpsTaskStore,
 } from "./opsTasks";
@@ -199,6 +200,11 @@ describe("ops task proof layer", () => {
     expect(task.agentEventId).toBe(44);
     expect(store.events[0].eventType).toBe("agent_suggested");
     expect(store.events[0].agentEventId).toBe(44);
+  });
+
+  it("maps level_1 safely to lane and level DB values", () => {
+    expect(mapLegacyLevelToOps("level_1")).toEqual({ lane: "lane_1", level: "1" });
+    expect(mapLegacyLevelToOps("level_4")).toEqual({ lane: "level_4", level: "4" });
   });
 
   it("does not synthesize fake sample data in production metric helpers", async () => {

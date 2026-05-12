@@ -1,4 +1,3 @@
-import { createOperatorTask } from "../../db";
 import { createOpsTask, mapLegacyLevelToOps } from "../../opsTasks";
 import type { AgentTool } from "../toolRegistry";
 
@@ -19,18 +18,6 @@ export const logOperatorTaskTool: AgentTool<OperatorTaskInput> = {
     const title = input.title.trim();
     if (!title) throw new Error("Operator task title is required");
 
-    const task = await createOperatorTask({
-      tenantId: ctx.tenantId,
-      source: input.source ?? "emergency_composer",
-      level: input.level,
-      title: title.slice(0, 255),
-      details: input.details ?? null,
-      status: "open",
-      priority: input.priority ?? "high",
-      target: input.target ?? null,
-      sourceNote: input.sourceNote ?? null,
-      createdByUserId: ctx.actorId ?? null,
-    });
     const mapped = mapLegacyLevelToOps(input.level);
     const opsTask = await createOpsTask({
       tenantId: ctx.tenantId,
@@ -44,20 +31,23 @@ export const logOperatorTaskTool: AgentTool<OperatorTaskInput> = {
       priority: input.priority ?? "high",
       createdBy: ctx.actorId ?? null,
       metadataJson: {
-        legacyOperatorTaskId: task?.id ?? null,
+        composerSource: input.source ?? "emergency_composer",
         sourceNote: input.sourceNote ?? null,
         target: input.target ?? null,
+        legacyLevel: input.level,
       },
     });
 
     return {
       entityType: "ops_task",
       entityId: opsTask.id,
-      output: task ?? {
-        persisted: false,
+      output: {
+        id: opsTask.id,
         level: input.level,
-        title,
-        priority: input.priority ?? "high",
+        title: opsTask.title,
+        status: "open",
+        priority: opsTask.priority,
+        target: input.target ?? null,
         opsTaskId: opsTask.id,
       },
     };
