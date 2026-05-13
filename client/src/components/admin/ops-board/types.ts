@@ -34,6 +34,17 @@ export type AdminHomeData = {
     lastAskLabel: string;
     suggestedText: string;
   };
+  level4Mission: {
+    state: "none" | "locked" | "unlocked" | "completed";
+    title: string;
+    statusLabel: string;
+    subhead: string;
+    revenueImpact: number;
+    xpReward: number;
+    xpAwarded: number;
+    progressPercent: number;
+    canEnter: boolean;
+  };
   collectionPriority: {
     type: "collected_unpaid";
     customerName: string;

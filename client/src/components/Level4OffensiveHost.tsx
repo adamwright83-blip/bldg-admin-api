@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -224,6 +224,9 @@ const SYNTHETIC_LANE2_CANDIDATE = {
 export function Level4OffensiveHost() {
   const state = trpc.admin.getLevel4OffensiveState.useQuery();
   const gateQuery = trpc.admin.getLevel4GateState.useQuery();
+  const missionQuery = trpc.admin.level4Mission.current.useQuery();
+  const startMission = trpc.admin.level4Mission.start.useMutation();
+  const completeMission = trpc.admin.level4Mission.complete.useMutation();
   const generateCopy = trpc.admin.generateOffensiveCopy.useMutation();
   const execAction = trpc.admin.executeOffensiveAction.useMutation();
   const utils = trpc.useUtils();
@@ -262,6 +265,16 @@ export function Level4OffensiveHost() {
   }, [state.data, syntheticLane2Active]);
 
   const gate = gateQuery.data;
+  const missionState = missionQuery.data;
+
+  useEffect(() => {
+    if (!missionState?.accessible || missionState.mission?.startedAt) return;
+    startMission.mutate(undefined, {
+      onSuccess: () => {
+        void utils.admin.level4Mission.current.invalidate();
+      },
+    });
+  }, [missionState?.accessible, missionState?.mission?.startedAt, startMission, utils]);
 
   const openBuildingPenetration = useCallback(async (): Promise<boolean> => {
     if (!topBuilding) {
@@ -524,7 +537,7 @@ export function Level4OffensiveHost() {
   }, [modal, execAction, utils, closeModal, syntheticLane2Active, laneForModal]);
 
   // Honest lane labels derived from the read-only server gate.
-  if (state.isLoading || gateQuery.isLoading) {
+  if (state.isLoading || gateQuery.isLoading || missionQuery.isLoading) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-white/50" />
@@ -543,19 +556,16 @@ export function Level4OffensiveHost() {
     );
   }
 
-  if (gate.state === "LOCKED") {
-    const lockedChallenge = challengeFromGate(gate);
-    return (
-      <Level4GateLocked
-        gate={gate}
-        activeChallenge={lockedChallenge}
-        onNavigate={(path) => { window.location.href = path; }}
-      />
-    );
+  if (!missionState?.mission || !missionState.task) {
+    return <Level4MissionEmpty />;
   }
 
-  if (gate.state === "COMPLETE_TODAY") {
-    return <Level4Complete dailyXp={gate.dailyXp} />;
+  if (missionState.boardState === "locked") {
+    return <Level4MissionLocked state={missionState} />;
+  }
+
+  if (missionState.boardState === "completed") {
+    return <Level4MissionCompleted state={missionState} />;
   }
 
   const targetAgeLabel = topBuilding?.daysSinceLastTouch != null
@@ -600,10 +610,44 @@ export function Level4OffensiveHost() {
 
   const lane3Title = "LANE 3 | BLOCK C | Market hole";
   const lane3Body = "Scoring engine not built yet.";
-  const activeChallenge = challengeFromBoss({ topBuilding, referralCandidate });
+  const activeChallenge: Level4ActiveChallenge = {
+    id: `level4_mission:${missionState.mission.id}`,
+    kind: "building_penetration",
+    title: "LEVEL 4 MISSION",
+    targetLabel: missionState.task.title,
+    missionLabel: missionState.task.description || `${formatUsdCents(missionState.task.revenueAtRiskCents || 0)} estimated impact`,
+    ctaLabel: "EXECUTE MISSION →",
+    severity: "boss",
+  };
 
   return (
     <>
+      <section className="mb-4 rounded-lg border border-[#d6ad4d]/70 bg-[#17120a] p-4 text-white shadow-[0_18px_60px_rgba(214,173,77,0.12)]">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#e5bd60]">Current Lane 4 Mission</p>
+            <h1 className="mt-1 text-2xl font-semibold leading-tight">{missionState.task.title}</h1>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-white/65">
+              {missionState.task.description || "Focused execution mode is loaded from the active Lane 4 task."}
+            </p>
+          </div>
+          <Button
+            type="button"
+            disabled={completeMission.isPending}
+            onClick={async () => {
+              await completeMission.mutateAsync();
+              await utils.admin.level4Mission.current.invalidate();
+              await utils.admin.getLevel4GateState.invalidate();
+              await utils.admin.opsTasks.weeklyReflection.invalidate();
+              await utils.admin.opsTasks.performanceMetrics.invalidate();
+            }}
+            className="bg-[#d6ad4d] text-[#1f1605] hover:bg-[#e6c369]"
+          >
+            {completeMission.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Complete Mission · {missionState.xpReward} XP
+          </Button>
+        </div>
+      </section>
       <Level4Offensive
         ref={l4Ref}
         onDeployLane1={openBuildingPenetration}
@@ -628,7 +672,7 @@ export function Level4OffensiveHost() {
         previewOpen={modal != null}
         dailyXp={gate.dailyXp + (completion?.xp ?? 0)}
         completion={completion}
-        gateState={gate.state}
+        gateState="UNLOCKED"
         activeChallenge={activeChallenge}
         onCompletionHoldDone={() => {
           setCompletion(null);
@@ -743,6 +787,55 @@ export function Level4OffensiveHost() {
         </div>
       )}
     </>
+  );
+}
+
+function Level4MissionEmpty() {
+  return (
+    <section className="min-h-[70vh] bg-[#0e1111] px-4 py-12 text-[#e5e7eb]">
+      <div className="mx-auto max-w-3xl rounded-lg border border-white/10 bg-black/35 p-8 text-center">
+        <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-white/45">No Active Level 4 Mission</div>
+        <h1 className="mt-3 text-3xl font-semibold">Add a Lane 4 task to activate one.</h1>
+        <p className="mt-3 text-sm leading-6 text-white/60">
+          Lane 4 tasks are the raw material. Once one exists, the highest-priority task becomes the next Level 4 mission.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function Level4MissionLocked({ state }: { state: any }) {
+  return (
+    <section className="min-h-[70vh] bg-[#0e1111] px-4 py-12 text-[#e5e7eb]">
+      <div className="mx-auto max-w-3xl rounded-lg border border-white/10 bg-black/35 p-8">
+        <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#d6ad4d]">Level 4 Mission Locked</div>
+        <h1 className="mt-3 text-3xl font-semibold">{state.task?.title}</h1>
+        <p className="mt-3 text-sm leading-6 text-white/60">{state.progress.message}</p>
+        <div className="mt-6">
+          <div className="flex items-center justify-between font-mono text-xs uppercase tracking-[0.16em] text-white/55">
+            <span>{state.progress.completedLaneTasks}/{state.progress.requiredLaneTasks} Lane 1-3 tasks</span>
+            <span>{state.progress.laneXp}/{state.progress.requiredLaneXp} XP</span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
+            <span className="block h-full bg-[#d6ad4d]" style={{ width: `${state.progress.percent}%` }} />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Level4MissionCompleted({ state }: { state: any }) {
+  return (
+    <section className="min-h-[70vh] bg-[#0e1111] px-4 py-12 text-[#e5e7eb]">
+      <div className="mx-auto max-w-3xl rounded-lg border border-[#6ca66f]/60 bg-[#102014] p-8 text-center">
+        <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#a7e0a8]">Mission Completed</div>
+        <h1 className="mt-3 text-3xl font-semibold">✓ {state.task?.title}</h1>
+        <p className="mt-3 text-sm leading-6 text-white/65">
+          {(state.mission?.xpAwarded ?? state.xpReward).toLocaleString("en-US")} XP awarded. Reflection proof is now available in Operator Reflection.
+        </p>
+      </div>
+    </section>
   );
 }
 

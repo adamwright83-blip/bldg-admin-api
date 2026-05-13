@@ -116,6 +116,11 @@ import {
   type ExecuteOffensiveInput,
 } from "./level4OffensiveExecute";
 import { getLevel4GateState as loadLevel4GateState } from "./level4Gate";
+import {
+  completeLevel4Mission,
+  getCurrentLevel4MissionState,
+  markLevel4MissionStarted,
+} from "./level4Missions";
 import { runAgentTool, runOperatorVoiceCommand } from "./agents/agentRuntime";
 import { parseEmergencyTaskIntake, publicEmergencyTaskErrorMessage, runEmergencyTaskIntake } from "./operatorTaskIntake";
 import { isGasExpense, parseDriverExpenseReceiptPhoto } from "./expenseReceipt";
@@ -624,6 +629,27 @@ export const appRouter = router({
         })),
       weeklyReflection: adminProcedure.query(async ({ ctx }) => getWeeklyOperatorReflection(ctx.tenantId)),
       performanceMetrics: adminProcedure.query(async ({ ctx }) => getPerformanceMetrics(ctx.tenantId)),
+    }),
+
+    level4Mission: router({
+      current: adminProcedure.query(async ({ ctx }) => getCurrentLevel4MissionState({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user?.id != null ? String(ctx.user.id) : null,
+      })),
+      start: adminProcedure.mutation(async ({ ctx }) => markLevel4MissionStarted({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user?.id != null ? String(ctx.user.id) : null,
+      })),
+      complete: adminProcedure
+        .input(z.object({
+          outcome: z.string().max(2000).optional(),
+        }).optional())
+        .mutation(async ({ ctx, input }) => completeLevel4Mission({
+          tenantId: ctx.tenantId,
+          operatorId: ctx.user?.id != null ? String(ctx.user.id) : null,
+          completedBy: ctx.user?.id != null ? String(ctx.user.id) : null,
+          outcome: input?.outcome ?? null,
+        })),
     }),
 
     /** List orders by status — platform or vendor (vendor gets scoped list) */

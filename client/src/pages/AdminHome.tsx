@@ -42,6 +42,9 @@ export default function AdminHome({
   const level4Gate = trpc.admin.getLevel4GateState.useQuery(undefined, {
     enabled: isAuthenticated && isAdmin,
   });
+  const level4Mission = trpc.admin.level4Mission.current.useQuery(undefined, {
+    enabled: isAuthenticated && isAdmin,
+  });
   const utils = trpc.useUtils();
 
   const logOutreach = trpc.admin.executeOffensiveAction.useMutation({
@@ -64,14 +67,15 @@ export default function AdminHome({
         apex: apex.data,
         level2: level2.data,
         level4Gate: level4Gate.data,
+        level4Mission: level4Mission.data,
       }),
-    [dashboard.data, awaiting.data, collected.data, apex.data, level2.data, level4Gate.data]
+    [dashboard.data, awaiting.data, collected.data, apex.data, level2.data, level4Gate.data, level4Mission.data]
   );
 
   const loading =
-    dashboard.isLoading || awaiting.isLoading || collected.isLoading || apex.isLoading || level2.isLoading || level4Gate.isLoading;
+    dashboard.isLoading || awaiting.isLoading || collected.isLoading || apex.isLoading || level2.isLoading || level4Gate.isLoading || level4Mission.isLoading;
   const error =
-    dashboard.isError || awaiting.isError || collected.isError || apex.isError || level2.isError || level4Gate.isError;
+    dashboard.isError || awaiting.isError || collected.isError || apex.isError || level2.isError || level4Gate.isError || level4Mission.isError;
 
   async function handleLogOutreach(payload: LogOutreachPayload): Promise<void> {
     await logOutreach.mutateAsync({

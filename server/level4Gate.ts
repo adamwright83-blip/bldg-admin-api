@@ -1,5 +1,5 @@
 import { and, eq, gte, lt, sql } from "drizzle-orm";
-import { adminActionLog, orders, type Order } from "../drizzle/schema";
+import { adminActionLog, level4Missions, orders, type Order } from "../drizzle/schema";
 import { getDb } from "./db";
 import { getLevel4OffensiveState } from "./level4Offensive";
 import {
@@ -283,7 +283,7 @@ export async function getLevel4GateState(tenantId: string, now: Date = new Date(
   const bounds = getDashboardBusinessDayBoundsUtc(now);
   if (!db) return emptyGate(bounds);
 
-  const [allOrders, todayLogs, reminderWindowLogs, collectedToday, offensive] = await Promise.all([
+  const [allOrders, todayLogs, reminderWindowLogs, completedMissions, collectedToday, offensive] = await Promise.all([
     db
       .select()
       .from(orders)
@@ -319,6 +319,19 @@ export async function getLevel4GateState(tenantId: string, now: Date = new Date(
           eq(adminActionLog.entityType, "order"),
           gte(adminActionLog.createdAt, new Date(bounds.startUtc.getTime() - 48 * 3_600_000)),
           lt(adminActionLog.createdAt, bounds.endUtc)
+        )
+      ),
+    db
+      .select({
+        xpAwarded: level4Missions.xpAwarded,
+      })
+      .from(level4Missions)
+      .where(
+        and(
+          eq(level4Missions.tenantId, tenantId),
+          eq(level4Missions.status, "completed"),
+          gte(level4Missions.completedAt, bounds.startUtc),
+          lt(level4Missions.completedAt, bounds.endUtc)
         )
       ),
     getCollectedTodayCents(tenantId, now),
@@ -389,6 +402,7 @@ export async function getLevel4GateState(tenantId: string, now: Date = new Date(
   const level4ExecuteCount = todayLogs.filter((log) =>
     LEVEL4_ACTION_TYPES.includes(log.actionType as (typeof LEVEL4_ACTION_TYPES)[number])
   ).length;
+  const level4MissionXp = completedMissions.reduce((sum, mission) => sum + Number(mission.xpAwarded ?? 0), 0);
   const buildingIntroSecuredCount = todayLogs.filter((log) => log.actionType === MANUAL_INTRO_ACTION).length;
   const buildingSignedCount = todayLogs.filter((log) => log.actionType === MANUAL_SIGNED_ACTION).length;
 
@@ -396,7 +410,7 @@ export async function getLevel4GateState(tenantId: string, now: Date = new Date(
     collectedXp: Math.floor(collectedCents / 100),
     intakeWithin24hXp: intakeWithin24hCount * 50,
     reminderConvertedXp: reminderConvertedCount * 100,
-    level4ExecuteXp: level4ExecuteCount * 500,
+    level4ExecuteXp: level4ExecuteCount * 500 + level4MissionXp,
     buildingIntroSecuredXp: buildingIntroSecuredCount * 2_500,
     buildingSignedXp: buildingSignedCount * 25_000,
   };

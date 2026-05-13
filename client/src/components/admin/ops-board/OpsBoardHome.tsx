@@ -88,7 +88,7 @@ export function OpsBoardHome({
         <HeroCard onQuickInput={openQuickReceiptInput} />
         <RunRateCard data={data} />
         <KpiGrid data={data} onNavigate={onNavigate} />
-        <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} />
+        <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} onNavigate={onNavigate} />
         <TerritoryProgression data={data} />
         <RevenueAtRisk data={data} onOpenModal={setModal} />
         <PerformanceGauges data={data} />
@@ -101,7 +101,7 @@ export function OpsBoardHome({
         <EmergencyTaskComposer />
         <div className="ops-desktop-hero-row">
           <HeroCard onQuickInput={openQuickReceiptInput} />
-          <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} />
+          <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} onNavigate={onNavigate} />
         </div>
         <KpiGrid data={data} onNavigate={onNavigate} />
         <div className="ops-desktop-territory-row">

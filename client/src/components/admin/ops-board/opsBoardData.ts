@@ -45,6 +45,23 @@ type Level4GateLike = {
   dbAvailable?: boolean | null;
 };
 
+type Level4MissionLike = {
+  boardState?: "none" | "locked" | "unlocked" | "completed" | null;
+  accessible?: boolean | null;
+  xpReward?: number | null;
+  progress?: {
+    percent?: number | null;
+    message?: string | null;
+  } | null;
+  mission?: {
+    xpAwarded?: number | null;
+  } | null;
+  task?: {
+    title?: string | null;
+    revenueAtRiskCents?: number | null;
+  } | null;
+};
+
 export type BuildOpsBoardDataInput = {
   dashboard?: DashboardSummaryLike | null;
   collected?: CollectedTodayLike | null;
@@ -52,6 +69,7 @@ export type BuildOpsBoardDataInput = {
   apex?: ApexLike | null;
   level2?: Level2Like | null;
   level4Gate?: Level4GateLike | null;
+  level4Mission?: Level4MissionLike | null;
   now?: Date;
 };
 
@@ -222,6 +240,10 @@ export function buildOpsBoardData(input: BuildOpsBoardDataInput): AdminHomeData 
   const danielLive = riskAccounts.find((account) => account.name.toLowerCase().includes("daniel"));
   const danielAccount = danielLive ?? FALLBACK_RISK_ACCOUNTS[0];
   const danielAmount = danielAccount.amount > 0 ? danielAccount.amount : 86.46;
+  const missionState = input.level4Mission?.boardState ?? "none";
+  const missionTitle = input.level4Mission?.task?.title?.trim() || "No Active Level 4 Mission";
+  const missionReward = Number(input.level4Mission?.xpReward ?? 500);
+  const missionAwarded = Number(input.level4Mission?.mission?.xpAwarded ?? 0);
 
   return {
     businessDay,
@@ -276,6 +298,31 @@ export function buildOpsBoardData(input: BuildOpsBoardDataInput): AdminHomeData 
       lastAskLabel: "14 days ago",
       suggestedText:
         "Hey Christopher — quick follow-up on the Building 3 intro you mentioned. Would you be comfortable connecting me with the GM this week? We’re ready to support another Greystar property.",
+    },
+    level4Mission: {
+      state: missionState,
+      title: missionTitle,
+      statusLabel:
+        missionState === "locked"
+          ? "Locked"
+          : missionState === "unlocked"
+            ? "Unlocked"
+            : missionState === "completed"
+              ? "Mission Completed"
+              : "No Active Level 4 Mission",
+      subhead:
+        missionState === "none"
+          ? "Add a Lane 4 task to activate one"
+          : missionState === "completed"
+            ? `${(missionAwarded || missionReward).toLocaleString("en-US")} XP earned. This stays visible for a bit.`
+            : missionState === "unlocked"
+              ? "Ready for focused execution."
+              : input.level4Mission?.progress?.message ?? "Complete Lane 1-3 work to unlock.",
+      revenueImpact: centsToDollars(input.level4Mission?.task?.revenueAtRiskCents),
+      xpReward: missionReward,
+      xpAwarded: missionAwarded,
+      progressPercent: Math.max(0, Math.min(100, Math.round(Number(input.level4Mission?.progress?.percent ?? 0)))),
+      canEnter: Boolean(input.level4Mission?.accessible && missionState === "unlocked"),
     },
     collectionPriority: {
       type: "collected_unpaid",

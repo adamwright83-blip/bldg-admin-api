@@ -318,6 +318,18 @@ export async function completeOpsTask(
       note: input.outcome,
     }, store);
   }
+  if (after.lane === "lane_1" || after.lane === "lane_2" || after.lane === "lane_3") {
+    try {
+      const { evaluateLevel4MissionUnlock } = await import("./level4Missions");
+      await evaluateLevel4MissionUnlock({
+        tenantId,
+        operatorId: after.completedBy,
+        taskStore: store,
+      });
+    } catch (error) {
+      console.warn("[Level4Mission] Failed to evaluate unlock after task completion:", error);
+    }
+  }
   return after;
 }
 

@@ -451,6 +451,31 @@ export const opsTaskEvents = mysqlTable("ops_task_events", {
 export type OpsTaskEvent = typeof opsTaskEvents.$inferSelect;
 export type InsertOpsTaskEvent = typeof opsTaskEvents.$inferInsert;
 
+export const level4Missions = mysqlTable("level4_missions", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  operatorId: varchar("operatorId", { length: 128 }).notNull().default("tenant_proxy"),
+  taskId: int("taskId").notNull(),
+  status: mysqlEnum("status", ["locked", "unlocked", "completed", "expired"]).notNull().default("locked"),
+  missionDate: varchar("missionDate", { length: 10 }).notNull(),
+  activatedAt: timestamp("activatedAt").defaultNow().notNull(),
+  unlockedAt: timestamp("unlockedAt"),
+  startedAt: timestamp("startedAt"),
+  completedAt: timestamp("completedAt"),
+  expiredAt: timestamp("expiredAt"),
+  visibleUntil: timestamp("visibleUntil"),
+  xpAwarded: int("xpAwarded").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantOperatorStatusIdx: index("idx_level4_missions_tenant_operator_status").on(table.tenantId, table.operatorId, table.status),
+  tenantOperatorDateIdx: index("idx_level4_missions_tenant_operator_date").on(table.tenantId, table.operatorId, table.missionDate),
+  taskIdx: index("idx_level4_missions_task").on(table.taskId),
+}));
+
+export type Level4Mission = typeof level4Missions.$inferSelect;
+export type InsertLevel4Mission = typeof level4Missions.$inferInsert;
+
 export const agentEvents = mysqlTable("agent_events", {
   id: int("id").autoincrement().primaryKey(),
   tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
@@ -465,6 +490,7 @@ export const agentEvents = mysqlTable("agent_events", {
     "building_agent",
     "collections_agent",
     "operator_task_agent",
+    "system_agent",
   ]).notNull(),
   actorType: mysqlEnum("actorType", ["human", "voice", "resident_chat", "driver", "vendor", "ai_agent", "system"]).notNull(),
   actorId: varchar("actorId", { length: 128 }),

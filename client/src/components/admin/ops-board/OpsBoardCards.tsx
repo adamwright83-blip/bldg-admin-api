@@ -19,9 +19,11 @@ import {
   Route,
   Shield,
   Sun,
+  Trophy,
   User,
   Users,
   WalletCards,
+  Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -245,12 +247,66 @@ export function MissionStack({
   data,
   onOpenModal,
   onOpenCollectionPriority,
-}: Pick<BoardActionProps, "data" | "onOpenModal" | "onOpenCollectionPriority">) {
+  onNavigate,
+}: Pick<BoardActionProps, "data" | "onOpenModal" | "onOpenCollectionPriority" | "onNavigate">) {
   return (
     <section className="ops-mission-stack">
+      <Level4MissionCard data={data} onNavigate={onNavigate} />
       <ChristopherCard data={data} onOpenModal={onOpenModal} />
       <DanielCard data={data} onOpenModal={onOpenModal} onOpenCollectionPriority={onOpenCollectionPriority} />
     </section>
+  );
+}
+
+function Level4MissionCard({ data, onNavigate }: Pick<BoardActionProps, "data" | "onNavigate">) {
+  const mission = data.level4Mission;
+  const isLocked = mission.state === "locked";
+  const isUnlocked = mission.state === "unlocked";
+  const isCompleted = mission.state === "completed";
+  const isEmpty = mission.state === "none";
+
+  return (
+    <article className={`ops-card ops-mission-card ops-level4-card ops-level4-card-${mission.state}`}>
+      <div className="ops-mission-main">
+        <div className="ops-level4-icon" aria-hidden>
+          {isCompleted ? <Trophy className="h-5 w-5" /> : isUnlocked ? <Zap className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
+        </div>
+        <div>
+          <p className="ops-mission-type">LEVEL 4 MISSION — {mission.statusLabel.toUpperCase()}</p>
+          <h2>{isCompleted ? `✓ ${mission.title}` : mission.title}</h2>
+          <p>{mission.subhead}</p>
+        </div>
+      </div>
+      {isLocked ? (
+        <div className="ops-progress-row ops-level4-progress">
+          <span>{mission.progressPercent}%</span>
+          <div className="ops-progress-track">
+            <i style={{ width: `${mission.progressPercent}%` }} />
+          </div>
+        </div>
+      ) : null}
+      {isUnlocked ? (
+        <div className="ops-level4-meta">
+          <span>{formatCompactUsd(mission.revenueImpact)} impact</span>
+          <span>{mission.xpReward.toLocaleString("en-US")} XP</span>
+        </div>
+      ) : null}
+      {isCompleted ? (
+        <div className="ops-level4-meta complete">
+          <span>{mission.xpAwarded.toLocaleString("en-US")} XP earned</span>
+          <span>{formatCompactUsd(mission.revenueImpact)} protected</span>
+        </div>
+      ) : null}
+      {mission.canEnter ? (
+        <Button type="button" className="ops-button ops-button-green ops-level4-enter" onClick={() => onNavigate("/level4")}>
+          Enter Mission →
+        </Button>
+      ) : isEmpty ? (
+        <Button type="button" variant="outline" className="ops-button ops-button-red-outline" onClick={() => onNavigate("/live")}>
+          Add Lane 4 Task →
+        </Button>
+      ) : null}
+    </article>
   );
 }
 
