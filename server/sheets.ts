@@ -358,6 +358,12 @@ export type WriteDriverExpenseInput = {
   note?: string | null;
 };
 
+export function isStaleDriverExpenseDate(date: Date, now = new Date()): boolean {
+  const oldestAllowed = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+  const newestAllowed = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2);
+  return date < oldestAllowed || date > newestAllowed;
+}
+
 export async function writeDriverExpenseToSheet(
   input: WriteDriverExpenseInput,
 ): Promise<WriteOrderToSheetResult & { note?: string }> {
@@ -366,7 +372,18 @@ export async function writeDriverExpenseToSheet(
     return { ok: false, reason: "Expense amount must be greater than zero" };
   }
 
-  const targetDate = parseSheetTargetDate(input.receiptDate);
+  const fallbackDate = new Date();
+  const parsedTargetDate = parseSheetTargetDate(input.receiptDate, fallbackDate);
+  const targetDate = isStaleDriverExpenseDate(parsedTargetDate, fallbackDate)
+    ? fallbackDate
+    : parsedTargetDate;
+  if (targetDate !== parsedTargetDate) {
+    console.warn("[Sheets] Driver expense receipt date looked stale; using upload date instead", {
+      receiptDate: input.receiptDate,
+      parsedDate: format(parsedTargetDate, "yyyy-MM-dd"),
+      uploadDate: format(fallbackDate, "yyyy-MM-dd"),
+    });
+  }
   const context = await getSheetsContext(targetDate);
   if ("error" in context) return { ok: false, reason: context.error };
 

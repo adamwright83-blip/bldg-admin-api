@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import { describe, expect, it } from "vitest";
 import {
+  isStaleDriverExpenseDate,
   normalizeMonthlyTabTitle,
   parseSheetTargetDate,
   resolveMonthlyTabName,
@@ -21,5 +22,11 @@ describe("Google Sheets helpers", () => {
   it("falls back when receipt date is unreadable", () => {
     const fallback = new Date(2026, 4, 12);
     expect(parseSheetTargetDate("not a date", fallback)).toBe(fallback);
+  });
+
+  it("treats old OCR receipt years as stale for driver expenses", () => {
+    const uploadDate = new Date(2026, 4, 12);
+    expect(isStaleDriverExpenseDate(new Date(2020, 4, 12), uploadDate)).toBe(true);
+    expect(isStaleDriverExpenseDate(new Date(2026, 4, 12), uploadDate)).toBe(false);
   });
 });
