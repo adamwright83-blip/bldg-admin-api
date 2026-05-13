@@ -35,7 +35,7 @@ const LEVEL4_ANCHORS = {
   heroStart: { x: 23.5, y: 75 },
   heroStep1: { x: 34, y: 55 },
   heroStep2: { x: 43, y: 43 },
-  villain: { x: 50, y: 52 },
+  villain: { x: 50, y: 50.5 },
   family: { x: 81, y: 76 },
   firstTask: { x: 37, y: 48 },
   bossTask: { x: 50, y: 66 },
@@ -289,7 +289,7 @@ export function Level4BoardScene({
         />
         <img
           className="level4-scene__speech level4-scene__speech--three"
-          src="/assets/level4/level4-speech-pushy.png"
+          src="/assets/level4/youdontwannaseempushy.png"
           alt="you don't wanna seem pushy..."
           draggable={false}
         />

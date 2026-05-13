@@ -1705,7 +1705,7 @@
 
 .level4-scene__speech {
   position: absolute;
-  z-index: 12;
+  z-index: 11;
   width: clamp(100px, 13cqw, 230px);
   max-width: none;
   padding: 0;
@@ -1720,25 +1720,27 @@
   animation: level4SpeechGlitch 6.8s steps(2, end) infinite;
   user-select: none;
   -webkit-user-drag: none;
+  pointer-events: none;
 }
 
 .level4-scene__speech--one {
-  left: 34%;
-  top: 19%;
+  left: 35%;
+  top: 24%;
   transform: rotate(-7deg);
 }
 
 .level4-scene__speech--two {
-  left: 58%;
-  top: 20.5%;
+  left: 61%;
+  top: 25%;
   transform: rotate(6deg);
 }
 
 .level4-scene__speech--three {
-  left: 36.5%;
-  top: 37.2%;
-  width: clamp(120px, 15cqw, 260px);
-  transform: rotate(-3deg);
+  left: 50%;
+  top: 34%;
+  width: clamp(115px, 13.5cqw, 240px);
+  filter: drop-shadow(2px 4px 0 rgba(255, 50, 42, .18));
+  transform: translateX(-50%) rotate(-3deg);
 }
 
 .level4-scene:has(.level4-scene__promise-zone:hover)::after,
@@ -1796,8 +1798,8 @@
 }
 
 .level4-scene__villain {
-  width: clamp(145px, 16.8cqw, 330px);
-  transform: translate(-50%, -63%);
+  width: clamp(87px, 10cqw, 198px);
+  transform: translate(-50%, -60%);
   z-index: 6;
 }
 
@@ -1815,12 +1817,13 @@
 }
 
 .level4-scene__task-layer {
-  z-index: 5;
+  z-index: 15;
   pointer-events: none;
 }
 
 .level4-scene__task-token {
   position: absolute;
+  z-index: 16;
   left: calc(var(--x) * 1%);
   top: calc(var(--y) * 1%);
   width: clamp(210px, 20.5cqw, 360px);
@@ -1923,6 +1926,7 @@
 
 .level4-scene__weapon-artButton {
   position: relative;
+  z-index: 17;
   display: block;
   width: 100%;
   border: 0;
