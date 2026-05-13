@@ -192,6 +192,64 @@ function ResendSheetsButton({ orderId }: { orderId: number }) {
   );
 }
 
+function orderTotalCents(order: Order): number {
+  const total = parseFloat(String(order.total ?? "0"));
+  return Number.isFinite(total) ? Math.round(total * 100) : 0;
+}
+
+function hasCardOnFile(order: Order): boolean {
+  return !!(order.stripeCustomerId || order.stripePaymentMethodId);
+}
+
+function openOrderIntake(orderId: number) {
+  window.location.assign(`/intake?orderId=${orderId}`);
+}
+
+function RetryChargeButton({ order, onCharged }: { order: Order; onCharged?: () => void }) {
+  const chargeCard = trpc.admin.chargeCard.useMutation();
+  const amountCents = orderTotalCents(order);
+  const canRetry = !order.paid && amountCents >= 50 && hasCardOnFile(order);
+
+  if (order.paid) return <span className="text-xs text-emerald-700">Paid</span>;
+
+  const handleClick = async () => {
+    if (!canRetry) {
+      openOrderIntake(order.id);
+      return;
+    }
+    try {
+      const result = await chargeCard.mutateAsync({ orderId: order.id, amountCents });
+      if (result.success) {
+        toast.success(`Charged ${order.firstName} ${order.lastName} ${money(amountCents)}.`);
+        onCharged?.();
+      } else {
+        toast.error(result.error || "Charge failed. Ask for a new card or retry later.");
+      }
+    } catch (error: any) {
+      toast.error(error?.message || "Charge failed. Ask for a new card or retry later.");
+    }
+  };
+
+  return (
+    <Button
+      type="button"
+      variant={canRetry ? "default" : "outline"}
+      size="sm"
+      className={
+        canRetry
+          ? "bg-red-700 text-white hover:bg-red-800 text-xs whitespace-nowrap"
+          : "border-black text-black text-xs whitespace-nowrap"
+      }
+      onClick={handleClick}
+      disabled={chargeCard.isPending}
+      title={canRetry ? "Attempt the saved card again" : "Open intake to confirm pricing or payment method"}
+    >
+      {chargeCard.isPending ? <Loader2 className="animate-spin w-3.5 h-3.5 mr-1.5" /> : null}
+      {canRetry ? "Retry charge" : "Open intake"}
+    </Button>
+  );
+}
+
 function getWeekDates(offset: number) {
   const today = new Date();
   today.setDate(today.getDate() + offset * 7);
@@ -1470,7 +1528,7 @@ function IntakeDetail({ orderId, onBack }: { orderId: number; onBack: () => void
         disabled={totals.totalCents < 50 || chargeCard.isPending || saveIntake.isPending}
       >
         {(chargeCard.isPending || saveIntake.isPending) ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : null}
-        Charge Card — ${centsToDollars(totals.totalCents)}
+        {chargeResult && !chargeResult.success ? "Retry Card" : "Charge Card"} — ${centsToDollars(totals.totalCents)}
       </Button>
     </div>
   );
@@ -1709,6 +1767,7 @@ function ProcessingTab() {
               <th className="py-2 pr-4">Service</th>
               <th className="py-2 pr-4">Total</th>
               <th className="py-2 pr-4">Paid</th>
+              <th className="py-2 pr-4">Payment</th>
               <th className="py-2 pr-4">Notes</th>
               <th className="py-2 pr-2">Receipt</th>
               <th className="py-2 pr-2 w-10"></th>
@@ -1723,6 +1782,9 @@ function ProcessingTab() {
                 <td className="py-3 pr-4">{o.serviceType === "wash_fold" ? "W&F" : "DC"}</td>
                 <td className="py-3 pr-4">${o.total || "0.00"}</td>
                 <td className="py-3 pr-4">{o.paid ? "Yes" : "No"}</td>
+                <td className="py-3 pr-4">
+                  <RetryChargeButton order={o} onCharged={refetch} />
+                </td>
                 <td className="py-3 pr-4 max-w-[200px] truncate text-black/50">{o.specialInstructions || "—"}</td>
                 <td className="py-3 pr-2">
                   {o.paid ? (
@@ -1814,6 +1876,7 @@ function ReadyTab() {
               <th className="py-2 pr-4">Bags</th>
               <th className="py-2 pr-4">Garments</th>
               <th className="py-2 pr-4">Total</th>
+              <th className="py-2 pr-4">Payment</th>
               <th className="py-2 pr-2 w-10"></th>
               <th className="py-2"></th>
             </tr>
@@ -1829,6 +1892,9 @@ function ReadyTab() {
                 <td className="py-3 pr-4">{o.bagCount || "—"}</td>
                 <td className="py-3 pr-4">{o.garmentCount || "—"}</td>
                 <td className="py-3 pr-4">${o.total || "0.00"}</td>
+                <td className="py-3 pr-4">
+                  <RetryChargeButton order={o} onCharged={refetch} />
+                </td>
                 <td className="py-3 pr-2 align-middle">
                   {o.paid ? <ResendSheetsButton orderId={o.id} /> : <span className="text-black/20 text-xs">—</span>}
                 </td>
