@@ -2,6 +2,7 @@ import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { adminActionLog, level4Missions, orders, type Order } from "../drizzle/schema";
 import { getDb } from "./db";
 import { getLevel4OffensiveState } from "./level4Offensive";
+import { isMissingLevel4MissionTableError } from "./level4Missions";
 import {
   ACTION_LOG_ACTED_STATUSES,
   ACTION_SEND_REMINDER,
@@ -333,7 +334,14 @@ export async function getLevel4GateState(tenantId: string, now: Date = new Date(
           gte(level4Missions.completedAt, bounds.startUtc),
           lt(level4Missions.completedAt, bounds.endUtc)
         )
-      ),
+      )
+      .catch((error) => {
+        if (isMissingLevel4MissionTableError(error)) {
+          console.warn("[Level4Gate] level4_missions table is not installed yet; omitting mission XP.");
+          return [];
+        }
+        throw error;
+      }),
     getCollectedTodayCents(tenantId, now),
     getLevel4OffensiveState(tenantId),
   ]);

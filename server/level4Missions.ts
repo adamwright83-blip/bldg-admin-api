@@ -64,7 +64,18 @@ export const LEVEL4_COMPLETION_XP = 500;
 export const LEVEL4_COMPLETED_VISIBILITY_MS = 2 * 60 * 60 * 1000;
 
 const ACTIVE_STATUSES: Level4MissionStatus[] = ["locked", "unlocked"];
-const BOARD_STATUSES: Level4MissionStatus[] = ["locked", "unlocked", "completed"];
+
+export function isMissingLevel4MissionTableError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { code?: unknown; errno?: unknown; message?: unknown };
+  const code = String(record.code ?? "");
+  const message = String(record.message ?? "").toLowerCase();
+  return (
+    code === "ER_NO_SUCH_TABLE" ||
+    record.errno === 1146 ||
+    (message.includes("level4_missions") && (message.includes("doesn't exist") || message.includes("does not exist")))
+  );
+}
 
 function operatorKey(operatorId?: string | null) {
   return operatorId || "tenant_proxy";
@@ -148,22 +159,37 @@ const drizzleLevel4MissionStore: Level4MissionStore = {
   async updateMission(tenantId, missionId, patch) {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
-    await db.update(level4Missions).set(patch).where(and(eq(level4Missions.tenantId, tenantId), eq(level4Missions.id, missionId)));
-    const rows = await db.select().from(level4Missions).where(and(eq(level4Missions.tenantId, tenantId), eq(level4Missions.id, missionId))).limit(1);
-    return rows[0] ?? null;
+    try {
+      await db.update(level4Missions).set(patch).where(and(eq(level4Missions.tenantId, tenantId), eq(level4Missions.id, missionId)));
+      const rows = await db.select().from(level4Missions).where(and(eq(level4Missions.tenantId, tenantId), eq(level4Missions.id, missionId))).limit(1);
+      return rows[0] ?? null;
+    } catch (error) {
+      if (isMissingLevel4MissionTableError(error)) return null;
+      throw error;
+    }
   },
   async listMissions(input) {
     const db = await getDb();
     if (!db) return [];
     const clauses = [eq(level4Missions.tenantId, input.tenantId), eq(level4Missions.operatorId, input.operatorId)];
     if (input.statuses?.length) clauses.push(inArray(level4Missions.status, input.statuses));
-    return db.select().from(level4Missions).where(and(...clauses)).orderBy(desc(level4Missions.activatedAt), desc(level4Missions.id)).limit(input.limit ?? 10);
+    try {
+      return await db.select().from(level4Missions).where(and(...clauses)).orderBy(desc(level4Missions.activatedAt), desc(level4Missions.id)).limit(input.limit ?? 10);
+    } catch (error) {
+      if (isMissingLevel4MissionTableError(error)) return [];
+      throw error;
+    }
   },
   async getMission(tenantId, missionId) {
     const db = await getDb();
     if (!db) return null;
-    const rows = await db.select().from(level4Missions).where(and(eq(level4Missions.tenantId, tenantId), eq(level4Missions.id, missionId))).limit(1);
-    return rows[0] ?? null;
+    try {
+      const rows = await db.select().from(level4Missions).where(and(eq(level4Missions.tenantId, tenantId), eq(level4Missions.id, missionId))).limit(1);
+      return rows[0] ?? null;
+    } catch (error) {
+      if (isMissingLevel4MissionTableError(error)) return null;
+      throw error;
+    }
   },
   async listCandidateTasks(tenantId, operatorId) {
     const db = await getDb();
@@ -184,20 +210,25 @@ const drizzleLevel4MissionStore: Level4MissionStore = {
   async createAgentEvent(input) {
     const db = await getDb();
     if (!db) return null;
-    const result = await db.insert(agentEvents).values({
-      tenantId: input.tenantId,
-      agentType: input.agentType,
-      actorType: input.actorType,
-      actorId: input.actorId,
-      toolName: input.toolName,
-      entityType: input.entityType,
-      entityId: input.entityId,
-      inputJson: input.inputJson,
-      outputJson: input.outputJson,
-      status: input.status,
-    });
-    const id = Number(result[0].insertId);
-    return { ...input, id, createdAt: new Date() };
+    try {
+      const result = await db.insert(agentEvents).values({
+        tenantId: input.tenantId,
+        agentType: input.agentType,
+        actorType: input.actorType,
+        actorId: input.actorId,
+        toolName: input.toolName,
+        entityType: input.entityType,
+        entityId: input.entityId,
+        inputJson: input.inputJson,
+        outputJson: input.outputJson,
+        status: input.status,
+      });
+      const id = Number(result[0].insertId);
+      return { ...input, id, createdAt: new Date() };
+    } catch (error) {
+      console.warn("[Level4Mission] Failed to log mission state change:", error);
+      return null;
+    }
   },
 };
 
@@ -255,15 +286,24 @@ export async function promoteNextLevel4Mission(input: {
   const task = candidates.sort((a, b) => priorityRank(b) - priorityRank(a) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0];
   if (!task) return null;
 
-  const mission = await store.createMission({
-    tenantId,
-    operatorId,
-    taskId: task.id,
-    status: "locked",
-    missionDate: missionDay(now),
-    activatedAt: now,
-    xpAwarded: 0,
-  });
+  let mission: Level4Mission;
+  try {
+    mission = await store.createMission({
+      tenantId,
+      operatorId,
+      taskId: task.id,
+      status: "locked",
+      missionDate: missionDay(now),
+      activatedAt: now,
+      xpAwarded: 0,
+    });
+  } catch (error) {
+    if (isMissingLevel4MissionTableError(error)) {
+      console.warn("[Level4Mission] level4_missions table is not installed yet; returning empty mission state.");
+      return null;
+    }
+    throw error;
+  }
   await logStateChange(tenantId, operatorId, mission, "mission_activated", null, { status: mission.status, taskId: task.id, missionDate: mission.missionDate }, store);
   return mission;
 }
