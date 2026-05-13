@@ -35,7 +35,7 @@ const LEVEL4_ANCHORS = {
   heroStart: { x: 23.5, y: 75 },
   heroStep1: { x: 34, y: 55 },
   heroStep2: { x: 43, y: 43 },
-  villain: { x: 50, y: 50.5 },
+  villain: { x: 50, y: 46.5 },
   family: { x: 81, y: 76 },
   firstTask: { x: 37, y: 48 },
   bossTask: { x: 50, y: 66 },

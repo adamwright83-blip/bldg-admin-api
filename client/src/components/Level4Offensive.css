@@ -1737,7 +1737,7 @@
 
 .level4-scene__speech--three {
   left: 50%;
-  top: 34%;
+  top: 29%;
   width: clamp(115px, 13.5cqw, 240px);
   filter: drop-shadow(2px 4px 0 rgba(255, 50, 42, .18));
   transform: translateX(-50%) rotate(-3deg);
