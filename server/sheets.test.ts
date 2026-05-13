@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import { describe, expect, it } from "vitest";
 import {
+  getLosAngelesBusinessDate,
   isStaleDriverExpenseDate,
   normalizeMonthlyTabTitle,
   parseSheetTargetDate,
@@ -28,5 +29,10 @@ describe("Google Sheets helpers", () => {
     const uploadDate = new Date(2026, 4, 12);
     expect(isStaleDriverExpenseDate(new Date(2020, 4, 12), uploadDate)).toBe(true);
     expect(isStaleDriverExpenseDate(new Date(2026, 4, 12), uploadDate)).toBe(false);
+  });
+
+  it("uses Los Angeles calendar date for late-day driver uploads on UTC servers", () => {
+    const date = getLosAngelesBusinessDate(new Date("2026-05-13T01:14:00.000Z"));
+    expect(format(date, "yyyy-MM-dd")).toBe("2026-05-12");
   });
 });

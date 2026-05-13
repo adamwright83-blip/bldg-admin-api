@@ -60,6 +60,17 @@ export function parseSheetTargetDate(raw: string | null | undefined, fallback = 
   return Number.isNaN(parsed.getTime()) ? fallback : parsed;
 }
 
+export function getLosAngelesBusinessDate(now = new Date()): Date {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return new Date(Number(values.year), Number(values.month) - 1, Number(values.day));
+}
+
 /** Google Sheets / Excel serial date → UTC calendar YYYY-MM-DD */
 function serialToYYYYMMDD(serial: number): string {
   const epochMs = (serial - 25569) * 86400 * 1000;
@@ -372,7 +383,7 @@ export async function writeDriverExpenseToSheet(
     return { ok: false, reason: "Expense amount must be greater than zero" };
   }
 
-  const fallbackDate = new Date();
+  const fallbackDate = getLosAngelesBusinessDate();
   const parsedTargetDate = parseSheetTargetDate(input.receiptDate, fallbackDate);
   const targetDate = isStaleDriverExpenseDate(parsedTargetDate, fallbackDate)
     ? fallbackDate
