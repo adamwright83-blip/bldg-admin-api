@@ -271,9 +271,9 @@ function Level4MissionCard({ data, onNavigate }: Pick<BoardActionProps, "data" |
         <div className="ops-level4-icon" aria-hidden>
           {isCompleted ? <Trophy className="h-5 w-5" /> : isUnlocked ? <Zap className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
         </div>
-        <div>
+        <div className="ops-level4-copy">
           <p className="ops-mission-type">LEVEL 4 MISSION — {mission.statusLabel.toUpperCase()}</p>
-          <h2>{isCompleted ? `✓ ${mission.title}` : mission.title}</h2>
+          <h2 title={mission.title}>{isCompleted ? `✓ ${mission.title}` : mission.title}</h2>
           <p>{mission.subhead}</p>
         </div>
       </div>
@@ -299,7 +299,7 @@ function Level4MissionCard({ data, onNavigate }: Pick<BoardActionProps, "data" |
       ) : null}
       {mission.canEnter ? (
         <Button type="button" className="ops-button ops-button-green ops-level4-enter" onClick={() => onNavigate("/level4")}>
-          Enter Mission →
+          Enter Level 4
         </Button>
       ) : isEmpty ? (
         <Button type="button" variant="outline" className="ops-button ops-button-red-outline" onClick={() => onNavigate("/live")}>
