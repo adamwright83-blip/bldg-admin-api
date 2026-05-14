@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { normalizePropertyTower } from "@shared/propertyTowers";
 import { cleanCloudLegacyCustomers } from "./cleancloudLegacy";
+import { parseCsv } from "./externalSystems/csvIngestion";
+import { cleanCloudDailyOrdersSalesPlaybook } from "./externalSystems/playbooks";
 
 describe("CleanCloud legacy customer import data", () => {
   it("normalizes contest addresses to property and tower", () => {
@@ -39,5 +41,24 @@ describe("CleanCloud legacy customer import data", () => {
     expect(sum(cleanCloudLegacyCustomers.filter((row) => row.towerKey === "cpe_south_2170"))).toBe(20.75);
     expect(sum(cleanCloudLegacyCustomers.filter((row) => row.towerKey === "cpe_north_2160"))).toBe(85.1);
   });
-});
 
+  it("parses CSV values with quoted commas for stable ingestion", () => {
+    const rows = parseCsv('Order ID,Customer Name,Total\n"1001","Lee, Abe","$94.05"\n');
+    expect(rows).toEqual([
+      {
+        "Order ID": "1001",
+        "Customer Name": "Lee, Abe",
+        Total: "$94.05",
+      },
+    ]);
+  });
+
+  it("keeps browser automation as a CSV handoff playbook", () => {
+    expect(cleanCloudDailyOrdersSalesPlaybook).toMatchObject({
+      system: "cleancloud",
+      downloadArtifact: "csv",
+      handoffEndpoint: "/api/admin/cleancloud/import",
+    });
+    expect(cleanCloudDailyOrdersSalesPlaybook.steps.some((step) => step.instruction.includes("Do not write directly"))).toBe(true);
+  });
+});

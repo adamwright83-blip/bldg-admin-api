@@ -72,10 +72,10 @@ const agentToolAllowlist: Record<AgentType, Set<string>> = {
     "updateOrderStatusTool",
     "getResidentContextTool",
   ]),
-  gm_agent: new Set(["getLevel4GateStateTool", "getResidentContextTool", "draftCustomerMessageTool", "sendCustomerReminderTool", "logRevenueInterventionTool"]),
+  gm_agent: new Set(["getLevel4GateStateTool", "getResidentContextTool", "draftCustomerMessageTool", "sendCustomerReminderTool", "logRevenueInterventionTool", "importCleanCloudOrdersTool"]),
   building_agent: new Set(["getLevel4GateStateTool", "getResidentContextTool", "requestVendorConfirmationTool"]),
   collections_agent: new Set(["getLevel4GateStateTool", "getResidentContextTool", "draftCustomerMessageTool", "sendCustomerReminderTool", "logRevenueInterventionTool"]),
-  operator_task_agent: new Set(["logOperatorTaskTool", "draftCustomerMessageTool", "logRevenueInterventionTool"]),
+  operator_task_agent: new Set(["logOperatorTaskTool", "draftCustomerMessageTool", "logRevenueInterventionTool", "importCleanCloudOrdersTool"]),
 };
 
 export function assertToolPermission(ctx: AgentContext, toolName: string): void {

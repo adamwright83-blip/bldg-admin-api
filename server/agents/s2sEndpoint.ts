@@ -27,6 +27,7 @@ export const s2sAgentToolAllowlist = new Set([
   "createVendorAdminCommandTool",
   "logVendorOnboardingAbandonmentTool",
   "scanAbandonedVendorOnboardingSessionsTool",
+  "importCleanCloudOrdersTool",
 ]);
 
 const agentTypes = [

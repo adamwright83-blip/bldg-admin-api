@@ -24,6 +24,7 @@ import { createAgentS2SRunToolHandler } from "../agents/s2sEndpoint";
 import { runAgentTool } from "../agents/agentRuntime";
 import { registerVendorOnboardingSessionRoutes } from "../vendorOnboardingSessionApi";
 import { registerVendorBookingPublicRoutes } from "../vendorBookingPublicApi";
+import { registerCleanCloudImportRoutes } from "../cleancloudImportRoute";
 import { z } from "zod";
 
 const warnedUnknownTenantHosts = new Set<string>();
@@ -228,6 +229,8 @@ async function startServer() {
   // Apply cors middleware to all paths (leads REST endpoint is handled above, before this)
   app.use(cors(corsOptions));
   app.options("*", cors(corsOptions));
+
+  registerCleanCloudImportRoutes(app);
 
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));

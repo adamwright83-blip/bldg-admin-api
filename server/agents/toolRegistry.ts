@@ -37,6 +37,7 @@ import { createVendorAdminCommandTool } from "./tools/createVendorAdminCommandTo
 import { logVendorOnboardingAbandonmentTool } from "./tools/logVendorOnboardingAbandonmentTool";
 import { scanAbandonedVendorOnboardingSessionsTool } from "./tools/scanAbandonedVendorOnboardingSessionsTool";
 import { logOperatorTaskTool } from "./tools/logOperatorTaskTool";
+import { importCleanCloudOrdersTool } from "./tools/importCleanCloudOrdersTool";
 
 export type AgentToolResult<TOutput = unknown> = {
   entityType?: string | null;
@@ -90,6 +91,7 @@ const tools = [
   logVendorOnboardingAbandonmentTool,
   scanAbandonedVendorOnboardingSessionsTool,
   logOperatorTaskTool,
+  importCleanCloudOrdersTool,
 ] satisfies AgentTool[];
 
 export const toolRegistry = new Map<string, AgentTool>(

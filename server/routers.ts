@@ -95,7 +95,7 @@ import Stripe from "stripe";
 import * as jose from "jose";
 import { BUILDINGS, matchBuilding } from "@shared/buildings";
 import { normalizePropertyTower, TOWER_DEFINITIONS } from "@shared/propertyTowers";
-import { cleanCloudLegacyCustomers } from "./cleancloudLegacy";
+import { cleanCloudLegacyCustomers, listImportedCleanCloudLegacyCustomers } from "./cleancloudLegacy";
 import {
   getActedOnTodayCents,
   getAwaitingPaymentCents,
@@ -1292,7 +1292,9 @@ export const appRouter = router({
 
         let abeDedupedOrLinked = false;
         if (includeLegacyCleanCloud) {
-          for (const legacy of cleanCloudLegacyCustomers) {
+          const importedLegacyCustomers = await listImportedCleanCloudLegacyCustomers();
+          const legacyCustomers = [...cleanCloudLegacyCustomers, ...importedLegacyCustomers];
+          for (const legacy of legacyCustomers) {
             const legacyEmail = legacy.email?.trim().toLowerCase() || "";
             const legacyPhoneDigits = legacy.phone.replace(/\D/g, "");
             const existing = rows.find((row) => {
@@ -1429,6 +1431,10 @@ export const appRouter = router({
           };
           existing.totalCustomers += 1;
           if (row.recencyStatus === "active") existing.activeCustomers += 1;
+          const legacyRevenue = Number(row.legacyCleanCloudRevenue ?? 0);
+          if (Number.isFinite(legacyRevenue) && legacyRevenue > 0) {
+            existing.totalRevenue += legacyRevenue;
+          }
           if (row.floorNumber != null) {
             const floor = row.floorNumber;
             const floorEntry = existing.floors[floor] ?? {
@@ -1438,6 +1444,9 @@ export const appRouter = router({
             };
             floorEntry.totalCustomers += 1;
             if (row.recencyStatus === "active") floorEntry.activeCustomers += 1;
+            if (Number.isFinite(legacyRevenue) && legacyRevenue > 0) {
+              floorEntry.totalRevenue += legacyRevenue;
+            }
             existing.floors[floor] = floorEntry;
           }
           buildingSummaryMap.set(key, existing);
@@ -1505,7 +1514,8 @@ export const appRouter = router({
 
         for (const row of rows) {
           if (row.propertyGroup !== "opus_la" && row.propertyGroup !== "century_park_east") continue;
-          const prop = contestTotals.properties[row.propertyGroup];
+          const propertyGroup = row.propertyGroup as "opus_la" | "century_park_east";
+          const prop = contestTotals.properties[propertyGroup];
           const stripe = Number(row.stripeVerifiedRevenue ?? 0);
           const legacy = includeLegacyCleanCloud ? Number(row.legacyCleanCloudRevenue ?? 0) : 0;
           const operational = stripe + legacy;

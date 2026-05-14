@@ -352,6 +352,59 @@ export const drycleanReceiptIntakes = mysqlTable("dryclean_receipt_intakes", {
 export type DrycleanReceiptIntake = typeof drycleanReceiptIntakes.$inferSelect;
 export type InsertDrycleanReceiptIntake = typeof drycleanReceiptIntakes.$inferInsert;
 
+export const cleancloudImportBatches = mysqlTable("cleancloud_import_batches", {
+  id: int("id").autoincrement().primaryKey(),
+  source: varchar("source", { length: 64 }).notNull().default("cleancloud"),
+  sourceFileName: varchar("sourceFileName", { length: 255 }).notNull(),
+  importedRowCount: int("importedRowCount").notNull().default(0),
+  skippedRowCount: int("skippedRowCount").notNull().default(0),
+  duplicateRowCount: int("duplicateRowCount").notNull().default(0),
+  importStatus: mysqlEnum("importStatus", ["completed", "completed_with_errors", "failed"]).notNull().default("completed"),
+  errorJson: json("errorJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CleancloudImportBatch = typeof cleancloudImportBatches.$inferSelect;
+export type InsertCleancloudImportBatch = typeof cleancloudImportBatches.$inferInsert;
+
+export const cleancloudLegacyOrders = mysqlTable(
+  "cleancloud_legacy_orders",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    cleancloudOrderId: varchar("cleancloudOrderId", { length: 128 }),
+    sourceFileName: varchar("sourceFileName", { length: 255 }).notNull(),
+    importBatchId: int("importBatchId").notNull(),
+    customerName: varchar("customerName", { length: 255 }).notNull(),
+    customerEmail: varchar("customerEmail", { length: 320 }),
+    customerPhone: varchar("customerPhone", { length: 30 }),
+    orderDateUtc: timestamp("orderDateUtc").notNull(),
+    completedDateUtc: timestamp("completedDateUtc"),
+    orderStatus: varchar("orderStatus", { length: 100 }).notNull(),
+    orderTotalCents: int("orderTotalCents").notNull().default(0),
+    paymentStatus: varchar("paymentStatus", { length: 100 }).notNull(),
+    serviceType: varchar("serviceType", { length: 100 }).notNull(),
+    buildingName: varchar("buildingName", { length: 255 }),
+    tower: varchar("tower", { length: 100 }),
+    unit: varchar("unit", { length: 50 }),
+    rawJson: json("rawJson"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    cleancloudOrderIdUnique: uniqueIndex("uq_cleancloud_legacy_order_id").on(table.cleancloudOrderId),
+    batchIdx: index("idx_cleancloud_legacy_orders_batch").on(table.importBatchId),
+    customerOrderIdx: index("idx_cleancloud_legacy_orders_customer_order").on(
+      table.customerName,
+      table.orderDateUtc,
+      table.orderTotalCents
+    ),
+    buildingIdx: index("idx_cleancloud_legacy_orders_building").on(table.buildingName, table.tower),
+  })
+);
+
+export type CleancloudLegacyOrder = typeof cleancloudLegacyOrders.$inferSelect;
+export type InsertCleancloudLegacyOrder = typeof cleancloudLegacyOrders.$inferInsert;
+
 export const operatorTasks = mysqlTable("operator_tasks", {
   id: int("id").autoincrement().primaryKey(),
   tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
