@@ -96,7 +96,7 @@ import * as jose from "jose";
 import { BUILDINGS, matchBuilding } from "@shared/buildings";
 import { normalizePropertyTower, TOWER_DEFINITIONS } from "@shared/propertyTowers";
 import { cleanCloudLegacyCustomers, listImportedCleanCloudLegacyCustomers } from "./cleancloudLegacy";
-import { getClearentCollectedTodayCents, listImportedClearentCustomers } from "./clearent";
+import { getClearentCollectedTodayCents, getClearentOperationalRevenueCents, listImportedClearentCustomers } from "./clearent";
 import {
   getActedOnTodayCents,
   getAwaitingPaymentCents,
@@ -1308,9 +1308,10 @@ export const appRouter = router({
         const safeLower = (value: unknown): string =>
           typeof value === "string" ? value.toLowerCase() : "";
 
-        const [aggregateRows, paidOrders] = await Promise.all([
+        const [aggregateRows, paidOrders, clearentOperationalCents] = await Promise.all([
           listAdminCustomerAggregates(),
           listPaidOrdersForBuildingRevenue(),
+          getClearentOperationalRevenueCents(),
         ]);
         const includeLegacyCleanCloud = input?.includeLegacyCleanCloud ?? true;
         let rows: any[] = hydrateCustomerAggregates(aggregateRows).map((row) => {
@@ -1680,6 +1681,13 @@ export const appRouter = router({
           }
         };
         roundTotals(contestTotals.grand);
+        const clearentOperationalRevenue = Math.round((clearentOperationalCents / 100) * 100) / 100;
+        if (clearentOperationalRevenue > contestTotals.grand.clearentXplorPayRevenue) {
+          const delta = clearentOperationalRevenue - contestTotals.grand.clearentXplorPayRevenue;
+          contestTotals.grand.clearentXplorPayRevenue = clearentOperationalRevenue;
+          contestTotals.grand.totalOperationalRevenue =
+            Math.round((contestTotals.grand.totalOperationalRevenue + delta) * 100) / 100;
+        }
         for (const prop of Object.values(contestTotals.properties)) {
           roundTotals(prop as unknown as Record<string, unknown>);
           for (const tower of Object.values(prop.towers)) roundTotals(tower as unknown as Record<string, unknown>);

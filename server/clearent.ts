@@ -3,9 +3,11 @@ import { and, desc, eq, gte, isNotNull, lt, or, sql } from "drizzle-orm";
 import { fromZonedTime } from "date-fns-tz";
 import {
   clearentImportBatches,
+  clearentDailySummaries,
   clearentTransactions,
   orders,
   type ClearentTransaction,
+  type InsertClearentDailySummary,
   type InsertClearentTransaction,
 } from "../drizzle/schema";
 import { getDb } from "./db";
@@ -21,6 +23,10 @@ export type ClearentReportBasis = "settled_date" | "entered_date" | "unknown";
 export type ClearentImportSummary = ExternalImportSummary & {
   sourceReportBasis: ClearentReportBasis;
   mergedRowCount: number;
+  importedSummaryRowCount: number;
+  updatedSummaryRowCount: number;
+  skippedSummaryRowCount: number;
+  importedTransactionRowCount: number;
 };
 
 export type ClearentRevenueSummary = {
@@ -78,16 +84,31 @@ const fieldAliases = {
   unit: ["Unit", "Apt", "Apartment", "Suite"],
 } as const;
 
+const dailySummaryAliases = {
+  settleDate: ["Settle Date", "Settled Date", "Settlement Date"],
+  transactionDate: ["Transaction Date", "Date"],
+  totalSales: ["Total Sales", "Sales"],
+  netSales: ["Net Sales"],
+  totalTransactions: ["Total Transactions", "Transactions"],
+  interchange: ["Interchange"],
+  discount: ["Discount"],
+  depositAmount: ["Deposit Amount"],
+} as const;
+
 function pick(row: CsvRecord, aliases: readonly string[]): string {
   const entries = Object.entries(row);
   for (const alias of aliases) {
     const direct = row[alias];
     if (direct?.trim()) return direct.trim();
-    const lower = alias.toLowerCase();
-    const found = entries.find(([key]) => key.trim().toLowerCase() === lower)?.[1];
+    const lower = alias.toLowerCase().replace(/\s+/g, " ");
+    const found = entries.find(([key]) => key.trim().toLowerCase().replace(/\s+/g, " ") === lower)?.[1];
     if (found?.trim()) return found.trim();
   }
   return "";
+}
+
+function hasAny(row: CsvRecord, aliases: readonly string[]): boolean {
+  return Boolean(pick(row, aliases));
 }
 
 export function parseClearentReportBasis(value: unknown): ClearentReportBasis {
@@ -95,9 +116,10 @@ export function parseClearentReportBasis(value: unknown): ClearentReportBasis {
   return "unknown";
 }
 
-function parseMoneyCents(value: string): number {
-  const parenNegative = /^\(.*\)$/.test(value.trim());
-  const cleaned = value.replace(/[,$\s()]/g, "");
+function parseMoneyCents(value: unknown): number {
+  const raw = String(value ?? "").trim();
+  const parenNegative = /^\(.*\)$/.test(raw);
+  const cleaned = raw.replace(/[,$\s()]/g, "");
   if (!cleaned) return 0;
   const n = Number(cleaned);
   if (!Number.isFinite(n)) return 0;
@@ -130,6 +152,13 @@ function parsePacificDate(value: string): Date | null {
   return Number.isNaN(utc.getTime()) ? null : utc;
 }
 
+function parseInteger(value: string): number | null {
+  const cleaned = value.replace(/[,\s]/g, "");
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
 function normalizePhone(phone: string): string | null {
   const digits = phone.replace(/\D/g, "");
   return digits || null;
@@ -153,6 +182,39 @@ function rowFingerprint(row: CsvRecord): string {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, value]) => `${key.trim().toLowerCase()}=${String(value).trim().toLowerCase()}`)
     .join("|");
+}
+
+function isTotalRow(row: CsvRecord): boolean {
+  return Object.values(row).some((value) => String(value ?? "").trim().toLowerCase() === "total");
+}
+
+function looksLikeDailySummaryRow(row: CsvRecord): boolean {
+  if (isTotalRow(row)) return false;
+  const hasDepositDate = hasAny(row, dailySummaryAliases.settleDate);
+  const hasDailyActivityDate = hasAny(row, dailySummaryAliases.transactionDate);
+  const hasAggregateSales = hasAny(row, dailySummaryAliases.totalSales);
+  const hasAggregateCount = hasAny(row, dailySummaryAliases.totalTransactions);
+  const hasTransactionIdentity =
+    hasAny(row, fieldAliases.clearentTransactionId) ||
+    hasAny(row, fieldAliases.authCode) ||
+    hasAny(row, fieldAliases.lastFour) ||
+    hasAny(row, fieldAliases.customerName);
+  return hasAggregateSales && (hasDepositDate || (hasDailyActivityDate && hasAggregateCount)) && !hasTransactionIdentity;
+}
+
+function inferReportBasis(input: {
+  requested: ClearentReportBasis;
+  sourceFileName: string;
+  rows: CsvRecord[];
+}): ClearentReportBasis {
+  if (input.requested !== "unknown") return input.requested;
+  const name = input.sourceFileName.toLowerCase();
+  if (name.includes("depositdetails") || name.includes("deposit")) return "settled_date";
+  if (name.includes("dailycardactivity") || name.includes("dailycard")) return "entered_date";
+  const sample = input.rows.find((row) => Object.values(row).some((value) => String(value).trim()));
+  if (sample && hasAny(sample, dailySummaryAliases.settleDate)) return "settled_date";
+  if (sample && hasAny(sample, dailySummaryAliases.transactionDate) && hasAny(sample, dailySummaryAliases.totalSales)) return "entered_date";
+  return "unknown";
 }
 
 function firstKnownDate(row: Pick<InsertClearentTransaction, "transactionDateUtc" | "enteredDateUtc" | "settledDateUtc" | "depositDateUtc">): Date | null {
@@ -259,6 +321,45 @@ export function normalizeClearentRow(row: CsvRecord, input: {
   };
 
   return { normalized, needsBuildingResolution };
+}
+
+export function normalizeClearentDailySummaryRow(row: CsvRecord, input: {
+  sourceFileName: string;
+  importBatchId: number;
+  sourceReportBasis: ClearentReportBasis;
+}): InsertClearentDailySummary | null {
+  if (isTotalRow(row)) return null;
+  const reportDateRaw =
+    input.sourceReportBasis === "settled_date"
+      ? pick(row, dailySummaryAliases.settleDate)
+      : pick(row, dailySummaryAliases.transactionDate) || pick(row, dailySummaryAliases.settleDate);
+  const reportDateUtc = parsePacificDate(reportDateRaw);
+  if (!reportDateUtc) return null;
+  const totalSalesCents = parseMoneyCents(pick(row, dailySummaryAliases.totalSales));
+  if (!totalSalesCents) return null;
+
+  return {
+    sourceFileName: input.sourceFileName,
+    importBatchId: input.importBatchId,
+    sourceReportBasis: input.sourceReportBasis,
+    reportDateUtc,
+    totalSalesCents,
+    netSalesCents: pick(row, dailySummaryAliases.netSales) ? parseMoneyCents(pick(row, dailySummaryAliases.netSales)) : null,
+    totalTransactions: parseInteger(pick(row, dailySummaryAliases.totalTransactions)),
+    interchangeCents: pick(row, dailySummaryAliases.interchange) ? parseMoneyCents(pick(row, dailySummaryAliases.interchange)) : null,
+    discountCents: pick(row, dailySummaryAliases.discount) ? parseMoneyCents(pick(row, dailySummaryAliases.discount)) : null,
+    depositAmountCents: pick(row, dailySummaryAliases.depositAmount) ? parseMoneyCents(pick(row, dailySummaryAliases.depositAmount)) : null,
+    rawJson: {
+      source: "clearent_xplorpay",
+      dataType: "daily_summary",
+      sourceFileName: input.sourceFileName,
+      originalRow: row,
+      rowFingerprint: rowFingerprint(row),
+      normalizedAt: new Date().toISOString(),
+      timezone: PACIFIC_TIME_ZONE,
+      totalRowSkipped: false,
+    },
+  };
 }
 
 function mergePatch(existing: ClearentTransaction, incoming: InsertClearentTransaction): Partial<InsertClearentTransaction> {
@@ -374,9 +475,10 @@ export async function importClearentTransactions(input: TabularFileInput & {
   const db = await getDb();
   if (!db) throw new Error("Database is not configured");
 
-  const sourceReportBasis = parseClearentReportBasis(input.sourceReportBasis);
+  const requestedReportBasis = parseClearentReportBasis(input.sourceReportBasis);
   const sourceFileName = input.fileName?.trim() || `clearent-import-${new Date().toISOString()}.csv`;
   const parsedRows = parseTabularRows(input);
+  const sourceReportBasis = inferReportBasis({ requested: requestedReportBasis, sourceFileName, rows: parsedRows });
   const errors: ClearentImportSummary["errors"] = [];
 
   const [batch] = await db
@@ -399,10 +501,67 @@ export async function importClearentTransactions(input: TabularFileInput & {
   let duplicateRowCount = 0;
   let unresolvedBuildingCount = 0;
   let mergedRowCount = 0;
+  let importedSummaryRowCount = 0;
+  let updatedSummaryRowCount = 0;
+  let skippedSummaryRowCount = 0;
+  let importedTransactionRowCount = 0;
   const seen = new Set<string>();
 
   for (let i = 0; i < parsedRows.length; i++) {
     try {
+      if (isTotalRow(parsedRows[i])) {
+        skippedRowCount += 1;
+        skippedSummaryRowCount += 1;
+        continue;
+      }
+
+      if (looksLikeDailySummaryRow(parsedRows[i])) {
+        const normalizedSummary = normalizeClearentDailySummaryRow(parsedRows[i], {
+          sourceFileName,
+          importBatchId,
+          sourceReportBasis,
+        });
+        if (!normalizedSummary) {
+          skippedRowCount += 1;
+          skippedSummaryRowCount += 1;
+          continue;
+        }
+        const existing = await db
+          .select({ id: clearentDailySummaries.id })
+          .from(clearentDailySummaries)
+          .where(
+            and(
+              eq(clearentDailySummaries.sourceReportBasis, normalizedSummary.sourceReportBasis),
+              eq(clearentDailySummaries.reportDateUtc, normalizedSummary.reportDateUtc)
+            )
+          )
+          .limit(1);
+        if (existing[0]) {
+          await db
+            .update(clearentDailySummaries)
+            .set({
+              sourceFileName: normalizedSummary.sourceFileName,
+              importBatchId,
+              totalSalesCents: normalizedSummary.totalSalesCents,
+              netSalesCents: normalizedSummary.netSalesCents,
+              totalTransactions: normalizedSummary.totalTransactions,
+              interchangeCents: normalizedSummary.interchangeCents,
+              discountCents: normalizedSummary.discountCents,
+              depositAmountCents: normalizedSummary.depositAmountCents,
+              rawJson: {
+                ...(normalizedSummary.rawJson as Record<string, unknown>),
+                updatedExistingSummaryId: existing[0].id,
+              },
+            })
+            .where(eq(clearentDailySummaries.id, existing[0].id));
+          updatedSummaryRowCount += 1;
+        } else {
+          await db.insert(clearentDailySummaries).values(normalizedSummary);
+          importedSummaryRowCount += 1;
+        }
+        continue;
+      }
+
       const { normalized, needsBuildingResolution } = normalizeClearentRow(parsedRows[i], {
         sourceFileName,
         importBatchId,
@@ -433,6 +592,7 @@ export async function importClearentTransactions(input: TabularFileInput & {
 
       await db.insert(clearentTransactions).values(normalized);
       importedRowCount += 1;
+      importedTransactionRowCount += 1;
       if (needsBuildingResolution) unresolvedBuildingCount += 1;
     } catch (error) {
       skippedRowCount += 1;
@@ -447,7 +607,7 @@ export async function importClearentTransactions(input: TabularFileInput & {
   await db
     .update(clearentImportBatches)
     .set({
-      importedRowCount,
+      importedRowCount: importedRowCount + importedSummaryRowCount,
       skippedRowCount,
       duplicateRowCount,
       importStatus,
@@ -461,11 +621,15 @@ export async function importClearentTransactions(input: TabularFileInput & {
     sourceReportBasis,
     importBatchId,
     parsedRowCount: parsedRows.length,
-    importedRowCount,
+    importedRowCount: importedRowCount + importedSummaryRowCount,
     skippedRowCount,
     duplicateRowCount,
     unresolvedBuildingCount,
     mergedRowCount,
+    importedSummaryRowCount,
+    updatedSummaryRowCount,
+    skippedSummaryRowCount,
+    importedTransactionRowCount,
     importStatus,
     errors,
   };
@@ -475,7 +639,7 @@ export async function getClearentRevenueForBounds(bounds: DashboardBusinessDayBo
   const db = await getDb();
   if (!db) return null;
 
-  const [collectedRow, settledRow] = await Promise.all([
+  const [collectedRow, settledRow, collectedSummaryRow, settledSummaryRow] = await Promise.all([
     db
       .select({
         cents: sql<number>`COALESCE(SUM(${clearentTransactions.grossAmountCents}), 0)`,
@@ -496,16 +660,41 @@ export async function getClearentRevenueForBounds(bounds: DashboardBusinessDayBo
       .where(
         or(
           and(isNotNull(clearentTransactions.depositDateUtc), gte(clearentTransactions.depositDateUtc, bounds.startUtc), lt(clearentTransactions.depositDateUtc, bounds.endUtc)),
-          and(isNotNull(clearentTransactions.depositDateUtc), sql`1 = 0`),
           and(isNotNull(clearentTransactions.settledDateUtc), gte(clearentTransactions.settledDateUtc, bounds.startUtc), lt(clearentTransactions.settledDateUtc, bounds.endUtc))
+        )
+      ),
+    db
+      .select({
+        cents: sql<number>`COALESCE(SUM(${clearentDailySummaries.totalSalesCents}), 0)`,
+      })
+      .from(clearentDailySummaries)
+      .where(
+        and(
+          eq(clearentDailySummaries.sourceReportBasis, "entered_date"),
+          gte(clearentDailySummaries.reportDateUtc, bounds.startUtc),
+          lt(clearentDailySummaries.reportDateUtc, bounds.endUtc)
+        )
+      ),
+    db
+      .select({
+        cents: sql<number>`COALESCE(SUM(COALESCE(${clearentDailySummaries.depositAmountCents}, ${clearentDailySummaries.netSalesCents}, ${clearentDailySummaries.totalSalesCents})), 0)`,
+      })
+      .from(clearentDailySummaries)
+      .where(
+        and(
+          eq(clearentDailySummaries.sourceReportBasis, "settled_date"),
+          gte(clearentDailySummaries.reportDateUtc, bounds.startUtc),
+          lt(clearentDailySummaries.reportDateUtc, bounds.endUtc)
         )
       ),
   ]);
 
+  const transactionCollected = Number(collectedRow[0]?.cents ?? 0);
+  const transactionSettled = Number(settledRow[0]?.cents ?? 0);
   return {
     bounds,
-    collectedCents: Number(collectedRow[0]?.cents ?? 0),
-    settledCents: Number(settledRow[0]?.cents ?? 0),
+    collectedCents: transactionCollected || Number(collectedSummaryRow[0]?.cents ?? 0),
+    settledCents: transactionSettled || Number(settledSummaryRow[0]?.cents ?? 0),
   };
 }
 
@@ -528,9 +717,39 @@ export function buildClearentRevenueSummaryFromRows(
   return { bounds, collectedCents, settledCents };
 }
 
+export function buildClearentRevenueSummaryFromDailyRows(
+  rows: Array<Pick<InsertClearentDailySummary, "sourceReportBasis" | "reportDateUtc" | "totalSalesCents" | "netSalesCents" | "depositAmountCents">>,
+  bounds: DashboardBusinessDayBounds
+): ClearentRevenueSummary {
+  let collectedCents = 0;
+  let settledCents = 0;
+  for (const row of rows) {
+    if (row.reportDateUtc < bounds.startUtc || row.reportDateUtc >= bounds.endUtc) continue;
+    if (row.sourceReportBasis === "entered_date") collectedCents += row.totalSalesCents;
+    if (row.sourceReportBasis === "settled_date") {
+      settledCents += row.depositAmountCents ?? row.netSalesCents ?? row.totalSalesCents;
+    }
+  }
+  return { bounds, collectedCents, settledCents };
+}
+
 export async function getClearentCollectedTodayCents(now = new Date()) {
   const bounds = getDashboardBusinessDayBoundsUtc(now);
   return getClearentRevenueForBounds(bounds);
+}
+
+export async function getClearentOperationalRevenueCents(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [transactionRow, summaryRow] = await Promise.all([
+    db.select({ cents: sql<number>`COALESCE(SUM(${clearentTransactions.grossAmountCents}), 0)` }).from(clearentTransactions),
+    db
+      .select({ cents: sql<number>`COALESCE(SUM(${clearentDailySummaries.totalSalesCents}), 0)` })
+      .from(clearentDailySummaries)
+      .where(eq(clearentDailySummaries.sourceReportBasis, "entered_date")),
+  ]);
+  const transactionCents = Number(transactionRow[0]?.cents ?? 0);
+  return transactionCents || Number(summaryRow[0]?.cents ?? 0);
 }
 
 export async function listImportedClearentCustomers(): Promise<ClearentCustomerAggregate[]> {

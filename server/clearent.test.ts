@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 import {
+  buildClearentRevenueSummaryFromDailyRows,
   buildClearentRevenueSummaryFromRows,
   clearentFallbackKey,
+  normalizeClearentDailySummaryRow,
   normalizeClearentRow,
 } from "./clearent";
 import { parseTabularRows } from "./externalSystems/tabularIngestion";
@@ -65,6 +67,144 @@ describe("Clearent / XplorPay import pipeline", () => {
       Amount: "$120.00",
       "Card Type": "Mastercard",
     });
+  });
+
+  it("parses DepositDetails daily aggregate fixture rows after report title rows", () => {
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ["Deposit Details, May 2026"],
+      [],
+      ["Settle Date", "Total Sales", "Net Sales", "Total\nTransactions", "Interchange", "Discount", "Deposit Amount"],
+      ["05/01/2026", "$304.51", "$304.51", "4", "$0.00", "($6.85)", "$297.66"],
+      ["TOTAL", "$1,626.63", "$1,626.63", "22", "$0.00", "($36.60)", "$1,590.03"],
+    ]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, "Deposit Details");
+    const buffer = Buffer.from(XLSX.write(workbook, { type: "buffer", bookType: "xls" }));
+    const rows = parseTabularRows({ buffer, fileName: "DepositDetails_2026-May.xls" });
+
+    expect(rows[0]).toMatchObject({
+      "Settle Date": "05/01/2026",
+      "Total Sales": "$304.51",
+      "Total\nTransactions": "4",
+      Discount: "($6.85)",
+    });
+  });
+
+  it("parses DailyCardActivity daily aggregate fixture rows after report title rows", () => {
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ["Daily Card Activity, May 2026"],
+      [],
+      ["Transaction\nDate", "Total\nTransactions", "Sales", "", ""],
+      ["05/12/2026", "3", "$172.92", "", ""],
+      ["TOTAL", "20", "$1,540.38", "", ""],
+    ]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, "Daily Card Activity");
+    const buffer = Buffer.from(XLSX.write(workbook, { type: "buffer", bookType: "xls" }));
+    const rows = parseTabularRows({ buffer, fileName: "DailyCardActivity_2026-May.xls" });
+
+    expect(rows[0]).toMatchObject({
+      "Transaction\nDate": "05/12/2026",
+      "Total\nTransactions": "3",
+      Sales: "$172.92",
+    });
+  });
+
+  it("normalizes DepositDetails rows as settled daily summaries", () => {
+    const summary = normalizeClearentDailySummaryRow(
+      {
+        "Settle Date": "05/01/2026",
+        "Total Sales": "$304.51",
+        "Net Sales": "$304.51",
+        "Total Transactions": "4",
+        Interchange: "$0.00",
+        Discount: "($6.85)",
+        "Deposit Amount": "$297.66",
+      },
+      { sourceFileName: "DepositDetails_2026-May.xls", importBatchId: 10, sourceReportBasis: "settled_date" }
+    );
+
+    expect(summary).toMatchObject({
+      sourceReportBasis: "settled_date",
+      totalSalesCents: 30451,
+      netSalesCents: 30451,
+      totalTransactions: 4,
+      interchangeCents: 0,
+      discountCents: -685,
+      depositAmountCents: 29766,
+    });
+  });
+
+  it("normalizes DailyCardActivity rows as entered daily summaries", () => {
+    const summary = normalizeClearentDailySummaryRow(
+      {
+        "Transaction Date": "05/12/2026",
+        "Total Transactions": "3",
+        Sales: "$172.92",
+      },
+      { sourceFileName: "DailyCardActivity_2026-May.xls", importBatchId: 11, sourceReportBasis: "entered_date" }
+    );
+
+    expect(summary).toMatchObject({
+      sourceReportBasis: "entered_date",
+      totalSalesCents: 17292,
+      totalTransactions: 3,
+      netSalesCents: null,
+      depositAmountCents: null,
+    });
+  });
+
+  it("skips TOTAL rows for daily summaries", () => {
+    const summary = normalizeClearentDailySummaryRow(
+      {
+        "Transaction Date": "TOTAL",
+        "Total Transactions": "20",
+        Sales: "$1,540.38",
+      },
+      { sourceFileName: "DailyCardActivity_2026-May.xls", importBatchId: 11, sourceReportBasis: "entered_date" }
+    );
+
+    expect(summary).toBeNull();
+  });
+
+  it("uses daily aggregate rows for Clearent dashboard totals when transaction rows are unavailable", () => {
+    const entered = normalizeClearentDailySummaryRow(
+      {
+        "Transaction Date": "05/14/2026",
+        "Total Transactions": "1",
+        Sales: "$149.97",
+      },
+      { sourceFileName: "DailyCardActivity_2026-May.xls", importBatchId: 11, sourceReportBasis: "entered_date" }
+    )!;
+    const settled = normalizeClearentDailySummaryRow(
+      {
+        "Settle Date": "05/14/2026",
+        "Total Sales": "$149.97",
+        "Net Sales": "$149.97",
+        "Total Transactions": "1",
+        Discount: "($3.37)",
+        "Deposit Amount": "$146.60",
+      },
+      { sourceFileName: "DepositDetails_2026-May.xls", importBatchId: 10, sourceReportBasis: "settled_date" }
+    )!;
+
+    const summary = buildClearentRevenueSummaryFromDailyRows([entered, settled], bounds);
+    expect(summary.collectedCents).toBe(14997);
+    expect(summary.settledCents).toBe(14660);
+  });
+
+  it("daily aggregate rows carry summary metadata, not fake customer attribution", () => {
+    const summary = normalizeClearentDailySummaryRow(
+      {
+        "Transaction Date": "05/12/2026",
+        "Total Transactions": "3",
+        Sales: "$172.92",
+      },
+      { sourceFileName: "DailyCardActivity_2026-May.xls", importBatchId: 11, sourceReportBasis: "entered_date" }
+    )!;
+
+    expect((summary.rawJson as any).dataType).toBe("daily_summary");
+    expect("customerName" in summary).toBe(false);
   });
 
   it("handles settled_date report basis separately from entered_date", () => {

@@ -470,6 +470,34 @@ export const clearentTransactions = mysqlTable(
 export type ClearentTransaction = typeof clearentTransactions.$inferSelect;
 export type InsertClearentTransaction = typeof clearentTransactions.$inferInsert;
 
+export const clearentDailySummaries = mysqlTable(
+  "clearent_daily_summaries",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    sourceFileName: varchar("sourceFileName", { length: 255 }).notNull(),
+    importBatchId: int("importBatchId").notNull(),
+    sourceReportBasis: mysqlEnum("sourceReportBasis", ["settled_date", "entered_date", "unknown"]).notNull().default("unknown"),
+    reportDateUtc: timestamp("reportDateUtc").notNull(),
+    totalSalesCents: int("totalSalesCents").notNull().default(0),
+    netSalesCents: int("netSalesCents"),
+    totalTransactions: int("totalTransactions"),
+    interchangeCents: int("interchangeCents"),
+    discountCents: int("discountCents"),
+    depositAmountCents: int("depositAmountCents"),
+    rawJson: json("rawJson"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    basisDateUnique: uniqueIndex("uq_clearent_daily_summary_basis_date").on(table.sourceReportBasis, table.reportDateUtc),
+    batchIdx: index("idx_clearent_daily_summaries_batch").on(table.importBatchId),
+    reportDateIdx: index("idx_clearent_daily_summaries_report_date").on(table.reportDateUtc),
+  })
+);
+
+export type ClearentDailySummary = typeof clearentDailySummaries.$inferSelect;
+export type InsertClearentDailySummary = typeof clearentDailySummaries.$inferInsert;
+
 export const operatorTasks = mysqlTable("operator_tasks", {
   id: int("id").autoincrement().primaryKey(),
   tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
