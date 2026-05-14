@@ -405,6 +405,71 @@ export const cleancloudLegacyOrders = mysqlTable(
 export type CleancloudLegacyOrder = typeof cleancloudLegacyOrders.$inferSelect;
 export type InsertCleancloudLegacyOrder = typeof cleancloudLegacyOrders.$inferInsert;
 
+export const clearentImportBatches = mysqlTable("clearent_import_batches", {
+  id: int("id").autoincrement().primaryKey(),
+  source: varchar("source", { length: 64 }).notNull().default("clearent_xplorpay"),
+  sourceFileName: varchar("sourceFileName", { length: 255 }).notNull(),
+  sourceReportBasis: mysqlEnum("sourceReportBasis", ["settled_date", "entered_date", "unknown"]).notNull().default("unknown"),
+  importedRowCount: int("importedRowCount").notNull().default(0),
+  skippedRowCount: int("skippedRowCount").notNull().default(0),
+  duplicateRowCount: int("duplicateRowCount").notNull().default(0),
+  importStatus: mysqlEnum("importStatus", ["completed", "completed_with_errors", "failed"]).notNull().default("completed"),
+  errorJson: json("errorJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ClearentImportBatch = typeof clearentImportBatches.$inferSelect;
+export type InsertClearentImportBatch = typeof clearentImportBatches.$inferInsert;
+
+export const clearentTransactions = mysqlTable(
+  "clearent_transactions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    clearentTransactionId: varchar("clearentTransactionId", { length: 128 }),
+    sourceFileName: varchar("sourceFileName", { length: 255 }).notNull(),
+    importBatchId: int("importBatchId").notNull(),
+    sourceReportBasis: mysqlEnum("sourceReportBasis", ["settled_date", "entered_date", "unknown"]).notNull().default("unknown"),
+    merchantId: varchar("merchantId", { length: 128 }),
+    merchantName: varchar("merchantName", { length: 255 }),
+    transactionDateUtc: timestamp("transactionDateUtc"),
+    enteredDateUtc: timestamp("enteredDateUtc"),
+    settledDateUtc: timestamp("settledDateUtc"),
+    depositDateUtc: timestamp("depositDateUtc"),
+    cardType: varchar("cardType", { length: 64 }),
+    lastFour: varchar("lastFour", { length: 4 }),
+    customerName: varchar("customerName", { length: 255 }),
+    customerEmail: varchar("customerEmail", { length: 320 }),
+    customerPhone: varchar("customerPhone", { length: 30 }),
+    grossAmountCents: int("grossAmountCents").notNull().default(0),
+    netAmountCents: int("netAmountCents"),
+    feeAmountCents: int("feeAmountCents"),
+    depositAmountCents: int("depositAmountCents"),
+    transactionStatus: varchar("transactionStatus", { length: 100 }).notNull().default("unknown"),
+    transactionType: varchar("transactionType", { length: 100 }).notNull().default("unknown"),
+    authCode: varchar("authCode", { length: 128 }),
+    batchId: varchar("batchId", { length: 128 }),
+    buildingName: varchar("buildingName", { length: 255 }),
+    tower: varchar("tower", { length: 100 }),
+    unit: varchar("unit", { length: 50 }),
+    matchedOrderId: int("matchedOrderId"),
+    matchedCustomerId: int("matchedCustomerId"),
+    rawJson: json("rawJson"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    clearentTransactionIdUnique: uniqueIndex("uq_clearent_transaction_id").on(table.clearentTransactionId),
+    batchIdx: index("idx_clearent_transactions_batch").on(table.importBatchId),
+    enteredDateIdx: index("idx_clearent_transactions_entered").on(table.enteredDateUtc),
+    settledDateIdx: index("idx_clearent_transactions_settled").on(table.settledDateUtc),
+    authMatchIdx: index("idx_clearent_transactions_auth_match").on(table.authCode, table.grossAmountCents, table.lastFour),
+    buildingIdx: index("idx_clearent_transactions_building").on(table.buildingName, table.tower),
+  })
+);
+
+export type ClearentTransaction = typeof clearentTransactions.$inferSelect;
+export type InsertClearentTransaction = typeof clearentTransactions.$inferInsert;
+
 export const operatorTasks = mysqlTable("operator_tasks", {
   id: int("id").autoincrement().primaryKey(),
   tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),

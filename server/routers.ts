@@ -96,6 +96,7 @@ import * as jose from "jose";
 import { BUILDINGS, matchBuilding } from "@shared/buildings";
 import { normalizePropertyTower, TOWER_DEFINITIONS } from "@shared/propertyTowers";
 import { cleanCloudLegacyCustomers, listImportedCleanCloudLegacyCustomers } from "./cleancloudLegacy";
+import { getClearentCollectedTodayCents, listImportedClearentCustomers } from "./clearent";
 import {
   getActedOnTodayCents,
   getAwaitingPaymentCents,
@@ -628,7 +629,18 @@ export const appRouter = router({
           createdBy: ctx.user?.id != null ? String(ctx.user.id) : null,
         })),
       weeklyReflection: adminProcedure.query(async ({ ctx }) => getWeeklyOperatorReflection(ctx.tenantId)),
-      performanceMetrics: adminProcedure.query(async ({ ctx }) => getPerformanceMetrics(ctx.tenantId)),
+      performanceMetrics: adminProcedure.query(async ({ ctx }) => {
+        const [metrics, clearent] = await Promise.all([
+          getPerformanceMetrics(ctx.tenantId),
+          getClearentCollectedTodayCents(),
+        ]);
+        return {
+          ...metrics,
+          clearentPaymentTruthCents: clearent?.collectedCents ?? 0,
+          clearentSettledCents: clearent?.settledCents ?? 0,
+          clearentProcessorLabel: "Clearent / XplorPay",
+        };
+      }),
     }),
 
     level4Mission: router({
@@ -689,10 +701,11 @@ export const appRouter = router({
       .input(z.object({ q: z.string().min(2).max(100) }))
       .query(async ({ input }) => searchOrdersForReceipt(input.q)),
 
-    /** Home command center — paid revenue by `paidAt` in dashboard TZ (legacy rows without paidAt use `updatedAt`). */
+    /** Home command center — Stripe/order revenue plus labeled Clearent payment truth. */
     dashboardSummary: protectedProcedure.query(async () => {
       const row = await getAdminDashboardSummary();
-      return row ?? {
+      const clearent = await getClearentCollectedTodayCents();
+      const fallback = {
         revenueTimestampBasis: "paidAt" as const,
         dashboardTimeZone: getDashboardTimeZone(),
         revenueToday: 0,
@@ -703,6 +716,27 @@ export const appRouter = router({
         distinctBuildingsWithSlug: 0,
         distinctCustomerPhones: 0,
         totalOrders: 0,
+      };
+      const base = row ?? fallback;
+      return {
+        ...base,
+        paymentProcessorTotals: {
+          stripe: {
+            collectedToday: base.revenueToday,
+            collectedMonth: base.revenueMonth,
+          },
+          clearentXplorPay: {
+            collectedTodayCents: clearent?.collectedCents ?? 0,
+            settledTodayCents: clearent?.settledCents ?? 0,
+            collectedToday: (clearent?.collectedCents ?? 0) / 100,
+            settledToday: (clearent?.settledCents ?? 0) / 100,
+            label: "Clearent / XplorPay",
+          },
+          cleanCloud: {
+            label: "Legacy CleanCloud",
+            includedInPaymentTruth: false,
+          },
+        },
       };
     }),
 
@@ -767,21 +801,30 @@ export const appRouter = router({
     /** Paid orders today — sums totals where `paidAt` falls in the business day (not action logs). */
     getCollectedToday: adminProcedure.query(async ({ ctx }) => {
       const r = await getCollectedTodayCents(ctx.tenantId);
+      const clearent = await getClearentCollectedTodayCents();
       if (!r) {
         return {
-          cents: 0,
+          cents: clearent?.collectedCents ?? 0,
+          stripeCents: 0,
+          clearentCents: clearent?.collectedCents ?? 0,
+          clearentSettledCents: clearent?.settledCents ?? 0,
           businessYmd: "",
           timeZone: getDashboardTimeZone(),
-          dbAvailable: false,
-          timestampBasis: "paidAt" as const,
+          dbAvailable: Boolean(clearent),
+          timestampBasis: "clearent_entered_date" as const,
+          processorLabel: "Clearent / XplorPay",
         };
       }
       return {
-        cents: r.cents,
+        cents: clearent?.collectedCents ?? r.cents,
+        stripeCents: r.cents,
+        clearentCents: clearent?.collectedCents ?? 0,
+        clearentSettledCents: clearent?.settledCents ?? 0,
         businessYmd: r.bounds.ymd,
         timeZone: r.bounds.timeZone,
         dbAvailable: true,
-        timestampBasis: "paidAt" as const,
+        timestampBasis: clearent ? "clearent_entered_date" as const : "paidAt" as const,
+        processorLabel: clearent ? "Clearent / XplorPay" : "Stripe/orders",
       };
     }),
 
@@ -1281,6 +1324,7 @@ export const appRouter = router({
             buildingAddressCanonical: tower.buildingAddressCanonical,
             stripeVerifiedRevenue: row.lifetimeSpend,
             legacyCleanCloudRevenue: 0,
+            clearentXplorPayRevenue: 0,
             totalOperationalRevenue: row.lifetimeSpend,
             source: "stripe",
             paymentProcessor: "stripe",
@@ -1291,6 +1335,85 @@ export const appRouter = router({
         });
 
         let abeDedupedOrLinked = false;
+        const clearentCustomers = await listImportedClearentCustomers();
+        for (const clearent of clearentCustomers) {
+          const clearentEmail = clearent.email?.trim().toLowerCase() || "";
+          const clearentPhoneDigits = clearent.phone.replace(/\D/g, "");
+          const existing = rows.find((row) => {
+            const rowEmail = row.email?.trim().toLowerCase() || "";
+            const rowPhoneDigits = row.phone.replace(/\D/g, "");
+            return (
+              (clearentEmail && rowEmail === clearentEmail) ||
+              (clearentPhoneDigits.length >= 7 && rowPhoneDigits === clearentPhoneDigits)
+            );
+          });
+
+          if (existing) {
+            existing.clearentXplorPayRevenue =
+              Math.round(((existing.clearentXplorPayRevenue ?? 0) + clearent.totalCollected) * 100) / 100;
+            existing.totalOperationalRevenue =
+              Math.round((existing.stripeVerifiedRevenue + existing.legacyCleanCloudRevenue + existing.clearentXplorPayRevenue) * 100) / 100;
+            existing.lifetimeSpend = existing.totalOperationalRevenue;
+            existing.totalOrders += clearent.transactionCount;
+            existing.source = existing.source === "stripe" ? "stripe_plus_clearent_xplorpay" : `${existing.source}_plus_clearent_xplorpay`;
+            existing.paymentProcessor = existing.paymentProcessor.includes("clearent")
+              ? existing.paymentProcessor
+              : `${existing.paymentProcessor},clearent_xplorpay`;
+            existing.includedInOperationalRevenue = true;
+            existing.clearentPaymentNote = clearent.clearentPaymentNote;
+            existing.clearentXplorPayBadge = "CLEARENT / XPLORPAY";
+            existing.clearentStripeStatus = "Not in Stripe";
+            continue;
+          }
+
+          rows.push({
+            phone: clearent.phone,
+            firstName: clearent.firstName,
+            lastName: clearent.lastName,
+            email: clearent.email,
+            unit: clearent.unit,
+            buildingSlug:
+              clearent.propertyGroup === "opus_la"
+                ? "opusla"
+                : clearent.propertyGroup === "century_park_east"
+                  ? "centuryparkeast"
+                  : null,
+            floorNumber: deriveFloorNumber(clearent.unit),
+            address: clearent.address,
+            totalOrders: clearent.transactionCount,
+            lifetimeSpend: clearent.totalCollected,
+            firstOrderAt: new Date(`${clearent.firstTransactionDate}T12:00:00Z`),
+            lastOrderAt: new Date(`${clearent.lastTransactionDate}T12:00:00Z`),
+            lastOrderId: 0,
+            avgOrderValue: Math.round((clearent.totalCollected / Math.max(1, clearent.transactionCount)) * 100) / 100,
+            daysSinceLastOrder: 0,
+            ordersLast30Days: 0,
+            ordersLast90Days: 0,
+            recencyStatus: "active",
+            tier: clearent.totalCollected >= 300 ? "vip" : "standard",
+            statusColor: "success",
+            bldgUserIds: [],
+            propertyGroup: clearent.propertyGroup,
+            propertyDisplayName: clearent.propertyDisplayName,
+            towerKey: clearent.towerKey,
+            towerDisplayName: clearent.towerDisplayName,
+            buildingAddressCanonical: clearent.buildingAddressCanonical,
+            stripeVerifiedRevenue: 0,
+            legacyCleanCloudRevenue: 0,
+            clearentXplorPayRevenue: clearent.totalCollected,
+            totalOperationalRevenue: clearent.totalCollected,
+            source: clearent.source,
+            paymentProcessor: clearent.paymentProcessor,
+            includedInStripe: false,
+            includedInOperationalRevenue: true,
+            stripePaymentIntentId: null,
+            clearentPaymentNote: clearent.clearentPaymentNote,
+            clearentXplorPayBadge: "CLEARENT / XPLORPAY",
+            clearentStripeStatus: "Not in Stripe",
+            note: clearent.note,
+          });
+        }
+
         if (includeLegacyCleanCloud) {
           const importedLegacyCustomers = await listImportedCleanCloudLegacyCustomers();
           const legacyCustomers = [...cleanCloudLegacyCustomers, ...importedLegacyCustomers];
@@ -1310,12 +1433,12 @@ export const appRouter = router({
               existing.legacyCleanCloudRevenue =
                 Math.round((existing.legacyCleanCloudRevenue + legacy.totalSpend) * 100) / 100;
               existing.totalOperationalRevenue =
-                Math.round((existing.stripeVerifiedRevenue + existing.legacyCleanCloudRevenue) * 100) / 100;
+                Math.round((existing.stripeVerifiedRevenue + existing.legacyCleanCloudRevenue + (existing.clearentXplorPayRevenue ?? 0)) * 100) / 100;
               existing.totalOrders += legacy.orderCount;
               existing.lifetimeSpend = existing.totalOperationalRevenue;
               existing.cleancloudCustomerId = legacy.cleancloudCustomerId;
-              existing.source = "stripe_plus_cleancloud_legacy";
-              existing.paymentProcessor = "stripe,cleancloud";
+              existing.source = existing.source.includes("cleancloud") ? existing.source : `${existing.source}_plus_cleancloud_legacy`;
+              existing.paymentProcessor = existing.paymentProcessor.includes("cleancloud") ? existing.paymentProcessor : `${existing.paymentProcessor},cleancloud`;
               existing.includedInStripe = true;
               existing.includedInOperationalRevenue = true;
               existing.legacyImportNote = legacy.legacyImportNote;
@@ -1361,6 +1484,7 @@ export const appRouter = router({
               buildingAddressCanonical: legacy.buildingAddressCanonical,
               stripeVerifiedRevenue: 0,
               legacyCleanCloudRevenue: legacy.totalSpend,
+              clearentXplorPayRevenue: 0,
               totalOperationalRevenue: legacy.totalSpend,
               source: legacy.source,
               paymentProcessor: legacy.paymentProcessor,
@@ -1432,8 +1556,12 @@ export const appRouter = router({
           existing.totalCustomers += 1;
           if (row.recencyStatus === "active") existing.activeCustomers += 1;
           const legacyRevenue = Number(row.legacyCleanCloudRevenue ?? 0);
+          const clearentRevenue = Number(row.clearentXplorPayRevenue ?? 0);
           if (Number.isFinite(legacyRevenue) && legacyRevenue > 0) {
             existing.totalRevenue += legacyRevenue;
+          }
+          if (Number.isFinite(clearentRevenue) && clearentRevenue > 0) {
+            existing.totalRevenue += clearentRevenue;
           }
           if (row.floorNumber != null) {
             const floor = row.floorNumber;
@@ -1446,6 +1574,9 @@ export const appRouter = router({
             if (row.recencyStatus === "active") floorEntry.activeCustomers += 1;
             if (Number.isFinite(legacyRevenue) && legacyRevenue > 0) {
               floorEntry.totalRevenue += legacyRevenue;
+            }
+            if (Number.isFinite(clearentRevenue) && clearentRevenue > 0) {
+              floorEntry.totalRevenue += clearentRevenue;
             }
             existing.floors[floor] = floorEntry;
           }
@@ -1480,11 +1611,14 @@ export const appRouter = router({
           stripeOnlyHelperText: "Stripe-only view excludes legacy CleanCloud orders.",
           legacyHelperText:
             "Legacy CleanCloud orders are included for operational history only. They are not Stripe transactions and will not appear in Stripe reports.",
+          clearentHelperText:
+            "Clearent / XplorPay imports are payment truth for collected and settled card activity. They are not Stripe transactions or CleanCloud orders.",
           includeLegacyCleanCloud,
           abeDedupedOrLinked,
           grand: {
             stripeVerifiedRevenue: 0,
             legacyCleanCloudRevenue: 0,
+            clearentXplorPayRevenue: 0,
             totalOperationalRevenue: 0,
           },
           properties: {
@@ -1492,21 +1626,23 @@ export const appRouter = router({
               propertyDisplayName: "OPUS LA",
               stripeVerifiedRevenue: 0,
               legacyCleanCloudRevenue: 0,
+              clearentXplorPayRevenue: 0,
               totalOperationalRevenue: 0,
               towers: {
-                opus_south_3545: { ...TOWER_DEFINITIONS.opus_south_3545, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, totalOperationalRevenue: 0 },
-                opus_north_3650: { ...TOWER_DEFINITIONS.opus_north_3650, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, totalOperationalRevenue: 0 },
-                unknown: { ...TOWER_DEFINITIONS.unknown, propertyGroup: "opus_la", propertyDisplayName: "OPUS LA", stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, totalOperationalRevenue: 0 },
+                opus_south_3545: { ...TOWER_DEFINITIONS.opus_south_3545, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, clearentXplorPayRevenue: 0, totalOperationalRevenue: 0 },
+                opus_north_3650: { ...TOWER_DEFINITIONS.opus_north_3650, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, clearentXplorPayRevenue: 0, totalOperationalRevenue: 0 },
+                unknown: { ...TOWER_DEFINITIONS.unknown, propertyGroup: "opus_la", propertyDisplayName: "OPUS LA", stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, clearentXplorPayRevenue: 0, totalOperationalRevenue: 0 },
               },
             },
             century_park_east: {
               propertyDisplayName: "Century Park East",
               stripeVerifiedRevenue: 0,
               legacyCleanCloudRevenue: 0,
+              clearentXplorPayRevenue: 0,
               totalOperationalRevenue: 0,
               towers: {
-                cpe_south_2170: { ...TOWER_DEFINITIONS.cpe_south_2170, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, totalOperationalRevenue: 0 },
-                cpe_north_2160: { ...TOWER_DEFINITIONS.cpe_north_2160, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, totalOperationalRevenue: 0 },
+                cpe_south_2170: { ...TOWER_DEFINITIONS.cpe_south_2170, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, clearentXplorPayRevenue: 0, totalOperationalRevenue: 0 },
+                cpe_north_2160: { ...TOWER_DEFINITIONS.cpe_north_2160, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, clearentXplorPayRevenue: 0, totalOperationalRevenue: 0 },
               },
             },
           },
@@ -1518,24 +1654,28 @@ export const appRouter = router({
           const prop = contestTotals.properties[propertyGroup];
           const stripe = Number(row.stripeVerifiedRevenue ?? 0);
           const legacy = includeLegacyCleanCloud ? Number(row.legacyCleanCloudRevenue ?? 0) : 0;
-          const operational = stripe + legacy;
+          const clearent = Number(row.clearentXplorPayRevenue ?? 0);
+          const operational = stripe + legacy + clearent;
           prop.stripeVerifiedRevenue += stripe;
           prop.legacyCleanCloudRevenue += legacy;
+          prop.clearentXplorPayRevenue += clearent;
           prop.totalOperationalRevenue += operational;
           contestTotals.grand.stripeVerifiedRevenue += stripe;
           contestTotals.grand.legacyCleanCloudRevenue += legacy;
+          contestTotals.grand.clearentXplorPayRevenue += clearent;
           contestTotals.grand.totalOperationalRevenue += operational;
-          const towers = prop.towers as Record<string, { stripeVerifiedRevenue: number; legacyCleanCloudRevenue: number; totalOperationalRevenue: number }>;
+          const towers = prop.towers as Record<string, { stripeVerifiedRevenue: number; legacyCleanCloudRevenue: number; clearentXplorPayRevenue: number; totalOperationalRevenue: number }>;
           const towerKey = row.towerKey in towers ? row.towerKey : "unknown";
           if (towers[towerKey]) {
             towers[towerKey].stripeVerifiedRevenue += stripe;
             towers[towerKey].legacyCleanCloudRevenue += legacy;
+            towers[towerKey].clearentXplorPayRevenue += clearent;
             towers[towerKey].totalOperationalRevenue += operational;
           }
         }
 
         const roundTotals = (obj: Record<string, unknown>) => {
-          for (const key of ["stripeVerifiedRevenue", "legacyCleanCloudRevenue", "totalOperationalRevenue"]) {
+          for (const key of ["stripeVerifiedRevenue", "legacyCleanCloudRevenue", "clearentXplorPayRevenue", "totalOperationalRevenue"]) {
             if (typeof obj[key] === "number") obj[key] = Math.round((obj[key] as number) * 100) / 100;
           }
         };

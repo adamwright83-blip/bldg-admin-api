@@ -25,6 +25,7 @@ import { runAgentTool } from "../agents/agentRuntime";
 import { registerVendorOnboardingSessionRoutes } from "../vendorOnboardingSessionApi";
 import { registerVendorBookingPublicRoutes } from "../vendorBookingPublicApi";
 import { registerCleanCloudImportRoutes } from "../cleancloudImportRoute";
+import { registerClearentImportRoutes } from "../clearentImportRoute";
 import { z } from "zod";
 
 const warnedUnknownTenantHosts = new Set<string>();
@@ -231,6 +232,7 @@ async function startServer() {
   app.options("*", cors(corsOptions));
 
   registerCleanCloudImportRoutes(app);
+  registerClearentImportRoutes(app);
 
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));

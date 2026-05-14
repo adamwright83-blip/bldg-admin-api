@@ -6,6 +6,9 @@ type DashboardSummaryLike = {
 
 type CollectedTodayLike = {
   cents?: number | null;
+  stripeCents?: number | null;
+  clearentCents?: number | null;
+  clearentSettledCents?: number | null;
   businessYmd?: string | null;
   dbAvailable?: boolean | null;
 };
@@ -224,7 +227,8 @@ export function buildOpsBoardData(input: BuildOpsBoardDataInput): AdminHomeData 
   const liveRiskTotal = centsToDollars(input.awaiting?.cents);
   const riskTotal = liveRiskTotal > 0 ? liveRiskTotal : 1_240;
   const riskIsLive = Boolean(input.awaiting?.dbAvailable && liveRiskTotal > 0);
-  const liveCollected = centsToDollars(input.collected?.cents);
+  const clearentCollected = centsToDollars(input.collected?.clearentCents);
+  const liveCollected = clearentCollected > 0 ? clearentCollected : centsToDollars(input.collected?.cents);
   const collectedIsLive = Boolean(input.collected?.dbAvailable);
   const monthlyLive = Number(input.dashboard?.revenueMonth ?? 0);
   const monthlyRunRate = Number.isFinite(monthlyLive) && monthlyLive > 0 ? monthlyLive : 18_400;

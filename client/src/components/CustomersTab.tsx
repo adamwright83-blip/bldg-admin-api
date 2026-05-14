@@ -36,6 +36,7 @@ type CustomerRow = {
   buildingAddressCanonical?: string | null;
   stripeVerifiedRevenue?: number;
   legacyCleanCloudRevenue?: number;
+  clearentXplorPayRevenue?: number;
   totalOperationalRevenue?: number;
   source?: string;
   paymentProcessor?: string;
@@ -148,9 +149,11 @@ export function CustomersTab({ onOpenProfile }: Props) {
     | {
         stripeOnlyHelperText: string;
         legacyHelperText: string;
+        clearentHelperText?: string;
         grand: {
           stripeVerifiedRevenue: number;
           legacyCleanCloudRevenue: number;
+          clearentXplorPayRevenue?: number;
           totalOperationalRevenue: number;
         };
         properties: Record<
@@ -159,6 +162,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
             propertyDisplayName: string;
             stripeVerifiedRevenue: number;
             legacyCleanCloudRevenue: number;
+            clearentXplorPayRevenue?: number;
             totalOperationalRevenue: number;
             towers: Record<
               string,
@@ -167,6 +171,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
                 buildingAddressCanonical: string | null;
                 stripeVerifiedRevenue: number;
                 legacyCleanCloudRevenue: number;
+                clearentXplorPayRevenue?: number;
                 totalOperationalRevenue: number;
               }
             >;
@@ -325,7 +330,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
 
       {contestTotals && (
         <div className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-4">
             <div className="rounded-md border border-black/10 bg-white p-3">
               <p className="text-xs uppercase tracking-wider text-black/45">Stripe verified revenue</p>
               <p className="text-2xl font-semibold text-black">${contestTotals.grand.stripeVerifiedRevenue.toFixed(2)}</p>
@@ -335,10 +340,17 @@ export function CustomersTab({ onOpenProfile }: Props) {
               <p className="text-2xl font-semibold text-black">${contestTotals.grand.legacyCleanCloudRevenue.toFixed(2)}</p>
             </div>
             <div className="rounded-md border border-black/10 bg-white p-3">
+              <p className="text-xs uppercase tracking-wider text-black/45">Clearent / XplorPay</p>
+              <p className="text-2xl font-semibold text-black">${(contestTotals.grand.clearentXplorPayRevenue ?? 0).toFixed(2)}</p>
+            </div>
+            <div className="rounded-md border border-black/10 bg-white p-3">
               <p className="text-xs uppercase tracking-wider text-black/45">Total operational revenue</p>
               <p className="text-2xl font-semibold text-black">${contestTotals.grand.totalOperationalRevenue.toFixed(2)}</p>
             </div>
           </div>
+          {contestTotals.clearentHelperText ? (
+            <p className="text-xs text-black/55">{contestTotals.clearentHelperText}</p>
+          ) : null}
 
           <div className="grid gap-3 lg:grid-cols-2">
             {(["opus_la", "century_park_east"] as const).map((key) => {
@@ -357,6 +369,7 @@ export function CustomersTab({ onOpenProfile }: Props) {
                     <div className="text-right text-xs text-black/55">
                       <div>Stripe ${prop.stripeVerifiedRevenue.toFixed(2)}</div>
                       <div>CleanCloud ${prop.legacyCleanCloudRevenue.toFixed(2)}</div>
+                      <div>Clearent ${(prop.clearentXplorPayRevenue ?? 0).toFixed(2)}</div>
                     </div>
                   </div>
                   <div className="mt-3 divide-y divide-black/5">
@@ -560,7 +573,14 @@ export function CustomersTab({ onOpenProfile }: Props) {
                       <div className="text-black/70">{r.unit || "—"}</div>
                       <div className="text-black/80 font-medium">${r.lifetimeSpend.toFixed(2)}</div>
                       <div className="space-y-1">
-                        {(r.legacyCleanCloudRevenue ?? 0) > 0 ? (
+                        {(r.clearentXplorPayRevenue ?? 0) > 0 ? (
+                          <>
+                            <span className="inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-800">
+                              CLEARENT / XPLORPAY
+                            </span>
+                            <div className="text-[11px] font-medium text-black/60">Payment truth · not Stripe</div>
+                          </>
+                        ) : (r.legacyCleanCloudRevenue ?? 0) > 0 ? (
                           <>
                             <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
                               LEGACY · CLEANCLOUD

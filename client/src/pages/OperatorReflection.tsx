@@ -225,6 +225,8 @@ export default function OperatorReflection() {
                 {[
                   ["total tasks completed", metrics?.totalTasksCompleted ?? 0, <CheckCircle2 className="h-5 w-5" />],
                   ["revenue recovered", money(metrics?.revenueRecoveredCents), <DollarSign className="h-5 w-5" />],
+                  ["Clearent / XplorPay collected", money((metrics as any)?.clearentPaymentTruthCents), <DollarSign className="h-5 w-5" />],
+                  ["Clearent / XplorPay settled", money((metrics as any)?.clearentSettledCents), <DollarSign className="h-5 w-5" />],
                   ["revenue at risk detected", money(metrics?.revenueAtRiskDetectedCents), <CalendarDays className="h-5 w-5" />],
                   ["average completion time", minutes(metrics?.averageCompletionMinutes), <Clock className="h-5 w-5" />],
                   ["stale customers reactivated", metrics?.staleCustomersReactivated ?? 0, <Users className="h-5 w-5" />],
