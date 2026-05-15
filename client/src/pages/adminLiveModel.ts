@@ -9,7 +9,7 @@ export const LIVE_LANES: Array<{
   next?: LiveStatus;
   nextLabel?: string;
 }> = [
-  { title: "NEW INTAKE", status: "new", rail: "bg-emerald-600", next: "collected", nextLabel: "Assign" },
+  { title: "NEW INTAKE", status: "new", rail: "bg-emerald-600" },
   { title: "PICKUP READY", status: "collected", rail: "bg-blue-600", next: "processing", nextLabel: "Process" },
   { title: "IN CLEANING", status: "processing", rail: "bg-blue-500", next: "ready", nextLabel: "Ready" },
   { title: "RETURN READY", status: "ready", rail: "bg-emerald-600", next: "delivered", nextLabel: "Deliver" },
@@ -70,7 +70,6 @@ export function statusTone(order: Pick<Order, "status" | "paid">) {
 }
 
 export function nextLiveStatus(order: Pick<Order, "status">): LiveStatus | null {
-  if (order.status === "new") return "collected";
   if (order.status === "collected") return "processing";
   if (order.status === "processing") return "ready";
   if (order.status === "ready") return "delivered";
@@ -78,7 +77,7 @@ export function nextLiveStatus(order: Pick<Order, "status">): LiveStatus | null 
 }
 
 export function nextLiveActionLabel(order: Pick<Order, "status">): string {
-  if (order.status === "new") return "Pickup complete";
+  if (order.status === "new") return "Open pickups";
   if (order.status === "collected") return "Process";
   if (order.status === "processing") return "Ready";
   if (order.status === "ready") return "Deliver";

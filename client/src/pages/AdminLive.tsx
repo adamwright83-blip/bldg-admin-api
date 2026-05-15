@@ -125,7 +125,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
   async function runNextStatusAction(order: Order) {
     const next = nextLiveStatus(order);
     if (!next) {
-      onNavigate(`/intake?orderId=${order.id}`);
+      onNavigate(order.status === "new" ? "/pickups" : `/intake?orderId=${order.id}`);
       return;
     }
     await moveOrder(order, next);
@@ -450,7 +450,11 @@ function LiveTools({
       <button className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white" onClick={() => onIntake(order)}>
         <span>{order.status === "delivered" ? "Payment / Intake" : "Intake"}</span><span>&gt;</span>
       </button>
-      {nextStatus ? (
+      {order.status === "new" ? (
+        <button className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white" onClick={() => onStatusAction(order)}>
+          <span>Open pickups</span><span>&gt;</span>
+        </button>
+      ) : nextStatus ? (
         <button className="flex w-full items-center justify-between border border-black bg-black px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] text-white hover:bg-black/80 disabled:opacity-50" disabled={updatePending} onClick={() => onStatusAction(order)}>
           <span>{nextLiveActionLabel(order)}</span><span>{nextStatus}</span>
         </button>

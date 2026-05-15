@@ -58,8 +58,8 @@ function order(overrides: Partial<Order> = {}): Order {
 
 describe("admin live model", () => {
   it("maps repo statuses to the legal next live action", () => {
-    expect(nextLiveStatus(order({ status: "new" }))).toBe("collected");
-    expect(nextLiveActionLabel(order({ status: "new" }))).toBe("Pickup complete");
+    expect(nextLiveStatus(order({ status: "new" }))).toBeNull();
+    expect(nextLiveActionLabel(order({ status: "new" }))).toBe("Open pickups");
     expect(nextLiveStatus(order({ status: "collected" }))).toBe("processing");
     expect(nextLiveActionLabel(order({ status: "collected" }))).toBe("Process");
     expect(nextLiveStatus(order({ status: "processing" }))).toBe("ready");
@@ -98,5 +98,13 @@ describe("admin live model", () => {
     expect(source).toContain('utils.admin.listByStatus.invalidate({ status: "new" })');
     expect(source).toContain('utils.admin.listByStatus.invalidate({ status: "delivered" })');
     expect(source).toContain("utils.admin.dashboardSummary.invalidate()");
+  });
+
+  it("admin dispatch queue does not mark pickup orders collected before the driver app resolves them", () => {
+    const source = readFileSync(new URL("./Admin.tsx", import.meta.url), "utf8");
+    expect(source).not.toContain("dispatchMutation");
+    expect(source).not.toContain('status: "collected" });\n    queueQuery.refetch();');
+    expect(source).toContain("Order is queued for the driver pickup app.");
+    expect(source).toContain("pickupDate: localYmd()");
   });
 });

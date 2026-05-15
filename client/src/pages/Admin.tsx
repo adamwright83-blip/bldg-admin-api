@@ -276,6 +276,14 @@ function getWeekDates(offset: number) {
   return dates;
 }
 
+function localYmd(date = new Date()): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 /* ===== ADMIN PAGE ===== */
 export default function Admin() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
@@ -423,7 +431,7 @@ function NewOrderTab({
     unit: "",
     specialInstructions: "",
     serviceType: "wash_fold" as "wash_fold" | "dry_cleaning",
-    pickupDate: new Date().toISOString().split("T")[0],
+    pickupDate: localYmd(),
     pickupTimeWindow: TIME_WINDOWS[0],
     deliveryDate: "",
     deliveryTimeWindow: "",
@@ -484,7 +492,6 @@ function NewOrderTab({
 
   const createOrder = trpc.admin.createOrder.useMutation();
   const queueQuery = trpc.admin.listByStatus.useQuery({ status: "new" });
-  const dispatchMutation = trpc.admin.updateStatus.useMutation();
 
   // Refs for autofill detection — browser autofill bypasses React onChange
   const phoneRef = useRef<HTMLInputElement>(null);
@@ -551,7 +558,7 @@ function NewOrderTab({
 
     const pickupDateObj = new Date(form.pickupDate + "T00:00:00");
     pickupDateObj.setDate(pickupDateObj.getDate() + 1);
-    const defaultDelivery = pickupDateObj.toISOString().split("T")[0];
+    const defaultDelivery = localYmd(pickupDateObj);
 
     await createOrder.mutateAsync({
       serviceType: form.serviceType,
@@ -575,9 +582,9 @@ function NewOrderTab({
     queueQuery.refetch();
   };
 
-  const handleDispatch = async (orderId: number) => {
-    await dispatchMutation.mutateAsync({ orderId, status: "collected" });
+  const handleDispatch = async () => {
     queueQuery.refetch();
+    toast.success("Order is queued for the driver pickup app.");
   };
 
   if (submitted) {
@@ -595,7 +602,7 @@ function NewOrderTab({
             setForm({
               firstName: "", lastName: "", email: "", address: "", unit: "",
               specialInstructions: "", serviceType: "wash_fold",
-              pickupDate: new Date().toISOString().split("T")[0],
+              pickupDate: localYmd(),
               pickupTimeWindow: TIME_WINDOWS[0], deliveryDate: "", deliveryTimeWindow: "",
               buildingSlug: SUPPORTED_BUILDINGS[0].value, vendorId: undefined,
             });
@@ -794,13 +801,9 @@ function NewOrderTab({
                   variant="outline"
                   size="sm"
                   className="border-black text-black text-xs shrink-0"
-                  onClick={() => handleDispatch(order.id)}
-                  disabled={dispatchMutation.isPending}
+                  onClick={() => handleDispatch()}
                 >
-                  {dispatchMutation.isPending ? (
-                    <Loader2 className="animate-spin w-3.5 h-3.5 mr-1" />
-                  ) : null}
-                  Dispatch
+                  Queued for Driver
                 </Button>
               </div>
             ))}
