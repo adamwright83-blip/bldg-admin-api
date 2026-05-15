@@ -2,6 +2,7 @@ import type express from "express";
 import { resolveTenantIdFromHeaders } from "@shared/tenantConfig";
 import { sdk } from "./_core/sdk";
 import { importCleanCloudLegacyOrders } from "./cleancloudLegacy";
+import { importCleanCloudPaidOrders, parseCleanCloudPaidReportType } from "./cleancloudPaidOrders";
 import { isValidAgentSharedSecret } from "./agents/s2sEndpoint";
 
 const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
@@ -33,6 +34,7 @@ function extractMultipart(body: Buffer, contentType: string) {
   const parts = text.split(`--${boundary}`);
   let csvText = "";
   let sourceFileName: string | null = null;
+  let sourceReportType: string | null = null;
 
   for (const part of parts) {
     const [rawHeaders, ...rest] = part.split(/\r?\n\r?\n/);
@@ -47,10 +49,12 @@ function extractMultipart(body: Buffer, contentType: string) {
       csvText = content;
     } else if (name === "sourceFileName") {
       sourceFileName = content.trim();
+    } else if (name === "sourceReportType") {
+      sourceReportType = content.trim();
     }
   }
 
-  return { csvText, sourceFileName };
+  return { csvText, sourceFileName, sourceReportType };
 }
 
 function extractImportInput(body: Buffer, contentType: string) {
@@ -65,6 +69,7 @@ function extractImportInput(body: Buffer, contentType: string) {
     return {
       csvText: String(parsed.csvText ?? parsed.csv ?? ""),
       sourceFileName: parsed.sourceFileName != null ? String(parsed.sourceFileName) : null,
+      sourceReportType: parsed.sourceReportType != null ? String(parsed.sourceReportType) : null,
     };
   }
   if (normalizedContentType.includes("application/x-www-form-urlencoded")) {
@@ -72,11 +77,13 @@ function extractImportInput(body: Buffer, contentType: string) {
     return {
       csvText: params.get("csvText") ?? params.get("csv") ?? "",
       sourceFileName: params.get("sourceFileName"),
+      sourceReportType: params.get("sourceReportType"),
     };
   }
   return {
     csvText: bodyText,
     sourceFileName: null,
+    sourceReportType: null,
   };
 }
 
@@ -132,6 +139,50 @@ export function registerCleanCloudImportRoutes(app: express.Express) {
       return res.status(statusCode).json({
         error: error instanceof Error ? error.message : String(error),
         code: statusCode === 401 ? "CLEANCLOUD_IMPORT_UNAUTHORIZED" : "CLEANCLOUD_IMPORT_FAILED",
+      });
+    }
+  });
+
+  app.post("/api/admin/cleancloud/paid-orders/import", async (req, res) => {
+    try {
+      await assertAdminOrAgent(req);
+      const contentType = String(req.headers["content-type"] ?? "text/csv");
+      const body = await readRequestBody(req);
+      const input = extractImportInput(body, contentType);
+
+      if (!input.csvText.trim()) {
+        return res.status(400).json({
+          error: "CSV upload or csvText is required",
+          code: "CLEANCLOUD_PAID_IMPORT_EMPTY",
+        });
+      }
+
+      const tenant = resolveTenantIdFromHeaders(req.headers as Record<string, string | string[] | undefined>);
+      const sourceReportType = parseCleanCloudPaidReportType(
+        input.sourceReportType ?? req.query.sourceReportType ?? "orders_sales"
+      );
+      const summary = await importCleanCloudPaidOrders({
+        csvText: input.csvText,
+        sourceFileName: input.sourceFileName ?? undefined,
+        sourceReportType,
+        tenantId: tenant.tenantId,
+      });
+
+      return res.status(200).json({
+        ...summary,
+        tenantId: tenant.tenantId,
+        invalidated: [
+          "Payment Reconciliation",
+          "customer counts",
+          "Building Leaderboard",
+          "revenue summaries",
+        ],
+      });
+    } catch (error) {
+      const statusCode = (error as any)?.statusCode === 401 ? 401 : 500;
+      return res.status(statusCode).json({
+        error: error instanceof Error ? error.message : String(error),
+        code: statusCode === 401 ? "CLEANCLOUD_PAID_IMPORT_UNAUTHORIZED" : "CLEANCLOUD_PAID_IMPORT_FAILED",
       });
     }
   });

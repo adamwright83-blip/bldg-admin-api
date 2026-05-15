@@ -452,6 +452,58 @@ export const cleancloudLegacyOrders = mysqlTable(
 export type CleancloudLegacyOrder = typeof cleancloudLegacyOrders.$inferSelect;
 export type InsertCleancloudLegacyOrder = typeof cleancloudLegacyOrders.$inferInsert;
 
+export const cleancloudPaidOrders = mysqlTable(
+  "cleancloud_paid_orders",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    sourceReportType: mysqlEnum("sourceReportType", ["orders_sales", "orders_revenue"]).notNull(),
+    sourceFileName: varchar("sourceFileName", { length: 255 }).notNull(),
+    importBatchId: int("importBatchId").notNull(),
+    cleancloudOrderId: varchar("cleancloudOrderId", { length: 128 }).notNull(),
+    cleancloudCustomerId: varchar("cleancloudCustomerId", { length: 128 }),
+    customerName: varchar("customerName", { length: 255 }).notNull(),
+    customerEmail: varchar("customerEmail", { length: 320 }),
+    customerPhone: varchar("customerPhone", { length: 30 }),
+    address: text("address"),
+    placedAtUtc: timestamp("placedAtUtc"),
+    paymentDateUtc: timestamp("paymentDateUtc"),
+    paidDateUtc: timestamp("paidDateUtc"),
+    readyByDateUtc: timestamp("readyByDateUtc"),
+    collectedAtUtc: timestamp("collectedAtUtc"),
+    cleanedAtUtc: timestamp("cleanedAtUtc"),
+    orderStatus: varchar("orderStatus", { length: 100 }),
+    paid: boolean("paid").notNull().default(false),
+    paymentType: varchar("paymentType", { length: 100 }),
+    cardPaymentType: varchar("cardPaymentType", { length: 100 }),
+    totalCents: int("totalCents").notNull().default(0),
+    subtotalCents: int("subtotalCents"),
+    discountCents: int("discountCents"),
+    creditCents: int("creditCents"),
+    totalWeightLbs: decimal("totalWeightLbs", { precision: 8, scale: 2 }),
+    summaryText: text("summaryText"),
+    buildingName: varchar("buildingName", { length: 255 }),
+    buildingSlug: varchar("buildingSlug", { length: 100 }),
+    tower: varchar("tower", { length: 100 }),
+    unit: varchar("unit", { length: 50 }),
+    buildingResolutionStatus: mysqlEnum("buildingResolutionStatus", ["resolved", "unresolved_needs_mapping", "not_applicable"]).notNull(),
+    rawJson: json("rawJson"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    orderReportUnique: uniqueIndex("uq_cleancloud_paid_order_report").on(table.cleancloudOrderId, table.sourceReportType),
+    batchIdx: index("idx_cleancloud_paid_orders_batch").on(table.importBatchId),
+    paymentDateIdx: index("idx_cleancloud_paid_orders_payment_date").on(table.paymentDateUtc),
+    paidDateIdx: index("idx_cleancloud_paid_orders_paid_date").on(table.paidDateUtc),
+    customerIdx: index("idx_cleancloud_paid_orders_customer").on(table.cleancloudCustomerId, table.customerName),
+    buildingIdx: index("idx_cleancloud_paid_orders_building").on(table.buildingSlug, table.tower),
+  })
+);
+
+export type CleancloudPaidOrder = typeof cleancloudPaidOrders.$inferSelect;
+export type InsertCleancloudPaidOrder = typeof cleancloudPaidOrders.$inferInsert;
+
 export const clearentImportBatches = mysqlTable("clearent_import_batches", {
   id: int("id").autoincrement().primaryKey(),
   source: varchar("source", { length: 64 }).notNull().default("clearent_xplorpay"),
@@ -544,6 +596,58 @@ export const clearentDailySummaries = mysqlTable(
 
 export type ClearentDailySummary = typeof clearentDailySummaries.$inferSelect;
 export type InsertClearentDailySummary = typeof clearentDailySummaries.$inferInsert;
+
+export const paymentReconciliationMatches = mysqlTable(
+  "payment_reconciliation_matches",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    processor: mysqlEnum("processor", ["clearent", "stripe", "manual"]).notNull(),
+    processorSourceType: mysqlEnum("processorSourceType", ["clearent_daily_summary", "clearent_transaction", "stripe_payment"]).notNull(),
+    processorSourceId: varchar("processorSourceId", { length: 128 }),
+    orderSource: mysqlEnum("orderSource", ["cleancloud_orders_sales", "cleancloud_orders_revenue", "bldg", "manual"]).notNull(),
+    orderId: int("orderId"),
+    cleancloudOrderId: varchar("cleancloudOrderId", { length: 128 }),
+    cleancloudCustomerId: varchar("cleancloudCustomerId", { length: 128 }),
+    customerName: varchar("customerName", { length: 255 }),
+    customerEmail: varchar("customerEmail", { length: 320 }),
+    customerPhone: varchar("customerPhone", { length: 30 }),
+    buildingName: varchar("buildingName", { length: 255 }),
+    buildingSlug: varchar("buildingSlug", { length: 100 }),
+    tower: varchar("tower", { length: 100 }),
+    unit: varchar("unit", { length: 50 }),
+    matchedAmountCents: int("matchedAmountCents").notNull().default(0),
+    matchStatus: mysqlEnum("matchStatus", [
+      "customer_match",
+      "date_total_match",
+      "manual_match",
+      "possible_duplicate",
+      "unmatched",
+      "needs_review",
+      "ignored",
+    ]).notNull(),
+    matchConfidence: mysqlEnum("matchConfidence", ["high", "medium", "low"]).notNull(),
+    matchReason: text("matchReason").notNull(),
+    localBusinessDate: varchar("localBusinessDate", { length: 20 }).notNull(),
+    rawJson: json("rawJson"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    sourceDateIdx: index("idx_payment_reconciliation_source_date").on(
+      table.processor,
+      table.processorSourceType,
+      table.processorSourceId,
+      table.localBusinessDate
+    ),
+    statusIdx: index("idx_payment_reconciliation_status").on(table.matchStatus),
+    customerIdx: index("idx_payment_reconciliation_customer").on(table.cleancloudCustomerId, table.customerName),
+    buildingIdx: index("idx_payment_reconciliation_building").on(table.buildingSlug, table.tower),
+  })
+);
+
+export type PaymentReconciliationMatch = typeof paymentReconciliationMatches.$inferSelect;
+export type InsertPaymentReconciliationMatch = typeof paymentReconciliationMatches.$inferInsert;
 
 export const operatorTasks = mysqlTable("operator_tasks", {
   id: int("id").autoincrement().primaryKey(),

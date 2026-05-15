@@ -96,11 +96,12 @@ import * as jose from "jose";
 import { BUILDINGS, matchBuilding } from "@shared/buildings";
 import { normalizePropertyTower, TOWER_DEFINITIONS } from "@shared/propertyTowers";
 import { cleanCloudLegacyCustomers, listImportedCleanCloudLegacyCustomers } from "./cleancloudLegacy";
-import { getClearentCollectedTodayCents, getClearentOperationalRevenueCents, listImportedClearentCustomers } from "./clearent";
+import { getClearentCollectedTodayCents, listImportedClearentCustomers } from "./clearent";
 import {
   exportOperationsEventsCsv,
   listOperationsEvents,
 } from "./operationsEventsDashboard";
+import { getPaymentReconciliationDashboard, listReconciledCleanCloudCustomerRevenue } from "./paymentReconciliation";
 import {
   getActedOnTodayCents,
   getAwaitingPaymentCents,
@@ -769,6 +770,18 @@ export const appRouter = router({
         .mutation(async ({ input }) => exportOperationsEventsCsv(input ?? {})),
     }),
 
+    paymentReconciliation: router({
+      summary: protectedProcedure
+        .input(z.object({
+          startDate: z.string().optional(),
+          endDate: z.string().optional(),
+          processor: z.enum(["clearent", "stripe", "all"]).default("all"),
+          businessUnit: z.enum(["laundry_butler", "laundry_farm", "all"]).default("all"),
+          status: z.enum(["matched", "unmatched", "possible_duplicate", "needs_review", "ignored", "all"]).default("all"),
+        }).optional())
+        .query(async ({ input }) => getPaymentReconciliationDashboard(input ?? {})),
+    }),
+
     /** Manual recovery actions logged today (attempted/delivered — not cash collection). */
     getActedOnToday: adminProcedure.query(async ({ ctx }) => {
       const r = await getActedOnTodayCents(ctx.tenantId);
@@ -1337,10 +1350,9 @@ export const appRouter = router({
         const safeLower = (value: unknown): string =>
           typeof value === "string" ? value.toLowerCase() : "";
 
-        const [aggregateRows, paidOrders, clearentOperationalCents] = await Promise.all([
+        const [aggregateRows, paidOrders] = await Promise.all([
           listAdminCustomerAggregates(),
           listPaidOrdersForBuildingRevenue(),
-          getClearentOperationalRevenueCents(),
         ]);
         const includeLegacyCleanCloud = input?.includeLegacyCleanCloud ?? true;
         let rows: any[] = hydrateCustomerAggregates(aggregateRows).map((row) => {
@@ -1441,6 +1453,84 @@ export const appRouter = router({
             clearentXplorPayBadge: "CLEARENT / XPLORPAY",
             clearentStripeStatus: "Not in Stripe",
             note: clearent.note,
+          });
+        }
+
+        const reconciledCleanCloudCustomers = await listReconciledCleanCloudCustomerRevenue();
+        for (const reconciled of reconciledCleanCloudCustomers) {
+          const reconciledEmail = reconciled.customerEmail?.trim().toLowerCase() || "";
+          const reconciledPhoneDigits = reconciled.customerPhone.replace(/\D/g, "");
+          const existing = rows.find((row) => {
+            const rowEmail = row.email?.trim().toLowerCase() || "";
+            const rowPhoneDigits = row.phone.replace(/\D/g, "");
+            return (
+              (reconciledEmail && rowEmail === reconciledEmail) ||
+              (reconciledPhoneDigits.length >= 7 && rowPhoneDigits === reconciledPhoneDigits)
+            );
+          });
+          const tower = normalizePropertyTower(reconciled.buildingName || reconciled.buildingSlug || null);
+          const propertyGroup =
+            reconciled.buildingSlug === "opusla"
+              ? "opus_la"
+              : reconciled.buildingSlug === "centuryparkeast"
+                ? "century_park_east"
+                : tower.propertyGroup;
+
+          if (existing) {
+            existing.clearentXplorPayRevenue =
+              Math.round(((existing.clearentXplorPayRevenue ?? 0) + reconciled.totalCollected) * 100) / 100;
+            existing.totalOperationalRevenue =
+              Math.round((existing.stripeVerifiedRevenue + existing.legacyCleanCloudRevenue + existing.clearentXplorPayRevenue) * 100) / 100;
+            existing.lifetimeSpend = existing.totalOperationalRevenue;
+            existing.totalOrders += reconciled.orderCount;
+            existing.source = existing.source.includes("clearent_reconciled") ? existing.source : `${existing.source}_plus_clearent_reconciled`;
+            existing.paymentProcessor = existing.paymentProcessor.includes("clearent")
+              ? existing.paymentProcessor
+              : `${existing.paymentProcessor},clearent_xplorpay`;
+            existing.clearentXplorPayBadge = "CLEARENT RECONCILED";
+            existing.clearentStripeStatus = "Reconciled to CleanCloud";
+            continue;
+          }
+
+          rows.push({
+            phone: reconciled.customerPhone,
+            firstName: reconciled.customerName.split(/\s+/)[0] || reconciled.customerName,
+            lastName: reconciled.customerName.split(/\s+/).slice(1).join(" "),
+            email: reconciled.customerEmail,
+            unit: reconciled.unit,
+            buildingSlug: reconciled.buildingSlug,
+            floorNumber: deriveFloorNumber(reconciled.unit),
+            address: reconciled.buildingName ?? "",
+            totalOrders: reconciled.orderCount,
+            lifetimeSpend: reconciled.totalCollected,
+            firstOrderAt: new Date(`${reconciled.firstBusinessDate}T12:00:00Z`),
+            lastOrderAt: new Date(`${reconciled.lastBusinessDate}T12:00:00Z`),
+            lastOrderId: 0,
+            avgOrderValue: Math.round((reconciled.totalCollected / Math.max(1, reconciled.orderCount)) * 100) / 100,
+            daysSinceLastOrder: 0,
+            ordersLast30Days: 0,
+            ordersLast90Days: 0,
+            recencyStatus: "active",
+            tier: reconciled.totalCollected >= 300 ? "vip" : "standard",
+            statusColor: "success",
+            bldgUserIds: [],
+            propertyGroup,
+            propertyDisplayName: propertyGroup === "opus_la" ? "OPUS LA" : propertyGroup === "century_park_east" ? "Century Park East" : "Unknown",
+            towerKey: tower.towerKey,
+            towerDisplayName: reconciled.tower ?? tower.towerDisplayName,
+            buildingAddressCanonical: tower.buildingAddressCanonical,
+            stripeVerifiedRevenue: 0,
+            legacyCleanCloudRevenue: 0,
+            clearentXplorPayRevenue: reconciled.totalCollected,
+            totalOperationalRevenue: reconciled.totalCollected,
+            source: "cleancloud_paid_orders_plus_clearent_reconciled",
+            paymentProcessor: "clearent_xplorpay,cleancloud",
+            includedInStripe: false,
+            includedInOperationalRevenue: true,
+            stripePaymentIntentId: null,
+            cleancloudCustomerId: reconciled.cleancloudCustomerId,
+            clearentXplorPayBadge: "CLEARENT RECONCILED",
+            clearentStripeStatus: "Reconciled to CleanCloud",
           });
         }
 
@@ -1642,7 +1732,7 @@ export const appRouter = router({
           legacyHelperText:
             "Legacy CleanCloud orders are included for operational history only. They are not Stripe transactions and will not appear in Stripe reports.",
           clearentHelperText:
-            "Clearent / XplorPay imports are payment truth for collected and settled card activity. They are not Stripe transactions or CleanCloud orders.",
+            "Clearent daily summaries prove money collected. Customer rankings update only after dollars are reconciled to orders.",
           includeLegacyCleanCloud,
           abeDedupedOrLinked,
           grand: {
@@ -1710,13 +1800,6 @@ export const appRouter = router({
           }
         };
         roundTotals(contestTotals.grand);
-        const clearentOperationalRevenue = Math.round((clearentOperationalCents / 100) * 100) / 100;
-        if (clearentOperationalRevenue > contestTotals.grand.clearentXplorPayRevenue) {
-          const delta = clearentOperationalRevenue - contestTotals.grand.clearentXplorPayRevenue;
-          contestTotals.grand.clearentXplorPayRevenue = clearentOperationalRevenue;
-          contestTotals.grand.totalOperationalRevenue =
-            Math.round((contestTotals.grand.totalOperationalRevenue + delta) * 100) / 100;
-        }
         for (const prop of Object.values(contestTotals.properties)) {
           roundTotals(prop as unknown as Record<string, unknown>);
           for (const tower of Object.values(prop.towers)) roundTotals(tower as unknown as Record<string, unknown>);

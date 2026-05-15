@@ -26,6 +26,7 @@ function AdminHostRouter() {
       <Route path="/new-order" component={AdminHostApp} />
       <Route path="/customers" component={AdminHostApp} />
       <Route path="/operations-events" component={AdminHostApp} />
+      <Route path="/payment-reconciliation" component={AdminHostApp} />
       <Route path="/intake" component={AdminHostApp} />
       <Route path="/processing" component={AdminHostApp} />
       <Route path="/ready" component={AdminHostApp} />

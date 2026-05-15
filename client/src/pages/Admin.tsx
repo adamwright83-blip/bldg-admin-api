@@ -7,6 +7,7 @@ import { LoginForm } from "@/components/LoginForm";
 import { CustomerProfileDrawer } from "@/components/CustomerProfileDrawer";
 import { CustomersTab } from "@/components/CustomersTab";
 import OperationsEventsPage from "./OperationsEventsPage";
+import PaymentReconciliationPage from "./PaymentReconciliationPage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Search, Check, Copy, AlertCircle, ChevronLeft, ChevronRight, MapPin, Phone, MessageSquare, Package, Menu, Trash2, Camera, Mic, X } from "lucide-react";
@@ -93,6 +94,7 @@ const STATUS_FOR_TAB: Record<Tab, Order["status"] | null> = {
   "New Order": null,
   Customers: null,
   "Operations Events": null,
+  "Payment Reconciliation": null,
   Intake: "collected",
   Processing: "processing",
   Ready: "ready",
@@ -3093,6 +3095,7 @@ export function AdminTabPanels({
       )}
       {activeTab === "Customers" && <CustomersTab onOpenProfile={(p) => setProfilePhone(p)} />}
       {activeTab === "Operations Events" && <OperationsEventsPage />}
+      {activeTab === "Payment Reconciliation" && <PaymentReconciliationPage />}
       {activeTab === "Intake" && (
         <IntakeTab
           initialSelectedOrderId={initialSelectedOrderId}
