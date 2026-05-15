@@ -1,5 +1,6 @@
-import { and, desc, eq, gte, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, lt, or, sql, type SQL } from "drizzle-orm";
 import { operationsEvents, type OperationsEvent } from "../drizzle/schema";
+import { getDashboardTimeZone, zonedDayStartUtc, zonedNextDayYmd, zonedYmd } from "./dashboardZoned";
 import { getDb } from "./db";
 
 export type OperationsEventsBusinessUnit = "all" | "laundry_butler" | "laundry_farm";
@@ -20,7 +21,8 @@ export type OperationsEventsFilters = {
 export type NormalizedOperationsEventsFilters = Required<Omit<OperationsEventsFilters, "customerSearch">> & {
   customerSearch: string;
   startUtc: Date;
-  endUtc: Date;
+  endExclusiveUtc: Date;
+  timeZone: string;
 };
 
 export const OPERATIONS_EVENTS_CSV_COLUMNS = [
@@ -56,18 +58,16 @@ export const OPERATIONS_EVENTS_CSV_COLUMNS = [
 
 const DEFAULT_PAGE_SIZE = 50;
 
-function ymd(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
 export function normalizeOperationsEventsFilters(
   input: OperationsEventsFilters = {},
   now = new Date()
 ): NormalizedOperationsEventsFilters {
-  const endDate = input.endDate?.trim() || ymd(now);
+  const timeZone = getDashboardTimeZone();
+  const endDate = input.endDate?.trim() || zonedYmd(now, timeZone);
   const fallbackStart = new Date(now);
   fallbackStart.setUTCDate(fallbackStart.getUTCDate() - 30);
-  const startDate = input.startDate?.trim() || ymd(fallbackStart);
+  const startDate = input.startDate?.trim() || zonedYmd(fallbackStart, timeZone);
+  const endExclusiveDate = zonedNextDayYmd(endDate, timeZone);
   const page = Math.max(1, Math.trunc(input.page ?? 1));
   const pageSize = Math.min(Math.max(1, Math.trunc(input.pageSize ?? DEFAULT_PAGE_SIZE)), 200);
   return {
@@ -79,8 +79,9 @@ export function normalizeOperationsEventsFilters(
     customerSearch: input.customerSearch?.trim() ?? "",
     page,
     pageSize,
-    startUtc: new Date(`${startDate}T00:00:00.000Z`),
-    endUtc: new Date(`${endDate}T23:59:59.999Z`),
+    startUtc: zonedDayStartUtc(startDate, timeZone),
+    endExclusiveUtc: zonedDayStartUtc(endExclusiveDate, timeZone),
+    timeZone,
   };
 }
 
@@ -100,7 +101,7 @@ function knownBuildingWhere(building: "opus_la" | "century_park_east"): SQL {
 export function operationsEventsWhere(filters: NormalizedOperationsEventsFilters): SQL | undefined {
   const clauses: SQL[] = [
     gte(operationsEvents.actualEventTimestamp, filters.startUtc),
-    lte(operationsEvents.actualEventTimestamp, filters.endUtc),
+    lt(operationsEvents.actualEventTimestamp, filters.endExclusiveUtc),
   ];
 
   if (filters.businessUnit === "laundry_butler") clauses.push(eq(operationsEvents.tenantId, "default"));
@@ -177,6 +178,23 @@ export function operationsEventsToCsv(rows: OperationsEvent[]): string {
     lines.push(values.map(csvCell).join(","));
   }
   return `${lines.join("\n")}\n`;
+}
+
+export function summarizeOperationsEventRows(rows: OperationsEvent[]) {
+  return {
+    totalEvents: rows.length,
+    pickupCount: rows.filter((row) => row.sourceEventType === "pickup_completed").length,
+    dropoffCount: rows.filter((row) => row.sourceEventType === "dropoff_completed").length,
+    unresolvedBuildingCount: rows.filter((row) => row.buildingResolutionStatus === "unresolved_needs_mapping").length,
+  };
+}
+
+export function operationEventWithinDashboardDateRange(
+  row: OperationsEvent,
+  filters: Pick<NormalizedOperationsEventsFilters, "startUtc" | "endExclusiveUtc">
+): boolean {
+  const ts = row.actualEventTimestamp.getTime();
+  return ts >= filters.startUtc.getTime() && ts < filters.endExclusiveUtc.getTime();
 }
 
 export function operationsEventsCsvFilename(filters: NormalizedOperationsEventsFilters): string {

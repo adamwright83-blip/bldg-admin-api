@@ -16,14 +16,22 @@ type BuildingFilter = "all" | "opus_la" | "century_park_east" | "other" | "unres
 type EventTypeFilter = "all" | "pickup_completed" | "dropoff_completed";
 
 const PAGE_SIZE = 50;
+const OPERATOR_TIME_ZONE = "America/Los_Angeles";
 
 function dateInputValue(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: OPERATOR_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value;
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 function defaultStartDate(): string {
   const d = new Date();
-  d.setUTCDate(d.getUTCDate() - 30);
+  d.setDate(d.getDate() - 30);
   return dateInputValue(d);
 }
 

@@ -4,10 +4,12 @@ import { MySqlDialect } from "drizzle-orm/mysql-core";
 import type { OperationsEvent } from "../drizzle/schema";
 import {
   OPERATIONS_EVENTS_CSV_COLUMNS,
+  operationEventWithinDashboardDateRange,
   normalizeOperationsEventsFilters,
   operationsEventsCsvFilename,
   operationsEventsToCsv,
   operationsEventsWhere,
+  summarizeOperationsEventRows,
 } from "./operationsEventsDashboard";
 
 function event(overrides: Partial<OperationsEvent> = {}): OperationsEvent {
@@ -82,6 +84,56 @@ describe("operations events dashboard helpers", () => {
     });
   });
 
+  it("interprets displayed dates as Los Angeles local days with an exclusive next-day end", () => {
+    const filters = normalizeOperationsEventsFilters({
+      startDate: "2026-04-15",
+      endDate: "2026-05-15",
+    });
+    expect(filters.timeZone).toBe("America/Los_Angeles");
+    expect(filters.startUtc.toISOString()).toBe("2026-04-15T07:00:00.000Z");
+    expect(filters.endExclusiveUtc.toISOString()).toBe("2026-05-16T07:00:00.000Z");
+
+    const query = whereSql({ startDate: "2026-04-15", endDate: "2026-05-15" });
+    expect(query.sql).toContain("`operations_events`.`actualEventTimestamp` >= ?");
+    expect(query.sql).toContain("`operations_events`.`actualEventTimestamp` < ?");
+    expect(query.sql).not.toContain("`operations_events`.`actualEventTimestamp` <= ?");
+  });
+
+  it("includes the verified production smoke-test rows when the UI end date is 05/15/2026", () => {
+    const filters = normalizeOperationsEventsFilters({
+      startDate: "2026-04-15",
+      endDate: "2026-05-15",
+      businessUnit: "all",
+    });
+    const rows = [
+      event({
+        id: 1,
+        orderId: 101,
+        customerName: "Adam Carlin",
+        sourceEventType: "pickup_completed",
+        actualEventTimestamp: new Date("2026-05-15T04:51:32.000Z"),
+      }),
+      event({
+        id: 2,
+        orderId: 97,
+        customerName: "Abe Chung",
+        sourceEventType: "dropoff_completed",
+        actualEventTimestamp: new Date("2026-05-15T04:53:36.000Z"),
+      }),
+    ];
+
+    expect(rows.every((row) => operationEventWithinDashboardDateRange(row, filters))).toBe(true);
+  });
+
+  it("keeps the displayed end date inclusive but excludes the following Los Angeles local day", () => {
+    const filters = normalizeOperationsEventsFilters({
+      startDate: "2026-05-15",
+      endDate: "2026-05-15",
+    });
+    expect(operationEventWithinDashboardDateRange(event({ actualEventTimestamp: new Date("2026-05-16T06:59:59.999Z") }), filters)).toBe(true);
+    expect(operationEventWithinDashboardDateRange(event({ actualEventTimestamp: new Date("2026-05-16T07:00:00.000Z") }), filters)).toBe(false);
+  });
+
   it("event type filter restricts results to pickup or dropoff events", () => {
     const query = whereSql({ eventType: "pickup_completed" });
     expect(query.sql).toContain("`operations_events`.`sourceEventType` = ?");
@@ -92,6 +144,34 @@ describe("operations events dashboard helpers", () => {
     const query = whereSql({ businessUnit: "laundry_farm" });
     expect(query.sql).toContain("`operations_events`.`tenantId` = ?");
     expect(query.params).toContain("laundry_farm");
+  });
+
+  it("does not exclude tenantId default rows when business unit filter is All", () => {
+    const query = whereSql({ businessUnit: "all" });
+    expect(query.sql).not.toContain("`operations_events`.`tenantId` = ?");
+    expect(operationEventWithinDashboardDateRange(event({ tenantId: "default" }), normalizeOperationsEventsFilters({}))).toBe(true);
+  });
+
+  it("summarizes the verified fixture rows as total 2, pickup 1, dropoff 1", () => {
+    const summary = summarizeOperationsEventRows([
+      event({
+        id: 1,
+        customerName: "Adam Carlin",
+        sourceEventType: "pickup_completed",
+        actualEventTimestamp: new Date("2026-05-15T04:51:32.000Z"),
+      }),
+      event({
+        id: 2,
+        customerName: "Abe Chung",
+        sourceEventType: "dropoff_completed",
+        actualEventTimestamp: new Date("2026-05-15T04:53:36.000Z"),
+      }),
+    ]);
+    expect(summary).toMatchObject({
+      totalEvents: 2,
+      pickupCount: 1,
+      dropoffCount: 1,
+    });
   });
 
   it("building filter handles known and unresolved building buckets", () => {
