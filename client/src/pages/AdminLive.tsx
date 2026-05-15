@@ -5,80 +5,29 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import type { Order } from "@shared/types";
 import type { ReactNode } from "react";
-
-type LiveStatus = "new" | "collected" | "processing" | "ready" | "delivered";
+import {
+  LIVE_LANES,
+  amountCents,
+  customerName,
+  isActionableDelivered,
+  isToday,
+  money,
+  nextLiveActionLabel,
+  nextLiveStatus,
+  olderThan24Hours,
+  phoneHref,
+  pickOneThingRightNow,
+  serviceLabel,
+  shortBuilding,
+  statusTone,
+  syncSelectedOrder,
+  type LiveStatus,
+} from "./adminLiveModel";
 
 type AdminLiveProps = {
   onNavigate: (path: string) => void;
   onOpenCustomer: (phone: string) => void;
 };
-
-const LANES: Array<{
-  title: string;
-  status: LiveStatus;
-  rail: string;
-  next?: LiveStatus;
-  nextLabel?: string;
-}> = [
-  { title: "NEW INTAKE", status: "new", rail: "bg-emerald-600", next: "collected", nextLabel: "Assign" },
-  { title: "PICKUP READY", status: "collected", rail: "bg-blue-600", next: "processing", nextLabel: "Process" },
-  { title: "IN CLEANING", status: "processing", rail: "bg-blue-500", next: "ready", nextLabel: "Ready" },
-  { title: "RETURN READY", status: "ready", rail: "bg-emerald-600", next: "delivered", nextLabel: "Delivered" },
-  { title: "DELIVERED / CHARGE", status: "delivered", rail: "bg-emerald-700" },
-];
-
-function todayYmd() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function money(value: unknown) {
-  const n = typeof value === "number" ? value : Number(value ?? 0);
-  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function amountCents(order: Order) {
-  return Math.round(Number(order.total ?? 0) * 100);
-}
-
-function customerName(order: Order) {
-  return `${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() || "Unknown customer";
-}
-
-function serviceLabel(serviceType: Order["serviceType"]) {
-  return serviceType === "dry_cleaning" ? "Dry cleaning" : "Wash & fold";
-}
-
-function shortBuilding(order: Order) {
-  return (order.buildingSlug || order.address || "Building").replace(/[-_]/g, " ").toUpperCase();
-}
-
-function phoneHref(phone: string) {
-  const digits = phone.replace(/[^\d+]/g, "");
-  if (!digits) return "";
-  return `sms:${digits.startsWith("+") ? digits : `+1${digits.replace(/^1/, "")}`}`;
-}
-
-function isToday(date?: string | null) {
-  return !!date && date === todayYmd();
-}
-
-function isActionableDelivered(order: Order) {
-  const hasPositiveTotal = amountCents(order) >= 50;
-  return !order.paid || (!order.paid && hasPositiveTotal) || isToday(order.deliveryDate);
-}
-
-function olderThan24Hours(date: Date | string | null | undefined) {
-  if (!date) return false;
-  return Date.now() - new Date(date).getTime() > 24 * 60 * 60 * 1000;
-}
-
-function statusTone(order: Order) {
-  if (order.status === "delivered" && !order.paid) return "text-red-700";
-  if (order.paid) return "text-emerald-700";
-  if (order.status === "collected" || order.status === "processing") return "text-blue-700";
-  return "text-black/60";
-}
 
 function MiniMetric({ label, value, tone = "text-black" }: { label: string; value: string; tone?: string }) {
   return (
@@ -92,6 +41,7 @@ function MiniMetric({ label, value, tone = "text-black" }: { label: string; valu
 export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps) {
   const utils = trpc.useUtils();
   const [clock, setClock] = useState(new Date());
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const statusQueries = {
     new: trpc.admin.listByStatus.useQuery({ status: "new" }),
     collected: trpc.admin.listByStatus.useQuery({ status: "collected" }),
@@ -128,11 +78,27 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
     ...ordersByStatus,
     delivered: actionableDelivered,
   };
+  const allLiveOrders = useMemo(
+    () => Object.values(ordersByStatus).flat(),
+    [ordersByStatus]
+  );
+  const selectedOrder = syncSelectedOrder(selectedOrderId, allLiveOrders);
   const readyDueToday = ordersByStatus.ready.filter((o) => isToday(o.deliveryDate));
   const readyToCharge = [...ordersByStatus.ready, ...ordersByStatus.delivered].filter((o) => !o.paid && amountCents(o) >= 50);
   const blocked = unpaidDelivered.filter((o) => olderThan24Hours(o.updatedAt ?? o.createdAt));
-  const priority = unpaidDelivered[0] ?? readyDueToday[0] ?? ordersByStatus.new[0] ?? null;
+  const staleCollectedOrProcessing = [...ordersByStatus.collected, ...ordersByStatus.processing].filter((o) => olderThan24Hours(o.updatedAt ?? o.createdAt));
+  const priority = pickOneThingRightNow({
+    unpaidDelivered,
+    readyDueToday,
+    newOrders: ordersByStatus.new,
+    staleCollectedOrProcessing,
+    blocked,
+  });
   const loading = Object.values(statusQueries).some((q) => q.isLoading);
+
+  useEffect(() => {
+    if (selectedOrderId && !selectedOrder && !loading) setSelectedOrderId(null);
+  }, [loading, selectedOrder, selectedOrderId]);
 
   async function invalidateLive() {
     await Promise.all([
@@ -154,6 +120,20 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
     } catch (error: any) {
       toast.error(error?.message || "Could not update order.");
     }
+  }
+
+  async function runNextStatusAction(order: Order) {
+    const next = nextLiveStatus(order);
+    if (!next) {
+      onNavigate(`/intake?orderId=${order.id}`);
+      return;
+    }
+    await moveOrder(order, next);
+  }
+
+  function openOrder(order: Order) {
+    setSelectedOrderId(order.id);
+    onOpenCustomer(order.phone);
   }
 
   async function charge(order: Order) {
@@ -185,16 +165,23 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
     }
   }
 
-  function OrderCard({ order, lane }: { order: Order; lane: (typeof LANES)[number] }) {
+  function OrderCard({ order, lane }: { order: Order; lane: (typeof LIVE_LANES)[number] }) {
     const hasCard = !!(order.stripeCustomerId || order.stripePaymentMethodId);
+    const isSelected = selectedOrderId === order.id;
     return (
-      <article className="relative border border-[#D8D1C4] bg-[#FBFAF6] pl-3 pr-3 py-3">
+      <article
+        className={`relative cursor-pointer border bg-[#FBFAF6] pl-3 pr-3 py-3 transition ${
+          isSelected ? "border-black shadow-[inset_0_0_0_1px_#000]" : "border-[#D8D1C4] hover:border-black/35"
+        }`}
+        onClick={() => setSelectedOrderId(order.id)}
+        aria-selected={isSelected}
+      >
         <span className={`absolute left-0 top-0 h-full w-0.5 ${lane.rail}`} />
         <div className="flex items-start justify-between gap-2">
           <div className="font-mono text-[11px] font-semibold text-black/65">#LB-{order.id}</div>
           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${order.paid ? "bg-emerald-600" : hasCard ? "bg-blue-600" : "bg-amber-500"}`} />
         </div>
-        <button className="mt-1 text-left text-[13px] font-bold uppercase tracking-[0.08em]" onClick={() => onOpenCustomer(order.phone)}>
+        <button className="mt-1 text-left text-[13px] font-bold uppercase tracking-[0.08em]" onClick={(event) => { event.stopPropagation(); openOrder(order); }}>
           {customerName(order)}
         </button>
         <div className="mt-1 space-y-0.5 text-[11px] uppercase tracking-[0.08em] text-black/70">
@@ -209,27 +196,27 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
         {order.specialInstructions ? <div className="mt-2 border-t border-[#D8D1C4] pt-2 text-[11px] text-black/55 line-clamp-2">{order.specialInstructions}</div> : null}
         <div className="mt-3 grid grid-cols-3 gap-1.5">
           {order.phone && lane.status !== "processing" ? (
-            <a className="border border-[#C9C0B1] bg-white px-2 py-1 text-center text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" href={phoneHref(order.phone)}>
+            <a className="border border-[#C9C0B1] bg-white px-2 py-1 text-center text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" href={phoneHref(order.phone)} onClick={(event) => event.stopPropagation()}>
               Text
             </a>
           ) : lane.status === "processing" ? (
-            <button className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={() => onOpenCustomer(order.phone)}>
+            <button className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={(event) => { event.stopPropagation(); openOrder(order); }}>
               Notes
             </button>
           ) : null}
-          <button className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={() => onOpenCustomer(order.phone)}>
+          <button className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={(event) => { event.stopPropagation(); openOrder(order); }}>
             View
           </button>
           {lane.next ? (
-            <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={updateStatus.isPending} onClick={() => moveOrder(order, lane.next!)}>
+            <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={updateStatus.isPending} onClick={(event) => { event.stopPropagation(); setSelectedOrderId(order.id); moveOrder(order, lane.next!); }}>
               {lane.nextLabel}
             </button>
           ) : order.paid ? (
-            <a className="border border-[#C9C0B1] bg-white px-2 py-1 text-center text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" href={`/receipt/${order.id}`} target="_blank" rel="noreferrer">
+            <a className="border border-[#C9C0B1] bg-white px-2 py-1 text-center text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" href={`/receipt/${order.id}`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
               Receipt
             </a>
           ) : (
-            <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={chargeCard.isPending} onClick={() => charge(order)}>
+            <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={chargeCard.isPending} onClick={(event) => { event.stopPropagation(); setSelectedOrderId(order.id); charge(order); }}>
               {hasCard && amountCents(order) >= 50 ? "Charge" : "Intake"}
             </button>
           )}
@@ -264,7 +251,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
           ) : (
             <div className="overflow-x-auto border border-[#D8D1C4] bg-[#FBFAF6]">
               <div className="grid grid-cols-1 divide-y divide-[#D8D1C4] md:min-w-[1120px] md:grid-cols-5 md:divide-x md:divide-y-0">
-                {LANES.map((lane) => (
+                {LIVE_LANES.map((lane) => (
                   <section key={lane.status} className="flex min-h-[320px] flex-col md:min-h-[620px]">
                     <div className="flex items-center justify-between border-b border-[#D8D1C4] px-3 py-3">
                       <h2 className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/75">{lane.title}</h2>
@@ -316,6 +303,14 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
         </main>
 
         <aside className="space-y-4">
+          <CommandPanel title="SELECTED ORDER">
+            {selectedOrder ? (
+              <SelectedOrderSummary order={selectedOrder} />
+            ) : (
+              <div className="text-sm text-black/45">Select an order to use Live Tools.</div>
+            )}
+          </CommandPanel>
+
           <CommandPanel title="ONE THING RIGHT NOW">
             {priority ? (
               <div className="border border-red-200 bg-red-50 p-3 text-center">
@@ -324,7 +319,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
                 <div className="font-mono text-xs text-black/55">Order #{priority.id}</div>
                 <div className="mt-2 font-mono text-2xl font-semibold">{money(priority.total)}</div>
                 <div className="mt-3 grid gap-2">
-                  <Button className="h-8 rounded-none bg-black text-xs uppercase tracking-[0.12em] text-white hover:bg-black/80" onClick={() => onOpenCustomer(priority.phone)}>Open order</Button>
+                  <Button className="h-8 rounded-none bg-black text-xs uppercase tracking-[0.12em] text-white hover:bg-black/80" onClick={() => { setSelectedOrderId(priority.id); openOrder(priority); }}>Open order</Button>
                   <Button variant="outline" className="h-8 rounded-none border-[#C9C0B1] bg-white text-xs uppercase tracking-[0.12em]" onClick={() => onNavigate(`/intake?orderId=${priority.id}`)}>Open intake</Button>
                   {priority.phone ? <button className="border border-[#C9C0B1] bg-white px-3 py-2 text-center text-xs font-bold uppercase tracking-[0.12em]" onClick={() => copySms(priority)}>Copy SMS</button> : null}
                 </div>
@@ -333,16 +328,16 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
           </CommandPanel>
 
           <CommandPanel title="LIVE TOOLS">
-            {[
-              ["Intake", "/intake"],
-              ["Processing", "/processing"],
-              ["Ready", "/ready"],
-              ["Pickups & Deliveries", "/pickups"],
-            ].map(([label, path]) => (
-              <button key={label} className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white" onClick={() => onNavigate(path)}>
-                <span>{label}</span><span>&gt;</span>
-              </button>
-            ))}
+            <LiveTools
+              order={selectedOrder}
+              updatePending={updateStatus.isPending}
+              chargePending={chargeCard.isPending}
+              onOpen={openOrder}
+              onIntake={(order) => onNavigate(`/intake?orderId=${order.id}`)}
+              onStatusAction={runNextStatusAction}
+              onCharge={charge}
+              onCopySms={copySms}
+            />
           </CommandPanel>
 
           <CommandPanel title="DRIVER ACTIVE">
@@ -388,6 +383,95 @@ function CommandPanel({ title, children }: { title: string; children: ReactNode 
       </div>
       {children}
     </section>
+  );
+}
+
+function SelectedOrderSummary({ order }: { order: Order }) {
+  const hasCard = !!(order.stripeCustomerId || order.stripePaymentMethodId);
+  return (
+    <div className="space-y-3 text-xs">
+      <div>
+        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-black/45">Active order</div>
+        <div className="mt-1 text-sm font-bold uppercase tracking-[0.08em]">{customerName(order)}</div>
+        <div className="font-mono text-black/55">#LB-{order.id} / {order.status}</div>
+      </div>
+      <div className="grid gap-2 border-t border-[#D8D1C4] pt-3 uppercase tracking-[0.08em] text-black/65">
+        <div>{shortBuilding(order)} {order.unit ? `/ UNIT ${order.unit}` : ""}</div>
+        <div>{serviceLabel(order.serviceType)}</div>
+        <div>Pickup {order.pickupDate} / {order.pickupTimeWindow || "window n/a"}</div>
+        <div>Return {order.deliveryDate || "not set"} / {order.deliveryTimeWindow || "window n/a"}</div>
+        <div className={statusTone(order)}>{order.paid ? "Paid" : hasCard ? "Card on file" : "Payment needs intake"} / {money(order.total)}</div>
+      </div>
+    </div>
+  );
+}
+
+function LiveTools({
+  order,
+  updatePending,
+  chargePending,
+  onOpen,
+  onIntake,
+  onStatusAction,
+  onCharge,
+  onCopySms,
+}: {
+  order: Order | null;
+  updatePending: boolean;
+  chargePending: boolean;
+  onOpen: (order: Order) => void;
+  onIntake: (order: Order) => void;
+  onStatusAction: (order: Order) => void;
+  onCharge: (order: Order) => void;
+  onCopySms: (order: Order) => void;
+}) {
+  if (!order) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-black/45">Select an order to use Live Tools.</p>
+        {["View", "Intake", "Process", "Ready", "Deliver", "Text"].map((label) => (
+          <button key={label} className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] opacity-40" disabled>
+            <span>{label}</span><span>&gt;</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  const nextStatus = nextLiveStatus(order);
+  const hasCard = !!(order.stripeCustomerId || order.stripePaymentMethodId);
+  const canCharge = order.status === "delivered" && hasCard && amountCents(order) >= 50 && !order.paid;
+
+  return (
+    <div className="space-y-2">
+      <button className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white" onClick={() => onOpen(order)}>
+        <span>View</span><span>&gt;</span>
+      </button>
+      <button className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white" onClick={() => onIntake(order)}>
+        <span>{order.status === "delivered" ? "Payment / Intake" : "Intake"}</span><span>&gt;</span>
+      </button>
+      {nextStatus ? (
+        <button className="flex w-full items-center justify-between border border-black bg-black px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] text-white hover:bg-black/80 disabled:opacity-50" disabled={updatePending} onClick={() => onStatusAction(order)}>
+          <span>{nextLiveActionLabel(order)}</span><span>{nextStatus}</span>
+        </button>
+      ) : (
+        <button className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white disabled:opacity-50" disabled={chargePending} onClick={() => onCharge(order)}>
+          <span>{canCharge ? "Charge card" : "Open payment"}</span><span>&gt;</span>
+        </button>
+      )}
+      {order.phone ? (
+        <a className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white" href={phoneHref(order.phone)}>
+          <span>Text</span><span>&gt;</span>
+        </a>
+      ) : (
+        <button className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] opacity-40" disabled>
+          <span>Text unavailable</span><span>&gt;</span>
+        </button>
+      )}
+      <button className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white" onClick={() => onCopySms(order)}>
+        <span>Copy SMS</span><span>&gt;</span>
+      </button>
+    </div>
   );
 }
 
