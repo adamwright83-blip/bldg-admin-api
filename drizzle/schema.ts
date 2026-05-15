@@ -108,6 +108,50 @@ export const orders = mysqlTable("orders", {
 export type Order = typeof orders.$inferSelect;
 export type InsertOrder = typeof orders.$inferInsert;
 
+export const operationsEvents = mysqlTable(
+  "operations_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    businessUnitLabel: varchar("businessUnitLabel", { length: 128 }).notNull(),
+    source: mysqlEnum("source", ["driver_app_bldg", "cleancloud_csv", "cleancloud_playbook", "system_backfill"]).notNull(),
+    sourceEventType: mysqlEnum("sourceEventType", ["pickup_completed", "dropoff_completed"]).notNull(),
+    eventStatus: mysqlEnum("eventStatus", ["completed", "corrected", "voided"]).notNull().default("completed"),
+    orderId: int("orderId"),
+    customerName: varchar("customerName", { length: 255 }).notNull(),
+    customerPhone: varchar("customerPhone", { length: 30 }),
+    customerEmail: varchar("customerEmail", { length: 320 }),
+    serviceType: varchar("serviceType", { length: 64 }).notNull(),
+    buildingName: varchar("buildingName", { length: 255 }),
+    buildingSlug: varchar("buildingSlug", { length: 100 }),
+    tower: varchar("tower", { length: 100 }),
+    buildingResolutionStatus: mysqlEnum("buildingResolutionStatus", ["resolved", "unresolved_needs_mapping", "not_applicable"]).notNull(),
+    unit: varchar("unit", { length: 50 }),
+    scheduledDate: varchar("scheduledDate", { length: 20 }),
+    scheduledWindow: varchar("scheduledWindow", { length: 50 }),
+    actualEventTimestamp: timestamp("actualEventTimestamp").notNull(),
+    actorUserId: varchar("actorUserId", { length: 128 }),
+    actorDisplayName: varchar("actorDisplayName", { length: 255 }),
+    vendorId: int("vendorId"),
+    bagCount: int("bagCount"),
+    garmentCount: int("garmentCount"),
+    weightLbs: decimal("weightLbs", { precision: 8, scale: 2 }),
+    rawJson: json("rawJson"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    sourceEventOrderUnique: uniqueIndex("uq_operations_events_source_type_order").on(table.source, table.sourceEventType, table.orderId),
+    tenantTimeIdx: index("idx_operations_events_tenant_time").on(table.tenantId, table.actualEventTimestamp),
+    orderIdx: index("idx_operations_events_order").on(table.orderId),
+    buildingIdx: index("idx_operations_events_building").on(table.buildingSlug, table.tower),
+    resolutionIdx: index("idx_operations_events_resolution").on(table.buildingResolutionStatus),
+  })
+);
+
+export type OperationsEvent = typeof operationsEvents.$inferSelect;
+export type InsertOperationsEvent = typeof operationsEvents.$inferInsert;
+
 /**
  * Single row per tenant: weekly revenue target for deficit / predator UI.
  */

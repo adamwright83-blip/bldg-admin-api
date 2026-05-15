@@ -1794,7 +1794,11 @@ export const appRouter = router({
         if (ctx.vendorSession && order.vendorId !== ctx.vendorSession.vendorId) {
           throw new Error("Unauthorized");
         }
-        await updateOrderStatus(input.orderId, input.status);
+        await updateOrderStatus(input.orderId, input.status, {
+          source: "driver_app_bldg",
+          actorUserId: ctx.user?.id ?? null,
+          actorDisplayName: ctx.user?.name ?? ctx.user?.email ?? null,
+        });
 
         // SMS: Pickup en route when marking as collected
         if (input.status === "collected") {

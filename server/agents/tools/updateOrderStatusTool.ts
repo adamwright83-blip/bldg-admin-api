@@ -16,7 +16,11 @@ export const updateOrderStatusTool: AgentTool<Record<string, any>> = {
     if (!["new", "intake-pending", "collected", "processing", "ready", "delivered"].includes(status)) {
       throw new Error("Invalid order status");
     }
-    await updateOrderStatus(orderId, status);
+    await updateOrderStatus(orderId, status, {
+      source: "driver_app_bldg",
+      actorUserId: ctx.actorId ?? null,
+      actorDisplayName: ctx.actorType,
+    });
     return { entityType: "order", entityId: orderId, output: { orderId, status } };
   },
 };

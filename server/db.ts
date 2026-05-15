@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, max,
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users,
-  orders, InsertOrder, Order,
+  orders, InsertOrder, Order, operationsEvents,
   vendors, InsertVendor, Vendor,
   vendorUsers, InsertVendorUser, VendorUser,
   vendorServiceCoverage, InsertVendorServiceCoverage, VendorServiceCoverage,
@@ -40,6 +40,10 @@ import {
   zonedWeekRangeUtcContaining,
   zonedYmd,
 } from "./dashboardZoned";
+import {
+  buildOperationEventForOrderStatusChange,
+  type OperationsEventActorContext,
+} from "./operationsEvents";
 
 export type { AdminCustomerAggregateDbRow };
 
@@ -523,12 +527,35 @@ export async function getOrdersByDateAndStatus(
 
 export async function updateOrderStatus(
   orderId: number,
-  status: Order["status"]
+  status: Order["status"],
+  actor?: OperationsEventActorContext
 ): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(orders).set({ status }).where(eq(orders.id, orderId));
+  await db.transaction(async (tx) => {
+    const existing = await tx.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+    const previousOrder = existing[0];
+    await tx.update(orders).set({ status }).where(eq(orders.id, orderId));
+    if (!previousOrder) return;
+
+    const event = buildOperationEventForOrderStatusChange({
+      order: previousOrder,
+      previousStatus: previousOrder.status,
+      nextStatus: status,
+      actor,
+    });
+    if (!event) return;
+
+    await tx
+      .insert(operationsEvents)
+      .values(event)
+      .onDuplicateKeyUpdate({
+        set: {
+          updatedAt: new Date(),
+        },
+      });
+  });
 }
 
 export async function listRecentAgentEvents(
