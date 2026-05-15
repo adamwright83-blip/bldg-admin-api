@@ -220,7 +220,7 @@ export type WriteOrderToSheetResult =
   | { ok: true; tabName: string }
   | { ok: false; reason: string };
 
-async function getSheetsContext(date: Date): Promise<
+export async function getSheetsContext(date: Date): Promise<
   | {
       auth: Auth.JWT;
       spreadsheetId: string;
@@ -297,6 +297,27 @@ async function getSheetsContext(date: Date): Promise<
     col1: dayCol0 + 1,
     colLetter: colIndex0ToLetter(dayCol0),
   };
+}
+
+export async function setSheetCellValue(
+  auth: Auth.JWT,
+  spreadsheetId: string,
+  tabName: string,
+  row1Based: number,
+  col1Based: number,
+  value: string | number,
+): Promise<void> {
+  const sheets = google.sheets({ version: "v4", auth });
+  const colLet = colIndex0ToLetter(col1Based - 1);
+  const a1 = `${colLet}${row1Based}`;
+  const range = `${escapeSheetName(tabName)}!${a1}`;
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [[value]] },
+    auth,
+  });
 }
 
 export async function writeOrderToSheet(

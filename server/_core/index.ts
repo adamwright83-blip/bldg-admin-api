@@ -27,6 +27,7 @@ import { registerVendorBookingPublicRoutes } from "../vendorBookingPublicApi";
 import { registerCleanCloudImportRoutes } from "../cleancloudImportRoute";
 import { registerClearentImportRoutes } from "../clearentImportRoute";
 import { registerPaymentReconciliationRoutes } from "../paymentReconciliationRoute";
+import { registerLaundryFarmSheetSyncRoutes } from "../laundryFarmSheetSyncRoute";
 import { z } from "zod";
 
 const warnedUnknownTenantHosts = new Set<string>();
@@ -235,6 +236,7 @@ async function startServer() {
   registerCleanCloudImportRoutes(app);
   registerClearentImportRoutes(app);
   registerPaymentReconciliationRoutes(app);
+  registerLaundryFarmSheetSyncRoutes(app);
 
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
