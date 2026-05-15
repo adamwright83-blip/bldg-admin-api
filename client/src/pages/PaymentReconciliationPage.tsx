@@ -38,8 +38,23 @@ function formatDate(value: string | Date | null | undefined): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function localDateKey(value: string | Date | null | undefined): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return dateInputValue(d);
+}
+
 function reportLabel(sourceReportType: string): string {
   return sourceReportType === "orders_revenue" ? "orders_revenue fallback" : "orders_sales";
+}
+
+function coverageLabel(status: string): string {
+  if (status === "matched") return "matched";
+  if (status === "needs_review") return "needs review";
+  if (status === "missing_clearent") return "missing Clearent";
+  if (status === "missing_cleancloud") return "missing CleanCloud";
+  return "no activity";
 }
 
 export default function PaymentReconciliationPage() {
@@ -54,6 +69,14 @@ export default function PaymentReconciliationPage() {
   );
   const reconciliation = trpc.admin.paymentReconciliation.summary.useQuery(queryInput);
   const data = reconciliation.data;
+  const coverageByDate = useMemo(
+    () => new Map((data?.sourceCoverage ?? []).map((row) => [row.localBusinessDate, row])),
+    [data?.sourceCoverage]
+  );
+  const matchedOrderIds = useMemo(
+    () => new Set((data?.matchedRows ?? []).map((row) => row.cleancloudOrderId).filter(Boolean)),
+    [data?.matchedRows]
+  );
 
   return (
     <div className="space-y-5">
@@ -108,7 +131,8 @@ export default function PaymentReconciliationPage() {
       <div className="grid gap-3 md:grid-cols-4">
         {[
           ["Clearent collected", money(data?.totals.clearentCollectedCents)],
-          ["CleanCloud candidates", money(data?.totals.cleancloudCandidateOrderCents)],
+          ["All CleanCloud candidates", money(data?.totals.allCleancloudCandidateOrderCents ?? data?.totals.cleancloudCandidateOrderCents)],
+          ["Comparable candidates", money(data?.totals.comparableCleancloudCandidateOrderCents)],
           ["Reconciled customer revenue", money(data?.totals.reconciledCustomerRevenueCents)],
           ["Unresolved delta", money(data?.totals.unresolvedDeltaCents)],
         ].map(([label, value]) => (
@@ -118,6 +142,84 @@ export default function PaymentReconciliationPage() {
           </div>
         ))}
       </div>
+
+      <section className="rounded border border-black/10 bg-white">
+        <div className="border-b border-black/10 p-4">
+          <h2 className="font-semibold">Matched / Reconciled Orders</h2>
+          <p className="mt-1 text-sm text-black/50">Every dollar in reconciled customer revenue must appear here.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-[1000px] w-full text-sm">
+            <thead className="bg-black/[0.03] text-left text-xs uppercase tracking-wide text-black/50">
+              <tr>
+                <th className="px-3 py-3">Date</th>
+                <th className="px-3 py-3">Status</th>
+                <th className="px-3 py-3">Reason</th>
+                <th className="px-3 py-3">Order</th>
+                <th className="px-3 py-3">Customer</th>
+                <th className="px-3 py-3">Amount</th>
+                <th className="px-3 py-3">Building</th>
+                <th className="px-3 py-3">Source</th>
+                <th className="px-3 py-3">Confidence</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-black/10">
+              {data?.matchedRows.length ? data.matchedRows.map((row) => (
+                <tr key={row.id}>
+                  <td className="px-3 py-3">{row.localBusinessDate}</td>
+                  <td className="px-3 py-3 font-mono text-xs">{row.matchStatus}</td>
+                  <td className="px-3 py-3">{row.matchReason}</td>
+                  <td className="px-3 py-3 font-mono text-xs">{row.cleancloudOrderId || "-"}</td>
+                  <td className="px-3 py-3">{row.customerName || "-"}</td>
+                  <td className="px-3 py-3">{money(row.matchedAmountCents)}</td>
+                  <td className="px-3 py-3">{row.buildingName || row.buildingSlug || "Unresolved / Needs Mapping"}</td>
+                  <td className="px-3 py-3 font-mono text-xs">{row.orderSource}</td>
+                  <td className="px-3 py-3 font-mono text-xs">{row.matchConfidence}</td>
+                </tr>
+              )) : (
+                <tr><td className="px-3 py-6 text-center text-black/45" colSpan={9}>No matched rows for these filters. Reconciled customer revenue should be $0.00.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded border border-black/10 bg-white">
+        <div className="border-b border-black/10 p-4">
+          <h2 className="font-semibold">Source Coverage</h2>
+          <p className="mt-1 text-sm text-black/50">Only dates with Clearent entered totals and CleanCloud candidates are comparable.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-[900px] w-full text-sm">
+            <thead className="bg-black/[0.03] text-left text-xs uppercase tracking-wide text-black/50">
+              <tr>
+                <th className="px-3 py-3">Date</th>
+                <th className="px-3 py-3">Clearent entered</th>
+                <th className="px-3 py-3">Clearent settled</th>
+                <th className="px-3 py-3">CleanCloud candidates</th>
+                <th className="px-3 py-3">Comparable</th>
+                <th className="px-3 py-3">Status</th>
+                <th className="px-3 py-3">Delta</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-black/10">
+              {data?.sourceCoverage.length ? data.sourceCoverage.map((row) => (
+                <tr key={row.localBusinessDate}>
+                  <td className="px-3 py-3">{row.localBusinessDate}</td>
+                  <td className="px-3 py-3">{row.clearentEnteredCents == null ? "-" : money(row.clearentEnteredCents)}</td>
+                  <td className="px-3 py-3">{row.clearentSettledCents == null ? "-" : money(row.clearentSettledCents)}</td>
+                  <td className="px-3 py-3">{money(row.cleancloudCandidateCents)}</td>
+                  <td className="px-3 py-3">{row.comparable ? "yes" : "no"}</td>
+                  <td className="px-3 py-3 font-mono text-xs">{coverageLabel(row.status)}</td>
+                  <td className="px-3 py-3">{row.comparable ? money(row.unresolvedDeltaCents) : "-"}</td>
+                </tr>
+              )) : (
+                <tr><td className="px-3 py-6 text-center text-black/45" colSpan={7}>No source coverage for these filters.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="rounded border border-black/10 bg-white">
         <div className="border-b border-black/10 p-4">
@@ -156,7 +258,7 @@ export default function PaymentReconciliationPage() {
       <section className="rounded border border-black/10 bg-white">
         <div className="border-b border-black/10 p-4">
           <h2 className="font-semibold">CleanCloud Candidate Paid Orders</h2>
-          <p className="mt-1 text-sm text-black/50">Paid card orders with Clearent card type, grouped by local payment date.</p>
+          <p className="mt-1 text-sm text-black/50">Candidate orders are not counted in customer rankings unless reconciled.</p>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-[1000px] w-full text-sm">
@@ -168,20 +270,29 @@ export default function PaymentReconciliationPage() {
                 <th className="px-3 py-3">Report</th>
                 <th className="px-3 py-3">Amount</th>
                 <th className="px-3 py-3">Building</th>
+                <th className="px-3 py-3">Coverage</th>
+                <th className="px-3 py-3">Revenue status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-black/10">
-              {data?.cleancloudCandidateOrders.length ? data.cleancloudCandidateOrders.map((row) => (
-                <tr key={`${row.sourceReportType}-${row.cleancloudOrderId}`}>
-                  <td className="px-3 py-3 font-mono text-xs">{row.cleancloudOrderId}</td>
-                  <td className="px-3 py-3">{row.customerName}</td>
-                  <td className="px-3 py-3">{formatDate(row.paymentDateUtc ?? row.paidDateUtc)}</td>
-                  <td className="px-3 py-3 font-mono text-xs">{reportLabel(row.sourceReportType)}</td>
-                  <td className="px-3 py-3">{money(row.totalCents)}</td>
-                  <td className="px-3 py-3">{row.buildingName || row.buildingSlug || "Unresolved / Needs Mapping"}</td>
-                </tr>
-              )) : (
-                <tr><td className="px-3 py-6 text-center text-black/45" colSpan={6}>No CleanCloud Clearent card candidates for these filters.</td></tr>
+              {data?.cleancloudCandidateOrders.length ? data.cleancloudCandidateOrders.map((row) => {
+                const candidateDate = localDateKey(row.paymentDateUtc ?? row.paidDateUtc);
+                const coverage = candidateDate ? coverageByDate.get(candidateDate) : undefined;
+                const isMatched = matchedOrderIds.has(row.cleancloudOrderId);
+                return (
+                  <tr key={`${row.sourceReportType}-${row.cleancloudOrderId}`}>
+                    <td className="px-3 py-3 font-mono text-xs">{row.cleancloudOrderId}</td>
+                    <td className="px-3 py-3">{row.customerName}</td>
+                    <td className="px-3 py-3">{formatDate(row.paymentDateUtc ?? row.paidDateUtc)}</td>
+                    <td className="px-3 py-3 font-mono text-xs">{reportLabel(row.sourceReportType)}</td>
+                    <td className="px-3 py-3">{money(row.totalCents)}</td>
+                    <td className="px-3 py-3">{row.buildingName || row.buildingSlug || "Unresolved / Needs Mapping"}</td>
+                    <td className="px-3 py-3 font-mono text-xs">{coverage ? coverageLabel(coverage.status) : "outside coverage"}</td>
+                    <td className="px-3 py-3">{isMatched ? "counted via matched row" : coverage?.status === "needs_review" ? "excluded: needs review" : coverage?.status === "missing_clearent" ? "excluded: missing Clearent" : "excluded"}</td>
+                  </tr>
+                );
+              }) : (
+                <tr><td className="px-3 py-6 text-center text-black/45" colSpan={8}>No CleanCloud Clearent card candidates for these filters.</td></tr>
               )}
             </tbody>
           </table>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildSourceCoverageRows,
   chooseCleanCloudCandidatesForDate,
   dedupeCleanCloudCandidates,
   reconcileClearentDailySummaryWithCleanCloudCandidates,
@@ -142,5 +143,78 @@ describe("Clearent / CleanCloud reconciliation", () => {
     );
 
     expect(reconciledCustomerRevenueCents([{ matchStatus: result.status, matchedAmountCents: 17292 }])).toBe(0);
+  });
+
+  it("builds one source coverage row per date and marks missing Clearent correctly", () => {
+    const coverage = buildSourceCoverageRows({
+      startDate: "2026-05-10",
+      endDate: "2026-05-12",
+      clearentDailySummaries: [
+        {
+          sourceReportBasis: "entered_date",
+          reportDateUtc: new Date("2026-05-12T07:00:00.000Z"),
+          totalSalesCents: 17292,
+          depositAmountCents: null,
+          netSalesCents: null,
+        },
+      ],
+      cleancloudCandidateOrders: [
+        ...may12Candidates,
+        candidate({
+          id: 50,
+          cleancloudOrderId: "500",
+          paymentDateUtc: new Date("2026-05-11T20:00:00.000Z"),
+          totalCents: 4500,
+        }),
+      ],
+    });
+
+    expect(coverage).toHaveLength(3);
+    expect(coverage.find((row) => row.localBusinessDate === "2026-05-12")).toMatchObject({
+      status: "needs_review",
+      comparable: true,
+      cleancloudCandidateCents: 19407,
+      unresolvedDeltaCents: -2115,
+    });
+    expect(coverage.find((row) => row.localBusinessDate === "2026-05-11")).toMatchObject({
+      status: "missing_clearent",
+      comparable: false,
+      cleancloudCandidateCents: 4500,
+      unresolvedDeltaCents: 0,
+    });
+    expect(coverage.find((row) => row.localBusinessDate === "2026-05-10")).toMatchObject({
+      status: "no_activity",
+      comparable: false,
+    });
+  });
+
+  it("unresolved delta only uses comparable dates", () => {
+    const coverage = buildSourceCoverageRows({
+      startDate: "2026-05-11",
+      endDate: "2026-05-12",
+      clearentDailySummaries: [
+        {
+          sourceReportBasis: "entered_date",
+          reportDateUtc: new Date("2026-05-12T07:00:00.000Z"),
+          totalSalesCents: 17292,
+          depositAmountCents: null,
+          netSalesCents: null,
+        },
+      ],
+      cleancloudCandidateOrders: [
+        ...may12Candidates,
+        candidate({
+          id: 50,
+          cleancloudOrderId: "500",
+          paymentDateUtc: new Date("2026-05-11T20:00:00.000Z"),
+          totalCents: 999999,
+        }),
+      ],
+    });
+
+    const unresolvedDelta = coverage
+      .filter((row) => row.comparable && row.status === "needs_review")
+      .reduce((sum, row) => sum + row.unresolvedDeltaCents, 0);
+    expect(unresolvedDelta).toBe(-2115);
   });
 });

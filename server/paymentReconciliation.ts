@@ -59,6 +59,16 @@ export type DailyDateTotalReconciliation = {
   candidates: CleanCloudCandidateOrder[];
 };
 
+export type SourceCoverageRow = {
+  localBusinessDate: string;
+  clearentEnteredCents: number | null;
+  clearentSettledCents: number | null;
+  cleancloudCandidateCents: number;
+  comparable: boolean;
+  status: "matched" | "needs_review" | "missing_clearent" | "missing_cleancloud" | "no_activity";
+  unresolvedDeltaCents: number;
+};
+
 export function localBusinessDateForUtc(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   const d = value instanceof Date ? value : new Date(value);
@@ -103,6 +113,69 @@ export function dedupeCleanCloudCandidates(rows: CleanCloudCandidateOrder[]): Cl
     const bDate = b.sourceReportType === "orders_sales" ? b.paymentDateUtc : b.paidDateUtc;
     return (bDate?.getTime() ?? 0) - (aDate?.getTime() ?? 0) || Number(b.cleancloudOrderId) - Number(a.cleancloudOrderId);
   });
+}
+
+export function cleanCloudCandidateDate(row: CleanCloudCandidateOrder): string | null {
+  return row.sourceReportType === "orders_sales"
+    ? localBusinessDateForUtc(row.paymentDateUtc)
+    : localBusinessDateForUtc(row.paidDateUtc);
+}
+
+export function buildSourceCoverageRows(input: {
+  startDate: string;
+  endDate: string;
+  clearentDailySummaries: Array<Pick<ClearentDailySummary, "sourceReportBasis" | "reportDateUtc" | "totalSalesCents" | "depositAmountCents" | "netSalesCents">>;
+  cleancloudCandidateOrders: CleanCloudCandidateOrder[];
+}): SourceCoverageRow[] {
+  const clearentEntered = new Map<string, number>();
+  const clearentSettled = new Map<string, number>();
+  const cleancloud = new Map<string, number>();
+
+  for (const row of input.clearentDailySummaries) {
+    const date = localBusinessDateForUtc(row.reportDateUtc);
+    if (!date) continue;
+    if (row.sourceReportBasis === "entered_date") {
+      clearentEntered.set(date, (clearentEntered.get(date) ?? 0) + row.totalSalesCents);
+    }
+    if (row.sourceReportBasis === "settled_date") {
+      clearentSettled.set(date, (clearentSettled.get(date) ?? 0) + (row.depositAmountCents ?? row.netSalesCents ?? row.totalSalesCents));
+    }
+  }
+
+  for (const row of input.cleancloudCandidateOrders) {
+    const date = cleanCloudCandidateDate(row);
+    if (!date) continue;
+    cleancloud.set(date, (cleancloud.get(date) ?? 0) + row.totalCents);
+  }
+
+  const rows: SourceCoverageRow[] = [];
+  const cursor = new Date(`${input.startDate}T00:00:00Z`);
+  const end = new Date(`${input.endDate}T00:00:00Z`);
+  while (cursor.getTime() <= end.getTime()) {
+    const date = cursor.toISOString().slice(0, 10);
+    const entered = clearentEntered.get(date) ?? null;
+    const settled = clearentSettled.get(date) ?? null;
+    const cleancloudCents = cleancloud.get(date) ?? 0;
+    const comparable = entered != null && cleancloudCents > 0;
+    const unresolvedDeltaCents = comparable ? entered - cleancloudCents : 0;
+    let status: SourceCoverageRow["status"] = "no_activity";
+    if (comparable) status = unresolvedDeltaCents === 0 ? "matched" : "needs_review";
+    else if (entered == null && cleancloudCents > 0) status = "missing_clearent";
+    else if (entered != null && cleancloudCents === 0) status = "missing_cleancloud";
+    else if (settled != null) status = "no_activity";
+    rows.push({
+      localBusinessDate: date,
+      clearentEnteredCents: entered,
+      clearentSettledCents: settled,
+      cleancloudCandidateCents: cleancloudCents,
+      comparable,
+      status,
+      unresolvedDeltaCents,
+    });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return rows.reverse();
 }
 
 export function reconcileClearentDailySummaryWithCleanCloudCandidates(
@@ -291,17 +364,23 @@ export async function reconcileClearentDailySummaries(input: PaymentReconciliati
     )
     .orderBy(desc(clearentDailySummaries.reportDateUtc));
 
-  for (const summary of summaryRows) {
-    const reconciliation = reconcileClearentDailySummaryWithCleanCloudCandidates(summary, candidates);
+  const localDates = Array.from(
+    new Set(summaryRows.map((summary) => localBusinessDateForUtc(summary.reportDateUtc)).filter((date): date is string => Boolean(date)))
+  );
+  for (const localDate of localDates) {
     await db
       .delete(paymentReconciliationMatches)
       .where(
         and(
           eq(paymentReconciliationMatches.processor, "clearent"),
           eq(paymentReconciliationMatches.processorSourceType, "clearent_daily_summary"),
-          eq(paymentReconciliationMatches.processorSourceId, String(summary.id))
+          eq(paymentReconciliationMatches.localBusinessDate, localDate)
         )
       );
+  }
+
+  for (const summary of summaryRows) {
+    const reconciliation = reconcileClearentDailySummaryWithCleanCloudCandidates(summary, candidates);
     const rows = buildMatchRows(summary, reconciliation);
     if (rows.length) await db.insert(paymentReconciliationMatches).values(rows);
   }
@@ -354,31 +433,42 @@ export async function getPaymentReconciliationDashboard(input: PaymentReconcilia
   const needsReviewRows = matchedRows.filter((row) => row.matchStatus === "needs_review");
   const unmatchedClearentRows = matchedRows.filter((row) => row.matchStatus === "unmatched");
   const exactMatchedRows = matchedRows.filter((row) => row.matchStatus === "date_total_match" || row.matchStatus === "customer_match" || row.matchStatus === "manual_match");
+  const visibleMatchedRows = exactMatchedRows;
   const clearentCollectedCents = clearentDaily
     .filter((row) => row.sourceReportBasis === "entered_date")
     .reduce((sum, row) => sum + row.totalSalesCents, 0);
   const clearentSettledCents = clearentDaily
     .filter((row) => row.sourceReportBasis === "settled_date")
     .reduce((sum, row) => sum + (row.depositAmountCents ?? row.netSalesCents ?? row.totalSalesCents), 0);
-  const cleancloudCandidateOrderCents = candidates.reduce((sum, row) => sum + row.totalCents, 0);
-  const reconciledCustomerRevenue = reconciledCustomerRevenueCents(matchedRows);
-  const unresolvedDeltaCents = needsReviewRows.reduce((sum, row) => {
-    const raw = row.rawJson as { unresolvedDeltaCents?: number } | null;
-    return sum + Number(raw?.unresolvedDeltaCents ?? 0);
-  }, 0);
+  const sourceCoverage = buildSourceCoverageRows({
+    startDate: filters.startDate,
+    endDate: filters.endDate,
+    clearentDailySummaries: clearentDaily,
+    cleancloudCandidateOrders: candidates,
+  });
+  const allCleancloudCandidateOrderCents = candidates.reduce((sum, row) => sum + row.totalCents, 0);
+  const comparableCleancloudCandidateOrderCents = sourceCoverage
+    .filter((row) => row.clearentEnteredCents != null)
+    .reduce((sum, row) => sum + row.cleancloudCandidateCents, 0);
+  const reconciledCustomerRevenue = reconciledCustomerRevenueCents(visibleMatchedRows);
+  const unresolvedDeltaCents = sourceCoverage
+    .filter((row) => row.comparable && row.status === "needs_review")
+    .reduce((sum, row) => sum + row.unresolvedDeltaCents, 0);
 
   return {
     filters,
     totals: {
       clearentCollectedCents,
       clearentSettledCents,
-      cleancloudCandidateOrderCents,
+      cleancloudCandidateOrderCents: allCleancloudCandidateOrderCents,
+      allCleancloudCandidateOrderCents,
+      comparableCleancloudCandidateOrderCents,
       reconciledCustomerRevenueCents: reconciledCustomerRevenue,
       unmatchedClearentCents: unmatchedClearentRows.reduce((sum, row) => {
         const raw = row.rawJson as { clearentTotalCents?: number } | null;
         return sum + Number(raw?.clearentTotalCents ?? 0);
       }, 0),
-      unmatchedCleanCloudOrderCents: Math.max(0, cleancloudCandidateOrderCents - reconciledCustomerRevenue),
+      unmatchedCleanCloudOrderCents: Math.max(0, comparableCleancloudCandidateOrderCents - reconciledCustomerRevenue),
       possibleDuplicateCents: matchedRows
         .filter((row) => row.matchStatus === "possible_duplicate")
         .reduce((sum, row) => sum + row.matchedAmountCents, 0),
@@ -386,10 +476,11 @@ export async function getPaymentReconciliationDashboard(input: PaymentReconcilia
     },
     clearentDailySummaries: clearentDaily,
     cleancloudCandidateOrders: candidates,
-    matchedRows: exactMatchedRows,
+    matchedRows: visibleMatchedRows,
     needsReviewRows,
     unmatchedClearentRows,
     unmatchedCleanCloudRows: [],
+    sourceCoverage,
     warning: "Clearent import currently contains daily aggregate data, not transaction-level customer data.",
   };
 }
