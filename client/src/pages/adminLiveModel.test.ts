@@ -59,7 +59,7 @@ function order(overrides: Partial<Order> = {}): Order {
 describe("admin live model", () => {
   it("maps repo statuses to the legal next live action", () => {
     expect(nextLiveStatus(order({ status: "new" }))).toBeNull();
-    expect(nextLiveActionLabel(order({ status: "new" }))).toBe("Open pickups");
+    expect(nextLiveActionLabel(order({ status: "new" }))).toBe("Dispatch Driver");
     expect(nextLiveStatus(order({ status: "collected" }))).toBe("processing");
     expect(nextLiveActionLabel(order({ status: "collected" }))).toBe("Process");
     expect(nextLiveStatus(order({ status: "processing" }))).toBe("ready");
@@ -98,6 +98,19 @@ describe("admin live model", () => {
     expect(source).toContain('utils.admin.listByStatus.invalidate({ status: "new" })');
     expect(source).toContain('utils.admin.listByStatus.invalidate({ status: "delivered" })');
     expect(source).toContain("utils.admin.dashboardSummary.invalidate()");
+  });
+
+  it("New Intake dispatch is separate from explicit pickup completion", () => {
+    const modelSource = readFileSync(new URL("./adminLiveModel.ts", import.meta.url), "utf8");
+    const liveSource = readFileSync(new URL("./AdminLive.tsx", import.meta.url), "utf8");
+    expect(modelSource).toContain('{ title: "NEW INTAKE", status: "new", rail: "bg-emerald-600" }');
+    expect(modelSource).not.toContain('status: "new", rail: "bg-emerald-600", next: "collected"');
+    expect(liveSource).toContain("async function dispatchDriver(order: Order)");
+    expect(liveSource).toContain("async function completePickup(order: Order)");
+    expect(liveSource).toContain('toast.success(`#LB-${order.id} remains queued for driver pickup.`)');
+    expect(liveSource).toContain('await moveOrder(order, "collected");');
+    expect(liveSource).toContain("Dispatch Driver");
+    expect(liveSource).toContain("Pickup Complete");
   });
 
   it("admin dispatch queue does not mark pickup orders collected before the driver app resolves them", () => {

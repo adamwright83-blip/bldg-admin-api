@@ -77,7 +77,7 @@ export function nextLiveStatus(order: Pick<Order, "status">): LiveStatus | null 
 }
 
 export function nextLiveActionLabel(order: Pick<Order, "status">): string {
-  if (order.status === "new") return "Open pickups";
+  if (order.status === "new") return "Dispatch Driver";
   if (order.status === "collected") return "Process";
   if (order.status === "processing") return "Ready";
   if (order.status === "ready") return "Deliver";

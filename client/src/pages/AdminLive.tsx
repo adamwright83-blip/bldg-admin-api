@@ -125,10 +125,20 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
   async function runNextStatusAction(order: Order) {
     const next = nextLiveStatus(order);
     if (!next) {
-      onNavigate(order.status === "new" ? "/pickups" : `/intake?orderId=${order.id}`);
+      onNavigate(`/intake?orderId=${order.id}`);
       return;
     }
     await moveOrder(order, next);
+  }
+
+  async function dispatchDriver(order: Order) {
+    setSelectedOrderId(order.id);
+    await invalidateLive();
+    toast.success(`#LB-${order.id} remains queued for driver pickup.`);
+  }
+
+  async function completePickup(order: Order) {
+    await moveOrder(order, "collected");
   }
 
   function openOrder(order: Order) {
@@ -168,6 +178,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
   function OrderCard({ order, lane }: { order: Order; lane: (typeof LIVE_LANES)[number] }) {
     const hasCard = !!(order.stripeCustomerId || order.stripePaymentMethodId);
     const isSelected = selectedOrderId === order.id;
+    const actionGridClass = order.status === "new" ? "grid-cols-2" : "grid-cols-3";
     return (
       <article
         className={`relative cursor-pointer border bg-[#FBFAF6] pl-3 pr-3 py-3 transition ${
@@ -194,7 +205,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
           </div>
         </div>
         {order.specialInstructions ? <div className="mt-2 border-t border-[#D8D1C4] pt-2 text-[11px] text-black/55 line-clamp-2">{order.specialInstructions}</div> : null}
-        <div className="mt-3 grid grid-cols-3 gap-1.5">
+        <div className={`mt-3 grid ${actionGridClass} gap-1.5`}>
           {order.phone && lane.status !== "processing" ? (
             <a className="border border-[#C9C0B1] bg-white px-2 py-1 text-center text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" href={phoneHref(order.phone)} onClick={(event) => event.stopPropagation()}>
               Text
@@ -207,7 +218,16 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
           <button className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={(event) => { event.stopPropagation(); openOrder(order); }}>
             View
           </button>
-          {lane.next ? (
+          {order.status === "new" ? (
+            <>
+              <button className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={(event) => { event.stopPropagation(); dispatchDriver(order); }}>
+                Dispatch Driver
+              </button>
+              <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={updateStatus.isPending} onClick={(event) => { event.stopPropagation(); setSelectedOrderId(order.id); completePickup(order); }}>
+                Pickup Complete
+              </button>
+            </>
+          ) : lane.next ? (
             <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={updateStatus.isPending} onClick={(event) => { event.stopPropagation(); setSelectedOrderId(order.id); moveOrder(order, lane.next!); }}>
               {lane.nextLabel}
             </button>
@@ -335,6 +355,8 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
               onOpen={openOrder}
               onIntake={(order) => onNavigate(`/intake?orderId=${order.id}`)}
               onStatusAction={runNextStatusAction}
+              onDispatch={dispatchDriver}
+              onPickupComplete={completePickup}
               onCharge={charge}
               onCopySms={copySms}
             />
@@ -413,6 +435,8 @@ function LiveTools({
   onOpen,
   onIntake,
   onStatusAction,
+  onDispatch,
+  onPickupComplete,
   onCharge,
   onCopySms,
 }: {
@@ -422,6 +446,8 @@ function LiveTools({
   onOpen: (order: Order) => void;
   onIntake: (order: Order) => void;
   onStatusAction: (order: Order) => void;
+  onDispatch: (order: Order) => void;
+  onPickupComplete: (order: Order) => void;
   onCharge: (order: Order) => void;
   onCopySms: (order: Order) => void;
 }) {
@@ -451,9 +477,14 @@ function LiveTools({
         <span>{order.status === "delivered" ? "Payment / Intake" : "Intake"}</span><span>&gt;</span>
       </button>
       {order.status === "new" ? (
-        <button className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white" onClick={() => onStatusAction(order)}>
-          <span>Open pickups</span><span>&gt;</span>
-        </button>
+        <>
+          <button className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white" onClick={() => onDispatch(order)}>
+            <span>Dispatch Driver</span><span>safe</span>
+          </button>
+          <button className="flex w-full items-center justify-between border border-black bg-black px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] text-white hover:bg-black/80 disabled:opacity-50" disabled={updatePending} onClick={() => onPickupComplete(order)}>
+            <span>Pickup Complete</span><span>collected</span>
+          </button>
+        </>
       ) : nextStatus ? (
         <button className="flex w-full items-center justify-between border border-black bg-black px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] text-white hover:bg-black/80 disabled:opacity-50" disabled={updatePending} onClick={() => onStatusAction(order)}>
           <span>{nextLiveActionLabel(order)}</span><span>{nextStatus}</span>
