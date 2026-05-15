@@ -98,6 +98,10 @@ import { normalizePropertyTower, TOWER_DEFINITIONS } from "@shared/propertyTower
 import { cleanCloudLegacyCustomers, listImportedCleanCloudLegacyCustomers } from "./cleancloudLegacy";
 import { getClearentCollectedTodayCents, getClearentOperationalRevenueCents, listImportedClearentCustomers } from "./clearent";
 import {
+  exportOperationsEventsCsv,
+  listOperationsEvents,
+} from "./operationsEventsDashboard";
+import {
   getActedOnTodayCents,
   getAwaitingPaymentCents,
   upsertAwaitingPaymentAdjustmentCents,
@@ -738,6 +742,31 @@ export const appRouter = router({
           },
         },
       };
+    }),
+
+    operationsEvents: router({
+      list: protectedProcedure
+        .input(z.object({
+          startDate: z.string().optional(),
+          endDate: z.string().optional(),
+          businessUnit: z.enum(["all", "laundry_butler", "laundry_farm"]).default("all"),
+          building: z.enum(["all", "opus_la", "century_park_east", "other", "unresolved"]).default("all"),
+          eventType: z.enum(["all", "pickup_completed", "dropoff_completed"]).default("all"),
+          customerSearch: z.string().max(120).optional(),
+          page: z.number().int().min(1).default(1),
+          pageSize: z.number().int().min(1).max(200).default(50),
+        }).optional())
+        .query(async ({ input }) => listOperationsEvents(input ?? {})),
+      exportCsv: protectedProcedure
+        .input(z.object({
+          startDate: z.string().optional(),
+          endDate: z.string().optional(),
+          businessUnit: z.enum(["all", "laundry_butler", "laundry_farm"]).default("all"),
+          building: z.enum(["all", "opus_la", "century_park_east", "other", "unresolved"]).default("all"),
+          eventType: z.enum(["all", "pickup_completed", "dropoff_completed"]).default("all"),
+          customerSearch: z.string().max(120).optional(),
+        }).optional())
+        .mutation(async ({ input }) => exportOperationsEventsCsv(input ?? {})),
     }),
 
     /** Manual recovery actions logged today (attempted/delivered — not cash collection). */

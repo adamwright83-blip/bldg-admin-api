@@ -143,8 +143,11 @@ export const operationsEvents = mysqlTable(
   (table) => ({
     sourceEventOrderUnique: uniqueIndex("uq_operations_events_source_type_order").on(table.source, table.sourceEventType, table.orderId),
     tenantTimeIdx: index("idx_operations_events_tenant_time").on(table.tenantId, table.actualEventTimestamp),
+    sourceEventTypeIdx: index("idx_operations_events_event_type").on(table.sourceEventType),
     orderIdx: index("idx_operations_events_order").on(table.orderId),
+    customerNameIdx: index("idx_operations_events_customer_name").on(table.customerName),
     buildingIdx: index("idx_operations_events_building").on(table.buildingSlug, table.tower),
+    vendorIdx: index("idx_operations_events_vendor").on(table.vendorId),
     resolutionIdx: index("idx_operations_events_resolution").on(table.buildingResolutionStatus),
   })
 );

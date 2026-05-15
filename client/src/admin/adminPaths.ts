@@ -1,6 +1,7 @@
 export const ADMIN_WORKSPACE_TABS = [
   "New Order",
   "Customers",
+  "Operations Events",
   "Intake",
   "Processing",
   "Ready",
@@ -15,6 +16,7 @@ export type AdminWorkspaceTab = (typeof ADMIN_WORKSPACE_TABS)[number];
 export const TAB_PATH: Record<AdminWorkspaceTab, string> = {
   "New Order": "/new-order",
   Customers: "/customers",
+  "Operations Events": "/operations-events",
   Intake: "/intake",
   Processing: "/processing",
   Ready: "/ready",
