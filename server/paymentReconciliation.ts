@@ -78,14 +78,31 @@ export function chooseCleanCloudCandidatesForDate(
   localBusinessDate: string,
   rows: CleanCloudCandidateOrder[]
 ): CleanCloudCandidateOrder[] {
-  const candidates = rows.filter(isCleanCloudClearentCandidate);
-  const sales = candidates.filter(
-    (row) => row.sourceReportType === "orders_sales" && localBusinessDateForUtc(row.paymentDateUtc) === localBusinessDate
+  return dedupeCleanCloudCandidates(
+    rows.filter((row) => {
+      if (!isCleanCloudClearentCandidate(row)) return false;
+      const candidateDate =
+        row.sourceReportType === "orders_sales"
+          ? localBusinessDateForUtc(row.paymentDateUtc)
+          : localBusinessDateForUtc(row.paidDateUtc);
+      return candidateDate === localBusinessDate;
+    })
   );
-  if (sales.length) return sales;
-  return candidates.filter(
-    (row) => row.sourceReportType === "orders_revenue" && localBusinessDateForUtc(row.paidDateUtc) === localBusinessDate
-  );
+}
+
+export function dedupeCleanCloudCandidates(rows: CleanCloudCandidateOrder[]): CleanCloudCandidateOrder[] {
+  const byOrderId = new Map<string, CleanCloudCandidateOrder>();
+  for (const row of rows.filter(isCleanCloudClearentCandidate)) {
+    const existing = byOrderId.get(row.cleancloudOrderId);
+    if (!existing || (existing.sourceReportType === "orders_revenue" && row.sourceReportType === "orders_sales")) {
+      byOrderId.set(row.cleancloudOrderId, row);
+    }
+  }
+  return Array.from(byOrderId.values()).sort((a, b) => {
+    const aDate = a.sourceReportType === "orders_sales" ? a.paymentDateUtc : a.paidDateUtc;
+    const bDate = b.sourceReportType === "orders_sales" ? b.paymentDateUtc : b.paidDateUtc;
+    return (bDate?.getTime() ?? 0) - (aDate?.getTime() ?? 0) || Number(b.cleancloudOrderId) - Number(a.cleancloudOrderId);
+  });
 }
 
 export function reconcileClearentDailySummaryWithCleanCloudCandidates(
@@ -260,7 +277,8 @@ export async function reconcileClearentDailySummaries(input: PaymentReconciliati
   if (!db) throw new Error("Database unavailable");
   const filters = normalizeFilters(input);
   const tenantId = tenantIdForBusinessUnit(filters.businessUnit);
-  const candidates = await loadCandidateRows(filters.startUtc, filters.endExclusiveUtc, tenantId);
+  const rawCandidates = await loadCandidateRows(filters.startUtc, filters.endExclusiveUtc, tenantId);
+  const candidates = dedupeCleanCloudCandidates(rawCandidates);
   const summaryRows = await db
     .select()
     .from(clearentDailySummaries)
@@ -306,7 +324,7 @@ export async function getPaymentReconciliationDashboard(input: PaymentReconcilia
   await reconcileClearentDailySummaries(input);
 
   const tenantId = tenantIdForBusinessUnit(filters.businessUnit);
-  const candidates = await loadCandidateRows(filters.startUtc, filters.endExclusiveUtc, tenantId);
+  const candidates = dedupeCleanCloudCandidates(await loadCandidateRows(filters.startUtc, filters.endExclusiveUtc, tenantId));
   const clearentDaily = await db
     .select()
     .from(clearentDailySummaries)

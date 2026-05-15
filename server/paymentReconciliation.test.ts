@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   chooseCleanCloudCandidatesForDate,
+  dedupeCleanCloudCandidates,
   reconcileClearentDailySummaryWithCleanCloudCandidates,
   reconciledCustomerRevenueCents,
   type CleanCloudCandidateOrder,
@@ -50,6 +51,49 @@ describe("Clearent / CleanCloud reconciliation", () => {
 
     expect(chosen).toHaveLength(3);
     expect(chosen.every((row) => row.sourceReportType === "orders_sales")).toBe(true);
+  });
+
+  it("dedupes candidate display rows by cleancloudOrderId and prefers orders_sales", () => {
+    const deduped = dedupeCleanCloudCandidates([
+      candidate({ id: 10, sourceReportType: "orders_revenue", cleancloudOrderId: "437", totalCents: 9999, paidDateUtc: new Date("2026-05-13T04:38:00.000Z") }),
+      candidate({ id: 1, sourceReportType: "orders_sales", cleancloudOrderId: "437", totalCents: 3375 }),
+      candidate({ id: 11, sourceReportType: "orders_revenue", cleancloudOrderId: "500", totalCents: 4500, paymentDateUtc: null, paidDateUtc: new Date("2026-05-13T05:00:00.000Z") }),
+    ]);
+
+    expect(deduped.map((row) => row.cleancloudOrderId).sort()).toEqual(["437", "500"]);
+    expect(deduped.find((row) => row.cleancloudOrderId === "437")).toMatchObject({
+      sourceReportType: "orders_sales",
+      totalCents: 3375,
+    });
+    expect(deduped.find((row) => row.cleancloudOrderId === "500")).toMatchObject({
+      sourceReportType: "orders_revenue",
+      totalCents: 4500,
+    });
+  });
+
+  it("uses orders_revenue fallback for a date only when orders_sales is missing for that order", () => {
+    const chosen = chooseCleanCloudCandidatesForDate("2026-05-12", [
+      candidate({ id: 1, sourceReportType: "orders_sales", cleancloudOrderId: "437", totalCents: 3375 }),
+      candidate({
+        id: 10,
+        sourceReportType: "orders_revenue",
+        cleancloudOrderId: "437",
+        totalCents: 9999,
+        paymentDateUtc: null,
+        paidDateUtc: new Date("2026-05-13T04:38:00.000Z"),
+      }),
+      candidate({
+        id: 11,
+        sourceReportType: "orders_revenue",
+        cleancloudOrderId: "500",
+        totalCents: 4500,
+        paymentDateUtc: null,
+        paidDateUtc: new Date("2026-05-13T05:00:00.000Z"),
+      }),
+    ]);
+
+    expect(chosen.map((row) => row.cleancloudOrderId).sort()).toEqual(["437", "500"]);
+    expect(chosen.reduce((sum, row) => sum + row.totalCents, 0)).toBe(7875);
   });
 
   it("keeps the May 12 mismatch in needs_review with Clearent minus CleanCloud delta", () => {

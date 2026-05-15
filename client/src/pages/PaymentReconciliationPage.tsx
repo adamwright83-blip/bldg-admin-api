@@ -38,6 +38,10 @@ function formatDate(value: string | Date | null | undefined): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function reportLabel(sourceReportType: string): string {
+  return sourceReportType === "orders_revenue" ? "orders_revenue fallback" : "orders_sales";
+}
+
 export default function PaymentReconciliationPage() {
   const [startDate, setStartDate] = useState(defaultStartDate);
   const [endDate, setEndDate] = useState(defaultEndDate);
@@ -172,7 +176,7 @@ export default function PaymentReconciliationPage() {
                   <td className="px-3 py-3 font-mono text-xs">{row.cleancloudOrderId}</td>
                   <td className="px-3 py-3">{row.customerName}</td>
                   <td className="px-3 py-3">{formatDate(row.paymentDateUtc ?? row.paidDateUtc)}</td>
-                  <td className="px-3 py-3 font-mono text-xs">{row.sourceReportType}</td>
+                  <td className="px-3 py-3 font-mono text-xs">{reportLabel(row.sourceReportType)}</td>
                   <td className="px-3 py-3">{money(row.totalCents)}</td>
                   <td className="px-3 py-3">{row.buildingName || row.buildingSlug || "Unresolved / Needs Mapping"}</td>
                 </tr>
