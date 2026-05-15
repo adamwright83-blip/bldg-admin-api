@@ -29,7 +29,14 @@ export type AgentContext = {
 };
 
 const agentToolAllowlist: Record<AgentType, Set<string>> = {
-  resident_agent: new Set(["getResidentContextTool", "createLaundryOrderTool", "draftCustomerMessageTool"]),
+  resident_agent: new Set([
+    "getResidentContextTool",
+    "createLaundryOrderTool",
+    "draftCustomerMessageTool",
+    "createResidentAgentPlanTool",
+    "updateResidentAgentPlanTool",
+    "createResidentCoordinatedRequestTool",
+  ]),
   operator_voice_agent: new Set([
     "getResidentContextTool",
     "createPendingDryCleaningOrderTool",

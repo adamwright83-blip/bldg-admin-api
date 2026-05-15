@@ -39,6 +39,9 @@ import { scanAbandonedVendorOnboardingSessionsTool } from "./tools/scanAbandoned
 import { logOperatorTaskTool } from "./tools/logOperatorTaskTool";
 import { importCleanCloudOrdersTool } from "./tools/importCleanCloudOrdersTool";
 import { importClearentTransactionsTool } from "./tools/importClearentTransactionsTool";
+import { createResidentAgentPlanTool } from "./tools/createResidentAgentPlanTool";
+import { updateResidentAgentPlanTool } from "./tools/updateResidentAgentPlanTool";
+import { createResidentCoordinatedRequestTool } from "./tools/createResidentCoordinatedRequestTool";
 
 export type AgentToolResult<TOutput = unknown> = {
   entityType?: string | null;
@@ -94,6 +97,9 @@ const tools = [
   logOperatorTaskTool,
   importCleanCloudOrdersTool,
   importClearentTransactionsTool,
+  createResidentAgentPlanTool,
+  updateResidentAgentPlanTool,
+  createResidentCoordinatedRequestTool,
 ] satisfies AgentTool[];
 
 export const toolRegistry = new Map<string, AgentTool>(

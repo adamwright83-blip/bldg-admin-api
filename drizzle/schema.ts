@@ -811,6 +811,109 @@ export const agentEvents = mysqlTable("agent_events", {
 export type AgentEvent = typeof agentEvents.$inferSelect;
 export type InsertAgentEvent = typeof agentEvents.$inferInsert;
 
+export const residentAgentPlans = mysqlTable(
+  "resident_agent_plans",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    bldgUserId: int("bldgUserId"),
+    residentName: varchar("residentName", { length: 255 }),
+    buildingSlug: varchar("buildingSlug", { length: 100 }),
+    buildingName: varchar("buildingName", { length: 255 }),
+    unit: varchar("unit", { length: 50 }),
+    conversationId: varchar("conversationId", { length: 128 }),
+    sessionId: varchar("sessionId", { length: 128 }),
+    originalMessage: text("originalMessage").notNull(),
+    planStatus: mysqlEnum("planStatus", [
+      "partially_confirmed",
+      "pending_confirmation",
+      "completed",
+      "failed",
+      "cancelled",
+    ]).notNull().default("pending_confirmation"),
+    planJson: json("planJson"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    tenantStatusIdx: index("idx_resident_agent_plans_tenant_status").on(table.tenantId, table.planStatus),
+    tenantUserIdx: index("idx_resident_agent_plans_tenant_user").on(table.tenantId, table.bldgUserId),
+    conversationIdx: index("idx_resident_agent_plans_conversation").on(table.conversationId),
+  })
+);
+
+export type ResidentAgentPlan = typeof residentAgentPlans.$inferSelect;
+export type InsertResidentAgentPlan = typeof residentAgentPlans.$inferInsert;
+
+export const residentCoordinatedRequests = mysqlTable(
+  "resident_coordinated_requests",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    bldgUserId: int("bldgUserId"),
+    residentName: varchar("residentName", { length: 255 }),
+    residentPhone: varchar("residentPhone", { length: 30 }),
+    residentEmail: varchar("residentEmail", { length: 320 }),
+    buildingSlug: varchar("buildingSlug", { length: 100 }),
+    buildingName: varchar("buildingName", { length: 255 }),
+    unit: varchar("unit", { length: 50 }),
+    serviceCategory: mysqlEnum("serviceCategory", [
+      "dog_grooming",
+      "car_detail",
+      "airport_transport",
+      "apartment_cleaning",
+      "dry_cleaning",
+      "other",
+    ]).notNull(),
+    serviceRequested: text("serviceRequested").notNull(),
+    requestedDate: varchar("requestedDate", { length: 20 }),
+    requestedWindow: varchar("requestedWindow", { length: 100 }),
+    deadlineDate: varchar("deadlineDate", { length: 20 }),
+    deadlineReason: text("deadlineReason"),
+    origin: varchar("origin", { length: 255 }),
+    destination: varchar("destination", { length: 255 }),
+    notes: text("notes"),
+    status: mysqlEnum("status", [
+      "pending_operator_review",
+      "pending_provider_confirmation",
+      "confirmed",
+      "declined",
+      "cancelled",
+      "completed",
+      "failed",
+    ]).notNull().default("pending_operator_review"),
+    statusReason: text("statusReason"),
+    residentVisibleStatus: mysqlEnum("residentVisibleStatus", [
+      "confirmed",
+      "pending_provider_confirmation",
+      "pending_operator_review",
+      "failed",
+      "cancelled",
+      "completed",
+    ]).notNull().default("pending_operator_review"),
+    nextAction: text("nextAction"),
+    requiresHumanApproval: boolean("requiresHumanApproval").notNull().default(true),
+    customerCharged: boolean("customerCharged").notNull().default(false),
+    providerVendorId: int("providerVendorId"),
+    providerConfirmationStatus: varchar("providerConfirmationStatus", { length: 100 }),
+    sourceConversationId: varchar("sourceConversationId", { length: 128 }),
+    sourceSessionId: varchar("sourceSessionId", { length: 128 }),
+    parentPlanId: int("parentPlanId"),
+    rawJson: json("rawJson"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    tenantStatusIdx: index("idx_resident_coord_requests_tenant_status").on(table.tenantId, table.status),
+    tenantPlanIdx: index("idx_resident_coord_requests_tenant_plan").on(table.tenantId, table.parentPlanId),
+    tenantUserIdx: index("idx_resident_coord_requests_tenant_user").on(table.tenantId, table.bldgUserId),
+    categoryIdx: index("idx_resident_coord_requests_category").on(table.serviceCategory),
+  })
+);
+
+export type ResidentCoordinatedRequest = typeof residentCoordinatedRequests.$inferSelect;
+export type InsertResidentCoordinatedRequest = typeof residentCoordinatedRequests.$inferInsert;
+
 export const tenantAiUsage = mysqlTable(
   "tenant_ai_usage",
   {

@@ -11,6 +11,8 @@ import {
   leads, Lead, InsertLead,
   catalogItems, CatalogItem,
   agentEvents, InsertAgentEvent, AgentEvent,
+  residentAgentPlans, InsertResidentAgentPlan, ResidentAgentPlan,
+  residentCoordinatedRequests, InsertResidentCoordinatedRequest, ResidentCoordinatedRequest,
   operatorTasks, InsertOperatorTask, OperatorTask,
   tenantAiUsage, TenantAiUsage,
   vendorProfiles, InsertVendorProfile, VendorProfile,
@@ -1216,6 +1218,65 @@ export async function updateVendorPeerServiceRequest(
     .update(vendorPeerServiceRequests)
     .set(data)
     .where(and(eq(vendorPeerServiceRequests.tenantId, tenantId), eq(vendorPeerServiceRequests.id, id)));
+}
+
+export async function createResidentAgentPlan(
+  data: InsertResidentAgentPlan
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(residentAgentPlans).values(data);
+  return Number(result[0].insertId);
+}
+
+export async function getResidentAgentPlan(
+  tenantId: string,
+  id: number
+): Promise<ResidentAgentPlan | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select()
+    .from(residentAgentPlans)
+    .where(and(eq(residentAgentPlans.tenantId, tenantId), eq(residentAgentPlans.id, id)))
+    .limit(1);
+  return rows[0];
+}
+
+export async function updateResidentAgentPlan(
+  tenantId: string,
+  id: number,
+  data: Partial<InsertResidentAgentPlan>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(residentAgentPlans)
+    .set(data)
+    .where(and(eq(residentAgentPlans.tenantId, tenantId), eq(residentAgentPlans.id, id)));
+}
+
+export async function createResidentCoordinatedRequest(
+  data: InsertResidentCoordinatedRequest
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(residentCoordinatedRequests).values(data);
+  return Number(result[0].insertId);
+}
+
+export async function getResidentCoordinatedRequest(
+  tenantId: string,
+  id: number
+): Promise<ResidentCoordinatedRequest | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select()
+    .from(residentCoordinatedRequests)
+    .where(and(eq(residentCoordinatedRequests.tenantId, tenantId), eq(residentCoordinatedRequests.id, id)))
+    .limit(1);
+  return rows[0];
 }
 
 export async function listVendorPeerServiceProviders(input: {
