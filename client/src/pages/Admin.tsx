@@ -2050,8 +2050,8 @@ function RequestsTab() {
     },
   });
 
-  const handleStatus = (requestId: number, status: string) => {
-    updateStatus.mutateAsync({ requestId, status });
+  const handleStatus = (source: "service_requests" | "resident_coordinated_requests", requestId: number, status: string) => {
+    updateStatus.mutateAsync({ source, requestId, status });
   };
 
   if (requests === undefined) {
@@ -2067,7 +2067,7 @@ function RequestsTab() {
     return (
       <div>
         <h2 className="text-lg font-semibold mb-4">Requests</h2>
-        <p className="text-sm text-black/50">No coordinated requests. Requests from the resident app (car-wash, grooming, other) will appear here.</p>
+        <p className="text-sm text-black/50">No coordinated requests. Resident service requests will appear here.</p>
       </div>
     );
   }
@@ -2075,11 +2075,11 @@ function RequestsTab() {
   return (
     <div>
       <h2 className="text-lg font-semibold mb-4">Requests</h2>
-      <p className="text-xs text-black/50 mb-4">Coordinated requests from bldg.chat (car-wash, grooming, other).</p>
+      <p className="text-xs text-black/50 mb-4">Coordinated requests from bldg.chat.</p>
       <div className="space-y-4">
         {requests.map((req) => (
           <RequestCard
-            key={req.id}
+            key={`${req.source}-${req.id}`}
             request={req}
             onStatus={handleStatus}
             isPending={updateStatus.isPending}
@@ -2097,46 +2097,69 @@ function RequestCard({
 }: {
   request: {
     id: number;
-    serviceType: string | null;
+    source: "service_requests" | "resident_coordinated_requests";
+    serviceCategory: string | null;
+    serviceLabel: string;
     status: string | null;
-    requestSummary: string | null;
+    residentName: string | null;
+    residentPhone: string | null;
+    residentEmail: string | null;
+    buildingSlug: string | null;
+    buildingName: string | null;
+    unit: string | null;
+    requestedDate: string | null;
+    requestedWindow: string | null;
+    deadlineDate: string | null;
+    deadlineReason: string | null;
+    origin: string | null;
+    destination: string | null;
+    serviceRequested: string | null;
+    notes: string | null;
+    parentPlanId: number | null;
     createdAt: Date | null;
-    resident: {
-      firstName: string | null;
-      lastName: string | null;
-      phoneE164: string | null;
-      phone: string | null;
-      buildingSlug: string | null;
-      unit: string | null;
-    } | null;
+    updatedAt: Date | null;
   };
-  onStatus: (id: number, status: string) => void;
+  onStatus: (source: "service_requests" | "resident_coordinated_requests", id: number, status: string) => void;
   isPending: boolean;
 }) {
   const created = request.createdAt
     ? new Date(request.createdAt).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })
     : "—";
-  const residentName = request.resident
-    ? [request.resident.firstName, request.resident.lastName].filter(Boolean).join(" ").trim() || "—"
-    : "—";
-  const building = request.resident?.buildingSlug ?? "—";
-  const unit = request.resident?.unit ?? "—";
-  const summary = request.requestSummary ?? "—";
-  const rawPhone = request.resident?.phoneE164 || request.resident?.phone || "";
+  const residentName = request.residentName || "—";
+  const building = request.buildingName || request.buildingSlug || "—";
+  const unit = request.unit ?? "—";
+  const summary = request.serviceRequested ?? request.notes ?? "—";
+  const rawPhone = request.residentPhone || "";
   const phone = rawPhone.replace(/[^\d+]/g, "") || "";
   const smsHref = phone ? `sms:${phone.startsWith("+") ? phone : "+1" + phone}` : null;
+  const details = [
+    request.requestedDate ? `Date: ${request.requestedDate}` : null,
+    request.requestedWindow ? `Window: ${request.requestedWindow}` : null,
+    request.deadlineDate ? `Deadline: ${request.deadlineDate}` : null,
+    request.deadlineReason ? `Reason: ${request.deadlineReason}` : null,
+    request.origin || request.destination
+      ? `Route: ${request.origin ?? "—"} → ${request.destination ?? "—"}`
+      : null,
+  ].filter(Boolean);
 
   return (
     <div className="border border-black/10 rounded-lg p-4 bg-white">
       <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
         <div>
-          <span className="text-xs font-medium uppercase tracking-wider text-black/60">{request.serviceType ?? "—"}</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-black/60">{request.serviceLabel}</span>
           <p className="font-medium text-sm mt-0.5">{residentName}</p>
           <p className="text-xs text-black/50">Unit {unit} · {building}</p>
         </div>
         <span className="text-xs text-black/40">{created}</span>
       </div>
       <p className="text-sm text-black/70 mb-3">{summary}</p>
+      {details.length > 0 && (
+        <div className="text-xs text-black/50 mb-3 space-y-1">
+          {details.map((detail) => (
+            <p key={detail}>{detail}</p>
+          ))}
+        </div>
+      )}
       <div className="flex items-center gap-2 mb-3">
         <span className="text-xs text-black/50">Status: {request.status ?? "new"}</span>
       </div>
@@ -2169,7 +2192,7 @@ function RequestCard({
           variant="outline"
           size="sm"
           className="text-xs border-black/20"
-          onClick={() => onStatus(request.id, "contacting-vendor")}
+          onClick={() => onStatus(request.source, request.id, "contacting-vendor")}
           disabled={isPending}
         >
           Contacting vendor
@@ -2178,7 +2201,7 @@ function RequestCard({
           variant="outline"
           size="sm"
           className="text-xs border-black/20"
-          onClick={() => onStatus(request.id, "awaiting-vendor")}
+          onClick={() => onStatus(request.source, request.id, "awaiting-vendor")}
           disabled={isPending}
         >
           Awaiting vendor confirmation
@@ -2187,7 +2210,7 @@ function RequestCard({
           variant="outline"
           size="sm"
           className="text-xs border-green-600 text-green-600 hover:bg-green-50"
-          onClick={() => onStatus(request.id, "scheduled")}
+          onClick={() => onStatus(request.source, request.id, "scheduled")}
           disabled={isPending}
         >
           Mark scheduled
@@ -2196,7 +2219,7 @@ function RequestCard({
           variant="outline"
           size="sm"
           className="text-xs border-black/20"
-          onClick={() => onStatus(request.id, "closed")}
+          onClick={() => onStatus(request.source, request.id, "closed")}
           disabled={isPending}
         >
           Close request

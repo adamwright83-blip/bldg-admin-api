@@ -6,8 +6,7 @@ import {
   vendors, InsertVendor, Vendor,
   vendorUsers, InsertVendorUser, VendorUser,
   vendorServiceCoverage, InsertVendorServiceCoverage, VendorServiceCoverage,
-  serviceRequests, ServiceRequest,
-  bldgUsers, BldgUser,
+  serviceRequests,
   leads, Lead, InsertLead,
   catalogItems, CatalogItem,
   agentEvents, InsertAgentEvent, AgentEvent,
@@ -1600,60 +1599,265 @@ export async function getVendorForOrder(
 /* ===== COORDINATED SERVICE REQUESTS (from resident app) ===== */
 
 const COORDINATED_SERVICE_TYPES = ["car-wash", "grooming", "other"] as const;
+const RESIDENT_COORDINATED_OPEN_STATUSES = ["pending_operator_review", "pending_provider_confirmation"] as const;
 
-export type CoordinatedRequestWithResident = ServiceRequest & { resident: BldgUser | null };
+export type UnifiedCoordinatedRequest = {
+  id: number;
+  source: "service_requests" | "resident_coordinated_requests";
+  serviceCategory: string | null;
+  serviceLabel: string;
+  status: string | null;
+  residentName: string | null;
+  residentPhone: string | null;
+  residentEmail: string | null;
+  buildingSlug: string | null;
+  buildingName: string | null;
+  unit: string | null;
+  requestedDate: string | null;
+  requestedWindow: string | null;
+  deadlineDate: string | null;
+  deadlineReason: string | null;
+  origin: string | null;
+  destination: string | null;
+  serviceRequested: string | null;
+  notes: string | null;
+  parentPlanId: number | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+};
 
-export async function listCoordinatedRequests(): Promise<CoordinatedRequestWithResident[]> {
+type LegacyRequestJson = {
+  residentName?: unknown;
+  residentPhone?: unknown;
+  residentEmail?: unknown;
+  buildingSlug?: unknown;
+  buildingName?: unknown;
+  unit?: unknown;
+  requestedDate?: unknown;
+  requestedWindow?: unknown;
+  deadlineDate?: unknown;
+  deadlineReason?: unknown;
+  origin?: unknown;
+  destination?: unknown;
+  serviceRequested?: unknown;
+  notes?: unknown;
+};
+
+function nullableString(value: unknown): string | null {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text.length > 0 ? text : null;
+}
+
+function legacyRequestJson(value: unknown): LegacyRequestJson {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as LegacyRequestJson : {};
+}
+
+export function coordinatedRequestServiceLabel(category: string | null): string {
+  switch (category) {
+    case "dog_grooming":
+    case "grooming":
+      return "Dog Grooming";
+    case "car_detail":
+    case "car-wash":
+      return "Car Detail";
+    case "airport_transport":
+      return "LAX / Airport Pickup";
+    case "apartment_cleaning":
+      return "Apartment Cleaning";
+    case "dry_cleaning":
+      return "Dry Cleaning";
+    case "other":
+    default:
+      return "Other";
+  }
+}
+
+export function mapLegacyServiceRequestForRequestsPage(
+  request: typeof serviceRequests.$inferSelect
+): UnifiedCoordinatedRequest {
+  const requestJson = legacyRequestJson(request.requestJson);
+  return {
+    id: request.id,
+    source: "service_requests",
+    serviceCategory: request.serviceType,
+    serviceLabel: coordinatedRequestServiceLabel(request.serviceType),
+    status: request.status,
+    residentName: nullableString(requestJson.residentName),
+    residentPhone: nullableString(requestJson.residentPhone),
+    residentEmail: nullableString(requestJson.residentEmail),
+    buildingSlug: nullableString(requestJson.buildingSlug),
+    buildingName: nullableString(requestJson.buildingName),
+    unit: nullableString(requestJson.unit),
+    requestedDate: request.scheduledDate ?? nullableString(requestJson.requestedDate),
+    requestedWindow: request.scheduledWindow ?? nullableString(requestJson.requestedWindow),
+    deadlineDate: nullableString(requestJson.deadlineDate),
+    deadlineReason: nullableString(requestJson.deadlineReason),
+    origin: nullableString(requestJson.origin),
+    destination: nullableString(requestJson.destination),
+    serviceRequested: nullableString(requestJson.serviceRequested) ?? request.requestSummary,
+    notes: nullableString(requestJson.notes),
+    parentPlanId: null,
+    createdAt: request.createdAt,
+    updatedAt: request.updatedAt,
+  };
+}
+
+export function mapResidentCoordinatedRequestForRequestsPage(
+  request: ResidentCoordinatedRequest
+): UnifiedCoordinatedRequest {
+  return {
+    id: request.id,
+    source: "resident_coordinated_requests",
+    serviceCategory: request.serviceCategory,
+    serviceLabel: coordinatedRequestServiceLabel(request.serviceCategory),
+    status: request.status,
+    residentName: request.residentName,
+    residentPhone: request.residentPhone,
+    residentEmail: request.residentEmail,
+    buildingSlug: request.buildingSlug,
+    buildingName: request.buildingName,
+    unit: request.unit,
+    requestedDate: request.requestedDate,
+    requestedWindow: request.requestedWindow,
+    deadlineDate: request.deadlineDate,
+    deadlineReason: request.deadlineReason,
+    origin: request.origin,
+    destination: request.destination,
+    serviceRequested: request.serviceRequested,
+    notes: request.notes,
+    parentPlanId: request.parentPlanId,
+    createdAt: request.createdAt,
+    updatedAt: request.updatedAt,
+  };
+}
+
+function sortRequestsNewestFirst<T extends { createdAt: Date | null }>(requests: T[]): T[] {
+  return requests.sort((a, b) => {
+    const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return bTime - aTime;
+  });
+}
+
+export function mergeCoordinatedRequestsForRequestsPage(
+  legacyRequests: Array<typeof serviceRequests.$inferSelect>,
+  residentRequests: ResidentCoordinatedRequest[]
+): UnifiedCoordinatedRequest[] {
+  return sortRequestsNewestFirst([
+    ...legacyRequests.map(mapLegacyServiceRequestForRequestsPage),
+    ...residentRequests.map(mapResidentCoordinatedRequestForRequestsPage),
+  ]);
+}
+
+export async function listCoordinatedRequests(): Promise<UnifiedCoordinatedRequest[]> {
   const db = await getDb();
   if (!db) return [];
 
-  try {
-    const rows = await db
-      .select({
-        request: serviceRequests,
-        resident: {
-          id: bldgUsers.id,
-          firstName: bldgUsers.firstName,
-          lastName: bldgUsers.lastName,
-          phoneE164: bldgUsers.phoneE164,
-          phone: bldgUsers.phone,
-          buildingSlug: bldgUsers.buildingSlug,
-          unit: bldgUsers.unit,
-        },
-      })
-      .from(serviceRequests)
-      .leftJoin(bldgUsers, eq(serviceRequests.bldgUserId, bldgUsers.id))
-      .where(inArray(serviceRequests.serviceType, [...COORDINATED_SERVICE_TYPES]))
-      .orderBy(desc(serviceRequests.createdAt));
-
-    return rows.map((r) => ({ ...r.request, resident: r.resident?.id != null ? r.resident : null }));
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn("[Requests] bldg_users join failed, returning requests without resident:", msg);
-    const requestsOnly = await db
+  const [legacyRequests, residentRequests] = await Promise.all([
+    db
       .select()
       .from(serviceRequests)
       .where(inArray(serviceRequests.serviceType, [...COORDINATED_SERVICE_TYPES]))
-      .orderBy(desc(serviceRequests.createdAt));
-    return requestsOnly.map((r) => ({ ...r, resident: null }));
-  }
+      .orderBy(desc(serviceRequests.createdAt)),
+    db
+      .select()
+      .from(residentCoordinatedRequests)
+      .orderBy(desc(residentCoordinatedRequests.createdAt)),
+  ]);
+
+  return mergeCoordinatedRequestsForRequestsPage(legacyRequests, residentRequests);
 }
 
 export async function getNewCoordinatedRequestsCount(): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
 
-  const result = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(serviceRequests)
-    .where(
-      and(
-        inArray(serviceRequests.serviceType, [...COORDINATED_SERVICE_TYPES]),
-        inArray(serviceRequests.status, ["new", "pending"])
-      )
-    );
+  const [legacyResult, residentResult] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(serviceRequests)
+      .where(
+        and(
+          inArray(serviceRequests.serviceType, [...COORDINATED_SERVICE_TYPES]),
+          inArray(serviceRequests.status, ["new", "pending"])
+        )
+      ),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(residentCoordinatedRequests)
+      .where(inArray(residentCoordinatedRequests.status, [...RESIDENT_COORDINATED_OPEN_STATUSES])),
+  ]);
 
-  return Number(result[0]?.count ?? 0);
+  return Number(legacyResult[0]?.count ?? 0) + Number(residentResult[0]?.count ?? 0);
+}
+
+function residentRequestStatusFromAdminAction(status: string): {
+  status: "pending_operator_review" | "pending_provider_confirmation" | "confirmed" | "cancelled" | "completed" | "failed";
+  residentVisibleStatus: "pending_operator_review" | "pending_provider_confirmation" | "confirmed" | "cancelled" | "completed" | "failed";
+  statusReason: string;
+} {
+  switch (status) {
+    case "contacting-vendor":
+      return {
+        status: "pending_operator_review",
+        residentVisibleStatus: "pending_operator_review",
+        statusReason: "Operator is contacting a provider.",
+      };
+    case "awaiting-vendor":
+      return {
+        status: "pending_provider_confirmation",
+        residentVisibleStatus: "pending_provider_confirmation",
+        statusReason: "Provider confirmation is pending.",
+      };
+    case "scheduled":
+      return {
+        status: "confirmed",
+        residentVisibleStatus: "confirmed",
+        statusReason: "Operator marked the coordinated request as scheduled.",
+      };
+    case "closed":
+      return {
+        status: "cancelled",
+        residentVisibleStatus: "cancelled",
+        statusReason: "Operator closed the coordinated request.",
+      };
+    case "pending_operator_review":
+    case "pending_provider_confirmation":
+    case "confirmed":
+    case "cancelled":
+    case "completed":
+    case "failed":
+      return {
+        status,
+        residentVisibleStatus: status,
+        statusReason: "Operator updated the coordinated request status.",
+      };
+    default:
+      return {
+        status: "pending_operator_review",
+        residentVisibleStatus: "pending_operator_review",
+        statusReason: `Unsupported status action ignored: ${status}`,
+      };
+  }
+}
+
+export async function updateCoordinatedRequestStatus(
+  source: UnifiedCoordinatedRequest["source"],
+  id: number,
+  status: string
+): Promise<void> {
+  if (source === "resident_coordinated_requests") {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    await db
+      .update(residentCoordinatedRequests)
+      .set(residentRequestStatusFromAdminAction(status))
+      .where(eq(residentCoordinatedRequests.id, id));
+    return;
+  }
+
+  await updateServiceRequestStatus(id, status);
 }
 
 export async function updateServiceRequestStatus(

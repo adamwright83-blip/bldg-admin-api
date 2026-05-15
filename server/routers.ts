@@ -43,7 +43,7 @@ import {
   listVendorUsers,
   listCoordinatedRequests,
   getNewCoordinatedRequestsCount,
-  updateServiceRequestStatus,
+  updateCoordinatedRequestStatus,
   createLead,
   getLeadById,
   listLeads,
@@ -2644,9 +2644,13 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
     }),
 
     updateRequestStatus: protectedProcedure
-      .input(z.object({ requestId: z.number(), status: z.string().min(1) }))
+      .input(z.object({
+        requestId: z.number(),
+        source: z.enum(["service_requests", "resident_coordinated_requests"]).default("service_requests"),
+        status: z.string().min(1),
+      }))
       .mutation(async ({ input }) => {
-        await updateServiceRequestStatus(input.requestId, input.status);
+        await updateCoordinatedRequestStatus(input.source, input.requestId, input.status);
         return { success: true };
       }),
 
