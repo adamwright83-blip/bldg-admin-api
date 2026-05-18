@@ -75,7 +75,7 @@ function isCleanCloudClearentPaidCard(order: {
   );
 }
 
-function candidateDate(row: { sourceReportType: CleanCloudPaidReportType; paymentDateUtc: Date | null; paidDateUtc: Date | null }) {
+function candidateDate(row: { sourceReportType: CleanCloudPaidReportType; paymentDateUtc?: Date | null; paidDateUtc?: Date | null }) {
   const value = row.sourceReportType === "orders_sales" ? row.paymentDateUtc : row.paidDateUtc;
   return value ? formatInTimeZone(value, OPERATOR_TIME_ZONE, "yyyy-MM-dd") : null;
 }
@@ -109,6 +109,7 @@ export function buildCleanCloudCsvSheetPlan(input: {
     }
 
     candidateRowCount += 1;
+    const totalCents = result.normalized.totalCents ?? 0;
     const classification = classifyCleanCloudService(result.normalized);
     const existing = byDate.get(date) ?? {
       date,
@@ -127,20 +128,20 @@ export function buildCleanCloudCsvSheetPlan(input: {
       reviewOrders: [],
     };
 
-    existing.totalCents += result.normalized.totalCents;
+    existing.totalCents += totalCents;
     existing.orderCount += 1;
     existing.orderIds.push(result.normalized.cleancloudOrderId);
-    existing.classifications[classification] += result.normalized.totalCents;
-    if (classification === "laundry") existing.laundryCents += result.normalized.totalCents;
-    else if (classification === "dry_cleaning") existing.dryCleanCents += result.normalized.totalCents;
+    existing.classifications[classification] += totalCents;
+    if (classification === "laundry") existing.laundryCents += totalCents;
+    else if (classification === "dry_cleaning") existing.dryCleanCents += totalCents;
     else {
-      existing.reviewCents += result.normalized.totalCents;
+      existing.reviewCents += totalCents;
       existing.reviewOrders.push({
         cleancloudOrderId: result.normalized.cleancloudOrderId,
         customerName: result.normalized.customerName,
-        amountCents: result.normalized.totalCents,
+        amountCents: totalCents,
         classification,
-        summaryText: result.normalized.summaryText,
+        summaryText: result.normalized.summaryText ?? null,
       });
     }
     byDate.set(date, existing);
@@ -215,7 +216,7 @@ export async function writeCleanCloudCsvPlanToSheet(input: {
     grouped.set(monthKey, [...(grouped.get(monthKey) ?? []), total]);
   }
 
-  for (const [monthKey, totals] of grouped) {
+  for (const [monthKey, totals] of Array.from(grouped.entries())) {
     const [year, month] = monthKey.split("-").map(Number);
     const requestedTab = getMonthlyTabName(new Date(year, (month ?? 1) - 1, 1));
     const tabName = resolveMonthlyTabName(titles, requestedTab);

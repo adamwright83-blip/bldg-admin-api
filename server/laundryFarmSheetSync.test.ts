@@ -65,9 +65,30 @@ describe("Laundry Farm revenue sheet sync", () => {
     expect(classifyCleanCloudService(order({ summaryText: "Dry cleaning pressed shirts" }))).toBe("dry_cleaning");
   });
 
-  it("does not silently count unknown or mixed service orders", () => {
-    expect(classifyCleanCloudService(order({ summaryText: "Retail item" }))).toBe("unknown_needs_review");
-    expect(classifyCleanCloudService(order({ summaryText: "Wash & Fold plus dry cleaning" }))).toBe("mixed_needs_review");
+  it("classifies Laundry Farm laundry catalog items as laundry", () => {
+    expect(classifyCleanCloudService(order({ summaryText: "All Comforters x 3<br>  17.20lb<br><br>Discount: $27.59" }))).toBe("laundry");
+    expect(classifyCleanCloudService(order({ summaryText: "Comforter x 1" }))).toBe("laundry");
+    expect(classifyCleanCloudService(order({ summaryText: "Bedding & Rugs x 1" }))).toBe("laundry");
+    expect(classifyCleanCloudService(order({ summaryText: "Wash, Fold & Dry x 12" }))).toBe("laundry");
+  });
+
+  it("does not treat dry by itself as dry cleaning", () => {
+    expect(classifyCleanCloudService(order({ summaryText: "Dry" }))).toBe("unknown_needs_review");
+    expect(classifyCleanCloudService(order({ summaryText: "Wash, Fold & Dry x 22" }))).toBe("laundry");
+  });
+
+  it("classifies non-catalog items as dry cleaning and mixed catalog/non-catalog orders as review", () => {
+    expect(classifyCleanCloudService(order({ summaryText: "Retail item" }))).toBe("dry_cleaning");
+    expect(classifyCleanCloudService(order({ summaryText: "Fluff & Fold x 10<br>Dress Shirt (1) (D) x 2" }))).toBe("mixed_needs_review");
+  });
+
+  it("keeps Thomas Hartmann-style All Comforters orders in laundry", () => {
+    expect(classifyCleanCloudService(order({
+      cleancloudOrderId: "406",
+      customerName: "Thomas Hartmann",
+      totalCents: 11037,
+      summaryText: "All Comforters x 3<br>  17.20lb<br><br>Discount: $27.59",
+    }))).toBe("laundry");
   });
 
   it("builds row 3 and row 4 values without touching other sheet rows", () => {
@@ -99,16 +120,15 @@ describe("Laundry Farm revenue sheet sync", () => {
         order({ cleancloudOrderId: "1", totalCents: 3375, summaryText: "Wash & Fold laundry" }),
         order({ cleancloudOrderId: "2", totalCents: 2125, summaryText: "Dry cleaning" }),
         order({ cleancloudOrderId: "3", totalCents: 500, summaryText: "Retail item" }),
-        order({ cleancloudOrderId: "4", totalCents: 1000, summaryText: "Wash & Fold plus dry cleaning" }),
+        order({ cleancloudOrderId: "4", totalCents: 1000, summaryText: "Fluff & Fold x 8<br>Dress Shirt (1) (D) x 1" }),
       ],
     });
 
     expect(plan.laundryRevenueCents).toBe(3375);
-    expect(plan.dryCleanRevenueCents).toBe(2125);
-    expect(plan.unknownCents).toBe(500);
+    expect(plan.dryCleanRevenueCents).toBe(2625);
+    expect(plan.unknownCents).toBe(0);
     expect(plan.mixedCents).toBe(1000);
     expect(plan.warnings).toContain("clearent_cleancloud_mismatch");
-    expect(plan.warnings).toContain("unknown_classification");
     expect(plan.warnings).toContain("mixed_classification");
   });
 

@@ -72,23 +72,54 @@ describe("CleanCloud CSV sheet sync", () => {
     });
   });
 
-  it("blocks mixed and unknown service rows by default", () => {
+  it("blocks mixed service rows by default", () => {
     const plan = planFromRows([
-      "424,1 May 2026 10:00,Mixed Customer,11,Wash & Fold plus Dress Shirt (1) (D),1,Card,Clearent Saved Card,1 May 2026 16:00,50.00,50.00,collected",
-      "425,1 May 2026 10:00,Retail Customer,12,Retail item,1,Card,Clearent Saved Card,1 May 2026 17:00,9.99,9.99,collected",
+      "424,1 May 2026 10:00,Mixed Customer,11,Fluff & Fold x 10<br>Dress Shirt (1) (D) x 2,1,Card,Clearent Saved Card,1 May 2026 16:00,50.00,50.00,collected",
     ]);
 
     expect(plan.dailyTotals[0]).toMatchObject({
       laundryCents: 0,
       dryCleanCents: 0,
-      reviewCents: 5999,
+      reviewCents: 5000,
       reviewOrders: [
         expect.objectContaining({ cleancloudOrderId: "424", classification: "mixed_needs_review" }),
-        expect.objectContaining({ cleancloudOrderId: "425", classification: "unknown_needs_review" }),
       ],
     });
     expect(() => assertCleanCloudCsvPlanWritable(plan)).toThrow(/sheet write blocked/i);
     expect(() => assertCleanCloudCsvPlanWritable(plan, true)).not.toThrow();
+  });
+
+  it("plans unknown non-catalog items as dry cleaning", () => {
+    const plan = planFromRows([
+      "425,1 May 2026 10:00,Retail Customer,12,Retail item,1,Card,Clearent Saved Card,1 May 2026 17:00,9.99,9.99,collected",
+    ]);
+
+    expect(plan.dailyTotals[0]).toMatchObject({
+      laundryCents: 0,
+      dryCleanCents: 999,
+      reviewCents: 0,
+      reviewOrders: [],
+    });
+    expect(() => assertCleanCloudCsvPlanWritable(plan)).not.toThrow();
+  });
+
+  it("keeps Thomas Hartmann All Comforters order #406 in laundry", () => {
+    const plan = planFromRows([
+      "406,21 Apr 2026 08:10,Thomas Hartmann,40,Fluff & Fold SAME DAY / DELIVERY x 25.05<br>  25.05lb<br>  0.00lb<br>Rug - Small x 1<br>Sheets (1) x 2<br>All Comforters x 1<br>Discount: $12.26,1,Card,Clearent Saved Card,22 Apr 2026 18:42,110.37,110.37,collected",
+    ]);
+
+    expect(plan.dailyTotals).toEqual([
+      expect.objectContaining({
+        date: "2026-04-22",
+        totalCents: 11037,
+        laundryCents: 11037,
+        dryCleanCents: 0,
+        reviewCents: 0,
+        orderIds: ["406"],
+        reviewOrders: [],
+      }),
+    ]);
+    expect(() => assertCleanCloudCsvPlanWritable(plan)).not.toThrow();
   });
 
   it("skips paid cash rows and unpaid rows", () => {
