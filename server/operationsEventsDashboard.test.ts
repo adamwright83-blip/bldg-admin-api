@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { MySqlDialect } from "drizzle-orm/mysql-core";
-import type { OperationsEvent } from "../drizzle/schema";
 import {
   OPERATIONS_EVENTS_CSV_COLUMNS,
+  type OperationsEventDashboardRow,
   operationEventWithinDashboardDateRange,
   normalizeOperationsEventsFilters,
   operationsEventsCsvFilename,
@@ -12,7 +12,7 @@ import {
   summarizeOperationsEventRows,
 } from "./operationsEventsDashboard";
 
-function event(overrides: Partial<OperationsEvent> = {}): OperationsEvent {
+function event(overrides: Partial<OperationsEventDashboardRow> = {}): OperationsEventDashboardRow {
   const ts = new Date("2026-05-14T20:15:00.000Z");
   return {
     id: 1,
@@ -37,6 +37,9 @@ function event(overrides: Partial<OperationsEvent> = {}): OperationsEvent {
     actorUserId: "7",
     actorDisplayName: "Adam",
     vendorId: null,
+    chargedAmount: "42.50",
+    paid: true,
+    paidAt: new Date("2026-05-15T02:30:00.000Z"),
     bagCount: 2,
     garmentCount: null,
     weightLbs: "12.50",
@@ -206,8 +209,30 @@ describe("operations events dashboard helpers", () => {
     expect(csv).toContain("2026-05-14T20:15:00.000Z");
     expect(csv).toContain("pickup_completed");
     expect(csv).toContain("Moj Salon");
+    expect(csv).toContain("42.50,true,2026-05-15T02:30:00.000Z");
     expect(csv).toContain("12.50");
     expect(csv).toContain('"{""orderSnapshot"":{""id"":42,""firstName"":""Moj""}}"');
+  });
+
+  it("operations event dashboard rows include charged order fields without losing event fields", () => {
+    const row = event({
+      id: 9,
+      orderId: 102,
+      customerName: "Johnny Appleseed",
+      chargedAmount: "38.00",
+      paid: true,
+      paidAt: new Date("2026-05-16T01:00:00.000Z"),
+    });
+
+    expect(row).toMatchObject({
+      id: 9,
+      orderId: 102,
+      customerName: "Johnny Appleseed",
+      sourceEventType: "pickup_completed",
+      chargedAmount: "38.00",
+      paid: true,
+    });
+    expect(row.paidAt?.toISOString()).toBe("2026-05-16T01:00:00.000Z");
   });
 
   it("CSV filename reflects active filters", () => {
@@ -230,5 +255,13 @@ describe("operations events dashboard helpers", () => {
     expect(source).toContain("LOWER(${operationsEvents.customerName}) LIKE");
     expect(source).toContain("LOWER(COALESCE(${operationsEvents.customerEmail}, '')) LIKE");
     expect(source).toContain("COALESCE(${operationsEvents.customerPhone}, '') LIKE");
+  });
+
+  it("list and CSV queries join operations events to orders for charged amounts", () => {
+    const source = readFileSync(new URL("./operationsEventsDashboard.ts", import.meta.url), "utf8");
+    expect(source).toContain("leftJoin(orders, eq(operationsEvents.orderId, orders.id))");
+    expect(source).toContain("chargedAmount: orders.total");
+    expect(source).toContain("paid: orders.paid");
+    expect(source).toContain("paidAt: orders.paidAt");
   });
 });

@@ -1,5 +1,5 @@
-import { and, desc, eq, gte, lt, or, sql, type SQL } from "drizzle-orm";
-import { operationsEvents, type OperationsEvent } from "../drizzle/schema";
+import { and, desc, eq, getTableColumns, gte, lt, or, sql, type SQL } from "drizzle-orm";
+import { operationsEvents, orders, type OperationsEvent } from "../drizzle/schema";
 import { getDashboardTimeZone, zonedDayStartUtc, zonedNextDayYmd, zonedYmd } from "./dashboardZoned";
 import { getDb } from "./db";
 
@@ -16,6 +16,12 @@ export type OperationsEventsFilters = {
   customerSearch?: string | null;
   page?: number;
   pageSize?: number;
+};
+
+export type OperationsEventDashboardRow = OperationsEvent & {
+  chargedAmount: string | null;
+  paid: boolean | null;
+  paidAt: Date | null;
 };
 
 export type NormalizedOperationsEventsFilters = Required<Omit<OperationsEventsFilters, "customerSearch">> & {
@@ -47,6 +53,9 @@ export const OPERATIONS_EVENTS_CSV_COLUMNS = [
   "actor_user_id",
   "actor_display_name",
   "vendor_id",
+  "charged_amount",
+  "paid",
+  "paid_at",
   "bag_count",
   "garment_count",
   "weight_lbs",
@@ -142,7 +151,16 @@ function csvCell(value: unknown): string {
   return /[",\n\r]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
 }
 
-export function operationsEventsToCsv(rows: OperationsEvent[]): string {
+function operationsEventDashboardSelect() {
+  return {
+    ...getTableColumns(operationsEvents),
+    chargedAmount: orders.total,
+    paid: orders.paid,
+    paidAt: orders.paidAt,
+  };
+}
+
+export function operationsEventsToCsv(rows: OperationsEventDashboardRow[]): string {
   const lines = [OPERATIONS_EVENTS_CSV_COLUMNS.join(",")];
   for (const row of rows) {
     const values = [
@@ -167,6 +185,9 @@ export function operationsEventsToCsv(rows: OperationsEvent[]): string {
       row.actorUserId,
       row.actorDisplayName,
       row.vendorId,
+      row.chargedAmount,
+      row.paid,
+      row.paidAt,
       row.bagCount,
       row.garmentCount,
       row.weightLbs,
@@ -215,8 +236,9 @@ export async function listOperationsEvents(input: OperationsEventsFilters = {}) 
 
   const [rows, totals] = await Promise.all([
     db
-      .select()
+      .select(operationsEventDashboardSelect())
       .from(operationsEvents)
+      .leftJoin(orders, eq(operationsEvents.orderId, orders.id))
       .where(where)
       .orderBy(desc(operationsEvents.actualEventTimestamp), desc(operationsEvents.id))
       .limit(filters.pageSize)
@@ -254,8 +276,9 @@ export async function exportOperationsEventsCsv(input: OperationsEventsFilters =
   if (!db) throw new Error("Database unavailable");
   const filters = normalizeOperationsEventsFilters(input);
   const rows = await db
-    .select()
+    .select(operationsEventDashboardSelect())
     .from(operationsEvents)
+    .leftJoin(orders, eq(operationsEvents.orderId, orders.id))
     .where(operationsEventsWhere(filters))
     .orderBy(desc(operationsEvents.actualEventTimestamp), desc(operationsEvents.id));
   return {

@@ -51,10 +51,26 @@ function formatDateTime(value: string | Date | null | undefined): string {
   });
 }
 
-function formatServiceType(value: string): string {
-  if (value === "wash_fold") return "Wash & Fold";
-  if (value === "dry_cleaning") return "Dry Cleaning";
-  return value;
+function formatMoney(value: string | number | null | undefined): string | null {
+  if (value == null || value === "") return null;
+  const amount = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(amount);
+}
+
+function chargedDisplay(row: OperationsEventRow): { label: string; detail: string | null; muted?: boolean } {
+  if (!row.orderId) return { label: "-", detail: null, muted: true };
+  if (!row.paid) return { label: "Unpaid", detail: null, muted: true };
+
+  const charged = formatMoney(row.chargedAmount);
+  if (!charged) return { label: "No charge", detail: null, muted: true };
+  return {
+    label: charged,
+    detail: row.paidAt ? `Paid ${formatDateTime(row.paidAt)}` : null,
+  };
 }
 
 function downloadCsv(filename: string, csv: string) {
@@ -222,13 +238,14 @@ export default function OperationsEventsPage() {
 
       <div className="overflow-hidden rounded border border-black/10 bg-white">
         <div className="overflow-x-auto">
-          <table className="min-w-[1200px] w-full text-sm">
+          <table className="min-w-[1300px] w-full text-sm">
             <thead className="bg-black/[0.03] text-left text-xs uppercase tracking-wide text-black/50">
               <tr>
                 <th className="w-10 px-3 py-3" />
                 <th className="px-3 py-3">Event timestamp</th>
                 <th className="px-3 py-3">Event type</th>
                 <th className="px-3 py-3">Customer</th>
+                <th className="px-3 py-3">Charged</th>
                 <th className="px-3 py-3">Business unit</th>
                 <th className="px-3 py-3">Building / Tower / Unit</th>
                 <th className="px-3 py-3">Scheduled</th>
@@ -239,47 +256,54 @@ export default function OperationsEventsPage() {
             </thead>
             <tbody className="divide-y divide-black/10">
               {events.isLoading ? (
-                <tr><td className="px-3 py-8 text-center text-black/45" colSpan={10}>Loading events...</td></tr>
+                <tr><td className="px-3 py-8 text-center text-black/45" colSpan={11}>Loading events...</td></tr>
               ) : data?.rows.length ? (
-                data.rows.map((row) => (
-                  <Fragment key={row.id}>
-                    <tr className="align-top hover:bg-black/[0.02]">
-                      <td className="px-3 py-3">
-                        <button type="button" className="rounded p-1 hover:bg-black/5" onClick={() => setExpanded(expanded === row.id ? null : row.id)} aria-label="Toggle raw snapshot">
-                          {expanded === row.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                        </button>
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap">{formatDateTime(row.actualEventTimestamp)}</td>
-                      <td className="px-3 py-3 font-mono text-xs">{row.sourceEventType}</td>
-                      <td className="px-3 py-3">
-                        <div className="font-medium">{row.customerName}</div>
-                        <div className="text-xs text-black/45">{row.customerEmail || row.customerPhone || "-"}</div>
-                      </td>
-                      <td className="px-3 py-3">{row.businessUnitLabel}</td>
-                      <td className="px-3 py-3">
-                        <div>{row.buildingName || row.buildingSlug || "-"}</div>
-                        <div className="text-xs text-black/45">{[row.tower, row.unit ? `Unit ${row.unit}` : null].filter(Boolean).join(" / ") || row.buildingResolutionStatus}</div>
-                      </td>
-                      <td className="px-3 py-3">
-                        <div>{row.scheduledDate || "-"}</div>
-                        <div className="text-xs text-black/45">{row.scheduledWindow || "-"}</div>
-                      </td>
-                      <td className="px-3 py-3">{row.actorDisplayName || "-"}</td>
-                      <td className="px-3 py-3">{row.vendorId ?? "-"}</td>
-                      <td className="px-3 py-3">{row.orderId ? <a className="underline decoration-black/20 underline-offset-2 hover:decoration-black" href={`/intake?orderId=${row.orderId}`}>#{row.orderId}</a> : "-"}</td>
-                    </tr>
-                    {expanded === row.id ? (
-                      <tr>
-                        <td className="px-3 py-3" />
-                        <td className="px-3 py-3" colSpan={9}>
-                          <RawSnapshot row={row} />
+                data.rows.map((row) => {
+                  const charged = chargedDisplay(row);
+                  return (
+                    <Fragment key={row.id}>
+                      <tr className="align-top hover:bg-black/[0.02]">
+                        <td className="px-3 py-3">
+                          <button type="button" className="rounded p-1 hover:bg-black/5" onClick={() => setExpanded(expanded === row.id ? null : row.id)} aria-label="Toggle raw snapshot">
+                            {expanded === row.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                          </button>
                         </td>
+                        <td className="px-3 py-3 whitespace-nowrap">{formatDateTime(row.actualEventTimestamp)}</td>
+                        <td className="px-3 py-3 font-mono text-xs">{row.sourceEventType}</td>
+                        <td className="px-3 py-3">
+                          <div className="font-medium">{row.customerName}</div>
+                          <div className="text-xs text-black/45">{row.customerEmail || row.customerPhone || "-"}</div>
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <div className={charged.muted ? "font-medium text-black/45" : "font-semibold text-black"}>{charged.label}</div>
+                          {charged.detail ? <div className="text-xs text-black/45">{charged.detail}</div> : null}
+                        </td>
+                        <td className="px-3 py-3">{row.businessUnitLabel}</td>
+                        <td className="px-3 py-3">
+                          <div>{row.buildingName || row.buildingSlug || "-"}</div>
+                          <div className="text-xs text-black/45">{[row.tower, row.unit ? `Unit ${row.unit}` : null].filter(Boolean).join(" / ") || row.buildingResolutionStatus}</div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div>{row.scheduledDate || "-"}</div>
+                          <div className="text-xs text-black/45">{row.scheduledWindow || "-"}</div>
+                        </td>
+                        <td className="px-3 py-3">{row.actorDisplayName || "-"}</td>
+                        <td className="px-3 py-3">{row.vendorId ?? "-"}</td>
+                        <td className="px-3 py-3">{row.orderId ? <a className="underline decoration-black/20 underline-offset-2 hover:decoration-black" href={`/intake?orderId=${row.orderId}`}>#{row.orderId}</a> : "-"}</td>
                       </tr>
-                    ) : null}
-                  </Fragment>
-                ))
+                      {expanded === row.id ? (
+                        <tr>
+                          <td className="px-3 py-3" />
+                          <td className="px-3 py-3" colSpan={10}>
+                            <RawSnapshot row={row} />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })
               ) : (
-                <tr><td className="px-3 py-8 text-center text-black/45" colSpan={10}>No operations events match these filters.</td></tr>
+                <tr><td className="px-3 py-8 text-center text-black/45" colSpan={11}>No operations events match these filters.</td></tr>
               )}
             </tbody>
           </table>
