@@ -80,7 +80,7 @@ export function classifyCleanCloudService(order: Pick<CleancloudPaidOrder, "summ
     .join(" ")
     .toLowerCase();
 
-  const dry = /\b(dry\s*clean(?:ing|ed)?|drycleaning|press(?:ed)?|laundered shirt|shirt laundry)\b/i.test(haystack);
+  const dry = /\b(dry\s*clean(?:ing|ed)?|drycleaning|press(?:ed)?|laundered shirt|shirt laundry|dress shirt|blouse|pants|comforters?)\b|\(d\)/i.test(haystack);
   const laundry = /\b(wash\s*(?:&|and)\s*fold|fluff|laundry|per\s*lb|pounds?|lbs?|weight)\b/i.test(haystack);
   if (dry && laundry) return "mixed_needs_review";
   if (dry) return "dry_cleaning";

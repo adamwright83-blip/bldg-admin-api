@@ -24,8 +24,10 @@ const spreadsheetId =
   argValue("spreadsheetId") ??
   process.env.GOOGLE_SHEETS_SPREADSHEET_ID ??
   "";
-const rowLabel = argValue("rowLabel") ?? "LF Laundry Rev";
+const laundryRowLabel = argValue("laundryRowLabel") ?? "LF Laundry Rev";
+const dryCleanRowLabel = argValue("dryCleanRowLabel") ?? "LF Dry Clean Rev";
 const dryRun = process.argv.includes("--dry-run") || process.argv.includes("--dryRun");
+const allowReviewRows = process.argv.includes("--allow-review-rows") || process.argv.includes("--allowReviewRows");
 
 if (!ordersPath) {
   console.error("Missing --orders=/path/to/CC-Orders.csv");
@@ -39,9 +41,20 @@ const plan = buildCleanCloudCsvSheetPlanFromFile({
 
 const printablePlan = {
   ...plan,
+  targetRows: {
+    laundry: laundryRowLabel,
+    dryCleaning: dryCleanRowLabel,
+  },
   dailyTotals: plan.dailyTotals.map((day) => ({
     ...day,
     total: (day.totalCents / 100).toFixed(2),
+    laundry: (day.laundryCents / 100).toFixed(2),
+    dryCleaning: (day.dryCleanCents / 100).toFixed(2),
+    review: (day.reviewCents / 100).toFixed(2),
+    reviewOrders: day.reviewOrders.map((order) => ({
+      ...order,
+      amount: (order.amountCents / 100).toFixed(2),
+    })),
     classifications: Object.fromEntries(
       Object.entries(day.classifications).map(([key, cents]) => [key, (cents / 100).toFixed(2)])
     ),
@@ -61,7 +74,9 @@ const sheetResult = await writeCleanCloudCsvPlanToSheet({
   spreadsheetId,
   plan,
   dryRun,
-  rowLabel,
+  laundryRowLabel,
+  dryCleanRowLabel,
+  allowReviewRows,
 });
 
 console.log(JSON.stringify({ plan: printablePlan, sheet: sheetResult }, null, 2));

@@ -23,9 +23,21 @@ const OPERATOR_TIME_ZONE = "America/Los_Angeles";
 export type CleanCloudCsvDailyTotal = {
   date: string;
   totalCents: number;
+  laundryCents: number;
+  dryCleanCents: number;
+  reviewCents: number;
   orderCount: number;
   orderIds: string[];
   classifications: Record<LaundryFarmServiceClass, number>;
+  reviewOrders: CleanCloudCsvReviewOrder[];
+};
+
+export type CleanCloudCsvReviewOrder = {
+  cleancloudOrderId: string;
+  customerName: string;
+  amountCents: number;
+  classification: Extract<LaundryFarmServiceClass, "mixed_needs_review" | "unknown_needs_review">;
+  summaryText: string | null;
 };
 
 export type CleanCloudCsvSheetPlan = {
@@ -35,6 +47,20 @@ export type CleanCloudCsvSheetPlan = {
   candidateRowCount: number;
   skippedRowCount: number;
   dailyTotals: CleanCloudCsvDailyTotal[];
+};
+
+export type CleanCloudCsvSheetWrite = {
+  date: string;
+  tabName: string;
+  laundryCell: string;
+  laundryPreviousValue: number;
+  laundryNextValue: number;
+  dryCleanCell: string;
+  dryCleanPreviousValue: number;
+  dryCleanNextValue: number;
+  orderCount: number;
+  orderIds: string[];
+  reviewOrders: CleanCloudCsvReviewOrder[];
 };
 
 function isCleanCloudClearentPaidCard(order: {
@@ -87,6 +113,9 @@ export function buildCleanCloudCsvSheetPlan(input: {
     const existing = byDate.get(date) ?? {
       date,
       totalCents: 0,
+      laundryCents: 0,
+      dryCleanCents: 0,
+      reviewCents: 0,
       orderCount: 0,
       orderIds: [],
       classifications: {
@@ -95,12 +124,25 @@ export function buildCleanCloudCsvSheetPlan(input: {
         mixed_needs_review: 0,
         unknown_needs_review: 0,
       },
+      reviewOrders: [],
     };
 
     existing.totalCents += result.normalized.totalCents;
     existing.orderCount += 1;
     existing.orderIds.push(result.normalized.cleancloudOrderId);
     existing.classifications[classification] += result.normalized.totalCents;
+    if (classification === "laundry") existing.laundryCents += result.normalized.totalCents;
+    else if (classification === "dry_cleaning") existing.dryCleanCents += result.normalized.totalCents;
+    else {
+      existing.reviewCents += result.normalized.totalCents;
+      existing.reviewOrders.push({
+        cleancloudOrderId: result.normalized.cleancloudOrderId,
+        customerName: result.normalized.customerName,
+        amountCents: result.normalized.totalCents,
+        classification,
+        summaryText: result.normalized.summaryText,
+      });
+    }
     byDate.set(date, existing);
   }
 
@@ -122,6 +164,20 @@ function formatCents(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
+function reviewOrdersForPlan(plan: CleanCloudCsvSheetPlan): CleanCloudCsvReviewOrder[] {
+  return plan.dailyTotals.flatMap((total) => total.reviewOrders);
+}
+
+export function assertCleanCloudCsvPlanWritable(plan: CleanCloudCsvSheetPlan, allowReviewRows = false) {
+  const reviewOrders = reviewOrdersForPlan(plan);
+  if (!allowReviewRows && reviewOrders.length) {
+    const preview = reviewOrders
+      .map((order) => `#${order.cleancloudOrderId} ${order.customerName} ${formatCents(order.amountCents)} ${order.classification}`)
+      .join("; ");
+    throw new Error(`CleanCloud CSV has unknown/mixed service rows; sheet write blocked until reviewed: ${preview}`);
+  }
+}
+
 async function getSheetsAuth(): Promise<Auth.JWT> {
   const clientEmail = process.env.GOOGLE_SHEETS_CLIENT_EMAIL?.trim();
   const privateKey = process.env.GOOGLE_SHEETS_PRIVATE_KEY?.replace(/\\n/g, "\n");
@@ -139,23 +195,19 @@ export async function writeCleanCloudCsvPlanToSheet(input: {
   spreadsheetId: string;
   plan: CleanCloudCsvSheetPlan;
   dryRun?: boolean;
-  rowLabel?: string;
+  laundryRowLabel?: string;
+  dryCleanRowLabel?: string;
+  allowReviewRows?: boolean;
 }) {
-  const rowLabel = input.rowLabel ?? "LF Laundry Rev";
+  const laundryRowLabel = input.laundryRowLabel ?? "LF Laundry Rev";
+  const dryCleanRowLabel = input.dryCleanRowLabel ?? "LF Dry Clean Rev";
+  if (!input.dryRun) assertCleanCloudCsvPlanWritable(input.plan, input.allowReviewRows);
   const auth = await getSheetsAuth();
   const sheets = google.sheets({ version: "v4", auth });
   const meta = await sheets.spreadsheets.get({ spreadsheetId: input.spreadsheetId, auth });
   const titles = meta.data.sheets?.map((sheet) => sheet.properties?.title).filter(Boolean) as string[];
 
-  const writes: Array<{
-    date: string;
-    tabName: string;
-    cell: string;
-    previousValue: number;
-    nextValue: number;
-    orderCount: number;
-    orderIds: string[];
-  }> = [];
+  const writes: CleanCloudCsvSheetWrite[] = [];
 
   const grouped = new Map<string, CleanCloudCsvDailyTotal[]>();
   for (const total of input.plan.dailyTotals) {
@@ -177,34 +229,31 @@ export async function writeCleanCloudCsvPlanToSheet(input: {
       auth,
     });
     const values = got.data.values ?? [];
-    const row0 = findRowByLabel(values.map((row) => row?.[0]), rowLabel);
-    if (row0 == null) throw new Error(`Row label "${rowLabel}" not found in ${tabName}`);
-
-    const header = values[0] ?? [];
-    for (const total of totals) {
-      const col0 = findDayColumn(header, new Date(`${total.date}T00:00:00`));
-      if (col0 == null) throw new Error(`No date column for ${total.date} in ${tabName}`);
-      const previousValue = parseNumericCell(values[row0]?.[col0]);
-      const nextValue = Number(formatCents(total.totalCents));
-      writes.push({
-        date: total.date,
+    writes.push(
+      ...buildCleanCloudCsvSheetWrites({
         tabName,
-        cell: `${colIndex0ToLetter(col0)}${row0 + 1}`,
-        previousValue,
-        nextValue,
-        orderCount: total.orderCount,
-        orderIds: total.orderIds,
-      });
-    }
+        values,
+        dailyTotals: totals,
+        laundryRowLabel,
+        dryCleanRowLabel,
+      })
+    );
   }
 
   if (!input.dryRun) {
     for (const write of writes) {
       await sheets.spreadsheets.values.update({
         spreadsheetId: input.spreadsheetId,
-        range: `${escapeSheetName(write.tabName)}!${write.cell}`,
+        range: `${escapeSheetName(write.tabName)}!${write.laundryCell}`,
         valueInputOption: "USER_ENTERED",
-        requestBody: { values: [[write.nextValue.toFixed(2)]] },
+        requestBody: { values: [[write.laundryNextValue.toFixed(2)]] },
+        auth,
+      });
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: input.spreadsheetId,
+        range: `${escapeSheetName(write.tabName)}!${write.dryCleanCell}`,
+        valueInputOption: "USER_ENTERED",
+        requestBody: { values: [[write.dryCleanNextValue.toFixed(2)]] },
         auth,
       });
     }
@@ -212,9 +261,45 @@ export async function writeCleanCloudCsvPlanToSheet(input: {
 
   return {
     dryRun: Boolean(input.dryRun),
-    rowLabel,
+    laundryRowLabel,
+    dryCleanRowLabel,
     writes,
   };
+}
+
+export function buildCleanCloudCsvSheetWrites(input: {
+  tabName: string;
+  values: unknown[][];
+  dailyTotals: CleanCloudCsvDailyTotal[];
+  laundryRowLabel?: string;
+  dryCleanRowLabel?: string;
+}): CleanCloudCsvSheetWrite[] {
+  const laundryRowLabel = input.laundryRowLabel ?? "LF Laundry Rev";
+  const dryCleanRowLabel = input.dryCleanRowLabel ?? "LF Dry Clean Rev";
+  const columnA = input.values.map((row) => row?.[0]);
+  const laundryRow0 = findRowByLabel(columnA, laundryRowLabel);
+  if (laundryRow0 == null) throw new Error(`Row label "${laundryRowLabel}" not found in ${input.tabName}`);
+  const dryCleanRow0 = findRowByLabel(columnA, dryCleanRowLabel);
+  if (dryCleanRow0 == null) throw new Error(`Row label "${dryCleanRowLabel}" not found in ${input.tabName}`);
+
+  const header = input.values[0] ?? [];
+  return input.dailyTotals.map((total) => {
+    const col0 = findDayColumn(header, new Date(`${total.date}T00:00:00`));
+    if (col0 == null) throw new Error(`No date column for ${total.date} in ${input.tabName}`);
+    return {
+      date: total.date,
+      tabName: input.tabName,
+      laundryCell: `${colIndex0ToLetter(col0)}${laundryRow0 + 1}`,
+      laundryPreviousValue: parseNumericCell(input.values[laundryRow0]?.[col0]),
+      laundryNextValue: Number(formatCents(total.laundryCents)),
+      dryCleanCell: `${colIndex0ToLetter(col0)}${dryCleanRow0 + 1}`,
+      dryCleanPreviousValue: parseNumericCell(input.values[dryCleanRow0]?.[col0]),
+      dryCleanNextValue: Number(formatCents(total.dryCleanCents)),
+      orderCount: total.orderCount,
+      orderIds: total.orderIds,
+      reviewOrders: total.reviewOrders,
+    };
+  });
 }
 
 export function buildCleanCloudCsvSheetPlanFromFile(input: {
