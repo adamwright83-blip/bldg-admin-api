@@ -28,6 +28,7 @@ import { registerCleanCloudImportRoutes } from "../cleancloudImportRoute";
 import { registerClearentImportRoutes } from "../clearentImportRoute";
 import { registerPaymentReconciliationRoutes } from "../paymentReconciliationRoute";
 import { registerLaundryFarmSheetSyncRoutes } from "../laundryFarmSheetSyncRoute";
+import { PUBLIC_FORM_ORIGINS, buildAdminCorsOptions } from "./corsConfig";
 import { z } from "zod";
 
 const warnedUnknownTenantHosts = new Set<string>();
@@ -79,20 +80,6 @@ async function startServer() {
   const server = createServer(app);
 
   console.log("[Boot] v9 — REST endpoint for leads with robust error handling");
-
-  // Public form origins that can submit leads
-  const PUBLIC_FORM_ORIGINS = [
-    "https://buildings.bldg.chat",
-    "https://contact.bldg.chat",
-    "https://vendorsignup.bldg.chat",
-  ];
-
-  // All allowed origins for the admin API
-  const ADMIN_ALLOWED_ORIGINS = [
-    "https://admin.bldg.chat",
-    "https://driver.bldg.chat",
-    ...PUBLIC_FORM_ORIGINS,
-  ];
 
   // =============================================================================
   // PUBLIC LEADS SUBMISSION - REST endpoint with manual CORS (no middleware)
@@ -215,19 +202,7 @@ async function startServer() {
   // =============================================================================
   // STANDARD CORS for all other endpoints
   // =============================================================================
-  const corsOptions: cors.CorsOptions = {
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (ADMIN_ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-      if (origin.startsWith("https://") && origin.endsWith(".bldg.chat")) return callback(null, true);
-      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
-      console.warn(`[CORS v8] Blocked origin: ${origin}`);
-      callback(null, false);
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "x-trpc-source", "x-agent-shared-secret"],
-  };
+  const corsOptions = buildAdminCorsOptions();
   
   // Apply cors middleware to all paths (leads REST endpoint is handled above, before this)
   app.use(cors(corsOptions));
