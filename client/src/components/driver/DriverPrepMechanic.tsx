@@ -56,7 +56,7 @@ type Props = {
 
 const OVERRIDE_TIMEOUT_MS = 8000;
 const NEXT_TARGET_CINEMATIC_MS = 2200;
-const SKIPPABLE_GAME_PHASES: ReadonlySet<DriverPrepPhase> =
+const DRIVER_HOME_ESCAPE_PHASES: ReadonlySet<DriverPrepPhase> =
   new Set<DriverPrepPhase>([
     "prep_t1",
     "prep_t2",
@@ -67,6 +67,7 @@ const SKIPPABLE_GAME_PHASES: ReadonlySet<DriverPrepPhase> =
     "flyer_proof",
     "signal_override",
     "verify_failed",
+    "next_target",
   ]);
 
 /** Map the in-flight payload index → XP award tier. */
@@ -408,8 +409,7 @@ export function DriverPrepMechanic({
   }, []);
 
   const scansCompleted = scansCompletedFromState(state);
-  const showSkipButton =
-    selectedOrder != null && SKIPPABLE_GAME_PHASES.has(state.phase);
+  const showHomeEscapeButton = DRIVER_HOME_ESCAPE_PHASES.has(state.phase);
 
   return (
     <div className="driver-game min-h-screen">
@@ -438,18 +438,17 @@ export function DriverPrepMechanic({
         handleDebriefReturn,
         handleRetryFailure,
       })}
-      {showSkipButton ? (
+      {showHomeEscapeButton ? (
         <button
           type="button"
           onClick={handleSkipGamesToCommand}
-          disabled={Boolean(isLoading)}
-          aria-label="Skip mini games and return to driver home"
+          aria-label="Return to driver home"
           className="fixed right-4 top-4 z-[70] inline-flex items-center gap-2 border border-neon/50 bg-black/75 px-4 py-3 text-neon shadow-[0_0_18px_oklch(0.85_0.25_155/0.18)] backdrop-blur
-                     transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none"
+                     transition-all active:scale-[0.98]"
         >
           <Home className="w-4 h-4" />
           <span className="font-display text-[12px] font-extrabold uppercase tracking-[0.18em]">
-            Skip
+            {selectedOrder ? "Skip" : "Home"}
           </span>
         </button>
       ) : null}

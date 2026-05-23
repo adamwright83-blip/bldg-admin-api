@@ -236,6 +236,42 @@ describe("driverPrepMachine — payload progression", () => {
       nextStatus: "delivered",
     });
   });
+
+  it("returns to command center from a game loop even without an order to resolve", () => {
+    let state = createInitialDriverPrepState(1, "2026-04-20");
+    state = run(
+      state,
+      { type: "SELECT_ORDER", orderId: 99 },
+      { type: "START_RUN_FROM_ORDER" },
+      {
+        type: "SET_PREP_PREVIEW",
+        tier: 1,
+        previewDataUrl: "data:image/png;base64,AAA",
+      },
+      { type: "SECURE_PREP_TASK", tier: 1, now: "2026-04-20T10:00Z" },
+      {
+        type: "SET_PREP_PREVIEW",
+        tier: 2,
+        previewDataUrl: "data:image/png;base64,AAA",
+      },
+      { type: "SECURE_PREP_TASK", tier: 2, now: "2026-04-20T10:00Z" },
+      {
+        type: "SET_PREP_PREVIEW",
+        tier: 3,
+        previewDataUrl: "data:image/png;base64,AAA",
+      },
+      { type: "SECURE_PREP_TASK", tier: 3, now: "2026-04-20T10:00Z" },
+      { type: "ADVANCE_PREP_COMPLETE" }
+    );
+    expect(state.phase).toBe("laundry_run");
+
+    state = run(state, { type: "SKIP_GAMES_TO_COMMAND_CENTER" });
+
+    expect(state.phase).toBe("command_center");
+    expect(state.currentOrderId).toBeNull();
+    expect(state.pendingOrderResolution).toBeNull();
+    expect(state.resolvedOrderIdsCurrentMission).toEqual([]);
+  });
 });
 
 describe("driverPrepMachine — hard reset on Signal Override failure", () => {
