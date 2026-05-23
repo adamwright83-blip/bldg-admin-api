@@ -531,63 +531,64 @@ export default function CommandCenter({
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.3 + i * 0.08, duration: 0.3 }}
                 onClick={() => handleSelect(order)}
-                className="w-full text-left border border-border/30 hover:border-neon/40
-                           transition-all duration-200 active:bg-void-lighter group relative overflow-hidden"
+                className="w-full text-left border-2 border-yellow-200 bg-yellow-300 text-black
+                           shadow-[0_0_22px_rgba(250,204,21,0.34)] transition-all duration-200
+                           active:scale-[0.99] active:bg-yellow-200 group relative overflow-hidden"
               >
                 <div
-                  className="absolute inset-0 bg-gradient-to-r from-neon/0 via-neon/[0.02] to-neon/0
-                             opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute inset-y-0 right-0 w-14 bg-black/10 opacity-80
+                             group-hover:bg-black/15 transition-colors"
                 />
 
                 <div className="p-4 relative">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       <div className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-muted-foreground/60" />
-                        <span className="text-[10px] text-muted-foreground">
+                        <Clock className="w-3 h-3 text-black/65" />
+                        <span className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-black/75">
                           {order.timeWindow}
                         </span>
                       </div>
                       <span
-                        className={`text-[8px] tracking-[0.15em] uppercase px-2 py-0.5 font-bold ${
+                        className={`text-[9px] tracking-[0.15em] uppercase px-2 py-1 font-black border ${
                           order.type === "PICKUP"
-                            ? "bg-neon/10 text-neon border border-neon/30"
-                            : "bg-amber/10 text-amber border border-amber/30"
+                            ? "bg-black text-yellow-300 border-black"
+                            : "bg-white text-black border-black/25"
                         }`}
                       >
                         {order.type}
                       </span>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-neon transition-colors" />
+                    <ChevronRight className="w-6 h-6 text-black/75 group-hover:text-black transition-colors" />
                   </div>
 
-                  <p className="font-display font-bold text-[15px] text-foreground mb-1 uppercase tracking-wide">
+                  <p className="font-display text-[24px] font-black leading-none text-black mb-2 uppercase tracking-wide break-words">
                     {order.customerName}
                   </p>
                   {order.buildingName ? (
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <Building2 className="w-3 h-3 text-neon/50 shrink-0" />
-                      <p className="text-[9px] tracking-[0.18em] text-neon/70 uppercase font-semibold truncate">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Building2 className="w-3.5 h-3.5 text-black/70 shrink-0" />
+                      <p className="text-[10px] tracking-[0.18em] text-black/75 uppercase font-black truncate">
                         {order.buildingName}
                       </p>
                     </div>
                   ) : null}
                   <div className="flex items-start gap-1.5">
-                    <MapPin className="w-3 h-3 text-neon/40 mt-0.5 shrink-0" />
-                    <p className="text-[10px] text-muted-foreground leading-tight">
+                    <MapPin className="w-4 h-4 text-black/70 mt-0.5 shrink-0" />
+                    <p className="text-[13px] font-bold text-black/80 leading-tight">
                       {order.address}
                       {order.unit ? ` · Unit ${order.unit}` : ""}
                     </p>
                   </div>
 
-                  <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/20">
+                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-black/20">
                     <div className="flex items-center gap-1.5">
-                      <Package className="w-3 h-3 text-muted-foreground/50" />
-                      <span className="text-[10px] text-muted-foreground">
+                      <Package className="w-3.5 h-3.5 text-black/65" />
+                      <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-black/70">
                         {order.items} {order.items === 1 ? "bag" : "bags"}
                       </span>
                     </div>
-                    <span className="font-display text-[11px] font-bold text-neon tracking-wider uppercase">
+                    <span className="font-display text-[13px] font-black text-black tracking-wider uppercase">
                       {order.dateLabel}
                     </span>
                   </div>
