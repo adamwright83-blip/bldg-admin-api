@@ -61,6 +61,14 @@ function Router() {
       <Route path="/catalog" component={AdminCatalog} />
       <Route path="/pricing" component={AdminCatalog} />
       <Route
+        path={"/welcome"}
+        component={
+          tenant.templateType === "laundryfarm"
+            ? LaundryFarmHome
+            : ButlerHome
+        }
+      />
+      <Route
         path={"/"}
         component={
           isDriverHost

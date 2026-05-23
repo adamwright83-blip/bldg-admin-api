@@ -43,6 +43,7 @@ import {
 } from "./dashboardZoned";
 import {
   buildOperationEventForOrderStatusChange,
+  buildPickupCompletedOperationsEventForOrder,
   type OperationsEventActorContext,
 } from "./operationsEvents";
 
@@ -548,6 +549,13 @@ export async function updateOrderStatus(
     });
     if (!event) return;
 
+    const existingEvent = await tx
+      .select({ id: operationsEvents.id })
+      .from(operationsEvents)
+      .where(and(eq(operationsEvents.orderId, orderId), eq(operationsEvents.sourceEventType, event.sourceEventType)))
+      .limit(1);
+    if (existingEvent.length > 0) return;
+
     await tx
       .insert(operationsEvents)
       .values(event)
@@ -556,6 +564,42 @@ export async function updateOrderStatus(
           updatedAt: new Date(),
         },
       });
+  });
+}
+
+export async function ensurePickupCompletedOperationsEventForOrder(
+  orderId: number,
+  input: {
+    actorDisplayName?: string | null;
+    actualEventTimestamp?: Date;
+    reason?: string;
+  } = {}
+): Promise<{ created: boolean; eventId?: number | null }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.transaction(async (tx) => {
+    const existingEvent = await tx
+      .select({ id: operationsEvents.id })
+      .from(operationsEvents)
+      .where(and(eq(operationsEvents.orderId, orderId), eq(operationsEvents.sourceEventType, "pickup_completed")))
+      .limit(1);
+    if (existingEvent[0]) return { created: false, eventId: existingEvent[0].id };
+
+    const [order] = await tx.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+    if (!order) throw new Error(`Order #${orderId} not found`);
+
+    const event = buildPickupCompletedOperationsEventForOrder({
+      order,
+      actor: {
+        source: "system_backfill",
+        actorDisplayName: input.actorDisplayName ?? "Admin charge",
+        actualEventTimestamp: input.actualEventTimestamp,
+      },
+      reason: input.reason,
+    });
+    await tx.insert(operationsEvents).values(event);
+    return { created: true, eventId: null };
   });
 }
 

@@ -41,6 +41,7 @@ import {
   updateVendorBranding,
   updateVendorSlug,
   listVendorUsers,
+  ensurePickupCompletedOperationsEventForOrder,
   listCoordinatedRequests,
   getNewCoordinatedRequestsCount,
   updateCoordinatedRequestStatus,
@@ -2082,6 +2083,13 @@ export const appRouter = router({
           let paymentIntent;
           let platformFeeCents: number | null = null;
           let vendorPayoutCents: number | null = null;
+          const hasPaidBefore = await hasCustomerPaidBefore(customerId!);
+          const stripeMetadata = {
+            orderId: String(input.orderId),
+            tenantId: order.tenantId ?? "default",
+            customerName: `${order.firstName} ${order.lastName}`.trim(),
+            source: "admin_chargeCard",
+          };
 
           if (payoutReady) {
             const feePercent = vendor?.platformFeePercent != null
@@ -2098,6 +2106,7 @@ export const appRouter = router({
               currency: "usd",
               confirm: true,
               off_session: true,
+              metadata: stripeMetadata,
               transfer_data: { destination: vendorAccountId! },
               application_fee_amount: platformFeeCents,
               ...(useOnBehalfOf ? { on_behalf_of: vendorAccountId! } : {}),
@@ -2112,47 +2121,19 @@ export const appRouter = router({
               currency: "usd",
               confirm: true,
               off_session: true,
+              metadata: stripeMetadata,
             });
             console.log(`[ChargeCard] No payout routing applied for order #${input.orderId}`);
           }
 
-          // Generate receipt JWT for app.bldg.chat
-          const jwtSigningSecret =
-  process.env.JWT_SHARED_SECRET ||
-  process.env.JWT_SECRET ||
-  process.env.APP_SHARED_API_SECRET;
-
-if (!jwtSigningSecret) {
-  throw new Error("Missing JWT signing secret (JWT_SHARED_SECRET / JWT_SECRET / APP_SHARED_API_SECRET)");
-}
-
-const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
-          const vendorName = vendor?.name ?? (order.serviceType === "wash_fold" ? "Laundry Butler" : "Laundry Butler");
-          const receiptToken = await new jose.SignJWT({
-            orderId: input.orderId,
-            customerId: customerId,
-            totalWeight: order.weightLbs ? parseFloat(order.weightLbs) : 0,
-            finalAmount: input.amountCents,
-            currency: "usd",
-            vendorName: vendorName,
-          })
-            .setProtectedHeader({ alg: "HS256" })
-            .setExpirationTime("365d")
-            .setIssuedAt()
-            .sign(sharedSecret);
-
-          const receiptUrl = `https://app.bldg.chat/receipt/${receiptToken}`;
-          const hasPaidBefore = await hasCustomerPaidBefore(customerId!);
-
           const paidAt = new Date(paymentIntent.created * 1000);
-
           await updateOrderIntake(input.orderId, {
             paid: true,
             paidAt,
             stripePaymentIntentId: paymentIntent.id,
+            total: centsToDollars(input.amountCents),
             status: "processing",
             isFirstPaidOrder: !hasPaidBefore,
-            portalJwt: receiptUrl,
             ...(payoutReady ? {
               platformFeeCents,
               vendorPayoutCents,
@@ -2161,6 +2142,44 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
               routingPrioritySnapshot: null,
             } : {}),
           });
+
+          await ensurePickupCompletedOperationsEventForOrder(input.orderId, {
+            actorDisplayName: "Admin charge",
+            actualEventTimestamp: paidAt,
+            reason: "stripe_charge_succeeded",
+          });
+
+          let receiptUrl: string | null = null;
+          try {
+            const jwtSigningSecret =
+              process.env.JWT_SHARED_SECRET ||
+              process.env.JWT_SECRET ||
+              process.env.APP_SHARED_API_SECRET;
+
+            if (!jwtSigningSecret) {
+              throw new Error("Missing JWT signing secret (JWT_SHARED_SECRET / JWT_SECRET / APP_SHARED_API_SECRET)");
+            }
+
+            const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
+            const vendorName = vendor?.name ?? "Laundry Butler";
+            const receiptToken = await new jose.SignJWT({
+              orderId: input.orderId,
+              customerId: customerId,
+              totalWeight: order.weightLbs ? parseFloat(order.weightLbs) : 0,
+              finalAmount: input.amountCents,
+              currency: "usd",
+              vendorName,
+            })
+              .setProtectedHeader({ alg: "HS256" })
+              .setExpirationTime("365d")
+              .setIssuedAt()
+              .sign(sharedSecret);
+
+            receiptUrl = `https://app.bldg.chat/receipt/${receiptToken}`;
+            await updateOrderIntake(input.orderId, { portalJwt: receiptUrl });
+          } catch (err) {
+            console.warn("[Receipt] Failed to generate receipt after successful charge:", err);
+          }
 
           // Notify owner
           try {
@@ -2180,7 +2199,7 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
           }
 
           // Send receipt notification to app.bldg.chat via webhook
-          if (order.bldgUserId) {
+          if (order.bldgUserId && receiptUrl) {
             try {
               console.log('[ChargeCard] Sending receipt webhook for user', order.bldgUserId);
               const webhookUrl = "https://app.bldg.chat/api/webhooks/receipt";
@@ -2251,7 +2270,7 @@ const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
             receiptUrl,
           };
         } catch (err: any) {
-          console.error("[Stripe] Charge failed:", err.message);
+          console.error("[ChargeCard] Charge or payment-truth persistence failed:", err.message);
           return {
             success: false,
             error: err.message || "Payment failed. Card may have been declined.",

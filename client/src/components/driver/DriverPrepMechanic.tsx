@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, RotateCw, Radio, ChevronRight } from "lucide-react";
+import {
+  AlertTriangle,
+  RotateCw,
+  Radio,
+  ChevronRight,
+  Home,
+} from "lucide-react";
 import type { Order } from "@shared/types";
 import { matchBuilding } from "@shared/buildings";
 import {
@@ -50,6 +56,18 @@ type Props = {
 
 const OVERRIDE_TIMEOUT_MS = 8000;
 const NEXT_TARGET_CINEMATIC_MS = 2200;
+const SKIPPABLE_GAME_PHASES: ReadonlySet<DriverPrepPhase> =
+  new Set<DriverPrepPhase>([
+    "prep_t1",
+    "prep_t2",
+    "prep_t3",
+    "prep_complete",
+    "laundry_run",
+    "mission_briefing",
+    "flyer_proof",
+    "signal_override",
+    "verify_failed",
+  ]);
 
 /** Map the in-flight payload index → XP award tier. */
 function xpForPayload(payloadIndex: number, payloadCount: number): number {
@@ -293,6 +311,17 @@ export function DriverPrepMechanic({
     dispatch({ type: "START_RUN_FROM_ORDER" });
   }, []);
 
+  const handleSkipGamesToCommand = useCallback(() => {
+    sounds.scanConfirm();
+    haptics.slam();
+    dispatch({
+      type: "SKIP_GAMES_TO_COMMAND_CENTER",
+      resolvedOrder: selectedOrder
+        ? { orderId: selectedOrder.id, nextStatus: selectedOrder.nextStatus }
+        : undefined,
+    });
+  }, [selectedOrder]);
+
   const handleCompleteScan = useCallback(
     (tier: 1 | 2 | 3, previewDataUrl?: string | null) => {
       if (previewDataUrl) {
@@ -379,6 +408,8 @@ export function DriverPrepMechanic({
   }, []);
 
   const scansCompleted = scansCompletedFromState(state);
+  const showSkipButton =
+    selectedOrder != null && SKIPPABLE_GAME_PHASES.has(state.phase);
 
   return (
     <div className="driver-game min-h-screen">
@@ -398,6 +429,7 @@ export function DriverPrepMechanic({
         onOrderCreated,
         handleBackToCommand,
         handleStartVerification,
+        handleSkipGamesToCommand,
         handleCompleteScan,
         handleCompleteLaundryRun,
         handleFlyerPosted,
@@ -406,6 +438,21 @@ export function DriverPrepMechanic({
         handleDebriefReturn,
         handleRetryFailure,
       })}
+      {showSkipButton ? (
+        <button
+          type="button"
+          onClick={handleSkipGamesToCommand}
+          disabled={Boolean(isLoading)}
+          aria-label="Skip mini games and return to driver home"
+          className="fixed right-4 top-4 z-[70] inline-flex items-center gap-2 border border-neon/50 bg-black/75 px-4 py-3 text-neon shadow-[0_0_18px_oklch(0.85_0.25_155/0.18)] backdrop-blur
+                     transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none"
+        >
+          <Home className="w-4 h-4" />
+          <span className="font-display text-[12px] font-extrabold uppercase tracking-[0.18em]">
+            Skip
+          </span>
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -426,6 +473,7 @@ type RenderArgs = {
   onOrderCreated?: () => Promise<void> | void;
   handleBackToCommand: () => void;
   handleStartVerification: () => void;
+  handleSkipGamesToCommand: () => void;
   handleCompleteScan: (
     tier: 1 | 2 | 3,
     previewDataUrl?: string | null
@@ -474,6 +522,7 @@ function renderPhase(phase: DriverPrepPhase, args: RenderArgs) {
         <OrderDetail
           order={args.selectedOrder}
           onStartVerification={args.handleStartVerification}
+          onSkipGames={args.handleSkipGamesToCommand}
           onBack={args.handleBackToCommand}
         />
       );

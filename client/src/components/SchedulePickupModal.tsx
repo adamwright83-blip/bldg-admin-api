@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { trpc } from "@/lib/trpc";
-import { getResidentWebOrigin } from "@/const";
 import { useTenant } from "@/hooks/useTenant";
 import { WF_RATE_PER_LB_CENTS, centsToDollars } from "@shared/pricing";
 import { useCatalogDryCleanMinCents } from "@/components/CatalogDryCleanPricing";
@@ -729,32 +728,13 @@ function StepCardOnFile({
 }
 
 function StepSuccess({
-  orderId,
   supportPhone,
+  onContinue,
 }: {
-  orderId: number;
   supportPhone: string;
+  onContinue: () => void;
 }) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const generateTokenMutation = trpc.orders.generatePortalToken.useMutation();
   const supportPhoneHref = `tel:${supportPhone.replace(/[^\d+]/g, "")}`;
-
-  const handleContinue = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const { token } = await generateTokenMutation.mutateAsync({ orderId });
-      const welcome = new URL("/welcome", `${getResidentWebOrigin()}/`);
-      welcome.searchParams.set("token", token);
-      window.location.href = welcome.toString();
-    } catch (err) {
-      console.error("Failed to generate portal token:", err);
-      setLoading(false);
-      setError("Unable to continue right now. Please try again in a moment.");
-    }
-  };
 
   return (
     <StepContainer
@@ -772,14 +752,8 @@ function StepSuccess({
         </p>
       </div>
 
-      {error ? (
-        <p className="rounded-xl border border-[#f3d0df] bg-[#fff2f8] px-3 py-2 text-[12px] text-[#a52c61]" role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      <PrimaryButton onClick={handleContinue} loading={loading}>
-        {loading ? "Redirecting..." : "Continue"}
+      <PrimaryButton onClick={onContinue}>
+        Continue
       </PrimaryButton>
     </StepContainer>
   );
@@ -925,7 +899,10 @@ function BookingExperience({
         ) : null}
 
         {step === 6 && orderId ? (
-          <StepSuccess orderId={orderId} supportPhone={tenant.supportPhone} />
+          <StepSuccess
+            supportPhone={tenant.supportPhone}
+            onContinue={onClose ?? (() => window.location.assign("/"))}
+          />
         ) : null}
       </div>
 

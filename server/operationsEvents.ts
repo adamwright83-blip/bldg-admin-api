@@ -89,11 +89,28 @@ export function buildOperationEventForOrderStatusChange(input: {
   if (!shouldCaptureOperationEvent(input)) return null;
 
   const isPickup = input.nextStatus === "collected";
+  return buildCompletedOperationEventForOrder({
+    order: input.order,
+    sourceEventType: isPickup ? "pickup_completed" : "dropoff_completed",
+    actor: input.actor,
+    rawJson: {
+      previousStatus: input.previousStatus,
+      nextStatus: input.nextStatus,
+    },
+  });
+}
+
+function buildCompletedOperationEventForOrder(input: {
+  order: Order;
+  sourceEventType: "pickup_completed" | "dropoff_completed";
+  actor?: OperationsEventActorContext;
+  rawJson?: Record<string, unknown>;
+}): InsertOperationsEvent {
+  const isPickup = input.sourceEventType === "pickup_completed";
   const order = input.order;
   const actualEventTimestamp = input.actor?.actualEventTimestamp ?? new Date();
   const building = resolveBuilding(order);
   const tenantId = order.tenantId ?? "default";
-  const sourceEventType = isPickup ? "pickup_completed" : "dropoff_completed";
   const scheduledDate = isPickup ? order.pickupDate : order.deliveryDate;
   const scheduledWindow = isPickup ? order.pickupTimeWindow : order.deliveryTimeWindow;
 
@@ -101,7 +118,7 @@ export function buildOperationEventForOrderStatusChange(input: {
     tenantId,
     businessUnitLabel: tenantLabel(tenantId),
     source: input.actor?.source ?? "driver_app_bldg",
-    sourceEventType,
+    sourceEventType: input.sourceEventType,
     eventStatus: "completed",
     orderId: order.id,
     customerName: `${order.firstName} ${order.lastName}`.trim() || "Unknown Customer",
@@ -121,11 +138,29 @@ export function buildOperationEventForOrderStatusChange(input: {
     weightLbs: order.weightLbs ?? null,
     rawJson: {
       source: input.actor?.source ?? "driver_app_bldg",
-      previousStatus: input.previousStatus,
-      nextStatus: input.nextStatus,
+      ...input.rawJson,
       orderSnapshot: order,
       capturedAt: actualEventTimestamp.toISOString(),
       vendorInitiated: Boolean(order.vendorId && !input.actor?.actorUserId),
     },
   };
+}
+
+export function buildPickupCompletedOperationsEventForOrder(input: {
+  order: Order;
+  actor?: OperationsEventActorContext;
+  reason?: string;
+}): InsertOperationsEvent {
+  return buildCompletedOperationEventForOrder({
+    order: input.order,
+    sourceEventType: "pickup_completed",
+    actor: {
+      source: "system_backfill",
+      ...input.actor,
+    },
+    rawJson: {
+      reason: input.reason ?? "operations_event_backfill",
+      synthesizedFrom: "order_payment_truth",
+    },
+  });
 }

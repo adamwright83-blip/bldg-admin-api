@@ -264,4 +264,35 @@ describe("operations events dashboard helpers", () => {
     expect(source).toContain("paid: orders.paid");
     expect(source).toContain("paidAt: orders.paidAt");
   });
+
+  it("chargeCard persists Stripe payment truth before non-critical side effects", () => {
+    const source = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
+    const stripeCreate = source.indexOf("paymentIntent = await stripe.paymentIntents.create");
+    const paidUpdate = source.indexOf("await updateOrderIntake(input.orderId, {\n            paid: true");
+    const ensureEvent = source.indexOf("await ensurePickupCompletedOperationsEventForOrder(input.orderId");
+    const receipt = source.indexOf("const receiptToken = await new jose.SignJWT");
+    const sms = source.indexOf("await notifyCardCharged(order.phone");
+    const sheets = source.indexOf("await writeOrderToSheet(order, input.amountCents)");
+    const opsTask = source.indexOf("const task = await createOpsTask");
+
+    expect(stripeCreate).toBeGreaterThan(-1);
+    expect(paidUpdate).toBeGreaterThan(stripeCreate);
+    expect(ensureEvent).toBeGreaterThan(paidUpdate);
+    expect(receipt).toBeGreaterThan(paidUpdate);
+    expect(sms).toBeGreaterThan(paidUpdate);
+    expect(sheets).toBeGreaterThan(paidUpdate);
+    expect(opsTask).toBeGreaterThan(paidUpdate);
+    expect(source).toContain("total: centsToDollars(input.amountCents)");
+    expect(source).toContain('source: "admin_chargeCard"');
+    expect(source).toContain("[Receipt] Failed to generate receipt after successful charge:");
+  });
+
+  it("repair script updates paid order truth and ensures an operations event", () => {
+    const source = readFileSync(new URL("../scripts/repair-stripe-paid-order.ts", import.meta.url), "utf8");
+    expect(source).toContain("paymentIntent.status !== \"succeeded\"");
+    expect(source).toContain("paid: true");
+    expect(source).toContain("stripePaymentIntentId: paymentIntent.id");
+    expect(source).toContain("total: centsToDollars(paymentIntent.amount)");
+    expect(source).toContain("ensurePickupCompletedOperationsEventForOrder(orderId");
+  });
 });

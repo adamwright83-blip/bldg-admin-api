@@ -10,7 +10,6 @@
  */
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
-import { getResidentWebOrigin } from "@/const";
 import { useTenant } from "@/hooks/useTenant";
 import { WF_RATE_PER_LB_CENTS, centsToDollars } from "@shared/pricing";
 import { useCatalogDryCleanMinCents } from "@/components/CatalogDryCleanPricing";
@@ -560,32 +559,15 @@ function Step5(props: {
 
 /* ===== STEP 6: SUCCESS ===== */
 function Step6({
-  orderId,
   onClose,
   supportPhone,
   primaryColor,
 }: {
-  orderId: number;
   onClose: () => void;
   supportPhone: string;
   primaryColor: string;
 }) {
-  const [loading, setLoading] = useState(false);
   const supportPhoneHref = `tel:${supportPhone.replace(/[^\d+]/g, "")}`;
-  const generateTokenMutation = trpc.orders.generatePortalToken.useMutation();
-
-  const handleContinue = async () => {
-    setLoading(true);
-    try {
-      const { token } = await generateTokenMutation.mutateAsync({ orderId });
-      const welcome = new URL("/welcome", `${getResidentWebOrigin()}/`);
-      welcome.searchParams.set("token", token);
-      window.location.href = welcome.toString();
-    } catch (err) {
-      console.error("Failed to generate portal token:", err);
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="text-center py-4">
@@ -615,8 +597,8 @@ function Step6({
         if you have requests or questions.
       </p>
 
-      <BlackButton onClick={handleContinue} disabled={loading} primaryColor={primaryColor}>
-        {loading ? "REDIRECTING..." : "CONTINUE"}
+      <BlackButton onClick={onClose} primaryColor={primaryColor}>
+        CONTINUE
       </BlackButton>
     </div>
   );
@@ -734,7 +716,6 @@ export default function SchedulePickupModal({ onClose }: SchedulePickupModalProp
         )}
         {step === 6 && orderId && (
           <Step6
-            orderId={orderId}
             onClose={onClose}
             supportPhone={tenant.supportPhone}
             primaryColor={tenant.primaryColor}

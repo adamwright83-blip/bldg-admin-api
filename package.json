@@ -15,6 +15,7 @@
     "backfill:order-buildings": "tsx scripts/backfill-order-buildings.ts",
     "sync:cleancloud-csv-to-sheet": "tsx scripts/sync-cleancloud-csv-to-sheet.ts",
     "sync:laundry-farm-sheet": "tsx scripts/sync-laundry-farm-revenue-sheet.ts",
+    "repair:stripe-paid-order": "tsx scripts/repair-stripe-paid-order.ts",
     "seed:catalog": "tsx scripts/seed-catalog-from-dc-items.ts",
     "db:push": "drizzle-kit generate && drizzle-kit migrate"
   },

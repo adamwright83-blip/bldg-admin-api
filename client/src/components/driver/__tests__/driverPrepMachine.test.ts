@@ -158,6 +158,84 @@ describe("driverPrepMachine — payload progression", () => {
     expect(state.phase).toBe("mission_complete");
     expect(state.history.missionsCompletedLifetime).toBe(1);
   });
+
+  it("skips games by resolving the order and returning to command center without mission completion", () => {
+    const previewUrl = "data:image/png;base64,AAA";
+    let state = createInitialDriverPrepState(3, "2026-04-20");
+    state = run(
+      state,
+      { type: "SELECT_ORDER", orderId: 77 },
+      { type: "START_RUN_FROM_ORDER" },
+      { type: "SET_PREP_PREVIEW", tier: 1, previewDataUrl: previewUrl },
+      { type: "SECURE_PREP_TASK", tier: 1, now: "2026-04-20T10:00Z" },
+      { type: "SET_PREP_PREVIEW", tier: 2, previewDataUrl: previewUrl },
+      { type: "SECURE_PREP_TASK", tier: 2, now: "2026-04-20T10:00Z" },
+      { type: "SET_PREP_PREVIEW", tier: 3, previewDataUrl: previewUrl },
+      { type: "SECURE_PREP_TASK", tier: 3, now: "2026-04-20T10:00Z" },
+      { type: "ADVANCE_PREP_COMPLETE" },
+      { type: "COMPLETE_LAUNDRY_RUN", score: 4 },
+      { type: "ADVANCE_TO_FLYER_PROOF" },
+      { type: "COMPLETE_FLYER_PROOF", previewDataUrl: previewUrl },
+      {
+        type: "START_SIGNAL_OVERRIDE",
+        startedAt: "2026-04-20T10:01Z",
+        deadlineAt: "2026-04-20T10:01:08Z",
+      }
+    );
+    expect(state.phase).toBe("signal_override");
+
+    state = run(state, {
+      type: "SKIP_GAMES_TO_COMMAND_CENTER",
+      resolvedOrder: { orderId: 77, nextStatus: "collected" },
+    });
+
+    expect(state.phase).toBe("command_center");
+    expect(state.currentOrderId).toBeNull();
+    expect(state.pendingOrderResolution).toEqual({
+      orderId: 77,
+      nextStatus: "collected",
+    });
+    expect(state.resolvedOrderIdsCurrentMission).toEqual([77]);
+    expect(state.currentPayloadIndex).toBe(1);
+    expect(state.completedPayloadsCurrentMission).toBe(0);
+    expect(state.missionCompletedForDay).toBe(false);
+    expect(state.history.totalXp).toBe(0);
+    expect(state.deployment).toEqual({
+      status: "empty",
+      previewDataUrl: null,
+      uploadedAt: null,
+    });
+    expect(state.verification.result).toBe("pending");
+  });
+
+  it("ignores stale prep scan callbacks after a skip returns to command center", () => {
+    const previewUrl = "data:image/png;base64,AAA";
+    let state = createInitialDriverPrepState(1, "2026-04-20");
+    state = run(
+      state,
+      { type: "SELECT_ORDER", orderId: 88 },
+      { type: "START_RUN_FROM_ORDER" }
+    );
+    expect(state.phase).toBe("prep_t1");
+
+    state = run(state, {
+      type: "SKIP_GAMES_TO_COMMAND_CENTER",
+      resolvedOrder: { orderId: 88, nextStatus: "delivered" },
+    });
+
+    const afterStaleScan = run(
+      state,
+      { type: "SET_PREP_PREVIEW", tier: 1, previewDataUrl: previewUrl },
+      { type: "SECURE_PREP_TASK", tier: 1, now: "2026-04-20T10:00Z" }
+    );
+
+    expect(afterStaleScan.phase).toBe("command_center");
+    expect(afterStaleScan.prepUploads.t1.status).toBe("empty");
+    expect(afterStaleScan.pendingOrderResolution).toEqual({
+      orderId: 88,
+      nextStatus: "delivered",
+    });
+  });
 });
 
 describe("driverPrepMachine — hard reset on Signal Override failure", () => {

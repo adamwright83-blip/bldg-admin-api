@@ -13,6 +13,7 @@ import {
   Clock,
   ExternalLink,
   Building2,
+  Home,
 } from "lucide-react";
 import type { GameOrder } from "./driverGameTypes";
 import { sounds } from "./driverSounds";
@@ -24,12 +25,14 @@ const BRIEFING_BG =
 interface Props {
   order: GameOrder;
   onStartVerification: () => void;
+  onSkipGames: () => void;
   onBack: () => void;
 }
 
 export default function OrderDetail({
   order,
   onStartVerification,
+  onSkipGames,
   onBack,
 }: Props) {
   const [showObjectives, setShowObjectives] = useState(false);
@@ -58,6 +61,10 @@ export default function OrderDetail({
     sounds.scanConfirm();
     haptics.slam();
     onStartVerification();
+  };
+
+  const handleSkipGames = () => {
+    onSkipGames();
   };
 
   const objectives = [
@@ -253,13 +260,22 @@ export default function OrderDetail({
 
       <div className="fixed bottom-0 left-0 right-0 z-20">
         <div className="h-16 bg-gradient-to-t from-void to-transparent" />
-        <div className="bg-void px-4 pb-6 pt-2">
+        <div className="bg-void px-4 pb-6 pt-2 space-y-2">
           <button
             onClick={handleDelivered}
             className="w-full bg-neon text-void py-4 font-display font-extrabold text-lg uppercase tracking-wider
                        active:scale-[0.98] transition-transform shadow-[0_0_20px_oklch(0.85_0.25_155/0.3)]"
           >
             Order {order.type === "PICKUP" ? "Picked Up" : "Delivered"}
+          </button>
+          <button
+            type="button"
+            onClick={handleSkipGames}
+            className="w-full border border-neon/35 bg-neon/[0.04] py-3.5 font-display font-extrabold text-sm uppercase tracking-[0.16em] text-neon
+                       active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+          >
+            <Home className="w-4 h-4" />
+            <span>Skip Games & Return Home</span>
           </button>
         </div>
       </div>

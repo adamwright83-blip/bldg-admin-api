@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import type { Order } from "../drizzle/schema";
 import {
   buildOperationEventForOrderStatusChange,
+  buildPickupCompletedOperationsEventForOrder,
   shouldCaptureOperationEvent,
 } from "./operationsEvents";
 
@@ -152,6 +154,31 @@ describe("operations event capture", () => {
     expect((event?.rawJson as any).vendorInitiated).toBe(true);
   });
 
+  it("builds system pickup events for admin charge backfills", () => {
+    const paidAt = new Date("2026-05-18T20:10:00.000Z");
+    const event = buildPickupCompletedOperationsEventForOrder({
+      order: order({ status: "processing", paid: true, paidAt }),
+      actor: {
+        actorDisplayName: "Admin charge",
+        actualEventTimestamp: paidAt,
+      },
+      reason: "stripe_charge_succeeded",
+    });
+
+    expect(event).toMatchObject({
+      source: "system_backfill",
+      sourceEventType: "pickup_completed",
+      eventStatus: "completed",
+      orderId: 42,
+      actorDisplayName: "Admin charge",
+      actualEventTimestamp: paidAt,
+      scheduledDate: "2026-05-14",
+      scheduledWindow: "10:00am-12:00pm",
+    });
+    expect((event.rawJson as any).reason).toBe("stripe_charge_succeeded");
+    expect((event.rawJson as any).synthesizedFrom).toBe("order_payment_truth");
+  });
+
   it("flags unknown explicit building slugs as unresolved instead of fake-resolved", () => {
     const event = buildOperationEventForOrderStatusChange({
       order: order({
@@ -168,5 +195,12 @@ describe("operations event capture", () => {
       tower: null,
       buildingResolutionStatus: "unresolved_needs_mapping",
     });
+  });
+
+  it("DB helpers avoid duplicate pickup events across sources", () => {
+    const source = readFileSync(new URL("./db.ts", import.meta.url), "utf8");
+    expect(source).toContain("ensurePickupCompletedOperationsEventForOrder");
+    expect(source).toContain("eq(operationsEvents.orderId, orderId), eq(operationsEvents.sourceEventType, \"pickup_completed\")");
+    expect(source).toContain("eq(operationsEvents.orderId, orderId), eq(operationsEvents.sourceEventType, event.sourceEventType)");
   });
 });

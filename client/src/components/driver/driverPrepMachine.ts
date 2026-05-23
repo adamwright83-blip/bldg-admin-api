@@ -111,6 +111,13 @@ export type DriverPrepAction =
   | { type: "ADVANCE_AFTER_VERIFY_SUCCESS" }
   | { type: "ACK_VERIFY_FAILURE" }
   | { type: "ACK_ORDER_RESOLUTION" }
+  | {
+      type: "SKIP_GAMES_TO_COMMAND_CENTER";
+      resolvedOrder?: {
+        orderId: number;
+        nextStatus: "collected" | "delivered";
+      };
+    }
   | { type: "REGISTER_NEXT_TARGET_LAUNCH" }
   | { type: "CANCEL_NEXT_TARGET_LAUNCH" }
   | { type: "RESUME_AFTER_MAP_RETURN" }
@@ -440,6 +447,7 @@ export function driverPrepReducer(
       });
     }
     case "SET_PREP_PREVIEW": {
+      if (state.phase !== `prep_t${action.tier}`) return state;
       const key = `t${action.tier}` as "t1" | "t2" | "t3";
       return stampUpdatedAt({
         ...state,
@@ -455,6 +463,7 @@ export function driverPrepReducer(
       });
     }
     case "SECURE_PREP_TASK": {
+      if (state.phase !== `prep_t${action.tier}`) return state;
       const key = `t${action.tier}` as "t1" | "t2" | "t3";
       const phase = nextPrepPhase(action.tier);
       return stampUpdatedAt({
@@ -588,6 +597,31 @@ export function driverPrepReducer(
       });
     case "ACK_ORDER_RESOLUTION":
       return stampUpdatedAt({ ...state, pendingOrderResolution: null });
+    case "SKIP_GAMES_TO_COMMAND_CENTER": {
+      const resolvedOrderIdsCurrentMission = action.resolvedOrder
+        ? state.resolvedOrderIdsCurrentMission.includes(
+            action.resolvedOrder.orderId
+          )
+          ? state.resolvedOrderIdsCurrentMission
+          : [
+              ...state.resolvedOrderIdsCurrentMission,
+              action.resolvedOrder.orderId,
+            ]
+        : state.resolvedOrderIdsCurrentMission;
+
+      return stampUpdatedAt({
+        ...state,
+        phase: "command_center",
+        currentOrderId: null,
+        laundryRunScore: 0,
+        deployment: createEmptyDeploymentProof(),
+        verification: createEmptyVerificationState(),
+        postVerifyPhase: null,
+        resolvedOrderIdsCurrentMission,
+        nextTargetLaunchPending: false,
+        pendingOrderResolution: action.resolvedOrder ?? null,
+      });
+    }
     case "REGISTER_NEXT_TARGET_LAUNCH":
       return stampUpdatedAt({ ...state, nextTargetLaunchPending: true });
     case "CANCEL_NEXT_TARGET_LAUNCH":

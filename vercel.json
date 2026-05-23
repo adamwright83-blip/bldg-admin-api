@@ -1,6 +1,7 @@
 {
   "rewrites": [
     { "source": "/receipt/:path*", "destination": "/index.html" },
+    { "source": "/welcome", "destination": "/index.html" },
     { "source": "/admin", "destination": "/index.html" },
     { "source": "/home", "destination": "/index.html" },
     { "source": "/live", "destination": "/index.html" },
