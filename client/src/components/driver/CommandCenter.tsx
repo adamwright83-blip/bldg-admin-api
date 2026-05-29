@@ -22,10 +22,17 @@ import {
   ChevronLeft,
   CheckCircle2,
   Loader2,
+  Mic,
   ReceiptText,
+  Scissors,
+  Search,
+  Sparkles,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useDebounce } from "@/hooks/useDebounce";
 import { trpc } from "@/lib/trpc";
+import { centsToDollars } from "@shared/pricing";
 import type { GameOrder, GameStateSnapshot } from "./driverGameTypes";
 import { sounds } from "./driverSounds";
 import { haptics } from "./driverHaptics";
@@ -176,7 +183,7 @@ function ScheduleDateSelector({
       </div>
 
       <div className="grid grid-cols-7 gap-1.5 mb-3">
-        {days.map((day) => (
+        {days.map(day => (
           <button
             key={day.value}
             type="button"
@@ -234,7 +241,9 @@ function dataUrlToReceiptPayload(dataUrl: string): {
   mimeType: "image/jpeg" | "image/png" | "image/webp";
   base64: string;
 } {
-  const match = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,([\s\S]+)$/);
+  const match = dataUrl.match(
+    /^data:(image\/(?:jpeg|png|webp));base64,([\s\S]+)$/
+  );
   if (!match) throw new Error("Use a JPEG, PNG, or WebP receipt photo.");
   return {
     mimeType: match[1] as "image/jpeg" | "image/png" | "image/webp",
@@ -242,11 +251,92 @@ function dataUrlToReceiptPayload(dataUrl: string): {
   };
 }
 
-function DriverReceiptUpload() {
+const RECEIPT_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+type ReceiptImageMime = (typeof RECEIPT_IMAGE_TYPES)[number];
+
+type ReceiptCustomer = {
+  orderId?: number | null;
+  orderStatus?: string | null;
+  serviceType?: string | null;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string | null;
+  unit: string | null;
+  address: string;
+  buildingSlug: string | null;
+  stripeCustomerId: string | null;
+  stripePaymentMethodId: string | null;
+};
+
+type ParsedReceipt = {
+  receiptIntakeId?: number;
+  receiptImageUrl?: string | null;
+  vendorName: string | null;
+  receiptNumber: string | null;
+  lines: Array<{
+    rawLabel: string;
+    qty: number;
+    unitPriceCents: number | null;
+    lineTotalCents: number | null;
+  }>;
+  dryCleanerRetailTotalCents: number;
+  confidence: number;
+  warnings: string[];
+};
+
+type ReceiptMatch = {
+  rawLabel: string;
+  matchedCatalogSlug: string | null;
+  matchedCatalogName: string | null;
+  category: string | null;
+  qty: number;
+  dryCleanerRetailLineTotalCents: number | null;
+  laundryButlerUnitPriceCents: number | null;
+  laundryButlerLineTotalCents: number;
+  confidence: number;
+  warning: string | null;
+};
+
+type ReceiptSummary = {
+  dryCleanerRetailTotalCents: number;
+  partnerCostCents: number;
+  laundryButlerRetailSubtotalCents: number;
+  customerTotalCentsAtDraft: number;
+  estimatedGrossMarginCents: number;
+  warnings: string[];
+};
+
+function isReceiptImageMime(value: string): value is ReceiptImageMime {
+  return RECEIPT_IMAGE_TYPES.includes(value as ReceiptImageMime);
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () =>
+      resolve(String(reader.result || "").split(",")[1] || "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function money(cents: number | null | undefined): string {
+  return `$${centsToDollars(cents ?? 0)}`;
+}
+
+function customerName(customer: ReceiptCustomer): string {
+  return (
+    `${customer.firstName || ""} ${customer.lastName || ""}`.trim() ||
+    "Resident"
+  );
+}
+
+function DriverGasReceiptUpload() {
   const fileRef = React.useRef<HTMLInputElement>(null);
   const [lastResult, setLastResult] = React.useState<string | null>(null);
   const uploadReceipt = trpc.admin.uploadDriverExpenseReceipt.useMutation({
-    onSuccess: (result) => {
+    onSuccess: result => {
       if (result.success) {
         const total = `$${(result.parsed.totalCents / 100).toFixed(2)}`;
         const vendor = result.parsed.vendorName ?? "gas receipt";
@@ -261,7 +351,7 @@ function DriverReceiptUpload() {
       sounds.overrideFail();
       haptics.error();
     },
-    onError: (error) => {
+    onError: error => {
       setLastResult(null);
       toast.error(error.message || "Could not upload receipt.");
       sounds.overrideFail();
@@ -271,7 +361,7 @@ function DriverReceiptUpload() {
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    if (!isReceiptImageMime(file.type)) {
       toast.error("Use a JPEG, PNG, or WebP receipt photo.");
       return;
     }
@@ -282,19 +372,328 @@ function DriverReceiptUpload() {
       uploadReceipt.mutate(dataUrlToReceiptPayload(compressed));
       if (fileRef.current) fileRef.current.value = "";
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not read receipt photo.");
+      toast.error(
+        error instanceof Error ? error.message : "Could not read receipt photo."
+      );
     }
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+76px)] z-40 flex justify-center px-6 pointer-events-none">
+    <>
       <input
         ref={fileRef}
         type="file"
         accept="image/*"
         capture="environment"
         className="hidden"
-        onChange={(event) => void handleFile(event.target.files?.[0])}
+        onChange={event => void handleFile(event.target.files?.[0])}
+      />
+      <motion.button
+        type="button"
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.34, duration: 0.4 }}
+        onClick={() => fileRef.current?.click()}
+        disabled={uploadReceipt.isPending}
+        className="pointer-events-auto min-h-[78px] rounded-[8px] border-2 border-amber/75 bg-black/90 px-2.5 py-3 text-center shadow-[0_0_24px_rgba(255,190,80,0.2)] backdrop-blur transition-colors hover:border-amber hover:bg-black disabled:opacity-70"
+      >
+        <div className="flex h-full items-center justify-center gap-2.5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] border border-amber/55 bg-amber/[0.12] text-amber">
+            {uploadReceipt.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Camera className="h-4 w-4" />
+            )}
+          </span>
+          <span className="min-w-0">
+            <span className="block font-display text-[13px] font-extrabold uppercase leading-[1.05] tracking-[0.05em] text-white sm:text-[15px]">
+              Gas Receipt
+            </span>
+            <span className="mt-1 flex min-w-0 items-center justify-center gap-1 text-[8px] uppercase tracking-[0.12em] text-amber/80">
+              {lastResult ? (
+                <CheckCircle2 className="h-3 w-3" />
+              ) : (
+                <ReceiptText className="h-3 w-3" />
+              )}
+              <span className="truncate">
+                {lastResult ? `Logged ${lastResult}` : "Tap camera"}
+              </span>
+            </span>
+          </span>
+        </div>
+      </motion.button>
+    </>
+  );
+}
+
+function DriverDryCleanReceiptUpload({
+  onOrderCreated,
+}: {
+  onOrderCreated?: () => Promise<void> | void;
+}) {
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const [open, setOpen] = React.useState(false);
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const [photoData, setPhotoData] = React.useState<{
+    mimeType: ReceiptImageMime;
+    base64: string;
+  } | null>(null);
+  const [parsed, setParsed] = React.useState<ParsedReceipt | null>(null);
+  const [matches, setMatches] = React.useState<ReceiptMatch[]>([]);
+  const [query, setQuery] = React.useState("");
+  const [selectedCustomer, setSelectedCustomer] =
+    React.useState<ReceiptCustomer | null>(null);
+  const [summary, setSummary] = React.useState<ReceiptSummary | null>(null);
+  const debouncedQuery = useDebounce(query, 250);
+
+  const parseReceipt = trpc.admin.dryCleanReceipt.parseReceipt.useMutation();
+  const matchReceipt =
+    trpc.admin.dryCleanReceipt.matchReceiptToCatalog.useMutation();
+  const createDraft =
+    trpc.admin.dryCleanReceipt.createOrderFromReceipt.useMutation();
+  const customerQuery = trpc.admin.searchCustomersForAssignment.useQuery(
+    { search: debouncedQuery },
+    { enabled: open && debouncedQuery.trim().length >= 2 && !selectedCustomer }
+  );
+  const catalogQuery = trpc.admin.catalog.list.useQuery(
+    { includeArchived: false },
+    { enabled: open && !!summary }
+  );
+  const catalogRows = React.useMemo(
+    () =>
+      (catalogQuery.data ?? []).filter(
+        row =>
+          (row.serviceType ?? "dry_clean") === "dry_clean" ||
+          row.serviceType === "alteration"
+      ),
+    [catalogQuery.data]
+  );
+  const isReading = parseReceipt.isPending || matchReceipt.isPending;
+
+  React.useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  const refreshSummary = React.useCallback(
+    (nextMatches: ReceiptMatch[], dryTotal?: number) => {
+      const dryCleanerRetailTotalCents =
+        dryTotal ??
+        nextMatches.reduce(
+          (sum, match) => sum + (match.dryCleanerRetailLineTotalCents ?? 0),
+          0
+        );
+      const laundryButlerRetailSubtotalCents = nextMatches.reduce(
+        (sum, match) => sum + match.laundryButlerLineTotalCents,
+        0
+      );
+      const partnerCostCents = Math.round(dryCleanerRetailTotalCents * 0.6);
+      setSummary({
+        dryCleanerRetailTotalCents,
+        partnerCostCents,
+        laundryButlerRetailSubtotalCents,
+        customerTotalCentsAtDraft: laundryButlerRetailSubtotalCents,
+        estimatedGrossMarginCents:
+          laundryButlerRetailSubtotalCents - partnerCostCents,
+        warnings: nextMatches
+          .map(match => match.warning)
+          .filter((warning): warning is string => !!warning),
+      });
+    },
+    []
+  );
+
+  const resetWorkflow = React.useCallback(() => {
+    setPreviewUrl(null);
+    setPhotoData(null);
+    setParsed(null);
+    setMatches([]);
+    setQuery("");
+    setSelectedCustomer(null);
+    setSummary(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }, []);
+
+  async function handleFile(file: File | undefined) {
+    if (!file) return;
+    if (!isReceiptImageMime(file.type)) {
+      toast.error("Use a JPEG, PNG, or WebP receipt photo.");
+      return;
+    }
+    try {
+      sounds.shutter();
+      haptics.shutter();
+      setOpen(true);
+      setPreviewUrl(URL.createObjectURL(file));
+      setParsed(null);
+      setMatches([]);
+      setSummary(null);
+      setSelectedCustomer(null);
+      setQuery("");
+      const base64 = await fileToBase64(file);
+      setPhotoData({ mimeType: file.type, base64 });
+      if (fileRef.current) fileRef.current.value = "";
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not read dry-clean receipt photo."
+      );
+    }
+  }
+
+  function runSpeech() {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error("Speech recognition is not available in this browser.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.onresult = (event: any) => {
+      setSelectedCustomer(null);
+      setQuery(event.results?.[0]?.[0]?.transcript ?? "");
+    };
+    recognition.start();
+  }
+
+  async function selectCustomer(customer: ReceiptCustomer) {
+    if (!photoData && !parsed) {
+      toast.error("Add a dry-clean receipt photo first.");
+      return;
+    }
+    try {
+      setSelectedCustomer(customer);
+      setQuery(customerName(customer));
+      const parsedReceipt =
+        parsed ?? (await parseReceipt.mutateAsync(photoData!));
+      setParsed(parsedReceipt);
+      const result = await matchReceipt.mutateAsync({
+        receiptIntakeId: parsedReceipt.receiptIntakeId,
+        lines: parsedReceipt.lines,
+        dryCleanerRetailTotalCents: parsedReceipt.dryCleanerRetailTotalCents,
+      });
+      setMatches(result.matches);
+      setSummary(result);
+      sounds.scanConfirm();
+      haptics.impact();
+    } catch (error) {
+      setSelectedCustomer(null);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not parse dry-clean receipt."
+      );
+      sounds.overrideFail();
+      haptics.error();
+    }
+  }
+
+  function setLineMatch(idx: number, slug: string) {
+    const item = catalogRows.find(row => row.slug === slug);
+    const next = matches.map((match, i) =>
+      i === idx
+        ? {
+            ...match,
+            matchedCatalogSlug: item?.slug ?? null,
+            matchedCatalogName: item?.name ?? null,
+            category: item?.category ?? null,
+            laundryButlerUnitPriceCents: item?.standardPriceCents ?? null,
+            laundryButlerLineTotalCents: item
+              ? item.standardPriceCents * match.qty
+              : 0,
+            confidence: item ? 1 : 0,
+            warning: item ? null : "No Laundry Butler catalog item selected.",
+          }
+        : match
+    );
+    setMatches(next);
+    refreshSummary(
+      next,
+      summary?.dryCleanerRetailTotalCents ?? parsed?.dryCleanerRetailTotalCents
+    );
+  }
+
+  function setLineQty(idx: number, qty: number) {
+    const next = matches.map((match, i) => {
+      if (i !== idx) return match;
+      const cleanQty = Math.max(0, Math.round(qty || 0));
+      return {
+        ...match,
+        qty: cleanQty,
+        laundryButlerLineTotalCents:
+          (match.laundryButlerUnitPriceCents ?? 0) * cleanQty,
+      };
+    });
+    setMatches(next);
+    refreshSummary(
+      next,
+      summary?.dryCleanerRetailTotalCents ?? parsed?.dryCleanerRetailTotalCents
+    );
+  }
+
+  async function handleCreateDraft() {
+    if (!parsed?.receiptIntakeId || !selectedCustomer || !summary) return;
+    try {
+      const res = await createDraft.mutateAsync({
+        receiptIntakeId: parsed.receiptIntakeId,
+        selectedCustomer,
+        reviewedMatches: matches,
+        dryCleanerRetailTotalCents: summary.dryCleanerRetailTotalCents,
+        partnerCostCents: summary.partnerCostCents,
+        laundryButlerRetailSubtotalCents:
+          summary.laundryButlerRetailSubtotalCents,
+        customerTotalCentsAtDraft: summary.customerTotalCentsAtDraft,
+        receiptNumber: parsed.receiptNumber,
+        parseJson: parsed,
+        warnings: [...(parsed.warnings ?? []), ...(summary.warnings ?? [])],
+      });
+      if (res.dryCleaningCostSheet?.ok) {
+        toast.success("Dry-clean intake created. Cost sent to Sheets.");
+      } else {
+        toast.success("Dry-clean intake created. No card was charged.");
+        if (res.dryCleaningCostSheet && !res.dryCleaningCostSheet.ok) {
+          toast.error(
+            `Cost sheet write skipped: ${res.dryCleaningCostSheet.reason}`
+          );
+        }
+      }
+      sounds.scanConfirm();
+      haptics.impact();
+      await onOrderCreated?.();
+      resetWorkflow();
+      setOpen(false);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not create dry-clean intake."
+      );
+      sounds.overrideFail();
+      haptics.error();
+    }
+  }
+
+  const warnings = [...(parsed?.warnings ?? []), ...(summary?.warnings ?? [])];
+  const canCreateDraft =
+    Boolean(selectedCustomer && parsed?.receiptIntakeId && summary) &&
+    matches.length > 0 &&
+    matches.some(match => !!match.matchedCatalogSlug) &&
+    !createDraft.isPending;
+
+  return (
+    <>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={event => void handleFile(event.target.files?.[0])}
       />
       <motion.button
         type="button"
@@ -302,24 +701,310 @@ function DriverReceiptUpload() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.28, duration: 0.4 }}
         onClick={() => fileRef.current?.click()}
-        disabled={uploadReceipt.isPending}
-        className="pointer-events-auto min-h-[70px] w-[min(300px,calc(100vw-64px))] rounded-full border-2 border-amber/75 bg-black/88 px-6 py-3 text-center shadow-[0_0_28px_rgba(255,190,80,0.22)] backdrop-blur transition-colors hover:border-amber hover:bg-black disabled:opacity-70"
+        disabled={isReading || createDraft.isPending}
+        className="pointer-events-auto min-h-[78px] rounded-[8px] border-2 border-cyan-100 bg-cyan-300 px-2.5 py-3 text-center text-black shadow-[0_0_28px_rgba(103,232,249,0.26)] transition-colors hover:bg-cyan-200 disabled:opacity-70"
       >
-        <div className="flex items-center justify-center gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-amber/55 bg-amber/[0.12] text-amber">
-            {uploadReceipt.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+        <div className="flex h-full items-center justify-center gap-2.5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] border border-black/20 bg-white/35 text-black">
+            {isReading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Scissors className="h-4 w-4" />
+            )}
           </span>
           <span className="min-w-0">
-            <span className="block font-display text-[18px] font-extrabold uppercase tracking-[0.08em] text-white">
-              Gas Receipt Upload
+            <span className="block font-display text-[13px] font-black uppercase leading-[1.05] tracking-[0.05em] text-black sm:text-[15px]">
+              Dry Clean
             </span>
-            <span className="mt-1 flex items-center justify-center gap-1.5 text-[9px] uppercase tracking-[0.18em] text-amber/80">
-              {lastResult ? <CheckCircle2 className="h-3 w-3" /> : <ReceiptText className="h-3 w-3" />}
-              {lastResult ? `Logged ${lastResult}` : "Tap camera · row 16"}
+            <span className="mt-1 flex min-w-0 items-center justify-center gap-1 text-[8px] font-black uppercase tracking-[0.12em] text-black/70">
+              <Sparkles className="h-3 w-3" />
+              <span className="truncate">Photo to order</span>
             </span>
           </span>
         </div>
       </motion.button>
+
+      <AnimatePresence>
+        {open ? (
+          <motion.div
+            className="pointer-events-auto fixed inset-0 z-[130] overflow-y-auto bg-black/82 px-3 py-5 backdrop-blur-md"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="mx-auto mb-[calc(env(safe-area-inset-bottom)+16px)] w-full max-w-xl rounded-[8px] border border-cyan-200/35 bg-[#061111] text-white shadow-[0_0_40px_rgba(103,232,249,0.16)]"
+              initial={{ y: 28, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 28, opacity: 0 }}
+              transition={{ duration: 0.22 }}
+            >
+              <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-cyan-200/15 bg-[#061111]/95 p-4 backdrop-blur">
+                <div className="min-w-0">
+                  <p className="text-[8px] font-bold uppercase tracking-[0.24em] text-cyan-200/70">
+                    Dry Clean Receipt
+                  </p>
+                  <h2 className="font-display text-[22px] font-black uppercase leading-none tracking-wide text-white">
+                    Create Intake
+                  </h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    className="h-10 border border-cyan-200/35 bg-cyan-300 px-3 text-[9px] font-black uppercase tracking-[0.16em] text-black"
+                  >
+                    Retake
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Close dry-clean receipt intake"
+                    onClick={() => setOpen(false)}
+                    className="flex h-10 w-10 items-center justify-center border border-white/15 bg-white/[0.06] text-white/70 hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-4 p-4">
+                <div className="flex items-start gap-3 rounded-[8px] border border-white/10 bg-white/[0.04] p-3">
+                  {previewUrl ? (
+                    <img
+                      src={previewUrl}
+                      alt="Dry-clean receipt preview"
+                      className="h-28 w-20 shrink-0 rounded-[6px] border border-cyan-200/25 object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-28 w-20 shrink-0 items-center justify-center rounded-[6px] border border-cyan-200/25 bg-cyan-300/10">
+                      <ReceiptText className="h-5 w-5 text-cyan-200" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-white">
+                      Who does this receipt belong to?
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-white/55">
+                      Match the customer, review each catalog line, then create
+                      the order and Sheets cost entry.
+                    </p>
+                    {photoData ? (
+                      <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.16em] text-cyan-200/70">
+                        Photo ready
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.16em] text-amber/80">
+                        Pick a receipt photo to begin
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-[1fr_44px] gap-2">
+                  <label className="relative block">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-200/60" />
+                    <input
+                      value={query}
+                      onChange={event => {
+                        setQuery(event.target.value);
+                        setSelectedCustomer(null);
+                      }}
+                      placeholder="Search name, phone, unit, email, building"
+                      className="h-12 w-full rounded-[8px] border border-cyan-200/25 bg-black/45 pl-10 pr-3 text-sm font-semibold text-white outline-none placeholder:text-white/35 focus:border-cyan-200"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={runSpeech}
+                    title="Speak customer name"
+                    className="flex h-12 items-center justify-center rounded-[8px] border border-cyan-200/25 bg-cyan-300/10 text-cyan-100"
+                  >
+                    <Mic className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {!selectedCustomer && (customerQuery.data?.length ?? 0) > 0 ? (
+                  <div className="overflow-hidden rounded-[8px] border border-cyan-200/20 bg-black/45">
+                    {customerQuery.data!.map(customer => (
+                      <button
+                        key={`${customer.phone}-${customer.unit ?? ""}-${customer.orderId ?? ""}`}
+                        type="button"
+                        disabled={isReading}
+                        onClick={() => void selectCustomer(customer)}
+                        className="block w-full border-b border-white/8 px-3 py-3 text-left last:border-b-0 hover:bg-cyan-300/10 disabled:opacity-70"
+                      >
+                        <span className="block text-sm font-black text-white">
+                          {customerName(customer)}
+                        </span>
+                        <span className="mt-1 block text-xs text-white/55">
+                          {customer.phone} · Unit {customer.unit || "—"} ·{" "}
+                          {customer.buildingSlug || customer.address || "—"}
+                          {customer.orderId
+                            ? ` · Order #${customer.orderId}${customer.serviceType === "dry_cleaning" ? " dry clean" : ""}`
+                            : ""}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {!selectedCustomer && customerQuery.isFetching ? (
+                  <div className="flex items-center gap-2 rounded-[8px] border border-white/10 bg-white/[0.04] p-3 text-sm text-white/60">
+                    <Loader2 className="h-4 w-4 animate-spin text-cyan-200" />
+                    Searching customers...
+                  </div>
+                ) : null}
+
+                {selectedCustomer ? (
+                  <div className="rounded-[8px] border border-cyan-200/30 bg-cyan-300/10 p-3 text-sm text-white">
+                    Selected <strong>{customerName(selectedCustomer)}</strong>
+                    <span className="text-white/55">
+                      {" "}
+                      · Unit {selectedCustomer.unit || "—"} ·{" "}
+                      {selectedCustomer.phone}
+                    </span>
+                  </div>
+                ) : null}
+
+                {isReading ? (
+                  <div className="flex items-center gap-2 rounded-[8px] border border-cyan-200/20 bg-cyan-300/10 p-3 text-sm font-semibold text-cyan-100">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Reading receipt and matching catalog items...
+                  </div>
+                ) : null}
+
+                {parsed && summary ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-[8px] border border-white/10 bg-white/[0.04] p-3">
+                        <p className="text-[8px] font-bold uppercase tracking-[0.18em] text-cyan-200/65">
+                          Dry Cleaner
+                        </p>
+                        <p className="mt-1 font-display text-xl font-black text-white">
+                          {money(summary.dryCleanerRetailTotalCents)}
+                        </p>
+                        <p className="mt-1 text-xs text-white/50">
+                          LB cost {money(summary.partnerCostCents)}
+                        </p>
+                      </div>
+                      <div className="rounded-[8px] border border-white/10 bg-white/[0.04] p-3">
+                        <p className="text-[8px] font-bold uppercase tracking-[0.18em] text-cyan-200/65">
+                          Customer Draft
+                        </p>
+                        <p className="mt-1 font-display text-xl font-black text-white">
+                          {money(summary.customerTotalCentsAtDraft)}
+                        </p>
+                        <p className="mt-1 text-xs text-white/50">
+                          Margin {money(summary.estimatedGrossMarginCents)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {matches.map((match, idx) => (
+                        <div
+                          key={`${match.rawLabel}-${idx}`}
+                          className="rounded-[8px] border border-white/10 bg-white/[0.04] p-3"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="break-words text-sm font-black text-white">
+                                {match.rawLabel}
+                              </p>
+                              <p className="mt-1 text-xs text-white/50">
+                                Cleaner line{" "}
+                                {money(match.dryCleanerRetailLineTotalCents)} ·
+                                AI {Math.round(match.confidence * 100)}%
+                              </p>
+                            </div>
+                            <input
+                              type="number"
+                              min={0}
+                              value={match.qty}
+                              onChange={event =>
+                                setLineQty(idx, Number(event.target.value))
+                              }
+                              className="h-10 w-16 shrink-0 rounded-[8px] border border-cyan-200/25 bg-black/45 px-2 text-center text-sm font-black text-white outline-none"
+                              aria-label={`Quantity for ${match.rawLabel}`}
+                            />
+                          </div>
+                          <select
+                            value={match.matchedCatalogSlug ?? ""}
+                            onChange={event =>
+                              setLineMatch(idx, event.target.value)
+                            }
+                            className="mt-3 h-11 w-full rounded-[8px] border border-cyan-200/25 bg-black px-3 text-sm font-semibold text-white outline-none"
+                            aria-label={`Catalog match for ${match.rawLabel}`}
+                          >
+                            <option value="">Choose Laundry Butler item</option>
+                            {catalogRows.map(row => (
+                              <option key={row.slug} value={row.slug}>
+                                {row.name} · {money(row.standardPriceCents)}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="mt-2 text-sm text-white">
+                            LB line total{" "}
+                            <strong>
+                              {money(match.laundryButlerLineTotalCents)}
+                            </strong>
+                          </p>
+                          {match.warning ? (
+                            <p className="mt-2 text-xs font-semibold text-amber">
+                              {match.warning}
+                            </p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+
+                    {warnings.length > 0 ? (
+                      <div className="rounded-[8px] border border-amber/40 bg-amber/[0.12] p-3 text-xs font-semibold text-amber">
+                        {warnings.map((warning, i) => (
+                          <p key={`${warning}-${i}`}>{warning}</p>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateDraft()}
+                      disabled={!canCreateDraft}
+                      className="flex min-h-12 w-full items-center justify-center gap-2 rounded-[8px] border border-cyan-100 bg-cyan-300 px-4 py-3 text-sm font-black uppercase tracking-[0.16em] text-black transition-colors hover:bg-cyan-200 disabled:opacity-55"
+                    >
+                      {createDraft.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4" />
+                      )}
+                      Create Intake Draft
+                    </button>
+                    <p className="text-center text-xs font-semibold text-white/45">
+                      No customer discount is applied here, and no card is
+                      charged.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </>
+  );
+}
+
+function DriverReceiptDock({
+  onOrderCreated,
+}: {
+  onOrderCreated?: () => Promise<void> | void;
+}) {
+  return (
+    <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+76px)] z-40 px-4 pointer-events-none">
+      <div className="mx-auto grid w-full max-w-[520px] grid-cols-2 gap-2.5">
+        <DriverDryCleanReceiptUpload onOrderCreated={onOrderCreated} />
+        <DriverGasReceiptUpload />
+      </div>
     </div>
   );
 }
@@ -390,7 +1075,7 @@ export default function CommandCenter({
         }}
       />
 
-      <div className="relative z-10 px-4 pt-6 pb-24">
+      <div className="relative z-10 px-4 pt-6 pb-44">
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -603,7 +1288,7 @@ export default function CommandCenter({
         onOpenChange={setQuickOrderOpen}
         onOrderCreated={onOrderCreated}
       />
-      <DriverReceiptUpload />
+      <DriverReceiptDock onOrderCreated={onOrderCreated} />
     </motion.div>
   );
 }
