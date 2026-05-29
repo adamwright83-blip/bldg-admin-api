@@ -236,11 +236,20 @@ export async function parseDryCleanReceiptPhoto(input: {
 }): Promise<ParsedDryCleanReceipt> {
   const buffer = Buffer.from(input.base64, "base64");
   const ext = input.mimeType.split("/")[1] || "jpg";
-  const stored = await storagePut(
-    `dryclean-receipts/${input.tenantId}/${Date.now()}-${nanoid(8)}.${ext}`,
-    buffer,
-    input.mimeType
-  );
+  const receiptImageKey = `dryclean-receipts/${input.tenantId}/${Date.now()}-${nanoid(8)}.${ext}`;
+  let stored: { key: string; url: string | null } = {
+    key: receiptImageKey,
+    url: null,
+  };
+  try {
+    stored = await storagePut(receiptImageKey, buffer, input.mimeType);
+  } catch (error) {
+    console.warn("[DryCleanReceiptIntake] Receipt image storage skipped", {
+      tenantId: input.tenantId,
+      receiptImageKey,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   const db = await getDb();
   if (!db) throw new Error("Database not available");
