@@ -198,6 +198,7 @@ export function DriverPrepMechanic({
   );
 
   const didMountRef = useRef(false);
+  const lastHomeEscapeAtRef = useRef(0);
   useEffect(() => {
     if (!didMountRef.current) {
       didMountRef.current = true;
@@ -313,6 +314,10 @@ export function DriverPrepMechanic({
   }, []);
 
   const handleSkipGamesToCommand = useCallback(() => {
+    const now = Date.now();
+    if (now - lastHomeEscapeAtRef.current < 450) return;
+    lastHomeEscapeAtRef.current = now;
+
     sounds.scanConfirm();
     haptics.slam();
     dispatch({
@@ -439,18 +444,30 @@ export function DriverPrepMechanic({
         handleRetryFailure,
       })}
       {showHomeEscapeButton ? (
-        <button
-          type="button"
-          onClick={handleSkipGamesToCommand}
-          aria-label="Return to driver home"
-          className="fixed right-4 top-4 z-[70] inline-flex items-center gap-2 border border-neon/50 bg-black/75 px-4 py-3 text-neon shadow-[0_0_18px_oklch(0.85_0.25_155/0.18)] backdrop-blur
-                     transition-all active:scale-[0.98]"
-        >
-          <Home className="w-4 h-4" />
-          <span className="font-display text-[12px] font-extrabold uppercase tracking-[0.18em]">
-            {selectedOrder ? "Skip" : "Home"}
-          </span>
-        </button>
+        <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+14px)] z-[1000] px-4 pointer-events-none">
+          <button
+            type="button"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              handleSkipGamesToCommand();
+            }}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              handleSkipGamesToCommand();
+            }}
+            aria-label="Skip mini games and return to driver home"
+            className="pointer-events-auto flex min-h-[68px] w-full items-center justify-center gap-3 border-2 border-yellow-100 bg-yellow-300 px-5 py-4 text-black
+                       shadow-[0_0_30px_rgba(250,204,21,0.48)] transition-all active:scale-[0.98] active:bg-yellow-200"
+            style={{ touchAction: "manipulation" }}
+          >
+            <Home className="h-6 w-6 shrink-0" />
+            <span className="font-display text-[18px] font-black uppercase tracking-[0.12em]">
+              {selectedOrder ? "Skip Mini Games" : "Driver Home"}
+            </span>
+          </button>
+        </div>
       ) : null}
     </div>
   );
