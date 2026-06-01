@@ -1,9 +1,20 @@
 import { getDashboardTimeZone } from "./dashboardZoned";
-import { writeDriverExpenseToSheet, writeDryCleaningCostToSheet, writeOrderToSheet } from "./sheets";
+import {
+  writeDriverExpenseToSheet,
+  writeDryCleaningCostToSheet,
+  writeOrderToSheet,
+} from "./sheets";
 import { COOKIE_NAME, VENDOR_COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, adminProcedure, platformOrVendorProcedure, vendorProcedure, router } from "./_core/trpc";
+import {
+  publicProcedure,
+  protectedProcedure,
+  adminProcedure,
+  platformOrVendorProcedure,
+  vendorProcedure,
+  router,
+} from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import {
   createOrder,
@@ -89,20 +100,37 @@ import {
 } from "./customerProfile";
 import { ENV } from "./_core/env";
 import { notifyOwner } from "./_core/notification";
-import { notifyPickupEnRoute, notifyCardCharged, notifyDeliveryEnRoute } from "./_core/sms";
+import {
+  notifyPickupEnRoute,
+  notifyCardCharged,
+  notifyDeliveryEnRoute,
+} from "./_core/sms";
 import { centsToDollars } from "@shared/pricing";
 import { z } from "zod";
 import Stripe from "stripe";
 import * as jose from "jose";
 import { BUILDINGS, matchBuilding } from "@shared/buildings";
-import { normalizePropertyTower, TOWER_DEFINITIONS } from "@shared/propertyTowers";
-import { cleanCloudLegacyCustomers, listImportedCleanCloudLegacyCustomers } from "./cleancloudLegacy";
-import { getClearentCollectedTodayCents, listImportedClearentCustomers } from "./clearent";
+import {
+  normalizePropertyTower,
+  TOWER_DEFINITIONS,
+} from "@shared/propertyTowers";
+import {
+  cleanCloudLegacyCustomers,
+  listImportedCleanCloudLegacyCustomers,
+} from "./cleancloudLegacy";
+import {
+  getClearentCollectedTodayCents,
+  listImportedClearentCustomers,
+} from "./clearent";
 import {
   exportOperationsEventsCsv,
   listOperationsEvents,
 } from "./operationsEventsDashboard";
-import { getPaymentReconciliationDashboard, listReconciledCleanCloudCustomerRevenue } from "./paymentReconciliation";
+import {
+  getPaymentReconciliationDashboard,
+  listReconciledCleanCloudCustomerRevenue,
+} from "./paymentReconciliation";
+import { getTruePnlCockpitSummary } from "./truePnlCockpit";
 import {
   getActedOnTodayCents,
   getAwaitingPaymentCents,
@@ -129,7 +157,11 @@ import {
   markLevel4MissionStarted,
 } from "./level4Missions";
 import { runAgentTool, runOperatorVoiceCommand } from "./agents/agentRuntime";
-import { parseEmergencyTaskIntake, publicEmergencyTaskErrorMessage, runEmergencyTaskIntake } from "./operatorTaskIntake";
+import {
+  parseEmergencyTaskIntake,
+  publicEmergencyTaskErrorMessage,
+  runEmergencyTaskIntake,
+} from "./operatorTaskIntake";
 import { isGasExpense, parseDriverExpenseReceiptPhoto } from "./expenseReceipt";
 import {
   OPS_TASK_LANES,
@@ -155,7 +187,9 @@ const STRIPE_API_VERSION = "2025-03-31.basil" as const;
 
 function getStripe(): Stripe {
   const key =
-    process.env.STRIPE_SECRET_KEY_OVERRIDE || process.env.STRIPE_SECRET_KEY || "";
+    process.env.STRIPE_SECRET_KEY_OVERRIDE ||
+    process.env.STRIPE_SECRET_KEY ||
+    "";
   if (!key || key.length < 20) {
     throw new Error(
       "STRIPE_SECRET_KEY (or STRIPE_SECRET_KEY_OVERRIDE) must be set and non-empty. Check env."
@@ -166,18 +200,24 @@ function getStripe(): Stripe {
 
 export function validateStripeEnv(): void {
   const key =
-    process.env.STRIPE_SECRET_KEY_OVERRIDE || process.env.STRIPE_SECRET_KEY || "";
+    process.env.STRIPE_SECRET_KEY_OVERRIDE ||
+    process.env.STRIPE_SECRET_KEY ||
+    "";
   if (!key || key.length < 20) {
     throw new Error(
       "STRIPE_SECRET_KEY (or STRIPE_SECRET_KEY_OVERRIDE) must be set at startup. Set in Railway env."
     );
   }
   if (process.env.STRIPE_SECRET_KEY_OVERRIDE) {
-    console.log("[Stripe] Using alternate account (key ends ..." + key.slice(-4) + ")");
+    console.log(
+      "[Stripe] Using alternate account (key ends ..." + key.slice(-4) + ")"
+    );
   }
 }
 
-const APP_SHARED_SECRET = new TextEncoder().encode(process.env.APP_SHARED_API_SECRET || "fallback-secret");
+const APP_SHARED_SECRET = new TextEncoder().encode(
+  process.env.APP_SHARED_API_SECRET || "fallback-secret"
+);
 
 /** Catalog/menu LLM errors → tRPC (Anthropic Messages API). */
 function throwCatalogAiAsTrpc(e: unknown): never {
@@ -212,7 +252,10 @@ function throwCatalogAiAsTrpc(e: unknown): never {
   ) {
     throw new TRPCError({ code: "BAD_REQUEST", message: clip(msg) });
   }
-  if (msg.includes("rejected the request") || msg.includes("Anthropic API error")) {
+  if (
+    msg.includes("rejected the request") ||
+    msg.includes("Anthropic API error")
+  ) {
     throw new TRPCError({ code: "BAD_REQUEST", message: clip(msg) });
   }
   throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: clip(msg) });
@@ -301,8 +344,8 @@ export const appRouter = router({
       const vid = ctx.vendorSession.vendorId;
       const today = new Date().toISOString().split("T")[0];
       const orders = await getOrdersByVendorId(vid);
-      const todayOrders = orders.filter(o =>
-        (o.pickupDate === today || o.deliveryDate === today)
+      const todayOrders = orders.filter(
+        o => o.pickupDate === today || o.deliveryDate === today
       );
       const awaitingIntake = orders.filter(o => o.status === "collected");
       const readyForDelivery = orders.filter(o => o.status === "ready");
@@ -310,11 +353,20 @@ export const appRouter = router({
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
       const weekStartStr = weekStart.toISOString().split("T")[0];
       const thisWeekOrders = orders.filter(o => {
-        const d = o.updatedAt ? new Date(o.updatedAt).toISOString().split("T")[0] : "";
+        const d = o.updatedAt
+          ? new Date(o.updatedAt).toISOString().split("T")[0]
+          : "";
         return d >= weekStartStr && o.paid;
       });
-      const grossCents = thisWeekOrders.reduce((s, o) => s + (o.total ? Math.round(parseFloat(String(o.total)) * 100) : 0), 0);
-      const payoutCents = thisWeekOrders.reduce((s, o) => s + (o.vendorPayoutCents ?? 0), 0);
+      const grossCents = thisWeekOrders.reduce(
+        (s, o) =>
+          s + (o.total ? Math.round(parseFloat(String(o.total)) * 100) : 0),
+        0
+      );
+      const payoutCents = thisWeekOrders.reduce(
+        (s, o) => s + (o.vendorPayoutCents ?? 0),
+        0
+      );
       const last5 = orders.slice(0, 5);
       return {
         todayOrderCount: todayOrders.length,
@@ -326,21 +378,56 @@ export const appRouter = router({
       };
     }),
     listOrders: vendorProcedure
-      .input(z.object({ status: z.enum(["new", "intake-pending", "collected", "processing", "ready", "delivered"]).optional() }))
+      .input(
+        z.object({
+          status: z
+            .enum([
+              "new",
+              "intake-pending",
+              "collected",
+              "processing",
+              "ready",
+              "delivered",
+            ])
+            .optional(),
+        })
+      )
       .query(async ({ ctx, input }) => {
         return getOrdersByVendorId(ctx.vendorSession.vendorId, input.status);
       }),
     listByStatus: vendorProcedure
-      .input(z.object({ status: z.enum(["new", "intake-pending", "collected", "processing", "ready", "delivered"]) }))
+      .input(
+        z.object({
+          status: z.enum([
+            "new",
+            "intake-pending",
+            "collected",
+            "processing",
+            "ready",
+            "delivered",
+          ]),
+        })
+      )
       .query(async ({ ctx, input }) => {
         return getOrdersByVendorId(ctx.vendorSession.vendorId, input.status);
       }),
     listByDate: vendorProcedure
-      .input(z.object({
-        date: z.string(),
-        status: z.enum(["new", "intake-pending", "collected", "processing", "ready", "delivered"]),
-        dateField: z.enum(["pickupDate", "deliveryDate"]).default("pickupDate"),
-      }))
+      .input(
+        z.object({
+          date: z.string(),
+          status: z.enum([
+            "new",
+            "intake-pending",
+            "collected",
+            "processing",
+            "ready",
+            "delivered",
+          ]),
+          dateField: z
+            .enum(["pickupDate", "deliveryDate"])
+            .default("pickupDate"),
+        })
+      )
       .query(async ({ ctx, input }) => {
         return getOrdersByDateAndStatus(
           input.date,
@@ -359,7 +446,9 @@ export const appRouter = router({
       const vendor = await getVendorById(ctx.vendorSession.vendorId);
       if (!vendor?.stripeConnectAccountId) return null;
       const stripe = getStripe();
-      const link = await stripe.accounts.createLoginLink(vendor.stripeConnectAccountId);
+      const link = await stripe.accounts.createLoginLink(
+        vendor.stripeConnectAccountId
+      );
       return { url: link.url };
     }),
   }),
@@ -461,7 +550,10 @@ export const appRouter = router({
         try {
           const order = await getOrderById(input.orderId);
           if (order) {
-            const serviceLabel = order.serviceType === "wash_fold" ? "Wash & Fold" : "Dry Cleaning";
+            const serviceLabel =
+              order.serviceType === "wash_fold"
+                ? "Wash & Fold"
+                : "Dry Cleaning";
             await notifyOwner({
               title: `New Pickup Order #${order.id}`,
               content: [
@@ -470,8 +562,12 @@ export const appRouter = router({
                 `Pickup: ${order.pickupDate} | ${order.pickupTimeWindow}`,
                 `Address: ${order.address}${order.unit ? `, ${order.unit}` : ""}`,
                 `Phone: ${order.phone}${order.email ? ` | Email: ${order.email}` : ""}`,
-                order.specialInstructions ? `Notes: ${order.specialInstructions}` : "",
-              ].filter(Boolean).join("\n"),
+                order.specialInstructions
+                  ? `Notes: ${order.specialInstructions}`
+                  : "",
+              ]
+                .filter(Boolean)
+                .join("\n"),
             });
           }
         } catch (err) {
@@ -551,10 +647,15 @@ export const appRouter = router({
               `Email: ${input.email}`,
               `Units: ${input.number_of_units || "—"}`,
               input.phone ? `Phone: ${input.phone}` : "",
-            ].filter(Boolean).join("\n"),
+            ]
+              .filter(Boolean)
+              .join("\n"),
           });
         } catch (err) {
-          console.warn("[Notification] Failed to notify owner of new lead:", err);
+          console.warn(
+            "[Notification] Failed to notify owner of new lead:",
+            err
+          );
         }
 
         return { success: true, id: leadId.toString() };
@@ -565,76 +666,108 @@ export const appRouter = router({
   admin: router({
     opsTasks: router({
       list: adminProcedure
-        .input(z.object({
-          status: z.union([z.enum(OPS_TASK_STATUSES), z.array(z.enum(OPS_TASK_STATUSES))]).optional(),
-          lane: z.enum(OPS_TASK_LANES).optional(),
-          level: z.enum(OPS_TASK_LEVELS).optional(),
-          dateFrom: z.string().datetime().optional(),
-          dateTo: z.string().datetime().optional(),
-          tenantId: z.string().min(1).optional(),
-          limit: z.number().int().min(1).max(500).default(200),
-        }).optional())
-        .query(async ({ ctx, input }) => listOpsTasks({
-          tenantId: input?.tenantId ?? ctx.tenantId,
-          status: input?.status as OpsTaskStatus | OpsTaskStatus[] | undefined,
-          lane: input?.lane as OpsTaskLane | undefined,
-          level: input?.level as OpsTaskLevel | undefined,
-          dateFrom: input?.dateFrom ? new Date(input.dateFrom) : null,
-          dateTo: input?.dateTo ? new Date(input.dateTo) : null,
-          limit: input?.limit ?? 200,
-        })),
+        .input(
+          z
+            .object({
+              status: z
+                .union([
+                  z.enum(OPS_TASK_STATUSES),
+                  z.array(z.enum(OPS_TASK_STATUSES)),
+                ])
+                .optional(),
+              lane: z.enum(OPS_TASK_LANES).optional(),
+              level: z.enum(OPS_TASK_LEVELS).optional(),
+              dateFrom: z.string().datetime().optional(),
+              dateTo: z.string().datetime().optional(),
+              tenantId: z.string().min(1).optional(),
+              limit: z.number().int().min(1).max(500).default(200),
+            })
+            .optional()
+        )
+        .query(async ({ ctx, input }) =>
+          listOpsTasks({
+            tenantId: input?.tenantId ?? ctx.tenantId,
+            status: input?.status as
+              | OpsTaskStatus
+              | OpsTaskStatus[]
+              | undefined,
+            lane: input?.lane as OpsTaskLane | undefined,
+            level: input?.level as OpsTaskLevel | undefined,
+            dateFrom: input?.dateFrom ? new Date(input.dateFrom) : null,
+            dateTo: input?.dateTo ? new Date(input.dateTo) : null,
+            limit: input?.limit ?? 200,
+          })
+        ),
       complete: adminProcedure
-        .input(z.object({
-          taskId: z.number().int().positive(),
-          outcome: z.string().max(2000).optional(),
-          revenueRecoveredCents: z.number().int().min(0).optional(),
-          completedBy: z.string().max(128).optional(),
-        }))
-        .mutation(async ({ ctx, input }) => completeOpsTask({
-          tenantId: ctx.tenantId,
-          taskId: input.taskId,
-          outcome: input.outcome ?? null,
-          revenueRecoveredCents: input.revenueRecoveredCents,
-          completedBy: input.completedBy ?? (ctx.user?.id != null ? String(ctx.user.id) : null),
-        })),
+        .input(
+          z.object({
+            taskId: z.number().int().positive(),
+            outcome: z.string().max(2000).optional(),
+            revenueRecoveredCents: z.number().int().min(0).optional(),
+            completedBy: z.string().max(128).optional(),
+          })
+        )
+        .mutation(async ({ ctx, input }) =>
+          completeOpsTask({
+            tenantId: ctx.tenantId,
+            taskId: input.taskId,
+            outcome: input.outcome ?? null,
+            revenueRecoveredCents: input.revenueRecoveredCents,
+            completedBy:
+              input.completedBy ??
+              (ctx.user?.id != null ? String(ctx.user.id) : null),
+          })
+        ),
       dismiss: adminProcedure
-        .input(z.object({
-          taskId: z.number().int().positive(),
-          reason: z.string().max(2000).optional(),
-        }))
-        .mutation(async ({ ctx, input }) => updateOpsTaskStatus({
-          tenantId: ctx.tenantId,
-          taskId: input.taskId,
-          status: "dismissed",
-          actorId: ctx.user?.id != null ? String(ctx.user.id) : null,
-          note: input.reason ?? null,
-        })),
+        .input(
+          z.object({
+            taskId: z.number().int().positive(),
+            reason: z.string().max(2000).optional(),
+          })
+        )
+        .mutation(async ({ ctx, input }) =>
+          updateOpsTaskStatus({
+            tenantId: ctx.tenantId,
+            taskId: input.taskId,
+            status: "dismissed",
+            actorId: ctx.user?.id != null ? String(ctx.user.id) : null,
+            note: input.reason ?? null,
+          })
+        ),
       createManual: adminProcedure
-        .input(z.object({
-          title: z.string().min(1).max(255),
-          description: z.string().max(4000).optional(),
-          lane: z.enum(OPS_TASK_LANES),
-          level: z.enum(OPS_TASK_LEVELS),
-          priority: z.enum(["low", "normal", "high", "emergency"]).default("normal"),
-          revenueAtRiskCents: z.number().int().min(0).optional(),
-          customerId: z.number().int().positive().optional(),
-          orderId: z.number().int().positive().optional(),
-        }))
-        .mutation(async ({ ctx, input }) => createOpsTask({
-          tenantId: ctx.tenantId,
-          title: input.title,
-          description: input.description ?? null,
-          lane: input.lane,
-          level: input.level,
-          priority: input.priority,
-          revenueAtRiskCents: input.revenueAtRiskCents ?? 0,
-          customerId: input.customerId ?? null,
-          orderId: input.orderId ?? null,
-          taskType: "manual_operator_task",
-          source: "manual",
-          createdBy: ctx.user?.id != null ? String(ctx.user.id) : null,
-        })),
-      weeklyReflection: adminProcedure.query(async ({ ctx }) => getWeeklyOperatorReflection(ctx.tenantId)),
+        .input(
+          z.object({
+            title: z.string().min(1).max(255),
+            description: z.string().max(4000).optional(),
+            lane: z.enum(OPS_TASK_LANES),
+            level: z.enum(OPS_TASK_LEVELS),
+            priority: z
+              .enum(["low", "normal", "high", "emergency"])
+              .default("normal"),
+            revenueAtRiskCents: z.number().int().min(0).optional(),
+            customerId: z.number().int().positive().optional(),
+            orderId: z.number().int().positive().optional(),
+          })
+        )
+        .mutation(async ({ ctx, input }) =>
+          createOpsTask({
+            tenantId: ctx.tenantId,
+            title: input.title,
+            description: input.description ?? null,
+            lane: input.lane,
+            level: input.level,
+            priority: input.priority,
+            revenueAtRiskCents: input.revenueAtRiskCents ?? 0,
+            customerId: input.customerId ?? null,
+            orderId: input.orderId ?? null,
+            taskType: "manual_operator_task",
+            source: "manual",
+            createdBy: ctx.user?.id != null ? String(ctx.user.id) : null,
+          })
+        ),
+      weeklyReflection: adminProcedure.query(async ({ ctx }) =>
+        getWeeklyOperatorReflection(ctx.tenantId)
+      ),
       performanceMetrics: adminProcedure.query(async ({ ctx }) => {
         const [metrics, clearent] = await Promise.all([
           getPerformanceMetrics(ctx.tenantId),
@@ -650,29 +783,50 @@ export const appRouter = router({
     }),
 
     level4Mission: router({
-      current: adminProcedure.query(async ({ ctx }) => getCurrentLevel4MissionState({
-        tenantId: ctx.tenantId,
-        operatorId: ctx.user?.id != null ? String(ctx.user.id) : null,
-      })),
-      start: adminProcedure.mutation(async ({ ctx }) => markLevel4MissionStarted({
-        tenantId: ctx.tenantId,
-        operatorId: ctx.user?.id != null ? String(ctx.user.id) : null,
-      })),
-      complete: adminProcedure
-        .input(z.object({
-          outcome: z.string().max(2000).optional(),
-        }).optional())
-        .mutation(async ({ ctx, input }) => completeLevel4Mission({
+      current: adminProcedure.query(async ({ ctx }) =>
+        getCurrentLevel4MissionState({
           tenantId: ctx.tenantId,
           operatorId: ctx.user?.id != null ? String(ctx.user.id) : null,
-          completedBy: ctx.user?.id != null ? String(ctx.user.id) : null,
-          outcome: input?.outcome ?? null,
-        })),
+        })
+      ),
+      start: adminProcedure.mutation(async ({ ctx }) =>
+        markLevel4MissionStarted({
+          tenantId: ctx.tenantId,
+          operatorId: ctx.user?.id != null ? String(ctx.user.id) : null,
+        })
+      ),
+      complete: adminProcedure
+        .input(
+          z
+            .object({
+              outcome: z.string().max(2000).optional(),
+            })
+            .optional()
+        )
+        .mutation(async ({ ctx, input }) =>
+          completeLevel4Mission({
+            tenantId: ctx.tenantId,
+            operatorId: ctx.user?.id != null ? String(ctx.user.id) : null,
+            completedBy: ctx.user?.id != null ? String(ctx.user.id) : null,
+            outcome: input?.outcome ?? null,
+          })
+        ),
     }),
 
     /** List orders by status — platform or vendor (vendor gets scoped list) */
     listByStatus: platformOrVendorProcedure
-      .input(z.object({ status: z.enum(["new", "intake-pending", "collected", "processing", "ready", "delivered"]) }))
+      .input(
+        z.object({
+          status: z.enum([
+            "new",
+            "intake-pending",
+            "collected",
+            "processing",
+            "ready",
+            "delivered",
+          ]),
+        })
+      )
       .query(async ({ ctx, input }) => {
         const vendorId = ctx.vendorSession?.vendorId;
         return getOrdersByStatus(input.status, vendorId);
@@ -680,14 +834,30 @@ export const appRouter = router({
 
     /** List orders by date + status — platform or vendor */
     listByDate: platformOrVendorProcedure
-      .input(z.object({
-        date: z.string(),
-        status: z.enum(["new", "intake-pending", "collected", "processing", "ready", "delivered"]),
-        dateField: z.enum(["pickupDate", "deliveryDate"]).default("pickupDate"),
-      }))
+      .input(
+        z.object({
+          date: z.string(),
+          status: z.enum([
+            "new",
+            "intake-pending",
+            "collected",
+            "processing",
+            "ready",
+            "delivered",
+          ]),
+          dateField: z
+            .enum(["pickupDate", "deliveryDate"])
+            .default("pickupDate"),
+        })
+      )
       .query(async ({ ctx, input }) => {
         const vendorId = ctx.vendorSession?.vendorId;
-        return getOrdersByDateAndStatus(input.date, input.status, input.dateField, vendorId);
+        return getOrdersByDateAndStatus(
+          input.date,
+          input.status,
+          input.dateField,
+          vendorId
+        );
       }),
 
     /** Get single order detail — vendor can only get own orders */
@@ -696,7 +866,10 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         const order = await getOrderById(input.id);
         if (!order) return null;
-        if (ctx.vendorSession && order.vendorId !== ctx.vendorSession.vendorId) {
+        if (
+          ctx.vendorSession &&
+          order.vendorId !== ctx.vendorSession.vendorId
+        ) {
           return null; // vendor cannot see other vendor's orders
         }
         return order;
@@ -746,41 +919,105 @@ export const appRouter = router({
       };
     }),
 
+    truePnlCockpitSummary: protectedProcedure
+      .input(
+        z
+          .object({
+            month: z
+              .string()
+              .regex(/^\d{4}-\d{2}$/)
+              .optional(),
+          })
+          .optional()
+      )
+      .query(async ({ input }) =>
+        getTruePnlCockpitSummary({ month: input?.month ?? null })
+      ),
+
     operationsEvents: router({
       list: protectedProcedure
-        .input(z.object({
-          startDate: z.string().optional(),
-          endDate: z.string().optional(),
-          businessUnit: z.enum(["all", "laundry_butler", "laundry_farm"]).default("all"),
-          building: z.enum(["all", "opus_la", "century_park_east", "other", "unresolved"]).default("all"),
-          eventType: z.enum(["all", "pickup_completed", "dropoff_completed"]).default("all"),
-          customerSearch: z.string().max(120).optional(),
-          page: z.number().int().min(1).default(1),
-          pageSize: z.number().int().min(1).max(200).default(50),
-        }).optional())
+        .input(
+          z
+            .object({
+              startDate: z.string().optional(),
+              endDate: z.string().optional(),
+              businessUnit: z
+                .enum(["all", "laundry_butler", "laundry_farm"])
+                .default("all"),
+              building: z
+                .enum([
+                  "all",
+                  "opus_la",
+                  "century_park_east",
+                  "other",
+                  "unresolved",
+                ])
+                .default("all"),
+              eventType: z
+                .enum(["all", "pickup_completed", "dropoff_completed"])
+                .default("all"),
+              customerSearch: z.string().max(120).optional(),
+              page: z.number().int().min(1).default(1),
+              pageSize: z.number().int().min(1).max(200).default(50),
+            })
+            .optional()
+        )
         .query(async ({ input }) => listOperationsEvents(input ?? {})),
       exportCsv: protectedProcedure
-        .input(z.object({
-          startDate: z.string().optional(),
-          endDate: z.string().optional(),
-          businessUnit: z.enum(["all", "laundry_butler", "laundry_farm"]).default("all"),
-          building: z.enum(["all", "opus_la", "century_park_east", "other", "unresolved"]).default("all"),
-          eventType: z.enum(["all", "pickup_completed", "dropoff_completed"]).default("all"),
-          customerSearch: z.string().max(120).optional(),
-        }).optional())
+        .input(
+          z
+            .object({
+              startDate: z.string().optional(),
+              endDate: z.string().optional(),
+              businessUnit: z
+                .enum(["all", "laundry_butler", "laundry_farm"])
+                .default("all"),
+              building: z
+                .enum([
+                  "all",
+                  "opus_la",
+                  "century_park_east",
+                  "other",
+                  "unresolved",
+                ])
+                .default("all"),
+              eventType: z
+                .enum(["all", "pickup_completed", "dropoff_completed"])
+                .default("all"),
+              customerSearch: z.string().max(120).optional(),
+            })
+            .optional()
+        )
         .mutation(async ({ input }) => exportOperationsEventsCsv(input ?? {})),
     }),
 
     paymentReconciliation: router({
       summary: protectedProcedure
-        .input(z.object({
-          startDate: z.string().optional(),
-          endDate: z.string().optional(),
-          processor: z.enum(["clearent", "stripe", "all"]).default("all"),
-          businessUnit: z.enum(["laundry_butler", "laundry_farm", "all"]).default("all"),
-          status: z.enum(["matched", "unmatched", "possible_duplicate", "needs_review", "ignored", "all"]).default("all"),
-        }).optional())
-        .query(async ({ input }) => getPaymentReconciliationDashboard(input ?? {})),
+        .input(
+          z
+            .object({
+              startDate: z.string().optional(),
+              endDate: z.string().optional(),
+              processor: z.enum(["clearent", "stripe", "all"]).default("all"),
+              businessUnit: z
+                .enum(["laundry_butler", "laundry_farm", "all"])
+                .default("all"),
+              status: z
+                .enum([
+                  "matched",
+                  "unmatched",
+                  "possible_duplicate",
+                  "needs_review",
+                  "ignored",
+                  "all",
+                ])
+                .default("all"),
+            })
+            .optional()
+        )
+        .query(async ({ input }) =>
+          getPaymentReconciliationDashboard(input ?? {})
+        ),
     }),
 
     /** Manual recovery actions logged today (attempted/delivered — not cash collection). */
@@ -829,13 +1066,17 @@ export const appRouter = router({
     setAwaitingPaymentAdjustment: adminProcedure
       .input(z.object({ adjustmentCents: z.number().int() }))
       .mutation(async ({ ctx, input }) => {
-        const clamped = Math.max(-500_000_000, Math.min(500_000_000, input.adjustmentCents));
+        const clamped = Math.max(
+          -500_000_000,
+          Math.min(500_000_000, input.adjustmentCents)
+        );
         try {
           await upsertAwaitingPaymentAdjustmentCents(ctx.tenantId, clamped);
         } catch (e) {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: e instanceof Error ? e.message : "Failed to save adjustment",
+            message:
+              e instanceof Error ? e.message : "Failed to save adjustment",
           });
         }
         return { ok: true as const };
@@ -866,7 +1107,9 @@ export const appRouter = router({
         businessYmd: r.bounds.ymd,
         timeZone: r.bounds.timeZone,
         dbAvailable: true,
-        timestampBasis: clearent ? "clearent_entered_date" as const : "paidAt" as const,
+        timestampBasis: clearent
+          ? ("clearent_entered_date" as const)
+          : ("paidAt" as const),
         processorLabel: clearent ? "Clearent / XplorPay" : "Stripe/orders",
       };
     }),
@@ -883,29 +1126,47 @@ export const appRouter = router({
     agent: router({
       listTools: adminProcedure.query(() => listAgentTools()),
       events: adminProcedure
-        .input(z.object({ limit: z.number().int().min(1).max(500).default(100) }))
-        .query(async ({ ctx, input }) => getAgentEventTimeline(ctx.tenantId, input.limit)),
-      aiUsageState: adminProcedure.query(async ({ ctx }) => getTenantAiLimitState(ctx.tenantId)),
+        .input(
+          z.object({ limit: z.number().int().min(1).max(500).default(100) })
+        )
+        .query(async ({ ctx, input }) =>
+          getAgentEventTimeline(ctx.tenantId, input.limit)
+        ),
+      aiUsageState: adminProcedure.query(async ({ ctx }) =>
+        getTenantAiLimitState(ctx.tenantId)
+      ),
       runTool: adminProcedure
-        .input(z.object({
-          toolName: z.string().min(1),
-          input: z.unknown().default({}),
-          agentType: z.enum([
-            "resident_agent",
-            "operator_voice_agent",
-            "vendor_agent",
-            "driver_agent",
-            "gm_agent",
-            "building_agent",
-            "collections_agent",
-            "operator_task_agent",
-          ]),
-          actorType: z.enum(["human", "voice", "resident_chat", "driver", "vendor", "ai_agent", "system"]).default("human"),
-          sessionId: z.string().optional(),
-          conversationId: z.string().optional(),
-          approvedByUserId: z.string().optional(),
-          trustedUiFlow: z.boolean().optional(),
-        }))
+        .input(
+          z.object({
+            toolName: z.string().min(1),
+            input: z.unknown().default({}),
+            agentType: z.enum([
+              "resident_agent",
+              "operator_voice_agent",
+              "vendor_agent",
+              "driver_agent",
+              "gm_agent",
+              "building_agent",
+              "collections_agent",
+              "operator_task_agent",
+            ]),
+            actorType: z
+              .enum([
+                "human",
+                "voice",
+                "resident_chat",
+                "driver",
+                "vendor",
+                "ai_agent",
+                "system",
+              ])
+              .default("human"),
+            sessionId: z.string().optional(),
+            conversationId: z.string().optional(),
+            approvedByUserId: z.string().optional(),
+            trustedUiFlow: z.boolean().optional(),
+          })
+        )
         .mutation(async ({ ctx, input }) => {
           return runAgentTool(input.toolName, input.input, {
             tenantId: ctx.tenantId,
@@ -919,11 +1180,13 @@ export const appRouter = router({
           });
         }),
       runOperatorVoiceCommand: adminProcedure
-        .input(z.object({
-          note: z.string().min(1),
-          sessionId: z.string().optional(),
-          conversationId: z.string().optional(),
-        }))
+        .input(
+          z.object({
+            note: z.string().min(1),
+            sessionId: z.string().optional(),
+            conversationId: z.string().optional(),
+          })
+        )
         .mutation(async ({ ctx, input }) => {
           return runOperatorVoiceCommand(input.note, {
             tenantId: ctx.tenantId,
@@ -937,13 +1200,17 @@ export const appRouter = router({
         }),
       previewEmergencyTaskIntake: adminProcedure
         .input(z.object({ note: z.string().min(1).max(4000) }))
-        .query(({ input }) => ({ tasks: parseEmergencyTaskIntake(input.note) })),
+        .query(({ input }) => ({
+          tasks: parseEmergencyTaskIntake(input.note),
+        })),
       runEmergencyTaskIntake: adminProcedure
-        .input(z.object({
-          note: z.string().min(1).max(4000),
-          sessionId: z.string().optional(),
-          conversationId: z.string().optional(),
-        }))
+        .input(
+          z.object({
+            note: z.string().min(1).max(4000),
+            sessionId: z.string().optional(),
+            conversationId: z.string().optional(),
+          })
+        )
         .mutation(async ({ ctx, input }) => {
           try {
             return await runEmergencyTaskIntake(input.note, {
@@ -961,40 +1228,54 @@ export const appRouter = router({
           }
         }),
       listOperatorTasks: adminProcedure
-        .input(z.object({
-          status: z.enum(["active", "open", "in_progress", "done", "blocked"]).default("active"),
-          limit: z.number().int().min(1).max(200).default(80),
-        }))
+        .input(
+          z.object({
+            status: z
+              .enum(["active", "open", "in_progress", "done", "blocked"])
+              .default("active"),
+            limit: z.number().int().min(1).max(200).default(80),
+          })
+        )
         .query(async ({ ctx, input }) => {
           const statuses =
             input.status === "active"
-              ? ["open", "accepted", "in_progress"] as const
+              ? (["open", "accepted", "in_progress"] as const)
               : input.status === "done"
-                ? ["completed"] as const
+                ? (["completed"] as const)
                 : input.status === "blocked"
-                  ? ["open", "accepted", "in_progress"] as const
-                  : [input.status] as const;
+                  ? (["open", "accepted", "in_progress"] as const)
+                  : ([input.status] as const);
           const rows = await listOpsTasks({
             tenantId: ctx.tenantId,
             status: statuses as any,
             limit: input.limit,
           });
-          return rows.map((task) => ({
+          return rows.map(task => ({
             id: task.id,
             level: `level_${task.level}` as const,
             title: task.title,
-            status: task.status === "completed" ? "done" : task.status === "accepted" ? "in_progress" : task.status,
+            status:
+              task.status === "completed"
+                ? "done"
+                : task.status === "accepted"
+                  ? "in_progress"
+                  : task.status,
             priority: task.priority,
-            target: typeof task.metadataJson === "object" && task.metadataJson && "target" in task.metadataJson
-              ? String((task.metadataJson as any).target ?? "")
-              : null,
+            target:
+              typeof task.metadataJson === "object" &&
+              task.metadataJson &&
+              "target" in task.metadataJson
+                ? String((task.metadataJson as any).target ?? "")
+                : null,
           }));
         }),
       updateOperatorTaskStatus: adminProcedure
-        .input(z.object({
-          id: z.number().int().positive(),
-          status: z.enum(["open", "in_progress", "done", "blocked"]),
-        }))
+        .input(
+          z.object({
+            id: z.number().int().positive(),
+            status: z.enum(["open", "in_progress", "done", "blocked"]),
+          })
+        )
         .mutation(async ({ ctx, input }) => {
           if (input.status === "done") {
             await completeOpsTask({
@@ -1027,17 +1308,27 @@ export const appRouter = router({
         if (process.env.NODE_ENV === "production") {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message: "Revenue intervention debug is available in development only.",
+            message:
+              "Revenue intervention debug is available in development only.",
           });
         }
-        const r = await getRevenueInterventionOrderDebug(ctx.tenantId, input.orderId);
+        const r = await getRevenueInterventionOrderDebug(
+          ctx.tenantId,
+          input.orderId
+        );
         if (r === null) {
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Database unavailable",
+          });
         }
         if ("error" in r) {
           throw new TRPCError({
             code: r.error === "order_not_found" ? "NOT_FOUND" : "FORBIDDEN",
-            message: r.error === "order_not_found" ? "Order not found" : "Order not in tenant",
+            message:
+              r.error === "order_not_found"
+                ? "Order not found"
+                : "Order not in tenant",
           });
         }
         return r;
@@ -1107,7 +1398,7 @@ export const appRouter = router({
         businessYmd: bounds.ymd,
         timeZone: bounds.timeZone,
         aggregateMutationType,
-        items: items.map((c) => {
+        items: items.map(c => {
           const o = c.order;
           return {
             issueLabel: c.issueLabel,
@@ -1178,7 +1469,9 @@ export const appRouter = router({
       )
       .mutation(async ({ input }) => {
         try {
-          return await generateLevel4OffensiveCopy(input as GenerateOffensiveCopyInput);
+          return await generateLevel4OffensiveCopy(
+            input as GenerateOffensiveCopyInput
+          );
         } catch (e) {
           throwCatalogAiAsTrpc(e);
         }
@@ -1258,11 +1551,14 @@ export const appRouter = router({
               tenantId: ctx.tenantId,
               actionType: out.actionType,
               title,
-              description: input.block === "market_hole_outreach"
-                ? input.note ?? null
-                : input.generatedCopy.internalNote,
-              customerId: input.block === "referral_request" ? input.userId : null,
-              revenueAtRiskCents: input.block === "referral_request" ? input.ltvCents : 0,
+              description:
+                input.block === "market_hole_outreach"
+                  ? (input.note ?? null)
+                  : input.generatedCopy.internalNote,
+              customerId:
+                input.block === "referral_request" ? input.userId : null,
+              revenueAtRiskCents:
+                input.block === "referral_request" ? input.ltvCents : 0,
               completedBy: ctx.user?.id != null ? String(ctx.user.id) : null,
               metadataJson: {
                 adminActionLogId: out.logId,
@@ -1337,11 +1633,17 @@ export const appRouter = router({
         z
           .object({
             search: z.string().max(120).optional(),
-            sortBy: z.enum(["spend", "orders", "lastOrder"]).default("lastOrder"),
-            status: z.enum(["new", "active", "warm", "cooling", "lapsed"]).optional(),
+            sortBy: z
+              .enum(["spend", "orders", "lastOrder"])
+              .default("lastOrder"),
+            status: z
+              .enum(["new", "active", "warm", "cooling", "lapsed"])
+              .optional(),
             tier: z.enum(["vip", "standard"]).optional(),
             buildingSlug: z.string().max(100).optional(),
-            propertyGroup: z.enum(["opus_la", "century_park_east", "unknown"]).optional(),
+            propertyGroup: z
+              .enum(["opus_la", "century_park_east", "unknown"])
+              .optional(),
             towerKey: z.string().max(100).optional(),
             includeLegacyCleanCloud: z.boolean().default(true),
           })
@@ -1356,7 +1658,7 @@ export const appRouter = router({
           listPaidOrdersForBuildingRevenue(),
         ]);
         const includeLegacyCleanCloud = input?.includeLegacyCleanCloud ?? true;
-        let rows: any[] = hydrateCustomerAggregates(aggregateRows).map((row) => {
+        let rows: any[] = hydrateCustomerAggregates(aggregateRows).map(row => {
           const tower = normalizePropertyTower(row.address);
           return {
             ...row,
@@ -1382,24 +1684,39 @@ export const appRouter = router({
         for (const clearent of clearentCustomers) {
           const clearentEmail = clearent.email?.trim().toLowerCase() || "";
           const clearentPhoneDigits = clearent.phone.replace(/\D/g, "");
-          const existing = rows.find((row) => {
+          const existing = rows.find(row => {
             const rowEmail = row.email?.trim().toLowerCase() || "";
             const rowPhoneDigits = row.phone.replace(/\D/g, "");
             return (
               (clearentEmail && rowEmail === clearentEmail) ||
-              (clearentPhoneDigits.length >= 7 && rowPhoneDigits === clearentPhoneDigits)
+              (clearentPhoneDigits.length >= 7 &&
+                rowPhoneDigits === clearentPhoneDigits)
             );
           });
 
           if (existing) {
             existing.clearentXplorPayRevenue =
-              Math.round(((existing.clearentXplorPayRevenue ?? 0) + clearent.totalCollected) * 100) / 100;
+              Math.round(
+                ((existing.clearentXplorPayRevenue ?? 0) +
+                  clearent.totalCollected) *
+                  100
+              ) / 100;
             existing.totalOperationalRevenue =
-              Math.round((existing.stripeVerifiedRevenue + existing.legacyCleanCloudRevenue + existing.clearentXplorPayRevenue) * 100) / 100;
+              Math.round(
+                (existing.stripeVerifiedRevenue +
+                  existing.legacyCleanCloudRevenue +
+                  existing.clearentXplorPayRevenue) *
+                  100
+              ) / 100;
             existing.lifetimeSpend = existing.totalOperationalRevenue;
             existing.totalOrders += clearent.transactionCount;
-            existing.source = existing.source === "stripe" ? "stripe_plus_clearent_xplorpay" : `${existing.source}_plus_clearent_xplorpay`;
-            existing.paymentProcessor = existing.paymentProcessor.includes("clearent")
+            existing.source =
+              existing.source === "stripe"
+                ? "stripe_plus_clearent_xplorpay"
+                : `${existing.source}_plus_clearent_xplorpay`;
+            existing.paymentProcessor = existing.paymentProcessor.includes(
+              "clearent"
+            )
               ? existing.paymentProcessor
               : `${existing.paymentProcessor},clearent_xplorpay`;
             existing.includedInOperationalRevenue = true;
@@ -1425,10 +1742,17 @@ export const appRouter = router({
             address: clearent.address,
             totalOrders: clearent.transactionCount,
             lifetimeSpend: clearent.totalCollected,
-            firstOrderAt: new Date(`${clearent.firstTransactionDate}T12:00:00Z`),
+            firstOrderAt: new Date(
+              `${clearent.firstTransactionDate}T12:00:00Z`
+            ),
             lastOrderAt: new Date(`${clearent.lastTransactionDate}T12:00:00Z`),
             lastOrderId: 0,
-            avgOrderValue: Math.round((clearent.totalCollected / Math.max(1, clearent.transactionCount)) * 100) / 100,
+            avgOrderValue:
+              Math.round(
+                (clearent.totalCollected /
+                  Math.max(1, clearent.transactionCount)) *
+                  100
+              ) / 100,
             daysSinceLastOrder: 0,
             ordersLast30Days: 0,
             ordersLast90Days: 0,
@@ -1457,19 +1781,27 @@ export const appRouter = router({
           });
         }
 
-        const reconciledCleanCloudCustomers = await listReconciledCleanCloudCustomerRevenue();
+        const reconciledCleanCloudCustomers =
+          await listReconciledCleanCloudCustomerRevenue();
         for (const reconciled of reconciledCleanCloudCustomers) {
-          const reconciledEmail = reconciled.customerEmail?.trim().toLowerCase() || "";
-          const reconciledPhoneDigits = reconciled.customerPhone.replace(/\D/g, "");
-          const existing = rows.find((row) => {
+          const reconciledEmail =
+            reconciled.customerEmail?.trim().toLowerCase() || "";
+          const reconciledPhoneDigits = reconciled.customerPhone.replace(
+            /\D/g,
+            ""
+          );
+          const existing = rows.find(row => {
             const rowEmail = row.email?.trim().toLowerCase() || "";
             const rowPhoneDigits = row.phone.replace(/\D/g, "");
             return (
               (reconciledEmail && rowEmail === reconciledEmail) ||
-              (reconciledPhoneDigits.length >= 7 && rowPhoneDigits === reconciledPhoneDigits)
+              (reconciledPhoneDigits.length >= 7 &&
+                rowPhoneDigits === reconciledPhoneDigits)
             );
           });
-          const tower = normalizePropertyTower(reconciled.buildingName || reconciled.buildingSlug || null);
+          const tower = normalizePropertyTower(
+            reconciled.buildingName || reconciled.buildingSlug || null
+          );
           const propertyGroup =
             reconciled.buildingSlug === "opusla"
               ? "opus_la"
@@ -1479,13 +1811,26 @@ export const appRouter = router({
 
           if (existing) {
             existing.clearentXplorPayRevenue =
-              Math.round(((existing.clearentXplorPayRevenue ?? 0) + reconciled.totalCollected) * 100) / 100;
+              Math.round(
+                ((existing.clearentXplorPayRevenue ?? 0) +
+                  reconciled.totalCollected) *
+                  100
+              ) / 100;
             existing.totalOperationalRevenue =
-              Math.round((existing.stripeVerifiedRevenue + existing.legacyCleanCloudRevenue + existing.clearentXplorPayRevenue) * 100) / 100;
+              Math.round(
+                (existing.stripeVerifiedRevenue +
+                  existing.legacyCleanCloudRevenue +
+                  existing.clearentXplorPayRevenue) *
+                  100
+              ) / 100;
             existing.lifetimeSpend = existing.totalOperationalRevenue;
             existing.totalOrders += reconciled.orderCount;
-            existing.source = existing.source.includes("clearent_reconciled") ? existing.source : `${existing.source}_plus_clearent_reconciled`;
-            existing.paymentProcessor = existing.paymentProcessor.includes("clearent")
+            existing.source = existing.source.includes("clearent_reconciled")
+              ? existing.source
+              : `${existing.source}_plus_clearent_reconciled`;
+            existing.paymentProcessor = existing.paymentProcessor.includes(
+              "clearent"
+            )
               ? existing.paymentProcessor
               : `${existing.paymentProcessor},clearent_xplorpay`;
             existing.clearentXplorPayBadge = "CLEARENT RECONCILED";
@@ -1495,7 +1840,9 @@ export const appRouter = router({
 
           rows.push({
             phone: reconciled.customerPhone,
-            firstName: reconciled.customerName.split(/\s+/)[0] || reconciled.customerName,
+            firstName:
+              reconciled.customerName.split(/\s+/)[0] ||
+              reconciled.customerName,
             lastName: reconciled.customerName.split(/\s+/).slice(1).join(" "),
             email: reconciled.customerEmail,
             unit: reconciled.unit,
@@ -1507,7 +1854,12 @@ export const appRouter = router({
             firstOrderAt: new Date(`${reconciled.firstBusinessDate}T12:00:00Z`),
             lastOrderAt: new Date(`${reconciled.lastBusinessDate}T12:00:00Z`),
             lastOrderId: 0,
-            avgOrderValue: Math.round((reconciled.totalCollected / Math.max(1, reconciled.orderCount)) * 100) / 100,
+            avgOrderValue:
+              Math.round(
+                (reconciled.totalCollected /
+                  Math.max(1, reconciled.orderCount)) *
+                  100
+              ) / 100,
             daysSinceLastOrder: 0,
             ordersLast30Days: 0,
             ordersLast90Days: 0,
@@ -1516,7 +1868,12 @@ export const appRouter = router({
             statusColor: "success",
             bldgUserIds: [],
             propertyGroup,
-            propertyDisplayName: propertyGroup === "opus_la" ? "OPUS LA" : propertyGroup === "century_park_east" ? "Century Park East" : "Unknown",
+            propertyDisplayName:
+              propertyGroup === "opus_la"
+                ? "OPUS LA"
+                : propertyGroup === "century_park_east"
+                  ? "Century Park East"
+                  : "Unknown",
             towerKey: tower.towerKey,
             towerDisplayName: reconciled.tower ?? tower.towerDisplayName,
             buildingAddressCanonical: tower.buildingAddressCanonical,
@@ -1536,36 +1893,57 @@ export const appRouter = router({
         }
 
         if (includeLegacyCleanCloud) {
-          const importedLegacyCustomers = await listImportedCleanCloudLegacyCustomers();
-          const legacyCustomers = [...cleanCloudLegacyCustomers, ...importedLegacyCustomers];
+          const importedLegacyCustomers =
+            await listImportedCleanCloudLegacyCustomers();
+          const legacyCustomers = [
+            ...cleanCloudLegacyCustomers,
+            ...importedLegacyCustomers,
+          ];
           for (const legacy of legacyCustomers) {
             const legacyEmail = legacy.email?.trim().toLowerCase() || "";
             const legacyPhoneDigits = legacy.phone.replace(/\D/g, "");
-            const existing = rows.find((row) => {
+            const existing = rows.find(row => {
               const rowEmail = row.email?.trim().toLowerCase() || "";
               const rowPhoneDigits = row.phone.replace(/\D/g, "");
               return (
                 (legacyEmail && rowEmail === legacyEmail) ||
-                (legacyPhoneDigits.length >= 7 && rowPhoneDigits === legacyPhoneDigits)
+                (legacyPhoneDigits.length >= 7 &&
+                  rowPhoneDigits === legacyPhoneDigits)
               );
             });
 
             if (existing) {
               existing.legacyCleanCloudRevenue =
-                Math.round((existing.legacyCleanCloudRevenue + legacy.totalSpend) * 100) / 100;
+                Math.round(
+                  (existing.legacyCleanCloudRevenue + legacy.totalSpend) * 100
+                ) / 100;
               existing.totalOperationalRevenue =
-                Math.round((existing.stripeVerifiedRevenue + existing.legacyCleanCloudRevenue + (existing.clearentXplorPayRevenue ?? 0)) * 100) / 100;
+                Math.round(
+                  (existing.stripeVerifiedRevenue +
+                    existing.legacyCleanCloudRevenue +
+                    (existing.clearentXplorPayRevenue ?? 0)) *
+                    100
+                ) / 100;
               existing.totalOrders += legacy.orderCount;
               existing.lifetimeSpend = existing.totalOperationalRevenue;
               existing.cleancloudCustomerId = legacy.cleancloudCustomerId;
-              existing.source = existing.source.includes("cleancloud") ? existing.source : `${existing.source}_plus_cleancloud_legacy`;
-              existing.paymentProcessor = existing.paymentProcessor.includes("cleancloud") ? existing.paymentProcessor : `${existing.paymentProcessor},cleancloud`;
+              existing.source = existing.source.includes("cleancloud")
+                ? existing.source
+                : `${existing.source}_plus_cleancloud_legacy`;
+              existing.paymentProcessor = existing.paymentProcessor.includes(
+                "cleancloud"
+              )
+                ? existing.paymentProcessor
+                : `${existing.paymentProcessor},cleancloud`;
               existing.includedInStripe = true;
               existing.includedInOperationalRevenue = true;
               existing.legacyImportNote = legacy.legacyImportNote;
               existing.cleanCloudLegacyBadge = "LEGACY · CLEANCLOUD";
               existing.cleanCloudStripeStatus = "Not in Stripe";
-              if (legacy.email === "abectunes@gmail.com" || legacy.phone === "5165871292") {
+              if (
+                legacy.email === "abectunes@gmail.com" ||
+                legacy.phone === "5165871292"
+              ) {
                 abeDedupedOrLinked = true;
               }
               continue;
@@ -1590,7 +1968,8 @@ export const appRouter = router({
               firstOrderAt: new Date(`${legacy.firstOrderDate}T12:00:00Z`),
               lastOrderAt: new Date(`${legacy.lastOrderDate}T12:00:00Z`),
               lastOrderId: 0,
-              avgOrderValue: Math.round((legacy.totalSpend / legacy.orderCount) * 100) / 100,
+              avgOrderValue:
+                Math.round((legacy.totalSpend / legacy.orderCount) * 100) / 100,
               daysSinceLastOrder: 0,
               ordersLast30Days: 0,
               ordersLast90Days: 0,
@@ -1623,36 +2002,47 @@ export const appRouter = router({
         const q = input?.search?.trim().toLowerCase();
         if (q) {
           rows = rows.filter(
-            (r) =>
+            r =>
               safeLower(r.phone).includes(q) ||
-              `${safeLower(r.firstName)} ${safeLower(r.lastName)}`.includes(q) ||
+              `${safeLower(r.firstName)} ${safeLower(r.lastName)}`.includes(
+                q
+              ) ||
               safeLower(r.email).includes(q)
           );
         }
         if (input?.status) {
-          rows = rows.filter((r) => r.recencyStatus === input.status);
+          rows = rows.filter(r => r.recencyStatus === input.status);
         }
         if (input?.tier) {
-          rows = rows.filter((r) => r.tier === input.tier);
+          rows = rows.filter(r => r.tier === input.tier);
         }
         if (input?.buildingSlug) {
-          rows = rows.filter((r) => r.buildingSlug === input.buildingSlug);
+          rows = rows.filter(r => r.buildingSlug === input.buildingSlug);
         }
         if (input?.propertyGroup) {
-          rows = rows.filter((r) => r.propertyGroup === input.propertyGroup);
+          rows = rows.filter(r => r.propertyGroup === input.propertyGroup);
         }
         if (input?.towerKey) {
-          rows = rows.filter((r) => r.towerKey === input.towerKey);
+          rows = rows.filter(r => r.towerKey === input.towerKey);
         }
         const sortBy = input?.sortBy ?? "lastOrder";
         if (sortBy === "spend") {
-          rows.sort((a, b) => b.lifetimeSpend - a.lifetimeSpend || b.lastOrderAt.getTime() - a.lastOrderAt.getTime());
+          rows.sort(
+            (a, b) =>
+              b.lifetimeSpend - a.lifetimeSpend ||
+              b.lastOrderAt.getTime() - a.lastOrderAt.getTime()
+          );
         } else if (sortBy === "orders") {
-          rows.sort((a, b) => b.totalOrders - a.totalOrders || b.lastOrderAt.getTime() - a.lastOrderAt.getTime());
+          rows.sort(
+            (a, b) =>
+              b.totalOrders - a.totalOrders ||
+              b.lastOrderAt.getTime() - a.lastOrderAt.getTime()
+          );
         } else {
           rows.sort(
             (a, b) =>
-              new Date(b.lastOrderAt).getTime() - new Date(a.lastOrderAt).getTime()
+              new Date(b.lastOrderAt).getTime() -
+              new Date(a.lastOrderAt).getTime()
           );
         }
 
@@ -1662,7 +2052,14 @@ export const appRouter = router({
             totalCustomers: number;
             activeCustomers: number;
             totalRevenue: number;
-            floors: Record<number, { totalCustomers: number; activeCustomers: number; totalRevenue: number }>;
+            floors: Record<
+              number,
+              {
+                totalCustomers: number;
+                activeCustomers: number;
+                totalRevenue: number;
+              }
+            >;
           }
         >();
 
@@ -1705,7 +2102,10 @@ export const appRouter = router({
         }
 
         for (const order of paidOrders) {
-          const key = order.buildingSlug?.trim() || matchBuilding(order.address)?.slug || "unknown";
+          const key =
+            order.buildingSlug?.trim() ||
+            matchBuilding(order.address)?.slug ||
+            "unknown";
           const existing = buildingSummaryMap.get(key) ?? {
             totalCustomers: 0,
             activeCustomers: 0,
@@ -1729,7 +2129,8 @@ export const appRouter = router({
         }
 
         const contestTotals = {
-          stripeOnlyHelperText: "Stripe-only view excludes legacy CleanCloud orders.",
+          stripeOnlyHelperText:
+            "Stripe-only view excludes legacy CleanCloud orders.",
           legacyHelperText:
             "Legacy CleanCloud orders are included for operational history only. They are not Stripe transactions and will not appear in Stripe reports.",
           clearentHelperText:
@@ -1750,9 +2151,29 @@ export const appRouter = router({
               clearentXplorPayRevenue: 0,
               totalOperationalRevenue: 0,
               towers: {
-                opus_south_3545: { ...TOWER_DEFINITIONS.opus_south_3545, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, clearentXplorPayRevenue: 0, totalOperationalRevenue: 0 },
-                opus_north_3650: { ...TOWER_DEFINITIONS.opus_north_3650, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, clearentXplorPayRevenue: 0, totalOperationalRevenue: 0 },
-                unknown: { ...TOWER_DEFINITIONS.unknown, propertyGroup: "opus_la", propertyDisplayName: "OPUS LA", stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, clearentXplorPayRevenue: 0, totalOperationalRevenue: 0 },
+                opus_south_3545: {
+                  ...TOWER_DEFINITIONS.opus_south_3545,
+                  stripeVerifiedRevenue: 0,
+                  legacyCleanCloudRevenue: 0,
+                  clearentXplorPayRevenue: 0,
+                  totalOperationalRevenue: 0,
+                },
+                opus_north_3650: {
+                  ...TOWER_DEFINITIONS.opus_north_3650,
+                  stripeVerifiedRevenue: 0,
+                  legacyCleanCloudRevenue: 0,
+                  clearentXplorPayRevenue: 0,
+                  totalOperationalRevenue: 0,
+                },
+                unknown: {
+                  ...TOWER_DEFINITIONS.unknown,
+                  propertyGroup: "opus_la",
+                  propertyDisplayName: "OPUS LA",
+                  stripeVerifiedRevenue: 0,
+                  legacyCleanCloudRevenue: 0,
+                  clearentXplorPayRevenue: 0,
+                  totalOperationalRevenue: 0,
+                },
               },
             },
             century_park_east: {
@@ -1762,19 +2183,39 @@ export const appRouter = router({
               clearentXplorPayRevenue: 0,
               totalOperationalRevenue: 0,
               towers: {
-                cpe_south_2170: { ...TOWER_DEFINITIONS.cpe_south_2170, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, clearentXplorPayRevenue: 0, totalOperationalRevenue: 0 },
-                cpe_north_2160: { ...TOWER_DEFINITIONS.cpe_north_2160, stripeVerifiedRevenue: 0, legacyCleanCloudRevenue: 0, clearentXplorPayRevenue: 0, totalOperationalRevenue: 0 },
+                cpe_south_2170: {
+                  ...TOWER_DEFINITIONS.cpe_south_2170,
+                  stripeVerifiedRevenue: 0,
+                  legacyCleanCloudRevenue: 0,
+                  clearentXplorPayRevenue: 0,
+                  totalOperationalRevenue: 0,
+                },
+                cpe_north_2160: {
+                  ...TOWER_DEFINITIONS.cpe_north_2160,
+                  stripeVerifiedRevenue: 0,
+                  legacyCleanCloudRevenue: 0,
+                  clearentXplorPayRevenue: 0,
+                  totalOperationalRevenue: 0,
+                },
               },
             },
           },
         };
 
         for (const row of rows) {
-          if (row.propertyGroup !== "opus_la" && row.propertyGroup !== "century_park_east") continue;
-          const propertyGroup = row.propertyGroup as "opus_la" | "century_park_east";
+          if (
+            row.propertyGroup !== "opus_la" &&
+            row.propertyGroup !== "century_park_east"
+          )
+            continue;
+          const propertyGroup = row.propertyGroup as
+            | "opus_la"
+            | "century_park_east";
           const prop = contestTotals.properties[propertyGroup];
           const stripe = Number(row.stripeVerifiedRevenue ?? 0);
-          const legacy = includeLegacyCleanCloud ? Number(row.legacyCleanCloudRevenue ?? 0) : 0;
+          const legacy = includeLegacyCleanCloud
+            ? Number(row.legacyCleanCloudRevenue ?? 0)
+            : 0;
           const clearent = Number(row.clearentXplorPayRevenue ?? 0);
           const operational = stripe + legacy + clearent;
           prop.stripeVerifiedRevenue += stripe;
@@ -1785,7 +2226,15 @@ export const appRouter = router({
           contestTotals.grand.legacyCleanCloudRevenue += legacy;
           contestTotals.grand.clearentXplorPayRevenue += clearent;
           contestTotals.grand.totalOperationalRevenue += operational;
-          const towers = prop.towers as Record<string, { stripeVerifiedRevenue: number; legacyCleanCloudRevenue: number; clearentXplorPayRevenue: number; totalOperationalRevenue: number }>;
+          const towers = prop.towers as Record<
+            string,
+            {
+              stripeVerifiedRevenue: number;
+              legacyCleanCloudRevenue: number;
+              clearentXplorPayRevenue: number;
+              totalOperationalRevenue: number;
+            }
+          >;
           const towerKey = row.towerKey in towers ? row.towerKey : "unknown";
           if (towers[towerKey]) {
             towers[towerKey].stripeVerifiedRevenue += stripe;
@@ -1796,14 +2245,21 @@ export const appRouter = router({
         }
 
         const roundTotals = (obj: Record<string, unknown>) => {
-          for (const key of ["stripeVerifiedRevenue", "legacyCleanCloudRevenue", "clearentXplorPayRevenue", "totalOperationalRevenue"]) {
-            if (typeof obj[key] === "number") obj[key] = Math.round((obj[key] as number) * 100) / 100;
+          for (const key of [
+            "stripeVerifiedRevenue",
+            "legacyCleanCloudRevenue",
+            "clearentXplorPayRevenue",
+            "totalOperationalRevenue",
+          ]) {
+            if (typeof obj[key] === "number")
+              obj[key] = Math.round((obj[key] as number) * 100) / 100;
           }
         };
         roundTotals(contestTotals.grand);
         for (const prop of Object.values(contestTotals.properties)) {
           roundTotals(prop as unknown as Record<string, unknown>);
-          for (const tower of Object.values(prop.towers)) roundTotals(tower as unknown as Record<string, unknown>);
+          for (const tower of Object.values(prop.towers))
+            roundTotals(tower as unknown as Record<string, unknown>);
         }
 
         const buildingSummary = Object.fromEntries(
@@ -1830,27 +2286,32 @@ export const appRouter = router({
 
     /** Create order manually (admin new order tab) */
     createOrder: protectedProcedure
-      .input(z.object({
-        serviceType: z.enum(["wash_fold", "dry_cleaning"]),
-        pickupDate: z.string(),
-        pickupTimeWindow: z.string(),
-        deliveryDate: z.string().optional(),
-        deliveryTimeWindow: z.string().optional(),
-        address: z.string(),
-        unit: z.string().optional(),
-        specialInstructions: z.string().optional(),
-        firstName: z.string().min(1),
-        lastName: z.string().min(1),
-        phone: z.string().min(1),
-        email: z.string().optional(),
-        stripeCustomerId: z.string().optional(),
-        stripePaymentMethodId: z.string().optional(),
-        buildingSlug: z.string(),
-        vendorId: z.number().optional(),
-      }).refine(
-        (d) => d.address.trim().length > 0 || d.buildingSlug.trim().length > 0,
-        { message: "Either address or buildingSlug is required" }
-      ))
+      .input(
+        z
+          .object({
+            serviceType: z.enum(["wash_fold", "dry_cleaning"]),
+            pickupDate: z.string(),
+            pickupTimeWindow: z.string(),
+            deliveryDate: z.string().optional(),
+            deliveryTimeWindow: z.string().optional(),
+            address: z.string(),
+            unit: z.string().optional(),
+            specialInstructions: z.string().optional(),
+            firstName: z.string().min(1),
+            lastName: z.string().min(1),
+            phone: z.string().min(1),
+            email: z.string().optional(),
+            stripeCustomerId: z.string().optional(),
+            stripePaymentMethodId: z.string().optional(),
+            buildingSlug: z.string(),
+            vendorId: z.number().optional(),
+          })
+          .refine(
+            d =>
+              d.address.trim().length > 0 || d.buildingSlug.trim().length > 0,
+            { message: "Either address or buildingSlug is required" }
+          )
+      )
       .mutation(async ({ input }) => {
         const pickupDateObj = new Date(input.pickupDate + "T00:00:00");
         pickupDateObj.setDate(pickupDateObj.getDate() + 1);
@@ -1865,9 +2326,13 @@ export const appRouter = router({
           );
           resolvedVendorId = vendor?.id ?? null;
           if (vendor) {
-            console.log(`[VendorRouting] assigned vendor #${vendor.id} (${vendor.name}) for building=${input.buildingSlug} service=${input.serviceType}`);
+            console.log(
+              `[VendorRouting] assigned vendor #${vendor.id} (${vendor.name}) for building=${input.buildingSlug} service=${input.serviceType}`
+            );
           } else {
-            console.log(`[VendorRouting] no vendor found for building=${input.buildingSlug} service=${input.serviceType}`);
+            console.log(
+              `[VendorRouting] no vendor found for building=${input.buildingSlug} service=${input.serviceType}`
+            );
           }
         }
 
@@ -1877,7 +2342,8 @@ export const appRouter = router({
           pickupDate: input.pickupDate,
           pickupTimeWindow: input.pickupTimeWindow,
           deliveryDate: input.deliveryDate || defaultDeliveryDate,
-          deliveryTimeWindow: input.deliveryTimeWindow || input.pickupTimeWindow,
+          deliveryTimeWindow:
+            input.deliveryTimeWindow || input.pickupTimeWindow,
           address: input.address,
           unit: input.unit || null,
           specialInstructions: input.specialInstructions || null,
@@ -1897,14 +2363,26 @@ export const appRouter = router({
 
     /** Update order status — platform or vendor (vendor scoped to own orders) */
     updateStatus: platformOrVendorProcedure
-      .input(z.object({
-        orderId: z.number(),
-        status: z.enum(["new", "intake-pending", "collected", "processing", "ready", "delivered"]),
-      }))
+      .input(
+        z.object({
+          orderId: z.number(),
+          status: z.enum([
+            "new",
+            "intake-pending",
+            "collected",
+            "processing",
+            "ready",
+            "delivered",
+          ]),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
         const order = await getOrderById(input.orderId);
         if (!order) throw new Error("Order not found");
-        if (ctx.vendorSession && order.vendorId !== ctx.vendorSession.vendorId) {
+        if (
+          ctx.vendorSession &&
+          order.vendorId !== ctx.vendorSession.vendorId
+        ) {
           throw new Error("Unauthorized");
         }
         await updateOrderStatus(input.orderId, input.status, {
@@ -1930,15 +2408,20 @@ export const appRouter = router({
 
     /** Mark ready — platform or vendor (vendor scoped to own orders) */
     markReady: platformOrVendorProcedure
-      .input(z.object({
-        orderId: z.number(),
-        bagCount: z.number().int().min(1).default(1),
-        garmentCount: z.number().int().optional(),
-      }))
+      .input(
+        z.object({
+          orderId: z.number(),
+          bagCount: z.number().int().min(1).default(1),
+          garmentCount: z.number().int().optional(),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
         const order = await getOrderById(input.orderId);
         if (!order) throw new Error("Order not found");
-        if (ctx.vendorSession && order.vendorId !== ctx.vendorSession.vendorId) {
+        if (
+          ctx.vendorSession &&
+          order.vendorId !== ctx.vendorSession.vendorId
+        ) {
           throw new Error("Unauthorized");
         }
         await updateOrderIntake(input.orderId, {
@@ -1961,14 +2444,16 @@ export const appRouter = router({
 
     /** Correct customer/order building attribution for revenue and profile rollups. */
     updateCustomerBuilding: protectedProcedure
-      .input(z.object({
-        phone: z.string().min(3),
-        buildingSlug: z.string().min(1).max(100),
-        scope: z.enum(["latest", "all"]),
-        latestOrderId: z.number().int().positive().optional(),
-      }))
+      .input(
+        z.object({
+          phone: z.string().min(3),
+          buildingSlug: z.string().min(1).max(100),
+          scope: z.enum(["latest", "all"]),
+          latestOrderId: z.number().int().positive().optional(),
+        })
+      )
       .mutation(async ({ input }) => {
-        const building = BUILDINGS.find((b) => b.slug === input.buildingSlug);
+        const building = BUILDINGS.find(b => b.slug === input.buildingSlug);
         if (!building) {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -1999,19 +2484,24 @@ export const appRouter = router({
 
     /** Save intake data — platform or vendor (chargeCard stays platform-only) */
     saveIntake: platformOrVendorProcedure
-      .input(z.object({
-        orderId: z.number(),
-        weightLbs: z.number().optional(),
-        subtotal: z.string(),
-        discountPercent: z.string(),
-        total: z.string(),
-        upchargesJson: z.any().optional(),
-        drycleanItemsJson: z.any().optional(),
-      }))
+      .input(
+        z.object({
+          orderId: z.number(),
+          weightLbs: z.number().optional(),
+          subtotal: z.string(),
+          discountPercent: z.string(),
+          total: z.string(),
+          upchargesJson: z.any().optional(),
+          drycleanItemsJson: z.any().optional(),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
         const order = await getOrderById(input.orderId);
         if (!order) throw new Error("Order not found");
-        if (ctx.vendorSession && order.vendorId !== ctx.vendorSession.vendorId) {
+        if (
+          ctx.vendorSession &&
+          order.vendorId !== ctx.vendorSession.vendorId
+        ) {
           throw new Error("Unauthorized");
         }
         await updateOrderIntake(input.orderId, {
@@ -2027,10 +2517,12 @@ export const appRouter = router({
 
     /** Charge card off-session */
     chargeCard: protectedProcedure
-      .input(z.object({
-        orderId: z.number(),
-        amountCents: z.number().int().min(50), // Stripe minimum $0.50
-      }))
+      .input(
+        z.object({
+          orderId: z.number(),
+          amountCents: z.number().int().min(50), // Stripe minimum $0.50
+        })
+      )
       .mutation(async ({ input }) => {
         const stripe = getStripe();
         const order = await getOrderById(input.orderId);
@@ -2045,12 +2537,23 @@ export const appRouter = router({
         if (customerId && !paymentMethodId) {
           try {
             const customer = await stripe.customers.retrieve(customerId);
-            if ('invoice_settings' in customer && customer.invoice_settings?.default_payment_method) {
-              paymentMethodId = customer.invoice_settings.default_payment_method as string;
-              await updateOrderStripe(input.orderId, customerId, paymentMethodId);
+            if (
+              "invoice_settings" in customer &&
+              customer.invoice_settings?.default_payment_method
+            ) {
+              paymentMethodId = customer.invoice_settings
+                .default_payment_method as string;
+              await updateOrderStripe(
+                input.orderId,
+                customerId,
+                paymentMethodId
+              );
             }
           } catch (err) {
-            console.warn(`[Stripe] Failed to retrieve customer ${customerId}:`, err);
+            console.warn(
+              `[Stripe] Failed to retrieve customer ${customerId}:`,
+              err
+            );
           }
         }
 
@@ -2068,17 +2571,22 @@ export const appRouter = router({
         if (!customerId || !paymentMethodId) {
           return {
             success: false,
-            error: "No card on file for this customer. Collect payment manually.",
+            error:
+              "No card on file for this customer. Collect payment manually.",
           };
         }
 
         try {
           // Resolve vendor for payout routing
-          const vendor = order.vendorId ? await getVendorById(order.vendorId) : null;
-          const vendorAccountId = vendor?.stripeConnectAccountId
-            ?? process.env.STRIPE_CONNECT_VENDOR_ACCOUNT_ID
-            ?? null;
-          const payoutReady = !!vendorAccountId && vendor?.payoutsEnabled === true;
+          const vendor = order.vendorId
+            ? await getVendorById(order.vendorId)
+            : null;
+          const vendorAccountId =
+            vendor?.stripeConnectAccountId ??
+            process.env.STRIPE_CONNECT_VENDOR_ACCOUNT_ID ??
+            null;
+          const payoutReady =
+            !!vendorAccountId && vendor?.payoutsEnabled === true;
 
           let paymentIntent;
           let platformFeeCents: number | null = null;
@@ -2092,12 +2600,16 @@ export const appRouter = router({
           };
 
           if (payoutReady) {
-            const feePercent = vendor?.platformFeePercent != null
-              ? parseFloat(vendor.platformFeePercent as string)
-              : ENV.platformFeePercent;
-            platformFeeCents = Math.round(input.amountCents * feePercent / 100);
+            const feePercent =
+              vendor?.platformFeePercent != null
+                ? parseFloat(vendor.platformFeePercent as string)
+                : ENV.platformFeePercent;
+            platformFeeCents = Math.round(
+              (input.amountCents * feePercent) / 100
+            );
             vendorPayoutCents = input.amountCents - platformFeeCents;
-            const useOnBehalfOf = process.env.STRIPE_CONNECT_ON_BEHALF_OF === "true";
+            const useOnBehalfOf =
+              process.env.STRIPE_CONNECT_ON_BEHALF_OF === "true";
 
             paymentIntent = await stripe.paymentIntents.create({
               customer: customerId,
@@ -2111,8 +2623,12 @@ export const appRouter = router({
               application_fee_amount: platformFeeCents,
               ...(useOnBehalfOf ? { on_behalf_of: vendorAccountId! } : {}),
             });
-            console.log(`[ChargeCard] Destination charge for vendor ${vendorAccountId}`);
-            console.log(`[ChargeCard] Vendor payout: $${(vendorPayoutCents / 100).toFixed(2)}  Platform fee: $${(platformFeeCents / 100).toFixed(2)} (${feePercent}%)`);
+            console.log(
+              `[ChargeCard] Destination charge for vendor ${vendorAccountId}`
+            );
+            console.log(
+              `[ChargeCard] Vendor payout: $${(vendorPayoutCents / 100).toFixed(2)}  Platform fee: $${(platformFeeCents / 100).toFixed(2)} (${feePercent}%)`
+            );
           } else {
             paymentIntent = await stripe.paymentIntents.create({
               customer: customerId,
@@ -2123,7 +2639,9 @@ export const appRouter = router({
               off_session: true,
               metadata: stripeMetadata,
             });
-            console.log(`[ChargeCard] No payout routing applied for order #${input.orderId}`);
+            console.log(
+              `[ChargeCard] No payout routing applied for order #${input.orderId}`
+            );
           }
 
           const paidAt = new Date(paymentIntent.created * 1000);
@@ -2134,13 +2652,15 @@ export const appRouter = router({
             total: centsToDollars(input.amountCents),
             status: "processing",
             isFirstPaidOrder: !hasPaidBefore,
-            ...(payoutReady ? {
-              platformFeeCents,
-              vendorPayoutCents,
-              stripeConnectedAccountIdSnapshot: vendorAccountId,
-              vendorNameSnapshot: vendor?.name ?? null,
-              routingPrioritySnapshot: null,
-            } : {}),
+            ...(payoutReady
+              ? {
+                  platformFeeCents,
+                  vendorPayoutCents,
+                  stripeConnectedAccountIdSnapshot: vendorAccountId,
+                  vendorNameSnapshot: vendor?.name ?? null,
+                  routingPrioritySnapshot: null,
+                }
+              : {}),
           });
 
           await ensurePickupCompletedOperationsEventForOrder(input.orderId, {
@@ -2157,7 +2677,9 @@ export const appRouter = router({
               process.env.APP_SHARED_API_SECRET;
 
             if (!jwtSigningSecret) {
-              throw new Error("Missing JWT signing secret (JWT_SHARED_SECRET / JWT_SECRET / APP_SHARED_API_SECRET)");
+              throw new Error(
+                "Missing JWT signing secret (JWT_SHARED_SECRET / JWT_SECRET / APP_SHARED_API_SECRET)"
+              );
             }
 
             const sharedSecret = new TextEncoder().encode(jwtSigningSecret);
@@ -2178,7 +2700,10 @@ export const appRouter = router({
             receiptUrl = `https://app.bldg.chat/receipt/${receiptToken}`;
             await updateOrderIntake(input.orderId, { portalJwt: receiptUrl });
           } catch (err) {
-            console.warn("[Receipt] Failed to generate receipt after successful charge:", err);
+            console.warn(
+              "[Receipt] Failed to generate receipt after successful charge:",
+              err
+            );
           }
 
           // Notify owner
@@ -2195,20 +2720,26 @@ export const appRouter = router({
           try {
             await notifyCardCharged(order.phone, centsToDollars(input.amountCents));
           } catch (err) {
-            console.warn("[SMS] Failed to send card charged notification:", err);
+            console.warn(
+              "[SMS] Failed to send card charged notification:",
+              err
+            );
           }
 
           // Send receipt notification to app.bldg.chat via webhook
           if (order.bldgUserId && receiptUrl) {
             try {
-              console.log('[ChargeCard] Sending receipt webhook for user', order.bldgUserId);
+              console.log(
+                "[ChargeCard] Sending receipt webhook for user",
+                order.bldgUserId
+              );
               const webhookUrl = "https://app.bldg.chat/api/webhooks/receipt";
               const webhookSecret = process.env.APP_SHARED_API_SECRET || "";
               const webhookResponse = await fetch(webhookUrl, {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
-                  "Authorization": webhookSecret,
+                  Authorization: webhookSecret,
                 },
                 body: JSON.stringify({
                   bldgUserId: order.bldgUserId,
@@ -2218,20 +2749,27 @@ export const appRouter = router({
               });
               if (!webhookResponse.ok) {
                 const errorText = await webhookResponse.text();
-                console.warn('[ChargeCard] Webhook failed:', webhookResponse.status, errorText);
+                console.warn(
+                  "[ChargeCard] Webhook failed:",
+                  webhookResponse.status,
+                  errorText
+                );
               } else {
-                console.log('[ChargeCard] Receipt webhook sent successfully for user', order.bldgUserId);
+                console.log(
+                  "[ChargeCard] Receipt webhook sent successfully for user",
+                  order.bldgUserId
+                );
               }
             } catch (err) {
-              console.warn('[ChargeCard] Failed to send receipt webhook:', err);
+              console.warn("[ChargeCard] Failed to send receipt webhook:", err);
             }
           }
 
           try {
             await writeOrderToSheet(order, input.amountCents);
-            console.log('[Sheets] Revenue written successfully');
+            console.log("[Sheets] Revenue written successfully");
           } catch (err) {
-            console.warn('[Sheets] Failed to write revenue:', err);
+            console.warn("[Sheets] Failed to write revenue:", err);
           }
 
           try {
@@ -2270,10 +2808,14 @@ export const appRouter = router({
             receiptUrl,
           };
         } catch (err: any) {
-          console.error("[ChargeCard] Charge or payment-truth persistence failed:", err.message);
+          console.error(
+            "[ChargeCard] Charge or payment-truth persistence failed:",
+            err.message
+          );
           return {
             success: false,
-            error: err.message || "Payment failed. Card may have been declined.",
+            error:
+              err.message || "Payment failed. Card may have been declined.",
           };
         }
       }),
@@ -2285,36 +2827,48 @@ export const appRouter = router({
     resendToSheets: adminProcedure
       .input(z.object({ orderId: z.number() }))
       .mutation(async ({ input }) => {
-        console.log(`[Sheets:Manual] Resending order #${input.orderId} to Sheets`);
+        console.log(
+          `[Sheets:Manual] Resending order #${input.orderId} to Sheets`
+        );
         try {
           const order = await getOrderById(input.orderId);
           if (!order) {
-            console.warn(`[Sheets:Manual] Failed: order #${input.orderId} — Order not found`);
+            console.warn(
+              `[Sheets:Manual] Failed: order #${input.orderId} — Order not found`
+            );
             return { success: false as const, error: "Order not found" };
           }
           if (!order.paid) {
-            console.warn(`[Sheets:Manual] Failed: order #${input.orderId} — Order not charged yet`);
+            console.warn(
+              `[Sheets:Manual] Failed: order #${input.orderId} — Order not charged yet`
+            );
             return { success: false as const, error: "Order not charged yet" };
           }
-          const amountCents = Math.round(Number.parseFloat(String(order.total ?? "0")) * 100);
+          const amountCents = Math.round(
+            Number.parseFloat(String(order.total ?? "0")) * 100
+          );
           if (!Number.isFinite(amountCents)) {
-            console.warn(`[Sheets:Manual] Failed: order #${input.orderId} — Invalid charge total`);
+            console.warn(
+              `[Sheets:Manual] Failed: order #${input.orderId} — Invalid charge total`
+            );
             return { success: false as const, error: "Invalid charge total" };
           }
           const sheetResult = await writeOrderToSheet(order, amountCents);
           if (!sheetResult.ok) {
             console.warn(
-              `[Sheets:Manual] Failed: order #${input.orderId} — ${sheetResult.reason}`,
+              `[Sheets:Manual] Failed: order #${input.orderId} — ${sheetResult.reason}`
             );
             return { success: false as const, error: sheetResult.reason };
           }
           console.log(
-            `[Sheets:Manual] Success: order #${input.orderId} written to ${sheetResult.tabName}`,
+            `[Sheets:Manual] Success: order #${input.orderId} written to ${sheetResult.tabName}`
           );
           return { success: true as const };
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
-          console.warn(`[Sheets:Manual] Failed: order #${input.orderId} — ${msg}`);
+          console.warn(
+            `[Sheets:Manual] Failed: order #${input.orderId} — ${msg}`
+          );
           return { success: false as const, error: msg };
         }
       }),
@@ -2354,14 +2908,17 @@ export const appRouter = router({
         });
 
         if (!isGasExpense(parsed)) {
-          console.warn("[DriverExpenseReceipt] Rejected receipt before Sheets write", {
-            tenantId: ctx.tenantId,
-            category: parsed.category,
-            receiptDate: parsed.receiptDate,
-            totalCents: parsed.totalCents,
-            confidence: parsed.confidence,
-            gasEvidence: parsed.gasEvidence,
-          });
+          console.warn(
+            "[DriverExpenseReceipt] Rejected receipt before Sheets write",
+            {
+              tenantId: ctx.tenantId,
+              category: parsed.category,
+              receiptDate: parsed.receiptDate,
+              totalCents: parsed.totalCents,
+              confidence: parsed.confidence,
+              gasEvidence: parsed.gasEvidence,
+            }
+          );
           return {
             success: false as const,
             parsed,
@@ -2453,9 +3010,11 @@ export const appRouter = router({
           })
         )
         .mutation(async ({ ctx, input }) => {
-          const catalogRows = await listCatalogItemsForAdmin(ctx.tenantId, { includeArchived: false });
+          const catalogRows = await listCatalogItemsForAdmin(ctx.tenantId, {
+            includeArchived: false,
+          });
           const match = matchReceiptLinesToCatalog(
-            input.lines.map((line) => ({
+            input.lines.map(line => ({
               rawLabel: line.rawLabel,
               qty: line.qty,
               unitPriceCents: line.unitPriceCents ?? null,
@@ -2465,7 +3024,10 @@ export const appRouter = router({
             input.dryCleanerRetailTotalCents
           );
           if (input.receiptIntakeId) {
-            await updateReceiptIntakeAfterMatch({ receiptIntakeId: input.receiptIntakeId, match });
+            await updateReceiptIntakeAfterMatch({
+              receiptIntakeId: input.receiptIntakeId,
+              match,
+            });
           }
           return match;
         }),
@@ -2490,26 +3052,34 @@ export const appRouter = router({
           const selected = input.selectedCustomer;
           const math = buildDraftMath({
             dryCleanerRetailTotalCents: input.dryCleanerRetailTotalCents,
-            laundryButlerRetailSubtotalCents: input.laundryButlerRetailSubtotalCents,
+            laundryButlerRetailSubtotalCents:
+              input.laundryButlerRetailSubtotalCents,
           });
           if (math.partnerCostCents !== input.partnerCostCents) {
-            throw new TRPCError({ code: "BAD_REQUEST", message: "Partner cost must be 60% of dry-cleaner retail total." });
-          }
-          if (input.customerTotalCentsAtDraft !== math.customerTotalCentsAtDraft) {
             throw new TRPCError({
               code: "BAD_REQUEST",
-              message: "Draft customer total must equal Laundry Butler retail subtotal before manual customer discount.",
+              message: "Partner cost must be 60% of dry-cleaner retail total.",
+            });
+          }
+          if (
+            input.customerTotalCentsAtDraft !== math.customerTotalCentsAtDraft
+          ) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message:
+                "Draft customer total must equal Laundry Butler retail subtotal before manual customer discount.",
             });
           }
 
           const drycleanItemsJson = buildDrycleanItemsJsonFromReviewed(
-            input.reviewedMatches.map((m) => ({
+            input.reviewedMatches.map(m => ({
               rawLabel: m.rawLabel,
               matchedCatalogSlug: m.matchedCatalogSlug,
               matchedCatalogName: m.matchedCatalogName,
               category: m.category,
               qty: m.qty,
-              dryCleanerRetailLineTotalCents: m.dryCleanerRetailLineTotalCents ?? null,
+              dryCleanerRetailLineTotalCents:
+                m.dryCleanerRetailLineTotalCents ?? null,
               laundryButlerUnitPriceCents: m.laundryButlerUnitPriceCents,
               laundryButlerLineTotalCents: m.laundryButlerLineTotalCents,
               confidence: m.confidence,
@@ -2521,42 +3091,53 @@ export const appRouter = router({
             0
           );
           if (subtotalFromReviewed !== math.laundryButlerRetailSubtotalCents) {
-            throw new TRPCError({ code: "BAD_REQUEST", message: "Reviewed Laundry Butler line totals do not match subtotal." });
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message:
+                "Reviewed Laundry Butler line totals do not match subtotal.",
+            });
           }
 
           const buildingSlug = selected.buildingSlug?.trim() || "";
-          const vendor = buildingSlug ? await getVendorForOrder(buildingSlug, "dry_cleaning") : null;
+          const vendor = buildingSlug
+            ? await getVendorForOrder(buildingSlug, "dry_cleaning")
+            : null;
           const specialInstructions = [
             "Created from dry cleaner receipt photo",
             input.receiptNumber ? `Receipt #${input.receiptNumber}` : "",
             input.notes?.trim() || "",
-            ...(input.warnings ?? []).map((w) => `Receipt warning: ${w}`),
-          ].filter(Boolean).join("\n");
+            ...(input.warnings ?? []).map(w => `Receipt warning: ${w}`),
+          ]
+            .filter(Boolean)
+            .join("\n");
 
           const existingOrderId =
             selected.orderId && selected.serviceType === "dry_cleaning"
               ? selected.orderId
               : null;
-          const orderId = existingOrderId ?? await createOrder({
-            tenantId: ctx.tenantId,
-            serviceType: "dry_cleaning",
-            pickupDate: localYmd(0),
-            pickupTimeWindow: "Dry clean receipt intake",
-            deliveryDate: localYmd(1),
-            deliveryTimeWindow: "Dry clean receipt intake",
-            address: selected.address || buildingSlug || "Dry clean receipt intake",
-            unit: selected.unit ?? null,
-            specialInstructions,
-            firstName: selected.firstName,
-            lastName: selected.lastName || "",
-            phone: selected.phone,
-            email: selected.email ?? null,
-            stripeCustomerId: selected.stripeCustomerId ?? null,
-            stripePaymentMethodId: selected.stripePaymentMethodId ?? null,
-            buildingSlug,
-            vendorId: vendor?.id ?? null,
-            status: "collected",
-          });
+          const orderId =
+            existingOrderId ??
+            (await createOrder({
+              tenantId: ctx.tenantId,
+              serviceType: "dry_cleaning",
+              pickupDate: localYmd(0),
+              pickupTimeWindow: "Dry clean receipt intake",
+              deliveryDate: localYmd(1),
+              deliveryTimeWindow: "Dry clean receipt intake",
+              address:
+                selected.address || buildingSlug || "Dry clean receipt intake",
+              unit: selected.unit ?? null,
+              specialInstructions,
+              firstName: selected.firstName,
+              lastName: selected.lastName || "",
+              phone: selected.phone,
+              email: selected.email ?? null,
+              stripeCustomerId: selected.stripeCustomerId ?? null,
+              stripePaymentMethodId: selected.stripePaymentMethodId ?? null,
+              buildingSlug,
+              vendorId: vendor?.id ?? null,
+              status: "collected",
+            }));
 
           await updateOrderIntake(orderId, {
             ...(existingOrderId ? { specialInstructions } : {}),
@@ -2590,7 +3171,8 @@ export const appRouter = router({
             parseJson: input.parseJson,
             dryCleanerRetailTotalCents: math.dryCleanerRetailTotalCents,
             partnerCostCents: math.partnerCostCents,
-            laundryButlerRetailSubtotalCents: math.laundryButlerRetailSubtotalCents,
+            laundryButlerRetailSubtotalCents:
+              math.laundryButlerRetailSubtotalCents,
             customerTotalCentsAtDraft: math.customerTotalCentsAtDraft,
           });
 
@@ -2609,7 +3191,9 @@ export const appRouter = router({
               level: "1",
               taskType: "dry_clean_receipt_intake",
               title: `Captured dry-clean receipt for order #${orderId}`,
-              description: `${selected.firstName} ${selected.lastName || ""}`.trim() || "Dry-clean receipt assigned to customer.",
+              description:
+                `${selected.firstName} ${selected.lastName || ""}`.trim() ||
+                "Dry-clean receipt assigned to customer.",
               source: "quick_input",
               priority: "high",
               revenueAtRiskCents: math.customerTotalCentsAtDraft,
@@ -2620,7 +3204,8 @@ export const appRouter = router({
                 receiptNumber: input.receiptNumber ?? null,
                 partnerCostCents: math.partnerCostCents,
                 dryCleanerRetailTotalCents: math.dryCleanerRetailTotalCents,
-                laundryButlerRetailSubtotalCents: math.laundryButlerRetailSubtotalCents,
+                laundryButlerRetailSubtotalCents:
+                  math.laundryButlerRetailSubtotalCents,
                 sheetWrite: sheetResult,
               },
               createdBy: ctx.user?.id != null ? String(ctx.user.id) : null,
@@ -2628,11 +3213,16 @@ export const appRouter = router({
             await completeOpsTask({
               tenantId: ctx.tenantId,
               taskId: task.id,
-              outcome: "Dry-clean receipt captured, assigned, priced, and cost logged.",
-              completedBy: ctx.user?.id != null ? String(ctx.user.id) : "quick_input",
+              outcome:
+                "Dry-clean receipt captured, assigned, priced, and cost logged.",
+              completedBy:
+                ctx.user?.id != null ? String(ctx.user.id) : "quick_input",
             });
           } catch (error) {
-            console.warn("[OpsTasks] Failed to log dry-clean receipt intake:", error);
+            console.warn(
+              "[OpsTasks] Failed to log dry-clean receipt intake:",
+              error
+            );
           }
 
           return {
@@ -2663,13 +3253,21 @@ export const appRouter = router({
     }),
 
     updateRequestStatus: protectedProcedure
-      .input(z.object({
-        requestId: z.number(),
-        source: z.enum(["service_requests", "resident_coordinated_requests"]).default("service_requests"),
-        status: z.string().min(1),
-      }))
+      .input(
+        z.object({
+          requestId: z.number(),
+          source: z
+            .enum(["service_requests", "resident_coordinated_requests"])
+            .default("service_requests"),
+          status: z.string().min(1),
+        })
+      )
       .mutation(async ({ input }) => {
-        await updateCoordinatedRequestStatus(input.source, input.requestId, input.status);
+        await updateCoordinatedRequestStatus(
+          input.source,
+          input.requestId,
+          input.status
+        );
         return { success: true };
       }),
 
@@ -2690,10 +3288,12 @@ export const appRouter = router({
     }),
 
     updateLeadStatus: protectedProcedure
-      .input(z.object({
-        leadId: z.number(),
-        status: z.enum(["New", "Contacted", "Qualified", "Closed", "Spam"]),
-      }))
+      .input(
+        z.object({
+          leadId: z.number(),
+          status: z.enum(["New", "Contacted", "Qualified", "Closed", "Spam"]),
+        })
+      )
       .mutation(async ({ input }) => {
         await updateLeadStatus(input.leadId, input.status);
         return { success: true };
@@ -2723,12 +3323,14 @@ export const appRouter = router({
     /* ===== VENDOR MANAGEMENT (Phase 1) ===== */
 
     createVendor: protectedProcedure
-      .input(z.object({
-        name: z.string().min(1),
-        email: z.string().email().optional(),
-        country: z.string().length(2).optional(),
-        platformFeePercent: z.number().min(0).max(100).optional(),
-      }))
+      .input(
+        z.object({
+          name: z.string().min(1),
+          email: z.string().email().optional(),
+          country: z.string().length(2).optional(),
+          platformFeePercent: z.number().min(0).max(100).optional(),
+        })
+      )
       .mutation(async ({ input }) => {
         const id = await createVendor({
           name: input.name,
@@ -2739,10 +3341,9 @@ export const appRouter = router({
         return getVendorById(id);
       }),
 
-    listVendors: protectedProcedure
-      .query(async () => {
-        return listVendors();
-      }),
+    listVendors: protectedProcedure.query(async () => {
+      return listVendors();
+    }),
 
     updateVendorActive: protectedProcedure
       .input(z.object({ vendorId: z.number(), isActive: z.boolean() }))
@@ -2752,14 +3353,21 @@ export const appRouter = router({
       }),
 
     setVendorUserPassword: adminProcedure
-      .input(z.object({
-        vendorId: z.number(),
-        email: z.string().email(),
-        password: z.string().min(6),
-      }))
+      .input(
+        z.object({
+          vendorId: z.number(),
+          email: z.string().email(),
+          password: z.string().min(6),
+        })
+      )
       .mutation(async ({ input }) => {
-        const hash = await import("bcryptjs").then(b => b.default.hash(input.password, 10));
-        const existing = await getVendorUserByVendorIdAndEmail(input.vendorId, input.email);
+        const hash = await import("bcryptjs").then(b =>
+          b.default.hash(input.password, 10)
+        );
+        const existing = await getVendorUserByVendorIdAndEmail(
+          input.vendorId,
+          input.email
+        );
         if (existing) {
           await updateVendorUserPassword(input.vendorId, input.email, hash);
         } else {
@@ -2773,11 +3381,13 @@ export const appRouter = router({
       }),
 
     updateVendorBranding: adminProcedure
-      .input(z.object({
-        vendorId: z.number(),
-        brandName: z.string().nullable().optional(),
-        logoUrl: z.string().url().nullable().optional(),
-      }))
+      .input(
+        z.object({
+          vendorId: z.number(),
+          brandName: z.string().nullable().optional(),
+          logoUrl: z.string().url().nullable().optional(),
+        })
+      )
       .mutation(async ({ input }) => {
         await updateVendorBranding(input.vendorId, {
           brandName: input.brandName,
@@ -2787,7 +3397,9 @@ export const appRouter = router({
       }),
 
     updateVendorSlug: adminProcedure
-      .input(z.object({ vendorId: z.number(), slug: z.string().min(1).max(50) }))
+      .input(
+        z.object({ vendorId: z.number(), slug: z.string().min(1).max(50) })
+      )
       .mutation(async ({ input }) => {
         await updateVendorSlug(input.vendorId, input.slug.trim().toLowerCase());
         return { success: true };
@@ -2804,7 +3416,8 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const vendor = await getVendorById(input.vendorId);
         if (!vendor) throw new Error("Vendor not found");
-        if (vendor.stripeConnectAccountId) throw new Error("Vendor already has a Connect account");
+        if (vendor.stripeConnectAccountId)
+          throw new Error("Vendor already has a Connect account");
 
         const stripe = getStripe();
         const account = await stripe.accounts.create({
@@ -2820,7 +3433,9 @@ export const appRouter = router({
         });
 
         await updateVendorConnectAccount(input.vendorId, account.id);
-        console.log(`[Connect] Created Express account ${account.id} for vendor #${input.vendorId} (${vendor.name})`);
+        console.log(
+          `[Connect] Created Express account ${account.id} for vendor #${input.vendorId} (${vendor.name})`
+        );
         return { accountId: account.id };
       }),
 
@@ -2829,7 +3444,8 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const vendor = await getVendorById(input.vendorId);
         if (!vendor) throw new Error("Vendor not found");
-        if (!vendor.stripeConnectAccountId) throw new Error("Vendor has no Connect account. Create one first.");
+        if (!vendor.stripeConnectAccountId)
+          throw new Error("Vendor has no Connect account. Create one first.");
 
         const stripe = getStripe();
         const link = await stripe.accountLinks.create({
@@ -2840,7 +3456,9 @@ export const appRouter = router({
           collection_options: { fields: "eventually_due" },
         });
 
-        console.log(`[Connect] Generated fresh onboarding link for vendor #${input.vendorId}`);
+        console.log(
+          `[Connect] Generated fresh onboarding link for vendor #${input.vendorId}`
+        );
         return { url: link.url };
       }),
 
@@ -2849,10 +3467,13 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const vendor = await getVendorById(input.vendorId);
         if (!vendor) throw new Error("Vendor not found");
-        if (!vendor.stripeConnectAccountId) throw new Error("Vendor has no Connect account");
+        if (!vendor.stripeConnectAccountId)
+          throw new Error("Vendor has no Connect account");
 
         const stripe = getStripe();
-        const account = await stripe.accounts.retrieve(vendor.stripeConnectAccountId);
+        const account = await stripe.accounts.retrieve(
+          vendor.stripeConnectAccountId
+        );
 
         const currentlyDue = account.requirements?.currently_due ?? [];
         const pastDue = account.requirements?.past_due ?? [];
@@ -2867,7 +3488,9 @@ export const appRouter = router({
           disabledReason: disabledReason,
         });
 
-        console.log(`[Connect] Refreshed status for vendor #${input.vendorId}: payoutsEnabled=${account.payouts_enabled}`);
+        console.log(
+          `[Connect] Refreshed status for vendor #${input.vendorId}: payoutsEnabled=${account.payouts_enabled}`
+        );
         return {
           chargesEnabled: account.charges_enabled,
           payoutsEnabled: account.payouts_enabled,
@@ -2881,28 +3504,32 @@ export const appRouter = router({
     /* ===== VENDOR SERVICE COVERAGE (Phase 2) ===== */
 
     createVendorCoverage: protectedProcedure
-      .input(z.object({
-        vendorId: z.number(),
-        buildingSlug: z.string().min(1),
-        serviceType: z.enum(["wash_fold", "dry_cleaning"]),
-        priority: z.number().int().default(10),
-        isActive: z.boolean().default(true),
-        isDefault: z.boolean().default(false),
-        notes: z.string().optional(),
-      }))
+      .input(
+        z.object({
+          vendorId: z.number(),
+          buildingSlug: z.string().min(1),
+          serviceType: z.enum(["wash_fold", "dry_cleaning"]),
+          priority: z.number().int().default(10),
+          isActive: z.boolean().default(true),
+          isDefault: z.boolean().default(false),
+          notes: z.string().optional(),
+        })
+      )
       .mutation(async ({ input }) => {
         const id = await createVendorCoverage(input);
         return { id };
       }),
 
     updateVendorCoverage: protectedProcedure
-      .input(z.object({
-        coverageId: z.number(),
-        priority: z.number().int().optional(),
-        isActive: z.boolean().optional(),
-        isDefault: z.boolean().optional(),
-        notes: z.string().nullable().optional(),
-      }))
+      .input(
+        z.object({
+          coverageId: z.number(),
+          priority: z.number().int().optional(),
+          isActive: z.boolean().optional(),
+          isDefault: z.boolean().optional(),
+          notes: z.string().nullable().optional(),
+        })
+      )
       .mutation(async ({ input }) => {
         const { coverageId, ...data } = input;
         await updateVendorCoverage(coverageId, data);
@@ -2939,7 +3566,10 @@ export const appRouter = router({
               .string()
               .min(1)
               .max(128)
-              .regex(/^[a-z0-9][a-z0-9_-]*$/i, "Slug: letters, numbers, hyphen, underscore"),
+              .regex(
+                /^[a-z0-9][a-z0-9_-]*$/i,
+                "Slug: letters, numbers, hyphen, underscore"
+              ),
             name: z.string().min(1).max(255),
             category: z.string().min(1).max(100),
             serviceType: z
@@ -2974,8 +3604,15 @@ export const appRouter = router({
             return { id };
           } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
-            if (msg.includes("Duplicate") || msg.includes("duplicate") || msg.includes("uq_catalog")) {
-              throw new TRPCError({ code: "CONFLICT", message: "Slug already exists for this tenant" });
+            if (
+              msg.includes("Duplicate") ||
+              msg.includes("duplicate") ||
+              msg.includes("uq_catalog")
+            ) {
+              throw new TRPCError({
+                code: "CONFLICT",
+                message: "Slug already exists for this tenant",
+              });
             }
             throw e;
           }
@@ -2993,7 +3630,9 @@ export const appRouter = router({
               .optional(),
             name: z.string().min(1).max(255).optional(),
             category: z.string().min(1).max(100).optional(),
-            serviceType: z.enum(["dry_clean", "wash_fold", "alteration", "other"]).optional(),
+            serviceType: z
+              .enum(["dry_clean", "wash_fold", "alteration", "other"])
+              .optional(),
             standardPriceCents: z.number().int().min(0).optional(),
             expressPriceCents: z.number().int().min(0).nullable().optional(),
             costCents: z.number().int().min(0).nullable().optional(),
@@ -3005,28 +3644,46 @@ export const appRouter = router({
         .mutation(async ({ ctx, input }) => {
           const { id, iconUrl, ...rest } = input;
           const patch: Parameters<typeof updateCatalogItemRow>[2] = {};
-          if (rest.slug !== undefined) patch.slug = rest.slug.trim().toLowerCase();
+          if (rest.slug !== undefined)
+            patch.slug = rest.slug.trim().toLowerCase();
           if (rest.name !== undefined) patch.name = rest.name.trim();
-          if (rest.category !== undefined) patch.category = rest.category.trim();
-          if (rest.serviceType !== undefined) patch.serviceType = rest.serviceType;
-          if (rest.standardPriceCents !== undefined) patch.standardPriceCents = rest.standardPriceCents;
-          if (rest.expressPriceCents !== undefined) patch.expressPriceCents = rest.expressPriceCents;
+          if (rest.category !== undefined)
+            patch.category = rest.category.trim();
+          if (rest.serviceType !== undefined)
+            patch.serviceType = rest.serviceType;
+          if (rest.standardPriceCents !== undefined)
+            patch.standardPriceCents = rest.standardPriceCents;
+          if (rest.expressPriceCents !== undefined)
+            patch.expressPriceCents = rest.expressPriceCents;
           if (rest.costCents !== undefined) patch.costCents = rest.costCents;
           if (rest.isActive !== undefined) patch.isActive = rest.isActive;
           if (rest.isOnline !== undefined) patch.isOnline = rest.isOnline;
           if (iconUrl !== undefined) {
             patch.iconUrl =
-              iconUrl && String(iconUrl).trim().length > 0 ? String(iconUrl).trim() : null;
+              iconUrl && String(iconUrl).trim().length > 0
+                ? String(iconUrl).trim()
+                : null;
           }
           try {
             const ok = await updateCatalogItemRow(id, ctx.tenantId, patch);
-            if (!ok) throw new TRPCError({ code: "NOT_FOUND", message: "Item not found" });
+            if (!ok)
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message: "Item not found",
+              });
             return { success: true as const };
           } catch (e: unknown) {
             if (e instanceof TRPCError) throw e;
             const msg = e instanceof Error ? e.message : String(e);
-            if (msg.includes("Duplicate") || msg.includes("duplicate") || msg.includes("uq_catalog")) {
-              throw new TRPCError({ code: "CONFLICT", message: "Slug already exists for this tenant" });
+            if (
+              msg.includes("Duplicate") ||
+              msg.includes("duplicate") ||
+              msg.includes("uq_catalog")
+            ) {
+              throw new TRPCError({
+                code: "CONFLICT",
+                message: "Slug already exists for this tenant",
+              });
             }
             throw e;
           }
@@ -3036,7 +3693,11 @@ export const appRouter = router({
         .input(z.object({ id: z.number().int() }))
         .mutation(async ({ ctx, input }) => {
           const ok = await archiveCatalogItemRow(input.id, ctx.tenantId);
-          if (!ok) throw new TRPCError({ code: "NOT_FOUND", message: "Item not found or already archived" });
+          if (!ok)
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Item not found or already archived",
+            });
           return { success: true as const };
         }),
 
@@ -3050,7 +3711,12 @@ export const appRouter = router({
       parseMenuImport: adminProcedure
         .input(
           z.object({
-            mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "application/pdf"]),
+            mimeType: z.enum([
+              "image/jpeg",
+              "image/png",
+              "image/webp",
+              "application/pdf",
+            ]),
             base64: z.string().max(9_000_000),
           })
         )
@@ -3060,13 +3726,17 @@ export const appRouter = router({
               mimeType: input.mimeType,
               base64Data: input.base64,
             });
-            const existing = await listCatalogItemsForAdmin(ctx.tenantId, { includeArchived: false });
-            const bySlug = new Map(existing.map((r) => [r.slug, r]));
-            const rows = parsed.map((it) => {
+            const existing = await listCatalogItemsForAdmin(ctx.tenantId, {
+              includeArchived: false,
+            });
+            const bySlug = new Map(existing.map(r => [r.slug, r]));
+            const rows = parsed.map(it => {
               const slug = slugifyCatalogName(it.name);
               const hit = bySlug.get(slug);
               const inferredCost =
-                it.costCents != null ? it.costCents : Math.round(it.standardPriceCents / 2);
+                it.costCents != null
+                  ? it.costCents
+                  : Math.round(it.standardPriceCents / 2);
               return {
                 name: it.name,
                 category: it.category,
@@ -3095,19 +3765,28 @@ export const appRouter = router({
                 slug: z.string().min(1).max(128),
                 name: z.string().min(1).max(255),
                 category: z.string().min(1).max(100),
-                serviceType: z.enum(["dry_clean", "wash_fold", "alteration", "other"]),
+                serviceType: z.enum([
+                  "dry_clean",
+                  "wash_fold",
+                  "alteration",
+                  "other",
+                ]),
                 standardPriceCents: z.number().int().min(0),
                 expressPriceCents: z.number().int().min(0).nullable(),
                 costCents: z.number().int().min(0).nullable(),
                 isActive: z.boolean(),
                 isOnline: z.boolean(),
-                duplicateAction: z.enum(["skip", "update_existing", "create_new"]),
+                duplicateAction: z.enum([
+                  "skip",
+                  "update_existing",
+                  "create_new",
+                ]),
               })
             ),
           })
         )
         .mutation(async ({ ctx, input }) => {
-          const mapped = input.rows.map((r) => ({
+          const mapped = input.rows.map(r => ({
             slug: r.slug.trim().toLowerCase(),
             name: r.name.trim(),
             category: r.category.trim(),
@@ -3126,9 +3805,11 @@ export const appRouter = router({
         .input(z.object({ command: z.string().min(1).max(2000) }))
         .mutation(async ({ ctx, input }) => {
           try {
-            const list = await listCatalogItemsForAdmin(ctx.tenantId, { includeArchived: false });
+            const list = await listCatalogItemsForAdmin(ctx.tenantId, {
+              includeArchived: false,
+            });
             const summary = list
-              .map((r) => `${r.slug} | ${r.name} | ${r.standardPriceCents}`)
+              .map(r => `${r.slug} | ${r.name} | ${r.standardPriceCents}`)
               .join("\n");
             const draft = await parseCatalogCommandWithLLM({
               command: input.command.trim(),
@@ -3143,11 +3824,19 @@ export const appRouter = router({
       applyCommand: adminProcedure
         .input(
           z.object({
-            intent: z.enum(["create", "update_price", "archive", "toggle_online"]),
+            intent: z.enum([
+              "create",
+              "update_price",
+              "archive",
+              "toggle_online",
+            ]),
             slug: z.string().min(1).max(128).nullable().optional(),
             name: z.string().max(255).nullable().optional(),
             category: z.string().max(100).nullable().optional(),
-            serviceType: z.enum(["dry_clean", "wash_fold", "alteration", "other"]).nullable().optional(),
+            serviceType: z
+              .enum(["dry_clean", "wash_fold", "alteration", "other"])
+              .nullable()
+              .optional(),
             standardPriceCents: z.number().int().min(0).nullable().optional(),
             expressPriceCents: z.number().int().min(0).nullable().optional(),
             costCents: z.number().int().min(0).nullable().optional(),
@@ -3170,7 +3859,8 @@ export const appRouter = router({
             if (input.standardPriceCents == null) {
               throw new TRPCError({
                 code: "BAD_REQUEST",
-                message: "Create requires standard price (cents) in the preview.",
+                message:
+                  "Create requires standard price (cents) in the preview.",
               });
             }
             const baseSlug =
@@ -3179,7 +3869,8 @@ export const appRouter = router({
             if (!/^[a-z0-9][a-z0-9_-]*$/i.test(slug)) {
               throw new TRPCError({
                 code: "BAD_REQUEST",
-                message: "Derived slug is invalid; edit name or slug in a follow-up command.",
+                message:
+                  "Derived slug is invalid; edit name or slug in a follow-up command.",
               });
             }
             const exists = await getCatalogItemBySlugForTenant(slug, tid);
@@ -3212,7 +3903,11 @@ export const appRouter = router({
                 message: "update_price requires standardPriceCents.",
               });
             }
-            const row = await resolveActiveCatalogItemBySlugOrName(tid, input.slug, input.name);
+            const row = await resolveActiveCatalogItemBySlugOrName(
+              tid,
+              input.slug,
+              input.name
+            );
             if (!row) {
               throw new TRPCError({
                 code: "NOT_FOUND",
@@ -3230,13 +3925,20 @@ export const appRouter = router({
             }
             const ok = await updateCatalogItemRow(row.id, tid, patch);
             if (!ok) {
-              throw new TRPCError({ code: "NOT_FOUND", message: "Item not found" });
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message: "Item not found",
+              });
             }
             return { ok: true as const, updatedId: row.id };
           }
 
           if (input.intent === "archive") {
-            const row = await resolveActiveCatalogItemBySlugOrName(tid, input.slug, input.name);
+            const row = await resolveActiveCatalogItemBySlugOrName(
+              tid,
+              input.slug,
+              input.name
+            );
             if (!row) {
               throw new TRPCError({
                 code: "NOT_FOUND",
@@ -3245,7 +3947,10 @@ export const appRouter = router({
             }
             const ok = await archiveCatalogItemRow(row.id, tid);
             if (!ok) {
-              throw new TRPCError({ code: "NOT_FOUND", message: "Item not found or already archived" });
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message: "Item not found or already archived",
+              });
             }
             return { ok: true as const, archivedId: row.id };
           }
@@ -3257,21 +3962,33 @@ export const appRouter = router({
                 message: "toggle_online requires isOnline true or false.",
               });
             }
-            const row = await resolveActiveCatalogItemBySlugOrName(tid, input.slug, input.name);
+            const row = await resolveActiveCatalogItemBySlugOrName(
+              tid,
+              input.slug,
+              input.name
+            );
             if (!row) {
               throw new TRPCError({
                 code: "NOT_FOUND",
                 message: "No single matching catalog item for slug/name.",
               });
             }
-            const ok = await updateCatalogItemRow(row.id, tid, { isOnline: input.isOnline });
+            const ok = await updateCatalogItemRow(row.id, tid, {
+              isOnline: input.isOnline,
+            });
             if (!ok) {
-              throw new TRPCError({ code: "NOT_FOUND", message: "Item not found" });
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message: "Item not found",
+              });
             }
             return { ok: true as const, updatedId: row.id };
           }
 
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Unknown intent" });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Unknown intent",
+          });
         }),
     }),
   }),

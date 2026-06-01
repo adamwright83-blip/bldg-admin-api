@@ -163,7 +163,7 @@ class MemoryLevel4MissionStore implements Level4MissionStore {
   }
 }
 
-async function laneTask(store: MemoryOpsTaskStore, lane: "lane_1" | "lane_2" | "lane_3", completedBy = "op1") {
+async function laneTask(store: MemoryOpsTaskStore, lane: "lane_1" | "lane_2" | "lane_3", completedBy = "op1", completedAt = new Date()) {
   const level = lane.replace("lane_", "") as "1" | "2" | "3";
   const task = await createOpsTask({
     tenantId: "default",
@@ -172,7 +172,10 @@ async function laneTask(store: MemoryOpsTaskStore, lane: "lane_1" | "lane_2" | "
     taskType: lane === "lane_3" ? "unpaid_order" : "manual_operator_task",
     title: `${lane} task`,
   }, store);
-  return completeOpsTask({ tenantId: "default", taskId: task.id, completedBy, revenueRecoveredCents: lane === "lane_3" ? 1000 : undefined }, store);
+  const completed = await completeOpsTask({ tenantId: "default", taskId: task.id, completedBy, revenueRecoveredCents: lane === "lane_3" ? 1000 : undefined }, store);
+  completed.completedAt = completedAt;
+  task.completedAt = completedAt;
+  return completed;
 }
 
 describe("level4 mission connective tissue", () => {
@@ -256,7 +259,7 @@ describe("level4 mission connective tissue", () => {
     const missions = new MemoryLevel4MissionStore(ops);
     await createOpsTask({ tenantId: "default", lane: "level_4", level: "4", taskType: "gm_followup", title: "Today" }, ops);
     const tomorrow = await createOpsTask({ tenantId: "default", lane: "level_4", level: "4", taskType: "gm_followup", title: "Tomorrow" }, ops);
-    for (let i = 0; i < 5; i += 1) await laneTask(ops, "lane_1", "op1");
+    for (let i = 0; i < 5; i += 1) await laneTask(ops, "lane_1", "op1", new Date("2026-05-12T16:30:00Z"));
     await evaluateLevel4MissionUnlock({ tenantId: "default", operatorId: "op1", now: new Date("2026-05-12T16:00:00Z"), store: missions, taskStore: ops });
     await completeLevel4Mission({ tenantId: "default", operatorId: "op1", now: new Date("2026-05-12T17:00:00Z"), store: missions, taskStore: ops });
 

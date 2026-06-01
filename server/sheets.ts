@@ -261,7 +261,7 @@ function serialToYYYYMMDD(serial: number): string {
   return format(d, "yyyy-MM-dd");
 }
 
-function normalizeCellToYYYYMMDD(value: unknown): string | null {
+export function normalizeSheetCellToYYYYMMDD(value: unknown): string | null {
   if (value == null || value === "") return null;
   if (typeof value === "number" && !Number.isNaN(value)) {
     return serialToYYYYMMDD(value);
@@ -290,7 +290,7 @@ export function findDayColumn(
   const target = format(targetDate, "yyyy-MM-dd");
   if (!rowValues?.length) return null;
   for (let c = 0; c < rowValues.length; c++) {
-    const normalized = normalizeCellToYYYYMMDD(rowValues[c]);
+    const normalized = normalizeSheetCellToYYYYMMDD(rowValues[c]);
     if (normalized === target) return c;
   }
   return null;
@@ -394,7 +394,7 @@ export function getMonthlyDateHeaderValues(date: Date): string[] {
 function inferDateHeaderStartColumn(values: unknown[][]): number {
   const headerRow = values[0] ?? [];
   const firstDateCol = headerRow.findIndex(
-    cell => normalizeCellToYYYYMMDD(cell) != null
+    cell => normalizeSheetCellToYYYYMMDD(cell) != null
   );
   return firstDateCol >= 0 ? firstDateCol : 1;
 }

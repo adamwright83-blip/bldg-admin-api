@@ -25,6 +25,7 @@ function AdminHostRouter() {
       <Route path="/live" component={AdminHostApp} />
       <Route path="/new-order" component={AdminHostApp} />
       <Route path="/customers" component={AdminHostApp} />
+      <Route path="/pnl" component={AdminHostApp} />
       <Route path="/operations-events" component={AdminHostApp} />
       <Route path="/payment-reconciliation" component={AdminHostApp} />
       <Route path="/intake" component={AdminHostApp} />
@@ -49,7 +50,9 @@ function Router() {
   const isAdminHost = hostname === "admin.bldg.chat";
   const isDriverHost = hostname === "driver.bldg.chat";
   const isVendorHost = hostname.endsWith(".ops.bldg.chat");
-  const vendorSlug = isVendorHost ? hostname.replace(".ops.bldg.chat", "") : null;
+  const vendorSlug = isVendorHost
+    ? hostname.replace(".ops.bldg.chat", "")
+    : null;
 
   if (isAdminHost) {
     return <AdminHostRouter />;
@@ -63,9 +66,7 @@ function Router() {
       <Route
         path={"/welcome"}
         component={
-          tenant.templateType === "laundryfarm"
-            ? LaundryFarmHome
-            : ButlerHome
+          tenant.templateType === "laundryfarm" ? LaundryFarmHome : ButlerHome
         }
       />
       <Route
