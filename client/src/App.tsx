@@ -82,6 +82,7 @@ function Router() {
         }
       />
       <Route path={"/admin"} component={Admin} />
+      <Route path={"/pnl"} component={AdminHostApp} />
       <Route path={"/driver"} component={Driver} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
