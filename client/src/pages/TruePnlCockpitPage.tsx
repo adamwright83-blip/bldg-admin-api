@@ -11,7 +11,7 @@ import {
   Star,
   Users,
 } from "lucide-react";
-import cockpitShellUrl from "@/assets/pnl/cockpit-shell.png";
+import brightBlankCanvasUrl from "@/assets/pnl/brightblankcanvas.png";
 import { trpc } from "@/lib/trpc";
 import {
   addTenOrdersWhatIf,
@@ -109,66 +109,6 @@ function lineByKey(data: CockpitData, key: string): PnlLine {
   );
 }
 
-function sceneGradient(scene: CockpitScene): string {
-  switch (scene) {
-    case "cliff":
-      return "from-red-900 via-red-700 to-orange-500";
-    case "hover":
-      return "from-sky-900 via-sky-700 to-sky-500";
-    case "cloud1":
-      return "from-sky-900 via-cyan-800 to-emerald-600";
-    case "cloud2":
-      return "from-blue-950 via-blue-800 to-sky-500";
-    case "cloud3":
-      return "from-indigo-950 via-indigo-800 to-sky-400";
-  }
-}
-
-function SceneBackdrop({ scene }: { scene: CockpitScene }) {
-  return (
-    <div className={`absolute inset-0 bg-gradient-to-b ${sceneGradient(scene)}`}>
-      <div className="absolute left-[8%] top-[8%] h-32 w-48 rounded-full bg-white/20 blur-2xl" />
-      <div className="absolute right-[15%] top-[4%] h-28 w-56 rounded-full bg-white/25 blur-2xl" />
-      <div className="absolute right-[5%] top-[14%] h-24 w-36 rounded-full bg-white/15 blur-2xl" />
-      <svg
-        className="absolute inset-0 h-full w-full"
-        viewBox="0 0 1400 400"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-      >
-        <path
-          d="M80 280 C280 240 480 190 680 155 C860 124 1060 90 1280 62"
-          fill="none"
-          stroke="rgba(255,255,255,0.6)"
-          strokeWidth="12"
-          strokeLinecap="round"
-          strokeDasharray="1 28"
-        />
-        <path
-          d="M80 280 C280 240 480 190 680 155 C860 124 1060 90 1280 62"
-          fill="none"
-          stroke="rgba(14,165,233,0.3)"
-          strokeWidth="4"
-          strokeLinecap="round"
-        />
-        <g transform="translate(1160 55)">
-          <path d="M0 0 L130 16 L0 34 Z" fill="rgba(239,68,68,0.9)" />
-          <text x="18" y="24" fill="white" fontSize="18" fontWeight="900" fontFamily="system-ui">
-            PROFIT
-          </text>
-        </g>
-        {scene === "cliff" ? (
-          <g transform="translate(900 200)">
-            <rect width="82" height="32" rx="6" fill="rgba(127,29,29,0.9)" />
-            <text x="41" y="21" textAnchor="middle" fill="white" fontSize="14" fontWeight="900" fontFamily="system-ui">
-              DANGER
-            </text>
-          </g>
-        ) : null}
-      </svg>
-    </div>
-  );
-}
 
 function PeriodToggle({
   month,
@@ -574,20 +514,21 @@ export default function TruePnlCockpitPage() {
 
   return (
     <div className="min-h-screen bg-[#06101d] text-white">
-      {/* ── Hero section: sky art + headline ── */}
-      <div className="relative overflow-hidden" style={{ minHeight: 320 }}>
-        <SceneBackdrop scene={scene} />
-
-        {/* plane art positioned top-center */}
+      {/* ── Hero section: landscape art + headline ── */}
+      <div className="relative overflow-hidden" style={{ minHeight: 380 }}>
+        {/* Full-bleed landscape background — show top (sky + floating islands) */}
         <img
-          src={cockpitShellUrl}
+          src={brightBlankCanvasUrl}
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-top opacity-40"
+          className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-top"
         />
 
-        {/* dark fade at bottom so content below reads cleanly */}
-        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-[#06101d]" />
+        {/* Dark overlay so text reads cleanly over bright art */}
+        <div className="absolute inset-0 bg-slate-950/50" />
+
+        {/* Fade bottom edge into the dark content area */}
+        <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-b from-transparent to-[#06101d]" />
 
         {/* top bar */}
         <div className="relative z-10 mx-auto max-w-[1400px] px-6 pt-5">
