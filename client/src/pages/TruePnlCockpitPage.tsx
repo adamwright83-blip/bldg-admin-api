@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Check,
   ChevronRight,
+  Info,
   Loader2,
   RefreshCw,
   Star,
@@ -533,21 +534,21 @@ export function CockpitView({
           <span className="text-[0.74cqw] font-black uppercase tracking-widest text-sky-200 drop-shadow">
             True P&L Cockpit
           </span>
-          {scene === "cliff" ? (
+          {scene === "cliff" && (
             <span className="flex items-center gap-[0.2cqw] rounded-full bg-red-600 px-[0.5cqw] py-[0.1cqw] text-[0.55cqw] font-black uppercase tracking-wide text-white shadow-[0_0_12px_rgba(239,68,68,0.8)]">
               <AlertTriangle className="h-[0.7cqw] w-[0.7cqw]" />
               Losing money — pull up
             </span>
-          ) : (
-            warningCount > 0 && (
-              <span
-                className="flex items-center gap-[0.2cqw] rounded-full border border-amber-400/50 bg-amber-900/80 px-[0.5cqw] py-[0.1cqw] text-[0.55cqw] font-black text-amber-200"
-                title={missingLabels.join(", ")}
-              >
-                <AlertTriangle className="h-[0.7cqw] w-[0.7cqw]" />
-                {warningCount} optional row{warningCount > 1 ? "s" : ""} missing
-              </span>
-            )
+          )}
+          {scene !== "cliff" && warningCount > 0 && (
+            // Demoted: a quiet setup indicator, not a SaaS alarm strip.
+            <span
+              className="flex items-center gap-[0.2cqw] rounded-full border border-white/15 bg-white/5 px-[0.5cqw] py-[0.1cqw] text-[0.5cqw] font-semibold text-white/45"
+              title={`Setup: ${missingLabels.join(", ") || "some rows not entered"}`}
+            >
+              <Info className="h-[0.65cqw] w-[0.65cqw]" />
+              Setup
+            </span>
           )}
         </Zone>
 

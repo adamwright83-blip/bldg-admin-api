@@ -18,6 +18,7 @@ import AdminLive from "./AdminLive";
 import OperatorReflection from "./OperatorReflection";
 import { Level4OffensiveHost } from "@/components/Level4OffensiveHost";
 import { AdminCustomerSearchBlock, AdminTabPanels } from "./Admin";
+import TruePnlCockpitPage from "./TruePnlCockpitPage";
 
 const LIVE_INTERNAL_TABS = new Set<AdminWorkspaceTab>([
   "Intake",
@@ -76,6 +77,7 @@ export default function AdminHostApp() {
   const isHome = isAdminCommandCenterPath(path);
   const isLive = path === "/live";
   const isLevel4 = path === "/level4";
+  const isPnl = path === "/pnl";
   const isOperatorReflection = path === "/operator-reflection";
   const activeTab = adminPathToTab(path);
   const isLiveNavActive = isLive || (activeTab !== null && LIVE_INTERNAL_TABS.has(activeTab));
@@ -119,6 +121,22 @@ export default function AdminHostApp() {
         <div className="mx-auto w-full max-w-[1480px] px-3 pt-14 pb-6">
           <Level4OffensiveHost />
         </div>
+      </div>
+    );
+  }
+
+  // The True P&L Cockpit takes over the whole screen — one rail (the cockpit's
+  // own), no admin sidebar/header/search chrome. A small patch returns to Board.
+  if (isPnl) {
+    return (
+      <div className="min-h-screen w-full overflow-hidden bg-[#06101d]">
+        <Link
+          href="/"
+          className="fixed top-3 right-3 z-50 inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-black/40 px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-white/65 backdrop-blur-sm transition-colors hover:border-white/25 hover:bg-black/60 hover:text-white"
+        >
+          ← Exit Cockpit
+        </Link>
+        <TruePnlCockpitPage />
       </div>
     );
   }
