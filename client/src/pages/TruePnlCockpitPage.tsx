@@ -125,6 +125,7 @@ const LINE_ORDER = [
   "grossRevenue",
   "storeLabor",
   "driverOperatorPay",
+  "ownerPay",
   "gasFuel",
   "vehicleInsurance",
   "mileageVehicleExpenses",
@@ -183,17 +184,35 @@ function compactMoney(cents: number): string {
 }
 
 /**
- * Derive a tier from live net + revenue for the interactive climb.
- * Mirrors the server's resolveTruePnlCloudLevel thresholds so demo and real agree.
+ * Period-aware danger thresholds (true-net cents) — MUST mirror the server's
+ * TRUE_PNL_DANGER_THRESHOLDS so the projected climb agrees with the real tier.
  */
-function levelFromNet(netCents: number, revenueCents: number): CockpitLevel {
-  if (netCents < 0) return "cliff";
-  const margin = revenueCents > 0 ? netCents / revenueCents : 0;
-  if (margin < 0.05 || netCents < 50_000) return "hover";
-  if (netCents >= 300_000 && margin >= 0.25) return "cloud3";
-  if (netCents >= 150_000 && margin >= 0.15) return "cloud2";
-  return "cloud1";
+const DANGER_THRESHOLDS: Record<
+  "today" | "week" | "month",
+  { hover: number; cloud1: number; cloud2: number; cloud3: number }
+> = {
+  today: { hover: 10_000, cloud1: 30_000, cloud2: 60_000, cloud3: 100_000 },
+  week: { hover: 30_000, cloud1: 100_000, cloud2: 200_000, cloud3: 400_000 },
+  month: { hover: 100_000, cloud1: 300_000, cloud2: 600_000, cloud3: 1_000_000 },
+};
+
+function levelFromNet(
+  netCents: number,
+  period: "today" | "week" | "month"
+): CockpitLevel {
+  const t = DANGER_THRESHOLDS[period];
+  if (netCents < t.hover) return "cliff";
+  if (netCents < t.cloud1) return "hover";
+  if (netCents < t.cloud2) return "cloud1";
+  if (netCents < t.cloud3) return "cloud2";
+  return "cloud3";
 }
+
+const PERIOD_BY_VIEW: Record<PeriodView, "today" | "week" | "month"> = {
+  Today: "today",
+  Week: "week",
+  Month: "month",
+};
 
 /** Smoothly animate a number toward a target (cents). */
 function useCountUp(target: number, ms = 650): number {
@@ -429,25 +448,29 @@ export function CockpitView({
     interactive ||
     (rescueMode && displayMissions.some(m => (m.liftCents ?? 0) > 0));
 
+  const period = PERIOD_BY_VIEW[activeView];
+
+  // ── ACTUAL state: where the business is right now (never moved by clicks) ──
+  // The sky, status, gauges and tier all reflect the booked, server-computed
+  // reality. This stays put so a tapped mission never fakes a recovery.
+  const actualNet = data.trueNetCents;
+  const actualLevel = data.cloudLevel;
+  const scene = sceneFromCloudLevel(actualLevel);
+  const levelCopy = cockpitLevelCopy(actualLevel);
+  const marginPct = data.marginPct;
+  const ratios = gaugeRatios(actualNet, marginPct, data);
+
+  // ── PROJECTED state: a labeled flight path, only if you complete the moves ──
   let liftCents = 0;
   if (canCommit) {
     displayMissions.forEach((m, i) => {
       if (committed.has(i)) liftCents += m.liftCents ?? 0;
     });
   }
-  const netCents = data.trueNetCents + liftCents;
   const projecting = canCommit && liftCents > 0;
-  const animatedNet = useCountUp(netCents);
-  const marginPct =
-    data.grossRevenueCents > 0
-      ? (netCents / data.grossRevenueCents) * 100
-      : data.marginPct;
-  const level = canCommit
-    ? levelFromNet(netCents, data.grossRevenueCents)
-    : data.cloudLevel;
-  const scene = sceneFromCloudLevel(level);
-  const levelCopy = cockpitLevelCopy(level);
-  const ratios = gaugeRatios(netCents, marginPct, data);
+  const projectedNet = actualNet + liftCents;
+  const projectedLevel = levelFromNet(projectedNet, period);
+  const animatedProjected = useCountUp(projectedNet);
   const rows = LINE_ORDER.map(key => lineByKey(data, key));
   const warningCount = data.warnings.filter(w => w.severity !== "info").length;
   const missingLabels = data.warnings.flatMap(w => w.labels ?? []);
@@ -457,14 +480,14 @@ export function CockpitView({
     .slice(0, 4);
 
   // What-If always resolves to a believable projection (never "unavailable").
-  const baseWhatIf = addTenOrdersWhatIf({ trueNetCents: netCents });
+  const baseWhatIf = addTenOrdersWhatIf({ trueNetCents: actualNet });
   const aovCents = 4600;
   const whatIfNet = baseWhatIf.available
     ? baseWhatIf.projectedTrueNetCents
-    : netCents + Math.round(10 * aovCents * 0.3);
+    : actualNet + Math.round(10 * aovCents * 0.3);
 
   const prevDelta = data.previousMonth
-    ? netCents - data.previousMonth.trueNetCents
+    ? actualNet - data.previousMonth.trueNetCents
     : null;
 
   const ladder: Array<{ key: CockpitLevel; label: string; note: string }> = [
@@ -606,21 +629,28 @@ export function CockpitView({
         >
           <div>
             <div className="text-[0.6cqw] font-black uppercase tracking-widest text-slate-500">
-              {projecting ? "Projected True Net" : `True Net Profit (${activeView})`}
+              True Net Profit ({activeView})
             </div>
+            {/* ACTUAL hero — never moves when you tap a mission */}
             <div
               className={`mt-[0.3cqh] font-mono text-[2.5cqw] font-black leading-none ${
-                netCents < 0 ? "text-red-600" : "text-emerald-700"
+                actualNet < 0 ? "text-red-600" : "text-emerald-700"
               }`}
             >
-              {moneyFromCents(animatedNet)}
+              {moneyFromCents(actualNet)}
             </div>
             {projecting ? (
-              <div className="mt-[0.4cqh] text-[0.6cqw] font-bold leading-snug text-slate-500">
-                Today {moneyFromCents(data.trueNetCents)}{" "}
-                <span className="text-emerald-700">
-                  · +{moneyFromCents(liftCents)} from these moves
-                </span>
+              // PROJECTED flight path — clearly labeled, not the actual state
+              <div className="mt-[0.4cqh] rounded-[0.5cqw] bg-sky-500/10 px-[0.5cqw] py-[0.3cqh]">
+                <div className="text-[0.5cqw] font-black uppercase tracking-wider text-sky-600">
+                  ✈ Flight path · projected
+                </div>
+                <div className="font-mono text-[1cqw] font-black text-sky-700">
+                  {moneyFromCents(animatedProjected)}
+                  <span className="ml-[0.3cqw] text-[0.55cqw] font-bold text-slate-500">
+                    if you complete these moves
+                  </span>
+                </div>
               </div>
             ) : (
               <div className="mt-[0.5cqh] text-[0.82cqw] font-black text-sky-700">
@@ -632,6 +662,11 @@ export function CockpitView({
             <div className="text-[0.78cqw] font-black text-slate-800">
               Status:{" "}
               <span className={sceneAccentClass(scene)}>{levelCopy.label}</span>
+              {projecting && projectedLevel !== actualLevel && (
+                <span className="ml-[0.3cqw] text-[0.6cqw] font-bold text-sky-600">
+                  → {cockpitLevelCopy(projectedLevel).label} (projected)
+                </span>
+              )}
             </div>
             <p className="mt-[0.2cqh] text-[0.64cqw] font-semibold leading-snug text-slate-600">
               {levelCopy.sentence}
@@ -645,9 +680,9 @@ export function CockpitView({
             title="Altitude"
             subtitle="True Net Profit"
             ratio={ratios.altitude}
-            value={compactMoney(netCents)}
+            value={compactMoney(actualNet)}
             detail={`Margin ${percentLabel(marginPct)}`}
-            tone={netCents < 0 ? "text-red-400" : "text-emerald-400"}
+            tone={actualNet < 0 ? "text-red-400" : "text-emerald-400"}
           />
           <GaugeCell
             title="Fuel"
@@ -679,9 +714,9 @@ export function CockpitView({
             title="Cliff Distance"
             subtitle="How Close To Loss?"
             ratio={ratios.cliff}
-            value={compactMoney(netCents)}
-            detail={netCents < 0 ? "Below break-even" : "Above the cliff"}
-            tone={netCents < 0 ? "text-red-400" : "text-emerald-400"}
+            value={compactMoney(actualNet)}
+            detail={actualNet < 0 ? "Below break-even" : "Above the cliff"}
+            tone={actualNet < 0 ? "text-red-400" : "text-emerald-400"}
           />
         </Zone>
 
@@ -695,18 +730,35 @@ export function CockpitView({
           </div>
           <div className="flex flex-1 flex-col justify-between">
             {ladder.map(lvl => {
-              const on = level === lvl.key;
+              const on = actualLevel === lvl.key; // solid = where you ARE
+              const projectedHere =
+                projecting &&
+                projectedLevel === lvl.key &&
+                projectedLevel !== actualLevel; // ghost = where you COULD be
               return (
                 <div
                   key={lvl.key}
                   className={`flex items-center justify-end gap-[0.4cqw] rounded-[0.5cqw] px-[0.5cqw] py-[0.2cqh] transition-all duration-500 ${
-                    on ? "bg-sky-500/25 ring-1 ring-sky-400/60" : ""
+                    on
+                      ? "bg-sky-500/25 ring-1 ring-sky-400/60"
+                      : projectedHere
+                        ? "ring-1 ring-dashed ring-sky-300/50"
+                        : ""
                   }`}
                 >
+                  {projectedHere && (
+                    <span className="text-[0.45cqw] font-black uppercase text-sky-300/80">
+                      ✈ proj
+                    </span>
+                  )}
                   <div className="text-right">
                     <div
                       className={`text-[0.66cqw] font-black leading-none ${
-                        on ? "text-white" : "text-white/55"
+                        on
+                          ? "text-white"
+                          : projectedHere
+                            ? "text-sky-200/80"
+                            : "text-white/55"
                       }`}
                     >
                       {lvl.label}
@@ -1019,12 +1071,6 @@ function useIsDemo(): boolean {
     new URLSearchParams(window.location.search).get("demo") === "1"
   );
 }
-
-const PERIOD_BY_VIEW: Record<PeriodView, "today" | "week" | "month"> = {
-  Today: "today",
-  Week: "week",
-  Month: "month",
-};
 
 export default function TruePnlCockpitPage() {
   const isDemo = useIsDemo();

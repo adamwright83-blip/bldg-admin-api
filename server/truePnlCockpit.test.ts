@@ -39,7 +39,8 @@ describe("True P&L Cockpit", () => {
     expect(summary.grossRevenueCents).toBe(842000);
     expect(summary.totalExpenseCents).toBe(661000);
     expect(summary.trueNetCents).toBe(181000);
-    expect(summary.cloudLevel).toBe("cloud2");
+    // $1,810 in a MONTH is only Hover under period-aware danger thresholds.
+    expect(summary.cloudLevel).toBe("hover");
     expect(
       summary.lines.find(line => line.key === "gasFuel")?.matchedLabels
     ).toEqual(["Other Expenses"]);
@@ -64,49 +65,26 @@ describe("True P&L Cockpit", () => {
     expect(summary.expensePressurePct).toBeCloseTo(78.503, 2);
   });
 
-  it("uses both true-net dollars and margin for cloud levels", () => {
-    expect(
-      resolveTruePnlCloudLevel({
-        grossRevenueCents: 100000,
-        trueNetCents: -1,
-        trusted: true,
-      })
-    ).toBe("cliff");
-    expect(
-      resolveTruePnlCloudLevel({
-        grossRevenueCents: 1000000,
-        trueNetCents: 40000,
-        trusted: true,
-      })
-    ).toBe("hover");
-    expect(
-      resolveTruePnlCloudLevel({
-        grossRevenueCents: 1000000,
-        trueNetCents: 50000,
-        trusted: true,
-      })
-    ).toBe("cloud1");
-    expect(
-      resolveTruePnlCloudLevel({
-        grossRevenueCents: 1000000,
-        trueNetCents: 150000,
-        trusted: true,
-      })
-    ).toBe("cloud2");
-    expect(
-      resolveTruePnlCloudLevel({
-        grossRevenueCents: 1200000,
-        trueNetCents: 300000,
-        trusted: true,
-      })
-    ).toBe("cloud3");
-    expect(
-      resolveTruePnlCloudLevel({
-        grossRevenueCents: 100000,
-        trueNetCents: 30000,
-        trusted: true,
-      })
-    ).toBe("hover");
+  it("maps true-net dollars to period-aware danger levels", () => {
+    // DAY — a small positive day is still dangerous, not safe.
+    expect(resolveTruePnlCloudLevel({ trueNetCents: 3375, trusted: true, period: "today" })).toBe("cliff"); // +$33.75
+    expect(resolveTruePnlCloudLevel({ trueNetCents: 7200, trusted: true, period: "today" })).toBe("cliff"); // +$72
+    expect(resolveTruePnlCloudLevel({ trueNetCents: 15000, trusted: true, period: "today" })).toBe("hover"); // $150
+    expect(resolveTruePnlCloudLevel({ trueNetCents: 45000, trusted: true, period: "today" })).toBe("cloud1"); // $450
+    expect(resolveTruePnlCloudLevel({ trueNetCents: 80000, trusted: true, period: "today" })).toBe("cloud2"); // $800
+    expect(resolveTruePnlCloudLevel({ trueNetCents: 120000, trusted: true, period: "today" })).toBe("cloud3"); // $1,200
+    // WEEK
+    expect(resolveTruePnlCloudLevel({ trueNetCents: 20000, trusted: true, period: "week" })).toBe("cliff"); // $200
+    expect(resolveTruePnlCloudLevel({ trueNetCents: 65000, trusted: true, period: "week" })).toBe("hover"); // $650
+    expect(resolveTruePnlCloudLevel({ trueNetCents: 250000, trusted: true, period: "week" })).toBe("cloud2"); // $2,500
+    // MONTH
+    expect(resolveTruePnlCloudLevel({ trueNetCents: 90000, trusted: true, period: "month" })).toBe("cliff"); // $900
+    expect(resolveTruePnlCloudLevel({ trueNetCents: 181000, trusted: true, period: "month" })).toBe("hover"); // $1,810
+    expect(resolveTruePnlCloudLevel({ trueNetCents: 680000, trusted: true, period: "month" })).toBe("cloud2"); // $6,800
+    expect(resolveTruePnlCloudLevel({ trueNetCents: 1200000, trusted: true, period: "month" })).toBe("cloud3"); // $12,000
+    // untrusted → setup; default period is month
+    expect(resolveTruePnlCloudLevel({ trueNetCents: 999999, trusted: false, period: "month" })).toBe("setup_needed");
+    expect(resolveTruePnlCloudLevel({ trueNetCents: 90000, trusted: true })).toBe("cliff");
   });
 
   it("counts missing optional expense rows as zero and warns", () => {

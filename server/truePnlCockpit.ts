@@ -38,6 +38,7 @@ export type TruePnlLine = {
     | "grossRevenue"
     | "storeLabor"
     | "driverOperatorPay"
+    | "ownerPay"
     | "gasFuel"
     | "vehicleInsurance"
     | "mileageVehicleExpenses"
@@ -119,6 +120,22 @@ export const TRUE_PNL_ROW_ALIASES: PnlLineConfig[] = [
       "Operator Pay",
       "Driver / Operator Pay",
       "Driver Operator Pay",
+    ],
+  },
+  {
+    // Owner/operator compensation — a REAL business expense in True P&L.
+    // Aliases are intentionally distinct from driverOperatorPay's "Operator Pay"
+    // so the same sheet row can never be counted in two groups (no double-count).
+    key: "ownerPay",
+    label: "Owner pay",
+    core: false,
+    aliases: [
+      "Adam Labor",
+      "Owner Labor",
+      "Owner Pay",
+      "Founder Pay",
+      "Owner Draw",
+      "Owner Compensation",
     ],
   },
   {
@@ -318,22 +335,32 @@ function latestRunwayDays(
   return null;
 }
 
+/**
+ * Period-aware danger thresholds (true-net cents). A small positive day is NOT
+ * safe — e.g. +$33.75/day is below the $100 day floor, so it reads as Cliff.
+ * Tune these in one place. Mirrored on the client in levelFromNet().
+ */
+export const TRUE_PNL_DANGER_THRESHOLDS: Record<
+  TruePnlPeriod,
+  { hover: number; cloud1: number; cloud2: number; cloud3: number }
+> = {
+  today: { hover: 10_000, cloud1: 30_000, cloud2: 60_000, cloud3: 100_000 },
+  week: { hover: 30_000, cloud1: 100_000, cloud2: 200_000, cloud3: 400_000 },
+  month: { hover: 100_000, cloud1: 300_000, cloud2: 600_000, cloud3: 1_000_000 },
+};
+
 export function resolveTruePnlCloudLevel(input: {
-  grossRevenueCents: number;
   trueNetCents: number;
   trusted: boolean;
+  period?: TruePnlPeriod;
 }): TruePnlCloudLevel {
   if (!input.trusted) return "setup_needed";
-  const margin =
-    input.grossRevenueCents > 0
-      ? input.trueNetCents / input.grossRevenueCents
-      : null;
-  if (input.trueNetCents < 0) return "cliff";
-  if (margin == null || margin < 0.05 || input.trueNetCents < 50_000)
-    return "hover";
-  if (input.trueNetCents >= 300_000 && margin >= 0.25) return "cloud3";
-  if (input.trueNetCents >= 150_000 && margin >= 0.15) return "cloud2";
-  return "cloud1";
+  const t = TRUE_PNL_DANGER_THRESHOLDS[input.period ?? "month"];
+  if (input.trueNetCents < t.hover) return "cliff";
+  if (input.trueNetCents < t.cloud1) return "hover";
+  if (input.trueNetCents < t.cloud2) return "cloud1";
+  if (input.trueNetCents < t.cloud3) return "cloud2";
+  return "cloud3";
 }
 
 function cloudLabel(level: TruePnlCloudLevel): string {
@@ -358,6 +385,7 @@ function buildMonthSnapshot(input: {
   sheet: SheetMonthData;
   columns?: number[];
   periodLabelOverride?: string;
+  period?: TruePnlPeriod;
 }): Omit<
   TruePnlSummary,
   "source" | "generatedAt" | "fuel" | "previousMonth" | "period"
@@ -438,9 +466,9 @@ function buildMonthSnapshot(input: {
   const trusted =
     !revenueLine.missing && dateColumns.length > 0 && grossRevenueCents > 0;
   const cloudLevel = resolveTruePnlCloudLevel({
-    grossRevenueCents,
     trueNetCents,
     trusted,
+    period: input.period ?? "month",
   });
 
   return {
@@ -527,6 +555,7 @@ export function buildTruePnlCockpitSummary(input: BuildInput): TruePnlSummary {
     sheet: input.current,
     columns: currentColumns,
     periodLabelOverride: currentLabel,
+    period,
   });
 
   // Like-for-like previous: today→yesterday, week→last week (same sheet);
@@ -537,6 +566,7 @@ export function buildTruePnlCockpitSummary(input: BuildInput): TruePnlSummary {
         ? buildMonthSnapshot({
             monthDate: previousMonth(input.monthDate),
             sheet: input.previous,
+            period: "month",
           })
         : null
       : slices.previous.length
@@ -546,6 +576,7 @@ export function buildTruePnlCockpitSummary(input: BuildInput): TruePnlSummary {
             columns: slices.previous,
             periodLabelOverride:
               period === "today" ? "Yesterday" : "Last Week",
+            period,
           })
         : null;
 
