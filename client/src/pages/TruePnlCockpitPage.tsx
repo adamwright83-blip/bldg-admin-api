@@ -406,6 +406,200 @@ function gaugeRatios(
   };
 }
 
+// ─── Owner Pay Helper ─────────────────────────────────────────────────────────
+// "Can the business afford to pay me?" Local parser turns messy survival needs
+// into a monthly/weekly/daily owner-pay requirement, compared against the owner
+// pay ALREADY in the Sheet (the ownerPay line). No double-counting, no write-back.
+
+function parseSurvivalMonthlyCents(text: string): number {
+  let monthly = 0;
+  for (const m of Array.from(text.matchAll(/\$\s?([\d,]+(?:\.\d{1,2})?)/g))) {
+    const amt = parseFloat(m[1]!.replace(/,/g, ""));
+    if (!Number.isFinite(amt)) continue;
+    const after = text
+      .slice(m.index! + m[0].length, m.index! + m[0].length + 18)
+      .toLowerCase();
+    let mult = 1; // default: monthly
+    if (/(per\s*week|\/\s*wk|\/\s*week|a week|weekly|each week)/.test(after))
+      mult = 4.333;
+    else if (/(per\s*year|\/\s*yr|\/\s*year|annual|a year|yearly)/.test(after))
+      mult = 1 / 12;
+    else if (/(per\s*day|\/\s*day|a day|daily|each day)/.test(after)) mult = 30.4;
+    monthly += amt * 100 * mult;
+  }
+  return Math.round(monthly);
+}
+
+function OwnerPayHelper({
+  open,
+  onClose,
+  activeView,
+  includedCents,
+  text,
+  setText,
+}: {
+  open: boolean;
+  onClose: () => void;
+  activeView: PeriodView;
+  includedCents: number; // owner pay already in the Sheet, for the active period
+  text: string;
+  setText: (t: string) => void;
+}) {
+  if (!open) return null;
+  const reqMonthly = parseSurvivalMonthlyCents(text);
+  const reqWeekly = Math.round(reqMonthly / 4.333);
+  const reqDaily = Math.round(reqMonthly / 30.4);
+  const periodWord =
+    activeView === "Today" ? "day" : activeView === "Week" ? "week" : "month";
+  const reqForPeriod =
+    activeView === "Today"
+      ? reqDaily
+      : activeView === "Week"
+        ? reqWeekly
+        : reqMonthly;
+  const gap = reqForPeriod - includedCents;
+  const hasInput = reqMonthly > 0;
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg overflow-hidden rounded-2xl bg-slate-900 text-white shadow-2xl ring-1 ring-white/10"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between border-b border-white/10 bg-slate-950/60 px-5 py-4">
+          <div>
+            <div className="text-sm font-black uppercase tracking-widest text-sky-300">
+              Owner Pay Helper
+            </div>
+            <div className="text-xs font-semibold text-white/60">
+              Can the business afford to pay you?
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md px-2 py-1 text-white/50 hover:bg-white/10 hover:text-white"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <div>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-white/60">
+              What do you need to survive?
+            </label>
+            <textarea
+              value={text}
+              onChange={e => setText(e.target.value)}
+              rows={3}
+              placeholder="Rent is $1350. Car insurance is $260. Phone is $85. Food and gas is $600."
+              className="w-full resize-none rounded-lg border border-white/15 bg-slate-950/70 p-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-sky-400/60"
+            />
+            <p className="mt-1 text-[11px] font-semibold text-white/40">
+              Tip: amounts are monthly by default — add “/week” or “/year” to change.
+            </p>
+          </div>
+
+          {hasInput ? (
+            <>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                {[
+                  ["Monthly", reqMonthly],
+                  ["Weekly", reqWeekly],
+                  ["Daily", reqDaily],
+                ].map(([label, cents]) => (
+                  <div
+                    key={label as string}
+                    className="rounded-lg bg-white/5 px-2 py-2"
+                  >
+                    <div className="text-[10px] font-bold uppercase text-white/45">
+                      {label as string}
+                    </div>
+                    <div className="font-mono text-base font-black text-white">
+                      {moneyFromCents(cents as number)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-lg border border-white/10 bg-slate-950/50 p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-white/70">
+                    Required owner pay ({periodWord})
+                  </span>
+                  <span className="font-mono font-black text-white">
+                    {moneyFromCents(reqForPeriod)}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="font-semibold text-white/70">
+                    Included in Sheet ({activeView})
+                  </span>
+                  <span className="font-mono font-black text-white">
+                    {moneyFromCents(includedCents)}
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2">
+                  <span className="font-black">Gap ({periodWord})</span>
+                  <span
+                    className={`font-mono font-black ${
+                      gap > 0 ? "text-red-400" : "text-emerald-400"
+                    }`}
+                  >
+                    {gap > 0 ? moneyFromCents(gap) : "Covered ✓"}
+                  </span>
+                </div>
+              </div>
+
+              {gap > 0 && (
+                <div className="rounded-lg border border-amber-400/30 bg-amber-950/40 p-3 text-sm">
+                  <div className="font-black text-amber-300">
+                    Owner pay is underfunded.
+                  </div>
+                  <p className="mt-1 font-semibold leading-snug text-amber-100/80">
+                    Add {moneyFromCents(gap)} this {periodWord} of true net to
+                    cover your survival pay — earn it with the rescue moves on
+                    the cockpit, then raise the owner-pay row to{" "}
+                    <span className="font-mono">{moneyFromCents(reqDaily)}/day</span>.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2">
+                <span className="text-xs font-bold text-white/60">
+                  Suggested owner-pay row
+                </span>
+                <span className="font-mono text-sm font-black text-sky-300">
+                  {moneyFromCents(reqDaily)}/day
+                </span>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm font-semibold text-white/45">
+              Type your survival costs above to see what you need to pay
+              yourself and whether the business covers it.
+            </p>
+          )}
+
+          <button
+            type="button"
+            disabled
+            title="Sheet write-back is coming next"
+            className="w-full cursor-not-allowed rounded-lg bg-white/10 py-2.5 text-sm font-black text-white/40"
+          >
+            Apply to Sheet — coming next
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main presentational view ────────────────────────────────────────────────
 
 export function CockpitView({
@@ -433,6 +627,10 @@ export function CockpitView({
   useEffect(() => {
     setCommitted(new Set());
   }, [data, interactive]);
+
+  const [helperOpen, setHelperOpen] = useState(false);
+  const [survivalText, setSurvivalText] = useState("");
+  const ownerPayIncludedCents = lineByKey(data, "ownerPay").amountCents;
 
   // Rescue Deck: in red/weak tiers (based on the booked, server-computed level)
   // Mission Control shows specific operator moves carrying real dollar lift.
@@ -558,6 +756,13 @@ export function CockpitView({
               Setup
             </span>
           )}
+          <button
+            type="button"
+            onClick={() => setHelperOpen(true)}
+            className="ml-[0.4cqw] flex items-center gap-[0.25cqw] rounded-full border border-sky-400/40 bg-sky-500/15 px-[0.6cqw] py-[0.12cqw] text-[0.55cqw] font-black uppercase tracking-wide text-sky-200 hover:bg-sky-500/30"
+          >
+            💵 Owner Pay Helper
+          </button>
         </Zone>
 
         {/* PERIOD TOGGLE */}
@@ -1020,6 +1225,15 @@ export function CockpitView({
           <span>Fly smart. Profit real. ⭐</span>
         </Zone>
       </div>
+
+      <OwnerPayHelper
+        open={helperOpen}
+        onClose={() => setHelperOpen(false)}
+        activeView={activeView}
+        includedCents={ownerPayIncludedCents}
+        text={survivalText}
+        setText={setSurvivalText}
+      />
     </div>
   );
 }
