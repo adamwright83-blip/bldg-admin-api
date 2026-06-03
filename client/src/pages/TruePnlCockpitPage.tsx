@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Star,
 } from "lucide-react";
+import { keepPreviousData } from "@tanstack/react-query";
 import cockpitBgUrl from "@/assets/pnl/cockpit-bg.png";
 import basketIcon from "@/assets/pnl/icons/basket.png";
 import flyersIcon from "@/assets/pnl/icons/flyers.png";
@@ -1023,12 +1024,19 @@ function useIsDemo(): boolean {
   );
 }
 
+const PERIOD_BY_VIEW: Record<PeriodView, "today" | "week" | "month"> = {
+  Today: "today",
+  Week: "week",
+  Month: "month",
+};
+
 export default function TruePnlCockpitPage() {
   const isDemo = useIsDemo();
   const [month, setMonth] = useState(currentMonthInput);
+  const [activeView, setActiveView] = useState<PeriodView>("Month");
   const query = trpc.admin.truePnlCockpitSummary.useQuery(
-    { month },
-    { enabled: !isDemo }
+    { month, period: PERIOD_BY_VIEW[activeView] },
+    { enabled: !isDemo, placeholderData: keepPreviousData }
   );
   const data = query.data as CockpitData | undefined;
 
@@ -1076,7 +1084,8 @@ export default function TruePnlCockpitPage() {
       month={month}
       onMonthChange={setMonth}
       onRefresh={() => query.refetch()}
-      activeView="Month"
+      activeView={activeView}
+      onViewChange={setActiveView}
     />
   );
 }

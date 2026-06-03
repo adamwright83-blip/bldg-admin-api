@@ -927,11 +927,15 @@ export const appRouter = router({
               .string()
               .regex(/^\d{4}-\d{2}$/)
               .optional(),
+            period: z.enum(["today", "week", "month"]).optional(),
           })
           .optional()
       )
       .query(async ({ input }) =>
-        getTruePnlCockpitSummary({ month: input?.month ?? null })
+        getTruePnlCockpitSummary({
+          month: input?.month ?? null,
+          period: input?.period ?? "month",
+        })
       ),
 
     operationsEvents: router({

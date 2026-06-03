@@ -161,4 +161,55 @@ describe("True P&L Cockpit", () => {
 
     expect(summary.previousMonth).toBeNull();
   });
+
+  it("slices today / week / month from the daily date columns", () => {
+    // 8 days of June: $100 revenue and $10 store labor each day.
+    const header = ["", ...Array.from({ length: 8 }, (_, i) => `2026-06-0${i + 1}`)];
+    const values: unknown[][] = [
+      header,
+      ["CleanCloud Revenue", ...Array(8).fill("100.00")],
+      ["Store Labor", ...Array(8).fill("10.00")],
+    ];
+    const base = {
+      monthDate: parseTruePnlMonth("2026-06"),
+      current: { tabName: "JUN 26", values },
+    } as const;
+
+    const month = buildTruePnlCockpitSummary({ ...base, period: "month" });
+    const week = buildTruePnlCockpitSummary({ ...base, period: "week" });
+    const today = buildTruePnlCockpitSummary({ ...base, period: "today" });
+
+    // month = all 8 days; week = last 7; today = last 1 — real different numbers.
+    expect(month.grossRevenueCents).toBe(80000);
+    expect(month.trueNetCents).toBe(72000);
+    expect(week.grossRevenueCents).toBe(70000);
+    expect(week.trueNetCents).toBe(63000);
+    expect(today.grossRevenueCents).toBe(10000);
+    expect(today.trueNetCents).toBe(9000);
+
+    expect(month.period).toBe("month");
+    expect(today.period).toBe("today");
+    // today compares against yesterday from the same sheet
+    expect(today.previousMonth?.trueNetCents).toBe(9000);
+    expect(today.previousMonth?.monthLabel).toBe("Yesterday");
+  });
+
+  it("warns when revenue is recorded but expenses are not entered", () => {
+    const summary = buildTruePnlCockpitSummary({
+      monthDate: parseTruePnlMonth("2026-06"),
+      current: {
+        tabName: "JUN 26",
+        values: [
+          ["", "2026-06-01"],
+          ["CleanCloud Revenue", "500.00"],
+        ],
+      },
+    });
+
+    expect(summary.grossRevenueCents).toBe(50000);
+    expect(summary.totalExpenseCents).toBe(0);
+    expect(
+      summary.warnings.some(w => w.code === "expenses_not_entered")
+    ).toBe(true);
+  });
 });
