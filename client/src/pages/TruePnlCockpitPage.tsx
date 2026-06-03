@@ -622,10 +622,11 @@ export function CockpitView({
           </p>
         </Zone>
 
-        {/* TRUE NET CARD */}
+        {/* TRUE NET CARD — cream backing matches the frame panel, so it stays
+            readable even if the frame art is slow/blocked on a deploy. */}
         <Zone
           area={ZONES.trueNet}
-          className="flex flex-col justify-between p-[0.9cqw]"
+          className="flex flex-col justify-between rounded-[0.8cqw] bg-[#f7eede]/95 p-[0.9cqw]"
         >
           <div>
             <div className="text-[0.6cqw] font-black uppercase tracking-widest text-slate-500">
@@ -721,7 +722,10 @@ export function CockpitView({
         </Zone>
 
         {/* CLOUD LADDER */}
-        <Zone area={ZONES.cloudLadder} className="flex flex-col">
+        <Zone
+          area={ZONES.cloudLadder}
+          className="flex flex-col rounded-[0.8cqw] bg-[#0e2138]/80 p-[0.4cqw]"
+        >
           <div className="text-center text-[0.62cqw] font-black uppercase tracking-widest text-white/80">
             Cloud Level
           </div>
@@ -774,7 +778,10 @@ export function CockpitView({
         </Zone>
 
         {/* EXPENSE DRAGS */}
-        <Zone area={ZONES.expense} className="flex flex-col p-[0.7cqw]">
+        <Zone
+          area={ZONES.expense}
+          className="flex flex-col rounded-[0.8cqw] bg-[#0e2138]/80 p-[0.7cqw]"
+        >
           <div className="text-center text-[0.66cqw] font-black uppercase tracking-widest text-white/80">
             Top Expense Drags
           </div>
@@ -802,7 +809,10 @@ export function CockpitView({
         </Zone>
 
         {/* P&L BREAKDOWN */}
-        <Zone area={ZONES.pnl} className="flex flex-col px-[1.6cqw] py-[0.9cqw]">
+        <Zone
+          area={ZONES.pnl}
+          className="flex flex-col rounded-[0.8cqw] bg-[#f7eede]/95 px-[1.6cqw] py-[0.9cqw]"
+        >
           <div className="text-center text-[0.78cqw] font-black uppercase tracking-widest text-slate-700">
             True P&L Breakdown ·{" "}
             <span className="font-semibold text-slate-500">{activeView}</span>
@@ -845,7 +855,10 @@ export function CockpitView({
         </Zone>
 
         {/* PREVIOUS COMPARISON */}
-        <Zone area={ZONES.prevComp} className="flex flex-col p-[0.7cqw]">
+        <Zone
+          area={ZONES.prevComp}
+          className="flex flex-col rounded-[0.8cqw] bg-[#0e2138]/80 p-[0.7cqw]"
+        >
           <div className="text-center text-[0.64cqw] font-black uppercase tracking-widest text-white/80">
             Previous Comparison
           </div>
@@ -916,7 +929,7 @@ export function CockpitView({
                   return next;
                 })
               }
-              className={`absolute flex flex-col items-center px-[0.5cqw] py-[0.5cqh] text-center transition-transform ${
+              className={`absolute flex flex-col items-center rounded-[0.7cqw] bg-[#f7eede]/92 px-[0.5cqw] py-[0.5cqh] text-center transition-transform ${
                 tappable ? "cursor-pointer hover:scale-[1.04]" : "cursor-default"
               }`}
               style={{
@@ -967,7 +980,7 @@ export function CockpitView({
         {/* WHAT-IF */}
         <Zone
           area={ZONES.whatif}
-          className="flex items-center gap-[0.6cqw] px-[0.8cqw]"
+          className="flex items-center gap-[0.6cqw] rounded-[0.8cqw] bg-[#0e2138]/80 px-[0.8cqw]"
         >
           <div className="min-w-0 flex-1">
             <div className="text-[0.64cqw] font-black uppercase tracking-widest text-sky-300">
