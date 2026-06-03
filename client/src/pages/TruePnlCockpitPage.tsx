@@ -126,12 +126,22 @@ const LINE_ORDER = [
   "dryCleaningPartnerCost",
 ];
 
-// Always-filled mission fallback (so no card ever sits empty in production).
+// Healthy-tier missions (growth/pipeline) — shown when already profitable.
 const CANONICAL_MISSIONS: CockpitMissionView[] = [
-  { title: "Call 10 past customers", detail: "Recover 3 orders", impactLabel: "+$90 true net", tone: "growth" },
-  { title: "Post 40 flyers", detail: "Target nearby buildings", impactLabel: "+$120 true net", tone: "growth" },
-  { title: "Visit 3 spas in person", detail: "1 weekly towel account", impactLabel: "+$160 / wk", tone: "growth" },
-  { title: "Push 5 orders over $45", detail: "Protect the margin", impactLabel: "+$55 true net", tone: "steady" },
+  { title: "Post 10 new flyers", detail: "Keep the pipeline full", impactLabel: "+$40 true net", tone: "growth" },
+  { title: "Reactivate 2 customers", detail: "Win back inactive accounts", impactLabel: "+$25 true net", tone: "growth" },
+  { title: "Get 2 orders over $45", detail: "Lift average ticket", impactLabel: "+$50 true net", tone: "growth" },
+  { title: "Maintain 5-star service", detail: "Protect your rating", impactLabel: "On track", tone: "steady" },
+];
+
+// Rescue Deck — shown in red/weak tiers. Ordered to the mission icons
+// (flyers, people, basket, star) and carrying real dollar lift so committing
+// one climbs the (projected) plane off the cliff. -$X + 425 recovers the period.
+const RESCUE_MISSIONS: CockpitMissionView[] = [
+  { title: "Post 40 flyers", detail: "Target nearby buildings", impactLabel: "+$120 true net", tone: "growth", liftCents: 12000 },
+  { title: "Call 10 past customers", detail: "Recover 3 orders", impactLabel: "+$90 true net", tone: "growth", liftCents: 9000 },
+  { title: "Push 5 orders over $45", detail: "Protect the margin", impactLabel: "+$55 true net", tone: "steady", liftCents: 5500 },
+  { title: "Visit 3 spas in person", detail: "1 weekly towel account", impactLabel: "+$160 / wk", tone: "growth", liftCents: 16000 },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -167,14 +177,17 @@ function compactMoney(cents: number): string {
   return `${sign}$${Math.round(abs)}`;
 }
 
-/** Derive a tier from live net + revenue (for the interactive climb). */
+/**
+ * Derive a tier from live net + revenue for the interactive climb.
+ * Mirrors the server's resolveTruePnlCloudLevel thresholds so demo and real agree.
+ */
 function levelFromNet(netCents: number, revenueCents: number): CockpitLevel {
   if (netCents < 0) return "cliff";
-  const margin = revenueCents > 0 ? (netCents / revenueCents) * 100 : 0;
-  if (margin < 8) return "hover";
-  if (margin < 15) return "cloud1";
-  if (margin < 25) return "cloud2";
-  return "cloud3";
+  const margin = revenueCents > 0 ? netCents / revenueCents : 0;
+  if (margin < 0.05 || netCents < 50_000) return "hover";
+  if (netCents >= 300_000 && margin >= 0.25) return "cloud3";
+  if (netCents >= 150_000 && margin >= 0.15) return "cloud2";
+  return "cloud1";
 }
 
 /** Smoothly animate a number toward a target (cents). */
@@ -425,37 +438,34 @@ export function CockpitView({
     setCommitted(new Set());
   }, [data, interactive]);
 
+  // Rescue Deck: in red/weak tiers (based on the booked, server-computed level)
+  // Mission Control shows specific operator moves carrying real dollar lift.
+  const rescueMode =
+    data.cloudLevel === "cliff" || data.cloudLevel === "hover";
   const missions: CockpitMissionView[] =
-    missionsProp ??
-    generateCockpitMissions({
-      cloudLevel: data.cloudLevel,
-      trueNetCents: data.trueNetCents,
-      grossRevenueCents: data.grossRevenueCents,
-      expensePressurePct: data.expensePressurePct,
-    });
-  const displayMissions = useMemo(() => {
-    const out = [...missions];
-    for (const m of CANONICAL_MISSIONS) {
-      if (out.length >= 4) break;
-      if (!out.some(x => x.title === m.title)) out.push(m);
-    }
-    return out.slice(0, 4);
-  }, [missions]);
+    missionsProp ?? (rescueMode ? RESCUE_MISSIONS : CANONICAL_MISSIONS);
+  const displayMissions = useMemo(() => missions.slice(0, 4), [missions]);
+
+  // Committing a move climbs the (projected) plane — live on the real page too
+  // when we're in the danger zone, not just in the scripted demo.
+  const canCommit =
+    interactive ||
+    (rescueMode && displayMissions.some(m => (m.liftCents ?? 0) > 0));
 
   let liftCents = 0;
-  if (interactive) {
+  if (canCommit) {
     displayMissions.forEach((m, i) => {
       if (committed.has(i)) liftCents += m.liftCents ?? 0;
     });
   }
   const netCents = data.trueNetCents + liftCents;
-  const projecting = interactive && liftCents > 0;
+  const projecting = canCommit && liftCents > 0;
   const animatedNet = useCountUp(netCents);
   const marginPct =
     data.grossRevenueCents > 0
       ? (netCents / data.grossRevenueCents) * 100
       : data.marginPct;
-  const level = interactive
+  const level = canCommit
     ? levelFromNet(netCents, data.grossRevenueCents)
     : data.cloudLevel;
   const scene = sceneFromCloudLevel(level);
@@ -846,7 +856,7 @@ export function CockpitView({
             Mission Control
           </div>
           <p className="mt-[0.3cqh] text-[0.58cqw] font-semibold leading-snug text-white/65">
-            {interactive
+            {canCommit
               ? "Tap a move you'll make. Watch the plane climb."
               : "Protect profit and build tomorrow's pipeline."}
           </p>
@@ -855,7 +865,7 @@ export function CockpitView({
         {/* MISSION CARDS */}
         {displayMissions.map((mission, i) => {
           const done = committed.has(i);
-          const tappable = interactive && (mission.liftCents ?? 0) > 0;
+          const tappable = canCommit && (mission.liftCents ?? 0) > 0;
           return (
             <button
               key={mission.title}

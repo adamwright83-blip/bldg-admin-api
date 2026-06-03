@@ -124,14 +124,8 @@ const MONTH: CockpitData = {
 // Cliff-week missions: the moves that give the plane lift. Each carries a real
 // dollar lift so tapping them visibly pulls the cockpit off the cliff.
 //  -$121 + $90 + $120 + $160 + $55 = +$304  →  Cliff → Hover, live on stage.
+// Ordered to the mission icons (flyers, people, basket, star).
 export const CLIFF_MISSIONS: CockpitMissionView[] = [
-  {
-    title: "Call 10 past customers",
-    detail: "Recover 3 orders",
-    impactLabel: "+$90 true net",
-    tone: "growth",
-    liftCents: 9000,
-  },
   {
     title: "Post 40 flyers",
     detail: "Los Feliz / Silver Lake",
@@ -140,11 +134,11 @@ export const CLIFF_MISSIONS: CockpitMissionView[] = [
     liftCents: 12000,
   },
   {
-    title: "Visit 3 spas in person",
-    detail: "1 weekly towel account",
-    impactLabel: "+$160 / wk",
+    title: "Call 10 past customers",
+    detail: "Recover 3 orders",
+    impactLabel: "+$90 true net",
     tone: "growth",
-    liftCents: 16000,
+    liftCents: 9000,
   },
   {
     title: "Push 5 orders over $45",
@@ -152,6 +146,13 @@ export const CLIFF_MISSIONS: CockpitMissionView[] = [
     impactLabel: "+$55 true net",
     tone: "steady",
     liftCents: 5500,
+  },
+  {
+    title: "Visit 3 spas in person",
+    detail: "1 weekly towel account",
+    impactLabel: "+$160 / wk",
+    tone: "growth",
+    liftCents: 16000,
   },
 ];
 
