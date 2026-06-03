@@ -15,7 +15,11 @@ import {
   Star,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
-import cockpitBgUrl from "@/assets/pnl/cockpit-bg.png";
+import cockpitFrameUrl from "@/assets/pnl/cockpit-frame.png";
+import skyCliffUrl from "@/assets/pnl/sky-cliff.png";
+import skyHoverUrl from "@/assets/pnl/sky-hover.png";
+import skyCloud2Url from "@/assets/pnl/sky-cloud2.png";
+import skyCloud3Url from "@/assets/pnl/sky-cloud3.png";
 import basketIcon from "@/assets/pnl/icons/basket.png";
 import flyersIcon from "@/assets/pnl/icons/flyers.png";
 import peopleIcon from "@/assets/pnl/icons/people.png";
@@ -96,12 +100,12 @@ const ZONES = {
   toggle: { left: "42.5%", top: "1.2%", width: "17%", height: "6%" },
   sheet: { left: "60.5%", top: "1.4%", width: "13.5%", height: "5.6%" },
   headline: { left: "6%", top: "7.2%", width: "46%", height: "10.5%" },
-  trueNet: { left: "6.6%", top: "18.4%", width: "16.3%", height: "22.9%" },
-  gauges: { left: "25.8%", top: "32.2%", width: "46.4%", height: "16.6%" },
+  trueNet: { left: "7.6%", top: "19.5%", width: "16.5%", height: "22.9%" },
+  gauges: { left: "26%", top: "33%", width: "46%", height: "15.5%" },
   cloudLadder: { left: "80%", top: "13.8%", width: "16.8%", height: "34.5%" },
-  expense: { left: "5%", top: "44%", width: "18%", height: "28%" },
-  pnl: { left: "23.9%", top: "52%", width: "51%", height: "19.2%" },
-  prevComp: { left: "80%", top: "53%", width: "17.8%", height: "20%" },
+  expense: { left: "5%", top: "45%", width: "18%", height: "26%" },
+  pnl: { left: "24.6%", top: "53.9%", width: "49.6%", height: "16.1%" },
+  prevComp: { left: "80%", top: "53%", width: "17.8%", height: "19%" },
   missionCtrl: { left: "5%", top: "75.5%", width: "15%", height: "16.5%" },
   reward: { left: "67%", top: "75.9%", width: "9%", height: "15.5%" },
   whatif: { left: "77.3%", top: "75.4%", width: "20.7%", height: "15.8%" },
@@ -109,12 +113,12 @@ const ZONES = {
 } satisfies Record<string, CSSProperties>;
 
 const MISSION_SLOTS = [
-  { left: "20.8%", width: "10.6%" },
-  { left: "32.7%", width: "10.6%" },
-  { left: "44.7%", width: "10.8%" },
-  { left: "56.6%", width: "9.9%" },
+  { left: "21.6%", width: "10.2%" },
+  { left: "33.0%", width: "10.6%" },
+  { left: "44.7%", width: "10.6%" },
+  { left: "56.4%", width: "10.3%" },
 ];
-const MISSION_ROW = { top: "76.2%", height: "15.4%" };
+const MISSION_ROW = { top: "74.4%", height: "15%" };
 const MISSION_ICONS = [flyersIcon, peopleIcon, basketIcon, starIcon];
 
 const LINE_ORDER = [
@@ -231,44 +235,16 @@ function Zone({
   );
 }
 
-// Tier-driven world art (swap in bespoke per-tier skies as generated).
-const SCENE_BG: Record<CockpitScene, string> = {
-  cliff: cockpitBgUrl,
-  hover: cockpitBgUrl,
-  cloud1: cockpitBgUrl,
-  cloud2: cockpitBgUrl,
-  cloud3: cockpitBgUrl,
+// Tier-driven world seen through the (fixed) cockpit windshield. The sky art
+// carries the mood, so we no longer wash the scene in CSS tints — only a light
+// scrim behind the headline keeps text legible over bright skies.
+const SCENE_SKY: Record<CockpitScene, string> = {
+  cliff: skyCliffUrl,
+  hover: skyHoverUrl,
+  cloud1: skyCloud2Url,
+  cloud2: skyCloud2Url,
+  cloud3: skyCloud3Url,
 };
-
-function sceneTintStyle(scene: CockpitScene): CSSProperties {
-  switch (scene) {
-    case "cliff":
-      return {
-        background:
-          "linear-gradient(to bottom, rgba(120,12,12,0.72) 0%, rgba(140,20,20,0.30) 34%, rgba(120,12,12,0.10) 55%, transparent 70%)",
-      };
-    case "hover":
-      return {
-        background:
-          "linear-gradient(to bottom, rgba(245,158,11,0.16) 0%, transparent 44%)",
-      };
-    case "cloud1":
-      return {
-        background:
-          "linear-gradient(to bottom, rgba(16,185,129,0.18) 0%, transparent 46%)",
-      };
-    case "cloud2":
-      return {
-        background:
-          "linear-gradient(to bottom, rgba(56,189,248,0.22) 0%, rgba(186,230,253,0.10) 28%, transparent 52%)",
-      };
-    case "cloud3":
-      return {
-        background:
-          "linear-gradient(to bottom, rgba(167,139,250,0.26) 0%, rgba(251,191,36,0.14) 26%, transparent 54%)",
-      };
-  }
-}
 
 // ─── SVG arc gauge (rotating needle, animates on value change) ───────────────
 
@@ -508,25 +484,34 @@ export function CockpitView({
   return (
     <div className="w-full bg-[#06101d]">
       <div
-        className="relative mx-auto w-full select-none overflow-hidden"
-        style={{
-          aspectRatio: "1536 / 1024",
-          containerType: "size",
-          backgroundImage: `url(${SCENE_BG[scene]})`,
-          backgroundSize: "100% 100%",
-        }}
+        className="relative mx-auto w-full select-none overflow-hidden bg-[#06101d]"
+        style={{ aspectRatio: "1536 / 1024", containerType: "size" }}
       >
-        {/* MOOD GRADE */}
-        <div
-          className="pointer-events-none absolute inset-0 transition-[background] duration-700"
-          style={sceneTintStyle(scene)}
+        {/* Layer 1 — the world outside the windshield (changes with the tier) */}
+        <style>{`@keyframes cockpitSkyFade{from{opacity:0}to{opacity:1}}`}</style>
+        <img
+          key={scene}
+          src={SCENE_SKY[scene]}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{ animation: "cockpitSkyFade 700ms ease" }}
         />
-        {scene === "cliff" && (
-          <div
-            className="pointer-events-none absolute inset-0 animate-pulse"
-            style={{ boxShadow: "inset 0 0 16cqw 5cqw rgba(120,0,0,0.6)" }}
-          />
-        )}
+        {/* Legibility scrim: only darkens the visible sky (sits under the frame) */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(to bottom, rgba(6,16,29,0.55) 0%, rgba(6,16,29,0.12) 22%, transparent 38%)",
+          }}
+        />
+        {/* Layer 2 — the fixed cockpit frame (transparent windshield) */}
+        <img
+          src={cockpitFrameUrl}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 h-full w-full object-fill"
+        />
 
         {/* EYEBROW */}
         <Zone area={ZONES.eyebrow} className="flex items-center gap-[0.5cqw]">
