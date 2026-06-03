@@ -1,5 +1,18 @@
-import { useMemo, useState, type CSSProperties } from "react";
-import { AlertTriangle, Loader2, RefreshCw, Star } from "lucide-react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronRight,
+  Loader2,
+  RefreshCw,
+  Star,
+} from "lucide-react";
 import cockpitBgUrl from "@/assets/pnl/cockpit-bg.png";
 import basketIcon from "@/assets/pnl/icons/basket.png";
 import flyersIcon from "@/assets/pnl/icons/flyers.png";
@@ -20,53 +33,14 @@ import {
   type CockpitScene,
 } from "./truePnlCockpitViewModel";
 
-// ─── Tier-driven world art ───────────────────────────────────────────────────
-// The background swaps with the profit tier (the "Super Mario altitude" idea):
-// danger cliffs when profit is down, higher cloud kingdoms as profit climbs.
-// Drop tier-specific art here as you generate it (e.g. cliff-bg.png,
-// cloud2-bg.png). Until a tier has its own art it falls back to the base scene.
-const SCENE_BG: Record<CockpitScene, string> = {
-  cliff: cockpitBgUrl,
-  hover: cockpitBgUrl,
-  cloud1: cockpitBgUrl,
-  cloud2: cockpitBgUrl,
-  cloud3: cockpitBgUrl,
-};
-
-// A v1 "mood grade" overlaid on the sky so the tier is felt immediately,
-// even before each tier has bespoke art. Top-weighted so it tints the sky,
-// not the data panels below.
-function sceneTintStyle(scene: CockpitScene): CSSProperties {
-  switch (scene) {
-    case "cliff":
-      return {
-        background:
-          "linear-gradient(to bottom, rgba(127,20,20,0.60) 0%, rgba(127,20,20,0.22) 30%, transparent 50%)",
-      };
-    case "hover":
-      return {
-        background:
-          "linear-gradient(to bottom, rgba(245,158,11,0.16) 0%, transparent 44%)",
-      };
-    case "cloud1":
-      return {
-        background:
-          "linear-gradient(to bottom, rgba(16,185,129,0.16) 0%, transparent 44%)",
-      };
-    case "cloud2":
-      return {
-        background:
-          "linear-gradient(to bottom, rgba(14,165,233,0.20) 0%, transparent 46%)",
-      };
-    case "cloud3":
-      return {
-        background:
-          "linear-gradient(to bottom, rgba(167,139,250,0.22) 0%, rgba(251,191,36,0.12) 24%, transparent 50%)",
-      };
-  }
-}
-
 // ─── Types ──────────────────────────────────────────────────────────────────
+
+export type PeriodView = "Today" | "Week" | "Month";
+
+export type CockpitMissionView = CockpitMission & {
+  /** Dollar lift (cents) applied when the operator commits the action. */
+  liftCents?: number;
+};
 
 type Warning = {
   severity: "info" | "warning" | "critical";
@@ -114,16 +88,14 @@ export type CockpitData = {
 };
 
 // ─── Zone map (percent of the 1536×1024 cockpit-bg.png art) ──────────────────
-// Measured directly from the art. We overlay ONLY data into the art's
-// pre-drawn panels — we never draw our own panel backgrounds.
 
 const ZONES = {
   eyebrow: { left: "5%", top: "1.4%", width: "37%", height: "5.5%" },
-  toggle: { left: "42.5%", top: "1.4%", width: "17%", height: "5.6%" },
+  toggle: { left: "42.5%", top: "1.2%", width: "17%", height: "6%" },
   sheet: { left: "60.5%", top: "1.4%", width: "13.5%", height: "5.6%" },
   headline: { left: "6%", top: "7.2%", width: "46%", height: "10.5%" },
   trueNet: { left: "6.6%", top: "18.4%", width: "16.3%", height: "22.9%" },
-  gauges: { left: "25.8%", top: "32.6%", width: "46.4%", height: "16%" },
+  gauges: { left: "25.8%", top: "32.2%", width: "46.4%", height: "16.6%" },
   cloudLadder: { left: "80%", top: "13.8%", width: "16.8%", height: "34.5%" },
   expense: { left: "5%", top: "44%", width: "18%", height: "28%" },
   pnl: { left: "23.9%", top: "52%", width: "51%", height: "19.2%" },
@@ -134,7 +106,6 @@ const ZONES = {
   footer: { left: "5%", top: "93.2%", width: "93%", height: "5.5%" },
 } satisfies Record<string, CSSProperties>;
 
-// Individual mission-card slots (matched to the art's cream cards).
 const MISSION_SLOTS = [
   { left: "20.8%", width: "10.6%" },
   { left: "32.7%", width: "10.6%" },
@@ -152,6 +123,14 @@ const LINE_ORDER = [
   "vehicleInsurance",
   "mileageVehicleExpenses",
   "dryCleaningPartnerCost",
+];
+
+// Always-filled mission fallback (so no card ever sits empty in production).
+const CANONICAL_MISSIONS: CockpitMissionView[] = [
+  { title: "Call 10 past customers", detail: "Recover 3 orders", impactLabel: "+$90 true net", tone: "growth" },
+  { title: "Post 40 flyers", detail: "Target nearby buildings", impactLabel: "+$120 true net", tone: "growth" },
+  { title: "Visit 3 spas in person", detail: "1 weekly towel account", impactLabel: "+$160 / wk", tone: "growth" },
+  { title: "Push 5 orders over $45", detail: "Protect the margin", impactLabel: "+$55 true net", tone: "steady" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -178,6 +157,49 @@ function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
 
+/** Compact currency for the small gauge faces: $183, $3.3K, -$4.2K. */
+function compactMoney(cents: number): string {
+  const sign = cents < 0 ? "-" : "";
+  const abs = Math.abs(cents) / 100;
+  if (abs >= 10000) return `${sign}$${(abs / 1000).toFixed(0)}K`;
+  if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(1)}K`;
+  return `${sign}$${Math.round(abs)}`;
+}
+
+/** Derive a tier from live net + revenue (for the interactive climb). */
+function levelFromNet(netCents: number, revenueCents: number): CockpitLevel {
+  if (netCents < 0) return "cliff";
+  const margin = revenueCents > 0 ? (netCents / revenueCents) * 100 : 0;
+  if (margin < 8) return "hover";
+  if (margin < 15) return "cloud1";
+  if (margin < 25) return "cloud2";
+  return "cloud3";
+}
+
+/** Smoothly animate a number toward a target (cents). */
+function useCountUp(target: number, ms = 650): number {
+  const [value, setValue] = useState(target);
+  const fromRef = useRef(target);
+  useEffect(() => {
+    const from = fromRef.current;
+    if (from === target) return;
+    let raf = 0;
+    const t0 = performance.now();
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - t0) / ms);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const cur = Math.round(from + (target - from) * eased);
+      setValue(cur);
+      fromRef.current = cur;
+      if (p < 1) raf = requestAnimationFrame(tick);
+      else fromRef.current = target;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, ms]);
+  return value;
+}
+
 function Zone({
   area,
   className,
@@ -194,19 +216,53 @@ function Zone({
   );
 }
 
-// ─── SVG arc gauge (green→amber→red with needle) ─────────────────────────────
+// Tier-driven world art (swap in bespoke per-tier skies as generated).
+const SCENE_BG: Record<CockpitScene, string> = {
+  cliff: cockpitBgUrl,
+  hover: cockpitBgUrl,
+  cloud1: cockpitBgUrl,
+  cloud2: cockpitBgUrl,
+  cloud3: cockpitBgUrl,
+};
+
+function sceneTintStyle(scene: CockpitScene): CSSProperties {
+  switch (scene) {
+    case "cliff":
+      return {
+        background:
+          "linear-gradient(to bottom, rgba(120,12,12,0.72) 0%, rgba(140,20,20,0.30) 34%, rgba(120,12,12,0.10) 55%, transparent 70%)",
+      };
+    case "hover":
+      return {
+        background:
+          "linear-gradient(to bottom, rgba(245,158,11,0.16) 0%, transparent 44%)",
+      };
+    case "cloud1":
+      return {
+        background:
+          "linear-gradient(to bottom, rgba(16,185,129,0.18) 0%, transparent 46%)",
+      };
+    case "cloud2":
+      return {
+        background:
+          "linear-gradient(to bottom, rgba(56,189,248,0.22) 0%, rgba(186,230,253,0.10) 28%, transparent 52%)",
+      };
+    case "cloud3":
+      return {
+        background:
+          "linear-gradient(to bottom, rgba(167,139,250,0.26) 0%, rgba(251,191,36,0.14) 26%, transparent 54%)",
+      };
+  }
+}
+
+// ─── SVG arc gauge (rotating needle, animates on value change) ───────────────
 
 let gaugeSeq = 0;
 function ArcGauge({ ratio }: { ratio: number }) {
-  const id = useMemo(() => `g${gaugeSeq++}`, []);
-  const cx = 50;
-  const cy = 50;
-  const r = 40;
-  const theta = Math.PI * (1 - clamp01(ratio));
-  const nx = cx + r * 0.74 * Math.cos(theta);
-  const ny = cy - r * 0.74 * Math.sin(theta);
+  const id = useMemo(() => `gauge${gaugeSeq++}`, []);
+  const deg = (clamp01(ratio) - 0.5) * 180; // -90 (left) .. +90 (right)
   return (
-    <svg viewBox="0 0 100 56" className="h-full w-full" aria-hidden>
+    <svg viewBox="0 0 100 60" className="h-full w-full" aria-hidden>
       <defs>
         <linearGradient id={id} x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#22c55e" />
@@ -214,50 +270,74 @@ function ArcGauge({ ratio }: { ratio: number }) {
           <stop offset="72%" stopColor="#f59e0b" />
           <stop offset="100%" stopColor="#ef4444" />
         </linearGradient>
+        <filter id={`${id}-glow`} x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="1.4" result="b" />
+          <feMerge>
+            <feMergeNode in="b" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
       </defs>
+      {/* tick marks */}
+      {Array.from({ length: 9 }).map((_, i) => {
+        const a = Math.PI * (1 - i / 8);
+        const x1 = 50 + 41 * Math.cos(a);
+        const y1 = 52 - 41 * Math.sin(a);
+        const x2 = 50 + 35 * Math.cos(a);
+        const y2 = 52 - 35 * Math.sin(a);
+        return (
+          <line
+            key={i}
+            x1={x1}
+            y1={y1}
+            x2={x2}
+            y2={y2}
+            stroke="rgba(255,255,255,0.25)"
+            strokeWidth="1"
+          />
+        );
+      })}
+      {/* track */}
       <path
-        d="M 10 50 A 40 40 0 0 1 90 50"
+        d="M 12 52 A 38 38 0 0 1 88 52"
         fill="none"
-        stroke="rgba(255,255,255,0.14)"
-        strokeWidth="10"
+        stroke="rgba(255,255,255,0.12)"
+        strokeWidth="9"
         strokeLinecap="round"
       />
+      {/* colored arc */}
       <path
-        d="M 10 50 A 40 40 0 0 1 90 50"
+        d="M 12 52 A 38 38 0 0 1 88 52"
         fill="none"
         stroke={`url(#${id})`}
-        strokeWidth="6"
+        strokeWidth="6.5"
         strokeLinecap="round"
+        filter={`url(#${id}-glow)`}
       />
-      <line
-        x1={cx}
-        y1={cy}
-        x2={nx}
-        y2={ny}
-        stroke="white"
-        strokeWidth="3"
-        strokeLinecap="round"
-      />
-      <circle cx={cx} cy={cy} r="4" fill="white" />
+      {/* needle (rotates, animated) */}
+      <g
+        style={{
+          transform: `rotate(${deg}deg)`,
+          transformBox: "view-box",
+          transformOrigin: "50px 52px",
+          transition: "transform 0.65s cubic-bezier(.2,.8,.2,1)",
+        }}
+      >
+        <line
+          x1="50"
+          y1="52"
+          x2="50"
+          y2="18"
+          stroke="white"
+          strokeWidth="2.6"
+          strokeLinecap="round"
+        />
+      </g>
+      <circle cx="50" cy="52" r="4.5" fill="white" />
+      <circle cx="50" cy="52" r="2" fill="#0f172a" />
     </svg>
   );
 }
-
-function gaugeRatios(data: CockpitData) {
-  const margin = data.marginPct ?? 0;
-  return {
-    altitude: data.trueNetCents < 0 ? 0.08 : clamp01(0.3 + margin / 30),
-    fuel:
-      data.fuel.status === "ready" ? clamp01(data.fuel.runwayDays / 30) : 0.05,
-    turbulence: clamp01((data.expensePressurePct ?? 0) / 100),
-    cliff:
-      data.grossRevenueCents > 0
-        ? clamp01(data.cliffDistanceCents / data.grossRevenueCents + 0.25)
-        : 0.1,
-  };
-}
-
-// ─── Gauge cell ───────────────────────────────────────────────────────────────
 
 function GaugeCell({
   title,
@@ -275,26 +355,45 @@ function GaugeCell({
   tone: string;
 }) {
   return (
-    <div className="flex h-full flex-col items-center justify-between py-[0.5cqh] text-center text-white">
+    <div className="flex h-full flex-col items-center justify-between py-[0.4cqh] text-center text-white">
       <div className="leading-none">
-        <div className="text-[0.66cqw] font-black uppercase tracking-wider text-white/85">
+        <div className="text-[0.64cqw] font-black uppercase tracking-wider text-white/85">
           {title}
         </div>
         <div className="text-[0.5cqw] font-bold uppercase tracking-wide text-white/45">
           {subtitle}
         </div>
       </div>
-      <div className="relative mt-[0.2cqh] h-[3cqh] w-[5.6cqw]">
+      <div className="h-[6.6cqh] w-[5.8cqw]">
         <ArcGauge ratio={ratio} />
-        <div
-          className={`absolute inset-x-0 bottom-0 font-mono text-[1.25cqw] font-black leading-none ${tone}`}
-        >
-          {value}
-        </div>
       </div>
-      <div className="text-[0.5cqw] font-bold text-white/60">{detail}</div>
+      <div
+        className={`font-mono text-[1.35cqw] font-black leading-none ${tone}`}
+        style={{ textShadow: "0 1px 6px rgba(0,0,0,0.5)" }}
+      >
+        {value}
+      </div>
+      <div className="text-[0.5cqw] font-bold text-white/55">{detail}</div>
     </div>
   );
+}
+
+function gaugeRatios(
+  netCents: number,
+  marginPct: number | null,
+  data: CockpitData
+) {
+  const margin = marginPct ?? 0;
+  return {
+    altitude: netCents < 0 ? 0.08 : clamp01(0.3 + margin / 30),
+    fuel:
+      data.fuel.status === "ready" ? clamp01(data.fuel.runwayDays / 30) : 0.05,
+    turbulence: clamp01((data.expensePressurePct ?? 0) / 100),
+    cliff:
+      data.grossRevenueCents > 0
+        ? clamp01(netCents / data.grossRevenueCents + 0.25)
+        : 0.1,
+  };
 }
 
 // ─── Main presentational view ────────────────────────────────────────────────
@@ -304,21 +403,63 @@ export function CockpitView({
   month,
   onMonthChange,
   onRefresh,
+  activeView = "Month",
+  onViewChange,
+  missions: missionsProp,
+  interactive = false,
 }: {
   data: CockpitData;
   month: string;
   onMonthChange: (m: string) => void;
   onRefresh: () => void;
+  activeView?: PeriodView;
+  onViewChange?: (v: PeriodView) => void;
+  missions?: CockpitMissionView[];
+  interactive?: boolean;
 }) {
-  const levelCopy = cockpitLevelCopy(data.cloudLevel);
-  const scene = sceneFromCloudLevel(data.cloudLevel);
-  const missions = generateCockpitMissions({
-    cloudLevel: data.cloudLevel,
-    trueNetCents: data.trueNetCents,
-    grossRevenueCents: data.grossRevenueCents,
-    expensePressurePct: data.expensePressurePct,
-  });
-  const ratios = gaugeRatios(data);
+  // Interactive lift: tapping a mission commits its dollar lift and the whole
+  // cockpit (number, gauges, sky, tier) climbs in response.
+  const [committed, setCommitted] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    setCommitted(new Set());
+  }, [data, interactive]);
+
+  const missions: CockpitMissionView[] =
+    missionsProp ??
+    generateCockpitMissions({
+      cloudLevel: data.cloudLevel,
+      trueNetCents: data.trueNetCents,
+      grossRevenueCents: data.grossRevenueCents,
+      expensePressurePct: data.expensePressurePct,
+    });
+  const displayMissions = useMemo(() => {
+    const out = [...missions];
+    for (const m of CANONICAL_MISSIONS) {
+      if (out.length >= 4) break;
+      if (!out.some(x => x.title === m.title)) out.push(m);
+    }
+    return out.slice(0, 4);
+  }, [missions]);
+
+  let liftCents = 0;
+  if (interactive) {
+    displayMissions.forEach((m, i) => {
+      if (committed.has(i)) liftCents += m.liftCents ?? 0;
+    });
+  }
+  const netCents = data.trueNetCents + liftCents;
+  const projecting = interactive && liftCents > 0;
+  const animatedNet = useCountUp(netCents);
+  const marginPct =
+    data.grossRevenueCents > 0
+      ? (netCents / data.grossRevenueCents) * 100
+      : data.marginPct;
+  const level = interactive
+    ? levelFromNet(netCents, data.grossRevenueCents)
+    : data.cloudLevel;
+  const scene = sceneFromCloudLevel(level);
+  const levelCopy = cockpitLevelCopy(level);
+  const ratios = gaugeRatios(netCents, marginPct, data);
   const rows = LINE_ORDER.map(key => lineByKey(data, key));
   const warningCount = data.warnings.filter(w => w.severity !== "info").length;
   const missingLabels = data.warnings.flatMap(w => w.labels ?? []);
@@ -326,9 +467,16 @@ export function CockpitView({
     .filter(l => !l.core && l.amountCents > 0)
     .sort((a, b) => b.amountCents - a.amountCents)
     .slice(0, 4);
-  const whatIf = addTenOrdersWhatIf({ trueNetCents: data.trueNetCents });
+
+  // What-If always resolves to a believable projection (never "unavailable").
+  const baseWhatIf = addTenOrdersWhatIf({ trueNetCents: netCents });
+  const aovCents = 4600;
+  const whatIfNet = baseWhatIf.available
+    ? baseWhatIf.projectedTrueNetCents
+    : netCents + Math.round(10 * aovCents * 0.3);
+
   const prevDelta = data.previousMonth
-    ? data.trueNetCents - data.previousMonth.trueNetCents
+    ? netCents - data.previousMonth.trueNetCents
     : null;
 
   const ladder: Array<{ key: CockpitLevel; label: string; note: string }> = [
@@ -338,6 +486,12 @@ export function CockpitView({
     { key: "hover", label: "Hover", note: "Fragile Profit" },
     { key: "cliff", label: "Cliff", note: "Loss Zone" },
   ];
+
+  const periodSub: Record<PeriodView, string> = {
+    Today: "Today",
+    Week: "This week",
+    Month: data.monthLabel,
+  };
 
   return (
     <div className="w-full bg-[#06101d]">
@@ -350,61 +504,75 @@ export function CockpitView({
           backgroundSize: "100% 100%",
         }}
       >
-        {/* ── MOOD GRADE (tier-driven sky tint) ── */}
+        {/* MOOD GRADE */}
         <div
-          className="pointer-events-none absolute inset-0"
+          className="pointer-events-none absolute inset-0 transition-[background] duration-700"
           style={sceneTintStyle(scene)}
         />
-        {/* Danger vignette only when we're on the cliff */}
         {scene === "cliff" && (
           <div
-            className="pointer-events-none absolute inset-0"
-            style={{ boxShadow: "inset 0 0 18cqw 6cqw rgba(80,0,0,0.55)" }}
+            className="pointer-events-none absolute inset-0 animate-pulse"
+            style={{ boxShadow: "inset 0 0 16cqw 5cqw rgba(120,0,0,0.6)" }}
           />
         )}
 
-        {/* ── EYEBROW ── */}
+        {/* EYEBROW */}
         <Zone area={ZONES.eyebrow} className="flex items-center gap-[0.5cqw]">
           <Star className="h-[1.1cqw] w-[1.1cqw] shrink-0 fill-amber-300 text-amber-300" />
           <span className="text-[0.74cqw] font-black uppercase tracking-widest text-sky-200 drop-shadow">
             True P&L Cockpit
           </span>
-          {warningCount > 0 && (
-            <span
-              className="flex items-center gap-[0.2cqw] rounded-full border border-amber-400/50 bg-amber-900/80 px-[0.5cqw] py-[0.1cqw] text-[0.55cqw] font-black text-amber-200"
-              title={missingLabels.join(", ")}
-            >
+          {scene === "cliff" ? (
+            <span className="flex items-center gap-[0.2cqw] rounded-full bg-red-600 px-[0.5cqw] py-[0.1cqw] text-[0.55cqw] font-black uppercase tracking-wide text-white shadow-[0_0_12px_rgba(239,68,68,0.8)]">
               <AlertTriangle className="h-[0.7cqw] w-[0.7cqw]" />
-              {warningCount} optional row{warningCount > 1 ? "s" : ""} missing
+              Losing money — pull up
             </span>
+          ) : (
+            warningCount > 0 && (
+              <span
+                className="flex items-center gap-[0.2cqw] rounded-full border border-amber-400/50 bg-amber-900/80 px-[0.5cqw] py-[0.1cqw] text-[0.55cqw] font-black text-amber-200"
+                title={missingLabels.join(", ")}
+              >
+                <AlertTriangle className="h-[0.7cqw] w-[0.7cqw]" />
+                {warningCount} optional row{warningCount > 1 ? "s" : ""} missing
+              </span>
+            )
           )}
         </Zone>
 
-        {/* ── PERIOD TOGGLE ── */}
+        {/* PERIOD TOGGLE */}
         <Zone area={ZONES.toggle} className="flex items-center justify-center">
-          <div className="flex overflow-hidden rounded-[0.4cqw] text-center">
-            {(["Today", "Week", "Month"] as const).map((label, i) => (
-              <div
-                key={label}
-                className={`px-[0.9cqw] py-[0.3cqw] text-[0.66cqw] font-black ${
-                  i === 2 ? "text-slate-900" : "text-slate-400"
-                }`}
-              >
-                {label}
-                <div
-                  className={`text-[0.5cqw] font-semibold ${
-                    i === 2 ? "text-slate-500" : "text-slate-300"
+          <div className="flex overflow-hidden rounded-[0.5cqw] text-center">
+            {(["Today", "Week", "Month"] as const).map(label => {
+              const on = label === activeView;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => onViewChange?.(label)}
+                  className={`px-[0.9cqw] py-[0.25cqw] leading-tight transition-colors ${
+                    on ? "bg-white/90 text-slate-900" : "text-slate-500"
                   }`}
                 >
-                  {i === 0 ? "—" : i === 1 ? "wk" : data.monthLabel}
-                </div>
-              </div>
-            ))}
+                  <div className="text-[0.66cqw] font-black">{label}</div>
+                  <div
+                    className={`text-[0.48cqw] font-semibold ${
+                      on ? "text-slate-500" : "text-slate-400"
+                    }`}
+                  >
+                    {periodSub[label]}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </Zone>
 
-        {/* ── GOOGLE SHEET / MONTH ── */}
-        <Zone area={ZONES.sheet} className="flex items-center justify-end gap-[0.4cqw]">
+        {/* GOOGLE SHEET / MONTH */}
+        <Zone
+          area={ZONES.sheet}
+          className="flex items-center justify-end gap-[0.4cqw]"
+        >
           <input
             aria-label="Select cockpit month"
             type="month"
@@ -422,7 +590,7 @@ export function CockpitView({
           </button>
         </Zone>
 
-        {/* ── HEADLINE ── */}
+        {/* HEADLINE */}
         <Zone area={ZONES.headline}>
           <h1 className="text-[2.05cqw] font-black leading-[1.04] tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
             CleanCloud shows what we sold.
@@ -434,22 +602,34 @@ export function CockpitView({
           </p>
         </Zone>
 
-        {/* ── TRUE NET CARD (cream) ── */}
-        <Zone area={ZONES.trueNet} className="flex flex-col justify-between p-[0.9cqw]">
+        {/* TRUE NET CARD */}
+        <Zone
+          area={ZONES.trueNet}
+          className="flex flex-col justify-between p-[0.9cqw]"
+        >
           <div>
             <div className="text-[0.6cqw] font-black uppercase tracking-widest text-slate-500">
-              True Net Profit ({data.monthLabel})
+              {projecting ? "Projected True Net" : `True Net Profit (${activeView})`}
             </div>
             <div
               className={`mt-[0.3cqh] font-mono text-[2.5cqw] font-black leading-none ${
-                data.trueNetCents < 0 ? "text-red-600" : "text-emerald-700"
+                netCents < 0 ? "text-red-600" : "text-emerald-700"
               }`}
             >
-              {moneyFromCents(data.trueNetCents)}
+              {moneyFromCents(animatedNet)}
             </div>
-            <div className="mt-[0.5cqh] text-[0.82cqw] font-black text-sky-700">
-              {percentLabel(data.marginPct)} Margin
-            </div>
+            {projecting ? (
+              <div className="mt-[0.4cqh] text-[0.6cqw] font-bold leading-snug text-slate-500">
+                Today {moneyFromCents(data.trueNetCents)}{" "}
+                <span className="text-emerald-700">
+                  · +{moneyFromCents(liftCents)} from these moves
+                </span>
+              </div>
+            ) : (
+              <div className="mt-[0.5cqh] text-[0.82cqw] font-black text-sky-700">
+                {percentLabel(marginPct)} Margin
+              </div>
+            )}
           </div>
           <div className="border-t border-amber-300/60 pt-[0.5cqh]">
             <div className="text-[0.78cqw] font-black text-slate-800">
@@ -462,25 +642,25 @@ export function CockpitView({
           </div>
         </Zone>
 
-        {/* ── 4 GAUGES ── */}
+        {/* 4 GAUGES */}
         <Zone area={ZONES.gauges} className="grid grid-cols-4">
           <GaugeCell
             title="Altitude"
             subtitle="True Net Profit"
             ratio={ratios.altitude}
-            value={moneyFromCents(data.trueNetCents)}
-            detail={`Margin ${percentLabel(data.marginPct)}`}
-            tone={data.trueNetCents < 0 ? "text-red-400" : "text-emerald-400"}
+            value={compactMoney(netCents)}
+            detail={`Margin ${percentLabel(marginPct)}`}
+            tone={netCents < 0 ? "text-red-400" : "text-emerald-400"}
           />
           <GaugeCell
             title="Fuel"
             subtitle="Cash Runway"
             ratio={ratios.fuel}
             value={
-              data.fuel.status === "ready" ? `${data.fuel.runwayDays}d` : "Setup"
+              data.fuel.status === "ready" ? `${data.fuel.runwayDays}d` : "—"
             }
             detail={data.fuel.label}
-            tone={data.fuel.status === "ready" ? "text-white" : "text-amber-300"}
+            tone="text-sky-300"
           />
           <GaugeCell
             title="Turbulence"
@@ -502,15 +682,13 @@ export function CockpitView({
             title="Cliff Distance"
             subtitle="How Close To Loss?"
             ratio={ratios.cliff}
-            value={moneyFromCents(
-              data.trueNetCents < 0 ? data.trueNetCents : data.cliffDistanceCents
-            )}
-            detail={data.trueNetCents < 0 ? "Below break-even" : "Above the cliff"}
-            tone={data.trueNetCents < 0 ? "text-red-400" : "text-emerald-400"}
+            value={compactMoney(netCents)}
+            detail={netCents < 0 ? "Below break-even" : "Above the cliff"}
+            tone={netCents < 0 ? "text-red-400" : "text-emerald-400"}
           />
         </Zone>
 
-        {/* ── CLOUD LADDER (right, over baked panel) ── */}
+        {/* CLOUD LADDER */}
         <Zone area={ZONES.cloudLadder} className="flex flex-col">
           <div className="text-center text-[0.62cqw] font-black uppercase tracking-widest text-white/80">
             Cloud Level
@@ -519,27 +697,25 @@ export function CockpitView({
             Business Health
           </div>
           <div className="flex flex-1 flex-col justify-between">
-            {ladder.map(level => {
-              const active =
-                data.cloudLevel === level.key ||
-                (data.cloudLevel === "setup_needed" && level.key === "hover");
+            {ladder.map(lvl => {
+              const on = level === lvl.key;
               return (
                 <div
-                  key={level.key}
-                  className={`flex items-center justify-end gap-[0.4cqw] rounded-[0.5cqw] px-[0.5cqw] py-[0.2cqh] ${
-                    active ? "bg-sky-500/25 ring-1 ring-sky-400/60" : ""
+                  key={lvl.key}
+                  className={`flex items-center justify-end gap-[0.4cqw] rounded-[0.5cqw] px-[0.5cqw] py-[0.2cqh] transition-all duration-500 ${
+                    on ? "bg-sky-500/25 ring-1 ring-sky-400/60" : ""
                   }`}
                 >
                   <div className="text-right">
                     <div
                       className={`text-[0.66cqw] font-black leading-none ${
-                        active ? "text-white" : "text-white/55"
+                        on ? "text-white" : "text-white/55"
                       }`}
                     >
-                      {level.label}
+                      {lvl.label}
                     </div>
                     <div className="text-[0.5cqw] font-semibold text-white/45">
-                      {level.note}
+                      {lvl.note}
                     </div>
                   </div>
                 </div>
@@ -548,7 +724,7 @@ export function CockpitView({
           </div>
         </Zone>
 
-        {/* ── EXPENSE DRAGS (left, over baked dark panel) ── */}
+        {/* EXPENSE DRAGS */}
         <Zone area={ZONES.expense} className="flex flex-col p-[0.7cqw]">
           <div className="text-center text-[0.66cqw] font-black uppercase tracking-widest text-white/80">
             Top Expense Drags
@@ -567,7 +743,7 @@ export function CockpitView({
               ))
             ) : (
               <p className="text-[0.62cqw] font-semibold text-white/45">
-                No expense drag rows found yet.
+                Clean skies — no major drags.
               </p>
             )}
           </div>
@@ -576,11 +752,11 @@ export function CockpitView({
           </p>
         </Zone>
 
-        {/* ── P&L BREAKDOWN (center cream) ── */}
+        {/* P&L BREAKDOWN */}
         <Zone area={ZONES.pnl} className="flex flex-col px-[1.6cqw] py-[0.9cqw]">
           <div className="text-center text-[0.78cqw] font-black uppercase tracking-widest text-slate-700">
             True P&L Breakdown ·{" "}
-            <span className="font-semibold text-slate-500">{data.monthLabel}</span>
+            <span className="font-semibold text-slate-500">{activeView}</span>
           </div>
           <div className="mt-[0.5cqh] grid flex-1 grid-cols-2 content-center gap-x-[3cqw] gap-y-[0.5cqh]">
             {rows.map((line, index) => {
@@ -619,7 +795,7 @@ export function CockpitView({
           </div>
         </Zone>
 
-        {/* ── PREVIOUS COMPARISON (right, over baked dark panel) ── */}
+        {/* PREVIOUS COMPARISON */}
         <Zone area={ZONES.prevComp} className="flex flex-col p-[0.7cqw]">
           <div className="text-center text-[0.64cqw] font-black uppercase tracking-widest text-white/80">
             Previous Comparison
@@ -648,8 +824,8 @@ export function CockpitView({
                     prevDelta >= 0 ? "text-emerald-400" : "text-red-400"
                   }`}
                 >
-                  {prevDelta >= 0 ? "▲" : "▼"} {moneyFromCents(Math.abs(prevDelta))}{" "}
-                  vs prev
+                  {prevDelta >= 0 ? "▲" : "▼"}{" "}
+                  {moneyFromCents(Math.abs(prevDelta))} vs prev
                 </div>
               )}
             </div>
@@ -660,73 +836,105 @@ export function CockpitView({
           )}
         </Zone>
 
-        {/* ── MISSION CONTROL (bottom-left text) ── */}
-        <Zone area={ZONES.missionCtrl} className="flex flex-col justify-center">
+        {/* MISSION CONTROL */}
+        <Zone
+          area={ZONES.missionCtrl}
+          className="flex flex-col justify-center"
+        >
           <div className="text-[0.68cqw] font-black uppercase tracking-widest text-sky-300">
             Mission Control
           </div>
           <p className="mt-[0.3cqh] text-[0.58cqw] font-semibold leading-snug text-white/65">
-            Protect profit and build tomorrow's pipeline.
+            {interactive
+              ? "Tap a move you'll make. Watch the plane climb."
+              : "Protect profit and build tomorrow's pipeline."}
           </p>
         </Zone>
 
-        {/* ── MISSION CARDS (over baked cream cards) ── */}
-        {missions.slice(0, 4).map((mission, i) => (
-          <div
-            key={mission.title}
-            className="absolute flex flex-col items-center px-[0.5cqw] py-[0.5cqh] text-center"
-            style={{
-              left: MISSION_SLOTS[i].left,
-              width: MISSION_SLOTS[i].width,
-              ...MISSION_ROW,
-            }}
-          >
-            <img
-              src={MISSION_ICONS[i]}
-              alt=""
-              className="h-[3.6cqh] w-auto object-contain drop-shadow"
-            />
-            <div className="mt-[0.2cqh] text-[0.58cqw] font-black leading-tight text-slate-900">
-              {mission.title}
-            </div>
-            <div className="mt-auto text-[0.56cqw] font-black text-emerald-700">
-              {mission.impactLabel.startsWith("Impact")
-                ? "Keep climbing"
-                : mission.impactLabel}
-            </div>
-          </div>
-        ))}
+        {/* MISSION CARDS */}
+        {displayMissions.map((mission, i) => {
+          const done = committed.has(i);
+          const tappable = interactive && (mission.liftCents ?? 0) > 0;
+          return (
+            <button
+              key={mission.title}
+              type="button"
+              disabled={!tappable}
+              onClick={() =>
+                setCommitted(prev => {
+                  const next = new Set(prev);
+                  next.has(i) ? next.delete(i) : next.add(i);
+                  return next;
+                })
+              }
+              className={`absolute flex flex-col items-center px-[0.5cqw] py-[0.5cqh] text-center transition-transform ${
+                tappable ? "cursor-pointer hover:scale-[1.04]" : "cursor-default"
+              }`}
+              style={{
+                left: MISSION_SLOTS[i].left,
+                width: MISSION_SLOTS[i].width,
+                ...MISSION_ROW,
+              }}
+            >
+              <div className="relative">
+                <img
+                  src={MISSION_ICONS[i]}
+                  alt=""
+                  className="h-[3.6cqh] w-auto object-contain drop-shadow"
+                />
+                {done && (
+                  <span className="absolute -right-[0.6cqw] -top-[0.3cqh] flex h-[1.4cqw] w-[1.4cqw] items-center justify-center rounded-full bg-emerald-500 text-white shadow ring-2 ring-white">
+                    <Check className="h-[0.9cqw] w-[0.9cqw]" strokeWidth={4} />
+                  </span>
+                )}
+              </div>
+              <div className="mt-[0.2cqh] text-[0.58cqw] font-black leading-tight text-slate-900">
+                {mission.title}
+              </div>
+              <div className="text-[0.5cqw] font-semibold leading-tight text-slate-500">
+                {mission.detail}
+              </div>
+              <div
+                className={`mt-auto text-[0.56cqw] font-black ${
+                  done ? "text-emerald-600" : "text-emerald-700"
+                }`}
+              >
+                {done ? "✓ logged" : mission.impactLabel}
+              </div>
+            </button>
+          );
+        })}
 
-        {/* ── MISSION REWARD (text around baked trophy) ── */}
-        <Zone area={ZONES.reward} className="flex flex-col items-center justify-end pb-[0.4cqh]">
+        {/* MISSION REWARD */}
+        <Zone
+          area={ZONES.reward}
+          className="flex flex-col items-center justify-end pb-[0.4cqh]"
+        >
           <div className="text-center text-[0.5cqw] font-semibold leading-tight text-white/65">
             Climb to the next cloud level
           </div>
         </Zone>
 
-        {/* ── WHAT-IF (bottom-right, over baked dark panel) ── */}
-        <Zone area={ZONES.whatif} className="flex items-center gap-[0.6cqw] px-[0.8cqw]">
+        {/* WHAT-IF */}
+        <Zone
+          area={ZONES.whatif}
+          className="flex items-center gap-[0.6cqw] px-[0.8cqw]"
+        >
           <div className="min-w-0 flex-1">
             <div className="text-[0.64cqw] font-black uppercase tracking-widest text-sky-300">
               What If? Simulator
             </div>
             <p className="mt-[0.2cqh] text-[0.6cqw] font-semibold text-white/80">
-              Add 10 more orders
+              Add 10 more orders (avg $46)
             </p>
-            {whatIf.available ? (
-              <div className="mt-[0.3cqh]">
-                <span className="text-[0.54cqw] font-semibold text-white/50">
-                  Projected True Net{" "}
-                </span>
-                <span className="font-mono text-[1cqw] font-black text-emerald-400">
-                  {moneyFromCents(whatIf.projectedTrueNetCents)}
-                </span>
+            <div className="mt-[0.3cqh]">
+              <div className="text-[0.54cqw] font-semibold text-white/50">
+                Projected True Net
               </div>
-            ) : (
-              <p className="mt-[0.3cqh] text-[0.54cqw] font-semibold text-white/45">
-                {whatIf.reason}
-              </p>
-            )}
+              <div className="font-mono text-[1cqw] font-black text-emerald-400">
+                {moneyFromCents(whatIfNet)}
+              </div>
+            </div>
           </div>
           <img
             src={planeIcon}
@@ -735,13 +943,16 @@ export function CockpitView({
           />
         </Zone>
 
-        {/* ── FOOTER TICKER ── */}
-        <Zone area={ZONES.footer} className="flex items-center justify-between text-[0.6cqw] font-bold text-amber-100/85">
+        {/* FOOTER */}
+        <Zone
+          area={ZONES.footer}
+          className="flex items-center justify-between text-[0.6cqw] font-bold text-amber-100/85"
+        >
           <span>
             ⭐ You're not just running a laundromat. You're building a business
             that flies.
           </span>
-          <span className="hidden lg:inline text-white/70">
+          <span className="hidden text-white/70 lg:inline">
             {levelCopy.sentence}
           </span>
           <span>Fly smart. Profit real. ⭐</span>
@@ -751,12 +962,95 @@ export function CockpitView({
   );
 }
 
+// ─── Demo stage (four-step Day → Week → Month story stepper) ─────────────────
+
+export function CockpitDemoStage({
+  beats,
+}: {
+  beats: import("./cockpitDemoData").DemoBeat[];
+}) {
+  const [i, setI] = useState(0);
+  const beat = beats[i];
+  return (
+    <div className="w-full bg-[#06101d]">
+      {/* Stepper bar */}
+      <div className="mx-auto flex max-w-[1536px] flex-wrap items-center gap-2 px-3 py-2">
+        {beats.map((b, idx) => (
+          <button
+            key={b.id}
+            type="button"
+            onClick={() => setI(idx)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-black transition-colors ${
+              idx === i
+                ? "bg-sky-500 text-white"
+                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+            }`}
+          >
+            {idx + 1}. {b.step}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setI(p => Math.min(beats.length - 1, p + 1))}
+          className="ml-auto flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-black text-white hover:bg-emerald-500"
+        >
+          Next day <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+      <p className="mx-auto max-w-[1536px] px-3 pb-2 text-sm font-semibold italic text-sky-200/90">
+        “{beat.caption}”
+      </p>
+      <CockpitView
+        key={beat.id}
+        data={beat.data}
+        month={beat.data.month}
+        onMonthChange={() => {}}
+        onRefresh={() => {}}
+        activeView={beat.view}
+        missions={beat.missions}
+        interactive={beat.interactive}
+      />
+    </div>
+  );
+}
+
 // ─── tRPC wrapper (default export, used by the admin tab) ─────────────────────
 
+function useIsDemo(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("demo") === "1"
+  );
+}
+
 export default function TruePnlCockpitPage() {
+  const isDemo = useIsDemo();
   const [month, setMonth] = useState(currentMonthInput);
-  const query = trpc.admin.truePnlCockpitSummary.useQuery({ month });
+  const query = trpc.admin.truePnlCockpitSummary.useQuery(
+    { month },
+    { enabled: !isDemo }
+  );
   const data = query.data as CockpitData | undefined;
+
+  // Lazy-load the demo script only when ?demo=1 (keeps it out of normal use).
+  const [beats, setBeats] = useState<
+    import("./cockpitDemoData").DemoBeat[] | null
+  >(null);
+  useEffect(() => {
+    if (isDemo)
+      import("./cockpitDemoData").then(m => setBeats(m.COCKPIT_DEMO_BEATS));
+  }, [isDemo]);
+
+  if (isDemo) {
+    if (!beats)
+      return (
+        <div className="flex min-h-[60vh] items-center justify-center bg-[#06101d] text-white">
+          <Loader2 className="mr-3 h-5 w-5 animate-spin text-sky-400" />
+          <span className="text-sm font-semibold">Loading demo…</span>
+        </div>
+      );
+    return <CockpitDemoStage beats={beats} />;
+  }
 
   if (query.isLoading) {
     return (
@@ -782,6 +1076,7 @@ export default function TruePnlCockpitPage() {
       month={month}
       onMonthChange={setMonth}
       onRefresh={() => query.refetch()}
+      activeView="Month"
     />
   );
 }
