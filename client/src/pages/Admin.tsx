@@ -493,27 +493,38 @@ export default function Admin() {
         </div>
       </nav>
 
-      <AdminCustomerSearchBlock
-        customerSearchQuery={customerSearchQuery}
-        setCustomerSearchQuery={setCustomerSearchQuery}
-        debouncedCustomerQuery={debouncedCustomerQuery}
-        searchOrders={searchOrders}
-        setProfilePhone={setProfilePhone}
-        onPrefillNewOrder={phone => {
-          setNewOrderPhoneSeed(phone);
-          setActiveTab("New Order");
-          setCustomerSearchQuery("");
-        }}
-      />
+      {activeTab !== "True P&L Cockpit" && (
+        <AdminCustomerSearchBlock
+          customerSearchQuery={customerSearchQuery}
+          setCustomerSearchQuery={setCustomerSearchQuery}
+          debouncedCustomerQuery={debouncedCustomerQuery}
+          searchOrders={searchOrders}
+          setProfilePhone={setProfilePhone}
+          onPrefillNewOrder={phone => {
+            setNewOrderPhoneSeed(phone);
+            setActiveTab("New Order");
+            setCustomerSearchQuery("");
+          }}
+        />
+      )}
 
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+      {activeTab === "True P&L Cockpit" ? (
         <AdminTabPanels
           activeTab={activeTab}
           setProfilePhone={setProfilePhone}
           newOrderPhoneSeed={newOrderPhoneSeed}
           onConsumePhoneSeed={() => setNewOrderPhoneSeed(null)}
         />
-      </div>
+      ) : (
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+          <AdminTabPanels
+            activeTab={activeTab}
+            setProfilePhone={setProfilePhone}
+            newOrderPhoneSeed={newOrderPhoneSeed}
+            onConsumePhoneSeed={() => setNewOrderPhoneSeed(null)}
+          />
+        </div>
+      )}
 
       <CustomerProfileDrawer
         open={profilePhone !== null}

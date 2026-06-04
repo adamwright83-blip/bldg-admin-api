@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+/* Vite root is preview/, so Tailwind only auto-scans here by default.
+   Explicitly scan the real component source so utility classes
+   (including arbitrary cqw values) get generated for the preview. */
+@source "../client/src/**/*.{ts,tsx}";
+@source "./**/*.{ts,tsx}";

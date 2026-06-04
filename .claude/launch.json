@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pnl-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "--config",
+        "vite.preview.config.ts",
+        "--port",
+        "5174",
+        "--strictPort"
+      ],
+      "port": 5174
+    }
+  ]
+}

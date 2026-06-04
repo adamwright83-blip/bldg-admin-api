@@ -43,6 +43,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
   const [clock, setClock] = useState(new Date());
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const statusQueries = {
+    "intake-pending": trpc.admin.listByStatus.useQuery({ status: "intake-pending" }),
     new: trpc.admin.listByStatus.useQuery({ status: "new" }),
     collected: trpc.admin.listByStatus.useQuery({ status: "collected" }),
     processing: trpc.admin.listByStatus.useQuery({ status: "processing" }),
@@ -59,12 +60,14 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
   }, []);
 
   const ordersByStatus = useMemo(() => ({
+    "intake-pending": statusQueries["intake-pending"].data ?? [],
     new: statusQueries.new.data ?? [],
     collected: statusQueries.collected.data ?? [],
     processing: statusQueries.processing.data ?? [],
     ready: statusQueries.ready.data ?? [],
     delivered: statusQueries.delivered.data ?? [],
   }), [
+    statusQueries["intake-pending"].data,
     statusQueries.new.data,
     statusQueries.collected.data,
     statusQueries.processing.data,
@@ -88,6 +91,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
   const blocked = unpaidDelivered.filter((o) => olderThan24Hours(o.updatedAt ?? o.createdAt));
   const staleCollectedOrProcessing = [...ordersByStatus.collected, ...ordersByStatus.processing].filter((o) => olderThan24Hours(o.updatedAt ?? o.createdAt));
   const priority = pickOneThingRightNow({
+    heldReviewOrders: ordersByStatus["intake-pending"],
     unpaidDelivered,
     readyDueToday,
     newOrders: ordersByStatus.new,
@@ -102,6 +106,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
 
   async function invalidateLive() {
     await Promise.all([
+      utils.admin.listByStatus.invalidate({ status: "intake-pending" }),
       utils.admin.listByStatus.invalidate({ status: "new" }),
       utils.admin.listByStatus.invalidate({ status: "collected" }),
       utils.admin.listByStatus.invalidate({ status: "processing" }),
@@ -179,6 +184,12 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
     const hasCard = !!(order.stripeCustomerId || order.stripePaymentMethodId);
     const isSelected = selectedOrderId === order.id;
     const actionGridClass = order.status === "new" ? "grid-cols-2" : "grid-cols-3";
+    const heldLines = [
+      order.heldCleanedRequestText ? ["Cleaned", order.heldCleanedRequestText] : null,
+      order.heldRawRequestText ? ["Raw", order.heldRawRequestText] : null,
+      order.heldRequestedPickupWindow ? ["Pickup", order.heldRequestedPickupWindow] : null,
+      order.heldRequestedReturnBy ? ["Return by", order.heldRequestedReturnBy] : null,
+    ].filter(Boolean) as Array<[string, string]>;
     return (
       <article
         className={`relative cursor-pointer border bg-[#FBFAF6] pl-3 pr-3 py-3 transition ${
@@ -205,6 +216,18 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
           </div>
         </div>
         {order.specialInstructions ? <div className="mt-2 border-t border-[#D8D1C4] pt-2 text-[11px] text-black/55 line-clamp-2">{order.specialInstructions}</div> : null}
+        {heldLines.length ? (
+          <div className="mt-2 border-t border-[#D8D1C4] pt-2 text-[11px] text-black/65">
+            <div className="mb-1 font-bold uppercase tracking-[0.12em] text-amber-700">HELD</div>
+            <div className="space-y-1">
+              {heldLines.map(([label, value]) => (
+                <div key={label} className="line-clamp-2">
+                  <span className="font-semibold">{label}:</span> {value}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className={`mt-3 grid ${actionGridClass} gap-1.5`}>
           {order.phone && lane.status !== "processing" ? (
             <a className="border border-[#C9C0B1] bg-white px-2 py-1 text-center text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" href={phoneHref(order.phone)} onClick={(event) => event.stopPropagation()}>
@@ -253,7 +276,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
             {clock.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "2-digit", year: "numeric" })} / {clock.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })} / Los Angeles, CA
           </div>
           <div className="grid grid-cols-2 border border-[#D8D1C4] bg-white sm:grid-cols-5">
-            <MiniMetric label="Open orders" value={String(ordersByStatus.new.length + ordersByStatus.collected.length + ordersByStatus.processing.length + ordersByStatus.ready.length).padStart(2, "0")} />
+            <MiniMetric label="Open orders" value={String(ordersByStatus["intake-pending"].length + ordersByStatus.new.length + ordersByStatus.collected.length + ordersByStatus.processing.length + ordersByStatus.ready.length).padStart(2, "0")} />
             <MiniMetric label="Pickups due" value={String(ordersByStatus.new.filter((o) => isToday(o.pickupDate)).length || ordersByStatus.new.length).padStart(2, "0")} tone="text-emerald-700" />
             <MiniMetric label="Returns due" value={String(readyDueToday.length || ordersByStatus.ready.length).padStart(2, "0")} tone="text-blue-700" />
             <MiniMetric label="Ready to charge" value={money(readyToCharge.reduce((sum, o) => sum + Number(o.total ?? 0), 0))} />
@@ -270,7 +293,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
             </div>
           ) : (
             <div className="overflow-x-auto border border-[#D8D1C4] bg-[#FBFAF6]">
-              <div className="grid grid-cols-1 divide-y divide-[#D8D1C4] md:min-w-[1120px] md:grid-cols-5 md:divide-x md:divide-y-0">
+              <div className="grid grid-cols-1 divide-y divide-[#D8D1C4] md:min-w-[1320px] md:grid-cols-6 md:divide-x md:divide-y-0">
                 {LIVE_LANES.map((lane) => (
                   <section key={lane.status} className="flex min-h-[320px] flex-col md:min-h-[620px]">
                     <div className="flex items-center justify-between border-b border-[#D8D1C4] px-3 py-3">
@@ -334,7 +357,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
           <CommandPanel title="ONE THING RIGHT NOW">
             {priority ? (
               <div className="border border-red-200 bg-red-50 p-3 text-center">
-                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-red-700">{priority.paid ? "Due today" : "Payment open"}</div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-red-700">{priority.status === "intake-pending" ? "HELD review" : priority.paid ? "Due today" : "Payment open"}</div>
                 <div className="mt-3 text-sm font-bold">{customerName(priority)}</div>
                 <div className="font-mono text-xs text-black/55">Order #{priority.id}</div>
                 <div className="mt-2 font-mono text-2xl font-semibold">{money(priority.total)}</div>
@@ -410,6 +433,12 @@ function CommandPanel({ title, children }: { title: string; children: ReactNode 
 
 function SelectedOrderSummary({ order }: { order: Order }) {
   const hasCard = !!(order.stripeCustomerId || order.stripePaymentMethodId);
+  const heldLines = [
+    order.heldCleanedRequestText ? ["Cleaned", order.heldCleanedRequestText] : null,
+    order.heldRawRequestText ? ["Raw", order.heldRawRequestText] : null,
+    order.heldRequestedPickupWindow ? ["Pickup", order.heldRequestedPickupWindow] : null,
+    order.heldRequestedReturnBy ? ["Return by", order.heldRequestedReturnBy] : null,
+  ].filter(Boolean) as Array<[string, string]>;
   return (
     <div className="space-y-3 text-xs">
       <div>
@@ -424,6 +453,18 @@ function SelectedOrderSummary({ order }: { order: Order }) {
         <div>Return {order.deliveryDate || "not set"} / {order.deliveryTimeWindow || "window n/a"}</div>
         <div className={statusTone(order)}>{order.paid ? "Paid" : hasCard ? "Card on file" : "Payment needs intake"} / {money(order.total)}</div>
       </div>
+      {heldLines.length ? (
+        <div className="border-t border-[#D8D1C4] pt-3 text-black/70">
+          <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">HELD request</div>
+          <div className="space-y-1">
+            {heldLines.map(([label, value]) => (
+              <div key={label}>
+                <span className="font-semibold">{label}:</span> {value}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

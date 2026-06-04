@@ -16,6 +16,8 @@ export type TruePnlCloudLevel =
   | "cloud2"
   | "cloud3";
 
+export type TruePnlPeriod = "today" | "week" | "month";
+
 export type TruePnlWarning = {
   severity: "info" | "warning" | "critical";
   code:
@@ -24,6 +26,7 @@ export type TruePnlWarning = {
     | "missing_date_columns"
     | "missing_core_revenue_rows"
     | "missing_optional_expense_rows"
+    | "expenses_not_entered"
     | "previous_month_missing"
     | "sheet_read_failed";
   message: string;
@@ -35,6 +38,7 @@ export type TruePnlLine = {
     | "grossRevenue"
     | "storeLabor"
     | "driverOperatorPay"
+    | "ownerPay"
     | "gasFuel"
     | "vehicleInsurance"
     | "mileageVehicleExpenses"
@@ -48,8 +52,10 @@ export type TruePnlLine = {
 
 export type TruePnlSummary = {
   source: "google_sheets";
+  period: TruePnlPeriod;
   month: string;
   monthLabel: string;
+  periodLabel: string;
   tabName: string | null;
   generatedAt: string;
   trusted: boolean;
@@ -117,6 +123,22 @@ export const TRUE_PNL_ROW_ALIASES: PnlLineConfig[] = [
     ],
   },
   {
+    // Owner/operator compensation — a REAL business expense in True P&L.
+    // Aliases are intentionally distinct from driverOperatorPay's "Operator Pay"
+    // so the same sheet row can never be counted in two groups (no double-count).
+    key: "ownerPay",
+    label: "Owner pay",
+    core: false,
+    aliases: [
+      "Adam Labor",
+      "Owner Labor",
+      "Owner Pay",
+      "Founder Pay",
+      "Owner Draw",
+      "Owner Compensation",
+    ],
+  },
+  {
     key: "gasFuel",
     label: "Gas / fuel",
     core: false,
@@ -172,6 +194,7 @@ type BuildInput = {
   monthDate: Date;
   current: SheetMonthData | null;
   previous?: SheetMonthData | null;
+  period?: TruePnlPeriod;
   warnings?: TruePnlWarning[];
   generatedAt?: Date;
 };
@@ -234,6 +257,54 @@ function matchingRowIndexes(values: unknown[][], aliases: string[]): number[] {
   return indexes;
 }
 
+// Columns (within the month) where revenue was actually recorded — used to find
+// the latest real day and to slice today/week without landing on empty future days.
+function populatedColumns(values: unknown[][], dateColumns: number[]): number[] {
+  const revenueAliases =
+    TRUE_PNL_ROW_ALIASES.find(c => c.key === "grossRevenue")?.aliases ?? [];
+  const revenueRows = matchingRowIndexes(values, revenueAliases);
+  if (!revenueRows.length) return dateColumns;
+  return dateColumns.filter(col =>
+    revenueRows.some(rowIndex => parseNumericCell(values[rowIndex]?.[col]) !== 0)
+  );
+}
+
+// Slice the populated columns into the current period + a like-for-like previous
+// period (today vs yesterday, week vs last week). Month uses all columns and
+// compares against the previous-month tab elsewhere.
+function periodSlices(
+  populated: number[],
+  monthColumns: number[],
+  period: TruePnlPeriod
+): { current: number[]; previous: number[] } {
+  if (period === "today") {
+    const n = populated.length;
+    return {
+      current: n >= 1 ? [populated[n - 1]!] : [],
+      previous: n >= 2 ? [populated[n - 2]!] : [],
+    };
+  }
+  if (period === "week") {
+    return {
+      current: populated.slice(-7),
+      previous: populated.slice(-14, -7),
+    };
+  }
+  return { current: monthColumns, previous: [] };
+}
+
+function columnDateLabel(values: unknown[][], colIndex: number): string | null {
+  const ymd = normalizeSheetCellToYYYYMMDD(values[0]?.[colIndex]);
+  if (!ymd) return null;
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function sumRows(
   values: unknown[][],
   rowIndexes: number[],
@@ -264,22 +335,32 @@ function latestRunwayDays(
   return null;
 }
 
+/**
+ * Period-aware danger thresholds (true-net cents). A small positive day is NOT
+ * safe — e.g. +$33.75/day is below the $100 day floor, so it reads as Cliff.
+ * Tune these in one place. Mirrored on the client in levelFromNet().
+ */
+export const TRUE_PNL_DANGER_THRESHOLDS: Record<
+  TruePnlPeriod,
+  { hover: number; cloud1: number; cloud2: number; cloud3: number }
+> = {
+  today: { hover: 10_000, cloud1: 30_000, cloud2: 60_000, cloud3: 100_000 },
+  week: { hover: 30_000, cloud1: 100_000, cloud2: 200_000, cloud3: 400_000 },
+  month: { hover: 100_000, cloud1: 300_000, cloud2: 600_000, cloud3: 1_000_000 },
+};
+
 export function resolveTruePnlCloudLevel(input: {
-  grossRevenueCents: number;
   trueNetCents: number;
   trusted: boolean;
+  period?: TruePnlPeriod;
 }): TruePnlCloudLevel {
   if (!input.trusted) return "setup_needed";
-  const margin =
-    input.grossRevenueCents > 0
-      ? input.trueNetCents / input.grossRevenueCents
-      : null;
-  if (input.trueNetCents < 0) return "cliff";
-  if (margin == null || margin < 0.05 || input.trueNetCents < 50_000)
-    return "hover";
-  if (input.trueNetCents >= 300_000 && margin >= 0.25) return "cloud3";
-  if (input.trueNetCents >= 150_000 && margin >= 0.15) return "cloud2";
-  return "cloud1";
+  const t = TRUE_PNL_DANGER_THRESHOLDS[input.period ?? "month"];
+  if (input.trueNetCents < t.hover) return "cliff";
+  if (input.trueNetCents < t.cloud1) return "hover";
+  if (input.trueNetCents < t.cloud2) return "cloud1";
+  if (input.trueNetCents < t.cloud3) return "cloud2";
+  return "cloud3";
 }
 
 function cloudLabel(level: TruePnlCloudLevel): string {
@@ -302,12 +383,16 @@ function cloudLabel(level: TruePnlCloudLevel): string {
 function buildMonthSnapshot(input: {
   monthDate: Date;
   sheet: SheetMonthData;
+  columns?: number[];
+  periodLabelOverride?: string;
+  period?: TruePnlPeriod;
 }): Omit<
   TruePnlSummary,
-  "source" | "generatedAt" | "fuel" | "previousMonth"
+  "source" | "generatedAt" | "fuel" | "previousMonth" | "period"
 > & { fuelRunwayDays: number | null } {
   const warnings: TruePnlWarning[] = [];
-  const dateColumns = monthDateColumns(input.sheet.values, input.monthDate);
+  const dateColumns =
+    input.columns ?? monthDateColumns(input.sheet.values, input.monthDate);
   if (!dateColumns.length) {
     warnings.push({
       severity: "critical",
@@ -360,6 +445,17 @@ function buildMonthSnapshot(input: {
   const totalExpenseCents = lines
     .filter(line => !line.core)
     .reduce((sum, line) => sum + line.amountCents, 0);
+
+  // Honesty guard: revenue recorded but zero expenses → margin is overstated
+  // (expenses not entered for this period). Don't present a fake 100%-margin win.
+  if (grossRevenueCents > 0 && totalExpenseCents === 0) {
+    warnings.push({
+      severity: "warning",
+      code: "expenses_not_entered",
+      message:
+        "Revenue is recorded but no expenses were entered for this period, so profit is overstated.",
+    });
+  }
   const trueNetCents = grossRevenueCents - totalExpenseCents;
   const marginPct =
     grossRevenueCents > 0 ? (trueNetCents / grossRevenueCents) * 100 : null;
@@ -370,14 +466,15 @@ function buildMonthSnapshot(input: {
   const trusted =
     !revenueLine.missing && dateColumns.length > 0 && grossRevenueCents > 0;
   const cloudLevel = resolveTruePnlCloudLevel({
-    grossRevenueCents,
     trueNetCents,
     trusted,
+    period: input.period ?? "month",
   });
 
   return {
     month: monthKey(input.monthDate),
     monthLabel: monthLabel(input.monthDate),
+    periodLabel: input.periodLabelOverride ?? monthLabel(input.monthDate),
     tabName: input.sheet.tabName,
     trusted,
     grossRevenueCents,
@@ -402,8 +499,10 @@ export function buildTruePnlCockpitSummary(input: BuildInput): TruePnlSummary {
   if (!input.current) {
     return {
       source: "google_sheets",
+      period: input.period ?? "month",
       month: monthKey(input.monthDate),
       monthLabel: monthLabel(input.monthDate),
+      periodLabel: monthLabel(input.monthDate),
       tabName: null,
       generatedAt: generatedAt.toISOString(),
       trusted: false,
@@ -434,19 +533,56 @@ export function buildTruePnlCockpitSummary(input: BuildInput): TruePnlSummary {
     };
   }
 
+  const period = input.period ?? "month";
+  const monthColumns = monthDateColumns(input.current.values, input.monthDate);
+  const populated =
+    period === "month"
+      ? monthColumns
+      : populatedColumns(input.current.values, monthColumns);
+  const slices = periodSlices(populated, monthColumns, period);
+  const currentColumns = slices.current.length ? slices.current : monthColumns;
+
+  const currentLabel =
+    period === "today"
+      ? (columnDateLabel(input.current.values, currentColumns[currentColumns.length - 1]!) ??
+        "Today")
+      : period === "week"
+        ? "This Week"
+        : undefined;
+
   const current = buildMonthSnapshot({
     monthDate: input.monthDate,
     sheet: input.current,
+    columns: currentColumns,
+    periodLabelOverride: currentLabel,
+    period,
   });
-  const previous = input.previous
-    ? buildMonthSnapshot({
-        monthDate: previousMonth(input.monthDate),
-        sheet: input.previous,
-      })
-    : null;
+
+  // Like-for-like previous: today→yesterday, week→last week (same sheet);
+  // month→previous-month tab.
+  const previous =
+    period === "month"
+      ? input.previous
+        ? buildMonthSnapshot({
+            monthDate: previousMonth(input.monthDate),
+            sheet: input.previous,
+            period: "month",
+          })
+        : null
+      : slices.previous.length
+        ? buildMonthSnapshot({
+            monthDate: input.monthDate,
+            sheet: input.current,
+            columns: slices.previous,
+            periodLabelOverride:
+              period === "today" ? "Yesterday" : "Last Week",
+            period,
+          })
+        : null;
 
   return {
     source: "google_sheets",
+    period,
     generatedAt: generatedAt.toISOString(),
     ...current,
     warnings: [...baseWarnings, ...current.warnings],
@@ -465,7 +601,7 @@ export function buildTruePnlCockpitSummary(input: BuildInput): TruePnlSummary {
     previousMonth: previous
       ? {
           month: previous.month,
-          monthLabel: previous.monthLabel,
+          monthLabel: previous.periodLabel,
           tabName: previous.tabName!,
           grossRevenueCents: previous.grossRevenueCents,
           trueNetCents: previous.trueNetCents,
@@ -534,14 +670,17 @@ async function loadMonthSheet(input: {
 export async function getTruePnlCockpitSummary(
   input: {
     month?: string | null;
+    period?: TruePnlPeriod;
   } = {}
 ): Promise<TruePnlSummary> {
   const monthDate = parseTruePnlMonth(input.month);
+  const period = input.period ?? "month";
   const authContext = sheetsAuth();
   if ("error" in authContext) {
     return buildTruePnlCockpitSummary({
       monthDate,
       current: null,
+      period,
       warnings: [authContext.error],
     });
   }
@@ -584,12 +723,14 @@ export async function getTruePnlCockpitSummary(
       monthDate,
       current,
       previous,
+      period,
       warnings,
     });
   } catch (error) {
     return buildTruePnlCockpitSummary({
       monthDate,
       current: null,
+      period,
       warnings: [
         {
           severity: "critical",

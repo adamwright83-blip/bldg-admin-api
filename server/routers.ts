@@ -185,7 +185,7 @@ import type { AgentType, ActorType } from "./agents/permissions";
 
 const STRIPE_API_VERSION = "2025-03-31.basil" as const;
 
-function getStripe(): Stripe {
+export function getStripe(): Stripe {
   const key =
     process.env.STRIPE_SECRET_KEY_OVERRIDE ||
     process.env.STRIPE_SECRET_KEY ||
@@ -927,11 +927,15 @@ export const appRouter = router({
               .string()
               .regex(/^\d{4}-\d{2}$/)
               .optional(),
+            period: z.enum(["today", "week", "month"]).optional(),
           })
           .optional()
       )
       .query(async ({ input }) =>
-        getTruePnlCockpitSummary({ month: input?.month ?? null })
+        getTruePnlCockpitSummary({
+          month: input?.month ?? null,
+          period: input?.period ?? "month",
+        })
       ),
 
     operationsEvents: router({
