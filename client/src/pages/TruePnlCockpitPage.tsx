@@ -756,13 +756,6 @@ export function CockpitView({
               Setup
             </span>
           )}
-          <button
-            type="button"
-            onClick={() => setHelperOpen(true)}
-            className="ml-[0.4cqw] flex items-center gap-[0.25cqw] rounded-full border border-sky-400/40 bg-sky-500/15 px-[0.6cqw] py-[0.12cqw] text-[0.55cqw] font-black uppercase tracking-wide text-sky-200 hover:bg-sky-500/30"
-          >
-            💵 Owner Pay Helper
-          </button>
         </Zone>
 
         {/* PERIOD TOGGLE */}
@@ -877,6 +870,13 @@ export function CockpitView({
             <p className="mt-[0.2cqh] text-[0.64cqw] font-semibold leading-snug text-slate-600">
               {levelCopy.sentence}
             </p>
+            <button
+              type="button"
+              onClick={() => setHelperOpen(true)}
+              className="mt-[0.5cqh] flex w-full items-center justify-center gap-[0.3cqw] rounded-[0.5cqw] bg-slate-900 px-[0.6cqw] py-[0.5cqh] text-[0.66cqw] font-black uppercase tracking-wide text-white shadow hover:bg-slate-800"
+            >
+              💵 Owner Pay Helper →
+            </button>
           </div>
         </Zone>
 
