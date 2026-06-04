@@ -46,6 +46,7 @@ import {
   buildPickupCompletedOperationsEventForOrder,
   type OperationsEventActorContext,
 } from "./operationsEvents";
+import { normalizePhoneForStorage, phoneDigits, sameNormalizedPhone } from "./phone";
 
 export type { AdminCustomerAggregateDbRow };
 
@@ -848,27 +849,40 @@ export async function findStripeCardByPhone(
   const db = await getDb();
   if (!db) return null;
 
+  const normalizedPhone = normalizePhoneForStorage(phone);
+  if (!normalizedPhone) return null;
+  const digits = phoneDigits(normalizedPhone);
+  const nationalDigits = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  const storedPhoneDigits = sql<string>`REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${orders.phone}, '+', ''), '-', ''), ' ', ''), '(', ''), ')', ''), '.', '')`;
+
   const result = await db
     .select({
+      phone: orders.phone,
       stripeCustomerId: orders.stripeCustomerId,
       stripePaymentMethodId: orders.stripePaymentMethodId,
     })
     .from(orders)
     .where(
       and(
-        eq(orders.phone, phone),
+        or(
+          eq(orders.phone, normalizedPhone),
+          eq(orders.phone, phone),
+          sql`${storedPhoneDigits} = ${digits}`,
+          sql`${storedPhoneDigits} = ${nationalDigits}`
+        ),
         sql`${orders.stripeCustomerId} IS NOT NULL`,
         sql`${orders.stripePaymentMethodId} IS NOT NULL`,
         sql`${orders.stripePaymentMethodId} != ''`
       )
     )
     .orderBy(desc(orders.createdAt))
-    .limit(1);
+    .limit(25);
 
-  if (result.length > 0 && result[0].stripeCustomerId && result[0].stripePaymentMethodId) {
+  const match = result.find((row) => sameNormalizedPhone(row.phone, normalizedPhone));
+  if (match?.stripeCustomerId && match.stripePaymentMethodId) {
     return {
-      stripeCustomerId: result[0].stripeCustomerId,
-      stripePaymentMethodId: result[0].stripePaymentMethodId,
+      stripeCustomerId: match.stripeCustomerId,
+      stripePaymentMethodId: match.stripePaymentMethodId,
     };
   }
   return null;

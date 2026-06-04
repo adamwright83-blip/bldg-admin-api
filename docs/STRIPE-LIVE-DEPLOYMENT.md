@@ -20,8 +20,9 @@
 
 ## 3) Routes / webhook paths
 
-- **Outgoing:** bldg-admin-api POSTs to `https://app.bldg.chat/api/webhooks/receipt` after charging a card (with `Authorization: APP_SHARED_API_SECRET`). No new routes in this repo.
-- **Incoming:** This API has no Stripe webhook endpoint.
+- **Outgoing:** bldg-admin-api POSTs to `https://app.bldg.chat/api/webhooks/receipt` after charging a card (with `Authorization: APP_SHARED_API_SECRET`).
+- **Incoming server-to-server:** `POST /api/resident/payment-method-lookup` lets the resident backend look up an existing saved Stripe card by phone with `x-app-shared-secret`. It uses the same `STRIPE_SECRET_KEY` / `STRIPE_SECRET_KEY_OVERRIDE` path as admin charging and returns only Stripe IDs plus safe card display metadata.
+- **Incoming webhooks:** This API has no Stripe webhook endpoint.
 
 ## 4) Live test checklist
 

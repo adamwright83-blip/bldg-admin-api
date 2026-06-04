@@ -46,6 +46,15 @@ export const orders = mysqlTable("orders", {
   unit: varchar("unit", { length: 50 }),
   specialInstructions: text("specialInstructions"),
 
+  /* HELD resident request metadata */
+  heldRawRequestText: text("heldRawRequestText"),
+  heldCleanedRequestText: text("heldCleanedRequestText"),
+  heldServiceSummary: text("heldServiceSummary"),
+  heldRequestedPickupWindow: varchar("heldRequestedPickupWindow", { length: 255 }),
+  heldRequestedReturnBy: varchar("heldRequestedReturnBy", { length: 255 }),
+  heldSource: varchar("heldSource", { length: 64 }),
+  heldMetadataJson: json("heldMetadataJson"),
+
   /* Customer contact */
   firstName: varchar("firstName", { length: 100 }).notNull(),
   lastName: varchar("lastName", { length: 100 }).notNull(),

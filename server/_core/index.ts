@@ -8,11 +8,11 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
-import { appRouter, validateStripeEnv } from "../routers";
+import { appRouter, getStripe, validateStripeEnv } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { sdk } from "./sdk";
-import { upsertUser } from "../db";
+import { createOrder, upsertUser } from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { VENDOR_COOKIE_NAME, THIRTY_DAYS_MS } from "@shared/const";
@@ -30,6 +30,11 @@ import { registerPaymentReconciliationRoutes } from "../paymentReconciliationRou
 import { registerLaundryFarmSheetSyncRoutes } from "../laundryFarmSheetSyncRoute";
 import { PUBLIC_FORM_ORIGINS, buildAdminCorsOptions } from "./corsConfig";
 import { z } from "zod";
+import { buildBldgIntakeOrder } from "../residentIntake";
+import {
+  lookupVerifiedResidentCardByPhone,
+  verifyStripePaymentMethodOwnership,
+} from "../residentPaymentMethods";
 
 const warnedUnknownTenantHosts = new Set<string>();
 const vendorOnboardingRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -48,6 +53,12 @@ function isVendorOnboardingRateLimited(req: express.Request, email?: string, now
   }
   existing.count += 1;
   return existing.count > 5;
+}
+
+function hasValidAppSharedSecret(req: express.Request): boolean {
+  const sharedSecret = req.headers["x-app-shared-secret"];
+  const value = Array.isArray(sharedSecret) ? sharedSecret[0] : sharedSecret;
+  return !!value && value === process.env.APP_SHARED_API_SECRET;
 }
 
 function createPublicSessionToken() {
@@ -496,14 +507,53 @@ async function startServer() {
     }
   });
 
+  // Server-to-server saved card lookup for resident app.
+  app.post("/api/resident/payment-method-lookup", async (req, res) => {
+    if (!hasValidAppSharedSecret(req)) {
+      return res.status(401).json({
+        error: "Unauthorized",
+        code: "PAYMENT_METHOD_LOOKUP_UNAUTHORIZED",
+        message: "Invalid or missing x-app-shared-secret",
+      });
+    }
+
+    const phone = typeof req.body?.phone === "string" ? req.body.phone : "";
+    if (!phone.trim()) {
+      return res.status(400).json({
+        ok: false,
+        error: "Missing phone",
+        code: "PAYMENT_METHOD_LOOKUP_INVALID_REQUEST",
+      });
+    }
+
+    try {
+      const card = await lookupVerifiedResidentCardByPhone(getStripe(), phone);
+      if (!card) {
+        return res.status(200).json({ ok: true, found: false });
+      }
+      return res.status(200).json({
+        ok: true,
+        found: true,
+        stripeCustomerId: card.stripeCustomerId,
+        stripePaymentMethodId: card.stripePaymentMethodId,
+        cardLast4: card.cardLast4,
+        brand: card.brand,
+        expMonth: card.expMonth,
+        expYear: card.expYear,
+      });
+    } catch (err) {
+      console.warn("[ResidentPaymentLookup] Stripe verification failed:", err);
+      return res.status(200).json({ ok: true, found: false });
+    }
+  });
+
   // Intake API endpoint for bldg-chat integration (authenticated via shared secret)
   // Resident app must ONLY show "Laundry booked" when response is 200 + { ok: true, orderId }.
   app.post("/api/intake/from-bldg", async (req, res) => {
     const reqId = `intake-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     console.log(`[Intake ${reqId}] POST /api/intake/from-bldg received`);
 
-    const sharedSecret = req.headers["x-app-shared-secret"];
-    if (!sharedSecret || sharedSecret !== process.env.APP_SHARED_API_SECRET) {
+    if (!hasValidAppSharedSecret(req)) {
       console.log(`[Intake ${reqId}] Auth failed (401)`);
       return res.status(401).json({
         error: "Unauthorized",
@@ -512,134 +562,75 @@ async function startServer() {
       });
     }
 
+    const tenantResolution = resolveTenantIdFromHeaders(
+      req.headers as Record<string, string | string[] | undefined>
+    );
+    if (!tenantResolution.matched) {
+      const unknownHost = tenantResolution.host || "(missing-host)";
+      if (!warnedUnknownTenantHosts.has(unknownHost)) {
+        warnedUnknownTenantHosts.add(unknownHost);
+        console.warn(`[TenantResolver] Unknown host "${unknownHost}", falling back to default.`);
+      }
+    }
+
+    let intake;
     try {
-      const { createOrder } = await import("../db");
-      const {
-        source,
-        serviceType,
-        firstName,
-        lastName,
-        phone,
-        email,
-        unit,
-        address,
-        pickupDate,
-        pickupWindow,
-        specialInstructions,
-        stripeCustomerId,
-        stripePaymentMethodId,
-        bldgUserId,
-        buildingSlug,
-      } = req.body;
-
-      const addressTrim =
-        address != null && typeof address === "string" ? address.trim() : "";
-      const buildingSlugTrim =
-        buildingSlug != null && typeof buildingSlug === "string"
-          ? buildingSlug.trim()
-          : "";
-
-      // Validate required fields (address OR buildingSlug required for location)
-      if (!serviceType || !firstName || !lastName || !phone || !pickupDate || !pickupWindow) {
-        console.log(`[Intake ${reqId}] Validation failed: missing required fields`);
-        return res.status(400).json({
-          error: "Missing required fields",
-          code: "ADMIN_INTAKE_FAILED",
-          message:
-            "serviceType, firstName, lastName, phone, pickupDate, pickupWindow are required",
-        });
-      }
-      if (!addressTrim && !buildingSlugTrim) {
-        console.log(`[Intake ${reqId}] Validation failed: missing address and buildingSlug`);
-        return res.status(400).json({
-          error: "Missing location",
-          code: "ADMIN_INTAKE_FAILED",
-          message: "Either address or buildingSlug is required",
-        });
-      }
-
-      // Normalize service type from "wash-fold" to "wash_fold"
-      const normalizedServiceType = String(serviceType).replace("-", "_");
-      if (normalizedServiceType !== "wash_fold" && normalizedServiceType !== "dry_cleaning") {
-        console.log(`[Intake ${reqId}] Validation failed: invalid service type "${serviceType}"`);
-        return res.status(400).json({
-          error: "Invalid service type",
-          code: "ADMIN_INTAKE_FAILED",
-          message: "serviceType must be wash-fold or dry-cleaning",
-        });
-      }
-
-      // Calculate default delivery date (next day) - guard against invalid dates
-      const parts = String(pickupDate).split("-").map(Number);
-      const year = parts[0],
-        month = parts[1],
-        day = parts[2];
-      if (!year || !month || !day || isNaN(year) || isNaN(month) || isNaN(day)) {
-        console.log(`[Intake ${reqId}] Validation failed: invalid pickupDate "${pickupDate}"`);
-        return res.status(400).json({
-          error: "Invalid pickup date",
-          code: "ADMIN_INTAKE_FAILED",
-          message: "pickupDate must be YYYY-MM-DD",
-        });
-      }
-      const nextDay = new Date(year, month - 1, day + 1);
-      if (isNaN(nextDay.getTime())) {
-        console.log(`[Intake ${reqId}] Validation failed: invalid date from pickupDate "${pickupDate}"`);
-        return res.status(400).json({
-          error: "Invalid pickup date",
-          code: "ADMIN_INTAKE_FAILED",
-          message: "pickupDate could not be parsed",
-        });
-      }
-      const defaultDeliveryDate =
-        nextDay.getFullYear() +
-        "-" +
-        String(nextDay.getMonth() + 1).padStart(2, "0") +
-        "-" +
-        String(nextDay.getDate()).padStart(2, "0");
-
-      console.log(
-        `[Intake ${reqId}] Creating order: ${firstName} ${lastName}, ${normalizedServiceType}, pickup ${pickupDate}`
-      );
-
-      const tenantResolution = resolveTenantIdFromHeaders(
-        req.headers as Record<string, string | string[] | undefined>
-      );
-      if (!tenantResolution.matched) {
-        const unknownHost = tenantResolution.host || "(missing-host)";
-        if (!warnedUnknownTenantHosts.has(unknownHost)) {
-          warnedUnknownTenantHosts.add(unknownHost);
-          console.warn(`[TenantResolver] Unknown host "${unknownHost}", falling back to default.`);
-        }
-      }
-
-      const orderId = await createOrder({
-        tenantId: tenantResolution.tenantId,
-        serviceType: normalizedServiceType,
-        pickupDate,
-        pickupTimeWindow: pickupWindow,
-        deliveryDate: defaultDeliveryDate,
-        deliveryTimeWindow: pickupWindow,
-        address: addressTrim || "",
-        unit: unit || null,
-        specialInstructions: specialInstructions || null,
-        firstName,
-        lastName,
-        phone,
-        email: email || null,
-        stripeCustomerId: stripeCustomerId || null,
-        stripePaymentMethodId: stripePaymentMethodId || null,
-        bldgUserId: bldgUserId || null,
-        buildingSlug: buildingSlugTrim || null,
-        status: "new",
+      intake = buildBldgIntakeOrder(req.body, tenantResolution.tenantId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`[Intake ${reqId}] Validation failed: ${msg}`);
+      return res.status(400).json({
+        error: "Invalid intake request",
+        code: "ADMIN_INTAKE_FAILED",
+        message: msg,
       });
+    }
 
+    let paymentReady = false;
+    const orderValues = { ...intake.order };
+    if (intake.paymentInput.stripeCustomerId && intake.paymentInput.stripePaymentMethodId) {
+      try {
+        const verified = await verifyStripePaymentMethodOwnership(
+          getStripe(),
+          intake.paymentInput.stripeCustomerId,
+          intake.paymentInput.stripePaymentMethodId
+        );
+        if (verified) {
+          orderValues.stripeCustomerId = verified.stripeCustomerId;
+          orderValues.stripePaymentMethodId = verified.stripePaymentMethodId;
+          paymentReady = true;
+        } else {
+          orderValues.stripeCustomerId = null;
+          orderValues.stripePaymentMethodId = null;
+        }
+      } catch (err) {
+        console.warn(`[Intake ${reqId}] Stripe IDs were not verified; storing order without card refs.`, err);
+        orderValues.stripeCustomerId = null;
+        orderValues.stripePaymentMethodId = null;
+      }
+    } else {
+      orderValues.stripeCustomerId = null;
+      orderValues.stripePaymentMethodId = null;
+    }
+
+    try {
+      console.log(
+        `[Intake ${reqId}] Creating order: ${orderValues.firstName} ${orderValues.lastName}, ${orderValues.serviceType}, status ${orderValues.status}`
+      );
+      const orderId = await createOrder(orderValues);
       console.log(`[Intake ${reqId}] Order created: id=${orderId}`);
-      res.status(200).json({ ok: true, orderId });
+      return res.status(200).json({
+        ok: true,
+        orderId,
+        status: intake.status,
+        needsReview: intake.needsReview,
+        needsReviewReason: intake.needsReviewReason,
+        paymentReady,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[Intake ${reqId}] Error:`, err);
-      res.status(500).json({
+      return res.status(500).json({
         error: "Internal server error",
         code: "ADMIN_INTAKE_FAILED",
         message: msg,

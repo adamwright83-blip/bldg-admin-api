@@ -1,6 +1,6 @@
 import type { Order } from "@shared/types";
 
-export type LiveStatus = "new" | "collected" | "processing" | "ready" | "delivered";
+export type LiveStatus = "intake-pending" | "new" | "collected" | "processing" | "ready" | "delivered";
 
 export const LIVE_LANES: Array<{
   title: string;
@@ -9,6 +9,7 @@ export const LIVE_LANES: Array<{
   next?: LiveStatus;
   nextLabel?: string;
 }> = [
+  { title: "HELD REVIEW", status: "intake-pending", rail: "bg-amber-500", next: "new", nextLabel: "Accept / Schedule" },
   { title: "NEW INTAKE", status: "new", rail: "bg-emerald-600" },
   { title: "PICKUP READY", status: "collected", rail: "bg-blue-600", next: "processing", nextLabel: "Process" },
   { title: "IN CLEANING", status: "processing", rail: "bg-blue-500", next: "ready", nextLabel: "Ready" },
@@ -65,11 +66,13 @@ export function olderThan24Hours(date: Date | string | null | undefined) {
 export function statusTone(order: Pick<Order, "status" | "paid">) {
   if (order.status === "delivered" && !order.paid) return "text-red-700";
   if (order.paid) return "text-emerald-700";
+  if (order.status === "intake-pending") return "text-amber-700";
   if (order.status === "collected" || order.status === "processing") return "text-blue-700";
   return "text-black/60";
 }
 
 export function nextLiveStatus(order: Pick<Order, "status">): LiveStatus | null {
+  if (order.status === "intake-pending") return "new";
   if (order.status === "collected") return "processing";
   if (order.status === "processing") return "ready";
   if (order.status === "ready") return "delivered";
@@ -77,6 +80,7 @@ export function nextLiveStatus(order: Pick<Order, "status">): LiveStatus | null 
 }
 
 export function nextLiveActionLabel(order: Pick<Order, "status">): string {
+  if (order.status === "intake-pending") return "Accept / Schedule";
   if (order.status === "new") return "Dispatch Driver";
   if (order.status === "collected") return "Process";
   if (order.status === "processing") return "Ready";
@@ -90,6 +94,7 @@ export function syncSelectedOrder(selectedOrderId: number | null, orders: Order[
 }
 
 export function pickOneThingRightNow(input: {
+  heldReviewOrders?: Order[];
   unpaidDelivered: Order[];
   readyDueToday: Order[];
   newOrders: Order[];
@@ -97,6 +102,7 @@ export function pickOneThingRightNow(input: {
   blocked: Order[];
 }): Order | null {
   return (
+    input.heldReviewOrders?.[0] ??
     input.unpaidDelivered[0] ??
     input.readyDueToday[0] ??
     input.newOrders[0] ??
