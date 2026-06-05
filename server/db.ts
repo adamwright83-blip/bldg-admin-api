@@ -162,6 +162,62 @@ export async function createOrder(order: InsertOrder): Promise<number> {
   return insertId;
 }
 
+const OPEN_ORDER_STATUSES: Order["status"][] = ["intake-pending", "new", "collected", "processing", "ready"];
+
+function normalizeDuplicateText(value: unknown) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function duplicateRequestSignal(order: Pick<InsertOrder, "heldCleanedRequestText" | "heldRawRequestText" | "specialInstructions">) {
+  return normalizeDuplicateText(
+    order.heldCleanedRequestText ||
+      order.heldRawRequestText ||
+      order.specialInstructions ||
+      ""
+  ).slice(0, 160);
+}
+
+function sameDuplicateResident(left: InsertOrder, right: Order) {
+  if (left.bldgUserId != null && right.bldgUserId != null) return left.bldgUserId === right.bldgUserId;
+  const leftPhone = phoneDigits(left.phone);
+  const rightPhone = phoneDigits(right.phone);
+  if (!leftPhone || !rightPhone) return false;
+  const normalizedLeft = leftPhone.length === 11 && leftPhone.startsWith("1") ? leftPhone.slice(1) : leftPhone;
+  const normalizedRight = rightPhone.length === 11 && rightPhone.startsWith("1") ? rightPhone.slice(1) : rightPhone;
+  return normalizedLeft === normalizedRight;
+}
+
+export async function findLikelyDuplicateOpenResidentOrder(order: InsertOrder): Promise<Order | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const candidates = await db
+    .select()
+    .from(orders)
+    .where(and(
+      eq(orders.tenantId, order.tenantId ?? "default"),
+      inArray(orders.status, OPEN_ORDER_STATUSES),
+      eq(orders.serviceType, order.serviceType),
+      eq(orders.pickupDate, order.pickupDate),
+      order.deliveryDate == null ? isNull(orders.deliveryDate) : eq(orders.deliveryDate, order.deliveryDate)
+    ))
+    .orderBy(desc(orders.createdAt), desc(orders.id))
+    .limit(25);
+
+  const incomingSignal = duplicateRequestSignal(order);
+  return candidates.find((candidate) => {
+    if (!sameDuplicateResident(order, candidate)) return false;
+    if (normalizeDuplicateText(order.unit) !== normalizeDuplicateText(candidate.unit)) return false;
+    if (normalizeDuplicateText(order.buildingSlug || order.address) !== normalizeDuplicateText(candidate.buildingSlug || candidate.address)) return false;
+    const candidateSignal = duplicateRequestSignal(candidate);
+    return incomingSignal ? incomingSignal === candidateSignal : candidateSignal === "";
+  });
+}
+
 /** Rows with no usable building slug (null, empty, or whitespace only). */
 const missingBuildingSlugWhere = sql`(${orders.buildingSlug} IS NULL OR TRIM(COALESCE(${orders.buildingSlug}, '')) = '')`;
 

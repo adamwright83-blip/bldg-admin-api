@@ -111,19 +111,24 @@ function computeDeliveryDate(pickupDate: string): string {
 function orderToGameOrder(order: Order): GameOrder {
   const isDelivery = order.status === "ready";
   const building = matchBuilding(order.address);
+  const deliveryDateLabel = order.deliveryDate
+    ? formatPickupDate(order.deliveryDate)
+    : `Est. ${formatPickupDate(computeDeliveryDate(order.pickupDate))}`;
   return {
     id: order.id,
     type: isDelivery ? "DELIVERY" : "PICKUP",
     customerName: `${order.firstName} ${order.lastName}`.trim() || "Resident",
     address: order.address,
     items: Math.max(1, order.bagCount || 1),
-    timeWindow: order.pickupTimeWindow || "—",
     nextStatus: nextStatusForOrder(order.status),
     unit: order.unit ?? null,
     buildingName: building?.name ?? null,
     dateLabel: isDelivery
-      ? formatPickupDate(computeDeliveryDate(order.pickupDate))
+      ? deliveryDateLabel
       : formatPickupDate(order.pickupDate),
+    timeWindow: isDelivery
+      ? (order.deliveryTimeWindow || "window n/a")
+      : (order.pickupTimeWindow || "—"),
   };
 }
 

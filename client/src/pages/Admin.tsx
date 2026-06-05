@@ -2625,6 +2625,7 @@ function ReadyTab() {
 
 /* ===== PICKUPS TAB (DRIVER VIEW INSIDE ADMIN) ===== */
 function PickupsTab() {
+  const utils = trpc.useUtils();
   const [weekOffset, setWeekOffset] = useState(0);
   const dates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
   // Use local date formatting to avoid timezone shifts
@@ -2653,14 +2654,24 @@ function PickupsTab() {
 
   const updateStatus = trpc.admin.updateStatus.useMutation();
 
+  async function invalidateLiveStatuses() {
+    await Promise.all([
+      utils.admin.listByStatus.invalidate({ status: "new" }),
+      utils.admin.listByStatus.invalidate({ status: "collected" }),
+      utils.admin.listByStatus.invalidate({ status: "ready" }),
+      utils.admin.listByStatus.invalidate({ status: "delivered" }),
+      utils.admin.dashboardSummary.invalidate(),
+    ]);
+  }
+
   const handleCollect = async (orderId: number) => {
     await updateStatus.mutateAsync({ orderId, status: "collected" });
-    refetchPickups();
+    await Promise.all([refetchPickups(), invalidateLiveStatuses()]);
   };
 
   const handleDeliver = async (orderId: number) => {
     await updateStatus.mutateAsync({ orderId, status: "delivered" });
-    refetchDeliveries();
+    await Promise.all([refetchDeliveries(), invalidateLiveStatuses()]);
   };
 
   return (

@@ -9,9 +9,12 @@ import {
   LIVE_LANES,
   amountCents,
   customerName,
+  groupLikelyDuplicateLiveOrders,
   isActionableDelivered,
   isToday,
   liveDateLabel,
+  liveOrderCreatedLabel,
+  liveOrderSource,
   money,
   nextLiveActionLabel,
   nextLiveStatus,
@@ -23,6 +26,7 @@ import {
   statusTone,
   syncSelectedOrder,
   type LiveStatus,
+  type LiveOrderGroup,
 } from "./adminLiveModel";
 
 type AdminLiveProps = {
@@ -43,13 +47,15 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
   const utils = trpc.useUtils();
   const [clock, setClock] = useState(new Date());
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
+  const liveQueryOptions = { refetchInterval: 15_000, refetchOnWindowFocus: true };
   const statusQueries = {
-    "intake-pending": trpc.admin.listByStatus.useQuery({ status: "intake-pending" }),
-    new: trpc.admin.listByStatus.useQuery({ status: "new" }),
-    collected: trpc.admin.listByStatus.useQuery({ status: "collected" }),
-    processing: trpc.admin.listByStatus.useQuery({ status: "processing" }),
-    ready: trpc.admin.listByStatus.useQuery({ status: "ready" }),
-    delivered: trpc.admin.listByStatus.useQuery({ status: "delivered" }),
+    "intake-pending": trpc.admin.listByStatus.useQuery({ status: "intake-pending" }, liveQueryOptions),
+    new: trpc.admin.listByStatus.useQuery({ status: "new" }, liveQueryOptions),
+    collected: trpc.admin.listByStatus.useQuery({ status: "collected" }, liveQueryOptions),
+    processing: trpc.admin.listByStatus.useQuery({ status: "processing" }, liveQueryOptions),
+    ready: trpc.admin.listByStatus.useQuery({ status: "ready" }, liveQueryOptions),
+    delivered: trpc.admin.listByStatus.useQuery({ status: "delivered" }, liveQueryOptions),
   };
   const summary = trpc.admin.dashboardSummary.useQuery();
   const updateStatus = trpc.admin.updateStatus.useMutation();
@@ -82,6 +88,12 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
     ...ordersByStatus,
     delivered: actionableDelivered,
   };
+  const liveLaneGroups = useMemo(
+    () => Object.fromEntries(
+      LIVE_LANES.map((lane) => [lane.status, groupLikelyDuplicateLiveOrders(liveLaneOrders[lane.status])])
+    ) as Record<LiveStatus, LiveOrderGroup[]>,
+    [liveLaneOrders]
+  );
   const allLiveOrders = useMemo(
     () => Object.values(ordersByStatus).flat(),
     [ordersByStatus]
@@ -104,6 +116,12 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
   useEffect(() => {
     if (selectedOrderId && !selectedOrder && !loading) setSelectedOrderId(null);
   }, [loading, selectedOrder, selectedOrderId]);
+
+  useEffect(() => {
+    if (!selectedGroupKey) return;
+    const exists = Object.values(liveLaneGroups).some((groups) => groups.some((group) => group.key === selectedGroupKey));
+    if (!exists && !loading) setSelectedGroupKey(null);
+  }, [liveLaneGroups, loading, selectedGroupKey]);
 
   async function invalidateLive() {
     await Promise.all([
@@ -181,9 +199,10 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
     }
   }
 
-  function OrderCard({ order, lane }: { order: Order; lane: (typeof LIVE_LANES)[number] }) {
+  function OrderCard({ group, lane }: { group: LiveOrderGroup; lane: (typeof LIVE_LANES)[number] }) {
+    const order = group.representative;
     const hasCard = !!(order.stripeCustomerId || order.stripePaymentMethodId);
-    const isSelected = selectedOrderId === order.id;
+    const isSelected = selectedGroupKey === group.key;
     const actionGridClass = order.status === "new" ? "grid-cols-2" : "grid-cols-3";
     const heldLines = [
       order.heldCleanedRequestText ? ["Cleaned", order.heldCleanedRequestText] : null,
@@ -200,7 +219,10 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
         className={`relative cursor-pointer border bg-[#FBFAF6] pl-3 pr-3 py-2.5 transition ${
           isSelected ? "border-black shadow-[inset_0_0_0_1px_#000]" : "border-[#D8D1C4] hover:border-black/35"
         }`}
-        onClick={() => setSelectedOrderId(isSelected ? null : order.id)}
+        onClick={() => {
+          setSelectedGroupKey(isSelected ? null : group.key);
+          setSelectedOrderId(isSelected ? null : order.id);
+        }}
         aria-selected={isSelected}
       >
         <span className={`absolute left-0 top-0 h-full w-0.5 ${lane.rail}`} />
@@ -215,6 +237,12 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
                 </div>
               ))}
             </div>
+            {group.isLikelyDuplicate ? (
+              <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.1em] text-amber-700">
+                Likely duplicate group · {group.orders.length} orders
+              </div>
+            ) : null}
+            <div className="mt-1 font-mono text-[10px] text-black/45">Newest #LB-{order.id}</div>
           </div>
           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${order.paid ? "bg-emerald-600" : hasCard ? "bg-blue-600" : "bg-amber-500"}`} />
         </div>
@@ -232,6 +260,29 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
                 {order.paid ? "Paid" : hasCard ? "Card on file" : "Payment needs intake"} / {money(order.total)}
               </div>
             </div>
+            {group.isLikelyDuplicate ? (
+              <div className="mt-2 border-t border-[#D8D1C4] pt-2 text-[11px] text-black/70">
+                <div className="mb-2 font-bold uppercase tracking-[0.12em] text-amber-700">Real rows in this group</div>
+                <div className="space-y-2">
+                  {group.orders.map((row) => (
+                    <div key={row.id} className="border border-[#D8D1C4] bg-white px-2 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono font-semibold">#LB-{row.id}</span>
+                        <span className="uppercase tracking-[0.1em] text-black/45">{liveOrderCreatedLabel(row.createdAt)} · {liveOrderSource(row)}</span>
+                      </div>
+                      {row.heldCleanedRequestText || row.heldRawRequestText ? (
+                        <div className="mt-1 line-clamp-2 text-black/55">
+                          {row.heldCleanedRequestText || row.heldRawRequestText}
+                        </div>
+                      ) : null}
+                      <button className="mt-2 border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={(event) => { event.stopPropagation(); openOrder(row); }}>
+                        Open order
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {order.specialInstructions ? <div className="mt-2 border-t border-[#D8D1C4] pt-2 text-[11px] text-black/55 line-clamp-3">{order.specialInstructions}</div> : null}
             {heldLines.length ? (
               <div className="mt-2 border-t border-[#D8D1C4] pt-2 text-[11px] text-black/65">
@@ -325,7 +376,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
                       <span className="font-mono text-xs text-black/55">{liveLaneOrders[lane.status].length}</span>
                     </div>
                     <div className="flex-1 space-y-3 p-3">
-                      {liveLaneOrders[lane.status].length ? liveLaneOrders[lane.status].map((order) => <OrderCard key={order.id} order={order} lane={lane} />) : (
+                      {liveLaneGroups[lane.status].length ? liveLaneGroups[lane.status].map((group) => <OrderCard key={group.key} group={group} lane={lane} />) : (
                         <div className="border border-dashed border-[#D8D1C4] px-3 py-8 text-center text-[11px] uppercase tracking-[0.12em] text-black/35">Clear</div>
                       )}
                     </div>
@@ -394,12 +445,13 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
             ) : <div className="text-sm text-black/45">No critical action.</div>}
           </CommandPanel>
 
-          <CommandPanel title="LIVE TOOLS">
+          <CommandPanel title="SELECTED ORDER ACTIONS">
             <LiveTools
               order={selectedOrder}
               updatePending={updateStatus.isPending}
               chargePending={chargeCard.isPending}
               onOpen={openOrder}
+              onCustomerProfile={(order) => onOpenCustomer(order.phone)}
               onIntake={(order) => onNavigate(`/intake?orderId=${order.id}`)}
               onStatusAction={runNextStatusAction}
               onDispatch={dispatchDriver}
@@ -426,7 +478,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
             <Button className="mt-4 h-8 w-full rounded-none bg-black text-xs uppercase tracking-[0.12em] text-white hover:bg-black/80" onClick={() => onNavigate("/intake")}>Pursue failed payments</Button>
           </CommandPanel>
 
-          <CommandPanel title="QUICK ACTIONS">
+          <CommandPanel title="GLOBAL SHORTCUTS">
             {[
               ["New Intake", "/new-order"],
               ["Create Order", "/new-order"],
@@ -498,6 +550,7 @@ function LiveTools({
   updatePending,
   chargePending,
   onOpen,
+  onCustomerProfile,
   onIntake,
   onStatusAction,
   onDispatch,
@@ -509,6 +562,7 @@ function LiveTools({
   updatePending: boolean;
   chargePending: boolean;
   onOpen: (order: Order) => void;
+  onCustomerProfile: (order: Order) => void;
   onIntake: (order: Order) => void;
   onStatusAction: (order: Order) => void;
   onDispatch: (order: Order) => void;
@@ -536,7 +590,7 @@ function LiveTools({
   return (
     <div className="space-y-2">
       <button className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white" onClick={() => onOpen(order)}>
-        <span>View</span><span>&gt;</span>
+        <span>Open Order</span><span>&gt;</span>
       </button>
       <button className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white" onClick={() => onIntake(order)}>
         <span>{order.status === "delivered" ? "Payment / Intake" : "Intake"}</span><span>&gt;</span>
@@ -561,7 +615,7 @@ function LiveTools({
       )}
       {order.phone ? (
         <a className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white" href={phoneHref(order.phone)}>
-          <span>Text</span><span>&gt;</span>
+          <span>Text Customer</span><span>&gt;</span>
         </a>
       ) : (
         <button className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] opacity-40" disabled>
@@ -571,6 +625,11 @@ function LiveTools({
       <button className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white" onClick={() => onCopySms(order)}>
         <span>Copy SMS</span><span>&gt;</span>
       </button>
+      {order.phone ? (
+        <button className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] hover:bg-black hover:text-white" onClick={() => onCustomerProfile(order)}>
+          <span>Customer Profile</span><span>&gt;</span>
+        </button>
+      ) : null}
     </div>
   );
 }

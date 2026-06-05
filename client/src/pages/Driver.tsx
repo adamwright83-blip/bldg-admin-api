@@ -15,6 +15,7 @@ function getLocalYmd(date = new Date()): string {
 
 export default function Driver() {
   const { loading: authLoading, isAuthenticated } = useAuth();
+  const utils = trpc.useUtils();
   const [selectedDate, setSelectedDate] = useState(() => getLocalYmd());
 
   const pickupQuery = trpc.admin.listByDate.useQuery({
@@ -29,12 +30,22 @@ export default function Driver() {
   });
   const updateStatus = trpc.admin.updateStatus.useMutation();
 
+  async function invalidateLiveStatuses() {
+    await Promise.all([
+      utils.admin.listByStatus.invalidate({ status: "new" }),
+      utils.admin.listByStatus.invalidate({ status: "collected" }),
+      utils.admin.listByStatus.invalidate({ status: "ready" }),
+      utils.admin.listByStatus.invalidate({ status: "delivered" }),
+      utils.admin.dashboardSummary.invalidate(),
+    ]);
+  }
+
   const handleResolveOrder = async (
     orderId: number,
     status: "collected" | "delivered"
   ) => {
     await updateStatus.mutateAsync({ orderId, status });
-    await Promise.all([pickupQuery.refetch(), deliveryQuery.refetch()]);
+    await Promise.all([pickupQuery.refetch(), deliveryQuery.refetch(), invalidateLiveStatuses()]);
   };
 
   const handleOrderCreated = async () => {

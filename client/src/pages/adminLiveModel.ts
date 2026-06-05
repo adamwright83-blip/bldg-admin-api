@@ -1,6 +1,14 @@
 import type { Order } from "@shared/types";
 
 export type LiveStatus = "intake-pending" | "new" | "collected" | "processing" | "ready" | "delivered";
+export type LiveOrderSource = "HELD" | "admin" | "driver" | "unknown";
+
+export type LiveOrderGroup = {
+  key: string;
+  orders: Order[];
+  representative: Order;
+  isLikelyDuplicate: boolean;
+};
 
 export const LIVE_LANES: Array<{
   title: string;
@@ -45,6 +53,93 @@ export function serviceLabel(serviceType: Order["serviceType"]) {
 
 export function shortBuilding(order: Pick<Order, "buildingSlug" | "address">) {
   return (order.buildingSlug || order.address || "Building").replace(/[-_]/g, " ").toUpperCase();
+}
+
+function normalizedText(value: unknown) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function normalizedPhone(value: unknown) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) return digits.slice(1);
+  return digits;
+}
+
+function normalizedDate(value: unknown) {
+  return String(value ?? "not-set").slice(0, 10) || "not-set";
+}
+
+function duplicateRequestSignal(order: Order) {
+  return normalizedText(
+    order.heldCleanedRequestText ||
+      order.heldRawRequestText ||
+      order.specialInstructions ||
+      ""
+  ).slice(0, 120);
+}
+
+export function liveOrderSource(order: Order): LiveOrderSource {
+  if (order.heldSource || order.heldRawRequestText || order.heldCleanedRequestText) return "HELD";
+  if (order.status === "collected" || order.status === "delivered") return "driver";
+  if (order.createdAt) return "admin";
+  return "unknown";
+}
+
+export function liveOrderCreatedLabel(value: Order["createdAt"]) {
+  if (!value) return "created time unknown";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "created time unknown";
+  return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+function duplicateGroupKey(order: Order) {
+  const identity = order.bldgUserId
+    ? `u:${order.bldgUserId}`
+    : normalizedPhone(order.phone)
+      ? `p:${normalizedPhone(order.phone)}`
+      : `n:${normalizedText(customerName(order))}`;
+  return [
+    identity,
+    order.status,
+    order.serviceType,
+    normalizedDate(order.pickupDate),
+    normalizedDate(order.deliveryDate),
+    normalizedText(order.buildingSlug || order.address),
+    normalizedText(order.unit),
+    duplicateRequestSignal(order),
+  ].join("|");
+}
+
+export function groupLikelyDuplicateLiveOrders(orders: Order[]): LiveOrderGroup[] {
+  const map = new Map<string, Order[]>();
+  for (const order of orders) {
+    const key = duplicateGroupKey(order);
+    map.set(key, [...(map.get(key) ?? []), order]);
+  }
+
+  return [...map.entries()]
+    .map(([key, groupedOrders]) => {
+      const sorted = [...groupedOrders].sort((a, b) => {
+        const createdDelta = new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
+        return createdDelta || b.id - a.id;
+      });
+      return {
+        key,
+        orders: sorted,
+        representative: sorted[0],
+        isLikelyDuplicate: sorted.length > 1,
+      };
+    })
+    .sort((a, b) => {
+      const createdDelta =
+        new Date(b.representative.createdAt ?? 0).getTime() -
+        new Date(a.representative.createdAt ?? 0).getTime();
+      return createdDelta || b.representative.id - a.representative.id;
+    });
 }
 
 export function phoneHref(phone: string) {

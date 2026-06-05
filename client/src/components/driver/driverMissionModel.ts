@@ -185,6 +185,7 @@ function isBlockedServicedAddress(address: string): boolean {
 
 function buildStop(order: Order, stage: "pickup" | "delivery"): DriverMissionStop {
   const building = matchBuilding(order.address);
+  const fallbackDeliveryDate = `Est. ${formatPickupDate(computeDeliveryDate(order.pickupDate))}`;
   return {
     id: `${stage}-${order.id}`,
     orderId: order.id,
@@ -201,8 +202,10 @@ function buildStop(order: Order, stage: "pickup" | "delivery"): DriverMissionSto
     dateLabel:
       stage === "pickup"
         ? formatPickupDate(order.pickupDate)
-        : formatPickupDate(computeDeliveryDate(order.pickupDate)),
-    timeWindow: order.pickupTimeWindow,
+        : order.deliveryDate
+          ? formatPickupDate(order.deliveryDate)
+          : fallbackDeliveryDate,
+    timeWindow: stage === "pickup" ? order.pickupTimeWindow : (order.deliveryTimeWindow || "window n/a"),
   };
 }
 

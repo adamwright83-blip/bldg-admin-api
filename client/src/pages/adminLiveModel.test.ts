@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { Order } from "@shared/types";
 import {
+  groupLikelyDuplicateLiveOrders,
   liveDateLabel,
+  liveOrderSource,
   nextLiveActionLabel,
   nextLiveStatus,
   pickOneThingRightNow,
@@ -90,6 +92,33 @@ describe("admin live model", () => {
     expect(liveDateLabel("2026-05-15")).toBe("2026-05-15");
     expect(liveDateLabel(null)).toBe("not set");
     expect(liveDateLabel(undefined)).toBe("not set");
+  });
+
+  it("groups likely duplicate live order rows while preserving every real order id", () => {
+    const groups = groupLikelyDuplicateLiveOrders([
+      order({ id: 1248, firstName: "Lila", lastName: "Barkhordarian", phone: "(323) 555-0000", pickupDate: "2026-06-04", deliveryDate: null, heldCleanedRequestText: "Pick up laundry Thursday." }),
+      order({ id: 1247, firstName: "LILA", lastName: "BARKHORDARIAN", phone: "+1 323 555 0000", pickupDate: "2026-06-04", deliveryDate: null, heldCleanedRequestText: "Pick up laundry Thursday." }),
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].isLikelyDuplicate).toBe(true);
+    expect(groups[0].representative.id).toBe(1248);
+    expect(groups[0].orders.map((o) => o.id)).toEqual([1248, 1247]);
+  });
+
+  it("does not group the same customer when the pickup date differs", () => {
+    const groups = groupLikelyDuplicateLiveOrders([
+      order({ id: 1, firstName: "Lila", lastName: "Barkhordarian", phone: "3235550000", pickupDate: "2026-06-04" }),
+      order({ id: 2, firstName: "Lila", lastName: "Barkhordarian", phone: "3235550000", pickupDate: "2026-06-05" }),
+    ]);
+
+    expect(groups).toHaveLength(2);
+    expect(groups.every((group) => !group.isLikelyDuplicate)).toBe(true);
+  });
+
+  it("labels HELD-sourced rows from order metadata", () => {
+    expect(liveOrderSource(order({ heldSource: "resident_app" }))).toBe("HELD");
+    expect(liveOrderSource(order({ status: "collected" }))).toBe("driver");
   });
 
   it("prioritizes one thing right now from real live order state", () => {
