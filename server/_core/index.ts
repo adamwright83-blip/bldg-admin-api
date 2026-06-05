@@ -12,7 +12,7 @@ import { appRouter, getStripe, validateStripeEnv } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { sdk } from "./sdk";
-import { createOrder, upsertUser } from "../db";
+import { createOrder, upsertUser, getVendorForOrder } from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { VENDOR_COOKIE_NAME, THIRTY_DAYS_MS } from "@shared/const";
@@ -611,6 +611,32 @@ async function startServer() {
     } else {
       orderValues.stripeCustomerId = null;
       orderValues.stripePaymentMethodId = null;
+    }
+
+    // Route the order to the building's vendor (mirrors the admin order-create
+    // routing). Without this, resident orders have vendorId=null and never show
+    // in the vendor-scoped driver feed even when status is "new".
+    const routeSlug = (orderValues as { buildingSlug?: string | null })
+      .buildingSlug;
+    if (routeSlug) {
+      try {
+        const vendor = await getVendorForOrder(
+          routeSlug,
+          orderValues.serviceType
+        );
+        if (vendor) {
+          (orderValues as { vendorId?: number | null }).vendorId = vendor.id;
+          console.log(
+            `[Intake ${reqId}] Routed to vendor #${vendor.id} (${vendor.name})`
+          );
+        } else {
+          console.log(
+            `[Intake ${reqId}] No vendor routed for building=${routeSlug} service=${orderValues.serviceType}`
+          );
+        }
+      } catch (e) {
+        console.warn(`[Intake ${reqId}] Vendor routing failed:`, e);
+      }
     }
 
     try {
