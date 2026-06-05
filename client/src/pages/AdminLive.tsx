@@ -11,6 +11,7 @@ import {
   customerName,
   isActionableDelivered,
   isToday,
+  liveDateLabel,
   money,
   nextLiveActionLabel,
   nextLiveStatus,
@@ -148,7 +149,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
 
   function openOrder(order: Order) {
     setSelectedOrderId(order.id);
-    onOpenCustomer(order.phone);
+    onNavigate(`/intake?orderId=${order.id}`);
   }
 
   async function charge(order: Order) {
@@ -190,80 +191,103 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
       order.heldRequestedPickupWindow ? ["Pickup", order.heldRequestedPickupWindow] : null,
       order.heldRequestedReturnBy ? ["Return by", order.heldRequestedReturnBy] : null,
     ].filter(Boolean) as Array<[string, string]>;
+    const summaryRows = [
+      ["Pickup", liveDateLabel(order.pickupDate)],
+      ["Return", liveDateLabel(order.deliveryDate)],
+    ];
     return (
       <article
-        className={`relative cursor-pointer border bg-[#FBFAF6] pl-3 pr-3 py-3 transition ${
+        className={`relative cursor-pointer border bg-[#FBFAF6] pl-3 pr-3 py-2.5 transition ${
           isSelected ? "border-black shadow-[inset_0_0_0_1px_#000]" : "border-[#D8D1C4] hover:border-black/35"
         }`}
-        onClick={() => setSelectedOrderId(order.id)}
+        onClick={() => setSelectedOrderId(isSelected ? null : order.id)}
         aria-selected={isSelected}
       >
         <span className={`absolute left-0 top-0 h-full w-0.5 ${lane.rail}`} />
         <div className="flex items-start justify-between gap-2">
-          <div className="font-mono text-[11px] font-semibold text-black/65">#LB-{order.id}</div>
-          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${order.paid ? "bg-emerald-600" : hasCard ? "bg-blue-600" : "bg-amber-500"}`} />
-        </div>
-        <button className="mt-1 text-left text-[13px] font-bold uppercase tracking-[0.08em]" onClick={(event) => { event.stopPropagation(); openOrder(order); }}>
-          {customerName(order)}
-        </button>
-        <div className="mt-1 space-y-0.5 text-[11px] uppercase tracking-[0.08em] text-black/70">
-          <div>{shortBuilding(order)} {order.unit ? `/ UNIT ${order.unit}` : ""}</div>
-          <div>{serviceLabel(order.serviceType)}</div>
-          <div>{order.bagCount ?? "-"} bags{order.garmentCount ? ` / ${order.garmentCount} garments` : ""}{order.weightLbs ? ` / ${order.weightLbs} lb` : ""}</div>
-          <div>{order.status === "ready" || order.status === "delivered" ? "Return" : "Pickup"} {order.deliveryTimeWindow || order.pickupTimeWindow || "window n/a"}</div>
-          <div className={statusTone(order)}>
-            {order.paid ? "Paid" : hasCard ? "Card on file" : "Payment needs intake"} / {money(order.total)}
-          </div>
-        </div>
-        {order.specialInstructions ? <div className="mt-2 border-t border-[#D8D1C4] pt-2 text-[11px] text-black/55 line-clamp-2">{order.specialInstructions}</div> : null}
-        {heldLines.length ? (
-          <div className="mt-2 border-t border-[#D8D1C4] pt-2 text-[11px] text-black/65">
-            <div className="mb-1 font-bold uppercase tracking-[0.12em] text-amber-700">HELD</div>
-            <div className="space-y-1">
-              {heldLines.map(([label, value]) => (
-                <div key={label} className="line-clamp-2">
-                  <span className="font-semibold">{label}:</span> {value}
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-bold uppercase tracking-[0.08em]">{customerName(order)}</div>
+            <div className="mt-1 grid gap-0.5 text-[11px] uppercase tracking-[0.08em] text-black/65">
+              {summaryRows.map(([label, value]) => (
+                <div key={label} className="grid grid-cols-[54px_minmax(0,1fr)] gap-1">
+                  <span className="text-black/40">{label}</span>
+                  <span className="truncate">{value}</span>
                 </div>
               ))}
             </div>
           </div>
-        ) : null}
-        <div className={`mt-3 grid ${actionGridClass} gap-1.5`}>
-          {order.phone && lane.status !== "processing" ? (
-            <a className="border border-[#C9C0B1] bg-white px-2 py-1 text-center text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" href={phoneHref(order.phone)} onClick={(event) => event.stopPropagation()}>
-              Text
-            </a>
-          ) : lane.status === "processing" ? (
-            <button className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={(event) => { event.stopPropagation(); openOrder(order); }}>
-              Notes
-            </button>
-          ) : null}
-          <button className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={(event) => { event.stopPropagation(); openOrder(order); }}>
-            View
-          </button>
-          {order.status === "new" ? (
-            <>
-              <button className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={(event) => { event.stopPropagation(); dispatchDriver(order); }}>
-                Dispatch Driver
-              </button>
-              <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={updateStatus.isPending} onClick={(event) => { event.stopPropagation(); setSelectedOrderId(order.id); completePickup(order); }}>
-                Pickup Complete
-              </button>
-            </>
-          ) : lane.next ? (
-            <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={updateStatus.isPending} onClick={(event) => { event.stopPropagation(); setSelectedOrderId(order.id); moveOrder(order, lane.next!); }}>
-              {lane.nextLabel}
-            </button>
-          ) : order.paid ? (
-            <a className="border border-[#C9C0B1] bg-white px-2 py-1 text-center text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" href={`/receipt/${order.id}`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
-              Receipt
-            </a>
-          ) : (
-            <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={chargeCard.isPending} onClick={(event) => { event.stopPropagation(); setSelectedOrderId(order.id); charge(order); }}>
-              {hasCard && amountCents(order) >= 50 ? "Charge" : "Intake"}
-            </button>
-          )}
+          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${order.paid ? "bg-emerald-600" : hasCard ? "bg-blue-600" : "bg-amber-500"}`} />
         </div>
+
+        {isSelected ? (
+          <div className="mt-3 border-t border-[#D8D1C4] pt-3">
+            <div className="space-y-0.5 text-[11px] uppercase tracking-[0.08em] text-black/70">
+              <div className="font-mono text-black/50">#LB-{order.id} / {order.status}</div>
+              <div>{shortBuilding(order)} {order.unit ? `/ UNIT ${order.unit}` : ""}</div>
+              <div>{serviceLabel(order.serviceType)}</div>
+              <div>{order.bagCount ?? "-"} bags{order.garmentCount ? ` / ${order.garmentCount} garments` : ""}{order.weightLbs ? ` / ${order.weightLbs} lb` : ""}</div>
+              <div>Pickup {liveDateLabel(order.pickupDate)} / {order.pickupTimeWindow || "window n/a"}</div>
+              <div>Return {liveDateLabel(order.deliveryDate)} / {order.deliveryTimeWindow || "window n/a"}</div>
+              <div className={statusTone(order)}>
+                {order.paid ? "Paid" : hasCard ? "Card on file" : "Payment needs intake"} / {money(order.total)}
+              </div>
+            </div>
+            {order.specialInstructions ? <div className="mt-2 border-t border-[#D8D1C4] pt-2 text-[11px] text-black/55 line-clamp-3">{order.specialInstructions}</div> : null}
+            {heldLines.length ? (
+              <div className="mt-2 border-t border-[#D8D1C4] pt-2 text-[11px] text-black/65">
+                <div className="mb-1 font-bold uppercase tracking-[0.12em] text-amber-700">HELD</div>
+                <div className="space-y-1">
+                  {heldLines.map(([label, value]) => (
+                    <div key={label} className="line-clamp-2">
+                      <span className="font-semibold">{label}:</span> {value}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <div className={`mt-3 grid ${actionGridClass} gap-1.5`}>
+              {order.phone && lane.status !== "processing" ? (
+                <a className="border border-[#C9C0B1] bg-white px-2 py-1 text-center text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" href={phoneHref(order.phone)} onClick={(event) => event.stopPropagation()}>
+                  Text
+                </a>
+              ) : lane.status === "processing" ? (
+                <button className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={(event) => { event.stopPropagation(); openOrder(order); }}>
+                  Notes
+                </button>
+              ) : null}
+              <button className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={(event) => { event.stopPropagation(); openOrder(order); }}>
+                Open order
+              </button>
+              {order.status === "new" ? (
+                <>
+                  <button className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={(event) => { event.stopPropagation(); dispatchDriver(order); }}>
+                    Dispatch Driver
+                  </button>
+                  <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={updateStatus.isPending} onClick={(event) => { event.stopPropagation(); setSelectedOrderId(order.id); completePickup(order); }}>
+                    Pickup Complete
+                  </button>
+                </>
+              ) : lane.next ? (
+                <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={updateStatus.isPending} onClick={(event) => { event.stopPropagation(); setSelectedOrderId(order.id); moveOrder(order, lane.next!); }}>
+                  {lane.nextLabel}
+                </button>
+              ) : order.paid ? (
+                <a className="border border-[#C9C0B1] bg-white px-2 py-1 text-center text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" href={`/receipt/${order.id}`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
+                  Receipt
+                </a>
+              ) : (
+                <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={chargeCard.isPending} onClick={(event) => { event.stopPropagation(); setSelectedOrderId(order.id); charge(order); }}>
+                  {hasCard && amountCents(order) >= 50 ? "Charge" : "Intake"}
+                </button>
+              )}
+              {order.phone ? (
+                <button className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={(event) => { event.stopPropagation(); onOpenCustomer(order.phone); }}>
+                  Customer
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </article>
     );
   }

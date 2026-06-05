@@ -35,6 +35,10 @@ export function customerName(order: Pick<Order, "firstName" | "lastName">) {
   return `${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() || "Unknown customer";
 }
 
+export function liveDateLabel(value?: string | null) {
+  return value || "not set";
+}
+
 export function serviceLabel(serviceType: Order["serviceType"]) {
   return serviceType === "dry_cleaning" ? "Dry cleaning" : "Wash & fold";
 }
