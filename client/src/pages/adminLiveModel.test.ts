@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { Order } from "@shared/types";
 import {
+  liveDateLabel,
   nextLiveActionLabel,
   nextLiveStatus,
   pickOneThingRightNow,
@@ -85,6 +86,12 @@ describe("admin live model", () => {
     expect(syncSelectedOrder(null, [order({ id: 1 })])).toBeNull();
   });
 
+  it("keeps compact live cards focused on the order dates operators need first", () => {
+    expect(liveDateLabel("2026-05-15")).toBe("2026-05-15");
+    expect(liveDateLabel(null)).toBe("not set");
+    expect(liveDateLabel(undefined)).toBe("not set");
+  });
+
   it("prioritizes one thing right now from real live order state", () => {
     const unpaidDelivered = order({ id: 5, status: "delivered", paid: false });
     const readyDue = order({ id: 4, status: "ready" });
@@ -105,6 +112,8 @@ describe("admin live model", () => {
     expect(source).toContain('utils.admin.listByStatus.invalidate({ status: "new" })');
     expect(source).toContain('utils.admin.listByStatus.invalidate({ status: "delivered" })');
     expect(source).toContain("utils.admin.dashboardSummary.invalidate()");
+    expect(source).toContain("onNavigate(`/intake?orderId=${order.id}`)");
+    expect(source).toContain("Open order");
   });
 
   it("New Intake dispatch is separate from explicit pickup completion", () => {
