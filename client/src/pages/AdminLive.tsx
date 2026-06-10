@@ -3,6 +3,14 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { Order } from "@shared/types";
 import type { ReactNode } from "react";
 import {
@@ -60,6 +68,18 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
   const summary = trpc.admin.dashboardSummary.useQuery();
   const updateStatus = trpc.admin.updateStatus.useMutation();
   const chargeCard = trpc.admin.chargeCard.useMutation();
+  const deleteOrderMutation = trpc.admin.deleteOrder.useMutation();
+  /**
+   * Delete confirmation: nothing is removed until the operator confirms in
+   * the dialog. Holds either a single order or a whole duplicate group
+   * (test-order cleanup is usually the entire group).
+   */
+  const [deleteTarget, setDeleteTarget] = useState<
+    | null
+    | { kind: "order"; order: Order }
+    | { kind: "group"; group: LiveOrderGroup }
+  >(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClock(new Date()), 30_000);
@@ -143,6 +163,32 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
       toast.success(`#LB-${order.id} moved to ${status}.`);
     } catch (error: any) {
       toast.error(error?.message || "Could not update order.");
+    }
+  }
+
+  /** Runs only after the operator confirms in the dialog. */
+  async function confirmDelete() {
+    if (!deleteTarget || deleteBusy) return;
+    const orders =
+      deleteTarget.kind === "order" ? [deleteTarget.order] : deleteTarget.group.orders;
+    setDeleteBusy(true);
+    try {
+      for (const order of orders) {
+        await deleteOrderMutation.mutateAsync({ orderId: order.id });
+      }
+      await invalidateLive();
+      setSelectedOrderId(null);
+      setSelectedGroupKey(null);
+      toast.success(
+        orders.length === 1
+          ? `#LB-${orders[0].id} deleted.`
+          : `${orders.length} orders deleted.`
+      );
+      setDeleteTarget(null);
+    } catch (error: any) {
+      toast.error(error?.message || "Could not delete order.");
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -337,6 +383,26 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
                 </button>
               ) : null}
             </div>
+            {/* DELETE — fast cleanup for test orders. Never instant: opens a
+                confirm dialog first so a stray click can't destroy data. */}
+            <div className="mt-1.5 grid grid-cols-1 gap-1.5">
+              <button
+                className="border border-red-700/60 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-red-700 hover:bg-red-700 hover:text-white disabled:opacity-50"
+                disabled={deleteBusy}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setDeleteTarget(
+                    group.isLikelyDuplicate && group.orders.length > 1
+                      ? { kind: "group", group }
+                      : { kind: "order", order }
+                  );
+                }}
+              >
+                {group.isLikelyDuplicate && group.orders.length > 1
+                  ? `Delete group (${group.orders.length})`
+                  : "Delete"}
+              </button>
+            </div>
           </div>
         ) : null}
       </article>
@@ -492,6 +558,60 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
           </CommandPanel>
         </aside>
       </div>
+
+      {/* DELETE CONFIRMATION — the only path to deletion. Spells out exactly
+          what will be removed; destructive button is visually loud. */}
+      <Dialog open={deleteTarget != null} onOpenChange={(open) => { if (!open && !deleteBusy) setDeleteTarget(null); }}>
+        <DialogContent className="border-red-700/40">
+          <DialogHeader>
+            <DialogTitle className="text-red-700">
+              {deleteTarget?.kind === "group"
+                ? `Delete ${deleteTarget.group.orders.length} orders?`
+                : deleteTarget
+                  ? `Delete order #LB-${deleteTarget.order.id}?`
+                  : "Delete?"}
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  This permanently removes{" "}
+                  {deleteTarget?.kind === "group"
+                    ? "every order in this duplicate group"
+                    : "this order"}{" "}
+                  from the board, the stage pages, and the dashboard. It cannot be undone.
+                </p>
+                {deleteTarget ? (
+                  <div className="max-h-40 space-y-1 overflow-y-auto rounded border border-black/10 bg-black/[0.03] p-2 font-mono text-xs">
+                    {(deleteTarget.kind === "group" ? deleteTarget.group.orders : [deleteTarget.order]).map((row) => (
+                      <div key={row.id} className="flex items-center justify-between gap-2">
+                        <span>#LB-{row.id} · {customerName(row)}</span>
+                        <span className="text-black/45">{row.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" disabled={deleteBusy} onClick={() => setDeleteTarget(null)}>
+              Keep {deleteTarget?.kind === "group" ? "them" : "it"}
+            </Button>
+            <Button
+              className="bg-red-700 text-white hover:bg-red-800"
+              disabled={deleteBusy}
+              onClick={() => void confirmDelete()}
+            >
+              {deleteBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {deleteBusy
+                ? "Deleting…"
+                : deleteTarget?.kind === "group"
+                  ? `Yes, delete all ${deleteTarget.group.orders.length}`
+                  : "Yes, delete it"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
