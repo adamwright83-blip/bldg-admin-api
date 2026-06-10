@@ -34,6 +34,8 @@ type Level4BoardSceneProps = {
   war?: Level4WarView | null;
   onEngageProjectile?: (laneKey: WarProjectileView["laneKey"]) => void;
   lastStrike?: { label: string; at: number } | null;
+  onLogCallStrike?: () => void;
+  logStrikePending?: boolean;
 };
 
 const LEVEL4_ANCHORS = {
@@ -93,6 +95,8 @@ export function Level4BoardScene({
   war = null,
   onEngageProjectile,
   lastStrike = null,
+  onLogCallStrike,
+  logStrikePending = false,
 }: Level4BoardSceneProps) {
   const [progressIndex, setProgressIndex] = useState(() => visualProgressIndex ?? readStoredProgress());
   const [heroPose, setHeroPose] = useState<"front" | "back">("front");
@@ -207,7 +211,13 @@ export function Level4BoardScene({
           When war state is available it carries the real story: front line,
           territory, boss HP posture, excuse projectiles, momentum flame. */}
       {war?.available ? (
-        <Level4WarLayer war={war} onEngageProjectile={onEngageProjectile} lastStrike={lastStrike} />
+        <Level4WarLayer
+          war={war}
+          onEngageProjectile={onEngageProjectile}
+          lastStrike={lastStrike}
+          onLogCallStrike={onLogCallStrike}
+          logStrikePending={logStrikePending}
+        />
       ) : null}
 
       <div className="level4-scene__task-layer">

@@ -585,7 +585,40 @@ export function Level4OffensiveHost() {
   }
 
   if (missionState.boardState === "locked") {
-    return <Level4MissionLocked state={missionState} />;
+    // The war never sleeps: even while the boss mission is locked, the
+    // battlefield renders live — front line, projectiles, boss posture —
+    // so lane work (the way to unlock) has visible consequences here too.
+    return (
+      <Level4MissionLocked state={missionState}>
+        {gate ? (
+          <div className="l4-encounterSceneFrame mt-6">
+            <Level4BoardScene
+              gateState={gate.state}
+              activeChallenge={challengeFromGate(gate)}
+              dailyXp={gate.dailyXp}
+              war={(warQuery.data as Level4WarView | undefined) ?? null}
+              lastStrike={lastStrike}
+              onEngageProjectile={(laneKey) => {
+                const lane = gate.lanes.find((l) => l.key === laneKey);
+                if (lane) window.location.href = lane.path;
+              }}
+              onLogCallStrike={() => {
+                recordWarAction.mutate({
+                  kind: "call_strike",
+                  dedupeKey: `manual-call:${Date.now()}`,
+                  meta: { source: "log_strike_button" },
+                });
+              }}
+              logStrikePending={recordWarAction.isPending}
+              onPrimaryAction={() => {
+                const lane = gate.lanes.find((l) => l.count > 0);
+                if (lane) window.location.href = lane.path;
+              }}
+            />
+          </div>
+        ) : null}
+      </Level4MissionLocked>
+    );
   }
 
   if (missionState.boardState === "completed") {
@@ -681,6 +714,14 @@ export function Level4OffensiveHost() {
           const lane = gate.lanes.find((l) => l.key === laneKey);
           if (lane) window.location.href = lane.path;
         }}
+        onLogCallStrike={() => {
+          recordWarAction.mutate({
+            kind: "call_strike",
+            dedupeKey: `manual-call:${Date.now()}`,
+            meta: { source: "log_strike_button" },
+          });
+        }}
+        logStrikePending={recordWarAction.isPending}
         onDeployLane1={openBuildingPenetration}
         onDeployLane2={openReferralRequest}
         onDeployLane3={openMarketHole}
@@ -835,22 +876,25 @@ function Level4MissionEmpty() {
   );
 }
 
-function Level4MissionLocked({ state }: { state: any }) {
+function Level4MissionLocked({ state, children }: { state: any; children?: React.ReactNode }) {
   return (
     <section className="min-h-[70vh] bg-[#0e1111] px-4 py-12 text-[#e5e7eb]">
-      <div className="mx-auto max-w-3xl rounded-lg border border-white/10 bg-black/35 p-8">
-        <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#d6ad4d]">Level 4 Mission Locked</div>
-        <h1 className="mt-3 text-3xl font-semibold">{state.task?.title}</h1>
-        <p className="mt-3 text-sm leading-6 text-white/60">{state.progress.message}</p>
-        <div className="mt-6">
-          <div className="flex items-center justify-between font-mono text-xs uppercase tracking-[0.16em] text-white/55">
-            <span>{state.progress.completedLaneTasks}/{state.progress.requiredLaneTasks} Lane 1-3 tasks</span>
-            <span>{state.progress.laneXp}/{state.progress.requiredLaneXp} XP</span>
-          </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
-            <span className="block h-full bg-[#d6ad4d]" style={{ width: `${state.progress.percent}%` }} />
+      <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-3xl rounded-lg border border-white/10 bg-black/35 p-8">
+          <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#d6ad4d]">Level 4 Mission Locked</div>
+          <h1 className="mt-3 text-3xl font-semibold">{state.task?.title}</h1>
+          <p className="mt-3 text-sm leading-6 text-white/60">{state.progress.message}</p>
+          <div className="mt-6">
+            <div className="flex items-center justify-between font-mono text-xs uppercase tracking-[0.16em] text-white/55">
+              <span>{state.progress.completedLaneTasks}/{state.progress.requiredLaneTasks} Lane 1-3 tasks</span>
+              <span>{state.progress.laneXp}/{state.progress.requiredLaneXp} XP</span>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
+              <span className="block h-full bg-[#d6ad4d]" style={{ width: `${state.progress.percent}%` }} />
+            </div>
           </div>
         </div>
+        {children}
       </div>
     </section>
   );

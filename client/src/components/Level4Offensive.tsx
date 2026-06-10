@@ -198,6 +198,8 @@ export type Level4OffensiveProps = {
   war?: Level4WarView | null;
   onEngageProjectile?: (laneKey: WarProjectileView["laneKey"]) => void;
   lastStrike?: { label: string; at: number } | null;
+  onLogCallStrike?: () => void;
+  logStrikePending?: boolean;
   /**
    * True once the preview/modal is visibly on screen. Gates the HOLD→UNSTABLE
    * timer: while a copy generation is in flight and the modal is not yet shown,
@@ -244,6 +246,8 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
     war = null,
     onEngageProjectile,
     lastStrike = null,
+    onLogCallStrike,
+    logStrikePending = false,
     previewOpen = false,
   }: Level4OffensiveProps,
   handleRef: ForwardedRef<Level4OffensiveHandle>
@@ -843,6 +847,8 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
         war={war}
         onEngageProjectile={onEngageProjectile}
         lastStrike={lastStrike}
+        onLogCallStrike={onLogCallStrike}
+        logStrikePending={logStrikePending}
       />
 
       <div className="l4-grid">

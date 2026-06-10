@@ -22,7 +22,7 @@
  * has not been migrated yet, the war runs in a safe ephemeral mode instead of
  * crashing the dashboard.
  */
-import { and, desc, eq, gte, lt } from "drizzle-orm";
+import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { level4WarEvents, type Level4WarEvent } from "../drizzle/schema";
 import { getDb } from "./db";
 import { getDashboardBusinessDayBoundsUtc } from "./revenueIntervention";
@@ -194,7 +194,7 @@ function projectilesFromGate(
       headStart + Math.max(0, idleMs) / PROJECTILE_FLIGHT_MS
     );
     out.push({
-      id: `${lane.key}:${zonedYmd(now)}`,
+      id: `${lane.key}:${now.toDateString()}`,
       laneKey: lane.key as WarProjectile["laneKey"],
       excuse: excuseFor(lane.key, i + now.getDate()),
       progress,
@@ -228,6 +228,38 @@ async function readDayEvents(
   }
 }
 
+/**
+ * Self-provisioning: the deployed environment applies migrations on its own
+ * schedule, so the first write attempts to create the table if it's missing.
+ * Idempotent (IF NOT EXISTS) and safe to race.
+ */
+async function ensureWarTable(): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS \`level4_war_events\` (
+        \`id\` int AUTO_INCREMENT NOT NULL,
+        \`tenantId\` varchar(64) NOT NULL DEFAULT 'default',
+        \`kind\` varchar(48) NOT NULL,
+        \`dedupeKey\` varchar(191) NOT NULL,
+        \`pushHundredths\` int NOT NULL DEFAULT 0,
+        \`metadata\` json,
+        \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+        CONSTRAINT \`level4_war_events_id\` PRIMARY KEY(\`id\`),
+        CONSTRAINT \`uq_level4_war_events_tenant_dedupe\` UNIQUE(\`tenantId\`,\`dedupeKey\`),
+        INDEX \`idx_level4_war_events_tenant_created\` (\`tenantId\`,\`createdAt\`)
+      )
+    `);
+    return true;
+  } catch (error) {
+    console.warn("[Level4War] ensureWarTable failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
 function settleOutcome(lineH: number): "WON" | "HELD" | "LOST" {
   if (lineH >= (WAR_NEUTRAL_TILE + 2) * 100) return "WON";
   if (lineH <= (WAR_NEUTRAL_TILE - 2) * 100) return "LOST";
@@ -246,8 +278,8 @@ function inheritLine(settled: number): number {
 
 export async function getLevel4WarState(tenantId: string): Promise<Level4WarState> {
   const now = new Date();
-  const ymd = zonedYmd(now);
   const bounds = getDashboardBusinessDayBoundsUtc(now);
+  const ymd = zonedYmd(now, bounds.timeZone);
   const gate = await getLevel4GateState(tenantId);
 
   // Boss HP = remaining revenue gap vs daily target (already business-day
@@ -259,15 +291,19 @@ export async function getLevel4WarState(tenantId: string): Promise<Level4WarStat
 
   const events = await readDayEvents(tenantId, bounds);
   if (events === null) {
+    // Table not migrated yet — the war still renders fully: projectiles and
+    // boss HP derive from gate data that already exists. The line simply
+    // holds at neutral until the first write auto-creates the table.
+    const ephemeralProjectiles = projectilesFromGate(gate.lanes, null, now);
     return {
-      available: false,
+      available: true,
       ymd,
       frontLineHundredths: WAR_NEUTRAL_TILE * 100,
       frontLineTile: WAR_NEUTRAL_TILE,
       bossHpPct,
       combo: { chain: 0, multiplier: 1, label: null, msLeft: 0 },
-      projectiles: [],
-      victoryToday: false,
+      projectiles: ephemeralProjectiles,
+      victoryToday: gate.state === "COMPLETE_TODAY",
       reckoning: null,
       yesterday: null,
       lastEventAt: null,
@@ -339,6 +375,8 @@ export async function recordLevel4WarAction(params: {
   }
 
   try {
+    // First write self-provisions the table when migrations haven't run yet.
+    await ensureWarTable();
     // Idempotency: same dedupeKey today → no double shove.
     const existing = await db
       .select({ id: level4WarEvents.id })

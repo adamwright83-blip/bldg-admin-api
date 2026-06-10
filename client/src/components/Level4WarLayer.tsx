@@ -46,6 +46,12 @@ type Level4WarLayerProps = {
   onEngageProjectile?: (laneKey: WarProjectileView["laneKey"]) => void;
   /** Optional strike feedback (why-toast text) from the last action. */
   lastStrike?: { label: string; at: number } | null;
+  /**
+   * Manual call-strike logger (pre-Twilio): one tap = one dial scored.
+   * When omitted the button hides (e.g. read-only mounts).
+   */
+  onLogCallStrike?: () => void;
+  logStrikePending?: boolean;
 };
 
 const TILE_COUNT = 14;
@@ -69,7 +75,13 @@ function pos(style: { x: number; y: number }): CSSProperties {
   return { "--x": String(style.x), "--y": String(style.y) } as CSSProperties;
 }
 
-export function Level4WarLayer({ war, onEngageProjectile, lastStrike }: Level4WarLayerProps) {
+export function Level4WarLayer({
+  war,
+  onEngageProjectile,
+  lastStrike,
+  onLogCallStrike,
+  logStrikePending = false,
+}: Level4WarLayerProps) {
   const lineT = (war?.frontLineHundredths ?? 700) / (TILE_COUNT * 100);
   const linePoint = bridgePoint(lineT);
   // Fighters flank the line: hero a half-tile behind it, villain a half ahead.
@@ -91,7 +103,7 @@ export function Level4WarLayer({ war, onEngageProjectile, lastStrike }: Level4Wa
   }, [lastStrike]);
 
   const tiles = useMemo(() => Array.from({ length: TILE_COUNT }, (_, i) => i), []);
-  if (!war) return null;
+  if (!war?.available) return null;
 
   const outcomeBanner = war.victoryToday
     ? { text: "BRIDGE TAKEN — THE PROCRASTINATOR FALLS", tone: "won" as const }
@@ -195,6 +207,21 @@ export function Level4WarLayer({ war, onEngageProjectile, lastStrike }: Level4Wa
         <div className="l4war__why" style={pos({ x: linePoint.x, y: linePoint.y - 14 })}>
           {lastStrike.label}
         </div>
+      ) : null}
+
+      {/* LOG STRIKE — manual call scoring until Twilio is live. Every dial
+          counts, answered or not: the rep who wins is the one who dials. */}
+      {onLogCallStrike ? (
+        <button
+          type="button"
+          className="l4war__logstrike"
+          disabled={logStrikePending}
+          onClick={onLogCallStrike}
+          aria-label="Log a cold call strike — counts whether they answered or not"
+        >
+          {logStrikePending ? "STRIKING…" : "☎ LOG STRIKE"}
+          <span>a dial counts, answered or not</span>
+        </button>
       ) : null}
 
       {/* Morning memory + evening reckoning. */}
