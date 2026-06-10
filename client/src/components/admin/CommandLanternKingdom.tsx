@@ -53,8 +53,8 @@ type Pt = { x: number; y: number };
 
 /** Quadratic bezier from the nest (bottom-left) to the castle (top-right). */
 const P0: Pt = { x: 10, y: 78 };
-const PC: Pt = { x: 40, y: 26 };
-const P2: Pt = { x: 84, y: 22 };
+const PC: Pt = { x: 38, y: 30 };
+const P2: Pt = { x: 72, y: 26 };
 
 function pathPoint(t: number): Pt {
   const u = Math.max(0, Math.min(1, t));
@@ -221,17 +221,17 @@ export function CommandLanternKingdom({ onNavigate }: { onNavigate: (path: strin
         />
       ))}
 
-      {/* Cottage islands — wake with milestones */}
+      {/* Floating castle-isles — asleep (dimmed under the curse) until the
+          campaign crosses their milestone, then they wake to full color. */}
       {cottages.map((c, i) => {
         const p = pathPoint(c.t);
         return (
           <span
             key={i}
-            className="lk__island"
+            className={`lk__island ${c.awake ? "is-awake" : "is-asleep"}`}
             style={{ left: `${p.x + c.dx}%`, top: `${p.y + c.dy}%`, transform: `translate(-50%,-20%) scale(${c.scale})` }}
           >
-            <img src={A2("island-cottage-dark")} alt="" draggable={false} className={c.awake ? "is-hidden" : ""} />
-            <img src={A2("island-cottage-awake")} alt="" draggable={false} className={c.awake ? "" : "is-hidden"} />
+            <img src={A2("island-castle")} alt="" draggable={false} />
           </span>
         );
       })}

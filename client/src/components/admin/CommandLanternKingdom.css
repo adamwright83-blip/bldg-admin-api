@@ -51,8 +51,8 @@
 
 .lk__cursecloud {
   position: absolute;
-  top: 2%;
-  right: 4%;
+  top: 4%;
+  right: 34%;
   width: clamp(90px, 13%, 160px);
   opacity: 0.85;
   animation: lk-drift 7s ease-in-out infinite;
@@ -65,12 +65,15 @@
 
 .lk__castle {
   position: absolute;
-  left: 76%;
-  top: 4%;
-  width: clamp(140px, 22%, 260px);
+  left: 80%;
+  top: 1%;
+  width: clamp(170px, 27%, 330px);
   transform: translateX(-50%);
-  filter: drop-shadow(0 12px 18px rgba(30, 20, 60, 0.35));
+  filter: drop-shadow(0 14px 20px rgba(30, 20, 60, 0.4));
+  transition: filter 1400ms ease;
 }
+/* The summit sleeps until the kingdom is fully won. */
+.lk--red .lk__castle, .lk--storm .lk__castle { filter: saturate(0.5) brightness(0.7) drop-shadow(0 14px 20px rgba(30, 20, 60, 0.5)); }
 
 .lk__pathline {
   position: absolute;
@@ -99,9 +102,12 @@
 }
 
 .lk__island { position: absolute; width: clamp(70px, 11%, 130px); }
-.lk__island img { width: 100%; transition: opacity 1400ms ease; position: absolute; inset: 0; }
-.lk__island img.is-hidden { opacity: 0; }
-.lk__island img:not(.is-hidden) { opacity: 1; position: relative; }
+.lk__island img { width: 100%; transition: filter 1400ms ease, opacity 1400ms ease; }
+.lk__island.is-asleep img { filter: saturate(0.35) brightness(0.62) hue-rotate(12deg); opacity: 0.85; }
+.lk__island.is-awake img {
+  filter: saturate(1.05) brightness(1.02) drop-shadow(0 0 14px rgba(255, 200, 100, 0.45));
+  opacity: 1;
+}
 
 .lk__vines {
   position: absolute;
