@@ -34,7 +34,20 @@ import { trpc } from "@/lib/trpc";
 import { useCommandSky } from "./CommandSky";
 import "./CommandLanternKingdom.css";
 
-const A = "/assets/kingdom";
+/** Kingdom art loads as its own lazy chunk; static paths are the fallback
+ * for environments where the public assets exist on disk. */
+function useKingdomArt(): Record<string, string> | null {
+  const [art, setArt] = useState<Record<string, string> | null>(null);
+  useEffect(() => {
+    let active = true;
+    void import("./kingdomArt").then(
+      (m) => { if (active) setArt(m.KINGDOM_ART); },
+      () => undefined,
+    );
+    return () => { active = false; };
+  }, []);
+  return art;
+}
 
 type Pt = { x: number; y: number };
 
@@ -69,6 +82,8 @@ const MISSIONS = [
 ] as const;
 
 export function CommandLanternKingdom({ onNavigate }: { onNavigate: (path: string) => void }) {
+  const art = useKingdomArt();
+  const A2 = (k: string) => art?.[k] ?? `/assets/kingdom/${k}.png`;
   const utils = trpc.useUtils();
   const sky = useCommandSky();
   const war = trpc.admin.getLevel4WarState.useQuery(undefined, {
@@ -121,10 +136,10 @@ export function CommandLanternKingdom({ onNavigate }: { onNavigate: (path: strin
 
   const sparkPos = pathPoint(napping ? 0.02 : sparkT);
   const sparkSrc = celebrating
-    ? `${A}/spark-celebrating.png`
+    ? A2("spark-celebrating")
     : napping
-      ? `${A}/spark-sleeping.png`
-      : `${A}/spark-gliding.png`;
+      ? A2("spark-sleeping")
+      : A2("spark-gliding");
 
   // Lanterns: cap the rendered count at 50 (each bead may represent >1 when
   // the target exceeds 50, exactly like the covenant beads).
@@ -172,18 +187,18 @@ export function CommandLanternKingdom({ onNavigate }: { onNavigate: (path: strin
     <section className={`lk lk--${tone} ${hope ? "lk--hope" : ""}`} aria-label="Spark and the Fifty Lanterns — your kingdom">
       {/* SKY + far kingdom plate (masked painterly backdrop) */}
       <div className="lk__sky" />
-      <img className="lk__far" src={`${A}/kingdom-far.png`} alt="" draggable={false} />
+      <img className="lk__far" src={A2("kingdom-far")} alt="" draggable={false} />
       {debt > 0 ? (
         <img
           className={`lk__cursecloud ${debt >= 2 ? "is-heavy" : ""}`}
-          src={`${A}/curse-cloud.png`}
+          src={A2("curse-cloud")}
           alt=""
           draggable={false}
         />
       ) : null}
 
       {/* Castle at the summit */}
-      <img className="lk__castle" src={`${A}/castle-clouds.png`} alt="" draggable={false} />
+      <img className="lk__castle" src={A2("castle-clouds")} alt="" draggable={false} />
 
       {/* The lantern path */}
       <svg className="lk__pathline" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
@@ -199,7 +214,7 @@ export function CommandLanternKingdom({ onNavigate }: { onNavigate: (path: strin
         <img
           key={l.key}
           className={`lk__lantern ${l.lit ? "is-lit" : ""}`}
-          src={l.lit ? `${A}/lantern-lit.png` : `${A}/lantern-unlit.png`}
+          src={l.lit ? A2("lantern-lit") : A2("lantern-unlit")}
           style={{ left: `${l.x}%`, top: `${l.y}%` }}
           alt=""
           draggable={false}
@@ -215,8 +230,8 @@ export function CommandLanternKingdom({ onNavigate }: { onNavigate: (path: strin
             className="lk__island"
             style={{ left: `${p.x + c.dx}%`, top: `${p.y + c.dy}%`, transform: `translate(-50%,-20%) scale(${c.scale})` }}
           >
-            <img src={`${A}/island-cottage-dark.png`} alt="" draggable={false} className={c.awake ? "is-hidden" : ""} />
-            <img src={`${A}/island-cottage-awake.png`} alt="" draggable={false} className={c.awake ? "" : "is-hidden"} />
+            <img src={A2("island-cottage-dark")} alt="" draggable={false} className={c.awake ? "is-hidden" : ""} />
+            <img src={A2("island-cottage-awake")} alt="" draggable={false} className={c.awake ? "" : "is-hidden"} />
           </span>
         );
       })}
@@ -225,7 +240,7 @@ export function CommandLanternKingdom({ onNavigate }: { onNavigate: (path: strin
       {debt > 0 ? (
         <img
           className="lk__vines"
-          src={debt >= 2 ? `${A}/vines-dense.png` : `${A}/vines-sparse.png`}
+          src={debt >= 2 ? A2("vines-dense") : A2("vines-sparse")}
           alt=""
           draggable={false}
         />
@@ -239,7 +254,7 @@ export function CommandLanternKingdom({ onNavigate }: { onNavigate: (path: strin
           aria-label="The Time-Eater stalks your next lantern — open the war to fight back"
           title="The Time-Eater is eyeing your next lantern. Fight back →"
         >
-          <img src={`${A}/time-eater.png`} alt="" draggable={false} />
+          <img src={A2("time-eater")} alt="" draggable={false} />
         </button>
       ) : null}
       {debt >= 2 ? (
@@ -250,12 +265,12 @@ export function CommandLanternKingdom({ onNavigate }: { onNavigate: (path: strin
           aria-label="The Collector of Tomorrows hoards your unfinished work — open the war"
           title="The Collector of Tomorrows is hoarding unfinished scrolls. Fight back →"
         >
-          <img src={`${A}/collector-tomorrows.png`} alt="" draggable={false} />
+          <img src={A2("collector-tomorrows")} alt="" draggable={false} />
         </button>
       ) : null}
 
       {/* Nest + Spark */}
-      <img className="lk__nest" src={`${A}/nest-ember.png`} alt="" draggable={false} />
+      <img className="lk__nest" src={A2("nest-ember")} alt="" draggable={false} />
       <div
         className={`lk__spark ${celebrating ? "is-celebrating" : ""} ${napping ? "is-napping" : ""}`}
         style={{ left: `${sparkPos.x}%`, top: `${sparkPos.y - 6}%` }}
@@ -273,7 +288,7 @@ export function CommandLanternKingdom({ onNavigate }: { onNavigate: (path: strin
         onClick={() => onNavigate("/pnl")}
         aria-label={`True net today ${usd(net)} — open the full cockpit`}
       >
-        <img src={`${A}/stone-tablet.png`} alt="" draggable={false} />
+        <img src={A2("stone-tablet")} alt="" draggable={false} />
         <span className={`lk__tablet-face ${net < 0 ? "is-down" : "is-up"}`}>
           <i>TRUE NET</i>
           <b>{pnl.isLoading ? "…" : usd(net)}</b>
@@ -294,7 +309,7 @@ export function CommandLanternKingdom({ onNavigate }: { onNavigate: (path: strin
               onClick={() => lightStone(m)}
               aria-pressed={lit}
             >
-              <img src={`${A}/runestone.png`} alt="" draggable={false} />
+              <img src={A2("runestone")} alt="" draggable={false} />
               <span className="lk__stone-rune" aria-hidden>{lit ? "✦" : "·"}</span>
               <span className="lk__stone-label">
                 <b>{m.title}</b>
@@ -313,7 +328,7 @@ export function CommandLanternKingdom({ onNavigate }: { onNavigate: (path: strin
         aria-expanded={scrollOpen}
         aria-label={scrollOpen ? "Roll the scroll closed" : "Unroll the scroll — show me the math"}
       >
-        <img src={`${A}/scroll.png`} alt="" draggable={false} />
+        <img src={A2("scroll")} alt="" draggable={false} />
         <span>{scrollOpen ? "roll it up" : "the math"}</span>
       </button>
       {scrollOpen ? (
