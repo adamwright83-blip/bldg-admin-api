@@ -7,8 +7,6 @@ import { CustomerProfileDrawer } from "@/components/CustomerProfileDrawer";
 import { useDebounce } from "@/hooks/useDebounce";
 import { trpc } from "@/lib/trpc";
 import {
-  ADMIN_WORKSPACE_TABS,
-  TAB_PATH,
   adminPathToTab,
   isAdminCommandCenterPath,
   type AdminWorkspaceTab,
@@ -26,6 +24,42 @@ const LIVE_INTERNAL_TABS = new Set<AdminWorkspaceTab>([
   "Ready",
   "Pickups",
 ]);
+
+/**
+ * THREE ROOMS AND A DRAWER — the sellable information architecture.
+ * Paths are unchanged (deep links + muscle memory survive); the sidebar
+ * groups them into rooms, and a room tab strip renders above the page.
+ *
+ *  KINGDOM  — feel the business, one next action (home).
+ *  COUNTER  — where the work gets done (Live is the spine).
+ *  PEOPLE   — who we serve, recover, sell to.
+ *  DRAWER   — low-frequency configuration only. Money is NOT in here.
+ */
+const COUNTER_PATHS = new Set([
+  "/live",
+  "/new-order",
+  "/operations-events",
+  "/payment-reconciliation",
+  "/requests",
+  "/intake",
+  "/processing",
+  "/ready",
+  "/pickups",
+]);
+const PEOPLE_PATHS = new Set(["/customers", "/leads", "/vendors"]);
+
+const COUNTER_TABS: Array<{ label: string; path: string }> = [
+  { label: "Pipeline", path: "/live" },
+  { label: "New order", path: "/new-order" },
+  { label: "History", path: "/operations-events" },
+  { label: "Money owed", path: "/payment-reconciliation" },
+  { label: "Requests", path: "/requests" },
+];
+const PEOPLE_TABS: Array<{ label: string; path: string }> = [
+  { label: "Customers", path: "/customers" },
+  { label: "Leads", path: "/leads" },
+  { label: "Vendors", path: "/vendors" },
+];
 
 function normalizePath(loc: string): string {
   const p = loc.split("?")[0]?.replace(/\/$/, "") || "";
@@ -81,6 +115,10 @@ export default function AdminHostApp() {
   const isOperatorReflection = path === "/operator-reflection";
   const activeTab = adminPathToTab(path);
   const isLiveNavActive = isLive || (activeTab !== null && LIVE_INTERNAL_TABS.has(activeTab));
+  const isCounter = COUNTER_PATHS.has(path);
+  const isPeople = PEOPLE_PATHS.has(path);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const roomTabs = isCounter ? COUNTER_TABS : isPeople ? PEOPLE_TABS : null;
   const initialSelectedOrderId =
     path === "/intake" ? parseOrderIdFromLocation(loc) ?? parseOrderIdFromWindowSearch() : null;
   const quickReceiptOpen = path === "/intake" && parseQuickReceiptFromLocation(loc);
@@ -141,33 +179,6 @@ export default function AdminHostApp() {
     );
   }
 
-  function sidebarLinkClass(hrefPath: string) {
-    const active = path === hrefPath;
-    return `block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-      active ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
-    }`;
-  }
-
-  function workspaceTabLabel(tab: AdminWorkspaceTab) {
-    const tabActive = path === TAB_PATH[tab];
-    const countClass = tabActive ? "text-green-300" : "text-green-600";
-    if (tab === "Requests" && (requestsCount.data ?? 0) >= 1) {
-      return (
-        <>
-          Requests <span className={`${countClass} font-semibold`}>({requestsCount.data})</span>
-        </>
-      );
-    }
-    if (tab === "Leads" && (leadsCount.data ?? 0) >= 1) {
-      return (
-        <>
-          Leads <span className={`${countClass} font-semibold`}>({leadsCount.data})</span>
-        </>
-      );
-    }
-    return tab;
-  }
-
   return (
     <div
       className="min-h-screen bg-white text-black flex"
@@ -190,60 +201,88 @@ export default function AdminHostApp() {
         <div className="px-2 mb-4">
           <span className="text-xs font-semibold tracking-widest uppercase text-black">Laundry Butler</span>
         </div>
+        {/* THREE ROOMS AND A DRAWER. Every old path still works — the rooms
+            are how you move, the tabs (rendered above each room) are how you
+            work. Level 4 is reached through the Kingdom (villains/war strip),
+            not the nav. The drawer holds configuration only — money lives in
+            the Counter where it belongs. */}
         <nav className="flex flex-col gap-0.5 flex-1 overflow-y-auto">
           <Link
             href="/"
-            className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-              isHome ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
+            className={`block rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+              isHome || isLevel4 ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
             }`}
             onClick={() => setMobileNavOpen(false)}
           >
-            Board
-          </Link>
-          <Link
-            href="/level4"
-            className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-              isLevel4 ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
-            }`}
-            onClick={() => setMobileNavOpen(false)}
-          >
-            Level 4
-          </Link>
-          <Link
-            href="/operator-reflection"
-            className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-              isOperatorReflection ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
-            }`}
-            onClick={() => setMobileNavOpen(false)}
-          >
-            Operator Reflection
+            🏰 Kingdom
           </Link>
           <Link
             href="/live"
-            className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-              isLiveNavActive ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
+            className={`block rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+              isCounter ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
             }`}
             onClick={() => setMobileNavOpen(false)}
           >
-            Live
+            🧺 Counter
+            {(requestsCount.data ?? 0) >= 1 ? (
+              <span className="ml-1.5 rounded-full bg-black/10 px-1.5 py-0.5 text-[10px] font-bold text-black/60">
+                {requestsCount.data}
+              </span>
+            ) : null}
           </Link>
-          {ADMIN_WORKSPACE_TABS.filter((tab) => !LIVE_INTERNAL_TABS.has(tab)).map((tab) => (
-            <Link
-              key={tab}
-              href={TAB_PATH[tab]}
-              className={sidebarLinkClass(TAB_PATH[tab])}
-              onClick={() => setMobileNavOpen(false)}
-            >
-              {workspaceTabLabel(tab)}
-            </Link>
-          ))}
-          <a
-            href="/catalog"
-            className="block rounded-md px-3 py-2 text-sm font-medium transition-colors text-black/70 hover:bg-black/5 hover:text-black"
+          <Link
+            href="/customers"
+            className={`block rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+              isPeople ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
+            }`}
             onClick={() => setMobileNavOpen(false)}
           >
-            Catalog & Pricing
-          </a>
+            🫂 People
+            {(leadsCount.data ?? 0) >= 1 ? (
+              <span className="ml-1.5 rounded-full bg-black/10 px-1.5 py-0.5 text-[10px] font-bold text-black/60">
+                {leadsCount.data}
+              </span>
+            ) : null}
+          </Link>
+
+          <div className="mt-auto border-t border-black/10 pt-2">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-black/55 transition-colors hover:bg-black/5 hover:text-black"
+              onClick={() => setDrawerOpen((v) => !v)}
+              aria-expanded={drawerOpen}
+            >
+              ⚙ Drawer
+              <span className="text-[10px] text-black/35">{drawerOpen ? "▲" : "▼"}</span>
+            </button>
+            {drawerOpen ? (
+              <div className="mt-0.5 flex flex-col gap-0.5 pl-2">
+                <a
+                  href="/catalog"
+                  className="block rounded-md px-3 py-1.5 text-[13px] text-black/60 hover:bg-black/5 hover:text-black"
+                  onClick={() => setMobileNavOpen(false)}
+                >
+                  Price list
+                </a>
+                <Link
+                  href="/pnl"
+                  className="block rounded-md px-3 py-1.5 text-[13px] text-black/60 hover:bg-black/5 hover:text-black"
+                  onClick={() => setMobileNavOpen(false)}
+                >
+                  CFO Cockpit (add-on)
+                </Link>
+                <Link
+                  href="/operator-reflection"
+                  className={`block rounded-md px-3 py-1.5 text-[13px] hover:bg-black/5 hover:text-black ${
+                    isOperatorReflection ? "text-black font-semibold" : "text-black/60"
+                  }`}
+                  onClick={() => setMobileNavOpen(false)}
+                >
+                  Reflection archive
+                </Link>
+              </div>
+            ) : null}
+          </div>
         </nav>
       </aside>
 
@@ -259,7 +298,42 @@ export default function AdminHostApp() {
               >
                 <Menu className="h-5 w-5" />
               </button>
-              <span className="text-xs text-black/40 ml-auto">{user?.name || "Admin"}</span>
+              {/* Room tabs: the views inside a room. Same truth, one room. */}
+              {roomTabs ? (
+                <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" aria-label="Room views">
+                  {roomTabs.map((t) => {
+                    const tabActive =
+                      path === t.path ||
+                      (t.path === "/live" && isLiveNavActive);
+                    return (
+                      <Link
+                        key={t.path}
+                        href={t.path}
+                        className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                          tabActive
+                            ? "bg-black text-white"
+                            : "text-black/55 hover:bg-black/5 hover:text-black"
+                        }`}
+                      >
+                        {t.label}
+                        {t.path === "/requests" && (requestsCount.data ?? 0) >= 1 ? (
+                          <span className={`ml-1 text-[10px] font-bold ${tabActive ? "text-white/70" : "text-black/40"}`}>
+                            {requestsCount.data}
+                          </span>
+                        ) : null}
+                      </Link>
+                    );
+                  })}
+                </nav>
+              ) : null}
+              {/* Create order is a global action — never hunt for it. */}
+              <Link
+                href="/new-order"
+                className="ml-auto shrink-0 rounded-md bg-black px-3 py-1.5 text-[12.5px] font-bold text-white transition-colors hover:bg-black/80"
+              >
+                + Order
+              </Link>
+              <span className="hidden text-xs text-black/40 sm:inline">{user?.name || "Admin"}</span>
             </header>
 
             {!isLive && !isOperatorReflection ? (
