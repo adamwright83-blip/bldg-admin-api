@@ -16,7 +16,8 @@ import {
 import { OpsBoardModals } from "./OpsBoardModals";
 import { EmergencyTaskComposer } from "./EmergencyTaskComposer";
 import { SkyBackdrop, SkyBar, useCommandSky } from "../CommandSky";
-import { CommandCockpitBand, ReflectionDigest, WarStrip } from "../CommandCockpitBand";
+import { ReflectionDigest, WarStrip } from "../CommandCockpitBand";
+import { CommandLanternKingdom } from "../CommandLanternKingdom";
 import type { AdminHomeData, LogOutreachPayload, OpsBoardModal } from "./types";
 
 type OpsBoardHomeProps = {
@@ -88,14 +89,17 @@ export function OpsBoardHome({
 
       <SkyBackdrop tone={sky.data?.tone} />
 
+      {/* THE SPINE — what greets the operator, in order: weather → money
+          heartbeat + Mission Control + the math → the war. Everything legacy
+          lives BELOW the spine; the merged content leads, never trails. */}
       <div className="ops-mobile-board">
         <MobileTopBar operatorName={operatorName} onOpenMobileNav={onOpenMobileNav} />
+        <CommandLanternKingdom onNavigate={onNavigate} />
         <SkyBar />
+        <WarStrip onNavigate={onNavigate} />
         <StatusStrip data={data} includeRunRate={false} />
         <EmergencyTaskComposer />
         <HeroCard onQuickInput={openQuickReceiptInput} />
-        <CommandCockpitBand onNavigate={onNavigate} />
-        <WarStrip onNavigate={onNavigate} />
         <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} onNavigate={onNavigate} />
         <RunRateCard data={data} />
         <KpiGrid data={data} onNavigate={onNavigate} />
@@ -108,15 +112,15 @@ export function OpsBoardHome({
       </div>
 
       <div className="ops-desktop-board">
+        <CommandLanternKingdom onNavigate={onNavigate} />
         <SkyBar />
+        <WarStrip onNavigate={onNavigate} />
         <StatusStrip data={data} />
         <EmergencyTaskComposer />
         <div className="ops-desktop-hero-row">
           <HeroCard onQuickInput={openQuickReceiptInput} />
           <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} onNavigate={onNavigate} />
         </div>
-        <CommandCockpitBand onNavigate={onNavigate} />
-        <WarStrip onNavigate={onNavigate} />
         <KpiGrid data={data} onNavigate={onNavigate} />
         <div className="ops-desktop-territory-row">
           <TerritoryProgression data={data} />

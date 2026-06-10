@@ -1,0 +1,367 @@
+/* SPARK & THE FIFTY LANTERNS — kingdom styles.
+   Anchoring: world elements position by % of the scene box so the kingdom
+   is responsive end-to-end. Numbers live INSIDE their graphics (tablet,
+   scroll), so misalignment is structurally impossible. */
+
+.lk {
+  position: relative;
+  z-index: 10;
+  margin-bottom: 16px;
+  height: clamp(340px, 46vh, 520px);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 18px 50px rgba(20, 16, 40, 0.25);
+  user-select: none;
+}
+
+/* ── Sky covenant tones ─────────────────────────────────────────────── */
+.lk__sky {
+  position: absolute;
+  inset: 0;
+  transition: background 1200ms ease;
+  background: linear-gradient(180deg, #9fb6c4 0%, #cfd9de 60%, #e8e2d4 100%);
+}
+.lk--blue .lk__sky { background: linear-gradient(180deg, #6db5ee 0%, #a8d6f7 55%, #ffe9c0 100%); }
+.lk--fair .lk__sky { background: linear-gradient(180deg, #8cc3e8 0%, #c3deef 55%, #f3e8cd 100%); }
+.lk--overcast .lk__sky { background: linear-gradient(180deg, #9fb6c4 0%, #cfd9de 60%, #e8e2d4 100%); }
+.lk--storm .lk__sky { background: linear-gradient(180deg, #5d6b85 0%, #8d97ab 60%, #b9b4ae 100%); }
+.lk--red .lk__sky { background: linear-gradient(180deg, #5a4a74 0%, #7d6a99 55%, #b78f95 100%); }
+.lk--hope .lk__sky { background: linear-gradient(180deg, #ffd98a 0%, #ffe7b4 45%, #aedcf7 100%) !important; }
+
+/* ── Layers ─────────────────────────────────────────────────────────── */
+.lk__far {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4%;
+  width: 100%;
+  height: 72%;
+  object-fit: cover;
+  object-position: center bottom;
+  opacity: 0.9;
+  /* The painterly plate fades into the sky instead of hard-cutting. */
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 26%, #000 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 26%, #000 100%);
+  filter: saturate(0.8) brightness(0.92);
+  transition: filter 1200ms ease;
+}
+.lk--blue .lk__far,
+.lk--hope .lk__far { filter: saturate(1.05) brightness(1.04); }
+.lk--red .lk__far { filter: saturate(0.55) brightness(0.78) hue-rotate(18deg); }
+
+.lk__cursecloud {
+  position: absolute;
+  top: 2%;
+  right: 4%;
+  width: clamp(90px, 13%, 160px);
+  opacity: 0.85;
+  animation: lk-drift 7s ease-in-out infinite;
+}
+.lk__cursecloud.is-heavy { width: clamp(120px, 18%, 220px); opacity: 0.95; }
+@keyframes lk-drift {
+  0%, 100% { transform: translateY(0) }
+  50% { transform: translateY(-8px) }
+}
+
+.lk__castle {
+  position: absolute;
+  left: 76%;
+  top: 4%;
+  width: clamp(140px, 22%, 260px);
+  transform: translateX(-50%);
+  filter: drop-shadow(0 12px 18px rgba(30, 20, 60, 0.35));
+}
+
+.lk__pathline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.lk__lantern {
+  position: absolute;
+  width: clamp(13px, 1.9%, 22px);
+  transform: translate(-50%, -90%);
+  opacity: 0.55;
+  transition: opacity 700ms ease, filter 700ms ease, transform 700ms ease;
+  filter: saturate(0.6);
+}
+.lk__lantern.is-lit {
+  opacity: 1;
+  filter: saturate(1.15) drop-shadow(0 0 10px rgba(255, 190, 80, 0.95)) drop-shadow(0 0 22px rgba(255, 160, 40, 0.5));
+  animation: lk-lantern-sway 3.4s ease-in-out infinite;
+}
+@keyframes lk-lantern-sway {
+  0%, 100% { transform: translate(-50%, -90%) rotate(-2.5deg); }
+  50% { transform: translate(-50%, -90%) rotate(2.5deg); }
+}
+
+.lk__island { position: absolute; width: clamp(70px, 11%, 130px); }
+.lk__island img { width: 100%; transition: opacity 1400ms ease; position: absolute; inset: 0; }
+.lk__island img.is-hidden { opacity: 0; }
+.lk__island img:not(.is-hidden) { opacity: 1; position: relative; }
+
+.lk__vines {
+  position: absolute;
+  right: -2%;
+  bottom: -4%;
+  width: clamp(120px, 22%, 260px);
+  opacity: 0.9;
+  transition: width 1200ms ease, opacity 1200ms ease;
+  pointer-events: none;
+}
+
+.lk__villain {
+  position: absolute;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  transition: left 1400ms ease, top 1400ms ease, transform 200ms ease;
+  pointer-events: auto;
+}
+.lk__villain:hover { transform: scale(1.06); }
+.lk__villain--eater { width: clamp(64px, 10%, 120px); transform: translate(-50%, -50%); }
+.lk__villain--eater:hover { transform: translate(-50%, -50%) scale(1.06); }
+.lk__villain--eater img { width: 100%; animation: lk-lurk 4.5s ease-in-out infinite; }
+.lk__villain--collector { right: 6%; top: 30%; width: clamp(70px, 11%, 130px); }
+.lk__villain--collector img { width: 100%; animation: lk-drift 6s ease-in-out infinite; }
+@keyframes lk-lurk {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(5px) rotate(1.5deg); }
+}
+
+.lk__nest {
+  position: absolute;
+  left: 4%;
+  bottom: 6%;
+  width: clamp(70px, 11%, 130px);
+  filter: drop-shadow(0 8px 12px rgba(40, 24, 10, 0.4));
+}
+
+.lk__spark {
+  position: absolute;
+  width: clamp(64px, 10.5%, 120px);
+  transform: translate(-50%, -60%);
+  transition: left 1500ms cubic-bezier(0.22, 1, 0.36, 1), top 1500ms cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 5;
+  pointer-events: none;
+}
+.lk__spark img {
+  width: 100%;
+  filter: drop-shadow(0 10px 14px rgba(20, 30, 60, 0.4));
+  animation: lk-glide 3s ease-in-out infinite;
+}
+@keyframes lk-glide {
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50% { transform: translateY(-7px) rotate(1.5deg); }
+}
+.lk__spark.is-celebrating img { animation: lk-loop 1.4s ease-in-out infinite; }
+@keyframes lk-loop {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  30% { transform: translateY(-16px) rotate(-9deg) scale(1.06); }
+  60% { transform: translateY(-4px) rotate(7deg); }
+}
+.lk__spark.is-napping img { animation: lk-snooze 4.5s ease-in-out infinite; }
+@keyframes lk-snooze {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.035); }
+}
+
+.lk__beam {
+  position: absolute;
+  left: 18%;
+  bottom: 14%;
+  width: 3px;
+  height: 52%;
+  transform: rotate(28deg);
+  transform-origin: bottom center;
+  background: linear-gradient(0deg, rgba(255, 230, 150, 0.95), rgba(255, 230, 150, 0));
+  box-shadow: 0 0 24px rgba(255, 215, 120, 0.9), 0 0 60px rgba(255, 200, 90, 0.5);
+  animation: lk-beam 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes lk-beam {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+
+/* ── The stone tablet (number bonded inside) ────────────────────────── */
+.lk__tablet {
+  position: absolute;
+  left: 21%;
+  bottom: 4%;
+  width: clamp(96px, 13%, 150px);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 180ms ease;
+  z-index: 6;
+}
+.lk__tablet:hover { transform: translateY(-3px); }
+.lk__tablet img { width: 100%; filter: drop-shadow(0 10px 14px rgba(30, 20, 50, 0.45)); }
+.lk__tablet-face {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%) rotate(-2deg);
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  width: 78%;
+}
+.lk__tablet-face i {
+  font-size: clamp(7px, 0.85vw, 10px);
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: rgba(70, 55, 40, 0.75);
+  font-style: normal;
+  text-transform: uppercase;
+}
+.lk__tablet-face b {
+  font-family: ui-monospace, monospace;
+  font-size: clamp(13px, 1.7vw, 22px);
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+.lk__tablet-face.is-up b { color: #1d7a3f; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5); }
+.lk__tablet-face.is-down b { color: #a33326; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5); }
+
+/* ── Runestones ─────────────────────────────────────────────────────── */
+.lk__stones {
+  position: absolute;
+  left: 36%;
+  right: 26%;
+  bottom: 3.5%;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  z-index: 6;
+}
+.lk__stone {
+  position: relative;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  display: grid;
+  justify-items: center;
+  transition: transform 160ms ease;
+}
+.lk__stone:hover { transform: translateY(-3px); }
+.lk__stone img {
+  width: clamp(38px, 4.8vw, 64px);
+  filter: saturate(0.7) drop-shadow(0 6px 8px rgba(20, 20, 40, 0.4));
+  transition: filter 500ms ease;
+}
+.lk__stone.is-lit img {
+  filter: saturate(1.1) drop-shadow(0 0 12px rgba(120, 255, 170, 0.9)) drop-shadow(0 6px 10px rgba(20, 40, 25, 0.45));
+}
+.lk__stone-rune {
+  position: absolute;
+  top: 26%;
+  font-size: clamp(12px, 1.4vw, 18px);
+  color: rgba(255, 255, 255, 0.55);
+  transition: color 500ms ease, text-shadow 500ms ease;
+  pointer-events: none;
+}
+.lk__stone.is-lit .lk__stone-rune {
+  color: #b8ffce;
+  text-shadow: 0 0 10px rgba(110, 255, 160, 0.95);
+}
+.lk__stone-label { display: grid; justify-items: center; margin-top: 3px; }
+.lk__stone-label b {
+  font-size: clamp(8px, 0.95vw, 11px);
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(10, 10, 30, 0.85);
+  text-align: center;
+  line-height: 1.15;
+}
+.lk__stone-label i {
+  font-size: clamp(7px, 0.8vw, 9px);
+  font-style: normal;
+  color: rgba(255, 255, 255, 0.7);
+  text-shadow: 0 1px 3px rgba(10, 10, 30, 0.85);
+}
+.lk__stone.is-lit .lk__stone-label i { color: #b8ffce; }
+
+/* ── The enchanted scroll ───────────────────────────────────────────── */
+.lk__scrollbtn {
+  position: absolute;
+  right: 3%;
+  bottom: 4%;
+  width: clamp(54px, 7%, 86px);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  display: grid;
+  justify-items: center;
+  z-index: 7;
+  transition: transform 180ms ease;
+}
+.lk__scrollbtn:hover { transform: translateY(-3px); }
+.lk__scrollbtn img { width: 100%; filter: drop-shadow(0 8px 10px rgba(40, 24, 12, 0.45)); }
+.lk__scrollbtn span {
+  margin-top: 2px;
+  font-size: clamp(8px, 0.9vw, 10px);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(10, 10, 30, 0.85);
+}
+.lk__scrollpanel {
+  position: absolute;
+  right: 3%;
+  bottom: 16%;
+  width: min(320px, 56%);
+  max-height: 64%;
+  overflow-y: auto;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fdf6e4, #f4e8cd);
+  border: 1px solid rgba(150, 110, 40, 0.45);
+  box-shadow: 0 18px 44px rgba(30, 20, 8, 0.45);
+  padding: 10px 12px;
+  z-index: 8;
+}
+.lk__scrollpanel table { width: 100%; border-collapse: collapse; font-size: 12px; color: #4a3c28; }
+.lk__scrollpanel td { padding: 4px 4px; border-bottom: 1px solid rgba(150, 110, 40, 0.18); }
+.lk__scrollpanel td:last-child { text-align: right; font-family: ui-monospace, monospace; font-weight: 700; }
+.lk__scrollpanel td.is-down { color: #a33326; }
+.lk__scrollpanel td.is-up { color: #1d7a3f; }
+.lk__scrolltotal td { border-top: 2px solid rgba(150, 110, 40, 0.4); border-bottom: 0; font-weight: 900; padding-top: 7px; }
+
+/* ── Whisper ────────────────────────────────────────────────────────── */
+.lk__whisper {
+  position: absolute;
+  left: 3%;
+  top: 3%;
+  margin: 0;
+  max-width: 56%;
+  font-size: clamp(11px, 1.15vw, 14px);
+  font-weight: 600;
+  font-style: italic;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(10, 10, 30, 0.8);
+  z-index: 7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lk__spark img,
+  .lk__lantern.is-lit,
+  .lk__cursecloud,
+  .lk__villain--eater img,
+  .lk__villain--collector img,
+  .lk__beam {
+    animation: none !important;
+  }
+  .lk__spark,
+  .lk__lantern,
+  .lk__sky,
+  .lk__far { transition: none !important; }
+}
