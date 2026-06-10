@@ -12,6 +12,7 @@ import {
 } from "react";
 import { cn } from "@/lib/utils";
 import { Level4BoardScene, type Level4ActiveChallenge } from "./Level4BoardScene";
+import type { Level4WarView, WarProjectileView } from "./Level4WarLayer";
 import "./Level4Offensive.css";
 
 import boardPng from "@/assets/l4/board.png";
@@ -193,6 +194,10 @@ export type Level4OffensiveProps = {
   onCompletionHoldDone?: () => void;
   gateState?: "LOCKED" | "UNLOCKED" | "COMPLETE_TODAY" | "COLD_CASE_VISUAL_ONLY";
   activeChallenge?: Level4ActiveChallenge | null;
+  /** War for the Bridge — live duel state forwarded to the board scene. */
+  war?: Level4WarView | null;
+  onEngageProjectile?: (laneKey: WarProjectileView["laneKey"]) => void;
+  lastStrike?: { label: string; at: number } | null;
   /**
    * True once the preview/modal is visibly on screen. Gates the HOLD→UNSTABLE
    * timer: while a copy generation is in flight and the modal is not yet shown,
@@ -236,6 +241,9 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
     onCompletionHoldDone,
     gateState = "UNLOCKED",
     activeChallenge = null,
+    war = null,
+    onEngageProjectile,
+    lastStrike = null,
     previewOpen = false,
   }: Level4OffensiveProps,
   handleRef: ForwardedRef<Level4OffensiveHandle>
@@ -832,6 +840,9 @@ export const Level4Offensive = forwardRef(function Level4Offensive(
           if (!lane) return;
           void tryCompleteLane(lane);
         }}
+        war={war}
+        onEngageProjectile={onEngageProjectile}
+        lastStrike={lastStrike}
       />
 
       <div className="l4-grid">

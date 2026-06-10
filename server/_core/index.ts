@@ -24,6 +24,7 @@ import { createAgentS2SRunToolHandler } from "../agents/s2sEndpoint";
 import { runAgentTool } from "../agents/agentRuntime";
 import { registerVendorOnboardingSessionRoutes } from "../vendorOnboardingSessionApi";
 import { registerVendorBookingPublicRoutes } from "../vendorBookingPublicApi";
+import { registerLevel4TwilioRoutes } from "../level4Twilio";
 import { registerCleanCloudImportRoutes } from "../cleancloudImportRoute";
 import { registerClearentImportRoutes } from "../clearentImportRoute";
 import { registerPaymentReconciliationRoutes } from "../paymentReconciliationRoute";
@@ -233,6 +234,9 @@ async function startServer() {
   app.post("/api/agent/s2s/run-tool", createAgentS2SRunToolHandler());
   registerVendorOnboardingSessionRoutes(app);
   registerVendorBookingPublicRoutes(app);
+  // Level 4 War — Twilio call-strike status callbacks (armed; quiet until
+  // the Twilio account is activated for real traffic).
+  registerLevel4TwilioRoutes(app);
 
   const vendorOnboardingStartSchema = z.object({
     businessName: z.string().max(255).optional().nullable(),

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
+import { Level4WarLayer, type Level4WarView, type WarProjectileView } from "./Level4WarLayer";
 
 export type Level4ActiveChallenge = {
   id: string;
@@ -29,6 +30,10 @@ type Level4BoardSceneProps = {
   dailyXp?: number;
   onPrimaryAction?: () => void;
   onPromiseClick?: () => void;
+  /** War for the Bridge — live duel state; null renders the classic scene. */
+  war?: Level4WarView | null;
+  onEngageProjectile?: (laneKey: WarProjectileView["laneKey"]) => void;
+  lastStrike?: { label: string; at: number } | null;
 };
 
 const LEVEL4_ANCHORS = {
@@ -85,6 +90,9 @@ export function Level4BoardScene({
   dailyXp = 0,
   onPrimaryAction,
   onPromiseClick,
+  war = null,
+  onEngageProjectile,
+  lastStrike = null,
 }: Level4BoardSceneProps) {
   const [progressIndex, setProgressIndex] = useState(() => visualProgressIndex ?? readStoredProgress());
   const [heroPose, setHeroPose] = useState<"front" | "back">("front");
@@ -194,6 +202,13 @@ export function Level4BoardScene({
         </div>
         {pathGlow ? <div className={cn("level4-scene__path-glow", `level4-scene__path-glow--${pathGlow}`)} /> : null}
       </div>
+
+      {/* WAR FOR THE BRIDGE — the living duel rides above the path layer.
+          When war state is available it carries the real story: front line,
+          territory, boss HP posture, excuse projectiles, momentum flame. */}
+      {war?.available ? (
+        <Level4WarLayer war={war} onEngageProjectile={onEngageProjectile} lastStrike={lastStrike} />
+      ) : null}
 
       <div className="level4-scene__task-layer">
         {activeChallenge && gateState !== "COMPLETE_TODAY" ? (

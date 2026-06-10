@@ -1179,3 +1179,24 @@ export const vendorOnboardingMessages = mysqlTable("vendor_onboarding_messages",
 
 export type VendorOnboardingMessage = typeof vendorOnboardingMessages.$inferSelect;
 export type InsertVendorOnboardingMessage = typeof vendorOnboardingMessages.$inferInsert;
+
+/**
+ * Level 4 — War for the Bridge. Append-only action events; all daily war
+ * state (front line, combo, reckoning) derives from a fold over these.
+ * dedupeKey makes every recording idempotent (replays cannot double-shove).
+ */
+export const level4WarEvents = mysqlTable("level4_war_events", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  kind: varchar("kind", { length: 48 }).notNull(),
+  dedupeKey: varchar("dedupeKey", { length: 191 }).notNull(),
+  pushHundredths: int("pushHundredths").notNull().default(0),
+  metadata: json("metadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantDedupeIdx: uniqueIndex("uq_level4_war_events_tenant_dedupe").on(table.tenantId, table.dedupeKey),
+  tenantCreatedIdx: index("idx_level4_war_events_tenant_created").on(table.tenantId, table.createdAt),
+}));
+
+export type Level4WarEvent = typeof level4WarEvents.$inferSelect;
+export type InsertLevel4WarEvent = typeof level4WarEvents.$inferInsert;

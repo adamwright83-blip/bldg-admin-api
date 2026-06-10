@@ -1,0 +1,300 @@
+/* Level 4 — War for the Bridge overlay.
+   Positioning contract matches the board scene: elements anchor by
+   --x/--y as percentages of the scene box. Everything interpolates —
+   the war never teleports. */
+
+.l4war {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* ── Territory tiles ─────────────────────────────────────────────────── */
+.l4war__tile {
+  position: absolute;
+  left: calc(var(--x) * 1%);
+  top: calc(var(--y) * 1%);
+  width: 26px;
+  height: 9px;
+  transform: translate(-50%, -50%) skewX(-18deg);
+  border-radius: 2px;
+  transition: background 900ms ease, box-shadow 900ms ease, opacity 900ms ease;
+}
+.l4war__tile--ours {
+  background: linear-gradient(180deg, rgba(255, 176, 64, 0.85), rgba(214, 112, 24, 0.75));
+  box-shadow: 0 0 14px rgba(255, 156, 40, 0.45);
+}
+.l4war__tile--his {
+  background: linear-gradient(180deg, rgba(64, 78, 112, 0.5), rgba(28, 34, 52, 0.55));
+  box-shadow: 0 0 8px rgba(40, 52, 86, 0.35);
+  opacity: 0.8;
+}
+
+/* ── The front line ──────────────────────────────────────────────────── */
+.l4war__line {
+  position: absolute;
+  left: calc(var(--x) * 1%);
+  top: calc(var(--y) * 1%);
+  transform: translate(-50%, -50%);
+  transition: left 1000ms cubic-bezier(0.22, 1, 0.36, 1), top 1000ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.l4war__line-glow {
+  display: block;
+  width: 10px;
+  height: 56px;
+  border-radius: 6px;
+  transform: skewX(-18deg);
+  background: linear-gradient(180deg, rgba(255, 232, 170, 0.95), rgba(255, 150, 40, 0.7), rgba(255, 232, 170, 0.95));
+  box-shadow:
+    0 0 18px rgba(255, 170, 60, 0.85),
+    0 0 44px rgba(255, 140, 30, 0.45);
+  animation: l4war-line-breathe 2.6s ease-in-out infinite;
+}
+@keyframes l4war-line-breathe {
+  0%, 100% { opacity: 0.85; transform: skewX(-18deg) scaleY(1); }
+  50% { opacity: 1; transform: skewX(-18deg) scaleY(1.08); }
+}
+.l4war__line--struck .l4war__line-glow {
+  animation: l4war-line-struck 880ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes l4war-line-struck {
+  0% { box-shadow: 0 0 18px rgba(255, 170, 60, 0.85); }
+  25% { box-shadow: 0 0 36px rgba(255, 220, 120, 1), 0 0 90px rgba(255, 170, 60, 0.8); }
+  100% { box-shadow: 0 0 18px rgba(255, 170, 60, 0.85); }
+}
+
+/* ── Fighters ────────────────────────────────────────────────────────── */
+.l4war__fighter {
+  position: absolute;
+  left: calc(var(--x) * 1%);
+  top: calc(var(--y) * 1%);
+  transform: translate(-50%, -88%);
+  transition: left 1000ms cubic-bezier(0.22, 1, 0.36, 1), top 1000ms cubic-bezier(0.22, 1, 0.36, 1);
+  width: 7.2%;
+  min-width: 44px;
+}
+.l4war__fighter img {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 10px 10px rgba(10, 8, 16, 0.5));
+}
+.l4war__fighter--hero { z-index: 3; }
+.l4war__fighter--villain { z-index: 2; }
+
+/* Villain posture decays with HP — he physically loses the will. */
+.l4war__fighter--villain img {
+  transition: transform 1200ms ease, filter 1200ms ease, opacity 1200ms ease;
+  transform-origin: 50% 95%;
+}
+.l4war__fighter--villain.is-hurt img {
+  transform: rotate(-3deg) scale(0.97);
+  filter: drop-shadow(0 10px 10px rgba(10, 8, 16, 0.5)) saturate(0.85);
+}
+.l4war__fighter--villain.is-dying img {
+  transform: rotate(-8deg) scale(0.9) translateY(3%);
+  filter: drop-shadow(0 6px 8px rgba(10, 8, 16, 0.45)) saturate(0.55) brightness(0.85);
+}
+.l4war__fighter--villain.is-dead img {
+  transform: rotate(-78deg) scale(0.82) translateY(14%);
+  filter: saturate(0.2) brightness(0.6);
+  opacity: 0.55;
+}
+.l4war__boss-aura {
+  position: absolute;
+  inset: -12% -18%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    closest-side,
+    rgba(124, 64, 220, calc(var(--hp) / 100 * 0.34)),
+    transparent 70%
+  );
+  animation: l4war-aura 3s ease-in-out infinite;
+}
+@keyframes l4war-aura {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+.is-dying .l4war__boss-aura { animation-duration: 0.9s; }
+.is-dead .l4war__boss-aura { opacity: 0; animation: none; }
+
+/* ── Momentum flame ──────────────────────────────────────────────────── */
+.l4war__flame {
+  position: absolute;
+  left: 50%;
+  top: -14%;
+  transform: translateX(-50%);
+  display: grid;
+  place-items: center;
+}
+.l4war__flame i {
+  position: absolute;
+  width: 12px;
+  height: 18px;
+  border-radius: 50% 50% 35% 35%;
+  background: radial-gradient(circle at 50% 80%, #ffd27a, #ff8a2a 60%, rgba(255, 80, 20, 0));
+  animation: l4war-flame 720ms ease-in-out infinite;
+}
+.l4war__flame i:nth-child(2) { animation-delay: 180ms; transform: translateX(-7px) scale(0.8); }
+.l4war__flame i:nth-child(3) { animation-delay: 320ms; transform: translateX(7px) scale(0.72); }
+@keyframes l4war-flame {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.95; }
+  50% { transform: translateY(-5px) scale(1.12); opacity: 1; }
+}
+.l4war__flame b {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #fff3d6;
+  text-shadow: 0 1px 0 rgba(120, 40, 0, 0.8), 0 0 12px rgba(255, 150, 40, 0.9);
+}
+
+/* ── Excuse projectiles ──────────────────────────────────────────────── */
+.l4war__excuse {
+  position: absolute;
+  left: calc(var(--x) * 1%);
+  top: calc(var(--y) * 1%);
+  transform: translate(-50%, -100%);
+  transition: left 1400ms linear, top 1400ms linear;
+  pointer-events: auto;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.l4war__excuse-bubble {
+  display: inline-block;
+  max-width: 150px;
+  padding: 5px 9px;
+  border-radius: 10px 10px 10px 2px;
+  background: rgba(20, 16, 30, 0.92);
+  border: 1px solid rgba(150, 110, 240, 0.55);
+  color: #d9ccff;
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.25;
+  box-shadow: 0 4px 14px rgba(20, 10, 50, 0.55), 0 0 16px rgba(124, 64, 220, 0.3);
+  animation: l4war-excuse-drift 2.4s ease-in-out infinite;
+}
+@keyframes l4war-excuse-drift {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-4px) rotate(1.2deg); }
+}
+.l4war__excuse--urgent .l4war__excuse-bubble {
+  border-color: rgba(255, 96, 96, 0.85);
+  color: #ffd9d9;
+  box-shadow: 0 4px 14px rgba(60, 8, 8, 0.6), 0 0 22px rgba(255, 70, 50, 0.55);
+  animation-duration: 0.9s;
+}
+.l4war__excuse-fuse {
+  display: block;
+  height: 3px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #ff5a3c calc(var(--p) * 100%), rgba(255, 255, 255, 0.18) 0);
+}
+
+/* ── Strike pulse + why-toast ───────────────────────────────────────── */
+.l4war__strike {
+  position: absolute;
+  left: calc(var(--x) * 1%);
+  top: calc(var(--y) * 1%);
+}
+.l4war__strike span {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  border: 2px solid rgba(255, 214, 130, 0.95);
+  animation: l4war-strike-ring 860ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes l4war-strike-ring {
+  0% { width: 10px; height: 10px; opacity: 1; }
+  100% { width: 120px; height: 120px; opacity: 0; }
+}
+.l4war__why {
+  position: absolute;
+  left: calc(var(--x) * 1%);
+  top: calc(var(--y) * 1%);
+  transform: translate(-50%, -100%);
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(24, 20, 14, 0.92);
+  border: 1px solid rgba(255, 190, 90, 0.6);
+  color: #ffe9c4;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  animation: l4war-why 900ms ease forwards;
+}
+@keyframes l4war-why {
+  0% { opacity: 0; translate: 0 6px; }
+  18% { opacity: 1; translate: 0 0; }
+  80% { opacity: 1; }
+  100% { opacity: 0; translate: 0 -8px; }
+}
+
+/* ── Banners ─────────────────────────────────────────────────────────── */
+.l4war__yesterday,
+.l4war__reckoning {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  border-radius: 10px;
+  pointer-events: none;
+}
+.l4war__yesterday {
+  top: 4%;
+  font-size: 10px;
+  padding: 4px 12px;
+  background: rgba(16, 14, 22, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(255, 244, 220, 0.85);
+}
+.l4war__yesterday.is-won { border-color: rgba(120, 220, 130, 0.5); color: #cdf3cf; }
+.l4war__yesterday.is-lost { border-color: rgba(255, 110, 90, 0.5); color: #ffd2c8; }
+.l4war__reckoning {
+  top: 10%;
+  font-size: 14px;
+  padding: 10px 22px;
+  background: rgba(14, 12, 20, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff3da;
+  box-shadow: 0 14px 50px rgba(0, 0, 0, 0.55);
+  animation: l4war-reckoning 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.l4war__reckoning.is-won {
+  border-color: rgba(120, 220, 130, 0.75);
+  box-shadow: 0 14px 50px rgba(20, 80, 30, 0.5), 0 0 40px rgba(110, 220, 120, 0.35);
+}
+.l4war__reckoning.is-lost {
+  border-color: rgba(255, 110, 90, 0.7);
+  box-shadow: 0 14px 50px rgba(80, 20, 12, 0.55);
+}
+@keyframes l4war-reckoning {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-10px) scale(0.96); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .l4war__line-glow,
+  .l4war__flame i,
+  .l4war__excuse-bubble,
+  .l4war__boss-aura {
+    animation: none;
+  }
+  .l4war__tile,
+  .l4war__line,
+  .l4war__fighter,
+  .l4war__excuse {
+    transition: none;
+  }
+}

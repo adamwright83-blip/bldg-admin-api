@@ -14,6 +14,7 @@ import { BUILDINGS } from "@shared/buildings";
 import { TENANT_CONFIG, type TenantId } from "@shared/tenantConfig";
 import { Level4Offensive, type Level4OffensiveHandle } from "./Level4Offensive";
 import { Level4BoardScene, type Level4ActiveChallenge } from "./Level4BoardScene";
+import type { Level4WarView } from "./Level4WarLayer";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../server/routers";
 
@@ -225,6 +226,29 @@ export function Level4OffensiveHost() {
   const state = trpc.admin.getLevel4OffensiveState.useQuery();
   const gateQuery = trpc.admin.getLevel4GateState.useQuery();
   const missionQuery = trpc.admin.level4Mission.current.useQuery();
+  // WAR FOR THE BRIDGE — territory duel state. Polls so the front line,
+  // boss posture, and excuse projectiles stay alive without manual refresh.
+  const warQuery = trpc.admin.getLevel4WarState.useQuery(undefined, {
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+  });
+  const recordWarAction = trpc.admin.recordLevel4WarAction.useMutation({
+    onSuccess: async (result) => {
+      if (result.recorded) {
+        setLastStrike({
+          label:
+            result.kind === "call_strike"
+              ? "CALL STRIKE +"
+              : result.kind === "revive"
+                ? "BACK IN THE FIGHT"
+                : "LINE PUSHED +",
+          at: Date.now(),
+        });
+      }
+      await utils.admin.getLevel4WarState.invalidate();
+    },
+  });
+  const [lastStrike, setLastStrike] = useState<{ label: string; at: number } | null>(null);
   const startMission = trpc.admin.level4Mission.start.useMutation();
   const completeMission = trpc.admin.level4Mission.complete.useMutation();
   const generateCopy = trpc.admin.generateOffensiveCopy.useMutation();
@@ -650,6 +674,13 @@ export function Level4OffensiveHost() {
       </section>
       <Level4Offensive
         ref={l4Ref}
+        war={(warQuery.data as Level4WarView | undefined) ?? null}
+        lastStrike={lastStrike}
+        onEngageProjectile={(laneKey) => {
+          // Shattering an excuse = doing the real work it's lying about.
+          const lane = gate.lanes.find((l) => l.key === laneKey);
+          if (lane) window.location.href = lane.path;
+        }}
         onDeployLane1={openBuildingPenetration}
         onDeployLane2={openReferralRequest}
         onDeployLane3={openMarketHole}

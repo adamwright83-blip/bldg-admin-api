@@ -628,6 +628,24 @@ export function CockpitView({
     setCommitted(new Set());
   }, [data, interactive]);
 
+  // WAR FOR THE BRIDGE: a checked cockpit mission is a real commitment —
+  // it shoves the Level 4 front line (idempotent per mission per day) so
+  // the money room and the gameboard tell one story. Fire-and-forget: the
+  // cockpit never blocks on the war.
+  const utils = trpc.useUtils();
+  const warTaskCheck = trpc.admin.recordLevel4WarAction.useMutation({
+    onSuccess: () => void utils.admin.getLevel4WarState.invalidate(),
+    onError: () => undefined,
+  });
+  const commitMissionToWar = (mission: CockpitMissionView) => {
+    const day = new Date().toISOString().slice(0, 10);
+    warTaskCheck.mutate({
+      kind: "task_check",
+      dedupeKey: `cockpit:${day}:${mission.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 80)}`,
+      meta: { source: "cfo_cockpit", mission: mission.title },
+    });
+  };
+
   const [helperOpen, setHelperOpen] = useState(false);
   const [survivalText, setSurvivalText] = useState("");
   const ownerPayIncludedCents = lineByKey(data, "ownerPay").amountCents;
@@ -1127,13 +1145,16 @@ export function CockpitView({
               key={mission.title}
               type="button"
               disabled={!tappable}
-              onClick={() =>
+              onClick={() => {
+                const willCheck = !committed.has(i);
                 setCommitted(prev => {
                   const next = new Set(prev);
                   next.has(i) ? next.delete(i) : next.add(i);
                   return next;
-                })
-              }
+                });
+                // Checking (not unchecking) pushes the war's front line.
+                if (willCheck) commitMissionToWar(mission);
+              }}
               className={`absolute flex flex-col items-center rounded-[0.7cqw] bg-[#f7eede]/92 px-[0.5cqw] py-[0.5cqh] text-center transition-transform ${
                 tappable ? "cursor-pointer hover:scale-[1.04]" : "cursor-default"
               }`}

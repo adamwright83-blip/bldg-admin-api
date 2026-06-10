@@ -152,6 +152,12 @@ import {
 } from "./level4OffensiveExecute";
 import { getLevel4GateState as loadLevel4GateState } from "./level4Gate";
 import {
+  getLevel4WarState as loadLevel4WarState,
+  recordLevel4WarAction,
+  recordWarActionSafe,
+  type WarActionKind,
+} from "./level4War";
+import {
   completeLevel4Mission,
   getCurrentLevel4MissionState,
   markLevel4MissionStarted,
@@ -1127,6 +1133,39 @@ export const appRouter = router({
       return loadLevel4GateState(ctx.tenantId);
     }),
 
+    /** War for the Bridge — daily territory duel state (front line, boss HP, combo, projectiles). */
+    getLevel4WarState: adminProcedure.query(async ({ ctx }) => {
+      return loadLevel4WarState(ctx.tenantId);
+    }),
+
+    /**
+     * Record a war action explicitly (call strikes, excuse shatters, task
+     * checks, revives). Order-driven pushes (stage advances, reminders,
+     * outreach) are instrumented inside their own mutations — this endpoint
+     * covers actions that have no other server mutation to ride on.
+     */
+    recordLevel4WarAction: adminProcedure
+      .input(
+        z.object({
+          kind: z.enum([
+            "call_strike",
+            "excuse_shattered",
+            "task_check",
+            "revive",
+          ]),
+          dedupeKey: z.string().min(4).max(191),
+          meta: z.record(z.string(), z.unknown()).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return recordLevel4WarAction({
+          tenantId: ctx.tenantId,
+          kind: input.kind as WarActionKind,
+          dedupeKey: input.dedupeKey,
+          meta: input.meta,
+        });
+      }),
+
     agent: router({
       listTools: adminProcedure.query(() => listAgentTools()),
       events: adminProcedure
@@ -1573,6 +1612,15 @@ export const appRouter = router({
             console.warn("[OpsTasks] Failed to log Level 4 completion:", error);
           }
         }
+        if (!out.deduped) {
+          // War: an outreach weapon actually fired — shove the front line.
+          recordWarActionSafe({
+            tenantId: ctx.tenantId,
+            kind: "outreach_executed",
+            dedupeKey: `outreach:${out.actionType}:${out.logId ?? input.block}`,
+            meta: { block: input.block },
+          });
+        }
         return {
           deduped: out.deduped,
           logId: out.logId,
@@ -1590,6 +1638,14 @@ export const appRouter = router({
         });
         if (!out.ok) {
           throw new TRPCError({ code: "BAD_REQUEST", message: out.error });
+        }
+        if (!out.deduped) {
+          recordWarActionSafe({
+            tenantId: ctx.tenantId,
+            kind: out.paymentCollected ? "collection_recovered" : "reminder_sent",
+            dedupeKey: `reminder:${input.orderId}:${new Date().toDateString()}`,
+            meta: { orderId: input.orderId, paymentCollected: out.paymentCollected },
+          });
         }
         return {
           deduped: out.deduped,
@@ -2393,6 +2449,16 @@ export const appRouter = router({
           source: "driver_app_bldg",
           actorUserId: ctx.user?.id ?? null,
           actorDisplayName: ctx.user?.name ?? ctx.user?.email ?? null,
+        });
+
+        // War: a real pipeline advance — same event no matter which surface
+        // (LIVE board, stage page, driver app) fired it. Idempotent per
+        // order+status, so re-clicks cannot double-shove the front line.
+        recordWarActionSafe({
+          tenantId: ctx.tenantId ?? "default",
+          kind: "stage_advance",
+          dedupeKey: `stage:${input.orderId}:${input.status}`,
+          meta: { orderId: input.orderId, status: input.status },
         });
 
         // SMS: Pickup en route when marking as collected
