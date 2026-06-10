@@ -1200,3 +1200,33 @@ export const level4WarEvents = mysqlTable("level4_war_events", {
 
 export type Level4WarEvent = typeof level4WarEvents.$inferSelect;
 export type InsertLevel4WarEvent = typeof level4WarEvents.$inferInsert;
+
+/** Command screen Sky Covenant — operator-tunable weather settings. */
+export const commandSkySettings = mysqlTable("command_sky_settings", {
+  tenantId: varchar("tenantId", { length: 64 }).notNull().primaryKey(),
+  mode: varchar("mode", { length: 16 }).notNull().default("campaign"),
+  period: varchar("period", { length: 16 }).notNull().default("today"),
+  redBelowCents: int("redBelowCents").notNull().default(0),
+  blueAboveCents: int("blueAboveCents").notNull().default(20000),
+  campaignTarget: int("campaignTarget").notNull().default(50),
+  campaignLabel: varchar("campaignLabel", { length: 120 }).notNull().default("50 new customers"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CommandSkySettingsRow = typeof commandSkySettings.$inferSelect;
+
+/** Sky Covenant win events — verbal commitments and first orders (hope). */
+export const commandSkyWins = mysqlTable("command_sky_wins", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+  kind: varchar("kind", { length: 32 }).notNull(),
+  label: varchar("label", { length: 191 }).notNull(),
+  dedupeKey: varchar("dedupeKey", { length: 191 }).notNull(),
+  hopeExpiresAt: timestamp("hopeExpiresAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantDedupeIdx: uniqueIndex("uq_command_sky_wins_tenant_dedupe").on(table.tenantId, table.dedupeKey),
+  tenantCreatedIdx: index("idx_command_sky_wins_tenant_created").on(table.tenantId, table.createdAt),
+}));
+
+export type CommandSkyWin = typeof commandSkyWins.$inferSelect;

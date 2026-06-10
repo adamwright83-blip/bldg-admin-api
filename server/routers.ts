@@ -158,6 +158,12 @@ import {
   type WarActionKind,
 } from "./level4War";
 import {
+  getCommandSkyState,
+  getCommandSkySettings,
+  logCommandSkyWin,
+  updateCommandSkySettings,
+} from "./commandSky";
+import {
   completeLevel4Mission,
   getCurrentLevel4MissionState,
   markLevel4MissionStarted,
@@ -1137,6 +1143,58 @@ export const appRouter = router({
     getLevel4WarState: adminProcedure.query(async ({ ctx }) => {
       return loadLevel4WarState(ctx.tenantId);
     }),
+
+    /** Sky Covenant — the Command screen's weather (mode, hope windows, campaign). */
+    getCommandSky: adminProcedure
+      .input(z.object({ netCents: z.number().int().nullable().optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        return getCommandSkyState({
+          tenantId: ctx.tenantId,
+          netCents: input?.netCents ?? null,
+        });
+      }),
+
+    getCommandSkySettings: adminProcedure.query(async ({ ctx }) =>
+      getCommandSkySettings(ctx.tenantId)
+    ),
+
+    updateCommandSkySettings: adminProcedure
+      .input(
+        z.object({
+          mode: z.enum(["profit", "campaign"]).optional(),
+          period: z.enum(["today", "week", "month"]).optional(),
+          redBelowCents: z.number().int().min(-10_000_000).max(10_000_000).optional(),
+          blueAboveCents: z.number().int().min(-10_000_000).max(10_000_000).optional(),
+          campaignTarget: z.number().int().min(1).max(100_000).optional(),
+          campaignLabel: z.string().min(1).max(120).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => updateCommandSkySettings(ctx.tenantId, input)),
+
+    /** Log a Win — verbal commitment (3h blue) or first order (blue to block end). */
+    logCommandSkyWin: adminProcedure
+      .input(
+        z.object({
+          kind: z.enum(["verbal_commitment", "first_order"]),
+          label: z.string().min(1).max(191),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const result = await logCommandSkyWin({
+          tenantId: ctx.tenantId,
+          kind: input.kind,
+          label: input.label,
+          dedupeKey: `manual:${input.kind}:${input.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 100)}:${new Date().toISOString().slice(0, 10)}`,
+        });
+        // A win is also a shove on the Level 4 front line.
+        recordWarActionSafe({
+          tenantId: ctx.tenantId,
+          kind: "task_check",
+          dedupeKey: `sky-win:${input.kind}:${result.hopeExpiresAt}`,
+          meta: { source: "command_sky", label: input.label },
+        });
+        return result;
+      }),
 
     /**
      * Record a war action explicitly (call strikes, excuse shatters, task

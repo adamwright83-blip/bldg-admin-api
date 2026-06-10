@@ -15,6 +15,8 @@ import {
 } from "./OpsBoardCards";
 import { OpsBoardModals } from "./OpsBoardModals";
 import { EmergencyTaskComposer } from "./EmergencyTaskComposer";
+import { SkyBackdrop, SkyBar, useCommandSky } from "../CommandSky";
+import { CommandCockpitBand, ReflectionDigest, WarStrip } from "../CommandCockpitBand";
 import type { AdminHomeData, LogOutreachPayload, OpsBoardModal } from "./types";
 
 type OpsBoardHomeProps = {
@@ -41,6 +43,9 @@ export function OpsBoardHome({
   outreachLogging,
 }: OpsBoardHomeProps) {
   const [modal, setModal] = useState<OpsBoardModal | null>(null);
+  // COMMAND SKY — the merged Board+Cockpit weather. The whole home breathes
+  // with it; hope events (Log a Win) can turn it blue right now.
+  const sky = useCommandSky();
 
   const openCollectionPriority = () => {
     const rawOrderId =
@@ -81,28 +86,37 @@ export function OpsBoardHome({
         </div>
       ) : null}
 
+      <SkyBackdrop tone={sky.data?.tone} />
+
       <div className="ops-mobile-board">
         <MobileTopBar operatorName={operatorName} onOpenMobileNav={onOpenMobileNav} />
+        <SkyBar />
         <StatusStrip data={data} includeRunRate={false} />
         <EmergencyTaskComposer />
         <HeroCard onQuickInput={openQuickReceiptInput} />
+        <CommandCockpitBand onNavigate={onNavigate} />
+        <WarStrip onNavigate={onNavigate} />
+        <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} onNavigate={onNavigate} />
         <RunRateCard data={data} />
         <KpiGrid data={data} onNavigate={onNavigate} />
-        <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} onNavigate={onNavigate} />
         <TerritoryProgression data={data} />
         <RevenueAtRisk data={data} onOpenModal={setModal} />
         <PerformanceGauges data={data} />
+        <ReflectionDigest onNavigate={onNavigate} />
         <QuickActions onNavigate={onNavigate} onOpenModal={setModal} />
         <MobileBottomNav onNavigate={onNavigate} />
       </div>
 
       <div className="ops-desktop-board">
+        <SkyBar />
         <StatusStrip data={data} />
         <EmergencyTaskComposer />
         <div className="ops-desktop-hero-row">
           <HeroCard onQuickInput={openQuickReceiptInput} />
           <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} onNavigate={onNavigate} />
         </div>
+        <CommandCockpitBand onNavigate={onNavigate} />
+        <WarStrip onNavigate={onNavigate} />
         <KpiGrid data={data} onNavigate={onNavigate} />
         <div className="ops-desktop-territory-row">
           <TerritoryProgression data={data} />
@@ -112,6 +126,7 @@ export function OpsBoardHome({
           <PerformanceGauges data={data} />
           <QuickActions onNavigate={onNavigate} onOpenModal={setModal} />
         </div>
+        <ReflectionDigest onNavigate={onNavigate} />
       </div>
 
       <OpsBoardModals
