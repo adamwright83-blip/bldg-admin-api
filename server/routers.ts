@@ -104,6 +104,7 @@ import {
   notifyPickupEnRoute,
   notifyCardCharged,
   notifyDeliveryEnRoute,
+  sendSMS,
 } from "./_core/sms";
 import { centsToDollars } from "@shared/pricing";
 import { z } from "zod";
@@ -182,14 +183,23 @@ import {
   completeOpsTask,
   createOpsTask,
   createOrCompleteLevel4OpsTask,
+  getOpsTaskById,
   getPerformanceMetrics,
   getWeeklyOperatorReflection,
   listOpsTasks,
+  recordOpsTaskReply,
   updateOpsTaskStatus,
   type OpsTaskLevel,
   type OpsTaskLane,
   type OpsTaskStatus,
 } from "./opsTasks";
+import {
+  buildOrderPatchFromReply,
+  buildResidentReplyPayload,
+  buildResidentReplySms,
+  mapOpsTaskToResidentFollowup,
+  postReplyToResident,
+} from "./residentFollowups";
 import { getAgentEventTimeline } from "./agents/agentEvents";
 import { getTenantAiLimitState } from "./agents/costTracking";
 import { listAgentTools } from "./agents/toolRegistry";
@@ -1396,6 +1406,84 @@ export const appRouter = router({
           return { ok: true as const };
         }),
     }),
+
+    /**
+     * Resident post-order follow-ups — the FLASHING RED loop.
+     * platformOrVendorProcedure so BOTH admin.bldg.chat and driver.bldg.chat
+     * sessions can poll and reply (the driver page already uses this tier).
+     */
+    listResidentFollowups: platformOrVendorProcedure.query(async () => {
+      const tasks = await listOpsTasks({ tenantId: "default", status: "open", limit: 100 });
+      return tasks
+        .map((task) => mapOpsTaskToResidentFollowup(task))
+        .filter((item): item is NonNullable<typeof item> => item !== null);
+    }),
+
+    /**
+     * Operator reply to a resident follow-up. Does FOUR things:
+     *  1. APPROVED + time → revises the REAL order (updateOrderIntake)
+     *  2. stores the reply on the ops task + completes it
+     *  3. S2S write-back to the resident app (drives the returning courier)
+     *  4. SMS tap-link to the resident's phone (Twilio)
+     * Returns delivery flags so the operator UI can show what actually happened.
+     */
+    replyToResidentFollowup: platformOrVendorProcedure
+      .input(
+        z.object({
+          taskId: z.number().int().positive(),
+          message: z.string().min(1).max(1000),
+          decision: z.enum(["approved", "declined"]).optional(),
+          newTime: z.string().max(60).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const task = await getOpsTaskById(input.taskId);
+        if (!task) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Follow-up task not found" });
+        }
+        const item = mapOpsTaskToResidentFollowup(task);
+        if (!item) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Task is not a resident follow-up" });
+        }
+        if (task.status === "completed") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Follow-up already answered" });
+        }
+
+        // 1) Approve → revise the REAL order. Declines / plain replies never mutate.
+        const patch = buildOrderPatchFromReply(item.followupType, input.decision, input.newTime);
+        let orderRevised = false;
+        if (patch && item.orderId != null) {
+          await updateOrderIntake(item.orderId, patch);
+          orderRevised = true;
+          console.log(
+            `[ResidentFollowup] order #${item.orderId} revised: ${JSON.stringify(patch)}`
+          );
+        }
+
+        // 2) Store the reply + complete the task (event-logged).
+        const actorId =
+          (ctx as { user?: { id?: unknown } }).user?.id != null
+            ? String((ctx as { user?: { id?: unknown } }).user!.id)
+            : null;
+        await recordOpsTaskReply({
+          taskId: input.taskId,
+          message: input.message,
+          decision: input.decision ?? null,
+          appliedOrderPatch: patch,
+          repliedBy: actorId,
+        });
+
+        // 3) Write back to the resident app (returning courier + note).
+        const payload = buildResidentReplyPayload(item, input, patch);
+        const residentNotified = await postReplyToResident(payload);
+
+        // 4) SMS tap-link (non-fatal; resident poll covers the no-SMS path).
+        const smsSent = item.phone
+          ? await sendSMS(item.phone, buildResidentReplySms(item, input.message))
+          : false;
+
+        return { ok: true as const, orderRevised, residentNotified, smsSent };
+      }),
 
     /** Static UI hints (env-backed); delivery truth remains on admin_action_log + webhooks. */
     revenueInterventionUiContext: adminProcedure.query(() => ({
