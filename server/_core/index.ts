@@ -12,7 +12,7 @@ import { appRouter, getStripe, validateStripeEnv } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { sdk } from "./sdk";
-import { createOrder, findLikelyDuplicateOpenResidentOrder, upsertUser } from "../db";
+import { createOrReuseResidentLaundryOrder, upsertUser } from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { VENDOR_COOKIE_NAME, THIRTY_DAYS_MS } from "@shared/const";
@@ -621,21 +621,13 @@ async function startServer() {
       console.log(
         `[Intake ${reqId}] Creating order: ${orderValues.firstName} ${orderValues.lastName}, ${orderValues.serviceType}, status ${orderValues.status}`
       );
-      const duplicate = await findLikelyDuplicateOpenResidentOrder(orderValues);
-      if (duplicate) {
-        console.log(`[Intake ${reqId}] Duplicate open resident order found: id=${duplicate.id}`);
-        return res.status(200).json({
-          ok: true,
-          orderId: duplicate.id,
-          status: intake.status,
-          needsReview: intake.needsReview,
-          needsReviewReason: intake.needsReviewReason,
-          paymentReady,
-          duplicate: true,
-        });
-      }
-      const orderId = await createOrder(orderValues);
-      console.log(`[Intake ${reqId}] Order created: id=${orderId}`);
+      // Single canonical, idempotent create. Resolves retries/double-taps via
+      // clientRequestId, falls back to the composite open-order duplicate guard,
+      // and recovers from insert races — so one resident request = one order.
+      const { orderId, reused } = await createOrReuseResidentLaundryOrder(orderValues, {
+        clientRequestId: intake.clientRequestId,
+      });
+      console.log(`[Intake ${reqId}] Order ${reused ? "reused (idempotent)" : "created"}: id=${orderId}`);
       return res.status(200).json({
         ok: true,
         orderId,
@@ -643,6 +635,7 @@ async function startServer() {
         needsReview: intake.needsReview,
         needsReviewReason: intake.needsReviewReason,
         paymentReady,
+        ...(reused ? { duplicate: true } : {}),
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

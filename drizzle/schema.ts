@@ -55,6 +55,13 @@ export const orders = mysqlTable("orders", {
   heldSource: varchar("heldSource", { length: 64 }),
   heldMetadataJson: json("heldMetadataJson"),
 
+  /* Resident-app idempotency key (one per "set it in motion" tap). Nullable for
+   * all pre-existing and non-resident rows. A UNIQUE index (below) makes this the
+   * DB-enforced exact-once guarantee: the same key can create at most one order,
+   * even under concurrent retries. heldMetadataJson.clientRequestId is kept as a
+   * debugging mirror only — it is NOT the atomic guarantee. */
+  residentClientRequestId: varchar("residentClientRequestId", { length: 191 }),
+
   /* Customer contact */
   firstName: varchar("firstName", { length: 100 }).notNull(),
   lastName: varchar("lastName", { length: 100 }).notNull(),
@@ -112,7 +119,14 @@ export const orders = mysqlTable("orders", {
   /* Timestamps */
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  /* DB-enforced resident-laundry idempotency. MySQL allows multiple NULLs, so
+   * old rows and non-resident (keyless) rows never collide; only real keys are
+   * forced unique. This is the atomic exact-once guard for concurrent retries. */
+  residentClientRequestIdUnq: uniqueIndex("orders_resident_client_request_id_unq").on(
+    table.residentClientRequestId,
+  ),
+}));
 
 export type Order = typeof orders.$inferSelect;
 export type InsertOrder = typeof orders.$inferInsert;

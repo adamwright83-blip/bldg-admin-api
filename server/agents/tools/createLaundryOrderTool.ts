@@ -1,4 +1,4 @@
-import { createOrder } from "../../db";
+import { createOrReuseResidentLaundryOrder } from "../../db";
 import type { AgentTool } from "../toolRegistry";
 
 export const createLaundryOrderTool: AgentTool<Record<string, any>, { orderId: number }> = {
@@ -8,7 +8,10 @@ export const createLaundryOrderTool: AgentTool<Record<string, any>, { orderId: n
     const pickupDate = String(input.pickupDate);
     const pickupDateObj = new Date(`${pickupDate}T00:00:00`);
     pickupDateObj.setDate(pickupDateObj.getDate() + 1);
-    const orderId = await createOrder({
+    // Route through the canonical idempotent helper (no direct createOrder) so
+    // this server-to-server tool can no longer create duplicate resident orders.
+    // No clientRequestId here, so it relies on the composite open-order guard.
+    const { orderId } = await createOrReuseResidentLaundryOrder({
       tenantId: ctx.tenantId,
       serviceType: input.serviceType ?? "wash_fold",
       pickupDate,

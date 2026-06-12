@@ -218,6 +218,88 @@ export async function findLikelyDuplicateOpenResidentOrder(order: InsertOrder): 
   });
 }
 
+/** True for a MySQL duplicate-key violation (ER_DUP_ENTRY / errno 1062). */
+function isDuplicateKeyError(err: unknown): boolean {
+  const e = err as { code?: string; errno?: number; message?: string } | null | undefined;
+  if (!e) return false;
+  return (
+    e.code === "ER_DUP_ENTRY" ||
+    e.errno === 1062 ||
+    /duplicate entry/i.test(e.message ?? "")
+  );
+}
+
+/**
+ * Resident-laundry idempotency lookup, keyed on the physical, UNIQUE-indexed
+ * orders.residentClientRequestId column (NOT the heldMetadataJson mirror). The
+ * resident app stamps one clientRequestId per "set it in motion" tap; a retry
+ * carries the same key, so we resolve it back to the order already created.
+ * The key is globally unique by construction, so no tenant scoping is needed.
+ */
+export async function findResidentOrderByClientRequestId(
+  clientRequestId: string | null | undefined
+): Promise<Order | undefined> {
+  const db = await getDb();
+  if (!db || !clientRequestId) return undefined;
+
+  const rows = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.residentClientRequestId, clientRequestId))
+    .orderBy(asc(orders.id))
+    .limit(1);
+
+  return rows[0];
+}
+
+/**
+ * The single canonical, idempotent entry point for creating a resident
+ * laundry / dry-clean order. Exact-once is DB-enforced by the UNIQUE index on
+ * orders.residentClientRequestId — safe even under simultaneous retries:
+ *   1. fast path — if we've already stored this clientRequestId, return it.
+ *   2. composite open-order guard — fallback for keyless paths / lost keys.
+ *   3. atomic insert — stamp residentClientRequestId; if a concurrent insert wins
+ *      the unique key, we catch ER_DUP_ENTRY and resolve back to that order.
+ * Returns { orderId, reused } so callers can log without changing user copy.
+ * Use this instead of createOrder() for every resident-originated booking.
+ */
+export async function createOrReuseResidentLaundryOrder(
+  order: InsertOrder,
+  opts?: { clientRequestId?: string | null }
+): Promise<{ orderId: number; reused: boolean }> {
+  // Debugging mirror only — the physical column / opts are authoritative.
+  const metadataKey =
+    order.heldMetadataJson && typeof order.heldMetadataJson === "object" && !Array.isArray(order.heldMetadataJson)
+      ? ((order.heldMetadataJson as Record<string, unknown>).clientRequestId as string | undefined)
+      : undefined;
+  const clientRequestId = opts?.clientRequestId ?? order.residentClientRequestId ?? metadataKey ?? null;
+
+  // 1) Fast path: this key already produced an order.
+  if (clientRequestId) {
+    const existing = await findResidentOrderByClientRequestId(clientRequestId);
+    if (existing) return { orderId: existing.id, reused: true };
+  }
+
+  // 2) Fallback duplicate guard (keyless paths, or a re-send that lost the key).
+  const dupe = await findLikelyDuplicateOpenResidentOrder(order);
+  if (dupe) return { orderId: dupe.id, reused: true };
+
+  // 3) Atomic insert. The UNIQUE index on residentClientRequestId is the real
+  //    exact-once guarantee: two simultaneous inserts can both pass the reads
+  //    above, but only one wins the key — the loser gets ER_DUP_ENTRY and we
+  //    resolve it back to the winning order instead of creating a duplicate.
+  try {
+    const orderId = await createOrder({ ...order, residentClientRequestId: clientRequestId ?? null });
+    return { orderId, reused: false };
+  } catch (err) {
+    if (clientRequestId && isDuplicateKeyError(err)) {
+      const raced = await findResidentOrderByClientRequestId(clientRequestId);
+      if (raced) return { orderId: raced.id, reused: true };
+    }
+    throw err;
+  }
+}
+
 /** Rows with no usable building slug (null, empty, or whitespace only). */
 const missingBuildingSlugWhere = sql`(${orders.buildingSlug} IS NULL OR TRIM(COALESCE(${orders.buildingSlug}, '')) = '')`;
 
