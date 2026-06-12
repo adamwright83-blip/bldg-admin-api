@@ -272,6 +272,9 @@ export function buildBldgIntakeOrder(bodyValue: unknown, tenantId: string): Buil
       heldRequestedReturnBy: returnByLanguage,
       heldSource,
       heldMetadataJson: metadataForHeld(held, service, heldSource, clientRequestId),
+      // Physical idempotency column (UNIQUE) — the atomic exact-once key.
+      // heldMetadataJson.clientRequestId above is a debugging mirror only.
+      residentClientRequestId: clientRequestId,
       firstName: names.firstName,
       lastName: names.lastName,
       phone,
