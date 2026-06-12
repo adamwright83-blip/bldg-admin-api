@@ -218,6 +218,77 @@ export async function findLikelyDuplicateOpenResidentOrder(order: InsertOrder): 
   });
 }
 
+/**
+ * Resident-laundry idempotency lookup. The resident app stamps a per-tap
+ * clientRequestId into heldMetadataJson; a retry / double-submit carries the
+ * SAME key, so we can resolve it back to the order we already created instead
+ * of inserting a duplicate. heldMetadataJson is a MySQL JSON column, so we
+ * match on the extracted '$.clientRequestId' scalar.
+ */
+export async function findResidentOrderByClientRequestId(
+  clientRequestId: string | null | undefined,
+  tenantId: string | null | undefined
+): Promise<Order | undefined> {
+  const db = await getDb();
+  if (!db || !clientRequestId) return undefined;
+
+  const rows = await db
+    .select()
+    .from(orders)
+    .where(and(
+      eq(orders.tenantId, tenantId ?? "default"),
+      sql`JSON_UNQUOTE(JSON_EXTRACT(${orders.heldMetadataJson}, '$.clientRequestId')) = ${clientRequestId}`
+    ))
+    .orderBy(asc(orders.id))
+    .limit(1);
+
+  return rows[0];
+}
+
+/**
+ * The single canonical, idempotent entry point for creating a resident
+ * laundry / dry-clean order. Duplicate-safe in three layers:
+ *   1. clientRequestId — exact-once for retries / double taps (same key → same order).
+ *   2. composite open-order guard — catches re-sends that lost the key.
+ *   3. post-insert race recovery — if a concurrent request inserted between our
+ *      checks and this insert, resolve back to the earliest matching order.
+ * Returns { orderId, reused } so callers can log without changing user copy.
+ * Use this instead of createOrder() for every resident-originated booking.
+ */
+export async function createOrReuseResidentLaundryOrder(
+  order: InsertOrder,
+  opts?: { clientRequestId?: string | null }
+): Promise<{ orderId: number; reused: boolean }> {
+  const metadataKey =
+    order.heldMetadataJson && typeof order.heldMetadataJson === "object" && !Array.isArray(order.heldMetadataJson)
+      ? ((order.heldMetadataJson as Record<string, unknown>).clientRequestId as string | undefined)
+      : undefined;
+  const clientRequestId = opts?.clientRequestId ?? metadataKey ?? null;
+
+  if (clientRequestId) {
+    const existing = await findResidentOrderByClientRequestId(clientRequestId, order.tenantId);
+    if (existing) return { orderId: existing.id, reused: true };
+  }
+
+  const dupe = await findLikelyDuplicateOpenResidentOrder(order);
+  if (dupe) return { orderId: dupe.id, reused: true };
+
+  try {
+    const orderId = await createOrder(order);
+    return { orderId, reused: false };
+  } catch (err) {
+    // A concurrent insert may have created the order between our checks above
+    // and this insert. Prefer returning the existing row over surfacing the error.
+    if (clientRequestId) {
+      const raced = await findResidentOrderByClientRequestId(clientRequestId, order.tenantId);
+      if (raced) return { orderId: raced.id, reused: true };
+    }
+    const racedDupe = await findLikelyDuplicateOpenResidentOrder(order);
+    if (racedDupe) return { orderId: racedDupe.id, reused: true };
+    throw err;
+  }
+}
+
 /** Rows with no usable building slug (null, empty, or whitespace only). */
 const missingBuildingSlugWhere = sql`(${orders.buildingSlug} IS NULL OR TRIM(COALESCE(${orders.buildingSlug}, '')) = '')`;
 

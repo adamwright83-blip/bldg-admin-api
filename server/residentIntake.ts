@@ -9,6 +9,9 @@ export type BuiltBldgIntakeOrder = {
   status: IntakeStatus;
   needsReview: boolean;
   needsReviewReason: string | null;
+  /** Resident-app idempotency key (per "set it in motion" tap). Stored in
+   * heldMetadataJson.clientRequestId so a retry resolves to the same order. */
+  clientRequestId: string | null;
   paymentInput: {
     stripeCustomerId: string | null;
     stripePaymentMethodId: string | null;
@@ -122,7 +125,12 @@ function normalizeServiceType(body: Record<string, unknown>, service: Record<str
   return null;
 }
 
-function metadataForHeld(held: Record<string, unknown>, service: Record<string, unknown>, source: string | null): Record<string, unknown> | null {
+function metadataForHeld(
+  held: Record<string, unknown>,
+  service: Record<string, unknown>,
+  source: string | null,
+  clientRequestId: string | null,
+): Record<string, unknown> | null {
   const rawMetadata = objectValue(held.metadata);
   const metadata: Record<string, unknown> = {
     ...rawMetadata,
@@ -131,6 +139,9 @@ function metadataForHeld(held: Record<string, unknown>, service: Record<string, 
   if (held.displayRequest != null) metadata.displayRequest = held.displayRequest;
   if (service.items != null) metadata.serviceItems = service.items;
   if (source) metadata.source = source;
+  // Idempotency key: persist so findResidentOrderByClientRequestId can resolve
+  // a retry/double-tap back to this exact order instead of creating a duplicate.
+  if (clientRequestId) metadata.clientRequestId = clientRequestId;
   return Object.keys(metadata).length > 0 ? metadata : null;
 }
 
@@ -140,6 +151,10 @@ export function buildBldgIntakeOrder(bodyValue: unknown, tenantId: string): Buil
   const service = objectValue(body.service);
   const held = objectValue(body.held);
   const payment = objectValue(body.payment);
+
+  // Resident-app idempotency key (top-level on the intake body; may also arrive
+  // nested under held). Exact-text so the opaque key is preserved verbatim.
+  const clientRequestId = firstExactText(body.clientRequestId, held.clientRequestId);
 
   const serviceType = normalizeServiceType(body, service);
   if (!serviceType) {
@@ -235,6 +250,7 @@ export function buildBldgIntakeOrder(bodyValue: unknown, tenantId: string): Buil
     status,
     needsReview: status === "intake-pending",
     needsReviewReason,
+    clientRequestId,
     paymentInput: {
       stripeCustomerId,
       stripePaymentMethodId,
@@ -255,7 +271,7 @@ export function buildBldgIntakeOrder(bodyValue: unknown, tenantId: string): Buil
       heldRequestedPickupWindow: pickupLanguage,
       heldRequestedReturnBy: returnByLanguage,
       heldSource,
-      heldMetadataJson: metadataForHeld(held, service, heldSource),
+      heldMetadataJson: metadataForHeld(held, service, heldSource, clientRequestId),
       firstName: names.firstName,
       lastName: names.lastName,
       phone,
