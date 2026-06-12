@@ -218,6 +218,40 @@ export async function findLikelyDuplicateOpenResidentOrder(order: InsertOrder): 
   });
 }
 
+/**
+ * LOOSE resident-laundry duplicate guard: same resident + same serviceType +
+ * same pickupDate + still open = the same physical pickup. Unlike the strict
+ * guard above, deliveryDate and request-text "signal" are deliberately ignored —
+ * live orders #172/#173 (2026-06-12) proved two booking paths produce different
+ * deliveryDate/metadata shapes for one user action, which defeated the strict
+ * match and created a duplicate order.
+ */
+async function findOpenResidentLaundryOrderLoose(order: InsertOrder): Promise<Order | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const candidates = await db
+    .select()
+    .from(orders)
+    .where(and(
+      eq(orders.tenantId, order.tenantId ?? "default"),
+      inArray(orders.status, OPEN_ORDER_STATUSES),
+      eq(orders.serviceType, order.serviceType),
+      eq(orders.pickupDate, order.pickupDate)
+    ))
+    .orderBy(desc(orders.createdAt), desc(orders.id))
+    .limit(25);
+
+  return candidates.find((candidate) => {
+    if (!sameDuplicateResident(order, candidate)) return false;
+    if (normalizeDuplicateText(order.unit) !== normalizeDuplicateText(candidate.unit)) return false;
+    return (
+      normalizeDuplicateText(order.buildingSlug || order.address) ===
+      normalizeDuplicateText(candidate.buildingSlug || candidate.address)
+    );
+  });
+}
+
 /** True for a MySQL duplicate-key violation (ER_DUP_ENTRY / errno 1062). */
 function isDuplicateKeyError(err: unknown): boolean {
   const e = err as { code?: string; errno?: number; message?: string } | null | undefined;
@@ -283,6 +317,20 @@ export async function createOrReuseResidentLaundryOrder(
   // 2) Fallback duplicate guard (keyless paths, or a re-send that lost the key).
   const dupe = await findLikelyDuplicateOpenResidentOrder(order);
   if (dupe) return { orderId: dupe.id, reused: true };
+
+  // 2b) LOOSE resident-laundry guard. Live incident (orders #172/#173,
+  // 2026-06-12): two paths booked the same resident+day with DIFFERENT
+  // deliveryDate and request-text "signal", so the strict guard above missed.
+  // For resident laundry/dry-clean, same resident + same serviceType + same
+  // pickupDate + still-open IS the same physical pickup — deliveryDate and
+  // request text must not defeat the dedupe.
+  const loose = await findOpenResidentLaundryOrderLoose(order);
+  if (loose) {
+    console.warn(
+      `[Idempotency] loose dedupe hit — reusing open order #${loose.id} (same resident/service/pickupDate; deliveryDate/signal differed)`
+    );
+    return { orderId: loose.id, reused: true };
+  }
 
   // 3) Atomic insert. The UNIQUE index on residentClientRequestId is the real
   //    exact-once guarantee: two simultaneous inserts can both pass the reads

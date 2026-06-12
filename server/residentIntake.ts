@@ -92,6 +92,18 @@ function ymdFromDateLike(value: unknown): string | null {
   return match[1];
 }
 
+/**
+ * Accept a value for a *TimeWindow column only if it is not date-like.
+ * Guards against return-by DATE strings ("2026-06-14") leaking into
+ * deliveryTimeWindow (live order #173 regression).
+ */
+function timeWindowOnly(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return null;
+  return trimmed || null;
+}
+
 function addDaysYmd(ymd: string, days: number): string {
   const [year, month, day] = ymd.split("-").map(Number);
   const date = new Date(year, month - 1, day + days);
@@ -261,7 +273,13 @@ export function buildBldgIntakeOrder(bodyValue: unknown, tenantId: string): Buil
       pickupDate: pickupDate ?? "TBD",
       pickupTimeWindow: pickupWindow ?? pickupLanguage ?? "Needs scheduling",
       deliveryDate: returnByDate ?? (actionable && pickupDate ? addDaysYmd(pickupDate, 1) : null),
-      deliveryTimeWindow: deliveryWindow ?? returnByLanguage ?? (actionable ? pickupWindow : null),
+      // A TIME WINDOW only — never a date. Live order #173 (2026-06-12) stored
+      // deliveryTimeWindow="2026-06-14" because returnByLanguage (a return-by
+      // DATE string) leaked into this field when the payload omitted a window.
+      deliveryTimeWindow:
+        timeWindowOnly(deliveryWindow) ??
+        timeWindowOnly(returnByLanguage) ??
+        (actionable ? pickupWindow : null),
       address,
       unit,
       specialInstructions,
