@@ -3,6 +3,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
 import { Loader2 } from "lucide-react";
 import { DriverPrepMechanic } from "@/components/driver/DriverPrepMechanic";
+import { ResidentFollowupAlert } from "@/components/admin/ResidentFollowupAlert";
 import { useState } from "react";
 
 function getLocalYmd(date = new Date()): string {
@@ -65,18 +66,22 @@ export default function Driver() {
   }
 
   return (
-    <DriverPrepMechanic
-      pickups={pickupQuery.data}
-      deliveries={deliveryQuery.data}
-      selectedDate={selectedDate}
-      onSelectedDateChange={setSelectedDate}
-      isLoading={
-        pickupQuery.isLoading ||
-        deliveryQuery.isLoading ||
-        updateStatus.isPending
-      }
-      onOrderCreated={handleOrderCreated}
-      onResolveOrder={handleResolveOrder}
-    />
+    <>
+      {/* Drop-everything resident message alarm — flashing red, top of the driver screen. */}
+      <ResidentFollowupAlert />
+      <DriverPrepMechanic
+        pickups={pickupQuery.data}
+        deliveries={deliveryQuery.data}
+        selectedDate={selectedDate}
+        onSelectedDateChange={setSelectedDate}
+        isLoading={
+          pickupQuery.isLoading ||
+          deliveryQuery.isLoading ||
+          updateStatus.isPending
+        }
+        onOrderCreated={handleOrderCreated}
+        onResolveOrder={handleResolveOrder}
+      />
+    </>
   );
 }

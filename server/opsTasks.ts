@@ -333,6 +333,70 @@ export async function completeOpsTask(
   return after;
 }
 
+/** Read a single ops task (used by the resident follow-up reply flow). */
+export async function getOpsTaskById(
+  taskId: number,
+  tenantId = "default",
+  store: OpsTaskStore = drizzleOpsTaskStore
+): Promise<OpsTask | null> {
+  return store.getTask(tenantId, taskId);
+}
+
+/**
+ * Record an operator's reply to a resident post-order follow-up: merge the
+ * reply into the task's metadataJson (never overwrite the original resident
+ * context), mark the task completed, and log the event. The reply is what the
+ * resident app renders when the courier returns.
+ */
+export async function recordOpsTaskReply(
+  input: {
+    tenantId?: string;
+    taskId: number;
+    message: string;
+    decision?: "approved" | "declined" | null;
+    appliedOrderPatch?: Record<string, unknown> | null;
+    repliedBy?: string | null;
+  },
+  store: OpsTaskStore = drizzleOpsTaskStore
+): Promise<OpsTask> {
+  const tenantId = input.tenantId ?? "default";
+  const before = await store.getTask(tenantId, input.taskId);
+  if (!before) throw new Error("Ops task not found");
+
+  const existingMeta =
+    before.metadataJson && typeof before.metadataJson === "object" && !Array.isArray(before.metadataJson)
+      ? (before.metadataJson as Record<string, unknown>)
+      : {};
+  const reply = {
+    message: input.message,
+    decision: input.decision ?? null,
+    appliedOrderPatch: input.appliedOrderPatch ?? null,
+    repliedAt: new Date().toISOString(),
+    repliedBy: input.repliedBy ?? null,
+  };
+
+  const after = await store.updateTask(tenantId, input.taskId, {
+    status: "completed",
+    completedAt: new Date(),
+    completedBy: input.repliedBy ?? null,
+    outcome: `Replied to resident: ${input.message.slice(0, 180)}`,
+    metadataJson: { ...existingMeta, residentReply: reply },
+  });
+  if (!after) throw new Error("Ops task reply update failed");
+
+  await createOpsTaskEvent({
+    tenantId,
+    taskId: input.taskId,
+    eventType: "completed",
+    actorId: input.repliedBy ?? null,
+    beforeJson: before,
+    afterJson: after,
+    note: `Resident reply: ${input.message.slice(0, 180)}`,
+  }, store);
+
+  return after;
+}
+
 function averageCompletionMinutes(tasks: OpsTask[]) {
   const durations = tasks
     .filter((task) => task.completedAt)

@@ -17,6 +17,7 @@ import OperatorReflection from "./OperatorReflection";
 import { Level4OffensiveHost } from "@/components/Level4OffensiveHost";
 import { AdminCustomerSearchBlock, AdminTabPanels } from "./Admin";
 import TruePnlCockpitPage from "./TruePnlCockpitPage";
+import { ResidentFollowupAlert } from "@/components/admin/ResidentFollowupAlert";
 
 const LIVE_INTERNAL_TABS = new Set<AdminWorkspaceTab>([
   "Intake",
@@ -184,6 +185,8 @@ export default function AdminHostApp() {
       className="min-h-screen bg-white text-black flex"
       style={{ fontFamily: '"Inter", system-ui, sans-serif' }}
     >
+      {/* Drop-everything resident message alarm — flashing red, top of every admin screen. */}
+      <ResidentFollowupAlert />
       {mobileNavOpen ? (
         <button
           type="button"
