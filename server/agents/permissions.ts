@@ -36,6 +36,7 @@ const agentToolAllowlist: Record<AgentType, Set<string>> = {
     "createResidentAgentPlanTool",
     "updateResidentAgentPlanTool",
     "createResidentCoordinatedRequestTool",
+    "createOrderFollowupTaskTool",
   ]),
   operator_voice_agent: new Set([
     "getResidentContextTool",
