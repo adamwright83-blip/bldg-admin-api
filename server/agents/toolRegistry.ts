@@ -43,6 +43,7 @@ import { createResidentAgentPlanTool } from "./tools/createResidentAgentPlanTool
 import { updateResidentAgentPlanTool } from "./tools/updateResidentAgentPlanTool";
 import { createResidentCoordinatedRequestTool } from "./tools/createResidentCoordinatedRequestTool";
 import { createOrderFollowupTaskTool } from "./tools/createOrderFollowupTaskTool";
+import { cancelResidentOrderTool } from "./tools/cancelResidentOrderTool";
 
 export type AgentToolResult<TOutput = unknown> = {
   entityType?: string | null;
@@ -102,6 +103,7 @@ const tools = [
   updateResidentAgentPlanTool,
   createResidentCoordinatedRequestTool,
   createOrderFollowupTaskTool,
+  cancelResidentOrderTool,
 ] satisfies AgentTool[];
 
 export const toolRegistry = new Map<string, AgentTool>(

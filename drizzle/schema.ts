@@ -75,7 +75,7 @@ export const orders = mysqlTable("orders", {
   stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 255 }),
 
   /* Order status */
-  status: mysqlEnum("status", ["new", "intake-pending", "collected", "processing", "ready", "delivered"])
+  status: mysqlEnum("status", ["new", "intake-pending", "collected", "processing", "ready", "delivered", "cancelled"])
     .default("new")
     .notNull(),
 

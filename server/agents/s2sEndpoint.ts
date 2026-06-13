@@ -13,6 +13,7 @@ export const s2sAgentToolAllowlist = new Set([
   "updateResidentAgentPlanTool",
   "createResidentCoordinatedRequestTool",
   "createOrderFollowupTaskTool",
+  "cancelResidentOrderTool",
   "createVendorOnboardingSessionTool",
   "prefillVendorFromWebTool",
   "collectVendorDetailsTool",

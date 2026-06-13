@@ -23,6 +23,7 @@ const STATUS_RANK: Record<Order["status"], number> = {
   processing: 3,
   ready: 4,
   delivered: 5,
+  cancelled: 6,
 };
 
 export function shouldCaptureOperationEvent(input: {

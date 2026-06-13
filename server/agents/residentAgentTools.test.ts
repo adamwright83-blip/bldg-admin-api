@@ -5,15 +5,26 @@ import type { AgentContext } from "./permissions";
 
 const dbMocks = vi.hoisted(() => ({
   createOrder: vi.fn(),
+  getOrderById: vi.fn(),
+  updateOrderStatus: vi.fn(),
   createResidentAgentPlan: vi.fn(),
   getResidentAgentPlan: vi.fn(),
   updateResidentAgentPlan: vi.fn(),
   createResidentCoordinatedRequest: vi.fn(),
 }));
 
+const opsTaskMocks = vi.hoisted(() => ({
+  createOpsTask: vi.fn(),
+}));
+
 vi.mock("../db", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../db")>()),
   ...dbMocks,
+}));
+
+vi.mock("../opsTasks", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../opsTasks")>()),
+  ...opsTaskMocks,
 }));
 
 import { assertToolPermission } from "./permissions";
@@ -22,6 +33,8 @@ import { createLaundryOrderTool } from "./tools/createLaundryOrderTool";
 import { createResidentAgentPlanTool } from "./tools/createResidentAgentPlanTool";
 import { updateResidentAgentPlanTool } from "./tools/updateResidentAgentPlanTool";
 import { createResidentCoordinatedRequestTool } from "./tools/createResidentCoordinatedRequestTool";
+import { createOrderFollowupTaskTool } from "./tools/createOrderFollowupTaskTool";
+import { cancelResidentOrderTool } from "./tools/cancelResidentOrderTool";
 
 const residentCtx: AgentContext = {
   tenantId: "default",
@@ -35,12 +48,20 @@ const residentCtx: AgentContext = {
 describe("resident-safe agent tools", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    opsTaskMocks.createOpsTask.mockResolvedValue({
+      id: 88,
+      title: "task",
+      status: "open",
+      priority: "high",
+    });
   });
 
   it("allows resident_agent to run the resident-safe plan and coordinated request tools", () => {
     expect(() => assertToolPermission(residentCtx, "createResidentAgentPlanTool")).not.toThrow();
     expect(() => assertToolPermission(residentCtx, "updateResidentAgentPlanTool")).not.toThrow();
     expect(() => assertToolPermission(residentCtx, "createResidentCoordinatedRequestTool")).not.toThrow();
+    expect(() => assertToolPermission(residentCtx, "createOrderFollowupTaskTool")).not.toThrow();
+    expect(() => assertToolPermission(residentCtx, "cancelResidentOrderTool")).not.toThrow();
     expect(() => assertToolPermission(residentCtx, "createLaundryOrderTool")).not.toThrow();
   });
 
@@ -60,6 +81,8 @@ describe("resident-safe agent tools", () => {
     expect(s2sAgentToolAllowlist.has("createResidentAgentPlanTool")).toBe(true);
     expect(s2sAgentToolAllowlist.has("updateResidentAgentPlanTool")).toBe(true);
     expect(s2sAgentToolAllowlist.has("createResidentCoordinatedRequestTool")).toBe(true);
+    expect(s2sAgentToolAllowlist.has("createOrderFollowupTaskTool")).toBe(true);
+    expect(s2sAgentToolAllowlist.has("cancelResidentOrderTool")).toBe(true);
   });
 
   it("S2S allowlist keeps unsafe confirmation tools unavailable to resident orchestration", () => {
@@ -209,6 +232,29 @@ describe("resident-safe agent tools", () => {
   it("keeps createLaundryOrderTool registered as the direct laundry path", () => {
     expect(createLaundryOrderTool.name).toBe("createLaundryOrderTool");
     expect(createLaundryOrderTool.description).toContain("existing order creation helper");
+  });
+
+  it("creates resident follow-up ops tasks for existing orders", async () => {
+    const result = await createOrderFollowupTaskTool.execute({
+      orderId: 172,
+      followupType: "return_by_time",
+      requestText: "deliver at 5pm",
+      requestedWindow: "5pm",
+      bldgUserId: 42,
+    }, residentCtx);
+
+    expect(result.output).toMatchObject({ orderId: 172, status: "open" });
+  });
+
+  it("cancels resident orders directly without vendor permission", async () => {
+    dbMocks.getOrderById.mockResolvedValue({ id: 172, bldgUserId: 42, status: "new" });
+
+    const result = await cancelResidentOrderTool.execute({ orderId: 172, bldgUserId: 42 }, residentCtx);
+
+    expect(dbMocks.updateOrderStatus).toHaveBeenCalledWith(172, "cancelled", expect.objectContaining({
+      actorDisplayName: "resident_chat",
+    }));
+    expect(result.output).toMatchObject({ orderCancelled: true, orderId: 172, status: "cancelled" });
   });
 
   it("includes a real migration for the new resident tables", () => {
