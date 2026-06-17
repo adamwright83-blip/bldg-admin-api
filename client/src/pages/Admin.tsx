@@ -23,6 +23,10 @@ import {
   Phone,
   MessageSquare,
   Package,
+  Plus,
+  CreditCard,
+  CalendarDays,
+  Shirt as ShirtIcon,
   Menu,
   Trash2,
   Camera,
@@ -573,6 +577,7 @@ function NewOrderTab({
     string | null
   >(null);
   const [submitted, setSubmitted] = useState(false);
+  const submitRequestIdRef = useRef<string | null>(null);
 
   const vendorsQuery = trpc.admin.listVendors.useQuery();
 
@@ -623,6 +628,30 @@ function NewOrderTab({
 
   const createOrder = trpc.admin.createOrder.useMutation();
   const queueQuery = trpc.admin.listByStatus.useQuery({ status: "new" });
+
+  const resetOrderForm = useCallback(() => {
+    submitRequestIdRef.current = null;
+    setSubmitted(false);
+    setPhone("");
+    setPrefilled(false);
+    setStripeCustomerId(null);
+    setStripePaymentMethodId(null);
+    setForm({
+      firstName: "",
+      lastName: "",
+      email: "",
+      address: "",
+      unit: "",
+      specialInstructions: "",
+      serviceType: "wash_fold",
+      pickupDate: localYmd(),
+      pickupTimeWindow: TIME_WINDOWS[0],
+      deliveryDate: "",
+      deliveryTimeWindow: "",
+      buildingSlug: SUPPORTED_BUILDINGS[0].value,
+      vendorId: undefined,
+    });
+  }, []);
 
   // Refs for autofill detection — browser autofill bypasses React onChange
   const phoneRef = useRef<HTMLInputElement>(null);
@@ -691,32 +720,70 @@ function NewOrderTab({
     pickupDateObj.setDate(pickupDateObj.getDate() + 1);
     const defaultDelivery = localYmd(pickupDateObj);
 
-    await createOrder.mutateAsync({
-      serviceType: form.serviceType,
-      pickupDate: form.pickupDate,
-      pickupTimeWindow: form.pickupTimeWindow,
-      deliveryDate: form.deliveryDate || defaultDelivery,
-      deliveryTimeWindow: form.deliveryTimeWindow || form.pickupTimeWindow,
-      address: actualAddress,
-      unit: actualUnit || undefined,
-      specialInstructions: form.specialInstructions || undefined,
-      firstName: actualFirstName,
-      lastName: actualLastName,
-      phone: actualPhone,
-      email: actualEmail || undefined,
-      stripeCustomerId: stripeCustomerId || undefined,
-      stripePaymentMethodId: stripePaymentMethodId || undefined,
-      buildingSlug: form.buildingSlug,
-      vendorId: form.vendorId,
-    });
-    setSubmitted(true);
-    queueQuery.refetch();
+    if (!submitRequestIdRef.current) {
+      submitRequestIdRef.current =
+        window.crypto?.randomUUID?.() ??
+        `admin-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+
+    try {
+      const result = await createOrder.mutateAsync({
+        serviceType: form.serviceType,
+        pickupDate: form.pickupDate,
+        pickupTimeWindow: form.pickupTimeWindow,
+        deliveryDate: form.deliveryDate || defaultDelivery,
+        deliveryTimeWindow: form.deliveryTimeWindow || form.pickupTimeWindow,
+        address: actualAddress,
+        unit: actualUnit || undefined,
+        specialInstructions: form.specialInstructions || undefined,
+        firstName: actualFirstName,
+        lastName: actualLastName,
+        phone: actualPhone,
+        email: actualEmail || undefined,
+        stripeCustomerId: stripeCustomerId || undefined,
+        stripePaymentMethodId: stripePaymentMethodId || undefined,
+        buildingSlug: form.buildingSlug,
+        vendorId: form.vendorId,
+        clientRequestId: submitRequestIdRef.current,
+      });
+      setSubmitted(true);
+      queueQuery.refetch();
+      toast.success(result.reused ? "Order already created. Reopened safely." : "Order created.");
+    } catch (error: any) {
+      toast.error(error?.message || "Could not create order. Please retry.");
+    }
   };
 
   const handleDispatch = async () => {
     queueQuery.refetch();
     toast.success("Order is queued for the driver pickup app.");
   };
+
+  const pickupDateObj = new Date(form.pickupDate + "T00:00:00");
+  pickupDateObj.setDate(pickupDateObj.getDate() + 1);
+  const defaultDeliveryPreview = localYmd(pickupDateObj);
+  const submitDisabled =
+    createOrder.isPending ||
+    !phone.trim() ||
+    !form.firstName.trim() ||
+    !form.address.trim() ||
+    !form.pickupDate.trim() ||
+    !form.pickupTimeWindow.trim();
+  const hasSavedCard = Boolean(stripeCustomerId || stripePaymentMethodId);
+  const serviceTiles = [
+    {
+      id: "wash_fold" as const,
+      title: "Wash & Fold",
+      detail: "$2.50 / lb",
+      icon: Package,
+    },
+    {
+      id: "dry_cleaning" as const,
+      title: "Dry Cleaning",
+      detail: "Itemized intake",
+      icon: ShirtIcon,
+    },
+  ];
 
   if (submitted) {
     return (
@@ -726,26 +793,7 @@ function NewOrderTab({
         <Button
           variant="outline"
           className="mt-4 border-black text-black"
-          onClick={() => {
-            setSubmitted(false);
-            setPhone("");
-            setPrefilled(false);
-            setForm({
-              firstName: "",
-              lastName: "",
-              email: "",
-              address: "",
-              unit: "",
-              specialInstructions: "",
-              serviceType: "wash_fold",
-              pickupDate: localYmd(),
-              pickupTimeWindow: TIME_WINDOWS[0],
-              deliveryDate: "",
-              deliveryTimeWindow: "",
-              buildingSlug: SUPPORTED_BUILDINGS[0].value,
-              vendorId: undefined,
-            });
-          }}
+          onClick={resetOrderForm}
         >
           Create Another
         </Button>
@@ -754,306 +802,358 @@ function NewOrderTab({
   }
 
   return (
-    <div className="max-w-xl">
-      <h2 className="text-lg font-semibold mb-6">New Order</h2>
-
-      {/* Phone search */}
-      <div className="mb-6">
-        <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
-          Phone
-        </label>
-        <div className="flex gap-2 flex-wrap">
-          <Input
-            ref={phoneRef}
-            value={phone}
-            onChange={e => {
-              setPhone(e.target.value);
-              setPrefilled(false);
-            }}
-            placeholder="(323) 555-1234"
-            className="bg-white border-black/20"
-          />
-          {searchQuery.data && !prefilled && (
-            <>
-              <Button
-                variant="outline"
-                className="border-black text-black shrink-0"
-                onClick={handlePrefill}
-              >
-                <Search className="w-4 h-4 mr-1" /> Prefill
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="border-black/30 text-black shrink-0"
-                onClick={() => onOpenProfile(searchQuery.data!.phone)}
-              >
-                View profile
-              </Button>
-            </>
-          )}
-        </div>
-        {searchQuery.data && !prefilled && (
-          <p className="text-xs text-black/50 mt-1">
-            Found: {searchQuery.data.firstName} {searchQuery.data.lastName}
-            {searchQuery.data.stripeCustomerId ? " (card on file)" : ""}
+    <div className="min-h-[calc(100vh-140px)]">
+      <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">New Order</h2>
+          <p className="mt-1 text-sm text-black/50">
+            Counter-ready POS capture for walkups, building pickups, and repeat customers.
           </p>
-        )}
+        </div>
+        <div className="grid grid-cols-3 border border-black/10 bg-white text-center text-xs">
+          <div className="px-3 py-2">
+            <div className="font-mono text-lg font-semibold">{queueQuery.data?.length || 0}</div>
+            <div className="uppercase tracking-[0.12em] text-black/40">New</div>
+          </div>
+          <div className="border-x border-black/10 px-3 py-2">
+            <div className="font-mono text-lg font-semibold">{hasSavedCard ? "Yes" : "No"}</div>
+            <div className="uppercase tracking-[0.12em] text-black/40">Card</div>
+          </div>
+          <div className="px-3 py-2">
+            <div className="font-mono text-lg font-semibold">{form.deliveryDate || defaultDeliveryPreview}</div>
+            <div className="uppercase tracking-[0.12em] text-black/40">Return</div>
+          </div>
+        </div>
       </div>
 
-      {/* Customer fields */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div>
-          <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
-            First Name
-          </label>
-          <Input
-            ref={firstNameRef}
-            value={form.firstName}
-            onChange={e => setForm({ ...form, firstName: e.target.value })}
-            className="bg-white border-black/20"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
-            Last Name
-          </label>
-          <Input
-            ref={lastNameRef}
-            value={form.lastName}
-            onChange={e => setForm({ ...form, lastName: e.target.value })}
-            className="bg-white border-black/20"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
-            Email (optional)
-          </label>
-          <Input
-            ref={emailRef}
-            value={form.email}
-            onChange={e => setForm({ ...form, email: e.target.value })}
-            className="bg-white border-black/20"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
-            Unit
-          </label>
-          <Input
-            ref={unitRef}
-            value={form.unit}
-            onChange={e => setForm({ ...form, unit: e.target.value })}
-            className="bg-white border-black/20"
-          />
-        </div>
-      </div>
-      <div className="mb-6">
-        <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
-          Address
-        </label>
-        <Input
-          ref={addressRef}
-          value={form.address}
-          onChange={e => setForm({ ...form, address: e.target.value })}
-          className="bg-white border-black/20"
-        />
-      </div>
-      <div className="mb-6">
-        <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
-          Special Instructions
-        </label>
-        <Input
-          value={form.specialInstructions}
-          onChange={e =>
-            setForm({ ...form, specialInstructions: e.target.value })
-          }
-          className="bg-white border-black/20"
-        />
-      </div>
+      <div className="grid min-h-[680px] gap-4 xl:grid-cols-[270px_minmax(0,1fr)_360px]">
+        <section className="border border-black/10 bg-[#FBFAF6] p-3">
+          <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">Services</div>
+          <div className="grid gap-2">
+            {serviceTiles.map((service) => {
+              const Icon = service.icon;
+              const active = form.serviceType === service.id;
+              return (
+                <button
+                  key={service.id}
+                  type="button"
+                  onClick={() => setForm({ ...form, serviceType: service.id })}
+                  className={`flex min-h-[94px] items-center gap-3 border px-3 py-3 text-left transition-colors ${
+                    active
+                      ? "border-black bg-black text-white"
+                      : "border-black/10 bg-white text-black hover:border-black/35"
+                  }`}
+                >
+                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center border ${active ? "border-white/25" : "border-black/10"}`}>
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold uppercase tracking-[0.08em]">{service.title}</span>
+                    <span className={`mt-1 block text-xs ${active ? "text-white/65" : "text-black/45"}`}>{service.detail}</span>
+                  </span>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              className="flex min-h-[74px] items-center gap-3 border border-dashed border-black/20 bg-white px-3 py-3 text-left text-black/55 hover:border-black/35 hover:text-black"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-black/10">
+                <Plus className="h-5 w-5" />
+              </span>
+              <span>
+                <span className="block text-sm font-bold uppercase tracking-[0.08em]">Add Item</span>
+                <span className="mt-1 block text-xs text-black/40">Use full intake for pricing</span>
+              </span>
+            </button>
+          </div>
 
-      {/* Building + Vendor */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div>
-          <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
-            Building
-          </label>
-          <select
-            value={form.buildingSlug}
-            onChange={e => setForm({ ...form, buildingSlug: e.target.value })}
-            className="w-full h-9 px-3 text-sm border border-black/20 bg-white"
-          >
-            {SUPPORTED_BUILDINGS.map(b => (
-              <option key={b.value} value={b.value}>
-                {b.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
-            Vendor (optional)
-          </label>
-          <select
-            value={form.vendorId ?? ""}
-            onChange={e =>
-              setForm({
-                ...form,
-                vendorId: e.target.value ? Number(e.target.value) : undefined,
-              })
-            }
-            className="w-full h-9 px-3 text-sm border border-black/20 bg-white"
-          >
-            <option value="">Auto-assign</option>
-            {vendorsQuery.data
-              ?.filter(v => v.isActive)
-              .map(v => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
+          <div className="mt-5 border-t border-black/10 pt-4">
+            <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">Building</div>
+            <select
+              value={form.buildingSlug}
+              onChange={e => setForm({ ...form, buildingSlug: e.target.value })}
+              className="h-10 w-full border border-black/15 bg-white px-3 text-sm"
+            >
+              {SUPPORTED_BUILDINGS.map(b => (
+                <option key={b.value} value={b.value}>
+                  {b.label}
                 </option>
               ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Service type */}
-      <div className="mb-6">
-        <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-2">
-          Service
-        </label>
-        <div className="flex gap-2">
-          {(["wash_fold", "dry_cleaning"] as const).map(s => (
-            <button
-              key={s}
-              onClick={() => setForm({ ...form, serviceType: s })}
-              className={`px-4 py-2 text-sm border transition-colors ${
-                form.serviceType === s
-                  ? "bg-black text-white border-black"
-                  : "bg-white text-black border-black/20 hover:border-black/40"
-              }`}
+            </select>
+            <select
+              value={form.vendorId ?? ""}
+              onChange={e =>
+                setForm({
+                  ...form,
+                  vendorId: e.target.value ? Number(e.target.value) : undefined,
+                })
+              }
+              className="mt-2 h-10 w-full border border-black/15 bg-white px-3 text-sm"
             >
-              {s === "wash_fold" ? "Wash & Fold" : "Dry Cleaning"}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Schedule */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div>
-          <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
-            Pickup Date
-          </label>
-          <Input
-            type="date"
-            value={form.pickupDate}
-            onChange={e => setForm({ ...form, pickupDate: e.target.value })}
-            className="bg-white border-black/20"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
-            Pickup Window
-          </label>
-          <select
-            value={form.pickupTimeWindow}
-            onChange={e =>
-              setForm({ ...form, pickupTimeWindow: e.target.value })
-            }
-            className="w-full h-9 px-3 text-sm border border-black/20 bg-white"
-          >
-            {TIME_WINDOWS.map(w => (
-              <option key={w} value={w}>
-                {w}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
-            Delivery Date (optional)
-          </label>
-          <Input
-            type="date"
-            value={form.deliveryDate}
-            onChange={e => setForm({ ...form, deliveryDate: e.target.value })}
-            className="bg-white border-black/20"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-black/50 uppercase tracking-wider mb-1">
-            Delivery Window (optional)
-          </label>
-          <select
-            value={form.deliveryTimeWindow}
-            onChange={e =>
-              setForm({ ...form, deliveryTimeWindow: e.target.value })
-            }
-            className="w-full h-9 px-3 text-sm border border-black/20 bg-white"
-          >
-            <option value="">Same as pickup</option>
-            {TIME_WINDOWS.map(w => (
-              <option key={w} value={w}>
-                {w}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <Button
-        className="bg-black text-white hover:bg-black/90 w-full"
-        onClick={handleSubmit}
-        disabled={createOrder.isPending}
-      >
-        {createOrder.isPending ? (
-          <Loader2 className="animate-spin w-4 h-4 mr-2" />
-        ) : null}
-        Create Order
-      </Button>
-
-      <div className="mt-10">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold">Dispatch Queue</h3>
-          <span className="text-xs text-black/40">
-            {queueQuery.data?.length || 0} pending
-          </span>
-        </div>
-        {!queueQuery.data?.length ? (
-          <p className="text-sm text-black/40 border border-black/10 p-3">
-            No unassigned requests in queue.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {queueQuery.data.map(order => (
-              <div
-                key={order.id}
-                className="border border-black/10 p-3 flex items-center justify-between gap-3"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">
-                    {order.firstName} {order.lastName}
-                  </p>
-                  <p className="text-xs text-black/50 truncate">
-                    Unit {order.unit || "—"} · {order.pickupDate} ·{" "}
-                    {order.pickupTimeWindow}
-                  </p>
-                  <p className="text-xs text-black/40 truncate">
-                    {order.address}
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-black text-black text-xs shrink-0"
-                  onClick={() => handleDispatch()}
-                >
-                  Queued for Driver
-                </Button>
-              </div>
-            ))}
+              <option value="">Auto-assign vendor</option>
+              {vendorsQuery.data
+                ?.filter(v => v.isActive)
+                .map(v => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+            </select>
           </div>
-        )}
+        </section>
+
+        <section className="border border-black/10 bg-white p-4">
+          <div className="mb-4 flex items-center justify-between border-b border-black/10 pb-3">
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/45">Current order</div>
+              <div className="mt-1 text-lg font-semibold">
+                {form.serviceType === "wash_fold" ? "Wash & Fold" : "Dry Cleaning"}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/45">Status</div>
+              <div className="mt-1 text-sm font-semibold text-emerald-700">Ready to submit</div>
+            </div>
+          </div>
+
+          <div className="grid gap-3">
+            <div className="grid grid-cols-[1fr_90px_90px] items-center gap-3 border border-black/10 bg-[#FBFAF6] px-3 py-3 text-sm">
+              <div>
+                <div className="font-semibold">{form.serviceType === "wash_fold" ? "Laundry service" : "Dry-cleaning intake"}</div>
+                <div className="mt-1 text-xs text-black/45">
+                  {form.serviceType === "wash_fold" ? "Weight and extras finalized during intake" : "Garments priced during intake"}
+                </div>
+              </div>
+              <div className="text-center text-xs uppercase tracking-[0.1em] text-black/45">Qty 1</div>
+              <div className="text-right font-mono text-sm">$0.00</div>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Pickup Date</span>
+                <Input
+                  type="date"
+                  value={form.pickupDate}
+                  onChange={e => setForm({ ...form, pickupDate: e.target.value })}
+                  className="bg-white border-black/20"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Pickup Window</span>
+                <select
+                  value={form.pickupTimeWindow}
+                  onChange={e => setForm({ ...form, pickupTimeWindow: e.target.value })}
+                  className="h-10 w-full border border-black/20 bg-white px-3 text-sm"
+                >
+                  {TIME_WINDOWS.map(w => (
+                    <option key={w} value={w}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Return Date</span>
+                <Input
+                  type="date"
+                  value={form.deliveryDate}
+                  onChange={e => setForm({ ...form, deliveryDate: e.target.value })}
+                  placeholder={defaultDeliveryPreview}
+                  className="bg-white border-black/20"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Return Window</span>
+                <select
+                  value={form.deliveryTimeWindow}
+                  onChange={e => setForm({ ...form, deliveryTimeWindow: e.target.value })}
+                  className="h-10 w-full border border-black/20 bg-white px-3 text-sm"
+                >
+                  <option value="">Same as pickup</option>
+                  {TIME_WINDOWS.map(w => (
+                    <option key={w} value={w}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Notes</span>
+              <Input
+                value={form.specialInstructions}
+                onChange={e => setForm({ ...form, specialInstructions: e.target.value })}
+                placeholder="Starch, bag count, gate code, or special handling"
+                className="bg-white border-black/20"
+              />
+            </label>
+          </div>
+
+          <div className="mt-6 grid gap-3 border-t border-black/10 pt-4 sm:grid-cols-3">
+            <div className="border border-black/10 bg-[#FBFAF6] p-3">
+              <CalendarDays className="mb-3 h-4 w-4 text-black/45" />
+              <div className="text-xs uppercase tracking-[0.12em] text-black/45">Pickup</div>
+              <div className="mt-1 text-sm font-semibold">{form.pickupDate || "Not set"}</div>
+            </div>
+            <div className="border border-black/10 bg-[#FBFAF6] p-3">
+              <Package className="mb-3 h-4 w-4 text-black/45" />
+              <div className="text-xs uppercase tracking-[0.12em] text-black/45">Pipeline</div>
+              <div className="mt-1 text-sm font-semibold">New intake</div>
+            </div>
+            <div className="border border-black/10 bg-[#FBFAF6] p-3">
+              <CreditCard className="mb-3 h-4 w-4 text-black/45" />
+              <div className="text-xs uppercase tracking-[0.12em] text-black/45">Payment</div>
+              <div className={`mt-1 text-sm font-semibold ${hasSavedCard ? "text-emerald-700" : "text-amber-700"}`}>
+                {hasSavedCard ? "Saved card" : "Needs intake"}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside className="flex flex-col border border-black/10 bg-[#FBFAF6]">
+          <div className="border-b border-black/10 p-4">
+            <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">Customer</div>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Phone</span>
+              <div className="flex gap-2">
+                <Input
+                  ref={phoneRef}
+                  value={phone}
+                  onChange={e => {
+                    setPhone(e.target.value);
+                    setPrefilled(false);
+                  }}
+                  placeholder="(323) 555-1234"
+                  className="bg-white border-black/20"
+                />
+                {searchQuery.data && !prefilled ? (
+                  <Button
+                    variant="outline"
+                    className="shrink-0 border-black text-black"
+                    onClick={handlePrefill}
+                  >
+                    <Search className="h-4 w-4" />
+                  </Button>
+                ) : null}
+              </div>
+            </label>
+            {searchQuery.data && !prefilled ? (
+              <div className="mt-2 flex items-center justify-between gap-2 border border-black/10 bg-white px-3 py-2 text-xs">
+                <span className="min-w-0 truncate">
+                  {searchQuery.data.firstName} {searchQuery.data.lastName}
+                  {searchQuery.data.stripeCustomerId ? " · card on file" : ""}
+                </span>
+                <button className="font-semibold uppercase tracking-[0.08em]" onClick={() => onOpenProfile(searchQuery.data!.phone)}>
+                  Profile
+                </button>
+              </div>
+            ) : null}
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">First Name</span>
+                <Input
+                  ref={firstNameRef}
+                  value={form.firstName}
+                  onChange={e => setForm({ ...form, firstName: e.target.value })}
+                  className="bg-white border-black/20"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Last Name</span>
+                <Input
+                  ref={lastNameRef}
+                  value={form.lastName}
+                  onChange={e => setForm({ ...form, lastName: e.target.value })}
+                  className="bg-white border-black/20"
+                />
+              </label>
+            </div>
+            <label className="mt-3 block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Email</span>
+              <Input
+                ref={emailRef}
+                value={form.email}
+                onChange={e => setForm({ ...form, email: e.target.value })}
+                className="bg-white border-black/20"
+              />
+            </label>
+            <label className="mt-3 block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Address</span>
+              <Input
+                ref={addressRef}
+                value={form.address}
+                onChange={e => setForm({ ...form, address: e.target.value })}
+                className="bg-white border-black/20"
+              />
+            </label>
+            <label className="mt-3 block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Unit</span>
+              <Input
+                ref={unitRef}
+                value={form.unit}
+                onChange={e => setForm({ ...form, unit: e.target.value })}
+                className="bg-white border-black/20"
+              />
+            </label>
+          </div>
+
+          <div className="flex-1 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">New intake queue</h3>
+              <span className="font-mono text-xs text-black/40">{queueQuery.data?.length || 0}</span>
+            </div>
+            {!queueQuery.data?.length ? (
+              <p className="border border-dashed border-black/15 bg-white px-3 py-6 text-center text-xs uppercase tracking-[0.12em] text-black/35">
+                Queue clear
+              </p>
+            ) : (
+              <div className="max-h-[240px] space-y-2 overflow-y-auto">
+                {queueQuery.data.slice(0, 5).map(order => (
+                  <div key={order.id} className="border border-black/10 bg-white p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">
+                          {order.firstName} {order.lastName}
+                        </p>
+                        <p className="truncate text-xs text-black/45">
+                          Unit {order.unit || "—"} · {order.pickupDate} · {order.pickupTimeWindow}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 border-black text-xs text-black"
+                        onClick={() => handleDispatch()}
+                      >
+                        Queued
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-black/10 bg-white p-4">
+            <div className="mb-3 flex items-center justify-between text-sm">
+              <span className="text-black/50">Starting total</span>
+              <span className="font-mono font-semibold">$0.00</span>
+            </div>
+            <Button
+              className="h-12 w-full bg-emerald-600 text-sm font-bold uppercase tracking-[0.12em] text-white hover:bg-emerald-700 disabled:opacity-50"
+              onClick={handleSubmit}
+              disabled={submitDisabled}
+            >
+              {createOrder.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Submit Order
+            </Button>
+          </div>
+        </aside>
       </div>
     </div>
   );
@@ -2538,8 +2638,12 @@ function ReadyTab() {
   const updateStatus = trpc.admin.updateStatus.useMutation();
 
   const handleDeliver = async (orderId: number) => {
-    await updateStatus.mutateAsync({ orderId, status: "delivered" });
-    refetch();
+    try {
+      await updateStatus.mutateAsync({ orderId, status: "delivered" });
+      refetch();
+    } catch (error: any) {
+      toast.error(error?.message || "Charge the order before marking it delivered.");
+    }
   };
 
   if (isLoading)
@@ -2609,7 +2713,8 @@ function ReadyTab() {
                     size="sm"
                     className="border-black text-black text-xs"
                     onClick={() => handleDeliver(o.id)}
-                    disabled={updateStatus.isPending}
+                    disabled={updateStatus.isPending || !o.paid}
+                    title={o.paid ? "Mark delivered" : "Charge the order before marking it delivered."}
                   >
                     Mark Delivered
                   </Button>
@@ -2670,8 +2775,12 @@ function PickupsTab() {
   };
 
   const handleDeliver = async (orderId: number) => {
-    await updateStatus.mutateAsync({ orderId, status: "delivered" });
-    await Promise.all([refetchDeliveries(), invalidateLiveStatuses()]);
+    try {
+      await updateStatus.mutateAsync({ orderId, status: "delivered" });
+      await Promise.all([refetchDeliveries(), invalidateLiveStatuses()]);
+    } catch (error: any) {
+      toast.error(error?.message || "Charge the order before marking it delivered.");
+    }
   };
 
   return (
@@ -2748,6 +2857,7 @@ function PickupsTab() {
                 action="Mark Delivered"
                 onAction={() => handleDeliver(o.id)}
                 isPending={updateStatus.isPending}
+                disabledReason={o.paid ? undefined : "Charge before delivery"}
                 showBags
                 showSheetsResend
               />
@@ -2985,6 +3095,7 @@ export function StopCard({
   action,
   onAction,
   isPending,
+  disabledReason,
   showBags,
   showSheetsResend,
 }: {
@@ -2992,6 +3103,7 @@ export function StopCard({
   action: string;
   onAction: () => void;
   isPending: boolean;
+  disabledReason?: string;
   showBags?: boolean;
   /** Admin Pickups tab: show 📊 resend when order is paid */
   showSheetsResend?: boolean;
@@ -3089,9 +3201,10 @@ export function StopCard({
           size="sm"
           className="border-black text-black text-xs w-full sm:w-auto"
           onClick={onAction}
-          disabled={isPending}
+          disabled={isPending || Boolean(disabledReason)}
+          title={disabledReason}
         >
-          {action}
+          {disabledReason || action}
         </Button>
         {showSheetsResend && order.paid ? (
           <ResendSheetsButton orderId={order.id} />

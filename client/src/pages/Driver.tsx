@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { DriverPrepMechanic } from "@/components/driver/DriverPrepMechanic";
 import { ResidentFollowupAlert } from "@/components/admin/ResidentFollowupAlert";
 import { useState } from "react";
+import { toast } from "sonner";
 
 function getLocalYmd(date = new Date()): string {
   return [
@@ -45,8 +46,20 @@ export default function Driver() {
     orderId: number,
     status: "collected" | "delivered"
   ) => {
-    await updateStatus.mutateAsync({ orderId, status });
-    await Promise.all([pickupQuery.refetch(), deliveryQuery.refetch(), invalidateLiveStatuses()]);
+    if (status === "delivered") {
+      const order = deliveryQuery.data?.find((row) => row.id === orderId);
+      if (order && !order.paid) {
+        toast.error("Charge the order before marking it delivered.");
+        return;
+      }
+    }
+
+    try {
+      await updateStatus.mutateAsync({ orderId, status });
+      await Promise.all([pickupQuery.refetch(), deliveryQuery.refetch(), invalidateLiveStatuses()]);
+    } catch (error: any) {
+      toast.error(error?.message || "Could not update order.");
+    }
   };
 
   const handleOrderCreated = async () => {
@@ -71,7 +84,7 @@ export default function Driver() {
       <ResidentFollowupAlert />
       <DriverPrepMechanic
         pickups={pickupQuery.data}
-        deliveries={deliveryQuery.data}
+        deliveries={deliveryQuery.data?.filter((order) => order.paid)}
         selectedDate={selectedDate}
         onSelectedDateChange={setSelectedDate}
         isLoading={

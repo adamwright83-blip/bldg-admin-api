@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -326,8 +327,12 @@ function VendorReadyTab() {
   const utils = trpc.useUtils();
 
   const handleMarkDelivered = async (orderId: number) => {
-    await updateStatus.mutateAsync({ orderId, status: "delivered" });
-    await utils.vendor.listByStatus.invalidate({ status: "ready" });
+    try {
+      await updateStatus.mutateAsync({ orderId, status: "delivered" });
+      await utils.vendor.listByStatus.invalidate({ status: "ready" });
+    } catch (error: any) {
+      toast.error(error?.message || "Charge the order before marking it delivered.");
+    }
   };
 
   return (
@@ -340,8 +345,13 @@ function VendorReadyTab() {
           {orders.map((o) => (
             <li key={o.id} className="border border-black/10 rounded p-3 flex items-center justify-between">
               <span>#{o.id} — {o.firstName} {o.lastName}</span>
-              <Button size="sm" onClick={() => handleMarkDelivered(o.id)}>
-                Mark delivered
+              <Button
+                size="sm"
+                onClick={() => handleMarkDelivered(o.id)}
+                disabled={updateStatus.isPending || !o.paid}
+                title={o.paid ? "Mark delivered" : "Charge the order before marking it delivered."}
+              >
+                {o.paid ? "Mark delivered" : "Charge first"}
               </Button>
             </li>
           ))}

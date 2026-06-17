@@ -17,7 +17,6 @@ export const LIVE_LANES: Array<{
   next?: LiveStatus;
   nextLabel?: string;
 }> = [
-  { title: "HELD REVIEW", status: "intake-pending", rail: "bg-amber-500", next: "new", nextLabel: "Accept / Schedule" },
   { title: "NEW INTAKE", status: "new", rail: "bg-emerald-600" },
   { title: "PICKUP READY", status: "collected", rail: "bg-blue-600", next: "processing", nextLabel: "Process" },
   { title: "IN CLEANING", status: "processing", rail: "bg-blue-500", next: "ready", nextLabel: "Ready" },

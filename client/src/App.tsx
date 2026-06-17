@@ -14,6 +14,26 @@ import DigitalReceiptPage from "./pages/DigitalReceiptPage";
 import LaundryFarmHome from "./pages/LaundryFarmHome";
 import AdminCatalog from "./pages/AdminCatalog";
 
+const LOCAL_ADMIN_PATHS = new Set([
+  "/admin",
+  "/home",
+  "/live",
+  "/new-order",
+  "/customers",
+  "/pnl",
+  "/operations-events",
+  "/payment-reconciliation",
+  "/intake",
+  "/processing",
+  "/ready",
+  "/pickups",
+  "/requests",
+  "/leads",
+  "/vendors",
+  "/level4",
+  "/operator-reflection",
+]);
+
 function AdminHostRouter() {
   return (
     <Switch>
@@ -48,13 +68,16 @@ function Router() {
     typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
   const { tenant } = useTenant();
   const isAdminHost = hostname === "admin.bldg.chat";
+  const isLocalAdminPath =
+    (hostname === "localhost" || hostname === "127.0.0.1") &&
+    LOCAL_ADMIN_PATHS.has(window.location.pathname);
   const isDriverHost = hostname === "driver.bldg.chat";
   const isVendorHost = hostname.endsWith(".ops.bldg.chat");
   const vendorSlug = isVendorHost
     ? hostname.replace(".ops.bldg.chat", "")
     : null;
 
-  if (isAdminHost) {
+  if (isAdminHost || isLocalAdminPath) {
     return <AdminHostRouter />;
   }
 

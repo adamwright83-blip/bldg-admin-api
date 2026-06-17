@@ -18,6 +18,7 @@ import {
 import { TRPCError } from "@trpc/server";
 import {
   createOrder,
+  findResidentOrderByClientRequestId,
   updateOrderStripe,
   getOrderById,
   getOrdersByStatus,
@@ -204,6 +205,22 @@ import { getAgentEventTimeline } from "./agents/agentEvents";
 import { getTenantAiLimitState } from "./agents/costTracking";
 import { listAgentTools } from "./agents/toolRegistry";
 import type { AgentType, ActorType } from "./agents/permissions";
+
+function isDuplicateKeyError(err: unknown): boolean {
+  const e = err as { code?: string; errno?: number; message?: string } | null | undefined;
+  if (!e) return false;
+  return (
+    e.code === "ER_DUP_ENTRY" ||
+    e.errno === 1062 ||
+    /duplicate entry/i.test(e.message ?? "")
+  );
+}
+
+function adminOrderIdempotencyKey(raw: string | null | undefined): string | null {
+  const trimmed = raw?.trim();
+  if (!trimmed) return null;
+  return trimmed.startsWith("admin-pos:") ? trimmed : `admin-pos:${trimmed}`;
+}
 
 const STRIPE_API_VERSION = "2025-03-31.basil" as const;
 
@@ -2511,6 +2528,7 @@ export const appRouter = router({
             stripePaymentMethodId: z.string().optional(),
             buildingSlug: z.string(),
             vendorId: z.number().optional(),
+            clientRequestId: z.string().max(160).optional(),
           })
           .refine(
             d =>
@@ -2519,6 +2537,12 @@ export const appRouter = router({
           )
       )
       .mutation(async ({ input }) => {
+        const idempotencyKey = adminOrderIdempotencyKey(input.clientRequestId);
+        if (idempotencyKey) {
+          const existing = await findResidentOrderByClientRequestId(idempotencyKey);
+          if (existing) return { orderId: existing.id, reused: true };
+        }
+
         const pickupDateObj = new Date(input.pickupDate + "T00:00:00");
         pickupDateObj.setDate(pickupDateObj.getDate() + 1);
         const defaultDeliveryDate = pickupDateObj.toISOString().split("T")[0];
@@ -2542,29 +2566,38 @@ export const appRouter = router({
           }
         }
 
-        const orderId = await createOrder({
-          tenantId: "default",
-          serviceType: input.serviceType,
-          pickupDate: input.pickupDate,
-          pickupTimeWindow: input.pickupTimeWindow,
-          deliveryDate: input.deliveryDate || defaultDeliveryDate,
-          deliveryTimeWindow:
-            input.deliveryTimeWindow || input.pickupTimeWindow,
-          address: input.address,
-          unit: input.unit || null,
-          specialInstructions: input.specialInstructions || null,
-          firstName: input.firstName,
-          lastName: input.lastName,
-          phone: input.phone,
-          email: input.email || null,
-          stripeCustomerId: input.stripeCustomerId || null,
-          stripePaymentMethodId: input.stripePaymentMethodId || null,
-          buildingSlug: input.buildingSlug,
-          vendorId: resolvedVendorId,
-          status: "new",
-        });
+        try {
+          const orderId = await createOrder({
+            tenantId: "default",
+            serviceType: input.serviceType,
+            pickupDate: input.pickupDate,
+            pickupTimeWindow: input.pickupTimeWindow,
+            deliveryDate: input.deliveryDate || defaultDeliveryDate,
+            deliveryTimeWindow:
+              input.deliveryTimeWindow || input.pickupTimeWindow,
+            address: input.address,
+            unit: input.unit || null,
+            specialInstructions: input.specialInstructions || null,
+            firstName: input.firstName,
+            lastName: input.lastName,
+            phone: input.phone,
+            email: input.email || null,
+            stripeCustomerId: input.stripeCustomerId || null,
+            stripePaymentMethodId: input.stripePaymentMethodId || null,
+            buildingSlug: input.buildingSlug,
+            vendorId: resolvedVendorId,
+            status: "new",
+            residentClientRequestId: idempotencyKey,
+          });
 
-        return { orderId };
+          return { orderId, reused: false };
+        } catch (err) {
+          if (idempotencyKey && isDuplicateKeyError(err)) {
+            const existing = await findResidentOrderByClientRequestId(idempotencyKey);
+            if (existing) return { orderId: existing.id, reused: true };
+          }
+          throw err;
+        }
       }),
 
     /** Update order status — platform or vendor (vendor scoped to own orders) */
@@ -2590,6 +2623,12 @@ export const appRouter = router({
           order.vendorId !== ctx.vendorSession.vendorId
         ) {
           throw new Error("Unauthorized");
+        }
+        if (input.status === "delivered" && !order.paid) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Charge the order before marking it delivered.",
+          });
         }
         await updateOrderStatus(input.orderId, input.status, {
           source: "driver_app_bldg",

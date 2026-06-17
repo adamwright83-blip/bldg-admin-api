@@ -149,6 +149,7 @@ describe("admin live model", () => {
     const modelSource = readFileSync(new URL("./adminLiveModel.ts", import.meta.url), "utf8");
     const liveSource = readFileSync(new URL("./AdminLive.tsx", import.meta.url), "utf8");
     expect(modelSource).toContain('{ title: "NEW INTAKE", status: "new", rail: "bg-emerald-600" }');
+    expect(modelSource).not.toContain('{ title: "HELD REVIEW"');
     expect(modelSource).not.toContain('status: "new", rail: "bg-emerald-600", next: "collected"');
     expect(liveSource).toContain("async function dispatchDriver(order: Order)");
     expect(liveSource).toContain("async function completePickup(order: Order)");
@@ -158,11 +159,38 @@ describe("admin live model", () => {
     expect(liveSource).toContain("Pickup Complete");
   });
 
+  it("keeps HELD review compact and removes duplicate grouping from the live board UI", () => {
+    const liveSource = readFileSync(new URL("./AdminLive.tsx", import.meta.url), "utf8");
+
+    expect(liveSource).toContain("Needs review");
+    expect(liveSource).toContain('ordersByStatus["intake-pending"].slice(0, 3)');
+    expect(liveSource).not.toContain("Likely duplicate group");
+    expect(liveSource).not.toContain("Delete group");
+  });
+
   it("admin dispatch queue does not mark pickup orders collected before the driver app resolves them", () => {
     const source = readFileSync(new URL("./Admin.tsx", import.meta.url), "utf8");
     expect(source).not.toContain("dispatchMutation");
     expect(source).not.toContain('status: "collected" });\n    queueQuery.refetch();');
     expect(source).toContain("Order is queued for the driver pickup app.");
     expect(source).toContain("pickupDate: localYmd()");
+  });
+
+  it("New Order is a POS-first counter screen with idempotent submit", () => {
+    const source = readFileSync(new URL("./Admin.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("Counter-ready POS capture");
+    expect(source).toContain("Current order");
+    expect(source).toContain("Submit Order");
+    expect(source).toContain("submitRequestIdRef.current");
+    expect(source).toContain("clientRequestId: submitRequestIdRef.current");
+  });
+
+  it("local admin routes can render the Counter shell for QA", () => {
+    const source = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("LOCAL_ADMIN_PATHS");
+    expect(source).toContain('"/new-order"');
+    expect(source).toContain("isAdminHost || isLocalAdminPath");
   });
 });

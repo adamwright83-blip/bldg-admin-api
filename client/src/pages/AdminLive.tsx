@@ -17,12 +17,9 @@ import {
   LIVE_LANES,
   amountCents,
   customerName,
-  groupLikelyDuplicateLiveOrders,
   isActionableDelivered,
   isToday,
   liveDateLabel,
-  liveOrderCreatedLabel,
-  liveOrderSource,
   money,
   nextLiveActionLabel,
   nextLiveStatus,
@@ -51,6 +48,15 @@ function MiniMetric({ label, value, tone = "text-black" }: { label: string; valu
   );
 }
 
+function toSingleLiveOrderGroups(orders: Order[]): LiveOrderGroup[] {
+  return orders.map((order) => ({
+    key: `order:${order.id}`,
+    orders: [order],
+    representative: order,
+    isLikelyDuplicate: false,
+  }));
+}
+
 export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps) {
   const utils = trpc.useUtils();
   const [clock, setClock] = useState(new Date());
@@ -71,13 +77,11 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
   const deleteOrderMutation = trpc.admin.deleteOrder.useMutation();
   /**
    * Delete confirmation: nothing is removed until the operator confirms in
-   * the dialog. Holds either a single order or a whole duplicate group
-   * (test-order cleanup is usually the entire group).
+   * the dialog.
    */
   const [deleteTarget, setDeleteTarget] = useState<
     | null
     | { kind: "order"; order: Order }
-    | { kind: "group"; group: LiveOrderGroup }
   >(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
@@ -110,7 +114,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
   };
   const liveLaneGroups = useMemo(
     () => Object.fromEntries(
-      LIVE_LANES.map((lane) => [lane.status, groupLikelyDuplicateLiveOrders(liveLaneOrders[lane.status])])
+      LIVE_LANES.map((lane) => [lane.status, toSingleLiveOrderGroups(liveLaneOrders[lane.status])])
     ) as Record<LiveStatus, LiveOrderGroup[]>,
     [liveLaneOrders]
   );
@@ -169,8 +173,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
   /** Runs only after the operator confirms in the dialog. */
   async function confirmDelete() {
     if (!deleteTarget || deleteBusy) return;
-    const orders =
-      deleteTarget.kind === "order" ? [deleteTarget.order] : deleteTarget.group.orders;
+    const orders = [deleteTarget.order];
     setDeleteBusy(true);
     try {
       for (const order of orders) {
@@ -283,11 +286,6 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
                 </div>
               ))}
             </div>
-            {group.isLikelyDuplicate ? (
-              <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.1em] text-amber-700">
-                Likely duplicate group · {group.orders.length} orders
-              </div>
-            ) : null}
             <div className="mt-1 font-mono text-[10px] text-black/45">Newest #LB-{order.id}</div>
           </div>
           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${order.paid ? "bg-emerald-600" : hasCard ? "bg-blue-600" : "bg-amber-500"}`} />
@@ -306,29 +304,6 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
                 {order.paid ? "Paid" : hasCard ? "Card on file" : "Payment needs intake"} / {money(order.total)}
               </div>
             </div>
-            {group.isLikelyDuplicate ? (
-              <div className="mt-2 border-t border-[#D8D1C4] pt-2 text-[11px] text-black/70">
-                <div className="mb-2 font-bold uppercase tracking-[0.12em] text-amber-700">Real rows in this group</div>
-                <div className="space-y-2">
-                  {group.orders.map((row) => (
-                    <div key={row.id} className="border border-[#D8D1C4] bg-white px-2 py-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono font-semibold">#LB-{row.id}</span>
-                        <span className="uppercase tracking-[0.1em] text-black/45">{liveOrderCreatedLabel(row.createdAt)} · {liveOrderSource(row)}</span>
-                      </div>
-                      {row.heldCleanedRequestText || row.heldRawRequestText ? (
-                        <div className="mt-1 line-clamp-2 text-black/55">
-                          {row.heldCleanedRequestText || row.heldRawRequestText}
-                        </div>
-                      ) : null}
-                      <button className="mt-2 border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={(event) => { event.stopPropagation(); openOrder(row); }}>
-                        Open order
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
             {order.specialInstructions ? <div className="mt-2 border-t border-[#D8D1C4] pt-2 text-[11px] text-black/55 line-clamp-3">{order.specialInstructions}</div> : null}
             {heldLines.length ? (
               <div className="mt-2 border-t border-[#D8D1C4] pt-2 text-[11px] text-black/65">
@@ -364,6 +339,25 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
                     Pickup Complete
                   </button>
                 </>
+              ) : lane.next === "delivered" ? (
+                order.paid ? (
+                  <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={updateStatus.isPending} onClick={(event) => { event.stopPropagation(); setSelectedOrderId(order.id); moveOrder(order, "delivered"); }}>
+                    Delivered
+                  </button>
+                ) : (
+                  <>
+                    <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={chargeCard.isPending} onClick={(event) => { event.stopPropagation(); setSelectedOrderId(order.id); charge(order); }}>
+                      {hasCard && amountCents(order) >= 50 ? "Charge" : "Intake"}
+                    </button>
+                    <button
+                      className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-black/35"
+                      disabled
+                      title="Charge the order before marking it delivered."
+                    >
+                      Delivered
+                    </button>
+                  </>
+                )
               ) : lane.next ? (
                 <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={updateStatus.isPending} onClick={(event) => { event.stopPropagation(); setSelectedOrderId(order.id); moveOrder(order, lane.next!); }}>
                   {lane.nextLabel}
@@ -373,9 +367,18 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
                   Receipt
                 </a>
               ) : (
-                <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={chargeCard.isPending} onClick={(event) => { event.stopPropagation(); setSelectedOrderId(order.id); charge(order); }}>
-                  {hasCard && amountCents(order) >= 50 ? "Charge" : "Intake"}
-                </button>
+                <>
+                  <button className="border border-black bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-black/80 disabled:opacity-50" disabled={chargeCard.isPending} onClick={(event) => { event.stopPropagation(); setSelectedOrderId(order.id); charge(order); }}>
+                    {hasCard && amountCents(order) >= 50 ? "Charge" : "Intake"}
+                  </button>
+                  <button
+                    className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-black/35"
+                    disabled
+                    title="Charge the order before marking it delivered."
+                  >
+                    Delivered
+                  </button>
+                </>
               )}
               {order.phone ? (
                 <button className="border border-[#C9C0B1] bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-black hover:text-white" onClick={(event) => { event.stopPropagation(); onOpenCustomer(order.phone); }}>
@@ -391,16 +394,10 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
                 disabled={deleteBusy}
                 onClick={(event) => {
                   event.stopPropagation();
-                  setDeleteTarget(
-                    group.isLikelyDuplicate && group.orders.length > 1
-                      ? { kind: "group", group }
-                      : { kind: "order", order }
-                  );
+                  setDeleteTarget({ kind: "order", order });
                 }}
               >
-                {group.isLikelyDuplicate && group.orders.length > 1
-                  ? `Delete group (${group.orders.length})`
-                  : "Delete"}
+                Delete
               </button>
             </div>
           </div>
@@ -428,6 +425,33 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
 
       <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_280px] xl:p-5">
         <main className="min-w-0">
+          {ordersByStatus["intake-pending"].length ? (
+            <section className="mb-3 flex flex-col gap-3 border border-amber-300 bg-amber-50 px-3 py-3 text-black sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Needs review</div>
+                <div className="mt-1 text-sm font-semibold">
+                  {ordersByStatus["intake-pending"].length} HELD order{ordersByStatus["intake-pending"].length === 1 ? "" : "s"} need scheduling details
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {ordersByStatus["intake-pending"].slice(0, 3).map((order) => (
+                  <button
+                    key={order.id}
+                    className="border border-amber-300 bg-white px-2.5 py-1.5 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-amber-800 hover:border-black hover:text-black"
+                    onClick={() => openOrder(order)}
+                  >
+                    #LB-{order.id} · {customerName(order)}
+                  </button>
+                ))}
+                <button
+                  className="border border-black bg-black px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-white hover:bg-black/80"
+                  onClick={() => onNavigate("/intake")}
+                >
+                  Open intake
+                </button>
+              </div>
+            </section>
+          ) : null}
           {loading ? (
             <div className="flex h-60 items-center justify-center border border-[#D8D1C4] bg-[#FBFAF6]">
               <Loader2 className="h-6 w-6 animate-spin text-black/35" />
@@ -565,24 +589,18 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
         <DialogContent className="border-red-700/40">
           <DialogHeader>
             <DialogTitle className="text-red-700">
-              {deleteTarget?.kind === "group"
-                ? `Delete ${deleteTarget.group.orders.length} orders?`
-                : deleteTarget
-                  ? `Delete order #LB-${deleteTarget.order.id}?`
-                  : "Delete?"}
+              {deleteTarget
+                ? `Delete order #LB-${deleteTarget.order.id}?`
+                : "Delete?"}
             </DialogTitle>
             <DialogDescription asChild>
               <div className="space-y-2 text-sm">
                 <p>
-                  This permanently removes{" "}
-                  {deleteTarget?.kind === "group"
-                    ? "every order in this duplicate group"
-                    : "this order"}{" "}
-                  from the board, the stage pages, and the dashboard. It cannot be undone.
+                  This permanently removes this order from the board, the stage pages, and the dashboard. It cannot be undone.
                 </p>
                 {deleteTarget ? (
                   <div className="max-h-40 space-y-1 overflow-y-auto rounded border border-black/10 bg-black/[0.03] p-2 font-mono text-xs">
-                    {(deleteTarget.kind === "group" ? deleteTarget.group.orders : [deleteTarget.order]).map((row) => (
+                    {[deleteTarget.order].map((row) => (
                       <div key={row.id} className="flex items-center justify-between gap-2">
                         <span>#LB-{row.id} · {customerName(row)}</span>
                         <span className="text-black/45">{row.status}</span>
@@ -595,7 +613,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button variant="outline" disabled={deleteBusy} onClick={() => setDeleteTarget(null)}>
-              Keep {deleteTarget?.kind === "group" ? "them" : "it"}
+              Keep it
             </Button>
             <Button
               className="bg-red-700 text-white hover:bg-red-800"
@@ -603,11 +621,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
               onClick={() => void confirmDelete()}
             >
               {deleteBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {deleteBusy
-                ? "Deleting…"
-                : deleteTarget?.kind === "group"
-                  ? `Yes, delete all ${deleteTarget.group.orders.length}`
-                  : "Yes, delete it"}
+              {deleteBusy ? "Deleting…" : "Yes, delete it"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -705,7 +719,7 @@ function LiveTools({
 
   const nextStatus = nextLiveStatus(order);
   const hasCard = !!(order.stripeCustomerId || order.stripePaymentMethodId);
-  const canCharge = order.status === "delivered" && hasCard && amountCents(order) >= 50 && !order.paid;
+  const canCharge = (order.status === "ready" || order.status === "delivered") && hasCard && amountCents(order) >= 50 && !order.paid;
 
   return (
     <div className="space-y-2">
@@ -722,6 +736,15 @@ function LiveTools({
           </button>
           <button className="flex w-full items-center justify-between border border-black bg-black px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] text-white hover:bg-black/80 disabled:opacity-50" disabled={updatePending} onClick={() => onPickupComplete(order)}>
             <span>Pickup Complete</span><span>collected</span>
+          </button>
+        </>
+      ) : nextStatus === "delivered" && !order.paid ? (
+        <>
+          <button className="flex w-full items-center justify-between border border-black bg-black px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] text-white hover:bg-black/80 disabled:opacity-50" disabled={chargePending} onClick={() => onCharge(order)}>
+            <span>{canCharge ? "Charge card" : "Open payment"}</span><span>&gt;</span>
+          </button>
+          <button className="flex w-full items-center justify-between border border-[#D8D1C4] bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] opacity-40" disabled title="Charge the order before marking it delivered.">
+            <span>Delivered</span><span>paid first</span>
           </button>
         </>
       ) : nextStatus ? (

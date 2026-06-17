@@ -50,8 +50,12 @@ const COUNTER_PATHS = new Set([
 const PEOPLE_PATHS = new Set(["/customers", "/leads", "/vendors"]);
 
 const COUNTER_TABS: Array<{ label: string; path: string }> = [
-  { label: "Pipeline", path: "/live" },
   { label: "New order", path: "/new-order" },
+  { label: "Intake", path: "/intake" },
+  { label: "Cleaning", path: "/processing" },
+  { label: "Ready", path: "/ready" },
+  { label: "Pickups", path: "/pickups" },
+  { label: "Pipeline", path: "/live" },
   { label: "History", path: "/operations-events" },
   { label: "Money owed", path: "/payment-reconciliation" },
   { label: "Requests", path: "/requests" },
@@ -220,7 +224,7 @@ export default function AdminHostApp() {
             🏰 Kingdom
           </Link>
           <Link
-            href="/live"
+            href="/new-order"
             className={`block rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
               isCounter ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
             }`}
