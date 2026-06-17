@@ -168,22 +168,30 @@ describe("admin live model", () => {
     expect(liveSource).not.toContain("Delete group");
   });
 
-  it("admin dispatch queue does not mark pickup orders collected before the driver app resolves them", () => {
+  it("New Order no longer behaves like a separate pickup dispatch shell", () => {
     const source = readFileSync(new URL("./Admin.tsx", import.meta.url), "utf8");
     expect(source).not.toContain("dispatchMutation");
     expect(source).not.toContain('status: "collected" });\n    queueQuery.refetch();');
-    expect(source).toContain("Order is queued for the driver pickup app.");
-    expect(source).toContain("pickupDate: localYmd()");
+    expect(source).not.toContain("Order is queued for the driver pickup app.");
+    expect(source).toContain("At-counter POS for customer lookup, garment pricing, discount, and payment.");
   });
 
-  it("New Order is a POS-first counter screen with idempotent submit", () => {
+  it("New Order is a consolidated POS screen with idempotent create, intake, and charge", () => {
     const source = readFileSync(new URL("./Admin.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain("Counter-ready POS capture");
+    expect(source).toContain("At-counter POS");
     expect(source).toContain("Current order");
-    expect(source).toContain("Submit Order");
+    expect(source).toContain("DryCleanIntake");
+    expect(source).toContain("WashFoldIntake");
+    expect(source).toContain("Discount %");
+    expect(source).toContain("Create & Charge");
     expect(source).toContain("submitRequestIdRef.current");
+    expect(source).toContain("createdOrderIdRef.current");
     expect(source).toContain("clientRequestId: submitRequestIdRef.current");
+    expect(source).toContain("saveIntake.mutateAsync");
+    expect(source).toContain("chargeCard.mutateAsync");
+    expect(source).toContain('status: "processing"');
+    expect(source).toContain("No saved card. Priced order saved for payment collection.");
   });
 
   it("local admin routes can render the Counter shell for QA", () => {

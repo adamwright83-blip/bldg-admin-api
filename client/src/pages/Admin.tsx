@@ -46,6 +46,7 @@ import {
   WF_FLAT_RATE_TEXTILES,
   WF_RATE_PER_LB_CENTS,
   WF_MINIMUM_SUBTOTAL_CENTS,
+  DC_ITEMS,
   calcWashFoldTotal,
   calcDryCleanTotal,
   centsToDollars,
@@ -546,6 +547,115 @@ export default function Admin() {
 }
 
 /* ===== NEW ORDER TAB ===== */
+type ServiceType = "wash_fold" | "dry_cleaning";
+
+type DryCleanCatalogRow = {
+  slug: string;
+  name: string;
+  category: string;
+  standardPriceCents: number;
+};
+
+type CheckoutResult =
+  | {
+      kind: "paid";
+      orderId: number;
+      receiptUrl?: string;
+    }
+  | {
+      kind: "unpaid";
+      orderId: number;
+      reason: string;
+    };
+
+function parseDiscountPercent(value: string): number {
+  const n = parseFloat(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(100, Math.max(0, n));
+}
+
+function toDryCleanCatalogRows(
+  rows:
+    | Array<{
+        slug: string;
+        name: string;
+        category: string;
+        serviceType?: string | null;
+        standardPriceCents: number;
+      }>
+    | undefined
+): DryCleanCatalogRow[] {
+  return (rows ?? [])
+    .filter(row => {
+      const st = row.serviceType ?? "dry_clean";
+      return st === "dry_clean" || st === "alteration";
+    })
+    .map(row => ({
+      slug: row.slug,
+      name: row.name,
+      category: row.category,
+      standardPriceCents: row.standardPriceCents,
+    }));
+}
+
+function legacyDryCleanCatalogRows(): DryCleanCatalogRow[] {
+  return DC_ITEMS.map(item => ({
+    slug: item.id,
+    name: item.label,
+    category: item.category,
+    standardPriceCents: item.priceCents,
+  }));
+}
+
+function buildSelectedWashFoldUpcharges(
+  selectedUpcharges: Record<string, boolean>
+): Record<string, UpchargeEntry> {
+  const upcharges: Record<string, UpchargeEntry> = {};
+  WF_UPCHARGES.forEach(u => {
+    if (selectedUpcharges[u.id]) {
+      upcharges[u.id] = {
+        label: u.label,
+        unit_price_cents: u.priceCents,
+        qty: 1,
+        total_cents: u.priceCents,
+      };
+    }
+  });
+  return upcharges;
+}
+
+function buildSelectedWashFoldFlatRates(
+  flatRateQtys: Record<string, number>
+): Record<string, UpchargeEntry> {
+  const flatRate: Record<string, UpchargeEntry> = {};
+  WF_FLAT_RATE_TEXTILES.forEach(f => {
+    const qty = flatRateQtys[f.id] || 0;
+    if (qty > 0) {
+      flatRate[f.id] = {
+        label: f.label,
+        unit_price_cents: f.priceCents,
+        qty,
+        total_cents: f.priceCents * qty,
+      };
+    }
+  });
+  return flatRate;
+}
+
+function hasWashFoldPricedItems(
+  effectiveWeightLbs: number,
+  flatRateQtys: Record<string, number>
+): boolean {
+  return (
+    effectiveWeightLbs > 0 ||
+    Object.values(flatRateQtys).some(qty => Number(qty) > 0)
+  );
+}
+
+function hasDryCleanPricedItems(dcQtys: Record<string, number>): boolean {
+  return Object.values(dcQtys).some(qty => Number(qty) > 0);
+}
+
 function NewOrderTab({
   onOpenProfile,
   phoneSeed,
@@ -563,7 +673,7 @@ function NewOrderTab({
     address: "",
     unit: "",
     specialInstructions: "",
-    serviceType: "wash_fold" as "wash_fold" | "dry_cleaning",
+    serviceType: "wash_fold" as ServiceType,
     pickupDate: localYmd(),
     pickupTimeWindow: TIME_WINDOWS[0],
     deliveryDate: "",
@@ -576,14 +686,30 @@ function NewOrderTab({
   const [stripePaymentMethodId, setStripePaymentMethodId] = useState<
     string | null
   >(null);
-  const [submitted, setSubmitted] = useState(false);
+  const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(
+    null
+  );
+  const [weightLbs, setWeightLbs] = useState("");
+  const [bags, setBags] = useState<number[]>([]);
+  const [selectedUpcharges, setSelectedUpcharges] = useState<
+    Record<string, boolean>
+  >({});
+  const [flatRateQtys, setFlatRateQtys] = useState<Record<string, number>>({});
+  const [dcQtys, setDcQtys] = useState<Record<string, number>>({});
+  const [discountPercent, setDiscountPercent] = useState("0");
   const submitRequestIdRef = useRef<string | null>(null);
+  const createdOrderIdRef = useRef<number | null>(null);
 
   const vendorsQuery = trpc.admin.listVendors.useQuery();
+  const utils = trpc.useUtils();
 
   const searchQuery = trpc.admin.searchCustomer.useQuery(
     { phone },
     { enabled: phone.length >= 7 && !prefilled }
+  );
+  const catalogQuery = trpc.admin.catalog.list.useQuery(
+    { includeArchived: false },
+    { enabled: form.serviceType === "dry_cleaning" }
   );
 
   const pendingSeedPrefill = useRef(false);
@@ -627,15 +753,25 @@ function NewOrderTab({
   }, [phone, searchQuery.isFetching, searchQuery.isFetched, searchQuery.data]);
 
   const createOrder = trpc.admin.createOrder.useMutation();
+  const saveIntake = trpc.admin.saveIntake.useMutation();
+  const chargeCard = trpc.admin.chargeCard.useMutation();
+  const updateStatus = trpc.admin.updateStatus.useMutation();
   const queueQuery = trpc.admin.listByStatus.useQuery({ status: "new" });
 
   const resetOrderForm = useCallback(() => {
     submitRequestIdRef.current = null;
-    setSubmitted(false);
+    createdOrderIdRef.current = null;
+    setCheckoutResult(null);
     setPhone("");
     setPrefilled(false);
     setStripeCustomerId(null);
     setStripePaymentMethodId(null);
+    setWeightLbs("");
+    setBags([]);
+    setSelectedUpcharges({});
+    setFlatRateQtys({});
+    setDcQtys({});
+    setDiscountPercent("0");
     setForm({
       firstName: "",
       lastName: "",
@@ -705,6 +841,72 @@ function NewOrderTab({
     }
   }, [searchQuery.data]);
 
+  const catalogRows = useMemo(
+    () => {
+      const rows = toDryCleanCatalogRows(catalogQuery.data);
+      if (rows.length === 0 && import.meta.env.DEV) {
+        return legacyDryCleanCatalogRows();
+      }
+      return rows;
+    },
+    [catalogQuery.data]
+  );
+
+  const currentInputWeight = (() => {
+    const n = parseFloat(weightLbs);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  })();
+  const effectiveWeightLbs =
+    bags.reduce((sum, bagWeight) => sum + bagWeight, 0) + currentInputWeight;
+  const washFoldUpcharges = useMemo(
+    () => buildSelectedWashFoldUpcharges(selectedUpcharges),
+    [selectedUpcharges]
+  );
+  const washFoldFlatRates = useMemo(
+    () => buildSelectedWashFoldFlatRates(flatRateQtys),
+    [flatRateQtys]
+  );
+  const drycleanItemsJson = useMemo(
+    () => buildDrycleanLineItems(catalogRows, dcQtys, null),
+    [catalogRows, dcQtys]
+  );
+  const discount = parseDiscountPercent(discountPercent);
+  const totals = useMemo(() => {
+    if (form.serviceType === "dry_cleaning") {
+      return calcDryCleanTotal(drycleanItemsJson, discount);
+    }
+    return calcWashFoldTotal(
+      effectiveWeightLbs,
+      washFoldUpcharges,
+      washFoldFlatRates,
+      discount
+    );
+  }, [
+    form.serviceType,
+    drycleanItemsJson,
+    discount,
+    effectiveWeightLbs,
+    washFoldUpcharges,
+    washFoldFlatRates,
+  ]);
+  const hasPricedItems =
+    form.serviceType === "dry_cleaning"
+      ? hasDryCleanPricedItems(dcQtys)
+      : hasWashFoldPricedItems(effectiveWeightLbs, flatRateQtys);
+  const checkoutTotals = hasPricedItems
+    ? totals
+    : { subtotalCents: 0, totalCents: 0 };
+
+  const invalidateOrderQueues = async () => {
+    await Promise.all([
+      queueQuery.refetch(),
+      utils.admin.listByStatus.invalidate({ status: "new" }),
+      utils.admin.listByStatus.invalidate({ status: "processing" }),
+      utils.admin.listByStatus.invalidate({ status: "delivered" }),
+      utils.admin.dashboardSummary.invalidate(),
+    ]);
+  };
+
   const handleSubmit = async () => {
     // Read from DOM refs as fallback for browser autofill that bypasses onChange
     const actualPhone = phoneRef.current?.value || phone;
@@ -714,7 +916,8 @@ function NewOrderTab({
     const actualAddress = addressRef.current?.value || form.address;
     const actualUnit = unitRef.current?.value || form.unit;
 
-    if (!actualFirstName || !actualAddress || !actualPhone) return;
+    if (!actualFirstName || !actualAddress || !actualPhone || !hasPricedItems)
+      return;
 
     const pickupDateObj = new Date(form.pickupDate + "T00:00:00");
     pickupDateObj.setDate(pickupDateObj.getDate() + 1);
@@ -727,36 +930,96 @@ function NewOrderTab({
     }
 
     try {
-      const result = await createOrder.mutateAsync({
-        serviceType: form.serviceType,
-        pickupDate: form.pickupDate,
-        pickupTimeWindow: form.pickupTimeWindow,
-        deliveryDate: form.deliveryDate || defaultDelivery,
-        deliveryTimeWindow: form.deliveryTimeWindow || form.pickupTimeWindow,
-        address: actualAddress,
-        unit: actualUnit || undefined,
-        specialInstructions: form.specialInstructions || undefined,
-        firstName: actualFirstName,
-        lastName: actualLastName,
-        phone: actualPhone,
-        email: actualEmail || undefined,
-        stripeCustomerId: stripeCustomerId || undefined,
-        stripePaymentMethodId: stripePaymentMethodId || undefined,
-        buildingSlug: form.buildingSlug,
-        vendorId: form.vendorId,
-        clientRequestId: submitRequestIdRef.current,
-      });
-      setSubmitted(true);
-      queueQuery.refetch();
-      toast.success(result.reused ? "Order already created. Reopened safely." : "Order created.");
-    } catch (error: any) {
-      toast.error(error?.message || "Could not create order. Please retry.");
-    }
-  };
+      let orderId = createdOrderIdRef.current;
+      if (!orderId) {
+        const result = await createOrder.mutateAsync({
+          serviceType: form.serviceType,
+          pickupDate: form.pickupDate,
+          pickupTimeWindow: form.pickupTimeWindow,
+          deliveryDate: form.deliveryDate || defaultDelivery,
+          deliveryTimeWindow: form.deliveryTimeWindow || form.pickupTimeWindow,
+          address: actualAddress,
+          unit: actualUnit || undefined,
+          specialInstructions: form.specialInstructions || undefined,
+          firstName: actualFirstName,
+          lastName: actualLastName,
+          phone: actualPhone,
+          email: actualEmail || undefined,
+          stripeCustomerId: stripeCustomerId || undefined,
+          stripePaymentMethodId: stripePaymentMethodId || undefined,
+          buildingSlug: form.buildingSlug,
+          vendorId: form.vendorId,
+          clientRequestId: submitRequestIdRef.current,
+        });
+        orderId = result.orderId;
+        createdOrderIdRef.current = orderId;
+      }
 
-  const handleDispatch = async () => {
-    queueQuery.refetch();
-    toast.success("Order is queued for the driver pickup app.");
+      await saveIntake.mutateAsync({
+        orderId,
+        weightLbs:
+          form.serviceType === "wash_fold" ? effectiveWeightLbs : undefined,
+        subtotal: centsToDollars(checkoutTotals.subtotalCents),
+        discountPercent: String(discount),
+        total: centsToDollars(checkoutTotals.totalCents),
+        upchargesJson:
+          form.serviceType === "wash_fold"
+            ? { ...washFoldUpcharges, ...washFoldFlatRates }
+            : undefined,
+        drycleanItemsJson:
+          form.serviceType === "dry_cleaning" ? drycleanItemsJson : undefined,
+      });
+
+      if (!hasSavedCard) {
+        await updateStatus.mutateAsync({ orderId, status: "processing" });
+        await invalidateOrderQueues();
+        setCheckoutResult({
+          kind: "unpaid",
+          orderId,
+          reason: "No saved card. Priced order saved for payment collection.",
+        });
+        toast.success("Priced order saved. Payment still needed.");
+        return;
+      }
+
+      try {
+        const charge = await chargeCard.mutateAsync({
+          orderId,
+          amountCents: checkoutTotals.totalCents,
+        });
+        if (charge.success) {
+          await invalidateOrderQueues();
+          setCheckoutResult({
+            kind: "paid",
+            orderId,
+            receiptUrl: charge.receiptUrl ?? undefined,
+          });
+          toast.success(`Created and charged $${centsToDollars(checkoutTotals.totalCents)}.`);
+          return;
+        }
+
+        await updateStatus.mutateAsync({ orderId, status: "processing" });
+        await invalidateOrderQueues();
+        setCheckoutResult({
+          kind: "unpaid",
+          orderId,
+          reason: charge.error || "Card charge failed. Payment still needed.",
+        });
+        toast.error(charge.error || "Card charge failed. Order saved unpaid.");
+      } catch (chargeError: any) {
+        await updateStatus.mutateAsync({ orderId, status: "processing" });
+        await invalidateOrderQueues();
+        setCheckoutResult({
+          kind: "unpaid",
+          orderId,
+          reason:
+            chargeError?.message || "Card charge failed. Payment still needed.",
+        });
+        toast.error(chargeError?.message || "Card charge failed. Order saved unpaid.");
+      }
+    } catch (error: any) {
+      toast.error(error?.message || "Could not complete checkout. Please retry.");
+    }
   };
 
   const pickupDateObj = new Date(form.pickupDate + "T00:00:00");
@@ -764,12 +1027,22 @@ function NewOrderTab({
   const defaultDeliveryPreview = localYmd(pickupDateObj);
   const submitDisabled =
     createOrder.isPending ||
+    saveIntake.isPending ||
+    chargeCard.isPending ||
+    updateStatus.isPending ||
     !phone.trim() ||
     !form.firstName.trim() ||
     !form.address.trim() ||
     !form.pickupDate.trim() ||
-    !form.pickupTimeWindow.trim();
+    !form.pickupTimeWindow.trim() ||
+    !hasPricedItems ||
+    checkoutTotals.totalCents < 50;
   const hasSavedCard = Boolean(stripeCustomerId || stripePaymentMethodId);
+  const checkoutBusy =
+    createOrder.isPending ||
+    saveIntake.isPending ||
+    chargeCard.isPending ||
+    updateStatus.isPending;
   const serviceTiles = [
     {
       id: "wash_fold" as const,
@@ -785,29 +1058,13 @@ function NewOrderTab({
     },
   ];
 
-  if (submitted) {
-    return (
-      <div className="text-center py-20">
-        <Check className="w-12 h-12 mx-auto mb-4 text-black" />
-        <p className="text-lg font-medium">Order created.</p>
-        <Button
-          variant="outline"
-          className="mt-4 border-black text-black"
-          onClick={resetOrderForm}
-        >
-          Create Another
-        </Button>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-[calc(100vh-140px)]">
       <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">New Order</h2>
           <p className="mt-1 text-sm text-black/50">
-            Counter-ready POS capture for walkups, building pickups, and repeat customers.
+            At-counter POS for customer lookup, garment pricing, discount, and payment.
           </p>
         </div>
         <div className="grid grid-cols-3 border border-black/10 bg-white text-center text-xs">
@@ -828,7 +1085,7 @@ function NewOrderTab({
 
       <div className="grid min-h-[680px] gap-4 xl:grid-cols-[270px_minmax(0,1fr)_360px]">
         <section className="border border-black/10 bg-[#FBFAF6] p-3">
-          <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">Services</div>
+              <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">Services</div>
           <div className="grid gap-2">
             {serviceTiles.map((service) => {
               const Icon = service.icon;
@@ -837,7 +1094,10 @@ function NewOrderTab({
                 <button
                   key={service.id}
                   type="button"
-                  onClick={() => setForm({ ...form, serviceType: service.id })}
+                  onClick={() => {
+                    setCheckoutResult(null);
+                    setForm({ ...form, serviceType: service.id });
+                  }}
                   className={`flex min-h-[94px] items-center gap-3 border px-3 py-3 text-left transition-colors ${
                     active
                       ? "border-black bg-black text-white"
@@ -862,8 +1122,8 @@ function NewOrderTab({
                 <Plus className="h-5 w-5" />
               </span>
               <span>
-                <span className="block text-sm font-bold uppercase tracking-[0.08em]">Add Item</span>
-                <span className="mt-1 block text-xs text-black/40">Use full intake for pricing</span>
+                <span className="block text-sm font-bold uppercase tracking-[0.08em]">Pricing live</span>
+                <span className="mt-1 block text-xs text-black/40">Items appear in current order</span>
               </span>
             </button>
           </div>
@@ -904,7 +1164,7 @@ function NewOrderTab({
         </section>
 
         <section className="border border-black/10 bg-white p-4">
-          <div className="mb-4 flex items-center justify-between border-b border-black/10 pb-3">
+            <div className="mb-4 flex items-center justify-between border-b border-black/10 pb-3">
             <div>
               <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/45">Current order</div>
               <div className="mt-1 text-lg font-semibold">
@@ -913,20 +1173,93 @@ function NewOrderTab({
             </div>
             <div className="text-right">
               <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/45">Status</div>
-              <div className="mt-1 text-sm font-semibold text-emerald-700">Ready to submit</div>
-            </div>
-          </div>
-
-          <div className="grid gap-3">
-            <div className="grid grid-cols-[1fr_90px_90px] items-center gap-3 border border-black/10 bg-[#FBFAF6] px-3 py-3 text-sm">
-              <div>
-                <div className="font-semibold">{form.serviceType === "wash_fold" ? "Laundry service" : "Dry-cleaning intake"}</div>
-                <div className="mt-1 text-xs text-black/45">
-                  {form.serviceType === "wash_fold" ? "Weight and extras finalized during intake" : "Garments priced during intake"}
+                  <div className={`mt-1 text-sm font-semibold ${checkoutResult?.kind === "paid" ? "text-emerald-700" : checkoutResult?.kind === "unpaid" ? "text-amber-700" : "text-black/70"}`}>
+                    {checkoutResult?.kind === "paid"
+                      ? "Paid"
+                      : checkoutResult?.kind === "unpaid"
+                        ? "Payment needed"
+                        : "Building ticket"}
+                  </div>
                 </div>
               </div>
-              <div className="text-center text-xs uppercase tracking-[0.1em] text-black/45">Qty 1</div>
-              <div className="text-right font-mono text-sm">$0.00</div>
+
+          <div className="grid gap-4">
+            {checkoutResult ? (
+              <div className={`border px-3 py-3 text-sm ${checkoutResult.kind === "paid" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+                <div className="flex items-start gap-2">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <p className="font-semibold">
+                      {checkoutResult.kind === "paid"
+                        ? `Order #${checkoutResult.orderId} charged.`
+                        : `Order #${checkoutResult.orderId} saved unpaid.`}
+                    </p>
+                    <p className="mt-1 text-xs opacity-75">
+                      {checkoutResult.kind === "paid"
+                        ? "It is now in Processing."
+                        : checkoutResult.reason}
+                    </p>
+                    {checkoutResult.kind === "paid" && checkoutResult.receiptUrl ? (
+                      <a
+                        href={checkoutResult.receiptUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-2 inline-block text-xs font-semibold underline"
+                      >
+                        Open receipt
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="border border-black/10 bg-[#FBFAF6] px-3 py-3 text-sm">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold">
+                    {form.serviceType === "wash_fold"
+                      ? "Wash & fold intake"
+                      : "Dry-cleaning garment selection"}
+                  </div>
+                  <div className="mt-1 text-xs text-black/45">
+                    {form.serviceType === "wash_fold"
+                      ? "Add weight, bags, upcharges, and flat-rate textiles."
+                      : "Tap garment types to build the customer total now."}
+                  </div>
+                </div>
+                <div className="text-right font-mono text-base font-semibold">
+                  ${centsToDollars(checkoutTotals.totalCents)}
+                </div>
+              </div>
+
+              {form.serviceType === "wash_fold" ? (
+                <WashFoldIntake
+                  weightLbs={weightLbs}
+                  setWeightLbs={setWeightLbs}
+                  bags={bags}
+                  setBags={setBags}
+                  effectiveWeightLbs={effectiveWeightLbs}
+                  selectedUpcharges={selectedUpcharges}
+                  setSelectedUpcharges={setSelectedUpcharges}
+                  flatRateQtys={flatRateQtys}
+                  setFlatRateQtys={setFlatRateQtys}
+                />
+              ) : catalogQuery.isLoading ? (
+                <div className="flex justify-center py-10">
+                  <Loader2 className="h-6 w-6 animate-spin text-black/30" />
+                </div>
+              ) : catalogRows.length === 0 ? (
+                <div className="border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  No dry-clean SKUs for this tenant. Add items in Catalog.
+                </div>
+              ) : (
+                <DryCleanIntake
+                  dcQtys={dcQtys}
+                  setDcQtys={setDcQtys}
+                  catalogRows={catalogRows}
+                />
+              )}
             </div>
 
             <div className="grid gap-3 lg:grid-cols-2">
@@ -1006,7 +1339,7 @@ function NewOrderTab({
               <CreditCard className="mb-3 h-4 w-4 text-black/45" />
               <div className="text-xs uppercase tracking-[0.12em] text-black/45">Payment</div>
               <div className={`mt-1 text-sm font-semibold ${hasSavedCard ? "text-emerald-700" : "text-amber-700"}`}>
-                {hasSavedCard ? "Saved card" : "Needs intake"}
+                  {hasSavedCard ? "Saved card" : "Unpaid if no card"}
               </div>
             </div>
           </div>
@@ -1102,56 +1435,63 @@ function NewOrderTab({
 
           <div className="flex-1 p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">New intake queue</h3>
+              <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">POS summary</h3>
               <span className="font-mono text-xs text-black/40">{queueQuery.data?.length || 0}</span>
             </div>
-            {!queueQuery.data?.length ? (
-              <p className="border border-dashed border-black/15 bg-white px-3 py-6 text-center text-xs uppercase tracking-[0.12em] text-black/35">
-                Queue clear
-              </p>
-            ) : (
-              <div className="max-h-[240px] space-y-2 overflow-y-auto">
-                {queueQuery.data.slice(0, 5).map(order => (
-                  <div key={order.id} className="border border-black/10 bg-white p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">
-                          {order.firstName} {order.lastName}
-                        </p>
-                        <p className="truncate text-xs text-black/45">
-                          Unit {order.unit || "—"} · {order.pickupDate} · {order.pickupTimeWindow}
-                        </p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="shrink-0 border-black text-xs text-black"
-                        onClick={() => handleDispatch()}
-                      >
-                        Queued
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+            <div className="space-y-2 border border-black/10 bg-white p-3 text-sm">
+              <div className="flex justify-between gap-3">
+                <span className="text-black/50">Subtotal</span>
+                <span className="font-mono">${centsToDollars(checkoutTotals.subtotalCents)}</span>
               </div>
-            )}
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Discount %</span>
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={discountPercent}
+                  onChange={e => setDiscountPercent(e.target.value)}
+                  className="bg-white border-black/20"
+                />
+              </label>
+              <div className="flex justify-between gap-3 border-t border-black/10 pt-2 text-base font-semibold">
+                <span>Total</span>
+                <span className="font-mono">${centsToDollars(checkoutTotals.totalCents)}</span>
+              </div>
+              {!hasPricedItems ? (
+                <p className="text-xs text-amber-700">
+                  Add weight, a textile, or a garment before charging.
+                </p>
+              ) : null}
+            </div>
           </div>
 
           <div className="border-t border-black/10 bg-white p-4">
             <div className="mb-3 flex items-center justify-between text-sm">
-              <span className="text-black/50">Starting total</span>
-              <span className="font-mono font-semibold">$0.00</span>
+              <span className="text-black/50">
+                {hasSavedCard ? "Charge saved card" : "No saved card: saves unpaid"}
+              </span>
+              <span className="font-mono font-semibold">${centsToDollars(checkoutTotals.totalCents)}</span>
             </div>
             <Button
               className="h-12 w-full bg-emerald-600 text-sm font-bold uppercase tracking-[0.12em] text-white hover:bg-emerald-700 disabled:opacity-50"
               onClick={handleSubmit}
               disabled={submitDisabled}
             >
-              {createOrder.isPending ? (
+              {checkoutBusy ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Submit Order
+              Create & Charge
             </Button>
+            {checkoutResult ? (
+              <Button
+                variant="outline"
+                className="mt-2 h-10 w-full border-black text-xs uppercase tracking-[0.12em] text-black"
+                onClick={resetOrderForm}
+              >
+                Create Another
+              </Button>
+            ) : null}
           </div>
         </aside>
       </div>
@@ -1791,18 +2131,13 @@ function IntakeDetail({
     { enabled: !!order && order.serviceType === "dry_cleaning" }
   );
   const catalogRows = useMemo(
-    () =>
-      (catalogQuery.data ?? [])
-        .filter(r => {
-          const st = r.serviceType ?? "dry_clean";
-          return st === "dry_clean" || st === "alteration";
-        })
-        .map(r => ({
-          slug: r.slug,
-          name: r.name,
-          category: r.category,
-          standardPriceCents: r.standardPriceCents,
-        })),
+    () => {
+      const rows = toDryCleanCatalogRows(catalogQuery.data);
+      if (rows.length === 0 && import.meta.env.DEV) {
+        return legacyDryCleanCatalogRows();
+      }
+      return rows;
+    },
     [catalogQuery.data]
   );
 
@@ -1859,29 +2194,8 @@ function IntakeDetail({
 
     // Calculate W&F section
     const w = effectiveWeightLbs;
-    const upcharges: Record<string, UpchargeEntry> = {};
-    WF_UPCHARGES.forEach(u => {
-      if (selectedUpcharges[u.id]) {
-        upcharges[u.id] = {
-          label: u.label,
-          unit_price_cents: u.priceCents,
-          qty: 1,
-          total_cents: u.priceCents,
-        };
-      }
-    });
-    const flatRate: Record<string, UpchargeEntry> = {};
-    WF_FLAT_RATE_TEXTILES.forEach(f => {
-      const qty = flatRateQtys[f.id] || 0;
-      if (qty > 0) {
-        flatRate[f.id] = {
-          label: f.label,
-          unit_price_cents: f.priceCents,
-          qty,
-          total_cents: f.priceCents * qty,
-        };
-      }
-    });
+    const upcharges = buildSelectedWashFoldUpcharges(selectedUpcharges);
+    const flatRate = buildSelectedWashFoldFlatRates(flatRateQtys);
     const wfTotal = calcWashFoldTotal(w, upcharges, flatRate, disc);
 
     // Calculate DC section (catalog + legacy JSON for unknown slugs)
@@ -1920,28 +2234,10 @@ function IntakeDetail({
     if (!order) return;
 
     // Build JSON data
-    const upchargesJson: Record<string, UpchargeEntry> = {};
-    WF_UPCHARGES.forEach(u => {
-      if (selectedUpcharges[u.id]) {
-        upchargesJson[u.id] = {
-          label: u.label,
-          unit_price_cents: u.priceCents,
-          qty: 1,
-          total_cents: u.priceCents,
-        };
-      }
-    });
-    WF_FLAT_RATE_TEXTILES.forEach(f => {
-      const qty = flatRateQtys[f.id] || 0;
-      if (qty > 0) {
-        upchargesJson[f.id] = {
-          label: f.label,
-          unit_price_cents: f.priceCents,
-          qty,
-          total_cents: f.priceCents * qty,
-        };
-      }
-    });
+    const upchargesJson = {
+      ...buildSelectedWashFoldUpcharges(selectedUpcharges),
+      ...buildSelectedWashFoldFlatRates(flatRateQtys),
+    };
 
     const drycleanItemsJson = buildDrycleanLineItems(
       catalogRows,
@@ -1969,7 +2265,10 @@ function IntakeDetail({
       amountCents: totals.totalCents,
     });
     if (!result.success) {
-      setChargeResult(result);
+      setChargeResult({
+        success: false,
+        error: result.error || "Charge failed. Ask for a new card or retry later.",
+      });
       return;
     }
 
@@ -1993,7 +2292,7 @@ function IntakeDetail({
     setChargeResult({
       success: true,
       isFirstPaidOrder: result.isFirstPaidOrder,
-      receiptUrl: result.receiptUrl,
+      receiptUrl: result.receiptUrl ?? undefined,
       portalWelcomeUrl,
     });
   };
