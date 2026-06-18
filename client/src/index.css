@@ -6,6 +6,7 @@
 @media (max-width: 767px), (max-device-width: 767px) and (hover: none) {
   .lb-butler-home {
     padding-bottom: calc(76px + env(safe-area-inset-bottom));
+    font-size: 17px;
   }
 
   .lb-butler-home .lb-topbar {
@@ -52,7 +53,7 @@
   }
 
   .lb-butler-home [data-hero-left] > div {
-    padding: 34px 20px 28px;
+    padding: 34px 20px 32px;
   }
 
   .lb-butler-home [data-hero-left] > div > span:first-child {
@@ -62,22 +63,30 @@
 
   .lb-butler-home [data-hero-title] {
     max-width: none;
-    font-size: clamp(45px, 13vw, 58px);
-    line-height: 0.94;
+    font-size: clamp(49px, 14.5vw, 62px);
+    line-height: 0.92;
   }
 
   .lb-butler-home [data-hero-title] + p {
-    max-width: 34rem;
-    margin-block: 20px 22px;
-    font-size: 17px;
-    line-height: 1.5;
+    max-width: none;
+    margin-block: 24px 26px;
+    font-size: 20px;
+    line-height: 1.45;
+  }
+
+  .lb-butler-home [data-hero-primary-cta] {
+    flex: none;
   }
 
   .lb-butler-home [data-hero-primary-cta] {
     width: 100%;
     min-width: 0;
-    height: 60px;
-    font-size: 18px;
+    height: 64px;
+    font-size: 20px;
+  }
+
+  .lb-butler-home [data-hero-primary-cta] + a {
+    display: none;
   }
 
   .lb-butler-home [data-hero-trust] {
@@ -85,10 +94,7 @@
   }
 
   .lb-butler-home [data-hero-mobile-image] {
-    display: block;
-    min-height: 280px;
-    margin: 0 20px 28px;
-    border-radius: 22px;
+    display: none;
   }
 
   .lb-butler-home [data-hero-center],
@@ -102,9 +108,9 @@
   }
 
   .lb-butler-home .lb-mobile-cta button {
-    min-height: 56px;
+    min-height: 60px;
     border-radius: 14px;
-    font-size: 17px;
+    font-size: 19px;
   }
 }
 
