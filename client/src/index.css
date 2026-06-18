@@ -1,6 +1,113 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Laundry Butler mobile fallback. max-device-width also protects the layout
+   when a mobile browser has been switched into a desktop-sized CSS viewport. */
+@media (max-width: 767px), (max-device-width: 767px) and (hover: none) {
+  .lb-butler-home {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+
+  .lb-butler-home .lb-topbar {
+    display: none;
+  }
+
+  .lb-butler-home .lb-header > div {
+    height: 64px;
+    padding-inline: 16px;
+  }
+
+  .lb-butler-home .lb-header a[href="#top"] {
+    min-width: 0;
+  }
+
+  .lb-butler-home .lb-header a[href="#top"] > span:first-child {
+    width: 40px;
+    height: 40px;
+  }
+
+  .lb-butler-home .lb-hero-shell {
+    padding: 0;
+  }
+
+  .lb-butler-home .lb-hero-shell > div {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .lb-butler-home [data-hero-grid] {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+  }
+
+  .lb-butler-home [data-hero-left] {
+    height: auto;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .lb-butler-home [data-hero-left] > div {
+    padding: 34px 20px 28px;
+  }
+
+  .lb-butler-home [data-hero-left] > div > span:first-child {
+    margin-bottom: 20px;
+    font-size: 11px;
+  }
+
+  .lb-butler-home [data-hero-title] {
+    max-width: none;
+    font-size: clamp(45px, 13vw, 58px);
+    line-height: 0.94;
+  }
+
+  .lb-butler-home [data-hero-title] + p {
+    max-width: 34rem;
+    margin-block: 20px 22px;
+    font-size: 17px;
+    line-height: 1.5;
+  }
+
+  .lb-butler-home [data-hero-primary-cta] {
+    width: 100%;
+    min-width: 0;
+    height: 60px;
+    font-size: 18px;
+  }
+
+  .lb-butler-home [data-hero-trust] {
+    display: none;
+  }
+
+  .lb-butler-home [data-hero-mobile-image] {
+    display: block;
+    min-height: 280px;
+    margin: 0 20px 28px;
+    border-radius: 22px;
+  }
+
+  .lb-butler-home [data-hero-center],
+  .lb-butler-home [data-hero-right] {
+    display: none;
+  }
+
+  .lb-butler-home .lb-mobile-cta {
+    display: block;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .lb-butler-home .lb-mobile-cta button {
+    min-height: 56px;
+    border-radius: 14px;
+    font-size: 17px;
+  }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

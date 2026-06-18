@@ -145,9 +145,9 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen overflow-x-hidden" style={{ background: C.page, color: C.text }}>
+    <div className="lb-butler-home min-h-screen overflow-x-hidden" style={{ background: C.page, color: C.text }}>
       <div
-        className="border-b border-white/20 text-[12px]"
+        className="lb-topbar border-b border-white/20 text-[12px]"
         style={{ background: "linear-gradient(90deg, #2d4f44 0%, #1f4035 100%)", color: "#f7f7f6" }}
       >
         <div className="mx-auto flex max-w-[1300px] flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:px-8">
@@ -170,7 +170,7 @@ export default function Home() {
       </div>
 
       <header
-        className="sticky top-0 z-40 border-b backdrop-blur-xl"
+        className="lb-header sticky top-0 z-40 border-b backdrop-blur-xl"
         style={{ borderColor: C.border, background: "rgba(255,247,245,0.92)" }}
       >
         <div className="mx-auto flex h-[86px] max-w-[1300px] items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
@@ -262,7 +262,7 @@ export default function Home() {
       </header>
 
       <main id="top">
-        <section className="relative overflow-hidden border-b" style={{ borderColor: C.border }}>
+        <section className="lb-hero relative overflow-hidden border-b" style={{ borderColor: C.border }}>
           <div
             className="pointer-events-none absolute inset-0"
             aria-hidden
@@ -272,7 +272,7 @@ export default function Home() {
             }}
           />
 
-          <div className="relative mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8 lg:py-[28px]">
+          <div className="lb-hero-shell relative mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8 lg:py-[28px]">
             <div
               className="relative overflow-hidden rounded-[28px] border shadow-[0_18px_34px_rgba(136,73,104,0.16)]"
               style={{ borderColor: C.border, background: "linear-gradient(160deg, #fff8f6 0%, #fff2ef 100%)" }}
@@ -285,7 +285,7 @@ export default function Home() {
               <div data-hero-grid className="relative grid gap-5 p-4 sm:p-5 lg:min-h-[676px] lg:grid-cols-[34fr_38fr_28fr] lg:items-start lg:gap-5 lg:p-7">
                 <div
                   data-hero-left
-                  className="flex rounded-[28px] border bg-[linear-gradient(155deg,#fffdfb_0%,#fff3f7_100%)] shadow-[0_16px_28px_rgba(136,73,104,0.14)] lg:h-[556px]"
+                  className="lb-hero-copy flex rounded-[28px] border bg-[linear-gradient(155deg,#fffdfb_0%,#fff3f7_100%)] shadow-[0_16px_28px_rgba(136,73,104,0.14)] lg:h-[556px]"
                   style={{ borderColor: C.border }}
                 >
                   <div className="flex h-full w-full flex-col px-6 pb-6 pt-7 lg:px-[28px] lg:pb-[26px] lg:pt-[30px]">
@@ -297,6 +297,7 @@ export default function Home() {
                     </span>
 
                     <h1
+                      data-hero-title
                       className="max-w-[88%] text-[clamp(50px,4.15vw,62px)] leading-[0.95] tracking-[-0.024em] text-[#2f1a24]"
                       style={{ fontFamily: '"Fraunces", "Playfair Display", serif' }}
                     >
@@ -330,7 +331,7 @@ export default function Home() {
                       </a>
                     </div>
 
-                    <div className="mt-auto grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                    <div data-hero-trust className="mt-auto grid grid-cols-1 gap-2.5 sm:grid-cols-3">
                       {[
                         [ShieldCheck, "Door-to-door service"],
                         [Sparkles, "Expert garment care"],
@@ -355,7 +356,7 @@ export default function Home() {
                   <SchedulePickupRail className="h-full rounded-[28px] border-[#e9d8e0] bg-[linear-gradient(180deg,#fffaf8_0%,#fff5f8_100%)] shadow-[0_16px_30px_rgba(136,73,104,0.14)] [&>div:nth-child(1)]:px-6 [&>div:nth-child(1)]:pb-5 [&>div:nth-child(1)]:pt-[26px] [&>div:nth-child(2)]:overflow-y-auto [&>div:nth-child(2)]:px-6 [&>div:nth-child(2)]:pb-4 [&>div:nth-child(2)]:pt-5 [&>div:nth-child(3)]:px-6 [&>div:nth-child(3)]:pb-4 [&>div:nth-child(3)]:pt-3" />
                 </div>
 
-                <div className="relative min-h-[430px] overflow-hidden rounded-[28px] border shadow-[0_18px_30px_rgba(136,73,104,0.14)] lg:hidden" style={{ borderColor: C.border }}>
+                <div data-hero-mobile-image className="relative min-h-[430px] overflow-hidden rounded-[28px] border shadow-[0_18px_30px_rgba(136,73,104,0.14)] lg:hidden" style={{ borderColor: C.border }}>
                   <img
                     src={ASSETS.hero}
                     alt="Laundry Butler concierge preparing a garment in a luxury residence"
@@ -708,7 +709,7 @@ export default function Home() {
         </div>
       </footer>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 px-4 py-3 shadow-[0_-12px_24px_rgba(63,26,43,0.12)] backdrop-blur lg:hidden" style={{ borderColor: C.border }}>
+      <div className="lb-mobile-cta fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 px-4 py-3 shadow-[0_-12px_24px_rgba(63,26,43,0.12)] backdrop-blur lg:hidden" style={{ borderColor: C.border }}>
         <button
           type="button"
           onClick={() => setShowModal(true)}
