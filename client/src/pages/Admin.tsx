@@ -841,16 +841,13 @@ function NewOrderTab({
     }
   }, [searchQuery.data]);
 
-  const catalogRows = useMemo(
-    () => {
-      const rows = toDryCleanCatalogRows(catalogQuery.data);
-      if (rows.length === 0 && import.meta.env.DEV) {
-        return legacyDryCleanCatalogRows();
-      }
-      return rows;
-    },
-    [catalogQuery.data]
-  );
+  const catalogRows = useMemo(() => {
+    const rows = toDryCleanCatalogRows(catalogQuery.data);
+    if (rows.length === 0 && import.meta.env.DEV) {
+      return legacyDryCleanCatalogRows();
+    }
+    return rows;
+  }, [catalogQuery.data]);
 
   const currentInputWeight = (() => {
     const n = parseFloat(weightLbs);
@@ -994,7 +991,9 @@ function NewOrderTab({
             orderId,
             receiptUrl: charge.receiptUrl ?? undefined,
           });
-          toast.success(`Created and charged $${centsToDollars(checkoutTotals.totalCents)}.`);
+          toast.success(
+            `Created and charged $${centsToDollars(checkoutTotals.totalCents)}.`
+          );
           return;
         }
 
@@ -1015,10 +1014,14 @@ function NewOrderTab({
           reason:
             chargeError?.message || "Card charge failed. Payment still needed.",
         });
-        toast.error(chargeError?.message || "Card charge failed. Order saved unpaid.");
+        toast.error(
+          chargeError?.message || "Card charge failed. Order saved unpaid."
+        );
       }
     } catch (error: any) {
-      toast.error(error?.message || "Could not complete checkout. Please retry.");
+      toast.error(
+        error?.message || "Could not complete checkout. Please retry."
+      );
     }
   };
 
@@ -1064,30 +1067,43 @@ function NewOrderTab({
         <div>
           <h2 className="text-xl font-semibold tracking-tight">New Order</h2>
           <p className="mt-1 text-sm text-black/50">
-            At-counter POS for customer lookup, garment pricing, discount, and payment.
+            At-counter POS for customer lookup, garment pricing, discount, and
+            payment.
           </p>
         </div>
         <div className="grid grid-cols-3 border border-black/10 bg-white text-center text-xs">
           <div className="px-3 py-2">
-            <div className="font-mono text-lg font-semibold">{queueQuery.data?.length || 0}</div>
+            <div className="font-mono text-lg font-semibold">
+              {queueQuery.data?.length || 0}
+            </div>
             <div className="uppercase tracking-[0.12em] text-black/40">New</div>
           </div>
           <div className="border-x border-black/10 px-3 py-2">
-            <div className="font-mono text-lg font-semibold">{hasSavedCard ? "Yes" : "No"}</div>
-            <div className="uppercase tracking-[0.12em] text-black/40">Card</div>
+            <div className="font-mono text-lg font-semibold">
+              {hasSavedCard ? "Yes" : "No"}
+            </div>
+            <div className="uppercase tracking-[0.12em] text-black/40">
+              Card
+            </div>
           </div>
           <div className="px-3 py-2">
-            <div className="font-mono text-lg font-semibold">{form.deliveryDate || defaultDeliveryPreview}</div>
-            <div className="uppercase tracking-[0.12em] text-black/40">Return</div>
+            <div className="font-mono text-lg font-semibold">
+              {form.deliveryDate || defaultDeliveryPreview}
+            </div>
+            <div className="uppercase tracking-[0.12em] text-black/40">
+              Return
+            </div>
           </div>
         </div>
       </div>
 
       <div className="grid min-h-[680px] gap-4 xl:grid-cols-[270px_minmax(0,1fr)_360px]">
         <section className="border border-black/10 bg-[#FBFAF6] p-3">
-              <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">Services</div>
+          <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">
+            Services
+          </div>
           <div className="grid gap-2">
-            {serviceTiles.map((service) => {
+            {serviceTiles.map(service => {
               const Icon = service.icon;
               const active = form.serviceType === service.id;
               return (
@@ -1104,12 +1120,20 @@ function NewOrderTab({
                       : "border-black/10 bg-white text-black hover:border-black/35"
                   }`}
                 >
-                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center border ${active ? "border-white/25" : "border-black/10"}`}>
+                  <span
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center border ${active ? "border-white/25" : "border-black/10"}`}
+                  >
                     <Icon className="h-5 w-5" />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-sm font-bold uppercase tracking-[0.08em]">{service.title}</span>
-                    <span className={`mt-1 block text-xs ${active ? "text-white/65" : "text-black/45"}`}>{service.detail}</span>
+                    <span className="block text-sm font-bold uppercase tracking-[0.08em]">
+                      {service.title}
+                    </span>
+                    <span
+                      className={`mt-1 block text-xs ${active ? "text-white/65" : "text-black/45"}`}
+                    >
+                      {service.detail}
+                    </span>
                   </span>
                 </button>
               );
@@ -1122,14 +1146,20 @@ function NewOrderTab({
                 <Plus className="h-5 w-5" />
               </span>
               <span>
-                <span className="block text-sm font-bold uppercase tracking-[0.08em]">Pricing live</span>
-                <span className="mt-1 block text-xs text-black/40">Items appear in current order</span>
+                <span className="block text-sm font-bold uppercase tracking-[0.08em]">
+                  Pricing live
+                </span>
+                <span className="mt-1 block text-xs text-black/40">
+                  Items appear in current order
+                </span>
               </span>
             </button>
           </div>
 
           <div className="mt-5 border-t border-black/10 pt-4">
-            <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">Building</div>
+            <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">
+              Building
+            </div>
             <select
               value={form.buildingSlug}
               onChange={e => setForm({ ...form, buildingSlug: e.target.value })}
@@ -1164,28 +1194,38 @@ function NewOrderTab({
         </section>
 
         <section className="border border-black/10 bg-white p-4">
-            <div className="mb-4 flex items-center justify-between border-b border-black/10 pb-3">
+          <div className="mb-4 flex items-center justify-between border-b border-black/10 pb-3">
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/45">Current order</div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/45">
+                Current order
+              </div>
               <div className="mt-1 text-lg font-semibold">
-                {form.serviceType === "wash_fold" ? "Wash & Fold" : "Dry Cleaning"}
+                {form.serviceType === "wash_fold"
+                  ? "Wash & Fold"
+                  : "Dry Cleaning"}
               </div>
             </div>
             <div className="text-right">
-              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/45">Status</div>
-                  <div className={`mt-1 text-sm font-semibold ${checkoutResult?.kind === "paid" ? "text-emerald-700" : checkoutResult?.kind === "unpaid" ? "text-amber-700" : "text-black/70"}`}>
-                    {checkoutResult?.kind === "paid"
-                      ? "Paid"
-                      : checkoutResult?.kind === "unpaid"
-                        ? "Payment needed"
-                        : "Building ticket"}
-                  </div>
-                </div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/45">
+                Status
               </div>
+              <div
+                className={`mt-1 text-sm font-semibold ${checkoutResult?.kind === "paid" ? "text-emerald-700" : checkoutResult?.kind === "unpaid" ? "text-amber-700" : "text-black/70"}`}
+              >
+                {checkoutResult?.kind === "paid"
+                  ? "Paid"
+                  : checkoutResult?.kind === "unpaid"
+                    ? "Payment needed"
+                    : "Building ticket"}
+              </div>
+            </div>
+          </div>
 
           <div className="grid gap-4">
             {checkoutResult ? (
-              <div className={`border px-3 py-3 text-sm ${checkoutResult.kind === "paid" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+              <div
+                className={`border px-3 py-3 text-sm ${checkoutResult.kind === "paid" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}
+              >
                 <div className="flex items-start gap-2">
                   <Check className="mt-0.5 h-4 w-4 shrink-0" />
                   <div>
@@ -1199,7 +1239,8 @@ function NewOrderTab({
                         ? "It is now in Processing."
                         : checkoutResult.reason}
                     </p>
-                    {checkoutResult.kind === "paid" && checkoutResult.receiptUrl ? (
+                    {checkoutResult.kind === "paid" &&
+                    checkoutResult.receiptUrl ? (
                       <a
                         href={checkoutResult.receiptUrl}
                         target="_blank"
@@ -1264,19 +1305,27 @@ function NewOrderTab({
 
             <div className="grid gap-3 lg:grid-cols-2">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Pickup Date</span>
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+                  Pickup Date
+                </span>
                 <Input
                   type="date"
                   value={form.pickupDate}
-                  onChange={e => setForm({ ...form, pickupDate: e.target.value })}
+                  onChange={e =>
+                    setForm({ ...form, pickupDate: e.target.value })
+                  }
                   className="bg-white border-black/20"
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Pickup Window</span>
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+                  Pickup Window
+                </span>
                 <select
                   value={form.pickupTimeWindow}
-                  onChange={e => setForm({ ...form, pickupTimeWindow: e.target.value })}
+                  onChange={e =>
+                    setForm({ ...form, pickupTimeWindow: e.target.value })
+                  }
                   className="h-10 w-full border border-black/20 bg-white px-3 text-sm"
                 >
                   {TIME_WINDOWS.map(w => (
@@ -1287,20 +1336,28 @@ function NewOrderTab({
                 </select>
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Return Date</span>
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+                  Return Date
+                </span>
                 <Input
                   type="date"
                   value={form.deliveryDate}
-                  onChange={e => setForm({ ...form, deliveryDate: e.target.value })}
+                  onChange={e =>
+                    setForm({ ...form, deliveryDate: e.target.value })
+                  }
                   placeholder={defaultDeliveryPreview}
                   className="bg-white border-black/20"
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Return Window</span>
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+                  Return Window
+                </span>
                 <select
                   value={form.deliveryTimeWindow}
-                  onChange={e => setForm({ ...form, deliveryTimeWindow: e.target.value })}
+                  onChange={e =>
+                    setForm({ ...form, deliveryTimeWindow: e.target.value })
+                  }
                   className="h-10 w-full border border-black/20 bg-white px-3 text-sm"
                 >
                   <option value="">Same as pickup</option>
@@ -1314,10 +1371,14 @@ function NewOrderTab({
             </div>
 
             <label className="block">
-              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Notes</span>
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+                Notes
+              </span>
               <Input
                 value={form.specialInstructions}
-                onChange={e => setForm({ ...form, specialInstructions: e.target.value })}
+                onChange={e =>
+                  setForm({ ...form, specialInstructions: e.target.value })
+                }
                 placeholder="Starch, bag count, gate code, or special handling"
                 className="bg-white border-black/20"
               />
@@ -1327,19 +1388,29 @@ function NewOrderTab({
           <div className="mt-6 grid gap-3 border-t border-black/10 pt-4 sm:grid-cols-3">
             <div className="border border-black/10 bg-[#FBFAF6] p-3">
               <CalendarDays className="mb-3 h-4 w-4 text-black/45" />
-              <div className="text-xs uppercase tracking-[0.12em] text-black/45">Pickup</div>
-              <div className="mt-1 text-sm font-semibold">{form.pickupDate || "Not set"}</div>
+              <div className="text-xs uppercase tracking-[0.12em] text-black/45">
+                Pickup
+              </div>
+              <div className="mt-1 text-sm font-semibold">
+                {form.pickupDate || "Not set"}
+              </div>
             </div>
             <div className="border border-black/10 bg-[#FBFAF6] p-3">
               <Package className="mb-3 h-4 w-4 text-black/45" />
-              <div className="text-xs uppercase tracking-[0.12em] text-black/45">Pipeline</div>
+              <div className="text-xs uppercase tracking-[0.12em] text-black/45">
+                Pipeline
+              </div>
               <div className="mt-1 text-sm font-semibold">New intake</div>
             </div>
             <div className="border border-black/10 bg-[#FBFAF6] p-3">
               <CreditCard className="mb-3 h-4 w-4 text-black/45" />
-              <div className="text-xs uppercase tracking-[0.12em] text-black/45">Payment</div>
-              <div className={`mt-1 text-sm font-semibold ${hasSavedCard ? "text-emerald-700" : "text-amber-700"}`}>
-                  {hasSavedCard ? "Saved card" : "Unpaid if no card"}
+              <div className="text-xs uppercase tracking-[0.12em] text-black/45">
+                Payment
+              </div>
+              <div
+                className={`mt-1 text-sm font-semibold ${hasSavedCard ? "text-emerald-700" : "text-amber-700"}`}
+              >
+                {hasSavedCard ? "Saved card" : "Unpaid if no card"}
               </div>
             </div>
           </div>
@@ -1347,9 +1418,13 @@ function NewOrderTab({
 
         <aside className="flex flex-col border border-black/10 bg-[#FBFAF6]">
           <div className="border-b border-black/10 p-4">
-            <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">Customer</div>
+            <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">
+              Customer
+            </div>
             <label className="block">
-              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Phone</span>
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+                Phone
+              </span>
               <div className="flex gap-2">
                 <Input
                   ref={phoneRef}
@@ -1378,7 +1453,10 @@ function NewOrderTab({
                   {searchQuery.data.firstName} {searchQuery.data.lastName}
                   {searchQuery.data.stripeCustomerId ? " · card on file" : ""}
                 </span>
-                <button className="font-semibold uppercase tracking-[0.08em]" onClick={() => onOpenProfile(searchQuery.data!.phone)}>
+                <button
+                  className="font-semibold uppercase tracking-[0.08em]"
+                  onClick={() => onOpenProfile(searchQuery.data!.phone)}
+                >
                   Profile
                 </button>
               </div>
@@ -1386,16 +1464,22 @@ function NewOrderTab({
 
             <div className="mt-3 grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">First Name</span>
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+                  First Name
+                </span>
                 <Input
                   ref={firstNameRef}
                   value={form.firstName}
-                  onChange={e => setForm({ ...form, firstName: e.target.value })}
+                  onChange={e =>
+                    setForm({ ...form, firstName: e.target.value })
+                  }
                   className="bg-white border-black/20"
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Last Name</span>
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+                  Last Name
+                </span>
                 <Input
                   ref={lastNameRef}
                   value={form.lastName}
@@ -1405,7 +1489,9 @@ function NewOrderTab({
               </label>
             </div>
             <label className="mt-3 block">
-              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Email</span>
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+                Email
+              </span>
               <Input
                 ref={emailRef}
                 value={form.email}
@@ -1414,7 +1500,9 @@ function NewOrderTab({
               />
             </label>
             <label className="mt-3 block">
-              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Address</span>
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+                Address
+              </span>
               <Input
                 ref={addressRef}
                 value={form.address}
@@ -1423,7 +1511,9 @@ function NewOrderTab({
               />
             </label>
             <label className="mt-3 block">
-              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Unit</span>
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+                Unit
+              </span>
               <Input
                 ref={unitRef}
                 value={form.unit}
@@ -1435,16 +1525,24 @@ function NewOrderTab({
 
           <div className="flex-1 p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">POS summary</h3>
-              <span className="font-mono text-xs text-black/40">{queueQuery.data?.length || 0}</span>
+              <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">
+                POS summary
+              </h3>
+              <span className="font-mono text-xs text-black/40">
+                {queueQuery.data?.length || 0}
+              </span>
             </div>
             <div className="space-y-2 border border-black/10 bg-white p-3 text-sm">
               <div className="flex justify-between gap-3">
                 <span className="text-black/50">Subtotal</span>
-                <span className="font-mono">${centsToDollars(checkoutTotals.subtotalCents)}</span>
+                <span className="font-mono">
+                  ${centsToDollars(checkoutTotals.subtotalCents)}
+                </span>
               </div>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">Discount %</span>
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+                  Discount %
+                </span>
                 <Input
                   type="number"
                   min="0"
@@ -1456,7 +1554,9 @@ function NewOrderTab({
               </label>
               <div className="flex justify-between gap-3 border-t border-black/10 pt-2 text-base font-semibold">
                 <span>Total</span>
-                <span className="font-mono">${centsToDollars(checkoutTotals.totalCents)}</span>
+                <span className="font-mono">
+                  ${centsToDollars(checkoutTotals.totalCents)}
+                </span>
               </div>
               {!hasPricedItems ? (
                 <p className="text-xs text-amber-700">
@@ -1469,9 +1569,13 @@ function NewOrderTab({
           <div className="border-t border-black/10 bg-white p-4">
             <div className="mb-3 flex items-center justify-between text-sm">
               <span className="text-black/50">
-                {hasSavedCard ? "Charge saved card" : "No saved card: saves unpaid"}
+                {hasSavedCard
+                  ? "Charge saved card"
+                  : "No saved card: saves unpaid"}
               </span>
-              <span className="font-mono font-semibold">${centsToDollars(checkoutTotals.totalCents)}</span>
+              <span className="font-mono font-semibold">
+                ${centsToDollars(checkoutTotals.totalCents)}
+              </span>
             </div>
             <Button
               className="h-12 w-full bg-emerald-600 text-sm font-bold uppercase tracking-[0.12em] text-white hover:bg-emerald-700 disabled:opacity-50"
@@ -2130,16 +2234,13 @@ function IntakeDetail({
     { includeArchived: false },
     { enabled: !!order && order.serviceType === "dry_cleaning" }
   );
-  const catalogRows = useMemo(
-    () => {
-      const rows = toDryCleanCatalogRows(catalogQuery.data);
-      if (rows.length === 0 && import.meta.env.DEV) {
-        return legacyDryCleanCatalogRows();
-      }
-      return rows;
-    },
-    [catalogQuery.data]
-  );
+  const catalogRows = useMemo(() => {
+    const rows = toDryCleanCatalogRows(catalogQuery.data);
+    if (rows.length === 0 && import.meta.env.DEV) {
+      return legacyDryCleanCatalogRows();
+    }
+    return rows;
+  }, [catalogQuery.data]);
 
   // Wash & fold state
   const [weightLbs, setWeightLbs] = useState("");
@@ -2267,7 +2368,8 @@ function IntakeDetail({
     if (!result.success) {
       setChargeResult({
         success: false,
-        error: result.error || "Charge failed. Ask for a new card or retry later.",
+        error:
+          result.error || "Charge failed. Ask for a new card or retry later.",
       });
       return;
     }
@@ -2275,12 +2377,11 @@ function IntakeDetail({
     let portalWelcomeUrl: string | undefined;
     if (result.isFirstPaidOrder) {
       try {
-        const { token } = await generatePortalToken.mutateAsync({
-          orderId: order.id,
-        });
-        const welcome = new URL("/welcome", `${getResidentWebOrigin()}/`);
-        welcome.searchParams.set("token", token);
-        portalWelcomeUrl = welcome.toString();
+        const { portalWelcomeUrl: generatedWelcomeUrl } =
+          await generatePortalToken.mutateAsync({
+            orderId: order.id,
+          });
+        portalWelcomeUrl = generatedWelcomeUrl;
       } catch (err) {
         console.error("Failed to generate portal welcome link:", err);
         toast.error(
@@ -2941,7 +3042,9 @@ function ReadyTab() {
       await updateStatus.mutateAsync({ orderId, status: "delivered" });
       refetch();
     } catch (error: any) {
-      toast.error(error?.message || "Charge the order before marking it delivered.");
+      toast.error(
+        error?.message || "Charge the order before marking it delivered."
+      );
     }
   };
 
@@ -3013,7 +3116,11 @@ function ReadyTab() {
                     className="border-black text-black text-xs"
                     onClick={() => handleDeliver(o.id)}
                     disabled={updateStatus.isPending || !o.paid}
-                    title={o.paid ? "Mark delivered" : "Charge the order before marking it delivered."}
+                    title={
+                      o.paid
+                        ? "Mark delivered"
+                        : "Charge the order before marking it delivered."
+                    }
                   >
                     Mark Delivered
                   </Button>
@@ -3078,7 +3185,9 @@ function PickupsTab() {
       await updateStatus.mutateAsync({ orderId, status: "delivered" });
       await Promise.all([refetchDeliveries(), invalidateLiveStatuses()]);
     } catch (error: any) {
-      toast.error(error?.message || "Charge the order before marking it delivered.");
+      toast.error(
+        error?.message || "Charge the order before marking it delivered."
+      );
     }
   };
 

@@ -4,7 +4,12 @@ import { useTenant } from "@/hooks/useTenant";
 import { WF_RATE_PER_LB_CENTS, centsToDollars } from "@shared/pricing";
 import { useCatalogDryCleanMinCents } from "@/components/CatalogDryCleanPricing";
 import { loadStripe } from "@stripe/stripe-js";
-import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import {
+  Elements,
+  CardElement,
+  useStripe,
+  useElements,
+} from "@stripe/react-stripe-js";
 import {
   ArrowLeft,
   CalendarClock,
@@ -80,7 +85,10 @@ function getCurrentStage(step: number): number {
 
 function StageStepper({ currentStage }: { currentStage: number }) {
   return (
-    <ol className="flex items-center gap-1.5 lg:gap-2" aria-label="Booking progress">
+    <ol
+      className="flex items-center gap-1.5 lg:gap-2"
+      aria-label="Booking progress"
+    >
       {STAGES.map((stage, index) => {
         const stageIndex = index + 1;
         const complete = stageIndex < currentStage;
@@ -93,7 +101,9 @@ function StageStepper({ currentStage }: { currentStage: number }) {
                 "inline-flex min-w-0 items-center gap-1 rounded-full border px-2 py-1 text-[10.5px] font-semibold transition-colors lg:rounded-[14px] lg:px-2.5 lg:py-1.5 lg:text-[11.5px]",
                 complete && "border-[#de80a8] bg-[#ffe7f2] text-[#9c2a5c]",
                 active && "border-[#d24784] bg-[#fff3f9] text-[#a8205c]",
-                !active && !complete && "border-[#ead8e0] bg-white text-[#896775]"
+                !active &&
+                  !complete &&
+                  "border-[#ead8e0] bg-white text-[#896775]"
               )}
             >
               <span
@@ -104,12 +114,19 @@ function StageStepper({ currentStage }: { currentStage: number }) {
                   !active && !complete && "bg-[#f7edf2] text-[#8f6b7a]"
                 )}
               >
-                {complete ? <Check className="h-2.5 w-2.5" aria-hidden /> : stageIndex}
+                {complete ? (
+                  <Check className="h-2.5 w-2.5" aria-hidden />
+                ) : (
+                  stageIndex
+                )}
               </span>
               <span className="truncate">{stage}</span>
             </div>
             {index < STAGES.length - 1 ? (
-              <span className="h-px w-2 shrink-0 bg-[#e8d6df] lg:w-3" aria-hidden />
+              <span
+                className="h-px w-2 shrink-0 bg-[#e8d6df] lg:w-3"
+                aria-hidden
+              />
             ) : null}
           </li>
         );
@@ -135,7 +152,9 @@ function SummaryRow({
         </span>
         <span>{label}</span>
       </div>
-      <div className="lb-booking-summary-value min-w-0 truncate text-right text-[12.5px] font-semibold text-[#351f29]">{value}</div>
+      <div className="lb-booking-summary-value min-w-0 truncate text-right text-[12.5px] font-semibold text-[#351f29]">
+        {value}
+      </div>
     </div>
   );
 }
@@ -148,7 +167,9 @@ function BookingSummary({ formData }: { formData: FormData }) {
   return (
     <div className="rounded-2xl border border-[#ecdbe4] bg-[linear-gradient(170deg,#fffdfc_0%,#fff4f8_100%)] p-3.5 shadow-[0_10px_20px_rgba(171,96,129,0.11)]">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#976a7c]">Order Summary</span>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#976a7c]">
+          Order Summary
+        </span>
         <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#a17084]">
           <Lock className="h-3 w-3" aria-hidden />
           Secure
@@ -192,9 +213,13 @@ function PrimaryButton({
       onClick={onClick}
       disabled={disabled || loading}
       className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl px-4 text-[14px] font-semibold text-white shadow-[0_14px_24px_rgba(178,31,97,0.34)] transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_28px_rgba(178,31,97,0.42)] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 lg:h-[58px] lg:rounded-[19px] lg:text-[16px]"
-      style={{ background: `linear-gradient(135deg, ${ACCENT} 0%, ${ACCENT_DEEP} 100%)` }}
+      style={{
+        background: `linear-gradient(135deg, ${ACCENT} 0%, ${ACCENT_DEEP} 100%)`,
+      }}
     >
-      {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+      {loading ? (
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+      ) : null}
       {children}
     </button>
   );
@@ -248,7 +273,7 @@ function InputField({
         type={type}
         value={value}
         min={min}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={event => onChange(event.target.value)}
         placeholder={placeholder}
         required={required}
         className="h-10 w-full rounded-xl border border-[#e8d7df] bg-white px-3.5 text-[14px] text-[#2f1b24] outline-none transition-all placeholder:text-[#b99eaa] focus:border-[#d65a90] focus:ring-2 focus:ring-[#f6c8dd] lg:h-[52px] lg:rounded-[14px] lg:text-[14.5px]"
@@ -278,8 +303,12 @@ function StepContainer({
             {icon}
           </div>
           <div>
-            <h3 className="text-[22px] font-semibold leading-[1.14] text-[#2a1720]">{title}</h3>
-            <p className="mt-1 text-[13px] leading-relaxed text-[#866272]">{subtitle}</p>
+            <h3 className="text-[22px] font-semibold leading-[1.14] text-[#2a1720]">
+              {title}
+            </h3>
+            <p className="mt-1 text-[13px] leading-relaxed text-[#866272]">
+              {subtitle}
+            </p>
           </div>
         </div>
         {onBack ? (
@@ -328,24 +357,43 @@ function StepService({
       icon={<Shirt className="h-4.5 w-4.5" aria-hidden />}
     >
       <div className="space-y-2.5">
-        <button type="button" className={`${tileClass(formData.serviceType === "wash_fold")} min-h-[76px] lg:rounded-[18px]`} onClick={() => select("wash_fold")}>
+        <button
+          type="button"
+          className={`${tileClass(formData.serviceType === "wash_fold")} min-h-[76px] lg:rounded-[18px]`}
+          onClick={() => select("wash_fold")}
+        >
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[16px] font-semibold text-[#2b1720]">Wash &amp; Fold</span>
+            <span className="text-[16px] font-semibold text-[#2b1720]">
+              Wash &amp; Fold
+            </span>
             <span className="rounded-full bg-[#ffe3ef] px-2.5 py-1 text-[11px] font-semibold text-[#ad1d5d]">
               ${centsToDollars(WF_RATE_PER_LB_CENTS)}/lb
             </span>
           </div>
-          <p className="mt-1 text-[13px] text-[#886170]">Premium wash + dry + fold with concierge pickup and return.</p>
+          <p className="mt-1 text-[13px] text-[#886170]">
+            Premium wash + dry + fold with concierge pickup and return.
+          </p>
         </button>
 
-        <button type="button" className={`${tileClass(formData.serviceType === "dry_cleaning")} min-h-[76px] lg:rounded-[18px]`} onClick={() => select("dry_cleaning")}>
+        <button
+          type="button"
+          className={`${tileClass(formData.serviceType === "dry_cleaning")} min-h-[76px] lg:rounded-[18px]`}
+          onClick={() => select("dry_cleaning")}
+        >
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[16px] font-semibold text-[#2b1720]">Dry Cleaning</span>
+            <span className="text-[16px] font-semibold text-[#2b1720]">
+              Dry Cleaning
+            </span>
             <span className="rounded-full bg-[#ffe3ef] px-2.5 py-1 text-[11px] font-semibold text-[#ad1d5d]">
-              {dcMinCents != null ? `From $${centsToDollars(dcMinCents)}` : "Per garment"}
+              {dcMinCents != null
+                ? `From $${centsToDollars(dcMinCents)}`
+                : "Per garment"}
             </span>
           </div>
-          <p className="mt-1 text-[13px] text-[#886170]">Expert garment care for delicates, tailoring-grade finishes, and formalwear.</p>
+          <p className="mt-1 text-[13px] text-[#886170]">
+            Expert garment care for delicates, tailoring-grade finishes, and
+            formalwear.
+          </p>
         </button>
       </div>
 
@@ -379,21 +427,28 @@ function StepPreferences({
           <InputField
             label="Address"
             value={formData.address}
-            onChange={(v) => setFormData({ ...formData, address: v })}
+            onChange={v => setFormData({ ...formData, address: v })}
             placeholder="123 Wilshire Blvd, Los Angeles, CA"
             required
           />
           <InputField
             label="Unit / Apt"
             value={formData.unit}
-            onChange={(v) => setFormData({ ...formData, unit: v })}
+            onChange={v => setFormData({ ...formData, unit: v })}
             placeholder="Unit 2401"
           />
           <label className="block space-y-1.5">
-            <span className="text-[12px] font-medium tracking-[0.01em] text-[#7e5b6a]">Special Instructions</span>
+            <span className="text-[12px] font-medium tracking-[0.01em] text-[#7e5b6a]">
+              Special Instructions
+            </span>
             <textarea
               value={formData.specialInstructions}
-              onChange={(event) => setFormData({ ...formData, specialInstructions: event.target.value })}
+              onChange={event =>
+                setFormData({
+                  ...formData,
+                  specialInstructions: event.target.value,
+                })
+              }
               placeholder="Leave with concierge, front desk notes, gate code, etc."
               rows={3}
               className="w-full resize-none rounded-xl border border-[#e8d7df] bg-white px-3.5 py-2.5 text-[14px] text-[#2f1b24] outline-none transition-all placeholder:text-[#b99eaa] focus:border-[#d65a90] focus:ring-2 focus:ring-[#f6c8dd]"
@@ -440,7 +495,7 @@ function StepDateTime({
             type="date"
             label="Pickup Date"
             value={formData.pickupDate}
-            onChange={(v) => setFormData({ ...formData, pickupDate: v })}
+            onChange={v => setFormData({ ...formData, pickupDate: v })}
             min={minDate}
             required
           />
@@ -450,13 +505,15 @@ function StepDateTime({
               Time Window <span className="text-[#cc2f73]">*</span>
             </span>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {TIME_WINDOWS.map((window) => {
+              {TIME_WINDOWS.map(window => {
                 const active = formData.pickupTimeWindow === window;
                 return (
                   <button
                     key={window}
                     type="button"
-                    onClick={() => setFormData({ ...formData, pickupTimeWindow: window })}
+                    onClick={() =>
+                      setFormData({ ...formData, pickupTimeWindow: window })
+                    }
                     className={cn(
                       "h-10 rounded-xl border px-3 text-left text-[13px] font-medium transition-colors lg:h-[52px] lg:rounded-[14px] lg:text-[13.5px]",
                       active
@@ -474,12 +531,16 @@ function StepDateTime({
       </div>
 
       <div className="rounded-xl border border-[#f0dbe5] bg-[#fff7fb] px-3 py-2 text-[12px] text-[#876575]">
-        Earliest pickup date is {minDate} to maintain concierge-level routing quality.
+        Earliest pickup date is {minDate} to maintain concierge-level routing
+        quality.
       </div>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <SecondaryButton onClick={onBack}>Back</SecondaryButton>
-        <PrimaryButton onClick={onNext} disabled={!formData.pickupDate || !formData.pickupTimeWindow}>
+        <PrimaryButton
+          onClick={onNext}
+          disabled={!formData.pickupDate || !formData.pickupTimeWindow}
+        >
           Continue to Review
         </PrimaryButton>
       </div>
@@ -503,7 +564,9 @@ function StepReview({
   error: string | null;
 }) {
   const canContinue =
-    formData.firstName.trim() && formData.lastName.trim() && formData.phone.trim();
+    formData.firstName.trim() &&
+    formData.lastName.trim() &&
+    formData.phone.trim();
 
   return (
     <StepContainer
@@ -517,13 +580,13 @@ function StepReview({
           <InputField
             label="First Name"
             value={formData.firstName}
-            onChange={(v) => setFormData({ ...formData, firstName: v })}
+            onChange={v => setFormData({ ...formData, firstName: v })}
             required
           />
           <InputField
             label="Last Name"
             value={formData.lastName}
-            onChange={(v) => setFormData({ ...formData, lastName: v })}
+            onChange={v => setFormData({ ...formData, lastName: v })}
             required
           />
         </div>
@@ -532,7 +595,7 @@ function StepReview({
           <InputField
             label="Phone"
             value={formData.phone}
-            onChange={(v) => setFormData({ ...formData, phone: v })}
+            onChange={v => setFormData({ ...formData, phone: v })}
             type="tel"
             placeholder="(323) 555-0100"
             required
@@ -540,7 +603,7 @@ function StepReview({
           <InputField
             label="Email"
             value={formData.email}
-            onChange={(v) => setFormData({ ...formData, email: v })}
+            onChange={v => setFormData({ ...formData, email: v })}
             type="email"
             placeholder="Optional"
           />
@@ -548,14 +611,21 @@ function StepReview({
       </div>
 
       {error ? (
-        <p className="rounded-xl border border-[#f3d0df] bg-[#fff2f8] px-3 py-2 text-[12px] text-[#a52c61]" role="alert">
+        <p
+          className="rounded-xl border border-[#f3d0df] bg-[#fff2f8] px-3 py-2 text-[12px] text-[#a52c61]"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <SecondaryButton onClick={onBack}>Back</SecondaryButton>
-        <PrimaryButton onClick={onSubmit} disabled={!canContinue} loading={loading}>
+        <PrimaryButton
+          onClick={onSubmit}
+          disabled={!canContinue}
+          loading={loading}
+        >
           {loading ? "Creating Order..." : "Create Order"}
         </PrimaryButton>
       </div>
@@ -571,7 +641,10 @@ function StepCardOnFile({
 }: {
   formData: FormData;
   orderId: number;
-  onSuccess: () => void;
+  onSuccess: (result: {
+    portalWelcomeUrl: string | null;
+    retryHandoff: () => Promise<string | null>;
+  }) => void;
   onBack: () => void;
 }) {
   const stripe = useStripe();
@@ -588,7 +661,9 @@ function StepCardOnFile({
     const mobileViewport = window.matchMedia(
       "(max-width: 767px), (max-device-width: 767px) and (hover: none)"
     ).matches;
-    return mobileViewport ? `${Math.max(20, Math.round(window.innerWidth * 0.05))}px` : "16px";
+    return mobileViewport
+      ? `${Math.max(20, Math.round(window.innerWidth * 0.05))}px`
+      : "16px";
   }, []);
 
   const initializedRef = useRef(false);
@@ -608,17 +683,24 @@ function StepCardOnFile({
         phone: formData.phone,
       },
       {
-        onSuccess: (data) => {
+        onSuccess: data => {
           setClientSecret(data.clientSecret);
           setCustomerId(data.customerId);
         },
-        onError: (err) => {
+        onError: err => {
           console.error("SetupIntent error:", err);
           setError("Failed to initialize payment. Please try again.");
         },
       }
     );
-  }, [formData.email, formData.firstName, formData.lastName, formData.phone, orderId, setupIntentMutation]);
+  }, [
+    formData.email,
+    formData.firstName,
+    formData.lastName,
+    formData.phone,
+    orderId,
+    setupIntentMutation,
+  ]);
 
   const handleSubmit = async () => {
     if (!stripe || !elements || !clientSecret || !customerId) return;
@@ -652,18 +734,30 @@ function StepCardOnFile({
       }
 
       if (result.setupIntent?.payment_method) {
-        await confirmCardMutation.mutateAsync({
+        const confirmationInput = {
           orderId,
           stripeCustomerId: customerId,
+          stripeSetupIntentId: result.setupIntent.id,
           stripePaymentMethodId:
             typeof result.setupIntent.payment_method === "string"
               ? result.setupIntent.payment_method
               : result.setupIntent.payment_method.id,
+        };
+        const confirmation =
+          await confirmCardMutation.mutateAsync(confirmationInput);
+        onSuccess({
+          portalWelcomeUrl: confirmation.portalWelcomeUrl,
+          retryHandoff: async () => {
+            const retry =
+              await confirmCardMutation.mutateAsync(confirmationInput);
+            return retry.portalWelcomeUrl;
+          },
         });
+        setLoading(false);
+        return;
       }
 
-      setLoading(false);
-      onSuccess();
+      throw new Error("Stripe did not return a saved payment method.");
     } catch (err) {
       console.error("Card confirmation error:", err);
       setError("Unable to save card. Please try again.");
@@ -685,7 +779,10 @@ function StepCardOnFile({
       ) : null}
 
       {!stripePk ? (
-        <p className="rounded-xl border border-[#f3d0df] bg-[#fff2f8] px-3 py-2 text-[12px] text-[#a52c61]" role="alert">
+        <p
+          className="rounded-xl border border-[#f3d0df] bg-[#fff2f8] px-3 py-2 text-[12px] text-[#a52c61]"
+          role="alert"
+        >
           Stripe publishable key is not configured.
         </p>
       ) : null}
@@ -714,17 +811,27 @@ function StepCardOnFile({
       </div>
 
       {error ? (
-        <p className="rounded-xl border border-[#f3d0df] bg-[#fff2f8] px-3 py-2 text-[12px] text-[#a52c61]" role="alert">
+        <p
+          className="rounded-xl border border-[#f3d0df] bg-[#fff2f8] px-3 py-2 text-[12px] text-[#a52c61]"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <SecondaryButton onClick={onBack} disabled={loading}>Back</SecondaryButton>
+        <SecondaryButton onClick={onBack} disabled={loading}>
+          Back
+        </SecondaryButton>
         <PrimaryButton
           onClick={handleSubmit}
           loading={loading}
-          disabled={!stripe || !clientSecret || confirmCardMutation.isPending || !stripePk}
+          disabled={
+            !stripe ||
+            !clientSecret ||
+            confirmCardMutation.isPending ||
+            !stripePk
+          }
         >
           {loading ? "Saving..." : "Save Card & Place Order"}
         </PrimaryButton>
@@ -735,12 +842,52 @@ function StepCardOnFile({
 
 function StepSuccess({
   supportPhone,
-  onContinue,
+  portalWelcomeUrl,
+  retryHandoff,
 }: {
   supportPhone: string;
-  onContinue: () => void;
+  portalWelcomeUrl: string | null;
+  retryHandoff: () => Promise<string | null>;
 }) {
   const supportPhoneHref = `tel:${supportPhone.replace(/[^\d+]/g, "")}`;
+  const [welcomeUrl, setWelcomeUrl] = useState(portalWelcomeUrl);
+  const [retrying, setRetrying] = useState(false);
+  const [handoffError, setHandoffError] = useState(
+    portalWelcomeUrl
+      ? null
+      : "HELD is temporarily unavailable. Your pickup is still booked."
+  );
+
+  useEffect(() => {
+    if (!welcomeUrl) return;
+    const redirectTimer = window.setTimeout(
+      () => window.location.assign(welcomeUrl),
+      2500
+    );
+    return () => window.clearTimeout(redirectTimer);
+  }, [welcomeUrl]);
+
+  const openHeld = async () => {
+    if (welcomeUrl) {
+      window.location.assign(welcomeUrl);
+      return;
+    }
+    setRetrying(true);
+    setHandoffError(null);
+    try {
+      const retriedUrl = await retryHandoff();
+      if (!retriedUrl) throw new Error("No welcome URL returned");
+      setWelcomeUrl(retriedUrl);
+      window.location.assign(retriedUrl);
+    } catch (error) {
+      console.error("HELD handoff retry failed:", error);
+      setHandoffError(
+        "Could not open HELD yet. Your pickup remains booked—please try again."
+      );
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   return (
     <StepContainer
@@ -749,17 +896,29 @@ function StepSuccess({
       icon={<CheckCircle2 className="h-4.5 w-4.5" aria-hidden />}
     >
       <div className="rounded-xl border border-[#ead7e1] bg-white p-3">
+        <p className="mb-2 text-[14px] font-semibold text-[#432530]">
+          {welcomeUrl ? "Opening HELD in a moment…" : "Your booking is safe."}
+        </p>
         <p className="text-[14px] leading-relaxed text-[#724f5d]">
           Need to update details? Call or text{" "}
-          <a href={supportPhoneHref} className="font-semibold text-[#b0215d] underline underline-offset-2">
+          <a
+            href={supportPhoneHref}
+            className="font-semibold text-[#b0215d] underline underline-offset-2"
+          >
             {supportPhone}
           </a>
           .
         </p>
       </div>
 
-      <PrimaryButton onClick={onContinue}>
-        Continue
+      {handoffError ? (
+        <p className="text-[12px] text-[#a52c61]" role="alert">
+          {handoffError}
+        </p>
+      ) : null}
+
+      <PrimaryButton onClick={openHeld} loading={retrying}>
+        {retrying ? "Opening HELD..." : "Continue to HELD"}
       </PrimaryButton>
     </StepContainer>
   );
@@ -774,6 +933,10 @@ function BookingExperience({
   const [step, setStep] = useState(1);
   const [orderId, setOrderId] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [portalWelcomeUrl, setPortalWelcomeUrl] = useState<string | null>(null);
+  const [retryHandoff, setRetryHandoff] = useState<
+    (() => Promise<string | null>) | null
+  >(null);
 
   const [formData, setFormData] = useState<FormData>({
     serviceType: null,
@@ -814,7 +977,9 @@ function BookingExperience({
       setStep(5);
     } catch (err) {
       console.error("Failed to create order:", err);
-      setSubmitError("Unable to create your order. Please verify details and try again.");
+      setSubmitError(
+        "Unable to create your order. Please verify details and try again."
+      );
     }
   };
 
@@ -822,13 +987,15 @@ function BookingExperience({
     <section
       className={cn(
         "lb-booking-panel relative flex w-full flex-col overflow-hidden border border-[#ead9e1] bg-[linear-gradient(180deg,#fffaf8_0%,#fff5f8_100%)] shadow-[0_24px_40px_rgba(149,77,110,0.23)]",
-        isModal ? "h-full rounded-none sm:h-auto sm:max-h-[94vh] sm:max-w-[560px] sm:rounded-[30px]" : "rounded-[30px]",
+        isModal
+          ? "h-full rounded-none sm:h-auto sm:max-h-[94vh] sm:max-w-[560px] sm:rounded-[30px]"
+          : "rounded-[30px]",
         className
       )}
       role={isModal ? "dialog" : undefined}
       aria-modal={isModal ? true : undefined}
       aria-label="Book a pickup"
-      onClick={(event) => event.stopPropagation()}
+      onClick={event => event.stopPropagation()}
     >
       <div className="lb-booking-header sticky top-0 z-10 border-b border-[#ead9e1] bg-[#fff9f7]/97 px-4 py-3 backdrop-blur sm:px-5">
         <div className="mb-2 flex items-center justify-between gap-3 lg:mb-5">
@@ -857,11 +1024,20 @@ function BookingExperience({
         <StageStepper currentStage={currentStage} />
       </div>
 
-      <div className={cn("lb-booking-body space-y-4 px-4 pb-5 pt-4 sm:px-5", isModal ? "overflow-y-auto" : "")}>
+      <div
+        className={cn(
+          "lb-booking-body space-y-4 px-4 pb-5 pt-4 sm:px-5",
+          isModal ? "overflow-y-auto" : ""
+        )}
+      >
         {step > 1 ? <BookingSummary formData={formData} /> : null}
 
         {step === 1 ? (
-          <StepService formData={formData} setFormData={setFormData} onNext={() => setStep(2)} />
+          <StepService
+            formData={formData}
+            setFormData={setFormData}
+            onNext={() => setStep(2)}
+          />
         ) : null}
 
         {step === 2 ? (
@@ -898,7 +1074,11 @@ function BookingExperience({
             <StepCardOnFile
               formData={formData}
               orderId={orderId}
-              onSuccess={() => setStep(6)}
+              onSuccess={({ portalWelcomeUrl: url, retryHandoff: retry }) => {
+                setPortalWelcomeUrl(url);
+                setRetryHandoff(() => retry);
+                setStep(6);
+              }}
               onBack={() => setStep(4)}
             />
           </Elements>
@@ -907,7 +1087,8 @@ function BookingExperience({
         {step === 6 && orderId ? (
           <StepSuccess
             supportPhone={tenant.supportPhone}
-            onContinue={onClose ?? (() => window.location.assign("/"))}
+            portalWelcomeUrl={portalWelcomeUrl}
+            retryHandoff={retryHandoff!}
           />
         ) : null}
       </div>
@@ -952,7 +1133,9 @@ export function SchedulePickupRail({ className }: { className?: string }) {
   return <BookingExperience presentation="rail" className={className} />;
 }
 
-export default function SchedulePickupModal({ onClose }: SchedulePickupModalProps) {
+export default function SchedulePickupModal({
+  onClose,
+}: SchedulePickupModalProps) {
   const { tenant } = useTenant();
 
   if (tenant.templateType !== "butler") {

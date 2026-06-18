@@ -1,6 +1,6 @@
 /**
  * Schedule Pickup Modal — 6-step wizard
- * 
+ *
  * Step 1: Service Selection (Wash & Fold / Dry Cleaning)
  * Step 2: Pickup Schedule (Date + Time Window)
  * Step 3: Address & Details
@@ -14,9 +14,15 @@ import { useTenant } from "@/hooks/useTenant";
 import { WF_RATE_PER_LB_CENTS, centsToDollars } from "@shared/pricing";
 import { useCatalogDryCleanMinCents } from "@/components/CatalogDryCleanPricing";
 import { loadStripe } from "@stripe/stripe-js";
-import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import {
+  Elements,
+  CardElement,
+  useStripe,
+  useElements,
+} from "@stripe/react-stripe-js";
 
-const DEFAULT_LOGO_FULL = "https://files.manuscdn.com/user_upload_by_module/session_file/310419663029845795/WZKCbJMLcYxTxbBz.png";
+const DEFAULT_LOGO_FULL =
+  "https://files.manuscdn.com/user_upload_by_module/session_file/310419663029845795/WZKCbJMLcYxTxbBz.png";
 
 const pf = { fontFamily: '"Playfair Display", Georgia, serif' };
 const cg = { fontFamily: '"Cormorant Garamond", Georgia, serif' };
@@ -52,7 +58,17 @@ function BackButton({ onClick }: { onClick: () => void }) {
       className="absolute top-4 left-4 text-black/60 hover:text-black transition-colors cursor-pointer"
       aria-label="Go back"
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="22"
+        height="22"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <polyline points="15 18 9 12 15 6" />
       </svg>
     </button>
@@ -128,7 +144,7 @@ function InputField({
       <input
         type={type}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         required={required}
         className="w-full border border-black/20 rounded px-3 py-2.5 text-[0.95rem] focus:outline-none focus:border-black/50 transition-colors bg-white"
@@ -204,7 +220,11 @@ function Step1({
         </button>
       </div>
 
-      <BlackButton onClick={onNext} disabled={!formData.serviceType} primaryColor={primaryColor}>
+      <BlackButton
+        onClick={onNext}
+        disabled={!formData.serviceType}
+        primaryColor={primaryColor}
+      >
         CONTINUE
       </BlackButton>
     </div>
@@ -241,7 +261,9 @@ function Step2({
           type="date"
           value={formData.pickupDate}
           min={minDate}
-          onChange={(e) => setFormData({ ...formData, pickupDate: e.target.value })}
+          onChange={e =>
+            setFormData({ ...formData, pickupDate: e.target.value })
+          }
           className="w-full border border-black/20 rounded px-3 py-2.5 text-[0.95rem] focus:outline-none focus:border-black/50 transition-colors bg-white"
           style={cg}
         />
@@ -252,10 +274,17 @@ function Step2({
           Time Window <span className="text-red-500">*</span>
         </label>
         <div className="space-y-2">
-          {["7:00am – 9:00am", "9:00am – 11:00am", "11:00am – 1:00pm", "7:00pm – 9:00pm"].map((window) => (
+          {[
+            "7:00am – 9:00am",
+            "9:00am – 11:00am",
+            "11:00am – 1:00pm",
+            "7:00pm – 9:00pm",
+          ].map(window => (
             <button
               key={window}
-              onClick={() => setFormData({ ...formData, pickupTimeWindow: window })}
+              onClick={() =>
+                setFormData({ ...formData, pickupTimeWindow: window })
+              }
               className={`w-full text-left border rounded-md px-4 py-3 transition-all cursor-pointer text-[0.95rem] ${
                 formData.pickupTimeWindow === window
                   ? "border-black bg-black/5"
@@ -299,7 +328,7 @@ function Step3({
       <InputField
         label="Address"
         value={formData.address}
-        onChange={(v) => setFormData({ ...formData, address: v })}
+        onChange={v => setFormData({ ...formData, address: v })}
         placeholder="123 Wilshire Blvd, Los Angeles, CA"
         required
       />
@@ -307,7 +336,7 @@ function Step3({
       <InputField
         label="Unit / Apt"
         value={formData.unit}
-        onChange={(v) => setFormData({ ...formData, unit: v })}
+        onChange={v => setFormData({ ...formData, unit: v })}
         placeholder="Unit 2401"
       />
 
@@ -317,7 +346,7 @@ function Step3({
         </label>
         <textarea
           value={formData.specialInstructions}
-          onChange={(e) =>
+          onChange={e =>
             setFormData({ ...formData, specialInstructions: e.target.value })
           }
           placeholder="Leave with concierge, etc."
@@ -347,7 +376,9 @@ function Step4({
   onBack: () => void;
 }) {
   const canContinue =
-    formData.firstName.trim() && formData.lastName.trim() && formData.phone.trim();
+    formData.firstName.trim() &&
+    formData.lastName.trim() &&
+    formData.phone.trim();
 
   return (
     <div>
@@ -357,21 +388,21 @@ function Step4({
       <InputField
         label="First Name"
         value={formData.firstName}
-        onChange={(v) => setFormData({ ...formData, firstName: v })}
+        onChange={v => setFormData({ ...formData, firstName: v })}
         required
       />
 
       <InputField
         label="Last Name"
         value={formData.lastName}
-        onChange={(v) => setFormData({ ...formData, lastName: v })}
+        onChange={v => setFormData({ ...formData, lastName: v })}
         required
       />
 
       <InputField
         label="Phone"
         value={formData.phone}
-        onChange={(v) => setFormData({ ...formData, phone: v })}
+        onChange={v => setFormData({ ...formData, phone: v })}
         type="tel"
         placeholder="(310) 555-0100"
         required
@@ -380,7 +411,7 @@ function Step4({
       <InputField
         label="Email"
         value={formData.email}
-        onChange={(v) => setFormData({ ...formData, email: v })}
+        onChange={v => setFormData({ ...formData, email: v })}
         type="email"
         placeholder="Optional"
       />
@@ -427,11 +458,11 @@ function Step5Inner({
         phone: formData.phone,
       },
       {
-        onSuccess: (data) => {
+        onSuccess: data => {
           setClientSecret(data.clientSecret);
           setCustomerId(data.customerId);
         },
-        onError: (err) => {
+        onError: err => {
           setError("Failed to initialize payment. Please try again.");
           console.error("SetupIntent error:", err);
         },
@@ -475,6 +506,7 @@ function Step5Inner({
       await confirmCardMutation.mutateAsync({
         orderId,
         stripeCustomerId: customerId,
+        stripeSetupIntentId: result.setupIntent.id,
         stripePaymentMethodId:
           typeof result.setupIntent.payment_method === "string"
             ? result.setupIntent.payment_method
@@ -495,8 +527,8 @@ function Step5Inner({
         className="text-[0.9rem] text-black/60 text-center mb-6 leading-relaxed"
         style={cg}
       >
-        Your card will not be charged now. It will be kept
-        securely on file for when your order is processed.
+        Your card will not be charged now. It will be kept securely on file for
+        when your order is processed.
       </p>
 
       <div className="border border-black/20 rounded px-4 py-3 mb-4 bg-white">
@@ -605,7 +637,9 @@ function Step6({
 }
 
 /* ===== MAIN MODAL ===== */
-export default function SchedulePickupModal({ onClose }: SchedulePickupModalProps) {
+export default function SchedulePickupModal({
+  onClose,
+}: SchedulePickupModalProps) {
   const { tenant } = useTenant();
   const [step, setStep] = useState(1);
   const [orderId, setOrderId] = useState<number | null>(null);
@@ -657,7 +691,7 @@ export default function SchedulePickupModal({ onClose }: SchedulePickupModalProp
       <div
         className="bg-white rounded-lg w-full max-w-[420px] max-h-[90vh] overflow-y-auto relative"
         style={{ padding: "32px 28px" }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={e => e.stopPropagation()}
       >
         {/* Close button */}
         <button
@@ -665,7 +699,17 @@ export default function SchedulePickupModal({ onClose }: SchedulePickupModalProp
           className="absolute top-4 right-4 text-black/40 hover:text-black transition-colors cursor-pointer"
           aria-label="Close"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
           </svg>

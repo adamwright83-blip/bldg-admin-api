@@ -113,6 +113,11 @@ import Stripe from "stripe";
 import * as jose from "jose";
 import { BUILDINGS, matchBuilding } from "@shared/buildings";
 import {
+  createPortalWelcomeUrl,
+  stripeObjectsMatchOrder,
+  submittedIdentityMatchesOrder,
+} from "./welcomeHandoff";
+import {
   normalizePropertyTower,
   TOWER_DEFINITIONS,
 } from "@shared/propertyTowers";
@@ -207,7 +212,10 @@ import { listAgentTools } from "./agents/toolRegistry";
 import type { AgentType, ActorType } from "./agents/permissions";
 
 function isDuplicateKeyError(err: unknown): boolean {
-  const e = err as { code?: string; errno?: number; message?: string } | null | undefined;
+  const e = err as
+    | { code?: string; errno?: number; message?: string }
+    | null
+    | undefined;
   if (!e) return false;
   return (
     e.code === "ER_DUP_ENTRY" ||
@@ -216,7 +224,9 @@ function isDuplicateKeyError(err: unknown): boolean {
   );
 }
 
-function adminOrderIdempotencyKey(raw: string | null | undefined): string | null {
+function adminOrderIdempotencyKey(
+  raw: string | null | undefined
+): string | null {
   const trimmed = raw?.trim();
   if (!trimmed) return null;
   return trimmed.startsWith("admin-pos:") ? trimmed : `admin-pos:${trimmed}`;
@@ -253,10 +263,6 @@ export function validateStripeEnv(): void {
     );
   }
 }
-
-const APP_SHARED_SECRET = new TextEncoder().encode(
-  process.env.APP_SHARED_API_SECRET || "fallback-secret"
-);
 
 /** Catalog/menu LLM errors → tRPC (Anthropic Messages API). */
 function throwCatalogAiAsTrpc(e: unknown): never {
@@ -546,6 +552,13 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
+        const order = await getOrderById(input.orderId);
+        if (!order || !submittedIdentityMatchesOrder(order, input)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Order identity could not be verified.",
+          });
+        }
         const stripe = getStripe();
         const customer = await stripe.customers.create({
           name: `${input.firstName} ${input.lastName}`,
@@ -577,9 +590,22 @@ export const appRouter = router({
           orderId: z.number(),
           stripeCustomerId: z.string(),
           stripePaymentMethodId: z.string(),
+          stripeSetupIntentId: z.string(),
         })
       )
       .mutation(async ({ input }) => {
+        const stripe = getStripe();
+        const [setupIntent, paymentMethod] = await Promise.all([
+          stripe.setupIntents.retrieve(input.stripeSetupIntentId),
+          stripe.paymentMethods.retrieve(input.stripePaymentMethodId),
+        ]);
+        if (!stripeObjectsMatchOrder(input, setupIntent, paymentMethod)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Card verification did not match this order.",
+          });
+        }
+
         await updateOrderStripe(
           input.orderId,
           input.stripeCustomerId,
@@ -613,38 +639,36 @@ export const appRouter = router({
           console.warn("[Notification] Failed to notify owner:", err);
         }
 
-        return { success: true };
+        const order = await getOrderById(input.orderId);
+        let portalWelcomeUrl: string | null = null;
+        let portalWelcomeError: string | null = null;
+        try {
+          if (!order)
+            throw new Error("Order not found after card confirmation");
+          portalWelcomeUrl = await createPortalWelcomeUrl(order);
+        } catch (error) {
+          console.error(
+            "[WelcomeHandoff] Order succeeded but token generation failed:",
+            error
+          );
+          portalWelcomeError =
+            "HELD is temporarily unavailable. Your pickup is still booked.";
+        }
+
+        return { success: true, portalWelcomeUrl, portalWelcomeError };
       }),
 
     /**
      * HS256 JWT for app.bldg.chat welcome handoff (APP_SHARED_API_SECRET).
      * Claims: phone, firstName, lastName, orderId, buildingSlug, exp (15m).
      */
-    generatePortalToken: publicProcedure
+    generatePortalToken: adminProcedure
       .input(z.object({ orderId: z.number() }))
       .mutation(async ({ input }) => {
         const order = await getOrderById(input.orderId);
         if (!order) throw new Error("Order not found");
 
-        const buildingSlug =
-          (order.buildingSlug && order.buildingSlug.trim()) ||
-          matchBuilding(order.address)?.slug ||
-          null;
-
-        const payload = {
-          phone: order.phone,
-          firstName: order.firstName,
-          lastName: order.lastName,
-          orderId: order.id,
-          buildingSlug,
-          exp: Math.floor(Date.now() / 1000) + 15 * 60, // 15 minutes
-        };
-
-        const token = await new jose.SignJWT(payload)
-          .setProtectedHeader({ alg: "HS256" })
-          .sign(APP_SHARED_SECRET);
-
-        return { token };
+        return { portalWelcomeUrl: await createPortalWelcomeUrl(order) };
       }),
   }),
 
@@ -1173,7 +1197,11 @@ export const appRouter = router({
 
     /** Sky Covenant — the Command screen's weather (mode, hope windows, campaign). */
     getCommandSky: adminProcedure
-      .input(z.object({ netCents: z.number().int().nullable().optional() }).optional())
+      .input(
+        z
+          .object({ netCents: z.number().int().nullable().optional() })
+          .optional()
+      )
       .query(async ({ ctx, input }) => {
         return getCommandSkyState({
           tenantId: ctx.tenantId,
@@ -1190,13 +1218,25 @@ export const appRouter = router({
         z.object({
           mode: z.enum(["profit", "campaign"]).optional(),
           period: z.enum(["today", "week", "month"]).optional(),
-          redBelowCents: z.number().int().min(-10_000_000).max(10_000_000).optional(),
-          blueAboveCents: z.number().int().min(-10_000_000).max(10_000_000).optional(),
+          redBelowCents: z
+            .number()
+            .int()
+            .min(-10_000_000)
+            .max(10_000_000)
+            .optional(),
+          blueAboveCents: z
+            .number()
+            .int()
+            .min(-10_000_000)
+            .max(10_000_000)
+            .optional(),
           campaignTarget: z.number().int().min(1).max(100_000).optional(),
           campaignLabel: z.string().min(1).max(120).optional(),
         })
       )
-      .mutation(async ({ ctx, input }) => updateCommandSkySettings(ctx.tenantId, input)),
+      .mutation(async ({ ctx, input }) =>
+        updateCommandSkySettings(ctx.tenantId, input)
+      ),
 
     /** Log a Win — verbal commitment (3h blue) or first order (blue to block end). */
     logCommandSkyWin: adminProcedure
@@ -1211,7 +1251,10 @@ export const appRouter = router({
           tenantId: ctx.tenantId,
           kind: input.kind,
           label: input.label,
-          dedupeKey: `manual:${input.kind}:${input.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 100)}:${new Date().toISOString().slice(0, 10)}`,
+          dedupeKey: `manual:${input.kind}:${input.label
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .slice(0, 100)}:${new Date().toISOString().slice(0, 10)}`,
         });
         // A win is also a shove on the Level 4 front line.
         recordWarActionSafe({
@@ -1430,9 +1473,13 @@ export const appRouter = router({
      * sessions can poll and reply (the driver page already uses this tier).
      */
     listResidentFollowups: platformOrVendorProcedure.query(async () => {
-      const tasks = await listOpsTasks({ tenantId: "default", status: "open", limit: 100 });
+      const tasks = await listOpsTasks({
+        tenantId: "default",
+        status: "open",
+        limit: 100,
+      });
       return tasks
-        .map((task) => mapOpsTaskToResidentFollowup(task))
+        .map(task => mapOpsTaskToResidentFollowup(task))
         .filter((item): item is NonNullable<typeof item> => item !== null);
     }),
 
@@ -1456,18 +1503,31 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const task = await getOpsTaskById(input.taskId);
         if (!task) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Follow-up task not found" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Follow-up task not found",
+          });
         }
         const item = mapOpsTaskToResidentFollowup(task);
         if (!item) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Task is not a resident follow-up" });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Task is not a resident follow-up",
+          });
         }
         if (task.status === "completed") {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Follow-up already answered" });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Follow-up already answered",
+          });
         }
 
         // 1) Approve → revise the REAL order. Declines / plain replies never mutate.
-        const patch = buildOrderPatchFromReply(item.followupType, input.decision, input.newTime);
+        const patch = buildOrderPatchFromReply(
+          item.followupType,
+          input.decision,
+          input.newTime
+        );
         let orderRevised = false;
         if (patch && item.orderId != null) {
           await updateOrderIntake(item.orderId, patch);
@@ -1496,7 +1556,10 @@ export const appRouter = router({
 
         // 4) SMS tap-link (non-fatal; resident poll covers the no-SMS path).
         const smsSent = item.phone
-          ? await sendSMS(item.phone, buildResidentReplySms(item, input.message))
+          ? await sendSMS(
+              item.phone,
+              buildResidentReplySms(item, input.message)
+            )
           : false;
 
         return { ok: true as const, orderRevised, residentNotified, smsSent };
@@ -1805,9 +1868,14 @@ export const appRouter = router({
         if (!out.deduped) {
           recordWarActionSafe({
             tenantId: ctx.tenantId,
-            kind: out.paymentCollected ? "collection_recovered" : "reminder_sent",
+            kind: out.paymentCollected
+              ? "collection_recovered"
+              : "reminder_sent",
             dedupeKey: `reminder:${input.orderId}:${new Date().toDateString()}`,
-            meta: { orderId: input.orderId, paymentCollected: out.paymentCollected },
+            meta: {
+              orderId: input.orderId,
+              paymentCollected: out.paymentCollected,
+            },
           });
         }
         return {
@@ -2539,7 +2607,8 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const idempotencyKey = adminOrderIdempotencyKey(input.clientRequestId);
         if (idempotencyKey) {
-          const existing = await findResidentOrderByClientRequestId(idempotencyKey);
+          const existing =
+            await findResidentOrderByClientRequestId(idempotencyKey);
           if (existing) return { orderId: existing.id, reused: true };
         }
 
@@ -2593,7 +2662,8 @@ export const appRouter = router({
           return { orderId, reused: false };
         } catch (err) {
           if (idempotencyKey && isDuplicateKeyError(err)) {
-            const existing = await findResidentOrderByClientRequestId(idempotencyKey);
+            const existing =
+              await findResidentOrderByClientRequestId(idempotencyKey);
             if (existing) return { orderId: existing.id, reused: true };
           }
           throw err;
@@ -2973,7 +3043,10 @@ export const appRouter = router({
 
           // SMS: Card charged notification to customer
           try {
-            await notifyCardCharged(order.phone, centsToDollars(input.amountCents));
+            await notifyCardCharged(
+              order.phone,
+              centsToDollars(input.amountCents)
+            );
           } catch (err) {
             console.warn(
               "[SMS] Failed to send card charged notification:",
