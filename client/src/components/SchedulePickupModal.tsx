@@ -349,10 +349,6 @@ function StepService({
         </button>
       </div>
 
-      <div className="rounded-xl border border-[#f0dbe5] bg-[#fff7fb] px-3 py-2 text-[12px] text-[#876575]">
-        Specialty Care is currently marketing-only and not included in online checkout.
-      </div>
-
       <PrimaryButton onClick={onNext} disabled={!formData.serviceType}>
         Continue to Preferences
       </PrimaryButton>
@@ -852,7 +848,7 @@ function BookingExperience({
       </div>
 
       <div className={cn("lb-booking-body space-y-4 px-4 pb-5 pt-4 sm:px-5", isModal ? "overflow-y-auto" : "")}>
-        <BookingSummary formData={formData} />
+        {step > 1 ? <BookingSummary formData={formData} /> : null}
 
         {step === 1 ? (
           <StepService formData={formData} setFormData={setFormData} onNext={() => setStep(2)} />
