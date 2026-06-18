@@ -306,6 +306,142 @@
     }
   }
 
+  /* Chrome can ignore the viewport meta tag when "Desktop site" is active on
+     a phone. Use viewport-relative sizing so the composition keeps the same
+     physical proportions in both a normal ~390px viewport and a forced
+     ~980px mobile viewport. */
+  .lb-reference-header {
+    height: 16.4vw;
+    padding-inline: 4.6vw;
+  }
+
+  .lb-reference-brand {
+    gap: 2.8vw;
+  }
+
+  .lb-reference-mark {
+    width: 10.3vw;
+    height: 10.3vw;
+    border-radius: 2.3vw;
+    font-size: 5.4vw;
+  }
+
+  .lb-reference-brand strong {
+    font-size: 4.1vw;
+  }
+
+  .lb-reference-brand small {
+    margin-top: .8vw;
+    font-size: 2.3vw;
+  }
+
+  .lb-reference-menu {
+    width: 10.8vw;
+    height: 10.8vw;
+    border-radius: 2.6vw;
+  }
+
+  .lb-reference-menu svg {
+    width: 5.9vw;
+    height: 5.9vw;
+  }
+
+  .lb-reference-hero {
+    padding: 5.6vw 4.6vw 4.6vw;
+  }
+
+  .lb-reference-hero h1 {
+    font-size: 13.4vw;
+  }
+
+  .lb-reference-hero h1 em {
+    margin-top: 1vw;
+  }
+
+  .lb-reference-flourish {
+    gap: 2.6vw;
+    margin: 4.1vw 0 3.6vw;
+  }
+
+  .lb-reference-flourish span {
+    width: 16.4vw;
+  }
+
+  .lb-reference-flourish svg {
+    width: 4.1vw;
+    height: 4.1vw;
+  }
+
+  .lb-reference-hero > p {
+    margin-bottom: 3.6vw;
+    font-size: 4.1vw;
+  }
+
+  .lb-reference-primary,
+  .lb-reference-secondary {
+    height: 13.8vw;
+    gap: 3.1vw;
+    border-radius: 6.2vw;
+    font-size: 5.1vw;
+  }
+
+  .lb-reference-secondary {
+    margin-top: 3.1vw;
+  }
+
+  .lb-reference-primary svg,
+  .lb-reference-secondary svg {
+    width: 5.9vw;
+    height: 5.9vw;
+  }
+
+  .lb-reference-trust {
+    gap: 2.6vw;
+    margin-top: 3.8vw;
+  }
+
+  .lb-reference-trust span {
+    grid-template-columns: 6.4vw 1fr;
+    gap: 1.5vw;
+    font-size: 2.55vw;
+  }
+
+  .lb-reference-trust svg {
+    width: 6.2vw;
+    height: 6.2vw;
+  }
+
+  .lb-reference-services {
+    margin: 0 4.6vw 7.2vw;
+    padding: 5.1vw 4.6vw;
+    border-radius: 5.1vw;
+  }
+
+  .lb-reference-services h2 {
+    margin-bottom: 4.4vw;
+    font-size: 7.2vw;
+  }
+
+  .lb-reference-services > div {
+    gap: 2.1vw;
+  }
+
+  .lb-reference-services article {
+    min-height: 17.9vw;
+    gap: 1.5vw;
+    padding: 2.3vw 1vw;
+    border-radius: 3.1vw;
+  }
+
+  .lb-reference-services article svg {
+    width: 5.6vw;
+    height: 5.6vw;
+  }
+
+  .lb-reference-services article strong {
+    font-size: 3.1vw;
+  }
+
   .lb-butler-home .lb-header > div {
     height: 64px;
     padding-inline: 16px;
