@@ -583,6 +583,13 @@ function StepCardOnFile({
   const [error, setError] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const cardFontSize = useMemo(() => {
+    if (typeof window === "undefined") return "16px";
+    const mobileViewport = window.matchMedia(
+      "(max-width: 767px), (max-device-width: 767px) and (hover: none)"
+    ).matches;
+    return mobileViewport ? `${Math.max(20, Math.round(window.innerWidth * 0.05))}px` : "16px";
+  }, []);
 
   const initializedRef = useRef(false);
   const setupIntentMutation = trpc.orders.createSetupIntent.useMutation();
@@ -683,16 +690,19 @@ function StepCardOnFile({
         </p>
       ) : null}
 
-      <div className="rounded-xl border border-[#e8d7df] bg-white px-4 py-3">
+      <div className="lb-booking-card-element rounded-xl border border-[#e8d7df] bg-white px-4 py-3">
         <CardElement
           options={{
             style: {
               base: {
-                fontSize: "16px",
+                fontSize: cardFontSize,
+                lineHeight: "1.6",
                 color: "#2f1b24",
                 fontFamily: '"DM Sans", system-ui, sans-serif',
+                fontSmoothing: "antialiased",
+                iconColor: "#b21a5c",
                 "::placeholder": {
-                  color: "#b69aa7",
+                  color: "#9d7184",
                 },
               },
               invalid: {
