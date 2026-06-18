@@ -128,14 +128,14 @@ function SummaryRow({
   icon: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 rounded-xl border border-[#f0e0e7] bg-white px-3 py-2">
-      <div className="inline-flex min-w-0 items-center gap-2 text-[12px] text-[#876674]">
+    <div className="lb-booking-summary-row flex items-center justify-between gap-2 rounded-xl border border-[#f0e0e7] bg-white px-3 py-2">
+      <div className="lb-booking-summary-label inline-flex min-w-0 items-center gap-2 text-[12px] text-[#876674]">
         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ffeaf3] text-[#b52d68]">
           {icon}
         </span>
         <span>{label}</span>
       </div>
-      <div className="min-w-0 truncate text-right text-[12.5px] font-semibold text-[#351f29]">{value}</div>
+      <div className="lb-booking-summary-value min-w-0 truncate text-right text-[12.5px] font-semibold text-[#351f29]">{value}</div>
     </div>
   );
 }
@@ -815,7 +815,7 @@ function BookingExperience({
   const panelBody = (
     <section
       className={cn(
-        "relative flex w-full flex-col overflow-hidden border border-[#ead9e1] bg-[linear-gradient(180deg,#fffaf8_0%,#fff5f8_100%)] shadow-[0_24px_40px_rgba(149,77,110,0.23)]",
+        "lb-booking-panel relative flex w-full flex-col overflow-hidden border border-[#ead9e1] bg-[linear-gradient(180deg,#fffaf8_0%,#fff5f8_100%)] shadow-[0_24px_40px_rgba(149,77,110,0.23)]",
         isModal ? "h-full rounded-none sm:h-auto sm:max-h-[94vh] sm:max-w-[560px] sm:rounded-[30px]" : "rounded-[30px]",
         className
       )}
@@ -824,7 +824,7 @@ function BookingExperience({
       aria-label="Book a pickup"
       onClick={(event) => event.stopPropagation()}
     >
-      <div className="sticky top-0 z-10 border-b border-[#ead9e1] bg-[#fff9f7]/97 px-4 py-3 backdrop-blur sm:px-5">
+      <div className="lb-booking-header sticky top-0 z-10 border-b border-[#ead9e1] bg-[#fff9f7]/97 px-4 py-3 backdrop-blur sm:px-5">
         <div className="mb-2 flex items-center justify-between gap-3 lg:mb-5">
           <div className="flex min-w-0 items-center gap-2.5">
             <img
@@ -851,7 +851,7 @@ function BookingExperience({
         <StageStepper currentStage={currentStage} />
       </div>
 
-      <div className={cn("space-y-4 px-4 pb-5 pt-4 sm:px-5", isModal ? "overflow-y-auto" : "")}>
+      <div className={cn("lb-booking-body space-y-4 px-4 pb-5 pt-4 sm:px-5", isModal ? "overflow-y-auto" : "")}>
         <BookingSummary formData={formData} />
 
         {step === 1 ? (
@@ -906,7 +906,7 @@ function BookingExperience({
         ) : null}
       </div>
 
-      <div className="border-t border-[#ead9e1] bg-[linear-gradient(180deg,#fff_0%,#fff8fb_100%)] px-3 py-2.5 sm:px-5">
+      <div className="lb-booking-footer border-t border-[#ead9e1] bg-[linear-gradient(180deg,#fff_0%,#fff8fb_100%)] px-3 py-2.5 sm:px-5">
         <div className="grid grid-cols-1 gap-1.5 text-[11px] text-[#7f606d] sm:grid-cols-3">
           <div className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#efdde6] bg-white px-2 py-1.5">
             <MapPin className="h-3.5 w-3.5" aria-hidden />
@@ -934,7 +934,7 @@ function BookingExperience({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-[#1e101640] p-0 sm:items-center sm:bg-black/55 sm:p-4"
+      className="lb-booking-overlay fixed inset-0 z-50 flex items-end justify-center bg-[#1e101640] p-0 sm:items-center sm:bg-black/55 sm:p-4"
       onClick={onClose}
     >
       {panelBody}

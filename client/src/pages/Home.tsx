@@ -169,7 +169,7 @@ function MobileButlerLanding({ openBooking }: { openBooking: () => void }) {
             <CalendarCheck2 aria-hidden />
             Schedule Pickup
           </button>
-          <a className="lb-reference-secondary" href="#mobile-services">
+          <a className="lb-reference-secondary" href="#mobile-pricing">
             <Tag aria-hidden />
             See Prices
           </a>
@@ -187,6 +187,16 @@ function MobileButlerLanding({ openBooking }: { openBooking: () => void }) {
             <article><Shirt aria-hidden /><strong>Dry Cleaning</strong></article>
             <article><Sparkles aria-hidden /><strong>Specialty Care</strong></article>
           </div>
+        </section>
+
+        <section className="lb-reference-pricing" id="mobile-pricing">
+          <p>Dry Cleaning Menu</p>
+          <h2>Clear pricing for every garment.</h2>
+          <CatalogDryCleanPricing
+            variant="butler"
+            className="lb-reference-price-list"
+            preview={false}
+          />
         </section>
       </main>
     </div>

@@ -442,6 +442,204 @@
     font-size: 3.1vw;
   }
 
+  .lb-reference-pricing {
+    margin: 0 4.6vw 9vw;
+    padding: 5.1vw 4.6vw;
+    border: 1px solid #f1d9e1;
+    border-radius: 5.1vw;
+    background: rgba(255,255,255,.82);
+    box-shadow: 0 12px 28px rgba(122, 65, 90, .08);
+    scroll-margin-top: 4vw;
+  }
+
+  .lb-reference-pricing > p {
+    margin: 0 0 1.5vw;
+    color: #c92267;
+    font-size: 2.8vw;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+
+  .lb-reference-pricing > h2 {
+    margin: 0 0 4.6vw;
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 7.2vw;
+    font-weight: 600;
+    line-height: 1.02;
+  }
+
+  .lb-reference-price-list > p {
+    margin-bottom: 3vw;
+    font-size: 3.8vw !important;
+    line-height: 1.4;
+  }
+
+  .lb-reference-price-list > div {
+    padding: 3.6vw;
+    border-radius: 4vw;
+  }
+
+  .lb-reference-price-list > div > div {
+    grid-template-columns: 1fr;
+    gap: 3vw;
+  }
+
+  .lb-reference-price-list section {
+    padding: 3.6vw;
+    border-radius: 3.2vw;
+  }
+
+  .lb-reference-price-list section h4 {
+    margin-bottom: 2.5vw;
+    font-size: 3.2vw !important;
+  }
+
+  .lb-reference-price-list section ul {
+    display: grid;
+    gap: 2.2vw;
+  }
+
+  .lb-reference-price-list section li {
+    gap: 3vw;
+    font-size: 4vw !important;
+    line-height: 1.35;
+  }
+
+  .lb-reference-price-list section li > span:first-child {
+    overflow: visible;
+    white-space: normal;
+  }
+
+  .lb-booking-overlay {
+    align-items: center !important;
+    padding: 3vw !important;
+    background: rgba(24, 12, 18, .62) !important;
+  }
+
+  .lb-booking-panel[role="dialog"] {
+    width: 94vw !important;
+    max-width: none !important;
+    height: auto !important;
+    max-height: 92svh !important;
+    border-radius: 5vw !important;
+  }
+
+  .lb-booking-header {
+    padding: 3.5vw 4vw !important;
+  }
+
+  .lb-booking-header img {
+    height: 8vw !important;
+    max-width: 38vw !important;
+  }
+
+  .lb-booking-header button[aria-label="Close booking"] {
+    width: 9vw !important;
+    height: 9vw !important;
+  }
+
+  .lb-booking-header button[aria-label="Close booking"] svg {
+    width: 4.5vw;
+    height: 4.5vw;
+  }
+
+  .lb-booking-header ol {
+    gap: 1.5vw;
+  }
+
+  .lb-booking-header ol li {
+    gap: 1vw;
+  }
+
+  .lb-booking-header ol li > div {
+    padding: 1.4vw 2vw;
+    border-radius: 3vw;
+    font-size: 2.65vw !important;
+  }
+
+  .lb-booking-header ol li > div > span:first-child {
+    width: 4.5vw;
+    height: 4.5vw;
+    font-size: 2.4vw;
+  }
+
+  .lb-booking-body {
+    gap: 4vw;
+    padding: 4vw !important;
+  }
+
+  .lb-booking-body [class*="text-["] {
+    font-size: 4vw !important;
+  }
+
+  .lb-booking-panel .lb-booking-body h3 {
+    font-size: 5.6vw !important;
+    line-height: 1.12;
+  }
+
+  .lb-booking-panel .lb-booking-body h3 + p {
+    margin-top: 1.2vw;
+    font-size: 3.5vw !important;
+    line-height: 1.45;
+  }
+
+  .lb-booking-body input,
+  .lb-booking-body textarea {
+    min-height: 11.5vw;
+    padding: 2.5vw 3.2vw;
+    border-radius: 3vw;
+    font-size: 4vw !important;
+  }
+
+  .lb-booking-body textarea {
+    min-height: 24vw;
+  }
+
+  .lb-booking-body button {
+    min-height: 11.5vw;
+    border-radius: 3.5vw;
+    font-size: 3.8vw !important;
+  }
+
+  .lb-booking-body section > div:first-child > div:first-child > div:first-child {
+    width: 9vw;
+    height: 9vw;
+  }
+
+  .lb-booking-body section > div:first-child > div:first-child > div:first-child svg {
+    width: 4.5vw;
+    height: 4.5vw;
+  }
+
+  .lb-booking-summary-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+    align-items: start !important;
+    gap: 2vw !important;
+    padding: 2.5vw 3vw !important;
+  }
+
+  .lb-booking-summary-label {
+    font-size: 3.3vw !important;
+  }
+
+  .lb-booking-summary-value {
+    overflow: visible !important;
+    font-size: 3.5vw !important;
+    line-height: 1.35;
+    white-space: normal !important;
+  }
+
+  .lb-booking-footer {
+    padding: 2.5vw 4vw !important;
+  }
+
+  .lb-booking-footer > div {
+    gap: 1.5vw;
+    font-size: 2.8vw !important;
+  }
+
   .lb-butler-home .lb-header > div {
     height: 64px;
     padding-inline: 16px;
