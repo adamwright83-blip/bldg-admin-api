@@ -9,8 +9,11 @@ import {
   Menu,
   PackageCheck,
   ShieldCheck,
+  Shirt,
+  ShoppingBasket,
   Sparkles,
   Star,
+  Tag,
   X,
 } from "lucide-react";
 import { useTenant } from "@/hooks/useTenant";
@@ -124,6 +127,72 @@ const FAQ_ITEMS = [
   },
 ] as const;
 
+function MobileButlerLanding({ openBooking }: { openBooking: () => void }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  return (
+    <div className="lb-reference-mobile">
+      <header className="lb-reference-header">
+        <a href="#mobile-top" className="lb-reference-brand" aria-label="Laundry Butler home">
+          <span className="lb-reference-mark">LB</span>
+          <span>
+            <strong>LAUNDRY BUTLER</strong>
+            <small>IMPECCABLE CARE</small>
+          </span>
+        </a>
+        <button
+          type="button"
+          className="lb-reference-menu"
+          aria-label="Open menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((value) => !value)}
+        >
+          {menuOpen ? <X aria-hidden /> : <Menu aria-hidden />}
+        </button>
+        {menuOpen ? (
+          <nav className="lb-reference-menu-panel">
+            <a href="#mobile-services" onClick={() => setMenuOpen(false)}>Services</a>
+            <button type="button" onClick={openBooking}>Schedule Pickup</button>
+          </nav>
+        ) : null}
+      </header>
+
+      <main id="mobile-top">
+        <section className="lb-reference-hero">
+          <h1>
+            Laundry &amp;<br />Dry Cleaning,
+            <em>handled<br />beautifully.</em>
+          </h1>
+          <div className="lb-reference-flourish" aria-hidden><span /><Sparkles /><span /></div>
+          <p>Premium laundry and dry cleaning.<br />Free pickup &amp; delivery at your doorstep.</p>
+          <button type="button" className="lb-reference-primary" onClick={openBooking}>
+            <CalendarCheck2 aria-hidden />
+            Schedule Pickup
+          </button>
+          <a className="lb-reference-secondary" href="#mobile-services">
+            <Tag aria-hidden />
+            See Prices
+          </a>
+          <div className="lb-reference-trust">
+            <span><ShieldCheck aria-hidden />Trusted by 1000+ Families</span>
+            <span><Sparkles aria-hidden />Impeccable Care for Every Garment</span>
+            <span><Leaf aria-hidden />Eco-Friendly Products &amp; Practices</span>
+          </div>
+        </section>
+
+        <section className="lb-reference-services" id="mobile-services">
+          <h2>Premium care for<br />every part of your life.</h2>
+          <div>
+            <article><ShoppingBasket aria-hidden /><strong>Wash &amp; Fold</strong></article>
+            <article><Shirt aria-hidden /><strong>Dry Cleaning</strong></article>
+            <article><Sparkles aria-hidden /><strong>Specialty Care</strong></article>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
 export default function Home() {
   const { tenant } = useTenant();
   const [showModal, setShowModal] = useState(false);
@@ -146,8 +215,9 @@ export default function Home() {
 
   return (
     <div className="lb-butler-home min-h-screen overflow-x-hidden" style={{ background: C.page, color: C.text }}>
+      <MobileButlerLanding openBooking={() => setShowModal(true)} />
       <div
-        className="lb-topbar border-b border-white/20 text-[12px]"
+        className="lb-desktop-site lb-topbar border-b border-white/20 text-[12px]"
         style={{ background: "linear-gradient(90deg, #2d4f44 0%, #1f4035 100%)", color: "#f7f7f6" }}
       >
         <div className="mx-auto flex max-w-[1300px] flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:px-8">
@@ -170,7 +240,7 @@ export default function Home() {
       </div>
 
       <header
-        className="lb-header sticky top-0 z-40 border-b backdrop-blur-xl"
+        className="lb-desktop-site lb-header sticky top-0 z-40 border-b backdrop-blur-xl"
         style={{ borderColor: C.border, background: "rgba(255,247,245,0.92)" }}
       >
         <div className="mx-auto flex h-[86px] max-w-[1300px] items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
@@ -261,7 +331,7 @@ export default function Home() {
         ) : null}
       </header>
 
-      <main id="top">
+      <main id="top" className="lb-desktop-site">
         <section className="lb-hero relative overflow-hidden border-b" style={{ borderColor: C.border }}>
           <div
             className="pointer-events-none absolute inset-0"
@@ -667,7 +737,7 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="border-t" style={{ borderColor: C.border, background: "#1f3a33", color: "#ebefe8" }}>
+      <footer className="lb-desktop-site border-t" style={{ borderColor: C.border, background: "#1f3a33", color: "#ebefe8" }}>
         <div className="mx-auto grid max-w-[1300px] gap-8 px-4 py-10 sm:px-6 md:grid-cols-2 lg:grid-cols-5 lg:px-8">
           <div className="lg:col-span-2">
             <img
@@ -709,7 +779,7 @@ export default function Home() {
         </div>
       </footer>
 
-      <div className="lb-mobile-cta fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 px-4 py-3 shadow-[0_-12px_24px_rgba(63,26,43,0.12)] backdrop-blur lg:hidden" style={{ borderColor: C.border }}>
+      <div className="lb-desktop-site lb-mobile-cta fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 px-4 py-3 shadow-[0_-12px_24px_rgba(63,26,43,0.12)] backdrop-blur lg:hidden" style={{ borderColor: C.border }}>
         <button
           type="button"
           onClick={() => setShowModal(true)}

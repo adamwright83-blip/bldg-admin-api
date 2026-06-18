@@ -1,16 +1,309 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+.lb-reference-mobile {
+  display: none;
+}
+
 /* Laundry Butler mobile fallback. max-device-width also protects the layout
    when a mobile browser has been switched into a desktop-sized CSS viewport. */
 @media (max-width: 767px), (max-device-width: 767px) and (hover: none) {
   .lb-butler-home {
-    padding-bottom: calc(76px + env(safe-area-inset-bottom));
-    font-size: 17px;
+    padding-bottom: 0;
+    background: #fff8f7 !important;
   }
 
-  .lb-butler-home .lb-topbar {
-    display: none;
+  .lb-butler-home > .lb-desktop-site {
+    display: none !important;
+  }
+
+  .lb-reference-mobile {
+    display: block;
+    min-height: 100svh;
+    color: #10251f;
+    background:
+      radial-gradient(circle at 16% 22%, rgba(255,255,255,.95), transparent 34%),
+      linear-gradient(145deg, #fffdfc 0%, #fff4f5 56%, #fff9f7 100%);
+  }
+
+  .lb-reference-header {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    height: 64px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    border-bottom: 1px solid #f1cbd8;
+    background: rgba(255, 249, 248, .92);
+  }
+
+  .lb-reference-brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    color: #10251f;
+    text-decoration: none;
+  }
+
+  .lb-reference-mark {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    place-items: center;
+    border-radius: 9px;
+    color: #eacb9b;
+    background: linear-gradient(145deg, #163b31, #0c261f);
+    box-shadow: 0 6px 12px rgba(18, 48, 39, .22);
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 21px;
+  }
+
+  .lb-reference-brand strong,
+  .lb-reference-brand small {
+    display: block;
+  }
+
+  .lb-reference-brand strong {
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    white-space: nowrap;
+  }
+
+  .lb-reference-brand small {
+    margin-top: 3px;
+    color: #d3286c;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: .28em;
+  }
+
+  .lb-reference-menu {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    border: 0;
+    border-radius: 10px;
+    color: white;
+    background: linear-gradient(135deg, #e42a74, #be175a);
+    box-shadow: 0 8px 18px rgba(201, 31, 100, .28);
+  }
+
+  .lb-reference-menu svg {
+    width: 23px;
+    height: 23px;
+  }
+
+  .lb-reference-menu-panel {
+    position: absolute;
+    top: 58px;
+    right: 14px;
+    display: grid;
+    width: 180px;
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid #f1cbd8;
+    border-radius: 14px;
+    background: white;
+    box-shadow: 0 14px 32px rgba(81, 25, 51, .16);
+  }
+
+  .lb-reference-menu-panel a,
+  .lb-reference-menu-panel button {
+    padding: 11px 12px;
+    border: 0;
+    border-radius: 9px;
+    color: #3f2631;
+    background: #fff4f7;
+    font-size: 15px;
+    font-weight: 700;
+    text-align: left;
+    text-decoration: none;
+  }
+
+  .lb-reference-hero {
+    padding: 22px 18px 18px;
+  }
+
+  .lb-reference-hero h1 {
+    margin: 0;
+    color: #10251f;
+    font-family: "Fraunces", Georgia, serif;
+    font-size: clamp(46px, 13.4vw, 56px);
+    font-weight: 500;
+    line-height: .93;
+    letter-spacing: -.045em;
+  }
+
+  .lb-reference-hero h1 em {
+    display: block;
+    margin-top: 4px;
+    color: #c91f65;
+    font-weight: 400;
+    line-height: .88;
+  }
+
+  .lb-reference-flourish {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    margin: 16px 0 14px;
+    color: #d3ad68;
+  }
+
+  .lb-reference-flourish span {
+    width: 64px;
+    height: 1px;
+    background: #d3ad68;
+  }
+
+  .lb-reference-flourish svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .lb-reference-hero > p {
+    margin: 0 0 14px;
+    color: #1e2926;
+    font-size: 16px;
+    line-height: 1.38;
+  }
+
+  .lb-reference-primary,
+  .lb-reference-secondary {
+    display: flex;
+    width: 100%;
+    height: 54px;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    border-radius: 24px;
+    font-size: 20px;
+    font-weight: 750;
+    text-decoration: none;
+  }
+
+  .lb-reference-primary {
+    border: 0;
+    color: white;
+    background: linear-gradient(110deg, #e92774, #bf1759);
+    box-shadow: 0 13px 24px rgba(214, 35, 107, .24);
+  }
+
+  .lb-reference-secondary {
+    margin-top: 12px;
+    border: 1.5px solid #df2a70;
+    color: #d52369;
+    background: rgba(255,255,255,.7);
+  }
+
+  .lb-reference-primary svg,
+  .lb-reference-secondary svg {
+    width: 23px;
+    height: 23px;
+  }
+
+  .lb-reference-trust {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 15px;
+  }
+
+  .lb-reference-trust span {
+    display: grid;
+    grid-template-columns: 25px 1fr;
+    align-items: start;
+    gap: 6px;
+    color: #26322e;
+    font-size: 10px;
+    line-height: 1.25;
+  }
+
+  .lb-reference-trust svg {
+    width: 24px;
+    height: 24px;
+    color: #d52369;
+  }
+
+  .lb-reference-services {
+    margin: 0 18px 28px;
+    padding: 20px 18px;
+    border: 1px solid #f1d9e1;
+    border-radius: 20px;
+    background: rgba(255,255,255,.76);
+    box-shadow: 0 12px 28px rgba(122, 65, 90, .08);
+  }
+
+  .lb-reference-services h2 {
+    margin: 0 0 17px;
+    color: #13251f;
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.02;
+  }
+
+  .lb-reference-services > div {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .lb-reference-services article {
+    display: grid;
+    min-width: 0;
+    min-height: 70px;
+    place-items: center;
+    gap: 6px;
+    padding: 9px 4px;
+    border: 1px solid #f2ccd9;
+    border-radius: 12px;
+    color: #26312d;
+    background: white;
+    text-align: center;
+  }
+
+  .lb-reference-services article svg {
+    width: 22px;
+    height: 22px;
+    color: #d52369;
+  }
+
+  .lb-reference-services article strong {
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 350px) {
+    .lb-reference-header {
+      padding-inline: 14px;
+    }
+
+    .lb-reference-brand {
+      gap: 8px;
+    }
+
+    .lb-reference-mark,
+    .lb-reference-menu {
+      width: 38px;
+      height: 38px;
+    }
+
+    .lb-reference-brand strong {
+      font-size: 14px;
+      letter-spacing: .07em;
+    }
+
+    .lb-reference-brand small {
+      font-size: 8px;
+      letter-spacing: .2em;
+    }
   }
 
   .lb-butler-home .lb-header > div {
