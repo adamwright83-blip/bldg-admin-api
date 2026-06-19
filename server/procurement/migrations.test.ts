@@ -8,6 +8,7 @@ describe("procurement migration files", () => {
       "0000_held_schema_migrations.sql",
       "0001_procurement_workflow_foundation.sql",
       "0002_authority_grants.sql",
+      "0003_guest_readiness_plans.sql",
     ]);
     for (const migration of migrations) {
       expect(migration.checksum).toMatch(/^[a-f0-9]{64}$/);

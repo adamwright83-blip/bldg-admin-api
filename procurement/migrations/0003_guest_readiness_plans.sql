@@ -1,0 +1,52 @@
+CREATE TABLE IF NOT EXISTS `guest_readiness_plans` (
+  `id` char(36) NOT NULL,
+  `authority_grant_id` char(36) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL DEFAULT 'default',
+  `bldg_user_id` int NOT NULL,
+  `building_slug` varchar(100) NOT NULL,
+  `objective_text` text NOT NULL,
+  `budget_cap_cents` int unsigned NOT NULL,
+  `estimated_total_cents` int unsigned NOT NULL DEFAULT 0,
+  `deadline_at` timestamp(3) NOT NULL,
+  `access_constraints_json` json NOT NULL,
+  `sensitivity_constraints_json` json NOT NULL,
+  `truth_state` enum('draft','evaluating','feasible','feasible_with_risk','infeasible','awaiting_resident_approval','awaiting_operator_review','unsupported','cancelled') NOT NULL DEFAULT 'draft',
+  `plan_status` enum('draft','under_review','ready','blocked','cancelled') NOT NULL DEFAULT 'draft',
+  `approval_gates_json` json NOT NULL,
+  `decision_evidence_json` json NOT NULL,
+  `unsupported_reasons_json` json NULL,
+  `evaluated_at` timestamp(3) NULL,
+  `cancelled_at` timestamp(3) NULL,
+  `created_at` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_guest_plans_authority` (`authority_grant_id`,`created_at`),
+  KEY `idx_guest_plans_resident_state` (`tenant_id`,`bldg_user_id`,`truth_state`),
+  KEY `idx_guest_plans_deadline` (`truth_state`,`deadline_at`),
+  CONSTRAINT `fk_guest_plans_authority` FOREIGN KEY (`authority_grant_id`)
+    REFERENCES `authority_grants` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `guest_readiness_plan_items` (
+  `id` char(36) NOT NULL,
+  `plan_id` char(36) NOT NULL,
+  `category` varchar(100) NOT NULL,
+  `description_text` text NOT NULL,
+  `estimated_cost_cents` int unsigned NOT NULL,
+  `scheduled_at` timestamp(3) NOT NULL,
+  `access_pattern` enum('no_entry','resident_present','building_or_operator_approved','unattended_entry') NOT NULL,
+  `sensitivity_tags_json` json NOT NULL,
+  `risk_category` enum('low','medium','high','unknown') NOT NULL,
+  `feasibility_classification` enum('feasible','feasible_with_risk','infeasible','unsupported') NOT NULL,
+  `item_state` enum('proposed','rejected','needs_resident_approval','needs_operator_review','sourcing_required','unavailable','cancelled') NOT NULL DEFAULT 'proposed',
+  `resident_approval_required` boolean NOT NULL DEFAULT false,
+  `operator_review_required` boolean NOT NULL DEFAULT false,
+  `decision_evidence_json` json NOT NULL,
+  `created_at` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_guest_plan_items_plan_state` (`plan_id`,`item_state`),
+  KEY `idx_guest_plan_items_risk` (`risk_category`,`feasibility_classification`),
+  CONSTRAINT `fk_guest_plan_items_plan` FOREIGN KEY (`plan_id`)
+    REFERENCES `guest_readiness_plans` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
