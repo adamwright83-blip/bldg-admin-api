@@ -28,6 +28,7 @@ import { registerLevel4TwilioRoutes } from "../level4Twilio";
 import { registerCleanCloudImportRoutes } from "../cleancloudImportRoute";
 import { registerClearentImportRoutes } from "../clearentImportRoute";
 import { registerPaymentReconciliationRoutes } from "../paymentReconciliationRoute";
+import { registerMarketplacePaymentInternalRoutes } from "../marketplacePayments/marketplacePaymentInternalRoute";
 import { registerLaundryFarmSheetSyncRoutes } from "../laundryFarmSheetSyncRoute";
 import { PUBLIC_FORM_ORIGINS, buildAdminCorsOptions } from "./corsConfig";
 import { z } from "zod";
@@ -223,6 +224,7 @@ async function startServer() {
   registerCleanCloudImportRoutes(app);
   registerClearentImportRoutes(app);
   registerPaymentReconciliationRoutes(app);
+  registerMarketplacePaymentInternalRoutes(app);
   registerLaundryFarmSheetSyncRoutes(app);
 
   // Configure body parser with larger size limit for file uploads
