@@ -8,7 +8,7 @@ import type { ProviderAcceptancePolicyView } from "../procurement/providerAccept
 import { MarketplacePaymentOrchestrator } from "./marketplacePaymentOrchestrator";
 import { MarketplacePaymentStore } from "./marketplacePaymentStore";
 
-async function assertAdminOrAgent(req: express.Request) {
+export async function assertAdminOrAgent(req: express.Request) {
   if (isValidAgentSharedSecret(req.headers["x-agent-shared-secret"])) return;
 
   let user = null;
@@ -137,7 +137,7 @@ function resolveOrchestrator(deps: OrchestratorDeps): MarketplacePaymentOrchestr
   return lazyOrchestrator;
 }
 
-function handleError(res: express.Response, error: unknown) {
+export function handleError(res: express.Response, error: unknown) {
   const statusCode = (error as any)?.statusCode === 401 ? 401 : error instanceof z.ZodError ? 400 : 500;
   return res.status(statusCode).json({
     error: error instanceof Error ? error.message : String(error),

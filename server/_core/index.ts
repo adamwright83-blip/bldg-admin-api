@@ -29,6 +29,7 @@ import { registerCleanCloudImportRoutes } from "../cleancloudImportRoute";
 import { registerClearentImportRoutes } from "../clearentImportRoute";
 import { registerPaymentReconciliationRoutes } from "../paymentReconciliationRoute";
 import { registerMarketplacePaymentInternalRoutes } from "../marketplacePayments/marketplacePaymentInternalRoute";
+import { registerMarketplacePaymentReadRoutes } from "../marketplacePayments/marketplacePaymentReadRoute";
 import { registerLaundryFarmSheetSyncRoutes } from "../laundryFarmSheetSyncRoute";
 import { PUBLIC_FORM_ORIGINS, buildAdminCorsOptions } from "./corsConfig";
 import { z } from "zod";
@@ -225,6 +226,7 @@ async function startServer() {
   registerClearentImportRoutes(app);
   registerPaymentReconciliationRoutes(app);
   registerMarketplacePaymentInternalRoutes(app);
+  registerMarketplacePaymentReadRoutes(app);
   registerLaundryFarmSheetSyncRoutes(app);
 
   // Configure body parser with larger size limit for file uploads
