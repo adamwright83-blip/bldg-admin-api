@@ -136,6 +136,7 @@ const TIME_WINDOWS = [
 const STATUS_FOR_TAB: Record<Tab, Order["status"] | null> = {
   "New Order": null,
   Customers: null,
+  "True P&L Cockpit": null,
   "Operations Events": null,
   "Payment Reconciliation": null,
   Intake: "collected",
@@ -143,6 +144,8 @@ const STATUS_FOR_TAB: Record<Tab, Order["status"] | null> = {
   Ready: "ready",
   Pickups: null,
   Requests: null,
+  "Job Cards": null,
+  "Proposal Review": null,
   Leads: null,
   Vendors: null,
 };

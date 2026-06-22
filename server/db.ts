@@ -6,7 +6,7 @@ import {
   vendors, InsertVendor, Vendor,
   vendorUsers, InsertVendorUser, VendorUser,
   vendorServiceCoverage, InsertVendorServiceCoverage, VendorServiceCoverage,
-  serviceRequests,
+  serviceRequests, bldgUsers,
   leads, Lead, InsertLead,
   catalogItems, CatalogItem,
   agentEvents, InsertAgentEvent, AgentEvent,
@@ -25,6 +25,7 @@ import {
   vendorOnboardingSessions, InsertVendorOnboardingSession, VendorOnboardingSession,
   vendorOnboardingMessages, InsertVendorOnboardingMessage, VendorOnboardingMessage,
 } from "../drizzle/schema";
+import type { RequestJobCardSourceRecords, RequestJobCardSourceType } from "./procurement/requestJobCardReadModel";
 import { ENV } from './_core/env';
 import { matchBuilding } from "@shared/buildings";
 import { resolveOrderLocationForInsert } from "./orderLocation";
@@ -1520,6 +1521,64 @@ export async function getResidentCoordinatedRequest(
     .where(and(eq(residentCoordinatedRequests.tenantId, tenantId), eq(residentCoordinatedRequests.id, id)))
     .limit(1);
   return rows[0];
+}
+
+/**
+ * Read-only source query for the Slice 47 administrative job-card read model.
+ * It fetches bounded pages from existing records only and never persists a
+ * derived job card. The service_requests table has no tenant column, matching
+ * its existing resident-app contract; the two newer tables remain tenant scoped.
+ */
+export async function listRequestJobCardSourceRecords(input: {
+  tenantId: string;
+  sources: RequestJobCardSourceType[];
+  fetchCount: number;
+}): Promise<RequestJobCardSourceRecords> {
+  const db = await getDb();
+  const empty: RequestJobCardSourceRecords = {
+    serviceRequests: [], coordinatedRequests: [], residentPlans: [],
+  };
+  if (!db) return empty;
+  const limit = Math.max(1, Math.min(1051, Math.trunc(input.fetchCount)));
+  const selected = new Set(input.sources);
+
+  const [serviceRows, coordinatedRequests, residentPlans] = await Promise.all([
+    selected.has("service_request")
+      ? db.select({
+          record: {
+            id: serviceRequests.id, bldgUserId: serviceRequests.bldgUserId,
+            serviceType: serviceRequests.serviceType, status: serviceRequests.status,
+            requestSummary: serviceRequests.requestSummary, requestJson: serviceRequests.requestJson,
+            scheduledDate: serviceRequests.scheduledDate, scheduledWindow: serviceRequests.scheduledWindow,
+            createdAt: serviceRequests.createdAt,
+          },
+          residentContext: {
+            bldgUserId: bldgUsers.id, residentName: sql<string | null>`TRIM(CONCAT_WS(' ', ${bldgUsers.firstName}, ${bldgUsers.lastName}))`,
+            buildingSlug: bldgUsers.buildingSlug, unit: bldgUsers.unit,
+          },
+        }).from(serviceRequests)
+        .leftJoin(bldgUsers, eq(serviceRequests.bldgUserId, bldgUsers.id))
+        .orderBy(desc(serviceRequests.createdAt), desc(serviceRequests.id)).limit(limit)
+      : Promise.resolve([]),
+    selected.has("resident_coordinated_request")
+      ? db.select().from(residentCoordinatedRequests)
+        .where(eq(residentCoordinatedRequests.tenantId, input.tenantId))
+        .orderBy(desc(residentCoordinatedRequests.createdAt), desc(residentCoordinatedRequests.id)).limit(limit)
+      : Promise.resolve([]),
+    selected.has("resident_agent_plan")
+      ? db.select().from(residentAgentPlans)
+        .where(eq(residentAgentPlans.tenantId, input.tenantId))
+        .orderBy(desc(residentAgentPlans.createdAt), desc(residentAgentPlans.id)).limit(limit)
+      : Promise.resolve([]),
+  ]);
+  return {
+    serviceRequests: serviceRows.map(row => ({
+      ...row,
+      residentContext: row.residentContext ?? { bldgUserId: row.record.bldgUserId },
+    })),
+    coordinatedRequests,
+    residentPlans,
+  };
 }
 
 export async function listVendorPeerServiceProviders(input: {

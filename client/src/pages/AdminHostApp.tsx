@@ -18,6 +18,8 @@ import { Level4OffensiveHost } from "@/components/Level4OffensiveHost";
 import { AdminCustomerSearchBlock, AdminTabPanels } from "./Admin";
 import TruePnlCockpitPage from "./TruePnlCockpitPage";
 import { ResidentFollowupAlert } from "@/components/admin/ResidentFollowupAlert";
+import RequestJobCardsPage from "./RequestJobCardsPage";
+import ProposalReviewPage from "./ProposalReviewPage";
 
 const LIVE_INTERNAL_TABS = new Set<AdminWorkspaceTab>([
   "Intake",
@@ -42,6 +44,8 @@ const COUNTER_PATHS = new Set([
   "/operations-events",
   "/payment-reconciliation",
   "/requests",
+  "/job-cards",
+  "/proposal-review",
   "/intake",
   "/processing",
   "/ready",
@@ -59,6 +63,8 @@ const COUNTER_TABS: Array<{ label: string; path: string }> = [
   { label: "History", path: "/operations-events" },
   { label: "Money owed", path: "/payment-reconciliation" },
   { label: "Requests", path: "/requests" },
+  { label: "Job cards", path: "/job-cards" },
+  { label: "Proposal review", path: "/proposal-review" },
 ];
 const PEOPLE_TABS: Array<{ label: string; path: string }> = [
   { label: "Customers", path: "/customers" },
@@ -374,6 +380,14 @@ export default function AdminHostApp() {
           />
         ) : isOperatorReflection ? (
           <OperatorReflection />
+        ) : path === "/job-cards" ? (
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full">
+            <RequestJobCardsPage />
+          </div>
+        ) : path === "/proposal-review" ? (
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full">
+            <ProposalReviewPage />
+          </div>
         ) : activeTab ? (
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full">
             <AdminTabPanels

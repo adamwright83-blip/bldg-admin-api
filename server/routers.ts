@@ -7,6 +7,8 @@ import {
 import { COOKIE_NAME, VENDOR_COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
+import { requestJobCardRouter } from "./procurement/requestJobCardRouter";
+import { vendorProposalReviewRouter } from "./procurement/vendorProposalReviewRouter";
 import {
   publicProcedure,
   protectedProcedure,
@@ -727,6 +729,8 @@ export const appRouter = router({
 
   /* ===== ADMIN ROUTES (protected — owner only) ===== */
   admin: router({
+    requestJobCards: requestJobCardRouter,
+    proposalReview: vendorProposalReviewRouter,
     opsTasks: router({
       list: adminProcedure
         .input(
