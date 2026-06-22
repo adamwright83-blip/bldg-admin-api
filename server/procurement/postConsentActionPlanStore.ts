@@ -172,6 +172,20 @@ export class PostConsentActionPlanStore {
     return this.readExistingPlan(this.pool, consentId);
   }
 
+  async listPlans(input: { limit: number; offset: number }): Promise<{
+    items: PostConsentActionPlanRecord[]; page: { limit: number; offset: number; hasMore: boolean };
+  }> {
+    const limit = Math.max(1, Math.min(50, Math.trunc(input.limit)));
+    const offset = Math.max(0, Math.min(1000, Math.trunc(input.offset)));
+    const [rows] = await this.pool.execute<PlanRow[]>(
+      `SELECT id, consent_id, proposal_version_id, tenant_id, bldg_user_id, status, reasons_json,
+              eligible_for_auto_send_pilot, proposal_version_snapshot_hash, created_by, created_at, updated_at
+         FROM post_consent_action_plans ORDER BY created_at DESC, id ASC LIMIT ? OFFSET ?`,
+      [limit + 1, offset]);
+    const items = rows.slice(0, limit).map(row => this.mapPlanRow(row));
+    return { items, page: { limit, offset, hasMore: rows.length > limit } };
+  }
+
   async getDraftByPlanId(planId: string): Promise<PostConsentOutreachDraftRecord | null> {
     return this.readDraftByPlanId(this.pool, planId);
   }
@@ -185,6 +199,18 @@ export class PostConsentActionPlanStore {
     };
   }
 
+  private mapPlanRow(row: PlanRow): PostConsentActionPlanRecord {
+    const reasons = parseJson(row.reasons_json);
+    return {
+      id: row.id, consentId: row.consent_id, proposalVersionId: row.proposal_version_id,
+      tenantId: row.tenant_id, bldgUserId: row.bldg_user_id, status: row.status,
+      reasons: Array.isArray(reasons) ? reasons : [],
+      eligibleForAutoSendPilot: Boolean(row.eligible_for_auto_send_pilot),
+      proposalVersionSnapshotHash: row.proposal_version_snapshot_hash, createdBy: row.created_by,
+      createdAt: row.created_at, updatedAt: row.updated_at,
+    };
+  }
+
   private async readExistingPlan(
     connection: Pool | PoolConnection, consentId: string,
   ): Promise<PostConsentActionPlanRecord | null> {
@@ -195,15 +221,7 @@ export class PostConsentActionPlanStore {
       [consentId]);
     const row = rows[0];
     if (!row) return null;
-    const reasons = parseJson(row.reasons_json);
-    return {
-      id: row.id, consentId: row.consent_id, proposalVersionId: row.proposal_version_id,
-      tenantId: row.tenant_id, bldgUserId: row.bldg_user_id, status: row.status,
-      reasons: Array.isArray(reasons) ? reasons : [],
-      eligibleForAutoSendPilot: Boolean(row.eligible_for_auto_send_pilot),
-      proposalVersionSnapshotHash: row.proposal_version_snapshot_hash, createdBy: row.created_by,
-      createdAt: row.created_at, updatedAt: row.updated_at,
-    };
+    return this.mapPlanRow(row);
   }
 
   private async readDraftByPlanId(

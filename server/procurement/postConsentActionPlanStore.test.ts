@@ -304,6 +304,49 @@ describe("PostConsentActionPlanStore.runPlan", () => {
   });
 });
 
+describe("PostConsentActionPlanStore.listPlans", () => {
+  it("returns a bounded, paginated page of plans ordered most-recent-first", async () => {
+    const rows = [
+      { id: "plan-2", consent_id: "consent-2", proposal_version_id: "version-2", tenant_id: "default",
+        bldg_user_id: 2, status: "needs_operator_review", reasons_json: JSON.stringify(["proposal_readiness:not_ready"]),
+        eligible_for_auto_send_pilot: 0, proposal_version_snapshot_hash: "d".repeat(64),
+        created_by: "admin:1", created_at: new Date("2026-06-22T12:00:00.000Z"), updated_at: new Date() },
+      { id: "plan-1", consent_id: "consent-1", proposal_version_id: "version-1", tenant_id: "default",
+        bldg_user_id: 1, status: "draft_vendor_outreach", reasons_json: JSON.stringify(["eligible"]),
+        eligible_for_auto_send_pilot: 0, proposal_version_snapshot_hash: SNAPSHOT_HASH,
+        created_by: "admin:1", created_at: new Date("2026-06-22T11:00:00.000Z"), updated_at: new Date() },
+    ];
+    const execute = vi.fn().mockResolvedValue([rows, []]);
+    const store = new PostConsentActionPlanStore({ execute } as never);
+
+    const result = await store.listPlans({ limit: 20, offset: 0 });
+
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0].id).toBe("plan-2");
+    expect(result.page).toEqual({ limit: 20, offset: 0, hasMore: false });
+    expect(String(execute.mock.calls[0][0])).toMatch(/ORDER BY created_at DESC/i);
+  });
+
+  it("clamps limit/offset to safe bounds", async () => {
+    const execute = vi.fn().mockResolvedValue([[], []]);
+    const store = new PostConsentActionPlanStore({ execute } as never);
+
+    await store.listPlans({ limit: 9999, offset: -5 });
+
+    const [, params] = execute.mock.calls[0];
+    expect(params).toEqual([51, 0]);
+  });
+
+  it("returns no mutation -- listPlans never writes", async () => {
+    const execute = vi.fn().mockResolvedValue([[], []]);
+    const store = new PostConsentActionPlanStore({ execute } as never);
+
+    await store.listPlans({ limit: 20, offset: 0 });
+
+    expect(String(execute.mock.calls[0][0])).not.toMatch(/INSERT INTO|UPDATE\s+\w+|DELETE FROM/i);
+  });
+});
+
 describe("post-consent action plan store source isolation", () => {
   it("writes only to post_consent_action_plans and post_consent_outreach_drafts -- never to vendor_outreach_drafts, gates, conversation events, dispatch, payment, Stripe, or legacy vendor tables", () => {
     const source = fs.readFileSync("server/procurement/postConsentActionPlanStore.ts", "utf8");

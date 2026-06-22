@@ -5,7 +5,7 @@ import { adminProcedure, router } from "../_core/trpc";
 import { createProcurementPool } from "./migrations";
 import { PostConsentActionPlanStore } from "./postConsentActionPlanStore";
 
-type PlanStore = Pick<PostConsentActionPlanStore, "runPlan" | "getPlanByConsentId" | "getDraftByPlanId">;
+type PlanStore = Pick<PostConsentActionPlanStore, "runPlan" | "getPlanByConsentId" | "getDraftByPlanId" | "listPlans">;
 let lazyStore: PostConsentActionPlanStore | null = null;
 
 function resolveStore(injected?: PlanStore): PlanStore {
@@ -23,6 +23,11 @@ function resolveStore(injected?: PlanStore): PlanStore {
  */
 export function createPostConsentActionPlanRouter(injectedStore?: PlanStore) {
   return router({
+    list: adminProcedure.input(z.object({
+      limit: z.number().int().min(1).max(50).default(20),
+      offset: z.number().int().min(0).max(1000).default(0),
+    }).default({ limit: 20, offset: 0 })).query(({ input }) => resolveStore(injectedStore).listPlans(input)),
+
     get: adminProcedure.input(z.object({ consentId: z.string().min(1).max(191) })).query(async ({ input }) => {
       const plan = await resolveStore(injectedStore).getPlanByConsentId(input.consentId);
       if (!plan) return { plan: null, draft: null };

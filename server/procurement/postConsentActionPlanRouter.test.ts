@@ -21,7 +21,7 @@ const DRAFT = {
 
 describe("post-consent action plan admin router", () => {
   it("rejects unauthenticated and non-admin access before store access", async () => {
-    const store = { runPlan: vi.fn(), getPlanByConsentId: vi.fn(), getDraftByPlanId: vi.fn() };
+    const store = { runPlan: vi.fn(), getPlanByConsentId: vi.fn(), getDraftByPlanId: vi.fn(), listPlans: vi.fn() };
     const router = createPostConsentActionPlanRouter(store as never);
     await expect(router.createCaller(context(null)).get({ consentId: "consent-1" }))
       .rejects.toMatchObject({ code: "FORBIDDEN" });
@@ -80,8 +80,25 @@ describe("post-consent action plan admin router", () => {
       .rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
-  it("contains exactly one mutation -- run -- and one query -- get", () => {
-    const router = createPostConsentActionPlanRouter({ runPlan: vi.fn(), getPlanByConsentId: vi.fn(), getDraftByPlanId: vi.fn() } as never);
-    expect(Object.keys(router._def.record)).toEqual(["get", "run"]);
+  it("list returns a paginated page of plans without requiring a consentId", async () => {
+    const page = { items: [PLAN], page: { limit: 20, offset: 0, hasMore: false } };
+    const store = { runPlan: vi.fn(), getPlanByConsentId: vi.fn(), getDraftByPlanId: vi.fn(), listPlans: vi.fn(async () => page) };
+    const result = await createPostConsentActionPlanRouter(store as never)
+      .createCaller(context({ id: 1, role: "admin" })).list({ limit: 20, offset: 0 });
+    expect(result).toEqual(page);
+    expect(store.listPlans).toHaveBeenCalledWith({ limit: 20, offset: 0 });
+  });
+
+  it("list rejects unauthenticated and non-admin access before store access", async () => {
+    const store = { runPlan: vi.fn(), getPlanByConsentId: vi.fn(), getDraftByPlanId: vi.fn(), listPlans: vi.fn() };
+    const router = createPostConsentActionPlanRouter(store as never);
+    await expect(router.createCaller(context(null)).list()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(router.createCaller(context({ id: 1, role: "user" })).list()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(store.listPlans).not.toHaveBeenCalled();
+  });
+
+  it("contains exactly one mutation -- run -- and two queries -- list, get", () => {
+    const router = createPostConsentActionPlanRouter({ runPlan: vi.fn(), getPlanByConsentId: vi.fn(), getDraftByPlanId: vi.fn(), listPlans: vi.fn() } as never);
+    expect(Object.keys(router._def.record)).toEqual(["list", "get", "run"]);
   });
 });

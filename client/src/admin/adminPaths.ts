@@ -11,6 +11,7 @@ export const ADMIN_WORKSPACE_TABS = [
   "Requests",
   "Job Cards",
   "Proposal Review",
+  "Post-Consent Plans",
   "Leads",
   "Vendors",
 ] as const;
@@ -30,6 +31,7 @@ export const TAB_PATH: Record<AdminWorkspaceTab, string> = {
   Requests: "/requests",
   "Job Cards": "/job-cards",
   "Proposal Review": "/proposal-review",
+  "Post-Consent Plans": "/post-consent-plans",
   Leads: "/leads",
   Vendors: "/vendors",
 };
