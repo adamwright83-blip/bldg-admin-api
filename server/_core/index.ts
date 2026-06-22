@@ -33,7 +33,7 @@ import { registerMarketplacePaymentReadRoutes } from "../marketplacePayments/mar
 import { registerMarketplaceStripeWebhookRoutes } from "../marketplacePayments/marketplaceStripeWebhookRoute";
 import { registerMarketplacePaymentDryRunRoutes } from "../marketplacePayments/marketplacePaymentDryRunRoute";
 import { registerLaundryFarmSheetSyncRoutes } from "../laundryFarmSheetSyncRoute";
-import { registerResidentProposalReadRoutes } from "../procurement/residentProposalReadApi";
+import { registerResidentProposalReadRoutes, registerResidentProposalConsentRoute } from "../procurement/residentProposalReadApi";
 import { PUBLIC_FORM_ORIGINS, buildAdminCorsOptions } from "./corsConfig";
 import { z } from "zod";
 import { buildBldgIntakeOrder } from "../residentIntake";
@@ -234,6 +234,7 @@ async function startServer() {
   registerMarketplacePaymentDryRunRoutes(app);
   registerLaundryFarmSheetSyncRoutes(app);
   registerResidentProposalReadRoutes(app);
+  registerResidentProposalConsentRoute(app);
 
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));

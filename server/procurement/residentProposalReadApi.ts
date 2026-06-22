@@ -1,8 +1,11 @@
+import crypto from "node:crypto";
 import type express from "express";
 import { createProcurementPool } from "./migrations";
 import { ResidentProposalReadStore } from "./residentProposalReadStore";
+import { ResidentProposalConsentStore } from "./residentProposalConsentStore";
 
 type ReadStore = Pick<ResidentProposalReadStore, "listVisible" | "readOwned">;
+type ConsentStore = Pick<ResidentProposalConsentStore, "recordConsent">;
 type ResidentIdentity = { bldgUserId: number; tenantId: string };
 
 function header(req: express.Request, name: string): string | null {
@@ -45,4 +48,39 @@ export function registerResidentProposalReadRoutes(app: express.Express, injecte
   const handlers = createResidentProposalReadHandlers(store);
   app.get("/api/resident/proposals", handlers.list);
   app.get("/api/resident/proposals/:versionId", handlers.get);
+}
+
+const VALID_VERSION_ID = /^[A-Za-z0-9_-]{1,191}$/;
+
+export function createResidentProposalConsentHandler(store: ConsentStore) {
+  return async (req: express.Request, res: express.Response) => {
+    const resident = authenticateResidentAppRequest(req);
+    if (!resident) return res.status(401).json({ error: "Unauthorized" });
+
+    const versionId = req.params.versionId;
+    if (!versionId || !VALID_VERSION_ID.test(versionId)) {
+      return res.status(400).json({ error: "Invalid proposal version id" });
+    }
+
+    const { decision, record } = await store.recordConsent({
+      id: crypto.randomUUID(), versionId, bldgUserId: resident.bldgUserId, tenantId: resident.tenantId,
+      createdBy: `bldg_user:${resident.bldgUserId}`,
+    });
+
+    if (decision.outcome === "invalid_request") {
+      return res.status(400).json({ error: "Invalid request" });
+    }
+    if (decision.outcome === "consent_not_allowed") {
+      return res.status(404).json({ error: "Proposal not found" });
+    }
+    return res.status(decision.outcome === "consent_already_recorded" ? 200 : 201).json({
+      status: decision.outcome, proposalVersionId: record?.proposalVersionId,
+      consentAction: record?.consentAction, consentedAt: record?.consentedAt,
+    });
+  };
+}
+
+export function registerResidentProposalConsentRoute(app: express.Express, injected?: ConsentStore): void {
+  const store = injected ?? new ResidentProposalConsentStore(createProcurementPool());
+  app.post("/api/resident/proposals/:versionId/consent", createResidentProposalConsentHandler(store));
 }
