@@ -63,6 +63,42 @@ export class LegalTemplateStore {
     });
   }
 
+  /**
+   * Approves an existing draft outreach template version in place -- it
+   * never creates a template row, never creates a lint rule, never renders
+   * or evaluates lint against the body, and never sends anything. Refuses
+   * (without writing) if the version doesn't exist or is not currently in
+   * `draft` status, so an already-approved or retired version can never be
+   * silently re-approved or have its effective date changed underneath it.
+   */
+  async approveOutreachTemplateVersion(input: {
+    templateKey: string; version: string; approvedBy: string; effectiveAt?: Date;
+  }): Promise<
+    | { ok: true; templateKey: string; version: string; approvedAt: Date; effectiveAt: Date }
+    | { ok: false; reason: "not_found" | "not_in_draft_status" }
+  > {
+    return this.withTransaction(async connection => {
+      const [rows] = await connection.execute<RowDataPacket[]>(
+        `SELECT template_key, version, status FROM outreach_template_versions
+           WHERE template_key = ? AND version = ? FOR UPDATE`,
+        [input.templateKey, input.version],
+      );
+      const row = rows[0];
+      if (!row) return { ok: false, reason: "not_found" } as const;
+      if (row.status !== "draft") return { ok: false, reason: "not_in_draft_status" } as const;
+
+      const approvedAt = new Date();
+      const effectiveAt = input.effectiveAt ?? approvedAt;
+      await connection.execute(
+        `UPDATE outreach_template_versions
+           SET status = 'approved', approved_by = ?, approved_at = ?, effective_at = ?
+         WHERE template_key = ? AND version = ? AND status = 'draft'`,
+        [input.approvedBy, approvedAt, effectiveAt, input.templateKey, input.version],
+      );
+      return { ok: true, templateKey: input.templateKey, version: input.version, approvedAt, effectiveAt } as const;
+    });
+  }
+
   async getLegalDocumentVersion(documentKey: string, version: string) {
     const [rows] = await this.pool.execute<RowDataPacket[]>(
       `SELECT * FROM legal_document_versions WHERE document_key = ? AND version = ?`,
