@@ -9,6 +9,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { requestJobCardRouter } from "./procurement/requestJobCardRouter";
 import { vendorProposalReviewRouter } from "./procurement/vendorProposalReviewRouter";
+import { postConsentActionPlanRouter } from "./procurement/postConsentActionPlanRouter";
 import {
   publicProcedure,
   protectedProcedure,
@@ -731,6 +732,7 @@ export const appRouter = router({
   admin: router({
     requestJobCards: requestJobCardRouter,
     proposalReview: vendorProposalReviewRouter,
+    postConsentActionPlan: postConsentActionPlanRouter,
     opsTasks: router({
       list: adminProcedure
         .input(

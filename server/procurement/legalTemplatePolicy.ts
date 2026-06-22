@@ -53,6 +53,10 @@ const BUILT_IN_BANNED_CLAIMS: Array<{ key: string; pattern: RegExp }> = [
   { key: "false_exclusivity", pattern: /\b(exclusive (?:partner|provider)|only approved provider)\b/i },
   { key: "fake_endorsement", pattern: /\b(recommended|endorsed|approved) by (?:your|the) building\b/i },
   { key: "false_booked_state", pattern: /\b(you are|you're|your service is|we have) booked\b/i },
+  { key: "false_scheduled_state", pattern: /\bwe have scheduled\b/i },
+  { key: "false_resident_booked_claim", pattern: /\bthe resident has booked\b/i },
+  { key: "false_payment_ready_claim", pattern: /\bpayment is ready\b/i },
+  { key: "false_confirmed_state", pattern: /\byou are confirmed\b/i },
 ];
 
 function validDate(value: Date | null): value is Date {
