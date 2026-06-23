@@ -218,6 +218,74 @@ export class VendorProposalVersionStore {
     }
   }
 
+  /**
+   * Marks an existing proposal ready for resident presentation -- the one
+   * step nothing else in this codebase ever performs. This is a thin human
+   * sign-off only: the resident-safe read path (residentProposalReadStore /
+   * buildResidentProposalPresentation) independently re-derives full safety
+   * (truth flags, language, fit, eligibility, terms, expiry, supersession)
+   * at read time regardless of this flag, so this method is deliberately a
+   * narrow gate, not the sole safety mechanism. Refuses if the proposal's
+   * latest version is not currently `ready_for_admin_review`, if that
+   * version is expired, or if the proposal's own status is not currently
+   * `draft` or `under_admin_review`. Never sends, books, pays, dispatches,
+   * marks provider acceptance, or calls an LLM.
+   */
+  async markReadyForResidentPresentation(input: {
+    proposalId: string; now?: Date;
+  }): Promise<
+    | { ok: true; proposalId: string; versionId: string }
+    | { ok: false; reason: "proposal_not_found" | "proposal_status_not_eligible" | "latest_version_not_admin_ready" | "latest_version_expired" }
+  > {
+    const now = input.now ?? new Date();
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const [proposalRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT id, proposal_status FROM vendor_proposals WHERE id = ? FOR UPDATE`,
+        [input.proposalId],
+      );
+      const proposalRow = proposalRows[0];
+      if (!proposalRow) {
+        await connection.commit();
+        return { ok: false, reason: "proposal_not_found" };
+      }
+      if (proposalRow.proposal_status !== "draft" && proposalRow.proposal_status !== "under_admin_review") {
+        await connection.commit();
+        return { ok: false, reason: "proposal_status_not_eligible" };
+      }
+
+      const [versionRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT id, review_state, expires_at FROM vendor_proposal_versions
+           WHERE proposal_id = ? ORDER BY version DESC LIMIT 1 FOR UPDATE`,
+        [input.proposalId],
+      );
+      const versionRow = versionRows[0];
+      if (!versionRow || versionRow.review_state !== "ready_for_admin_review") {
+        await connection.commit();
+        return { ok: false, reason: "latest_version_not_admin_ready" };
+      }
+      if (new Date(versionRow.expires_at).getTime() <= now.getTime()) {
+        await connection.commit();
+        return { ok: false, reason: "latest_version_expired" };
+      }
+
+      await connection.execute(
+        `UPDATE vendor_proposals SET proposal_status = 'ready_for_resident_presentation'
+           WHERE id = ? AND proposal_status IN ('draft','under_admin_review')`,
+        [input.proposalId],
+      );
+      await connection.commit();
+      return { ok: true, proposalId: input.proposalId, versionId: String(versionRow.id) };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
   private assertLocallyValid(input: CreateProposalVersionInput): void {
     const reasons = validateProposalVersionInput(input);
     if (reasons.length) throw new Error(`Proposal version is not safe to store: ${reasons.join(",")}`);

@@ -166,6 +166,92 @@ describe("durable vendor proposal/version storage", () => {
   });
 });
 
+describe("VendorProposalVersionStore.markReadyForResidentPresentation", () => {
+  const NOW2 = new Date("2026-06-22T12:00:00.000Z");
+
+  function poolForMark(opts: {
+    proposalRows?: Array<Record<string, unknown>>;
+    versionRows?: Array<Record<string, unknown>>;
+  } = {}) {
+    const execute = vi.fn(async (sql: string) => {
+      if (sql.includes("FROM vendor_proposals WHERE")) {
+        return [opts.proposalRows ?? [{ id: "proposal-1", proposal_status: "draft" }], []];
+      }
+      if (sql.includes("FROM vendor_proposal_versions")) {
+        return [opts.versionRows ?? [{ id: "version-1", review_state: "ready_for_admin_review",
+          expires_at: new Date("2026-06-25T12:00:00.000Z") }], []];
+      }
+      return [{ affectedRows: 1 }, []];
+    });
+    const connection = { beginTransaction: vi.fn(), commit: vi.fn(), rollback: vi.fn(), release: vi.fn(), execute };
+    return { pool: { getConnection: vi.fn(async () => connection) } as unknown as Pool, connection };
+  }
+
+  it("marks an eligible proposal ready for resident presentation", async () => {
+    const { pool, connection } = poolForMark();
+    const result = await new VendorProposalVersionStore(pool).markReadyForResidentPresentation({
+      proposalId: "proposal-1", now: NOW2,
+    });
+    expect(result).toEqual({ ok: true, proposalId: "proposal-1", versionId: "version-1" });
+    const updateCall = connection.execute.mock.calls.find(call => /^UPDATE/i.test(String(call[0]).trim()));
+    expect(updateCall).toBeDefined();
+    expect(String(updateCall![0])).toMatch(/SET proposal_status = 'ready_for_resident_presentation'/);
+    expect(connection.commit).toHaveBeenCalledOnce();
+  });
+
+  it("refuses a missing proposal without writing", async () => {
+    const { pool, connection } = poolForMark({ proposalRows: [] });
+    const result = await new VendorProposalVersionStore(pool).markReadyForResidentPresentation({
+      proposalId: "missing", now: NOW2,
+    });
+    expect(result).toEqual({ ok: false, reason: "proposal_not_found" });
+    expect(connection.execute.mock.calls.some(call => /^UPDATE/i.test(String(call[0]).trim()))).toBe(false);
+  });
+
+  it("refuses a proposal already past draft/under_admin_review", async () => {
+    const { pool, connection } = poolForMark({ proposalRows: [{ id: "proposal-1", proposal_status: "ready_for_resident_presentation" }] });
+    const result = await new VendorProposalVersionStore(pool).markReadyForResidentPresentation({
+      proposalId: "proposal-1", now: NOW2,
+    });
+    expect(result).toEqual({ ok: false, reason: "proposal_status_not_eligible" });
+    expect(connection.execute.mock.calls.some(call => /^UPDATE/i.test(String(call[0]).trim()))).toBe(false);
+  });
+
+  it("refuses when the latest version is not ready_for_admin_review", async () => {
+    const { pool, connection } = poolForMark({ versionRows: [{ id: "version-1", review_state: "needs_operator_review",
+      expires_at: new Date("2026-06-25T12:00:00.000Z") }] });
+    const result = await new VendorProposalVersionStore(pool).markReadyForResidentPresentation({
+      proposalId: "proposal-1", now: NOW2,
+    });
+    expect(result).toEqual({ ok: false, reason: "latest_version_not_admin_ready" });
+    expect(connection.execute.mock.calls.some(call => /^UPDATE/i.test(String(call[0]).trim()))).toBe(false);
+  });
+
+  it("refuses when the latest version has expired", async () => {
+    const { pool, connection } = poolForMark({ versionRows: [{ id: "version-1", review_state: "ready_for_admin_review",
+      expires_at: new Date("2026-06-20T12:00:00.000Z") }] });
+    const result = await new VendorProposalVersionStore(pool).markReadyForResidentPresentation({
+      proposalId: "proposal-1", now: NOW2,
+    });
+    expect(result).toEqual({ ok: false, reason: "latest_version_expired" });
+    expect(connection.execute.mock.calls.some(call => /^UPDATE/i.test(String(call[0]).trim()))).toBe(false);
+  });
+
+  it("the UPDATE statement only targets proposal_status on vendor_proposals -- no other column", async () => {
+    const { pool, connection } = poolForMark();
+    await new VendorProposalVersionStore(pool).markReadyForResidentPresentation({ proposalId: "proposal-1", now: NOW2 });
+    const updateCall = connection.execute.mock.calls.find(call => /^UPDATE/i.test(String(call[0]).trim()));
+    expect(String(updateCall![0])).toMatch(/UPDATE vendor_proposals/);
+    expect(String(updateCall![0])).not.toMatch(/booked|paid|dispatched|completed|provider_accepted/i);
+  });
+
+  it("introduces no outreach/send/booking/payment/dispatch/provider-acceptance/LLM behavior", () => {
+    const source = readFileSync("server/procurement/vendorProposalVersionStore.ts", "utf8");
+    expect(source).not.toMatch(/fetch\(|axios|stripe|sendSMS|sendEmail|capturePayment/i);
+    expect(source).not.toMatch(/openai|anthropic|chatgpt/i);
+  });
+});
+
 describe("proposal storage migration", () => {
   it("is additive, versioned, evidence-linked, and contains no execution columns or seed rows", () => {
     const sql = readFileSync("procurement/migrations/0015_vendor_proposal_versions.sql", "utf8");
