@@ -73,6 +73,7 @@ export const DC_ITEMS: DryCleanItem[] = [
   { id: "dress", label: "Dress", priceCents: 1200, category: "Dresses" },
   { id: "gown", label: "Gown", priceCents: 4200, category: "Dresses" },
   { id: "kid_dress", label: "Kid Dress", priceCents: 800, category: "Dresses" },
+  { id: "long_dress", label: "Long Dress", priceCents: 1800, category: "Dresses" },
 
   // SKIRTS
   { id: "skirt", label: "Skirt", priceCents: 1100, category: "Skirts" },
