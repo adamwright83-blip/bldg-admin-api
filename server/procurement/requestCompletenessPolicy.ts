@@ -25,12 +25,14 @@ export type CanonicalRequestFacts = {
   dog?: {
     name?: string | null;
     breed?: string | null;
+    weight?: string | null;
     size?: "small" | "medium" | "large" | "extra_large" | string | null;
     ageOrLifeStage?: string | null;
     temperament?: string | null;
     handlingNotes?: string | null;
     negativeConstraints?: string[] | null;
   } | null;
+  budget?: string | null;
 };
 
 export type RequestCompletenessResult = {

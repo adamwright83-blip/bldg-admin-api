@@ -99,6 +99,72 @@ function firstText(...values: unknown[]): string | null {
   return null;
 }
 
+const LABELS = [
+  "dog name", "breed/size", "breed", "size", "weight", "temperament",
+  "handling notes", "budget", "requested date", "requested window", "date", "window",
+  "service location",
+];
+
+function freeformText(...values: unknown[]): string {
+  return values.map(text).filter((value): value is string => !!value).join("\n");
+}
+
+function labeledValue(source: string, labels: readonly string[]): string | null {
+  if (!source.trim()) return null;
+  const labelPattern = labels.map(label => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  const match = new RegExp(
+    `(?:^|[\\n.;])\\s*(?:${labelPattern})\\s*:\\s*([^\\n.;]*)`,
+    "i",
+  ).exec(source);
+  return text(match?.[1]?.replace(/\s+/g, " "));
+}
+
+function normalizedDogSize(value: string | null): string | null {
+  const normalized = value?.toLowerCase().trim();
+  if (!normalized) return null;
+  if (/\bextra\s*large\b|\bxl\b/.test(normalized)) return "extra_large";
+  if (/\blarge\b/.test(normalized)) return "large";
+  if (/\bmedium\b|\bmed\b/.test(normalized)) return "medium";
+  if (/\bsmall\b/.test(normalized)) return "small";
+  return value;
+}
+
+function dogFactsFromFreeform(source: string): CanonicalRequestFacts["dog"] {
+  const breedSize = labeledValue(source, ["breed/size"]);
+  const breedSizeParts = breedSize?.split("/").map(part => part.trim()).filter(Boolean) ?? [];
+  const explicitSize = firstText(labeledValue(source, ["size"]), breedSizeParts.find(part =>
+    /\b(small|medium|med|large|extra\s*large|xl)\b/i.test(part)));
+  const value = {
+    name: labeledValue(source, ["dog name"]),
+    breed: firstText(labeledValue(source, ["breed"]), breedSizeParts.find(part =>
+      !/\b(small|medium|med|large|extra\s*large|xl|\d+\s*(lb|lbs|ibs|pounds?))\b/i.test(part))),
+    weight: firstText(labeledValue(source, ["weight"]), breedSizeParts.find(part => /\d+\s*(lb|lbs|ibs|pounds?)/i.test(part))),
+    size: normalizedDogSize(explicitSize),
+    temperament: labeledValue(source, ["temperament"]),
+    handlingNotes: labeledValue(source, ["handling notes"]),
+    negativeConstraints: null,
+  };
+  if (!value.handlingNotes && value.temperament && /no special handling needs/i.test(value.temperament)) {
+    value.handlingNotes = "no special handling needs";
+  }
+  return Object.values(value).some(Boolean) ? value : null;
+}
+
+function mergedDogFacts(...dogs: Array<CanonicalRequestFacts["dog"]>): CanonicalRequestFacts["dog"] {
+  const found = dogs.filter((dog): dog is NonNullable<CanonicalRequestFacts["dog"]> => !!dog);
+  if (!found.length) return null;
+  return {
+    name: firstText(...found.map(dog => dog.name)),
+    breed: firstText(...found.map(dog => dog.breed)),
+    weight: firstText(...found.map(dog => dog.weight)),
+    size: firstText(...found.map(dog => dog.size)),
+    ageOrLifeStage: firstText(...found.map(dog => dog.ageOrLifeStage)),
+    temperament: firstText(...found.map(dog => dog.temperament)),
+    handlingNotes: firstText(...found.map(dog => dog.handlingNotes)),
+    negativeConstraints: found.find(dog => dog.negativeConstraints?.length)?.negativeConstraints ?? null,
+  };
+}
+
 function mergedResident(record: JoinedResidentContext, fallback: JoinedResidentContext = {}) {
   return {
     bldgUserId: record.bldgUserId ?? fallback.bldgUserId ?? null,
@@ -116,19 +182,22 @@ export function adaptServiceRequestToJobCard(input: {
 }): ExistingRequestJobCardAdapterResult {
   const record = input.record;
   const json = object(record.requestJson);
+  const freeform = freeformText(json.notes, json.serviceDetails, json.rawRequest, json.originalMessage, record.requestSummary);
+  const freeformDog = dogFactsFromFreeform(freeform);
   const resident = mergedResident(input.residentContext ?? {}, { bldgUserId: record.bldgUserId });
   const facts: CanonicalRequestFacts = {
     buildingSlug: resident.buildingSlug,
     address: resident.address,
     unit: resident.unit,
-    requestedDate: firstText(record.scheduledDate, json.requestedDate, json.date),
-    requestedWindow: firstText(record.scheduledWindow, json.requestedWindow, json.window),
+    requestedDate: firstText(record.scheduledDate, json.requestedDate, json.date, labeledValue(freeform, ["requested date", "date"])),
+    requestedWindow: firstText(record.scheduledWindow, json.requestedWindow, json.window, labeledValue(freeform, ["requested window", "window"])),
     deadlineDate: firstText(json.deadlineDate, json.returnByDate),
     serviceDetails: firstText(json.serviceDetails, json.notes, record.requestSummary),
     vehicleDetails: firstText(json.vehicleDetails, json.vehicle),
     origin: firstText(json.origin),
     destination: firstText(json.destination),
-    dog: dogFacts(json),
+    dog: mergedDogFacts(dogFacts(json), freeformDog),
+    budget: labeledValue(freeform, ["budget"]),
   };
   const sourceId = String(record.id);
   const card = buildRequestJobCard({

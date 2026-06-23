@@ -33,6 +33,92 @@ describe("existing request job-card adapter", () => {
     });
   });
 
+  it("extracts explicit dog-grooming facts from labeled service_request notes without guessing", () => {
+    const result = adaptServiceRequestToJobCard({
+      record: {
+        id: 151, bldgUserId: 42, serviceType: "grooming", status: "new",
+        requestSummary: "Dog Grooming — Requested date: 2026-06-23. Requested window: 11am. Dog name: Butterscotch. Breed/size: Boxer / medium / 78 lbs. Temperament: friendly, no special handling needs. Budget: up to $125 before tip.",
+        scheduledDate: null, scheduledWindow: null,
+        requestJson: { notes: "Dog name: Butterscotch. Breed/size: Boxer / medium / 78 lbs. Temperament: friendly, no special handling needs. Budget: up to $125 before tip. Requested date: 2026-06-23. Requested window: 11am." },
+        createdAt: CREATED,
+      },
+      residentContext: { bldgUserId: 42, buildingSlug: "opusla", unit: "12A" },
+    });
+    expect(result.jobCards[0]).toMatchObject({
+      status: "job_card_ready_for_admin_review",
+      category: "dog_grooming",
+      requestFacts: {
+        requestedDate: "2026-06-23",
+        requestedWindow: "11am",
+        budget: "up to $125 before tip",
+        dog: {
+          name: "Butterscotch",
+          breed: "Boxer",
+          size: "medium",
+          weight: "78 lbs",
+          temperament: "friendly, no special handling needs",
+          handlingNotes: "no special handling needs",
+        },
+      },
+    });
+  });
+
+  it("keeps dog requests with dog facts but no explicit date/window in clarification", () => {
+    const result = adaptServiceRequestToJobCard({
+      record: {
+        id: 152, bldgUserId: 42, serviceType: "grooming", status: "new",
+        requestSummary: "Dog Grooming — Requested timing not specified. Dog name: Butterscotch. Breed/size: Boxer / medium / 78 lbs.",
+        scheduledDate: null, scheduledWindow: null,
+        requestJson: { notes: "Dog name: Butterscotch. Breed/size: Boxer / medium / 78 lbs. Budget: up to $125 before tip." },
+        createdAt: CREATED,
+      },
+      residentContext: { bldgUserId: 42, buildingSlug: "opusla", unit: "12A" },
+    });
+    expect(result.jobCards[0]).toMatchObject({
+      status: "job_card_needs_clarification",
+      requestFacts: { dog: { breed: "Boxer", size: "medium", weight: "78 lbs" } },
+      completeness: { nextQuestionKey: "requested_date" },
+    });
+    expect(result.jobCards[0].reasonCodes).toContain("missing:requested_date");
+  });
+
+  it("keeps dog requests with date/window but no dog size or breed in clarification", () => {
+    const result = adaptServiceRequestToJobCard({
+      record: {
+        id: 153, bldgUserId: 42, serviceType: "grooming", status: "new",
+        requestSummary: "Dog Grooming — Requested date: 2026-06-23. Requested window: 11am. Dog name: Butterscotch.",
+        scheduledDate: null, scheduledWindow: null,
+        requestJson: { notes: "Dog name: Butterscotch. Requested date: 2026-06-23. Requested window: 11am." },
+        createdAt: CREATED,
+      },
+      residentContext: { bldgUserId: 42, buildingSlug: "opusla", unit: "12A" },
+    });
+    expect(result.jobCards[0]).toMatchObject({
+      status: "job_card_needs_clarification",
+      requestFacts: { requestedDate: "2026-06-23", requestedWindow: "11am", dog: { name: "Butterscotch" } },
+      completeness: { nextQuestionKey: "dog_size_or_breed" },
+    });
+    expect(result.jobCards[0].reasonCodes).toContain("missing:dog_size_or_breed");
+  });
+
+  it("does not over-extract unrelated freeform text as dog truth", () => {
+    const result = adaptServiceRequestToJobCard({
+      record: {
+        id: 154, bldgUserId: 42, serviceType: "grooming", status: "new",
+        requestSummary: "Please help with grooming. Boxer lobby budget friendly maybe sometime.",
+        scheduledDate: null, scheduledWindow: null,
+        requestJson: { notes: "Please help with grooming. Boxer lobby budget friendly maybe sometime." },
+        createdAt: CREATED,
+      },
+      residentContext: { bldgUserId: 42, buildingSlug: "opusla", unit: "12A" },
+    });
+    expect(result.jobCards[0]).toMatchObject({
+      status: "job_card_needs_clarification",
+      requestFacts: { dog: null },
+      completeness: { nextQuestionKey: "requested_date" },
+    });
+  });
+
   it("adapts resident_coordinated_requests using direct fields and rawJson.input", () => {
     const result = adaptResidentCoordinatedRequestToJobCard({ record: {
       id: 19, bldgUserId: 42, residentName: "Adam", buildingSlug: "the-waverly", unit: "4A",
