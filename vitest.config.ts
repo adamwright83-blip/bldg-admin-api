@@ -19,6 +19,8 @@ export default defineConfig({
       "server/**/*.spec.ts",
       "client/**/*.test.ts",
       "client/**/*.spec.ts",
+      "shared/**/*.test.ts",
+      "shared/**/*.spec.ts",
     ],
     /** HTTP/Twilio/DB-dependent suites live in `*.integration.test.ts` — run via `pnpm test:integration`. */
     exclude: ["**/node_modules/**", "**/dist/**", "**/*.integration.test.ts"],

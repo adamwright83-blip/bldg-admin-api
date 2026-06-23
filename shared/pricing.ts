@@ -6,6 +6,16 @@
 export const WF_RATE_PER_LB_CENTS = 250; // $2.50/lb
 export const WF_MINIMUM_SUBTOTAL_CENTS = 4500; // $45.00 minimum
 
+/**
+ * Our dry-cleaning partner gives us 40% off retail, so our cost is 60% of
+ * the retail (customer) price. Applies to dry_clean catalog items only.
+ */
+export const DRY_CLEAN_PARTNER_DISCOUNT_PERCENT = 40;
+
+export function dryCleanCostCentsFromRetail(priceCents: number): number {
+  return Math.round(priceCents * (1 - DRY_CLEAN_PARTNER_DISCOUNT_PERCENT / 100));
+}
+
 /* Wash & Fold upcharges */
 export const WF_UPCHARGES = [
   { id: "bleach", label: "Bleach For Whites", priceCents: 200 },
