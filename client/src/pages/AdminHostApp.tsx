@@ -20,6 +20,7 @@ import TruePnlCockpitPage from "./TruePnlCockpitPage";
 import { ResidentFollowupAlert } from "@/components/admin/ResidentFollowupAlert";
 import RequestJobCardsPage from "./RequestJobCardsPage";
 import ProposalReviewPage from "./ProposalReviewPage";
+import FirstRealProposalBootstrapPage from "./FirstRealProposalBootstrapPage";
 import PostConsentActionPlanPage from "./PostConsentActionPlanPage";
 
 const LIVE_INTERNAL_TABS = new Set<AdminWorkspaceTab>([
@@ -47,6 +48,7 @@ const COUNTER_PATHS = new Set([
   "/requests",
   "/job-cards",
   "/proposal-review",
+  "/proposal-bootstrap",
   "/post-consent-plans",
   "/intake",
   "/processing",
@@ -67,6 +69,7 @@ const COUNTER_TABS: Array<{ label: string; path: string }> = [
   { label: "Requests", path: "/requests" },
   { label: "Job cards", path: "/job-cards" },
   { label: "Proposal review", path: "/proposal-review" },
+  { label: "Proposal bootstrap", path: "/proposal-bootstrap" },
   { label: "Post-consent plans", path: "/post-consent-plans" },
 ];
 const PEOPLE_TABS: Array<{ label: string; path: string }> = [
@@ -390,6 +393,10 @@ export default function AdminHostApp() {
         ) : path === "/proposal-review" ? (
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full">
             <ProposalReviewPage />
+          </div>
+        ) : path === "/proposal-bootstrap" ? (
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full">
+            <FirstRealProposalBootstrapPage />
           </div>
         ) : path === "/post-consent-plans" ? (
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full">

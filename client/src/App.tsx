@@ -30,6 +30,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/requests",
   "/job-cards",
   "/proposal-review",
+  "/proposal-bootstrap",
   "/leads",
   "/vendors",
   "/level4",
@@ -57,6 +58,7 @@ function AdminHostRouter() {
       <Route path="/requests" component={AdminHostApp} />
       <Route path="/job-cards" component={AdminHostApp} />
       <Route path="/proposal-review" component={AdminHostApp} />
+      <Route path="/proposal-bootstrap" component={AdminHostApp} />
       <Route path="/leads" component={AdminHostApp} />
       <Route path="/vendors" component={AdminHostApp} />
       <Route path="/level4" component={AdminHostApp} />
