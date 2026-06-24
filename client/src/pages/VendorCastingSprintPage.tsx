@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { AlertTriangle, ArrowRightCircle, Loader2, Trophy } from "lucide-react";
+import { useMemo, useState } from "react";
+import { AlertTriangle, ArrowRightCircle, Copy, Loader2, Trophy } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 const LANE_LABELS: Record<string, string> = {
@@ -8,20 +8,119 @@ const LANE_LABELS: Record<string, string> = {
   web_operator_producer: "Web operator producer",
 };
 
+const SOURCE_TYPE_OPTIONS = ["manual_operator_list", "public_business_directory", "permitted_public_fetch"] as const;
+const ATTEMPT_CHANNELS = ["call", "voicemail", "website_form", "email", "sms_if_allowed", "second_call_if_urgent"] as const;
+type AttemptChannel = (typeof ATTEMPT_CHANNELS)[number];
+
+type VendorFactsForm = {
+  businessName: string;
+  phone: string;
+  email: string;
+  website: string;
+  sourceType: (typeof SOURCE_TYPE_OPTIONS)[number];
+  sourceReference: string;
+  serviceArea: string;
+  qualificationNotes: string;
+  googleRating: string;
+  googleReviewCount: string;
+  yelpRating: string;
+  yelpReviewCount: string;
+  observedAt: string;
+  negativeFlags: string;
+  sourceConfidenceNotes: string;
+};
+
+const EMPTY_VENDOR_FACTS_FORM: VendorFactsForm = {
+  businessName: "", phone: "", email: "", website: "",
+  sourceType: "manual_operator_list", sourceReference: "", serviceArea: "", qualificationNotes: "",
+  googleRating: "", googleReviewCount: "", yelpRating: "", yelpReviewCount: "",
+  observedAt: "", negativeFlags: "", sourceConfidenceNotes: "",
+};
+
 function label(value: string): string {
   return value.replaceAll("_", " ").replace(/\b\w/g, character => character.toUpperCase());
+}
+
+function numberOrNull(value: string): number | null {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Mirrors server-side computeDraftAttemptStatus(); kept local so the client bundle never imports server policy modules. */
+function computeAttemptStatus(state: { draftGenerated: boolean; copied: boolean; manuallySent: boolean }): string {
+  if (!state.draftGenerated) return "blocked";
+  if (state.manuallySent) return "response_pending";
+  if (state.copied) return "copied";
+  return "draft_ready";
 }
 
 export default function VendorCastingSprintPage() {
   const [sourceKey, setSourceKey] = useState("service_request:155");
   const [appliedSourceKey, setAppliedSourceKey] = useState("service_request:155");
-  const [handoffLeadId, setHandoffLeadId] = useState<string | undefined>(undefined);
-  const [handoffRequested, setHandoffRequested] = useState(false);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | undefined>(undefined);
+  const [consoleOpen, setConsoleOpen] = useState(false);
+  const [vendorForm, setVendorForm] = useState<VendorFactsForm>(EMPTY_VENDOR_FACTS_FORM);
+  const [attemptChannel, setAttemptChannel] = useState<AttemptChannel | "">("");
+  const [copied, setCopied] = useState(false);
+  const [manuallySent, setManuallySent] = useState(false);
+
   const result = trpc.admin.vendorCastingSprint.mission.useQuery({ sourceKey: appliedSourceKey });
   const handoff = trpc.admin.vendorCastingSprint.bootstrapHandoff.useQuery(
-    { sourceKey: appliedSourceKey, leadId: handoffLeadId },
-    { enabled: handoffRequested },
+    { sourceKey: appliedSourceKey, leadId: selectedLeadId },
+    { enabled: consoleOpen },
   );
+  const generateDraft = trpc.admin.vendorCastingSprint.generateOutreachDraft.useMutation();
+
+  const attemptStatus = useMemo(
+    () => computeAttemptStatus({ draftGenerated: generateDraft.data?.allowed === true, copied, manuallySent }),
+    [generateDraft.data, copied, manuallySent],
+  );
+
+  function openConsole(leadId: string | undefined) {
+    setSelectedLeadId(leadId);
+    setConsoleOpen(true);
+    setVendorForm(EMPTY_VENDOR_FACTS_FORM);
+    setAttemptChannel("");
+    setCopied(false);
+    setManuallySent(false);
+    generateDraft.reset();
+  }
+
+  function submitDraftRequest() {
+    const leadId = handoff.data?.handoff?.leadId ?? selectedLeadId;
+    if (!leadId) return;
+    setCopied(false);
+    setManuallySent(false);
+    generateDraft.mutate({
+      sourceKey: appliedSourceKey,
+      leadId,
+      vendorFacts: {
+        businessName: vendorForm.businessName,
+        phone: vendorForm.phone || null,
+        email: vendorForm.email || null,
+        website: vendorForm.website || null,
+        sourceType: vendorForm.sourceType,
+        sourceReference: vendorForm.sourceReference,
+        serviceArea: vendorForm.serviceArea,
+        qualificationNotes: vendorForm.qualificationNotes,
+        googleRating: numberOrNull(vendorForm.googleRating),
+        googleReviewCount: numberOrNull(vendorForm.googleReviewCount),
+        yelpRating: numberOrNull(vendorForm.yelpRating),
+        yelpReviewCount: numberOrNull(vendorForm.yelpReviewCount),
+        observedAt: vendorForm.observedAt || null,
+        negativeFlags: vendorForm.negativeFlags ? vendorForm.negativeFlags.split(",").map(value => value.trim()).filter(Boolean) : null,
+        sourceConfidenceNotes: vendorForm.sourceConfidenceNotes || null,
+      },
+    });
+  }
+
+  async function copyDraftToClipboard() {
+    const draft = generateDraft.data?.allowed ? generateDraft.data.draft : null;
+    if (!draft) return;
+    await navigator.clipboard.writeText(`Subject: ${draft.subject}\n\n${draft.body}`);
+    setCopied(true);
+  }
 
   return (
     <div>
@@ -87,10 +186,10 @@ export default function VendorCastingSprintPage() {
               </p>
               <button
                 className="mt-3 flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900"
-                onClick={() => { setHandoffLeadId(undefined); setHandoffRequested(true); }}
+                onClick={() => openConsole(undefined)}
                 type="button"
               >
-                <ArrowRightCircle className="h-3.5 w-3.5" />View bootstrap handoff
+                <ArrowRightCircle className="h-3.5 w-3.5" />Open execution console
               </button>
             </section>
           ) : (
@@ -142,10 +241,10 @@ export default function VendorCastingSprintPage() {
                       ) : null}
                       <button
                         className="mt-2 text-xs font-semibold text-black/55 underline"
-                        onClick={() => { setHandoffLeadId(lead.id); setHandoffRequested(true); }}
+                        onClick={() => openConsole(lead.id)}
                         type="button"
                       >
-                        View bootstrap handoff
+                        Open execution console
                       </button>
                     </div>
                   ))}
@@ -154,30 +253,24 @@ export default function VendorCastingSprintPage() {
             ))}
           </div>
 
-          {handoffRequested ? (
+          {consoleOpen ? (
             <section className="rounded-xl border border-black/15 bg-black/[0.02] p-4">
-              <h2 className="text-sm font-bold">Casting sprint &rarr; proposal bootstrap handoff</h2>
+              <h2 className="text-sm font-bold">Casting sprint execution console</h2>
               {handoff.isLoading ? (
-                <div className="mt-3 flex items-center gap-2 text-sm text-black/50"><Loader2 className="h-4 w-4 animate-spin" />Loading handoff&hellip;</div>
+                <div className="mt-3 flex items-center gap-2 text-sm text-black/50"><Loader2 className="h-4 w-4 animate-spin" />Loading lead&hellip;</div>
               ) : !handoff.data?.allowed || !handoff.data.handoff ? (
                 <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                  {(handoff.data?.blockedReasons ?? []).map(label).join(" · ") || "Handoff not available."}
+                  {(handoff.data?.blockedReasons ?? []).map(label).join(" · ") || "No lead available."}
                 </div>
               ) : (
-                <div className="mt-3 space-y-3 text-sm">
+                <div className="mt-3 space-y-4 text-sm">
                   <ul className="list-disc space-y-1 pl-5 text-emerald-900/90">
                     {handoff.data.handoff.truthDisclaimers.map(disclaimer => <li key={disclaimer}>{disclaimer}</li>)}
                   </ul>
                   <p><span className="font-semibold">Source job card:</span> {handoff.data.handoff.sourceJobCardKey}</p>
-                  <p><span className="font-semibold">Lead:</span> {handoff.data.handoff.businessNameForDisplayOnly} ({LANE_LABELS[handoff.data.handoff.lane]})</p>
+                  <p><span className="font-semibold">Selected lead / lane:</span> {handoff.data.handoff.businessNameForDisplayOnly} ({LANE_LABELS[handoff.data.handoff.lane]})</p>
                   <p><span className="font-semibold">Why eligible:</span> {handoff.data.handoff.eligibilityReason}</p>
-                  <p><span className="font-semibold">Contact ladder:</span> {handoff.data.handoff.contactLadderSummary}</p>
-                  <div>
-                    <p className="font-semibold">Missing real-world facts before proposal:</p>
-                    <ul className="mt-1 list-disc space-y-1 pl-5 text-black/65">
-                      {handoff.data.handoff.missingRealWorldFacts.map(fact => <li key={fact}>{label(fact)}</li>)}
-                    </ul>
-                  </div>
+                  <p><span className="font-semibold">Current contact ladder:</span> {handoff.data.handoff.contactLadderSummary}</p>
                   <div>
                     <p className="font-semibold">Blocked truth claims:</p>
                     <ul className="mt-1 list-disc space-y-1 pl-5 text-red-700/80">
@@ -185,6 +278,87 @@ export default function VendorCastingSprintPage() {
                     </ul>
                   </div>
                   <p><span className="font-semibold">Recommended next admin action:</span> {handoff.data.handoff.recommendedNextAdminAction}</p>
+                  <div>
+                    <p className="font-semibold">Missing real vendor facts before a draft can be generated:</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-black/65">
+                      {handoff.data.handoff.missingRealWorldFacts.map(fact => <li key={fact}>{label(fact)}</li>)}
+                    </ul>
+                  </div>
+
+                  <div className="rounded-lg border border-black/10 bg-white p-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-black/45">
+                      Enter real vendor facts (never copy the demo lead name above)
+                    </p>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      <input className="rounded-lg border border-black/15 px-2 py-1.5 text-sm" placeholder="Business name *" value={vendorForm.businessName} onChange={event => setVendorForm({ ...vendorForm, businessName: event.target.value })} />
+                      <input className="rounded-lg border border-black/15 px-2 py-1.5 text-sm" placeholder="Phone" value={vendorForm.phone} onChange={event => setVendorForm({ ...vendorForm, phone: event.target.value })} />
+                      <input className="rounded-lg border border-black/15 px-2 py-1.5 text-sm" placeholder="Email" value={vendorForm.email} onChange={event => setVendorForm({ ...vendorForm, email: event.target.value })} />
+                      <input className="rounded-lg border border-black/15 px-2 py-1.5 text-sm" placeholder="Website" value={vendorForm.website} onChange={event => setVendorForm({ ...vendorForm, website: event.target.value })} />
+                      <select className="rounded-lg border border-black/15 px-2 py-1.5 text-sm" value={vendorForm.sourceType} onChange={event => setVendorForm({ ...vendorForm, sourceType: event.target.value as VendorFactsForm["sourceType"] })}>
+                        {SOURCE_TYPE_OPTIONS.map(option => <option key={option} value={option}>{label(option)}</option>)}
+                      </select>
+                      <input className="rounded-lg border border-black/15 px-2 py-1.5 text-sm" placeholder="Source reference *" value={vendorForm.sourceReference} onChange={event => setVendorForm({ ...vendorForm, sourceReference: event.target.value })} />
+                      <input className="rounded-lg border border-black/15 px-2 py-1.5 text-sm" placeholder="Service area *" value={vendorForm.serviceArea} onChange={event => setVendorForm({ ...vendorForm, serviceArea: event.target.value })} />
+                      <input className="rounded-lg border border-black/15 px-2 py-1.5 text-sm" placeholder="Observed at (date, if known)" value={vendorForm.observedAt} onChange={event => setVendorForm({ ...vendorForm, observedAt: event.target.value })} />
+                      <input className="rounded-lg border border-black/15 px-2 py-1.5 text-sm" placeholder="Google rating (if known)" value={vendorForm.googleRating} onChange={event => setVendorForm({ ...vendorForm, googleRating: event.target.value })} />
+                      <input className="rounded-lg border border-black/15 px-2 py-1.5 text-sm" placeholder="Google review count (if known)" value={vendorForm.googleReviewCount} onChange={event => setVendorForm({ ...vendorForm, googleReviewCount: event.target.value })} />
+                      <input className="rounded-lg border border-black/15 px-2 py-1.5 text-sm" placeholder="Yelp rating (if known)" value={vendorForm.yelpRating} onChange={event => setVendorForm({ ...vendorForm, yelpRating: event.target.value })} />
+                      <input className="rounded-lg border border-black/15 px-2 py-1.5 text-sm" placeholder="Yelp review count (if known)" value={vendorForm.yelpReviewCount} onChange={event => setVendorForm({ ...vendorForm, yelpReviewCount: event.target.value })} />
+                      <input className="rounded-lg border border-black/15 px-2 py-1.5 text-sm sm:col-span-2" placeholder="Negative flags, comma separated (if any)" value={vendorForm.negativeFlags} onChange={event => setVendorForm({ ...vendorForm, negativeFlags: event.target.value })} />
+                      <textarea className="rounded-lg border border-black/15 px-2 py-1.5 text-sm sm:col-span-2" placeholder="Qualification notes *" value={vendorForm.qualificationNotes} onChange={event => setVendorForm({ ...vendorForm, qualificationNotes: event.target.value })} />
+                      <textarea className="rounded-lg border border-black/15 px-2 py-1.5 text-sm sm:col-span-2" placeholder="Source confidence notes (if any)" value={vendorForm.sourceConfidenceNotes} onChange={event => setVendorForm({ ...vendorForm, sourceConfidenceNotes: event.target.value })} />
+                    </div>
+                    <button
+                      className="mt-3 rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                      disabled={generateDraft.isPending}
+                      onClick={submitDraftRequest}
+                      type="button"
+                    >
+                      Generate outreach draft
+                    </button>
+
+                    {generateDraft.data && !generateDraft.data.allowed ? (
+                      <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                        {generateDraft.data.blockedReasons.map(label).join(" · ")}
+                      </div>
+                    ) : null}
+
+                    {generateDraft.data?.allowed ? (
+                      <div className="mt-4 space-y-3">
+                        <div className="rounded-lg border border-black/10 bg-black/[0.02] p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.1em] text-black/45">Draft (no-send, admin-only)</p>
+                          <p className="mt-1 text-sm font-semibold">{generateDraft.data.draft.subject}</p>
+                          <pre className="mt-1 whitespace-pre-wrap text-sm text-black/75">{generateDraft.data.draft.body}</pre>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button className="flex items-center gap-1.5 rounded-lg border border-black/15 px-3 py-1.5 text-xs font-semibold" onClick={copyDraftToClipboard} type="button">
+                            <Copy className="h-3.5 w-3.5" />Copy draft
+                          </button>
+                          <select className="rounded-lg border border-black/15 px-2 py-1.5 text-xs" value={attemptChannel} onChange={event => setAttemptChannel(event.target.value as AttemptChannel)}>
+                            <option value="">Channel used&hellip;</option>
+                            {ATTEMPT_CHANNELS.map(channel => <option key={channel} value={channel}>{label(channel)}</option>)}
+                          </select>
+                          <button
+                            className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 disabled:opacity-40"
+                            disabled={!attemptChannel}
+                            onClick={() => setManuallySent(true)}
+                            type="button"
+                          >
+                            I sent this manually
+                          </button>
+                          <span className="rounded-full bg-black/[0.06] px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-black/55">
+                            Status: {label(attemptStatus)} (non-durable, this session only)
+                          </span>
+                        </div>
+                        {manuallySent ? (
+                          <p className="text-xs text-black/55">
+                            Logged as a manual/mock attempt only. No outreach was sent by HELD, no vendor has responded, and no
+                            provider has accepted. The lead is now treated as response-pending.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               )}
             </section>
