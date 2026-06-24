@@ -10,6 +10,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { requestJobCardRouter } from "./procurement/requestJobCardRouter";
 import { vendorProposalReviewRouter } from "./procurement/vendorProposalReviewRouter";
 import { firstRealProposalBootstrapRouter } from "./procurement/firstRealProposalBootstrapRouter";
+import { vendorCastingSprintRouter } from "./procurement/vendorCastingSprintRouter";
 import { postConsentActionPlanRouter } from "./procurement/postConsentActionPlanRouter";
 import {
   publicProcedure,
@@ -734,6 +735,7 @@ export const appRouter = router({
     requestJobCards: requestJobCardRouter,
     proposalReview: vendorProposalReviewRouter,
     firstRealProposalBootstrap: firstRealProposalBootstrapRouter,
+    vendorCastingSprint: vendorCastingSprintRouter,
     postConsentActionPlan: postConsentActionPlanRouter,
     opsTasks: router({
       list: adminProcedure

@@ -21,6 +21,7 @@ import { ResidentFollowupAlert } from "@/components/admin/ResidentFollowupAlert"
 import RequestJobCardsPage from "./RequestJobCardsPage";
 import ProposalReviewPage from "./ProposalReviewPage";
 import FirstRealProposalBootstrapPage from "./FirstRealProposalBootstrapPage";
+import VendorCastingSprintPage from "./VendorCastingSprintPage";
 import PostConsentActionPlanPage from "./PostConsentActionPlanPage";
 
 const LIVE_INTERNAL_TABS = new Set<AdminWorkspaceTab>([
@@ -49,6 +50,7 @@ const COUNTER_PATHS = new Set([
   "/job-cards",
   "/proposal-review",
   "/proposal-bootstrap",
+  "/casting-sprint",
   "/post-consent-plans",
   "/intake",
   "/processing",
@@ -70,6 +72,7 @@ const COUNTER_TABS: Array<{ label: string; path: string }> = [
   { label: "Job cards", path: "/job-cards" },
   { label: "Proposal review", path: "/proposal-review" },
   { label: "Proposal bootstrap", path: "/proposal-bootstrap" },
+  { label: "Casting sprint", path: "/casting-sprint" },
   { label: "Post-consent plans", path: "/post-consent-plans" },
 ];
 const PEOPLE_TABS: Array<{ label: string; path: string }> = [
@@ -397,6 +400,10 @@ export default function AdminHostApp() {
         ) : path === "/proposal-bootstrap" ? (
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full">
             <FirstRealProposalBootstrapPage />
+          </div>
+        ) : path === "/casting-sprint" ? (
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full">
+            <VendorCastingSprintPage />
           </div>
         ) : path === "/post-consent-plans" ? (
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full">
