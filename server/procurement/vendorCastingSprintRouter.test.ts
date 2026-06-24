@@ -264,4 +264,86 @@ describe("vendor casting sprint admin router", () => {
       expect(serialized).not.toMatch(/rating/i);
     });
   });
+
+  describe("runContactAttempt", () => {
+    const realVendorFacts = {
+      businessName: "Westside Mobile Pet Spa",
+      phone: "555-010-2002",
+      sourceType: "manual_operator_list" as const,
+      sourceReference: "Adam called and confirmed via Google Maps listing",
+      serviceArea: "cpe-south",
+      qualificationNotes: "Verified by Adam directly; services boxers, mobile van, available weekdays.",
+    };
+
+    it("rejects unauthenticated and non-admin callers", async () => {
+      await expect(vendorCastingSprintRouter.createCaller(context(null)).runContactAttempt({
+        sourceKey: "service_request:155", leadId: "x", channel: "email", vendorFacts: realVendorFacts,
+      })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+
+    it("runs a no-op attempt and never invokes a live outbound provider", async () => {
+      vi.mocked(listRequestJobCardSourceRecords).mockResolvedValue(readyServiceRequestSource);
+      const mission = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).mission({ sourceKey: "service_request:155" });
+      const winnerLeadId = mission.mission!.winner!.leadId;
+      const result = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).runContactAttempt({
+        sourceKey: "service_request:155", leadId: winnerLeadId, channel: "email", vendorFacts: realVendorFacts,
+      });
+      expect(result.allowed).toBe(true);
+      if (!result.allowed) throw new Error("expected allowed");
+      expect(result.providerResult.liveProviderInvoked).toBe(false);
+      expect(["sent_noop", "queued_noop"]).toContain(result.providerResult.status);
+      expect(result.attempt.status).toBe("response_pending");
+      expect(result.attempt.gatePassed).toBe(true);
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toMatch(/"providerAccepted":true/);
+      expect(serialized).not.toMatch(/"bookingConfirmed":true/);
+      expect(serialized).not.toMatch(/"paymentAuthorized":true/);
+      expect(serialized).not.toMatch(/"dispatched":true/);
+    });
+
+    it("blocks the attempt when required vendor facts are missing", async () => {
+      vi.mocked(listRequestJobCardSourceRecords).mockResolvedValue(readyServiceRequestSource);
+      const mission = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).mission({ sourceKey: "service_request:155" });
+      const winnerLeadId = mission.mission!.winner!.leadId;
+      const result = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).runContactAttempt({
+        sourceKey: "service_request:155", leadId: winnerLeadId, channel: "email",
+        vendorFacts: { ...realVendorFacts, businessName: "", phone: null },
+      });
+      expect(result.allowed).toBe(false);
+      expect(result.blockedReasons).toContain("business_name_required");
+    });
+  });
+
+  describe("simulateVendorReply", () => {
+    it("rejects unauthenticated and non-admin callers", async () => {
+      await expect(vendorCastingSprintRouter.createCaller(context(null)).simulateVendorReply({
+        sourceKey: "service_request:155", attemptId: "attempt_1", channel: "email", rawReplyText: "We're available, $110.",
+      })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+
+    it("accepts a simulated reply, interprets it, and builds a response terms packet without booking/payment/dispatch", async () => {
+      const result = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).simulateVendorReply({
+        sourceKey: "service_request:155", attemptId: "attempt_1", candidateId: "candidate_1", channel: "email",
+        rawReplyText: "We have an opening that day and can do it, $110.",
+      });
+      expect(result.allowed).toBe(true);
+      expect(result.packet?.inboundProvider).toBe("noop_test");
+      expect(result.interpretedReply?.classification).toBe("available");
+      expect(result.termsPacket?.inquiryOnlyNotBooking).toBe(true);
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toMatch(/"providerAccepted":true/);
+      expect(serialized).not.toMatch(/"bookingConfirmed":true/);
+      expect(serialized).not.toMatch(/"residentProposalReady":true/);
+    });
+
+    it("never fabricates a response: a forbidden-claim reply produces no terms packet", async () => {
+      const result = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).simulateVendorReply({
+        sourceKey: "service_request:155", attemptId: "attempt_1", channel: "email",
+        rawReplyText: "It is booked and accepted.",
+      });
+      expect(result.allowed).toBe(true);
+      expect(result.interpretedReply?.blocked).toBe(true);
+      expect(result.termsPacket).toBeNull();
+    });
+  });
 });

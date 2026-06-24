@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, ArrowRightCircle, Copy, Loader2, Trophy } from "lucide-react";
+import { AlertTriangle, ArrowRightCircle, Bot, Copy, Loader2, Trophy } from "lucide-react";
+import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 
 const LANE_LABELS: Record<string, string> = {
@@ -65,6 +66,10 @@ export default function VendorCastingSprintPage() {
   const [copied, setCopied] = useState(false);
   const [manuallySent, setManuallySent] = useState(false);
   const [confirmCreateOpen, setConfirmCreateOpen] = useState(false);
+  const [heldChannel, setHeldChannel] = useState<AttemptChannel | "">("");
+  const [replyText, setReplyText] = useState("");
+  const [replyChannel, setReplyChannel] = useState<AttemptChannel | "">("");
+  const [replyFromAddress, setReplyFromAddress] = useState("");
 
   const result = trpc.admin.vendorCastingSprint.mission.useQuery({ sourceKey: appliedSourceKey });
   const handoff = trpc.admin.vendorCastingSprint.bootstrapHandoff.useQuery(
@@ -74,6 +79,8 @@ export default function VendorCastingSprintPage() {
   const generateDraft = trpc.admin.vendorCastingSprint.generateOutreachDraft.useMutation();
   const candidatePayload = trpc.admin.vendorCastingSprint.candidateCreationPayload.useMutation();
   const createCandidate = trpc.admin.firstRealProposalBootstrap.createCandidate.useMutation();
+  const runContactAttempt = trpc.admin.vendorCastingSprint.runContactAttempt.useMutation();
+  const simulateReply = trpc.admin.vendorCastingSprint.simulateVendorReply.useMutation();
 
   const attemptStatus = useMemo(
     () => computeAttemptStatus({ draftGenerated: generateDraft.data?.allowed === true, copied, manuallySent }),
@@ -88,9 +95,15 @@ export default function VendorCastingSprintPage() {
     setCopied(false);
     setManuallySent(false);
     setConfirmCreateOpen(false);
+    setHeldChannel("");
+    setReplyText("");
+    setReplyChannel("");
+    setReplyFromAddress("");
     generateDraft.reset();
     candidatePayload.reset();
     createCandidate.reset();
+    runContactAttempt.reset();
+    simulateReply.reset();
   }
 
   function vendorFactsPayload() {
@@ -144,7 +157,35 @@ export default function VendorCastingSprintPage() {
     setConfirmCreateOpen(false);
     candidatePayload.reset();
     createCandidate.reset();
+    runContactAttempt.reset();
+    simulateReply.reset();
     generateDraft.mutate({ sourceKey: appliedSourceKey, leadId, vendorFacts: vendorFactsPayload() });
+  }
+
+  function runHeldContactAttempt() {
+    const leadId = handoff.data?.handoff?.leadId ?? selectedLeadId;
+    if (!leadId || !heldChannel) return;
+    simulateReply.reset();
+    runContactAttempt.mutate({
+      sourceKey: appliedSourceKey,
+      leadId,
+      candidateId: createCandidate.data?.candidateId ?? null,
+      channel: heldChannel,
+      vendorFacts: vendorFactsPayload(),
+    });
+  }
+
+  function ingestSimulatedReply() {
+    const attempt = runContactAttempt.data?.allowed ? runContactAttempt.data.attempt : null;
+    if (!attempt || !replyText.trim() || !replyChannel) return;
+    simulateReply.mutate({
+      sourceKey: appliedSourceKey,
+      attemptId: attempt.attemptId,
+      candidateId: attempt.candidateId,
+      channel: replyChannel,
+      rawReplyText: replyText,
+      fromAddressOrPhone: replyFromAddress || null,
+    });
   }
 
   async function copyDraftToClipboard() {
@@ -160,9 +201,10 @@ export default function VendorCastingSprintPage() {
         <div>
           <h1 className="text-xl font-semibold">Vendor Casting Sprint</h1>
           <p className="mt-1 max-w-3xl text-sm text-black/55">
-            Demand-driven casting view: three producer lanes race to qualify a vendor for one real ready
-            job card. No outreach is sent, no vendor is called, texted, emailed, or booked here &mdash;
-            every contact attempt below is mock/no-op only.
+            HELD runs the casting sprint, prepares the contact attempt, passes it through a safety gate, and
+            executes a no-op provider path while waiting on a real vendor reply &mdash; automation is the
+            product, manual copy below is fallback/test harness only. No real email, SMS, call, or form
+            submission happens in this slice.
           </p>
         </div>
         <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">
@@ -362,32 +404,6 @@ export default function VendorCastingSprintPage() {
                           <p className="mt-1 text-sm font-semibold">{generateDraft.data.draft.subject}</p>
                           <pre className="mt-1 whitespace-pre-wrap text-sm text-black/75">{generateDraft.data.draft.body}</pre>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button className="flex items-center gap-1.5 rounded-lg border border-black/15 px-3 py-1.5 text-xs font-semibold" onClick={copyDraftToClipboard} type="button">
-                            <Copy className="h-3.5 w-3.5" />Copy draft
-                          </button>
-                          <select className="rounded-lg border border-black/15 px-2 py-1.5 text-xs" value={attemptChannel} onChange={event => setAttemptChannel(event.target.value as AttemptChannel)}>
-                            <option value="">Channel used&hellip;</option>
-                            {ATTEMPT_CHANNELS.map(channel => <option key={channel} value={channel}>{label(channel)}</option>)}
-                          </select>
-                          <button
-                            className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 disabled:opacity-40"
-                            disabled={!attemptChannel}
-                            onClick={() => setManuallySent(true)}
-                            type="button"
-                          >
-                            I sent this manually
-                          </button>
-                          <span className="rounded-full bg-black/[0.06] px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-black/55">
-                            Status: {label(attemptStatus)} (non-durable, this session only)
-                          </span>
-                        </div>
-                        {manuallySent ? (
-                          <p className="text-xs text-black/55">
-                            Logged as a manual/mock attempt only. No outreach was sent by HELD, no vendor has responded, and no
-                            provider has accepted. The lead is now treated as response-pending.
-                          </p>
-                        ) : null}
 
                         <div className="rounded-lg border border-black/15 bg-white p-3">
                           <p className="text-xs font-bold uppercase tracking-[0.1em] text-black/45">Real candidate creation</p>
@@ -440,22 +456,145 @@ export default function VendorCastingSprintPage() {
                               <p><span className="font-semibold">Status:</span> sourcing candidate created, not scored, not promoted</p>
                               <p><span className="font-semibold">Source request:</span> {appliedSourceKey}</p>
                               <p><span className="font-semibold">Selected lead/lane:</span> {handoff.data.handoff.businessNameForDisplayOnly} ({LANE_LABELS[handoff.data.handoff.lane]})</p>
-                              <p className="font-semibold">Still has not happened:</p>
-                              <ul className="list-disc space-y-0.5 pl-5">
-                                <li>No outreach sent</li>
-                                <li>No vendor response</li>
-                                <li>No provider acceptance</li>
-                                <li>No booking</li>
-                                <li>No resident proposal ready</li>
-                              </ul>
-                              <p className="mt-1">
-                                <span className="font-semibold">Recommended next step:</span> manually send/call the vendor using
-                                the copied draft above; once they reply, record the real response and terms in the First Real
-                                Proposal Bootstrap tool (/proposal-bootstrap) rather than inventing a response here.
-                              </p>
                             </div>
                           )}
                         </div>
+
+                        <div className="rounded-lg border-2 border-indigo-200 bg-indigo-50/50 p-3">
+                          <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.1em] text-indigo-900">
+                            <Bot className="h-3.5 w-3.5" />HELD execution loop (automation-first)
+                          </div>
+                          <p className="mt-1 text-xs text-indigo-900/70">
+                            HELD prepares the contact attempt, passes it through a safety gate, then runs a no-op provider
+                            adapter. No real email, SMS, call, or form submission happens in this slice.
+                          </p>
+
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <select className="rounded-lg border border-black/15 px-2 py-1.5 text-xs" value={heldChannel} onChange={event => setHeldChannel(event.target.value as AttemptChannel)}>
+                              <option value="">Channel for HELD to use&hellip;</option>
+                              {ATTEMPT_CHANNELS.map(channel => <option key={channel} value={channel}>{label(channel)}</option>)}
+                            </select>
+                            <button
+                              className="rounded-lg bg-indigo-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                              disabled={!heldChannel || runContactAttempt.isPending}
+                              onClick={runHeldContactAttempt}
+                              type="button"
+                            >
+                              Run HELD contact attempt
+                            </button>
+                          </div>
+
+                          {runContactAttempt.data && !runContactAttempt.data.allowed ? (
+                            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-800">
+                              HELD blocked this attempt: {runContactAttempt.data.blockedReasons.map(label).join(" · ")}
+                            </div>
+                          ) : null}
+
+                          {runContactAttempt.data?.allowed ? (
+                            <div className="mt-3 space-y-1 rounded-lg border border-indigo-200 bg-white p-3 text-xs text-indigo-950">
+                              <p>✓ HELD prepared contact attempt ({runContactAttempt.data.attempt.attemptId})</p>
+                              <p>✓ HELD passed safety gate (founder escalation present, no forbidden claims)</p>
+                              <p>
+                                ✓ HELD executed no-op provider path ({label(runContactAttempt.data.providerResult.status)},
+                                liveProviderInvoked: false)
+                              </p>
+                              <p className="font-semibold">⏳ HELD is waiting for vendor reply (status: {label(runContactAttempt.data.attempt.status)})</p>
+                            </div>
+                          ) : null}
+
+                          {runContactAttempt.data?.allowed ? (
+                            <div className="mt-3 rounded-lg border border-black/10 bg-white p-3">
+                              <p className="text-xs font-bold uppercase tracking-[0.1em] text-black/45">
+                                Reply intake (local test/simulated webhook)
+                              </p>
+                              <p className="mt-1 text-xs text-black/55">
+                                Simulates a future inbound email/SMS/voice/form reply so the loop can be demoed without a live
+                                provider. inboundProvider stays noop_test.
+                              </p>
+                              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                <select className="rounded-lg border border-black/15 px-2 py-1.5 text-xs" value={replyChannel} onChange={event => setReplyChannel(event.target.value as AttemptChannel)}>
+                                  <option value="">Reply channel&hellip;</option>
+                                  {ATTEMPT_CHANNELS.map(channel => <option key={channel} value={channel}>{label(channel)}</option>)}
+                                </select>
+                                <input className="rounded-lg border border-black/15 px-2 py-1.5 text-xs" placeholder="From address/phone (if known)" value={replyFromAddress} onChange={event => setReplyFromAddress(event.target.value)} />
+                                <textarea className="rounded-lg border border-black/15 px-2 py-1.5 text-xs sm:col-span-2" placeholder="Raw vendor reply text" value={replyText} onChange={event => setReplyText(event.target.value)} />
+                              </div>
+                              <button
+                                className="mt-2 rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                                disabled={!replyText.trim() || !replyChannel || simulateReply.isPending}
+                                onClick={ingestSimulatedReply}
+                                type="button"
+                              >
+                                Ingest vendor reply (test)
+                              </button>
+
+                              {simulateReply.data?.interpretedReply ? (
+                                <div className="mt-3 space-y-2 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3 text-xs">
+                                  <p className="font-semibold text-indigo-950">HELD interpreted reply</p>
+                                  <p>Classification: <span className="font-semibold">{label(simulateReply.data.interpretedReply.classification)}</span></p>
+                                  <p className="text-black/60">Available does not mean accepted — availableNotAccepted is always true.</p>
+                                  {simulateReply.data.interpretedReply.extractedQuote ? (
+                                    <p>Extracted quote: ${simulateReply.data.interpretedReply.extractedQuote.amount} {simulateReply.data.interpretedReply.extractedQuote.currency}</p>
+                                  ) : null}
+                                  {simulateReply.data.interpretedReply.extractedAvailabilityWindow ? (
+                                    <p>Extracted window: {simulateReply.data.interpretedReply.extractedAvailabilityWindow}</p>
+                                  ) : null}
+                                  {simulateReply.data.interpretedReply.upfrontPaymentRequired ? <p>Upfront payment mentioned by vendor.</p> : null}
+
+                                  {simulateReply.data.termsPacket ? (
+                                    <div className="mt-2 rounded-lg border border-emerald-200 bg-white p-2">
+                                      <p className="font-semibold text-emerald-950">Response terms packet (review only)</p>
+                                      <p>Availability status: {label(simulateReply.data.termsPacket.availabilityStatus)} &middot; Rate status: {label(simulateReply.data.termsPacket.rateStatus)}</p>
+                                      {simulateReply.data.termsPacket.quotedAmount != null ? (
+                                        <p>Quoted: ${simulateReply.data.termsPacket.quotedAmount} {simulateReply.data.termsPacket.quotedCurrency}</p>
+                                      ) : null}
+                                      <p className="text-black/60">inquiryOnlyNotBooking: true &middot; residentProposalReady: false</p>
+                                      <p className="mt-1 font-semibold">Admin review response terms before proposal.</p>
+                                      <p className="mt-1">{simulateReply.data.termsPacket.recommendedNextStep}</p>
+                                      <Link className="mt-2 inline-block rounded-lg border border-black/15 px-2 py-1 text-xs font-semibold" href="/proposal-bootstrap">
+                                        Open Proposal Bootstrap
+                                      </Link>
+                                    </div>
+                                  ) : (
+                                    <p className="text-red-700">No response terms packet: the reply contained a blocked/forbidden claim and was not treated as truth.</p>
+                                  )}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <details className="rounded-lg border border-black/10 bg-black/[0.02] p-3">
+                          <summary className="cursor-pointer text-xs font-bold uppercase tracking-[0.1em] text-black/45">
+                            Manual fallback / test harness (not the product path)
+                          </summary>
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <button className="flex items-center gap-1.5 rounded-lg border border-black/15 px-3 py-1.5 text-xs font-semibold" onClick={copyDraftToClipboard} type="button">
+                              <Copy className="h-3.5 w-3.5" />Copy draft
+                            </button>
+                            <select className="rounded-lg border border-black/15 px-2 py-1.5 text-xs" value={attemptChannel} onChange={event => setAttemptChannel(event.target.value as AttemptChannel)}>
+                              <option value="">Channel used&hellip;</option>
+                              {ATTEMPT_CHANNELS.map(channel => <option key={channel} value={channel}>{label(channel)}</option>)}
+                            </select>
+                            <button
+                              className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 disabled:opacity-40"
+                              disabled={!attemptChannel}
+                              onClick={() => setManuallySent(true)}
+                              type="button"
+                            >
+                              I sent this manually
+                            </button>
+                            <span className="rounded-full bg-black/[0.06] px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-black/55">
+                              Status: {label(attemptStatus)} (non-durable, this session only)
+                            </span>
+                          </div>
+                          {manuallySent ? (
+                            <p className="mt-2 text-xs text-black/55">
+                              Logged as a manual/mock attempt only. No outreach was sent by HELD, no vendor has responded, and no
+                              provider has accepted. The lead is now treated as response-pending.
+                            </p>
+                          ) : null}
+                        </details>
                       </div>
                     ) : null}
                   </div>

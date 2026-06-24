@@ -12,6 +12,20 @@ import {
 } from "./castingSprintExecutionPolicy";
 import { buildRequestJobCardPage, REQUEST_JOB_CARD_SOURCE_TYPES, type RequestJobCardSourceType } from "./requestJobCardReadModel";
 import type { RequestJobCard } from "./requestJobCardPolicy";
+import {
+  buildContactAttempt,
+  buildResponseTermsPacket,
+  buildSimulatedReplyIntakePacket,
+  CONTACT_CHANNELS,
+  interpretVendorReply,
+  runNoopContactAttempt,
+  validateReplyIntakePacket,
+  type ContactAttempt,
+  type InterpretedReply,
+  type NoopProviderResult,
+  type ResponseTermsPacket,
+  type VendorReplyIntakePacket,
+} from "./vendorContactAttemptPolicy";
 import { buildCastingMission, type CastingMission } from "./vendorCastingSprintPolicy";
 
 const SOURCE_KEY_PATTERN = /^(service_request|resident_coordinated_request|resident_agent_plan):(.+)$/;
@@ -158,5 +172,101 @@ export const vendorCastingSprintRouter = router({
         return { allowed: false, blockedReasons: decision.reasons, payload: null };
       }
       return { allowed: true, blockedReasons: [], payload: decision.payload };
+    }),
+
+  /**
+   * Builds a real-facts draft, then runs it through the no-op send gate and
+   * a no-op provider adapter only. No adapter here makes a real network
+   * call or invokes a live provider; liveProviderInvoked is always false.
+   */
+  runContactAttempt: adminProcedure
+    .input(z.object({
+      sourceKey: z.string().min(3).max(191),
+      leadId: z.string().min(1).max(191),
+      candidateId: z.string().min(1).max(191).nullable().optional(),
+      channel: z.enum(CONTACT_CHANNELS),
+      vendorFacts: vendorFactsInput,
+    }))
+    .mutation(async ({ ctx, input }): Promise<
+      | { allowed: true; blockedReasons: []; attempt: ContactAttempt; providerResult: NoopProviderResult }
+      | { allowed: false; blockedReasons: string[]; attempt: ContactAttempt | null; providerResult: null }
+    > => {
+      const result = await resolveMission({ tenantId: ctx.tenantId, sourceKey: input.sourceKey });
+      if (!result.found || !result.mission || !result.jobCard) {
+        return { allowed: false, blockedReasons: result.blockedReasons.length ? result.blockedReasons : ["source_job_card_not_found"], attempt: null, providerResult: null };
+      }
+      const lead = result.mission.lanes.flatMap(lane => lane.leads).find(item => item.id === input.leadId);
+      if (!lead) {
+        return { allowed: false, blockedReasons: ["lead_not_found_in_mission"], attempt: null, providerResult: null };
+      }
+      const validation = validateRealVendorFacts(input.vendorFacts, lead);
+      if (!validation.valid) {
+        return { allowed: false, blockedReasons: validation.reasons, attempt: null, providerResult: null };
+      }
+      const draft = buildCastingSprintOutreachDraft({ jobCard: result.jobCard, lead, vendorFacts: input.vendorFacts });
+      const recipientTarget = input.vendorFacts.phone || input.vendorFacts.email || input.vendorFacts.website || "";
+      const builtAttempt = buildContactAttempt({
+        sourceKey: input.sourceKey,
+        candidateId: input.candidateId ?? null,
+        leadId: lead.id,
+        lane: lead.lane,
+        channel: input.channel,
+        draft,
+        recipientTarget,
+      });
+      const { attempt: ranAttempt, providerResult, blockedReasons } = runNoopContactAttempt(builtAttempt);
+      if (blockedReasons.length > 0 || !providerResult) {
+        return { allowed: false, blockedReasons, attempt: ranAttempt, providerResult: null };
+      }
+      return { allowed: true, blockedReasons: [], attempt: ranAttempt, providerResult };
+    }),
+
+  /**
+   * Local/admin test intake only: simulates a future inbound webhook/email/
+   * SMS/voice/form reply instead of requiring Adam to manually report what a
+   * vendor said. inboundProvider is always noop_test. Performs no real
+   * inbound channel listening and no production write.
+   */
+  simulateVendorReply: adminProcedure
+    .input(z.object({
+      sourceKey: z.string().min(3).max(191),
+      attemptId: z.string().min(1).max(191),
+      candidateId: z.string().min(1).max(191).nullable().optional(),
+      channel: z.enum(CONTACT_CHANNELS),
+      rawReplyText: z.string().min(3).max(5000),
+      fromAddressOrPhone: z.string().max(191).nullable().optional(),
+    }))
+    .mutation(({ input }): {
+      allowed: boolean;
+      blockedReasons: string[];
+      packet: VendorReplyIntakePacket | null;
+      interpretedReply: InterpretedReply | null;
+      termsPacket: ResponseTermsPacket | null;
+    } => {
+      const packet = buildSimulatedReplyIntakePacket({
+        attemptId: input.attemptId,
+        candidateId: input.candidateId ?? null,
+        sourceKey: input.sourceKey,
+        channel: input.channel,
+        rawReplyText: input.rawReplyText,
+        fromAddressOrPhone: input.fromAddressOrPhone ?? null,
+      });
+      const validation = validateReplyIntakePacket(packet);
+      if (!validation.valid) {
+        return { allowed: false, blockedReasons: validation.reasons, packet: null, interpretedReply: null, termsPacket: null };
+      }
+      const interpretedReply = interpretVendorReply({ packet });
+      const termsResult = buildResponseTermsPacket({
+        attemptId: input.attemptId,
+        candidateId: input.candidateId ?? null,
+        rawReplyText: input.rawReplyText,
+      });
+      return {
+        allowed: true,
+        blockedReasons: [],
+        packet,
+        interpretedReply,
+        termsPacket: termsResult.allowed ? termsResult.packet : null,
+      };
     }),
 });
