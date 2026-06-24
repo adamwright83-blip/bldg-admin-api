@@ -190,4 +190,78 @@ describe("vendor casting sprint admin router", () => {
       expect(serialized).not.toMatch(/"dispatched":true/);
     });
   });
+
+  describe("candidateCreationPayload", () => {
+    const realVendorFacts = {
+      businessName: "Westside Mobile Pet Spa",
+      phone: "555-010-2002",
+      sourceType: "manual_operator_list" as const,
+      sourceReference: "Adam called and confirmed via Google Maps listing",
+      serviceArea: "cpe-south",
+      qualificationNotes: "Verified by Adam directly; services boxers, mobile van, available weekdays.",
+    };
+
+    it("rejects unauthenticated and non-admin callers", async () => {
+      await expect(vendorCastingSprintRouter.createCaller(context(null)).candidateCreationPayload({
+        sourceKey: "service_request:155", leadId: "x", vendorFacts: realVendorFacts,
+      })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+
+    it("requires businessName", async () => {
+      vi.mocked(listRequestJobCardSourceRecords).mockResolvedValue(readyServiceRequestSource);
+      const mission = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).mission({ sourceKey: "service_request:155" });
+      const winnerLeadId = mission.mission!.winner!.leadId;
+      const result = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).candidateCreationPayload({
+        sourceKey: "service_request:155", leadId: winnerLeadId, vendorFacts: { ...realVendorFacts, businessName: "" },
+      });
+      expect(result.allowed).toBe(false);
+      expect(result.payload).toBeNull();
+      expect(result.blockedReasons).toContain("business_name_required");
+    });
+
+    it("requires at least one contact method", async () => {
+      vi.mocked(listRequestJobCardSourceRecords).mockResolvedValue(readyServiceRequestSource);
+      const mission = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).mission({ sourceKey: "service_request:155" });
+      const winnerLeadId = mission.mission!.winner!.leadId;
+      const result = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).candidateCreationPayload({
+        sourceKey: "service_request:155", leadId: winnerLeadId, vendorFacts: { ...realVendorFacts, phone: null },
+      });
+      expect(result.allowed).toBe(false);
+      expect(result.blockedReasons).toContain("at_least_one_contact_method_required");
+    });
+
+    it("blocks demo-only lead data from being treated as real evidence", async () => {
+      vi.mocked(listRequestJobCardSourceRecords).mockResolvedValue(readyServiceRequestSource);
+      const mission = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).mission({ sourceKey: "service_request:155" });
+      const winner = mission.mission!.winner!;
+      const result = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).candidateCreationPayload({
+        sourceKey: "service_request:155", leadId: winner.leadId, vendorFacts: { ...realVendorFacts, businessName: winner.businessName },
+      });
+      expect(result.allowed).toBe(false);
+      expect(result.blockedReasons).toContain("demo_lead_business_name_reused_as_real");
+    });
+
+    it("builds a payload compatible with firstRealProposalBootstrap.createCandidate without writing anything itself", async () => {
+      vi.mocked(listRequestJobCardSourceRecords).mockResolvedValue(readyServiceRequestSource);
+      const mission = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).mission({ sourceKey: "service_request:155" });
+      const winnerLeadId = mission.mission!.winner!.leadId;
+      const result = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).candidateCreationPayload({
+        sourceKey: "service_request:155", leadId: winnerLeadId, vendorFacts: realVendorFacts,
+      });
+      expect(result.allowed).toBe(true);
+      expect(result.payload).toMatchObject({
+        tenantId: "default",
+        sourceType: "manual_operator_list",
+        category: "dog_grooming",
+        businessName: "Westside Mobile Pet Spa",
+        phone: "555-010-2002",
+        serviceArea: "cpe-south",
+      });
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toMatch(/"booked":true/);
+      expect(serialized).not.toMatch(/"accepted":true/);
+      expect(serialized).not.toMatch(/"dispatched":true/);
+      expect(serialized).not.toMatch(/rating/i);
+    });
+  });
 });

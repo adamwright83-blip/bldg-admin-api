@@ -4,6 +4,7 @@ import { buildCastingMission } from "./vendorCastingSprintPolicy";
 import {
   ALLOWED_TRUTH_LINES,
   buildCastingSprintOutreachDraft,
+  buildRealCandidateCreationPayload,
   canLogManualAttempt,
   computeDraftAttemptStatus,
   detectDemoFactsReusedAsReal,
@@ -141,5 +142,64 @@ describe("casting sprint execution policy: attempt status and manual logging", (
     expect(canLogManualAttempt({ draftGenerated: false, channel: null })).toMatchObject({ allowed: false });
     expect(canLogManualAttempt({ draftGenerated: true, channel: null })).toMatchObject({ allowed: false, reasons: ["contact_channel_required"] });
     expect(canLogManualAttempt({ draftGenerated: true, channel: "call" })).toMatchObject({ allowed: true, reasons: [] });
+  });
+});
+
+describe("casting sprint execution policy: real candidate creation payload", () => {
+  it("requires businessName before building a candidate payload", () => {
+    const result = buildRealCandidateCreationPayload({
+      jobCard: dogGroomingJobCard(), lead: winnerLead(), vendorFacts: realFacts({ businessName: "" }),
+    });
+    expect(result.allowed).toBe(false);
+    if (result.allowed) throw new Error("expected blocked");
+    expect(result.reasons).toContain("business_name_required");
+    expect(result.payload).toBeNull();
+  });
+
+  it("requires at least one contact method before building a candidate payload", () => {
+    const result = buildRealCandidateCreationPayload({
+      jobCard: dogGroomingJobCard(), lead: winnerLead(), vendorFacts: realFacts({ phone: null, email: null, website: null }),
+    });
+    expect(result.allowed).toBe(false);
+    if (result.allowed) throw new Error("expected blocked");
+    expect(result.reasons).toContain("at_least_one_contact_method_required");
+  });
+
+  it("blocks demo-only lead data from being treated as real evidence", () => {
+    const lead = winnerLead();
+    const result = buildRealCandidateCreationPayload({
+      jobCard: dogGroomingJobCard(), lead, vendorFacts: realFacts({ businessName: lead.businessName }),
+    });
+    expect(result.allowed).toBe(false);
+    if (result.allowed) throw new Error("expected blocked");
+    expect(result.reasons).toContain("demo_lead_business_name_reused_as_real");
+  });
+
+  it("builds a payload compatible with firstRealProposalBootstrap.createCandidate", () => {
+    const jobCard = dogGroomingJobCard();
+    const result = buildRealCandidateCreationPayload({ jobCard, lead: winnerLead(), vendorFacts: realFacts() });
+    expect(result.allowed).toBe(true);
+    if (!result.allowed) throw new Error("expected allowed");
+    expect(result.payload).toMatchObject({
+      tenantId: "default",
+      sourceType: "manual_operator_list",
+      sourceReference: realFacts().sourceReference,
+      category: jobCard.category,
+      businessName: "Westside Mobile Pet Spa",
+      phone: "555-010-2002",
+      serviceArea: "cpe-south",
+    });
+    expect(result.payload!.qualificationNotes.length).toBeGreaterThanOrEqual(10);
+    expect(result.payload!.email).toBeUndefined();
+    expect(result.payload!.website).toBeUndefined();
+  });
+
+  it("never includes fabricated rating fields and never claims a vendor response, acceptance, booking, payment, or dispatch", () => {
+    const result = buildRealCandidateCreationPayload({ jobCard: dogGroomingJobCard(), lead: winnerLead(), vendorFacts: realFacts() });
+    expect(result.allowed).toBe(true);
+    if (!result.allowed) throw new Error("expected allowed");
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).not.toMatch(/rating/i);
+    expect(serialized).not.toMatch(/booked|accepted|paid|dispatched|responded/i);
   });
 });

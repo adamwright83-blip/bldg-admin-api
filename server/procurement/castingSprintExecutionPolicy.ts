@@ -192,3 +192,62 @@ export function canLogManualAttempt(state: Pick<DraftAttemptState, "draftGenerat
   if (!state.channel) reasons.push("contact_channel_required");
   return { allowed: reasons.length === 0, reasons };
 }
+
+/**
+ * Shape matches firstRealProposalBootstrapRouter's candidateInput exactly
+ * (tenantId/sourceType/sourceReference/category/businessName/contact/
+ * serviceArea/qualificationNotes) so this payload can be passed straight
+ * into the existing createCandidate mutation without remapping.
+ */
+export type CandidateCreationPayload = {
+  tenantId: string;
+  buildingSlug: string | null;
+  sourceType: VendorSourceType;
+  sourceReference: string;
+  category: string;
+  businessName: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  serviceArea: string;
+  qualificationNotes: string;
+};
+
+export type CandidateCreationDecision =
+  | { allowed: true; reasons: []; payload: CandidateCreationPayload }
+  | { allowed: false; reasons: string[]; payload: null };
+
+/**
+ * Builds the createCandidate payload from real, admin-entered vendor facts.
+ * Re-runs the same demo-evidence and required-field validation generateOutreachDraft
+ * uses, so this can never be called with demo lead data or missing facts even
+ * if the UI's draft step is bypassed. Performs no persistence itself.
+ */
+export function buildRealCandidateCreationPayload(input: {
+  jobCard: RequestJobCard;
+  lead: CastingLead;
+  vendorFacts: RealVendorFacts;
+  tenantId?: string;
+}): CandidateCreationDecision {
+  const validation = validateRealVendorFacts(input.vendorFacts, input.lead);
+  if (!validation.valid) {
+    return { allowed: false, reasons: validation.reasons, payload: null };
+  }
+  return {
+    allowed: true,
+    reasons: [],
+    payload: {
+      tenantId: input.tenantId ?? "default",
+      buildingSlug: input.jobCard.residentContext.buildingSlug,
+      sourceType: input.vendorFacts.sourceType,
+      sourceReference: input.vendorFacts.sourceReference,
+      category: input.jobCard.category,
+      businessName: input.vendorFacts.businessName,
+      phone: input.vendorFacts.phone?.trim() || undefined,
+      email: input.vendorFacts.email?.trim() || undefined,
+      website: input.vendorFacts.website?.trim() || undefined,
+      serviceArea: input.vendorFacts.serviceArea,
+      qualificationNotes: input.vendorFacts.qualificationNotes,
+    },
+  };
+}

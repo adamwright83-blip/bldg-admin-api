@@ -64,6 +64,7 @@ export default function VendorCastingSprintPage() {
   const [attemptChannel, setAttemptChannel] = useState<AttemptChannel | "">("");
   const [copied, setCopied] = useState(false);
   const [manuallySent, setManuallySent] = useState(false);
+  const [confirmCreateOpen, setConfirmCreateOpen] = useState(false);
 
   const result = trpc.admin.vendorCastingSprint.mission.useQuery({ sourceKey: appliedSourceKey });
   const handoff = trpc.admin.vendorCastingSprint.bootstrapHandoff.useQuery(
@@ -71,6 +72,8 @@ export default function VendorCastingSprintPage() {
     { enabled: consoleOpen },
   );
   const generateDraft = trpc.admin.vendorCastingSprint.generateOutreachDraft.useMutation();
+  const candidatePayload = trpc.admin.vendorCastingSprint.candidateCreationPayload.useMutation();
+  const createCandidate = trpc.admin.firstRealProposalBootstrap.createCandidate.useMutation();
 
   const attemptStatus = useMemo(
     () => computeAttemptStatus({ draftGenerated: generateDraft.data?.allowed === true, copied, manuallySent }),
@@ -84,7 +87,53 @@ export default function VendorCastingSprintPage() {
     setAttemptChannel("");
     setCopied(false);
     setManuallySent(false);
+    setConfirmCreateOpen(false);
     generateDraft.reset();
+    candidatePayload.reset();
+    createCandidate.reset();
+  }
+
+  function vendorFactsPayload() {
+    return {
+      businessName: vendorForm.businessName,
+      phone: vendorForm.phone || null,
+      email: vendorForm.email || null,
+      website: vendorForm.website || null,
+      sourceType: vendorForm.sourceType,
+      sourceReference: vendorForm.sourceReference,
+      serviceArea: vendorForm.serviceArea,
+      qualificationNotes: vendorForm.qualificationNotes,
+      googleRating: numberOrNull(vendorForm.googleRating),
+      googleReviewCount: numberOrNull(vendorForm.googleReviewCount),
+      yelpRating: numberOrNull(vendorForm.yelpRating),
+      yelpReviewCount: numberOrNull(vendorForm.yelpReviewCount),
+      observedAt: vendorForm.observedAt || null,
+      negativeFlags: vendorForm.negativeFlags ? vendorForm.negativeFlags.split(",").map(value => value.trim()).filter(Boolean) : null,
+      sourceConfidenceNotes: vendorForm.sourceConfidenceNotes || null,
+    };
+  }
+
+  async function confirmCreateRealCandidate() {
+    const leadId = handoff.data?.handoff?.leadId ?? selectedLeadId;
+    if (!leadId) return;
+    const payloadResult = await candidatePayload.mutateAsync({
+      sourceKey: appliedSourceKey, leadId, vendorFacts: vendorFactsPayload(),
+    });
+    if (!payloadResult.allowed) return;
+    await createCandidate.mutateAsync({
+      tenantId: payloadResult.payload.tenantId,
+      buildingSlug: payloadResult.payload.buildingSlug,
+      sourceType: payloadResult.payload.sourceType,
+      sourceReference: payloadResult.payload.sourceReference,
+      category: payloadResult.payload.category,
+      businessName: payloadResult.payload.businessName,
+      phone: payloadResult.payload.phone,
+      email: payloadResult.payload.email,
+      website: payloadResult.payload.website,
+      serviceArea: payloadResult.payload.serviceArea,
+      qualificationNotes: payloadResult.payload.qualificationNotes,
+    });
+    setConfirmCreateOpen(false);
   }
 
   function submitDraftRequest() {
@@ -92,27 +141,10 @@ export default function VendorCastingSprintPage() {
     if (!leadId) return;
     setCopied(false);
     setManuallySent(false);
-    generateDraft.mutate({
-      sourceKey: appliedSourceKey,
-      leadId,
-      vendorFacts: {
-        businessName: vendorForm.businessName,
-        phone: vendorForm.phone || null,
-        email: vendorForm.email || null,
-        website: vendorForm.website || null,
-        sourceType: vendorForm.sourceType,
-        sourceReference: vendorForm.sourceReference,
-        serviceArea: vendorForm.serviceArea,
-        qualificationNotes: vendorForm.qualificationNotes,
-        googleRating: numberOrNull(vendorForm.googleRating),
-        googleReviewCount: numberOrNull(vendorForm.googleReviewCount),
-        yelpRating: numberOrNull(vendorForm.yelpRating),
-        yelpReviewCount: numberOrNull(vendorForm.yelpReviewCount),
-        observedAt: vendorForm.observedAt || null,
-        negativeFlags: vendorForm.negativeFlags ? vendorForm.negativeFlags.split(",").map(value => value.trim()).filter(Boolean) : null,
-        sourceConfidenceNotes: vendorForm.sourceConfidenceNotes || null,
-      },
-    });
+    setConfirmCreateOpen(false);
+    candidatePayload.reset();
+    createCandidate.reset();
+    generateDraft.mutate({ sourceKey: appliedSourceKey, leadId, vendorFacts: vendorFactsPayload() });
   }
 
   async function copyDraftToClipboard() {
@@ -356,6 +388,74 @@ export default function VendorCastingSprintPage() {
                             provider has accepted. The lead is now treated as response-pending.
                           </p>
                         ) : null}
+
+                        <div className="rounded-lg border border-black/15 bg-white p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.1em] text-black/45">Real candidate creation</p>
+                          {!createCandidate.data ? (
+                            !confirmCreateOpen ? (
+                              <button
+                                className="mt-2 rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white"
+                                onClick={() => setConfirmCreateOpen(true)}
+                                type="button"
+                              >
+                                Create Real Candidate
+                              </button>
+                            ) : (
+                              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                                <ul className="list-disc space-y-1 pl-5 text-xs text-amber-950">
+                                  <li>This creates a sourcing candidate only.</li>
+                                  <li>No outreach has been sent by HELD.</li>
+                                  <li>No vendor has responded.</li>
+                                  <li>No provider has accepted.</li>
+                                  <li>No booking is confirmed.</li>
+                                  <li>No proposal is resident-ready.</li>
+                                </ul>
+                                {candidatePayload.data && !candidatePayload.data.allowed ? (
+                                  <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-800">
+                                    {candidatePayload.data.blockedReasons.map(label).join(" · ")}
+                                  </div>
+                                ) : null}
+                                <div className="mt-3 flex items-center gap-2">
+                                  <button
+                                    className="rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                                    disabled={candidatePayload.isPending || createCandidate.isPending}
+                                    onClick={confirmCreateRealCandidate}
+                                    type="button"
+                                  >
+                                    Confirm: Create Real Candidate
+                                  </button>
+                                  <button
+                                    className="rounded-lg border border-black/15 px-3 py-1.5 text-xs font-semibold"
+                                    onClick={() => setConfirmCreateOpen(false)}
+                                    type="button"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          ) : (
+                            <div className="mt-2 space-y-1 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
+                              <p><span className="font-semibold">Candidate id:</span> {createCandidate.data.candidateId}</p>
+                              <p><span className="font-semibold">Status:</span> sourcing candidate created, not scored, not promoted</p>
+                              <p><span className="font-semibold">Source request:</span> {appliedSourceKey}</p>
+                              <p><span className="font-semibold">Selected lead/lane:</span> {handoff.data.handoff.businessNameForDisplayOnly} ({LANE_LABELS[handoff.data.handoff.lane]})</p>
+                              <p className="font-semibold">Still has not happened:</p>
+                              <ul className="list-disc space-y-0.5 pl-5">
+                                <li>No outreach sent</li>
+                                <li>No vendor response</li>
+                                <li>No provider acceptance</li>
+                                <li>No booking</li>
+                                <li>No resident proposal ready</li>
+                              </ul>
+                              <p className="mt-1">
+                                <span className="font-semibold">Recommended next step:</span> manually send/call the vendor using
+                                the copied draft above; once they reply, record the real response and terms in the First Real
+                                Proposal Bootstrap tool (/proposal-bootstrap) rather than inventing a response here.
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ) : null}
                   </div>

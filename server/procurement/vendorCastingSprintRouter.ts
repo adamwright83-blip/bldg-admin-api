@@ -4,8 +4,10 @@ import { listRequestJobCardSourceRecords } from "../db";
 import { buildCastingSprintBootstrapHandoff, type CastingSprintBootstrapHandoff } from "./castingSprintBootstrapBridgePolicy";
 import {
   buildCastingSprintOutreachDraft,
+  buildRealCandidateCreationPayload,
   validateRealVendorFacts,
   VENDOR_SOURCE_TYPES,
+  type CandidateCreationPayload,
   type OutreachDraft,
 } from "./castingSprintExecutionPolicy";
 import { buildRequestJobCardPage, REQUEST_JOB_CARD_SOURCE_TYPES, type RequestJobCardSourceType } from "./requestJobCardReadModel";
@@ -85,6 +87,10 @@ export type GenerateOutreachDraftResponse =
   | { allowed: true; blockedReasons: []; draft: OutreachDraft }
   | { allowed: false; blockedReasons: string[]; draft: null };
 
+export type CandidateCreationPayloadResponse =
+  | { allowed: true; blockedReasons: []; payload: CandidateCreationPayload }
+  | { allowed: false; blockedReasons: string[]; payload: null };
+
 export const vendorCastingSprintRouter = router({
   mission: adminProcedure
     .input(z.object({ sourceKey: z.string().min(3).max(191) }))
@@ -127,5 +133,30 @@ export const vendorCastingSprintRouter = router({
         return { allowed: false, blockedReasons: ["draft_failed_truth_lint"], draft: null };
       }
       return { allowed: true, blockedReasons: [], draft };
+    }),
+
+  /**
+   * Validates and builds a createCandidate-compatible payload only; it never
+   * calls createCandidate itself, so this mutation alone never writes to
+   * vendor_sourcing_candidates. The actual real-candidate write happens when
+   * the admin UI separately calls firstRealProposalBootstrap.createCandidate
+   * with this payload, as an explicit, distinct admin action.
+   */
+  candidateCreationPayload: adminProcedure
+    .input(z.object({ sourceKey: z.string().min(3).max(191), leadId: z.string().min(1).max(191), vendorFacts: vendorFactsInput }))
+    .mutation(async ({ ctx, input }): Promise<CandidateCreationPayloadResponse> => {
+      const result = await resolveMission({ tenantId: ctx.tenantId, sourceKey: input.sourceKey });
+      if (!result.found || !result.mission || !result.jobCard) {
+        return { allowed: false, blockedReasons: result.blockedReasons.length ? result.blockedReasons : ["source_job_card_not_found"], payload: null };
+      }
+      const lead = result.mission.lanes.flatMap(lane => lane.leads).find(item => item.id === input.leadId);
+      if (!lead) {
+        return { allowed: false, blockedReasons: ["lead_not_found_in_mission"], payload: null };
+      }
+      const decision = buildRealCandidateCreationPayload({ jobCard: result.jobCard, lead, vendorFacts: input.vendorFacts, tenantId: ctx.tenantId });
+      if (!decision.allowed) {
+        return { allowed: false, blockedReasons: decision.reasons, payload: null };
+      }
+      return { allowed: true, blockedReasons: [], payload: decision.payload };
     }),
 });
