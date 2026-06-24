@@ -112,7 +112,7 @@ import {
   notifyDeliveryEnRoute,
   sendSMS,
 } from "./_core/sms";
-import { centsToDollars } from "@shared/pricing";
+import { centsToDollars, dryCleanCostCentsFromRetail } from "@shared/pricing";
 import { z } from "zod";
 import Stripe from "stripe";
 import * as jose from "jose";
@@ -4074,7 +4074,9 @@ export const appRouter = router({
               const inferredCost =
                 it.costCents != null
                   ? it.costCents
-                  : Math.round(it.standardPriceCents / 2);
+                  : it.serviceType === "dry_clean"
+                    ? dryCleanCostCentsFromRetail(it.standardPriceCents)
+                    : Math.round(it.standardPriceCents / 2);
               return {
                 name: it.name,
                 category: it.category,

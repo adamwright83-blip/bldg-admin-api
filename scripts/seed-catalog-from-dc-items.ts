@@ -14,7 +14,7 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../server/db";
 import { catalogItems } from "../drizzle/schema";
-import { DC_ITEMS } from "../shared/pricing";
+import { DC_ITEMS, dryCleanCostCentsFromRetail } from "../shared/pricing";
 
 const TENANTS_DEFAULT = ["default"] as const;
 const TENANTS_ALL = ["default", "laundry_farm"] as const;
@@ -64,7 +64,7 @@ async function main() {
         serviceType: "dry_clean",
         standardPriceCents: item.priceCents,
         expressPriceCents: null,
-        costCents: Math.round(item.priceCents / 2),
+        costCents: dryCleanCostCentsFromRetail(item.priceCents),
         isActive: true,
         isOnline: true,
         archived: false,
