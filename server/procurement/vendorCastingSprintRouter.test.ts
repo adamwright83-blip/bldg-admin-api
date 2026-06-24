@@ -85,4 +85,45 @@ describe("vendor casting sprint admin router", () => {
     expect(serialized).not.toMatch(/"dispatched":true/);
     expect(serialized).not.toMatch(/"llmCalled":true/);
   });
+
+  describe("bootstrapHandoff", () => {
+    it("rejects unauthenticated and non-admin callers", async () => {
+      await expect(vendorCastingSprintRouter.createCaller(context(null)).bootstrapHandoff({ sourceKey: "service_request:155" }))
+        .rejects.toMatchObject({ code: "FORBIDDEN" });
+      await expect(vendorCastingSprintRouter.createCaller(context({ role: "user" })).bootstrapHandoff({ sourceKey: "service_request:155" }))
+        .rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+
+    it("produces a handoff packet for the fastest eligible lead by default", async () => {
+      vi.mocked(listRequestJobCardSourceRecords).mockResolvedValue(readyServiceRequestSource);
+      const result = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).bootstrapHandoff({ sourceKey: "service_request:155" });
+      expect(result.found).toBe(true);
+      expect(result.allowed).toBe(true);
+      expect(result.handoff).not.toBeNull();
+      expect(result.handoff!.sourceJobCardKey).toBe("service_request:155");
+      expect(result.handoff!.truthDisclaimers).toContain("No outreach has been sent.");
+      expect(result.handoff!.truthDisclaimers).toContain("No vendor has responded.");
+      expect(result.handoff!.truthDisclaimers).toContain("No provider has accepted.");
+      expect(result.handoff!.truthDisclaimers).toContain("No booking is confirmed.");
+      expect(result.handoff!.truthDisclaimers).toContain("This is a sourcing/candidate handoff only.");
+    });
+
+    it("never marks vendor responded/accepted/booked/resident-ready and invokes no outbound or LLM path", async () => {
+      vi.mocked(listRequestJobCardSourceRecords).mockResolvedValue(readyServiceRequestSource);
+      const result = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).bootstrapHandoff({ sourceKey: "service_request:155" });
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toMatch(/"vendorResponded":true/);
+      expect(serialized).not.toMatch(/"providerAccepted":true/);
+      expect(serialized).not.toMatch(/"booked":true/);
+      expect(serialized).not.toMatch(/"paid":true/);
+      expect(serialized).not.toMatch(/"dispatched":true/);
+      expect(serialized).not.toMatch(/"residentReady":true/);
+      expect(serialized).not.toMatch(/"sentByHeld":true/);
+    });
+
+    it("reports not found when the source job card is missing", async () => {
+      const result = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).bootstrapHandoff({ sourceKey: "service_request:999" });
+      expect(result).toMatchObject({ found: false, allowed: false, blockedReasons: ["source_job_card_not_found"], handoff: null });
+    });
+  });
 });

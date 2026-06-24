@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, Loader2, Trophy } from "lucide-react";
+import { AlertTriangle, ArrowRightCircle, Loader2, Trophy } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 const LANE_LABELS: Record<string, string> = {
@@ -15,7 +15,13 @@ function label(value: string): string {
 export default function VendorCastingSprintPage() {
   const [sourceKey, setSourceKey] = useState("service_request:155");
   const [appliedSourceKey, setAppliedSourceKey] = useState("service_request:155");
+  const [handoffLeadId, setHandoffLeadId] = useState<string | undefined>(undefined);
+  const [handoffRequested, setHandoffRequested] = useState(false);
   const result = trpc.admin.vendorCastingSprint.mission.useQuery({ sourceKey: appliedSourceKey });
+  const handoff = trpc.admin.vendorCastingSprint.bootstrapHandoff.useQuery(
+    { sourceKey: appliedSourceKey, leadId: handoffLeadId },
+    { enabled: handoffRequested },
+  );
 
   return (
     <div>
@@ -79,6 +85,13 @@ export default function VendorCastingSprintPage() {
               <p className="mt-1 text-sm text-emerald-900/80">
                 {result.data.mission.winner.businessName} ({LANE_LABELS[result.data.mission.winner.lane]}) &mdash; eligible by availability and price; not booked or accepted.
               </p>
+              <button
+                className="mt-3 flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900"
+                onClick={() => { setHandoffLeadId(undefined); setHandoffRequested(true); }}
+                type="button"
+              >
+                <ArrowRightCircle className="h-3.5 w-3.5" />View bootstrap handoff
+              </button>
             </section>
           ) : (
             <section className="rounded-xl border border-black/10 bg-black/[0.02] p-4 text-sm text-black/55">
@@ -127,12 +140,55 @@ export default function VendorCastingSprintPage() {
                       {lead.blockedReasons.length > 0 ? (
                         <p className="mt-1 text-xs text-red-700/80">{lead.blockedReasons.map(label).join(" · ")}</p>
                       ) : null}
+                      <button
+                        className="mt-2 text-xs font-semibold text-black/55 underline"
+                        onClick={() => { setHandoffLeadId(lead.id); setHandoffRequested(true); }}
+                        type="button"
+                      >
+                        View bootstrap handoff
+                      </button>
                     </div>
                   ))}
                 </div>
               </section>
             ))}
           </div>
+
+          {handoffRequested ? (
+            <section className="rounded-xl border border-black/15 bg-black/[0.02] p-4">
+              <h2 className="text-sm font-bold">Casting sprint &rarr; proposal bootstrap handoff</h2>
+              {handoff.isLoading ? (
+                <div className="mt-3 flex items-center gap-2 text-sm text-black/50"><Loader2 className="h-4 w-4 animate-spin" />Loading handoff&hellip;</div>
+              ) : !handoff.data?.allowed || !handoff.data.handoff ? (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  {(handoff.data?.blockedReasons ?? []).map(label).join(" · ") || "Handoff not available."}
+                </div>
+              ) : (
+                <div className="mt-3 space-y-3 text-sm">
+                  <ul className="list-disc space-y-1 pl-5 text-emerald-900/90">
+                    {handoff.data.handoff.truthDisclaimers.map(disclaimer => <li key={disclaimer}>{disclaimer}</li>)}
+                  </ul>
+                  <p><span className="font-semibold">Source job card:</span> {handoff.data.handoff.sourceJobCardKey}</p>
+                  <p><span className="font-semibold">Lead:</span> {handoff.data.handoff.businessNameForDisplayOnly} ({LANE_LABELS[handoff.data.handoff.lane]})</p>
+                  <p><span className="font-semibold">Why eligible:</span> {handoff.data.handoff.eligibilityReason}</p>
+                  <p><span className="font-semibold">Contact ladder:</span> {handoff.data.handoff.contactLadderSummary}</p>
+                  <div>
+                    <p className="font-semibold">Missing real-world facts before proposal:</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-black/65">
+                      {handoff.data.handoff.missingRealWorldFacts.map(fact => <li key={fact}>{label(fact)}</li>)}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-semibold">Blocked truth claims:</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-red-700/80">
+                      {handoff.data.handoff.blockedTruthClaims.map(claim => <li key={claim}>{label(claim)}</li>)}
+                    </ul>
+                  </div>
+                  <p><span className="font-semibold">Recommended next admin action:</span> {handoff.data.handoff.recommendedNextAdminAction}</p>
+                </div>
+              )}
+            </section>
+          ) : null}
         </div>
       ) : null}
     </div>
