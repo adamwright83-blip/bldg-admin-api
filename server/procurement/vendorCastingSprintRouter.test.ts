@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../db", () => ({ listRequestJobCardSourceRecords: vi.fn() }));
 
 const { listRequestJobCardSourceRecords } = await import("../db");
-const { vendorCastingSprintRouter } = await import("./vendorCastingSprintRouter");
+const { vendorCastingSprintRouter, createVendorCastingSprintRouter } = await import("./vendorCastingSprintRouter");
 
 function context(user: { role: string } | null) {
   return { user, tenantId: "default", req: {}, res: {}, vendorSession: null } as never;
@@ -345,5 +345,235 @@ describe("vendor casting sprint admin router", () => {
       expect(result.interpretedReply?.blocked).toBe(true);
       expect(result.termsPacket).toBeNull();
     });
+  });
+});
+
+describe("vendor casting sprint admin router -- durable contact attempt store wiring", () => {
+  const realVendorFacts = {
+    businessName: "Westside Mobile Pet Spa",
+    phone: "555-010-2002",
+    sourceType: "manual_operator_list" as const,
+    sourceReference: "Adam called and confirmed via Google Maps listing",
+    serviceArea: "cpe-south",
+    qualificationNotes: "Verified by Adam directly; services boxers, mobile van, available weekdays.",
+  };
+
+  function makeDurableDraft(overrides?: Record<string, unknown>) {
+    return {
+      id: "durable-draft-1",
+      tenantId: "default",
+      sourceKey: "service_request:155",
+      candidateId: null,
+      leadId: "lead-1",
+      lane: "maps_producer",
+      channel: "email",
+      recipientSnapshot: "555-010-2002",
+      subjectRendered: "Availability check",
+      bodyRendered: "Hi vendor",
+      bodyHash: "a".repeat(64),
+      templateKey: "vendor_availability_request_v0",
+      templateVersion: null,
+      founderEscalationPresent: true,
+      forbiddenClaimsScanJson: {},
+      draftStatus: "draft_ready",
+      createdBy: "admin",
+      createdAt: new Date("2026-06-24T00:00:00.000Z"),
+      updatedAt: new Date("2026-06-24T00:00:00.000Z"),
+      ...overrides,
+    };
+  }
+
+  function makeDurableAttempt(overrides?: Record<string, unknown>) {
+    return {
+      id: "durable-attempt-1",
+      tenantId: "default",
+      outreachDraftId: "durable-draft-1",
+      sourceKey: "service_request:155",
+      serviceRequestId: null,
+      candidateId: null,
+      leadId: "lead-1",
+      lane: "maps_producer",
+      channel: "email",
+      recipientSnapshot: "555-010-2002",
+      draftSubject: "Availability check",
+      draftBodySnapshot: "Hi vendor",
+      draftBodyHash: "a".repeat(64),
+      templateKey: "vendor_availability_request_v0",
+      templateVersion: null,
+      founderEscalationPresent: true,
+      forbiddenClaimsScanJson: {},
+      sendGateResultJson: { allowed: true, reasons: [] },
+      automationMode: "noop_provider",
+      providerAdapter: "noop_email",
+      providerAttemptId: "attempt_xyz",
+      status: "response_pending",
+      statusHistoryJson: [{ status: "draft_ready", at: "2026-06-24T00:00:00.000Z", actor: "HELD" }, { status: "response_pending", at: "2026-06-24T00:00:01.000Z", actor: "HELD" }],
+      latestReplyJson: null,
+      latestTermsPacketJson: null,
+      liveProviderInvoked: false,
+      outreachSentByHeld: false,
+      providerResponded: false,
+      providerAccepted: false,
+      bookingConfirmed: false,
+      paymentAuthorized: false,
+      dispatched: false,
+      idempotencyKey: "fixed-key",
+      occurredAt: null,
+      sentAt: null,
+      createdBy: "admin",
+      createdAt: new Date("2026-06-24T00:00:00.000Z"),
+      updatedAt: new Date("2026-06-24T00:00:00.000Z"),
+      ...overrides,
+    };
+  }
+
+  function makeMockStore(overrides?: Partial<Record<string, unknown>>) {
+    return {
+      createDraft: vi.fn().mockResolvedValue(makeDurableDraft()),
+      createOrReuseAttempt: vi.fn().mockResolvedValue({ attempt: makeDurableAttempt(), reused: false }),
+      recordReplyAndTerms: vi.fn().mockResolvedValue(makeDurableAttempt({
+        status: "interpreted",
+        providerResponded: true,
+        latestReplyJson: { classification: "available" },
+        latestTermsPacketJson: { availabilityStatus: "available" },
+        statusHistoryJson: [
+          { status: "draft_ready", at: "2026-06-24T00:00:00.000Z", actor: "HELD" },
+          { status: "response_pending", at: "2026-06-24T00:00:01.000Z", actor: "HELD" },
+          { status: "interpreted", at: "2026-06-24T00:00:02.000Z", actor: "HELD" },
+        ],
+      })),
+      getAttemptById: vi.fn().mockResolvedValue(makeDurableAttempt()),
+      listAttemptsBySourceKey: vi.fn().mockResolvedValue([makeDurableAttempt()]),
+      listAttemptsByCandidateId: vi.fn().mockResolvedValue([makeDurableAttempt({ candidateId: "candidate-1" })]),
+      listRecentAttempts: vi.fn().mockResolvedValue({ attempts: [makeDurableAttempt()], nextCursor: null }),
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    vi.mocked(listRequestJobCardSourceRecords).mockResolvedValue(readyServiceRequestSource);
+  });
+
+  it("generateOutreachDraft returns a durableDraftId from the injected store", async () => {
+    const store = makeMockStore();
+    const router = createVendorCastingSprintRouter(store as any);
+    const mission = await router.createCaller(context({ role: "admin" })).mission({ sourceKey: "service_request:155" });
+    const winnerLeadId = mission.mission!.winner!.leadId;
+
+    const result = await router.createCaller(context({ role: "admin" })).generateOutreachDraft({
+      sourceKey: "service_request:155", leadId: winnerLeadId, vendorFacts: realVendorFacts,
+    });
+
+    expect(result.allowed).toBe(true);
+    if (!result.allowed) throw new Error("expected allowed");
+    expect(result.durableDraftId).toBe("durable-draft-1");
+    expect(result.persisted).toBe(true);
+    expect(result.bodyHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(store.createDraft).toHaveBeenCalledOnce();
+  });
+
+  it("runContactAttempt returns a durableAttemptId and persists response_pending state", async () => {
+    const store = makeMockStore();
+    const router = createVendorCastingSprintRouter(store as any);
+    const mission = await router.createCaller(context({ role: "admin" })).mission({ sourceKey: "service_request:155" });
+    const winnerLeadId = mission.mission!.winner!.leadId;
+
+    const result = await router.createCaller(context({ role: "admin" })).runContactAttempt({
+      sourceKey: "service_request:155", leadId: winnerLeadId, channel: "email", vendorFacts: realVendorFacts,
+    });
+
+    expect(result.allowed).toBe(true);
+    if (!result.allowed) throw new Error("expected allowed");
+    expect(result.durableAttemptId).toBe("durable-attempt-1");
+    expect(result.persisted).toBe(true);
+    expect(result.auditFeedSummary?.status).toBe("response_pending");
+    expect(store.createOrReuseAttempt).toHaveBeenCalledOnce();
+    const callArgs = store.createOrReuseAttempt.mock.calls[0][0];
+    expect(callArgs.sendGateResultJson).toEqual({ allowed: true, reasons: [] });
+    expect(callArgs.automationMode).toBe("noop_provider");
+  });
+
+  it("simulateVendorReply persists the latest reply and terms packet onto the same durable attempt", async () => {
+    const store = makeMockStore();
+    const router = createVendorCastingSprintRouter(store as any);
+
+    const result = await router.createCaller(context({ role: "admin" })).simulateVendorReply({
+      sourceKey: "service_request:155",
+      attemptId: "attempt_local",
+      durableAttemptId: "durable-attempt-1",
+      channel: "email",
+      rawReplyText: "We have an opening that day and can do it, $110.",
+    });
+
+    expect(result.allowed).toBe(true);
+    expect(result.persisted).toBe(true);
+    expect(result.durableAttemptId).toBe("durable-attempt-1");
+    expect(result.updatedStatus).toBe("interpreted");
+    expect(result.statusHistory).toHaveLength(3);
+    expect(store.recordReplyAndTerms).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: "default",
+      attemptId: "durable-attempt-1",
+      nextStatus: "interpreted",
+    }));
+  });
+
+  it("never invokes a live provider, never marks outreachSentByHeld, and never marks provider acceptance/booking/payment/dispatch", async () => {
+    const store = makeMockStore();
+    const router = createVendorCastingSprintRouter(store as any);
+    const mission = await router.createCaller(context({ role: "admin" })).mission({ sourceKey: "service_request:155" });
+    const winnerLeadId = mission.mission!.winner!.leadId;
+
+    const result = await router.createCaller(context({ role: "admin" })).runContactAttempt({
+      sourceKey: "service_request:155", leadId: winnerLeadId, channel: "email", vendorFacts: realVendorFacts,
+    });
+
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toMatch(/"liveProviderInvoked":true/);
+    expect(serialized).not.toMatch(/"outreachSentByHeld":true/);
+    expect(serialized).not.toMatch(/"providerAccepted":true/);
+    expect(serialized).not.toMatch(/"bookingConfirmed":true/);
+    expect(serialized).not.toMatch(/"paymentAuthorized":true/);
+    expect(serialized).not.toMatch(/"dispatched":true/);
+  });
+
+  it("contactAttemptsBySourceKey returns the durable attempt via the audit feed", async () => {
+    const store = makeMockStore();
+    const router = createVendorCastingSprintRouter(store as any);
+
+    const attempts = await router.createCaller(context({ role: "admin" })).contactAttemptsBySourceKey({ sourceKey: "service_request:155" });
+
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0].attemptId).toBe("durable-attempt-1");
+    expect(store.listAttemptsBySourceKey).toHaveBeenCalledWith("default", "service_request:155", 50);
+  });
+
+  it("contactAttemptsByCandidateId returns the durable attempt via the audit feed", async () => {
+    const store = makeMockStore();
+    const router = createVendorCastingSprintRouter(store as any);
+
+    const attempts = await router.createCaller(context({ role: "admin" })).contactAttemptsByCandidateId({ candidateId: "candidate-1" });
+
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0].candidateId).toBe("candidate-1");
+  });
+
+  it("contactAttemptById returns a single durable attempt", async () => {
+    const store = makeMockStore();
+    const router = createVendorCastingSprintRouter(store as any);
+
+    const attempt = await router.createCaller(context({ role: "admin" })).contactAttemptById({ attemptId: "durable-attempt-1" });
+
+    expect(attempt?.attemptId).toBe("durable-attempt-1");
+  });
+
+  it("recentContactAttempts paginates and is admin-only", async () => {
+    const store = makeMockStore();
+    const router = createVendorCastingSprintRouter(store as any);
+
+    await expect(router.createCaller(context(null)).recentContactAttempts({})).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    const page = await router.createCaller(context({ role: "admin" })).recentContactAttempts({});
+    expect(page.attempts).toHaveLength(1);
+    expect(page.nextCursor).toBeNull();
   });
 });

@@ -81,6 +81,10 @@ export default function VendorCastingSprintPage() {
   const createCandidate = trpc.admin.firstRealProposalBootstrap.createCandidate.useMutation();
   const runContactAttempt = trpc.admin.vendorCastingSprint.runContactAttempt.useMutation();
   const simulateReply = trpc.admin.vendorCastingSprint.simulateVendorReply.useMutation();
+  const auditFeed = trpc.admin.vendorCastingSprint.contactAttemptsBySourceKey.useQuery(
+    { sourceKey: appliedSourceKey },
+    { enabled: consoleOpen },
+  );
 
   const attemptStatus = useMemo(
     () => computeAttemptStatus({ draftGenerated: generateDraft.data?.allowed === true, copied, manuallySent }),
@@ -170,22 +174,25 @@ export default function VendorCastingSprintPage() {
       sourceKey: appliedSourceKey,
       leadId,
       candidateId: createCandidate.data?.candidateId ?? null,
+      durableDraftId: generateDraft.data?.allowed ? generateDraft.data.durableDraftId : null,
       channel: heldChannel,
       vendorFacts: vendorFactsPayload(),
-    });
+    }, { onSuccess: () => auditFeed.refetch() });
   }
 
   function ingestSimulatedReply() {
     const attempt = runContactAttempt.data?.allowed ? runContactAttempt.data.attempt : null;
+    const durableAttemptId = runContactAttempt.data?.allowed ? runContactAttempt.data.durableAttemptId : null;
     if (!attempt || !replyText.trim() || !replyChannel) return;
     simulateReply.mutate({
       sourceKey: appliedSourceKey,
       attemptId: attempt.attemptId,
+      durableAttemptId,
       candidateId: attempt.candidateId,
       channel: replyChannel,
       rawReplyText: replyText,
       fromAddressOrPhone: replyFromAddress || null,
-    });
+    }, { onSuccess: () => auditFeed.refetch() });
   }
 
   async function copyDraftToClipboard() {
@@ -403,6 +410,11 @@ export default function VendorCastingSprintPage() {
                           <p className="text-xs font-bold uppercase tracking-[0.1em] text-black/45">Draft (no-send, admin-only)</p>
                           <p className="mt-1 text-sm font-semibold">{generateDraft.data.draft.subject}</p>
                           <pre className="mt-1 whitespace-pre-wrap text-sm text-black/75">{generateDraft.data.draft.body}</pre>
+                          <p className="mt-2 text-xs text-black/50">
+                            {generateDraft.data.persisted
+                              ? <>HELD persisted the draft. Durable draft id: <span className="font-mono">{generateDraft.data.durableDraftId}</span></>
+                              : "HELD could not persist this draft durably; continuing with the in-memory draft only."}
+                          </p>
                         </div>
 
                         <div className="rounded-lg border border-black/15 bg-white p-3">
@@ -493,12 +505,27 @@ export default function VendorCastingSprintPage() {
                           {runContactAttempt.data?.allowed ? (
                             <div className="mt-3 space-y-1 rounded-lg border border-indigo-200 bg-white p-3 text-xs text-indigo-950">
                               <p>✓ HELD prepared contact attempt ({runContactAttempt.data.attempt.attemptId})</p>
-                              <p>✓ HELD passed safety gate (founder escalation present, no forbidden claims)</p>
+                              <p>✓ HELD recorded the send-gate snapshot (founder escalation present, no forbidden claims)</p>
                               <p>
-                                ✓ HELD executed no-op provider path ({label(runContactAttempt.data.providerResult.status)},
+                                ✓ HELD executed the no-op provider path ({label(runContactAttempt.data.providerResult.status)},
                                 liveProviderInvoked: false)
                               </p>
                               <p className="font-semibold">⏳ HELD is waiting for vendor reply (status: {label(runContactAttempt.data.attempt.status)})</p>
+                              <p className="text-indigo-900/70">
+                                {runContactAttempt.data.persisted
+                                  ? <>Durable attempt id: <span className="font-mono">{runContactAttempt.data.durableAttemptId}</span> &middot; persisted: audited</>
+                                  : "Could not persist this attempt durably; continuing in session-local mode only."}
+                              </p>
+                              {runContactAttempt.data.statusHistory.length > 0 ? (
+                                <div className="mt-2">
+                                  <p className="font-semibold">Status timeline</p>
+                                  <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                                    {runContactAttempt.data.statusHistory.map((entry, index) => (
+                                      <li key={`${entry.status}-${index}`}>{label(entry.status)} &mdash; {entry.actor} &middot; {new Date(entry.at).toLocaleTimeString()}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ) : null}
                             </div>
                           ) : null}
 
@@ -530,7 +557,7 @@ export default function VendorCastingSprintPage() {
 
                               {simulateReply.data?.interpretedReply ? (
                                 <div className="mt-3 space-y-2 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3 text-xs">
-                                  <p className="font-semibold text-indigo-950">HELD interpreted reply</p>
+                                  <p className="font-semibold text-indigo-950">HELD recorded the reply and response terms</p>
                                   <p>Classification: <span className="font-semibold">{label(simulateReply.data.interpretedReply.classification)}</span></p>
                                   <p className="text-black/60">Available does not mean accepted — availableNotAccepted is always true.</p>
                                   {simulateReply.data.interpretedReply.extractedQuote ? (
@@ -541,6 +568,19 @@ export default function VendorCastingSprintPage() {
                                   ) : null}
                                   {simulateReply.data.interpretedReply.upfrontPaymentRequired ? <p>Upfront payment mentioned by vendor.</p> : null}
 
+                                  {simulateReply.data.persisted ? (
+                                    <div className="rounded-lg border border-black/10 bg-white p-2">
+                                      <p>Durable attempt updated &middot; status now: <span className="font-semibold">{label(simulateReply.data.updatedStatus ?? "")}</span></p>
+                                      <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                                        {simulateReply.data.statusHistory.map((entry, index) => (
+                                          <li key={`${entry.status}-${index}`}>{label(entry.status)} &mdash; {entry.actor} &middot; {new Date(entry.at).toLocaleTimeString()}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  ) : (
+                                    <p className="text-black/50">Could not persist the reply durably; this reply remains session-local only.</p>
+                                  )}
+
                                   {simulateReply.data.termsPacket ? (
                                     <div className="mt-2 rounded-lg border border-emerald-200 bg-white p-2">
                                       <p className="font-semibold text-emerald-950">Response terms packet (review only)</p>
@@ -549,7 +589,7 @@ export default function VendorCastingSprintPage() {
                                         <p>Quoted: ${simulateReply.data.termsPacket.quotedAmount} {simulateReply.data.termsPacket.quotedCurrency}</p>
                                       ) : null}
                                       <p className="text-black/60">inquiryOnlyNotBooking: true &middot; residentProposalReady: false</p>
-                                      <p className="mt-1 font-semibold">Admin review response terms before proposal.</p>
+                                      <p className="mt-1 font-semibold">Admin review required before proposal.</p>
                                       <p className="mt-1">{simulateReply.data.termsPacket.recommendedNextStep}</p>
                                       <Link className="mt-2 inline-block rounded-lg border border-black/15 px-2 py-1 text-xs font-semibold" href="/proposal-bootstrap">
                                         Open Proposal Bootstrap
@@ -562,6 +602,38 @@ export default function VendorCastingSprintPage() {
                               ) : null}
                             </div>
                           ) : null}
+                        </div>
+
+                        <div className="rounded-lg border border-black/15 bg-white p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-bold uppercase tracking-[0.1em] text-black/45">Audit feed for this source</p>
+                            <button
+                              className="rounded-lg border border-black/15 px-2 py-1 text-xs font-semibold disabled:opacity-40"
+                              disabled={auditFeed.isFetching}
+                              onClick={() => auditFeed.refetch()}
+                              type="button"
+                            >
+                              {auditFeed.isFetching ? "Refreshing…" : "Refresh audit feed"}
+                            </button>
+                          </div>
+                          {auditFeed.data && auditFeed.data.length > 0 ? (
+                            <div className="mt-2 space-y-2">
+                              {auditFeed.data.map(entry => (
+                                <div key={entry.attemptId} className="rounded-lg border border-black/10 p-2 text-xs">
+                                  <p className="font-mono text-black/50">{entry.attemptId}</p>
+                                  <p>
+                                    <span className="font-semibold">{label(entry.status)}</span> &middot; {LANE_LABELS[entry.lane ?? ""] ?? entry.lane ?? "no lane"} &middot; {label(entry.channel)} &middot; {label(entry.automationMode)}
+                                  </p>
+                                  {entry.latestTermsPacketSummary ? (
+                                    <p className="text-black/55">Latest terms recorded &middot; admin review required before proposal.</p>
+                                  ) : null}
+                                  <p className="text-black/40">Updated {new Date(entry.updatedAt).toLocaleString()}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-xs text-black/50">No durable contact attempts recorded yet for this source.</p>
+                          )}
                         </div>
 
                         <details className="rounded-lg border border-black/10 bg-black/[0.02] p-3">

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { adminProcedure, router } from "../_core/trpc";
 import { listRequestJobCardSourceRecords } from "../db";
@@ -10,6 +11,7 @@ import {
   type CandidateCreationPayload,
   type OutreachDraft,
 } from "./castingSprintExecutionPolicy";
+import { createProcurementPool } from "./migrations";
 import { buildRequestJobCardPage, REQUEST_JOB_CARD_SOURCE_TYPES, type RequestJobCardSourceType } from "./requestJobCardReadModel";
 import type { RequestJobCard } from "./requestJobCardPolicy";
 import {
@@ -17,6 +19,7 @@ import {
   buildResponseTermsPacket,
   buildSimulatedReplyIntakePacket,
   CONTACT_CHANNELS,
+  type ContactChannel,
   interpretVendorReply,
   runNoopContactAttempt,
   validateReplyIntakePacket,
@@ -26,6 +29,12 @@ import {
   type ResponseTermsPacket,
   type VendorReplyIntakePacket,
 } from "./vendorContactAttemptPolicy";
+import {
+  VendorContactAttemptStore,
+  type DurableContactAttempt,
+  type DurableDraft,
+  type StatusHistoryEntry,
+} from "./vendorContactAttemptStore";
 import { buildCastingMission, type CastingMission } from "./vendorCastingSprintPolicy";
 
 const SOURCE_KEY_PATTERN = /^(service_request|resident_coordinated_request|resident_agent_plan):(.+)$/;
@@ -72,6 +81,29 @@ async function resolveMission(input: { tenantId: string; sourceKey: string }): P
   return { found: true, blockedReasons: [], mission, jobCard };
 }
 
+function bodyHashFor(body: string): string {
+  return createHash("sha256").update(body).digest("hex");
+}
+
+const PROVIDER_ADAPTER_BY_CHANNEL: Record<ContactChannel, string> = {
+  email: "noop_email",
+  sms_if_allowed: "noop_sms",
+  call: "noop_voice",
+  voicemail: "noop_voice",
+  second_call_if_urgent: "noop_voice",
+  website_form: "noop_website_form",
+};
+
+let lazyContactAttemptStore: VendorContactAttemptStore | null = null;
+
+function resolveContactAttemptStore(injected?: VendorContactAttemptStore): VendorContactAttemptStore {
+  if (injected) return injected;
+  if (!lazyContactAttemptStore) {
+    lazyContactAttemptStore = new VendorContactAttemptStore(createProcurementPool());
+  }
+  return lazyContactAttemptStore;
+}
+
 export type CastingSprintBootstrapHandoffResponse = {
   found: boolean;
   allowed: boolean;
@@ -98,14 +130,71 @@ const vendorFactsInput = z.object({
 });
 
 export type GenerateOutreachDraftResponse =
-  | { allowed: true; blockedReasons: []; draft: OutreachDraft }
-  | { allowed: false; blockedReasons: string[]; draft: null };
+  | { allowed: true; blockedReasons: []; draft: OutreachDraft; durableDraftId: string | null; bodyHash: string; persisted: boolean }
+  | { allowed: false; blockedReasons: string[]; draft: null; durableDraftId: null; bodyHash: null; persisted: false };
 
 export type CandidateCreationPayloadResponse =
   | { allowed: true; blockedReasons: []; payload: CandidateCreationPayload }
   | { allowed: false; blockedReasons: string[]; payload: null };
 
-export const vendorCastingSprintRouter = router({
+export type AuditFeedAttemptSummary = {
+  attemptId: string;
+  durableDraftId: string | null;
+  sourceKey: string;
+  candidateId: string | null;
+  leadId: string | null;
+  lane: string | null;
+  channel: string;
+  status: string;
+  automationMode: string;
+  providerAdapter: string | null;
+  providerAttemptId: string | null;
+  sendGateResultJson: unknown;
+  statusHistory: StatusHistoryEntry[];
+  latestReplySummary: unknown | null;
+  latestTermsPacketSummary: unknown | null;
+  liveProviderInvoked: boolean;
+  outreachSentByHeld: boolean;
+  providerResponded: boolean;
+  providerAccepted: boolean;
+  bookingConfirmed: boolean;
+  paymentAuthorized: boolean;
+  dispatched: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function toAuditFeedSummary(attempt: DurableContactAttempt): AuditFeedAttemptSummary {
+  return {
+    attemptId: attempt.id,
+    durableDraftId: attempt.outreachDraftId,
+    sourceKey: attempt.sourceKey,
+    candidateId: attempt.candidateId,
+    leadId: attempt.leadId,
+    lane: attempt.lane,
+    channel: attempt.channel,
+    status: attempt.status,
+    automationMode: attempt.automationMode,
+    providerAdapter: attempt.providerAdapter,
+    providerAttemptId: attempt.providerAttemptId,
+    sendGateResultJson: attempt.sendGateResultJson,
+    statusHistory: attempt.statusHistoryJson,
+    latestReplySummary: attempt.latestReplyJson,
+    latestTermsPacketSummary: attempt.latestTermsPacketJson,
+    liveProviderInvoked: attempt.liveProviderInvoked,
+    outreachSentByHeld: attempt.outreachSentByHeld,
+    providerResponded: attempt.providerResponded,
+    providerAccepted: attempt.providerAccepted,
+    bookingConfirmed: attempt.bookingConfirmed,
+    paymentAuthorized: attempt.paymentAuthorized,
+    dispatched: attempt.dispatched,
+    createdAt: attempt.createdAt.toISOString(),
+    updatedAt: attempt.updatedAt.toISOString(),
+  };
+}
+
+export function createVendorCastingSprintRouter(injectedStore?: VendorContactAttemptStore) {
+  return router({
   mission: adminProcedure
     .input(z.object({ sourceKey: z.string().min(3).max(191) }))
     .query(async ({ ctx, input }): Promise<CastingMissionResult> => {
@@ -128,25 +217,58 @@ export const vendorCastingSprintRouter = router({
     }),
 
   generateOutreachDraft: adminProcedure
-    .input(z.object({ sourceKey: z.string().min(3).max(191), leadId: z.string().min(1).max(191), vendorFacts: vendorFactsInput }))
+    .input(z.object({
+      sourceKey: z.string().min(3).max(191),
+      leadId: z.string().min(1).max(191),
+      candidateId: z.string().min(1).max(191).nullable().optional(),
+      channel: z.enum(CONTACT_CHANNELS).optional(),
+      vendorFacts: vendorFactsInput,
+    }))
     .mutation(async ({ ctx, input }): Promise<GenerateOutreachDraftResponse> => {
       const result = await resolveMission({ tenantId: ctx.tenantId, sourceKey: input.sourceKey });
       if (!result.found || !result.mission || !result.jobCard) {
-        return { allowed: false, blockedReasons: result.blockedReasons.length ? result.blockedReasons : ["source_job_card_not_found"], draft: null };
+        return { allowed: false, blockedReasons: result.blockedReasons.length ? result.blockedReasons : ["source_job_card_not_found"], draft: null, durableDraftId: null, bodyHash: null, persisted: false };
       }
       const lead = result.mission.lanes.flatMap(lane => lane.leads).find(item => item.id === input.leadId);
       if (!lead) {
-        return { allowed: false, blockedReasons: ["lead_not_found_in_mission"], draft: null };
+        return { allowed: false, blockedReasons: ["lead_not_found_in_mission"], draft: null, durableDraftId: null, bodyHash: null, persisted: false };
       }
       const validation = validateRealVendorFacts(input.vendorFacts, lead);
       if (!validation.valid) {
-        return { allowed: false, blockedReasons: validation.reasons, draft: null };
+        return { allowed: false, blockedReasons: validation.reasons, draft: null, durableDraftId: null, bodyHash: null, persisted: false };
       }
       const draft = buildCastingSprintOutreachDraft({ jobCard: result.jobCard, lead, vendorFacts: input.vendorFacts });
       if (!draft.safeToCopy) {
-        return { allowed: false, blockedReasons: ["draft_failed_truth_lint"], draft: null };
+        return { allowed: false, blockedReasons: ["draft_failed_truth_lint"], draft: null, durableDraftId: null, bodyHash: null, persisted: false };
       }
-      return { allowed: true, blockedReasons: [], draft };
+      const bodyHash = bodyHashFor(draft.body);
+      let durableDraftId: string | null = null;
+      let persisted = false;
+      try {
+        const store = resolveContactAttemptStore(injectedStore);
+        const durableDraft: DurableDraft = await store.createDraft({
+          tenantId: ctx.tenantId,
+          sourceKey: input.sourceKey,
+          candidateId: input.candidateId ?? null,
+          leadId: lead.id,
+          lane: lead.lane,
+          channel: input.channel ?? "email",
+          subjectRendered: draft.subject,
+          bodyRendered: draft.body,
+          bodyHash,
+          templateKey: draft.templateKey,
+          founderEscalationPresent: draft.founderEscalationIncluded,
+          forbiddenClaimsScanJson: { forbiddenClaimsDetected: draft.forbiddenClaimsDetected, blockingLintRules: draft.blockingLintRules },
+          createdBy: ctx.user?.id != null ? String(ctx.user.id) : "admin",
+        });
+        durableDraftId = durableDraft.id;
+        persisted = true;
+      } catch {
+        // HELD persisted the draft locally even if the durable write failed; the in-memory draft remains usable.
+        durableDraftId = null;
+        persisted = false;
+      }
+      return { allowed: true, blockedReasons: [], draft, durableDraftId, bodyHash, persisted };
     }),
 
   /**
@@ -184,24 +306,32 @@ export const vendorCastingSprintRouter = router({
       sourceKey: z.string().min(3).max(191),
       leadId: z.string().min(1).max(191),
       candidateId: z.string().min(1).max(191).nullable().optional(),
+      durableDraftId: z.string().min(1).max(191).nullable().optional(),
       channel: z.enum(CONTACT_CHANNELS),
       vendorFacts: vendorFactsInput,
     }))
     .mutation(async ({ ctx, input }): Promise<
-      | { allowed: true; blockedReasons: []; attempt: ContactAttempt; providerResult: NoopProviderResult }
-      | { allowed: false; blockedReasons: string[]; attempt: ContactAttempt | null; providerResult: null }
+      | {
+          allowed: true; blockedReasons: []; attempt: ContactAttempt; providerResult: NoopProviderResult;
+          durableAttemptId: string | null; durableDraftId: string | null; statusHistory: StatusHistoryEntry[];
+          persisted: boolean; auditFeedSummary: AuditFeedAttemptSummary | null;
+        }
+      | {
+          allowed: false; blockedReasons: string[]; attempt: ContactAttempt | null; providerResult: null;
+          durableAttemptId: null; durableDraftId: null; statusHistory: []; persisted: false; auditFeedSummary: null;
+        }
     > => {
       const result = await resolveMission({ tenantId: ctx.tenantId, sourceKey: input.sourceKey });
       if (!result.found || !result.mission || !result.jobCard) {
-        return { allowed: false, blockedReasons: result.blockedReasons.length ? result.blockedReasons : ["source_job_card_not_found"], attempt: null, providerResult: null };
+        return { allowed: false, blockedReasons: result.blockedReasons.length ? result.blockedReasons : ["source_job_card_not_found"], attempt: null, providerResult: null, durableAttemptId: null, durableDraftId: null, statusHistory: [], persisted: false, auditFeedSummary: null };
       }
       const lead = result.mission.lanes.flatMap(lane => lane.leads).find(item => item.id === input.leadId);
       if (!lead) {
-        return { allowed: false, blockedReasons: ["lead_not_found_in_mission"], attempt: null, providerResult: null };
+        return { allowed: false, blockedReasons: ["lead_not_found_in_mission"], attempt: null, providerResult: null, durableAttemptId: null, durableDraftId: null, statusHistory: [], persisted: false, auditFeedSummary: null };
       }
       const validation = validateRealVendorFacts(input.vendorFacts, lead);
       if (!validation.valid) {
-        return { allowed: false, blockedReasons: validation.reasons, attempt: null, providerResult: null };
+        return { allowed: false, blockedReasons: validation.reasons, attempt: null, providerResult: null, durableAttemptId: null, durableDraftId: null, statusHistory: [], persisted: false, auditFeedSummary: null };
       }
       const draft = buildCastingSprintOutreachDraft({ jobCard: result.jobCard, lead, vendorFacts: input.vendorFacts });
       const recipientTarget = input.vendorFacts.phone || input.vendorFacts.email || input.vendorFacts.website || "";
@@ -216,9 +346,54 @@ export const vendorCastingSprintRouter = router({
       });
       const { attempt: ranAttempt, providerResult, blockedReasons } = runNoopContactAttempt(builtAttempt);
       if (blockedReasons.length > 0 || !providerResult) {
-        return { allowed: false, blockedReasons, attempt: ranAttempt, providerResult: null };
+        return { allowed: false, blockedReasons, attempt: ranAttempt, providerResult: null, durableAttemptId: null, durableDraftId: null, statusHistory: [], persisted: false, auditFeedSummary: null };
       }
-      return { allowed: true, blockedReasons: [], attempt: ranAttempt, providerResult };
+
+      const sendGateResultJson = { allowed: blockedReasons.length === 0, reasons: blockedReasons };
+      const createdAt = ranAttempt.createdAt;
+      const statusHistory: StatusHistoryEntry[] = [
+        { status: "draft_ready", at: createdAt, actor: "HELD" },
+        { status: ranAttempt.status, at: new Date().toISOString(), actor: "HELD" },
+      ];
+      let durableAttemptId: string | null = null;
+      let durableDraftId: string | null = input.durableDraftId ?? null;
+      let persisted = false;
+      let auditFeedSummary: AuditFeedAttemptSummary | null = null;
+      try {
+        const store = resolveContactAttemptStore(injectedStore);
+        const { attempt: durableAttempt } = await store.createOrReuseAttempt({
+          tenantId: ctx.tenantId,
+          outreachDraftId: durableDraftId,
+          sourceKey: input.sourceKey,
+          candidateId: input.candidateId ?? null,
+          leadId: lead.id,
+          lane: lead.lane,
+          channel: input.channel,
+          recipientSnapshot: recipientTarget,
+          draftSubject: draft.subject,
+          draftBodySnapshot: draft.body,
+          draftBodyHash: bodyHashFor(draft.body),
+          templateKey: draft.templateKey,
+          founderEscalationPresent: draft.founderEscalationIncluded,
+          forbiddenClaimsScanJson: { forbiddenClaimsDetected: draft.forbiddenClaimsDetected, blockingLintRules: draft.blockingLintRules },
+          sendGateResultJson,
+          automationMode: "noop_provider",
+          providerAdapter: PROVIDER_ADAPTER_BY_CHANNEL[input.channel],
+          providerAttemptId: providerResult.attemptId,
+          status: ranAttempt.status,
+          statusHistoryJson: statusHistory,
+          createdBy: ctx.user?.id != null ? String(ctx.user.id) : "admin",
+        });
+        durableAttemptId = durableAttempt.id;
+        durableDraftId = durableAttempt.outreachDraftId;
+        persisted = true;
+        auditFeedSummary = toAuditFeedSummary(durableAttempt);
+      } catch {
+        durableAttemptId = null;
+        persisted = false;
+      }
+
+      return { allowed: true, blockedReasons: [], attempt: ranAttempt, providerResult, durableAttemptId, durableDraftId, statusHistory, persisted, auditFeedSummary };
     }),
 
   /**
@@ -231,18 +406,23 @@ export const vendorCastingSprintRouter = router({
     .input(z.object({
       sourceKey: z.string().min(3).max(191),
       attemptId: z.string().min(1).max(191),
+      durableAttemptId: z.string().min(1).max(191).nullable().optional(),
       candidateId: z.string().min(1).max(191).nullable().optional(),
       channel: z.enum(CONTACT_CHANNELS),
       rawReplyText: z.string().min(3).max(5000),
       fromAddressOrPhone: z.string().max(191).nullable().optional(),
     }))
-    .mutation(({ input }): {
+    .mutation(async ({ ctx, input }): Promise<{
       allowed: boolean;
       blockedReasons: string[];
       packet: VendorReplyIntakePacket | null;
       interpretedReply: InterpretedReply | null;
       termsPacket: ResponseTermsPacket | null;
-    } => {
+      durableAttemptId: string | null;
+      updatedStatus: string | null;
+      statusHistory: StatusHistoryEntry[];
+      persisted: boolean;
+    }> => {
       const packet = buildSimulatedReplyIntakePacket({
         attemptId: input.attemptId,
         candidateId: input.candidateId ?? null,
@@ -253,7 +433,7 @@ export const vendorCastingSprintRouter = router({
       });
       const validation = validateReplyIntakePacket(packet);
       if (!validation.valid) {
-        return { allowed: false, blockedReasons: validation.reasons, packet: null, interpretedReply: null, termsPacket: null };
+        return { allowed: false, blockedReasons: validation.reasons, packet: null, interpretedReply: null, termsPacket: null, durableAttemptId: null, updatedStatus: null, statusHistory: [], persisted: false };
       }
       const interpretedReply = interpretVendorReply({ packet });
       const termsResult = buildResponseTermsPacket({
@@ -261,12 +441,83 @@ export const vendorCastingSprintRouter = router({
         candidateId: input.candidateId ?? null,
         rawReplyText: input.rawReplyText,
       });
+      const termsPacket = termsResult.allowed ? termsResult.packet : null;
+
+      let durableAttemptId: string | null = null;
+      let updatedStatus: string | null = null;
+      let statusHistory: StatusHistoryEntry[] = [];
+      let persisted = false;
+      if (input.durableAttemptId) {
+        try {
+          const store = resolveContactAttemptStore(injectedStore);
+          const nextStatus = interpretedReply.blocked ? "blocked" : "interpreted";
+          const updated = await store.recordReplyAndTerms({
+            tenantId: ctx.tenantId,
+            attemptId: input.durableAttemptId,
+            latestReplyJson: interpretedReply,
+            latestTermsPacketJson: termsPacket,
+            nextStatus,
+            actor: "HELD",
+          });
+          durableAttemptId = updated.id;
+          updatedStatus = updated.status;
+          statusHistory = updated.statusHistoryJson;
+          persisted = true;
+        } catch {
+          durableAttemptId = null;
+          persisted = false;
+        }
+      }
+
       return {
         allowed: true,
         blockedReasons: [],
         packet,
         interpretedReply,
-        termsPacket: termsResult.allowed ? termsResult.packet : null,
+        termsPacket,
+        durableAttemptId,
+        updatedStatus,
+        statusHistory,
+        persisted,
       };
     }),
-});
+
+    /** Tenant-scoped, admin-only audit feed: a single durable attempt by id. */
+    contactAttemptById: adminProcedure
+      .input(z.object({ attemptId: z.string().min(1).max(191) }))
+      .query(async ({ ctx, input }): Promise<AuditFeedAttemptSummary | null> => {
+        const store = resolveContactAttemptStore(injectedStore);
+        const attempt = await store.getAttemptById(ctx.tenantId, input.attemptId);
+        return attempt ? toAuditFeedSummary(attempt) : null;
+      }),
+
+    /** Tenant-scoped, admin-only audit feed: every durable attempt for a sourceKey. */
+    contactAttemptsBySourceKey: adminProcedure
+      .input(z.object({ sourceKey: z.string().min(3).max(191), limit: z.number().int().min(1).max(250).default(50) }))
+      .query(async ({ ctx, input }): Promise<AuditFeedAttemptSummary[]> => {
+        const store = resolveContactAttemptStore(injectedStore);
+        const attempts = await store.listAttemptsBySourceKey(ctx.tenantId, input.sourceKey, input.limit);
+        return attempts.map(toAuditFeedSummary);
+      }),
+
+    /** Tenant-scoped, admin-only audit feed: every durable attempt for a candidateId. */
+    contactAttemptsByCandidateId: adminProcedure
+      .input(z.object({ candidateId: z.string().min(1).max(191), limit: z.number().int().min(1).max(250).default(50) }))
+      .query(async ({ ctx, input }): Promise<AuditFeedAttemptSummary[]> => {
+        const store = resolveContactAttemptStore(injectedStore);
+        const attempts = await store.listAttemptsByCandidateId(ctx.tenantId, input.candidateId, input.limit);
+        return attempts.map(toAuditFeedSummary);
+      }),
+
+    /** Tenant-scoped, admin-only audit feed: most recent durable attempts across all sources. */
+    recentContactAttempts: adminProcedure
+      .input(z.object({ limit: z.number().int().min(1).max(250).default(50), cursor: z.string().nullable().optional() }))
+      .query(async ({ ctx, input }): Promise<{ attempts: AuditFeedAttemptSummary[]; nextCursor: string | null }> => {
+        const store = resolveContactAttemptStore(injectedStore);
+        const page = await store.listRecentAttempts({ tenantId: ctx.tenantId, limit: input.limit, cursor: input.cursor ?? null });
+        return { attempts: page.attempts.map(toAuditFeedSummary), nextCursor: page.nextCursor };
+      }),
+  });
+}
+
+export const vendorCastingSprintRouter = createVendorCastingSprintRouter();
