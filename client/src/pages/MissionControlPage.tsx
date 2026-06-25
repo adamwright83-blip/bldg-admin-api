@@ -145,6 +145,18 @@ export default function MissionControlPage() {
   const [savedTrainingRules, setSavedTrainingRules] = useState<string[]>([]);
 
   const [expandedCandidateId, setExpandedCandidateId] = useState<string | null>(null);
+  const [draftQueueStatus, setDraftQueueStatus] = useState<Record<string, "queued" | "already_queued">>({});
+  const approveDraftOutreach = trpc.admin.vendorAcquisitionMission.approveCandidateForDraftOutreach.useMutation();
+
+  function approveDraft(candidateId: string) {
+    approveDraftOutreach.mutate({ candidateId }, {
+      onSuccess: result => {
+        if (result.status === "ok") {
+          setDraftQueueStatus(prev => ({ ...prev, [candidateId]: result.alreadyQueued ? "already_queued" : "queued" }));
+        }
+      },
+    });
+  }
 
   function copyCandidateDetails(candidate: { businessName: string; evidence: unknown }) {
     const rating = evidenceField(candidate.evidence, "rating");
@@ -533,15 +545,25 @@ export default function MissionControlPage() {
                     >
                       <Copy className="h-3 w-3" /> Copy details
                     </button>
-                    <button
-                      type="button"
-                      disabled
-                      title="Coming next -- not yet wired to any contact-attempt or send path"
-                      className="rounded-lg border border-black/10 px-2 py-1 text-xs font-semibold text-black/35 cursor-not-allowed"
-                    >
-                      Approve for outreach &middot; Coming next
-                    </button>
+                    {draftQueueStatus[candidate.id] ? (
+                      <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                        {draftQueueStatus[candidate.id] === "already_queued" ? "Draft already queued" : "Draft queued"} &middot; No outreach sent
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={approveDraftOutreach.isPending}
+                        title="Creates a draft-only, no-send contact record. Nothing is sent to this vendor."
+                        className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 disabled:opacity-40"
+                        onClick={() => approveDraft(candidate.id)}
+                      >
+                        {approveDraftOutreach.isPending ? "Queueing draft…" : "Approve for draft outreach"}
+                      </button>
+                    )}
                   </div>
+                  {serviceModeBadge(candidate.evidence) === "Needs review" ? (
+                    <p className="mt-1 text-[11px] text-amber-700">Review mobile fit before outreach.</p>
+                  ) : null}
 
                   {expanded ? (
                     <div className="mt-2 rounded-lg border border-black/10 bg-black/[0.02] p-2 text-[11px] text-black/55">

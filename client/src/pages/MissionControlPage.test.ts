@@ -314,10 +314,10 @@ describe("MissionControlPage -- Slice 76c Discovered Candidates panel", () => {
     expect(source).toMatch(/Not contacted &middot; No outreach sent/);
   });
 
-  it("the Approve for outreach affordance is disabled and labeled Coming next -- not wired to any mutation", () => {
-    expect(source).toMatch(/Approve for outreach &middot; Coming next/);
-    const approveButton = source.match(/disabled\s*\n?\s*title="Coming next[\s\S]{0,200}/)?.[0] ?? "";
-    expect(approveButton).not.toMatch(/\.mutate\(/);
+  it("the Approve for draft outreach affordance is wired to the real draft-only mutation (Slice 78a) and never labeled Send", () => {
+    expect(source).toMatch(/Approve for draft outreach/);
+    expect(source).toMatch(/approveCandidateForDraftOutreach\.useMutation/);
+    expect(source).not.toMatch(/>Send</);
   });
 
   it("Review, Open source, and Copy details never call a mutation or submit a form", () => {
@@ -399,9 +399,10 @@ describe("MissionControlPage -- Slice 77a mission-text-driven query planner", ()
     expect(source).not.toMatch(/serviceMode:\s*"mobile_required"\s*\}\)\s*\.map/);
   });
 
-  it("still never enables an outreach/send action and still shows the not-contacted safety line", () => {
+  it("still never enables a live send action and still shows the not-contacted safety line", () => {
     expect(source).toMatch(/Not contacted &middot; No outreach sent/);
-    expect(source).toMatch(/Approve for outreach &middot; Coming next/);
+    expect(source).toMatch(/Approve for draft outreach/);
+    expect(source).not.toMatch(/>Send</);
   });
 });
 
@@ -441,8 +442,9 @@ describe("MissionControlPage -- Slice 77b structured parser plan source", () => 
     expect(source).not.toMatch(/parseMissionWithClaude/);
   });
 
-  it("still never enables an outreach/send action and never renders a fake vendor name", () => {
-    expect(source).toMatch(/Approve for outreach &middot; Coming next/);
+  it("still never enables a live send action and never renders a fake vendor name", () => {
+    expect(source).toMatch(/Approve for draft outreach/);
+    expect(source).not.toMatch(/>Send</);
     expect(source).not.toMatch(/Paws & Polish|Happy Hounds|Wag Luxury|Beverly Barkers|Puppy Palace|The Dog Spa/);
   });
 });
@@ -454,5 +456,42 @@ describe("MissionControlPage -- Slice 77b source isolation", () => {
 
   it("never claims a truth field is true", () => {
     expect(source).not.toMatch(/provider_accepted:\s*true|bookingConfirmed:\s*true|paymentAuthorized:\s*true|dispatched:\s*true/i);
+  });
+});
+
+describe("MissionControlPage -- Slice 78a draft outreach queue", () => {
+  it("renders Approve for draft outreach wired to the real mutation", () => {
+    expect(source).toMatch(/Approve for draft outreach/);
+    expect(source).toMatch(/vendorAcquisitionMission\.approveCandidateForDraftOutreach\.useMutation/);
+  });
+
+  it("clicking approval calls the draft mutation with the candidate id", () => {
+    expect(source).toMatch(/function approveDraft\(candidateId: string\) \{/);
+    expect(source).toMatch(/approveDraftOutreach\.mutate\(\{ candidateId \}/);
+    expect(source).toMatch(/onClick=\{\(\) => approveDraft\(candidate\.id\)\}/);
+  });
+
+  it("shows 'Draft queued · No outreach sent' after a fresh approval, and 'Draft already queued' on idempotent re-approval", () => {
+    expect(source).toMatch(/Draft queued.*No outreach sent/);
+    expect(source).toMatch(/Draft already queued.*No outreach sent/);
+    expect(source).toMatch(/result\.alreadyQueued \? "already_queued" : "queued"/);
+  });
+
+  it("shows a 'Review mobile fit before outreach' warning for needs-review candidates rather than disabling the action", () => {
+    expect(source).toMatch(/Review mobile fit before outreach\./);
+    expect(source).toMatch(/serviceModeBadge\(candidate\.evidence\) === "Needs review"/);
+  });
+
+  it("the approve button is never labeled Send and never claims a live send happened", () => {
+    expect(source).not.toMatch(/>Send</);
+    expect(source).not.toMatch(/Email sent|SMS sent|Message sent/i);
+  });
+
+  it("never invokes any AgentMail/SMS/Yelp/web-form/phone send path from the draft queue action", () => {
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid|sendYelpMessage|placeCall|\.submit\(\)/i);
+  });
+
+  it("never renders a fake vendor name in the draft queue UI", () => {
+    expect(source).not.toMatch(/Paws & Polish|Happy Hounds|Wag Luxury|Beverly Barkers|Puppy Palace|The Dog Spa/);
   });
 });

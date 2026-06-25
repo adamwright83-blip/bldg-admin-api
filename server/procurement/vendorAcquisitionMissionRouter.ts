@@ -1,6 +1,8 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { adminProcedure, router } from "../_core/trpc";
+import { buildCandidateDraftOutreach } from "./vendorCandidateDraftOutreachPolicy";
+import { VendorContactAttemptStore } from "./vendorContactAttemptStore";
 import { runGooglePlacesDiscovery, type NormalizedPlaceCandidate } from "./googlePlacesDiscoveryConnector";
 import { createProcurementPool } from "./migrations";
 import { MISSION_OUTREACH_MODES } from "./vendorAcquisitionMissionPolicy";
@@ -50,6 +52,15 @@ function resolveSourcingStore(injected?: VendorSourcingStore): VendorSourcingSto
     lazySourcingStore = new VendorSourcingStore(createProcurementPool());
   }
   return lazySourcingStore;
+}
+
+let lazyContactAttemptStore: VendorContactAttemptStore | null = null;
+function resolveContactAttemptStore(injected?: VendorContactAttemptStore): VendorContactAttemptStore {
+  if (injected) return injected;
+  if (!lazyContactAttemptStore) {
+    lazyContactAttemptStore = new VendorContactAttemptStore(createProcurementPool());
+  }
+  return lazyContactAttemptStore;
 }
 
 export type QueryPlannerFallbackReason = "needs_provider_config" | "invalid_output" | "provider_error" | "parser_exception" | null;
@@ -108,6 +119,7 @@ export function createVendorAcquisitionMissionRouter(
   injectedSourcingStore?: VendorSourcingStore,
   injectedDiscoveryFn: typeof runGooglePlacesDiscovery = runGooglePlacesDiscovery,
   injectedParserFn: typeof parseMissionWithClaude = parseMissionWithClaude,
+  injectedContactAttemptStore?: VendorContactAttemptStore,
 ) {
   return router({
     createMission: adminProcedure
@@ -170,6 +182,61 @@ export function createVendorAcquisitionMissionRouter(
       .query(async ({ ctx, input }) => {
         const sourcingStore = resolveSourcingStore(injectedSourcingStore);
         return sourcingStore.listCandidatesForReview({ tenantId: ctx.tenantId, category: input.category, limit: input.limit });
+      }),
+
+    /**
+     * Slice 78a. Queues a draft-only, no-send contact-attempt record for a
+     * real persisted candidate -- never sends email/SMS/Yelp/web-form/
+     * phone, never marks provider_responded/provider_accepted/
+     * booking_confirmed/payment_authorized/dispatched (those four are
+     * hardcoded to 0 in createOrReuseAttempt's INSERT regardless of any
+     * input here), and reuses the existing, already-deployed Slice 74
+     * VendorContactAttemptStore.createOrReuseAttempt -- idempotent by a
+     * deterministic idempotency key derived from the candidate id, so
+     * approving the same candidate twice returns the existing draft
+     * rather than creating a duplicate.
+     */
+    approveCandidateForDraftOutreach: adminProcedure
+      .input(z.object({ candidateId: z.string().min(1) }))
+      .mutation(async ({ ctx, input }) => {
+        const sourcingStore = resolveSourcingStore(injectedSourcingStore);
+        const candidate = await sourcingStore.getCandidate(ctx.tenantId, input.candidateId);
+        if (!candidate) return { status: "candidate_not_found" as const };
+
+        const draft = buildCandidateDraftOutreach({
+          businessName: candidate.businessName,
+          geographyHint: "their service area and nearby high-rise buildings",
+        });
+
+        const attemptStore = resolveContactAttemptStore(injectedContactAttemptStore);
+        const draftBodyHash = createHash("sha256").update(draft.body).digest("hex");
+        const now = new Date();
+        const { attempt, reused } = await attemptStore.createOrReuseAttempt({
+          tenantId: ctx.tenantId,
+          sourceKey: `sourcing_candidate:${candidate.id}`,
+          candidateId: candidate.id,
+          channel: "manual_research_needed",
+          draftSubject: draft.subject,
+          draftBodySnapshot: draft.body,
+          draftBodyHash,
+          founderEscalationPresent: true,
+          forbiddenClaimsScanJson: { found: draft.forbiddenClaimsDetected },
+          sendGateResultJson: { allowed: false, reasons: ["draft_only_no_send_path_in_slice_78a"] },
+          automationMode: "manual_fallback",
+          providerAdapter: "draft_queue_v0",
+          status: "draft_ready",
+          statusHistoryJson: [{ status: "draft_ready", at: now.toISOString(), actor: "draft_queue_v0" }],
+          createdBy: "draft_queue_v0",
+          now,
+        });
+
+        return {
+          status: "ok" as const,
+          attemptId: attempt.id,
+          alreadyQueued: reused,
+          draftSubject: attempt.draftSubject,
+          draftBody: attempt.draftBodySnapshot,
+        };
       }),
 
     /**

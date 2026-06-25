@@ -549,3 +549,109 @@ describe("vendorAcquisitionMissionRouter -- previewQueryPlan", () => {
     expect(plan.searchQueries.length).toBeGreaterThan(0);
   });
 });
+
+function makeMockCandidate(overrides?: Record<string, unknown>) {
+  return {
+    id: "candidate-1", tenantId: "default", buildingSlug: null, sourceType: "permitted_public_fetch",
+    sourceReference: "place_1", category: "dog_grooming", businessName: "Sunset Mobile Grooming",
+    sourcingStatus: "discovered", createdBy: "google_places_discovery", createdAt: new Date(), updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+function makeMockContactAttemptStore(overrides?: Record<string, unknown>) {
+  return {
+    createOrReuseAttempt: vi.fn().mockResolvedValue({
+      attempt: {
+        id: "attempt-1", draftSubject: "subject", draftBodySnapshot: "body",
+        status: "draft_ready", providerResponded: false, providerAccepted: false,
+        bookingConfirmed: false, paymentAuthorized: false, dispatched: false,
+      },
+      reused: false,
+    }),
+    ...overrides,
+  };
+}
+
+describe("vendorAcquisitionMissionRouter -- approveCandidateForDraftOutreach (Slice 78a)", () => {
+  it("rejects unauthenticated and non-admin callers", async () => {
+    const sourcingStore = makeMockSourcingStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never);
+    await expect(
+      router.createCaller(context(null)).approveCandidateForDraftOutreach({ candidateId: "candidate-1" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("returns candidate_not_found honestly when the candidate does not exist, without creating any attempt", async () => {
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(null) });
+    const contactAttemptStore = makeMockContactAttemptStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never, undefined, undefined, contactAttemptStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).approveCandidateForDraftOutreach({ candidateId: "missing" });
+    expect(result).toEqual({ status: "candidate_not_found" });
+    expect(contactAttemptStore.createOrReuseAttempt).not.toHaveBeenCalled();
+  });
+
+  it("creates a draft-only, no-send contact attempt for a real candidate", async () => {
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const contactAttemptStore = makeMockContactAttemptStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never, undefined, undefined, contactAttemptStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).approveCandidateForDraftOutreach({ candidateId: "candidate-1" });
+
+    expect(result.status).toBe("ok");
+    expect(contactAttemptStore.createOrReuseAttempt).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: "default",
+      sourceKey: "sourcing_candidate:candidate-1",
+      candidateId: "candidate-1",
+      automationMode: "manual_fallback",
+      status: "draft_ready",
+    }));
+  });
+
+  it("the draft body passed to the store is deterministic and never claims booking/dispatch/payment", async () => {
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const contactAttemptStore = makeMockContactAttemptStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never, undefined, undefined, contactAttemptStore as never);
+    await router.createCaller(context({ role: "admin" })).approveCandidateForDraftOutreach({ candidateId: "candidate-1" });
+
+    const call = contactAttemptStore.createOrReuseAttempt.mock.calls[0][0];
+    expect(call.draftBodySnapshot).toContain("Adam Wright");
+    expect(call.draftBodySnapshot).not.toMatch(/booked|confirmed|dispatch|payment ready/i);
+  });
+
+  it("is idempotent: approving the same candidate twice reuses the existing draft (reused: true)", async () => {
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const contactAttemptStore = makeMockContactAttemptStore({
+      createOrReuseAttempt: vi.fn().mockResolvedValue({
+        attempt: { id: "attempt-1", draftSubject: "subject", draftBodySnapshot: "body" },
+        reused: true,
+      }),
+    });
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never, undefined, undefined, contactAttemptStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).approveCandidateForDraftOutreach({ candidateId: "candidate-1" });
+
+    expect(result).toMatchObject({ status: "ok", alreadyQueued: true });
+  });
+
+  it("never invokes any outreach/send capability -- the contact attempt store interface has no send method exposed here", async () => {
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const contactAttemptStore = makeMockContactAttemptStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never, undefined, undefined, contactAttemptStore as never);
+    await router.createCaller(context({ role: "admin" })).approveCandidateForDraftOutreach({ candidateId: "candidate-1" });
+
+    expect(Object.keys(contactAttemptStore)).toEqual(["createOrReuseAttempt"]);
+  });
+
+  it("never sets provider_responded/provider_accepted/booking_confirmed/payment_authorized/dispatched truth", async () => {
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const contactAttemptStore = makeMockContactAttemptStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never, undefined, undefined, contactAttemptStore as never);
+    await router.createCaller(context({ role: "admin" })).approveCandidateForDraftOutreach({ candidateId: "candidate-1" });
+
+    const call = contactAttemptStore.createOrReuseAttempt.mock.calls[0][0];
+    expect(call).not.toHaveProperty("providerResponded", true);
+    expect(call).not.toHaveProperty("providerAccepted", true);
+    expect(call).not.toHaveProperty("bookingConfirmed", true);
+    expect(call).not.toHaveProperty("paymentAuthorized", true);
+    expect(call).not.toHaveProperty("dispatched", true);
+  });
+});
