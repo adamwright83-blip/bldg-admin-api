@@ -712,7 +712,7 @@ export default function MissionControlPage() {
                     <div className="mt-2 rounded-lg border border-red-200 bg-red-50/30 p-3 text-xs">
                       <p className="text-xs font-bold">Prepare supervised send</p>
                       <p className="mt-1 text-black/55">
-                        Sends exactly one real email through AgentMail. Nothing is sent until you confirm below.
+                        This sends a real vendor outreach email. Nothing is sent until you confirm below.
                       </p>
                       <div className="mt-2 space-y-1 text-black/65">
                         <p><span className="font-semibold">Candidate:</span> {candidate.businessName}</p>
@@ -734,13 +734,16 @@ export default function MissionControlPage() {
                         value={recipientEmailInput}
                         onChange={event => setRecipientEmailInput(event.target.value)}
                       />
+                      <p className="mt-1 font-semibold text-red-700">
+                        Use the vendor&rsquo;s real business email only. A successful send records this candidate as contacted by HELD.
+                      </p>
                       <label className="mt-2 flex items-start gap-2 text-black/65">
                         <input
                           type="checkbox"
                           checked={sendConfirmed}
                           onChange={event => setSendConfirmed(event.target.checked)}
                         />
-                        I confirm this recipient email is correct and I want to send exactly one supervised outreach email.
+                        I confirm this is the vendor&rsquo;s real recipient email and I want to send exactly one supervised outreach email.
                       </label>
                       <button
                         type="button"

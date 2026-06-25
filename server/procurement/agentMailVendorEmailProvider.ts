@@ -31,6 +31,28 @@ function parseAllowlist(value: string | undefined): string[] {
   return (value ?? "").split(",").map(item => item.trim()).filter(Boolean);
 }
 
+/**
+ * Slice 80b. Source allowlist matcher: supports an exact match (the
+ * original, still-default behavior) or a trailing-`*` prefix wildcard,
+ * e.g. "sourcing_candidate:*" matches "sourcing_candidate:<any-uuid>"
+ * but never matches an unrelated sourceKey like "service_request:155"
+ * or "sourcing_candidate_other:1" (the match requires the literal
+ * prefix text, not a substring). This is the only allowlist that
+ * supports wildcards -- the category allowlist remains exact-match
+ * only, and every other gate (canary flag, provider config, founder
+ * escalation, forbidden claims, recipient validity, confirmation
+ * phrase) is evaluated exactly as before, unaffected by this matcher.
+ */
+export function sourceKeyMatchesAllowlist(sourceKey: string, allowlist: string[]): boolean {
+  return allowlist.some(entry => {
+    if (entry.endsWith("*")) {
+      const prefix = entry.slice(0, -1);
+      return prefix.length > 0 && sourceKey.startsWith(prefix);
+    }
+    return sourceKey === entry;
+  });
+}
+
 export type AgentMailProviderReadiness = {
   providerName: "agentmail";
   providerSelected: boolean;
@@ -116,7 +138,7 @@ export function evaluateAgentMailLiveSendGate(input: AgentMailLiveSendGateInput)
   const readiness = inspectAgentMailReadiness(env);
   const reasons: string[] = [...readiness.blockedReasons];
 
-  if (!readiness.sourceAllowlist.includes(input.sourceKey)) reasons.push("source_not_allowlisted");
+  if (!sourceKeyMatchesAllowlist(input.sourceKey, readiness.sourceAllowlist)) reasons.push("source_not_allowlisted");
   if (!input.category || !readiness.categoryAllowlist.includes(input.category)) reasons.push("category_not_allowlisted");
   if (!input.durableDraftId) reasons.push("durable_draft_id_required");
   if (!input.durableAttemptId && !input.idempotencyKey) reasons.push("durable_attempt_identity_required");

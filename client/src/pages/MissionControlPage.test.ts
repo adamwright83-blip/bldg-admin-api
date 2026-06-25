@@ -587,7 +587,7 @@ describe("MissionControlPage -- Slice 80a supervised outreach send canary", () =
   });
 
   it("requires the explicit confirmation checkbox before the send button is enabled", () => {
-    expect(source).toMatch(/I confirm this recipient email is correct and I want to send exactly one supervised outreach email\./);
+    expect(source).toMatch(/I confirm this is the vendor&rsquo;s real recipient email and I want to send exactly one supervised outreach email\./);
     expect(source).toMatch(/checked=\{sendConfirmed\}/);
   });
 
@@ -635,5 +635,27 @@ describe("MissionControlPage -- Slice 80a source isolation", () => {
 
   it("never claims a truth field is true", () => {
     expect(source).not.toMatch(/provider_accepted:\s*true|bookingConfirmed:\s*true|paymentAuthorized:\s*true|dispatched:\s*true/i);
+  });
+});
+
+describe("MissionControlPage -- Slice 80b supervised send guardrails", () => {
+  it("warns that only the vendor's real business email should be used, and that a successful send records candidate-contacted truth", () => {
+    expect(source).toMatch(/Use the vendor&rsquo;s real business email only\. A successful send records this candidate as contacted by HELD\./);
+  });
+
+  it("the confirmation checkbox explicitly says this is the vendor's real recipient email", () => {
+    expect(source).toMatch(/I confirm this is the vendor&rsquo;s real recipient email and I want to send exactly one supervised outreach email\./);
+  });
+
+  it("never tells the operator to test with their own email or send to themselves", () => {
+    expect(source).not.toMatch(/test with yourself|send to yourself|send to your own email|test-to-self|send to myself/i);
+  });
+
+  it("the send button remains one-at-a-time only -- no bulk-send UI was introduced", () => {
+    expect(source).not.toMatch(/Send all|Bulk send|selectAll|sendAllCandidates/i);
+  });
+
+  it("the success state copy is unchanged: 'Sent via AgentMail · Awaiting reply'", () => {
+    expect(source).toMatch(/Sent via AgentMail &middot; Awaiting reply/);
   });
 });

@@ -5,6 +5,7 @@ import {
   inspectAgentMailReadiness,
   renderSafeHtmlFromTextDraft,
   sendVendorEmailViaAgentMail,
+  sourceKeyMatchesAllowlist,
   SUPERVISED_CANARY_CONFIRMATION_TEXT,
   type MinimalAgentMailClient,
 } from "./agentMailVendorEmailProvider";
@@ -241,5 +242,94 @@ describe("sendVendorEmailViaAgentMail", () => {
       subject: "Availability check", textBody: "Hi vendor",
     }, { client, env: { ...FULL_ENV, AGENTMAIL_API_KEY: "super-secret-value" } });
     expect(JSON.stringify(result)).not.toContain("super-secret-value");
+  });
+});
+
+describe("sourceKeyMatchesAllowlist (Slice 80b)", () => {
+  it("matches an exact allowlist entry, preserving original behavior", () => {
+    expect(sourceKeyMatchesAllowlist("service_request:155", ["service_request:155"])).toBe(true);
+  });
+
+  it("rejects a sourceKey not present in an exact-only allowlist", () => {
+    expect(sourceKeyMatchesAllowlist("service_request:999", ["service_request:155"])).toBe(false);
+  });
+
+  it("matches sourcing_candidate:<uuid> against the sourcing_candidate:* wildcard", () => {
+    expect(sourceKeyMatchesAllowlist("sourcing_candidate:abc-123", ["sourcing_candidate:*"])).toBe(true);
+  });
+
+  it("does not let sourcing_candidate:* match an unrelated source key", () => {
+    expect(sourceKeyMatchesAllowlist("service_request:155", ["sourcing_candidate:*"])).toBe(false);
+    expect(sourceKeyMatchesAllowlist("sourcing_candidate_other:1", ["sourcing_candidate:*"])).toBe(false);
+  });
+
+  it("supports a mixed allowlist with both exact entries and a wildcard", () => {
+    const allowlist = ["service_request:155", "sourcing_candidate:*"];
+    expect(sourceKeyMatchesAllowlist("service_request:155", allowlist)).toBe(true);
+    expect(sourceKeyMatchesAllowlist("sourcing_candidate:xyz", allowlist)).toBe(true);
+    expect(sourceKeyMatchesAllowlist("service_request:999", allowlist)).toBe(false);
+  });
+
+  it("treats a bare '*' entry as matching nothing (never an unscoped wildcard)", () => {
+    expect(sourceKeyMatchesAllowlist("anything", ["*"])).toBe(false);
+  });
+});
+
+describe("evaluateAgentMailLiveSendGate -- wildcard source allowlist does not bypass other gates (Slice 80b)", () => {
+  it("allows a candidate-sourced key through the wildcard when every other gate passes", () => {
+    const decision = evaluateAgentMailLiveSendGate(gateInput({
+      sourceKey: "sourcing_candidate:abc-123",
+      env: { ...FULL_ENV, HELD_VENDOR_EMAIL_SOURCE_ALLOWLIST: "sourcing_candidate:*" },
+    }));
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("the wildcard does not bypass the category allowlist", () => {
+    const decision = evaluateAgentMailLiveSendGate(gateInput({
+      sourceKey: "sourcing_candidate:abc-123",
+      category: "haircut",
+      env: { ...FULL_ENV, HELD_VENDOR_EMAIL_SOURCE_ALLOWLIST: "sourcing_candidate:*" },
+    }));
+    expect(decision.allowed).toBe(false);
+    expect(decision.reasons).toContain("category_not_allowlisted");
+  });
+
+  it("the wildcard does not bypass the canary-enabled flag", () => {
+    const decision = evaluateAgentMailLiveSendGate(gateInput({
+      sourceKey: "sourcing_candidate:abc-123",
+      env: { ...FULL_ENV, HELD_VENDOR_EMAIL_SOURCE_ALLOWLIST: "sourcing_candidate:*", HELD_VENDOR_EMAIL_CANARY_ENABLED: "false" },
+    }));
+    expect(decision.allowed).toBe(false);
+    expect(decision.reasons).toContain("live_email_canary_disabled");
+  });
+
+  it("the wildcard does not bypass provider readiness (missing config)", () => {
+    const decision = evaluateAgentMailLiveSendGate(gateInput({
+      sourceKey: "sourcing_candidate:abc-123",
+      env: { ...FULL_ENV, HELD_VENDOR_EMAIL_SOURCE_ALLOWLIST: "sourcing_candidate:*", AGENTMAIL_API_KEY: "" },
+    }));
+    expect(decision.allowed).toBe(false);
+    expect(decision.reasons).toContain("agentmail_env_missing");
+  });
+
+  it("the wildcard does not bypass founder escalation / forbidden-claim checks", () => {
+    const decision = evaluateAgentMailLiveSendGate(gateInput({
+      sourceKey: "sourcing_candidate:abc-123",
+      env: { ...FULL_ENV, HELD_VENDOR_EMAIL_SOURCE_ALLOWLIST: "sourcing_candidate:*" },
+      founderEscalationPresent: false,
+      forbiddenClaimsDetected: ["forbidden_truth_claim_detected"],
+    }));
+    expect(decision.allowed).toBe(false);
+    expect(decision.reasons).toContain("founder_escalation_missing");
+    expect(decision.reasons).toContain("forbidden_claims_detected");
+  });
+
+  it("an unrelated source key is still rejected even when the wildcard is present in the allowlist", () => {
+    const decision = evaluateAgentMailLiveSendGate(gateInput({
+      sourceKey: "some_unrelated_source:1",
+      env: { ...FULL_ENV, HELD_VENDOR_EMAIL_SOURCE_ALLOWLIST: "sourcing_candidate:*" },
+    }));
+    expect(decision.allowed).toBe(false);
+    expect(decision.reasons).toContain("source_not_allowlisted");
   });
 });
