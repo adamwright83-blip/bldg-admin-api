@@ -155,20 +155,23 @@ export class VendorSourcingStore {
   }
 
   async listCandidates(input: { tenantId: string; status?: string; limit?: number }) {
-    const limit = Math.min(Math.max(input.limit ?? 100, 1), 250);
+    // LIMIT is inlined (never bound as a `?` placeholder) -- mysql2's
+    // .execute() fails against this MySQL version with "Incorrect
+    // arguments to mysqld_stmt_execute" when LIMIT is a bound parameter.
+    // Safe to inline because it is always a clamped, validated integer.
+    const limit = Math.trunc(Math.min(Math.max(input.limit ?? 100, 1), 250));
     const params: unknown[] = [input.tenantId];
     let statusClause = "";
     if (input.status) {
       statusClause = " AND sourcing_status = ?";
       params.push(input.status);
     }
-    params.push(limit);
     const [rows] = await this.pool.execute<CandidateDbRow[]>(
       `SELECT id, tenant_id, building_slug, source_type, source_reference, category,
               business_name, sourcing_status, created_by, created_at, updated_at
          FROM vendor_sourcing_candidates
         WHERE tenant_id = ?${statusClause}
-        ORDER BY created_at DESC LIMIT ?`,
+        ORDER BY created_at DESC LIMIT ${limit}`,
       params,
     );
     return rows.map(mapCandidateRow);

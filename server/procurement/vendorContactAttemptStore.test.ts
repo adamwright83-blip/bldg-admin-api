@@ -275,24 +275,44 @@ describe("VendorContactAttemptStore -- audit feed", () => {
     expect(await store.getAttemptById("default", "missing")).toBeNull();
   });
 
-  it("listAttemptsBySourceKey scopes the query by tenant and sourceKey", async () => {
+  it("listAttemptsBySourceKey scopes the query by tenant and sourceKey, never binds LIMIT, never passes undefined", async () => {
     const execute = vi.fn().mockResolvedValue([[MOCK_ATTEMPT_ROW], []]);
     const pool = { execute };
     const store = new VendorContactAttemptStore(pool as any);
 
     const attempts = await store.listAttemptsBySourceKey("default", "service_request:155");
     expect(attempts).toHaveLength(1);
-    expect(execute).toHaveBeenCalledWith(expect.stringMatching(/WHERE tenant_id = \? AND source_key = \?/), ["default", "service_request:155", 50]);
+    const [sql, params] = execute.mock.calls[0];
+    expect(sql).toMatch(/WHERE tenant_id = \? AND source_key = \?/);
+    expect(sql).not.toMatch(/LIMIT \?/);
+    expect(sql).toMatch(/LIMIT 50\s*$/);
+    expect(params).toEqual(["default", "service_request:155"]);
+    expect(params).not.toContain(undefined);
   });
 
-  it("listAttemptsByCandidateId scopes the query by tenant and candidateId", async () => {
+  it("listAttemptsBySourceKey clamps an out-of-range limit and inlines it", async () => {
+    const execute = vi.fn().mockResolvedValue([[], []]);
+    const pool = { execute };
+    const store = new VendorContactAttemptStore(pool as any);
+
+    await store.listAttemptsBySourceKey("default", "service_request:155", 99999);
+    const [sql] = execute.mock.calls[0];
+    expect(sql).toMatch(/LIMIT 250\s*$/);
+  });
+
+  it("listAttemptsByCandidateId scopes the query by tenant and candidateId, never binds LIMIT, never passes undefined", async () => {
     const execute = vi.fn().mockResolvedValue([[{ ...MOCK_ATTEMPT_ROW, candidate_id: "candidate-1" }], []]);
     const pool = { execute };
     const store = new VendorContactAttemptStore(pool as any);
 
     const attempts = await store.listAttemptsByCandidateId("default", "candidate-1");
     expect(attempts).toHaveLength(1);
-    expect(execute).toHaveBeenCalledWith(expect.stringMatching(/WHERE tenant_id = \? AND candidate_id = \?/), ["default", "candidate-1", 50]);
+    const [sql, params] = execute.mock.calls[0];
+    expect(sql).toMatch(/WHERE tenant_id = \? AND candidate_id = \?/);
+    expect(sql).not.toMatch(/LIMIT \?/);
+    expect(sql).toMatch(/LIMIT 50\s*$/);
+    expect(params).toEqual(["default", "candidate-1"]);
+    expect(params).not.toContain(undefined);
   });
 
   it("listRecentAttempts limits safely and returns a cursor only when the page is full", async () => {

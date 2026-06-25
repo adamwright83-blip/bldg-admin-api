@@ -643,21 +643,26 @@ async getDraftById(tenantId: string, draftId: string): Promise<DurableDraft | nu
   }
 
   async listAttemptsBySourceKey(tenantId: string, sourceKey: string, limit = 50): Promise<DurableContactAttempt[]> {
-    const boundedLimit = Math.min(Math.max(limit, 1), 250);
+    // LIMIT is inlined (never bound as a `?` placeholder) -- mysql2's
+    // .execute() fails against this MySQL version with "Incorrect
+    // arguments to mysqld_stmt_execute" when LIMIT is a bound parameter.
+    // Safe to inline because it is always a clamped, validated integer.
+    const boundedLimit = Math.trunc(Math.min(Math.max(limit, 1), 250));
     const [rows] = await this.pool.execute<AttemptDbRow[]>(
       `SELECT ${ATTEMPT_SELECT_COLUMNS} FROM vendor_contact_attempts
-        WHERE tenant_id = ? AND source_key = ? ORDER BY created_at DESC LIMIT ?`,
-      [tenantId, sourceKey, boundedLimit],
+        WHERE tenant_id = ? AND source_key = ? ORDER BY created_at DESC LIMIT ${boundedLimit}`,
+      [tenantId, sourceKey],
     );
     return rows.map(mapAttemptRow);
   }
 
   async listAttemptsByCandidateId(tenantId: string, candidateId: string, limit = 50): Promise<DurableContactAttempt[]> {
-    const boundedLimit = Math.min(Math.max(limit, 1), 250);
+    // See listAttemptsBySourceKey above: LIMIT must be inlined, not bound.
+    const boundedLimit = Math.trunc(Math.min(Math.max(limit, 1), 250));
     const [rows] = await this.pool.execute<AttemptDbRow[]>(
       `SELECT ${ATTEMPT_SELECT_COLUMNS} FROM vendor_contact_attempts
-        WHERE tenant_id = ? AND candidate_id = ? ORDER BY created_at DESC LIMIT ?`,
-      [tenantId, candidateId, boundedLimit],
+        WHERE tenant_id = ? AND candidate_id = ? ORDER BY created_at DESC LIMIT ${boundedLimit}`,
+      [tenantId, candidateId],
     );
     return rows.map(mapAttemptRow);
   }
