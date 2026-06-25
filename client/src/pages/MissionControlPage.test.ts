@@ -116,8 +116,9 @@ describe("MissionControlPage -- Slice 75b sub-agent orchestra", () => {
     }
   });
 
-  it("never claims candidates were found by a sub-agent", () => {
-    expect(source).not.toMatch(/candidates found|vendors discovered|leads sourced/i);
+  it("the fixed sub-agent status copy never claims candidates were found (only real discovery results, added in Slice 76a, may)", () => {
+    const subAgentsBlock = source.match(/const SUB_AGENTS: SubAgent\[\] = \[[\s\S]*?\];/)?.[0] ?? "";
+    expect(subAgentsBlock).not.toMatch(/candidates found|vendors discovered|leads sourced/i);
   });
 });
 
@@ -191,5 +192,45 @@ describe("MissionControlPage -- Slice 75c source isolation", () => {
   it("still never claims a truth field is true (display copy may honestly state they are false)", () => {
     expect(source).not.toMatch(/provider_accepted:\s*true|bookingConfirmed:\s*true|paymentAuthorized:\s*true|dispatched:\s*true/i);
     expect(source).not.toMatch(/provider_accepted: \{|booking_confirmed: \{|payment_authorized: \{/);
+  });
+});
+
+describe("MissionControlPage -- Slice 76a Run discovery action", () => {
+  it("renders a Run discovery action wired to the real runDiscovery mutation", () => {
+    expect(source).toMatch(/Run discovery/);
+    expect(source).toMatch(/vendorAcquisitionMission\.runDiscovery\.useMutation/);
+  });
+
+  it("displays the provider-config-needed state honestly", () => {
+    expect(source).toMatch(/needs_provider_config/);
+    expect(source).toMatch(/Map Scout needs a Google Places API key configured/);
+  });
+
+  it("displays a real discovery summary (found\\/persisted\\/already-discovered counts) without claiming outreach happened", () => {
+    expect(source).toMatch(/Found \{runDiscovery\.data\.foundCount\}/);
+    expect(source).not.toMatch(/contacted|outreach sent|message sent/i);
+  });
+
+  it("displays an honest zero-result state", () => {
+    expect(source).toMatch(/No candidates found for this mission\./);
+  });
+
+  it("never renders a hardcoded/fake vendor name in the discovery UI", () => {
+    expect(source).not.toMatch(/Paws & Polish|Happy Hounds|Wag Luxury|Beverly Barkers|Puppy Palace|The Dog Spa|Paw Spa LA/);
+  });
+
+  it("is disabled with no mission, and never auto-fires on initial render", () => {
+    expect(source).toMatch(/disabled=\{!latestMission \|\| runDiscovery\.isPending\}/);
+    expect(source).not.toMatch(/useEffect\([^)]*runDiscovery\.mutate/s);
+  });
+});
+
+describe("MissionControlPage -- Slice 76a source isolation", () => {
+  it("still never imports any outbound send adapter or live LLM", () => {
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid|openai|anthropic\./i);
+  });
+
+  it("still never claims a truth field is true", () => {
+    expect(source).not.toMatch(/provider_accepted:\s*true|bookingConfirmed:\s*true|paymentAuthorized:\s*true|dispatched:\s*true/i);
   });
 });

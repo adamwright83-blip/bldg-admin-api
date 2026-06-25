@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { adminProcedure, router } from "../_core/trpc";
+import { CANONICAL_SERVICE_CATEGORIES, getCanonicalServiceDefinition, type CanonicalServiceCategory } from "./canonicalServiceTaxonomyPolicy";
+import { runGooglePlacesDiscovery, type NormalizedPlaceCandidate } from "./googlePlacesDiscoveryConnector";
 import { createProcurementPool } from "./migrations";
 import { MISSION_OUTREACH_MODES } from "./vendorAcquisitionMissionPolicy";
 import { VendorAcquisitionMissionStore } from "./vendorAcquisitionMissionStore";
+import { VendorSourcingStore } from "./vendorSourcingStore";
 
 /**
  * Slice 75a. Wires the existing, already-deployed (Slice 74b)
@@ -34,6 +37,28 @@ function resolveStore(injected?: VendorAcquisitionMissionStore): VendorAcquisiti
   return lazyStore;
 }
 
+let lazySourcingStore: VendorSourcingStore | null = null;
+function resolveSourcingStore(injected?: VendorSourcingStore): VendorSourcingStore {
+  if (injected) return injected;
+  if (!lazySourcingStore) {
+    lazySourcingStore = new VendorSourcingStore(createProcurementPool());
+  }
+  return lazySourcingStore;
+}
+
+function searchTextForMission(category: string, geographyLabel: string): string {
+  const isCanonical = (CANONICAL_SERVICE_CATEGORIES as readonly string[]).includes(category);
+  const label = isCanonical ? getCanonicalServiceDefinition(category as CanonicalServiceCategory).label : category;
+  return `${label} near ${geographyLabel}`;
+}
+
+export type DiscoveredCandidateSummary = NormalizedPlaceCandidate & { persisted: boolean; alreadyDiscovered: boolean };
+export type RunDiscoveryResult =
+  | { status: "mission_not_found" }
+  | { status: "needs_provider_config"; missingEnvVar: string }
+  | { status: "provider_error"; reason: string }
+  | { status: "ok"; foundCount: number; persistedCount: number; alreadyDiscoveredCount: number; candidates: DiscoveredCandidateSummary[] };
+
 function denialReasons(error: unknown): string[] {
   const message = error instanceof Error ? error.message : String(error);
   const match = /denied: (.+)$/.exec(message);
@@ -44,7 +69,11 @@ export type CreateMissionResult =
   | { allowed: true; reasons: []; missionId: string; status: "draft" | "active" }
   | { allowed: false; reasons: string[]; missionId: string | null; status: "draft" | null };
 
-export function createVendorAcquisitionMissionRouter(injectedStore?: VendorAcquisitionMissionStore) {
+export function createVendorAcquisitionMissionRouter(
+  injectedStore?: VendorAcquisitionMissionStore,
+  injectedSourcingStore?: VendorSourcingStore,
+  injectedDiscoveryFn: typeof runGooglePlacesDiscovery = runGooglePlacesDiscovery,
+) {
   return router({
     createMission: adminProcedure
       .input(z.object({
@@ -91,6 +120,73 @@ export function createVendorAcquisitionMissionRouter(injectedStore?: VendorAcqui
       .query(async ({ ctx, input }) => {
         const store = resolveStore(injectedStore);
         return store.listMissions({ tenantId: ctx.tenantId, status: input.status, limit: input.limit });
+      }),
+
+    /**
+     * Read-only Google Places discovery for a real mission. Never sends
+     * outreach, never contacts a vendor, never marks any provider-
+     * acceptance/booking/payment/dispatch truth. Persists candidates only
+     * into the existing vendor_sourcing_candidates table (sourceType
+     * "permitted_public_fetch" -- automated, explicitly-permitted public
+     * fetch, per vendor_source_registry), with an application-level
+     * idempotency check by (tenantId, sourceType, placeId).
+     */
+    runDiscovery: adminProcedure
+      .input(z.object({ missionId: z.string().min(1) }))
+      .mutation(async ({ ctx, input }): Promise<RunDiscoveryResult> => {
+        const missionStore = resolveStore(injectedStore);
+        const mission = await missionStore.getMission(ctx.tenantId, input.missionId);
+        if (!mission) return { status: "mission_not_found" };
+
+        const ratingThreshold = mission.qualityGates.minGoogleRating ?? mission.qualityGates.minYelpRating ?? null;
+        const discovery = await injectedDiscoveryFn({
+          searchText: searchTextForMission(mission.category, mission.geographyLabel),
+          minRating: ratingThreshold,
+          maxResults: mission.targetQuantity,
+        });
+
+        if (discovery.status !== "ok") return discovery;
+
+        const sourcingStore = resolveSourcingStore(injectedSourcingStore);
+        const summaries: DiscoveredCandidateSummary[] = [];
+        let persistedCount = 0;
+        let alreadyDiscoveredCount = 0;
+
+        for (const candidate of discovery.candidates) {
+          const existing = await sourcingStore.findCandidateBySourceReference(
+            ctx.tenantId, "permitted_public_fetch", candidate.placeId,
+          );
+          if (existing) {
+            alreadyDiscoveredCount += 1;
+            summaries.push({ ...candidate, persisted: false, alreadyDiscovered: true });
+            continue;
+          }
+          try {
+            await sourcingStore.createCandidate({
+              id: randomUUID(),
+              tenantId: ctx.tenantId,
+              sourceType: "permitted_public_fetch",
+              sourceReference: candidate.placeId,
+              category: mission.category,
+              businessName: candidate.businessName,
+              publicProfile: { address: candidate.address, coordinates: candidate.coordinates, sourceUrl: candidate.sourceUrl },
+              evidence: candidate,
+              createdBy: "google_places_discovery",
+            });
+            persistedCount += 1;
+            summaries.push({ ...candidate, persisted: true, alreadyDiscovered: false });
+          } catch {
+            summaries.push({ ...candidate, persisted: false, alreadyDiscovered: false });
+          }
+        }
+
+        return {
+          status: "ok",
+          foundCount: discovery.candidates.length,
+          persistedCount,
+          alreadyDiscoveredCount,
+          candidates: summaries,
+        };
       }),
   });
 }

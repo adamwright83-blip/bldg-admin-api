@@ -76,6 +76,7 @@ export default function MissionControlPage() {
   const latestMission = recentMissions.data?.[0] ?? null;
 
   const recentAttempts = trpc.admin.vendorCastingSprint.recentContactAttempts.useQuery({ limit: 10 });
+  const runDiscovery = trpc.admin.vendorAcquisitionMission.runDiscovery.useMutation();
 
   const [trainingDraft, setTrainingDraft] = useState("");
   const [savedTrainingRules, setSavedTrainingRules] = useState<string[]>([]);
@@ -272,7 +273,17 @@ export default function MissionControlPage() {
       </section>
 
       <section className="mt-4 rounded-2xl border border-black/10 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-bold">Sub-Agent Orchestra</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-bold">Sub-Agent Orchestra</h2>
+          <button
+            type="button"
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 disabled:opacity-40"
+            disabled={!latestMission || runDiscovery.isPending}
+            onClick={() => latestMission && runDiscovery.mutate({ missionId: latestMission.id })}
+          >
+            {runDiscovery.isPending ? "Running discovery…" : "Run discovery"}
+          </button>
+        </div>
         {latestMission ? (
           <p className="mt-1 text-xs text-black/55">
             Latest mission &middot; {label(latestMission.category)} &middot; {latestMission.geographyLabel} &middot; target {latestMission.targetQuantity}
@@ -280,6 +291,39 @@ export default function MissionControlPage() {
         ) : (
           <p className="mt-1 text-xs text-black/50">No mission launched yet.</p>
         )}
+
+        {runDiscovery.data ? (
+          <div className="mt-2 rounded-lg border border-black/10 bg-black/[0.02] p-3 text-xs">
+            {runDiscovery.data.status === "needs_provider_config" ? (
+              <p className="font-semibold text-amber-800">
+                Map Scout needs a Google Places API key configured (missing env var: {runDiscovery.data.missingEnvVar}). No candidates were found.
+              </p>
+            ) : runDiscovery.data.status === "provider_error" ? (
+              <p className="font-semibold text-red-700">Discovery failed: {runDiscovery.data.reason}</p>
+            ) : runDiscovery.data.status === "mission_not_found" ? (
+              <p className="text-black/55">Mission not found.</p>
+            ) : runDiscovery.data.foundCount === 0 ? (
+              <p className="text-black/55">No candidates found for this mission.</p>
+            ) : (
+              <>
+                <p className="font-semibold">
+                  Found {runDiscovery.data.foundCount} &middot; persisted {runDiscovery.data.persistedCount} &middot; already discovered {runDiscovery.data.alreadyDiscoveredCount}
+                </p>
+                <div className="mt-2 space-y-1">
+                  {runDiscovery.data.candidates.map(candidate => (
+                    <p key={candidate.placeId} className="text-black/65">
+                      {candidate.businessName}
+                      {candidate.rating !== null ? ` · ${candidate.rating}★` : ""}
+                      {candidate.reviewCount !== null ? ` (${candidate.reviewCount} reviews)` : ""}
+                      {candidate.address ? ` · ${candidate.address}` : ""}
+                    </p>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        ) : null}
+
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {SUB_AGENTS.map(agent => {
             const Icon = agent.icon;

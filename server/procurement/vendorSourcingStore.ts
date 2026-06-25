@@ -124,6 +124,26 @@ export class VendorSourcingStore {
     }
   }
 
+  /**
+   * Idempotency check for discovery connectors: no unique DB constraint
+   * backs (tenant_id, source_type, source_reference) -- this is an
+   * application-level check-before-insert, not a transactional guarantee.
+   * Safe for normal sequential operator use; not safe against two
+   * concurrent discovery runs racing on the same place id.
+   */
+  async findCandidateBySourceReference(
+    tenantId: string, sourceType: string, sourceReference: string,
+  ): Promise<VendorSourcingCandidate | null> {
+    const [rows] = await this.pool.execute<CandidateDbRow[]>(
+      `SELECT id, tenant_id, building_slug, source_type, source_reference, category,
+              business_name, sourcing_status, created_by, created_at, updated_at
+         FROM vendor_sourcing_candidates
+        WHERE tenant_id = ? AND source_type = ? AND source_reference = ? LIMIT 1`,
+      [tenantId, sourceType, sourceReference],
+    );
+    return rows[0] ? mapCandidateRow(rows[0]) : null;
+  }
+
   async getCandidate(tenantId: string, id: string): Promise<VendorSourcingCandidate | null> {
     const [rows] = await this.pool.execute<CandidateDbRow[]>(
       `SELECT id, tenant_id, building_slug, source_type, source_reference, category,
