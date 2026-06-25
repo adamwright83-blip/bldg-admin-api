@@ -104,6 +104,32 @@ const CHANNEL_ICON_LEGEND = [
 
 const TRAINING_CHIPS = ["Tone: Luxury & Warm", "Focus: Availability", "Qualify: Pricing", "Objection: Busy"] as const;
 
+const MOBILE_SERVICE_CONFIRMED_OPTIONS = ["unknown", "yes", "no"] as const;
+const CALENDAR_METHOD_OPTIONS = ["held_schedule", "booking_url", "google_calendar_later", "manual_confirmation"] as const;
+const PREFERRED_CONTACT_CHANNEL_OPTIONS = ["phone", "email", "text", "website", "booking_url"] as const;
+
+type IntakeFormState = {
+  mobileServiceConfirmed: (typeof MOBILE_SERVICE_CONFIRMED_OPTIONS)[number];
+  serviceAreasText: string;
+  recurringDays: string;
+  recurringStart: string;
+  recurringEnd: string;
+  bookingUrl: string;
+  minimumNoticeHours: string;
+  appointmentDurationMinutes: string;
+  travelBufferMinutes: string;
+  calendarMethod: "" | (typeof CALENDAR_METHOD_OPTIONS)[number];
+  preferredContactChannel: "" | (typeof PREFERRED_CONTACT_CHANNEL_OPTIONS)[number];
+  blackoutNotes: string;
+  onboardingNotes: string;
+};
+
+const EMPTY_INTAKE_FORM: IntakeFormState = {
+  mobileServiceConfirmed: "unknown", serviceAreasText: "", recurringDays: "", recurringStart: "", recurringEnd: "",
+  bookingUrl: "", minimumNoticeHours: "", appointmentDurationMinutes: "", travelBufferMinutes: "",
+  calendarMethod: "", preferredContactChannel: "", blackoutNotes: "", onboardingNotes: "",
+};
+
 export default function MissionControlPage() {
   const [category, setCategory] = useState<(typeof CATEGORY_OPTIONS)[number]>("dog_grooming");
   const [zipCode, setZipCode] = useState("90027");
@@ -145,6 +171,13 @@ export default function MissionControlPage() {
   const [savedTrainingRules, setSavedTrainingRules] = useState<string[]>([]);
 
   const [expandedCandidateId, setExpandedCandidateId] = useState<string | null>(null);
+  const availabilityIntake = trpc.admin.vendorAcquisitionMission.getCandidateAvailabilityIntake.useQuery(
+    { candidateId: expandedCandidateId ?? "" },
+    { enabled: !!expandedCandidateId },
+  );
+  const saveAvailabilityIntake = trpc.admin.vendorAcquisitionMission.saveCandidateAvailabilityIntake.useMutation();
+  const [intakeForm, setIntakeForm] = useState<IntakeFormState>(EMPTY_INTAKE_FORM);
+  const [intakeSavedAt, setIntakeSavedAt] = useState<number | null>(null);
   const [draftQueueStatus, setDraftQueueStatus] = useState<Record<string, "queued" | "already_queued">>({});
   const approveDraftOutreach = trpc.admin.vendorAcquisitionMission.approveCandidateForDraftOutreach.useMutation();
 
@@ -156,6 +189,28 @@ export default function MissionControlPage() {
         }
       },
     });
+  }
+
+  function submitAvailabilityIntake(candidateId: string) {
+    const recurringAvailability = intakeForm.recurringDays.trim() && intakeForm.recurringStart.trim() && intakeForm.recurringEnd.trim()
+      ? [{ days: intakeForm.recurringDays.split(",").map(day => day.trim()).filter(Boolean), startTime: intakeForm.recurringStart.trim(), endTime: intakeForm.recurringEnd.trim() }]
+      : null;
+    saveAvailabilityIntake.mutate({
+      candidateId,
+      mobileServiceConfirmed: intakeForm.mobileServiceConfirmed,
+      serviceAreas: intakeForm.serviceAreasText.trim()
+        ? intakeForm.serviceAreasText.split(",").map(area => area.trim()).filter(Boolean)
+        : null,
+      recurringAvailability,
+      minimumNoticeHours: intakeForm.minimumNoticeHours.trim() ? Number(intakeForm.minimumNoticeHours) : null,
+      appointmentDurationMinutes: intakeForm.appointmentDurationMinutes.trim() ? Number(intakeForm.appointmentDurationMinutes) : null,
+      travelBufferMinutes: intakeForm.travelBufferMinutes.trim() ? Number(intakeForm.travelBufferMinutes) : null,
+      bookingUrl: intakeForm.bookingUrl.trim() || null,
+      calendarMethod: intakeForm.calendarMethod || null,
+      preferredContactChannel: intakeForm.preferredContactChannel || null,
+      blackoutNotes: intakeForm.blackoutNotes.trim() || null,
+      onboardingNotes: intakeForm.onboardingNotes.trim() || null,
+    }, { onSuccess: () => setIntakeSavedAt(Date.now()) });
   }
 
   function copyCandidateDetails(candidate: { businessName: string; evidence: unknown }) {
@@ -524,7 +579,11 @@ export default function MissionControlPage() {
                     <button
                       type="button"
                       className="rounded-lg border border-black/15 px-2 py-1 text-xs font-semibold"
-                      onClick={() => setExpandedCandidateId(expanded ? null : candidate.id)}
+                      onClick={() => {
+                        setExpandedCandidateId(expanded ? null : candidate.id);
+                        setIntakeForm(EMPTY_INTAKE_FORM);
+                        setIntakeSavedAt(null);
+                      }}
                     >
                       {expanded ? "Hide review" : "Review"}
                     </button>
@@ -570,6 +629,56 @@ export default function MissionControlPage() {
                       <p>Source type: {candidate.sourceType} &middot; Source reference: {candidate.sourceReference}</p>
                       <p>Created: {new Date(candidate.createdAt).toLocaleString()}</p>
                       <p className="mt-1">Evidence summary: {JSON.stringify(candidate.evidence)}</p>
+                    </div>
+                  ) : null}
+
+                  {expanded ? (
+                    <div className="mt-2 rounded-lg border border-black/10 bg-white p-3 text-xs">
+                      <p className="text-xs font-bold">Availability Intake</p>
+                      <p className="mt-1 text-black/55">
+                        HELD needs a dependable way to know whether this vendor can be booked for resident time windows.
+                      </p>
+
+                      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <select className="rounded-lg border border-black/15 px-2 py-1" value={intakeForm.mobileServiceConfirmed} onChange={event => setIntakeForm({ ...intakeForm, mobileServiceConfirmed: event.target.value as IntakeFormState["mobileServiceConfirmed"] })}>
+                          {MOBILE_SERVICE_CONFIRMED_OPTIONS.map(option => <option key={option} value={option}>Mobile service: {label(option)}</option>)}
+                        </select>
+                        <input className="rounded-lg border border-black/15 px-2 py-1" placeholder="Service areas / ZIPs, comma separated" value={intakeForm.serviceAreasText} onChange={event => setIntakeForm({ ...intakeForm, serviceAreasText: event.target.value })} />
+                        <input className="rounded-lg border border-black/15 px-2 py-1" placeholder="Recurring days (e.g. Tue, Wed, Sat)" value={intakeForm.recurringDays} onChange={event => setIntakeForm({ ...intakeForm, recurringDays: event.target.value })} />
+                        <div className="flex gap-1">
+                          <input className="w-full rounded-lg border border-black/15 px-2 py-1" placeholder="Start (10:00)" value={intakeForm.recurringStart} onChange={event => setIntakeForm({ ...intakeForm, recurringStart: event.target.value })} />
+                          <input className="w-full rounded-lg border border-black/15 px-2 py-1" placeholder="End (13:00)" value={intakeForm.recurringEnd} onChange={event => setIntakeForm({ ...intakeForm, recurringEnd: event.target.value })} />
+                        </div>
+                        <input className="rounded-lg border border-black/15 px-2 py-1" placeholder="Booking URL" value={intakeForm.bookingUrl} onChange={event => setIntakeForm({ ...intakeForm, bookingUrl: event.target.value })} />
+                        <input className="rounded-lg border border-black/15 px-2 py-1" placeholder="Minimum notice (hours)" value={intakeForm.minimumNoticeHours} onChange={event => setIntakeForm({ ...intakeForm, minimumNoticeHours: event.target.value })} />
+                        <input className="rounded-lg border border-black/15 px-2 py-1" placeholder="Appointment duration (minutes)" value={intakeForm.appointmentDurationMinutes} onChange={event => setIntakeForm({ ...intakeForm, appointmentDurationMinutes: event.target.value })} />
+                        <input className="rounded-lg border border-black/15 px-2 py-1" placeholder="Travel buffer (minutes)" value={intakeForm.travelBufferMinutes} onChange={event => setIntakeForm({ ...intakeForm, travelBufferMinutes: event.target.value })} />
+                        <select className="rounded-lg border border-black/15 px-2 py-1" value={intakeForm.calendarMethod} onChange={event => setIntakeForm({ ...intakeForm, calendarMethod: event.target.value as IntakeFormState["calendarMethod"] })}>
+                          <option value="">Calendar method&hellip;</option>
+                          {CALENDAR_METHOD_OPTIONS.map(option => <option key={option} value={option}>{label(option)}</option>)}
+                        </select>
+                        <select className="rounded-lg border border-black/15 px-2 py-1" value={intakeForm.preferredContactChannel} onChange={event => setIntakeForm({ ...intakeForm, preferredContactChannel: event.target.value as IntakeFormState["preferredContactChannel"] })}>
+                          <option value="">Preferred contact channel&hellip;</option>
+                          {PREFERRED_CONTACT_CHANNEL_OPTIONS.map(option => <option key={option} value={option}>{label(option)}</option>)}
+                        </select>
+                        <textarea className="rounded-lg border border-black/15 px-2 py-1 sm:col-span-2" placeholder="Blackout notes" value={intakeForm.blackoutNotes} onChange={event => setIntakeForm({ ...intakeForm, blackoutNotes: event.target.value })} />
+                        <textarea className="rounded-lg border border-black/15 px-2 py-1 sm:col-span-2" placeholder="Onboarding notes" value={intakeForm.onboardingNotes} onChange={event => setIntakeForm({ ...intakeForm, onboardingNotes: event.target.value })} />
+                      </div>
+
+                      <button
+                        type="button"
+                        className="mt-2 rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                        disabled={saveAvailabilityIntake.isPending}
+                        onClick={() => submitAvailabilityIntake(candidate.id)}
+                      >
+                        {saveAvailabilityIntake.isPending ? "Saving…" : "Save availability intake"}
+                      </button>
+
+                      {intakeSavedAt ? (
+                        <p className="mt-1 font-semibold text-emerald-700">Availability intake saved &middot; Not onboarded yet</p>
+                      ) : availabilityIntake.data?.status === "ok" && availabilityIntake.data.intake ? (
+                        <p className="mt-1 text-black/55">Existing intake on file &middot; Not onboarded yet</p>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>

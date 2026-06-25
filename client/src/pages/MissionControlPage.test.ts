@@ -495,3 +495,38 @@ describe("MissionControlPage -- Slice 78a draft outreach queue", () => {
     expect(source).not.toMatch(/Paws & Polish|Happy Hounds|Wag Luxury|Beverly Barkers|Puppy Palace|The Dog Spa/);
   });
 });
+
+describe("MissionControlPage -- Slice 78b availability intake", () => {
+  it("renders the Availability Intake panel for a real candidate, wired to the real queries/mutation", () => {
+    expect(source).toMatch(/Availability Intake/);
+    expect(source).toMatch(/HELD needs a dependable way to know whether this vendor can be booked/);
+    expect(source).toMatch(/getCandidateAvailabilityIntake\.useQuery/);
+    expect(source).toMatch(/saveCandidateAvailabilityIntake\.useMutation/);
+  });
+
+  it("can enter/save booking URL, service area, recurring availability, notice/duration/buffer, calendar method, and preferred channel", () => {
+    expect(source).toMatch(/placeholder="Booking URL"/);
+    expect(source).toMatch(/placeholder="Service areas \/ ZIPs, comma separated"/);
+    expect(source).toMatch(/placeholder="Recurring days/);
+    expect(source).toMatch(/placeholder="Minimum notice \(hours\)"/);
+    expect(source).toMatch(/placeholder="Appointment duration \(minutes\)"/);
+    expect(source).toMatch(/placeholder="Travel buffer \(minutes\)"/);
+    expect(source).toMatch(/Calendar method&hellip;/);
+    expect(source).toMatch(/Preferred contact channel&hellip;/);
+  });
+
+  it("shows a clear saved state without implying the vendor is onboarded or bookable", () => {
+    expect(source).toMatch(/Availability intake saved &middot; Not onboarded yet/);
+    expect(source).not.toMatch(/Onboarded\b|Bookable\b|Provider accepted/);
+  });
+
+  it("never triggers Google Calendar OAuth or any outreach/send action from the intake panel", () => {
+    expect(source).not.toMatch(/oauth|googleapis\.com\/auth/i);
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid/i);
+  });
+
+  it("never renders fake intake data -- saved-state text only appears conditionally on a real save or real existing intake", () => {
+    expect(source).toMatch(/intakeSavedAt \? \(/);
+    expect(source).toMatch(/availabilityIntake\.data\?\.status === "ok" && availabilityIntake\.data\.intake/);
+  });
+});

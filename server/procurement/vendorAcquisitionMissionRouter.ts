@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { adminProcedure, router } from "../_core/trpc";
+import {
+  CALENDAR_METHODS, MOBILE_SERVICE_CONFIRMED_VALUES, PREFERRED_CONTACT_CHANNELS,
+  VendorCandidateAvailabilityIntakeStore,
+} from "./vendorCandidateAvailabilityIntakeStore";
 import { buildCandidateDraftOutreach } from "./vendorCandidateDraftOutreachPolicy";
 import { VendorContactAttemptStore } from "./vendorContactAttemptStore";
 import { runGooglePlacesDiscovery, type NormalizedPlaceCandidate } from "./googlePlacesDiscoveryConnector";
@@ -63,6 +67,15 @@ function resolveContactAttemptStore(injected?: VendorContactAttemptStore): Vendo
   return lazyContactAttemptStore;
 }
 
+let lazyAvailabilityIntakeStore: VendorCandidateAvailabilityIntakeStore | null = null;
+function resolveAvailabilityIntakeStore(injected?: VendorCandidateAvailabilityIntakeStore): VendorCandidateAvailabilityIntakeStore {
+  if (injected) return injected;
+  if (!lazyAvailabilityIntakeStore) {
+    lazyAvailabilityIntakeStore = new VendorCandidateAvailabilityIntakeStore(createProcurementPool());
+  }
+  return lazyAvailabilityIntakeStore;
+}
+
 export type QueryPlannerFallbackReason = "needs_provider_config" | "invalid_output" | "provider_error" | "parser_exception" | null;
 
 export type DiscoveredCandidateSummary = NormalizedPlaceCandidate & {
@@ -120,6 +133,7 @@ export function createVendorAcquisitionMissionRouter(
   injectedDiscoveryFn: typeof runGooglePlacesDiscovery = runGooglePlacesDiscovery,
   injectedParserFn: typeof parseMissionWithClaude = parseMissionWithClaude,
   injectedContactAttemptStore?: VendorContactAttemptStore,
+  injectedAvailabilityIntakeStore?: VendorCandidateAvailabilityIntakeStore,
 ) {
   return router({
     createMission: adminProcedure
@@ -237,6 +251,78 @@ export function createVendorAcquisitionMissionRouter(
           draftSubject: attempt.draftSubject,
           draftBody: attempt.draftBodySnapshot,
         };
+      }),
+
+    /**
+     * Slice 78b. Read-only availability-intake lookup for a real
+     * candidate. Returns null honestly when no intake exists yet --
+     * never fabricates one. Validates tenant ownership by confirming the
+     * candidate exists for this tenant before reading any intake row.
+     */
+    getCandidateAvailabilityIntake: adminProcedure
+      .input(z.object({ candidateId: z.string().min(1) }))
+      .query(async ({ ctx, input }) => {
+        const sourcingStore = resolveSourcingStore(injectedSourcingStore);
+        const candidate = await sourcingStore.getCandidate(ctx.tenantId, input.candidateId);
+        if (!candidate) return { status: "candidate_not_found" as const };
+        const intakeStore = resolveAvailabilityIntakeStore(injectedAvailabilityIntakeStore);
+        const intake = await intakeStore.getByCandidateId({ tenantId: ctx.tenantId, candidateId: input.candidateId });
+        return { status: "ok" as const, intake };
+      }),
+
+    /**
+     * Slice 78b. Vendor candidate availability intake -- profile/intake
+     * data only. Never creates a booking, never connects Google
+     * Calendar, never sends an onboarding link/email/SMS/Yelp/web-form,
+     * never makes a phone call, and never mutates any
+     * vendor_contact_attempts truth column (this mutation has no access
+     * to that store at all). Idempotent: a second save for the same
+     * candidate updates the existing intake row via the table's own
+     * UNIQUE KEY, never creating a duplicate.
+     */
+    saveCandidateAvailabilityIntake: adminProcedure
+      .input(z.object({
+        candidateId: z.string().min(1),
+        mobileServiceConfirmed: z.enum(MOBILE_SERVICE_CONFIRMED_VALUES).optional(),
+        serviceAreas: z.array(z.string().min(1).max(100)).max(50).nullable().optional(),
+        recurringAvailability: z.array(z.object({
+          days: z.array(z.string().min(1).max(20)).min(1).max(7),
+          startTime: z.string().regex(/^\d{1,2}:\d{2}$/),
+          endTime: z.string().regex(/^\d{1,2}:\d{2}$/),
+          note: z.string().max(500).nullable().optional(),
+        })).max(20).nullable().optional(),
+        minimumNoticeHours: z.number().int().min(0).max(720).nullable().optional(),
+        appointmentDurationMinutes: z.number().int().min(15).max(480).nullable().optional(),
+        travelBufferMinutes: z.number().int().min(0).max(240).nullable().optional(),
+        bookingUrl: z.union([z.string().url().max(2048), z.literal("")]).nullable().optional(),
+        calendarMethod: z.enum(CALENDAR_METHODS).nullable().optional(),
+        preferredContactChannel: z.enum(PREFERRED_CONTACT_CHANNELS).nullable().optional(),
+        blackoutNotes: z.string().max(2000).nullable().optional(),
+        onboardingNotes: z.string().max(2000).nullable().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const sourcingStore = resolveSourcingStore(injectedSourcingStore);
+        const candidate = await sourcingStore.getCandidate(ctx.tenantId, input.candidateId);
+        if (!candidate) return { status: "candidate_not_found" as const };
+
+        const intakeStore = resolveAvailabilityIntakeStore(injectedAvailabilityIntakeStore);
+        const intake = await intakeStore.upsertForCandidate({
+          tenantId: ctx.tenantId,
+          candidateId: input.candidateId,
+          mobileServiceConfirmed: input.mobileServiceConfirmed,
+          serviceAreas: input.serviceAreas,
+          recurringAvailability: input.recurringAvailability,
+          minimumNoticeHours: input.minimumNoticeHours,
+          appointmentDurationMinutes: input.appointmentDurationMinutes,
+          travelBufferMinutes: input.travelBufferMinutes,
+          bookingUrl: input.bookingUrl || null,
+          calendarMethod: input.calendarMethod,
+          preferredContactChannel: input.preferredContactChannel,
+          blackoutNotes: input.blackoutNotes,
+          onboardingNotes: input.onboardingNotes,
+          createdBy: ctx.user?.id != null ? String(ctx.user.id) : "admin",
+        });
+        return { status: "ok" as const, intake };
       }),
 
     /**

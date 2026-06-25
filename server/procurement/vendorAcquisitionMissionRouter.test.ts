@@ -655,3 +655,125 @@ describe("vendorAcquisitionMissionRouter -- approveCandidateForDraftOutreach (Sl
     expect(call).not.toHaveProperty("dispatched", true);
   });
 });
+
+function makeMockAvailabilityIntakeStore(overrides?: Record<string, unknown>) {
+  return {
+    getByCandidateId: vi.fn().mockResolvedValue(null),
+    upsertForCandidate: vi.fn().mockResolvedValue({
+      id: "intake-1", tenantId: "default", candidateId: "candidate-1", mobileServiceConfirmed: "yes",
+      serviceAreas: ["90027"], recurringAvailability: null, minimumNoticeHours: 24,
+      appointmentDurationMinutes: 60, travelBufferMinutes: 30, bookingUrl: "https://example.com/book",
+      calendarMethod: "booking_url", preferredContactChannel: "phone", blackoutNotes: null, onboardingNotes: null,
+      createdBy: "admin", createdAt: new Date(), updatedAt: new Date(),
+    }),
+    ...overrides,
+  };
+}
+
+describe("vendorAcquisitionMissionRouter -- getCandidateAvailabilityIntake (Slice 78b)", () => {
+  it("rejects unauthenticated and non-admin callers", async () => {
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, makeMockSourcingStore() as never);
+    await expect(
+      router.createCaller(context(null)).getCandidateAvailabilityIntake({ candidateId: "candidate-1" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("returns candidate_not_found when the candidate does not belong to this tenant", async () => {
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(null) });
+    const intakeStore = makeMockAvailabilityIntakeStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never, undefined, undefined, undefined, intakeStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).getCandidateAvailabilityIntake({ candidateId: "missing" });
+    expect(result).toEqual({ status: "candidate_not_found" });
+    expect(intakeStore.getByCandidateId).not.toHaveBeenCalled();
+  });
+
+  it("returns null intake honestly when none exists yet, rather than fabricating one", async () => {
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const intakeStore = makeMockAvailabilityIntakeStore({ getByCandidateId: vi.fn().mockResolvedValue(null) });
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never, undefined, undefined, undefined, intakeStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).getCandidateAvailabilityIntake({ candidateId: "candidate-1" });
+    expect(result).toEqual({ status: "ok", intake: null });
+  });
+});
+
+describe("vendorAcquisitionMissionRouter -- saveCandidateAvailabilityIntake (Slice 78b)", () => {
+  it("rejects unauthenticated and non-admin callers", async () => {
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, makeMockSourcingStore() as never);
+    await expect(
+      router.createCaller(context(null)).saveCandidateAvailabilityIntake({ candidateId: "candidate-1" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("persists availability intake for a real candidate (booking URL, recurring availability, service area, notice/duration/buffer, calendar method, contact channel)", async () => {
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const intakeStore = makeMockAvailabilityIntakeStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never, undefined, undefined, undefined, intakeStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).saveCandidateAvailabilityIntake({
+      candidateId: "candidate-1",
+      mobileServiceConfirmed: "yes",
+      serviceAreas: ["90027"],
+      recurringAvailability: [{ days: ["Tuesday"], startTime: "10:00", endTime: "13:00" }],
+      minimumNoticeHours: 24,
+      appointmentDurationMinutes: 60,
+      travelBufferMinutes: 30,
+      bookingUrl: "https://example.com/book",
+      calendarMethod: "booking_url",
+      preferredContactChannel: "phone",
+    });
+    expect(result.status).toBe("ok");
+    expect(intakeStore.upsertForCandidate).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: "default", candidateId: "candidate-1", mobileServiceConfirmed: "yes", bookingUrl: "https://example.com/book",
+    }));
+  });
+
+  it("is idempotent: saving twice for the same candidate calls upsert both times without creating a new candidate", async () => {
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const intakeStore = makeMockAvailabilityIntakeStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never, undefined, undefined, undefined, intakeStore as never);
+    await router.createCaller(context({ role: "admin" })).saveCandidateAvailabilityIntake({ candidateId: "candidate-1", mobileServiceConfirmed: "yes" });
+    await router.createCaller(context({ role: "admin" })).saveCandidateAvailabilityIntake({ candidateId: "candidate-1", mobileServiceConfirmed: "yes" });
+    expect(intakeStore.upsertForCandidate).toHaveBeenCalledTimes(2);
+    expect(sourcingStore.createCandidate).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid booking URL", async () => {
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const intakeStore = makeMockAvailabilityIntakeStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never, undefined, undefined, undefined, intakeStore as never);
+    await expect(
+      router.createCaller(context({ role: "admin" })).saveCandidateAvailabilityIntake({ candidateId: "candidate-1", bookingUrl: "not-a-url" }),
+    ).rejects.toBeTruthy();
+  });
+
+  it("rejects an invalid calendar method or preferred contact channel outside the controlled enum", async () => {
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const intakeStore = makeMockAvailabilityIntakeStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never, undefined, undefined, undefined, intakeStore as never);
+    await expect(
+      router.createCaller(context({ role: "admin" })).saveCandidateAvailabilityIntake({ candidateId: "candidate-1", calendarMethod: "anything_made_up" as never }),
+    ).rejects.toBeTruthy();
+  });
+
+  it("clamps/rejects numeric values outside policy bounds (minimum notice 0-720h, duration 15-480min, buffer 0-240min)", async () => {
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const intakeStore = makeMockAvailabilityIntakeStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never, undefined, undefined, undefined, intakeStore as never);
+    await expect(
+      router.createCaller(context({ role: "admin" })).saveCandidateAvailabilityIntake({ candidateId: "candidate-1", minimumNoticeHours: 9999 }),
+    ).rejects.toBeTruthy();
+    await expect(
+      router.createCaller(context({ role: "admin" })).saveCandidateAvailabilityIntake({ candidateId: "candidate-1", appointmentDurationMinutes: 5 }),
+    ).rejects.toBeTruthy();
+    await expect(
+      router.createCaller(context({ role: "admin" })).saveCandidateAvailabilityIntake({ candidateId: "candidate-1", travelBufferMinutes: 9999 }),
+    ).rejects.toBeTruthy();
+  });
+
+  it("never invokes any outreach/send/booking/calendar-OAuth capability -- this mutation has no contact-attempt store access at all", async () => {
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const intakeStore = makeMockAvailabilityIntakeStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never, undefined, undefined, undefined, intakeStore as never);
+    await router.createCaller(context({ role: "admin" })).saveCandidateAvailabilityIntake({ candidateId: "candidate-1", mobileServiceConfirmed: "yes" });
+    expect(Object.keys(intakeStore).sort()).toEqual(["getByCandidateId", "upsertForCandidate"]);
+  });
+});
