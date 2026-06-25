@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  Compass, Expand, FileText, Loader2, Mail, MapPin, MessageSquare, Phone,
+  Compass, Copy, ExternalLink, Expand, FileText, Loader2, Mail, MapPin, MessageSquare, Phone,
   Reply, Send, ShieldCheck, Sparkles, Star, Wrench,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -12,6 +12,12 @@ const CATEGORY_OPTIONS = [
 
 function label(value: string): string {
   return value.replaceAll("_", " ").replace(/\b\w/g, character => character.toUpperCase());
+}
+
+function evidenceField(evidence: unknown, key: string): string | number | null {
+  if (typeof evidence !== "object" || evidence === null) return null;
+  const value = (evidence as Record<string, unknown>)[key];
+  return typeof value === "string" || typeof value === "number" ? value : null;
 }
 
 const GLOBAL_MARKET_PREVIEW_CITIES = ["London", "Dubai", "Singapore", "Paris", "Tokyo"] as const;
@@ -76,6 +82,7 @@ export default function MissionControlPage() {
   const latestMission = recentMissions.data?.[0] ?? null;
 
   const recentAttempts = trpc.admin.vendorCastingSprint.recentContactAttempts.useQuery({ limit: 10 });
+  const discoveredCandidates = trpc.admin.vendorAcquisitionMission.listDiscoveredCandidates.useQuery({ category, limit: 50 });
   const runDiscovery = trpc.admin.vendorAcquisitionMission.runDiscovery.useMutation();
 
   // Set immediately from the createMission response so Run Discovery
@@ -87,6 +94,26 @@ export default function MissionControlPage() {
 
   const [trainingDraft, setTrainingDraft] = useState("");
   const [savedTrainingRules, setSavedTrainingRules] = useState<string[]>([]);
+
+  const [expandedCandidateId, setExpandedCandidateId] = useState<string | null>(null);
+
+  function copyCandidateDetails(candidate: { businessName: string; evidence: unknown }) {
+    const rating = evidenceField(candidate.evidence, "rating");
+    const reviewCount = evidenceField(candidate.evidence, "reviewCount");
+    const address = evidenceField(candidate.evidence, "address");
+    const phone = evidenceField(candidate.evidence, "phone");
+    const website = evidenceField(candidate.evidence, "website");
+    const lines = [
+      candidate.businessName,
+      rating !== null ? `Rating: ${rating}` : null,
+      reviewCount !== null ? `Reviews: ${reviewCount}` : null,
+      address !== null ? `Address: ${address}` : null,
+      phone !== null ? `Phone: ${phone}` : null,
+      website !== null ? `Website: ${website}` : null,
+      "Not contacted. No outreach sent.",
+    ].filter((line): line is string => line !== null);
+    navigator.clipboard?.writeText(lines.join("\n"));
+  }
 
   function startMission() {
     const rating = Number(minRating);
@@ -108,7 +135,7 @@ export default function MissionControlPage() {
   }
 
   function startDiscovery() {
-    if (effectiveMissionId) runDiscovery.mutate({ missionId: effectiveMissionId });
+    if (effectiveMissionId) runDiscovery.mutate({ missionId: effectiveMissionId }, { onSuccess: () => discoveredCandidates.refetch() });
   }
 
   return (
@@ -340,21 +367,10 @@ export default function MissionControlPage() {
             ) : runDiscovery.data.foundCount === 0 ? (
               <p className="text-black/55">No candidates found for this mission.</p>
             ) : (
-              <>
-                <p className="font-semibold">
-                  Found {runDiscovery.data.foundCount} &middot; persisted {runDiscovery.data.persistedCount} &middot; already discovered {runDiscovery.data.alreadyDiscoveredCount}
-                </p>
-                <div className="mt-2 space-y-1">
-                  {runDiscovery.data.candidates.map(candidate => (
-                    <p key={candidate.placeId} className="text-black/65">
-                      {candidate.businessName}
-                      {candidate.rating !== null ? ` · ${candidate.rating}★` : ""}
-                      {candidate.reviewCount !== null ? ` (${candidate.reviewCount} reviews)` : ""}
-                      {candidate.address ? ` · ${candidate.address}` : ""}
-                    </p>
-                  ))}
-                </div>
-              </>
+              <p className="font-semibold">
+                Found {runDiscovery.data.foundCount} &middot; persisted {runDiscovery.data.persistedCount} &middot; already discovered {runDiscovery.data.alreadyDiscoveredCount}
+                &middot; see Discovered Candidates below for details.
+              </p>
             )}
           </div>
         ) : null}
@@ -378,6 +394,88 @@ export default function MissionControlPage() {
             );
           })}
         </div>
+      </section>
+
+      <section className="mt-4 rounded-2xl border border-black/10 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-bold">Discovered Candidates</h2>
+        <p className="mt-1 text-xs text-black/55">Review real candidates found by HELD before approving outreach.</p>
+
+        {discoveredCandidates.isLoading ? (
+          <p className="mt-3 text-xs text-black/50">Loading candidates&hellip;</p>
+        ) : discoveredCandidates.data && discoveredCandidates.data.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            {discoveredCandidates.data.map(candidate => {
+              const rating = evidenceField(candidate.evidence, "rating");
+              const reviewCount = evidenceField(candidate.evidence, "reviewCount");
+              const address = evidenceField(candidate.evidence, "address") ?? candidate.publicProfile?.address;
+              const phone = evidenceField(candidate.evidence, "phone");
+              const website = evidenceField(candidate.evidence, "website");
+              const sourceUrl = evidenceField(candidate.evidence, "sourceUrl");
+              const expanded = expandedCandidateId === candidate.id;
+              return (
+                <div key={candidate.id} className="rounded-lg border border-black/10 p-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold">{candidate.businessName}</p>
+                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700">Google Places</span>
+                    <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[10px] font-semibold text-black/55">{label(candidate.sourcingStatus)}</span>
+                    {rating !== null ? <span className="text-black/55">{rating}&#9733;{reviewCount !== null ? ` (${reviewCount} reviews)` : ""}</span> : null}
+                  </div>
+                  {typeof address === "string" ? <p className="mt-1 text-black/55">{address}</p> : null}
+                  <div className="mt-1 flex flex-wrap gap-3 text-black/45">
+                    {typeof phone === "string" ? <span>{phone}</span> : null}
+                    {typeof website === "string" ? <span>{website}</span> : null}
+                  </div>
+                  <p className="mt-1 font-semibold text-emerald-700">Not contacted &middot; No outreach sent</p>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded-lg border border-black/15 px-2 py-1 text-xs font-semibold"
+                      onClick={() => setExpandedCandidateId(expanded ? null : candidate.id)}
+                    >
+                      {expanded ? "Hide review" : "Review"}
+                    </button>
+                    {typeof sourceUrl === "string" ? (
+                      <a
+                        href={sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1 rounded-lg border border-black/15 px-2 py-1 text-xs font-semibold"
+                      >
+                        <ExternalLink className="h-3 w-3" /> Open source
+                      </a>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 rounded-lg border border-black/15 px-2 py-1 text-xs font-semibold"
+                      onClick={() => copyCandidateDetails(candidate)}
+                    >
+                      <Copy className="h-3 w-3" /> Copy details
+                    </button>
+                    <button
+                      type="button"
+                      disabled
+                      title="Coming next -- not yet wired to any contact-attempt or send path"
+                      className="rounded-lg border border-black/10 px-2 py-1 text-xs font-semibold text-black/35 cursor-not-allowed"
+                    >
+                      Approve for outreach &middot; Coming next
+                    </button>
+                  </div>
+
+                  {expanded ? (
+                    <div className="mt-2 rounded-lg border border-black/10 bg-black/[0.02] p-2 text-[11px] text-black/55">
+                      <p>Source type: {candidate.sourceType} &middot; Source reference: {candidate.sourceReference}</p>
+                      <p>Created: {new Date(candidate.createdAt).toLocaleString()}</p>
+                      <p className="mt-1">Evidence summary: {JSON.stringify(candidate.evidence)}</p>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-black/50">No candidates discovered yet. Run discovery to populate this list.</p>
+        )}
       </section>
 
       <section className="mt-4 rounded-2xl border border-black/10 bg-white p-5 shadow-sm">

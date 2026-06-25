@@ -123,6 +123,21 @@ export function createVendorAcquisitionMissionRouter(
       }),
 
     /**
+     * Read-only, admin-only candidate review query (Sub-slice 76c).
+     * Reads exactly what runDiscovery already persisted into
+     * vendor_sourcing_candidates -- never creates, sends, contacts, or
+     * marks any provider-acceptance/booking/payment/dispatch truth.
+     * Filters by category, not mission id -- vendor_sourcing_candidates
+     * has no mission_id column.
+     */
+    listDiscoveredCandidates: adminProcedure
+      .input(z.object({ category: z.string().optional(), limit: z.number().int().min(1).max(250).default(50) }))
+      .query(async ({ ctx, input }) => {
+        const sourcingStore = resolveSourcingStore(injectedSourcingStore);
+        return sourcingStore.listCandidatesForReview({ tenantId: ctx.tenantId, category: input.category, limit: input.limit });
+      }),
+
+    /**
      * Read-only Google Places discovery for a real mission. Never sends
      * outreach, never contacts a vendor, never marks any provider-
      * acceptance/booking/payment/dispatch truth. Persists candidates only

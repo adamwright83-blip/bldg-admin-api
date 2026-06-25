@@ -208,7 +208,8 @@ describe("MissionControlPage -- Slice 76a Run discovery action", () => {
 
   it("displays a real discovery summary (found\\/persisted\\/already-discovered counts) without claiming outreach happened", () => {
     expect(source).toMatch(/Found \{runDiscovery\.data\.foundCount\}/);
-    expect(source).not.toMatch(/contacted|outreach sent|message sent/i);
+    const summaryBlock = source.match(/Found \{runDiscovery\.data\.foundCount\}[\s\S]{0,120}/)?.[0] ?? "";
+    expect(summaryBlock).not.toMatch(/contacted|outreach sent|message sent/i);
   });
 
   it("displays an honest zero-result state", () => {
@@ -246,7 +247,7 @@ describe("MissionControlPage -- Run Discovery CTA activation bugfix", () => {
   });
 
   it("Run discovery's click handler calls the mutation with effectiveMissionId via startDiscovery", () => {
-    expect(source).toMatch(/function startDiscovery\(\) \{\s*if \(effectiveMissionId\) runDiscovery\.mutate\(\{ missionId: effectiveMissionId \}\)/);
+    expect(source).toMatch(/function startDiscovery\(\) \{\s*if \(effectiveMissionId\) runDiscovery\.mutate\(\{ missionId: effectiveMissionId \}/);
     expect(source).toMatch(/onClick=\{startDiscovery\}/);
   });
 
@@ -279,5 +280,77 @@ describe("MissionControlPage -- Run Discovery CTA activation bugfix", () => {
 
   it("never invokes any outreach/send path from the bugfixed activation flow", () => {
     expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid/i);
+  });
+});
+
+describe("MissionControlPage -- Slice 76c Discovered Candidates panel", () => {
+  it("renders the panel title, subtitle, and is wired to the real listDiscoveredCandidates query", () => {
+    expect(source).toMatch(/Discovered Candidates/);
+    expect(source).toMatch(/Review real candidates found by HELD before approving outreach\./);
+    expect(source).toMatch(/vendorAcquisitionMission\.listDiscoveredCandidates\.useQuery/);
+  });
+
+  it("renders the honest empty state", () => {
+    expect(source).toMatch(/No candidates discovered yet\. Run discovery to populate this list\./);
+  });
+
+  it("renders a Google Places source badge and the sourcing status, derived from real candidate fields only", () => {
+    expect(source).toMatch(/Google Places<\/span>/);
+    expect(source).toMatch(/label\(candidate\.sourcingStatus\)/);
+  });
+
+  it("renders rating/review count/address/phone/website only when present -- never fabricated", () => {
+    expect(source).toMatch(/evidenceField\(candidate\.evidence, "rating"\)/);
+    expect(source).toMatch(/typeof phone === "string"/);
+    expect(source).toMatch(/typeof website === "string"/);
+  });
+
+  it("never renders a hardcoded/fake vendor name", () => {
+    const panelSection = source.match(/Discovered Candidates[\s\S]*?<\/section>/)?.[0] ?? "";
+    expect(panelSection).not.toMatch(/Paws & Polish|Happy Hounds|Wag Luxury|Beverly Barkers|Puppy Palace|The Dog Spa|Paw Spa LA|Washing Spot/);
+  });
+
+  it("shows an explicit not-contacted safety line on every candidate", () => {
+    expect(source).toMatch(/Not contacted &middot; No outreach sent/);
+  });
+
+  it("the Approve for outreach affordance is disabled and labeled Coming next -- not wired to any mutation", () => {
+    expect(source).toMatch(/Approve for outreach &middot; Coming next/);
+    const approveButton = source.match(/disabled\s*\n?\s*title="Coming next[\s\S]{0,200}/)?.[0] ?? "";
+    expect(approveButton).not.toMatch(/\.mutate\(/);
+  });
+
+  it("Review, Open source, and Copy details never call a mutation or submit a form", () => {
+    expect(source).toMatch(/setExpandedCandidateId\(expanded \? null : candidate\.id\)/);
+    expect(source).toMatch(/onClick=\{\(\) => copyCandidateDetails\(candidate\)\}/);
+    expect(source).not.toMatch(/<form/i);
+  });
+
+  it("Open source only renders a real anchor link to the candidate's own sourceUrl, never a hardcoded URL", () => {
+    expect(source).toMatch(/href=\{sourceUrl\}/);
+    expect(source).toMatch(/target="_blank"/);
+  });
+
+  it("refetches discovered candidates after a successful discovery run", () => {
+    expect(source).toMatch(/onSuccess: \(\) => discoveredCandidates\.refetch\(\)/);
+  });
+
+  it("the raw per-candidate discovery dump is no longer the primary candidate UI -- the orchestra summary is concise", () => {
+    expect(source).not.toMatch(/candidate\.rating !== null \? ` · \$\{candidate\.rating\}★`/);
+    expect(source).toMatch(/see Discovered Candidates below for details\./);
+  });
+});
+
+describe("MissionControlPage -- Slice 76c source isolation", () => {
+  it("never imports any outbound send adapter or live LLM", () => {
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid|openai|anthropic\./i);
+  });
+
+  it("never claims a truth field is true", () => {
+    expect(source).not.toMatch(/provider_accepted:\s*true|bookingConfirmed:\s*true|paymentAuthorized:\s*true|dispatched:\s*true/i);
+  });
+
+  it("never submits a web form, sends SMS, or invokes a phone call from this page", () => {
+    expect(source).not.toMatch(/\.submit\(\)|sendSms\(|placeCall\(|sendYelpMessage\(/);
   });
 });

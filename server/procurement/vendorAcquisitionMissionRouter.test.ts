@@ -117,6 +117,7 @@ function makeMockSourcingStore(overrides?: Record<string, unknown>) {
     createCandidate: vi.fn().mockResolvedValue("candidate-1"),
     getCandidate: vi.fn(),
     listCandidates: vi.fn(),
+    listCandidatesForReview: vi.fn().mockResolvedValue([]),
     listSourceRegistry: vi.fn(),
     getSourceRegistry: vi.fn(),
     ...overrides,
@@ -233,8 +234,41 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(Object.keys(sourcingStore).sort()).toEqual([
-      "createCandidate", "findCandidateBySourceReference", "getCandidate", "getSourceRegistry", "listCandidates", "listSourceRegistry",
+      "createCandidate", "findCandidateBySourceReference", "getCandidate", "getSourceRegistry",
+      "listCandidates", "listCandidatesForReview", "listSourceRegistry",
     ]);
+  });
+});
+
+describe("vendorAcquisitionMissionRouter -- listDiscoveredCandidates", () => {
+  it("rejects unauthenticated and non-admin callers", async () => {
+    const sourcingStore = makeMockSourcingStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never);
+    await expect(router.createCaller(context(null)).listDiscoveredCandidates({})).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(sourcingStore.listCandidatesForReview).not.toHaveBeenCalled();
+  });
+
+  it("returns whatever the store reports, with no fabricated rows", async () => {
+    const sourcingStore = makeMockSourcingStore({
+      listCandidatesForReview: vi.fn().mockResolvedValue([{ id: "candidate-1", businessName: "Paw Spa LA" }]),
+    });
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never);
+    const candidates = await router.createCaller(context({ role: "admin" })).listDiscoveredCandidates({});
+    expect(candidates).toEqual([{ id: "candidate-1", businessName: "Paw Spa LA" }]);
+  });
+
+  it("passes the category filter and tenant through to the store, never mission id (no such column exists)", async () => {
+    const sourcingStore = makeMockSourcingStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never);
+    await router.createCaller(context({ role: "admin" })).listDiscoveredCandidates({ category: "dog_grooming", limit: 20 });
+    expect(sourcingStore.listCandidatesForReview).toHaveBeenCalledWith({ tenantId: "default", category: "dog_grooming", limit: 20 });
+  });
+
+  it("returns an empty list honestly when no candidates exist, rather than seeding demo rows", async () => {
+    const sourcingStore = makeMockSourcingStore();
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never);
+    const candidates = await router.createCaller(context({ role: "admin" })).listDiscoveredCandidates({});
+    expect(candidates).toEqual([]);
   });
 });
 

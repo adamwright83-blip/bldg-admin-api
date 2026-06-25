@@ -25,6 +25,16 @@ type CandidateDbRow = RowDataPacket & {
   created_by: string; created_at: Date; updated_at: Date;
 };
 
+type CandidateReviewDbRow = CandidateDbRow & {
+  public_profile_json: string | Record<string, unknown> | null;
+  evidence_json: string | Record<string, unknown>;
+};
+
+export type VendorSourcingCandidateForReview = VendorSourcingCandidate & {
+  publicProfile: Record<string, unknown> | null;
+  evidence: unknown;
+};
+
 export type CreateVendorSourcingCandidateInput = {
   id: string;
   tenantId: string;
@@ -60,6 +70,14 @@ function mapCandidateRow(row: CandidateDbRow): VendorSourcingCandidate {
     sourceType: row.source_type, sourceReference: row.source_reference, category: row.category,
     businessName: row.business_name, sourcingStatus: row.sourcing_status,
     createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at };
+}
+
+function mapCandidateReviewRow(row: CandidateReviewDbRow): VendorSourcingCandidateForReview {
+  return {
+    ...mapCandidateRow(row),
+    publicProfile: row.public_profile_json === null ? null : parseObject(row.public_profile_json),
+    evidence: typeof row.evidence_json === "string" ? JSON.parse(row.evidence_json) : row.evidence_json,
+  };
 }
 
 export class VendorSourcingStore {
@@ -175,6 +193,35 @@ export class VendorSourcingStore {
       params,
     );
     return rows.map(mapCandidateRow);
+  }
+
+  /**
+   * Narrow, read-only query for Mission Control's candidate review panel
+   * (Sub-slice 76c). Includes evidence_json/public_profile_json (unlike
+   * listCandidates) so the UI can show real rating/review-count/address/
+   * phone/website/source-URL without inventing anything. Filters by
+   * category, not mission id -- vendor_sourcing_candidates has no
+   * mission_id column, and adding one would require a migration.
+   */
+  async listCandidatesForReview(
+    input: { tenantId: string; category?: string; limit?: number },
+  ): Promise<VendorSourcingCandidateForReview[]> {
+    const limit = Math.trunc(Math.min(Math.max(input.limit ?? 50, 1), 250));
+    const params: unknown[] = [input.tenantId];
+    let categoryClause = "";
+    if (input.category) {
+      categoryClause = " AND category = ?";
+      params.push(input.category);
+    }
+    const [rows] = await this.pool.execute<CandidateReviewDbRow[]>(
+      `SELECT id, tenant_id, building_slug, source_type, source_reference, category,
+              business_name, public_profile_json, evidence_json, sourcing_status, created_by, created_at, updated_at
+         FROM vendor_sourcing_candidates
+        WHERE tenant_id = ?${categoryClause}
+        ORDER BY created_at DESC LIMIT ${limit}`,
+      params,
+    );
+    return rows.map(mapCandidateReviewRow);
   }
 
   private async getRegistryForUpdate(connection: PoolConnection, sourceType: string) {
