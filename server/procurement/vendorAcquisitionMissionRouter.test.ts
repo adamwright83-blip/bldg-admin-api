@@ -6,7 +6,7 @@ vi.mock("./agentMailVendorEmailProvider", async () => {
 });
 
 const { sendVendorEmailViaAgentMail, SUPERVISED_CANARY_CONFIRMATION_TEXT } = await import("./agentMailVendorEmailProvider");
-const { createVendorAcquisitionMissionRouter } = await import("./vendorAcquisitionMissionRouter");
+const { createVendorAcquisitionMissionRouter, resolveTargetGeography } = await import("./vendorAcquisitionMissionRouter");
 
 function context(user: { role: string } | null) {
   return { user, tenantId: "default", req: {}, res: {}, vendorSession: null } as never;
@@ -1645,5 +1645,47 @@ describe("vendorAcquisitionMissionRouter -- sendCandidateDraftOutreachCanary (Sl
     const { router } = setup();
     await router.createCaller(context({ role: "admin" })).sendCandidateDraftOutreachCanary(validInput());
     expect(sendVendorEmailViaAgentMail).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("resolveTargetGeography (Slice 81c/81d)", () => {
+  it("returns OPUS LA for geographyLabel containing 90027", () => {
+    expect(resolveTargetGeography("90027 (5 mi radius)")).toEqual({ targetZip: "90027", targetBuildingName: "OPUS LA" });
+  });
+
+  it("returns Century Park East for geographyLabel containing 90067", () => {
+    expect(resolveTargetGeography("90067 (5 mi radius)")).toEqual({ targetZip: "90067", targetBuildingName: "Century Park East" });
+  });
+
+  it("returns a null building name (never an invented one) for an unconfigured ZIP like 90010", () => {
+    expect(resolveTargetGeography("90010 (5 mi radius)")).toEqual({ targetZip: "90010", targetBuildingName: null });
+  });
+
+  it("returns null targetZip when geographyLabel has no 5-digit ZIP at all", () => {
+    expect(resolveTargetGeography("Los Angeles metro area")).toEqual({ targetZip: null, targetBuildingName: null });
+  });
+});
+
+describe("vendorAcquisitionMissionRouter -- runDiscovery uses the active mission's own geographyLabel, never a stale client default (Slice 81d)", () => {
+  it("a mission created with geographyLabel 90067 ranks/targets against 90067, not the 90027 default", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ geographyLabel: "90067 (5 mi radius)", targetQuantity: 1 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [{
+      provider: "google_places" as const, placeId: "p1", businessName: "Century City Mobile Groomer", rating: 4.8, reviewCount: 50,
+      address: "1 Main St, Los Angeles, CA 90067, USA", website: null, phone: "555-1111", coordinates: null, sourceUrl: "https://maps/p1",
+    }] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification());
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(verifyFn).toHaveBeenCalledWith(expect.objectContaining({ targetZip: "90067", targetBuildingName: "Century Park East" }));
+  });
+
+  it("createMission persists exactly the geographyLabel it was given (the client's effective ZIP), without rewriting it server-side", async () => {
+    const store = makeMockStore();
+    const router = createVendorAcquisitionMissionRouter(store as never);
+    await router.createCaller(context({ role: "admin" })).createMission(validInput({ geographyLabel: "90067 (5 mi radius)" }));
+    expect(store.createMission).toHaveBeenCalledWith(expect.objectContaining({ geographyLabel: "90067 (5 mi radius)" }));
   });
 });

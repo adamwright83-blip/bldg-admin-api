@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Compass, Copy, ExternalLink, Expand, FileText, Loader2, Mail, MapPin, MessageSquare, Phone,
   Reply, Send, ShieldCheck, Sparkles, Star, Wrench,
@@ -98,13 +98,12 @@ const LA_BUILDINGS = [
 ] as const;
 
 /**
- * Slice 81c fix. The composer's own building picker (selectedBuilding)
- * is the operator's choice for the NEXT mission to create -- it must
- * never be confused with which building/ZIP the mission actually being
+ * Slice 81c fix. The composer's own building/ZIP selection must never
+ * be confused with which building/ZIP the mission actually being
  * VIEWED in the shortlist below targets. A 90067 mission must never
  * show "OPUS LA / 90027" just because that happens to be the
- * composer's default selection. Falls back to the mission's own ZIP
- * text when it does not match a known building, and never invents a
+ * composer's current ZIP. Falls back to the mission's own ZIP text
+ * when it does not match a known building, and never invents a
  * building HELD has no configured ZIP for (e.g. "Los Feliz Towers").
  */
 function deriveActiveMissionTargetLabel(geographyLabel: string | null | undefined): string | null {
@@ -114,6 +113,23 @@ function deriveActiveMissionTargetLabel(geographyLabel: string | null | undefine
   if (!zip) return geographyLabel;
   const building = LA_BUILDINGS.find(candidate => candidate.zip === zip);
   return building ? `${building.name} (${zip})` : `Mission ZIP: ${zip}`;
+}
+
+/**
+ * Slice 81d. Extracts an explicit 5-digit ZIP from free-form mission
+ * text (e.g. "...near 90067 with 4.7+ ratings...") -- deliberately
+ * deterministic/regex-based, never a Claude call, just to read one ZIP
+ * back out of text the operator already typed. Takes the FIRST 5-digit
+ * token found, since mission text normally contains at most one.
+ */
+function extractZipFromMissionText(text: string): string | null {
+  const match = text.match(/\b(\d{5})\b/);
+  return match?.[1] ?? null;
+}
+
+/** Slice 81d. The only place a ZIP is matched to a configured building -- never invents one for an unconfigured ZIP. */
+function resolveBuildingForZip(zip: string): (typeof LA_BUILDINGS)[number] | null {
+  return LA_BUILDINGS.find(building => building.zip === zip) ?? null;
 }
 
 type SubAgent = { name: string; role: string; icon: typeof Compass; statusWithMission: string };
@@ -182,8 +198,24 @@ export default function MissionControlPage() {
   const [composerNote, setComposerNote] = useState(
     "Find me 10 dog groomers near 90027 with 4.7 or higher ratings on Yelp and/or Google Maps.",
   );
-  const [selectedBuildingId, setSelectedBuildingId] = useState<(typeof LA_BUILDINGS)[number]["id"]>("opus-la");
-  const selectedBuilding = LA_BUILDINGS.find(building => building.id === selectedBuildingId) ?? LA_BUILDINGS[0];
+  // Slice 81d. The last ZIP THIS COMPONENT auto-synced from mission
+  // text -- not the chip's current value. This is what makes a manual
+  // chip edit survive incidental text edits (re-typing a sentence that
+  // still contains the same ZIP) while a genuinely NEW ZIP typed into
+  // the text always wins, per the composer's source-of-truth order:
+  // (1) explicit ZIP in mission text, (2) manually edited ZIP chip,
+  // (3) default ZIP.
+  const lastSyncedTextZipRef = useRef<string | null>(extractZipFromMissionText(composerNote));
+  const composerBuilding = resolveBuildingForZip(zipCode);
+
+  function updateComposerNote(nextText: string) {
+    setComposerNote(nextText);
+    const textZip = extractZipFromMissionText(nextText);
+    if (textZip && textZip !== lastSyncedTextZipRef.current) {
+      lastSyncedTextZipRef.current = textZip;
+      setZipCode(textZip);
+    }
+  }
 
   const createMission = trpc.admin.vendorAcquisitionMission.createMission.useMutation();
   const recentMissions = trpc.admin.vendorAcquisitionMission.listMissions.useQuery({ limit: 10 });
@@ -310,9 +342,13 @@ export default function MissionControlPage() {
 
   function startMission() {
     const rating = Number(minRating);
+    // Slice 81d. Defensive resolution at submit time: even if the
+    // chip-sync somehow lagged, the payload still uses whatever ZIP is
+    // literally in the mission text, never a stale chip value.
+    const effectiveZip = extractZipFromMissionText(composerNote) ?? zipCode;
     createMission.mutate({
       category,
-      geographyLabel: `${zipCode} (${radiusMiles} mi radius)`,
+      geographyLabel: `${effectiveZip} (${radiusMiles} mi radius)`,
       targetQuantity: Math.max(1, Math.trunc(Number(targetQuantity) || 1)),
       qualityGates: Number.isFinite(rating) && rating > 0
         ? { minGoogleRating: rating, minYelpRating: rating, missionText: composerNote }
@@ -355,7 +391,7 @@ export default function MissionControlPage() {
             className="flex-1 resize-none border-none bg-transparent text-sm outline-none"
             rows={2}
             value={composerNote}
-            onChange={event => setComposerNote(event.target.value)}
+            onChange={event => updateComposerNote(event.target.value)}
           />
           <button
             className="rounded-full bg-amber-600 p-2 text-white disabled:opacity-40"
@@ -481,9 +517,9 @@ export default function MissionControlPage() {
               <button
                 key={building.id}
                 type="button"
-                onClick={() => setSelectedBuildingId(building.id)}
+                onClick={() => setZipCode(building.zip)}
                 className={`w-full rounded-lg border p-2 text-left text-xs ${
-                  selectedBuildingId === building.id
+                  composerBuilding?.id === building.id
                     ? "border-amber-300 bg-amber-50 font-semibold text-amber-900"
                     : "border-black/10 text-black/65"
                 }`}
@@ -500,7 +536,7 @@ export default function MissionControlPage() {
           <div className="relative overflow-hidden rounded-xl border border-black/10 bg-gradient-to-br from-amber-50 via-white to-black/[0.03] p-4">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold text-black/55">
-                Map preview &middot; {selectedBuilding.zip}, Los Angeles, CA
+                Map preview &middot; {zipCode}, Los Angeles, CA
               </p>
               <button
                 type="button"
@@ -515,7 +551,7 @@ export default function MissionControlPage() {
               <div className="absolute h-32 w-32 rounded-full border-2 border-dashed border-amber-300/70" />
               <div className="flex flex-col items-center gap-1">
                 <MapPin className="h-6 w-6 text-amber-600" />
-                <p className="text-xs font-semibold text-black/60">{selectedBuilding.name}</p>
+                <p className="text-xs font-semibold text-black/60">{composerBuilding?.name ?? `Mission ZIP: ${zipCode}`}</p>
               </div>
               <p className="absolute bottom-2 right-2 text-[10px] font-semibold uppercase tracking-wide text-black/30">
                 Static map preview &mdash; no live map provider configured

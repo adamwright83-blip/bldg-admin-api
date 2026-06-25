@@ -85,13 +85,14 @@ describe("MissionControlPage -- Slice 75b building selector", () => {
     expect(source).toMatch(/Century Park East.*90067/s);
   });
 
-  it("defaults the selected building to OPUS LA (matching the composer's default 90027 zip)", () => {
-    expect(source).toMatch(/useState<\(typeof LA_BUILDINGS\)\[number\]\["id"\]>\("opus-la"\)/);
+  it("defaults the composer ZIP to 90027, which resolves to OPUS LA", () => {
+    expect(source).toMatch(/useState\("90027"\)/);
+    expect(source).toMatch(/composerBuilding = resolveBuildingForZip\(zipCode\)/);
   });
 
-  it("building selection is local UI state only -- never calls a mutation", () => {
-    expect(source).toMatch(/setSelectedBuildingId\(building\.id\)/);
-    expect(source).not.toMatch(/setSelectedBuildingId[\s\S]{0,80}mutate/);
+  it("Slice 81d: clicking a building updates the ZIP chip directly (single ZIP source of truth), never a mutation", () => {
+    expect(source).toMatch(/onClick=\{\(\) => setZipCode\(building\.zip\)\}/);
+    expect(source).not.toMatch(/setZipCode\(building\.zip\)[\s\S]{0,80}mutate/);
   });
 });
 
@@ -784,5 +785,56 @@ describe("MissionControlPage -- Slice 81c tiered fulfillment shortlist", () => {
 
   it("never invents a coordinate or fabricated distance -- distance is only ever read from server-provided distanceToTargetMiles", () => {
     expect(source).not.toMatch(/distanceToTargetMiles\s*=\s*[\d.]/);
+  });
+});
+
+describe("MissionControlPage -- Slice 81d composer ZIP extraction + active mission target sync", () => {
+  it("extracts a ZIP from mission text deterministically, never via a Claude call", () => {
+    expect(source).toMatch(/function extractZipFromMissionText\(text: string\): string \| null \{/);
+    expect(source).toMatch(/text\.match\(\/\\b\(\\d\{5\}\)\\b\//);
+  });
+
+  it("typing mission text with a new ZIP updates the ZIP chip via updateComposerNote", () => {
+    expect(source).toMatch(/function updateComposerNote\(nextText: string\) \{/);
+    expect(source).toMatch(/if \(textZip && textZip !== lastSyncedTextZipRef\.current\) \{/);
+    expect(source).toMatch(/setZipCode\(textZip\);/);
+  });
+
+  it("the textarea's onChange calls updateComposerNote, not a raw setComposerNote that would skip the ZIP sync", () => {
+    expect(source).toMatch(/onChange=\{event => updateComposerNote\(event\.target\.value\)\}/);
+  });
+
+  it("mission text with no ZIP never overwrites the chip -- the sync only fires when a ZIP is actually found", () => {
+    expect(source).toMatch(/if \(textZip && textZip !== lastSyncedTextZipRef\.current\)/);
+  });
+
+  it("a manually edited ZIP chip is not immediately stomped by an incidental (same-ZIP) text edit -- sync compares against the last AUTO-SYNCED zip, not the current chip value", () => {
+    expect(source).toMatch(/lastSyncedTextZipRef\.current = textZip;/);
+    expect(source).not.toMatch(/textZip !== zipCode/);
+  });
+
+  it("the map/building preview is driven by the ZIP chip via resolveBuildingForZip, never a separate selectedBuildingId", () => {
+    expect(source).not.toMatch(/selectedBuildingId/);
+    expect(source).not.toMatch(/selectedBuilding\.zip|selectedBuilding\.name/);
+    expect(source).toMatch(/composerBuilding\?\.name \?\? `Mission ZIP: \$\{zipCode\}`/);
+  });
+
+  it("clicking a configured building in the picker sets the ZIP chip to that building's ZIP", () => {
+    expect(source).toMatch(/onClick=\{\(\) => setZipCode\(building\.zip\)\}/);
+  });
+
+  it("Start Mission resolves the effective ZIP from mission text defensively, even if chip-sync lagged", () => {
+    expect(source).toMatch(/const effectiveZip = extractZipFromMissionText\(composerNote\) \?\? zipCode;/);
+    expect(source).toMatch(/geographyLabel: `\$\{effectiveZip\} \(\$\{radiusMiles\} mi radius\)`/);
+  });
+
+  it("90010 (an unconfigured ZIP) never resolves to a configured building -- resolveBuildingForZip returns null and the UI falls back to 'Mission ZIP: 90010'", () => {
+    expect(source).toMatch(/function resolveBuildingForZip\(zip: string\): \(typeof LA_BUILDINGS\)\[number\] \| null \{/);
+    expect(source).toMatch(/LA_BUILDINGS\.find\(building => building\.zip === zip\) \?\? null;/);
+  });
+
+  it("existing 90027 behavior is preserved -- the default ZIP and default mission text both still reference 90027", () => {
+    expect(source).toMatch(/useState\("90027"\)/);
+    expect(source).toMatch(/near 90027/);
   });
 });

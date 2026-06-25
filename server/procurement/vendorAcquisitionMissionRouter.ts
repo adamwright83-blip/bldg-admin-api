@@ -132,7 +132,7 @@ const KNOWN_HELD_BUILDINGS: ReadonlyArray<{ name: string; zip: string }> = [
   { name: "Century Park East", zip: "90067" },
 ];
 
-function resolveTargetGeography(geographyLabel: string): { targetZip: string | null; targetBuildingName: string | null } {
+export function resolveTargetGeography(geographyLabel: string): { targetZip: string | null; targetBuildingName: string | null } {
   const targetZip = extractZipFromAddress(geographyLabel);
   const targetBuildingName = targetZip
     ? KNOWN_HELD_BUILDINGS.find(building => building.zip === targetZip)?.name ?? null
