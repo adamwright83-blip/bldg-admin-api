@@ -28,6 +28,14 @@ export type MissionQualityGates = {
   requireResidentialClients?: boolean;
   requireVerifiedContact?: boolean;
   excludeComplaintPatterns?: boolean;
+  /**
+   * Slice 77a. The operator's raw Mission Composer text, stored here
+   * (not as a new column) because quality_gates_json is already a JSON
+   * blob with no schema migration required to add an optional field.
+   * Read by vendorMissionQueryPlanner to drive Google Places query
+   * variants -- never used for outreach, booking, or truth claims.
+   */
+  missionText?: string | null;
 };
 
 export type VendorAcquisitionMissionDefinition = {

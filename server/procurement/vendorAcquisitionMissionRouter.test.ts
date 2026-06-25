@@ -168,7 +168,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     expect(sourcingStore.createCandidate).not.toHaveBeenCalled();
   });
 
-  it("builds the discovery query from real mission fields (category, geography, target count, rating)", async () => {
+  it("builds the discovery query from real mission fields via the query planner (category, geography, target count, rating)", async () => {
     const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [] });
@@ -176,7 +176,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(discoveryFn).toHaveBeenCalledWith({
-      searchText: "Dog Grooming near 90027 (5 mi radius)",
+      searchText: "Dog Grooming near 90027",
       minRating: 4.7,
       maxResults: 10,
     });
@@ -238,6 +238,95 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
       "listCandidates", "listCandidatesForReview", "listSourceRegistry",
     ]);
   });
+
+  it("uses the query planner to drive multiple Google Places query variants when mission text signals a service mode", async () => {
+    const missionStore = makeMockStore({
+      getMission: vi.fn().mockResolvedValue(makeMockMission({
+        qualityGates: { minGoogleRating: 4.7, missionText: "Find me 10 mobile dog groomers near 90027 who can service luxury high-rise residents at their buildings." },
+      })),
+    });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [] });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(discoveryFn.mock.calls.length).toBeGreaterThan(1);
+    expect(discoveryFn.mock.calls.some(([query]) => /mobile/i.test(query.searchText))).toBe(true);
+  });
+
+  it("dedupes candidates with the same place id returned by multiple query variants", async () => {
+    const missionStore = makeMockStore({
+      getMission: vi.fn().mockResolvedValue(makeMockMission({
+        qualityGates: { minGoogleRating: 4.7, missionText: "Find me 10 mobile dog groomers near 90027 at their buildings." },
+      })),
+    });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [MOCK_PLACE_CANDIDATE] });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(discoveryFn.mock.calls.length).toBeGreaterThan(1);
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.foundCount).toBe(1);
+    expect(sourcingStore.createCandidate).toHaveBeenCalledOnce();
+  });
+
+  it("persists matchedQuery, missionText, queryIntent, and serviceMode in candidate evidence", async () => {
+    const missionStore = makeMockStore({
+      getMission: vi.fn().mockResolvedValue(makeMockMission({
+        qualityGates: { minGoogleRating: 4.7, missionText: "Find me 10 mobile dog groomers near 90027 at their buildings." },
+      })),
+    });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [MOCK_PLACE_CANDIDATE] });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(sourcingStore.createCandidate).toHaveBeenCalledWith(expect.objectContaining({
+      evidence: expect.objectContaining({
+        matchedQuery: expect.stringMatching(/mobile/i),
+        missionText: "Find me 10 mobile dog groomers near 90027 at their buildings.",
+        serviceMode: "mobile_required",
+        queryIntent: expect.stringContaining("mobile_required"),
+      }),
+    }));
+  });
+
+  it("caps query variants and stops early once enough distinct candidates are found for the target count", async () => {
+    const missionStore = makeMockStore({
+      getMission: vi.fn().mockResolvedValue(makeMockMission({
+        targetQuantity: 1,
+        qualityGates: { minGoogleRating: 4.7, missionText: "Find me mobile dog groomers near 90027 at their high-rise buildings, mobile at-home house call on-site." },
+      })),
+    });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [MOCK_PLACE_CANDIDATE] });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    // targetQuantity is 1, and the first query variant already returns a
+    // candidate -- no further variants should be queried.
+    expect(discoveryFn.mock.calls.length).toBe(1);
+  });
+
+  it("continues to the next query variant on a per-variant provider_error rather than failing the whole run", async () => {
+    const missionStore = makeMockStore({
+      getMission: vi.fn().mockResolvedValue(makeMockMission({
+        qualityGates: { minGoogleRating: 4.7, missionText: "Find me 10 mobile dog groomers near 90027 at their buildings." },
+      })),
+    });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn()
+      .mockResolvedValueOnce({ status: "provider_error", reason: "UNKNOWN_ERROR" })
+      .mockResolvedValue({ status: "ok", candidates: [MOCK_PLACE_CANDIDATE] });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.foundCount).toBe(1);
+  });
 });
 
 describe("vendorAcquisitionMissionRouter -- listDiscoveredCandidates", () => {
@@ -292,5 +381,24 @@ describe("vendorAcquisitionMissionRouter -- listMissions", () => {
     const router = createVendorAcquisitionMissionRouter(store as never);
     const missions = await router.createCaller(context({ role: "admin" })).listMissions({});
     expect(missions).toEqual([]);
+  });
+});
+
+describe("vendorAcquisitionMissionRouter -- previewQueryPlan", () => {
+  it("rejects unauthenticated and non-admin callers", async () => {
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never);
+    await expect(
+      router.createCaller(context(null)).previewQueryPlan({ category: "dog_grooming", geographyLabel: "90027", targetQuantity: 10 }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("returns a real deterministic plan derived from the given mission text, with no I/O", async () => {
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never);
+    const plan = await router.createCaller(context({ role: "admin" })).previewQueryPlan({
+      missionText: "Find me 10 mobile dog groomers near 90027 at their buildings.",
+      category: "dog_grooming", geographyLabel: "90027 (5 mi radius)", ratingThreshold: 4.7, targetQuantity: 10,
+    });
+    expect(plan.serviceMode).toBe("mobile_required");
+    expect(plan.searchQueries.length).toBeGreaterThan(0);
   });
 });

@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { adminProcedure, router } from "../_core/trpc";
-import { CANONICAL_SERVICE_CATEGORIES, getCanonicalServiceDefinition, type CanonicalServiceCategory } from "./canonicalServiceTaxonomyPolicy";
 import { runGooglePlacesDiscovery, type NormalizedPlaceCandidate } from "./googlePlacesDiscoveryConnector";
 import { createProcurementPool } from "./migrations";
 import { MISSION_OUTREACH_MODES } from "./vendorAcquisitionMissionPolicy";
 import { VendorAcquisitionMissionStore } from "./vendorAcquisitionMissionStore";
+import { planMissionQuery } from "./vendorMissionQueryPlanner";
 import { VendorSourcingStore } from "./vendorSourcingStore";
 
 /**
@@ -26,6 +26,9 @@ const qualityGatesInput = z.object({
   requireResidentialClients: z.boolean().optional(),
   requireVerifiedContact: z.boolean().optional(),
   excludeComplaintPatterns: z.boolean().optional(),
+  // Slice 77a: the operator's raw Mission Composer text, stored in this
+  // existing JSON blob (no migration) and read by the query planner.
+  missionText: z.string().max(2000).nullable().optional(),
 });
 
 let lazyStore: VendorAcquisitionMissionStore | null = null;
@@ -46,13 +49,9 @@ function resolveSourcingStore(injected?: VendorSourcingStore): VendorSourcingSto
   return lazySourcingStore;
 }
 
-function searchTextForMission(category: string, geographyLabel: string): string {
-  const isCanonical = (CANONICAL_SERVICE_CATEGORIES as readonly string[]).includes(category);
-  const label = isCanonical ? getCanonicalServiceDefinition(category as CanonicalServiceCategory).label : category;
-  return `${label} near ${geographyLabel}`;
-}
-
-export type DiscoveredCandidateSummary = NormalizedPlaceCandidate & { persisted: boolean; alreadyDiscovered: boolean };
+export type DiscoveredCandidateSummary = NormalizedPlaceCandidate & {
+  persisted: boolean; alreadyDiscovered: boolean; matchedQuery: string;
+};
 export type RunDiscoveryResult =
   | { status: "mission_not_found" }
   | { status: "needs_provider_config"; missingEnvVar: string }
@@ -138,13 +137,40 @@ export function createVendorAcquisitionMissionRouter(
       }),
 
     /**
-     * Read-only Google Places discovery for a real mission. Never sends
-     * outreach, never contacts a vendor, never marks any provider-
-     * acceptance/booking/payment/dispatch truth. Persists candidates only
-     * into the existing vendor_sourcing_candidates table (sourceType
-     * "permitted_public_fetch" -- automated, explicitly-permitted public
-     * fetch, per vendor_source_registry), with an application-level
-     * idempotency check by (tenantId, sourceType, placeId).
+     * Pure, deterministic, no-I/O preview of what runDiscovery would
+     * plan -- lets Mission Control show the query plan before a mission
+     * is even created. Never calls an LLM/AI provider, never persists
+     * anything, never touches the database.
+     */
+    previewQueryPlan: adminProcedure
+      .input(z.object({
+        missionText: z.string().max(2000).nullable().optional(),
+        category: z.string().min(1).max(100),
+        geographyLabel: z.string().min(1).max(255),
+        ratingThreshold: z.number().min(0).max(5).nullable().optional(),
+        targetQuantity: z.number().int().min(1).max(500),
+      }))
+      .query(({ input }) => planMissionQuery({
+        missionText: input.missionText ?? null,
+        category: input.category,
+        geographyLabel: input.geographyLabel,
+        ratingThreshold: input.ratingThreshold ?? null,
+        targetQuantity: input.targetQuantity,
+      })),
+
+    /**
+     * Read-only Google Places discovery for a real mission, driven by
+     * the mission-text query planner (Slice 77a) rather than category+
+     * geography alone. Runs each planner-generated query variant
+     * (capped at MAX_QUERY_VARIANTS) through Google Places, stops early
+     * once enough distinct candidates are found for the mission's
+     * target count, and dedupes by place id across variants. Never
+     * sends outreach, never contacts a vendor, never marks any
+     * provider-acceptance/booking/payment/dispatch truth. Persists
+     * candidates only into the existing vendor_sourcing_candidates
+     * table (sourceType "permitted_public_fetch"), with an
+     * application-level idempotency check by (tenantId, sourceType,
+     * placeId).
      */
     runDiscovery: adminProcedure
       .input(z.object({ missionId: z.string().min(1) }))
@@ -154,20 +180,40 @@ export function createVendorAcquisitionMissionRouter(
         if (!mission) return { status: "mission_not_found" };
 
         const ratingThreshold = mission.qualityGates.minGoogleRating ?? mission.qualityGates.minYelpRating ?? null;
-        const discovery = await injectedDiscoveryFn({
-          searchText: searchTextForMission(mission.category, mission.geographyLabel),
-          minRating: ratingThreshold,
-          maxResults: mission.targetQuantity,
+        const plan = planMissionQuery({
+          missionText: mission.qualityGates.missionText ?? null,
+          category: mission.category,
+          geographyLabel: mission.geographyLabel,
+          ratingThreshold,
+          targetQuantity: mission.targetQuantity,
         });
 
-        if (discovery.status !== "ok") return discovery;
+        const byPlaceId = new Map<string, NormalizedPlaceCandidate & { matchedQuery: string }>();
+        let lastError: { status: "provider_error"; reason: string } | null = null;
+
+        for (const searchText of plan.searchQueries) {
+          if (byPlaceId.size >= mission.targetQuantity) break;
+          const discovery = await injectedDiscoveryFn({ searchText, minRating: ratingThreshold, maxResults: mission.targetQuantity });
+          if (discovery.status === "needs_provider_config") return discovery;
+          if (discovery.status === "provider_error") {
+            lastError = discovery;
+            continue;
+          }
+          for (const candidate of discovery.candidates) {
+            if (!byPlaceId.has(candidate.placeId)) {
+              byPlaceId.set(candidate.placeId, { ...candidate, matchedQuery: searchText });
+            }
+          }
+        }
+
+        if (byPlaceId.size === 0 && lastError) return lastError;
 
         const sourcingStore = resolveSourcingStore(injectedSourcingStore);
         const summaries: DiscoveredCandidateSummary[] = [];
         let persistedCount = 0;
         let alreadyDiscoveredCount = 0;
 
-        for (const candidate of discovery.candidates) {
+        for (const candidate of Array.from(byPlaceId.values())) {
           const existing = await sourcingStore.findCandidateBySourceReference(
             ctx.tenantId, "permitted_public_fetch", candidate.placeId,
           );
@@ -185,7 +231,13 @@ export function createVendorAcquisitionMissionRouter(
               category: mission.category,
               businessName: candidate.businessName,
               publicProfile: { address: candidate.address, coordinates: candidate.coordinates, sourceUrl: candidate.sourceUrl },
-              evidence: candidate,
+              evidence: {
+                ...candidate,
+                matchedQuery: candidate.matchedQuery,
+                missionText: mission.qualityGates.missionText ?? null,
+                queryIntent: plan.primaryIntent,
+                serviceMode: plan.serviceMode,
+              },
               createdBy: "google_places_discovery",
             });
             persistedCount += 1;
@@ -197,7 +249,7 @@ export function createVendorAcquisitionMissionRouter(
 
         return {
           status: "ok",
-          foundCount: discovery.candidates.length,
+          foundCount: byPlaceId.size,
           persistedCount,
           alreadyDiscoveredCount,
           candidates: summaries,

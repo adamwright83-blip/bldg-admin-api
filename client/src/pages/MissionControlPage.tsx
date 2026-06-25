@@ -20,6 +20,39 @@ function evidenceField(evidence: unknown, key: string): string | number | null {
   return typeof value === "string" || typeof value === "number" ? value : null;
 }
 
+function serviceModeBadge(evidence: unknown): string {
+  const mode = evidenceField(evidence, "serviceMode");
+  if (mode === "mobile_required" || mode === "building_service_required") return "Mobile intent";
+  if (mode === "storefront_ok") return "Storefront intent";
+  return "Needs review";
+}
+
+type RankableCandidate = { evidence: unknown };
+
+function rankCandidates<T extends RankableCandidate>(candidates: T[], currentServiceMode: string | null | undefined): T[] {
+  return [...candidates].sort((a, b) => {
+    const aMatches = currentServiceMode && evidenceField(a.evidence, "serviceMode") === currentServiceMode ? 1 : 0;
+    const bMatches = currentServiceMode && evidenceField(b.evidence, "serviceMode") === currentServiceMode ? 1 : 0;
+    if (aMatches !== bMatches) return bMatches - aMatches;
+
+    const aRating = Number(evidenceField(a.evidence, "rating") ?? 0);
+    const bRating = Number(evidenceField(b.evidence, "rating") ?? 0);
+    if (aRating !== bRating) return bRating - aRating;
+
+    const aReviews = Number(evidenceField(a.evidence, "reviewCount") ?? 0);
+    const bReviews = Number(evidenceField(b.evidence, "reviewCount") ?? 0);
+    if (aReviews !== bReviews) return bReviews - aReviews;
+
+    const aPhone = evidenceField(a.evidence, "phone") ? 1 : 0;
+    const bPhone = evidenceField(b.evidence, "phone") ? 1 : 0;
+    if (aPhone !== bPhone) return bPhone - aPhone;
+
+    const aWebsite = evidenceField(a.evidence, "website") ? 1 : 0;
+    const bWebsite = evidenceField(b.evidence, "website") ? 1 : 0;
+    return bWebsite - aWebsite;
+  });
+}
+
 const GLOBAL_MARKET_PREVIEW_CITIES = ["London", "Dubai", "Singapore", "Paris", "Tokyo"] as const;
 const US_MARKETS = [
   { name: "Los Angeles", active: true },
@@ -85,6 +118,15 @@ export default function MissionControlPage() {
   const discoveredCandidates = trpc.admin.vendorAcquisitionMission.listDiscoveredCandidates.useQuery({ category, limit: 50 });
   const runDiscovery = trpc.admin.vendorAcquisitionMission.runDiscovery.useMutation();
 
+  const ratingThreshold = Number(minRating);
+  const queryPlanPreview = trpc.admin.vendorAcquisitionMission.previewQueryPlan.useQuery({
+    missionText: composerNote,
+    category,
+    geographyLabel: `${zipCode} (${radiusMiles} mi radius)`,
+    ratingThreshold: Number.isFinite(ratingThreshold) && ratingThreshold > 0 ? ratingThreshold : null,
+    targetQuantity: Math.max(1, Math.trunc(Number(targetQuantity) || 1)),
+  });
+
   // Set immediately from the createMission response so Run Discovery
   // enables right away -- it does not wait on the recentMissions refetch
   // round-trip, which is what left the button stuck disabled after
@@ -122,8 +164,8 @@ export default function MissionControlPage() {
       geographyLabel: `${zipCode} (${radiusMiles} mi radius)`,
       targetQuantity: Math.max(1, Math.trunc(Number(targetQuantity) || 1)),
       qualityGates: Number.isFinite(rating) && rating > 0
-        ? { minGoogleRating: rating, minYelpRating: rating }
-        : { requireVerifiedContact: true },
+        ? { minGoogleRating: rating, minYelpRating: rating, missionText: composerNote }
+        : { requireVerifiedContact: true, missionText: composerNote },
       outreachMode: "draft_only",
       activateImmediately: true,
     }, {
@@ -175,7 +217,7 @@ export default function MissionControlPage() {
           </button>
         </div>
         <p className="mt-1 text-xs text-black/40">
-          HELD uses the structured filters below to create this mission in this version &mdash; the note above is for your reference only.
+          HELD turns your mission into a source query plan. Structured chips are safety constraints.
         </p>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -197,6 +239,21 @@ export default function MissionControlPage() {
         <p className="mt-1 text-xs text-black/35">
           &ldquo;Mobile preferred&rdquo; is not yet wired to mission criteria &mdash; reserved for a future slice.
         </p>
+
+        {queryPlanPreview.data ? (
+          <details className="mt-3 rounded-lg border border-black/10 bg-black/[0.02] p-2 text-xs">
+            <summary className="cursor-pointer font-semibold text-black/55">
+              Query Plan &middot; {label(queryPlanPreview.data.serviceMode)}
+            </summary>
+            <p className="mt-1 text-black/55">Location: {queryPlanPreview.data.locationText}</p>
+            <p className="mt-1 text-black/55">
+              Generated queries: {queryPlanPreview.data.searchQueries.join(" · ")}
+            </p>
+            {queryPlanPreview.data.notes.length > 0 ? (
+              <p className="mt-1 text-black/40">{queryPlanPreview.data.notes.join(" ")}</p>
+            ) : null}
+          </details>
+        ) : null}
 
         <button
           className="mt-4 rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
@@ -404,13 +461,14 @@ export default function MissionControlPage() {
           <p className="mt-3 text-xs text-black/50">Loading candidates&hellip;</p>
         ) : discoveredCandidates.data && discoveredCandidates.data.length > 0 ? (
           <div className="mt-3 space-y-2">
-            {discoveredCandidates.data.map(candidate => {
+            {rankCandidates(discoveredCandidates.data, queryPlanPreview.data?.serviceMode).map(candidate => {
               const rating = evidenceField(candidate.evidence, "rating");
               const reviewCount = evidenceField(candidate.evidence, "reviewCount");
               const address = evidenceField(candidate.evidence, "address") ?? candidate.publicProfile?.address;
               const phone = evidenceField(candidate.evidence, "phone");
               const website = evidenceField(candidate.evidence, "website");
               const sourceUrl = evidenceField(candidate.evidence, "sourceUrl");
+              const matchedQuery = evidenceField(candidate.evidence, "matchedQuery");
               const expanded = expandedCandidateId === candidate.id;
               return (
                 <div key={candidate.id} className="rounded-lg border border-black/10 p-3 text-xs">
@@ -418,9 +476,11 @@ export default function MissionControlPage() {
                     <p className="font-semibold">{candidate.businessName}</p>
                     <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700">Google Places</span>
                     <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[10px] font-semibold text-black/55">{label(candidate.sourcingStatus)}</span>
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">{serviceModeBadge(candidate.evidence)}</span>
                     {rating !== null ? <span className="text-black/55">{rating}&#9733;{reviewCount !== null ? ` (${reviewCount} reviews)` : ""}</span> : null}
                   </div>
                   {typeof address === "string" ? <p className="mt-1 text-black/55">{address}</p> : null}
+                  {typeof matchedQuery === "string" ? <p className="mt-1 text-black/40">Found via: {matchedQuery}</p> : null}
                   <div className="mt-1 flex flex-wrap gap-3 text-black/45">
                     {typeof phone === "string" ? <span>{phone}</span> : null}
                     {typeof website === "string" ? <span>{website}</span> : null}

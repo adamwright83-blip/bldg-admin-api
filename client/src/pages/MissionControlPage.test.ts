@@ -354,3 +354,67 @@ describe("MissionControlPage -- Slice 76c source isolation", () => {
     expect(source).not.toMatch(/\.submit\(\)|sendSms\(|placeCall\(|sendYelpMessage\(/);
   });
 });
+
+describe("MissionControlPage -- Slice 77a mission-text-driven query planner", () => {
+  it("passes the composer's actual text as missionText when creating a mission", () => {
+    expect(source).toMatch(/missionText: composerNote/);
+  });
+
+  it("removes the stale copy claiming structured filters (not the composer text) drive mission creation", () => {
+    expect(source).not.toMatch(/HELD uses the structured filters below to create this mission/);
+    expect(source).toMatch(/HELD turns your mission into a source query plan\. Structured chips are safety constraints\./);
+  });
+
+  it("renders a Query Plan preview wired to the real previewQueryPlan query, with no LLM call", () => {
+    expect(source).toMatch(/vendorAcquisitionMission\.previewQueryPlan\.useQuery/);
+    expect(source).toMatch(/Query Plan/);
+    expect(source).not.toMatch(/openai|anthropic\./i);
+  });
+
+  it("Query Plan preview shows service mode, location, and generated queries", () => {
+    expect(source).toMatch(/queryPlanPreview\.data\.serviceMode/);
+    expect(source).toMatch(/queryPlanPreview\.data\.locationText/);
+    expect(source).toMatch(/queryPlanPreview\.data\.searchQueries\.join/);
+  });
+
+  it("Candidate Review shows 'Found via' using the real matchedQuery evidence field, never a hardcoded query", () => {
+    expect(source).toMatch(/Found via: \{matchedQuery\}/);
+    expect(source).toMatch(/evidenceField\(candidate\.evidence, "matchedQuery"\)/);
+  });
+
+  it("Candidate Review shows a service-mode badge derived only from real evidence", () => {
+    expect(source).toMatch(/serviceModeBadge\(candidate\.evidence\)/);
+    expect(source).toMatch(/function serviceModeBadge/);
+    for (const badge of ["Mobile intent", "Storefront intent", "Needs review"]) {
+      expect(source).toContain(badge);
+    }
+  });
+
+  it("ranks candidates by matching service mode, then rating, review count, phone, website -- never a fixed/fake order", () => {
+    expect(source).toMatch(/function rankCandidates/);
+    expect(source).toMatch(/rankCandidates\(discoveredCandidates\.data, queryPlanPreview\.data\?\.serviceMode\)/);
+  });
+
+  it("does not hardcode the same service mode for every mission -- the planner output controls the badge/ranking, not a constant", () => {
+    expect(source).not.toMatch(/serviceMode:\s*"mobile_required"\s*\}\)\s*\.map/);
+  });
+
+  it("still never enables an outreach/send action and still shows the not-contacted safety line", () => {
+    expect(source).toMatch(/Not contacted &middot; No outreach sent/);
+    expect(source).toMatch(/Approve for outreach &middot; Coming next/);
+  });
+});
+
+describe("MissionControlPage -- Slice 77a source isolation", () => {
+  it("never imports any outbound send adapter or live LLM provider", () => {
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid|openai|anthropic\./i);
+  });
+
+  it("never claims a truth field is true", () => {
+    expect(source).not.toMatch(/provider_accepted:\s*true|bookingConfirmed:\s*true|paymentAuthorized:\s*true|dispatched:\s*true/i);
+  });
+
+  it("never renders a hardcoded/fake vendor name anywhere on the page", () => {
+    expect(source).not.toMatch(/Paws & Polish|Happy Hounds|Wag Luxury|Beverly Barkers|Puppy Palace|The Dog Spa/);
+  });
+});
