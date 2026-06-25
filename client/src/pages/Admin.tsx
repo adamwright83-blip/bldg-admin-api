@@ -148,6 +148,7 @@ const STATUS_FOR_TAB: Record<Tab, Order["status"] | null> = {
   "Proposal Review": null,
   "Proposal Bootstrap": null,
   "Casting Sprint": null,
+  "Mission Control": null,
   "Post-Consent Plans": null,
   Leads: null,
   Vendors: null,
