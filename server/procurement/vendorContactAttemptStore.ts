@@ -666,17 +666,21 @@ async getDraftById(tenantId: string, draftId: string): Promise<DurableDraft | nu
     attempts: DurableContactAttempt[];
     nextCursor: string | null;
   }> {
-    const limit = Math.min(Math.max(input.limit ?? 50, 1), 250);
+    // LIMIT is inlined (never bound as a `?` placeholder) -- mysql2's
+    // .execute() (prepared statements) fails against this MySQL version
+    // with "Incorrect arguments to mysqld_stmt_execute" when LIMIT is
+    // passed as a bound parameter. Safe to inline because it is always a
+    // clamped, validated integer computed here, never raw input.
+    const limit = Math.trunc(Math.min(Math.max(input.limit ?? 50, 1), 250));
     const params: unknown[] = [input.tenantId];
     let cursorClause = "";
     if (input.cursor) {
       cursorClause = " AND created_at < ?";
       params.push(new Date(input.cursor));
     }
-    params.push(limit);
     const [rows] = await this.pool.execute<AttemptDbRow[]>(
       `SELECT ${ATTEMPT_SELECT_COLUMNS} FROM vendor_contact_attempts
-        WHERE tenant_id = ?${cursorClause} ORDER BY created_at DESC LIMIT ?`,
+        WHERE tenant_id = ?${cursorClause} ORDER BY created_at DESC LIMIT ${limit}`,
       params,
     );
     const attempts = rows.map(mapAttemptRow);

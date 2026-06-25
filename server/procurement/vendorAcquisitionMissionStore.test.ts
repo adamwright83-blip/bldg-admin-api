@@ -112,6 +112,50 @@ describe("VendorAcquisitionMissionStore -- status transitions", () => {
   });
 });
 
+describe("VendorAcquisitionMissionStore -- listMissions (CTA bugfix)", () => {
+  it("works with missing/default input and never passes undefined into execute params", async () => {
+    const execute = vi.fn().mockResolvedValue([[MOCK_MISSION_ROW], []]);
+    const pool = { execute };
+    const store = new VendorAcquisitionMissionStore(pool as any);
+
+    const missions = await store.listMissions({ tenantId: "default" });
+
+    expect(missions).toHaveLength(1);
+    const [, params] = execute.mock.calls[0];
+    expect(params).toEqual(["default"]);
+    expect(params).not.toContain(undefined);
+  });
+
+  it("inlines a clamped LIMIT directly into the SQL string -- never binds it as a `?` placeholder", async () => {
+    // mysql2's .execute() fails against this MySQL version with
+    // "Incorrect arguments to mysqld_stmt_execute" when LIMIT is bound
+    // as a parameter -- confirmed by direct reproduction against
+    // production MySQL 9.6.0. LIMIT must be inlined, not parameterized.
+    const execute = vi.fn().mockResolvedValue([[], []]);
+    const pool = { execute };
+    const store = new VendorAcquisitionMissionStore(pool as any);
+
+    await store.listMissions({ tenantId: "default", limit: 99999 });
+
+    const [sql, params] = execute.mock.calls[0];
+    expect(sql).not.toMatch(/LIMIT \?/);
+    expect(sql).toMatch(/LIMIT 250\s*$/);
+    expect(params).toEqual(["default"]);
+  });
+
+  it("includes the status param only when a status filter is provided, with the placeholder count always matching", async () => {
+    const execute = vi.fn().mockResolvedValue([[], []]);
+    const pool = { execute };
+    const store = new VendorAcquisitionMissionStore(pool as any);
+
+    await store.listMissions({ tenantId: "default", status: "active", limit: 5 });
+    const [sql, params] = execute.mock.calls[0];
+    const placeholderCount = (sql.match(/\?/g) ?? []).length;
+    expect(placeholderCount).toBe(params.length);
+    expect(params).toEqual(["default", "active"]);
+  });
+});
+
 describe("vendor acquisition mission store source isolation (Slice 70)", () => {
   it("writes only to vendor_acquisition_missions -- never to sourcing, outreach, dispatch, payment, or Stripe tables", () => {
     const source = fs.readFileSync("server/procurement/vendorAcquisitionMissionStore.ts", "utf8");

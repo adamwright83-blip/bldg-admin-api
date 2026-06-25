@@ -306,13 +306,29 @@ describe("VendorContactAttemptStore -- audit feed", () => {
     expect(page.nextCursor).toBe(MOCK_ATTEMPT_ROW.created_at.toISOString());
   });
 
-  it("listRecentAttempts clamps an out-of-range limit", async () => {
+  it("listRecentAttempts works with missing/default input and never passes undefined into execute params", async () => {
+    const execute = vi.fn().mockResolvedValue([[], []]);
+    const pool = { execute };
+    const store = new VendorContactAttemptStore(pool as any);
+
+    await store.listRecentAttempts({ tenantId: "default" });
+    const [sql, params] = execute.mock.calls[0];
+    const placeholderCount = (sql.match(/\?/g) ?? []).length;
+    expect(placeholderCount).toBe(params.length);
+    expect(params).toEqual(["default"]);
+    expect(params).not.toContain(undefined);
+  });
+
+  it("listRecentAttempts clamps an out-of-range limit and inlines it (never binds LIMIT as a param)", async () => {
     const execute = vi.fn().mockResolvedValue([[], []]);
     const pool = { execute };
     const store = new VendorContactAttemptStore(pool as any);
 
     await store.listRecentAttempts({ tenantId: "default", limit: 10000 });
-    expect(execute).toHaveBeenCalledWith(expect.any(String), ["default", 250]);
+    const [sql, params] = execute.mock.calls[0];
+    expect(sql).not.toMatch(/LIMIT \?/);
+    expect(sql).toMatch(/LIMIT 250\s*$/);
+    expect(params).toEqual(["default"]);
   });
 
   it("round-trips JSON fields correctly", async () => {
