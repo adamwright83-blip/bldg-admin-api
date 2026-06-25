@@ -27,37 +27,10 @@ function planSourceLabel(source: string, fallbackReason: string | null): string 
   return "Deterministic fallback";
 }
 
-function serviceModeBadge(evidence: unknown): string {
-  const mode = evidenceField(evidence, "serviceMode");
+function serviceModeBadge(mode: string | null | undefined): string {
   if (mode === "mobile_required" || mode === "building_service_required") return "Mobile intent";
   if (mode === "storefront_ok") return "Storefront intent";
   return "Needs review";
-}
-
-type RankableCandidate = { evidence: unknown };
-
-function rankCandidates<T extends RankableCandidate>(candidates: T[], currentServiceMode: string | null | undefined): T[] {
-  return [...candidates].sort((a, b) => {
-    const aMatches = currentServiceMode && evidenceField(a.evidence, "serviceMode") === currentServiceMode ? 1 : 0;
-    const bMatches = currentServiceMode && evidenceField(b.evidence, "serviceMode") === currentServiceMode ? 1 : 0;
-    if (aMatches !== bMatches) return bMatches - aMatches;
-
-    const aRating = Number(evidenceField(a.evidence, "rating") ?? 0);
-    const bRating = Number(evidenceField(b.evidence, "rating") ?? 0);
-    if (aRating !== bRating) return bRating - aRating;
-
-    const aReviews = Number(evidenceField(a.evidence, "reviewCount") ?? 0);
-    const bReviews = Number(evidenceField(b.evidence, "reviewCount") ?? 0);
-    if (aReviews !== bReviews) return bReviews - aReviews;
-
-    const aPhone = evidenceField(a.evidence, "phone") ? 1 : 0;
-    const bPhone = evidenceField(b.evidence, "phone") ? 1 : 0;
-    if (aPhone !== bPhone) return bPhone - aPhone;
-
-    const aWebsite = evidenceField(a.evidence, "website") ? 1 : 0;
-    const bWebsite = evidenceField(b.evidence, "website") ? 1 : 0;
-    return bWebsite - aWebsite;
-  });
 }
 
 const GLOBAL_MARKET_PREVIEW_CITIES = ["London", "Dubai", "Singapore", "Paris", "Tokyo"] as const;
@@ -148,7 +121,6 @@ export default function MissionControlPage() {
   const latestMission = recentMissions.data?.[0] ?? null;
 
   const recentAttempts = trpc.admin.vendorCastingSprint.recentContactAttempts.useQuery({ limit: 10 });
-  const discoveredCandidates = trpc.admin.vendorAcquisitionMission.listDiscoveredCandidates.useQuery({ category, limit: 50 });
   const runDiscovery = trpc.admin.vendorAcquisitionMission.runDiscovery.useMutation();
 
   const ratingThreshold = Number(minRating);
@@ -166,6 +138,14 @@ export default function MissionControlPage() {
   // Start Mission succeeded.
   const [activeMissionId, setActiveMissionId] = useState<string | null>(null);
   const effectiveMissionId = activeMissionId ?? latestMission?.id ?? null;
+
+  // Mission-scoped shortlist (Slice 79a) -- only this mission's top
+  // target-count-ranked candidates, not every candidate ever discovered
+  // for the category.
+  const missionShortlist = trpc.admin.vendorAcquisitionMission.listMissionShortlist.useQuery(
+    { missionId: effectiveMissionId ?? "" },
+    { enabled: !!effectiveMissionId },
+  );
 
   const [trainingDraft, setTrainingDraft] = useState("");
   const [savedTrainingRules, setSavedTrainingRules] = useState<string[]>([]);
@@ -251,7 +231,7 @@ export default function MissionControlPage() {
   }
 
   function startDiscovery() {
-    if (effectiveMissionId) runDiscovery.mutate({ missionId: effectiveMissionId }, { onSuccess: () => discoveredCandidates.refetch() });
+    if (effectiveMissionId) runDiscovery.mutate({ missionId: effectiveMissionId }, { onSuccess: () => missionShortlist.refetch() });
   }
 
   return (
@@ -506,7 +486,8 @@ export default function MissionControlPage() {
               <>
                 <p className="font-semibold">
                   Found {runDiscovery.data.foundCount} &middot; persisted {runDiscovery.data.persistedCount} &middot; already discovered {runDiscovery.data.alreadyDiscoveredCount}
-                  &middot; see Discovered Candidates below for details.
+                  &middot; shortlisted {runDiscovery.data.shortlistedCount} &middot; overflow {runDiscovery.data.overflowCount}
+                  &middot; see Mission Shortlist below for details.
                 </p>
                 <p className="mt-1 text-black/40">
                   Plan source: {planSourceLabel(runDiscovery.data.queryPlannerSource, runDiscovery.data.queryPlannerFallbackReason)}
@@ -538,22 +519,28 @@ export default function MissionControlPage() {
       </section>
 
       <section className="mt-4 rounded-2xl border border-black/10 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-bold">Discovered Candidates</h2>
-        <p className="mt-1 text-xs text-black/55">Review real candidates found by HELD before approving outreach.</p>
+        <h2 className="text-sm font-bold">Mission Shortlist</h2>
+        <p className="mt-1 text-xs text-black/55">Top candidates ranked for this mission before approving draft outreach.</p>
+        {missionShortlist.data?.status === "ok" ? (
+          <p className="mt-1 text-xs text-black/40">
+            Showing {missionShortlist.data.entries.length} of {missionShortlist.data.totalFound} found for this mission
+          </p>
+        ) : null}
 
-        {discoveredCandidates.isLoading ? (
-          <p className="mt-3 text-xs text-black/50">Loading candidates&hellip;</p>
-        ) : discoveredCandidates.data && discoveredCandidates.data.length > 0 ? (
+        {!effectiveMissionId ? (
+          <p className="mt-3 text-xs text-black/50">No mission launched yet. Launch one above to see its shortlist.</p>
+        ) : missionShortlist.isLoading ? (
+          <p className="mt-3 text-xs text-black/50">Loading shortlist&hellip;</p>
+        ) : missionShortlist.data?.status === "ok" && missionShortlist.data.entries.length > 0 ? (
+          <>
           <div className="mt-3 space-y-2">
-            {rankCandidates(discoveredCandidates.data, queryPlanPreview.data?.serviceMode).map(candidate => {
+            {missionShortlist.data.entries.map(candidate => {
               const rating = evidenceField(candidate.evidence, "rating");
               const reviewCount = evidenceField(candidate.evidence, "reviewCount");
               const address = evidenceField(candidate.evidence, "address") ?? candidate.publicProfile?.address;
               const phone = evidenceField(candidate.evidence, "phone");
               const website = evidenceField(candidate.evidence, "website");
               const sourceUrl = evidenceField(candidate.evidence, "sourceUrl");
-              const matchedQuery = evidenceField(candidate.evidence, "matchedQuery");
-              const queryPlannerSource = evidenceField(candidate.evidence, "queryPlannerSource");
               const expanded = expandedCandidateId === candidate.id;
               return (
                 <div key={candidate.id} className="rounded-lg border border-black/10 p-3 text-xs">
@@ -561,14 +548,12 @@ export default function MissionControlPage() {
                     <p className="font-semibold">{candidate.businessName}</p>
                     <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700">Google Places</span>
                     <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[10px] font-semibold text-black/55">{label(candidate.sourcingStatus)}</span>
-                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">{serviceModeBadge(candidate.evidence)}</span>
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">{serviceModeBadge(candidate.serviceMode)}</span>
                     {rating !== null ? <span className="text-black/55">{rating}&#9733;{reviewCount !== null ? ` (${reviewCount} reviews)` : ""}</span> : null}
                   </div>
                   {typeof address === "string" ? <p className="mt-1 text-black/55">{address}</p> : null}
-                  {typeof matchedQuery === "string" ? <p className="mt-1 text-black/40">Found via: {matchedQuery}</p> : null}
-                  {typeof queryPlannerSource === "string" ? (
-                    <p className="mt-1 text-black/40">Plan source: {planSourceLabel(queryPlannerSource, null)}</p>
-                  ) : null}
+                  {candidate.matchedQuery ? <p className="mt-1 text-black/40">Found via: {candidate.matchedQuery}</p> : null}
+                  <p className="mt-1 text-black/40">Plan source: {planSourceLabel(candidate.queryPlannerSource, null)}</p>
                   <div className="mt-1 flex flex-wrap gap-3 text-black/45">
                     {typeof phone === "string" ? <span>{phone}</span> : null}
                     {typeof website === "string" ? <span>{website}</span> : null}
@@ -620,7 +605,7 @@ export default function MissionControlPage() {
                       </button>
                     )}
                   </div>
-                  {serviceModeBadge(candidate.evidence) === "Needs review" ? (
+                  {serviceModeBadge(candidate.serviceMode) === "Needs review" ? (
                     <p className="mt-1 text-[11px] text-amber-700">Review mobile fit before outreach.</p>
                   ) : null}
 
@@ -685,6 +670,17 @@ export default function MissionControlPage() {
               );
             })}
           </div>
+          {missionShortlist.data.totalFound > missionShortlist.data.entries.length ? (
+            <details className="mt-3 rounded-lg border border-black/10 bg-black/[0.02] p-2 text-xs">
+              <summary className="cursor-pointer font-semibold text-black/55">
+                Overflow / already discovered &middot; {missionShortlist.data.totalFound - missionShortlist.data.entries.length} additional candidates were found but not shortlisted.
+              </summary>
+              <p className="mt-1 text-black/40">
+                These candidates matched this mission&rsquo;s search but did not rank in the top {missionShortlist.data.targetQuantity}. They are retained for review, not shown as the mission&rsquo;s primary answer.
+              </p>
+            </details>
+          ) : null}
+          </>
         ) : (
           <p className="mt-3 text-xs text-black/50">No candidates discovered yet. Run discovery to populate this list.</p>
         )}

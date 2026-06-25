@@ -26,6 +26,7 @@ describe("procurement migration files", () => {
       "0018_vendor_acquisition_missions.sql",
       "0019_vendor_contact_attempt_audit.sql",
       "0020_vendor_candidate_availability_intake.sql",
+      "0021_vendor_acquisition_mission_candidate_matches.sql",
     ]);
     for (const migration of migrations) {
       expect(migration.checksum).toMatch(/^[a-f0-9]{64}$/);

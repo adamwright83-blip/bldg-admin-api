@@ -130,6 +130,15 @@ const MOCK_PLACE_CANDIDATE = {
   coordinates: { lat: 34.1, lng: -118.3 }, sourceUrl: "https://www.google.com/maps/place/?q=place_id:place_1",
 };
 
+function makeMockMatchStore(overrides?: Record<string, unknown>) {
+  return {
+    upsertMatch: vi.fn().mockResolvedValue({}),
+    listMissionMatches: vi.fn().mockResolvedValue([]),
+    countMissionMatches: vi.fn().mockResolvedValue({ total: 0, shortlisted: 0 }),
+    ...overrides,
+  };
+}
+
 describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
   it("rejects unauthenticated and non-admin callers", async () => {
     const missionStore = makeMockStore();
@@ -150,7 +159,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "needs_provider_config", missingEnvVar: "GOOGLE_PLACES_API_KEY" });
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, makeMockMatchStore() as never);
     const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(result).toEqual({ status: "needs_provider_config", missingEnvVar: "GOOGLE_PLACES_API_KEY" });
@@ -161,7 +170,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "provider_error", reason: "REQUEST_DENIED" });
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, makeMockMatchStore() as never);
     const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(result).toEqual({ status: "provider_error", reason: "REQUEST_DENIED" });
@@ -172,7 +181,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [] });
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, makeMockMatchStore() as never);
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(discoveryFn).toHaveBeenCalledWith({
@@ -186,7 +195,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [MOCK_PLACE_CANDIDATE] });
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, makeMockMatchStore() as never);
     const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(result.status).toBe("ok");
@@ -206,7 +215,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
       findCandidateBySourceReference: vi.fn().mockResolvedValue({ id: "existing-candidate", sourceReference: "place_1" }),
     });
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [MOCK_PLACE_CANDIDATE] });
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, makeMockMatchStore() as never);
     const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(result.status).toBe("ok");
@@ -220,11 +229,11 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [] });
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, makeMockMatchStore() as never);
     const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(result).toEqual({
-      status: "ok", foundCount: 0, persistedCount: 0, alreadyDiscoveredCount: 0, candidates: [],
+      status: "ok", foundCount: 0, persistedCount: 0, alreadyDiscoveredCount: 0, shortlistedCount: 0, overflowCount: 0, candidates: [],
       queryPlannerSource: "deterministic_fallback", queryPlannerFallbackReason: "invalid_output",
     });
   });
@@ -233,7 +242,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [MOCK_PLACE_CANDIDATE] });
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, makeMockMatchStore() as never);
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(Object.keys(sourcingStore).sort()).toEqual([
@@ -250,7 +259,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     });
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [] });
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, makeMockMatchStore() as never);
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(discoveryFn.mock.calls.length).toBeGreaterThan(1);
@@ -265,7 +274,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     });
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [MOCK_PLACE_CANDIDATE] });
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, makeMockMatchStore() as never);
     const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(discoveryFn.mock.calls.length).toBeGreaterThan(1);
@@ -283,7 +292,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     });
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [MOCK_PLACE_CANDIDATE] });
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, makeMockMatchStore() as never);
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(sourcingStore.createCandidate).toHaveBeenCalledWith(expect.objectContaining({
@@ -305,7 +314,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     });
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [MOCK_PLACE_CANDIDATE] });
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, makeMockMatchStore() as never);
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     // targetQuantity is 1, and the first query variant already returns a
@@ -323,7 +332,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     const discoveryFn = vi.fn()
       .mockResolvedValueOnce({ status: "provider_error", reason: "UNKNOWN_ERROR" })
       .mockResolvedValue({ status: "ok", candidates: [MOCK_PLACE_CANDIDATE] });
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, makeMockMatchStore() as never);
     const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(result.status).toBe("ok");
@@ -359,7 +368,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery (Slice 77b structured p
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [] });
     const parserFn = vi.fn().mockResolvedValue(makeStructuredPlan());
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never, undefined, undefined, makeMockMatchStore() as never);
     const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(parserFn).toHaveBeenCalledOnce();
@@ -374,7 +383,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery (Slice 77b structured p
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [] });
     const parserFn = vi.fn().mockResolvedValue({ status: "needs_provider_config", missingEnvVar: "ANTHROPIC_API_KEY" });
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never, undefined, undefined, makeMockMatchStore() as never);
     const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(result.status).toBe("ok");
@@ -388,7 +397,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery (Slice 77b structured p
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [] });
     const parserFn = vi.fn().mockRejectedValue(new Error("unexpected parser crash"));
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never, undefined, undefined, makeMockMatchStore() as never);
     const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(result.status).toBe("ok");
@@ -401,7 +410,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery (Slice 77b structured p
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [MOCK_PLACE_CANDIDATE] });
     const parserFn = vi.fn().mockResolvedValue(makeStructuredPlan());
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never, undefined, undefined, makeMockMatchStore() as never);
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(sourcingStore.createCandidate).toHaveBeenCalledWith(expect.objectContaining({
@@ -414,7 +423,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery (Slice 77b structured p
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [] });
     const parserFn = vi.fn().mockResolvedValue(makeStructuredPlan({ searchQueries: ["a custom claude-generated query"] }));
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never, undefined, undefined, makeMockMatchStore() as never);
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(discoveryFn).toHaveBeenCalledWith(expect.objectContaining({ searchText: "a custom claude-generated query" }));
@@ -437,7 +446,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery (Slice 77b structured p
       serviceMode: "building_service_required",
       searchQueries: ["dog groomers for apartment buildings near 90027", "mobile dog groomer building service 90027"],
     }));
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never, undefined, undefined, makeMockMatchStore() as never);
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(discoveryFn).toHaveBeenCalledWith(expect.objectContaining({ searchText: "dog groomers for apartment buildings near 90027" }));
@@ -455,7 +464,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery (Slice 77b structured p
       serviceMode: "storefront_ok",
       searchQueries: ["dog groomers near Century Park East", "dog grooming salon near Century Park East"],
     }));
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never, undefined, undefined, makeMockMatchStore() as never);
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(discoveryFn.mock.calls.every(([query]) => !/\bmobile\b/i.test(query.searchText))).toBe(true);
@@ -466,7 +475,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery (Slice 77b structured p
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [MOCK_PLACE_CANDIDATE] });
     const parserFn = vi.fn().mockResolvedValue(makeStructuredPlan());
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never, undefined, undefined, makeMockMatchStore() as never);
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(Object.keys(sourcingStore).sort()).toEqual([
@@ -775,5 +784,140 @@ describe("vendorAcquisitionMissionRouter -- saveCandidateAvailabilityIntake (Sli
     const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, sourcingStore as never, undefined, undefined, undefined, intakeStore as never);
     await router.createCaller(context({ role: "admin" })).saveCandidateAvailabilityIntake({ candidateId: "candidate-1", mobileServiceConfirmed: "yes" });
     expect(Object.keys(intakeStore).sort()).toEqual(["getByCandidateId", "upsertForCandidate"]);
+  });
+});
+
+const FOUR_CANDIDATES = [
+  { provider: "google_places" as const, placeId: "place_1", businessName: "Sunset Mobile Grooming", rating: 4.9, reviewCount: 220, address: "1 Main St", website: "https://a.example", phone: "111", coordinates: null, sourceUrl: "https://maps/1" },
+  { provider: "google_places" as const, placeId: "place_2", businessName: "Pawhamas Resort", rating: 4.7, reviewCount: 80, address: "2 Main St", website: null, phone: null, coordinates: null, sourceUrl: "https://maps/2" },
+  { provider: "google_places" as const, placeId: "place_3", businessName: "Pet Purrspective", rating: 4.5, reviewCount: 30, address: "3 Main St", website: null, phone: null, coordinates: null, sourceUrl: "https://maps/3" },
+  { provider: "google_places" as const, placeId: "place_4", businessName: "K-9 Tubs", rating: 4.2, reviewCount: 10, address: "4 Main St", website: null, phone: null, coordinates: null, sourceUrl: "https://maps/4" },
+];
+
+describe("vendorAcquisitionMissionRouter -- runDiscovery mission-scoped shortlist (Slice 79a)", () => {
+  it("upserts a mission match row for every resolved candidate, shortlisting only the top targetQuantity", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: FOUR_CANDIDATES });
+    const matchStore = makeMockMatchStore();
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.shortlistedCount).toBe(2);
+    expect(result.overflowCount).toBe(2);
+    expect(matchStore.upsertMatch).toHaveBeenCalledTimes(4);
+    const shortlistedCalls = matchStore.upsertMatch.mock.calls.filter(([call]) => call.isShortlisted === true);
+    const overflowCalls = matchStore.upsertMatch.mock.calls.filter(([call]) => call.isShortlisted === false);
+    expect(shortlistedCalls).toHaveLength(2);
+    expect(overflowCalls).toHaveLength(2);
+  });
+
+  it("ranks the highest-rated candidate first and assigns sequential rank positions", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: FOUR_CANDIDATES });
+    const matchStore = makeMockMatchStore();
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const firstCall = matchStore.upsertMatch.mock.calls.find(([call]) => call.rankPosition === 1)?.[0];
+    expect(firstCall.matchEvidence.businessName).toBe("Sunset Mobile Grooming");
+    expect(firstCall.isShortlisted).toBe(true);
+  });
+
+  it("rerunning discovery for the same mission/candidate updates the match row via upsert, never duplicating", async () => {
+    // Simulates a rerun where the candidate was already persisted by a
+    // prior run (findCandidateBySourceReference returns the same
+    // existing candidate both times) -- the match store's own
+    // upsertMatch (backed by the table's UNIQUE KEY) is what makes this
+    // idempotent, not a different candidate id per call.
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 10 })) });
+    const sourcingStore = makeMockSourcingStore({
+      findCandidateBySourceReference: vi.fn().mockResolvedValue({ id: "candidate-1", sourceReference: "place_1" }),
+    });
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [FOUR_CANDIDATES[0]] });
+    const matchStore = makeMockMatchStore();
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never);
+
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(matchStore.upsertMatch).toHaveBeenCalledTimes(2);
+    expect(matchStore.upsertMatch.mock.calls[0][0].candidateId).toBe("candidate-1");
+    expect(matchStore.upsertMatch.mock.calls[1][0].candidateId).toBe("candidate-1");
+  });
+
+  it("never invokes any outreach/send capability from the match store -- its interface has only match lifecycle methods", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: FOUR_CANDIDATES });
+    const matchStore = makeMockMatchStore();
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(Object.keys(matchStore).sort()).toEqual(["countMissionMatches", "listMissionMatches", "upsertMatch"]);
+  });
+});
+
+describe("vendorAcquisitionMissionRouter -- listMissionShortlist (Slice 79a)", () => {
+  it("rejects unauthenticated and non-admin callers", async () => {
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, makeMockSourcingStore() as never);
+    await expect(
+      router.createCaller(context(null)).listMissionShortlist({ missionId: "mission-1" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("returns mission_not_found honestly when the mission does not exist", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(null) });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, makeMockSourcingStore() as never);
+    const result = await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "missing" });
+    expect(result).toEqual({ status: "mission_not_found" });
+  });
+
+  it("returns only shortlisted matches by default, merged with real candidate data", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({
+      listCandidatesForReview: vi.fn().mockResolvedValue([{ id: "candidate-1", businessName: "Sunset Mobile Grooming", evidence: { rating: 4.9 } }]),
+    });
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([{
+        id: "match-1", tenantId: "default", missionId: "mission-1", candidateId: "candidate-1",
+        matchedQuery: "mobile dog groomers near 90027", queryPlannerSource: "anthropic_structured",
+        serviceMode: "mobile_required", rankScore: 9.5, rankPosition: 1, isShortlisted: true,
+      }]),
+      countMissionMatches: vi.fn().mockResolvedValue({ total: 4, shortlisted: 1 }),
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.totalFound).toBe(4);
+    expect(result.shortlistedCount).toBe(1);
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0].businessName).toBe("Sunset Mobile Grooming");
+    expect(result.entries[0].matchedQuery).toBe("mobile dog groomers near 90027");
+    expect(result.entries[0].queryPlannerSource).toBe("anthropic_structured");
+    expect(matchStore.listMissionMatches).toHaveBeenCalledWith(expect.objectContaining({ includeOverflow: false }));
+  });
+
+  it("returns overflow matches too when includeOverflow is requested", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({ listCandidatesForReview: vi.fn().mockResolvedValue([]) });
+    const matchStore = makeMockMatchStore();
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1", includeOverflow: true });
+    expect(matchStore.listMissionMatches).toHaveBeenCalledWith(expect.objectContaining({ includeOverflow: true }));
+  });
+
+  it("never invokes any outreach/send capability", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({ listCandidatesForReview: vi.fn().mockResolvedValue([]) });
+    const matchStore = makeMockMatchStore();
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1" });
+    expect(Object.keys(matchStore).sort()).toEqual(["countMissionMatches", "listMissionMatches", "upsertMatch"]);
   });
 });

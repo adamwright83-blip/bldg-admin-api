@@ -11,6 +11,9 @@ import { runGooglePlacesDiscovery, type NormalizedPlaceCandidate } from "./googl
 import { createProcurementPool } from "./migrations";
 import { MISSION_OUTREACH_MODES } from "./vendorAcquisitionMissionPolicy";
 import { VendorAcquisitionMissionStore } from "./vendorAcquisitionMissionStore";
+import {
+  type MatchQueryPlannerSource, type MatchServiceMode, VendorMissionCandidateMatchStore,
+} from "./vendorMissionCandidateMatchStore";
 import { planMissionQuery, type MissionQueryPlan } from "./vendorMissionQueryPlanner";
 import { parseMissionWithClaude } from "./vendorMissionStructuredParser";
 import { VendorSourcingStore } from "./vendorSourcingStore";
@@ -76,6 +79,37 @@ function resolveAvailabilityIntakeStore(injected?: VendorCandidateAvailabilityIn
   return lazyAvailabilityIntakeStore;
 }
 
+let lazyMatchStore: VendorMissionCandidateMatchStore | null = null;
+function resolveMatchStore(injected?: VendorMissionCandidateMatchStore): VendorMissionCandidateMatchStore {
+  if (injected) return injected;
+  if (!lazyMatchStore) {
+    lazyMatchStore = new VendorMissionCandidateMatchStore(createProcurementPool());
+  }
+  return lazyMatchStore;
+}
+
+/**
+ * Slice 79a. Ranks candidates discovered within a single runDiscovery
+ * call for one mission. Tier 1: this candidate's own service mode
+ * (Slice 77/77b evidence) matches the mission's current plan intent.
+ * Tier 2: the candidate is inherently mobile/building-service coded,
+ * even if it doesn't exactly match this mission's mode. Then rating,
+ * review count, phone presence, website presence. Ties break on
+ * placeId for determinism.
+ */
+function rankScoreForCandidate(
+  candidate: NormalizedPlaceCandidate, missionServiceMode: MatchServiceMode, candidateServiceMode: MatchServiceMode,
+): number {
+  let score = 0;
+  if (candidateServiceMode === missionServiceMode) score += 1000;
+  if (candidateServiceMode === "mobile_required" || candidateServiceMode === "building_service_required") score += 100;
+  score += (candidate.rating ?? 0) * 10;
+  score += Math.log10((candidate.reviewCount ?? 0) + 1) * 5;
+  if (candidate.phone) score += 2;
+  if (candidate.website) score += 1;
+  return score;
+}
+
 export type QueryPlannerFallbackReason = "needs_provider_config" | "invalid_output" | "provider_error" | "parser_exception" | null;
 
 export type DiscoveredCandidateSummary = NormalizedPlaceCandidate & {
@@ -87,6 +121,7 @@ export type RunDiscoveryResult =
   | { status: "provider_error"; reason: string }
   | {
       status: "ok"; foundCount: number; persistedCount: number; alreadyDiscoveredCount: number;
+      shortlistedCount: number; overflowCount: number;
       candidates: DiscoveredCandidateSummary[]; queryPlannerSource: QueryPlannerSource;
       queryPlannerFallbackReason: QueryPlannerFallbackReason;
     };
@@ -134,6 +169,7 @@ export function createVendorAcquisitionMissionRouter(
   injectedParserFn: typeof parseMissionWithClaude = parseMissionWithClaude,
   injectedContactAttemptStore?: VendorContactAttemptStore,
   injectedAvailabilityIntakeStore?: VendorCandidateAvailabilityIntakeStore,
+  injectedMatchStore?: VendorMissionCandidateMatchStore,
 ) {
   return router({
     createMission: adminProcedure
@@ -401,6 +437,7 @@ export function createVendorAcquisitionMissionRouter(
         const summaries: DiscoveredCandidateSummary[] = [];
         let persistedCount = 0;
         let alreadyDiscoveredCount = 0;
+        const resolvedCandidates: Array<{ candidateId: string; candidate: NormalizedPlaceCandidate & { matchedQuery: string } }> = [];
 
         for (const candidate of Array.from(byPlaceId.values())) {
           const existing = await sourcingStore.findCandidateBySourceReference(
@@ -409,11 +446,13 @@ export function createVendorAcquisitionMissionRouter(
           if (existing) {
             alreadyDiscoveredCount += 1;
             summaries.push({ ...candidate, persisted: false, alreadyDiscovered: true });
+            resolvedCandidates.push({ candidateId: existing.id, candidate });
             continue;
           }
+          const candidateId = randomUUID();
           try {
             await sourcingStore.createCandidate({
-              id: randomUUID(),
+              id: candidateId,
               tenantId: ctx.tenantId,
               sourceType: "permitted_public_fetch",
               sourceReference: candidate.placeId,
@@ -432,9 +471,40 @@ export function createVendorAcquisitionMissionRouter(
             });
             persistedCount += 1;
             summaries.push({ ...candidate, persisted: true, alreadyDiscovered: false });
+            resolvedCandidates.push({ candidateId, candidate });
           } catch {
             summaries.push({ ...candidate, persisted: false, alreadyDiscovered: false });
           }
+        }
+
+        // Rank every candidate resolved in this run, shortlist only the
+        // top targetQuantity, and persist a mission-scoped match row for
+        // each -- the same candidate can carry separate match rows for
+        // separate missions (never a single mission_id column on
+        // vendor_sourcing_candidates).
+        const matchStore = resolveMatchStore(injectedMatchStore);
+        const ranked = [...resolvedCandidates].sort((a, b) => {
+          const scoreDiff = rankScoreForCandidate(b.candidate, plan.serviceMode, plan.serviceMode)
+            - rankScoreForCandidate(a.candidate, plan.serviceMode, plan.serviceMode);
+          return scoreDiff !== 0 ? scoreDiff : a.candidate.placeId.localeCompare(b.candidate.placeId);
+        });
+        let shortlistedCount = 0;
+        for (let index = 0; index < ranked.length; index += 1) {
+          const { candidateId, candidate } = ranked[index];
+          const isShortlisted = index < mission.targetQuantity;
+          if (isShortlisted) shortlistedCount += 1;
+          await matchStore.upsertMatch({
+            tenantId: ctx.tenantId,
+            missionId: mission.id,
+            candidateId,
+            matchedQuery: candidate.matchedQuery,
+            queryPlannerSource: queryPlannerSource as MatchQueryPlannerSource,
+            serviceMode: plan.serviceMode as MatchServiceMode,
+            rankScore: rankScoreForCandidate(candidate, plan.serviceMode, plan.serviceMode),
+            rankPosition: index + 1,
+            isShortlisted,
+            matchEvidence: candidate,
+          });
         }
 
         return {
@@ -442,9 +512,60 @@ export function createVendorAcquisitionMissionRouter(
           foundCount: byPlaceId.size,
           persistedCount,
           alreadyDiscoveredCount,
+          shortlistedCount,
+          overflowCount: ranked.length - shortlistedCount,
           candidates: summaries,
           queryPlannerSource,
           queryPlannerFallbackReason,
+        };
+      }),
+
+    /**
+     * Slice 79a. Mission-scoped candidate shortlist: returns only the
+     * top targetQuantity-ranked candidates for this mission by default
+     * (is_shortlisted = 1), with includeOverflow returning the rest too.
+     * Reads exactly what runDiscovery already persisted -- never
+     * creates, sends, contacts, or marks any provider-acceptance/
+     * booking/payment/dispatch truth.
+     */
+    listMissionShortlist: adminProcedure
+      .input(z.object({ missionId: z.string().min(1), includeOverflow: z.boolean().default(false) }))
+      .query(async ({ ctx, input }) => {
+        const missionStore = resolveStore(injectedStore);
+        const mission = await missionStore.getMission(ctx.tenantId, input.missionId);
+        if (!mission) return { status: "mission_not_found" as const };
+
+        const matchStore = resolveMatchStore(injectedMatchStore);
+        const [matches, counts] = await Promise.all([
+          matchStore.listMissionMatches({ tenantId: ctx.tenantId, missionId: input.missionId, includeOverflow: input.includeOverflow }),
+          matchStore.countMissionMatches({ tenantId: ctx.tenantId, missionId: input.missionId }),
+        ]);
+
+        const sourcingStore = resolveSourcingStore(injectedSourcingStore);
+        const candidates = await sourcingStore.listCandidatesForReview({ tenantId: ctx.tenantId, category: mission.category, limit: 250 });
+        const candidateById = new Map(candidates.map(candidate => [candidate.id, candidate]));
+
+        const entries = matches
+          .map(match => {
+            const candidate = candidateById.get(match.candidateId);
+            if (!candidate) return null;
+            return {
+              ...candidate,
+              matchedQuery: match.matchedQuery,
+              queryPlannerSource: match.queryPlannerSource,
+              serviceMode: match.serviceMode,
+              rankPosition: match.rankPosition,
+              isShortlisted: match.isShortlisted,
+            };
+          })
+          .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+        return {
+          status: "ok" as const,
+          targetQuantity: mission.targetQuantity,
+          totalFound: counts.total,
+          shortlistedCount: counts.shortlisted,
+          entries,
         };
       }),
   });

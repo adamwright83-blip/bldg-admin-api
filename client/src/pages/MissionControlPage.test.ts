@@ -284,10 +284,10 @@ describe("MissionControlPage -- Run Discovery CTA activation bugfix", () => {
 });
 
 describe("MissionControlPage -- Slice 76c Discovered Candidates panel", () => {
-  it("renders the panel title, subtitle, and is wired to the real listDiscoveredCandidates query", () => {
-    expect(source).toMatch(/Discovered Candidates/);
-    expect(source).toMatch(/Review real candidates found by HELD before approving outreach\./);
-    expect(source).toMatch(/vendorAcquisitionMission\.listDiscoveredCandidates\.useQuery/);
+  it("renders the panel title, subtitle, and is wired to the real listMissionShortlist query (Slice 79a)", () => {
+    expect(source).toMatch(/Mission Shortlist/);
+    expect(source).toMatch(/Top candidates ranked for this mission before approving draft outreach\./);
+    expect(source).toMatch(/vendorAcquisitionMission\.listMissionShortlist\.useQuery/);
   });
 
   it("renders the honest empty state", () => {
@@ -306,7 +306,7 @@ describe("MissionControlPage -- Slice 76c Discovered Candidates panel", () => {
   });
 
   it("never renders a hardcoded/fake vendor name", () => {
-    const panelSection = source.match(/Discovered Candidates[\s\S]*?<\/section>/)?.[0] ?? "";
+    const panelSection = source.match(/Mission Shortlist[\s\S]*?<\/section>/)?.[0] ?? "";
     expect(panelSection).not.toMatch(/Paws & Polish|Happy Hounds|Wag Luxury|Beverly Barkers|Puppy Palace|The Dog Spa|Paw Spa LA|Washing Spot/);
   });
 
@@ -331,13 +331,19 @@ describe("MissionControlPage -- Slice 76c Discovered Candidates panel", () => {
     expect(source).toMatch(/target="_blank"/);
   });
 
-  it("refetches discovered candidates after a successful discovery run", () => {
-    expect(source).toMatch(/onSuccess: \(\) => discoveredCandidates\.refetch\(\)/);
+  it("refetches the mission shortlist after a successful discovery run", () => {
+    expect(source).toMatch(/onSuccess: \(\) => missionShortlist\.refetch\(\)/);
   });
 
   it("the raw per-candidate discovery dump is no longer the primary candidate UI -- the orchestra summary is concise", () => {
     expect(source).not.toMatch(/candidate\.rating !== null \? ` · \$\{candidate\.rating\}★`/);
-    expect(source).toMatch(/see Discovered Candidates below for details\./);
+    expect(source).toMatch(/see Mission Shortlist below for details\./);
+  });
+
+  it("shows the mission target/found count and an overflow section, not every candidate ever discovered for the category", () => {
+    expect(source).toMatch(/Showing \{missionShortlist\.data\.entries\.length\} of \{missionShortlist\.data\.totalFound\} found for this mission/);
+    expect(source).toMatch(/Overflow \/ already discovered/);
+    expect(source).toMatch(/additional candidates were found but not shortlisted\./);
   });
 });
 
@@ -377,22 +383,21 @@ describe("MissionControlPage -- Slice 77a mission-text-driven query planner", ()
     expect(source).toMatch(/queryPlanPreview\.data\.searchQueries\.join/);
   });
 
-  it("Candidate Review shows 'Found via' using the real matchedQuery evidence field, never a hardcoded query", () => {
-    expect(source).toMatch(/Found via: \{matchedQuery\}/);
-    expect(source).toMatch(/evidenceField\(candidate\.evidence, "matchedQuery"\)/);
+  it("Candidate Review shows 'Found via' using the real mission-scoped matchedQuery field, never a hardcoded query", () => {
+    expect(source).toMatch(/Found via: \{candidate\.matchedQuery\}/);
   });
 
-  it("Candidate Review shows a service-mode badge derived only from real evidence", () => {
-    expect(source).toMatch(/serviceModeBadge\(candidate\.evidence\)/);
+  it("Candidate Review shows a service-mode badge derived only from the real mission match's serviceMode", () => {
+    expect(source).toMatch(/serviceModeBadge\(candidate\.serviceMode\)/);
     expect(source).toMatch(/function serviceModeBadge/);
     for (const badge of ["Mobile intent", "Storefront intent", "Needs review"]) {
       expect(source).toContain(badge);
     }
   });
 
-  it("ranks candidates by matching service mode, then rating, review count, phone, website -- never a fixed/fake order", () => {
-    expect(source).toMatch(/function rankCandidates/);
-    expect(source).toMatch(/rankCandidates\(discoveredCandidates\.data, queryPlanPreview\.data\?\.serviceMode\)/);
+  it("ranking is computed server-side per mission (Slice 79a) -- the page renders entries in the order the shortlist query returns", () => {
+    expect(source).not.toMatch(/function rankCandidates/);
+    expect(source).toMatch(/missionShortlist\.data\.entries\.map/);
   });
 
   it("does not hardcode the same service mode for every mission -- the planner output controls the badge/ranking, not a constant", () => {
@@ -432,9 +437,8 @@ describe("MissionControlPage -- Slice 77b structured parser plan source", () => 
     expect(source).toMatch(/Plan source: \{planSourceLabel\(runDiscovery\.data\.queryPlannerSource, runDiscovery\.data\.queryPlannerFallbackReason\)\}/);
   });
 
-  it("Candidate Review shows the planner source per candidate when evidence includes it", () => {
-    expect(source).toMatch(/queryPlannerSource = evidenceField\(candidate\.evidence, "queryPlannerSource"\)/);
-    expect(source).toMatch(/Plan source: \{planSourceLabel\(queryPlannerSource, null\)\}/);
+  it("Candidate Review shows the planner source per candidate from the real mission match row", () => {
+    expect(source).toMatch(/Plan source: \{planSourceLabel\(candidate\.queryPlannerSource, null\)\}/);
   });
 
   it("does not call Claude on every render or keystroke -- the live composer preview stays deterministic-only", () => {
@@ -479,7 +483,7 @@ describe("MissionControlPage -- Slice 78a draft outreach queue", () => {
 
   it("shows a 'Review mobile fit before outreach' warning for needs-review candidates rather than disabling the action", () => {
     expect(source).toMatch(/Review mobile fit before outreach\./);
-    expect(source).toMatch(/serviceModeBadge\(candidate\.evidence\) === "Needs review"/);
+    expect(source).toMatch(/serviceModeBadge\(candidate\.serviceMode\) === "Needs review"/);
   });
 
   it("the approve button is never labeled Send and never claims a live send happened", () => {
@@ -528,5 +532,44 @@ describe("MissionControlPage -- Slice 78b availability intake", () => {
   it("never renders fake intake data -- saved-state text only appears conditionally on a real save or real existing intake", () => {
     expect(source).toMatch(/intakeSavedAt \? \(/);
     expect(source).toMatch(/availabilityIntake\.data\?\.status === "ok" && availabilityIntake\.data\.intake/);
+  });
+});
+
+describe("MissionControlPage -- Slice 79a mission-scoped shortlist", () => {
+  it("panel heading is mission-specific 'Mission Shortlist', not the generic 'Discovered Candidates'", () => {
+    expect(source).toMatch(/Mission Shortlist/);
+    expect(source).not.toMatch(/<h2[^>]*>Discovered Candidates<\/h2>/);
+  });
+
+  it("is wired to listMissionShortlist keyed on the active mission, not a category-wide query", () => {
+    expect(source).toMatch(/vendorAcquisitionMission\.listMissionShortlist\.useQuery\(\s*\{ missionId: effectiveMissionId/s);
+    expect(source).not.toMatch(/vendorAcquisitionMission\.listDiscoveredCandidates/);
+  });
+
+  it("shows an honest 'no mission yet' state distinct from the empty-shortlist state", () => {
+    expect(source).toMatch(/No mission launched yet\. Launch one above to see its shortlist\./);
+  });
+
+  it("shows a count of shown vs. total found, never silently displaying every category candidate as primary", () => {
+    expect(source).toMatch(/Showing \{missionShortlist\.data\.entries\.length\} of \{missionShortlist\.data\.totalFound\} found for this mission/);
+  });
+
+  it("renders a collapsed overflow/already-discovered section distinct from the primary shortlist", () => {
+    expect(source).toMatch(/<details[^>]*>[\s\S]*?Overflow \/ already discovered/);
+    expect(source).toMatch(/missionShortlist\.data\.totalFound > missionShortlist\.data\.entries\.length/);
+  });
+
+  it("draft outreach approval still operates from the shortlist card using the real candidate id, and never sends anything", () => {
+    expect(source).toMatch(/onClick=\{\(\) => approveDraft\(candidate\.id\)\}/);
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid/i);
+  });
+
+  it("availability intake still renders and saves from the mission shortlist card", () => {
+    expect(source).toMatch(/Availability Intake/);
+    expect(source).toMatch(/onClick=\{\(\) => submitAvailabilityIntake\(candidate\.id\)\}/);
+  });
+
+  it("never shows all global category candidates as primary cards -- rendering is driven by the mission entries array only", () => {
+    expect(source).not.toMatch(/category, limit: 50/);
   });
 });
