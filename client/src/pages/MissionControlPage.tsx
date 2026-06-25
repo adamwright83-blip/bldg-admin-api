@@ -76,6 +76,18 @@ const READINESS_BADGE_CLASS: Record<string, string> = {
   do_not_contact: "bg-red-50 text-red-800 border-red-300",
 };
 
+// Slice 82b. Where the deeper (up-to-3-page) website crawl found the
+// real recipient email -- read directly from the server's persisted
+// emailDiscoverySource, never guessed client-side.
+const EMAIL_DISCOVERY_SOURCE_LABEL: Record<string, string> = {
+  mailto: "Email found via mailto",
+  contact_page: "Email found on contact page",
+  about_page: "Email found on about page",
+  service_page: "Email found on service page",
+  homepage: "Email found on homepage",
+  footer: "Email found in footer",
+};
+
 // Slice 81a. Service-area status is read from the mission match's own
 // verification evidence -- see serviceAreaVerification on each
 // shortlist entry, never inferred client-side from rating/name/website
@@ -770,6 +782,13 @@ export default function MissionControlPage() {
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${READINESS_BADGE_CLASS[candidate.outreachReadinessQueue ?? "needs_service_area_review"]}`}>
                         {READINESS_BADGE_LABEL[candidate.outreachReadinessQueue ?? "needs_service_area_review"]}
                       </span>
+                    ) : null}
+                    {candidate.recipientEmail ? (
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                        Direct email found{EMAIL_DISCOVERY_SOURCE_LABEL[candidate.emailDiscoverySource ?? ""] ? ` · ${EMAIL_DISCOVERY_SOURCE_LABEL[candidate.emailDiscoverySource ?? ""]}` : ""}
+                      </span>
+                    ) : candidate.outreachReadinessQueue && candidate.outreachReadinessQueue !== "storefront_fallback_copy_needed" && candidate.outreachReadinessQueue !== "needs_service_area_review" && candidate.outreachReadinessQueue !== "do_not_contact" ? (
+                      <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[10px] font-semibold text-black/55">No direct email found</span>
                     ) : null}
                   </div>
                   {typeof address === "string" ? <p className="mt-1 text-black/55">{address}</p> : null}

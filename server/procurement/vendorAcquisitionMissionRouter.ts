@@ -19,6 +19,9 @@ import {
 import {
   interpretServiceAreaWithClaude, type StructuredServiceAreaInterpretation,
 } from "./vendorCandidateServiceAreaStructuredInterpreter";
+import {
+  discoverWebsiteContactEmail, type WebsiteContactEmailDiscoveryResult,
+} from "./vendorWebsiteContactEmailDiscovery";
 import { MISSION_OUTREACH_MODES } from "./vendorAcquisitionMissionPolicy";
 import { VendorAcquisitionMissionStore } from "./vendorAcquisitionMissionStore";
 import {
@@ -434,6 +437,7 @@ export function classifyOutreachReadiness(
   fulfillment: FulfillmentClassification | null,
   evidence: EffectiveServiceAreaEvidence | null,
   eligibility: PrimaryShortlistEligibility | null,
+  emailDiscovery?: WebsiteContactEmailDiscoveryResult | null,
 ): OutreachReadinessQueue | null {
   if (!fulfillment || !evidence) return null;
   if (eligibility && !eligibility.eligible) return "do_not_contact";
@@ -443,9 +447,14 @@ export function classifyOutreachReadiness(
   // Only green (verified/likely mobile/building-service, with the
   // vendor's own mobile evidence) remains -- route purely by the
   // vendor's own discovered contact evidence, never by mission intent.
-  if (evidence.outreachReadiness === "email_ready") return "ready_for_agentmail";
-  if (evidence.outreachReadiness === "form_required") return "contact_form_required_later";
-  if (evidence.outreachReadiness === "sms_or_call_required") return "phone_sms_required_later";
+  // Slice 82b: emailDiscovery (the deeper, up-to-3-page crawl) is
+  // consulted first when present -- it can find a real email the
+  // single-homepage-page verifier (81a) missed -- but never invents
+  // anything; it is simply a richer real-evidence source.
+  const primaryEmail = emailDiscovery?.primaryEmail ?? evidence.emailAddressesFound[0] ?? null;
+  if (primaryEmail) return "ready_for_agentmail";
+  if (emailDiscovery?.contactFormDetected || evidence.outreachReadiness === "form_required") return "contact_form_required_later";
+  if (emailDiscovery?.phoneDetected || evidence.outreachReadiness === "sms_or_call_required") return "phone_sms_required_later";
   return "manual_email_needed";
 }
 
@@ -532,9 +541,14 @@ async function loadReadyAgentMailCandidates(input: {
       outreachReadinessQueue?: OutreachReadinessQueue | null;
       serviceAreaVerification?: ServiceAreaVerification;
       fulfillmentClassification?: FulfillmentClassification;
+      emailDiscovery?: WebsiteContactEmailDiscoveryResult | null;
     } | null;
     if (evidence?.outreachReadinessQueue !== "ready_for_agentmail") continue;
-    const recipientEmail = evidence.serviceAreaVerification?.emailAddressesFound[0] ?? null;
+    // Slice 82b: prefer the deeper (up-to-3-page) crawl's email when
+    // present -- it can find a real email the single-homepage-page
+    // verifier (81a) missed -- otherwise fall back to the verifier's
+    // own homepage-only extraction. Both sources are real, never invented.
+    const recipientEmail = evidence.emailDiscovery?.primaryEmail ?? evidence.serviceAreaVerification?.emailAddressesFound[0] ?? null;
     if (!recipientEmail) continue;
     const candidate = await input.sourcingStore.getCandidate(input.tenantId, match.candidateId);
     if (!candidate) continue;
@@ -566,6 +580,7 @@ export function createVendorAcquisitionMissionRouter(
   injectedMatchStore?: VendorMissionCandidateMatchStore,
   injectedVerifyServiceAreaFn: typeof verifyCandidateServiceArea = verifyCandidateServiceArea,
   injectedInterpretServiceAreaFn: typeof interpretServiceAreaWithClaude = interpretServiceAreaWithClaude,
+  injectedDiscoverEmailFn: typeof discoverWebsiteContactEmail = discoverWebsiteContactEmail,
 ) {
   return router({
     createMission: adminProcedure
@@ -1227,7 +1242,16 @@ export function createVendorAcquisitionMissionRouter(
           // query's own mobile intent -- see hasVendorMobileEvidence.
           const vendorHasMobileEvidence = hasVendorMobileEvidence(entry.candidate.businessName, verification.websiteTextSnippet);
           const fulfillment = classifyFulfillment(evidence, vendorHasMobileEvidence);
-          return { ...entry, verification, evidence, fulfillment };
+          // Slice 82b. Only run the deeper (up-to-3-page) email crawl
+          // for candidates where it can actually change the outcome:
+          // green mobile/building-service candidates the single-page
+          // verifier (81a) did NOT already find an email for. This
+          // avoids a redundant second homepage fetch for every
+          // candidate while still maximizing the AgentMail-ready pool.
+          const emailDiscovery = fulfillment.fulfillmentTier === "green" && evidence.emailAddressesFound.length === 0
+            ? await injectedDiscoverEmailFn({ candidateName: entry.candidate.businessName, website: entry.candidate.website })
+            : null;
+          return { ...entry, verification, evidence, fulfillment, emailDiscovery };
         }));
 
         // Slice 81c. Rank every candidate resolved in this run by
@@ -1283,7 +1307,7 @@ export function createVendorAcquisitionMissionRouter(
 
         let shortlistedCount = 0;
         for (let index = 0; index < eligible.length; index += 1) {
-          const { candidateId, candidate, verification, evidence, fulfillment, eligibility } = eligible[index];
+          const { candidateId, candidate, verification, evidence, fulfillment, eligibility, emailDiscovery } = eligible[index];
           const isShortlisted = shortlistedIds.has(candidateId);
           if (isShortlisted) shortlistedCount += 1;
           await matchStore.upsertMatch({
@@ -1302,7 +1326,8 @@ export function createVendorAcquisitionMissionRouter(
               serviceAreaEffectiveEvidence: evidence,
               fulfillmentClassification: fulfillment,
               primaryShortlistEligibility: eligibility,
-              outreachReadinessQueue: classifyOutreachReadiness(fulfillment, evidence, eligibility),
+              emailDiscovery,
+              outreachReadinessQueue: classifyOutreachReadiness(fulfillment, evidence, eligibility, emailDiscovery),
             },
           });
         }
@@ -1366,6 +1391,7 @@ export function createVendorAcquisitionMissionRouter(
             fulfillmentClassification?: FulfillmentClassification;
             primaryShortlistEligibility?: PrimaryShortlistEligibility;
             outreachReadinessQueue?: OutreachReadinessQueue | null;
+            emailDiscovery?: WebsiteContactEmailDiscoveryResult | null;
           } | null;
           const deterministic = matchEvidence?.serviceAreaVerification ?? null;
           const effective = matchEvidence?.serviceAreaEffectiveEvidence ?? null;
@@ -1407,7 +1433,12 @@ export function createVendorAcquisitionMissionRouter(
             distanceToTargetMiles: deterministic?.distanceMilesToTarget ?? null,
             outreachReadinessQueue,
             outreachReadinessLabel: outreachReadinessQueue ? OUTREACH_READINESS_LABEL[outreachReadinessQueue] : null,
-            recipientEmail: serviceAreaVerification?.emailAddressesFound[0] ?? null,
+            // Slice 82b. Prefer the deeper crawl's discovered email
+            // (it can find one the single-page verifier missed); both
+            // sources are real, never invented.
+            recipientEmail: matchEvidence?.emailDiscovery?.primaryEmail ?? serviceAreaVerification?.emailAddressesFound[0] ?? null,
+            emailDiscoveryStatus: matchEvidence?.emailDiscovery?.emailDiscoveryStatus ?? null,
+            emailDiscoverySource: matchEvidence?.emailDiscovery?.discoverySource ?? null,
           };
         }
 

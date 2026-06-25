@@ -1960,6 +1960,111 @@ describe("classifyOutreachReadiness (Slice 82a)", () => {
   });
 });
 
+function emailDiscoveryResult(overrides?: Partial<Record<string, unknown>>) {
+  return {
+    emailDiscoveryStatus: "no_email_found", emailsFound: [], primaryEmail: null, pagesChecked: ["https://example.com/"],
+    emailEvidence: [], contactFormDetected: false, phoneDetected: false, discoverySource: null, requiresHumanReview: false,
+    ...overrides,
+  };
+}
+
+describe("classifyOutreachReadiness -- Slice 82b emailDiscovery integration", () => {
+  it("green verified mobile candidate with email found by the deeper crawl becomes ready_for_agentmail", () => {
+    const evidence = baseEvidence({ outreachReadiness: "not_outreach_ready", emailAddressesFound: [] });
+    const discovery = emailDiscoveryResult({ emailDiscoveryStatus: "email_found", primaryEmail: "hello@vendor.com", discoverySource: "contact_page" });
+    expect(classifyOutreachReadiness(baseFulfillment() as never, evidence as never, { eligible: true, exclusionReason: null }, discovery as never)).toBe("ready_for_agentmail");
+  });
+
+  it("green verified mobile candidate with no email + contact form found becomes contact_form_required_later", () => {
+    const evidence = baseEvidence({ outreachReadiness: "not_outreach_ready", emailAddressesFound: [] });
+    const discovery = emailDiscoveryResult({ contactFormDetected: true });
+    expect(classifyOutreachReadiness(baseFulfillment() as never, evidence as never, { eligible: true, exclusionReason: null }, discovery as never)).toBe("contact_form_required_later");
+  });
+
+  it("green verified mobile candidate with no email/form + phone found becomes phone_sms_required_later", () => {
+    const evidence = baseEvidence({ outreachReadiness: "not_outreach_ready", emailAddressesFound: [] });
+    const discovery = emailDiscoveryResult({ phoneDetected: true });
+    expect(classifyOutreachReadiness(baseFulfillment() as never, evidence as never, { eligible: true, exclusionReason: null }, discovery as never)).toBe("phone_sms_required_later");
+  });
+
+  it("storefront fallback with a discovered email remains storefront_fallback_copy_needed", () => {
+    const fulfillment = baseFulfillment({ fulfillmentMode: "drive_to_storefront_fallback", fulfillmentTier: "blue", fulfillmentLabel: "Drive-to fallback", vendorHasMobileEvidence: false });
+    const discovery = emailDiscoveryResult({ emailDiscoveryStatus: "email_found", primaryEmail: "hello@vendor.com" });
+    expect(classifyOutreachReadiness(fulfillment as never, baseEvidence() as never, { eligible: true, exclusionReason: null }, discovery as never)).toBe("storefront_fallback_copy_needed");
+  });
+
+  it("needs-review candidate with a discovered email remains needs_service_area_review", () => {
+    const fulfillment = baseFulfillment({ fulfillmentMode: "mobile_needs_review", fulfillmentTier: "yellow", fulfillmentLabel: "Mobile · Needs review" });
+    const discovery = emailDiscoveryResult({ emailDiscoveryStatus: "email_found", primaryEmail: "hello@vendor.com" });
+    expect(classifyOutreachReadiness(fulfillment as never, baseEvidence() as never, { eligible: true, exclusionReason: null }, discovery as never)).toBe("needs_service_area_review");
+  });
+
+  it("out-of-area candidate with a discovered email remains do_not_contact", () => {
+    const fulfillment = baseFulfillment({ fulfillmentMode: "out_of_area", fulfillmentTier: "red", fulfillmentLabel: "Out of area" });
+    const discovery = emailDiscoveryResult({ emailDiscoveryStatus: "email_found", primaryEmail: "hello@vendor.com" });
+    expect(classifyOutreachReadiness(fulfillment as never, baseEvidence() as never, { eligible: true, exclusionReason: null }, discovery as never)).toBe("do_not_contact");
+  });
+});
+
+describe("vendorAcquisitionMissionRouter -- runDiscovery website email discovery integration (Slice 82b)", () => {
+  it("calls the email discovery function only for green candidates with no email already found from the homepage", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [
+      { provider: "google_places" as const, placeId: "p1", businessName: "Mobile Green No Email", rating: 4.9, reviewCount: 50, address: "1 Main St", website: "https://example.com", phone: "555-0000", coordinates: null, sourceUrl: "https://maps/p1" },
+      { provider: "google_places" as const, placeId: "p2", businessName: "Mobile Green Has Email", rating: 4.8, reviewCount: 40, address: "2 Main St", website: "https://other.com", phone: "555-0001", coordinates: null, sourceUrl: "https://maps/p2" },
+    ] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockImplementation(async (input: { candidate: { address: string | null } }) => {
+      if (input.candidate.address === "1 Main St") return verification({ serviceAreaStatus: "verified_serves_target", emailAddressesFound: [] });
+      return verification({ serviceAreaStatus: "verified_serves_target", emailAddressesFound: ["found@vendor.com"] });
+    });
+    const discoverEmailFn = vi.fn().mockResolvedValue(emailDiscoveryResult({ emailDiscoveryStatus: "email_found", primaryEmail: "deep@vendor.com", discoverySource: "contact_page" }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never, undefined, discoverEmailFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(discoverEmailFn).toHaveBeenCalledOnce();
+    expect(discoverEmailFn).toHaveBeenCalledWith(expect.objectContaining({ candidateName: "Mobile Green No Email", website: "https://example.com" }));
+    const noEmailCall = matchStore.upsertMatch.mock.calls.find(([call]) => call.matchEvidence.businessName === "Mobile Green No Email")?.[0];
+    expect(noEmailCall.matchEvidence.outreachReadinessQueue).toBe("ready_for_agentmail");
+    expect(noEmailCall.matchEvidence.emailDiscovery.primaryEmail).toBe("deep@vendor.com");
+  });
+
+  it("never invents a fake email -- only the real discoverWebsiteContactEmail/verifier outputs ever become recipientEmail", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 1 })) });
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [{
+      provider: "google_places" as const, placeId: "p1", businessName: "Sunset Mobile Grooming", rating: 4.9, reviewCount: 50,
+      address: "1 Main St", website: "https://example.com", phone: "555-0000", coordinates: null, sourceUrl: "https://maps/p1",
+    }] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "verified_serves_target", emailAddressesFound: [] }));
+    const discoverEmailFn = vi.fn().mockResolvedValue(emailDiscoveryResult({ emailDiscoveryStatus: "no_email_found" }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never, undefined, discoverEmailFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const call = matchStore.upsertMatch.mock.calls[0][0];
+    expect(call.matchEvidence.outreachReadinessQueue).not.toBe("ready_for_agentmail");
+    expect(call.matchEvidence.emailDiscovery.primaryEmail).toBeNull();
+  });
+
+  it("does not call the email discovery function for blue/yellow/red tier candidates", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 1 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [{
+      provider: "google_places" as const, placeId: "p1", businessName: "Storefront Groomer", rating: 4.9, reviewCount: 50,
+      address: "1 Main St", website: "https://example.com", phone: "555-0000", coordinates: null, sourceUrl: "https://maps/p1",
+    }] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "unverified", emailAddressesFound: [] }));
+    const discoverEmailFn = vi.fn();
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never, undefined, discoverEmailFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(discoverEmailFn).not.toHaveBeenCalled();
+  });
+});
+
 describe("vendorAcquisitionMissionRouter -- Outreach Readiness Queue summary (Slice 82a)", () => {
   function matchWithReadiness(overrides?: Record<string, unknown>) {
     return {

@@ -934,3 +934,24 @@ describe("MissionControlPage -- Slice 82a Outreach Readiness Queue + AgentMail b
     expect(source).toMatch(/onClick=\{sendAgentMailBatch\}/);
   });
 });
+
+describe("MissionControlPage -- Slice 82b website contact email discovery", () => {
+  it("renders 'Direct email found' when a recipient email exists", () => {
+    expect(source).toMatch(/candidate\.recipientEmail \? \(/);
+    expect(source).toMatch(/Direct email found/);
+  });
+
+  it("renders 'No direct email found' when no email exists but the candidate is otherwise green", () => {
+    expect(source).toMatch(/No direct email found/);
+  });
+
+  it("renders the email discovery source label (contact page / mailto) when available", () => {
+    expect(source).toMatch(/EMAIL_DISCOVERY_SOURCE_LABEL\[candidate\.emailDiscoverySource/);
+    expect(source).toMatch(/Email found on contact page/);
+    expect(source).toMatch(/Email found via mailto/);
+  });
+
+  it("storefront fallback candidates never show the email-discovery badges, even if an email was found", () => {
+    expect(source).toMatch(/candidate\.outreachReadinessQueue !== "storefront_fallback_copy_needed"/);
+  });
+});
