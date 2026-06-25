@@ -659,3 +659,36 @@ describe("MissionControlPage -- Slice 80b supervised send guardrails", () => {
     expect(source).toMatch(/Sent via AgentMail &middot; Awaiting reply/);
   });
 });
+
+describe("MissionControlPage -- Slice 81a service area verification + contact routing", () => {
+  it("the shortlist card shows a service-area status badge sourced from serviceAreaVerification", () => {
+    expect(source).toMatch(/candidate\.serviceAreaVerification \? \(/);
+    expect(source).toMatch(/Service area: Verified/);
+    expect(source).toMatch(/Service area: Likely out of area/);
+    expect(source).toMatch(/Service area: Unverified/);
+  });
+
+  it("the shortlist card shows a contact-route label", () => {
+    expect(source).toMatch(/Contact route: Email/);
+    expect(source).toMatch(/Contact route: Contact form/);
+    expect(source).toMatch(/Contact route: SMS\/call required/);
+  });
+
+  it("renders the out-of-area/unverified reason from real verification evidence, not invented copy", () => {
+    expect(source).toMatch(/candidate\.serviceAreaVerification\.serviceAreaReasons\[0\]/);
+    expect(source).toMatch(/Held back from shortlist: \{candidate\.overflowReason\}/);
+  });
+
+  it("does not present AgentMail as the clean next action when no email was discovered", () => {
+    expect(source).toMatch(/Email not available\. Contact form\/SMS\/call workflow required later\./);
+    expect(source).toMatch(/outreachReadiness !== "email_ready"/);
+  });
+
+  it("a manually entered email is clearly labeled as manual, not discovered", () => {
+    expect(source).toMatch(/No email was discovered for this vendor.*manually supplied, not discovered\./);
+  });
+
+  it("no SMS/call/form-submission button exists anywhere in this page", () => {
+    expect(source).not.toMatch(/sendSms\(|placeCall\(|\.submit\(\)|Send SMS|Place call|Submit form/);
+  });
+});

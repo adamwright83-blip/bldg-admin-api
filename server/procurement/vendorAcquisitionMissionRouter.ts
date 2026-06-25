@@ -12,6 +12,9 @@ import { buildCandidateDraftOutreach } from "./vendorCandidateDraftOutreachPolic
 import { VendorContactAttemptStore } from "./vendorContactAttemptStore";
 import { runGooglePlacesDiscovery, type NormalizedPlaceCandidate } from "./googlePlacesDiscoveryConnector";
 import { createProcurementPool } from "./migrations";
+import {
+  extractZipFromAddress, verifyCandidateServiceArea, type ServiceAreaStatus, type ServiceAreaVerification,
+} from "./vendorCandidateServiceAreaVerifier";
 import { MISSION_OUTREACH_MODES } from "./vendorAcquisitionMissionPolicy";
 import { VendorAcquisitionMissionStore } from "./vendorAcquisitionMissionStore";
 import {
@@ -113,6 +116,41 @@ function rankScoreForCandidate(
   return score;
 }
 
+/**
+ * Slice 81a. Mirrors the client's LA_BUILDINGS list (MissionControlPage.tsx)
+ * -- the only two HELD-serviced buildings with a known ZIP in this
+ * codebase. Deliberately does not include "Los Feliz Towers": no ZIP
+ * for it exists anywhere in the codebase, and inventing one would be
+ * exactly the kind of fabricated truth this slice exists to prevent.
+ */
+const KNOWN_HELD_BUILDINGS: ReadonlyArray<{ name: string; zip: string }> = [
+  { name: "OPUS LA", zip: "90027" },
+  { name: "Century Park East", zip: "90067" },
+];
+
+function resolveTargetGeography(geographyLabel: string): { targetZip: string | null; targetBuildingName: string | null } {
+  const targetZip = extractZipFromAddress(geographyLabel);
+  const targetBuildingName = targetZip
+    ? KNOWN_HELD_BUILDINGS.find(building => building.zip === targetZip)?.name ?? null
+    : null;
+  return { targetZip, targetBuildingName };
+}
+
+/**
+ * Service-area status forms the PRIMARY sort tier; rank score (rating/
+ * review-count/contact-method based) only breaks ties within the same
+ * tier. A candidate Google found via a "mobile" query with a great
+ * rating is never ranked above a candidate that actually, verifiably
+ * serves the mission's target ZIP/building.
+ */
+const SERVICE_AREA_TIER: Record<ServiceAreaStatus, number> = {
+  verified_serves_target: 0,
+  likely_serves_target: 1,
+  unverified: 2,
+  likely_out_of_area: 3,
+  out_of_area: 4,
+};
+
 export type QueryPlannerFallbackReason = "needs_provider_config" | "invalid_output" | "provider_error" | "parser_exception" | null;
 
 export type DiscoveredCandidateSummary = NormalizedPlaceCandidate & {
@@ -173,6 +211,7 @@ export function createVendorAcquisitionMissionRouter(
   injectedContactAttemptStore?: VendorContactAttemptStore,
   injectedAvailabilityIntakeStore?: VendorCandidateAvailabilityIntakeStore,
   injectedMatchStore?: VendorMissionCandidateMatchStore,
+  injectedVerifyServiceAreaFn: typeof verifyCandidateServiceArea = verifyCandidateServiceArea,
 ) {
   return router({
     createMission: adminProcedure
@@ -604,21 +643,58 @@ export function createVendorAcquisitionMissionRouter(
           }
         }
 
-        // Rank every candidate resolved in this run, shortlist only the
-        // top targetQuantity, and persist a mission-scoped match row for
-        // each -- the same candidate can carry separate match rows for
-        // separate missions (never a single mission_id column on
-        // vendor_sourcing_candidates).
+        // Slice 81a. Verify service-area fit and contact route for every
+        // candidate resolved in this run BEFORE ranking -- a "mobile"
+        // query result with a great rating is never enough on its own
+        // to call a candidate outreach-ready.
+        const { targetZip, targetBuildingName } = resolveTargetGeography(mission.geographyLabel);
+        const verifiedCandidates = await Promise.all(resolvedCandidates.map(async entry => {
+          const verification = await injectedVerifyServiceAreaFn({
+            candidate: {
+              address: entry.candidate.address, website: entry.candidate.website,
+              phone: entry.candidate.phone, coordinates: entry.candidate.coordinates,
+            },
+            targetZip, targetBuildingName,
+          });
+          return { ...entry, verification };
+        }));
+
+        // Rank every candidate resolved in this run -- service-area tier
+        // first, then the existing rating/review-count/contact-method
+        // score only breaks ties within the same tier -- and persist a
+        // mission-scoped match row for each (the same candidate can
+        // carry separate match rows for separate missions; never a
+        // single mission_id column on vendor_sourcing_candidates).
         const matchStore = resolveMatchStore(injectedMatchStore);
-        const ranked = [...resolvedCandidates].sort((a, b) => {
+        const sorted = [...verifiedCandidates].sort((a, b) => {
+          const tierDiff = SERVICE_AREA_TIER[a.verification.serviceAreaStatus] - SERVICE_AREA_TIER[b.verification.serviceAreaStatus];
+          if (tierDiff !== 0) return tierDiff;
           const scoreDiff = rankScoreForCandidate(b.candidate, plan.serviceMode, plan.serviceMode)
             - rankScoreForCandidate(a.candidate, plan.serviceMode, plan.serviceMode);
           return scoreDiff !== 0 ? scoreDiff : a.candidate.placeId.localeCompare(b.candidate.placeId);
         });
+
+        // Likely-out-of-area/out-of-area candidates are excluded from
+        // the primary shortlist whenever enough verified/likely/
+        // unverified alternatives exist to fill the mission's target
+        // count. Only when there are not enough alternatives do they
+        // fill the remaining shortlist slots (better to show fewer
+        // verified candidates than to silently pretend an out-of-area
+        // candidate is qualified).
+        const isOutOfAreaTier = (status: ServiceAreaStatus) => status === "likely_out_of_area" || status === "out_of_area";
+        const inAreaPool = sorted.filter(entry => !isOutOfAreaTier(entry.verification.serviceAreaStatus));
+        const outOfAreaPool = sorted.filter(entry => isOutOfAreaTier(entry.verification.serviceAreaStatus));
+        const shortlistedIds = new Set<string>();
+        for (const entry of inAreaPool.slice(0, mission.targetQuantity)) shortlistedIds.add(entry.candidateId);
+        for (const entry of outOfAreaPool) {
+          if (shortlistedIds.size >= mission.targetQuantity) break;
+          shortlistedIds.add(entry.candidateId);
+        }
+
         let shortlistedCount = 0;
-        for (let index = 0; index < ranked.length; index += 1) {
-          const { candidateId, candidate } = ranked[index];
-          const isShortlisted = index < mission.targetQuantity;
+        for (let index = 0; index < sorted.length; index += 1) {
+          const { candidateId, candidate, verification } = sorted[index];
+          const isShortlisted = shortlistedIds.has(candidateId);
           if (isShortlisted) shortlistedCount += 1;
           await matchStore.upsertMatch({
             tenantId: ctx.tenantId,
@@ -630,7 +706,7 @@ export function createVendorAcquisitionMissionRouter(
             rankScore: rankScoreForCandidate(candidate, plan.serviceMode, plan.serviceMode),
             rankPosition: index + 1,
             isShortlisted,
-            matchEvidence: candidate,
+            matchEvidence: { ...candidate, serviceAreaVerification: verification },
           });
         }
 
@@ -640,7 +716,7 @@ export function createVendorAcquisitionMissionRouter(
           persistedCount,
           alreadyDiscoveredCount,
           shortlistedCount,
-          overflowCount: ranked.length - shortlistedCount,
+          overflowCount: sorted.length - shortlistedCount,
           candidates: summaries,
           queryPlannerSource,
           queryPlannerFallbackReason,
@@ -676,6 +752,15 @@ export function createVendorAcquisitionMissionRouter(
           .map(match => {
             const candidate = candidateById.get(match.candidateId);
             if (!candidate) return null;
+            // Slice 81a. serviceAreaVerification is read from this
+            // mission match's own evidence (refreshed every runDiscovery
+            // run for this mission) -- never from the candidate's own
+            // evidence blob, which is written once at first discovery
+            // and can go stale or reflect a different mission's geography.
+            const matchEvidence = match.matchEvidence as { serviceAreaVerification?: ServiceAreaVerification } | null;
+            const serviceAreaVerification = matchEvidence?.serviceAreaVerification ?? null;
+            const isOutOfArea = serviceAreaVerification?.serviceAreaStatus === "likely_out_of_area"
+              || serviceAreaVerification?.serviceAreaStatus === "out_of_area";
             return {
               ...candidate,
               matchedQuery: match.matchedQuery,
@@ -683,6 +768,8 @@ export function createVendorAcquisitionMissionRouter(
               serviceMode: match.serviceMode,
               rankPosition: match.rankPosition,
               isShortlisted: match.isShortlisted,
+              serviceAreaVerification,
+              overflowReason: !match.isShortlisted && isOutOfArea ? serviceAreaVerification?.serviceAreaReasons[0] ?? "Service area unverified" : null,
             };
           })
           .filter((entry): entry is NonNullable<typeof entry> => entry !== null);

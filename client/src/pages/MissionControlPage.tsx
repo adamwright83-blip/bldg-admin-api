@@ -33,6 +33,26 @@ function serviceModeBadge(mode: string | null | undefined): string {
   return "Needs review";
 }
 
+// Slice 81a. Service-area status is read from the mission match's own
+// verification evidence -- see serviceAreaVerification on each
+// shortlist entry, never inferred client-side from rating/name/website
+// presence alone.
+const SERVICE_AREA_STATUS_DISPLAY: Record<string, { label: string; className: string }> = {
+  verified_serves_target: { label: "Service area: Verified", className: "bg-emerald-50 text-emerald-800 border-emerald-200" },
+  likely_serves_target: { label: "Service area: Likely", className: "bg-blue-50 text-blue-800 border-blue-200" },
+  unverified: { label: "Service area: Unverified", className: "bg-black/[0.04] text-black/55 border-black/15" },
+  likely_out_of_area: { label: "Service area: Likely out of area", className: "bg-amber-50 text-amber-800 border-amber-300" },
+  out_of_area: { label: "Service area: Out of area", className: "bg-red-50 text-red-800 border-red-300" },
+};
+
+const CONTACT_ROUTE_DISPLAY: Record<string, string> = {
+  email_available: "Contact route: Email",
+  contact_form_available: "Contact route: Contact form",
+  phone_available: "Contact route: Phone",
+  sms_or_call_required: "Contact route: SMS/call required",
+  unknown: "Contact route: Unknown",
+};
+
 const GLOBAL_MARKET_PREVIEW_CITIES = ["London", "Dubai", "Singapore", "Paris", "Tokyo"] as const;
 const US_MARKETS = [
   { name: "Los Angeles", active: true },
@@ -577,6 +597,16 @@ export default function MissionControlPage() {
                     <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[10px] font-semibold text-black/55">{label(candidate.sourcingStatus)}</span>
                     <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">{serviceModeBadge(candidate.serviceMode)}</span>
                     {rating !== null ? <span className="text-black/55">{rating}&#9733;{reviewCount !== null ? ` (${reviewCount} reviews)` : ""}</span> : null}
+                    {candidate.serviceAreaVerification ? (
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${SERVICE_AREA_STATUS_DISPLAY[candidate.serviceAreaVerification.serviceAreaStatus]?.className ?? ""}`}>
+                        {SERVICE_AREA_STATUS_DISPLAY[candidate.serviceAreaVerification.serviceAreaStatus]?.label ?? "Service area: Unverified"}
+                      </span>
+                    ) : null}
+                    {candidate.serviceAreaVerification ? (
+                      <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[10px] font-semibold text-black/55">
+                        {CONTACT_ROUTE_DISPLAY[candidate.serviceAreaVerification.contactRoute] ?? "Contact route: Unknown"}
+                      </span>
+                    ) : null}
                   </div>
                   {typeof address === "string" ? <p className="mt-1 text-black/55">{address}</p> : null}
                   {candidate.matchedQuery ? <p className="mt-1 text-black/40">Found via: {candidate.matchedQuery}</p> : null}
@@ -585,6 +615,12 @@ export default function MissionControlPage() {
                     {typeof phone === "string" ? <span>{phone}</span> : null}
                     {typeof website === "string" ? <span>{website}</span> : null}
                   </div>
+                  {candidate.serviceAreaVerification && candidate.serviceAreaVerification.serviceAreaReasons.length > 0 ? (
+                    <p className="mt-1 text-black/55">{candidate.serviceAreaVerification.serviceAreaReasons[0]}</p>
+                  ) : null}
+                  {candidate.overflowReason ? (
+                    <p className="mt-1 font-semibold text-amber-700">Held back from shortlist: {candidate.overflowReason}</p>
+                  ) : null}
                   <p className="mt-1 font-semibold text-emerald-700">Not contacted &middot; No outreach sent</p>
 
                   <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -728,12 +764,20 @@ export default function MissionControlPage() {
                         <p className="mt-2 font-semibold text-black/55">Body</p>
                         <p className="whitespace-pre-wrap">{draftQueueStatus[candidate.id]?.body ?? "(no draft body found -- approve for draft outreach first)"}</p>
                       </div>
+                      {candidate.serviceAreaVerification && candidate.serviceAreaVerification.outreachReadiness !== "email_ready" ? (
+                        <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 font-semibold text-amber-800">
+                          Email not available. Contact form/SMS/call workflow required later.
+                        </p>
+                      ) : null}
                       <input
                         className="mt-2 w-full rounded-lg border border-black/15 px-2 py-1"
                         placeholder="Recipient email"
                         value={recipientEmailInput}
                         onChange={event => setRecipientEmailInput(event.target.value)}
                       />
+                      {candidate.serviceAreaVerification && candidate.serviceAreaVerification.emailAddressesFound.length === 0 ? (
+                        <p className="mt-1 text-black/55">No email was discovered for this vendor &mdash; any email entered above is manually supplied, not discovered.</p>
+                      ) : null}
                       <p className="mt-1 font-semibold text-red-700">
                         Use the vendor&rsquo;s real business email only. A successful send records this candidate as contacted by HELD.
                       </p>

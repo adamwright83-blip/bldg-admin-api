@@ -794,6 +794,19 @@ describe("vendorAcquisitionMissionRouter -- saveCandidateAvailabilityIntake (Sli
   });
 });
 
+// Slice 81a. A deterministic stub for the service-area verifier so
+// these runDiscovery tests never attempt the real verifier's live
+// website fetch (place_1 below carries a website URL) -- the verifier
+// itself has its own full test suite in
+// vendorCandidateServiceAreaVerifier.test.ts.
+const STUB_VERIFY_SERVICE_AREA_FN = vi.fn().mockResolvedValue({
+  serviceAreaStatus: "unverified", serviceAreaReasons: [], targetZipMatched: false, targetBuildingMatched: false,
+  candidateAddressZip: null, distanceMilesToTarget: null, websiteChecked: false, websiteServiceAreas: [],
+  websiteMentionsTargetZip: false, websiteMentionsTargetBuilding: false, contactRoute: "unknown",
+  emailAddressesFound: [], contactFormDetected: false, phoneFound: false, outreachReadiness: "not_outreach_ready",
+  verificationSource: "not_checked", verificationConfidence: "low",
+});
+
 const FOUR_CANDIDATES = [
   { provider: "google_places" as const, placeId: "place_1", businessName: "Sunset Mobile Grooming", rating: 4.9, reviewCount: 220, address: "1 Main St", website: "https://a.example", phone: "111", coordinates: null, sourceUrl: "https://maps/1" },
   { provider: "google_places" as const, placeId: "place_2", businessName: "Pawhamas Resort", rating: 4.7, reviewCount: 80, address: "2 Main St", website: null, phone: null, coordinates: null, sourceUrl: "https://maps/2" },
@@ -807,7 +820,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery mission-scoped shortlis
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: FOUR_CANDIDATES });
     const matchStore = makeMockMatchStore();
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, STUB_VERIFY_SERVICE_AREA_FN as never);
     const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(result.status).toBe("ok");
@@ -826,7 +839,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery mission-scoped shortlis
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: FOUR_CANDIDATES });
     const matchStore = makeMockMatchStore();
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, STUB_VERIFY_SERVICE_AREA_FN as never);
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     const firstCall = matchStore.upsertMatch.mock.calls.find(([call]) => call.rankPosition === 1)?.[0];
@@ -846,7 +859,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery mission-scoped shortlis
     });
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [FOUR_CANDIDATES[0]] });
     const matchStore = makeMockMatchStore();
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, STUB_VERIFY_SERVICE_AREA_FN as never);
 
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
@@ -861,10 +874,100 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery mission-scoped shortlis
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: FOUR_CANDIDATES });
     const matchStore = makeMockMatchStore();
-    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never);
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, STUB_VERIFY_SERVICE_AREA_FN as never);
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
     expect(Object.keys(matchStore).sort()).toEqual(["countMissionMatches", "listMissionMatches", "upsertMatch"]);
+  });
+});
+
+function verification(overrides?: Partial<Record<string, unknown>>) {
+  return {
+    serviceAreaStatus: "unverified", serviceAreaReasons: [], targetZipMatched: false, targetBuildingMatched: false,
+    candidateAddressZip: null, distanceMilesToTarget: null, websiteChecked: false, websiteServiceAreas: [],
+    websiteMentionsTargetZip: false, websiteMentionsTargetBuilding: false, contactRoute: "unknown",
+    emailAddressesFound: [], contactFormDetected: false, phoneFound: false, outreachReadiness: "not_outreach_ready",
+    verificationSource: "not_checked", verificationConfidence: "low",
+    ...overrides,
+  };
+}
+
+describe("vendorAcquisitionMissionRouter -- runDiscovery service-area verification integration (Slice 81a)", () => {
+  it("calls the verifier for every resolved candidate and saves the result into match_evidence_json", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [FOUR_CANDIDATES[0]] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "verified_serves_target" }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(verifyFn).toHaveBeenCalledOnce();
+    const upsertCall = matchStore.upsertMatch.mock.calls[0][0];
+    expect(upsertCall.matchEvidence.serviceAreaVerification.serviceAreaStatus).toBe("verified_serves_target");
+  });
+
+  it("ranks verified candidates above unverified candidates regardless of rating", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
+    const sourcingStore = makeMockSourcingStore();
+    // place_1 (Sunset, rating 4.9) is the highest-rated but will be
+    // classified likely_out_of_area; place_4 (K-9 Tubs, rating 4.2,
+    // lowest-rated) will be classified verified -- verified must still
+    // rank first despite the lower rating.
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: FOUR_CANDIDATES });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockImplementation(async (input: { candidate: { address: string | null } }) => {
+      if (input.candidate.address === "4 Main St") return verification({ serviceAreaStatus: "verified_serves_target" });
+      if (input.candidate.address === "1 Main St") return verification({ serviceAreaStatus: "likely_out_of_area" });
+      return verification({ serviceAreaStatus: "unverified" });
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const firstRanked = matchStore.upsertMatch.mock.calls.find(([call]) => call.rankPosition === 1)?.[0];
+    expect(firstRanked.matchEvidence.businessName).toBe("K-9 Tubs");
+    expect(firstRanked.isShortlisted).toBe(true);
+  });
+
+  it("excludes likely_out_of_area/out_of_area candidates from the primary shortlist when enough in-area alternatives exist", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: FOUR_CANDIDATES });
+    const matchStore = makeMockMatchStore();
+    // place_1 out-of-area; the other three unverified (in-area pool of 3, target is 2).
+    const verifyFn = vi.fn().mockImplementation(async (input: { candidate: { address: string | null } }) => {
+      if (input.candidate.address === "1 Main St") return verification({ serviceAreaStatus: "likely_out_of_area" });
+      return verification({ serviceAreaStatus: "unverified" });
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const sunsetCall = matchStore.upsertMatch.mock.calls.find(([call]) => call.matchEvidence.businessName === "Sunset Mobile Grooming")?.[0];
+    expect(sunsetCall.isShortlisted).toBe(false);
+  });
+
+  it("does not fill the mission target count with out-of-area candidates when fewer in-area alternatives exist than the target", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 3 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: FOUR_CANDIDATES });
+    const matchStore = makeMockMatchStore();
+    // Only place_4 is in-area (pool of 1); the other three are
+    // out-of-area. Target is 3, but only 1 real alternative exists --
+    // it is better to show 1 verified candidate than to pretend 3 are
+    // qualified, so the out-of-area pool fills the remaining 2 slots
+    // (per the brief's explicit "fewer alternatives" fallback) while
+    // still being honestly labeled out-of-area in their own evidence.
+    const verifyFn = vi.fn().mockImplementation(async (input: { candidate: { address: string | null } }) => {
+      if (input.candidate.address === "4 Main St") return verification({ serviceAreaStatus: "unverified" });
+      return verification({ serviceAreaStatus: "likely_out_of_area" });
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    if (result.status !== "ok") throw new Error("expected ok");
+    const k9Call = matchStore.upsertMatch.mock.calls.find(([call]) => call.matchEvidence.businessName === "K-9 Tubs")?.[0];
+    expect(k9Call.rankPosition).toBe(1);
+    expect(k9Call.isShortlisted).toBe(true);
   });
 });
 
@@ -926,6 +1029,34 @@ describe("vendorAcquisitionMissionRouter -- listMissionShortlist (Slice 79a)", (
     const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
     await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1" });
     expect(Object.keys(matchStore).sort()).toEqual(["countMissionMatches", "listMissionMatches", "upsertMatch"]);
+  });
+
+  it("Slice 81a: exposes serviceAreaVerification from the match's own (fresh) evidence, never from the candidate's stale evidence blob", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({
+      listCandidatesForReview: vi.fn().mockResolvedValue([{
+        id: "candidate-1", businessName: "Sunset Mobile Grooming",
+        // Stale: candidate's own evidence was written at first
+        // discovery and has no verification info (or an outdated one).
+        evidence: { rating: 4.9 },
+      }]),
+    });
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([{
+        id: "match-1", tenantId: "default", missionId: "mission-1", candidateId: "candidate-1",
+        matchedQuery: "mobile dog groomers near 90027", queryPlannerSource: "anthropic_structured",
+        serviceMode: "mobile_required", rankScore: 9.5, rankPosition: 1, isShortlisted: false,
+        matchEvidence: { rating: 4.9, serviceAreaVerification: verification({ serviceAreaStatus: "likely_out_of_area", serviceAreaReasons: ["Business address ZIP 91306 is outside target area"] }) },
+      }]),
+      countMissionMatches: vi.fn().mockResolvedValue({ total: 1, shortlisted: 0 }),
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1", includeOverflow: true });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.entries[0].serviceAreaVerification?.serviceAreaStatus).toBe("likely_out_of_area");
+    expect(result.entries[0].overflowReason).toBe("Business address ZIP 91306 is outside target area");
   });
 });
 
