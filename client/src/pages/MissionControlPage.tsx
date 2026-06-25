@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { Compass, Expand, Loader2, MapPin, Send, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import {
+  Compass, Expand, FileText, Loader2, Mail, MapPin, MessageSquare, Phone,
+  Reply, Send, ShieldCheck, Sparkles, Star, Wrench,
+} from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 const CATEGORY_OPTIONS = [
@@ -35,6 +38,26 @@ const SUB_AGENTS: SubAgent[] = [
   { name: "Web Seeker", role: "Exploring sites", icon: Wrench, statusWithMission: "Not configured yet" },
 ];
 
+const CHANNEL_DISPLAY: Record<string, { label: string; icon: typeof Mail }> = {
+  email: { label: "Email", icon: Mail },
+  sms_if_allowed: { label: "SMS", icon: MessageSquare },
+  website_form: { label: "Web Form", icon: FileText },
+  call: { label: "Phone / Voice", icon: Phone },
+  voicemail: { label: "Phone / Voice", icon: Phone },
+  second_call_if_urgent: { label: "Phone / Voice", icon: Phone },
+};
+
+const CHANNEL_ICON_LEGEND = [
+  { label: "Email", icon: Mail, comingSoon: false },
+  { label: "SMS", icon: MessageSquare, comingSoon: false },
+  { label: "Yelp", icon: Star, comingSoon: false },
+  { label: "Web Form", icon: FileText, comingSoon: false },
+  { label: "Phone / Voice", icon: Phone, comingSoon: true },
+  { label: "Reply", icon: Reply, comingSoon: false },
+] as const;
+
+const TRAINING_CHIPS = ["Tone: Luxury & Warm", "Focus: Availability", "Qualify: Pricing", "Objection: Busy"] as const;
+
 export default function MissionControlPage() {
   const [category, setCategory] = useState<(typeof CATEGORY_OPTIONS)[number]>("dog_grooming");
   const [zipCode, setZipCode] = useState("90027");
@@ -51,6 +74,11 @@ export default function MissionControlPage() {
   const createMission = trpc.admin.vendorAcquisitionMission.createMission.useMutation();
   const recentMissions = trpc.admin.vendorAcquisitionMission.listMissions.useQuery({ limit: 10 });
   const latestMission = recentMissions.data?.[0] ?? null;
+
+  const recentAttempts = trpc.admin.vendorCastingSprint.recentContactAttempts.useQuery({ limit: 10 });
+
+  const [trainingDraft, setTrainingDraft] = useState("");
+  const [savedTrainingRules, setSavedTrainingRules] = useState<string[]>([]);
 
   function startMission() {
     const rating = Number(minRating);
@@ -271,6 +299,100 @@ export default function MissionControlPage() {
             );
           })}
         </div>
+      </section>
+
+      <section className="mt-4 rounded-2xl border border-black/10 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-bold">Sent Messages</h2>
+        <p className="mt-1 text-xs text-black/55">Agent activity feed.</p>
+
+        <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-black/45">
+          {CHANNEL_ICON_LEGEND.map(channel => {
+            const Icon = channel.icon;
+            return (
+              <span key={channel.label} className="flex items-center gap-1">
+                <Icon className="h-3 w-3" /> {channel.label}
+                {channel.comingSoon ? <span className="font-semibold text-amber-700">&nbsp;&middot; Coming soon</span> : null}
+              </span>
+            );
+          })}
+        </div>
+
+        {recentAttempts.isLoading ? (
+          <p className="mt-3 text-xs text-black/50">Loading activity&hellip;</p>
+        ) : recentAttempts.data && recentAttempts.data.attempts.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            {recentAttempts.data.attempts.map(attempt => {
+              const channel = CHANNEL_DISPLAY[attempt.channel] ?? { label: label(attempt.channel), icon: Mail };
+              const Icon = channel.icon;
+              return (
+                <div key={attempt.attemptId} className="rounded-lg border border-black/10 p-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-3.5 w-3.5 text-black/45" />
+                    <span className="font-semibold">{channel.label}</span>
+                    <span className="text-black/40">&middot;</span>
+                    <span className="text-black/55">{label(attempt.automationMode)}</span>
+                    <span className="ml-auto text-black/40">{new Date(attempt.updatedAt).toLocaleString()}</span>
+                  </div>
+                  <p className="mt-1 text-black/60">Status: {label(attempt.status)}</p>
+                  <p className="mt-1 text-[11px] text-black/40">
+                    provider_responded: {String(attempt.providerResponded)} &middot; provider_accepted: false &middot; booking/payment/dispatch: false
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-black/50">No outbound attempts yet. Launch a mission and approve outreach to begin.</p>
+        )}
+      </section>
+
+      <section className="mt-4 rounded-2xl border border-black/10 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-bold">Sub-Agent Training</h2>
+        <p className="mt-1 text-xs text-black/55">Teach HELD how to communicate and qualify.</p>
+        <p className="mt-1 text-xs font-semibold text-amber-700">
+          This is human guidance for message drafting, not model training. Local guidance draft &mdash; persistence comes next.
+        </p>
+
+        <textarea
+          className="mt-3 w-full resize-none rounded-xl border border-black/10 bg-black/[0.02] p-3 text-sm outline-none"
+          rows={2}
+          placeholder="Instead of this message, send something like…"
+          value={trainingDraft}
+          onChange={event => setTrainingDraft(event.target.value)}
+        />
+
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {TRAINING_CHIPS.map(chip => (
+            <button
+              key={chip}
+              type="button"
+              className="rounded-full border border-black/15 px-3 py-1 text-xs font-semibold text-black/65"
+              onClick={() => setTrainingDraft(value => (value ? `${value} ${chip}` : chip))}
+            >
+              {chip}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="rounded-full bg-black px-3 py-1 text-xs font-semibold text-white disabled:opacity-40"
+            disabled={!trainingDraft.trim()}
+            onClick={() => {
+              setSavedTrainingRules(rules => [...rules, trainingDraft.trim()]);
+              setTrainingDraft("");
+            }}
+          >
+            Add rule
+          </button>
+        </div>
+
+        {savedTrainingRules.length > 0 ? (
+          <div className="mt-3 space-y-1">
+            <p className="text-xs font-bold uppercase tracking-wide text-black/45">Unsaved guidance (this session only)</p>
+            {savedTrainingRules.map((rule, index) => (
+              <p key={index} className="rounded-lg border border-black/10 bg-black/[0.02] p-2 text-xs text-black/65">{rule}</p>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section className="mt-4 rounded-2xl border border-black/10 bg-white p-5 shadow-sm">

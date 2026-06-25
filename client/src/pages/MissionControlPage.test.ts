@@ -126,7 +126,70 @@ describe("MissionControlPage -- Slice 75b source isolation", () => {
     expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid/i);
   });
 
-  it("still never touches truth fields", () => {
-    expect(source).not.toMatch(/provider_accepted|booking_confirmed|payment_authorized|\bdispatched\b/);
+  it("still never claims a truth field is true (display copy may honestly state they are false)", () => {
+    expect(source).not.toMatch(/provider_accepted:\s*true|bookingConfirmed:\s*true|paymentAuthorized:\s*true|dispatched:\s*true/i);
+    expect(source).not.toMatch(/provider_accepted: \{|booking_confirmed: \{|payment_authorized: \{/);
+  });
+});
+
+describe("MissionControlPage -- Slice 75c Sent Messages feed", () => {
+  it("renders the section title and reuses the existing Slice 74 recentContactAttempts query", () => {
+    expect(source).toMatch(/Sent Messages/);
+    expect(source).toMatch(/vendorCastingSprint\.recentContactAttempts\.useQuery/);
+  });
+
+  it("renders the honest empty-state copy", () => {
+    expect(source).toMatch(/No outbound attempts yet\. Launch a mission and approve outreach to begin\./);
+  });
+
+  it("renders all six channel icon labels, with Phone / Voice marked Coming soon", () => {
+    for (const channelLabel of ["Email", "SMS", "Yelp", "Web Form", "Phone / Voice", "Reply"]) {
+      expect(source).toContain(channelLabel);
+    }
+    expect(source).toMatch(/Phone \/ Voice.*comingSoon: true/s);
+  });
+
+  it("never renders a fake vendor name, fake message body, or hardcoded sent row", () => {
+    expect(source).not.toMatch(/Paws & Polish|Happy Hounds|Wag Luxury|Beverly Barkers|Puppy Palace|The Dog Spa/);
+  });
+
+  it("never invokes any outbound send mutation for this feed", () => {
+    expect(source).not.toMatch(/recentAttempts[\s\S]{0,40}\.mutate/);
+  });
+});
+
+describe("MissionControlPage -- Slice 75c Sub-Agent Training composer", () => {
+  it("renders the training composer and labels itself as guidance, not real model training", () => {
+    expect(source).toMatch(/Sub-Agent Training/);
+    expect(source).toMatch(/human guidance for message drafting, not model training/);
+    expect(source).toMatch(/Local guidance draft.*persistence comes next/);
+  });
+
+  it("renders the required training chips", () => {
+    for (const chip of ["Tone: Luxury & Warm", "Focus: Availability", "Qualify: Pricing", "Objection: Busy", "Add rule"]) {
+      expect(source).toContain(chip);
+    }
+  });
+
+  it("adding a rule only updates local component state, never persists or calls a mutation", () => {
+    expect(source).toMatch(/setSavedTrainingRules\(rules => \[\.\.\.rules, trainingDraft\.trim\(\)\]\)/);
+    const addRuleBlock = source.match(/onClick={\(\) => \{\s*setSavedTrainingRules[\s\S]{0,150}?\}\}/)?.[0] ?? "";
+    expect(addRuleBlock).not.toMatch(/\.mutate/);
+  });
+
+  it("never calls an LLM and never claims model improvement", () => {
+    expect(source).not.toMatch(/openai|anthropic\.|chatCompletion|generateText/i);
+    expect(source).not.toMatch(/model (improved|trained|learned)/i);
+  });
+});
+
+describe("MissionControlPage -- Slice 75c source isolation", () => {
+  it("still never imports any outbound send adapter", () => {
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid/i);
+  });
+
+  it("still never claims a truth field is true (display copy may honestly state they are false)", () => {
+    expect(source).not.toMatch(/provider_accepted:\s*true|bookingConfirmed:\s*true|paymentAuthorized:\s*true|dispatched:\s*true/i);
+    expect(source).not.toMatch(/provider_accepted: \{|booking_confirmed: \{|payment_authorized: \{/);
   });
 });

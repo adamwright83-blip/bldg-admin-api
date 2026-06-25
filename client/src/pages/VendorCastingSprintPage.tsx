@@ -402,8 +402,14 @@ export default function VendorCastingSprintPage() {
                     </ul>
                   </div>
 
-                  <div className="rounded-lg border border-black/10 bg-white p-3">
-                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-black/45">
+                  <details className="rounded-lg border border-black/10 bg-white p-3">
+                    <summary className="cursor-pointer text-xs font-bold uppercase tracking-[0.1em] text-black/45">
+                      Fallback: manually import/correct a vendor
+                    </summary>
+                    <p className="mt-1 text-xs text-black/50">
+                      Use only when HELD cannot source or parse a vendor automatically.
+                    </p>
+                    <p className="mt-2 text-xs font-bold uppercase tracking-[0.1em] text-black/45">
                       Enter real vendor facts (never copy the demo lead name above)
                     </p>
                     <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -851,7 +857,7 @@ export default function VendorCastingSprintPage() {
                         </details>
                       </div>
                     ) : null}
-                  </div>
+                  </details>
                 </div>
               )}
             </section>
