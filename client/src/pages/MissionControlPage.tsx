@@ -863,7 +863,7 @@ export default function MissionControlPage() {
                       <span className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-800">
                         Future contact-form workflow
                       </span>
-                    ) : (
+                    ) : candidate.outreachReadinessQueue === "ready_for_agentmail" ? (
                       <button
                         type="button"
                         disabled={approveDraftOutreach.isPending}
@@ -873,6 +873,17 @@ export default function MissionControlPage() {
                       >
                         {approveDraftOutreach.isPending ? "Queueing draft…" : "Approve for draft outreach"}
                       </button>
+                    ) : (
+                      // Slice 82c fix. A candidate with no
+                      // outreachReadinessQueue yet (its match row
+                      // predates Slice 82a, or runDiscovery has not
+                      // been re-run since) must never default to the
+                      // unrestricted draft-outreach button -- that
+                      // button previously appeared here regardless of
+                      // whether a direct email was ever found.
+                      <span className="rounded-lg border border-black/15 bg-black/[0.02] px-2 py-1 text-xs font-semibold text-black/55">
+                        Re-run discovery to classify outreach readiness
+                      </span>
                     )}
                     {draftQueueStatus[candidate.id] ? (
                       <button
@@ -1062,6 +1073,14 @@ export default function MissionControlPage() {
           </div>
         ) : null}
 
+        {agentMailBatchPreview.data?.status === "ok" && agentMailBatchPreview.data.readyCount === 0 ? (
+          <div className="mt-3 rounded-lg border border-black/10 bg-black/[0.02] p-3 text-xs">
+            <p className="text-xs font-bold">No AgentMail-ready mobile vendors yet</p>
+            <p className="mt-1 text-black/55">
+              Candidates without direct email are routed to manual email, phone/SMS, or contact-form workflows.
+            </p>
+          </div>
+        ) : null}
         {agentMailBatchPreview.data?.status === "ok" && agentMailBatchPreview.data.readyCount > 0 ? (
           <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/30 p-3 text-xs">
             <p className="text-xs font-bold">AgentMail-ready mobile vendors</p>

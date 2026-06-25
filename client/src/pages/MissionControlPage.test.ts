@@ -955,3 +955,33 @@ describe("MissionControlPage -- Slice 82b website contact email discovery", () =
     expect(source).toMatch(/candidate\.outreachReadinessQueue !== "storefront_fallback_copy_needed"/);
   });
 });
+
+describe("MissionControlPage -- Slice 82c outreach readiness CTA wiring fix", () => {
+  it("the draft-outreach button only renders for outreachReadinessQueue === ready_for_agentmail, never as the unconditional default", () => {
+    expect(source).toMatch(/candidate\.outreachReadinessQueue === "ready_for_agentmail" \? \(/);
+  });
+
+  it("a candidate with no outreachReadinessQueue yet (stale/pre-82a data) shows a safe re-run-discovery message, never the unrestricted draft button", () => {
+    expect(source).toMatch(/Re-run discovery to classify outreach readiness/);
+  });
+
+  it("a phone-only green mobile candidate (outreachReadinessQueue = phone_sms_required_later) never shows Approve for draft outreach", () => {
+    // The button branch is gated strictly on ready_for_agentmail, and
+    // phone_sms_required_later has its own earlier branch in the same
+    // conditional chain, so it can never fall through to the button.
+    const buttonBranchIndex = source.indexOf('candidate.outreachReadinessQueue === "ready_for_agentmail" ? (');
+    const phoneBranchIndex = source.indexOf('candidate.outreachReadinessQueue === "phone_sms_required_later" ? (');
+    expect(phoneBranchIndex).toBeGreaterThan(-1);
+    expect(phoneBranchIndex).toBeLessThan(buttonBranchIndex);
+  });
+
+  it("shows 'No AgentMail-ready mobile vendors yet' with the required explanation when ready count is 0", () => {
+    expect(source).toMatch(/No AgentMail-ready mobile vendors yet/);
+    expect(source).toMatch(/Candidates without direct email are routed to manual email, phone\/SMS, or contact-form workflows\./);
+  });
+
+  it("does not show the send button when ready count is 0 -- the batch panel with the button is a separate, mutually exclusive branch", () => {
+    expect(source).toMatch(/agentMailBatchPreview\.data\.readyCount === 0 \? \(/);
+    expect(source).toMatch(/agentMailBatchPreview\.data\.readyCount > 0 \? \(/);
+  });
+});

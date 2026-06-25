@@ -2172,6 +2172,23 @@ describe("vendorAcquisitionMissionRouter -- previewReadyAgentMailBatchForMission
     expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
   });
 
+  it("Slice 82c: a phone-only green mobile candidate (phone_sms_required_later) never appears in the AgentMail batch preview, even though it is green/mobile", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([
+        { id: "match-1", candidateId: "candidate-1", matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: [] }), fulfillmentClassification: baseFulfillment(), outreachReadinessQueue: "phone_sms_required_later" } },
+      ]),
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).previewReadyAgentMailBatchForMission({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.readyCount).toBe(0);
+    expect(result.candidates).toHaveLength(0);
+  });
+
   it("warns honestly when no candidates are ready", async () => {
     const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
     const sourcingStore = makeMockSourcingStore();
