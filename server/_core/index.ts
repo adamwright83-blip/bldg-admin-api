@@ -34,6 +34,7 @@ import { registerMarketplaceStripeWebhookRoutes } from "../marketplacePayments/m
 import { registerMarketplacePaymentDryRunRoutes } from "../marketplacePayments/marketplacePaymentDryRunRoute";
 import { registerLaundryFarmSheetSyncRoutes } from "../laundryFarmSheetSyncRoute";
 import { registerResidentProposalReadRoutes, registerResidentProposalConsentRoute } from "../procurement/residentProposalReadApi";
+import { registerAgentMailVendorReplyWebhookRoutes } from "../procurement/agentMailVendorReplyWebhookRoute";
 import { PUBLIC_FORM_ORIGINS, buildAdminCorsOptions } from "./corsConfig";
 import { z } from "zod";
 import { buildBldgIntakeOrder } from "../residentIntake";
@@ -232,6 +233,7 @@ async function startServer() {
   registerMarketplacePaymentReadRoutes(app);
   registerMarketplaceStripeWebhookRoutes(app);
   registerMarketplacePaymentDryRunRoutes(app);
+  registerAgentMailVendorReplyWebhookRoutes(app);
   registerLaundryFarmSheetSyncRoutes(app);
   registerResidentProposalReadRoutes(app);
   registerResidentProposalConsentRoute(app);

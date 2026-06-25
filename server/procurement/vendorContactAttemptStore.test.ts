@@ -418,3 +418,24 @@ describe("VendorContactAttemptStore -- recordLiveSendResult", () => {
     expect(connection.rollback).toHaveBeenCalledOnce();
   });
 });
+
+describe("VendorContactAttemptStore -- getAttemptByProviderAttemptId", () => {
+  it("returns the attempt matching the outbound provider message id, with no tenant filter", async () => {
+    const execute = vi.fn().mockResolvedValue([[MOCK_ATTEMPT_ROW], []]);
+    const pool = { execute };
+    const store = new VendorContactAttemptStore(pool as any);
+
+    const attempt = await store.getAttemptByProviderAttemptId("msg_outbound_123");
+    expect(attempt?.id).toBe("attempt-1");
+    expect(execute).toHaveBeenCalledWith(expect.stringMatching(/WHERE provider_attempt_id = \?/), ["msg_outbound_123"]);
+    expect(String(execute.mock.calls[0][0])).not.toMatch(/tenant_id\s*=\s*\?/);
+  });
+
+  it("returns null when no attempt matches", async () => {
+    const execute = vi.fn().mockResolvedValue([[], []]);
+    const pool = { execute };
+    const store = new VendorContactAttemptStore(pool as any);
+
+    expect(await store.getAttemptByProviderAttemptId("msg_unknown")).toBeNull();
+  });
+});

@@ -627,6 +627,21 @@ async getDraftById(tenantId: string, draftId: string): Promise<DurableDraft | nu
     return rows[0] ? mapAttemptRow(rows[0]) : null;
   }
 
+  /**
+   * Looks up an attempt by the outbound provider's own message id, with no
+   * tenant filter -- an inbound webhook has no tenant context of its own,
+   * only the AgentMail correlation id. provider_attempt_id is set exactly
+   * once, at the original outbound send, so this is a safe, narrow lookup
+   * rather than a broad scan.
+   */
+  async getAttemptByProviderAttemptId(providerAttemptId: string): Promise<DurableContactAttempt | null> {
+    const [rows] = await this.pool.execute<AttemptDbRow[]>(
+      `SELECT ${ATTEMPT_SELECT_COLUMNS} FROM vendor_contact_attempts WHERE provider_attempt_id = ? LIMIT 1`,
+      [providerAttemptId],
+    );
+    return rows[0] ? mapAttemptRow(rows[0]) : null;
+  }
+
   async listAttemptsBySourceKey(tenantId: string, sourceKey: string, limit = 50): Promise<DurableContactAttempt[]> {
     const boundedLimit = Math.min(Math.max(limit, 1), 250);
     const [rows] = await this.pool.execute<AttemptDbRow[]>(

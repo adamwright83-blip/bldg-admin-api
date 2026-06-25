@@ -787,18 +787,31 @@ export default function VendorCastingSprintPage() {
                           </div>
                           {auditFeed.data && auditFeed.data.length > 0 ? (
                             <div className="mt-2 space-y-2">
-                              {auditFeed.data.map(entry => (
-                                <div key={entry.attemptId} className="rounded-lg border border-black/10 p-2 text-xs">
-                                  <p className="font-mono text-black/50">{entry.attemptId}</p>
-                                  <p>
-                                    <span className="font-semibold">{label(entry.status)}</span> &middot; {LANE_LABELS[entry.lane ?? ""] ?? entry.lane ?? "no lane"} &middot; {label(entry.channel)} &middot; {label(entry.automationMode)}
-                                  </p>
-                                  {entry.latestTermsPacketSummary ? (
-                                    <p className="text-black/55">Latest terms recorded &middot; admin review required before proposal.</p>
-                                  ) : null}
-                                  <p className="text-black/40">Updated {new Date(entry.updatedAt).toLocaleString()}</p>
-                                </div>
-                              ))}
+                              {auditFeed.data.map(entry => {
+                                const reply = entry.latestReplySummary as { agentMailEventId?: unknown; classification?: unknown } | null;
+                                const receivedViaWebhook = Boolean(reply?.agentMailEventId);
+                                return (
+                                  <div key={entry.attemptId} className="rounded-lg border border-black/10 p-2 text-xs">
+                                    <p className="font-mono text-black/50">{entry.attemptId}</p>
+                                    <p>
+                                      <span className="font-semibold">{label(entry.status)}</span> &middot; {LANE_LABELS[entry.lane ?? ""] ?? entry.lane ?? "no lane"} &middot; {label(entry.channel)} &middot; {label(entry.automationMode)}
+                                    </p>
+                                    {receivedViaWebhook ? (
+                                      <div className="mt-1 rounded-lg border border-indigo-200 bg-indigo-50/40 p-1.5 text-indigo-950">
+                                        <p>HELD received the vendor reply.</p>
+                                        <p>HELD matched the reply to the durable attempt.</p>
+                                        <p>HELD recorded the response terms.</p>
+                                        {typeof reply?.classification === "string" ? <p>Interpreted reply: {label(reply.classification)}</p> : null}
+                                        <p>provider_responded: true &middot; provider_accepted: false &middot; booking/payment/dispatch: false</p>
+                                      </div>
+                                    ) : null}
+                                    {entry.latestTermsPacketSummary ? (
+                                      <p className="text-black/55">Latest terms recorded &middot; admin review required before proposal.</p>
+                                    ) : null}
+                                    <p className="text-black/40">Updated {new Date(entry.updatedAt).toLocaleString()}</p>
+                                  </div>
+                                );
+                              })}
                             </div>
                           ) : (
                             <p className="mt-2 text-xs text-black/50">No durable contact attempts recorded yet for this source.</p>
