@@ -15,6 +15,7 @@ import { createProcurementPool } from "./migrations";
 import { buildRequestJobCardPage, REQUEST_JOB_CARD_SOURCE_TYPES, type RequestJobCardSourceType } from "./requestJobCardReadModel";
 import type { RequestJobCard } from "./requestJobCardPolicy";
 import {
+  AUTOMATION_MODES,
   buildContactAttempt,
   buildResponseTermsPacket,
   buildSimulatedReplyIntakePacket,
@@ -29,6 +30,7 @@ import {
   type ResponseTermsPacket,
   type VendorReplyIntakePacket,
 } from "./vendorContactAttemptPolicy";
+import { buildProviderReadiness, evaluateLiveSendGate, type ProviderReadiness } from "./vendorContactProviderRegistry";
 import {
   VendorContactAttemptStore,
   type DurableContactAttempt,
@@ -195,6 +197,13 @@ function toAuditFeedSummary(attempt: DurableContactAttempt): AuditFeedAttemptSum
 
 export function createVendorCastingSprintRouter(injectedStore?: VendorContactAttemptStore) {
   return router({
+  /**
+   * Inspects provider configuration/flags only; never imports or calls a
+   * live email/SMS/form SDK. liveSendingEnabled is always false in this
+   * slice regardless of what env vars or flags are set.
+   */
+  providerReadiness: adminProcedure.query((): ProviderReadiness => buildProviderReadiness()),
+
   mission: adminProcedure
     .input(z.object({ sourceKey: z.string().min(3).max(191) }))
     .query(async ({ ctx, input }): Promise<CastingMissionResult> => {
@@ -308,6 +317,7 @@ export function createVendorCastingSprintRouter(injectedStore?: VendorContactAtt
       candidateId: z.string().min(1).max(191).nullable().optional(),
       durableDraftId: z.string().min(1).max(191).nullable().optional(),
       channel: z.enum(CONTACT_CHANNELS),
+      automationMode: z.enum(AUTOMATION_MODES).default("noop_provider"),
       vendorFacts: vendorFactsInput,
     }))
     .mutation(async ({ ctx, input }): Promise<
@@ -318,7 +328,7 @@ export function createVendorCastingSprintRouter(injectedStore?: VendorContactAtt
         }
       | {
           allowed: false; blockedReasons: string[]; attempt: ContactAttempt | null; providerResult: null;
-          durableAttemptId: null; durableDraftId: null; statusHistory: []; persisted: false; auditFeedSummary: null;
+          durableAttemptId: string | null; durableDraftId: string | null; statusHistory: StatusHistoryEntry[]; persisted: boolean; auditFeedSummary: AuditFeedAttemptSummary | null;
         }
     > => {
       const result = await resolveMission({ tenantId: ctx.tenantId, sourceKey: input.sourceKey });
@@ -335,6 +345,84 @@ export function createVendorCastingSprintRouter(injectedStore?: VendorContactAtt
       }
       const draft = buildCastingSprintOutreachDraft({ jobCard: result.jobCard, lead, vendorFacts: input.vendorFacts });
       const recipientTarget = input.vendorFacts.phone || input.vendorFacts.email || input.vendorFacts.website || "";
+
+      if (input.automationMode === "gated_provider_future") {
+        const liveGate = evaluateLiveSendGate({
+          sourceKey: input.sourceKey,
+          category: result.mission.sourceJobCard.category,
+          recipient: recipientTarget || null,
+          durableDraftId: input.durableDraftId ?? null,
+          durableAttemptId: null,
+          idempotencyKey: null,
+          sendGatePassed: draft.safeToCopy,
+          founderEscalationPresent: draft.founderEscalationIncluded,
+          forbiddenClaimsDetected: draft.forbiddenClaimsDetected,
+        });
+        const blockedAttempt = buildContactAttempt({
+          sourceKey: input.sourceKey,
+          candidateId: input.candidateId ?? null,
+          leadId: lead.id,
+          lane: lead.lane,
+          channel: input.channel,
+          draft,
+          recipientTarget,
+          automationMode: "gated_provider_future",
+        });
+        const finalBlockedAttempt = { ...blockedAttempt, status: "blocked" as const };
+        const statusHistory: StatusHistoryEntry[] = [
+          { status: "draft_ready", at: blockedAttempt.createdAt, actor: "HELD" },
+          { status: "blocked", at: new Date().toISOString(), actor: "HELD" },
+        ];
+        let durableAttemptId: string | null = null;
+        let durableDraftId: string | null = input.durableDraftId ?? null;
+        let persisted = false;
+        let auditFeedSummary: AuditFeedAttemptSummary | null = null;
+        try {
+          const store = resolveContactAttemptStore(injectedStore);
+          const { attempt: durableAttempt } = await store.createOrReuseAttempt({
+            tenantId: ctx.tenantId,
+            outreachDraftId: durableDraftId,
+            sourceKey: input.sourceKey,
+            candidateId: input.candidateId ?? null,
+            leadId: lead.id,
+            lane: lead.lane,
+            channel: input.channel,
+            recipientSnapshot: recipientTarget,
+            draftSubject: draft.subject,
+            draftBodySnapshot: draft.body,
+            draftBodyHash: bodyHashFor(draft.body),
+            templateKey: draft.templateKey,
+            founderEscalationPresent: draft.founderEscalationIncluded,
+            forbiddenClaimsScanJson: { forbiddenClaimsDetected: draft.forbiddenClaimsDetected, blockingLintRules: draft.blockingLintRules },
+            sendGateResultJson: liveGate,
+            automationMode: "gated_provider_future",
+            providerAdapter: PROVIDER_ADAPTER_BY_CHANNEL[input.channel],
+            providerAttemptId: null,
+            status: "blocked",
+            statusHistoryJson: statusHistory,
+            createdBy: ctx.user?.id != null ? String(ctx.user.id) : "admin",
+          });
+          durableAttemptId = durableAttempt.id;
+          durableDraftId = durableAttempt.outreachDraftId;
+          persisted = true;
+          auditFeedSummary = toAuditFeedSummary(durableAttempt);
+        } catch {
+          durableAttemptId = null;
+          persisted = false;
+        }
+        return {
+          allowed: false,
+          blockedReasons: liveGate.reasons,
+          attempt: finalBlockedAttempt,
+          providerResult: null,
+          durableAttemptId,
+          durableDraftId,
+          statusHistory,
+          persisted,
+          auditFeedSummary,
+        };
+      }
+
       const builtAttempt = buildContactAttempt({
         sourceKey: input.sourceKey,
         candidateId: input.candidateId ?? null,

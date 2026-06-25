@@ -577,3 +577,116 @@ describe("vendor casting sprint admin router -- durable contact attempt store wi
     expect(page.nextCursor).toBeNull();
   });
 });
+
+describe("vendor casting sprint admin router -- gated live provider foundation (Slice 74d)", () => {
+  const realVendorFacts = {
+    businessName: "Westside Mobile Pet Spa",
+    phone: "555-010-2002",
+    sourceType: "manual_operator_list" as const,
+    sourceReference: "Adam called and confirmed via Google Maps listing",
+    serviceArea: "cpe-south",
+    qualificationNotes: "Verified by Adam directly; services boxers, mobile van, available weekdays.",
+  };
+
+  beforeEach(() => {
+    vi.mocked(listRequestJobCardSourceRecords).mockResolvedValue(readyServiceRequestSource);
+  });
+
+  it("providerReadiness reports noop available and live sending disabled, admin-only", async () => {
+    await expect(vendorCastingSprintRouter.createCaller(context(null)).providerReadiness()).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    const readiness = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).providerReadiness();
+    expect(readiness.noop.configured).toBe(true);
+    expect(readiness.liveSendingEnabled).toBe(false);
+    expect(readiness.email.canSend).toBe(false);
+    expect(readiness.websiteForm.canSend).toBe(false);
+  });
+
+  it("gated_provider_future is blocked by default and never invokes a live provider", async () => {
+    const mission = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).mission({ sourceKey: "service_request:155" });
+    const winnerLeadId = mission.mission!.winner!.leadId;
+
+    const result = await vendorCastingSprintRouter.createCaller(context({ role: "admin" })).runContactAttempt({
+      sourceKey: "service_request:155", leadId: winnerLeadId, channel: "email",
+      automationMode: "gated_provider_future", vendorFacts: realVendorFacts,
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.blockedReasons).toContain("blocked_live_send_not_enabled_for_slice_74d");
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toMatch(/"liveProviderInvoked":true/);
+    expect(serialized).not.toMatch(/"outreachSentByHeld":true/);
+    expect(serialized).not.toMatch(/"providerAccepted":true/);
+    expect(serialized).not.toMatch(/"bookingConfirmed":true/);
+    expect(serialized).not.toMatch(/"paymentAuthorized":true/);
+    expect(serialized).not.toMatch(/"dispatched":true/);
+  });
+
+  it("persists the blocked gated_provider_future attempt into the durable audit store when injected", async () => {
+    const blockedDurableAttempt = {
+      id: "durable-attempt-1",
+      tenantId: "default",
+      outreachDraftId: null,
+      sourceKey: "service_request:155",
+      serviceRequestId: null,
+      candidateId: null,
+      leadId: "lead-1",
+      lane: "maps_producer",
+      channel: "email",
+      recipientSnapshot: "555-010-2002",
+      draftSubject: "Availability check",
+      draftBodySnapshot: "Hi vendor",
+      draftBodyHash: "a".repeat(64),
+      templateKey: "vendor_availability_request_v0",
+      templateVersion: null,
+      founderEscalationPresent: true,
+      forbiddenClaimsScanJson: {},
+      sendGateResultJson: { allowed: false, reasons: ["blocked_live_send_not_enabled_for_slice_74d"] },
+      automationMode: "gated_provider_future",
+      providerAdapter: "noop_email",
+      providerAttemptId: null,
+      status: "blocked",
+      statusHistoryJson: [{ status: "draft_ready", at: "2026-06-24T00:00:00.000Z", actor: "HELD" }, { status: "blocked", at: "2026-06-24T00:00:01.000Z", actor: "HELD" }],
+      latestReplyJson: null,
+      latestTermsPacketJson: null,
+      liveProviderInvoked: false,
+      outreachSentByHeld: false,
+      providerResponded: false,
+      providerAccepted: false,
+      bookingConfirmed: false,
+      paymentAuthorized: false,
+      dispatched: false,
+      idempotencyKey: "fixed-key",
+      occurredAt: null,
+      sentAt: null,
+      createdBy: "admin",
+      createdAt: new Date("2026-06-24T00:00:00.000Z"),
+      updatedAt: new Date("2026-06-24T00:00:00.000Z"),
+    };
+    const store = {
+      createDraft: vi.fn(),
+      createOrReuseAttempt: vi.fn().mockResolvedValue({ attempt: blockedDurableAttempt, reused: false }),
+      recordReplyAndTerms: vi.fn(),
+      getAttemptById: vi.fn(),
+      listAttemptsBySourceKey: vi.fn(),
+      listAttemptsByCandidateId: vi.fn(),
+      listRecentAttempts: vi.fn(),
+    };
+    const router = createVendorCastingSprintRouter(store as any);
+    const mission = await router.createCaller(context({ role: "admin" })).mission({ sourceKey: "service_request:155" });
+    const winnerLeadId = mission.mission!.winner!.leadId;
+
+    const result = await router.createCaller(context({ role: "admin" })).runContactAttempt({
+      sourceKey: "service_request:155", leadId: winnerLeadId, channel: "email",
+      automationMode: "gated_provider_future", vendorFacts: realVendorFacts,
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.persisted).toBe(true);
+    expect(result.durableAttemptId).toBe("durable-attempt-1");
+    const createCall = store.createOrReuseAttempt.mock.calls[0][0];
+    expect(createCall.automationMode).toBe("gated_provider_future");
+    expect(createCall.status).toBe("blocked");
+    expect(createCall.sendGateResultJson.liveSendAllowed).toBe(false);
+  });
+});

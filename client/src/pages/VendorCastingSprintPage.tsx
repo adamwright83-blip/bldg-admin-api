@@ -85,6 +85,8 @@ export default function VendorCastingSprintPage() {
     { sourceKey: appliedSourceKey },
     { enabled: consoleOpen },
   );
+  const providerReadiness = trpc.admin.vendorCastingSprint.providerReadiness.useQuery(undefined, { enabled: consoleOpen });
+  const runGatedFutureAttempt = trpc.admin.vendorCastingSprint.runContactAttempt.useMutation();
 
   const attemptStatus = useMemo(
     () => computeAttemptStatus({ draftGenerated: generateDraft.data?.allowed === true, copied, manuallySent }),
@@ -176,6 +178,21 @@ export default function VendorCastingSprintPage() {
       candidateId: createCandidate.data?.candidateId ?? null,
       durableDraftId: generateDraft.data?.allowed ? generateDraft.data.durableDraftId : null,
       channel: heldChannel,
+      vendorFacts: vendorFactsPayload(),
+    }, { onSuccess: () => auditFeed.refetch() });
+  }
+
+  /** Always returns blocked in this slice; demonstrates the gate without ever sending. */
+  function runGatedLiveEmailAttempt() {
+    const leadId = handoff.data?.handoff?.leadId ?? selectedLeadId;
+    if (!leadId) return;
+    runGatedFutureAttempt.mutate({
+      sourceKey: appliedSourceKey,
+      leadId,
+      candidateId: createCandidate.data?.candidateId ?? null,
+      durableDraftId: generateDraft.data?.allowed ? generateDraft.data.durableDraftId : null,
+      channel: "email",
+      automationMode: "gated_provider_future",
       vendorFacts: vendorFactsPayload(),
     }, { onSuccess: () => auditFeed.refetch() });
   }
@@ -470,6 +487,41 @@ export default function VendorCastingSprintPage() {
                               <p><span className="font-semibold">Selected lead/lane:</span> {handoff.data.handoff.businessNameForDisplayOnly} ({LANE_LABELS[handoff.data.handoff.lane]})</p>
                             </div>
                           )}
+                        </div>
+
+                        <div className="rounded-lg border border-black/15 bg-white p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.1em] text-black/45">Provider readiness</p>
+                          {providerReadiness.isLoading ? (
+                            <p className="mt-2 text-xs text-black/50">Loading provider readiness&hellip;</p>
+                          ) : providerReadiness.data ? (
+                            <div className="mt-2 space-y-2 text-xs">
+                              <p className="font-semibold text-emerald-800">
+                                ✓ No-op provider: active (mode {label(providerReadiness.data.noop.mode)})
+                              </p>
+                              <p className="text-amber-800">
+                                ⏳ Email provider: gated/future &mdash; {providerReadiness.data.email.configured ? "configured, but " : "not configured, and "}
+                                live provider is gated. {providerReadiness.data.email.blockedReasons.map(label).join(" · ")}
+                              </p>
+                              <p className="text-amber-800">
+                                ⏳ Website form provider: gated/future &mdash; {providerReadiness.data.websiteForm.blockedReasons.map(label).join(" · ")}
+                              </p>
+                              <p className="font-semibold text-black/70">No real vendor contact will be sent in this slice.</p>
+                              <p className="text-black/55">Next canary slice can enable supervised email: {providerReadiness.data.nextRequiredActionForCanary}</p>
+                              <div className="mt-2 flex items-center gap-2">
+                                <button
+                                  className="rounded-lg border border-black/15 px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
+                                  disabled={runGatedFutureAttempt.isPending}
+                                  onClick={runGatedLiveEmailAttempt}
+                                  type="button"
+                                >
+                                  Run gated live email (always blocked)
+                                </button>
+                                {runGatedFutureAttempt.data && !runGatedFutureAttempt.data.allowed ? (
+                                  <span className="text-xs text-red-700">Blocked: {runGatedFutureAttempt.data.blockedReasons.map(label).join(" · ")}</span>
+                                ) : null}
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
 
                         <div className="rounded-lg border-2 border-indigo-200 bg-indigo-50/50 p-3">
