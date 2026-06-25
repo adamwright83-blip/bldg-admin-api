@@ -195,6 +195,9 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
       searchText: "Dog Grooming near 90027",
       minRating: 4.7,
       maxResults: 10,
+      // Slice 81e: 90027 has a known centroid (OPUS LA), so discovery
+      // is biased toward it -- never fabricated for an unconfigured ZIP.
+      locationBias: { lat: 34.1141, lng: -118.2932, radiusMeters: 40_000 },
     });
   });
 
@@ -801,7 +804,10 @@ describe("vendorAcquisitionMissionRouter -- saveCandidateAvailabilityIntake (Sli
 // vendorCandidateServiceAreaVerifier.test.ts.
 const STUB_VERIFY_SERVICE_AREA_FN = vi.fn().mockResolvedValue({
   serviceAreaStatus: "unverified", serviceAreaReasons: [], targetZipMatched: false, targetBuildingMatched: false,
-  candidateAddressZip: null, distanceMilesToTarget: null, websiteChecked: false, websiteServiceAreas: [],
+  // Slice 81e: a known, nearby distance (not null) so these generic
+  // fixtures pass the new primary-shortlist distance gate -- tests
+  // that specifically exercise the gate itself set their own distance.
+  candidateAddressZip: null, distanceMilesToTarget: 5, websiteChecked: false, websiteServiceAreas: [],
   websiteMentionsTargetZip: false, websiteMentionsTargetBuilding: false, contactRoute: "unknown",
   emailAddressesFound: [], contactFormDetected: false, phoneFound: false, outreachReadiness: "not_outreach_ready",
   verificationSource: "not_checked", verificationConfidence: "low",
@@ -892,7 +898,10 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery mission-scoped shortlis
 function verification(overrides?: Partial<Record<string, unknown>>) {
   return {
     serviceAreaStatus: "unverified", serviceAreaReasons: [], targetZipMatched: false, targetBuildingMatched: false,
-    candidateAddressZip: null, distanceMilesToTarget: null, websiteChecked: false, websiteTextSnippet: "", websiteServiceAreas: [],
+    // Slice 81e: a known, nearby default distance so generic fixtures
+    // pass the new primary-shortlist distance gate by default; tests
+    // specifically exercising the gate override this explicitly.
+    candidateAddressZip: null, distanceMilesToTarget: 5, websiteChecked: false, websiteTextSnippet: "", websiteServiceAreas: [],
     websiteMentionsTargetZip: false, websiteMentionsTargetBuilding: false, contactRoute: "unknown",
     emailAddressesFound: [], contactFormDetected: false, phoneFound: false, outreachReadiness: "not_outreach_ready",
     verificationSource: "not_checked", verificationConfidence: "low",
@@ -1188,6 +1197,138 @@ describe("vendorAcquisitionMissionRouter -- fulfillment tier classification + sh
   });
 });
 
+describe("vendorAcquisitionMissionRouter -- primary shortlist hard distance/area gate (Slice 81e)", () => {
+  it("an out-of-state candidate (red tier, ~2400 miles away) is NEVER primary, even when target count is not met", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 10 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [{
+      provider: "google_places" as const, placeId: "p1", businessName: "Furry Land Mobile Grooming Central & Northern New Jersey",
+      rating: 4.9, reviewCount: 200, address: "1 Main St, East Brunswick, NJ 08816, USA", website: null, phone: "555-0000",
+      coordinates: { lat: 40.4339, lng: -74.4107 }, sourceUrl: "https://maps/p1",
+    }] });
+    const matchStore = makeMockMatchStore();
+    // The real deterministic verifier would compute this distance and
+    // classify likely_out_of_area/out_of_area for a candidate this far
+    // away; this test fixes the verifier output directly to isolate
+    // the shortlist-gate behavior under test.
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "out_of_area", distanceMilesToTarget: 2436 }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.shortlistedCount).toBe(0);
+    const call = matchStore.upsertMatch.mock.calls[0][0];
+    expect(call.isShortlisted).toBe(false);
+    expect(call.matchEvidence.primaryShortlistEligibility.eligible).toBe(false);
+    expect(call.matchEvidence.primaryShortlistEligibility.exclusionReason).toMatch(/Out of area/);
+  });
+
+  it("a storefront fallback candidate beyond the 15-mile limit is excluded from primary, even with no other alternatives", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 10 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [{
+      provider: "google_places" as const, placeId: "p1", businessName: "Far Storefront Groomer", rating: 4.9, reviewCount: 50,
+      address: "1 Main St, Los Angeles, CA 90067, USA", website: null, phone: "555-0000", coordinates: null, sourceUrl: "https://maps/p1",
+    }] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "unverified", distanceMilesToTarget: 20 }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const call = matchStore.upsertMatch.mock.calls[0][0];
+    expect(call.matchEvidence.fulfillmentClassification.fulfillmentTier).toBe("blue");
+    expect(call.isShortlisted).toBe(false);
+    expect(call.matchEvidence.primaryShortlistEligibility.eligible).toBe(false);
+  });
+
+  it("a storefront fallback candidate within the 15-mile limit is primary", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 10 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [{
+      provider: "google_places" as const, placeId: "p1", businessName: "Near Storefront Groomer", rating: 4.9, reviewCount: 50,
+      address: "1 Main St, Los Angeles, CA 90067, USA", website: null, phone: "555-0000", coordinates: null, sourceUrl: "https://maps/p1",
+    }] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "unverified", distanceMilesToTarget: 10 }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const call = matchStore.upsertMatch.mock.calls[0][0];
+    expect(call.isShortlisted).toBe(true);
+  });
+
+  it("a mobile-needs-review candidate beyond the 25-mile limit without explicit area support is excluded from primary", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 10 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [{
+      provider: "google_places" as const, placeId: "p1", businessName: "Mobile Far Groomer", rating: 4.9, reviewCount: 50,
+      address: "1 Main St, Los Angeles, CA 90067, USA", website: null, phone: "555-0000", coordinates: null, sourceUrl: "https://maps/p1",
+    }] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "unverified", distanceMilesToTarget: 40 }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const call = matchStore.upsertMatch.mock.calls[0][0];
+    expect(call.matchEvidence.fulfillmentClassification.fulfillmentTier).toBe("yellow");
+    expect(call.isShortlisted).toBe(false);
+  });
+
+  it("a verified mobile candidate with explicit service-area support remains primary even when farther than 25 miles", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 10 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [{
+      provider: "google_places" as const, placeId: "p1", businessName: "Mobile Far Groomer", rating: 4.9, reviewCount: 50,
+      address: "1 Main St, Los Angeles, CA 90067, USA", website: null, phone: "555-0000", coordinates: null, sourceUrl: "https://maps/p1",
+    }] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "verified_serves_target", distanceMilesToTarget: 40 }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const call = matchStore.upsertMatch.mock.calls[0][0];
+    expect(call.matchEvidence.fulfillmentClassification.fulfillmentTier).toBe("green");
+    expect(call.isShortlisted).toBe(true);
+  });
+
+  it("the primary shortlist returns fewer than targetQuantity when there are not enough usable candidates, never padding with ineligible ones", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 10 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [
+      { provider: "google_places" as const, placeId: "good1", businessName: "Good Groomer", rating: 4.9, reviewCount: 50, address: "1 Main St", website: null, phone: "555-0000", coordinates: null, sourceUrl: "https://maps/good1" },
+      { provider: "google_places" as const, placeId: "bad1", businessName: "Out Of Area Groomer", rating: 4.9, reviewCount: 50, address: "1 Far Ave", website: null, phone: "555-0001", coordinates: null, sourceUrl: "https://maps/bad1" },
+    ] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockImplementation(async (input: { candidate: { address: string | null } }) => {
+      if (input.candidate.address === "1 Far Ave") return verification({ serviceAreaStatus: "out_of_area", distanceMilesToTarget: 2000 });
+      return verification({ serviceAreaStatus: "unverified", distanceMilesToTarget: 5 });
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.shortlistedCount).toBe(1);
+    expect(result.shortlistedCount).toBeLessThan(10);
+  });
+
+  it("never shows a fabricated distance -- a candidate with no coordinates and an unconfigured target ZIP is excluded, not given a fake mile count", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ geographyLabel: "90010 (5 mi radius)", targetQuantity: 10 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [{
+      provider: "google_places" as const, placeId: "p1", businessName: "Some Groomer", rating: 4.9, reviewCount: 50,
+      address: "1 Main St", website: null, phone: "555-0000", coordinates: null, sourceUrl: "https://maps/p1",
+    }] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "unverified", distanceMilesToTarget: null }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const call = matchStore.upsertMatch.mock.calls[0][0];
+    expect(call.matchEvidence.serviceAreaVerification.distanceMilesToTarget).toBeNull();
+    expect(call.isShortlisted).toBe(false);
+  });
+});
+
 describe("vendorAcquisitionMissionRouter -- listMissionShortlist (Slice 79a)", () => {
   it("rejects unauthenticated and non-admin callers", async () => {
     const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, makeMockSourcingStore() as never);
@@ -1206,14 +1347,29 @@ describe("vendorAcquisitionMissionRouter -- listMissionShortlist (Slice 79a)", (
   it("returns only shortlisted matches by default, merged with real candidate data", async () => {
     const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
     const sourcingStore = makeMockSourcingStore({
-      listCandidatesForReview: vi.fn().mockResolvedValue([{ id: "candidate-1", businessName: "Sunset Mobile Grooming", evidence: { rating: 4.9 } }]),
+      listCandidatesForReview: vi.fn().mockResolvedValue([
+        { id: "candidate-1", businessName: "Sunset Mobile Grooming", evidence: { rating: 4.9 } },
+        { id: "candidate-2", businessName: "Excluded Candidate", evidence: {} },
+      ]),
     });
     const matchStore = makeMockMatchStore({
-      listMissionMatches: vi.fn().mockResolvedValue([{
-        id: "match-1", tenantId: "default", missionId: "mission-1", candidateId: "candidate-1",
-        matchedQuery: "mobile dog groomers near 90027", queryPlannerSource: "anthropic_structured",
-        serviceMode: "mobile_required", rankScore: 9.5, rankPosition: 1, isShortlisted: true,
-      }]),
+      // Slice 81e: listMissionShortlist now always reads every match
+      // (includeOverflow: true internally) so summary counts reflect
+      // reality, then filters down to shortlisted-only entries for the
+      // default (includeOverflow: false) caller -- candidate-2's
+      // non-shortlisted match must not appear in entries below.
+      listMissionMatches: vi.fn().mockResolvedValue([
+        {
+          id: "match-1", tenantId: "default", missionId: "mission-1", candidateId: "candidate-1",
+          matchedQuery: "mobile dog groomers near 90027", queryPlannerSource: "anthropic_structured",
+          serviceMode: "mobile_required", rankScore: 9.5, rankPosition: 1, isShortlisted: true,
+        },
+        {
+          id: "match-2", tenantId: "default", missionId: "mission-1", candidateId: "candidate-2",
+          matchedQuery: "mobile dog groomers near 90027", queryPlannerSource: "anthropic_structured",
+          serviceMode: "mobile_required", rankScore: 1, rankPosition: 2, isShortlisted: false,
+        },
+      ]),
       countMissionMatches: vi.fn().mockResolvedValue({ total: 4, shortlisted: 1 }),
     });
     const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
@@ -1227,7 +1383,7 @@ describe("vendorAcquisitionMissionRouter -- listMissionShortlist (Slice 79a)", (
     expect(result.entries[0].businessName).toBe("Sunset Mobile Grooming");
     expect(result.entries[0].matchedQuery).toBe("mobile dog groomers near 90027");
     expect(result.entries[0].queryPlannerSource).toBe("anthropic_structured");
-    expect(matchStore.listMissionMatches).toHaveBeenCalledWith(expect.objectContaining({ includeOverflow: false }));
+    expect(matchStore.listMissionMatches).toHaveBeenCalledWith(expect.objectContaining({ includeOverflow: true }));
   });
 
   it("returns overflow matches too when includeOverflow is requested", async () => {
@@ -1394,6 +1550,50 @@ describe("vendorAcquisitionMissionRouter -- listMissionShortlist (Slice 79a)", (
     expect(result.summary).toEqual(expect.objectContaining({
       verifiedMobileCount: 1, driveToFallbackCount: 1, emailReadyCount: 1, formRequiredCount: 1,
     }));
+  });
+
+  it("Slice 81e: excludedOutOfAreaCount and usableCount reflect ALL matches, even when the default call only returns shortlisted entries", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({
+      listCandidatesForReview: vi.fn().mockResolvedValue([
+        { id: "candidate-1", businessName: "Josie's Mobile Grooming", evidence: {} },
+        { id: "candidate-2", businessName: "Furry Land NJ", evidence: {} },
+      ]),
+    });
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([
+        matchWithFulfillment(),
+        matchWithFulfillment({
+          id: "match-2", candidateId: "candidate-2", isShortlisted: false,
+          matchEvidence: {
+            serviceAreaVerification: verification({ serviceAreaStatus: "out_of_area", distanceMilesToTarget: 2436 }),
+            serviceAreaEffectiveEvidence: {
+              serviceAreaStatus: "out_of_area", serviceAreaReasons: ["~2436 miles from target"], contactRoute: "phone_available",
+              outreachReadiness: "sms_or_call_required", emailAddressesFound: [], requiresHumanReview: false,
+              serviceAreaInterpreterSource: "deterministic_fallback", serviceAreaFallbackReason: "no_website_text",
+            },
+            fulfillmentClassification: {
+              fulfillmentMode: "out_of_area", fulfillmentTier: "red",
+              fulfillmentLabel: "Out of area", fulfillmentReason: "~2436 miles from target", vendorHasMobileEvidence: true,
+            },
+            primaryShortlistEligibility: { eligible: false, exclusionReason: "Out of area: ~2436 miles from target" },
+          },
+        }),
+      ]),
+      countMissionMatches: vi.fn().mockResolvedValue({ total: 2, shortlisted: 1 }),
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    // The default call only returns the 1 shortlisted entry...
+    expect(result.entries).toHaveLength(1);
+    // ...but the summary still honestly reflects the excluded one.
+    expect(result.summary.excludedOutOfAreaCount).toBe(1);
+    expect(result.summary.usableCount).toBe(1);
+    expect(result.summary.outOfAreaCount).toBe(1);
+    expect(result.overflowCount).toBe(1);
   });
 
   it("Slice 81c: never calls fetch or Claude -- only reads already-persisted match evidence", async () => {

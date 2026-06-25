@@ -23,6 +23,17 @@ export type GooglePlacesDiscoveryQuery = {
   searchText: string;
   minRating?: number | null;
   maxResults: number;
+  /**
+   * Slice 81e. Optional location bias toward the mission's actual
+   * target area -- Places API New's searchText only supports this as
+   * a BIAS (a hint, not a hard restriction), so out-of-area results
+   * can still come back even with this set. The real safety net is
+   * the post-discovery distance/area hard gate in
+   * vendorAcquisitionMissionRouter.ts; this just improves result
+   * quality before that gate runs. Never set for an unconfigured ZIP
+   * (no fabricated coordinates).
+   */
+  locationBias?: { lat: number; lng: number; radiusMeters: number } | null;
 };
 
 export type NormalizedPlaceCandidate = {
@@ -114,7 +125,17 @@ export async function runGooglePlacesDiscovery(
         "X-Goog-Api-Key": apiKey,
         "X-Goog-FieldMask": PLACES_API_NEW_FIELD_MASK,
       },
-      body: JSON.stringify({ textQuery: query.searchText }),
+      body: JSON.stringify({
+        textQuery: query.searchText,
+        ...(query.locationBias ? {
+          locationBias: {
+            circle: {
+              center: { latitude: query.locationBias.lat, longitude: query.locationBias.lng },
+              radius: query.locationBias.radiusMeters,
+            },
+          },
+        } : {}),
+      }),
     });
   } catch {
     return { status: "provider_error", reason: "request_failed", endpointFamily: "places_api_new" };

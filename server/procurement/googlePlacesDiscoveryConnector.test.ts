@@ -225,6 +225,41 @@ describe("runGooglePlacesDiscovery -- provider error diagnostics", () => {
   });
 });
 
+describe("runGooglePlacesDiscovery -- Slice 81e location bias", () => {
+  it("includes locationBias as a circle when given", async () => {
+    const fetchImpl = fakeFetch({ places: [] });
+    await runGooglePlacesDiscovery(
+      { searchText: "dog groomer near 90067", maxResults: 10, locationBias: { lat: 34.0567, lng: -118.4159, radiusMeters: 8000 } },
+      { env: { GOOGLE_PLACES_API_KEY: "test-key" }, fetchImpl },
+    );
+    const [, init] = fetchImpl.mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.locationBias).toEqual({ circle: { center: { latitude: 34.0567, longitude: -118.4159 }, radius: 8000 } });
+  });
+
+  it("omits locationBias entirely when not given (never fabricates coordinates)", async () => {
+    const fetchImpl = fakeFetch({ places: [] });
+    await runGooglePlacesDiscovery(
+      { searchText: "dog groomer near 90010", maxResults: 10 },
+      { env: { GOOGLE_PLACES_API_KEY: "test-key" }, fetchImpl },
+    );
+    const [, init] = fetchImpl.mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.locationBias).toBeUndefined();
+  });
+
+  it("omits locationBias when explicitly null", async () => {
+    const fetchImpl = fakeFetch({ places: [] });
+    await runGooglePlacesDiscovery(
+      { searchText: "dog groomer", maxResults: 10, locationBias: null },
+      { env: { GOOGLE_PLACES_API_KEY: "test-key" }, fetchImpl },
+    );
+    const [, init] = fetchImpl.mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.locationBias).toBeUndefined();
+  });
+});
+
 describe("runGooglePlacesDiscovery -- isolation", () => {
   it("never imports or calls an outreach/send adapter, and never logs the API key", async () => {
     const fs = await import("node:fs");

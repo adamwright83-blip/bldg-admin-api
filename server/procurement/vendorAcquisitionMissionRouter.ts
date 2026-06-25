@@ -13,7 +13,7 @@ import { VendorContactAttemptStore } from "./vendorContactAttemptStore";
 import { runGooglePlacesDiscovery, type NormalizedPlaceCandidate } from "./googlePlacesDiscoveryConnector";
 import { createProcurementPool } from "./migrations";
 import {
-  extractZipFromAddress, verifyCandidateServiceArea,
+  extractZipFromAddress, getKnownTargetZipCentroid, verifyCandidateServiceArea,
   type ContactRoute, type OutreachReadiness, type ServiceAreaStatus, type ServiceAreaVerification,
 } from "./vendorCandidateServiceAreaVerifier";
 import {
@@ -341,6 +341,49 @@ function classifyFulfillment(
     fulfillmentReason,
     vendorHasMobileEvidence,
   };
+}
+
+const STOREFRONT_FALLBACK_MAX_MILES = 15;
+const MOBILE_NEEDS_REVIEW_MAX_MILES = 25;
+
+export type PrimaryShortlistEligibility = { eligible: boolean; exclusionReason: string | null };
+
+/**
+ * Slice 81e. The real safety net behind Google's location BIAS (which
+ * is only a hint, not a hard restriction) -- a national franchise page
+ * thousands of miles away must never reach the primary shortlist just
+ * because the mission's target count wasn't otherwise filled. Replaces
+ * 81c's red-tier "fill remaining slots when not enough alternatives
+ * exist" fallback, which is exactly what let out-of-state candidates
+ * into the primary shortlist: red/out-of-area is now NEVER primary,
+ * with no exception, regardless of how few other candidates exist.
+ */
+function evaluatePrimaryShortlistEligibility(
+  fulfillment: FulfillmentClassification, evidence: EffectiveServiceAreaEvidence, distanceMiles: number | null,
+): PrimaryShortlistEligibility {
+  if (fulfillment.fulfillmentTier === "red") {
+    return { eligible: false, exclusionReason: `Out of area: ${evidence.serviceAreaReasons[0] ?? "does not appear to serve the target area"}` };
+  }
+  if (fulfillment.fulfillmentTier === "green") {
+    // Already required verified/likely service-area status PLUS the
+    // vendor's own mobile evidence to reach green -- trust that
+    // explicit evidence over raw distance.
+    return { eligible: true, exclusionReason: null };
+  }
+  const hasExplicitAreaSupport = evidence.serviceAreaStatus === "verified_serves_target";
+  if (fulfillment.fulfillmentTier === "blue") {
+    if (distanceMiles === null) {
+      if (hasExplicitAreaSupport || evidence.serviceAreaStatus === "likely_serves_target") return { eligible: true, exclusionReason: null };
+      return { eligible: false, exclusionReason: "Distance to target is unknown and no service-area evidence supports this candidate" };
+    }
+    if (distanceMiles <= STOREFRONT_FALLBACK_MAX_MILES) return { eligible: true, exclusionReason: null };
+    return { eligible: false, exclusionReason: `${distanceMiles} mi from target exceeds the ${STOREFRONT_FALLBACK_MAX_MILES} mi drive-to fallback limit` };
+  }
+  // yellow (mobile_needs_review)
+  if (hasExplicitAreaSupport) return { eligible: true, exclusionReason: null };
+  if (distanceMiles === null) return { eligible: false, exclusionReason: "Distance to target is unknown and no service-area evidence supports this candidate" };
+  if (distanceMiles <= MOBILE_NEEDS_REVIEW_MAX_MILES) return { eligible: true, exclusionReason: null };
+  return { eligible: false, exclusionReason: `${distanceMiles} mi from target exceeds the ${MOBILE_NEEDS_REVIEW_MAX_MILES} mi needs-review limit without explicit service-area support` };
 }
 
 export type QueryPlannerFallbackReason = "needs_provider_config" | "invalid_output" | "provider_error" | "parser_exception" | null;
@@ -772,12 +815,22 @@ export function createVendorAcquisitionMissionRouter(
           targetQuantity: mission.targetQuantity,
         }, injectedParserFn, ctx.tenantId);
 
+        // Slice 81e. Computed before discovery (not just before
+        // ranking) so the search itself can be biased toward the
+        // mission's actual target area -- locationBias is a Places
+        // API New BIAS, not a hard restriction, so out-of-area results
+        // can still come back; the real safety net is the eligibility
+        // gate applied below, after discovery.
+        const { targetZip, targetBuildingName } = resolveTargetGeography(mission.geographyLabel);
+        const targetCentroid = getKnownTargetZipCentroid(targetZip);
+        const locationBias = targetCentroid ? { ...targetCentroid, radiusMeters: 40_000 } : null;
+
         const byPlaceId = new Map<string, NormalizedPlaceCandidate & { matchedQuery: string }>();
         let lastError: { status: "provider_error"; reason: string } | null = null;
 
         for (const searchText of plan.searchQueries) {
           if (byPlaceId.size >= mission.targetQuantity) break;
-          const discovery = await injectedDiscoveryFn({ searchText, minRating: ratingThreshold, maxResults: mission.targetQuantity });
+          const discovery = await injectedDiscoveryFn({ searchText, minRating: ratingThreshold, maxResults: mission.targetQuantity, locationBias });
           if (discovery.status === "needs_provider_config") return discovery;
           if (discovery.status === "provider_error") {
             lastError = discovery;
@@ -844,8 +897,8 @@ export function createVendorAcquisitionMissionRouter(
         // fetch); the Claude structured interpreter then reads that
         // same already-fetched text as the primary interpretation layer
         // when there is meaningful text, with the deterministic result
-        // as its own fallback.
-        const { targetZip, targetBuildingName } = resolveTargetGeography(mission.geographyLabel);
+        // as its own fallback. targetZip/targetBuildingName were
+        // already resolved above (before discovery, for locationBias).
         const verifiedCandidates = await Promise.all(resolvedCandidates.map(async entry => {
           const verification = await injectedVerifyServiceAreaFn({
             candidate: {
@@ -907,25 +960,25 @@ export function createVendorAcquisitionMissionRouter(
           return scoreDiff !== 0 ? scoreDiff : a.candidate.placeId.localeCompare(b.candidate.placeId);
         });
 
-        // Red-tier (likely/out-of-area) candidates are excluded from
-        // the primary shortlist whenever enough green/blue/yellow
-        // alternatives exist to fill the mission's target count. Only
-        // when there are not enough alternatives do they fill the
-        // remaining shortlist slots (better to show fewer qualified
-        // candidates than to silently pretend an out-of-area candidate
-        // is qualified).
-        const usablePool = sorted.filter(entry => entry.fulfillment.fulfillmentTier !== "red");
-        const redPool = sorted.filter(entry => entry.fulfillment.fulfillmentTier === "red");
+        // Slice 81e. Primary-shortlist eligibility is a HARD gate, not
+        // a soft preference: red/out-of-area is NEVER primary, and
+        // blue/yellow candidates beyond their distance limit without
+        // explicit service-area support are excluded too -- regardless
+        // of whether enough alternatives exist to fill the mission's
+        // target count. Better to show fewer usable options honestly
+        // than to pad the count with a candidate 2,000 miles away.
+        const eligible = sorted.map(entry => ({
+          ...entry,
+          eligibility: evaluatePrimaryShortlistEligibility(entry.fulfillment, entry.evidence, entry.verification.distanceMilesToTarget),
+        }));
         const shortlistedIds = new Set<string>();
-        for (const entry of usablePool.slice(0, mission.targetQuantity)) shortlistedIds.add(entry.candidateId);
-        for (const entry of redPool) {
-          if (shortlistedIds.size >= mission.targetQuantity) break;
+        for (const entry of eligible.filter(e => e.eligibility.eligible).slice(0, mission.targetQuantity)) {
           shortlistedIds.add(entry.candidateId);
         }
 
         let shortlistedCount = 0;
-        for (let index = 0; index < sorted.length; index += 1) {
-          const { candidateId, candidate, verification, evidence, fulfillment } = sorted[index];
+        for (let index = 0; index < eligible.length; index += 1) {
+          const { candidateId, candidate, verification, evidence, fulfillment, eligibility } = eligible[index];
           const isShortlisted = shortlistedIds.has(candidateId);
           if (isShortlisted) shortlistedCount += 1;
           await matchStore.upsertMatch({
@@ -943,6 +996,7 @@ export function createVendorAcquisitionMissionRouter(
               serviceAreaVerification: verification,
               serviceAreaEffectiveEvidence: evidence,
               fulfillmentClassification: fulfillment,
+              primaryShortlistEligibility: eligibility,
             },
           });
         }
@@ -976,82 +1030,93 @@ export function createVendorAcquisitionMissionRouter(
         if (!mission) return { status: "mission_not_found" as const };
 
         const matchStore = resolveMatchStore(injectedMatchStore);
-        const [matches, counts] = await Promise.all([
-          matchStore.listMissionMatches({ tenantId: ctx.tenantId, missionId: input.missionId, includeOverflow: input.includeOverflow }),
+        // Slice 81e. Always reads every match (including overflow/
+        // excluded) so the summary counts reflect reality regardless
+        // of what the caller asked to see -- entries returned to the
+        // caller are filtered down afterward per input.includeOverflow.
+        const [allMatches, counts] = await Promise.all([
+          matchStore.listMissionMatches({ tenantId: ctx.tenantId, missionId: input.missionId, includeOverflow: true }),
           matchStore.countMissionMatches({ tenantId: ctx.tenantId, missionId: input.missionId }),
         ]);
+        const matches = input.includeOverflow ? allMatches : allMatches.filter(match => match.isShortlisted);
 
         const sourcingStore = resolveSourcingStore(injectedSourcingStore);
         const candidates = await sourcingStore.listCandidatesForReview({ tenantId: ctx.tenantId, category: mission.category, limit: 250 });
         const candidateById = new Map(candidates.map(candidate => [candidate.id, candidate]));
 
-        const entries = matches
-          .map(match => {
-            const candidate = candidateById.get(match.candidateId);
-            if (!candidate) return null;
-            // Slice 81a/81b. serviceAreaVerification is read from this
-            // mission match's own evidence (refreshed every runDiscovery
-            // run for this mission) -- never from the candidate's own
-            // evidence blob, which is written once at first discovery
-            // and can go stale or reflect a different mission's
-            // geography. This NEVER calls Claude or the network -- it
-            // only reads what runDiscovery already persisted.
-            const matchEvidence = match.matchEvidence as {
-              serviceAreaVerification?: ServiceAreaVerification;
-              serviceAreaEffectiveEvidence?: EffectiveServiceAreaEvidence;
-              fulfillmentClassification?: FulfillmentClassification;
-            } | null;
-            const deterministic = matchEvidence?.serviceAreaVerification ?? null;
-            const effective = matchEvidence?.serviceAreaEffectiveEvidence ?? null;
-            const serviceAreaVerification = deterministic ? {
-              ...deterministic,
-              serviceAreaStatus: effective?.serviceAreaStatus ?? deterministic.serviceAreaStatus,
-              serviceAreaReasons: effective?.serviceAreaReasons ?? deterministic.serviceAreaReasons,
-              contactRoute: effective?.contactRoute ?? deterministic.contactRoute,
-              outreachReadiness: effective?.outreachReadiness ?? deterministic.outreachReadiness,
-              emailAddressesFound: effective?.emailAddressesFound ?? deterministic.emailAddressesFound,
-              requiresHumanReview: effective?.requiresHumanReview ?? false,
-              serviceAreaInterpreterSource: effective?.serviceAreaInterpreterSource ?? "deterministic_fallback",
-              serviceAreaFallbackReason: effective?.serviceAreaFallbackReason ?? null,
-            } : null;
-            const isOutOfArea = serviceAreaVerification?.serviceAreaStatus === "likely_out_of_area"
-              || serviceAreaVerification?.serviceAreaStatus === "out_of_area";
-            // Slice 81c. fulfillmentClassification is read the same
-            // way -- from the match's own persisted evidence, never
-            // re-derived or re-fetched here. Missions whose matches
-            // predate Slice 81c simply have no classification until
-            // runDiscovery is re-run for them.
-            const fulfillment = matchEvidence?.fulfillmentClassification ?? null;
-            return {
-              ...candidate,
-              matchedQuery: match.matchedQuery,
-              queryPlannerSource: match.queryPlannerSource,
-              serviceMode: match.serviceMode,
-              rankPosition: match.rankPosition,
-              isShortlisted: match.isShortlisted,
-              serviceAreaVerification,
-              overflowReason: !match.isShortlisted && isOutOfArea ? serviceAreaVerification?.serviceAreaReasons[0] ?? "Service area unverified" : null,
-              fulfillmentMode: fulfillment?.fulfillmentMode ?? null,
-              fulfillmentTier: fulfillment?.fulfillmentTier ?? null,
-              fulfillmentLabel: fulfillment?.fulfillmentLabel ?? null,
-              fulfillmentReason: fulfillment?.fulfillmentReason ?? null,
-              distanceToTargetMiles: deterministic?.distanceMilesToTarget ?? null,
-            };
-          })
-          .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+        // Slice 81a/81b/81e. Every field here is read from this
+        // mission match's own evidence (refreshed every runDiscovery
+        // run for this mission) -- never from the candidate's own
+        // evidence blob, which is written once at first discovery and
+        // can go stale or reflect a different mission's geography.
+        // This NEVER calls Claude or the network -- it only reads what
+        // runDiscovery already persisted.
+        function mapMatchToEntry(match: (typeof allMatches)[number]) {
+          const candidate = candidateById.get(match.candidateId);
+          if (!candidate) return null;
+          const matchEvidence = match.matchEvidence as {
+            serviceAreaVerification?: ServiceAreaVerification;
+            serviceAreaEffectiveEvidence?: EffectiveServiceAreaEvidence;
+            fulfillmentClassification?: FulfillmentClassification;
+            primaryShortlistEligibility?: PrimaryShortlistEligibility;
+          } | null;
+          const deterministic = matchEvidence?.serviceAreaVerification ?? null;
+          const effective = matchEvidence?.serviceAreaEffectiveEvidence ?? null;
+          const serviceAreaVerification = deterministic ? {
+            ...deterministic,
+            serviceAreaStatus: effective?.serviceAreaStatus ?? deterministic.serviceAreaStatus,
+            serviceAreaReasons: effective?.serviceAreaReasons ?? deterministic.serviceAreaReasons,
+            contactRoute: effective?.contactRoute ?? deterministic.contactRoute,
+            outreachReadiness: effective?.outreachReadiness ?? deterministic.outreachReadiness,
+            emailAddressesFound: effective?.emailAddressesFound ?? deterministic.emailAddressesFound,
+            requiresHumanReview: effective?.requiresHumanReview ?? false,
+            serviceAreaInterpreterSource: effective?.serviceAreaInterpreterSource ?? "deterministic_fallback",
+            serviceAreaFallbackReason: effective?.serviceAreaFallbackReason ?? null,
+          } : null;
+          // Slice 81c/81e. fulfillmentClassification/eligibility are
+          // read the same way -- from the match's own persisted
+          // evidence, never re-derived or re-fetched here. Missions
+          // whose matches predate these slices simply have none until
+          // runDiscovery is re-run for them.
+          const fulfillment = matchEvidence?.fulfillmentClassification ?? null;
+          const eligibility = matchEvidence?.primaryShortlistEligibility ?? null;
+          return {
+            ...candidate,
+            matchedQuery: match.matchedQuery,
+            queryPlannerSource: match.queryPlannerSource,
+            serviceMode: match.serviceMode,
+            rankPosition: match.rankPosition,
+            isShortlisted: match.isShortlisted,
+            serviceAreaVerification,
+            overflowReason: !match.isShortlisted ? eligibility?.exclusionReason ?? serviceAreaVerification?.serviceAreaReasons[0] ?? "Service area unverified" : null,
+            fulfillmentMode: fulfillment?.fulfillmentMode ?? null,
+            fulfillmentTier: fulfillment?.fulfillmentTier ?? null,
+            fulfillmentLabel: fulfillment?.fulfillmentLabel ?? null,
+            fulfillmentReason: fulfillment?.fulfillmentReason ?? null,
+            distanceToTargetMiles: deterministic?.distanceMilesToTarget ?? null,
+          };
+        }
 
-        // Slice 81c. Computed purely from the entries already read
-        // above -- no extra query, no fetch, no Claude call.
+        const entries = matches.map(mapMatchToEntry).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+        // Slice 81c/81e. Computed from EVERY match (allMatches), not
+        // just the entries returned to this caller -- otherwise a
+        // default (includeOverflow: false) call would always show
+        // zero out-of-area/excluded counts even when real candidates
+        // were excluded for exactly that reason.
+        const allEntriesForSummary = allMatches.map(mapMatchToEntry).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
         const summary = {
-          verifiedMobileCount: entries.filter(e => e.fulfillmentMode === "verified_mobile_building_service").length,
-          likelyMobileCount: entries.filter(e => e.fulfillmentMode === "likely_mobile_building_service").length,
-          mobileNeedsReviewCount: entries.filter(e => e.fulfillmentMode === "mobile_needs_review").length,
-          driveToFallbackCount: entries.filter(e => e.fulfillmentMode === "drive_to_storefront_fallback").length,
-          likelyOutOfAreaCount: entries.filter(e => e.fulfillmentMode === "likely_out_of_area").length,
-          outOfAreaCount: entries.filter(e => e.fulfillmentMode === "out_of_area").length,
-          emailReadyCount: entries.filter(e => e.serviceAreaVerification?.outreachReadiness === "email_ready").length,
-          formRequiredCount: entries.filter(e => e.serviceAreaVerification?.outreachReadiness === "form_required").length,
-          smsOrCallRequiredCount: entries.filter(e => e.serviceAreaVerification?.outreachReadiness === "sms_or_call_required").length,
+          verifiedMobileCount: allEntriesForSummary.filter(e => e.fulfillmentMode === "verified_mobile_building_service").length,
+          likelyMobileCount: allEntriesForSummary.filter(e => e.fulfillmentMode === "likely_mobile_building_service").length,
+          mobileNeedsReviewCount: allEntriesForSummary.filter(e => e.fulfillmentMode === "mobile_needs_review").length,
+          driveToFallbackCount: allEntriesForSummary.filter(e => e.fulfillmentMode === "drive_to_storefront_fallback").length,
+          likelyOutOfAreaCount: allEntriesForSummary.filter(e => e.fulfillmentMode === "likely_out_of_area").length,
+          outOfAreaCount: allEntriesForSummary.filter(e => e.fulfillmentMode === "out_of_area").length,
+          excludedOutOfAreaCount: allEntriesForSummary.filter(e => !e.isShortlisted && (e.fulfillmentTier === "red")).length,
+          usableCount: allEntriesForSummary.filter(e => e.isShortlisted).length,
+          emailReadyCount: allEntriesForSummary.filter(e => e.serviceAreaVerification?.outreachReadiness === "email_ready").length,
+          formRequiredCount: allEntriesForSummary.filter(e => e.serviceAreaVerification?.outreachReadiness === "form_required").length,
+          smsOrCallRequiredCount: allEntriesForSummary.filter(e => e.serviceAreaVerification?.outreachReadiness === "sms_or_call_required").length,
         };
 
         return {

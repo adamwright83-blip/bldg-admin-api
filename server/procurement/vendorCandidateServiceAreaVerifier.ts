@@ -67,6 +67,17 @@ const KNOWN_TARGET_ZIP_CENTROIDS: Record<string, { lat: number; lng: number }> =
   "90067": { lat: 34.0567, lng: -118.4159 }, // Century Park East
 };
 
+/**
+ * Slice 81e. Exposes the same centroid table used for distance
+ * scoring so discovery can bias its Google Places search toward the
+ * mission's actual target area -- never invents a centroid for an
+ * unconfigured ZIP.
+ */
+export function getKnownTargetZipCentroid(zip: string | null): { lat: number; lng: number } | null {
+  if (!zip) return null;
+  return KNOWN_TARGET_ZIP_CENTROIDS[zip] ?? null;
+}
+
 const DISTANCE_LIKELY_THRESHOLD_MILES = 12;
 
 function toRadians(deg: number): number {

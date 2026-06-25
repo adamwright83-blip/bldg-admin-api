@@ -661,14 +661,15 @@ export default function MissionControlPage() {
         ) : null}
         {missionShortlist.data?.status === "ok" ? (
           <p className="mt-1 text-xs text-black/40">
-            Showing {missionShortlist.data.entries.length} of {missionShortlist.data.totalFound} found for this mission
+            Showing {missionShortlist.data.summary.usableCount} usable option{missionShortlist.data.summary.usableCount === 1 ? "" : "s"} of {missionShortlist.data.targetQuantity} requested
           </p>
         ) : null}
         {missionShortlist.data?.status === "ok" ? (
           <p className="mt-1 text-xs font-semibold text-black/55">
             {missionShortlist.data.summary.verifiedMobileCount + missionShortlist.data.summary.likelyMobileCount} mobile/building-service options &middot;{" "}
             {missionShortlist.data.summary.driveToFallbackCount} drive-to fallback options &middot;{" "}
-            {missionShortlist.data.overflowCount} overflow
+            {missionShortlist.data.summary.mobileNeedsReviewCount} need review &middot;{" "}
+            {missionShortlist.data.summary.excludedOutOfAreaCount} out of area excluded
           </p>
         ) : null}
 
@@ -953,10 +954,10 @@ export default function MissionControlPage() {
           {missionShortlist.data.totalFound > missionShortlist.data.entries.length ? (
             <details className="mt-3 rounded-lg border border-black/10 bg-black/[0.02] p-2 text-xs">
               <summary className="cursor-pointer font-semibold text-black/55">
-                Overflow / already discovered &middot; {missionShortlist.data.totalFound - missionShortlist.data.entries.length} additional candidates were found but not shortlisted.
+                Excluded / out of area &middot; {missionShortlist.data.totalFound - missionShortlist.data.entries.length} additional candidates were found but not shortlisted.
               </summary>
               <p className="mt-1 text-black/40">
-                These candidates matched this mission&rsquo;s search but did not rank in the top {missionShortlist.data.targetQuantity}. They are retained for review, not shown as the mission&rsquo;s primary answer.
+                {missionShortlist.data.summary.excludedOutOfAreaCount} of these are excluded for being out of area or too far from the target to be a usable option (never shown as primary cards). The rest matched this mission&rsquo;s search but did not rank in the top {missionShortlist.data.targetQuantity}. None are shown as the mission&rsquo;s primary answer.
               </p>
             </details>
           ) : null}

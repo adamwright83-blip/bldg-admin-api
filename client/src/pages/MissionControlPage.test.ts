@@ -341,9 +341,9 @@ describe("MissionControlPage -- Slice 76c Discovered Candidates panel", () => {
     expect(source).toMatch(/see Mission Shortlist below for details\./);
   });
 
-  it("shows the mission target/found count and an overflow section, not every candidate ever discovered for the category", () => {
-    expect(source).toMatch(/Showing \{missionShortlist\.data\.entries\.length\} of \{missionShortlist\.data\.totalFound\} found for this mission/);
-    expect(source).toMatch(/Overflow \/ already discovered/);
+  it("shows the mission usable-vs-requested count and an excluded/overflow section, not every candidate ever discovered for the category", () => {
+    expect(source).toMatch(/Showing \{missionShortlist\.data\.summary\.usableCount\} usable option/);
+    expect(source).toMatch(/Excluded \/ out of area/);
     expect(source).toMatch(/additional candidates were found but not shortlisted\./);
   });
 });
@@ -551,12 +551,12 @@ describe("MissionControlPage -- Slice 79a mission-scoped shortlist", () => {
     expect(source).toMatch(/No mission launched yet\. Launch one above to see its shortlist\./);
   });
 
-  it("shows a count of shown vs. total found, never silently displaying every category candidate as primary", () => {
-    expect(source).toMatch(/Showing \{missionShortlist\.data\.entries\.length\} of \{missionShortlist\.data\.totalFound\} found for this mission/);
+  it("shows a count of usable options vs. requested, never silently displaying every category candidate as primary", () => {
+    expect(source).toMatch(/Showing \{missionShortlist\.data\.summary\.usableCount\} usable option/);
   });
 
-  it("renders a collapsed overflow/already-discovered section distinct from the primary shortlist", () => {
-    expect(source).toMatch(/<details[^>]*>[\s\S]*?Overflow \/ already discovered/);
+  it("renders a collapsed excluded/out-of-area section distinct from the primary shortlist", () => {
+    expect(source).toMatch(/<details[^>]*>[\s\S]*?Excluded \/ out of area/);
     expect(source).toMatch(/missionShortlist\.data\.totalFound > missionShortlist\.data\.entries\.length/);
   });
 
@@ -836,5 +836,35 @@ describe("MissionControlPage -- Slice 81d composer ZIP extraction + active missi
   it("existing 90027 behavior is preserved -- the default ZIP and default mission text both still reference 90027", () => {
     expect(source).toMatch(/useState\("90027"\)/);
     expect(source).toMatch(/near 90027/);
+  });
+});
+
+describe("MissionControlPage -- Slice 81e geo-restricted discovery + usable shortlist gate", () => {
+  it("the primary list never renders out-of-state/red candidates as normal cards -- it only ever maps over the already-filtered entries array", () => {
+    expect(source).toMatch(/missionShortlist\.data\.entries\.map\(candidate => \{/);
+    // No separate render path exists for excluded/red candidates as primary cards.
+    expect(source).not.toMatch(/excludedEntries\.map|redEntries\.map/);
+  });
+
+  it("the excluded/out-of-area section is collapsed by default (a <details> element, not an always-visible list)", () => {
+    expect(source).toMatch(/<details className="mt-3 rounded-lg border border-black\/10 bg-black\/\[0\.02\] p-2 text-xs">/);
+    expect(source).toMatch(/Excluded \/ out of area/);
+  });
+
+  it("the summary shows usable count vs requested count", () => {
+    expect(source).toMatch(/usable option\{missionShortlist\.data\.summary\.usableCount === 1 \? "" : "s"\} of \{missionShortlist\.data\.targetQuantity\} requested/);
+  });
+
+  it("the summary includes a needs-review count", () => {
+    expect(source).toMatch(/\{missionShortlist\.data\.summary\.mobileNeedsReviewCount\} need review/);
+  });
+
+  it("the summary includes an excluded/out-of-area count", () => {
+    expect(source).toMatch(/\{missionShortlist\.data\.summary\.excludedOutOfAreaCount\} out of area excluded/);
+  });
+
+  it("90067 target still shows Century Park East and website-interpreted-by-AI labels still render (regression)", () => {
+    expect(source).toMatch(/Century Park East/);
+    expect(source).toMatch(/Website interpreted by AI/);
   });
 });
