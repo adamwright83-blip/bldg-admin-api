@@ -444,9 +444,17 @@ export function classifyOutreachReadiness(
   if (fulfillment.fulfillmentTier === "red") return "do_not_contact";
   if (fulfillment.fulfillmentTier === "blue") return "storefront_fallback_copy_needed";
   if (fulfillment.fulfillmentTier === "yellow") return "needs_service_area_review";
+  // Slice 82d fix. A candidate the Claude interpreter (or deterministic
+  // fallback) flagged as requiring human review can NEVER become
+  // ready_for_agentmail just because a direct email also happens to
+  // exist -- there is no manual-override mechanism yet, so this gate
+  // is unconditional. This was the real bug behind candidates showing
+  // "Human review required" AND "Ready for AgentMail" simultaneously.
+  if (evidence.requiresHumanReview) return "needs_service_area_review";
   // Only green (verified/likely mobile/building-service, with the
-  // vendor's own mobile evidence) remains -- route purely by the
-  // vendor's own discovered contact evidence, never by mission intent.
+  // vendor's own mobile evidence, no human review required) remains --
+  // route purely by the vendor's own discovered contact evidence,
+  // never by mission intent.
   // Slice 82b: emailDiscovery (the deeper, up-to-3-page crawl) is
   // consulted first when present -- it can find a real email the
   // single-homepage-page verifier (81a) missed -- but never invents
@@ -540,10 +548,26 @@ async function loadReadyAgentMailCandidates(input: {
     const evidence = match.matchEvidence as {
       outreachReadinessQueue?: OutreachReadinessQueue | null;
       serviceAreaVerification?: ServiceAreaVerification;
+      serviceAreaEffectiveEvidence?: EffectiveServiceAreaEvidence;
       fulfillmentClassification?: FulfillmentClassification;
+      primaryShortlistEligibility?: PrimaryShortlistEligibility;
       emailDiscovery?: WebsiteContactEmailDiscoveryResult | null;
     } | null;
-    if (evidence?.outreachReadinessQueue !== "ready_for_agentmail") continue;
+    if (!evidence?.serviceAreaEffectiveEvidence || !evidence.fulfillmentClassification) continue;
+    // Slice 82d fix. Never trust a persisted outreachReadinessQueue
+    // value blindly -- re-derive it live through the SAME canonical
+    // classifyOutreachReadiness() function the card badge and summary
+    // counts use, so this send/preview path can never disagree with
+    // them, and a match persisted before a classification-logic fix
+    // (e.g. the requiresHumanReview gate added in this slice) can
+    // never slip through as ready just because its stored value is stale.
+    const liveReadiness = classifyOutreachReadiness(
+      evidence.fulfillmentClassification,
+      evidence.serviceAreaEffectiveEvidence,
+      evidence.primaryShortlistEligibility ?? null,
+      evidence.emailDiscovery,
+    );
+    if (liveReadiness !== "ready_for_agentmail") continue;
     // Slice 82b: prefer the deeper (up-to-3-page) crawl's email when
     // present -- it can find a real email the single-homepage-page
     // verifier (81a) missed -- otherwise fall back to the verifier's
@@ -1413,10 +1437,18 @@ export function createVendorAcquisitionMissionRouter(
           // runDiscovery is re-run for them.
           const fulfillment = matchEvidence?.fulfillmentClassification ?? null;
           const eligibility = matchEvidence?.primaryShortlistEligibility ?? null;
-          // Slice 82a. Read the persisted classification only -- never
-          // re-derived here. Missions whose matches predate Slice 82a
-          // simply have none until runDiscovery is re-run for them.
-          const outreachReadinessQueue = matchEvidence?.outreachReadinessQueue ?? null;
+          // Slice 82d fix. ALWAYS re-derived live through the same
+          // canonical classifyOutreachReadiness() the card badge,
+          // summary counts, batch preview, and batch send all share --
+          // never trust the persisted outreachReadinessQueue value
+          // directly. This is what makes "Ready for AgentMail: 3" and
+          // the AgentMail batch panel impossible to disagree: both now
+          // read the exact same live computation over the exact same
+          // persisted evidence, so a classification-logic fix (like
+          // the requiresHumanReview gate added in this slice) applies
+          // immediately to every surface without requiring a
+          // re-run of discovery first.
+          const outreachReadinessQueue = effective ? classifyOutreachReadiness(fulfillment, effective, eligibility, matchEvidence?.emailDiscovery) : null;
           return {
             ...candidate,
             matchedQuery: match.matchedQuery,
@@ -1450,11 +1482,22 @@ export function createVendorAcquisitionMissionRouter(
         // zero out-of-area/excluded counts even when real candidates
         // were excluded for exactly that reason.
         const allEntriesForSummary = allMatches.map(mapMatchToEntry).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+        // Slice 82d fix. The fulfillment-mode breakdown used in the
+        // "Mission Fulfillment Shortlist" summary sentence must sum to
+        // the visible primary-shortlist count ("Showing N usable
+        // options"), never to the total-found count -- otherwise
+        // 5 mobile + 7 fallback + 0 review can silently include
+        // excluded/overflow candidates and sum to more than what is
+        // actually shown as cards (the original bug: 12 vs 10).
+        // excludedOutOfAreaCount intentionally stays scoped to ALL
+        // matches below, since it specifically describes candidates
+        // NOT in the visible set.
+        const shortlistedEntriesForSummary = allEntriesForSummary.filter(e => e.isShortlisted);
         const summary = {
-          verifiedMobileCount: allEntriesForSummary.filter(e => e.fulfillmentMode === "verified_mobile_building_service").length,
-          likelyMobileCount: allEntriesForSummary.filter(e => e.fulfillmentMode === "likely_mobile_building_service").length,
-          mobileNeedsReviewCount: allEntriesForSummary.filter(e => e.fulfillmentMode === "mobile_needs_review").length,
-          driveToFallbackCount: allEntriesForSummary.filter(e => e.fulfillmentMode === "drive_to_storefront_fallback").length,
+          verifiedMobileCount: shortlistedEntriesForSummary.filter(e => e.fulfillmentMode === "verified_mobile_building_service").length,
+          likelyMobileCount: shortlistedEntriesForSummary.filter(e => e.fulfillmentMode === "likely_mobile_building_service").length,
+          mobileNeedsReviewCount: shortlistedEntriesForSummary.filter(e => e.fulfillmentMode === "mobile_needs_review").length,
+          driveToFallbackCount: shortlistedEntriesForSummary.filter(e => e.fulfillmentMode === "drive_to_storefront_fallback").length,
           likelyOutOfAreaCount: allEntriesForSummary.filter(e => e.fulfillmentMode === "likely_out_of_area").length,
           outOfAreaCount: allEntriesForSummary.filter(e => e.fulfillmentMode === "out_of_area").length,
           excludedOutOfAreaCount: allEntriesForSummary.filter(e => !e.isShortlisted && (e.fulfillmentTier === "red")).length,

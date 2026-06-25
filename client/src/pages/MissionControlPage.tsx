@@ -418,7 +418,20 @@ export default function MissionControlPage() {
   }
 
   function startDiscovery() {
-    if (effectiveMissionId) runDiscovery.mutate({ missionId: effectiveMissionId }, { onSuccess: () => missionShortlist.refetch() });
+    // Slice 82d fix. Refetching only missionShortlist left
+    // agentMailBatchPreview showing stale data from before this
+    // discovery run -- the Outreach Readiness count could say "Ready
+    // for AgentMail: 3" while the batch panel, never refetched, still
+    // showed "No AgentMail-ready mobile vendors yet". Both queries
+    // read the same mission and must refresh together.
+    if (effectiveMissionId) {
+      runDiscovery.mutate({ missionId: effectiveMissionId }, {
+        onSuccess: () => {
+          missionShortlist.refetch();
+          agentMailBatchPreview.refetch();
+        },
+      });
+    }
   }
 
   return (
@@ -781,6 +794,17 @@ export default function MissionControlPage() {
                     {candidate.outreachReadinessLabel ? (
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${READINESS_BADGE_CLASS[candidate.outreachReadinessQueue ?? "needs_service_area_review"]}`}>
                         {READINESS_BADGE_LABEL[candidate.outreachReadinessQueue ?? "needs_service_area_review"]}
+                      </span>
+                    ) : null}
+                    {candidate.outreachReadinessQueue === "ready_for_agentmail" ? (
+                      // Slice 82d fix. A ready_for_agentmail candidate
+                      // must never visually read as phone-only -- this
+                      // makes the actual send route explicit and takes
+                      // priority over the secondary "Contact route:
+                      // Phone" badge, which can remain as background
+                      // evidence but is never the primary signal.
+                      <span className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                        Primary outreach route: AgentMail
                       </span>
                     ) : null}
                     {candidate.recipientEmail ? (

@@ -1552,6 +1552,51 @@ describe("vendorAcquisitionMissionRouter -- listMissionShortlist (Slice 79a)", (
     }));
   });
 
+  it("Slice 82d: the fulfillment-mode breakdown (mobile + drive-to + needs-review) sums to usableCount, never to a total that includes excluded candidates", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({
+      listCandidatesForReview: vi.fn().mockResolvedValue([
+        { id: "candidate-1", businessName: "Mobile A", evidence: {} },
+        { id: "candidate-2", businessName: "Storefront B", evidence: {} },
+        { id: "candidate-3", businessName: "Excluded C", evidence: {} },
+      ]),
+    });
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([
+        matchWithFulfillment({ id: "match-1", candidateId: "candidate-1", isShortlisted: true }),
+        matchWithFulfillment({
+          id: "match-2", candidateId: "candidate-2", isShortlisted: true,
+          matchEvidence: {
+            serviceAreaVerification: verification({ serviceAreaStatus: "unverified" }),
+            serviceAreaEffectiveEvidence: baseEvidence({ serviceAreaStatus: "unverified", outreachReadiness: "form_required", emailAddressesFound: [] }),
+            fulfillmentClassification: baseFulfillment({ fulfillmentMode: "drive_to_storefront_fallback", fulfillmentTier: "blue", fulfillmentLabel: "Drive-to fallback", vendorHasMobileEvidence: false }),
+            primaryShortlistEligibility: { eligible: true, exclusionReason: null },
+          },
+        }),
+        matchWithFulfillment({
+          id: "match-3", candidateId: "candidate-3", isShortlisted: false,
+          matchEvidence: {
+            serviceAreaVerification: verification({ serviceAreaStatus: "out_of_area" }),
+            serviceAreaEffectiveEvidence: baseEvidence({ serviceAreaStatus: "out_of_area", outreachReadiness: "not_outreach_ready", emailAddressesFound: [] }),
+            fulfillmentClassification: baseFulfillment({ fulfillmentMode: "out_of_area", fulfillmentTier: "red", fulfillmentLabel: "Out of area", vendorHasMobileEvidence: false }),
+            primaryShortlistEligibility: { eligible: false, exclusionReason: "too far" },
+          },
+        }),
+      ]),
+      countMissionMatches: vi.fn().mockResolvedValue({ total: 3, shortlisted: 2 }),
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    const breakdownSum = result.summary.verifiedMobileCount + result.summary.likelyMobileCount
+      + result.summary.driveToFallbackCount + result.summary.mobileNeedsReviewCount;
+    expect(breakdownSum).toBe(result.summary.usableCount);
+    expect(breakdownSum).toBe(2);
+    expect(result.summary.excludedOutOfAreaCount).toBe(1);
+  });
+
   it("Slice 81e: excludedOutOfAreaCount and usableCount reflect ALL matches, even when the default call only returns shortlisted entries", async () => {
     const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
     const sourcingStore = makeMockSourcingStore({
@@ -1917,6 +1962,11 @@ describe("classifyOutreachReadiness (Slice 82a)", () => {
     expect(classifyOutreachReadiness(baseFulfillment() as never, baseEvidence() as never, { eligible: true, exclusionReason: null })).toBe("ready_for_agentmail");
   });
 
+  it("Slice 82d: green + verified + email found + requiresHumanReview -> needs_service_area_review, NEVER ready_for_agentmail", () => {
+    const evidence = baseEvidence({ requiresHumanReview: true });
+    expect(classifyOutreachReadiness(baseFulfillment() as never, evidence as never, { eligible: true, exclusionReason: null })).toBe("needs_service_area_review");
+  });
+
   it("green + verified + form found (no email) -> contact_form_required_later", () => {
     const evidence = baseEvidence({ outreachReadiness: "form_required", emailAddressesFound: [] });
     expect(classifyOutreachReadiness(baseFulfillment() as never, evidence as never, { eligible: true, exclusionReason: null })).toBe("contact_form_required_later");
@@ -2156,8 +2206,8 @@ describe("vendorAcquisitionMissionRouter -- previewReadyAgentMailBatchForMission
     const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
     const matchStore = makeMockMatchStore({
       listMissionMatches: vi.fn().mockResolvedValue([
-        { id: "match-1", candidateId: "candidate-1", matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: ["hello@example.com"] }), fulfillmentClassification: baseFulfillment(), outreachReadinessQueue: "ready_for_agentmail" } },
-        { id: "match-2", candidateId: "candidate-2", matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: [] }), fulfillmentClassification: baseFulfillment({ fulfillmentMode: "drive_to_storefront_fallback", fulfillmentTier: "blue", fulfillmentLabel: "Drive-to fallback" }), outreachReadinessQueue: "storefront_fallback_copy_needed" } },
+        { id: "match-1", candidateId: "candidate-1", matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: ["hello@example.com"] }), serviceAreaEffectiveEvidence: baseEvidence(), primaryShortlistEligibility: { eligible: true, exclusionReason: null }, fulfillmentClassification: baseFulfillment(), outreachReadinessQueue: "ready_for_agentmail" } },
+        { id: "match-2", candidateId: "candidate-2", matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: [] }), serviceAreaEffectiveEvidence: baseEvidence({ emailAddressesFound: [] }), primaryShortlistEligibility: { eligible: true, exclusionReason: null }, fulfillmentClassification: baseFulfillment({ fulfillmentMode: "drive_to_storefront_fallback", fulfillmentTier: "blue", fulfillmentLabel: "Drive-to fallback" }), outreachReadinessQueue: "storefront_fallback_copy_needed" } },
       ]),
     });
     const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
@@ -2189,6 +2239,89 @@ describe("vendorAcquisitionMissionRouter -- previewReadyAgentMailBatchForMission
     expect(result.candidates).toHaveLength(0);
   });
 
+  it("Slice 82d: a candidate requiring human review never appears in the AgentMail batch preview, even with a direct email and a stale ready_for_agentmail persisted value", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([
+        {
+          id: "match-1", candidateId: "candidate-1",
+          matchEvidence: {
+            serviceAreaVerification: verification({ emailAddressesFound: ["hello@example.com"] }),
+            serviceAreaEffectiveEvidence: baseEvidence({ requiresHumanReview: true }),
+            primaryShortlistEligibility: { eligible: true, exclusionReason: null },
+            fulfillmentClassification: baseFulfillment(),
+            // Deliberately stale/incorrect persisted value (as if this
+            // match were written before the requiresHumanReview gate
+            // existed) -- the live re-derivation must override it.
+            outreachReadinessQueue: "ready_for_agentmail",
+          },
+        },
+      ]),
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).previewReadyAgentMailBatchForMission({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.readyCount).toBe(0);
+    expect(result.candidates).toHaveLength(0);
+  });
+
+  it("Slice 82d: the preview's readyCount always matches listMissionShortlist's readyForAgentMailCount summary for the same persisted matches (single source of truth)", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({
+      getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()),
+      listCandidatesForReview: vi.fn().mockResolvedValue([makeMockCandidate()]),
+    });
+    const matches = [
+      {
+        id: "match-1", candidateId: "candidate-1", isShortlisted: true, rankPosition: 1,
+        matchedQuery: "q", queryPlannerSource: "anthropic_structured", serviceMode: "mobile_required",
+        matchEvidence: {
+          serviceAreaVerification: verification({ emailAddressesFound: ["hello@example.com"] }),
+          serviceAreaEffectiveEvidence: baseEvidence(),
+          primaryShortlistEligibility: { eligible: true, exclusionReason: null },
+          fulfillmentClassification: baseFulfillment(),
+          outreachReadinessQueue: "ready_for_agentmail",
+        },
+      },
+      {
+        id: "match-2", candidateId: "candidate-1", isShortlisted: true, rankPosition: 2,
+        matchedQuery: "q", queryPlannerSource: "anthropic_structured", serviceMode: "mobile_required",
+        matchEvidence: {
+          serviceAreaVerification: verification({ emailAddressesFound: ["other@example.com"] }),
+          // Human review required -- must NOT count as ready in either path.
+          serviceAreaEffectiveEvidence: baseEvidence({ requiresHumanReview: true }),
+          primaryShortlistEligibility: { eligible: true, exclusionReason: null },
+          fulfillmentClassification: baseFulfillment(),
+          outreachReadinessQueue: "ready_for_agentmail",
+        },
+      },
+    ];
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue(matches),
+      countMissionMatches: vi.fn().mockResolvedValue({ total: 2, shortlisted: 2 }),
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const preview = await router.createCaller(context({ role: "admin" })).previewReadyAgentMailBatchForMission({ missionId: "mission-1" });
+    const shortlist = await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1" });
+
+    expect(preview.status).toBe("ok");
+    expect(shortlist.status).toBe("ok");
+    if (preview.status !== "ok" || shortlist.status !== "ok") throw new Error("expected ok");
+    // Both listMissionShortlist's summary count and the batch preview
+    // now re-derive classifyOutreachReadiness live over the same
+    // persisted evidence -- they can never disagree, even when the
+    // stored outreachReadinessQueue value is stale/incorrect (here,
+    // both matches were persisted with the same stale
+    // "ready_for_agentmail" value, but match-2 requires human review
+    // and must be excluded by both surfaces identically).
+    expect(preview.readyCount).toBe(1);
+    expect(shortlist.summary.readyForAgentMailCount).toBe(1);
+    expect(preview.readyCount).toBe(shortlist.summary.readyForAgentMailCount);
+  });
+
   it("warns honestly when no candidates are ready", async () => {
     const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
     const sourcingStore = makeMockSourcingStore();
@@ -2214,7 +2347,7 @@ describe("vendorAcquisitionMissionRouter -- sendReadyAgentMailBatchForMission (S
     const sourcingStore = overrides?.sourcingStore ?? makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
     const matchStore = overrides?.matchStore ?? makeMockMatchStore({
       listMissionMatches: vi.fn().mockResolvedValue([
-        { id: "match-1", candidateId: "candidate-1", matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: ["hello@example.com"] }), fulfillmentClassification: baseFulfillment(), outreachReadinessQueue: "ready_for_agentmail" } },
+        { id: "match-1", candidateId: "candidate-1", matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: ["hello@example.com"] }), serviceAreaEffectiveEvidence: baseEvidence(), primaryShortlistEligibility: { eligible: true, exclusionReason: null }, fulfillmentClassification: baseFulfillment(), outreachReadinessQueue: "ready_for_agentmail" } },
       ]),
     });
     const contactAttemptStore = overrides?.contactAttemptStore ?? makeMockContactAttemptStore({
@@ -2330,7 +2463,12 @@ describe("vendorAcquisitionMissionRouter -- sendReadyAgentMailBatchForMission (S
   it("caps the batch at AGENTMAIL_BATCH_SEND_MAX_CANDIDATES candidates", async () => {
     const manyMatches = Array.from({ length: 15 }, (_, i) => ({
       id: `m${i}`, candidateId: `c${i}`,
-      matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: [`vendor${i}@example.com`] }), fulfillmentClassification: baseFulfillment(), outreachReadinessQueue: "ready_for_agentmail" },
+      matchEvidence: {
+        serviceAreaVerification: verification({ emailAddressesFound: [`vendor${i}@example.com`] }),
+        serviceAreaEffectiveEvidence: baseEvidence({ emailAddressesFound: [`vendor${i}@example.com`] }),
+        primaryShortlistEligibility: { eligible: true, exclusionReason: null },
+        fulfillmentClassification: baseFulfillment(), outreachReadinessQueue: "ready_for_agentmail",
+      },
     }));
     vi.mocked(sendVendorEmailViaAgentMail).mockResolvedValue({
       providerName: "agentmail", providerAttemptId: "msg_1", threadId: null, inboxId: "inbox-1",

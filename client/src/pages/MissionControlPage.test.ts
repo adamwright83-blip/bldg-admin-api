@@ -248,7 +248,8 @@ describe("MissionControlPage -- Run Discovery CTA activation bugfix", () => {
   });
 
   it("Run discovery's click handler calls the mutation with effectiveMissionId via startDiscovery", () => {
-    expect(source).toMatch(/function startDiscovery\(\) \{\s*if \(effectiveMissionId\) runDiscovery\.mutate\(\{ missionId: effectiveMissionId \}/);
+    expect(source).toMatch(/function startDiscovery\(\) \{/);
+    expect(source).toMatch(/if \(effectiveMissionId\) \{\s*runDiscovery\.mutate\(\{ missionId: effectiveMissionId \}/);
     expect(source).toMatch(/onClick=\{startDiscovery\}/);
   });
 
@@ -332,8 +333,9 @@ describe("MissionControlPage -- Slice 76c Discovered Candidates panel", () => {
     expect(source).toMatch(/target="_blank"/);
   });
 
-  it("refetches the mission shortlist after a successful discovery run", () => {
-    expect(source).toMatch(/onSuccess: \(\) => missionShortlist\.refetch\(\)/);
+  it("refetches the mission shortlist AND the AgentMail batch preview after a successful discovery run (Slice 82d fix -- both must refresh together)", () => {
+    expect(source).toMatch(/missionShortlist\.refetch\(\);/);
+    expect(source).toMatch(/agentMailBatchPreview\.refetch\(\);/);
   });
 
   it("the raw per-candidate discovery dump is no longer the primary candidate UI -- the orchestra summary is concise", () => {
@@ -969,9 +971,10 @@ describe("MissionControlPage -- Slice 82c outreach readiness CTA wiring fix", ()
     // The button branch is gated strictly on ready_for_agentmail, and
     // phone_sms_required_later has its own earlier branch in the same
     // conditional chain, so it can never fall through to the button.
-    const buttonBranchIndex = source.indexOf('candidate.outreachReadinessQueue === "ready_for_agentmail" ? (');
+    const buttonBranchIndex = source.indexOf('Approve for draft outreach');
     const phoneBranchIndex = source.indexOf('candidate.outreachReadinessQueue === "phone_sms_required_later" ? (');
     expect(phoneBranchIndex).toBeGreaterThan(-1);
+    expect(buttonBranchIndex).toBeGreaterThan(-1);
     expect(phoneBranchIndex).toBeLessThan(buttonBranchIndex);
   });
 
@@ -983,5 +986,23 @@ describe("MissionControlPage -- Slice 82c outreach readiness CTA wiring fix", ()
   it("does not show the send button when ready count is 0 -- the batch panel with the button is a separate, mutually exclusive branch", () => {
     expect(source).toMatch(/agentMailBatchPreview\.data\.readyCount === 0 \? \(/);
     expect(source).toMatch(/agentMailBatchPreview\.data\.readyCount > 0 \? \(/);
+  });
+});
+
+describe("MissionControlPage -- Slice 82d readiness consistency fixes", () => {
+  it("running discovery refetches both missionShortlist AND agentMailBatchPreview, so the readiness count and the batch panel can never disagree again", () => {
+    expect(source).toMatch(/onSuccess: \(\) => \{\s*missionShortlist\.refetch\(\);\s*agentMailBatchPreview\.refetch\(\);\s*\}/);
+  });
+
+  it("a ready_for_agentmail candidate shows 'Primary outreach route: AgentMail', never implying phone-only", () => {
+    expect(source).toMatch(/candidate\.outreachReadinessQueue === "ready_for_agentmail" \? \(/);
+    expect(source).toMatch(/Primary outreach route: AgentMail/);
+  });
+
+  it("the 'Primary outreach route: AgentMail' badge appears alongside, not instead of, the secondary Contact route badge", () => {
+    const routeBadgeIndex = source.indexOf("Primary outreach route: AgentMail");
+    const contactRouteIndex = source.indexOf("CONTACT_ROUTE_DISPLAY[candidate.serviceAreaVerification.contactRoute]");
+    expect(routeBadgeIndex).toBeGreaterThan(-1);
+    expect(contactRouteIndex).toBeGreaterThan(-1);
   });
 });
