@@ -350,6 +350,18 @@ export class VendorContactAttemptStore {
     };
   }
 
+async getDraftById(tenantId: string, draftId: string): Promise<DurableDraft | null> {
+    const [rows] = await this.pool.execute<DraftDbRow[]>(
+      `SELECT id, tenant_id, source_key, candidate_id, lead_id, lane, channel, recipient_snapshot,
+              subject_rendered, body_rendered, body_hash, template_key, template_version,
+              founder_escalation_present, forbidden_claims_scan_json, draft_status, created_by,
+              created_at, updated_at
+         FROM vendor_contact_drafts WHERE tenant_id = ? AND id = ?`,
+      [tenantId, draftId],
+    );
+    return rows[0] ? mapDraftRow(rows[0]) : null;
+  }
+
   /**
    * Looks up an existing attempt by (tenantId, idempotencyKey) first; only
    * inserts a new row when none exists. Never updates an existing row's
@@ -523,6 +535,80 @@ export class VendorContactAttemptStore {
         provider_responded: 1,
         status: input.nextStatus,
         status_history_json: JSON.stringify(history),
+        updated_at: now,
+      });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  /**
+   * Records the outcome of a real (or attempted) live-provider send:
+   * provider_adapter, provider_attempt_id, live_provider_invoked,
+   * outreach_sent_by_held, status, status_history_json, and sent_at only.
+   * This UPDATE statement's column list never references
+   * provider_accepted, booking_confirmed, payment_authorized, or
+   * dispatched -- they remain structurally untouched regardless of what
+   * the live provider reported.
+   */
+  async recordLiveSendResult(input: {
+    tenantId: string;
+    attemptId: string;
+    providerAdapter: string;
+    providerAttemptId: string | null;
+    liveProviderInvoked: boolean;
+    outreachSentByHeld: boolean;
+    nextStatus: string;
+    actor: string;
+    now?: Date;
+  }): Promise<DurableContactAttempt> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.execute<AttemptDbRow[]>(
+        `SELECT ${ATTEMPT_SELECT_COLUMNS} FROM vendor_contact_attempts
+          WHERE tenant_id = ? AND id = ? FOR UPDATE`,
+        [input.tenantId, input.attemptId],
+      );
+      const current = rows[0];
+      if (!current) throw new Error("Vendor contact attempt not found");
+      const now = input.now ?? new Date();
+      const sentAt = input.outreachSentByHeld ? now : null;
+      const history: StatusHistoryEntry[] = [
+        ...(parseJson<StatusHistoryEntry[]>(current.status_history_json) ?? []),
+        { status: input.nextStatus, at: now.toISOString(), actor: input.actor },
+      ];
+      await connection.execute(
+        `UPDATE vendor_contact_attempts
+            SET provider_adapter = ?, provider_attempt_id = ?, live_provider_invoked = ?,
+                outreach_sent_by_held = ?, status = ?, status_history_json = ?, sent_at = ?, updated_at = ?
+          WHERE tenant_id = ? AND id = ?`,
+        [
+          input.providerAdapter,
+          input.providerAttemptId,
+          input.liveProviderInvoked ? 1 : 0,
+          input.outreachSentByHeld ? 1 : 0,
+          input.nextStatus,
+          JSON.stringify(history),
+          sentAt,
+          now,
+          input.tenantId,
+          input.attemptId,
+        ],
+      );
+      await connection.commit();
+      return mapAttemptRow({
+        ...current,
+        provider_adapter: input.providerAdapter,
+        provider_attempt_id: input.providerAttemptId,
+        live_provider_invoked: input.liveProviderInvoked ? 1 : 0,
+        outreach_sent_by_held: input.outreachSentByHeld ? 1 : 0,
+        status: input.nextStatus,
+        status_history_json: JSON.stringify(history),
+        sent_at: sentAt,
         updated_at: now,
       });
     } catch (error) {

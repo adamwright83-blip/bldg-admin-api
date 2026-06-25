@@ -1,8 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../db", () => ({ listRequestJobCardSourceRecords: vi.fn() }));
+vi.mock("./agentMailVendorEmailProvider", async () => {
+  const actual = await vi.importActual<typeof import("./agentMailVendorEmailProvider")>("./agentMailVendorEmailProvider");
+  return { ...actual, sendVendorEmailViaAgentMail: vi.fn() };
+});
 
 const { listRequestJobCardSourceRecords } = await import("../db");
+const { sendVendorEmailViaAgentMail } = await import("./agentMailVendorEmailProvider");
+const { SUPERVISED_CANARY_CONFIRMATION_TEXT } = await import("./agentMailVendorEmailProvider");
 const { vendorCastingSprintRouter, createVendorCastingSprintRouter } = await import("./vendorCastingSprintRouter");
 
 function context(user: { role: string } | null) {
@@ -688,5 +694,331 @@ describe("vendor casting sprint admin router -- gated live provider foundation (
     expect(createCall.automationMode).toBe("gated_provider_future");
     expect(createCall.status).toBe("blocked");
     expect(createCall.sendGateResultJson.liveSendAllowed).toBe(false);
+  });
+});
+
+describe("vendor casting sprint admin router -- AgentMail supervised email canary (Slice 74e)", () => {
+  const AGENTMAIL_FULL_ENV = {
+    HELD_VENDOR_EMAIL_PROVIDER: "agentmail",
+    AGENTMAIL_API_KEY: "fake-key",
+    AGENTMAIL_VENDOR_INBOX_ID: "held@agentmail.to",
+    AGENTMAIL_VENDOR_INBOX_EMAIL: "held@agentmail.to",
+    HELD_VENDOR_EMAIL_CANARY_ENABLED: "true",
+    HELD_VENDOR_EMAIL_SOURCE_ALLOWLIST: "service_request:155",
+    HELD_VENDOR_EMAIL_CATEGORY_ALLOWLIST: "dog_grooming",
+  };
+
+  function stubFullAgentMailEnv() {
+    for (const [key, value] of Object.entries(AGENTMAIL_FULL_ENV)) vi.stubEnv(key, value);
+  }
+
+  function makeDurableDraft(overrides?: Record<string, unknown>) {
+    return {
+      id: "durable-draft-1",
+      tenantId: "default",
+      sourceKey: "service_request:155",
+      candidateId: null,
+      leadId: "lead-1",
+      lane: "maps_producer",
+      channel: "email",
+      recipientSnapshot: null,
+      subjectRendered: "Availability check",
+      bodyRendered: "Hi vendor,\n\nNothing is confirmed yet.",
+      bodyHash: "a".repeat(64),
+      templateKey: "vendor_availability_request_v0",
+      templateVersion: null,
+      founderEscalationPresent: true,
+      forbiddenClaimsScanJson: { forbiddenClaimsDetected: [], blockingLintRules: [] },
+      draftStatus: "draft_ready",
+      createdBy: "admin",
+      createdAt: new Date("2026-06-24T00:00:00.000Z"),
+      updatedAt: new Date("2026-06-24T00:00:00.000Z"),
+      ...overrides,
+    };
+  }
+
+  function makeMockStore(overrides?: Record<string, unknown>) {
+    return {
+      createDraft: vi.fn(),
+      getDraftById: vi.fn().mockResolvedValue(makeDurableDraft()),
+      createOrReuseAttempt: vi.fn().mockResolvedValue({
+        attempt: { id: "durable-attempt-1", statusHistoryJson: [{ status: "draft_ready", at: "2026-06-24T00:00:00.000Z", actor: "HELD" }] },
+        reused: false,
+      }),
+      recordLiveSendResult: vi.fn().mockImplementation(async (input: { nextStatus: string }) => ({
+        id: "durable-attempt-1",
+        statusHistoryJson: [
+          { status: "draft_ready", at: "2026-06-24T00:00:00.000Z", actor: "HELD" },
+          { status: input.nextStatus, at: "2026-06-24T00:00:01.000Z", actor: "admin" },
+        ],
+      })),
+      recordReplyAndTerms: vi.fn(),
+      getAttemptById: vi.fn(),
+      listAttemptsBySourceKey: vi.fn(),
+      listAttemptsByCandidateId: vi.fn(),
+      listRecentAttempts: vi.fn(),
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    vi.mocked(listRequestJobCardSourceRecords).mockResolvedValue(readyServiceRequestSource);
+    vi.mocked(sendVendorEmailViaAgentMail).mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("blocks without the exact confirmation text and never calls AgentMail", async () => {
+    stubFullAgentMailEnv();
+    const store = makeMockStore();
+    const router = createVendorCastingSprintRouter(store as any);
+
+    const result = await router.createCaller(context({ role: "admin" })).runSupervisedAgentMailCanary({
+      sourceKey: "service_request:155",
+      durableDraftId: "durable-draft-1",
+      channel: "email",
+      recipientEmail: "vendor@example.com",
+      adminConfirmationText: "send it now",
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.blockedReasons).toContain("admin_confirmation_text_mismatch");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("blocks without a durable draft id and never calls AgentMail", async () => {
+    stubFullAgentMailEnv();
+    const store = makeMockStore({ getDraftById: vi.fn().mockResolvedValue(null) });
+    const router = createVendorCastingSprintRouter(store as any);
+
+    const result = await router.createCaller(context({ role: "admin" })).runSupervisedAgentMailCanary({
+      sourceKey: "service_request:155",
+      durableDraftId: "does-not-exist",
+      channel: "email",
+      recipientEmail: "vendor@example.com",
+      adminConfirmationText: SUPERVISED_CANARY_CONFIRMATION_TEXT,
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.blockedReasons).toContain("durable_draft_not_found");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("blocks with an invalid recipient and never calls AgentMail", async () => {
+    stubFullAgentMailEnv();
+    const store = makeMockStore();
+    const router = createVendorCastingSprintRouter(store as any);
+
+    const result = await router.createCaller(context({ role: "admin" })).runSupervisedAgentMailCanary({
+      sourceKey: "service_request:155",
+      durableDraftId: "durable-draft-1",
+      channel: "email",
+      recipientEmail: "not-an-email",
+      adminConfirmationText: SUPERVISED_CANARY_CONFIRMATION_TEXT,
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.blockedReasons).toContain("recipient_email_invalid");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("blocks when the draft carries forbidden claims and never calls AgentMail", async () => {
+    stubFullAgentMailEnv();
+    const store = makeMockStore({
+      getDraftById: vi.fn().mockResolvedValue(makeDurableDraft({ forbiddenClaimsScanJson: { forbiddenClaimsDetected: ["forbidden_truth_claim_detected"], blockingLintRules: [] } })),
+    });
+    const router = createVendorCastingSprintRouter(store as any);
+
+    const result = await router.createCaller(context({ role: "admin" })).runSupervisedAgentMailCanary({
+      sourceKey: "service_request:155",
+      durableDraftId: "durable-draft-1",
+      channel: "email",
+      recipientEmail: "vendor@example.com",
+      adminConfirmationText: SUPERVISED_CANARY_CONFIRMATION_TEXT,
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.blockedReasons).toContain("forbidden_claims_detected");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("blocks without canary enabled even with everything else correct", async () => {
+    stubFullAgentMailEnv();
+    vi.stubEnv("HELD_VENDOR_EMAIL_CANARY_ENABLED", "false");
+    const store = makeMockStore();
+    const router = createVendorCastingSprintRouter(store as any);
+
+    const result = await router.createCaller(context({ role: "admin" })).runSupervisedAgentMailCanary({
+      sourceKey: "service_request:155",
+      durableDraftId: "durable-draft-1",
+      channel: "email",
+      recipientEmail: "vendor@example.com",
+      adminConfirmationText: SUPERVISED_CANARY_CONFIRMATION_TEXT,
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.blockedReasons).toContain("live_email_canary_disabled");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("succeeds with a mocked AgentMail provider and all gates passing", async () => {
+    stubFullAgentMailEnv();
+    vi.mocked(sendVendorEmailViaAgentMail).mockResolvedValue({
+      providerName: "agentmail",
+      providerAttemptId: "msg_123",
+      threadId: "thread_456",
+      inboxId: "held@agentmail.to",
+      inboxEmail: "held@agentmail.to",
+      status: "sent",
+      liveProviderInvoked: true,
+      rawProviderResponseJson: { messageId: "msg_123", threadId: "thread_456" },
+      sentAt: "2026-06-24T00:00:02.000Z",
+      errorReason: null,
+    });
+    const store = makeMockStore();
+    const router = createVendorCastingSprintRouter(store as any);
+
+    const result = await router.createCaller(context({ role: "admin" })).runSupervisedAgentMailCanary({
+      sourceKey: "service_request:155",
+      durableDraftId: "durable-draft-1",
+      channel: "email",
+      recipientEmail: "vendor@example.com",
+      adminConfirmationText: SUPERVISED_CANARY_CONFIRMATION_TEXT,
+    });
+
+    expect(sendVendorEmailViaAgentMail).toHaveBeenCalledOnce();
+    expect(result.allowed).toBe(true);
+    expect(result.durableAttemptId).toBe("durable-attempt-1");
+    expect(result.sendResult?.providerAttemptId).toBe("msg_123");
+
+    const recordCall = store.recordLiveSendResult.mock.calls.at(-1)![0];
+    expect(recordCall.providerAdapter).toBe("agentmail");
+    expect(recordCall.liveProviderInvoked).toBe(true);
+    expect(recordCall.outreachSentByHeld).toBe(true);
+    expect(recordCall.nextStatus).toBe("response_pending");
+  });
+
+  it("never sets providerAccepted, bookingConfirmed, paymentAuthorized, or dispatched on a successful send", async () => {
+    stubFullAgentMailEnv();
+    vi.mocked(sendVendorEmailViaAgentMail).mockResolvedValue({
+      providerName: "agentmail",
+      providerAttemptId: "msg_123",
+      threadId: "thread_456",
+      inboxId: "held@agentmail.to",
+      inboxEmail: "held@agentmail.to",
+      status: "sent",
+      liveProviderInvoked: true,
+      rawProviderResponseJson: {},
+      sentAt: "2026-06-24T00:00:02.000Z",
+      errorReason: null,
+    });
+    const store = makeMockStore();
+    const router = createVendorCastingSprintRouter(store as any);
+
+    const result = await router.createCaller(context({ role: "admin" })).runSupervisedAgentMailCanary({
+      sourceKey: "service_request:155",
+      durableDraftId: "durable-draft-1",
+      channel: "email",
+      recipientEmail: "vendor@example.com",
+      adminConfirmationText: SUPERVISED_CANARY_CONFIRMATION_TEXT,
+    });
+
+    const recordCall = store.recordLiveSendResult.mock.calls.at(-1)![0];
+    expect(recordCall).not.toHaveProperty("providerAccepted");
+    expect(recordCall).not.toHaveProperty("bookingConfirmed");
+    expect(recordCall).not.toHaveProperty("paymentAuthorized");
+    expect(recordCall).not.toHaveProperty("dispatched");
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toMatch(/"providerAccepted":true/);
+    expect(serialized).not.toMatch(/"bookingConfirmed":true/);
+    expect(serialized).not.toMatch(/"paymentAuthorized":true/);
+    expect(serialized).not.toMatch(/"dispatched":true/);
+  });
+
+  it("only sets outreachSentByHeld true when AgentMail confirms sent, not on rejection", async () => {
+    stubFullAgentMailEnv();
+    vi.mocked(sendVendorEmailViaAgentMail).mockResolvedValue({
+      providerName: "agentmail",
+      providerAttemptId: null,
+      threadId: null,
+      inboxId: "held@agentmail.to",
+      inboxEmail: "held@agentmail.to",
+      status: "rejected",
+      liveProviderInvoked: true,
+      rawProviderResponseJson: null,
+      sentAt: null,
+      errorReason: "AgentMail validation error",
+    });
+    const store = makeMockStore();
+    const router = createVendorCastingSprintRouter(store as any);
+
+    const result = await router.createCaller(context({ role: "admin" })).runSupervisedAgentMailCanary({
+      sourceKey: "service_request:155",
+      durableDraftId: "durable-draft-1",
+      channel: "email",
+      recipientEmail: "vendor@example.com",
+      adminConfirmationText: SUPERVISED_CANARY_CONFIRMATION_TEXT,
+    });
+
+    expect(result.allowed).toBe(false);
+    const recordCall = store.recordLiveSendResult.mock.calls.at(-1)![0];
+    expect(recordCall.outreachSentByHeld).toBe(false);
+    expect(recordCall.liveProviderInvoked).toBe(true);
+  });
+
+  it("reuses the same durable attempt when one is already provided instead of creating a second row", async () => {
+    stubFullAgentMailEnv();
+    vi.mocked(sendVendorEmailViaAgentMail).mockResolvedValue({
+      providerName: "agentmail", providerAttemptId: "msg_123", threadId: "thread_456",
+      inboxId: "held@agentmail.to", inboxEmail: "held@agentmail.to", status: "sent",
+      liveProviderInvoked: true, rawProviderResponseJson: {}, sentAt: "2026-06-24T00:00:02.000Z", errorReason: null,
+    });
+    const store = makeMockStore();
+    const router = createVendorCastingSprintRouter(store as any);
+
+    await router.createCaller(context({ role: "admin" })).runSupervisedAgentMailCanary({
+      sourceKey: "service_request:155",
+      durableDraftId: "durable-draft-1",
+      durableAttemptId: "existing-attempt-1",
+      channel: "email",
+      recipientEmail: "vendor@example.com",
+      adminConfirmationText: SUPERVISED_CANARY_CONFIRMATION_TEXT,
+    });
+
+    expect(store.createOrReuseAttempt).not.toHaveBeenCalled();
+    expect(store.recordLiveSendResult).toHaveBeenCalledWith(expect.objectContaining({ attemptId: "existing-attempt-1" }));
+  });
+
+  it("does not double-send when the same idempotency key already produced a sent attempt", async () => {
+    stubFullAgentMailEnv();
+    const store = makeMockStore({
+      createOrReuseAttempt: vi.fn().mockResolvedValue({
+        attempt: {
+          id: "durable-attempt-1",
+          outreachSentByHeld: true,
+          statusHistoryJson: [
+            { status: "draft_ready", at: "2026-06-24T00:00:00.000Z", actor: "HELD" },
+            { status: "response_pending", at: "2026-06-24T00:00:01.000Z", actor: "admin" },
+          ],
+        },
+        reused: true,
+      }),
+    });
+    const router = createVendorCastingSprintRouter(store as any);
+
+    const result = await router.createCaller(context({ role: "admin" })).runSupervisedAgentMailCanary({
+      sourceKey: "service_request:155",
+      durableDraftId: "durable-draft-1",
+      channel: "email",
+      recipientEmail: "vendor@example.com",
+      adminConfirmationText: SUPERVISED_CANARY_CONFIRMATION_TEXT,
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.blockedReasons).toContain("duplicate_idempotency_attempt_already_sent");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+    expect(store.recordLiveSendResult).not.toHaveBeenCalled();
   });
 });

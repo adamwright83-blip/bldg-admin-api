@@ -334,4 +334,87 @@ describe("VendorContactAttemptStore -- audit feed", () => {
     expect(attempt?.latestReplyJson).toEqual({ classification: "unavailable" });
     expect(attempt?.latestTermsPacketJson).toEqual({ availabilityStatus: "unavailable" });
   });
+
+  it("getDraftById returns the mapped draft", async () => {
+    const execute = vi.fn().mockResolvedValue([[MOCK_DRAFT_ROW], []]);
+    const pool = { execute };
+    const store = new VendorContactAttemptStore(pool as any);
+
+    const draft = await store.getDraftById("default", "draft-1");
+    expect(draft?.id).toBe("draft-1");
+    expect(draft?.bodyHash).toBe(MOCK_DRAFT_ROW.body_hash);
+  });
+
+  it("getDraftById returns null when not found", async () => {
+    const execute = vi.fn().mockResolvedValue([[], []]);
+    const pool = { execute };
+    const store = new VendorContactAttemptStore(pool as any);
+
+    expect(await store.getDraftById("default", "missing")).toBeNull();
+  });
+});
+
+describe("VendorContactAttemptStore -- recordLiveSendResult", () => {
+  it("sets liveProviderInvoked and outreachSentByHeld, never touching acceptance/booking/payment/dispatch", async () => {
+    const connection = makeConnection({ selectRows: [MOCK_ATTEMPT_ROW] });
+    const pool = { getConnection: vi.fn().mockResolvedValue(connection) };
+    const store = new VendorContactAttemptStore(pool as any);
+
+    const updated = await store.recordLiveSendResult({
+      tenantId: "default",
+      attemptId: "attempt-1",
+      providerAdapter: "agentmail",
+      providerAttemptId: "msg_123",
+      liveProviderInvoked: true,
+      outreachSentByHeld: true,
+      nextStatus: "response_pending",
+      actor: "admin",
+    });
+
+    expect(updated.providerAdapter).toBe("agentmail");
+    expect(updated.providerAttemptId).toBe("msg_123");
+    expect(updated.liveProviderInvoked).toBe(true);
+    expect(updated.outreachSentByHeld).toBe(true);
+    expect(updated.status).toBe("response_pending");
+    expect(updated.providerAccepted).toBe(false);
+    expect(updated.bookingConfirmed).toBe(false);
+    expect(updated.paymentAuthorized).toBe(false);
+    expect(updated.dispatched).toBe(false);
+
+    const updateCall = connection.execute.mock.calls.find(([sql]) => /^\s*UPDATE/i.test(String(sql)));
+    expect(String(updateCall![0])).not.toMatch(/provider_accepted|booking_confirmed|payment_authorized|dispatched/i);
+  });
+
+  it("does not set outreachSentByHeld when the live send was rejected", async () => {
+    const connection = makeConnection({ selectRows: [MOCK_ATTEMPT_ROW] });
+    const pool = { getConnection: vi.fn().mockResolvedValue(connection) };
+    const store = new VendorContactAttemptStore(pool as any);
+
+    const updated = await store.recordLiveSendResult({
+      tenantId: "default",
+      attemptId: "attempt-1",
+      providerAdapter: "agentmail",
+      providerAttemptId: null,
+      liveProviderInvoked: true,
+      outreachSentByHeld: false,
+      nextStatus: "blocked",
+      actor: "admin",
+    });
+
+    expect(updated.liveProviderInvoked).toBe(true);
+    expect(updated.outreachSentByHeld).toBe(false);
+    expect(updated.status).toBe("blocked");
+  });
+
+  it("fails closed when the attempt does not exist", async () => {
+    const connection = makeConnection({ selectRows: [] });
+    const pool = { getConnection: vi.fn().mockResolvedValue(connection) };
+    const store = new VendorContactAttemptStore(pool as any);
+
+    await expect(store.recordLiveSendResult({
+      tenantId: "default", attemptId: "missing", providerAdapter: "agentmail", providerAttemptId: null,
+      liveProviderInvoked: true, outreachSentByHeld: false, nextStatus: "blocked", actor: "admin",
+    })).rejects.toThrow(/not found/i);
+    expect(connection.rollback).toHaveBeenCalledOnce();
+  });
 });

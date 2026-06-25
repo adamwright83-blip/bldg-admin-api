@@ -32,6 +32,14 @@ import {
 } from "./vendorContactAttemptPolicy";
 import { buildProviderReadiness, evaluateLiveSendGate, type ProviderReadiness } from "./vendorContactProviderRegistry";
 import {
+  buildAgentMailLabels,
+  evaluateAgentMailLiveSendGate,
+  inspectAgentMailReadiness,
+  sendVendorEmailViaAgentMail,
+  type AgentMailSendResult,
+} from "./agentMailVendorEmailProvider";
+import {
+  computeIdempotencyKey,
   VendorContactAttemptStore,
   type DurableContactAttempt,
   type DurableDraft,
@@ -202,7 +210,10 @@ export function createVendorCastingSprintRouter(injectedStore?: VendorContactAtt
    * live email/SMS/form SDK. liveSendingEnabled is always false in this
    * slice regardless of what env vars or flags are set.
    */
-  providerReadiness: adminProcedure.query((): ProviderReadiness => buildProviderReadiness()),
+  providerReadiness: adminProcedure.query((): ProviderReadiness & { agentMail: ReturnType<typeof inspectAgentMailReadiness> } => ({
+    ...buildProviderReadiness(),
+    agentMail: inspectAgentMailReadiness(),
+  })),
 
   mission: adminProcedure
     .input(z.object({ sourceKey: z.string().min(3).max(191) }))
@@ -482,6 +493,177 @@ export function createVendorCastingSprintRouter(injectedStore?: VendorContactAtt
       }
 
       return { allowed: true, blockedReasons: [], attempt: ranAttempt, providerResult, durableAttemptId, durableDraftId, statusHistory, persisted, auditFeedSummary };
+    }),
+
+  /**
+   * The only place in this router that can ever invoke a real outbound
+   * provider. Every precondition is re-evaluated here (allowlists, canary
+   * flag, env presence, send gate, founder escalation, forbidden claims,
+   * recipient validity) and the admin must type the exact confirmation
+   * phrase; if any check fails, AgentMail is never called. On success it
+   * calls sendVendorEmailViaAgentMail() exactly once and persists the
+   * outcome via recordLiveSendResult(), which never writes
+   * provider_accepted/booking_confirmed/payment_authorized/dispatched.
+   */
+  runSupervisedAgentMailCanary: adminProcedure
+    .input(z.object({
+      sourceKey: z.string().min(3).max(191),
+      durableDraftId: z.string().min(1).max(191),
+      durableAttemptId: z.string().min(1).max(191).nullable().optional(),
+      candidateId: z.string().min(1).max(191).nullable().optional(),
+      leadId: z.string().min(1).max(191).nullable().optional(),
+      channel: z.literal("email"),
+      recipientEmail: z.string().min(3).max(320),
+      adminConfirmationText: z.string().min(1).max(64),
+    }))
+    .mutation(async ({ ctx, input }): Promise<{
+      allowed: boolean;
+      blockedReasons: string[];
+      durableAttemptId: string | null;
+      sendResult: AgentMailSendResult | null;
+      statusHistory: StatusHistoryEntry[];
+      persisted: boolean;
+    }> => {
+      const result = await resolveMission({ tenantId: ctx.tenantId, sourceKey: input.sourceKey });
+      if (!result.found || !result.mission || !result.jobCard) {
+        return { allowed: false, blockedReasons: result.blockedReasons.length ? result.blockedReasons : ["source_job_card_not_found"], durableAttemptId: null, sendResult: null, statusHistory: [], persisted: false };
+      }
+      const store = resolveContactAttemptStore(injectedStore);
+      const draft = await store.getDraftById(ctx.tenantId, input.durableDraftId);
+      if (!draft) {
+        return { allowed: false, blockedReasons: ["durable_draft_not_found"], durableAttemptId: null, sendResult: null, statusHistory: [], persisted: false };
+      }
+
+      const forbiddenClaimsDetected = (draft.forbiddenClaimsScanJson as { forbiddenClaimsDetected?: string[] } | null)?.forbiddenClaimsDetected ?? [];
+      const sendGatePassed = draft.founderEscalationPresent && forbiddenClaimsDetected.length === 0;
+      const category = result.mission.sourceJobCard.category;
+      const idempotencyKey = computeIdempotencyKey({
+        sourceKey: input.sourceKey,
+        candidateId: input.candidateId ?? null,
+        leadId: input.leadId ?? null,
+        channel: "email",
+        draftBodyHash: draft.bodyHash,
+        automationMode: "gated_provider_future",
+      });
+
+      const liveGate = evaluateAgentMailLiveSendGate({
+        sourceKey: input.sourceKey,
+        category,
+        recipientEmail: input.recipientEmail,
+        durableDraftId: input.durableDraftId,
+        durableAttemptId: input.durableAttemptId ?? null,
+        idempotencyKey,
+        sendGatePassed,
+        founderEscalationPresent: draft.founderEscalationPresent,
+        forbiddenClaimsDetected,
+        adminConfirmationText: input.adminConfirmationText,
+      });
+
+      let attemptId: string | null = input.durableAttemptId ?? null;
+      let statusHistory: StatusHistoryEntry[] = [];
+      let persisted = false;
+
+      let alreadySentForThisIdempotencyKey = false;
+
+      if (!attemptId) {
+        try {
+          const { attempt, reused } = await store.createOrReuseAttempt({
+            tenantId: ctx.tenantId,
+            outreachDraftId: input.durableDraftId,
+            sourceKey: input.sourceKey,
+            candidateId: input.candidateId ?? null,
+            leadId: input.leadId ?? null,
+            lane: null,
+            channel: "email",
+            recipientSnapshot: input.recipientEmail,
+            draftSubject: draft.subjectRendered,
+            draftBodySnapshot: draft.bodyRendered,
+            draftBodyHash: draft.bodyHash,
+            templateKey: draft.templateKey,
+            founderEscalationPresent: draft.founderEscalationPresent,
+            forbiddenClaimsScanJson: draft.forbiddenClaimsScanJson,
+            sendGateResultJson: liveGate,
+            automationMode: "gated_provider_future",
+            providerAdapter: "agentmail",
+            providerAttemptId: null,
+            status: "gate_passed",
+            statusHistoryJson: [{ status: "draft_ready", at: draft.createdAt.toISOString(), actor: "HELD" }],
+            createdBy: ctx.user?.id != null ? String(ctx.user.id) : "admin",
+          });
+          attemptId = attempt.id;
+          statusHistory = attempt.statusHistoryJson;
+          persisted = true;
+          // Same idempotency key already produced a real send: never call AgentMail a second time.
+          if (reused && attempt.outreachSentByHeld) alreadySentForThisIdempotencyKey = true;
+        } catch {
+          attemptId = null;
+          persisted = false;
+        }
+      }
+
+      if (alreadySentForThisIdempotencyKey) {
+        return { allowed: false, blockedReasons: ["duplicate_idempotency_attempt_already_sent"], durableAttemptId: attemptId, sendResult: null, statusHistory, persisted };
+      }
+
+      if (!liveGate.allowed) {
+        if (attemptId) {
+          try {
+            const updated = await store.recordLiveSendResult({
+              tenantId: ctx.tenantId,
+              attemptId,
+              providerAdapter: "agentmail",
+              providerAttemptId: null,
+              liveProviderInvoked: false,
+              outreachSentByHeld: false,
+              nextStatus: "blocked",
+              actor: "admin",
+            });
+            statusHistory = updated.statusHistoryJson;
+            persisted = true;
+          } catch {
+            persisted = false;
+          }
+        }
+        return { allowed: false, blockedReasons: liveGate.reasons, durableAttemptId: attemptId, sendResult: null, statusHistory, persisted };
+      }
+
+      const labels = buildAgentMailLabels({ sourceKey: input.sourceKey, category: category ?? "uncategorized" });
+      const sendResult = await sendVendorEmailViaAgentMail({
+        inboxId: process.env.AGENTMAIL_VENDOR_INBOX_ID ?? "",
+        inboxEmail: process.env.AGENTMAIL_VENDOR_INBOX_EMAIL ?? "",
+        recipientEmail: input.recipientEmail,
+        subject: draft.subjectRendered ?? "Availability check",
+        textBody: draft.bodyRendered,
+        labels,
+      });
+
+      if (attemptId) {
+        try {
+          const updated = await store.recordLiveSendResult({
+            tenantId: ctx.tenantId,
+            attemptId,
+            providerAdapter: "agentmail",
+            providerAttemptId: sendResult.providerAttemptId,
+            liveProviderInvoked: sendResult.liveProviderInvoked,
+            outreachSentByHeld: sendResult.status === "sent",
+            nextStatus: sendResult.status === "sent" ? "response_pending" : "blocked",
+            actor: "admin",
+          });
+          statusHistory = updated.statusHistoryJson;
+          persisted = true;
+        } catch {
+          persisted = false;
+        }
+      }
+
+      return {
+        allowed: sendResult.status === "sent",
+        blockedReasons: sendResult.status === "sent" ? [] : [sendResult.errorReason ?? "agentmail_send_rejected"],
+        durableAttemptId: attemptId,
+        sendResult,
+        statusHistory,
+        persisted,
+      };
     }),
 
   /**

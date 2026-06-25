@@ -70,6 +70,9 @@ export default function VendorCastingSprintPage() {
   const [replyText, setReplyText] = useState("");
   const [replyChannel, setReplyChannel] = useState<AttemptChannel | "">("");
   const [replyFromAddress, setReplyFromAddress] = useState("");
+  const [canaryRecipientEmail, setCanaryRecipientEmail] = useState("");
+  const [canaryConfirmationText, setCanaryConfirmationText] = useState("");
+  const [canaryConfirmOpen, setCanaryConfirmOpen] = useState(false);
 
   const result = trpc.admin.vendorCastingSprint.mission.useQuery({ sourceKey: appliedSourceKey });
   const handoff = trpc.admin.vendorCastingSprint.bootstrapHandoff.useQuery(
@@ -87,6 +90,7 @@ export default function VendorCastingSprintPage() {
   );
   const providerReadiness = trpc.admin.vendorCastingSprint.providerReadiness.useQuery(undefined, { enabled: consoleOpen });
   const runGatedFutureAttempt = trpc.admin.vendorCastingSprint.runContactAttempt.useMutation();
+  const runAgentMailCanary = trpc.admin.vendorCastingSprint.runSupervisedAgentMailCanary.useMutation();
 
   const attemptStatus = useMemo(
     () => computeAttemptStatus({ draftGenerated: generateDraft.data?.allowed === true, copied, manuallySent }),
@@ -195,6 +199,21 @@ export default function VendorCastingSprintPage() {
       automationMode: "gated_provider_future",
       vendorFacts: vendorFactsPayload(),
     }, { onSuccess: () => auditFeed.refetch() });
+  }
+
+  function runSupervisedAgentMailCanary() {
+    const durableDraftId = generateDraft.data?.allowed ? generateDraft.data.durableDraftId : null;
+    if (!durableDraftId || !canaryRecipientEmail.trim() || !canaryConfirmationText.trim()) return;
+    runAgentMailCanary.mutate({
+      sourceKey: appliedSourceKey,
+      durableDraftId,
+      durableAttemptId: runContactAttempt.data?.allowed ? runContactAttempt.data.durableAttemptId : null,
+      candidateId: createCandidate.data?.candidateId ?? null,
+      leadId: handoff.data?.handoff?.leadId ?? selectedLeadId ?? null,
+      channel: "email",
+      recipientEmail: canaryRecipientEmail,
+      adminConfirmationText: canaryConfirmationText,
+    }, { onSuccess: () => { auditFeed.refetch(); setCanaryConfirmOpen(false); } });
   }
 
   function ingestSimulatedReply() {
@@ -505,7 +524,27 @@ export default function VendorCastingSprintPage() {
                               <p className="text-amber-800">
                                 ⏳ Website form provider: gated/future &mdash; {providerReadiness.data.websiteForm.blockedReasons.map(label).join(" · ")}
                               </p>
-                              <p className="font-semibold text-black/70">No real vendor contact will be sent in this slice.</p>
+                              <div className={providerReadiness.data.agentMail.canaryEnabled && providerReadiness.data.agentMail.configured ? "rounded-lg border border-amber-200 bg-amber-50 p-2" : "rounded-lg border border-black/10 bg-black/[0.02] p-2"}>
+                                <p className="font-semibold">
+                                  {providerReadiness.data.agentMail.configured ? "⏳" : "✕"} AgentMail: {providerReadiness.data.agentMail.configured ? "configured" : "missing config"}
+                                  {providerReadiness.data.agentMail.canaryEnabled ? ", canary enabled" : ", canary disabled"}
+                                </p>
+                                {providerReadiness.data.agentMail.missingEnvVars.length > 0 ? (
+                                  <p className="mt-1 text-black/55">Missing env vars: {providerReadiness.data.agentMail.missingEnvVars.join(", ")}</p>
+                                ) : null}
+                                <p className="mt-1 text-black/55">
+                                  Source allowlist: {providerReadiness.data.agentMail.sourceAllowlist.join(", ") || "none"} &middot;
+                                  {" "}Category allowlist: {providerReadiness.data.agentMail.categoryAllowlist.join(", ") || "none"}
+                                </p>
+                                <p className="mt-1 text-black/55">
+                                  Inbox id present: {providerReadiness.data.agentMail.inboxIdPresent ? "yes" : "no"} &middot;
+                                  {" "}Inbox email present: {providerReadiness.data.agentMail.inboxEmailPresent ? "yes" : "no"}
+                                </p>
+                                <p className="mt-1 font-semibold">Live provider is gated. Live send allowed: {String(providerReadiness.data.agentMail.liveSendAllowed)}.</p>
+                                <p className="mt-1 text-black/55">{providerReadiness.data.agentMail.nextAction}</p>
+                                <p className="mt-1 text-black/45">Webhooks (inbound reply ingestion) are deferred to Slice 74f.</p>
+                              </div>
+                              <p className="font-semibold text-black/70">No real vendor contact will be sent automatically in this slice.</p>
                               <p className="text-black/55">Next canary slice can enable supervised email: {providerReadiness.data.nextRequiredActionForCanary}</p>
                               <div className="mt-2 flex items-center gap-2">
                                 <button
@@ -520,6 +559,84 @@ export default function VendorCastingSprintPage() {
                                   <span className="text-xs text-red-700">Blocked: {runGatedFutureAttempt.data.blockedReasons.map(label).join(" · ")}</span>
                                 ) : null}
                               </div>
+
+                              {generateDraft.data?.allowed && generateDraft.data.durableDraftId ? (
+                                <div className="mt-3 rounded-lg border-2 border-amber-300 bg-amber-50 p-3">
+                                  <p className="text-xs font-bold uppercase tracking-[0.1em] text-amber-900">AgentMail supervised email canary</p>
+                                  <ul className="mt-1 list-disc space-y-0.5 pl-5 text-amber-950">
+                                    <li>This does not book anything.</li>
+                                    <li>This does not mean the provider accepted.</li>
+                                    <li>This does not authorize payment.</li>
+                                    <li>This does not dispatch.</li>
+                                  </ul>
+                                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                    <input
+                                      className="rounded-lg border border-black/15 px-2 py-1.5 text-xs"
+                                      placeholder="Recipient email"
+                                      value={canaryRecipientEmail}
+                                      onChange={event => setCanaryRecipientEmail(event.target.value)}
+                                    />
+                                    <p className="text-xs text-amber-900/80">AgentMail inbox: held@agentmail.to</p>
+                                  </div>
+                                  {!canaryConfirmOpen ? (
+                                    <button
+                                      className="mt-2 rounded-lg bg-amber-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                                      disabled={!canaryRecipientEmail.trim()}
+                                      onClick={() => setCanaryConfirmOpen(true)}
+                                      type="button"
+                                    >
+                                      Send supervised email canary&hellip;
+                                    </button>
+                                  ) : (
+                                    <div className="mt-2 space-y-2">
+                                      <p className="text-xs text-amber-900">
+                                        Type exactly <span className="font-mono font-semibold">SEND SUPERVISED EMAIL CANARY</span> to confirm:
+                                      </p>
+                                      <input
+                                        className="w-full rounded-lg border border-black/15 px-2 py-1.5 text-xs font-mono"
+                                        placeholder="SEND SUPERVISED EMAIL CANARY"
+                                        value={canaryConfirmationText}
+                                        onChange={event => setCanaryConfirmationText(event.target.value)}
+                                      />
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          className="rounded-lg bg-amber-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                                          disabled={runAgentMailCanary.isPending || canaryConfirmationText !== "SEND SUPERVISED EMAIL CANARY"}
+                                          onClick={runSupervisedAgentMailCanary}
+                                          type="button"
+                                        >
+                                          Confirm send
+                                        </button>
+                                        <button
+                                          className="rounded-lg border border-black/15 px-3 py-1.5 text-xs font-semibold"
+                                          onClick={() => { setCanaryConfirmOpen(false); setCanaryConfirmationText(""); }}
+                                          type="button"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {runAgentMailCanary.data && !runAgentMailCanary.data.allowed ? (
+                                    <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-800">
+                                      Blocked: {runAgentMailCanary.data.blockedReasons.map(label).join(" · ")}
+                                    </div>
+                                  ) : null}
+
+                                  {runAgentMailCanary.data?.allowed ? (
+                                    <div className="mt-2 space-y-1 rounded-lg border border-emerald-200 bg-white p-2 text-xs text-emerald-950">
+                                      <p>AgentMail inbox: held@agentmail.to &middot; Recipient: {canaryRecipientEmail}</p>
+                                      <p>Durable attempt id: <span className="font-mono">{runAgentMailCanary.data.durableAttemptId}</span></p>
+                                      {runAgentMailCanary.data.sendResult?.providerAttemptId ? (
+                                        <p>Provider message id: <span className="font-mono">{runAgentMailCanary.data.sendResult.providerAttemptId}</span></p>
+                                      ) : null}
+                                      <p className="font-semibold">Status: response pending &mdash; HELD is waiting for vendor reply.</p>
+                                      <p className="text-black/55">HELD labels stored on the AgentMail message (or in the durable attempt if unsupported).</p>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : null}
                             </div>
                           ) : null}
                         </div>
