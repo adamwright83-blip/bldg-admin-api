@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { discoverWebsiteContactEmail } from "./vendorWebsiteContactEmailDiscovery";
+import { discoverWebsiteContactEmail, isPlatformOrGeneratedEmail } from "./vendorWebsiteContactEmailDiscovery";
 
 function mockFetch(responses: Record<string, { ok?: boolean; status?: number; html?: string; throwAbort?: boolean }>): typeof fetch {
   return (async (url: string) => {
@@ -164,5 +164,62 @@ describe("discoverWebsiteContactEmail -- isolation", () => {
     const path = await import("node:path");
     const source = fs.readFileSync(path.resolve(__dirname, "vendorWebsiteContactEmailDiscovery.ts"), "utf8");
     expect(source).not.toMatch(/sendSms\(|sendYelpMessage\(|placeCall\(|elevenlabs\(|sendVendorEmailViaAgentMail/i);
+  });
+});
+
+describe("isPlatformOrGeneratedEmail (Slice 82f)", () => {
+  it("rejects the exact Sentry/Wix DSN address that produced the false positive", () => {
+    expect(isPlatformOrGeneratedEmail("dd0a55ccb8124b9c9d938e3acf41f8aa@sentry.wixpress.com")).toBe(true);
+  });
+
+  it("rejects any address under sentry.wixpress.com or wixpress.com generally", () => {
+    expect(isPlatformOrGeneratedEmail("abc123@sentry.wixpress.com")).toBe(true);
+    expect(isPlatformOrGeneratedEmail("hello@static.wixpress.com")).toBe(true);
+  });
+
+  it("rejects a hashed/generated local-part regardless of domain", () => {
+    expect(isPlatformOrGeneratedEmail("dd0a55ccb8124b9c9d938e3acf41f8aa@some-other-domain.com")).toBe(true);
+  });
+
+  it("never rejects a normal business email", () => {
+    expect(isPlatformOrGeneratedEmail("info@vendor-domain.com")).toBe(false);
+    expect(isPlatformOrGeneratedEmail("hello@vendor-domain.com")).toBe(false);
+    expect(isPlatformOrGeneratedEmail("booking@vendor-domain.com")).toBe(false);
+    expect(isPlatformOrGeneratedEmail("janedoe@gmail.com")).toBe(false);
+  });
+});
+
+describe("discoverWebsiteContactEmail -- Slice 82f platform/generated email rejection", () => {
+  it("rejects the Sentry/Wix DSN found via mailto, falling back to no_email_found", async () => {
+    const fetchFn = mockFetch({ "https://example.com/": { html: '<a href="mailto:dd0a55ccb8124b9c9d938e3acf41f8aa@sentry.wixpress.com">Contact</a>' } });
+    const result = await discoverWebsiteContactEmail({ candidateName: "Test", website: "https://example.com/", fetchFn });
+    expect(result.primaryEmail).toBeNull();
+    expect(result.emailDiscoveryStatus).toBe("no_email_found");
+  });
+
+  it("rejects the Sentry/Wix DSN found as plain text inside an inline script tag", async () => {
+    const fetchFn = mockFetch({
+      "https://example.com/": { html: '<html><body>Welcome</body><script>var x = {dsn: "dd0a55ccb8124b9c9d938e3acf41f8aa@sentry.wixpress.com"};</script></html>' },
+    });
+    const result = await discoverWebsiteContactEmail({ candidateName: "Test", website: "https://example.com/", fetchFn });
+    expect(result.primaryEmail).toBeNull();
+  });
+
+  it("a real vendor email is still found when it coexists with a platform/Sentry email on the page", async () => {
+    const fetchFn = mockFetch({
+      "https://example.com/": { html: '<body>Email us at hello@vendor.com</body><script>var x = "dd0a55ccb8124b9c9d938e3acf41f8aa@sentry.wixpress.com";</script>' },
+    });
+    const result = await discoverWebsiteContactEmail({ candidateName: "Test", website: "https://example.com/", fetchFn });
+    expect(result.primaryEmail).toBe("hello@vendor.com");
+  });
+
+  it("an unclosed trailing <script> tag (response truncated mid-bundle) does not leak embedded JS into the plain-text email scan", async () => {
+    // Simulates the real failure mode: a response cap landing in the
+    // middle of a large inline script, leaving no closing </script>
+    // anywhere in the captured text.
+    const truncatedHtml = '<html><body>Welcome</body><script>var sentryDsn = "dd0a55ccb8124b9c9d938e3acf41f8aa@sentry.wixpress.com"; var moreJunk = "lots of unrelated bundle code here without a closing tag';
+    const fetchFn = mockFetch({ "https://example.com/": { html: truncatedHtml } });
+    const result = await discoverWebsiteContactEmail({ candidateName: "Test", website: "https://example.com/", fetchFn });
+    expect(result.primaryEmail).toBeNull();
   });
 });

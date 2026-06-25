@@ -157,8 +157,27 @@ export async function fetchWebsiteTextSnippet(
   }
 }
 
+/**
+ * Slice 82f. The fetch above is capped at MAX_WEBSITE_FETCH_BYTES --
+ * on a large bundled page (common on Wix/Squarespace/site-builder
+ * sites), that cap can land in the MIDDLE of a <script> tag, leaving
+ * an opening <script without its closing </script> anywhere in the
+ * captured text. The paired-tag regex below can never match an
+ * unclosed tag, so without this step, an entire inline JS bundle --
+ * including SDK config strings that happen to look like an email,
+ * e.g. a Sentry DSN -- would otherwise survive into "plain text" and
+ * get matched by EMAIL_PATTERN. Truncates at the last unclosed
+ * <script>/<style> open tag before stripping the rest normally.
+ */
+function truncateAtUnclosedTag(html: string, tag: "script" | "style"): string {
+  const lastOpen = html.lastIndexOf(`<${tag}`);
+  const lastClose = html.lastIndexOf(`</${tag}>`);
+  return lastOpen > lastClose ? html.slice(0, lastOpen) : html;
+}
+
 function stripHtml(html: string): string {
-  return html
+  const safe = truncateAtUnclosedTag(truncateAtUnclosedTag(html, "script"), "style");
+  return safe
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
@@ -170,10 +189,37 @@ function stripHtml(html: string): string {
 const EMAIL_PATTERN = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 const MAILTO_PATTERN = /mailto:([^"'?\s>]+)/gi;
 
+/**
+ * Slice 82f. Real business emails only -- rejects platform/telemetry
+ * SDK config strings (Sentry, Bugsnag, etc. embed a DSN that is
+ * syntactically a valid email, e.g. <hash>@sentry.wixpress.com) and
+ * generated/hashed local-parts that are never how a real vendor inbox
+ * is named.
+ */
+const PLATFORM_EMAIL_DOMAIN_SUBSTRINGS = ["sentry", "wixpress", "bugsnag", "rollbar", "raygun", "datadoghq", "newrelic", "sentry-cdn"];
+const GENERATED_LOCAL_PART_PATTERN = /^[a-f0-9]{20,}$/i;
+
+export function isPlatformOrGeneratedEmail(email: string): boolean {
+  const atIndex = email.lastIndexOf("@");
+  if (atIndex < 1) return true;
+  const localPart = email.slice(0, atIndex);
+  const domain = email.slice(atIndex + 1).toLowerCase();
+  if (PLATFORM_EMAIL_DOMAIN_SUBSTRINGS.some(substring => domain.includes(substring))) return true;
+  if (GENERATED_LOCAL_PART_PATTERN.test(localPart)) return true;
+  return false;
+}
+
 function extractEmails(html: string, plainText: string): string[] {
   const found = new Set<string>();
-  for (const m of Array.from(html.matchAll(MAILTO_PATTERN))) found.add(m[1].toLowerCase());
-  for (const m of Array.from(plainText.matchAll(EMAIL_PATTERN))) found.add(m[0].toLowerCase());
+  const safeHtml = truncateAtUnclosedTag(truncateAtUnclosedTag(html, "script"), "style");
+  for (const m of Array.from(safeHtml.matchAll(MAILTO_PATTERN))) {
+    const email = m[1].toLowerCase();
+    if (!isPlatformOrGeneratedEmail(email)) found.add(email);
+  }
+  for (const m of Array.from(plainText.matchAll(EMAIL_PATTERN))) {
+    const email = m[0].toLowerCase();
+    if (!isPlatformOrGeneratedEmail(email)) found.add(email);
+  }
   return Array.from(found);
 }
 

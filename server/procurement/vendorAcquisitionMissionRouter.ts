@@ -1285,6 +1285,42 @@ export function createVendorAcquisitionMissionRouter(
           return { ...entry, verification, evidence, fulfillment, emailDiscovery };
         }));
 
+        // Slice 82f. Defense in depth beyond the domain/pattern
+        // blocklists above: the exact same email surfacing for two or
+        // more UNRELATED candidates in this same run is itself strong
+        // evidence of a shared platform/template artifact (a website-
+        // builder's generated support address, a shared agency inbox
+        // embedded in a template, etc.), not a real per-vendor inbox.
+        // Strips that email from every candidate it appears on rather
+        // than guessing which one (if any) it might really belong to.
+        const emailOccurrenceCounts = new Map<string, number>();
+        for (const entry of verifiedCandidates) {
+          const candidateEmails = new Set([...entry.evidence.emailAddressesFound, ...(entry.emailDiscovery?.emailsFound ?? [])]);
+          for (const email of Array.from(candidateEmails)) emailOccurrenceCounts.set(email, (emailOccurrenceCounts.get(email) ?? 0) + 1);
+        }
+        const sharedAcrossCandidates = new Set(
+          Array.from(emailOccurrenceCounts.entries()).filter(([, count]) => count > 1).map(([email]) => email),
+        );
+        if (sharedAcrossCandidates.size > 0) {
+          for (let i = 0; i < verifiedCandidates.length; i += 1) {
+            const entry = verifiedCandidates[i];
+            const filteredVerifierEmails = entry.evidence.emailAddressesFound.filter(email => !sharedAcrossCandidates.has(email));
+            const filteredDiscoveryEmails = entry.emailDiscovery?.emailsFound.filter(email => !sharedAcrossCandidates.has(email)) ?? [];
+            if (filteredVerifierEmails.length === entry.evidence.emailAddressesFound.length
+              && filteredDiscoveryEmails.length === (entry.emailDiscovery?.emailsFound.length ?? 0)) continue;
+            verifiedCandidates[i] = {
+              ...entry,
+              evidence: { ...entry.evidence, emailAddressesFound: filteredVerifierEmails },
+              emailDiscovery: entry.emailDiscovery ? {
+                ...entry.emailDiscovery,
+                emailsFound: filteredDiscoveryEmails,
+                primaryEmail: filteredDiscoveryEmails[0] ?? null,
+                emailDiscoveryStatus: filteredDiscoveryEmails[0] ? entry.emailDiscovery.emailDiscoveryStatus : "no_email_found",
+              } : null,
+            };
+          }
+        }
+
         // Slice 81c. Rank every candidate resolved in this run by
         // FULFILLMENT TIER first (green mobile/building-service, then
         // blue drive-to storefront fallback, then yellow needs-review,

@@ -113,14 +113,51 @@ const EMAIL_PATTERN = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 const INVALID_EMAIL_PATTERN = /^(noreply|no-reply|donotreply|do-not-reply|test|example)@|@example\.(com|org|net)$/i;
 const PHONE_PATTERN = /\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/;
 
+/**
+ * Slice 82f. Real business emails only -- rejects platform/telemetry
+ * SDK config strings (Sentry, Bugsnag, etc. embed a DSN that is
+ * syntactically a valid email, e.g. <hash>@sentry.wixpress.com) and
+ * generated/hashed local-parts that are never how a real vendor inbox
+ * is named. Mirrors the same rule in vendorCandidateServiceAreaVerifier.ts.
+ */
+const PLATFORM_EMAIL_DOMAIN_SUBSTRINGS = ["sentry", "wixpress", "bugsnag", "rollbar", "raygun", "datadoghq", "newrelic", "sentry-cdn"];
+const GENERATED_LOCAL_PART_PATTERN = /^[a-f0-9]{20,}$/i;
+
+export function isPlatformOrGeneratedEmail(email: string): boolean {
+  const atIndex = email.lastIndexOf("@");
+  if (atIndex < 1) return true;
+  const localPart = email.slice(0, atIndex);
+  const domain = email.slice(atIndex + 1).toLowerCase();
+  if (PLATFORM_EMAIL_DOMAIN_SUBSTRINGS.some(substring => domain.includes(substring))) return true;
+  if (GENERATED_LOCAL_PART_PATTERN.test(localPart)) return true;
+  return false;
+}
+
+/**
+ * Slice 82f. The fetch above is capped at MAX_RESPONSE_BYTES -- on a
+ * large bundled page (common on Wix/Squarespace/site-builder sites),
+ * that cap can land in the MIDDLE of a <script> tag, leaving an
+ * opening <script without its closing </script> anywhere in the
+ * captured text. The paired-tag regex below can never match an
+ * unclosed tag, so without this step, an entire inline JS bundle --
+ * including SDK config strings that happen to look like an email --
+ * would otherwise survive and get matched by EMAIL_PATTERN.
+ */
+function truncateAtUnclosedTag(html: string, tag: "script" | "style"): string {
+  const lastOpen = html.lastIndexOf(`<${tag}`);
+  const lastClose = html.lastIndexOf(`</${tag}>`);
+  return lastOpen > lastClose ? html.slice(0, lastOpen) : html;
+}
+
 function stripScriptsAndStyles(html: string): string {
-  return html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ");
+  const safe = truncateAtUnclosedTag(truncateAtUnclosedTag(html, "script"), "style");
+  return safe.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ");
 }
 
 /**
  * Extracts and validates real emails only -- never invents one from the
  * domain name, never guesses info@domain.com unless it literally
- * appears, and rejects obvious placeholder/fake addresses.
+ * appears, and rejects obvious placeholder/fake/platform addresses.
  */
 function extractValidEmails(html: string): { emails: string[]; foundViaMailto: boolean } {
   const cleaned = stripScriptsAndStyles(html);
@@ -128,14 +165,14 @@ function extractValidEmails(html: string): { emails: string[]; foundViaMailto: b
   let foundViaMailto = false;
   for (const match of Array.from(cleaned.matchAll(MAILTO_PATTERN))) {
     const email = decodeURIComponent(match[1]).toLowerCase().split("?")[0];
-    if (email && !INVALID_EMAIL_PATTERN.test(email)) {
+    if (email && !INVALID_EMAIL_PATTERN.test(email) && !isPlatformOrGeneratedEmail(email)) {
       found.add(email);
       foundViaMailto = true;
     }
   }
   for (const match of Array.from(cleaned.matchAll(EMAIL_PATTERN))) {
     const email = match[0].toLowerCase();
-    if (!INVALID_EMAIL_PATTERN.test(email)) found.add(email);
+    if (!INVALID_EMAIL_PATTERN.test(email) && !isPlatformOrGeneratedEmail(email)) found.add(email);
   }
   return { emails: Array.from(found), foundViaMailto };
 }

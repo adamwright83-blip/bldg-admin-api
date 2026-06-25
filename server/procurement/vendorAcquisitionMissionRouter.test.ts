@@ -2073,6 +2073,51 @@ describe("classifyOutreachReadiness -- Slice 82b emailDiscovery integration", ()
   });
 });
 
+describe("vendorAcquisitionMissionRouter -- runDiscovery cross-candidate duplicate email rejection (Slice 82f)", () => {
+  it("strips an email shared by two unrelated candidates from both, even when the domain blocklist did not catch it", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [
+      { provider: "google_places" as const, placeId: "p1", businessName: "Mobile A", rating: 4.9, reviewCount: 50, address: "1 Main St", website: "https://example.com", phone: "555-0000", coordinates: null, sourceUrl: "https://maps/p1" },
+      { provider: "google_places" as const, placeId: "p2", businessName: "Mobile B", rating: 4.8, reviewCount: 40, address: "2 Main St", website: "https://other.com", phone: "555-0001", coordinates: null, sourceUrl: "https://maps/p2" },
+    ] });
+    const matchStore = makeMockMatchStore();
+    // Both unrelated candidates surface the exact same address -- a
+    // shared-template/platform artifact, not two real per-vendor inboxes.
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "verified_serves_target", emailAddressesFound: ["shared-artifact@example-platform.com"] }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const callA = matchStore.upsertMatch.mock.calls.find(([call]) => call.matchEvidence.businessName === "Mobile A")?.[0];
+    const callB = matchStore.upsertMatch.mock.calls.find(([call]) => call.matchEvidence.businessName === "Mobile B")?.[0];
+    expect(callA.matchEvidence.serviceAreaEffectiveEvidence.emailAddressesFound).toEqual([]);
+    expect(callB.matchEvidence.serviceAreaEffectiveEvidence.emailAddressesFound).toEqual([]);
+    expect(callA.matchEvidence.outreachReadinessQueue).not.toBe("ready_for_agentmail");
+    expect(callB.matchEvidence.outreachReadinessQueue).not.toBe("ready_for_agentmail");
+  });
+
+  it("does not strip an email that is unique to one candidate", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [
+      { provider: "google_places" as const, placeId: "p1", businessName: "Mobile A", rating: 4.9, reviewCount: 50, address: "1 Main St", website: "https://example.com", phone: "555-0000", coordinates: null, sourceUrl: "https://maps/p1" },
+      { provider: "google_places" as const, placeId: "p2", businessName: "Mobile B", rating: 4.8, reviewCount: 40, address: "2 Main St", website: "https://other.com", phone: "555-0001", coordinates: null, sourceUrl: "https://maps/p2" },
+    ] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockImplementation(async (input: { candidate: { address: string | null } }) => {
+      if (input.candidate.address === "1 Main St") return verification({ serviceAreaStatus: "verified_serves_target", emailAddressesFound: ["hello-a@vendor-a.com"] });
+      return verification({ serviceAreaStatus: "verified_serves_target", emailAddressesFound: ["hello-b@vendor-b.com"] });
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const callA = matchStore.upsertMatch.mock.calls.find(([call]) => call.matchEvidence.businessName === "Mobile A")?.[0];
+    const callB = matchStore.upsertMatch.mock.calls.find(([call]) => call.matchEvidence.businessName === "Mobile B")?.[0];
+    expect(callA.matchEvidence.serviceAreaEffectiveEvidence.emailAddressesFound).toEqual(["hello-a@vendor-a.com"]);
+    expect(callB.matchEvidence.serviceAreaEffectiveEvidence.emailAddressesFound).toEqual(["hello-b@vendor-b.com"]);
+  });
+});
+
 describe("vendorAcquisitionMissionRouter -- runDiscovery website email discovery integration (Slice 82b)", () => {
   it("calls the email discovery function only for green candidates with no email already found from the homepage", async () => {
     const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });

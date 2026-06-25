@@ -3,6 +3,7 @@ import {
   extractZipFromAddress,
   fetchWebsiteTextSnippet,
   haversineDistanceMiles,
+  isPlatformOrGeneratedEmail,
   verifyCandidateServiceArea,
 } from "./vendorCandidateServiceAreaVerifier";
 
@@ -252,5 +253,49 @@ describe("verifyCandidateServiceArea -- classification", () => {
       fetchFn: spyFetch,
     });
     expect(methodCalled).toBeNull();
+  });
+});
+
+describe("isPlatformOrGeneratedEmail (Slice 82f)", () => {
+  it("rejects the exact Sentry/Wix DSN address that produced the false positive", () => {
+    expect(isPlatformOrGeneratedEmail("dd0a55ccb8124b9c9d938e3acf41f8aa@sentry.wixpress.com")).toBe(true);
+  });
+
+  it("never rejects a normal business email", () => {
+    expect(isPlatformOrGeneratedEmail("info@vendor-domain.com")).toBe(false);
+    expect(isPlatformOrGeneratedEmail("janedoe@gmail.com")).toBe(false);
+  });
+});
+
+describe("verifyCandidateServiceArea -- Slice 82f platform/generated email rejection", () => {
+  it("rejects the Sentry/Wix DSN found via mailto", async () => {
+    const result = await verifyCandidateServiceArea({
+      candidate: { address: null, website: "https://example.com", phone: null, coordinates: null },
+      targetZip: "90027",
+      targetBuildingName: "OPUS LA",
+      fetchFn: mockFetch('<a href="mailto:dd0a55ccb8124b9c9d938e3acf41f8aa@sentry.wixpress.com">Contact</a>'),
+    });
+    expect(result.emailAddressesFound).toEqual([]);
+  });
+
+  it("an unclosed trailing <script> tag (response truncated mid-bundle) does not leak an embedded Sentry DSN into the email scan", async () => {
+    const truncatedHtml = '<html><body>Welcome</body><script>var sentryDsn = "dd0a55ccb8124b9c9d938e3acf41f8aa@sentry.wixpress.com"; var moreJunk = "lots of unrelated bundle code here without a closing tag';
+    const result = await verifyCandidateServiceArea({
+      candidate: { address: null, website: "https://example.com", phone: null, coordinates: null },
+      targetZip: "90027",
+      targetBuildingName: "OPUS LA",
+      fetchFn: mockFetch(truncatedHtml),
+    });
+    expect(result.emailAddressesFound).toEqual([]);
+  });
+
+  it("a real vendor email is still found when it coexists with a platform/Sentry email on the page", async () => {
+    const result = await verifyCandidateServiceArea({
+      candidate: { address: null, website: "https://example.com", phone: null, coordinates: null },
+      targetZip: "90027",
+      targetBuildingName: "OPUS LA",
+      fetchFn: mockFetch('<body>Email us at hello@vendor.com</body><script>var x = "dd0a55ccb8124b9c9d938e3acf41f8aa@sentry.wixpress.com";</script>'),
+    });
+    expect(result.emailAddressesFound).toEqual(["hello@vendor.com"]);
   });
 });
