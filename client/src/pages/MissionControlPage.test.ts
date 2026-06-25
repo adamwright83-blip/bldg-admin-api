@@ -20,8 +20,8 @@ describe("MissionControlPage -- Slice 75a source isolation", () => {
     expect(source).toMatch(/Start Mission/);
   });
 
-  it("does not claim a discovery agent ran -- explicitly states no candidates were found", () => {
-    expect(source).toMatch(/No discovery agent has run yet/);
+  it("does not claim a discovery agent already ran on mission creation -- offers Run discovery instead (updated in the 76a CTA bugfix)", () => {
+    expect(source).toMatch(/Google Places discovery is available\. Run discovery to/);
   });
 
   it("labels mobile-preferred as not yet wired, rather than silently submitting it as real criteria", () => {
@@ -107,7 +107,7 @@ describe("MissionControlPage -- Slice 75b sub-agent orchestra", () => {
   });
 
   it("shows 'Waiting for mission' when no mission exists, and only mission-gated honest statuses otherwise", () => {
-    expect(source).toMatch(/latestMission \? agent\.statusWithMission : "Waiting for mission"/);
+    expect(source).toMatch(/effectiveMissionId \? agent\.statusWithMission : "Waiting for mission"/);
     for (const status of [
       "Ready to inspect places", "Waiting for provider keys", "AgentMail ready, canary gated",
       "Webhook ready", "Waiting for candidates", "Not configured yet",
@@ -220,7 +220,7 @@ describe("MissionControlPage -- Slice 76a Run discovery action", () => {
   });
 
   it("is disabled with no mission, and never auto-fires on initial render", () => {
-    expect(source).toMatch(/disabled=\{!latestMission \|\| runDiscovery\.isPending\}/);
+    expect(source).toMatch(/disabled=\{!effectiveMissionId \|\| runDiscovery\.isPending\}/);
     expect(source).not.toMatch(/useEffect\([^)]*runDiscovery\.mutate/s);
   });
 });
@@ -232,5 +232,52 @@ describe("MissionControlPage -- Slice 76a source isolation", () => {
 
   it("still never claims a truth field is true", () => {
     expect(source).not.toMatch(/provider_accepted:\s*true|bookingConfirmed:\s*true|paymentAuthorized:\s*true|dispatched:\s*true/i);
+  });
+});
+
+describe("MissionControlPage -- Run Discovery CTA activation bugfix", () => {
+  it("sets activeMissionId from the createMission response, not just from the recentMissions refetch", () => {
+    expect(source).toMatch(/const \[activeMissionId, setActiveMissionId\] = useState<string \| null>\(null\)/);
+    expect(source).toMatch(/onSuccess: data => \{\s*if \(data\.allowed && data\.missionId\) setActiveMissionId\(data\.missionId\)/);
+  });
+
+  it("derives effectiveMissionId from activeMissionId first, falling back to the latest list entry", () => {
+    expect(source).toMatch(/const effectiveMissionId = activeMissionId \?\? latestMission\?\.id \?\? null/);
+  });
+
+  it("Run discovery's click handler calls the mutation with effectiveMissionId via startDiscovery", () => {
+    expect(source).toMatch(/function startDiscovery\(\) \{\s*if \(effectiveMissionId\) runDiscovery\.mutate\(\{ missionId: effectiveMissionId \}\)/);
+    expect(source).toMatch(/onClick=\{startDiscovery\}/);
+  });
+
+  it("renders a second, prominent Run discovery CTA directly inside the green mission-active box", () => {
+    const successBox = source.match(/createMission\.data\.allowed \? \([\s\S]*?\) : \(/)?.[0] ?? "";
+    expect(successBox).toMatch(/Run discovery/);
+    expect(successBox).toMatch(/onClick=\{startDiscovery\}/);
+  });
+
+  it("the Sub-Agent Orchestra Run discovery button is visually solid/obvious once a mission is active, not just a faint outline", () => {
+    expect(source).toMatch(/effectiveMissionId\s*\n?\s*\?\s*"rounded-lg bg-amber-600[^"]*text-white/);
+  });
+
+  it("removed the stale 75a copy claiming connectors are not implemented", () => {
+    expect(source).not.toMatch(/Google\/Yelp source\s*\n?\s*connectors are not implemented in this slice/);
+  });
+
+  it("shows the updated 76a-aware composer copy", () => {
+    expect(source).toMatch(/Google Places discovery is available\. Run discovery to\s*\n?\s*find real candidates\. No outreach will be sent\./);
+  });
+
+  it("renders a visible error state if the discovery mutation fails", () => {
+    expect(source).toMatch(/runDiscovery\.isError/);
+    expect(source).toMatch(/Discovery request failed/);
+  });
+
+  it("shows an active-mission fallback line using activeMissionId even before recentMissions has refetched", () => {
+    expect(source).toMatch(/Mission active &middot; id <span className="font-mono">\{activeMissionId\}<\/span>/);
+  });
+
+  it("never invokes any outreach/send path from the bugfixed activation flow", () => {
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid/i);
   });
 });

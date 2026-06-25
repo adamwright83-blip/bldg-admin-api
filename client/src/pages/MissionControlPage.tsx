@@ -78,6 +78,13 @@ export default function MissionControlPage() {
   const recentAttempts = trpc.admin.vendorCastingSprint.recentContactAttempts.useQuery({ limit: 10 });
   const runDiscovery = trpc.admin.vendorAcquisitionMission.runDiscovery.useMutation();
 
+  // Set immediately from the createMission response so Run Discovery
+  // enables right away -- it does not wait on the recentMissions refetch
+  // round-trip, which is what left the button stuck disabled after
+  // Start Mission succeeded.
+  const [activeMissionId, setActiveMissionId] = useState<string | null>(null);
+  const effectiveMissionId = activeMissionId ?? latestMission?.id ?? null;
+
   const [trainingDraft, setTrainingDraft] = useState("");
   const [savedTrainingRules, setSavedTrainingRules] = useState<string[]>([]);
 
@@ -92,7 +99,16 @@ export default function MissionControlPage() {
         : { requireVerifiedContact: true },
       outreachMode: "draft_only",
       activateImmediately: true,
-    }, { onSuccess: () => recentMissions.refetch() });
+    }, {
+      onSuccess: data => {
+        if (data.allowed && data.missionId) setActiveMissionId(data.missionId);
+        recentMissions.refetch();
+      },
+    });
+  }
+
+  function startDiscovery() {
+    if (effectiveMissionId) runDiscovery.mutate({ missionId: effectiveMissionId });
   }
 
   return (
@@ -172,10 +188,17 @@ export default function MissionControlPage() {
                   Mission {createMission.data.status === "active" ? "active" : "draft ready"} &middot; id <span className="font-mono">{createMission.data.missionId}</span>
                 </p>
                 <p className="mt-1">
-                  This is a real, persisted sourcing target. No discovery agent has run yet &mdash; Google/Yelp source
-                  connectors are not implemented in this slice, so no candidates have been found and no outreach has
-                  been drafted or sent.
+                  This is a real, persisted sourcing target. Google Places discovery is available. Run discovery to
+                  find real candidates. No outreach will be sent.
                 </p>
+                <button
+                  type="button"
+                  className="mt-2 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                  disabled={!effectiveMissionId || runDiscovery.isPending}
+                  onClick={startDiscovery}
+                >
+                  {runDiscovery.isPending ? "Running discovery…" : "Run discovery"}
+                </button>
               </>
             ) : (
               <p>Mission blocked: {createMission.data.reasons.map(label).join(" · ")}</p>
@@ -277,9 +300,13 @@ export default function MissionControlPage() {
           <h2 className="text-sm font-bold">Sub-Agent Orchestra</h2>
           <button
             type="button"
-            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 disabled:opacity-40"
-            disabled={!latestMission || runDiscovery.isPending}
-            onClick={() => latestMission && runDiscovery.mutate({ missionId: latestMission.id })}
+            className={
+              effectiveMissionId
+                ? "rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:opacity-40"
+                : "rounded-lg border border-black/10 px-3 py-1.5 text-xs font-semibold text-black/35 disabled:opacity-40"
+            }
+            disabled={!effectiveMissionId || runDiscovery.isPending}
+            onClick={startDiscovery}
           >
             {runDiscovery.isPending ? "Running discovery…" : "Run discovery"}
           </button>
@@ -288,11 +315,19 @@ export default function MissionControlPage() {
           <p className="mt-1 text-xs text-black/55">
             Latest mission &middot; {label(latestMission.category)} &middot; {latestMission.geographyLabel} &middot; target {latestMission.targetQuantity}
           </p>
+        ) : activeMissionId ? (
+          <p className="mt-1 text-xs text-black/55">
+            Mission active &middot; id <span className="font-mono">{activeMissionId}</span> &middot; discovery ready.
+          </p>
         ) : (
           <p className="mt-1 text-xs text-black/50">No mission launched yet.</p>
         )}
 
-        {runDiscovery.data ? (
+        {runDiscovery.isError ? (
+          <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+            Discovery request failed: {runDiscovery.error?.message ?? "Unknown error"}
+          </div>
+        ) : runDiscovery.data ? (
           <div className="mt-2 rounded-lg border border-black/10 bg-black/[0.02] p-3 text-xs">
             {runDiscovery.data.status === "needs_provider_config" ? (
               <p className="font-semibold text-amber-800">
@@ -336,7 +371,7 @@ export default function MissionControlPage() {
                   <p className="text-xs font-bold">{agent.name}</p>
                   <p className="text-xs text-black/45">{agent.role}</p>
                   <p className="mt-1 text-xs font-semibold text-black/60">
-                    {latestMission ? agent.statusWithMission : "Waiting for mission"}
+                    {effectiveMissionId ? agent.statusWithMission : "Waiting for mission"}
                   </p>
                 </div>
               </div>
