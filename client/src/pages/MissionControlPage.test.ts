@@ -6,7 +6,7 @@ const source = fs.readFileSync(path.resolve(import.meta.dirname, "MissionControl
 
 describe("MissionControlPage -- Slice 75a source isolation", () => {
   it("never imports an AgentMail/SMS/Yelp/web-form/phone send path", () => {
-    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid/i);
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|from ["']twilio|sendSms\(|from ["']elevenlabs|from ["']sendgrid/i);
   });
 
   it("only calls the vendorAcquisitionMission router, not vendorCastingSprint outreach mutations", () => {
@@ -125,7 +125,7 @@ describe("MissionControlPage -- Slice 75b sub-agent orchestra", () => {
 
 describe("MissionControlPage -- Slice 75b source isolation", () => {
   it("still never imports any outbound send adapter", () => {
-    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid/i);
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|from ["']twilio|sendSms\(|from ["']elevenlabs|from ["']sendgrid/i);
   });
 
   it("still never claims a truth field is true (display copy may honestly state they are false)", () => {
@@ -187,7 +187,7 @@ describe("MissionControlPage -- Slice 75c Sub-Agent Training composer", () => {
 
 describe("MissionControlPage -- Slice 75c source isolation", () => {
   it("still never imports any outbound send adapter", () => {
-    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid/i);
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|from ["']twilio|sendSms\(|from ["']elevenlabs|from ["']sendgrid/i);
   });
 
   it("still never claims a truth field is true (display copy may honestly state they are false)", () => {
@@ -229,7 +229,7 @@ describe("MissionControlPage -- Slice 76a Run discovery action", () => {
 
 describe("MissionControlPage -- Slice 76a source isolation", () => {
   it("still never imports any outbound send adapter or live LLM", () => {
-    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid|openai|anthropic\./i);
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|from ["']twilio|sendSms\(|from ["']elevenlabs|from ["']sendgrid|openai|anthropic\./i);
   });
 
   it("still never claims a truth field is true", () => {
@@ -280,7 +280,7 @@ describe("MissionControlPage -- Run Discovery CTA activation bugfix", () => {
   });
 
   it("never invokes any outreach/send path from the bugfixed activation flow", () => {
-    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid/i);
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|from ["']twilio|sendSms\(|from ["']elevenlabs|from ["']sendgrid/i);
   });
 });
 
@@ -350,7 +350,7 @@ describe("MissionControlPage -- Slice 76c Discovered Candidates panel", () => {
 
 describe("MissionControlPage -- Slice 76c source isolation", () => {
   it("never imports any outbound send adapter or live LLM", () => {
-    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid|openai|anthropic\./i);
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|from ["']twilio|sendSms\(|from ["']elevenlabs|from ["']sendgrid|openai|anthropic\./i);
   });
 
   it("never claims a truth field is true", () => {
@@ -414,7 +414,7 @@ describe("MissionControlPage -- Slice 77a mission-text-driven query planner", ()
 
 describe("MissionControlPage -- Slice 77a source isolation", () => {
   it("never imports any outbound send adapter or live LLM provider", () => {
-    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid|openai|anthropic\./i);
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|from ["']twilio|sendSms\(|from ["']elevenlabs|from ["']sendgrid|openai|anthropic\./i);
   });
 
   it("never claims a truth field is true", () => {
@@ -456,7 +456,7 @@ describe("MissionControlPage -- Slice 77b structured parser plan source", () => 
 
 describe("MissionControlPage -- Slice 77b source isolation", () => {
   it("never imports any outbound send adapter or live LLM SDK directly", () => {
-    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid|@anthropic-ai/i);
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|from ["']twilio|sendSms\(|from ["']elevenlabs|from ["']sendgrid|@anthropic-ai/i);
   });
 
   it("never claims a truth field is true", () => {
@@ -493,7 +493,7 @@ describe("MissionControlPage -- Slice 78a draft outreach queue", () => {
   });
 
   it("never invokes any AgentMail/SMS/Yelp/web-form/phone send path from the draft queue action", () => {
-    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid|sendYelpMessage|placeCall|\.submit\(\)/i);
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|from ["']twilio|sendSms\(|from ["']elevenlabs|from ["']sendgrid|sendYelpMessage|placeCall|\.submit\(\)/i);
   });
 
   it("never renders a fake vendor name in the draft queue UI", () => {
@@ -527,7 +527,7 @@ describe("MissionControlPage -- Slice 78b availability intake", () => {
 
   it("never triggers Google Calendar OAuth or any outreach/send action from the intake panel", () => {
     expect(source).not.toMatch(/oauth|googleapis\.com\/auth/i);
-    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid/i);
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|from ["']twilio|sendSms\(|from ["']elevenlabs|from ["']sendgrid/i);
   });
 
   it("never renders fake intake data -- saved-state text only appears conditionally on a real save or real existing intake", () => {
@@ -562,7 +562,7 @@ describe("MissionControlPage -- Slice 79a mission-scoped shortlist", () => {
 
   it("draft outreach approval still operates from the shortlist card using the real candidate id, and never sends anything", () => {
     expect(source).toMatch(/onClick=\{\(\) => approveDraft\(candidate\.id\)\}/);
-    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid/i);
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|from ["']twilio|sendSms\(|from ["']elevenlabs|from ["']sendgrid/i);
   });
 
   it("availability intake still renders and saves from the mission shortlist card", () => {
@@ -631,7 +631,7 @@ describe("MissionControlPage -- Slice 80a supervised outreach send canary", () =
 
 describe("MissionControlPage -- Slice 80a source isolation", () => {
   it("never imports any outbound send adapter directly -- only calls the tRPC mutation by name", () => {
-    expect(source).not.toMatch(/from ["']agentmail|@anthropic-ai|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid/i);
+    expect(source).not.toMatch(/from ["']agentmail|@anthropic-ai|sendVendorEmail|from ["']twilio|sendSms\(|from ["']elevenlabs|from ["']sendgrid/i);
   });
 
   it("never claims a truth field is true", () => {
@@ -866,5 +866,71 @@ describe("MissionControlPage -- Slice 81e geo-restricted discovery + usable shor
   it("90067 target still shows Century Park East and website-interpreted-by-AI labels still render (regression)", () => {
     expect(source).toMatch(/Century Park East/);
     expect(source).toMatch(/Website interpreted by AI/);
+  });
+});
+
+describe("MissionControlPage -- Slice 82a Outreach Readiness Queue + AgentMail batch send", () => {
+  it("renders the Outreach Readiness section with the exact title/subtitle", () => {
+    expect(source).toMatch(/<h2 className="text-sm font-bold">Outreach Readiness<\/h2>/);
+    expect(source).toMatch(/HELD separates candidates by the safest next contact action before any outreach is sent\./);
+  });
+
+  it("readiness queue counts render from the real summary, never hardcoded", () => {
+    expect(source).toMatch(/Ready for AgentMail: \{missionShortlist\.data\.summary\.readyForAgentMailCount\}/);
+    expect(source).toMatch(/Manual email needed: \{missionShortlist\.data\.summary\.manualEmailNeededCount\}/);
+    expect(source).toMatch(/Phone\/SMS required later: \{missionShortlist\.data\.summary\.phoneSmsRequiredLaterCount\}/);
+    expect(source).toMatch(/Contact form required later: \{missionShortlist\.data\.summary\.contactFormRequiredLaterCount\}/);
+    expect(source).toMatch(/Storefront fallback copy needed: \{missionShortlist\.data\.summary\.storefrontFallbackCopyNeededCount\}/);
+    expect(source).toMatch(/Needs service-area review: \{missionShortlist\.data\.summary\.needsServiceAreaReviewCount\}/);
+    expect(source).toMatch(/Do not contact: \{missionShortlist\.data\.summary\.doNotContactCount\}/);
+  });
+
+  it("candidate cards show a readiness badge sourced from the server's outreachReadinessQueue, never re-derived client-side", () => {
+    expect(source).toMatch(/candidate\.outreachReadinessLabel \? \(/);
+    expect(source).toMatch(/READINESS_BADGE_CLASS\[candidate\.outreachReadinessQueue/);
+  });
+
+  it("the AgentMail batch panel is wired to the real preview query and batch send mutation", () => {
+    expect(source).toMatch(/vendorAcquisitionMission\.previewReadyAgentMailBatchForMission\.useQuery/);
+    expect(source).toMatch(/vendorAcquisitionMission\.sendReadyAgentMailBatchForMission\.useMutation/);
+  });
+
+  it("the batch preview shows candidate names, recipient emails, and subject/body", () => {
+    expect(source).toMatch(/\{c\.businessName\} &middot; \{c\.recipientEmail\}/);
+    expect(source).toMatch(/Subject: \{c\.subject\}/);
+  });
+
+  it("the batch send button is disabled without explicit confirmation", () => {
+    expect(source).toMatch(/disabled=\{!batchSendConfirmed \|\| agentMailBatchPreview\.data\.readyCount === 0 \|\| sendReadyAgentMailBatch\.isPending\}/);
+  });
+
+  it("the warning text matches the spec exactly", () => {
+    expect(source).toMatch(/This will send real outreach emails only to candidates marked Ready for AgentMail\. It will not contact phone-only, form-only, storefront fallback, needs-review, or out-of-area candidates\./);
+  });
+
+  it("the confirmation checkbox text matches the spec exactly", () => {
+    expect(source).toMatch(/I confirm I want to send AgentMail outreach to all Ready for AgentMail mobile vendors in this mission\./);
+  });
+
+  it("per-candidate results render sent/already-sent/gate-blocked/provider-failed copy", () => {
+    expect(source).toMatch(/Sent via AgentMail · Awaiting reply/);
+    expect(source).toMatch(/Already sent · skipped/);
+    expect(source).toMatch(/Gate blocked: \$\{r\.blockedReasons\.join\(", "\)\}/);
+    expect(source).toMatch(/Provider failed · no sent truth recorded/);
+  });
+
+  it("manual_email_needed/phone/form non-ready states show the exact required copy", () => {
+    expect(source).toMatch(/Find vendor email before AgentMail/);
+    expect(source).toMatch(/Future Twilio\/ElevenLabs workflow/);
+    expect(source).toMatch(/Future contact-form workflow/);
+  });
+
+  it("no SMS/call/form-submission button exists anywhere in the batch panel", () => {
+    expect(source).not.toMatch(/Send SMS|Place call|Submit form|Fill contact form/);
+  });
+
+  it("never auto-sends the batch on mission creation, discovery, page render, or draft approval -- the send call only happens inside the batch button's onClick", () => {
+    expect(source).not.toMatch(/useEffect\([^)]*sendReadyAgentMailBatch\.mutate/s);
+    expect(source).toMatch(/onClick=\{sendAgentMailBatch\}/);
   });
 });

@@ -53,6 +53,29 @@ const FULFILLMENT_TIER_CLASS: Record<string, string> = {
   red: "bg-red-50 text-red-800 border-red-300",
 };
 
+// Slice 82a. Outreach Readiness Queue badge -- HELD separates
+// candidates by the safest next contact action before any outreach is
+// sent. Read directly from the server's persisted classification
+// (outreachReadinessQueue), never re-derived client-side.
+const READINESS_BADGE_LABEL: Record<string, string> = {
+  ready_for_agentmail: "Ready for AgentMail",
+  manual_email_needed: "Manual email needed",
+  phone_sms_required_later: "Phone/SMS later",
+  contact_form_required_later: "Contact form later",
+  storefront_fallback_copy_needed: "Storefront copy needed",
+  needs_service_area_review: "Needs review",
+  do_not_contact: "Do not contact",
+};
+const READINESS_BADGE_CLASS: Record<string, string> = {
+  ready_for_agentmail: "bg-emerald-50 text-emerald-800 border-emerald-300",
+  manual_email_needed: "bg-blue-50 text-blue-800 border-blue-300",
+  phone_sms_required_later: "bg-violet-50 text-violet-800 border-violet-300",
+  contact_form_required_later: "bg-blue-50 text-blue-800 border-blue-300",
+  storefront_fallback_copy_needed: "bg-blue-50 text-blue-800 border-blue-300",
+  needs_service_area_review: "bg-amber-50 text-amber-800 border-amber-300",
+  do_not_contact: "bg-red-50 text-red-800 border-red-300",
+};
+
 // Slice 81a. Service-area status is read from the mission match's own
 // verification evidence -- see serviceAreaVerification on each
 // shortlist entry, never inferred client-side from rating/name/website
@@ -282,6 +305,25 @@ export default function MissionControlPage() {
       explicitConfirmation: sendConfirmed,
       adminConfirmationText: "SEND SUPERVISED EMAIL CANARY",
     });
+  }
+
+  // Slice 82a -- Outreach Readiness Queue + supervised AgentMail batch
+  // send. Local-only confirmation state; nothing here sends until the
+  // operator explicitly confirms and clicks the batch-send button.
+  const [batchSendConfirmed, setBatchSendConfirmed] = useState(false);
+  const agentMailBatchPreview = trpc.admin.vendorAcquisitionMission.previewReadyAgentMailBatchForMission.useQuery(
+    { missionId: effectiveMissionId ?? "" },
+    { enabled: !!effectiveMissionId },
+  );
+  const sendReadyAgentMailBatch = trpc.admin.vendorAcquisitionMission.sendReadyAgentMailBatchForMission.useMutation();
+
+  function sendAgentMailBatch() {
+    if (!effectiveMissionId) return;
+    sendReadyAgentMailBatch.mutate({
+      missionId: effectiveMissionId,
+      explicitConfirmation: batchSendConfirmed,
+      adminConfirmationText: "SEND SUPERVISED EMAIL CANARY",
+    }, { onSuccess: () => agentMailBatchPreview.refetch() });
   }
 
   function approveDraft(candidateId: string) {
@@ -724,6 +766,11 @@ export default function MissionControlPage() {
                         Human review required
                       </span>
                     ) : null}
+                    {candidate.outreachReadinessLabel ? (
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${READINESS_BADGE_CLASS[candidate.outreachReadinessQueue ?? "needs_service_area_review"]}`}>
+                        {READINESS_BADGE_LABEL[candidate.outreachReadinessQueue ?? "needs_service_area_review"]}
+                      </span>
+                    ) : null}
                   </div>
                   {typeof address === "string" ? <p className="mt-1 text-black/55">{address}</p> : null}
                   {candidate.matchedQuery ? <p className="mt-1 text-black/40">Found via: {candidate.matchedQuery}</p> : null}
@@ -784,6 +831,18 @@ export default function MissionControlPage() {
                     ) : candidate.fulfillmentTier === "red" ? (
                       <span className="rounded-lg border border-red-300 bg-red-50 px-2 py-1 text-xs font-semibold text-red-800">
                         Out of area &middot; not outreach-ready
+                      </span>
+                    ) : candidate.outreachReadinessQueue === "manual_email_needed" ? (
+                      <span className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-800">
+                        Find vendor email before AgentMail
+                      </span>
+                    ) : candidate.outreachReadinessQueue === "phone_sms_required_later" ? (
+                      <span className="rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-xs font-semibold text-violet-800">
+                        Future Twilio/ElevenLabs workflow
+                      </span>
+                    ) : candidate.outreachReadinessQueue === "contact_form_required_later" ? (
+                      <span className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-800">
+                        Future contact-form workflow
                       </span>
                     ) : (
                       <button
@@ -965,6 +1024,73 @@ export default function MissionControlPage() {
         ) : (
           <p className="mt-3 text-xs text-black/50">No candidates discovered yet. Run discovery to populate this list.</p>
         )}
+      </section>
+
+      <section className="mt-4 rounded-2xl border border-black/10 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-bold">Outreach Readiness</h2>
+        <p className="mt-1 text-xs text-black/55">
+          HELD separates candidates by the safest next contact action before any outreach is sent.
+        </p>
+        {missionShortlist.data?.status === "ok" ? (
+          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-1 font-semibold text-emerald-800">Ready for AgentMail: {missionShortlist.data.summary.readyForAgentMailCount}</span>
+            <span className="rounded-full border border-blue-300 bg-blue-50 px-2 py-1 font-semibold text-blue-800">Manual email needed: {missionShortlist.data.summary.manualEmailNeededCount}</span>
+            <span className="rounded-full border border-violet-300 bg-violet-50 px-2 py-1 font-semibold text-violet-800">Phone/SMS required later: {missionShortlist.data.summary.phoneSmsRequiredLaterCount}</span>
+            <span className="rounded-full border border-blue-300 bg-blue-50 px-2 py-1 font-semibold text-blue-800">Contact form required later: {missionShortlist.data.summary.contactFormRequiredLaterCount}</span>
+            <span className="rounded-full border border-blue-300 bg-blue-50 px-2 py-1 font-semibold text-blue-800">Storefront fallback copy needed: {missionShortlist.data.summary.storefrontFallbackCopyNeededCount}</span>
+            <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-1 font-semibold text-amber-800">Needs service-area review: {missionShortlist.data.summary.needsServiceAreaReviewCount}</span>
+            <span className="rounded-full border border-red-300 bg-red-50 px-2 py-1 font-semibold text-red-800">Do not contact: {missionShortlist.data.summary.doNotContactCount}</span>
+          </div>
+        ) : null}
+
+        {agentMailBatchPreview.data?.status === "ok" && agentMailBatchPreview.data.readyCount > 0 ? (
+          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/30 p-3 text-xs">
+            <p className="text-xs font-bold">AgentMail-ready mobile vendors</p>
+            <p className="mt-1 text-black/55">{agentMailBatchPreview.data.readyCount} candidate{agentMailBatchPreview.data.readyCount === 1 ? "" : "s"} ready for AgentMail.</p>
+            <div className="mt-2 space-y-2">
+              {agentMailBatchPreview.data.candidates.map(c => (
+                <div key={c.candidateId} className="rounded-lg border border-black/10 bg-white p-2">
+                  <p className="font-semibold">{c.businessName} &middot; {c.recipientEmail}</p>
+                  <p className="mt-1 text-black/55">Subject: {c.subject}</p>
+                  <p className="mt-1 whitespace-pre-wrap text-black/45">{c.body}</p>
+                </div>
+              ))}
+            </div>
+            {agentMailBatchPreview.data.warnings.map((w, i) => (
+              <p key={i} className="mt-2 text-amber-700">{w}</p>
+            ))}
+            <p className="mt-2 font-semibold text-red-700">
+              This will send real outreach emails only to candidates marked Ready for AgentMail. It will not contact phone-only, form-only, storefront fallback, needs-review, or out-of-area candidates.
+            </p>
+            <label className="mt-2 flex items-start gap-2 text-black/65">
+              <input type="checkbox" checked={batchSendConfirmed} onChange={event => setBatchSendConfirmed(event.target.checked)} />
+              I confirm I want to send AgentMail outreach to all Ready for AgentMail mobile vendors in this mission.
+            </label>
+            <button
+              type="button"
+              className="mt-2 rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+              disabled={!batchSendConfirmed || agentMailBatchPreview.data.readyCount === 0 || sendReadyAgentMailBatch.isPending}
+              onClick={sendAgentMailBatch}
+            >
+              {sendReadyAgentMailBatch.isPending ? "Sending…" : "Send AgentMail to ready vendors"}
+            </button>
+
+            {sendReadyAgentMailBatch.data?.status === "ok" ? (
+              <div className="mt-2 space-y-1">
+                {sendReadyAgentMailBatch.data.results.map(r => (
+                  <p key={r.candidateId} className="text-black/65">
+                    {r.businessName}: {
+                      r.status === "sent" ? "Sent via AgentMail · Awaiting reply"
+                      : r.status === "skipped_already_sent" ? "Already sent · skipped"
+                      : r.status === "gate_blocked" ? `Gate blocked: ${r.blockedReasons.join(", ")}`
+                      : `Provider failed · no sent truth recorded`
+                    }
+                  </p>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       <section className="mt-4 rounded-2xl border border-black/10 bg-white p-5 shadow-sm">

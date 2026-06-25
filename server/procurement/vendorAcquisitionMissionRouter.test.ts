@@ -6,7 +6,7 @@ vi.mock("./agentMailVendorEmailProvider", async () => {
 });
 
 const { sendVendorEmailViaAgentMail, SUPERVISED_CANARY_CONFIRMATION_TEXT } = await import("./agentMailVendorEmailProvider");
-const { createVendorAcquisitionMissionRouter, resolveTargetGeography } = await import("./vendorAcquisitionMissionRouter");
+const { createVendorAcquisitionMissionRouter, resolveTargetGeography, classifyOutreachReadiness } = await import("./vendorAcquisitionMissionRouter");
 
 function context(user: { role: string } | null) {
   return { user, tenantId: "default", req: {}, res: {}, vendorSession: null } as never;
@@ -1887,5 +1887,361 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery uses the active mission
     const router = createVendorAcquisitionMissionRouter(store as never);
     await router.createCaller(context({ role: "admin" })).createMission(validInput({ geographyLabel: "90067 (5 mi radius)" }));
     expect(store.createMission).toHaveBeenCalledWith(expect.objectContaining({ geographyLabel: "90067 (5 mi radius)" }));
+  });
+});
+
+function baseEvidence(overrides?: Partial<Record<string, unknown>>) {
+  return {
+    serviceAreaStatus: "verified_serves_target", serviceAreaReasons: [], contactRoute: "email_available",
+    outreachReadiness: "email_ready", emailAddressesFound: ["hello@example.com"], requiresHumanReview: false,
+    serviceAreaInterpreterSource: "deterministic_fallback", serviceAreaFallbackReason: null,
+    ...overrides,
+  };
+}
+
+function baseFulfillment(overrides?: Partial<Record<string, unknown>>) {
+  return {
+    fulfillmentMode: "verified_mobile_building_service", fulfillmentTier: "green",
+    fulfillmentLabel: "Mobile · Comes to building", fulfillmentReason: "Verified to serve the target area and shows mobile/building-service evidence",
+    vendorHasMobileEvidence: true,
+    ...overrides,
+  };
+}
+
+describe("classifyOutreachReadiness (Slice 82a)", () => {
+  it("returns null when there is no fulfillment/evidence yet (pre-82a matches)", () => {
+    expect(classifyOutreachReadiness(null, null, null)).toBeNull();
+  });
+
+  it("green + verified + email found -> ready_for_agentmail", () => {
+    expect(classifyOutreachReadiness(baseFulfillment() as never, baseEvidence() as never, { eligible: true, exclusionReason: null })).toBe("ready_for_agentmail");
+  });
+
+  it("green + verified + form found (no email) -> contact_form_required_later", () => {
+    const evidence = baseEvidence({ outreachReadiness: "form_required", emailAddressesFound: [] });
+    expect(classifyOutreachReadiness(baseFulfillment() as never, evidence as never, { eligible: true, exclusionReason: null })).toBe("contact_form_required_later");
+  });
+
+  it("green + verified + phone only (no email/form) -> phone_sms_required_later", () => {
+    const evidence = baseEvidence({ outreachReadiness: "sms_or_call_required", emailAddressesFound: [] });
+    expect(classifyOutreachReadiness(baseFulfillment() as never, evidence as never, { eligible: true, exclusionReason: null })).toBe("phone_sms_required_later");
+  });
+
+  it("green + verified + no email/form/phone -> manual_email_needed", () => {
+    const evidence = baseEvidence({ outreachReadiness: "not_outreach_ready", emailAddressesFound: [] });
+    expect(classifyOutreachReadiness(baseFulfillment() as never, evidence as never, { eligible: true, exclusionReason: null })).toBe("manual_email_needed");
+  });
+
+  it("drive-to storefront fallback (blue) -> storefront_fallback_copy_needed, even with a direct email", () => {
+    const fulfillment = baseFulfillment({ fulfillmentMode: "drive_to_storefront_fallback", fulfillmentTier: "blue", fulfillmentLabel: "Drive-to fallback", vendorHasMobileEvidence: false });
+    expect(classifyOutreachReadiness(fulfillment as never, baseEvidence() as never, { eligible: true, exclusionReason: null })).toBe("storefront_fallback_copy_needed");
+  });
+
+  it("mobile_needs_review (yellow) -> needs_service_area_review, even with a direct email", () => {
+    const fulfillment = baseFulfillment({ fulfillmentMode: "mobile_needs_review", fulfillmentTier: "yellow", fulfillmentLabel: "Mobile · Needs review" });
+    expect(classifyOutreachReadiness(fulfillment as never, baseEvidence() as never, { eligible: true, exclusionReason: null })).toBe("needs_service_area_review");
+  });
+
+  it("out-of-area (red) -> do_not_contact, even with a direct email", () => {
+    const fulfillment = baseFulfillment({ fulfillmentMode: "out_of_area", fulfillmentTier: "red", fulfillmentLabel: "Out of area" });
+    expect(classifyOutreachReadiness(fulfillment as never, baseEvidence() as never, { eligible: true, exclusionReason: null })).toBe("do_not_contact");
+  });
+
+  it("excluded by the primary-shortlist eligibility gate -> do_not_contact, regardless of tier", () => {
+    expect(classifyOutreachReadiness(baseFulfillment() as never, baseEvidence() as never, { eligible: false, exclusionReason: "too far" })).toBe("do_not_contact");
+  });
+
+  it("never produces ready_for_agentmail from mission query intent alone -- the function has no parameter for match.serviceMode at all", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const source = fs.readFileSync(path.resolve(__dirname, "vendorAcquisitionMissionRouter.ts"), "utf8");
+    const fnSource = source.slice(source.indexOf("export function classifyOutreachReadiness"), source.indexOf("export function classifyOutreachReadiness") + 1500);
+    expect(fnSource).not.toMatch(/serviceMode/);
+  });
+});
+
+describe("vendorAcquisitionMissionRouter -- Outreach Readiness Queue summary (Slice 82a)", () => {
+  function matchWithReadiness(overrides?: Record<string, unknown>) {
+    return {
+      id: "match-1", tenantId: "default", missionId: "mission-1", candidateId: "candidate-1",
+      matchedQuery: "mobile dog groomers near 90067", queryPlannerSource: "anthropic_structured",
+      serviceMode: "mobile_required", rankScore: 9.5, rankPosition: 1, isShortlisted: true,
+      matchEvidence: {
+        serviceAreaVerification: verification({ serviceAreaStatus: "verified_serves_target", emailAddressesFound: ["hello@example.com"], contactRoute: "email_available", outreachReadiness: "email_ready" }),
+        serviceAreaEffectiveEvidence: baseEvidence(),
+        fulfillmentClassification: baseFulfillment(),
+        primaryShortlistEligibility: { eligible: true, exclusionReason: null },
+        outreachReadinessQueue: "ready_for_agentmail",
+      },
+      ...overrides,
+    };
+  }
+
+  it("listMissionShortlist exposes outreachReadinessQueue/Label and recipientEmail per entry, read from persisted evidence only", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({ listCandidatesForReview: vi.fn().mockResolvedValue([makeMockCandidate()]) });
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([matchWithReadiness()]),
+      countMissionMatches: vi.fn().mockResolvedValue({ total: 1, shortlisted: 1 }),
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.entries[0].outreachReadinessQueue).toBe("ready_for_agentmail");
+    expect(result.entries[0].outreachReadinessLabel).toBe("Ready for AgentMail");
+    expect(result.entries[0].recipientEmail).toBe("hello@example.com");
+  });
+
+  it("readiness summary counts reflect all matches, not just the entries returned to a default caller", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({
+      listCandidatesForReview: vi.fn().mockResolvedValue([
+        makeMockCandidate({ id: "candidate-1" }), makeMockCandidate({ id: "candidate-2" }),
+      ]),
+    });
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([
+        matchWithReadiness(),
+        matchWithReadiness({
+          id: "match-2", candidateId: "candidate-2", isShortlisted: false,
+          matchEvidence: {
+            serviceAreaVerification: verification({ serviceAreaStatus: "unverified", contactRoute: "contact_form_available", outreachReadiness: "form_required" }),
+            serviceAreaEffectiveEvidence: baseEvidence({ serviceAreaStatus: "unverified", outreachReadiness: "form_required", emailAddressesFound: [] }),
+            fulfillmentClassification: baseFulfillment({ fulfillmentMode: "drive_to_storefront_fallback", fulfillmentTier: "blue", fulfillmentLabel: "Drive-to fallback", vendorHasMobileEvidence: false }),
+            primaryShortlistEligibility: { eligible: false, exclusionReason: "too far" },
+            outreachReadinessQueue: "do_not_contact",
+          },
+        }),
+      ]),
+      countMissionMatches: vi.fn().mockResolvedValue({ total: 2, shortlisted: 1 }),
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.summary.readyForAgentMailCount).toBe(1);
+    expect(result.summary.doNotContactCount).toBe(1);
+  });
+});
+
+describe("vendorAcquisitionMissionRouter -- previewReadyAgentMailBatchForMission (Slice 82a)", () => {
+  beforeEach(() => {
+    vi.mocked(sendVendorEmailViaAgentMail).mockReset();
+  });
+
+  it("rejects unauthenticated and non-admin callers", async () => {
+    const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, makeMockSourcingStore() as never);
+    await expect(
+      router.createCaller(context(null)).previewReadyAgentMailBatchForMission({ missionId: "mission-1" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("returns mission_not_found honestly when the mission does not exist", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(null) });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, makeMockSourcingStore() as never);
+    const result = await router.createCaller(context({ role: "admin" })).previewReadyAgentMailBatchForMission({ missionId: "missing" });
+    expect(result).toEqual({ status: "mission_not_found" });
+  });
+
+  it("returns only ready_for_agentmail candidates with their real recipient email, subject, and body -- no provider call", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([
+        { id: "match-1", candidateId: "candidate-1", matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: ["hello@example.com"] }), fulfillmentClassification: baseFulfillment(), outreachReadinessQueue: "ready_for_agentmail" } },
+        { id: "match-2", candidateId: "candidate-2", matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: [] }), fulfillmentClassification: baseFulfillment({ fulfillmentMode: "drive_to_storefront_fallback", fulfillmentTier: "blue", fulfillmentLabel: "Drive-to fallback" }), outreachReadinessQueue: "storefront_fallback_copy_needed" } },
+      ]),
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).previewReadyAgentMailBatchForMission({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.readyCount).toBe(1);
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0].recipientEmail).toBe("hello@example.com");
+    expect(result.candidates[0].subject).toMatch(/Mobile dog grooming availability for HELD residents|mobile dog grooming/i);
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("warns honestly when no candidates are ready", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore();
+    const matchStore = makeMockMatchStore({ listMissionMatches: vi.fn().mockResolvedValue([]) });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).previewReadyAgentMailBatchForMission({ missionId: "mission-1" });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.readyCount).toBe(0);
+    expect(result.warnings.length).toBeGreaterThan(0);
+  });
+});
+
+describe("vendorAcquisitionMissionRouter -- sendReadyAgentMailBatchForMission (Slice 82a)", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    for (const [key, value] of Object.entries(READY_ENV)) vi.stubEnv(key, value);
+    vi.mocked(sendVendorEmailViaAgentMail).mockReset();
+  });
+
+  function setup(overrides?: { missionStore?: object; sourcingStore?: object; matchStore?: object; contactAttemptStore?: object }) {
+    const missionStore = overrides?.missionStore ?? makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = overrides?.sourcingStore ?? makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const matchStore = overrides?.matchStore ?? makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([
+        { id: "match-1", candidateId: "candidate-1", matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: ["hello@example.com"] }), fulfillmentClassification: baseFulfillment(), outreachReadinessQueue: "ready_for_agentmail" } },
+      ]),
+    });
+    const contactAttemptStore = overrides?.contactAttemptStore ?? makeMockContactAttemptStore({
+      createOrReuseAttempt: vi.fn().mockResolvedValue({ attempt: makeMockDraftAttempt(), reused: false }),
+      recordLiveSendResult: vi.fn().mockResolvedValue({}),
+    });
+    const router = createVendorAcquisitionMissionRouter(
+      missionStore as never, sourcingStore as never, undefined, undefined,
+      contactAttemptStore as never, undefined, matchStore as never,
+    );
+    return { router, missionStore, sourcingStore, matchStore, contactAttemptStore };
+  }
+
+  function validInput(overrides?: Record<string, unknown>) {
+    return { missionId: "mission-1", explicitConfirmation: true, adminConfirmationText: SUPERVISED_CANARY_CONFIRMATION_TEXT, ...overrides };
+  }
+
+  it("rejects unauthenticated and non-admin callers", async () => {
+    const { router } = setup();
+    await expect(router.createCaller(context(null)).sendReadyAgentMailBatchForMission(validInput())).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("requires explicit confirmation, never calling the provider without it", async () => {
+    const { router } = setup();
+    const result = await router.createCaller(context({ role: "admin" })).sendReadyAgentMailBatchForMission(validInput({ explicitConfirmation: false }));
+    expect(result).toEqual({ status: "blocked", blockedReasons: ["explicit_confirmation_required"], results: [] });
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("returns no_ready_candidates honestly and never calls the provider when nothing is ready", async () => {
+    const { router } = setup({ matchStore: makeMockMatchStore({ listMissionMatches: vi.fn().mockResolvedValue([]) }) });
+    const result = await router.createCaller(context({ role: "admin" })).sendReadyAgentMailBatchForMission(validInput());
+    expect(result.status).toBe("no_ready_candidates");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("sends exactly one email per ready_for_agentmail candidate when every gate passes", async () => {
+    vi.mocked(sendVendorEmailViaAgentMail).mockResolvedValue({
+      providerName: "agentmail", providerAttemptId: "msg_1", threadId: null, inboxId: "inbox-1",
+      inboxEmail: "vendors@held.test", status: "sent", liveProviderInvoked: true,
+      rawProviderResponseJson: null, sentAt: "2026-06-26T00:00:00.000Z", errorReason: null,
+    });
+    const { router, contactAttemptStore } = setup();
+    const result = await router.createCaller(context({ role: "admin" })).sendReadyAgentMailBatchForMission(validInput());
+
+    expect(result.status).toBe("ok");
+    expect(sendVendorEmailViaAgentMail).toHaveBeenCalledOnce();
+    expect(sendVendorEmailViaAgentMail.mock.calls[0][0].recipientEmail).toBe("hello@example.com");
+    expect(contactAttemptStore.recordLiveSendResult).toHaveBeenCalledWith(expect.objectContaining({ outreachSentByHeld: true }));
+    expect(result.results[0]).toMatchObject({ candidateId: "candidate-1", status: "sent" });
+  });
+
+  it("skips an already-sent candidate without calling the provider again (idempotent)", async () => {
+    const { router, contactAttemptStore } = setup({
+      contactAttemptStore: makeMockContactAttemptStore({
+        createOrReuseAttempt: vi.fn().mockResolvedValue({ attempt: makeMockDraftAttempt({ outreachSentByHeld: true, sentAt: new Date("2026-06-26T00:00:00.000Z") }), reused: true }),
+        recordLiveSendResult: vi.fn(),
+      }),
+    });
+    const result = await router.createCaller(context({ role: "admin" })).sendReadyAgentMailBatchForMission(validInput());
+    expect(result.results[0].status).toBe("skipped_already_sent");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+    expect(contactAttemptStore.recordLiveSendResult).not.toHaveBeenCalled();
+  });
+
+  it("a duplicate click against an already-sent attempt is idempotent and does not send twice", async () => {
+    const contactAttemptStore = makeMockContactAttemptStore({
+      createOrReuseAttempt: vi.fn().mockResolvedValue({ attempt: makeMockDraftAttempt({ outreachSentByHeld: true }), reused: true }),
+      recordLiveSendResult: vi.fn(),
+    });
+    const { router } = setup({ contactAttemptStore });
+    await router.createCaller(context({ role: "admin" })).sendReadyAgentMailBatchForMission(validInput());
+    await router.createCaller(context({ role: "admin" })).sendReadyAgentMailBatchForMission(validInput());
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("never sends to storefront-fallback, needs-review, phone/SMS, or contact-form candidates -- loadReadyAgentMailCandidates excludes them before the loop even starts", async () => {
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([
+        { id: "m1", candidateId: "c1", matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: ["a@example.com"] }), fulfillmentClassification: baseFulfillment({ fulfillmentMode: "drive_to_storefront_fallback", fulfillmentTier: "blue" }), outreachReadinessQueue: "storefront_fallback_copy_needed" } },
+        { id: "m2", candidateId: "c2", matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: ["b@example.com"] }), fulfillmentClassification: baseFulfillment({ fulfillmentMode: "mobile_needs_review", fulfillmentTier: "yellow" }), outreachReadinessQueue: "needs_service_area_review" } },
+        { id: "m3", candidateId: "c3", matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: [] }), fulfillmentClassification: baseFulfillment(), outreachReadinessQueue: "phone_sms_required_later" } },
+        { id: "m4", candidateId: "c4", matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: [] }), fulfillmentClassification: baseFulfillment(), outreachReadinessQueue: "contact_form_required_later" } },
+      ]),
+    });
+    const { router } = setup({ matchStore });
+    const result = await router.createCaller(context({ role: "admin" })).sendReadyAgentMailBatchForMission(validInput());
+    expect(result.status).toBe("no_ready_candidates");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("respects the existing AgentMail provider/canary/source/category gates -- a disabled canary blocks the send", async () => {
+    vi.stubEnv("HELD_VENDOR_EMAIL_CANARY_ENABLED", "false");
+    const { router, contactAttemptStore } = setup();
+    const result = await router.createCaller(context({ role: "admin" })).sendReadyAgentMailBatchForMission(validInput());
+    expect(result.results[0].status).toBe("gate_blocked");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+    expect(contactAttemptStore.recordLiveSendResult).toHaveBeenCalledWith(expect.objectContaining({ outreachSentByHeld: false }));
+  });
+
+  it("provider failure does not mark sent/contacted truth", async () => {
+    vi.mocked(sendVendorEmailViaAgentMail).mockResolvedValue({
+      providerName: "agentmail", providerAttemptId: null, threadId: null, inboxId: "inbox-1",
+      inboxEmail: "vendors@held.test", status: "rejected", liveProviderInvoked: true,
+      rawProviderResponseJson: null, sentAt: null, errorReason: "provider_rejected",
+    });
+    const { router, contactAttemptStore } = setup();
+    const result = await router.createCaller(context({ role: "admin" })).sendReadyAgentMailBatchForMission(validInput());
+    expect(result.results[0].status).toBe("provider_failed");
+    expect(contactAttemptStore.recordLiveSendResult).toHaveBeenCalledWith(expect.objectContaining({ outreachSentByHeld: false }));
+  });
+
+  it("caps the batch at AGENTMAIL_BATCH_SEND_MAX_CANDIDATES candidates", async () => {
+    const manyMatches = Array.from({ length: 15 }, (_, i) => ({
+      id: `m${i}`, candidateId: `c${i}`,
+      matchEvidence: { serviceAreaVerification: verification({ emailAddressesFound: [`vendor${i}@example.com`] }), fulfillmentClassification: baseFulfillment(), outreachReadinessQueue: "ready_for_agentmail" },
+    }));
+    vi.mocked(sendVendorEmailViaAgentMail).mockResolvedValue({
+      providerName: "agentmail", providerAttemptId: "msg_1", threadId: null, inboxId: "inbox-1",
+      inboxEmail: "vendors@held.test", status: "sent", liveProviderInvoked: true,
+      rawProviderResponseJson: null, sentAt: "2026-06-26T00:00:00.000Z", errorReason: null,
+    });
+    const { router } = setup({
+      matchStore: makeMockMatchStore({ listMissionMatches: vi.fn().mockResolvedValue(manyMatches) }),
+      sourcingStore: makeMockSourcingStore({ getCandidate: vi.fn().mockImplementation(async (_t: string, id: string) => makeMockCandidate({ id })) }),
+    });
+    const result = await router.createCaller(context({ role: "admin" })).sendReadyAgentMailBatchForMission(validInput());
+    expect(result.results).toHaveLength(10);
+    expect(sendVendorEmailViaAgentMail).toHaveBeenCalledTimes(10);
+  });
+
+  it("never creates a fake/invented email -- only ever sends to the recipientEmail loaded from real persisted evidence", async () => {
+    vi.mocked(sendVendorEmailViaAgentMail).mockResolvedValue({
+      providerName: "agentmail", providerAttemptId: "msg_1", threadId: null, inboxId: "inbox-1",
+      inboxEmail: "vendors@held.test", status: "sent", liveProviderInvoked: true,
+      rawProviderResponseJson: null, sentAt: "2026-06-26T00:00:00.000Z", errorReason: null,
+    });
+    const { router } = setup();
+    await router.createCaller(context({ role: "admin" })).sendReadyAgentMailBatchForMission(validInput());
+    expect(sendVendorEmailViaAgentMail.mock.calls[0][0].recipientEmail).toBe("hello@example.com");
+  });
+
+  it("never invokes any SMS/Yelp/web-form/phone send path", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const source = fs.readFileSync(path.resolve(__dirname, "vendorAcquisitionMissionRouter.ts"), "utf8");
+    // ElevenLabs/Twilio are mentioned only in prose comments explaining
+    // they are NOT implemented yet -- check for an actual call/import,
+    // not the word.
+    expect(source).not.toMatch(/sendSms\(|sendYelpMessage\(|placeCall\(|elevenlabs\(|from ["']elevenlabs|\.submit\(\)/i);
   });
 });

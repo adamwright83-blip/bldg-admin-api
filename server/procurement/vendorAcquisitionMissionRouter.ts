@@ -345,6 +345,10 @@ function classifyFulfillment(
 
 const STOREFRONT_FALLBACK_MAX_MILES = 15;
 const MOBILE_NEEDS_REVIEW_MAX_MILES = 25;
+// Slice 82a. Safe ceiling for one batch-send click -- never an
+// unbounded loop, and never more than this many real emails per call
+// regardless of how many candidates classify ready_for_agentmail.
+const AGENTMAIL_BATCH_SEND_MAX_CANDIDATES = 10;
 
 export type PrimaryShortlistEligibility = { eligible: boolean; exclusionReason: string | null };
 
@@ -384,6 +388,65 @@ function evaluatePrimaryShortlistEligibility(
   if (distanceMiles === null) return { eligible: false, exclusionReason: "Distance to target is unknown and no service-area evidence supports this candidate" };
   if (distanceMiles <= MOBILE_NEEDS_REVIEW_MAX_MILES) return { eligible: true, exclusionReason: null };
   return { eligible: false, exclusionReason: `${distanceMiles} mi from target exceeds the ${MOBILE_NEEDS_REVIEW_MAX_MILES} mi needs-review limit without explicit service-area support` };
+}
+
+/**
+ * Slice 82a. Outreach Readiness Queue: the channel-routing classification
+ * that decides whether a candidate can be batch-emailed via AgentMail
+ * right now, or needs a different (future) workflow. This is
+ * deliberately separate from fulfillmentMode/Tier (81c) -- a candidate
+ * can be a green, in-area mobile vendor and STILL not be
+ * ready_for_agentmail if no direct email was found on its website.
+ * Built only to plug in SMS-via-Twilio and call-via-ElevenLabs later
+ * (phone_sms_required_later) and a contact-form workflow later
+ * (contact_form_required_later) -- neither is implemented in this
+ * slice; these are routing labels only.
+ *
+ * Critically: this NEVER reads match.serviceMode (the mission QUERY's
+ * own mobile intent) -- only the vendor-level fulfillment tier
+ * (already vendor-evidence-gated by 81c) and the vendor's own
+ * discovered contact evidence. A candidate that only matched a
+ * "mobile dog groomer" SEARCH can never become ready_for_agentmail on
+ * that basis alone.
+ */
+export const OUTREACH_READINESS_QUEUE_VALUES = [
+  "ready_for_agentmail",
+  "manual_email_needed",
+  "phone_sms_required_later",
+  "contact_form_required_later",
+  "storefront_fallback_copy_needed",
+  "needs_service_area_review",
+  "do_not_contact",
+] as const;
+export type OutreachReadinessQueue = (typeof OUTREACH_READINESS_QUEUE_VALUES)[number];
+
+export const OUTREACH_READINESS_LABEL: Record<OutreachReadinessQueue, string> = {
+  ready_for_agentmail: "Ready for AgentMail",
+  manual_email_needed: "Manual email needed",
+  phone_sms_required_later: "Phone/SMS required later",
+  contact_form_required_later: "Contact form required later",
+  storefront_fallback_copy_needed: "Storefront fallback copy needed",
+  needs_service_area_review: "Needs service-area review",
+  do_not_contact: "Do not contact",
+};
+
+export function classifyOutreachReadiness(
+  fulfillment: FulfillmentClassification | null,
+  evidence: EffectiveServiceAreaEvidence | null,
+  eligibility: PrimaryShortlistEligibility | null,
+): OutreachReadinessQueue | null {
+  if (!fulfillment || !evidence) return null;
+  if (eligibility && !eligibility.eligible) return "do_not_contact";
+  if (fulfillment.fulfillmentTier === "red") return "do_not_contact";
+  if (fulfillment.fulfillmentTier === "blue") return "storefront_fallback_copy_needed";
+  if (fulfillment.fulfillmentTier === "yellow") return "needs_service_area_review";
+  // Only green (verified/likely mobile/building-service, with the
+  // vendor's own mobile evidence) remains -- route purely by the
+  // vendor's own discovered contact evidence, never by mission intent.
+  if (evidence.outreachReadiness === "email_ready") return "ready_for_agentmail";
+  if (evidence.outreachReadiness === "form_required") return "contact_form_required_later";
+  if (evidence.outreachReadiness === "sms_or_call_required") return "phone_sms_required_later";
+  return "manual_email_needed";
 }
 
 export type QueryPlannerFallbackReason = "needs_provider_config" | "invalid_output" | "provider_error" | "parser_exception" | null;
@@ -432,6 +495,61 @@ function denialReasons(error: unknown): string[] {
   const message = error instanceof Error ? error.message : String(error);
   const match = /denied: (.+)$/.exec(message);
   return match ? match[1].split(",") : ["create_failed"];
+}
+
+export type ReadyAgentMailCandidate = {
+  candidateId: string;
+  businessName: string;
+  category: string;
+  sourceKey: string;
+  recipientEmail: string;
+  fulfillmentLabel: string;
+  serviceAreaStatus: ServiceAreaStatus;
+};
+
+/**
+ * Slice 82a. Shared by both the preview query and the batch send
+ * mutation so they can never disagree about which candidates are
+ * actually ready_for_agentmail -- reads ONLY already-persisted match
+ * evidence (set by runDiscovery), never re-derives or re-fetches
+ * anything. recipientEmail is always the deterministic verifier's own
+ * regex-extracted email (vendorCandidateServiceAreaVerifier.ts) --
+ * never invented, never sourced from the Claude interpreter (whose
+ * output schema has no email field at all). A candidate missing a real
+ * email is silently excluded here rather than ever being sent with a
+ * fabricated address. Capped at AGENTMAIL_BATCH_SEND_MAX_CANDIDATES.
+ */
+async function loadReadyAgentMailCandidates(input: {
+  tenantId: string;
+  missionId: string;
+  matchStore: VendorMissionCandidateMatchStore;
+  sourcingStore: VendorSourcingStore;
+}): Promise<ReadyAgentMailCandidate[]> {
+  const matches = await input.matchStore.listMissionMatches({ tenantId: input.tenantId, missionId: input.missionId, includeOverflow: true });
+  const results: ReadyAgentMailCandidate[] = [];
+  for (const match of matches) {
+    const evidence = match.matchEvidence as {
+      outreachReadinessQueue?: OutreachReadinessQueue | null;
+      serviceAreaVerification?: ServiceAreaVerification;
+      fulfillmentClassification?: FulfillmentClassification;
+    } | null;
+    if (evidence?.outreachReadinessQueue !== "ready_for_agentmail") continue;
+    const recipientEmail = evidence.serviceAreaVerification?.emailAddressesFound[0] ?? null;
+    if (!recipientEmail) continue;
+    const candidate = await input.sourcingStore.getCandidate(input.tenantId, match.candidateId);
+    if (!candidate) continue;
+    results.push({
+      candidateId: match.candidateId,
+      businessName: candidate.businessName,
+      category: candidate.category,
+      sourceKey: `sourcing_candidate:${match.candidateId}`,
+      recipientEmail,
+      fulfillmentLabel: evidence.fulfillmentClassification?.fulfillmentLabel ?? "",
+      serviceAreaStatus: evidence.serviceAreaVerification?.serviceAreaStatus ?? "unverified",
+    });
+    if (results.length >= AGENTMAIL_BATCH_SEND_MAX_CANDIDATES) break;
+  }
+  return results;
 }
 
 export type CreateMissionResult =
@@ -689,6 +807,193 @@ export function createVendorAcquisitionMissionRouter(
           attemptId: attempt.id,
           sendResult: { providerAttemptId: sendResult.providerAttemptId, sentAt: sendResult.sentAt },
         };
+      }),
+
+    /**
+     * Slice 82a. Read-only dry-run preview of exactly which candidates
+     * the batch send below would email, and exactly what each would
+     * receive -- no provider call, no draft created/persisted, no
+     * mutation of any kind. Reuses the same buildCandidateDraftOutreach
+     * copy as the existing draft queue (78a) and one-at-a-time send
+     * (80a); never a different/storefront/mobile-claiming template.
+     */
+    previewReadyAgentMailBatchForMission: adminProcedure
+      .input(z.object({ missionId: z.string().min(1) }))
+      .query(async ({ ctx, input }) => {
+        const missionStore = resolveStore(injectedStore);
+        const mission = await missionStore.getMission(ctx.tenantId, input.missionId);
+        if (!mission) return { status: "mission_not_found" as const };
+
+        const matchStore = resolveMatchStore(injectedMatchStore);
+        const sourcingStore = resolveSourcingStore(injectedSourcingStore);
+        const ready = await loadReadyAgentMailCandidates({ tenantId: ctx.tenantId, missionId: input.missionId, matchStore, sourcingStore });
+
+        const warnings: string[] = [];
+        if (ready.length === 0) warnings.push("No candidates are currently classified Ready for AgentMail for this mission.");
+        if (ready.length >= AGENTMAIL_BATCH_SEND_MAX_CANDIDATES) {
+          warnings.push(`Capped at ${AGENTMAIL_BATCH_SEND_MAX_CANDIDATES} candidates per batch send -- additional ready candidates will need a follow-up send.`);
+        }
+
+        const candidates = ready.map(entry => {
+          const draft = buildCandidateDraftOutreach({ businessName: entry.businessName, geographyHint: "their service area and nearby high-rise buildings" });
+          return {
+            candidateId: entry.candidateId,
+            businessName: entry.businessName,
+            recipientEmail: entry.recipientEmail,
+            subject: draft.subject,
+            body: draft.body,
+            serviceAreaStatus: entry.serviceAreaStatus,
+            fulfillmentLabel: entry.fulfillmentLabel,
+          };
+        });
+
+        return { status: "ok" as const, readyCount: candidates.length, candidates, warnings };
+      }),
+
+    /**
+     * Slice 82a. Supervised, mission-level batch AgentMail send --
+     * sends ONLY to candidates already classified ready_for_agentmail
+     * (green mobile/building-service, verified/likely service area,
+     * a real direct email discovered on the vendor's own website).
+     * Never sends to storefront-fallback, needs-review, phone/SMS-only,
+     * contact-form-only, or out-of-area candidates -- those are never
+     * even loaded by loadReadyAgentMailCandidates. Reuses the exact
+     * same gate (evaluateAgentMailLiveSendGate), provider call
+     * (sendVendorEmailViaAgentMail), and audit write
+     * (recordLiveSendResult) as the existing one-at-a-time send (80a)
+     * -- this is a sequential loop over that same proven path, never a
+     * new send implementation. Idempotent per candidate: an
+     * already-sent attempt is skipped, never re-sent, even on a
+     * duplicate click. Capped at AGENTMAIL_BATCH_SEND_MAX_CANDIDATES.
+     * Never invoked automatically -- requires explicitConfirmation from
+     * an operator action.
+     */
+    sendReadyAgentMailBatchForMission: adminProcedure
+      .input(z.object({
+        missionId: z.string().min(1),
+        explicitConfirmation: z.boolean(),
+        adminConfirmationText: z.string().min(1).max(64),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (!input.explicitConfirmation) {
+          return { status: "blocked" as const, blockedReasons: ["explicit_confirmation_required"], results: [] };
+        }
+
+        const missionStore = resolveStore(injectedStore);
+        const mission = await missionStore.getMission(ctx.tenantId, input.missionId);
+        if (!mission) return { status: "mission_not_found" as const, blockedReasons: [], results: [] };
+
+        const matchStore = resolveMatchStore(injectedMatchStore);
+        const sourcingStore = resolveSourcingStore(injectedSourcingStore);
+        const ready = await loadReadyAgentMailCandidates({ tenantId: ctx.tenantId, missionId: input.missionId, matchStore, sourcingStore });
+        if (ready.length === 0) {
+          return { status: "no_ready_candidates" as const, blockedReasons: ["no_candidates_ready_for_agentmail"], results: [] };
+        }
+
+        const attemptStore = resolveContactAttemptStore(injectedContactAttemptStore);
+        const results: Array<{
+          candidateId: string; businessName: string;
+          status: "sent" | "skipped_already_sent" | "gate_blocked" | "provider_failed";
+          blockedReasons: string[]; sentAt: string | null;
+        }> = [];
+
+        for (const entry of ready) {
+          const draft = buildCandidateDraftOutreach({ businessName: entry.businessName, geographyHint: "their service area and nearby high-rise buildings" });
+          const draftBodyHash = createHash("sha256").update(draft.body).digest("hex");
+          const now = new Date();
+          // Same draft-creation call as approveCandidateForDraftOutreach
+          // (78a) -- not a new template, not a new draft path. Reused
+          // (never duplicated) on a second click via the store's own
+          // idempotency, exactly like the existing draft queue.
+          const { attempt } = await attemptStore.createOrReuseAttempt({
+            tenantId: ctx.tenantId,
+            sourceKey: entry.sourceKey,
+            candidateId: entry.candidateId,
+            channel: "manual_research_needed",
+            draftSubject: draft.subject,
+            draftBodySnapshot: draft.body,
+            draftBodyHash,
+            founderEscalationPresent: true,
+            forbiddenClaimsScanJson: { found: draft.forbiddenClaimsDetected },
+            sendGateResultJson: { allowed: false, reasons: ["awaiting_agentmail_batch_send_gate"] },
+            automationMode: "manual_fallback",
+            providerAdapter: "draft_queue_v0",
+            status: "draft_ready",
+            statusHistoryJson: [{ status: "draft_ready", at: now.toISOString(), actor: "agentmail_batch_v0" }],
+            createdBy: "agentmail_batch_v0",
+            now,
+          });
+
+          if (attempt.outreachSentByHeld) {
+            results.push({
+              candidateId: entry.candidateId, businessName: entry.businessName, status: "skipped_already_sent",
+              blockedReasons: [], sentAt: attempt.sentAt?.toISOString() ?? null,
+            });
+            continue;
+          }
+
+          const forbiddenClaimsDetected = (attempt.forbiddenClaimsScanJson as { found?: string[] } | null)?.found ?? [];
+          const sendGatePassed = attempt.founderEscalationPresent && forbiddenClaimsDetected.length === 0;
+          const liveGate = evaluateAgentMailLiveSendGate({
+            sourceKey: attempt.sourceKey,
+            category: entry.category,
+            recipientEmail: entry.recipientEmail,
+            durableDraftId: attempt.id,
+            durableAttemptId: attempt.id,
+            idempotencyKey: null,
+            sendGatePassed,
+            founderEscalationPresent: attempt.founderEscalationPresent,
+            forbiddenClaimsDetected,
+            adminConfirmationText: input.adminConfirmationText,
+          });
+
+          if (!liveGate.allowed) {
+            try {
+              await attemptStore.recordLiveSendResult({
+                tenantId: ctx.tenantId, attemptId: attempt.id, providerAdapter: "agentmail", providerAttemptId: null,
+                liveProviderInvoked: false, outreachSentByHeld: false, nextStatus: "blocked", actor: "admin",
+              });
+            } catch {
+              // Non-fatal: the gate result is still returned even if the audit write fails.
+            }
+            results.push({
+              candidateId: entry.candidateId, businessName: entry.businessName, status: "gate_blocked",
+              blockedReasons: liveGate.reasons, sentAt: null,
+            });
+            continue;
+          }
+
+          const labels = buildAgentMailLabels({ sourceKey: attempt.sourceKey, category: entry.category });
+          const sendResult = await sendVendorEmailViaAgentMail({
+            inboxId: process.env.AGENTMAIL_VENDOR_INBOX_ID ?? "",
+            inboxEmail: process.env.AGENTMAIL_VENDOR_INBOX_EMAIL ?? "",
+            recipientEmail: entry.recipientEmail,
+            subject: attempt.draftSubject ?? draft.subject,
+            textBody: attempt.draftBodySnapshot ?? draft.body,
+            labels,
+          });
+
+          await attemptStore.recordLiveSendResult({
+            tenantId: ctx.tenantId,
+            attemptId: attempt.id,
+            providerAdapter: "agentmail",
+            providerAttemptId: sendResult.providerAttemptId,
+            liveProviderInvoked: sendResult.liveProviderInvoked,
+            outreachSentByHeld: sendResult.status === "sent",
+            nextStatus: sendResult.status === "sent" ? "response_pending" : "blocked",
+            actor: "admin",
+          });
+
+          results.push({
+            candidateId: entry.candidateId,
+            businessName: entry.businessName,
+            status: sendResult.status === "sent" ? "sent" : "provider_failed",
+            blockedReasons: sendResult.status === "sent" ? [] : [sendResult.errorReason ?? "agentmail_send_rejected"],
+            sentAt: sendResult.sentAt,
+          });
+        }
+
+        return { status: "ok" as const, blockedReasons: [], results };
       }),
 
     /**
@@ -997,6 +1302,7 @@ export function createVendorAcquisitionMissionRouter(
               serviceAreaEffectiveEvidence: evidence,
               fulfillmentClassification: fulfillment,
               primaryShortlistEligibility: eligibility,
+              outreachReadinessQueue: classifyOutreachReadiness(fulfillment, evidence, eligibility),
             },
           });
         }
@@ -1059,6 +1365,7 @@ export function createVendorAcquisitionMissionRouter(
             serviceAreaEffectiveEvidence?: EffectiveServiceAreaEvidence;
             fulfillmentClassification?: FulfillmentClassification;
             primaryShortlistEligibility?: PrimaryShortlistEligibility;
+            outreachReadinessQueue?: OutreachReadinessQueue | null;
           } | null;
           const deterministic = matchEvidence?.serviceAreaVerification ?? null;
           const effective = matchEvidence?.serviceAreaEffectiveEvidence ?? null;
@@ -1080,6 +1387,10 @@ export function createVendorAcquisitionMissionRouter(
           // runDiscovery is re-run for them.
           const fulfillment = matchEvidence?.fulfillmentClassification ?? null;
           const eligibility = matchEvidence?.primaryShortlistEligibility ?? null;
+          // Slice 82a. Read the persisted classification only -- never
+          // re-derived here. Missions whose matches predate Slice 82a
+          // simply have none until runDiscovery is re-run for them.
+          const outreachReadinessQueue = matchEvidence?.outreachReadinessQueue ?? null;
           return {
             ...candidate,
             matchedQuery: match.matchedQuery,
@@ -1094,6 +1405,9 @@ export function createVendorAcquisitionMissionRouter(
             fulfillmentLabel: fulfillment?.fulfillmentLabel ?? null,
             fulfillmentReason: fulfillment?.fulfillmentReason ?? null,
             distanceToTargetMiles: deterministic?.distanceMilesToTarget ?? null,
+            outreachReadinessQueue,
+            outreachReadinessLabel: outreachReadinessQueue ? OUTREACH_READINESS_LABEL[outreachReadinessQueue] : null,
+            recipientEmail: serviceAreaVerification?.emailAddressesFound[0] ?? null,
           };
         }
 
@@ -1117,6 +1431,14 @@ export function createVendorAcquisitionMissionRouter(
           emailReadyCount: allEntriesForSummary.filter(e => e.serviceAreaVerification?.outreachReadiness === "email_ready").length,
           formRequiredCount: allEntriesForSummary.filter(e => e.serviceAreaVerification?.outreachReadiness === "form_required").length,
           smsOrCallRequiredCount: allEntriesForSummary.filter(e => e.serviceAreaVerification?.outreachReadiness === "sms_or_call_required").length,
+          // Slice 82a. Outreach Readiness Queue counts.
+          readyForAgentMailCount: allEntriesForSummary.filter(e => e.outreachReadinessQueue === "ready_for_agentmail").length,
+          manualEmailNeededCount: allEntriesForSummary.filter(e => e.outreachReadinessQueue === "manual_email_needed").length,
+          phoneSmsRequiredLaterCount: allEntriesForSummary.filter(e => e.outreachReadinessQueue === "phone_sms_required_later").length,
+          contactFormRequiredLaterCount: allEntriesForSummary.filter(e => e.outreachReadinessQueue === "contact_form_required_later").length,
+          storefrontFallbackCopyNeededCount: allEntriesForSummary.filter(e => e.outreachReadinessQueue === "storefront_fallback_copy_needed").length,
+          needsServiceAreaReviewCount: allEntriesForSummary.filter(e => e.outreachReadinessQueue === "needs_service_area_review").length,
+          doNotContactCount: allEntriesForSummary.filter(e => e.outreachReadinessQueue === "do_not_contact").length,
         };
 
         return {
