@@ -158,14 +158,41 @@ export default function MissionControlPage() {
   const saveAvailabilityIntake = trpc.admin.vendorAcquisitionMission.saveCandidateAvailabilityIntake.useMutation();
   const [intakeForm, setIntakeForm] = useState<IntakeFormState>(EMPTY_INTAKE_FORM);
   const [intakeSavedAt, setIntakeSavedAt] = useState<number | null>(null);
-  const [draftQueueStatus, setDraftQueueStatus] = useState<Record<string, "queued" | "already_queued">>({});
+  const [draftQueueStatus, setDraftQueueStatus] = useState<Record<string, {
+    queued: "queued" | "already_queued"; subject: string | null; body: string | null;
+  }>>({});
   const approveDraftOutreach = trpc.admin.vendorAcquisitionMission.approveCandidateForDraftOutreach.useMutation();
+
+  // Slice 80a -- supervised one-candidate send. Local-only panel state;
+  // nothing here calls AgentMail until the operator explicitly confirms.
+  const [sendPanelCandidateId, setSendPanelCandidateId] = useState<string | null>(null);
+  const [recipientEmailInput, setRecipientEmailInput] = useState("");
+  const [sendConfirmed, setSendConfirmed] = useState(false);
+  const sendCandidateDraftOutreach = trpc.admin.vendorAcquisitionMission.sendCandidateDraftOutreachCanary.useMutation();
+  const recipientEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmailInput.trim());
+
+  function sendSupervisedOutreach(candidateId: string) {
+    if (!effectiveMissionId) return;
+    sendCandidateDraftOutreach.mutate({
+      missionId: effectiveMissionId,
+      candidateId,
+      recipientEmail: recipientEmailInput.trim(),
+      explicitConfirmation: sendConfirmed,
+      adminConfirmationText: "SEND SUPERVISED EMAIL CANARY",
+    });
+  }
 
   function approveDraft(candidateId: string) {
     approveDraftOutreach.mutate({ candidateId }, {
       onSuccess: result => {
         if (result.status === "ok") {
-          setDraftQueueStatus(prev => ({ ...prev, [candidateId]: result.alreadyQueued ? "already_queued" : "queued" }));
+          setDraftQueueStatus(prev => ({
+            ...prev,
+            [candidateId]: {
+              queued: result.alreadyQueued ? "already_queued" : "queued",
+              subject: result.draftSubject, body: result.draftBody,
+            },
+          }));
         }
       },
     });
@@ -591,7 +618,7 @@ export default function MissionControlPage() {
                     </button>
                     {draftQueueStatus[candidate.id] ? (
                       <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
-                        {draftQueueStatus[candidate.id] === "already_queued" ? "Draft already queued" : "Draft queued"} &middot; No outreach sent
+                        {draftQueueStatus[candidate.id].queued === "already_queued" ? "Draft already queued" : "Draft queued"} &middot; No outreach sent
                       </span>
                     ) : (
                       <button
@@ -604,6 +631,20 @@ export default function MissionControlPage() {
                         {approveDraftOutreach.isPending ? "Queueing draft…" : "Approve for draft outreach"}
                       </button>
                     )}
+                    {draftQueueStatus[candidate.id] ? (
+                      <button
+                        type="button"
+                        className="rounded-lg border border-black/15 px-2 py-1 text-xs font-semibold"
+                        onClick={() => {
+                          setSendPanelCandidateId(sendPanelCandidateId === candidate.id ? null : candidate.id);
+                          setRecipientEmailInput("");
+                          setSendConfirmed(false);
+                          sendCandidateDraftOutreach.reset();
+                        }}
+                      >
+                        {sendPanelCandidateId === candidate.id ? "Hide supervised send" : "Prepare supervised send"}
+                      </button>
+                    ) : null}
                   </div>
                   {serviceModeBadge(candidate.serviceMode) === "Needs review" ? (
                     <p className="mt-1 text-[11px] text-amber-700">Review mobile fit before outreach.</p>
@@ -663,6 +704,70 @@ export default function MissionControlPage() {
                         <p className="mt-1 font-semibold text-emerald-700">Availability intake saved &middot; Not onboarded yet</p>
                       ) : availabilityIntake.data?.status === "ok" && availabilityIntake.data.intake ? (
                         <p className="mt-1 text-black/55">Existing intake on file &middot; Not onboarded yet</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {sendPanelCandidateId === candidate.id ? (
+                    <div className="mt-2 rounded-lg border border-red-200 bg-red-50/30 p-3 text-xs">
+                      <p className="text-xs font-bold">Prepare supervised send</p>
+                      <p className="mt-1 text-black/55">
+                        Sends exactly one real email through AgentMail. Nothing is sent until you confirm below.
+                      </p>
+                      <div className="mt-2 space-y-1 text-black/65">
+                        <p><span className="font-semibold">Candidate:</span> {candidate.businessName}</p>
+                        <p><span className="font-semibold">Source provider:</span> Google Places</p>
+                        {typeof website === "string" ? <p><span className="font-semibold">Website:</span> {website}</p> : null}
+                        {typeof phone === "string" ? <p><span className="font-semibold">Phone:</span> {phone}</p> : null}
+                        {candidate.matchedQuery ? <p><span className="font-semibold">Matched query:</span> {candidate.matchedQuery}</p> : null}
+                        <p><span className="font-semibold">Plan source:</span> {planSourceLabel(candidate.queryPlannerSource, null)}</p>
+                      </div>
+                      <div className="mt-2 rounded-lg border border-black/10 bg-white p-2">
+                        <p className="font-semibold text-black/55">Subject</p>
+                        <p>{draftQueueStatus[candidate.id]?.subject ?? "Mobile dog grooming availability for HELD residents"}</p>
+                        <p className="mt-2 font-semibold text-black/55">Body</p>
+                        <p className="whitespace-pre-wrap">{draftQueueStatus[candidate.id]?.body ?? "(no draft body found -- approve for draft outreach first)"}</p>
+                      </div>
+                      <input
+                        className="mt-2 w-full rounded-lg border border-black/15 px-2 py-1"
+                        placeholder="Recipient email"
+                        value={recipientEmailInput}
+                        onChange={event => setRecipientEmailInput(event.target.value)}
+                      />
+                      <label className="mt-2 flex items-start gap-2 text-black/65">
+                        <input
+                          type="checkbox"
+                          checked={sendConfirmed}
+                          onChange={event => setSendConfirmed(event.target.checked)}
+                        />
+                        I confirm this recipient email is correct and I want to send exactly one supervised outreach email.
+                      </label>
+                      <button
+                        type="button"
+                        className="mt-2 rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                        disabled={!recipientEmailValid || !sendConfirmed || sendCandidateDraftOutreach.isPending}
+                        onClick={() => sendSupervisedOutreach(candidate.id)}
+                      >
+                        {sendCandidateDraftOutreach.isPending ? "Sending…" : "Send one supervised email"}
+                      </button>
+
+                      {sendCandidateDraftOutreach.data?.status === "sent" ? (
+                        <p className="mt-2 font-semibold text-emerald-700">
+                          Sent via AgentMail &middot; Awaiting reply
+                          {sendCandidateDraftOutreach.data.sendResult?.sentAt ? ` · ${sendCandidateDraftOutreach.data.sendResult.sentAt}` : ""}
+                        </p>
+                      ) : sendCandidateDraftOutreach.data?.status === "already_sent" ? (
+                        <p className="mt-2 font-semibold text-emerald-700">Already sent via AgentMail &middot; Awaiting reply</p>
+                      ) : sendCandidateDraftOutreach.data?.status === "gate_blocked" ? (
+                        <p className="mt-2 font-semibold text-amber-800">
+                          Send blocked by canary gate: {sendCandidateDraftOutreach.data.blockedReasons.join(", ")}
+                        </p>
+                      ) : sendCandidateDraftOutreach.data?.status === "send_failed" ? (
+                        <p className="mt-2 font-semibold text-red-700">
+                          Send failed &middot; No sent truth recorded &mdash; {sendCandidateDraftOutreach.data.blockedReasons.join(", ")}
+                        </p>
+                      ) : sendCandidateDraftOutreach.data?.status === "draft_not_found" ? (
+                        <p className="mt-2 text-black/55">AgentMail provider not ready: no draft queued for this candidate.</p>
                       ) : null}
                     </div>
                   ) : null}

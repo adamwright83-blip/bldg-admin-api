@@ -2,6 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { adminProcedure, router } from "../_core/trpc";
 import {
+  buildAgentMailLabels, evaluateAgentMailLiveSendGate, sendVendorEmailViaAgentMail,
+} from "./agentMailVendorEmailProvider";
+import {
   CALENDAR_METHODS, MOBILE_SERVICE_CONFIRMED_VALUES, PREFERRED_CONTACT_CHANNELS,
   VendorCandidateAvailabilityIntakeStore,
 } from "./vendorCandidateAvailabilityIntakeStore";
@@ -286,6 +289,130 @@ export function createVendorAcquisitionMissionRouter(
           alreadyQueued: reused,
           draftSubject: attempt.draftSubject,
           draftBody: attempt.draftBodySnapshot,
+        };
+      }),
+
+    /**
+     * Slice 80a. Sends exactly ONE supervised outreach email for ONE
+     * Mission Shortlist candidate's already-queued (Slice 78a) draft.
+     * Reuses the existing, already-deployed Slice 74e AgentMail adapter
+     * (agentMailVendorEmailProvider.ts) verbatim -- evaluateAgentMailLiveSendGate
+     * and sendVendorEmailViaAgentMail are not reimplemented here, and this
+     * mutation never bypasses any precondition that gate already enforces
+     * (provider config, canary flag, source allowlist, category allowlist,
+     * founder escalation, forbidden claims, recipient validity, exact admin
+     * confirmation phrase). No bulk loop exists: this only ever sends for
+     * the single candidateId in the input, and only after explicitConfirmation
+     * is true. recordLiveSendResult (the same store method the existing
+     * casting-sprint canary uses) is the only thing that can ever set
+     * outreach_sent_by_held -- and only after the provider call returns
+     * status "sent". provider_accepted/booking_confirmed/payment_authorized/
+     * dispatched are never referenced by this mutation at all.
+     */
+    sendCandidateDraftOutreachCanary: adminProcedure
+      .input(z.object({
+        missionId: z.string().min(1),
+        candidateId: z.string().min(1),
+        recipientEmail: z.string().min(3).max(320),
+        explicitConfirmation: z.boolean(),
+        adminConfirmationText: z.string().min(1).max(64),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (!input.explicitConfirmation) {
+          return { status: "blocked" as const, blockedReasons: ["explicit_confirmation_required"], attemptId: null, sendResult: null };
+        }
+
+        const missionStore = resolveStore(injectedStore);
+        const mission = await missionStore.getMission(ctx.tenantId, input.missionId);
+        if (!mission) return { status: "mission_not_found" as const, blockedReasons: [], attemptId: null, sendResult: null };
+
+        const sourcingStore = resolveSourcingStore(injectedSourcingStore);
+        const candidate = await sourcingStore.getCandidate(ctx.tenantId, input.candidateId);
+        if (!candidate) return { status: "candidate_not_found" as const, blockedReasons: [], attemptId: null, sendResult: null };
+
+        // Candidate must have a real mission match row for THIS mission --
+        // never send for a candidate that only matched a different mission.
+        const matchStore = resolveMatchStore(injectedMatchStore);
+        const matches = await matchStore.listMissionMatches({ tenantId: ctx.tenantId, missionId: input.missionId, includeOverflow: true });
+        const isOnThisMission = matches.some(match => match.candidateId === input.candidateId);
+        if (!isOnThisMission) {
+          return { status: "candidate_not_in_mission" as const, blockedReasons: ["candidate_has_no_match_row_for_this_mission"], attemptId: null, sendResult: null };
+        }
+
+        // The draft must already have been queued by approveCandidateForDraftOutreach (Slice 78a).
+        const attemptStore = resolveContactAttemptStore(injectedContactAttemptStore);
+        const recentAttempts = await attemptStore.listAttemptsByCandidateId(ctx.tenantId, input.candidateId, 1);
+        const attempt = recentAttempts[0];
+        if (!attempt) {
+          return { status: "draft_not_found" as const, blockedReasons: ["candidate_has_no_draft_queued"], attemptId: null, sendResult: null };
+        }
+
+        // Idempotent: never call AgentMail twice for the same attempt.
+        if (attempt.outreachSentByHeld) {
+          return {
+            status: "already_sent" as const, blockedReasons: [], attemptId: attempt.id,
+            sendResult: { providerAttemptId: attempt.providerAttemptId, sentAt: attempt.sentAt?.toISOString() ?? null },
+          };
+        }
+
+        const forbiddenClaimsDetected = (attempt.forbiddenClaimsScanJson as { found?: string[] } | null)?.found ?? [];
+        const sendGatePassed = attempt.founderEscalationPresent && forbiddenClaimsDetected.length === 0;
+
+        const liveGate = evaluateAgentMailLiveSendGate({
+          sourceKey: attempt.sourceKey,
+          category: candidate.category,
+          recipientEmail: input.recipientEmail,
+          // No separate vendor_contact_drafts row exists for candidate-
+          // sourced drafts (Slice 78a stores draft fields directly on the
+          // attempt) -- the attempt's own id is the durable draft identity
+          // surrogate for this presence check.
+          durableDraftId: attempt.id,
+          durableAttemptId: attempt.id,
+          idempotencyKey: null,
+          sendGatePassed,
+          founderEscalationPresent: attempt.founderEscalationPresent,
+          forbiddenClaimsDetected,
+          adminConfirmationText: input.adminConfirmationText,
+        });
+
+        if (!liveGate.allowed) {
+          try {
+            await attemptStore.recordLiveSendResult({
+              tenantId: ctx.tenantId, attemptId: attempt.id, providerAdapter: "agentmail", providerAttemptId: null,
+              liveProviderInvoked: false, outreachSentByHeld: false, nextStatus: "blocked", actor: "admin",
+            });
+          } catch {
+            // Non-fatal: the gate result is still returned even if the audit write fails.
+          }
+          return { status: "gate_blocked" as const, blockedReasons: liveGate.reasons, attemptId: attempt.id, sendResult: null };
+        }
+
+        const labels = buildAgentMailLabels({ sourceKey: attempt.sourceKey, category: candidate.category });
+        const sendResult = await sendVendorEmailViaAgentMail({
+          inboxId: process.env.AGENTMAIL_VENDOR_INBOX_ID ?? "",
+          inboxEmail: process.env.AGENTMAIL_VENDOR_INBOX_EMAIL ?? "",
+          recipientEmail: input.recipientEmail,
+          subject: attempt.draftSubject ?? "Mobile dog grooming availability for HELD residents",
+          textBody: attempt.draftBodySnapshot ?? "",
+          labels,
+        });
+
+        await attemptStore.recordLiveSendResult({
+          tenantId: ctx.tenantId,
+          attemptId: attempt.id,
+          providerAdapter: "agentmail",
+          providerAttemptId: sendResult.providerAttemptId,
+          liveProviderInvoked: sendResult.liveProviderInvoked,
+          outreachSentByHeld: sendResult.status === "sent",
+          nextStatus: sendResult.status === "sent" ? "response_pending" : "blocked",
+          actor: "admin",
+        });
+
+        return {
+          status: sendResult.status === "sent" ? ("sent" as const) : ("send_failed" as const),
+          blockedReasons: sendResult.status === "sent" ? [] : [sendResult.errorReason ?? "agentmail_send_rejected"],
+          attemptId: attempt.id,
+          sendResult: { providerAttemptId: sendResult.providerAttemptId, sentAt: sendResult.sentAt },
         };
       }),
 

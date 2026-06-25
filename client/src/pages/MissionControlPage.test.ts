@@ -573,3 +573,67 @@ describe("MissionControlPage -- Slice 79a mission-scoped shortlist", () => {
     expect(source).not.toMatch(/category, limit: 50/);
   });
 });
+
+describe("MissionControlPage -- Slice 80a supervised outreach send canary", () => {
+  it("renders 'Prepare supervised send' only after a draft is queued, wired to the real mutation", () => {
+    expect(source).toMatch(/Prepare supervised send/);
+    expect(source).toMatch(/vendorAcquisitionMission\.sendCandidateDraftOutreachCanary\.useMutation/);
+    expect(source).toMatch(/draftQueueStatus\[candidate\.id\] \? \(\s*<button/);
+  });
+
+  it("requires a valid recipient email before the send button is enabled", () => {
+    expect(source).toMatch(/const recipientEmailValid = \/\^\[\^\\s@\]\+@/);
+    expect(source).toMatch(/disabled=\{!recipientEmailValid \|\| !sendConfirmed \|\| sendCandidateDraftOutreach\.isPending\}/);
+  });
+
+  it("requires the explicit confirmation checkbox before the send button is enabled", () => {
+    expect(source).toMatch(/I confirm this recipient email is correct and I want to send exactly one supervised outreach email\./);
+    expect(source).toMatch(/checked=\{sendConfirmed\}/);
+  });
+
+  it("shows the exact subject/body preview before send, sourced from the real queued draft, never a hardcoded sample", () => {
+    expect(source).toMatch(/draftQueueStatus\[candidate\.id\]\?\.subject/);
+    expect(source).toMatch(/draftQueueStatus\[candidate\.id\]\?\.body/);
+  });
+
+  it("renders a success state after a real sent result", () => {
+    expect(source).toMatch(/Sent via AgentMail &middot; Awaiting reply/);
+  });
+
+  it("renders a gate-blocked state with the non-secret reason, never the API key", () => {
+    expect(source).toMatch(/Send blocked by canary gate: \{sendCandidateDraftOutreach\.data\.blockedReasons\.join\(", "\)\}/);
+  });
+
+  it("renders a failure state without claiming sent truth", () => {
+    expect(source).toMatch(/Send failed &middot; No sent truth recorded/);
+  });
+
+  it("only ever sends for one candidate at a time -- no bulk-send button or loop exists", () => {
+    expect(source).not.toMatch(/sendAll|bulkSend|\.forEach\(candidate => .*sendSupervisedOutreach/);
+    expect(source).toMatch(/function sendSupervisedOutreach\(candidateId: string\)/);
+  });
+
+  it("never auto-sends on render, discovery, or draft approval -- the send call only happens inside the explicit send button's onClick", () => {
+    expect(source).not.toMatch(/useEffect\([^)]*sendCandidateDraftOutreach\.mutate/s);
+    expect(source).toMatch(/onClick=\{\(\) => sendSupervisedOutreach\(candidate\.id\)\}/);
+  });
+
+  it("never invokes any SMS/Yelp/web-form/phone send path from this panel", () => {
+    expect(source).not.toMatch(/sendSms|sendYelpMessage|placeCall|\.submit\(\)/);
+  });
+
+  it("never renders a hardcoded/fake vendor name or claims guaranteed volume/current booking", () => {
+    expect(source).not.toMatch(/Paws & Polish|Happy Hounds|Wag Luxury|Beverly Barkers|Puppy Palace|The Dog Spa/);
+    expect(source).not.toMatch(/guaranteed volume|currently booking|partnership/i);
+  });
+});
+
+describe("MissionControlPage -- Slice 80a source isolation", () => {
+  it("never imports any outbound send adapter directly -- only calls the tRPC mutation by name", () => {
+    expect(source).not.toMatch(/from ["']agentmail|@anthropic-ai|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid/i);
+  });
+
+  it("never claims a truth field is true", () => {
+    expect(source).not.toMatch(/provider_accepted:\s*true|bookingConfirmed:\s*true|paymentAuthorized:\s*true|dispatched:\s*true/i);
+  });
+});

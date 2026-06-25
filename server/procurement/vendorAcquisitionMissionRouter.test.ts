@@ -1,5 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
-import { createVendorAcquisitionMissionRouter } from "./vendorAcquisitionMissionRouter";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("./agentMailVendorEmailProvider", async () => {
+  const actual = await vi.importActual<typeof import("./agentMailVendorEmailProvider")>("./agentMailVendorEmailProvider");
+  return { ...actual, sendVendorEmailViaAgentMail: vi.fn() };
+});
+
+const { sendVendorEmailViaAgentMail, SUPERVISED_CANARY_CONFIRMATION_TEXT } = await import("./agentMailVendorEmailProvider");
+const { createVendorAcquisitionMissionRouter } = await import("./vendorAcquisitionMissionRouter");
 
 function context(user: { role: string } | null) {
   return { user, tenantId: "default", req: {}, res: {}, vendorSession: null } as never;
@@ -919,5 +926,217 @@ describe("vendorAcquisitionMissionRouter -- listMissionShortlist (Slice 79a)", (
     const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
     await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1" });
     expect(Object.keys(matchStore).sort()).toEqual(["countMissionMatches", "listMissionMatches", "upsertMatch"]);
+  });
+});
+
+const READY_ENV = {
+  HELD_VENDOR_EMAIL_PROVIDER: "agentmail",
+  AGENTMAIL_API_KEY: "test-key",
+  AGENTMAIL_VENDOR_INBOX_ID: "inbox-1",
+  AGENTMAIL_VENDOR_INBOX_EMAIL: "vendors@held.test",
+  HELD_VENDOR_EMAIL_CANARY_ENABLED: "true",
+  HELD_VENDOR_EMAIL_SOURCE_ALLOWLIST: "sourcing_candidate:candidate-1",
+  HELD_VENDOR_EMAIL_CATEGORY_ALLOWLIST: "dog_grooming",
+};
+
+function makeMockDraftAttempt(overrides?: Record<string, unknown>) {
+  return {
+    id: "attempt-1", sourceKey: "sourcing_candidate:candidate-1", candidateId: "candidate-1",
+    draftSubject: "HELD preferred vendor list — mobile dog grooming near 90027",
+    draftBodySnapshot: "Hi — I'm Adam with HELD...",
+    founderEscalationPresent: true, forbiddenClaimsScanJson: { found: [] },
+    outreachSentByHeld: false, providerAttemptId: null, sentAt: null, status: "draft_ready",
+    ...overrides,
+  };
+}
+
+function makeMockMatchEntry(overrides?: Record<string, unknown>) {
+  return { id: "match-1", missionId: "mission-1", candidateId: "candidate-1", isShortlisted: true, ...overrides };
+}
+
+describe("vendorAcquisitionMissionRouter -- sendCandidateDraftOutreachCanary (Slice 80a)", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    for (const [key, value] of Object.entries(READY_ENV)) vi.stubEnv(key, value);
+    vi.mocked(sendVendorEmailViaAgentMail).mockReset();
+  });
+
+  function setup(overrides?: { missionStore?: object; sourcingStore?: object; matchStore?: object; contactAttemptStore?: object }) {
+    const missionStore = overrides?.missionStore ?? makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = overrides?.sourcingStore ?? makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const matchStore = overrides?.matchStore ?? makeMockMatchStore({ listMissionMatches: vi.fn().mockResolvedValue([makeMockMatchEntry()]) });
+    const contactAttemptStore = overrides?.contactAttemptStore ?? makeMockContactAttemptStore({
+      listAttemptsByCandidateId: vi.fn().mockResolvedValue([makeMockDraftAttempt()]),
+      recordLiveSendResult: vi.fn().mockResolvedValue({}),
+    });
+    const router = createVendorAcquisitionMissionRouter(
+      missionStore as never, sourcingStore as never, undefined, undefined,
+      contactAttemptStore as never, undefined, matchStore as never,
+    );
+    return { router, missionStore, sourcingStore, matchStore, contactAttemptStore };
+  }
+
+  function validInput(overrides?: Record<string, unknown>) {
+    return {
+      missionId: "mission-1", candidateId: "candidate-1", recipientEmail: "vendor@example.com",
+      explicitConfirmation: true, adminConfirmationText: SUPERVISED_CANARY_CONFIRMATION_TEXT,
+      ...overrides,
+    };
+  }
+
+  it("rejects unauthenticated and non-admin callers", async () => {
+    const { router } = setup();
+    await expect(router.createCaller(context(null)).sendCandidateDraftOutreachCanary(validInput())).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("cannot send without explicit confirmation, and never calls the provider", async () => {
+    const { router } = setup();
+    const result = await router.createCaller(context({ role: "admin" })).sendCandidateDraftOutreachCanary(validInput({ explicitConfirmation: false }));
+    expect(result).toEqual({ status: "blocked", blockedReasons: ["explicit_confirmation_required"], attemptId: null, sendResult: null });
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("cannot send without a draft queued for the candidate", async () => {
+    const { router } = setup({ contactAttemptStore: makeMockContactAttemptStore({ listAttemptsByCandidateId: vi.fn().mockResolvedValue([]) }) });
+    const result = await router.createCaller(context({ role: "admin" })).sendCandidateDraftOutreachCanary(validInput());
+    expect(result.status).toBe("draft_not_found");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("cannot send for a candidate with no match row on this mission", async () => {
+    const { router } = setup({ matchStore: makeMockMatchStore({ listMissionMatches: vi.fn().mockResolvedValue([]) }) });
+    const result = await router.createCaller(context({ role: "admin" })).sendCandidateDraftOutreachCanary(validInput());
+    expect(result.status).toBe("candidate_not_in_mission");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid recipient email via the existing gate, without calling the provider", async () => {
+    const { router } = setup();
+    const result = await router.createCaller(context({ role: "admin" })).sendCandidateDraftOutreachCanary(validInput({ recipientEmail: "not-an-email" }));
+    expect(result.status).toBe("gate_blocked");
+    expect(result.blockedReasons).toContain("recipient_email_invalid");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("rejects a wrong admin confirmation phrase via the existing gate, without calling the provider", async () => {
+    const { router } = setup();
+    const result = await router.createCaller(context({ role: "admin" })).sendCandidateDraftOutreachCanary(validInput({ adminConfirmationText: "wrong phrase" }));
+    expect(result.status).toBe("gate_blocked");
+    expect(result.blockedReasons).toContain("admin_confirmation_text_mismatch");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("returns gate_blocked with the exact reason when the canary flag is disabled, and never calls the provider", async () => {
+    vi.stubEnv("HELD_VENDOR_EMAIL_CANARY_ENABLED", "false");
+    const { router } = setup();
+    const result = await router.createCaller(context({ role: "admin" })).sendCandidateDraftOutreachCanary(validInput());
+    expect(result.status).toBe("gate_blocked");
+    expect(result.blockedReasons).toContain("live_email_canary_disabled");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("respects the source allowlist -- a candidate sourceKey outside the allowlist is blocked, never sent", async () => {
+    vi.stubEnv("HELD_VENDOR_EMAIL_SOURCE_ALLOWLIST", "sourcing_candidate:some-other-candidate");
+    const { router } = setup();
+    const result = await router.createCaller(context({ role: "admin" })).sendCandidateDraftOutreachCanary(validInput());
+    expect(result.status).toBe("gate_blocked");
+    expect(result.blockedReasons).toContain("source_not_allowlisted");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("respects the category allowlist -- an uncategorized/unlisted category is blocked, never sent", async () => {
+    vi.stubEnv("HELD_VENDOR_EMAIL_CATEGORY_ALLOWLIST", "haircut");
+    const { router } = setup();
+    const result = await router.createCaller(context({ role: "admin" })).sendCandidateDraftOutreachCanary(validInput());
+    expect(result.status).toBe("gate_blocked");
+    expect(result.blockedReasons).toContain("category_not_allowlisted");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("sends exactly one supervised email for one shortlisted candidate when every gate passes", async () => {
+    vi.mocked(sendVendorEmailViaAgentMail).mockResolvedValue({
+      providerName: "agentmail", providerAttemptId: "msg_1", threadId: "thread_1", inboxId: "inbox-1",
+      inboxEmail: "vendors@held.test", status: "sent", liveProviderInvoked: true,
+      rawProviderResponseJson: { messageId: "msg_1" }, sentAt: "2026-06-25T00:00:00.000Z", errorReason: null,
+    });
+    const { router, contactAttemptStore } = setup();
+    const result = await router.createCaller(context({ role: "admin" })).sendCandidateDraftOutreachCanary(validInput());
+
+    expect(result.status).toBe("sent");
+    expect(sendVendorEmailViaAgentMail).toHaveBeenCalledOnce();
+    expect(contactAttemptStore.recordLiveSendResult).toHaveBeenCalledWith(expect.objectContaining({
+      attemptId: "attempt-1", outreachSentByHeld: true, nextStatus: "response_pending",
+    }));
+  });
+
+  it("provider success marks sent truth exactly once -- recordLiveSendResult is called exactly once", async () => {
+    vi.mocked(sendVendorEmailViaAgentMail).mockResolvedValue({
+      providerName: "agentmail", providerAttemptId: "msg_1", threadId: null, inboxId: "inbox-1",
+      inboxEmail: "vendors@held.test", status: "sent", liveProviderInvoked: true,
+      rawProviderResponseJson: null, sentAt: "2026-06-25T00:00:00.000Z", errorReason: null,
+    });
+    const { router, contactAttemptStore } = setup();
+    await router.createCaller(context({ role: "admin" })).sendCandidateDraftOutreachCanary(validInput());
+    expect(contactAttemptStore.recordLiveSendResult).toHaveBeenCalledOnce();
+  });
+
+  it("provider failure does not mark sent/contacted truth", async () => {
+    vi.mocked(sendVendorEmailViaAgentMail).mockResolvedValue({
+      providerName: "agentmail", providerAttemptId: null, threadId: null, inboxId: "inbox-1",
+      inboxEmail: "vendors@held.test", status: "rejected", liveProviderInvoked: true,
+      rawProviderResponseJson: null, sentAt: null, errorReason: "provider_rejected",
+    });
+    const { router, contactAttemptStore } = setup();
+    const result = await router.createCaller(context({ role: "admin" })).sendCandidateDraftOutreachCanary(validInput());
+
+    expect(result.status).toBe("send_failed");
+    expect(contactAttemptStore.recordLiveSendResult).toHaveBeenCalledWith(expect.objectContaining({
+      outreachSentByHeld: false, nextStatus: "blocked",
+    }));
+  });
+
+  it("is idempotent: a duplicate send attempt for an already-sent draft returns already_sent and never calls the provider again", async () => {
+    const { router } = setup({
+      contactAttemptStore: makeMockContactAttemptStore({
+        listAttemptsByCandidateId: vi.fn().mockResolvedValue([makeMockDraftAttempt({ outreachSentByHeld: true, providerAttemptId: "msg_1", sentAt: new Date("2026-06-25T00:00:00.000Z") })]),
+        recordLiveSendResult: vi.fn(),
+      }),
+    });
+    const result = await router.createCaller(context({ role: "admin" })).sendCandidateDraftOutreachCanary(validInput());
+    expect(result.status).toBe("already_sent");
+    expect(sendVendorEmailViaAgentMail).not.toHaveBeenCalled();
+  });
+
+  it("never invokes any SMS/Yelp/web-form/phone path -- only sendVendorEmailViaAgentMail is ever called for outreach", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const source = fs.readFileSync(path.resolve(__dirname, "vendorAcquisitionMissionRouter.ts"), "utf8");
+    expect(source).not.toMatch(/sendSms|sendYelpMessage|placeCall|\.submit\(\)/);
+  });
+
+  it("never sets provider_accepted/booking_confirmed/payment_authorized/dispatched -- those fields are not referenced by this mutation", async () => {
+    vi.mocked(sendVendorEmailViaAgentMail).mockResolvedValue({
+      providerName: "agentmail", providerAttemptId: "msg_1", threadId: null, inboxId: "inbox-1",
+      inboxEmail: "vendors@held.test", status: "sent", liveProviderInvoked: true,
+      rawProviderResponseJson: null, sentAt: "2026-06-25T00:00:00.000Z", errorReason: null,
+    });
+    const { router, contactAttemptStore } = setup();
+    await router.createCaller(context({ role: "admin" })).sendCandidateDraftOutreachCanary(validInput());
+    const call = contactAttemptStore.recordLiveSendResult.mock.calls[0][0];
+    expect(call).not.toHaveProperty("providerAccepted");
+    expect(call).not.toHaveProperty("bookingConfirmed");
+    expect(call).not.toHaveProperty("paymentAuthorized");
+    expect(call).not.toHaveProperty("dispatched");
+  });
+
+  it("never sends more than one email even if called -- no loop over multiple candidates exists in this mutation", async () => {
+    vi.mocked(sendVendorEmailViaAgentMail).mockResolvedValue({
+      providerName: "agentmail", providerAttemptId: "msg_1", threadId: null, inboxId: "inbox-1",
+      inboxEmail: "vendors@held.test", status: "sent", liveProviderInvoked: true,
+      rawProviderResponseJson: null, sentAt: "2026-06-25T00:00:00.000Z", errorReason: null,
+    });
+    const { router } = setup();
+    await router.createCaller(context({ role: "admin" })).sendCandidateDraftOutreachCanary(validInput());
+    expect(sendVendorEmailViaAgentMail).toHaveBeenCalledTimes(1);
   });
 });
