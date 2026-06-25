@@ -444,21 +444,28 @@ export function classifyOutreachReadiness(
   if (fulfillment.fulfillmentTier === "red") return "do_not_contact";
   if (fulfillment.fulfillmentTier === "blue") return "storefront_fallback_copy_needed";
   if (fulfillment.fulfillmentTier === "yellow") return "needs_service_area_review";
-  // Slice 82d fix. A candidate the Claude interpreter (or deterministic
-  // fallback) flagged as requiring human review can NEVER become
-  // ready_for_agentmail just because a direct email also happens to
-  // exist -- there is no manual-override mechanism yet, so this gate
-  // is unconditional. This was the real bug behind candidates showing
-  // "Human review required" AND "Ready for AgentMail" simultaneously.
-  if (evidence.requiresHumanReview) return "needs_service_area_review";
-  // Only green (verified/likely mobile/building-service, with the
-  // vendor's own mobile evidence, no human review required) remains --
-  // route purely by the vendor's own discovered contact evidence,
-  // never by mission intent.
+  // Slice 82e fix (relaxes 82d). requiresHumanReview is now a WARNING,
+  // not an absolute block, for an otherwise-green candidate -- but
+  // ONLY when a real direct email was actually found. Without an
+  // email, there is nothing safe to route an ambiguous candidate to
+  // (no email-ready path exists), so it still stays in human review.
+  // This is the one deliberate relaxation: every other gate (mobile
+  // fit, verified/likely area tier, not-out-of-area, real direct
+  // email, not-already-sent) remains exactly as strict as before --
+  // storefront fallback, phone-only, form-only, and out-of-area
+  // candidates are still never reachable from this branch at all.
   // Slice 82b: emailDiscovery (the deeper, up-to-3-page crawl) is
   // consulted first when present -- it can find a real email the
   // single-homepage-page verifier (81a) missed -- but never invents
   // anything; it is simply a richer real-evidence source.
+  if (evidence.requiresHumanReview) {
+    const reviewEmail = emailDiscovery?.primaryEmail ?? evidence.emailAddressesFound[0] ?? null;
+    return reviewEmail ? "ready_for_agentmail" : "needs_service_area_review";
+  }
+  // Only green (verified/likely mobile/building-service, with the
+  // vendor's own mobile evidence, no human review required) remains --
+  // route purely by the vendor's own discovered contact evidence,
+  // never by mission intent.
   const primaryEmail = emailDiscovery?.primaryEmail ?? evidence.emailAddressesFound[0] ?? null;
   if (primaryEmail) return "ready_for_agentmail";
   if (emailDiscovery?.contactFormDetected || evidence.outreachReadiness === "form_required") return "contact_form_required_later";

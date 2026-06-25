@@ -787,8 +787,14 @@ export default function MissionControlPage() {
                       </span>
                     ) : null}
                     {candidate.serviceAreaVerification?.requiresHumanReview ? (
+                      // Slice 82e. ready_for_agentmail + requiresHumanReview
+                      // means a real email was found AND every other gate
+                      // passed -- human review is a non-blocking warning
+                      // here, not a block, so the copy says "recommended."
+                      // For every other readiness state, it is still the
+                      // actual reason the candidate is not ready.
                       <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                        Human review required
+                        {candidate.outreachReadinessQueue === "ready_for_agentmail" ? "Human review recommended" : "Human review required"}
                       </span>
                     ) : null}
                     {candidate.outreachReadinessLabel ? (
@@ -886,6 +892,18 @@ export default function MissionControlPage() {
                     ) : candidate.outreachReadinessQueue === "contact_form_required_later" ? (
                       <span className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-800">
                         Future contact-form workflow
+                      </span>
+                    ) : candidate.outreachReadinessQueue === "needs_service_area_review" ? (
+                      // Slice 82e fix. needs_service_area_review can
+                      // now occur on a GREEN-tier candidate too (human
+                      // review required, no direct email) -- the old
+                      // chain only checked fulfillmentTier === "yellow"
+                      // for this copy, so a green human-review
+                      // candidate fell through to the final
+                      // "Re-run discovery" fallback even though it was
+                      // already correctly classified.
+                      <span className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">
+                        Review service-area fit before outreach
                       </span>
                     ) : candidate.outreachReadinessQueue === "ready_for_agentmail" ? (
                       <button

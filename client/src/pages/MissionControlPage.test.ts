@@ -1006,3 +1006,20 @@ describe("MissionControlPage -- Slice 82d readiness consistency fixes", () => {
     expect(contactRouteIndex).toBeGreaterThan(-1);
   });
 });
+
+describe("MissionControlPage -- Slice 82e AgentMail-ready gate relaxation for reviewed-likely mobile vendors", () => {
+  it("shows 'Human review recommended' (not 'required') for a ready_for_agentmail candidate -- the warning is non-blocking once a real email exists", () => {
+    expect(source).toMatch(/candidate\.outreachReadinessQueue === "ready_for_agentmail" \? "Human review recommended" : "Human review required"/);
+  });
+
+  it("a needs_service_area_review candidate (human review, no email) shows 'Review service-area fit before outreach', never 'Re-run discovery' -- this is the exact bug Adam reported", () => {
+    expect(source).toMatch(/candidate\.outreachReadinessQueue === "needs_service_area_review" \? \(/);
+  });
+
+  it("ready_for_agentmail candidates still get the normal 'Approve for draft outreach' button, no new CTA", () => {
+    const needsReviewBranch = source.indexOf('candidate.outreachReadinessQueue === "needs_service_area_review" ? (');
+    const approveButtonIndex = source.indexOf("Approve for draft outreach");
+    expect(needsReviewBranch).toBeGreaterThan(-1);
+    expect(approveButtonIndex).toBeGreaterThan(needsReviewBranch);
+  });
+});

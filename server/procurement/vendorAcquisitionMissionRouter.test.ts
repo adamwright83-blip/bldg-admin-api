@@ -1962,9 +1962,26 @@ describe("classifyOutreachReadiness (Slice 82a)", () => {
     expect(classifyOutreachReadiness(baseFulfillment() as never, baseEvidence() as never, { eligible: true, exclusionReason: null })).toBe("ready_for_agentmail");
   });
 
-  it("Slice 82d: green + verified + email found + requiresHumanReview -> needs_service_area_review, NEVER ready_for_agentmail", () => {
+  it("Slice 82e: green + verified + direct email found + requiresHumanReview -> ready_for_agentmail (human review is now a non-blocking warning when a real email exists)", () => {
     const evidence = baseEvidence({ requiresHumanReview: true });
+    expect(classifyOutreachReadiness(baseFulfillment() as never, evidence as never, { eligible: true, exclusionReason: null })).toBe("ready_for_agentmail");
+  });
+
+  it("Slice 82e: green + verified + NO direct email + requiresHumanReview -> still needs_service_area_review (nothing safe to route an ambiguous, email-less candidate to)", () => {
+    const evidence = baseEvidence({ requiresHumanReview: true, emailAddressesFound: [] });
     expect(classifyOutreachReadiness(baseFulfillment() as never, evidence as never, { eligible: true, exclusionReason: null })).toBe("needs_service_area_review");
+  });
+
+  it("Slice 82e: requiresHumanReview never relaxes the OTHER gates -- storefront fallback with email + human review stays storefront_fallback_copy_needed", () => {
+    const fulfillment = baseFulfillment({ fulfillmentMode: "drive_to_storefront_fallback", fulfillmentTier: "blue", fulfillmentLabel: "Drive-to fallback", vendorHasMobileEvidence: false });
+    const evidence = baseEvidence({ requiresHumanReview: true });
+    expect(classifyOutreachReadiness(fulfillment as never, evidence as never, { eligible: true, exclusionReason: null })).toBe("storefront_fallback_copy_needed");
+  });
+
+  it("Slice 82e: requiresHumanReview never relaxes out-of-area exclusion -- out-of-area with email + human review stays do_not_contact", () => {
+    const fulfillment = baseFulfillment({ fulfillmentMode: "out_of_area", fulfillmentTier: "red", fulfillmentLabel: "Out of area" });
+    const evidence = baseEvidence({ requiresHumanReview: true });
+    expect(classifyOutreachReadiness(fulfillment as never, evidence as never, { eligible: true, exclusionReason: null })).toBe("do_not_contact");
   });
 
   it("green + verified + form found (no email) -> contact_form_required_later", () => {
@@ -2239,7 +2256,7 @@ describe("vendorAcquisitionMissionRouter -- previewReadyAgentMailBatchForMission
     expect(result.candidates).toHaveLength(0);
   });
 
-  it("Slice 82d: a candidate requiring human review never appears in the AgentMail batch preview, even with a direct email and a stale ready_for_agentmail persisted value", async () => {
+  it("Slice 82e: a human-review candidate WITH a direct email now appears in the AgentMail batch preview (the deliberate relaxation), overriding a stale persisted needs_service_area_review value", async () => {
     const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
     const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
     const matchStore = makeMockMatchStore({
@@ -2252,9 +2269,35 @@ describe("vendorAcquisitionMissionRouter -- previewReadyAgentMailBatchForMission
             primaryShortlistEligibility: { eligible: true, exclusionReason: null },
             fulfillmentClassification: baseFulfillment(),
             // Deliberately stale/incorrect persisted value (as if this
-            // match were written before the requiresHumanReview gate
-            // existed) -- the live re-derivation must override it.
-            outreachReadinessQueue: "ready_for_agentmail",
+            // match were written under the old 82d strict rule) -- the
+            // live re-derivation must override it with the new 82e rule.
+            outreachReadinessQueue: "needs_service_area_review",
+          },
+        },
+      ]),
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).previewReadyAgentMailBatchForMission({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.readyCount).toBe(1);
+    expect(result.candidates[0].recipientEmail).toBe("hello@example.com");
+  });
+
+  it("Slice 82e: a human-review candidate with NO direct email still never appears in the AgentMail batch preview", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({ getCandidate: vi.fn().mockResolvedValue(makeMockCandidate()) });
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([
+        {
+          id: "match-1", candidateId: "candidate-1",
+          matchEvidence: {
+            serviceAreaVerification: verification({ emailAddressesFound: [] }),
+            serviceAreaEffectiveEvidence: baseEvidence({ requiresHumanReview: true, emailAddressesFound: [] }),
+            primaryShortlistEligibility: { eligible: true, exclusionReason: null },
+            fulfillmentClassification: baseFulfillment(),
+            outreachReadinessQueue: "needs_service_area_review",
           },
         },
       ]),
@@ -2290,12 +2333,14 @@ describe("vendorAcquisitionMissionRouter -- previewReadyAgentMailBatchForMission
         id: "match-2", candidateId: "candidate-1", isShortlisted: true, rankPosition: 2,
         matchedQuery: "q", queryPlannerSource: "anthropic_structured", serviceMode: "mobile_required",
         matchEvidence: {
-          serviceAreaVerification: verification({ emailAddressesFound: ["other@example.com"] }),
-          // Human review required -- must NOT count as ready in either path.
-          serviceAreaEffectiveEvidence: baseEvidence({ requiresHumanReview: true }),
+          serviceAreaVerification: verification({ emailAddressesFound: [] }),
+          // Human review required AND no direct email -- must NOT
+          // count as ready in either path (the 82e relaxation only
+          // applies when a real email exists).
+          serviceAreaEffectiveEvidence: baseEvidence({ requiresHumanReview: true, emailAddressesFound: [] }),
           primaryShortlistEligibility: { eligible: true, exclusionReason: null },
           fulfillmentClassification: baseFulfillment(),
-          outreachReadinessQueue: "ready_for_agentmail",
+          outreachReadinessQueue: "needs_service_area_review",
         },
       },
     ];
@@ -2314,9 +2359,8 @@ describe("vendorAcquisitionMissionRouter -- previewReadyAgentMailBatchForMission
     // now re-derive classifyOutreachReadiness live over the same
     // persisted evidence -- they can never disagree, even when the
     // stored outreachReadinessQueue value is stale/incorrect (here,
-    // both matches were persisted with the same stale
-    // "ready_for_agentmail" value, but match-2 requires human review
-    // and must be excluded by both surfaces identically).
+    // match-2 requires human review AND has no email, so it must be
+    // excluded by both surfaces identically).
     expect(preview.readyCount).toBe(1);
     expect(shortlist.summary.readyForAgentMailCount).toBe(1);
     expect(preview.readyCount).toBe(shortlist.summary.readyForAgentMailCount);
