@@ -20,6 +20,13 @@ function evidenceField(evidence: unknown, key: string): string | number | null {
   return typeof value === "string" || typeof value === "number" ? value : null;
 }
 
+function planSourceLabel(source: string, fallbackReason: string | null): string {
+  if (source === "anthropic_structured") return "AI structured parser";
+  if (fallbackReason === "needs_provider_config") return "Provider config needed";
+  if (fallbackReason === "invalid_output") return "Invalid parser output fallback";
+  return "Deterministic fallback";
+}
+
 function serviceModeBadge(evidence: unknown): string {
   const mode = evidenceField(evidence, "serviceMode");
   if (mode === "mobile_required" || mode === "building_service_required") return "Mobile intent";
@@ -422,12 +429,22 @@ export default function MissionControlPage() {
             ) : runDiscovery.data.status === "mission_not_found" ? (
               <p className="text-black/55">Mission not found.</p>
             ) : runDiscovery.data.foundCount === 0 ? (
-              <p className="text-black/55">No candidates found for this mission.</p>
+              <>
+                <p className="text-black/55">No candidates found for this mission.</p>
+                <p className="mt-1 text-black/40">
+                  Plan source: {planSourceLabel(runDiscovery.data.queryPlannerSource, runDiscovery.data.queryPlannerFallbackReason)}
+                </p>
+              </>
             ) : (
-              <p className="font-semibold">
-                Found {runDiscovery.data.foundCount} &middot; persisted {runDiscovery.data.persistedCount} &middot; already discovered {runDiscovery.data.alreadyDiscoveredCount}
-                &middot; see Discovered Candidates below for details.
-              </p>
+              <>
+                <p className="font-semibold">
+                  Found {runDiscovery.data.foundCount} &middot; persisted {runDiscovery.data.persistedCount} &middot; already discovered {runDiscovery.data.alreadyDiscoveredCount}
+                  &middot; see Discovered Candidates below for details.
+                </p>
+                <p className="mt-1 text-black/40">
+                  Plan source: {planSourceLabel(runDiscovery.data.queryPlannerSource, runDiscovery.data.queryPlannerFallbackReason)}
+                </p>
+              </>
             )}
           </div>
         ) : null}
@@ -469,6 +486,7 @@ export default function MissionControlPage() {
               const website = evidenceField(candidate.evidence, "website");
               const sourceUrl = evidenceField(candidate.evidence, "sourceUrl");
               const matchedQuery = evidenceField(candidate.evidence, "matchedQuery");
+              const queryPlannerSource = evidenceField(candidate.evidence, "queryPlannerSource");
               const expanded = expandedCandidateId === candidate.id;
               return (
                 <div key={candidate.id} className="rounded-lg border border-black/10 p-3 text-xs">
@@ -481,6 +499,9 @@ export default function MissionControlPage() {
                   </div>
                   {typeof address === "string" ? <p className="mt-1 text-black/55">{address}</p> : null}
                   {typeof matchedQuery === "string" ? <p className="mt-1 text-black/40">Found via: {matchedQuery}</p> : null}
+                  {typeof queryPlannerSource === "string" ? (
+                    <p className="mt-1 text-black/40">Plan source: {planSourceLabel(queryPlannerSource, null)}</p>
+                  ) : null}
                   <div className="mt-1 flex flex-wrap gap-3 text-black/45">
                     {typeof phone === "string" ? <span>{phone}</span> : null}
                     {typeof website === "string" ? <span>{website}</span> : null}

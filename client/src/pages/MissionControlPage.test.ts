@@ -418,3 +418,41 @@ describe("MissionControlPage -- Slice 77a source isolation", () => {
     expect(source).not.toMatch(/Paws & Polish|Happy Hounds|Wag Luxury|Beverly Barkers|Puppy Palace|The Dog Spa/);
   });
 });
+
+describe("MissionControlPage -- Slice 77b structured parser plan source", () => {
+  it("renders a plan-source label derived from the real discovery result, with the controlled label set", () => {
+    expect(source).toMatch(/function planSourceLabel/);
+    for (const sourceLabel of ["AI structured parser", "Deterministic fallback", "Provider config needed", "Invalid parser output fallback"]) {
+      expect(source).toContain(sourceLabel);
+    }
+  });
+
+  it("shows the plan source on both the zero-result and success discovery summaries", () => {
+    expect(source).toMatch(/Plan source: \{planSourceLabel\(runDiscovery\.data\.queryPlannerSource, runDiscovery\.data\.queryPlannerFallbackReason\)\}/);
+  });
+
+  it("Candidate Review shows the planner source per candidate when evidence includes it", () => {
+    expect(source).toMatch(/queryPlannerSource = evidenceField\(candidate\.evidence, "queryPlannerSource"\)/);
+    expect(source).toMatch(/Plan source: \{planSourceLabel\(queryPlannerSource, null\)\}/);
+  });
+
+  it("does not call Claude on every render or keystroke -- the live composer preview stays deterministic-only", () => {
+    expect(source).toMatch(/vendorAcquisitionMission\.previewQueryPlan\.useQuery/);
+    expect(source).not.toMatch(/parseMissionWithClaude/);
+  });
+
+  it("still never enables an outreach/send action and never renders a fake vendor name", () => {
+    expect(source).toMatch(/Approve for outreach &middot; Coming next/);
+    expect(source).not.toMatch(/Paws & Polish|Happy Hounds|Wag Luxury|Beverly Barkers|Puppy Palace|The Dog Spa/);
+  });
+});
+
+describe("MissionControlPage -- Slice 77b source isolation", () => {
+  it("never imports any outbound send adapter or live LLM SDK directly", () => {
+    expect(source).not.toMatch(/from ["']agentmail|sendVendorEmail|twilio|sendSms|elevenlabs|sendgrid|@anthropic-ai/i);
+  });
+
+  it("never claims a truth field is true", () => {
+    expect(source).not.toMatch(/provider_accepted:\s*true|bookingConfirmed:\s*true|paymentAuthorized:\s*true|dispatched:\s*true/i);
+  });
+});

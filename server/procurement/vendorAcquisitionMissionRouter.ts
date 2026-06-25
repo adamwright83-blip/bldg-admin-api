@@ -5,8 +5,11 @@ import { runGooglePlacesDiscovery, type NormalizedPlaceCandidate } from "./googl
 import { createProcurementPool } from "./migrations";
 import { MISSION_OUTREACH_MODES } from "./vendorAcquisitionMissionPolicy";
 import { VendorAcquisitionMissionStore } from "./vendorAcquisitionMissionStore";
-import { planMissionQuery } from "./vendorMissionQueryPlanner";
+import { planMissionQuery, type MissionQueryPlan } from "./vendorMissionQueryPlanner";
+import { parseMissionWithClaude } from "./vendorMissionStructuredParser";
 import { VendorSourcingStore } from "./vendorSourcingStore";
+
+export type QueryPlannerSource = "anthropic_structured" | "deterministic_fallback";
 
 /**
  * Slice 75a. Wires the existing, already-deployed (Slice 74b)
@@ -49,6 +52,8 @@ function resolveSourcingStore(injected?: VendorSourcingStore): VendorSourcingSto
   return lazySourcingStore;
 }
 
+export type QueryPlannerFallbackReason = "needs_provider_config" | "invalid_output" | "provider_error" | "parser_exception" | null;
+
 export type DiscoveredCandidateSummary = NormalizedPlaceCandidate & {
   persisted: boolean; alreadyDiscovered: boolean; matchedQuery: string;
 };
@@ -56,7 +61,37 @@ export type RunDiscoveryResult =
   | { status: "mission_not_found" }
   | { status: "needs_provider_config"; missingEnvVar: string }
   | { status: "provider_error"; reason: string }
-  | { status: "ok"; foundCount: number; persistedCount: number; alreadyDiscoveredCount: number; candidates: DiscoveredCandidateSummary[] };
+  | {
+      status: "ok"; foundCount: number; persistedCount: number; alreadyDiscoveredCount: number;
+      candidates: DiscoveredCandidateSummary[]; queryPlannerSource: QueryPlannerSource;
+      queryPlannerFallbackReason: QueryPlannerFallbackReason;
+    };
+
+/**
+ * Slice 77b. Anthropic's structured parser (server/procurement/
+ * vendorMissionStructuredParser.ts) is the primary mission-text query-
+ * planning path; the deterministic keyword planner from Slice 77a
+ * (vendorMissionQueryPlanner.ts) is the fallback when Claude is
+ * unavailable, fails, times out, or returns output that fails schema
+ * validation. Never throws -- always returns a usable plan plus which
+ * source produced it (and, on fallback, why).
+ */
+async function resolveQueryPlan(
+  input: { missionText: string | null; category: string; geographyLabel: string; ratingThreshold: number | null; targetQuantity: number },
+  parserFn: typeof parseMissionWithClaude,
+  tenantId: string,
+): Promise<{ plan: MissionQueryPlan; source: QueryPlannerSource; fallbackReason: QueryPlannerFallbackReason }> {
+  try {
+    const parsed = await parserFn(input, { tenantId });
+    if (parsed.status === "ok") {
+      return { plan: parsed.plan, source: "anthropic_structured", fallbackReason: null };
+    }
+    return { plan: planMissionQuery(input), source: "deterministic_fallback", fallbackReason: parsed.status };
+  } catch {
+    // Never let a parser failure block discovery from running at all.
+    return { plan: planMissionQuery(input), source: "deterministic_fallback", fallbackReason: "parser_exception" };
+  }
+}
 
 function denialReasons(error: unknown): string[] {
   const message = error instanceof Error ? error.message : String(error);
@@ -72,6 +107,7 @@ export function createVendorAcquisitionMissionRouter(
   injectedStore?: VendorAcquisitionMissionStore,
   injectedSourcingStore?: VendorSourcingStore,
   injectedDiscoveryFn: typeof runGooglePlacesDiscovery = runGooglePlacesDiscovery,
+  injectedParserFn: typeof parseMissionWithClaude = parseMissionWithClaude,
 ) {
   return router({
     createMission: adminProcedure
@@ -180,13 +216,13 @@ export function createVendorAcquisitionMissionRouter(
         if (!mission) return { status: "mission_not_found" };
 
         const ratingThreshold = mission.qualityGates.minGoogleRating ?? mission.qualityGates.minYelpRating ?? null;
-        const plan = planMissionQuery({
+        const { plan, source: queryPlannerSource, fallbackReason: queryPlannerFallbackReason } = await resolveQueryPlan({
           missionText: mission.qualityGates.missionText ?? null,
           category: mission.category,
           geographyLabel: mission.geographyLabel,
           ratingThreshold,
           targetQuantity: mission.targetQuantity,
-        });
+        }, injectedParserFn, ctx.tenantId);
 
         const byPlaceId = new Map<string, NormalizedPlaceCandidate & { matchedQuery: string }>();
         let lastError: { status: "provider_error"; reason: string } | null = null;
@@ -237,6 +273,7 @@ export function createVendorAcquisitionMissionRouter(
                 missionText: mission.qualityGates.missionText ?? null,
                 queryIntent: plan.primaryIntent,
                 serviceMode: plan.serviceMode,
+                queryPlannerSource,
               },
               createdBy: "google_places_discovery",
             });
@@ -253,6 +290,8 @@ export function createVendorAcquisitionMissionRouter(
           persistedCount,
           alreadyDiscoveredCount,
           candidates: summaries,
+          queryPlannerSource,
+          queryPlannerFallbackReason,
         };
       }),
   });

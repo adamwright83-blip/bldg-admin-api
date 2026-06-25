@@ -223,7 +223,10 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn);
     const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
-    expect(result).toEqual({ status: "ok", foundCount: 0, persistedCount: 0, alreadyDiscoveredCount: 0, candidates: [] });
+    expect(result).toEqual({
+      status: "ok", foundCount: 0, persistedCount: 0, alreadyDiscoveredCount: 0, candidates: [],
+      queryPlannerSource: "deterministic_fallback", queryPlannerFallbackReason: "invalid_output",
+    });
   });
 
   it("never invokes any outreach/send capability -- the sourcing store interface has no send method", async () => {
@@ -326,6 +329,150 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery", () => {
     expect(result.status).toBe("ok");
     if (result.status !== "ok") throw new Error("expected ok");
     expect(result.foundCount).toBe(1);
+  });
+});
+
+describe("vendorAcquisitionMissionRouter -- runDiscovery (Slice 77b structured parser)", () => {
+  function makeStructuredPlan(overrides?: Partial<{
+    serviceMode: "mobile_required" | "building_service_required" | "storefront_ok" | "unknown";
+    searchQueries: string[];
+  }>) {
+    return {
+      status: "ok" as const,
+      plan: {
+        primaryIntent: "mobile_required:dog_grooming",
+        serviceCategory: "dog_grooming",
+        locationText: "90027",
+        searchQueries: overrides?.searchQueries ?? ["mobile dog groomers near 90027", "dog grooming that comes to you near 90027"],
+        requiredTerms: ["mobile"],
+        preferredTerms: [],
+        excludedTerms: [],
+        serviceMode: overrides?.serviceMode ?? "mobile_required",
+        confidence: "high" as const,
+        notes: ["Mission text describes building/mobile service."],
+      },
+    };
+  }
+
+  it("uses the structured Claude parser as the primary query-planning path when it succeeds", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [] });
+    const parserFn = vi.fn().mockResolvedValue(makeStructuredPlan());
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(parserFn).toHaveBeenCalledOnce();
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.queryPlannerSource).toBe("anthropic_structured");
+    expect(discoveryFn).toHaveBeenCalledWith(expect.objectContaining({ searchText: "mobile dog groomers near 90027" }));
+  });
+
+  it("falls back to the deterministic planner when the structured parser fails or is unavailable", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [] });
+    const parserFn = vi.fn().mockResolvedValue({ status: "needs_provider_config", missingEnvVar: "ANTHROPIC_API_KEY" });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.queryPlannerSource).toBe("deterministic_fallback");
+    expect(result.queryPlannerFallbackReason).toBe("needs_provider_config");
+  });
+
+  it("falls back to the deterministic planner when the parser throws rather than failing the whole discovery run", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [] });
+    const parserFn = vi.fn().mockRejectedValue(new Error("unexpected parser crash"));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.queryPlannerSource).toBe("deterministic_fallback");
+  });
+
+  it("records the planner source (anthropic_structured or deterministic_fallback) in persisted candidate evidence", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [MOCK_PLACE_CANDIDATE] });
+    const parserFn = vi.fn().mockResolvedValue(makeStructuredPlan());
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(sourcingStore.createCandidate).toHaveBeenCalledWith(expect.objectContaining({
+      evidence: expect.objectContaining({ queryPlannerSource: "anthropic_structured" }),
+    }));
+  });
+
+  it("passes the parser's generated search queries through to the Google Places connector", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [] });
+    const parserFn = vi.fn().mockResolvedValue(makeStructuredPlan({ searchQueries: ["a custom claude-generated query"] }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(discoveryFn).toHaveBeenCalledWith(expect.objectContaining({ searchText: "a custom claude-generated query" }));
+  });
+
+  it("integration plumbing: building-service phrasing without the literal word 'mobile' flows through correctly when the parser (Claude) recognizes it", async () => {
+    // This proves the router correctly uses whatever serviceMode/queries
+    // the parser returns -- it does not prove the live Claude model
+    // would classify this phrasing correctly. That property depends on
+    // Claude's actual language understanding and cannot be asserted by
+    // a mocked unit test; it is the entire reason this slice exists.
+    const missionStore = makeMockStore({
+      getMission: vi.fn().mockResolvedValue(makeMockMission({
+        qualityGates: { missionText: "Find groomers who will come to the building so residents won't have to leave the property." },
+      })),
+    });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [] });
+    const parserFn = vi.fn().mockResolvedValue(makeStructuredPlan({
+      serviceMode: "building_service_required",
+      searchQueries: ["dog groomers for apartment buildings near 90027", "mobile dog groomer building service 90027"],
+    }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(discoveryFn).toHaveBeenCalledWith(expect.objectContaining({ searchText: "dog groomers for apartment buildings near 90027" }));
+  });
+
+  it("integration plumbing: storefront/drive-to phrasing flows through as storefront_ok without forcing mobile queries", async () => {
+    const missionStore = makeMockStore({
+      getMission: vi.fn().mockResolvedValue(makeMockMission({
+        qualityGates: { missionText: "Find me 10 dog groomers residents can drive to near Century Park East." },
+      })),
+    });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [] });
+    const parserFn = vi.fn().mockResolvedValue(makeStructuredPlan({
+      serviceMode: "storefront_ok",
+      searchQueries: ["dog groomers near Century Park East", "dog grooming salon near Century Park East"],
+    }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(discoveryFn.mock.calls.every(([query]) => !/\bmobile\b/i.test(query.searchText))).toBe(true);
+  });
+
+  it("never invokes any outreach/send capability from the structured-parser path either", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [MOCK_PLACE_CANDIDATE] });
+    const parserFn = vi.fn().mockResolvedValue(makeStructuredPlan());
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, parserFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(Object.keys(sourcingStore).sort()).toEqual([
+      "createCandidate", "findCandidateBySourceReference", "getCandidate", "getSourceRegistry",
+      "listCandidates", "listCandidatesForReview", "listSourceRegistry",
+    ]);
   });
 });
 
