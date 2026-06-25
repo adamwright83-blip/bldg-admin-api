@@ -834,7 +834,7 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery mission-scoped shortlis
     expect(overflowCalls).toHaveLength(2);
   });
 
-  it("ranks the highest-rated candidate first and assigns sequential rank positions", async () => {
+  it("ranks the highest-rated candidate first WITHIN its fulfillment tier, and assigns sequential rank positions", async () => {
     const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
     const sourcingStore = makeMockSourcingStore();
     const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: FOUR_CANDIDATES });
@@ -842,8 +842,16 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery mission-scoped shortlis
     const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, STUB_VERIFY_SERVICE_AREA_FN as never);
     await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
 
+    // Slice 81c: "Sunset Mobile Grooming" has "Mobile" in its own name
+    // (vendor-level mobile evidence) but is unverified for service
+    // area -- that classifies as mobile_needs_review (yellow tier).
+    // "Pawhamas Resort" has no vendor-level mobile evidence and is
+    // unverified -- that classifies as drive_to_storefront_fallback
+    // (blue tier), which now correctly ranks ABOVE yellow regardless
+    // of Sunset's higher rating.
     const firstCall = matchStore.upsertMatch.mock.calls.find(([call]) => call.rankPosition === 1)?.[0];
-    expect(firstCall.matchEvidence.businessName).toBe("Sunset Mobile Grooming");
+    expect(firstCall.matchEvidence.businessName).toBe("Pawhamas Resort");
+    expect(firstCall.matchEvidence.fulfillmentClassification.fulfillmentTier).toBe("blue");
     expect(firstCall.isShortlisted).toBe(true);
   });
 
@@ -1073,6 +1081,113 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery structured service-area
   });
 });
 
+describe("vendorAcquisitionMissionRouter -- fulfillment tier classification + shortlist composition (Slice 81c)", () => {
+  // 4 candidates with real vendor-level mobile evidence (name contains
+  // "Mobile") and a verified service area -> green. 6 candidates with
+  // no mobile evidence (plain storefront names) -> blue. None contain
+  // "Mobile" by coincidence in their storefront names, so the
+  // classifier cannot mistake them for mobile vendors.
+  const TEN_CANDIDATES = [
+    ...Array.from({ length: 4 }, (_, i) => ({
+      provider: "google_places" as const, placeId: `mobile_${i}`, businessName: `Mobile Groomer ${i}`,
+      rating: 4.9 - i * 0.05, reviewCount: 100, address: `${i} Mobile Ave`, website: null, phone: "555-0000",
+      coordinates: null, sourceUrl: `https://maps/mobile_${i}`,
+    })),
+    ...Array.from({ length: 6 }, (_, i) => ({
+      provider: "google_places" as const, placeId: `storefront_${i}`, businessName: `Salon Groomer ${i}`,
+      rating: 4.8 - i * 0.05, reviewCount: 100, address: `${i} Storefront Ave`, website: null, phone: "555-0001",
+      coordinates: null, sourceUrl: `https://maps/storefront_${i}`,
+    })),
+  ];
+
+  it("a mobile candidate with vendor-level evidence and a verified area classifies green; a storefront candidate with no mobile evidence classifies blue", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 10 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: TEN_CANDIDATES });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "verified_serves_target" }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const mobileCall = matchStore.upsertMatch.mock.calls.find(([call]) => call.matchEvidence.businessName === "Mobile Groomer 0")?.[0];
+    const storefrontCall = matchStore.upsertMatch.mock.calls.find(([call]) => call.matchEvidence.businessName === "Salon Groomer 0")?.[0];
+    expect(mobileCall.matchEvidence.fulfillmentClassification.fulfillmentMode).toBe("verified_mobile_building_service");
+    expect(mobileCall.matchEvidence.fulfillmentClassification.fulfillmentTier).toBe("green");
+    expect(storefrontCall.matchEvidence.fulfillmentClassification.fulfillmentMode).toBe("drive_to_storefront_fallback");
+    expect(storefrontCall.matchEvidence.fulfillmentClassification.fulfillmentTier).toBe("blue");
+  });
+
+  it("green (mobile) candidates rank above blue (storefront fallback) candidates regardless of rating", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 10 })) });
+    const sourcingStore = makeMockSourcingStore();
+    // Lowest-rated mobile candidate (4.75) vs. highest-rated storefront (4.8).
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: TEN_CANDIDATES });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "verified_serves_target" }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const ranks = matchStore.upsertMatch.mock.calls.map(([call]) => ({ name: call.matchEvidence.businessName, tier: call.matchEvidence.fulfillmentClassification.fulfillmentTier, pos: call.rankPosition }));
+    const lastGreen = Math.max(...ranks.filter(r => r.tier === "green").map(r => r.pos));
+    const firstBlue = Math.min(...ranks.filter(r => r.tier === "blue").map(r => r.pos));
+    expect(lastGreen).toBeLessThan(firstBlue);
+  });
+
+  it("when only 4 of 10 candidates are verified/likely mobile, the top 10 (target count) includes all 4 green + the 6 blue storefront fallbacks, never padding with unqualified mobile claims", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 10 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: TEN_CANDIDATES });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "verified_serves_target" }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.shortlistedCount).toBe(10);
+    const shortlistedCalls = matchStore.upsertMatch.mock.calls.filter(([call]) => call.isShortlisted === true);
+    const greenCount = shortlistedCalls.filter(([call]) => call.matchEvidence.fulfillmentClassification.fulfillmentTier === "green").length;
+    const blueCount = shortlistedCalls.filter(([call]) => call.matchEvidence.fulfillmentClassification.fulfillmentTier === "blue").length;
+    expect(greenCount).toBe(4);
+    expect(blueCount).toBe(6);
+  });
+
+  it("a candidate's mission-query mobile intent (match.serviceMode) never substitutes for the vendor's own mobile evidence", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
+    const sourcingStore = makeMockSourcingStore();
+    // The query plan is mobile_required (mission-level intent), but the
+    // candidate's own name/website show no mobile evidence at all.
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [{
+      provider: "google_places" as const, placeId: "p1", businessName: "Generic Pet Salon", rating: 4.8, reviewCount: 50,
+      address: "1 Main St", website: null, phone: "555-1111", coordinates: null, sourceUrl: "https://maps/p1",
+    }] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "verified_serves_target" }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const call = matchStore.upsertMatch.mock.calls[0][0];
+    // Regardless of what mission-query intent produced this match,
+    // the vendor's own name/website show no mobile evidence -- so it
+    // is classified as a storefront fallback, never mobile.
+    expect(call.matchEvidence.fulfillmentClassification.fulfillmentMode).toBe("drive_to_storefront_fallback");
+    expect(call.matchEvidence.fulfillmentClassification.vendorHasMobileEvidence).toBe(false);
+  });
+
+  it("a storefront fallback is never labeled mobile", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 1 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [TEN_CANDIDATES[4]] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "unverified" }));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const call = matchStore.upsertMatch.mock.calls[0][0];
+    expect(call.matchEvidence.fulfillmentClassification.fulfillmentLabel).toBe("Drive-to fallback");
+    expect(call.matchEvidence.fulfillmentClassification.fulfillmentLabel).not.toMatch(/Mobile/);
+  });
+});
+
 describe("vendorAcquisitionMissionRouter -- listMissionShortlist (Slice 79a)", () => {
   it("rejects unauthenticated and non-admin callers", async () => {
     const router = createVendorAcquisitionMissionRouter(makeMockStore() as never, makeMockSourcingStore() as never);
@@ -1195,6 +1310,129 @@ describe("vendorAcquisitionMissionRouter -- listMissionShortlist (Slice 79a)", (
     expect(result.entries[0].serviceAreaVerification?.contactRoute).toBe("contact_form_available");
     expect((result.entries[0].serviceAreaVerification as { requiresHumanReview?: boolean })?.requiresHumanReview).toBe(true);
     expect((result.entries[0].serviceAreaVerification as { serviceAreaInterpreterSource?: string })?.serviceAreaInterpreterSource).toBe("anthropic_structured");
+  });
+
+  function matchWithFulfillment(overrides?: Record<string, unknown>) {
+    return {
+      id: "match-1", tenantId: "default", missionId: "mission-1", candidateId: "candidate-1",
+      matchedQuery: "mobile dog groomers near 90067", queryPlannerSource: "anthropic_structured",
+      serviceMode: "mobile_required", rankScore: 9.5, rankPosition: 1, isShortlisted: true,
+      matchEvidence: {
+        rating: 4.9,
+        serviceAreaVerification: verification({ serviceAreaStatus: "verified_serves_target", distanceMilesToTarget: 1.2 }),
+        serviceAreaEffectiveEvidence: {
+          serviceAreaStatus: "verified_serves_target", serviceAreaReasons: ["Website explicitly mentions 90067"],
+          contactRoute: "email_available", outreachReadiness: "email_ready",
+          emailAddressesFound: ["hello@example.com"], requiresHumanReview: false,
+          serviceAreaInterpreterSource: "anthropic_structured", serviceAreaFallbackReason: null,
+        },
+        fulfillmentClassification: {
+          fulfillmentMode: "verified_mobile_building_service", fulfillmentTier: "green",
+          fulfillmentLabel: "Mobile · Comes to building", fulfillmentReason: "Verified to serve the target area and shows mobile/building-service evidence",
+          vendorHasMobileEvidence: true,
+        },
+      },
+      ...overrides,
+    };
+  }
+
+  it("Slice 81c: returns the fulfillment classification fields for each candidate, read from match evidence only", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ geographyLabel: "90067 (5 mi radius)" })) });
+    const sourcingStore = makeMockSourcingStore({
+      listCandidatesForReview: vi.fn().mockResolvedValue([{ id: "candidate-1", businessName: "Josie's Mobile Grooming", evidence: {} }]),
+    });
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([matchWithFulfillment()]),
+      countMissionMatches: vi.fn().mockResolvedValue({ total: 1, shortlisted: 1 }),
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.entries[0].fulfillmentMode).toBe("verified_mobile_building_service");
+    expect(result.entries[0].fulfillmentTier).toBe("green");
+    expect(result.entries[0].fulfillmentLabel).toBe("Mobile · Comes to building");
+    expect(result.entries[0].distanceToTargetMiles).toBe(1.2);
+  });
+
+  it("Slice 81c: returns summary counts by fulfillment tier and contact readiness", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({
+      listCandidatesForReview: vi.fn().mockResolvedValue([
+        { id: "candidate-1", businessName: "Josie's Mobile Grooming", evidence: {} },
+        { id: "candidate-2", businessName: "Arnold's WEHO Dog Groomers", evidence: {} },
+      ]),
+    });
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([
+        matchWithFulfillment(),
+        matchWithFulfillment({
+          id: "match-2", candidateId: "candidate-2",
+          matchEvidence: {
+            serviceAreaVerification: verification({ serviceAreaStatus: "unverified" }),
+            serviceAreaEffectiveEvidence: {
+              serviceAreaStatus: "unverified", serviceAreaReasons: [], contactRoute: "contact_form_available",
+              outreachReadiness: "form_required", emailAddressesFound: [], requiresHumanReview: false,
+              serviceAreaInterpreterSource: "deterministic_fallback", serviceAreaFallbackReason: "no_website_text",
+            },
+            fulfillmentClassification: {
+              fulfillmentMode: "drive_to_storefront_fallback", fulfillmentTier: "blue",
+              fulfillmentLabel: "Drive-to fallback", fulfillmentReason: "No mobile/building-service evidence found -- treated as a drive-to storefront option",
+              vendorHasMobileEvidence: false,
+            },
+          },
+        }),
+      ]),
+      countMissionMatches: vi.fn().mockResolvedValue({ total: 2, shortlisted: 2 }),
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.summary).toEqual(expect.objectContaining({
+      verifiedMobileCount: 1, driveToFallbackCount: 1, emailReadyCount: 1, formRequiredCount: 1,
+    }));
+  });
+
+  it("Slice 81c: never calls fetch or Claude -- only reads already-persisted match evidence", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({
+      listCandidatesForReview: vi.fn().mockResolvedValue([{ id: "candidate-1", businessName: "Josie's Mobile Grooming", evidence: {} }]),
+    });
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([matchWithFulfillment()]),
+      countMissionMatches: vi.fn().mockResolvedValue({ total: 1, shortlisted: 1 }),
+    });
+    const verifyFn = vi.fn();
+    const interpretFn = vi.fn();
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never, verifyFn as never, interpretFn as never);
+    await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1" });
+
+    expect(verifyFn).not.toHaveBeenCalled();
+    expect(interpretFn).not.toHaveBeenCalled();
+  });
+
+  it("Slice 81c: candidate-level stale evidence never overrides the mission match's fulfillment classification", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({
+      listCandidatesForReview: vi.fn().mockResolvedValue([{
+        id: "candidate-1", businessName: "Josie's Mobile Grooming",
+        // Stale candidate-level evidence has no fulfillment info at all.
+        evidence: { rating: 4.9 },
+      }]),
+    });
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([matchWithFulfillment()]),
+      countMissionMatches: vi.fn().mockResolvedValue({ total: 1, shortlisted: 1 }),
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.entries[0].fulfillmentTier).toBe("green");
   });
 });
 

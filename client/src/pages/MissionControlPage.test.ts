@@ -24,8 +24,8 @@ describe("MissionControlPage -- Slice 75a source isolation", () => {
     expect(source).toMatch(/Google Places discovery is available\. Run discovery to/);
   });
 
-  it("labels mobile-preferred as not yet wired, rather than silently submitting it as real criteria", () => {
-    expect(source).toMatch(/not yet wired to mission criteria/);
+  it("is honest that mobile preference is interpreted from mission text, not a wired structured toggle, rather than silently submitting it as real criteria", () => {
+    expect(source).toMatch(/Mobile preference is currently interpreted from the mission text\./);
     expect(source).not.toMatch(/mobilePreferred[^}]*qualityGates/s);
   });
 
@@ -284,9 +284,9 @@ describe("MissionControlPage -- Run Discovery CTA activation bugfix", () => {
 });
 
 describe("MissionControlPage -- Slice 76c Discovered Candidates panel", () => {
-  it("renders the panel title, subtitle, and is wired to the real listMissionShortlist query (Slice 79a)", () => {
-    expect(source).toMatch(/Mission Shortlist/);
-    expect(source).toMatch(/Top candidates ranked for this mission before approving draft outreach\./);
+  it("renders the panel title, subtitle, and is wired to the real listMissionShortlist query (Slice 79a/81c)", () => {
+    expect(source).toMatch(/Mission Fulfillment Shortlist/);
+    expect(source).toMatch(/Mobile building-service vendors first, then high-quality nearby drive-to fallbacks when mobile coverage is thin\./);
     expect(source).toMatch(/vendorAcquisitionMission\.listMissionShortlist\.useQuery/);
   });
 
@@ -387,10 +387,10 @@ describe("MissionControlPage -- Slice 77a mission-text-driven query planner", ()
     expect(source).toMatch(/Found via: \{candidate\.matchedQuery\}/);
   });
 
-  it("Candidate Review shows a service-mode badge derived only from the real mission match's serviceMode", () => {
+  it("Candidate Review shows a service-mode badge derived only from the real mission match's serviceMode, honestly labeled as the query's intent (not vendor proof)", () => {
     expect(source).toMatch(/serviceModeBadge\(candidate\.serviceMode\)/);
     expect(source).toMatch(/function serviceModeBadge/);
-    for (const badge of ["Mobile intent", "Storefront intent", "Needs review"]) {
+    for (const badge of ["Mission query match: mobile", "Mission query match: storefront", "Mission query match: unclear"]) {
       expect(source).toContain(badge);
     }
   });
@@ -483,7 +483,7 @@ describe("MissionControlPage -- Slice 78a draft outreach queue", () => {
 
   it("shows a 'Review mobile fit before outreach' warning for needs-review candidates rather than disabling the action", () => {
     expect(source).toMatch(/Review mobile fit before outreach\./);
-    expect(source).toMatch(/serviceModeBadge\(candidate\.serviceMode\) === "Needs review"/);
+    expect(source).toMatch(/serviceModeBadge\(candidate\.serviceMode\) === "Mission query match: unclear"/);
   });
 
   it("the approve button is never labeled Send and never claims a live send happened", () => {
@@ -720,5 +720,69 @@ describe("MissionControlPage -- Slice 81b structured service-area interpretation
 
   it("no SMS/call/form-submission button exists, including in the structured-interpretation badges", () => {
     expect(source).not.toMatch(/Send SMS|Place call|Submit form|Fill contact form/);
+  });
+});
+
+describe("MissionControlPage -- Slice 81c tiered fulfillment shortlist", () => {
+  it("panel title and subtitle reflect the fulfillment shortlist", () => {
+    expect(source).toMatch(/Mission Fulfillment Shortlist/);
+    expect(source).toMatch(/Mobile building-service vendors first, then high-quality nearby drive-to fallbacks when mobile coverage is thin\./);
+  });
+
+  it("the collapsed card shows the fulfillment label and tier-colored badge", () => {
+    expect(source).toMatch(/candidate\.fulfillmentLabel \? \(/);
+    expect(source).toMatch(/FULFILLMENT_TIER_CLASS\[candidate\.fulfillmentTier/);
+  });
+
+  it("the summary line shows mobile count and drive-to fallback count", () => {
+    expect(source).toMatch(/mobile\/building-service options/);
+    expect(source).toMatch(/drive-to fallback options/);
+  });
+
+  it("'Mission query match' is not treated as proof of vendor mobile qualification -- it is a separate, honestly-labeled badge from fulfillmentLabel", () => {
+    expect(source).toMatch(/Mission query match: mobile/);
+    expect(source).not.toMatch(/Mobile intent/);
+  });
+
+  it("drive-to fallback candidates render with the blue fallback badge, sourced from the server-derived fulfillmentLabel, never a client-invented label", () => {
+    expect(source).toMatch(/blue:\s*"bg-blue-50/);
+    expect(source).toMatch(/\{candidate\.fulfillmentLabel\}/);
+  });
+
+  it("storefront fallback candidates do not get the mobile draft-outreach button -- they show 'Storefront fallback copy needed' instead", () => {
+    expect(source).toMatch(/Storefront fallback copy needed/);
+    expect(source).toMatch(/candidate\.fulfillmentTier === "blue" \? \(/);
+  });
+
+  it("yellow (needs-review) candidates show 'Review service-area fit before outreach' instead of the draft button", () => {
+    expect(source).toMatch(/Review service-area fit before outreach/);
+  });
+
+  it("red (out-of-area) candidates show 'Out of area · not outreach-ready' instead of the draft button", () => {
+    expect(source).toMatch(/Out of area &middot; not outreach-ready/);
+  });
+
+  it("distance to target renders only when safely computed, never a fabricated number", () => {
+    expect(source).toMatch(/typeof candidate\.distanceToTargetMiles === "number"/);
+    expect(source).toMatch(/mi from target/);
+  });
+
+  it("the wrong OPUS LA/90027 building context is never shown for a 90067 mission -- the active-mission target label is derived from the mission's own geographyLabel", () => {
+    expect(source).toMatch(/function deriveActiveMissionTargetLabel/);
+    expect(source).toMatch(/activeMissionTargetLabel = deriveActiveMissionTargetLabel\(latestMission\?\.geographyLabel/);
+    expect(source).not.toMatch(/activeMissionTargetLabel = selectedBuilding/);
+  });
+
+  it("mission ZIP appears in the target label when no known building matches, never an invented building", () => {
+    expect(source).toMatch(/Mission ZIP: \$\{zip\}/);
+    // LA_BUILDINGS has no entry for "Los Feliz Towers" -- the only
+    // occurrence of that name in this file is the explanatory comment
+    // describing why it is deliberately not invented, never a fake
+    // building constant.
+    expect(source).not.toMatch(/\{ id: "los-feliz|name: "Los Feliz Towers", zip:/);
+  });
+
+  it("never invents a coordinate or fabricated distance -- distance is only ever read from server-provided distanceToTargetMiles", () => {
+    expect(source).not.toMatch(/distanceToTargetMiles\s*=\s*[\d.]/);
   });
 });

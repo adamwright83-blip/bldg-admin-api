@@ -27,11 +27,31 @@ function planSourceLabel(source: string, fallbackReason: string | null): string 
   return "Deterministic fallback";
 }
 
+/**
+ * Slice 81c. This reflects the MISSION QUERY's intent (what kind of
+ * search was run), not any evidence about the vendor itself -- a
+ * vendor returned by a mobile-intent query is not thereby proven to
+ * offer mobile service. See fulfillmentLabel/fulfillmentTier below for
+ * the vendor-level classification that actually drives ranking and
+ * outreach gating.
+ */
 function serviceModeBadge(mode: string | null | undefined): string {
-  if (mode === "mobile_required" || mode === "building_service_required") return "Mobile intent";
-  if (mode === "storefront_ok") return "Storefront intent";
-  return "Needs review";
+  if (mode === "mobile_required" || mode === "building_service_required") return "Mission query match: mobile";
+  if (mode === "storefront_ok") return "Mission query match: storefront";
+  return "Mission query match: unclear";
 }
+
+// Slice 81c. Tier color classes for the fulfillment badge -- green
+// (verified/likely mobile/building-service), blue (drive-to storefront
+// fallback), yellow (mobile/area needs human review), red (out of
+// area). Read from fulfillmentTier, which the server derives from
+// real service-area + vendor-level mobile evidence, never guessed here.
+const FULFILLMENT_TIER_CLASS: Record<string, string> = {
+  green: "bg-emerald-50 text-emerald-800 border-emerald-300",
+  blue: "bg-blue-50 text-blue-800 border-blue-300",
+  yellow: "bg-amber-50 text-amber-800 border-amber-300",
+  red: "bg-red-50 text-red-800 border-red-300",
+};
 
 // Slice 81a. Service-area status is read from the mission match's own
 // verification evidence -- see serviceAreaVerification on each
@@ -76,6 +96,25 @@ const LA_BUILDINGS = [
   { id: "opus-la", name: "OPUS LA", zip: "90027" },
   { id: "century-park-east", name: "Century Park East", zip: "90067" },
 ] as const;
+
+/**
+ * Slice 81c fix. The composer's own building picker (selectedBuilding)
+ * is the operator's choice for the NEXT mission to create -- it must
+ * never be confused with which building/ZIP the mission actually being
+ * VIEWED in the shortlist below targets. A 90067 mission must never
+ * show "OPUS LA / 90027" just because that happens to be the
+ * composer's default selection. Falls back to the mission's own ZIP
+ * text when it does not match a known building, and never invents a
+ * building HELD has no configured ZIP for (e.g. "Los Feliz Towers").
+ */
+function deriveActiveMissionTargetLabel(geographyLabel: string | null | undefined): string | null {
+  if (!geographyLabel) return null;
+  const zipMatch = geographyLabel.match(/\b(\d{5})\b/);
+  const zip = zipMatch?.[1] ?? null;
+  if (!zip) return geographyLabel;
+  const building = LA_BUILDINGS.find(candidate => candidate.zip === zip);
+  return building ? `${building.name} (${zip})` : `Mission ZIP: ${zip}`;
+}
 
 type SubAgent = { name: string; role: string; icon: typeof Compass; statusWithMission: string };
 const SUB_AGENTS: SubAgent[] = [
@@ -168,6 +207,7 @@ export default function MissionControlPage() {
   // Start Mission succeeded.
   const [activeMissionId, setActiveMissionId] = useState<string | null>(null);
   const effectiveMissionId = activeMissionId ?? latestMission?.id ?? null;
+  const activeMissionTargetLabel = deriveActiveMissionTargetLabel(latestMission?.geographyLabel ?? null);
 
   // Mission-scoped shortlist (Slice 79a) -- only this mission's top
   // target-count-ranked candidates, not every candidate ever discovered
@@ -348,7 +388,7 @@ export default function MissionControlPage() {
           </button>
         </div>
         <p className="mt-1 text-xs text-black/35">
-          &ldquo;Mobile preferred&rdquo; is not yet wired to mission criteria &mdash; reserved for a future slice.
+          Mobile preference is currently interpreted from the mission text. Structured toggle wiring comes later.
         </p>
 
         {queryPlanPreview.data ? (
@@ -576,11 +616,23 @@ export default function MissionControlPage() {
       </section>
 
       <section className="mt-4 rounded-2xl border border-black/10 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-bold">Mission Shortlist</h2>
-        <p className="mt-1 text-xs text-black/55">Top candidates ranked for this mission before approving draft outreach.</p>
+        <h2 className="text-sm font-bold">Mission Fulfillment Shortlist</h2>
+        <p className="mt-1 text-xs text-black/55">
+          Mobile building-service vendors first, then high-quality nearby drive-to fallbacks when mobile coverage is thin.
+        </p>
+        {activeMissionTargetLabel ? (
+          <p className="mt-1 text-xs font-semibold text-black/50">Target: {activeMissionTargetLabel}</p>
+        ) : null}
         {missionShortlist.data?.status === "ok" ? (
           <p className="mt-1 text-xs text-black/40">
             Showing {missionShortlist.data.entries.length} of {missionShortlist.data.totalFound} found for this mission
+          </p>
+        ) : null}
+        {missionShortlist.data?.status === "ok" ? (
+          <p className="mt-1 text-xs font-semibold text-black/55">
+            {missionShortlist.data.summary.verifiedMobileCount + missionShortlist.data.summary.likelyMobileCount} mobile/building-service options &middot;{" "}
+            {missionShortlist.data.summary.driveToFallbackCount} drive-to fallback options &middot;{" "}
+            {missionShortlist.data.overflowCount} overflow
           </p>
         ) : null}
 
@@ -605,8 +657,16 @@ export default function MissionControlPage() {
                     <p className="font-semibold">{candidate.businessName}</p>
                     <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700">Google Places</span>
                     <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[10px] font-semibold text-black/55">{label(candidate.sourcingStatus)}</span>
+                    {candidate.fulfillmentLabel ? (
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${FULFILLMENT_TIER_CLASS[candidate.fulfillmentTier ?? "yellow"]}`}>
+                        {candidate.fulfillmentLabel}
+                      </span>
+                    ) : null}
                     <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">{serviceModeBadge(candidate.serviceMode)}</span>
                     {rating !== null ? <span className="text-black/55">{rating}&#9733;{reviewCount !== null ? ` (${reviewCount} reviews)` : ""}</span> : null}
+                    {typeof candidate.distanceToTargetMiles === "number" ? (
+                      <span className="text-black/55">{candidate.distanceToTargetMiles} mi from target</span>
+                    ) : null}
                     {candidate.serviceAreaVerification ? (
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${SERVICE_AREA_STATUS_DISPLAY[candidate.serviceAreaVerification.serviceAreaStatus]?.className ?? ""}`}>
                         {SERVICE_AREA_STATUS_DISPLAY[candidate.serviceAreaVerification.serviceAreaStatus]?.label ?? "Service area: Unverified"}
@@ -676,6 +736,18 @@ export default function MissionControlPage() {
                       <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
                         {draftQueueStatus[candidate.id].queued === "already_queued" ? "Draft already queued" : "Draft queued"} &middot; No outreach sent
                       </span>
+                    ) : candidate.fulfillmentTier === "blue" ? (
+                      <span className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-800">
+                        Storefront fallback copy needed
+                      </span>
+                    ) : candidate.fulfillmentTier === "yellow" ? (
+                      <span className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">
+                        Review service-area fit before outreach
+                      </span>
+                    ) : candidate.fulfillmentTier === "red" ? (
+                      <span className="rounded-lg border border-red-300 bg-red-50 px-2 py-1 text-xs font-semibold text-red-800">
+                        Out of area &middot; not outreach-ready
+                      </span>
                     ) : (
                       <button
                         type="button"
@@ -702,7 +774,7 @@ export default function MissionControlPage() {
                       </button>
                     ) : null}
                   </div>
-                  {serviceModeBadge(candidate.serviceMode) === "Needs review" ? (
+                  {serviceModeBadge(candidate.serviceMode) === "Mission query match: unclear" ? (
                     <p className="mt-1 text-[11px] text-amber-700">Review mobile fit before outreach.</p>
                   ) : null}
 

@@ -140,20 +140,6 @@ function resolveTargetGeography(geographyLabel: string): { targetZip: string | n
   return { targetZip, targetBuildingName };
 }
 
-/**
- * Service-area status forms the PRIMARY sort tier; rank score (rating/
- * review-count/contact-method based) only breaks ties within the same
- * tier. A candidate Google found via a "mobile" query with a great
- * rating is never ranked above a candidate that actually, verifiably
- * serves the mission's target ZIP/building.
- */
-const SERVICE_AREA_TIER: Record<ServiceAreaStatus, number> = {
-  verified_serves_target: 0,
-  likely_serves_target: 1,
-  unverified: 2,
-  likely_out_of_area: 3,
-  out_of_area: 4,
-};
 
 export type ServiceAreaInterpreterSource = "anthropic_structured" | "deterministic_fallback";
 
@@ -250,6 +236,111 @@ async function resolveServiceAreaEvidence(
     // Never let an interpreter failure block discovery from running at all.
     return resolveEffectiveServiceAreaEvidence(input.deterministic, null, "deterministic_fallback", "interpreter_exception");
   }
+}
+
+/**
+ * Slice 81c. Whether the MISSION QUERY had mobile intent
+ * (match.serviceMode, set once per discovery run from the query
+ * planner) is NOT evidence that any individual VENDOR actually offers
+ * mobile/building-service. This checks the vendor's OWN evidence --
+ * its business name, and the same already-fetched website text 81a
+ * captured -- for an explicit mobile/in-home/building-service signal.
+ * Deliberately deterministic/keyword-based (no new fetch, no new LLM
+ * call) -- mirrors the same "real but narrow v0" tradeoff as 81a's own
+ * service-area-text matching.
+ */
+const VENDOR_MOBILE_EVIDENCE_PATTERN =
+  /\bmobile\b|\bwe come to you\b|\bcomes? to your (?:home|building|door|unit)\b|\bin-home\b|\bin home\b|\bon-site\b|\bon site\b|\bhouse calls?\b|\bbuilding[- ]service\b/i;
+
+function hasVendorMobileEvidence(businessName: string, websiteTextSnippet: string): boolean {
+  return VENDOR_MOBILE_EVIDENCE_PATTERN.test(businessName) || VENDOR_MOBILE_EVIDENCE_PATTERN.test(websiteTextSnippet);
+}
+
+export const FULFILLMENT_MODES = [
+  "verified_mobile_building_service",
+  "likely_mobile_building_service",
+  "mobile_needs_review",
+  "drive_to_storefront_fallback",
+  "likely_out_of_area",
+  "out_of_area",
+] as const;
+export type FulfillmentMode = (typeof FULFILLMENT_MODES)[number];
+
+export type FulfillmentTier = "green" | "yellow" | "blue" | "red";
+
+export type FulfillmentClassification = {
+  fulfillmentMode: FulfillmentMode;
+  fulfillmentTier: FulfillmentTier;
+  fulfillmentLabel: string;
+  fulfillmentReason: string;
+  vendorHasMobileEvidence: boolean;
+};
+
+const FULFILLMENT_TIER_ORDER: Record<FulfillmentTier, number> = { green: 0, blue: 1, yellow: 2, red: 3 };
+const SERVICE_AREA_SUB_TIER: Record<ServiceAreaStatus, number> = {
+  verified_serves_target: 0, likely_serves_target: 1, unverified: 2, likely_out_of_area: 3, out_of_area: 4,
+};
+const FULFILLMENT_LABEL: Record<FulfillmentMode, string> = {
+  verified_mobile_building_service: "Mobile · Comes to building",
+  likely_mobile_building_service: "Mobile · Likely serves building",
+  mobile_needs_review: "Mobile · Needs review",
+  drive_to_storefront_fallback: "Drive-to fallback",
+  likely_out_of_area: "Out of area",
+  out_of_area: "Out of area",
+};
+const FULFILLMENT_TIER_FOR_MODE: Record<FulfillmentMode, FulfillmentTier> = {
+  verified_mobile_building_service: "green",
+  likely_mobile_building_service: "green",
+  mobile_needs_review: "yellow",
+  drive_to_storefront_fallback: "blue",
+  likely_out_of_area: "red",
+  out_of_area: "red",
+};
+
+/**
+ * Combines the service-area evidence (81a/81b) with the vendor's OWN
+ * mobile-service evidence (never the mission query's intent) into one
+ * classification the shortlist ranks and the UI renders directly. A
+ * vendor that serves the target area but shows no mobile evidence is
+ * classified as a storefront/drive-to fallback, not silently dropped
+ * and not silently relabeled mobile.
+ */
+function classifyFulfillment(
+  evidence: EffectiveServiceAreaEvidence, vendorHasMobileEvidence: boolean,
+): FulfillmentClassification {
+  let fulfillmentMode: FulfillmentMode;
+  let fulfillmentReason: string;
+
+  if (evidence.serviceAreaStatus === "out_of_area") {
+    fulfillmentMode = "out_of_area";
+    fulfillmentReason = evidence.serviceAreaReasons[0] ?? "Vendor does not appear to serve the target area";
+  } else if (evidence.serviceAreaStatus === "likely_out_of_area") {
+    fulfillmentMode = "likely_out_of_area";
+    fulfillmentReason = evidence.serviceAreaReasons[0] ?? "Vendor is likely outside the target area";
+  } else if (evidence.serviceAreaStatus === "verified_serves_target" && vendorHasMobileEvidence) {
+    fulfillmentMode = "verified_mobile_building_service";
+    fulfillmentReason = "Verified to serve the target area and shows mobile/building-service evidence";
+  } else if (evidence.serviceAreaStatus === "likely_serves_target" && vendorHasMobileEvidence) {
+    fulfillmentMode = "likely_mobile_building_service";
+    fulfillmentReason = "Likely serves the target area and shows mobile/building-service evidence";
+  } else if (evidence.serviceAreaStatus === "unverified" && vendorHasMobileEvidence) {
+    fulfillmentMode = "mobile_needs_review";
+    fulfillmentReason = "Shows mobile/building-service evidence, but service-area fit is not yet confirmed";
+  } else if (evidence.serviceAreaStatus === "verified_serves_target" || evidence.serviceAreaStatus === "likely_serves_target" || evidence.serviceAreaStatus === "unverified") {
+    fulfillmentMode = "drive_to_storefront_fallback";
+    fulfillmentReason = "No mobile/building-service evidence found -- treated as a drive-to storefront option";
+  } else {
+    fulfillmentMode = "mobile_needs_review";
+    fulfillmentReason = "Service-area fit is unclear";
+  }
+
+  return {
+    fulfillmentMode,
+    fulfillmentTier: FULFILLMENT_TIER_FOR_MODE[fulfillmentMode],
+    fulfillmentLabel: FULFILLMENT_LABEL[fulfillmentMode],
+    fulfillmentReason,
+    vendorHasMobileEvidence,
+  };
 }
 
 export type QueryPlannerFallbackReason = "needs_provider_config" | "invalid_output" | "provider_error" | "parser_exception" | null;
@@ -774,47 +865,67 @@ export function createVendorAcquisitionMissionRouter(
                 deterministic: verification,
               }, injectedInterpretServiceAreaFn, ctx.tenantId)
             : resolveEffectiveServiceAreaEvidence(verification, null, "deterministic_fallback", "no_website_text");
-          return { ...entry, verification, evidence };
+          // Slice 81c. Vendor-level mobile evidence, never the mission
+          // query's own mobile intent -- see hasVendorMobileEvidence.
+          const vendorHasMobileEvidence = hasVendorMobileEvidence(entry.candidate.businessName, verification.websiteTextSnippet);
+          const fulfillment = classifyFulfillment(evidence, vendorHasMobileEvidence);
+          return { ...entry, verification, evidence, fulfillment };
         }));
 
-        // Rank every candidate resolved in this run -- service-area tier
-        // first (using the EFFECTIVE evidence: Claude's interpretation
-        // when it ran and validated, the deterministic result
-        // otherwise), then the existing rating/review-count/contact-
-        // method score only breaks ties within the same tier -- and
-        // persist a mission-scoped match row for each (the same
-        // candidate can carry separate match rows for separate
-        // missions; never a single mission_id column on
-        // vendor_sourcing_candidates).
+        // Slice 81c. Rank every candidate resolved in this run by
+        // FULFILLMENT TIER first (green mobile/building-service, then
+        // blue drive-to storefront fallback, then yellow needs-review,
+        // then red out-of-area) -- a mission asking for "10 mobile
+        // groomers" never silently pads the shortlist with 10 vendors
+        // that merely matched a mobile-intent query; it shows however
+        // many are actually green, then fills the rest with the
+        // closest high-quality storefront fallbacks. Within the blue
+        // tier specifically, known distance-to-target breaks ties
+        // before rating; every other tier breaks ties by the existing
+        // rating/review-count/contact-method score. Persists a
+        // mission-scoped match row for each (the same candidate can
+        // carry separate match rows for separate missions; never a
+        // single mission_id column on vendor_sourcing_candidates).
         const matchStore = resolveMatchStore(injectedMatchStore);
         const sorted = [...verifiedCandidates].sort((a, b) => {
-          const tierDiff = SERVICE_AREA_TIER[a.evidence.serviceAreaStatus] - SERVICE_AREA_TIER[b.evidence.serviceAreaStatus];
+          const tierDiff = FULFILLMENT_TIER_ORDER[a.fulfillment.fulfillmentTier] - FULFILLMENT_TIER_ORDER[b.fulfillment.fulfillmentTier];
           if (tierDiff !== 0) return tierDiff;
+          if (a.fulfillment.fulfillmentTier === "blue") {
+            // A storefront fallback that's confirmed to serve the
+            // target area still ranks above an unconfirmed one, before
+            // distance/rating break further ties.
+            const subTierDiff = SERVICE_AREA_SUB_TIER[a.evidence.serviceAreaStatus] - SERVICE_AREA_SUB_TIER[b.evidence.serviceAreaStatus];
+            if (subTierDiff !== 0) return subTierDiff;
+            const aDist = a.verification.distanceMilesToTarget;
+            const bDist = b.verification.distanceMilesToTarget;
+            if (aDist !== null && bDist !== null && aDist !== bDist) return aDist - bDist;
+            if (aDist !== null && bDist === null) return -1;
+            if (aDist === null && bDist !== null) return 1;
+          }
           const scoreDiff = rankScoreForCandidate(b.candidate, plan.serviceMode, plan.serviceMode)
             - rankScoreForCandidate(a.candidate, plan.serviceMode, plan.serviceMode);
           return scoreDiff !== 0 ? scoreDiff : a.candidate.placeId.localeCompare(b.candidate.placeId);
         });
 
-        // Likely-out-of-area/out-of-area candidates are excluded from
-        // the primary shortlist whenever enough verified/likely/
-        // unverified alternatives exist to fill the mission's target
-        // count. Only when there are not enough alternatives do they
-        // fill the remaining shortlist slots (better to show fewer
-        // verified candidates than to silently pretend an out-of-area
-        // candidate is qualified).
-        const isOutOfAreaTier = (status: ServiceAreaStatus) => status === "likely_out_of_area" || status === "out_of_area";
-        const inAreaPool = sorted.filter(entry => !isOutOfAreaTier(entry.evidence.serviceAreaStatus));
-        const outOfAreaPool = sorted.filter(entry => isOutOfAreaTier(entry.evidence.serviceAreaStatus));
+        // Red-tier (likely/out-of-area) candidates are excluded from
+        // the primary shortlist whenever enough green/blue/yellow
+        // alternatives exist to fill the mission's target count. Only
+        // when there are not enough alternatives do they fill the
+        // remaining shortlist slots (better to show fewer qualified
+        // candidates than to silently pretend an out-of-area candidate
+        // is qualified).
+        const usablePool = sorted.filter(entry => entry.fulfillment.fulfillmentTier !== "red");
+        const redPool = sorted.filter(entry => entry.fulfillment.fulfillmentTier === "red");
         const shortlistedIds = new Set<string>();
-        for (const entry of inAreaPool.slice(0, mission.targetQuantity)) shortlistedIds.add(entry.candidateId);
-        for (const entry of outOfAreaPool) {
+        for (const entry of usablePool.slice(0, mission.targetQuantity)) shortlistedIds.add(entry.candidateId);
+        for (const entry of redPool) {
           if (shortlistedIds.size >= mission.targetQuantity) break;
           shortlistedIds.add(entry.candidateId);
         }
 
         let shortlistedCount = 0;
         for (let index = 0; index < sorted.length; index += 1) {
-          const { candidateId, candidate, verification, evidence } = sorted[index];
+          const { candidateId, candidate, verification, evidence, fulfillment } = sorted[index];
           const isShortlisted = shortlistedIds.has(candidateId);
           if (isShortlisted) shortlistedCount += 1;
           await matchStore.upsertMatch({
@@ -831,6 +942,7 @@ export function createVendorAcquisitionMissionRouter(
               ...candidate,
               serviceAreaVerification: verification,
               serviceAreaEffectiveEvidence: evidence,
+              fulfillmentClassification: fulfillment,
             },
           });
         }
@@ -887,6 +999,7 @@ export function createVendorAcquisitionMissionRouter(
             const matchEvidence = match.matchEvidence as {
               serviceAreaVerification?: ServiceAreaVerification;
               serviceAreaEffectiveEvidence?: EffectiveServiceAreaEvidence;
+              fulfillmentClassification?: FulfillmentClassification;
             } | null;
             const deterministic = matchEvidence?.serviceAreaVerification ?? null;
             const effective = matchEvidence?.serviceAreaEffectiveEvidence ?? null;
@@ -903,6 +1016,12 @@ export function createVendorAcquisitionMissionRouter(
             } : null;
             const isOutOfArea = serviceAreaVerification?.serviceAreaStatus === "likely_out_of_area"
               || serviceAreaVerification?.serviceAreaStatus === "out_of_area";
+            // Slice 81c. fulfillmentClassification is read the same
+            // way -- from the match's own persisted evidence, never
+            // re-derived or re-fetched here. Missions whose matches
+            // predate Slice 81c simply have no classification until
+            // runDiscovery is re-run for them.
+            const fulfillment = matchEvidence?.fulfillmentClassification ?? null;
             return {
               ...candidate,
               matchedQuery: match.matchedQuery,
@@ -912,16 +1031,37 @@ export function createVendorAcquisitionMissionRouter(
               isShortlisted: match.isShortlisted,
               serviceAreaVerification,
               overflowReason: !match.isShortlisted && isOutOfArea ? serviceAreaVerification?.serviceAreaReasons[0] ?? "Service area unverified" : null,
+              fulfillmentMode: fulfillment?.fulfillmentMode ?? null,
+              fulfillmentTier: fulfillment?.fulfillmentTier ?? null,
+              fulfillmentLabel: fulfillment?.fulfillmentLabel ?? null,
+              fulfillmentReason: fulfillment?.fulfillmentReason ?? null,
+              distanceToTargetMiles: deterministic?.distanceMilesToTarget ?? null,
             };
           })
           .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+        // Slice 81c. Computed purely from the entries already read
+        // above -- no extra query, no fetch, no Claude call.
+        const summary = {
+          verifiedMobileCount: entries.filter(e => e.fulfillmentMode === "verified_mobile_building_service").length,
+          likelyMobileCount: entries.filter(e => e.fulfillmentMode === "likely_mobile_building_service").length,
+          mobileNeedsReviewCount: entries.filter(e => e.fulfillmentMode === "mobile_needs_review").length,
+          driveToFallbackCount: entries.filter(e => e.fulfillmentMode === "drive_to_storefront_fallback").length,
+          likelyOutOfAreaCount: entries.filter(e => e.fulfillmentMode === "likely_out_of_area").length,
+          outOfAreaCount: entries.filter(e => e.fulfillmentMode === "out_of_area").length,
+          emailReadyCount: entries.filter(e => e.serviceAreaVerification?.outreachReadiness === "email_ready").length,
+          formRequiredCount: entries.filter(e => e.serviceAreaVerification?.outreachReadiness === "form_required").length,
+          smsOrCallRequiredCount: entries.filter(e => e.serviceAreaVerification?.outreachReadiness === "sms_or_call_required").length,
+        };
 
         return {
           status: "ok" as const,
           targetQuantity: mission.targetQuantity,
           totalFound: counts.total,
           shortlistedCount: counts.shortlisted,
+          overflowCount: counts.total - counts.shortlisted,
           entries,
+          summary,
         };
       }),
   });
