@@ -45,6 +45,16 @@ const SERVICE_AREA_STATUS_DISPLAY: Record<string, { label: string; className: st
   out_of_area: { label: "Service area: Out of area", className: "bg-red-50 text-red-800 border-red-300" },
 };
 
+// Slice 81b. Mirrors the 77a->77b pattern: the structured Claude
+// interpreter is the primary reader of the website text the 81a
+// deterministic verifier already safely fetched; the deterministic
+// result remains the fallback. This badge tells the operator which one
+// actually produced the status shown.
+const INTERPRETER_SOURCE_DISPLAY: Record<string, string> = {
+  anthropic_structured: "Website interpreted by AI",
+  deterministic_fallback: "Deterministic fallback",
+};
+
 const CONTACT_ROUTE_DISPLAY: Record<string, string> = {
   email_available: "Contact route: Email",
   contact_form_available: "Contact route: Contact form",
@@ -605,6 +615,16 @@ export default function MissionControlPage() {
                     {candidate.serviceAreaVerification ? (
                       <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[10px] font-semibold text-black/55">
                         {CONTACT_ROUTE_DISPLAY[candidate.serviceAreaVerification.contactRoute] ?? "Contact route: Unknown"}
+                      </span>
+                    ) : null}
+                    {candidate.serviceAreaVerification?.serviceAreaInterpreterSource ? (
+                      <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+                        {INTERPRETER_SOURCE_DISPLAY[candidate.serviceAreaVerification.serviceAreaInterpreterSource] ?? "Deterministic fallback"}
+                      </span>
+                    ) : null}
+                    {candidate.serviceAreaVerification?.requiresHumanReview ? (
+                      <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                        Human review required
                       </span>
                     ) : null}
                   </div>

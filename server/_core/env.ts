@@ -13,6 +13,8 @@ export const ENV = {
   anthropicModelVendorOnboarding: process.env.ANTHROPIC_MODEL_VENDOR_ONBOARDING ?? "",
   /** Slice 77b: Mission Composer query-plan parser. Cheap/fast model preferred -- falls back to anthropicModel if unset. */
   anthropicModelMissionPlanner: process.env.ANTHROPIC_MODEL_MISSION_PLANNER ?? "",
+  /** Slice 81b: website service-area interpreter. Falls back to anthropicModel if unset. */
+  anthropicModelServiceAreaVerifier: process.env.ANTHROPIC_MODEL_SERVICE_AREA_VERIFIER ?? "",
   platformFeePercent: parseFloat(process.env.PLATFORM_FEE_PERCENT ?? "5"),
   adminBaseUrl: process.env.ADMIN_BASE_URL ?? "https://admin.bldg.chat",
   /**

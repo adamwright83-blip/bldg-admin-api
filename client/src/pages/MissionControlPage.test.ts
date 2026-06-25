@@ -692,3 +692,33 @@ describe("MissionControlPage -- Slice 81a service area verification + contact ro
     expect(source).not.toMatch(/sendSms\(|placeCall\(|\.submit\(\)|Send SMS|Place call|Submit form/);
   });
 });
+
+describe("MissionControlPage -- Slice 81b structured service-area interpretation", () => {
+  it("the card shows 'Website interpreted by AI' when the interpreter source is anthropic_structured", () => {
+    expect(source).toMatch(/Website interpreted by AI/);
+    expect(source).toMatch(/anthropic_structured: "Website interpreted by AI"/);
+  });
+
+  it("the card shows 'Deterministic fallback' when fallback was used", () => {
+    expect(source).toMatch(/Deterministic fallback/);
+    expect(source).toMatch(/deterministic_fallback: "Deterministic fallback"/);
+  });
+
+  it("the card shows a human-review-required badge sourced from requiresHumanReview", () => {
+    expect(source).toMatch(/candidate\.serviceAreaVerification\?\.requiresHumanReview \? \(/);
+    expect(source).toMatch(/Human review required/);
+  });
+
+  it("contact-form/SMS-call-required path still renders for non-email-ready candidates", () => {
+    expect(source).toMatch(/Contact route: Contact form/);
+    expect(source).toMatch(/Contact route: SMS\/call required/);
+  });
+
+  it("does not show AgentMail as the clean path for non-email-ready candidates, even with structured interpretation", () => {
+    expect(source).toMatch(/outreachReadiness !== "email_ready"/);
+  });
+
+  it("no SMS/call/form-submission button exists, including in the structured-interpretation badges", () => {
+    expect(source).not.toMatch(/Send SMS|Place call|Submit form|Fill contact form/);
+  });
+});

@@ -884,10 +884,20 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery mission-scoped shortlis
 function verification(overrides?: Partial<Record<string, unknown>>) {
   return {
     serviceAreaStatus: "unverified", serviceAreaReasons: [], targetZipMatched: false, targetBuildingMatched: false,
-    candidateAddressZip: null, distanceMilesToTarget: null, websiteChecked: false, websiteServiceAreas: [],
+    candidateAddressZip: null, distanceMilesToTarget: null, websiteChecked: false, websiteTextSnippet: "", websiteServiceAreas: [],
     websiteMentionsTargetZip: false, websiteMentionsTargetBuilding: false, contactRoute: "unknown",
     emailAddressesFound: [], contactFormDetected: false, phoneFound: false, outreachReadiness: "not_outreach_ready",
     verificationSource: "not_checked", verificationConfidence: "low",
+    ...overrides,
+  };
+}
+
+function interpretation(overrides?: Partial<Record<string, unknown>>) {
+  return {
+    serviceAreaStatus: "verified_serves_target", serviceAreaReasons: ["Website explicitly mentions the target ZIP"],
+    targetZipSupported: true, targetBuildingSupported: false, targetNeighborhoodSupported: false,
+    serviceAreaTextSummary: "Site confirms target ZIP coverage.",
+    contactRoute: "email_available", outreachReadiness: "email_ready", confidence: "high", requiresHumanReview: false,
     ...overrides,
   };
 }
@@ -968,6 +978,98 @@ describe("vendorAcquisitionMissionRouter -- runDiscovery service-area verificati
     const k9Call = matchStore.upsertMatch.mock.calls.find(([call]) => call.matchEvidence.businessName === "K-9 Tubs")?.[0];
     expect(k9Call.rankPosition).toBe(1);
     expect(k9Call.isShortlisted).toBe(true);
+  });
+});
+
+describe("vendorAcquisitionMissionRouter -- runDiscovery structured service-area interpretation (Slice 81b)", () => {
+  it("calls the structured interpreter after deterministic website evidence extraction when meaningful text exists", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [FOUR_CANDIDATES[0]] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ websiteChecked: true, websiteTextSnippet: "We serve 90027. Email hello@example.com." }));
+    const interpretFn = vi.fn().mockResolvedValue({ status: "ok", interpretation: interpretation() });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never, interpretFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(interpretFn).toHaveBeenCalledOnce();
+    const upsertCall = matchStore.upsertMatch.mock.calls[0][0];
+    expect(upsertCall.matchEvidence.serviceAreaEffectiveEvidence.serviceAreaInterpreterSource).toBe("anthropic_structured");
+    expect(upsertCall.matchEvidence.serviceAreaEffectiveEvidence.serviceAreaStatus).toBe("verified_serves_target");
+  });
+
+  it("does not call the structured interpreter when there is no meaningful website text", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [FOUR_CANDIDATES[0]] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ websiteChecked: false }));
+    const interpretFn = vi.fn();
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never, interpretFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(interpretFn).not.toHaveBeenCalled();
+    const upsertCall = matchStore.upsertMatch.mock.calls[0][0];
+    expect(upsertCall.matchEvidence.serviceAreaEffectiveEvidence.serviceAreaInterpreterSource).toBe("deterministic_fallback");
+    expect(upsertCall.matchEvidence.serviceAreaEffectiveEvidence.serviceAreaFallbackReason).toBe("no_website_text");
+  });
+
+  it("falls back to the deterministic result when the interpreter returns a non-ok status, recording the fallback reason", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [FOUR_CANDIDATES[0]] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ serviceAreaStatus: "likely_out_of_area", websiteChecked: true, websiteTextSnippet: "We serve the valley." }));
+    const interpretFn = vi.fn().mockResolvedValue({ status: "invalid_output", reason: "schema_validation_failed" });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never, interpretFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const upsertCall = matchStore.upsertMatch.mock.calls[0][0];
+    expect(upsertCall.matchEvidence.serviceAreaEffectiveEvidence.serviceAreaInterpreterSource).toBe("deterministic_fallback");
+    expect(upsertCall.matchEvidence.serviceAreaEffectiveEvidence.serviceAreaFallbackReason).toBe("invalid_output");
+    expect(upsertCall.matchEvidence.serviceAreaEffectiveEvidence.serviceAreaStatus).toBe("likely_out_of_area");
+  });
+
+  it("falls back to the deterministic result (never throwing) when the interpreter call rejects", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: [FOUR_CANDIDATES[0]] });
+    const matchStore = makeMockMatchStore();
+    const verifyFn = vi.fn().mockResolvedValue(verification({ websiteChecked: true, websiteTextSnippet: "We serve the valley." }));
+    const interpretFn = vi.fn().mockRejectedValue(new Error("upstream 503"));
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never, interpretFn as never);
+    const result = await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    expect(result.status).toBe("ok");
+    const upsertCall = matchStore.upsertMatch.mock.calls[0][0];
+    expect(upsertCall.matchEvidence.serviceAreaEffectiveEvidence.serviceAreaInterpreterSource).toBe("deterministic_fallback");
+  });
+
+  it("ranks by the structured (effective) service-area status, not the raw deterministic status, when the interpreter overrides it", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission({ targetQuantity: 2 })) });
+    const sourcingStore = makeMockSourcingStore();
+    const discoveryFn = vi.fn().mockResolvedValue({ status: "ok", candidates: FOUR_CANDIDATES });
+    const matchStore = makeMockMatchStore();
+    // Deterministically place_1 (Sunset) looks "unverified", but the
+    // structured interpreter actually classifies it likely_out_of_area
+    // after reading the explicit service-area text -- ranking must
+    // follow the interpreter's classification, not the raw deterministic one.
+    const verifyFn = vi.fn().mockImplementation(async (input: { candidate: { address: string | null } }) => {
+      if (input.candidate.address === "1 Main St") return verification({ websiteChecked: true, websiteTextSnippet: "We serve the San Fernando Valley only." });
+      return verification();
+    });
+    const interpretFn = vi.fn().mockImplementation(async (input: { candidateAddress: string | null }) => {
+      if (input.candidateAddress === "1 Main St") {
+        return { status: "ok", interpretation: interpretation({ serviceAreaStatus: "likely_out_of_area", outreachReadiness: "form_required", contactRoute: "contact_form_available", requiresHumanReview: true }) };
+      }
+      return { status: "skipped_no_text" };
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, discoveryFn, undefined, undefined, undefined, matchStore as never, verifyFn as never, interpretFn as never);
+    await router.createCaller(context({ role: "admin" })).runDiscovery({ missionId: "mission-1" });
+
+    const sunsetCall = matchStore.upsertMatch.mock.calls.find(([call]) => call.matchEvidence.businessName === "Sunset Mobile Grooming")?.[0];
+    expect(sunsetCall.isShortlisted).toBe(false);
+    expect(sunsetCall.matchEvidence.serviceAreaEffectiveEvidence.serviceAreaStatus).toBe("likely_out_of_area");
   });
 });
 
@@ -1057,6 +1159,42 @@ describe("vendorAcquisitionMissionRouter -- listMissionShortlist (Slice 79a)", (
     if (result.status !== "ok") throw new Error("expected ok");
     expect(result.entries[0].serviceAreaVerification?.serviceAreaStatus).toBe("likely_out_of_area");
     expect(result.entries[0].overflowReason).toBe("Business address ZIP 91306 is outside target area");
+  });
+
+  it("Slice 81b: exposes the structured (effective) evidence when present, and never calls the Claude interpreter or the network", async () => {
+    const missionStore = makeMockStore({ getMission: vi.fn().mockResolvedValue(makeMockMission()) });
+    const sourcingStore = makeMockSourcingStore({
+      listCandidatesForReview: vi.fn().mockResolvedValue([{ id: "candidate-1", businessName: "Sunset Mobile Grooming", evidence: { rating: 4.9 } }]),
+    });
+    const matchStore = makeMockMatchStore({
+      listMissionMatches: vi.fn().mockResolvedValue([{
+        id: "match-1", tenantId: "default", missionId: "mission-1", candidateId: "candidate-1",
+        matchedQuery: "mobile dog groomers near 90027", queryPlannerSource: "anthropic_structured",
+        serviceMode: "mobile_required", rankScore: 9.5, rankPosition: 1, isShortlisted: false,
+        matchEvidence: {
+          rating: 4.9,
+          serviceAreaVerification: verification({ serviceAreaStatus: "unverified" }),
+          serviceAreaEffectiveEvidence: {
+            serviceAreaStatus: "likely_out_of_area",
+            serviceAreaReasons: ["Explicit service-area list excludes 90027 and OPUS LA"],
+            contactRoute: "contact_form_available", outreachReadiness: "form_required",
+            emailAddressesFound: [], requiresHumanReview: true,
+            serviceAreaInterpreterSource: "anthropic_structured", serviceAreaFallbackReason: null,
+          },
+        },
+      }]),
+      countMissionMatches: vi.fn().mockResolvedValue({ total: 1, shortlisted: 0 }),
+    });
+    const router = createVendorAcquisitionMissionRouter(missionStore as never, sourcingStore as never, undefined, undefined, undefined, undefined, matchStore as never);
+    const result = await router.createCaller(context({ role: "admin" })).listMissionShortlist({ missionId: "mission-1", includeOverflow: true });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected ok");
+    // The interpreter-derived status overrides the raw deterministic one.
+    expect(result.entries[0].serviceAreaVerification?.serviceAreaStatus).toBe("likely_out_of_area");
+    expect(result.entries[0].serviceAreaVerification?.contactRoute).toBe("contact_form_available");
+    expect((result.entries[0].serviceAreaVerification as { requiresHumanReview?: boolean })?.requiresHumanReview).toBe(true);
+    expect((result.entries[0].serviceAreaVerification as { serviceAreaInterpreterSource?: string })?.serviceAreaInterpreterSource).toBe("anthropic_structured");
   });
 });
 

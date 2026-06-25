@@ -36,6 +36,13 @@ export type ServiceAreaVerification = {
   candidateAddressZip: string | null;
   distanceMilesToTarget: number | null;
   websiteChecked: boolean;
+  /**
+   * Slice 81b. The same plain-text snippet (already capped, already
+   * stripped of HTML) this module extracted internally -- exposed so a
+   * downstream structured interpreter can read it without performing a
+   * second fetch of the candidate's site.
+   */
+  websiteTextSnippet: string;
   websiteServiceAreas: string[];
   websiteMentionsTargetZip: boolean;
   websiteMentionsTargetBuilding: boolean;
@@ -306,6 +313,7 @@ export async function verifyCandidateServiceArea(input: VerifyServiceAreaInput):
     candidateAddressZip,
     distanceMilesToTarget,
     websiteChecked,
+    websiteTextSnippet: plainText,
     websiteServiceAreas,
     websiteMentionsTargetZip,
     websiteMentionsTargetBuilding,

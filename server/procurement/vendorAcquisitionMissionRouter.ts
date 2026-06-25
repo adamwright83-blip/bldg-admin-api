@@ -13,8 +13,12 @@ import { VendorContactAttemptStore } from "./vendorContactAttemptStore";
 import { runGooglePlacesDiscovery, type NormalizedPlaceCandidate } from "./googlePlacesDiscoveryConnector";
 import { createProcurementPool } from "./migrations";
 import {
-  extractZipFromAddress, verifyCandidateServiceArea, type ServiceAreaStatus, type ServiceAreaVerification,
+  extractZipFromAddress, verifyCandidateServiceArea,
+  type ContactRoute, type OutreachReadiness, type ServiceAreaStatus, type ServiceAreaVerification,
 } from "./vendorCandidateServiceAreaVerifier";
+import {
+  interpretServiceAreaWithClaude, type StructuredServiceAreaInterpretation,
+} from "./vendorCandidateServiceAreaStructuredInterpreter";
 import { MISSION_OUTREACH_MODES } from "./vendorAcquisitionMissionPolicy";
 import { VendorAcquisitionMissionStore } from "./vendorAcquisitionMissionStore";
 import {
@@ -151,6 +155,103 @@ const SERVICE_AREA_TIER: Record<ServiceAreaStatus, number> = {
   out_of_area: 4,
 };
 
+export type ServiceAreaInterpreterSource = "anthropic_structured" | "deterministic_fallback";
+
+/**
+ * Slice 81b. The field the rest of this module (ranking, shortlist
+ * gating, the send-readiness UI) actually reads. Mirrors the 77a->77b
+ * pattern: serviceAreaStatus/contactRoute/outreachReadiness/reasons
+ * come from the Claude interpreter when it ran and validated, or from
+ * the 81a deterministic verifier otherwise. emailAddressesFound is
+ * ALWAYS sourced from the deterministic verifier's own regex
+ * extraction over the real fetched HTML, never from the model --
+ * the structured interpreter's output schema has no email-list field
+ * at all, so there is no path by which a model-invented email could
+ * ever reach the supervised-send UI.
+ */
+export type EffectiveServiceAreaEvidence = {
+  serviceAreaStatus: ServiceAreaStatus;
+  serviceAreaReasons: string[];
+  contactRoute: ContactRoute;
+  outreachReadiness: OutreachReadiness;
+  emailAddressesFound: string[];
+  requiresHumanReview: boolean;
+  serviceAreaInterpreterSource: ServiceAreaInterpreterSource;
+  serviceAreaFallbackReason: string | null;
+};
+
+function resolveEffectiveServiceAreaEvidence(
+  deterministic: ServiceAreaVerification,
+  interpretation: StructuredServiceAreaInterpretation | null,
+  interpreterSource: ServiceAreaInterpreterSource,
+  fallbackReason: string | null,
+): EffectiveServiceAreaEvidence {
+  if (interpreterSource === "anthropic_structured" && interpretation) {
+    return {
+      serviceAreaStatus: interpretation.serviceAreaStatus,
+      serviceAreaReasons: interpretation.serviceAreaReasons,
+      contactRoute: interpretation.contactRoute,
+      outreachReadiness: interpretation.outreachReadiness,
+      emailAddressesFound: deterministic.emailAddressesFound,
+      requiresHumanReview: interpretation.requiresHumanReview,
+      serviceAreaInterpreterSource: "anthropic_structured",
+      serviceAreaFallbackReason: null,
+    };
+  }
+  return {
+    serviceAreaStatus: deterministic.serviceAreaStatus,
+    serviceAreaReasons: deterministic.serviceAreaReasons,
+    contactRoute: deterministic.contactRoute,
+    outreachReadiness: deterministic.outreachReadiness,
+    emailAddressesFound: deterministic.emailAddressesFound,
+    requiresHumanReview: false,
+    serviceAreaInterpreterSource: "deterministic_fallback",
+    serviceAreaFallbackReason: fallbackReason,
+  };
+}
+
+/**
+ * Slice 81b. The Claude structured interpreter is the primary reader
+ * of the website evidence the 81a deterministic verifier already
+ * safely fetched; the deterministic result remains the fallback when
+ * Claude is unavailable, fails, times out, returns invalid output, or
+ * there simply is not enough website text to interpret. Never throws,
+ * never performs a second fetch -- it only ever reads the plain-text
+ * snippet the deterministic verifier already captured.
+ */
+async function resolveServiceAreaEvidence(
+  input: {
+    missionText: string | null; targetZip: string | null; targetBuildingName: string | null;
+    candidateName: string; candidateAddress: string | null; candidateWebsite: string | null; candidatePhone: string | null;
+    deterministic: ServiceAreaVerification;
+  },
+  interpretFn: typeof interpretServiceAreaWithClaude,
+  tenantId: string,
+): Promise<EffectiveServiceAreaEvidence> {
+  try {
+    const interpreted = await interpretFn({
+      missionText: input.missionText,
+      targetZip: input.targetZip,
+      targetBuildingName: input.targetBuildingName,
+      targetNeighborhood: null,
+      candidateName: input.candidateName,
+      candidateAddress: input.candidateAddress,
+      candidateAddressZip: input.deterministic.candidateAddressZip,
+      candidateWebsite: input.candidateWebsite,
+      candidatePhone: input.candidatePhone,
+      deterministicResult: input.deterministic,
+      websiteText: input.deterministic.websiteTextSnippet,
+    }, { tenantId });
+    if (interpreted.status === "ok") {
+      return resolveEffectiveServiceAreaEvidence(input.deterministic, interpreted.interpretation, "anthropic_structured", null);
+    }
+    return resolveEffectiveServiceAreaEvidence(input.deterministic, null, "deterministic_fallback", interpreted.status);
+  } catch {
+    // Never let an interpreter failure block discovery from running at all.
+    return resolveEffectiveServiceAreaEvidence(input.deterministic, null, "deterministic_fallback", "interpreter_exception");
+  }
+}
+
 export type QueryPlannerFallbackReason = "needs_provider_config" | "invalid_output" | "provider_error" | "parser_exception" | null;
 
 export type DiscoveredCandidateSummary = NormalizedPlaceCandidate & {
@@ -212,6 +313,7 @@ export function createVendorAcquisitionMissionRouter(
   injectedAvailabilityIntakeStore?: VendorCandidateAvailabilityIntakeStore,
   injectedMatchStore?: VendorMissionCandidateMatchStore,
   injectedVerifyServiceAreaFn: typeof verifyCandidateServiceArea = verifyCandidateServiceArea,
+  injectedInterpretServiceAreaFn: typeof interpretServiceAreaWithClaude = interpretServiceAreaWithClaude,
 ) {
   return router({
     createMission: adminProcedure
@@ -643,10 +745,15 @@ export function createVendorAcquisitionMissionRouter(
           }
         }
 
-        // Slice 81a. Verify service-area fit and contact route for every
-        // candidate resolved in this run BEFORE ranking -- a "mobile"
-        // query result with a great rating is never enough on its own
-        // to call a candidate outreach-ready.
+        // Slice 81a/81b. Verify service-area fit and contact route for
+        // every candidate resolved in this run BEFORE ranking -- a
+        // "mobile" query result with a great rating is never enough on
+        // its own to call a candidate outreach-ready. The deterministic
+        // verifier always runs first (it performs the one safe website
+        // fetch); the Claude structured interpreter then reads that
+        // same already-fetched text as the primary interpretation layer
+        // when there is meaningful text, with the deterministic result
+        // as its own fallback.
         const { targetZip, targetBuildingName } = resolveTargetGeography(mission.geographyLabel);
         const verifiedCandidates = await Promise.all(resolvedCandidates.map(async entry => {
           const verification = await injectedVerifyServiceAreaFn({
@@ -656,18 +763,32 @@ export function createVendorAcquisitionMissionRouter(
             },
             targetZip, targetBuildingName,
           });
-          return { ...entry, verification };
+          const evidence = verification.websiteChecked && verification.websiteTextSnippet.trim().length > 0
+            ? await resolveServiceAreaEvidence({
+                missionText: mission.qualityGates.missionText ?? null,
+                targetZip, targetBuildingName,
+                candidateName: entry.candidate.businessName,
+                candidateAddress: entry.candidate.address,
+                candidateWebsite: entry.candidate.website,
+                candidatePhone: entry.candidate.phone,
+                deterministic: verification,
+              }, injectedInterpretServiceAreaFn, ctx.tenantId)
+            : resolveEffectiveServiceAreaEvidence(verification, null, "deterministic_fallback", "no_website_text");
+          return { ...entry, verification, evidence };
         }));
 
         // Rank every candidate resolved in this run -- service-area tier
-        // first, then the existing rating/review-count/contact-method
-        // score only breaks ties within the same tier -- and persist a
-        // mission-scoped match row for each (the same candidate can
-        // carry separate match rows for separate missions; never a
-        // single mission_id column on vendor_sourcing_candidates).
+        // first (using the EFFECTIVE evidence: Claude's interpretation
+        // when it ran and validated, the deterministic result
+        // otherwise), then the existing rating/review-count/contact-
+        // method score only breaks ties within the same tier -- and
+        // persist a mission-scoped match row for each (the same
+        // candidate can carry separate match rows for separate
+        // missions; never a single mission_id column on
+        // vendor_sourcing_candidates).
         const matchStore = resolveMatchStore(injectedMatchStore);
         const sorted = [...verifiedCandidates].sort((a, b) => {
-          const tierDiff = SERVICE_AREA_TIER[a.verification.serviceAreaStatus] - SERVICE_AREA_TIER[b.verification.serviceAreaStatus];
+          const tierDiff = SERVICE_AREA_TIER[a.evidence.serviceAreaStatus] - SERVICE_AREA_TIER[b.evidence.serviceAreaStatus];
           if (tierDiff !== 0) return tierDiff;
           const scoreDiff = rankScoreForCandidate(b.candidate, plan.serviceMode, plan.serviceMode)
             - rankScoreForCandidate(a.candidate, plan.serviceMode, plan.serviceMode);
@@ -682,8 +803,8 @@ export function createVendorAcquisitionMissionRouter(
         // verified candidates than to silently pretend an out-of-area
         // candidate is qualified).
         const isOutOfAreaTier = (status: ServiceAreaStatus) => status === "likely_out_of_area" || status === "out_of_area";
-        const inAreaPool = sorted.filter(entry => !isOutOfAreaTier(entry.verification.serviceAreaStatus));
-        const outOfAreaPool = sorted.filter(entry => isOutOfAreaTier(entry.verification.serviceAreaStatus));
+        const inAreaPool = sorted.filter(entry => !isOutOfAreaTier(entry.evidence.serviceAreaStatus));
+        const outOfAreaPool = sorted.filter(entry => isOutOfAreaTier(entry.evidence.serviceAreaStatus));
         const shortlistedIds = new Set<string>();
         for (const entry of inAreaPool.slice(0, mission.targetQuantity)) shortlistedIds.add(entry.candidateId);
         for (const entry of outOfAreaPool) {
@@ -693,7 +814,7 @@ export function createVendorAcquisitionMissionRouter(
 
         let shortlistedCount = 0;
         for (let index = 0; index < sorted.length; index += 1) {
-          const { candidateId, candidate, verification } = sorted[index];
+          const { candidateId, candidate, verification, evidence } = sorted[index];
           const isShortlisted = shortlistedIds.has(candidateId);
           if (isShortlisted) shortlistedCount += 1;
           await matchStore.upsertMatch({
@@ -706,7 +827,11 @@ export function createVendorAcquisitionMissionRouter(
             rankScore: rankScoreForCandidate(candidate, plan.serviceMode, plan.serviceMode),
             rankPosition: index + 1,
             isShortlisted,
-            matchEvidence: { ...candidate, serviceAreaVerification: verification },
+            matchEvidence: {
+              ...candidate,
+              serviceAreaVerification: verification,
+              serviceAreaEffectiveEvidence: evidence,
+            },
           });
         }
 
@@ -752,13 +877,30 @@ export function createVendorAcquisitionMissionRouter(
           .map(match => {
             const candidate = candidateById.get(match.candidateId);
             if (!candidate) return null;
-            // Slice 81a. serviceAreaVerification is read from this
+            // Slice 81a/81b. serviceAreaVerification is read from this
             // mission match's own evidence (refreshed every runDiscovery
             // run for this mission) -- never from the candidate's own
             // evidence blob, which is written once at first discovery
-            // and can go stale or reflect a different mission's geography.
-            const matchEvidence = match.matchEvidence as { serviceAreaVerification?: ServiceAreaVerification } | null;
-            const serviceAreaVerification = matchEvidence?.serviceAreaVerification ?? null;
+            // and can go stale or reflect a different mission's
+            // geography. This NEVER calls Claude or the network -- it
+            // only reads what runDiscovery already persisted.
+            const matchEvidence = match.matchEvidence as {
+              serviceAreaVerification?: ServiceAreaVerification;
+              serviceAreaEffectiveEvidence?: EffectiveServiceAreaEvidence;
+            } | null;
+            const deterministic = matchEvidence?.serviceAreaVerification ?? null;
+            const effective = matchEvidence?.serviceAreaEffectiveEvidence ?? null;
+            const serviceAreaVerification = deterministic ? {
+              ...deterministic,
+              serviceAreaStatus: effective?.serviceAreaStatus ?? deterministic.serviceAreaStatus,
+              serviceAreaReasons: effective?.serviceAreaReasons ?? deterministic.serviceAreaReasons,
+              contactRoute: effective?.contactRoute ?? deterministic.contactRoute,
+              outreachReadiness: effective?.outreachReadiness ?? deterministic.outreachReadiness,
+              emailAddressesFound: effective?.emailAddressesFound ?? deterministic.emailAddressesFound,
+              requiresHumanReview: effective?.requiresHumanReview ?? false,
+              serviceAreaInterpreterSource: effective?.serviceAreaInterpreterSource ?? "deterministic_fallback",
+              serviceAreaFallbackReason: effective?.serviceAreaFallbackReason ?? null,
+            } : null;
             const isOutOfArea = serviceAreaVerification?.serviceAreaStatus === "likely_out_of_area"
               || serviceAreaVerification?.serviceAreaStatus === "out_of_area";
             return {
