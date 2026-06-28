@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Menu, Loader2 } from "lucide-react";
+import { Menu, Loader2, ArrowUpRight } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
 import { CustomerProfileDrawer } from "@/components/CustomerProfileDrawer";
@@ -42,26 +42,17 @@ const LIVE_INTERNAL_TABS = new Set<AdminWorkspaceTab>([
  *  PEOPLE   — who we serve, recover, sell to.
  *  DRAWER   — low-frequency configuration only. Money is NOT in here.
  */
-const COUNTER_PATHS = new Set([
-  "/live",
-  "/new-order",
-  "/operations-events",
-  "/payment-reconciliation",
-  "/requests",
-  "/job-cards",
-  "/proposal-review",
-  "/proposal-bootstrap",
-  "/casting-sprint",
-  "/mission-control",
-  "/post-consent-plans",
-  "/intake",
-  "/processing",
-  "/ready",
-  "/pickups",
-]);
-const PEOPLE_PATHS = new Set(["/customers", "/leads", "/vendors"]);
+/**
+ * Two workspaces share the Counter room but are never shown at once.
+ * Laundry Butler is the laundry POS workflow; HELD Corporate is the
+ * vendor-sourcing/proposal workflow (whose home is Mission Control 2026).
+ * The active workspace is derived purely from the current path -- there
+ * is no persisted/localStorage state to go stale, so a direct URL load
+ * always shows the correct workspace's nav.
+ */
+type AdminWorkspace = "laundry_butler" | "held_corporate";
 
-const COUNTER_TABS: Array<{ label: string; path: string }> = [
+const LAUNDRY_BUTLER_TABS: Array<{ label: string; path: string }> = [
   { label: "New order", path: "/new-order" },
   { label: "Intake", path: "/intake" },
   { label: "Cleaning", path: "/processing" },
@@ -70,6 +61,8 @@ const COUNTER_TABS: Array<{ label: string; path: string }> = [
   { label: "Pipeline", path: "/live" },
   { label: "History", path: "/operations-events" },
   { label: "Money owed", path: "/payment-reconciliation" },
+];
+const HELD_CORPORATE_TABS: Array<{ label: string; path: string }> = [
   { label: "Requests", path: "/requests" },
   { label: "Job cards", path: "/job-cards" },
   { label: "Proposal review", path: "/proposal-review" },
@@ -78,11 +71,30 @@ const COUNTER_TABS: Array<{ label: string; path: string }> = [
   { label: "Mission control", path: "/mission-control" },
   { label: "Post-consent plans", path: "/post-consent-plans" },
 ];
+
+const HELD_CORPORATE_PATHS = new Set(HELD_CORPORATE_TABS.map((t) => t.path));
+
+/** Counter room = both workspaces' tabs (the union); used only for room detection. */
+const COUNTER_PATHS = new Set([
+  ...LAUNDRY_BUTLER_TABS.map((t) => t.path),
+  ...HELD_CORPORATE_TABS.map((t) => t.path),
+]);
+const PEOPLE_PATHS = new Set(["/customers", "/leads", "/vendors"]);
+
 const PEOPLE_TABS: Array<{ label: string; path: string }> = [
   { label: "Customers", path: "/customers" },
   { label: "Leads", path: "/leads" },
   { label: "Vendors", path: "/vendors" },
 ];
+
+/**
+ * Route inference wins, always. Any HELD Corporate path => held_corporate;
+ * everything else (Laundry Butler Counter paths, People, Drawer pages,
+ * unknown) defaults to laundry_butler so the switcher has a stable label.
+ */
+function workspaceForPath(path: string): AdminWorkspace {
+  return HELD_CORPORATE_PATHS.has(path) ? "held_corporate" : "laundry_butler";
+}
 
 function normalizePath(loc: string): string {
   const p = loc.split("?")[0]?.replace(/\/$/, "") || "";
@@ -140,8 +152,17 @@ export default function AdminHostApp() {
   const isLiveNavActive = isLive || (activeTab !== null && LIVE_INTERNAL_TABS.has(activeTab));
   const isCounter = COUNTER_PATHS.has(path);
   const isPeople = PEOPLE_PATHS.has(path);
+  const activeWorkspace = workspaceForPath(path);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const roomTabs = isCounter ? COUNTER_TABS : isPeople ? PEOPLE_TABS : null;
+  // Inside the Counter room, show ONLY the active workspace's tabs --
+  // never both products at once. People keeps its own tab set.
+  const roomTabs = isCounter
+    ? activeWorkspace === "held_corporate"
+      ? HELD_CORPORATE_TABS
+      : LAUNDRY_BUTLER_TABS
+    : isPeople
+      ? PEOPLE_TABS
+      : null;
   const initialSelectedOrderId =
     path === "/intake" ? parseOrderIdFromLocation(loc) ?? parseOrderIdFromWindowSearch() : null;
   const quickReceiptOpen = path === "/intake" && parseQuickReceiptFromLocation(loc);
@@ -224,7 +245,9 @@ export default function AdminHostApp() {
         }`}
       >
         <div className="px-2 mb-4">
-          <span className="text-xs font-semibold tracking-widest uppercase text-black">Laundry Butler</span>
+          <span className="text-xs font-semibold tracking-widest uppercase text-black">
+            {activeWorkspace === "held_corporate" ? "HELD Corporate" : "Laundry Butler"}
+          </span>
         </div>
         {/* THREE ROOMS AND A DRAWER. Every old path still works — the rooms
             are how you move, the tabs (rendered above each room) are how you
@@ -270,7 +293,36 @@ export default function AdminHostApp() {
             ) : null}
           </Link>
 
-          <div className="mt-auto border-t border-black/10 pt-2">
+          <div className="mt-auto flex flex-col gap-2">
+            {/* Red diving board — the deliberate, can't-miss jump between
+                the two workspaces. Sits above the Drawer. Label + target
+                flip based on the path-derived active workspace. */}
+            <button
+              type="button"
+              aria-label={
+                activeWorkspace === "held_corporate"
+                  ? "Switch to Laundry Butler workspace"
+                  : "Switch to HELD Corporate workspace"
+              }
+              onClick={() => {
+                setMobileNavOpen(false);
+                navigate(activeWorkspace === "held_corporate" ? "/new-order" : "/mission-control");
+              }}
+              className="group relative block w-full -skew-x-6 rounded-md bg-red-600 px-3 py-2.5 text-left shadow-[0_4px_0_0_rgb(127_29_29)] outline-none transition-all hover:-translate-y-0.5 hover:bg-red-700 hover:shadow-[0_6px_0_0_rgb(127_29_29)] focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2 active:translate-y-0.5 active:shadow-[0_2px_0_0_rgb(127_29_29)]"
+            >
+              <span className="flex skew-x-6 items-center justify-between gap-2">
+                <span className="flex flex-col leading-tight">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-white/75">Switch to</span>
+                  <span className="text-sm font-extrabold text-white">
+                    {activeWorkspace === "held_corporate" ? "Laundry Butler" : "HELD Corporate"}
+                  </span>
+                </span>
+                <ArrowUpRight className="h-5 w-5 shrink-0 text-white transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              </span>
+            </button>
+          </div>
+
+          <div className="border-t border-black/10 pt-2">
             <button
               type="button"
               className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-black/55 transition-colors hover:bg-black/5 hover:text-black"
@@ -351,13 +403,20 @@ export default function AdminHostApp() {
                   })}
                 </nav>
               ) : null}
-              {/* Create order is a global action — never hunt for it. */}
-              <Link
-                href="/new-order"
-                className="ml-auto shrink-0 rounded-md bg-black px-3 py-1.5 text-[12.5px] font-bold text-white transition-colors hover:bg-black/80"
-              >
-                + Order
-              </Link>
+              {/* + Order is the Laundry Butler global action. It is hidden
+                  in the HELD Corporate workspace so the misleading laundry
+                  CTA is never the primary corporate action (HELD's mission
+                  composer lives on the Mission Control page itself). */}
+              {activeWorkspace === "held_corporate" ? (
+                <span className="ml-auto" />
+              ) : (
+                <Link
+                  href="/new-order"
+                  className="ml-auto shrink-0 rounded-md bg-black px-3 py-1.5 text-[12.5px] font-bold text-white transition-colors hover:bg-black/80"
+                >
+                  + Order
+                </Link>
+              )}
               <span className="hidden text-xs text-black/40 sm:inline">{user?.name || "Admin"}</span>
             </header>
 
