@@ -180,6 +180,41 @@ type ReceiptCustomer = {
   stripePaymentMethodId: string | null;
 };
 
+type CustomerDirectoryOption = {
+  phone: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  unit: string | null;
+  address: string;
+  buildingSlug?: string | null;
+  totalOrders?: number;
+};
+
+function customerOptionName(
+  customer: Pick<CustomerDirectoryOption, "firstName" | "lastName">
+): string {
+  return (
+    `${customer.firstName || ""} ${customer.lastName || ""}`.trim() ||
+    "Resident"
+  );
+}
+
+function toCustomerDirectoryOption(
+  customer: CustomerDirectoryOption
+): CustomerDirectoryOption {
+  return {
+    phone: customer.phone,
+    firstName: customer.firstName,
+    lastName: customer.lastName,
+    email: customer.email,
+    unit: customer.unit,
+    address: customer.address,
+    buildingSlug: customer.buildingSlug ?? null,
+    totalOrders: customer.totalOrders,
+  };
+}
+
 type ParsedReceipt = {
   receiptIntakeId?: number;
   receiptImageUrl?: string | null;
@@ -689,6 +724,10 @@ function NewOrderTab({
     vendorId: undefined as number | undefined,
   });
   const [prefilled, setPrefilled] = useState(false);
+  const [customerNameQuery, setCustomerNameQuery] = useState("");
+  const [selectedCustomer, setSelectedCustomer] =
+    useState<CustomerDirectoryOption | null>(null);
+  const [showCustomerMatches, setShowCustomerMatches] = useState(false);
   const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null);
   const [stripePaymentMethodId, setStripePaymentMethodId] = useState<
     string | null
@@ -709,10 +748,24 @@ function NewOrderTab({
 
   const vendorsQuery = trpc.admin.listVendors.useQuery();
   const utils = trpc.useUtils();
+  const debouncedCustomerNameQuery = useDebounce(customerNameQuery, 160);
 
   const searchQuery = trpc.admin.searchCustomer.useQuery(
     { phone },
     { enabled: phone.length >= 7 && !prefilled }
+  );
+  const customerMatchesQuery = trpc.admin.listCustomers.useQuery(
+    {
+      search: debouncedCustomerNameQuery.trim() || undefined,
+      sortBy: "lastOrder",
+      includeLegacyCleanCloud: false,
+    },
+    {
+      enabled:
+        showCustomerMatches &&
+        !selectedCustomer &&
+        debouncedCustomerNameQuery.trim().length >= 2,
+    }
   );
   const catalogQuery = trpc.admin.catalog.list.useQuery(
     { includeArchived: false },
@@ -756,6 +809,9 @@ function NewOrderTab({
     }));
     setStripeCustomerId(d.stripeCustomerId || null);
     setStripePaymentMethodId(d.stripePaymentMethodId || null);
+    setCustomerNameQuery(customerOptionName(d));
+    setSelectedCustomer(toCustomerDirectoryOption(d));
+    setShowCustomerMatches(false);
     setPrefilled(true);
   }, [phone, searchQuery.isFetching, searchQuery.isFetched, searchQuery.data]);
 
@@ -771,6 +827,9 @@ function NewOrderTab({
     setCheckoutResult(null);
     setPhone("");
     setPrefilled(false);
+    setCustomerNameQuery("");
+    setSelectedCustomer(null);
+    setShowCustomerMatches(false);
     setStripeCustomerId(null);
     setStripePaymentMethodId(null);
     setWeightLbs("");
@@ -844,9 +903,68 @@ function NewOrderTab({
       }));
       setStripeCustomerId(searchQuery.data.stripeCustomerId || null);
       setStripePaymentMethodId(searchQuery.data.stripePaymentMethodId || null);
+      setCustomerNameQuery(customerOptionName(searchQuery.data));
+      setSelectedCustomer(toCustomerDirectoryOption(searchQuery.data));
+      setShowCustomerMatches(false);
       setPrefilled(true);
     }
   }, [searchQuery.data]);
+
+  const customerMatches = useMemo(() => {
+    const rows = (customerMatchesQuery.data?.customers ??
+      []) as CustomerDirectoryOption[];
+    return rows.slice(0, 5);
+  }, [customerMatchesQuery.data?.customers]);
+
+  const applyCustomerSelection = useCallback(
+    async (customer: CustomerDirectoryOption) => {
+      setSelectedCustomer(customer);
+      setCustomerNameQuery(customerOptionName(customer));
+      setShowCustomerMatches(false);
+      setPhone(customer.phone || "");
+      setPrefilled(true);
+
+      setForm(f => ({
+        ...f,
+        firstName: customer.firstName || "",
+        lastName: customer.lastName || "",
+        email: customer.email || "",
+        address: customer.address || "",
+        unit: customer.unit || "",
+        buildingSlug:
+          customer.buildingSlug &&
+          SUPPORTED_BUILDINGS.some(b => b.value === customer.buildingSlug)
+            ? customer.buildingSlug
+            : f.buildingSlug,
+      }));
+      setStripeCustomerId(null);
+      setStripePaymentMethodId(null);
+
+      const digits = customer.phone.replace(/\D/g, "");
+      if (digits.length < 7) return;
+
+      try {
+        const hydrated = await utils.admin.searchCustomer.fetch({
+          phone: customer.phone,
+        });
+        if (!hydrated) return;
+        setForm(f => ({
+          ...f,
+          firstName: hydrated.firstName || customer.firstName || "",
+          lastName: hydrated.lastName || customer.lastName || "",
+          email: hydrated.email || customer.email || "",
+          address: hydrated.address || customer.address || "",
+          unit: hydrated.unit || customer.unit || "",
+        }));
+        setStripeCustomerId(hydrated.stripeCustomerId || null);
+        setStripePaymentMethodId(hydrated.stripePaymentMethodId || null);
+      } catch (err) {
+        console.error("Failed to hydrate selected customer:", err);
+        toast.error("Customer selected, but saved-card lookup failed.");
+      }
+    },
+    [utils.admin.searchCustomer]
+  );
 
   const catalogRows = useMemo(() => {
     const rows = toDryCleanCatalogRows(catalogQuery.data);
@@ -1439,6 +1557,7 @@ function NewOrderTab({
                   onChange={e => {
                     setPhone(e.target.value);
                     setPrefilled(false);
+                    setSelectedCustomer(null);
                   }}
                   placeholder="(323) 555-1234"
                   className="bg-white border-black/20"
@@ -1469,6 +1588,100 @@ function NewOrderTab({
               </div>
             ) : null}
 
+            <label className="mt-3 block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+                Find Existing Customer
+              </span>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/35" />
+                <Input
+                  value={customerNameQuery}
+                  onFocus={() => {
+                    if (!selectedCustomer) setShowCustomerMatches(true);
+                  }}
+                  onChange={e => {
+                    setCustomerNameQuery(e.target.value);
+                    setSelectedCustomer(null);
+                    setPrefilled(false);
+                    setShowCustomerMatches(true);
+                  }}
+                  placeholder="Type first or last name"
+                  className="bg-white border-black/20 pl-9"
+                />
+                {selectedCustomer ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCustomer(null);
+                      setCustomerNameQuery("");
+                      setPrefilled(false);
+                      setShowCustomerMatches(true);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-black/35 hover:text-black"
+                    aria-label="Clear selected customer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
+            </label>
+
+            {selectedCustomer ? (
+              <div className="mt-2 flex items-start justify-between gap-2 border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                <div className="min-w-0">
+                  <div className="font-semibold">
+                    Existing customer selected:{" "}
+                    {customerOptionName(selectedCustomer)}
+                  </div>
+                  <div className="mt-0.5 truncate text-emerald-900/70">
+                    {selectedCustomer.phone || "No phone"} · Unit{" "}
+                    {selectedCustomer.unit || "—"}
+                    {hasSavedCard ? " · card on file" : ""}
+                  </div>
+                </div>
+                {selectedCustomer.phone ? (
+                  <button
+                    type="button"
+                    className="shrink-0 font-semibold uppercase tracking-[0.08em]"
+                    onClick={() => onOpenProfile(selectedCustomer.phone)}
+                  >
+                    Profile
+                  </button>
+                ) : null}
+              </div>
+            ) : showCustomerMatches && customerNameQuery.trim().length >= 2 ? (
+              <div className="mt-2 overflow-hidden border border-black/10 bg-white text-xs shadow-sm">
+                {customerMatchesQuery.isFetching ? (
+                  <div className="flex items-center gap-2 px-3 py-3 text-black/45">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Searching customers...
+                  </div>
+                ) : customerMatches.length > 0 ? (
+                  customerMatches.map(customer => (
+                    <button
+                      key={`${customer.phone}-${customer.unit ?? ""}-${customer.firstName}-${customer.lastName}`}
+                      type="button"
+                      onClick={() => void applyCustomerSelection(customer)}
+                      className="block w-full border-b border-black/5 px-3 py-2 text-left last:border-b-0 hover:bg-black/[0.03]"
+                    >
+                      <div className="font-semibold text-black">
+                        {customerOptionName(customer)}
+                      </div>
+                      <div className="mt-0.5 text-black/50">
+                        {customer.phone || "No phone"} · Unit{" "}
+                        {customer.unit || "—"} ·{" "}
+                        {customer.address || "No address"}
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-3 py-3 text-black/45">
+                    No existing customer match.
+                  </div>
+                )}
+              </div>
+            ) : null}
+
             <div className="mt-3 grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
@@ -1477,9 +1690,17 @@ function NewOrderTab({
                 <Input
                   ref={firstNameRef}
                   value={form.firstName}
-                  onChange={e =>
-                    setForm({ ...form, firstName: e.target.value })
-                  }
+                  onFocus={() => setShowCustomerMatches(true)}
+                  onChange={e => {
+                    const nextForm = { ...form, firstName: e.target.value };
+                    setForm(nextForm);
+                    setCustomerNameQuery(
+                      `${nextForm.firstName} ${nextForm.lastName}`.trim()
+                    );
+                    setSelectedCustomer(null);
+                    setPrefilled(false);
+                    setShowCustomerMatches(true);
+                  }}
                   className="bg-white border-black/20"
                 />
               </label>
@@ -1490,7 +1711,17 @@ function NewOrderTab({
                 <Input
                   ref={lastNameRef}
                   value={form.lastName}
-                  onChange={e => setForm({ ...form, lastName: e.target.value })}
+                  onFocus={() => setShowCustomerMatches(true)}
+                  onChange={e => {
+                    const nextForm = { ...form, lastName: e.target.value };
+                    setForm(nextForm);
+                    setCustomerNameQuery(
+                      `${nextForm.firstName} ${nextForm.lastName}`.trim()
+                    );
+                    setSelectedCustomer(null);
+                    setPrefilled(false);
+                    setShowCustomerMatches(true);
+                  }}
                   className="bg-white border-black/20"
                 />
               </label>
