@@ -21,7 +21,9 @@ const MENU_JSON_SCHEMA = {
             },
             standardPriceCents: { type: "integer" },
             pricingUnit: { type: "string", enum: ["each", "per_lb"] },
-            expressPriceCents: { anyOf: [{ type: "integer" }, { type: "null" }] },
+            expressPriceCents: {
+              anyOf: [{ type: "integer" }, { type: "null" }],
+            },
             costCents: { anyOf: [{ type: "integer" }, { type: "null" }] },
           },
           required: [
@@ -56,7 +58,10 @@ const COMMAND_JSON_SCHEMA = {
       category: { anyOf: [{ type: "string" }, { type: "null" }] },
       serviceType: {
         anyOf: [
-          { type: "string", enum: ["dry_clean", "wash_fold", "alteration", "other"] },
+          {
+            type: "string",
+            enum: ["dry_clean", "wash_fold", "alteration", "other"],
+          },
           { type: "null" },
         ],
       },
@@ -109,12 +114,22 @@ export type DerivedPartnerCost = {
   costCents: number;
 };
 
+function dollarsToCents(value: string): number | null {
+  const n = Number(value.replace(/,/g, ""));
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100);
+}
+
 function getMessageText(result: InvokeResult): string {
   const raw = result.choices[0]?.message?.content;
   if (typeof raw === "string") return raw;
   if (Array.isArray(raw)) {
     return raw
-      .map((p) => (p && typeof p === "object" && "text" in p ? String((p as { text: string }).text) : ""))
+      .map(p =>
+        p && typeof p === "object" && "text" in p
+          ? String((p as { text: string }).text)
+          : ""
+      )
       .join("");
   }
   return "";
@@ -122,16 +137,20 @@ function getMessageText(result: InvokeResult): string {
 
 /** URL-safe slug: lowercase, underscores */
 export function slugifyCatalogName(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/['']/g, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 120) || "item";
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/['']/g, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 120) || "item"
+  );
 }
 
-export function normalizeCatalogCategory(category: string | null | undefined): string | null {
+export function normalizeCatalogCategory(
+  category: string | null | undefined
+): string | null {
   const raw = category?.trim();
   if (!raw) return null;
 
@@ -187,10 +206,15 @@ function inferCatalogCategory(name: string | null): string | null {
   if (/\b(pants|jeans|shorts|trousers?)\b/.test(lower)) return "Pants";
   if (/\b(dress|gown)\b/.test(lower)) return "Dresses";
   if (/\b(skirt)\b/.test(lower)) return "Skirts";
-  if (/\b(shirt|blouse|cardigan|sweater|top|vest|jersey|turtleneck)\b/.test(lower)) return "Tops";
+  if (
+    /\b(shirt|blouse|cardigan|sweater|top|vest|jersey|turtleneck)\b/.test(lower)
+  )
+    return "Tops";
   if (/\b(coat|jacket|outerwear)\b/.test(lower)) return "Outerwear";
-  if (/\b(comforter|duvet|blanket|sheet|pillow|bedspread)\b/.test(lower)) return "Bedding";
-  if (/\b(hem|zipper|alteration|repair|tailor)\b/.test(lower)) return "Alterations";
+  if (/\b(comforter|duvet|blanket|sheet|pillow|bedspread)\b/.test(lower))
+    return "Bedding";
+  if (/\b(hem|zipper|alteration|repair|tailor)\b/.test(lower))
+    return "Alterations";
   return null;
 }
 
@@ -204,14 +228,19 @@ export function derivePartnerCostFromCommand(
   let match: RegExpExecArray | null;
   while ((match = percentRe.exec(command)) !== null) {
     const rawPercent = Number(match[1]);
-    if (!Number.isFinite(rawPercent) || rawPercent < 0 || rawPercent > 100) continue;
+    if (!Number.isFinite(rawPercent) || rawPercent < 0 || rawPercent > 100)
+      continue;
 
     const start = Math.max(0, match.index - 80);
     const end = Math.min(command.length, match.index + match[0].length + 80);
     const nearby = command.slice(start, end).toLowerCase();
     const mentionsPartnerCost =
-      /\b(pay|paid|pays|payout|cost|owed|give|gets?|receives?|keeps?)\b/.test(nearby) &&
-      /\b(dry\s*clean(?:er|ing)?|cleaner|partner|vendor|provider|wholesale)\b/.test(nearby);
+      /\b(pay|paid|pays|payout|cost|owed|give|gets?|receives?|keeps?)\b/.test(
+        nearby
+      ) &&
+      /\b(dry\s*clean(?:er|ing)?|cleaner|partner|vendor|provider|wholesale)\b/.test(
+        nearby
+      );
 
     if (!mentionsPartnerCost) continue;
 
@@ -221,6 +250,42 @@ export function derivePartnerCostFromCommand(
     };
   }
 
+  return null;
+}
+
+export function deriveCustomerPriceCentsFromCommand(
+  command: string
+): number | null {
+  const patterns = [
+    /\b(?:charge|charge\s+the|charges?)\s+(?:the\s+)?customer\s+\$\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)/i,
+    /\bcustomer\s+(?:pays?|gets\s+charged|is\s+charged)\s+\$\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)/i,
+    /\b(?:sell|sells|selling|price|priced)\s+(?:it\s+|for\s+|at\s+|customer\s+)?\$\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)/i,
+    /\b(?:charge|charge\s+the|charges?)\s+(?:the\s+)?customer\s+(\d+(?:,\d{3})*(?:\.\d{1,2})?)\s+dollars?\b/i,
+    /\bcustomer\s+(?:pays?|gets\s+charged|is\s+charged)\s+(\d+(?:,\d{3})*(?:\.\d{1,2})?)\s+dollars?\b/i,
+    /\b(?:sell|sells|selling|price|priced)\s+(?:it\s+|for\s+|at\s+|customer\s+)?(\d+(?:,\d{3})*(?:\.\d{1,2})?)\s+dollars?\b/i,
+  ];
+  for (const pattern of patterns) {
+    const match = command.match(pattern);
+    const cents = match?.[1] ? dollarsToCents(match[1]) : null;
+    if (cents != null) return cents;
+  }
+  return null;
+}
+
+export function derivePartnerCostCentsFromCommand(
+  command: string
+): number | null {
+  const patterns = [
+    /\b(?:give|pay|pays?|paid|costs?|cost|owe|owed)\s+(?:the\s+)?(?:dry\s*clean(?:er|ing)?|cleaner|partner|vendor|provider)\s+\$\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)/i,
+    /\b(?:dry\s*clean(?:er|ing)?|cleaner|partner|vendor|provider)\s+(?:gets?|receives?|keeps?|is\s+paid|charges?)\s+\$\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)/i,
+    /\b(?:give|pay|pays?|paid|costs?|cost|owe|owed)\s+(?:the\s+)?(?:dry\s*clean(?:er|ing)?|cleaner|partner|vendor|provider)\s+(\d+(?:,\d{3})*(?:\.\d{1,2})?)\s+dollars?\b/i,
+    /\b(?:dry\s*clean(?:er|ing)?|cleaner|partner|vendor|provider)\s+(?:gets?|receives?|keeps?|is\s+paid|charges?)\s+(\d+(?:,\d{3})*(?:\.\d{1,2})?)\s+dollars?\b/i,
+  ];
+  for (const pattern of patterns) {
+    const match = command.match(pattern);
+    const cents = match?.[1] ? dollarsToCents(match[1]) : null;
+    if (cents != null) return cents;
+  }
   return null;
 }
 
@@ -234,18 +299,45 @@ export function normalizeParsedCatalogCommand(
     const inferredCategory = inferCatalogCategory(next.name);
     const rawServiceType = next.serviceType;
     next.serviceType = next.serviceType ?? "dry_clean";
-    next.category = normalizeCatalogCategory(next.category) ?? inferredCategory ?? "Garments";
-    if (rawServiceType === "other" && inferredCategory && inferredCategory !== "Garments") {
-      next.serviceType = inferredCategory === "Alterations" ? "alteration" : "dry_clean";
+    next.category =
+      normalizeCatalogCategory(next.category) ?? inferredCategory ?? "Garments";
+    if (
+      rawServiceType === "other" &&
+      inferredCategory &&
+      inferredCategory !== "Garments"
+    ) {
+      next.serviceType =
+        inferredCategory === "Alterations" ? "alteration" : "dry_clean";
     }
   }
 
-  const derivedPartnerCost = derivePartnerCostFromCommand(command, next.standardPriceCents);
-  if (derivedPartnerCost) {
+  const explicitCustomerPriceCents =
+    deriveCustomerPriceCentsFromCommand(command);
+  if (explicitCustomerPriceCents != null) {
+    next.standardPriceCents = explicitCustomerPriceCents;
+  }
+
+  const explicitPartnerCostCents = derivePartnerCostCentsFromCommand(command);
+  if (explicitPartnerCostCents != null) {
+    next.costCents = explicitPartnerCostCents;
+    const dollars = (explicitPartnerCostCents / 100).toFixed(2);
+    const summary = `Partner cost set to explicit command amount ($${dollars}).`;
+    next.notes = next.notes?.trim()
+      ? `${next.notes.trim()} ${summary}`
+      : summary;
+  }
+
+  const derivedPartnerCost = derivePartnerCostFromCommand(
+    command,
+    next.standardPriceCents
+  );
+  if (derivedPartnerCost && explicitPartnerCostCents == null) {
     next.costCents = derivedPartnerCost.costCents;
     const dollars = (derivedPartnerCost.costCents / 100).toFixed(2);
     const summary = `Partner cost set to ${derivedPartnerCost.percent}% of sell price ($${dollars}) before customer discounts.`;
-    next.notes = next.notes?.trim() ? `${next.notes.trim()} ${summary}` : summary;
+    next.notes = next.notes?.trim()
+      ? `${next.notes.trim()} ${summary}`
+      : summary;
   }
 
   return next;
@@ -261,7 +353,10 @@ export async function parseMenuFileWithLLM(params: {
   const userContent: Array<
     | { type: "text"; text: string }
     | { type: "image_url"; image_url: { url: string } }
-    | { type: "file_url"; file_url: { url: string; mime_type: "application/pdf" } }
+    | {
+        type: "file_url";
+        file_url: { url: string; mime_type: "application/pdf" };
+      }
   > = [
     {
       type: "text",
@@ -316,9 +411,12 @@ export async function parseMenuFileWithLLM(params: {
   if (!parsed.items || !Array.isArray(parsed.items)) {
     throw new Error("Menu parse missing items array");
   }
-  return parsed.items.map((it) => ({
+  return parsed.items.map(it => ({
     ...it,
-    category: normalizeCatalogCategory(it.category) ?? inferCatalogCategory(it.name) ?? "Garments",
+    category:
+      normalizeCatalogCategory(it.category) ??
+      inferCatalogCategory(it.name) ??
+      "Garments",
     expressPriceCents: it.expressPriceCents ?? null,
     costCents: it.costCents ?? null,
   }));
@@ -355,7 +453,9 @@ export async function parseCatalogCommandWithLLM(params: {
 
   const text = getMessageText(result);
   if (!text.trim()) {
-    throw new Error("Command parse: empty model output after Anthropic tool_use.");
+    throw new Error(
+      "Command parse: empty model output after Anthropic tool_use."
+    );
   }
   let parsed: ParsedCommandDraft;
   try {

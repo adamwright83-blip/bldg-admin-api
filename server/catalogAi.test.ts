@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  deriveCustomerPriceCentsFromCommand,
+  derivePartnerCostCentsFromCommand,
   derivePartnerCostFromCommand,
   normalizeCatalogCategory,
   normalizeParsedCatalogCommand,
@@ -31,14 +33,55 @@ describe("catalog AI command normalization", () => {
 
   it("supports percent written as a word", () => {
     expect(
-      derivePartnerCostFromCommand("Add silk blouse. sell $12. pay partner 25 percent", 1200)
+      derivePartnerCostFromCommand(
+        "Add silk blouse. sell $12. pay partner 25 percent",
+        1200
+      )
     ).toEqual({ percent: 25, costCents: 300 });
   });
 
   it("does not confuse customer discounts with partner cost", () => {
     expect(
-      derivePartnerCostFromCommand("cotton pants sell for $9 with 30% customer discount", 900)
+      derivePartnerCostFromCommand(
+        "cotton pants sell for $9 with 30% customer discount",
+        900
+      )
     ).toBeNull();
+  });
+
+  it("derives explicit customer charge and dry cleaner dollar cost", () => {
+    expect(
+      deriveCustomerPriceCentsFromCommand(
+        "add duvet cover, charge customer $20 and give drycleaner $8"
+      )
+    ).toBe(2000);
+    expect(
+      derivePartnerCostCentsFromCommand(
+        "add duvet cover, charge customer $20 and give drycleaner $8"
+      )
+    ).toBe(800);
+  });
+
+  it("explicit dollars override model guesses for customer price and partner cost", () => {
+    const normalized = normalizeParsedCatalogCommand(
+      "add duvet cover, charge customer $20 and give drycleaner $8",
+      {
+        ...baseDraft,
+        name: "Duvet Cover",
+        category: null,
+        standardPriceCents: 1900,
+        costCents: 950,
+      }
+    );
+
+    expect(normalized).toMatchObject({
+      intent: "create",
+      name: "Duvet Cover",
+      category: "Bedding",
+      serviceType: "dry_clean",
+      standardPriceCents: 2000,
+      costCents: 800,
+    });
   });
 
   it("fills create defaults and partner cost for garment commands", () => {
