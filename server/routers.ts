@@ -741,11 +741,19 @@ export const appRouter = router({
             .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() }))
             .max(20)
             .optional(),
+          mode: z.enum(["summary"]).optional(),
+          demoMode: z.boolean().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
         const { runComposerTurn } = await import("./analytics/composerAgent");
-        return runComposerTurn({ tenantId: ctx.tenantId, question: input.question, history: input.history ?? [] });
+        return runComposerTurn({
+          tenantId: ctx.tenantId,
+          question: input.question,
+          history: input.history ?? [],
+          mode: input.mode,
+          demoMode: input.demoMode ?? false,
+        });
       }),
     requestJobCards: requestJobCardRouter,
     proposalReview: vendorProposalReviewRouter,

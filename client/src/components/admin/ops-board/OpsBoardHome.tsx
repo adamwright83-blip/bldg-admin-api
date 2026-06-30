@@ -110,7 +110,7 @@ export function OpsBoardHome({
         <ReflectionDigest onNavigate={onNavigate} />
         <QuickActions onNavigate={onNavigate} onOpenModal={setModal} />
         <div className="px-4 pb-4">
-          <ComposerPanel />
+          <ComposerPanel onNavigate={onNavigate} />
         </div>
         <MobileBottomNav onNavigate={onNavigate} />
       </div>
@@ -136,7 +136,7 @@ export function OpsBoardHome({
         </div>
         <ReflectionDigest onNavigate={onNavigate} />
         <div className="px-4 pb-6">
-          <ComposerPanel />
+          <ComposerPanel onNavigate={onNavigate} />
         </div>
       </div>
 
