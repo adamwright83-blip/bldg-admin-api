@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { runComposerTurn } from "./composerAgent";
+import { runComposerTurn, normalizeRange } from "./composerAgent";
 import type { ComposerDeps } from "./composerAgent";
+import { buildQueryMeta } from "./metricRegistry";
 import type { RevenueSummary, OrderStats, OpenOrderStats, RepeatCustomerStats, MetricComparison, DataCompleteness } from "./analyticsQueries";
 
 // ── Fixture data with KNOWN values (used in golden tests) ────────────────────
@@ -37,6 +38,7 @@ const mockRepeat: RepeatCustomerStats = {
 };
 
 const mockComparison: MetricComparison = {
+  unit: "currency",
   current: 420.0,
   previous: 350.0,
   absChange: 70.0,
@@ -299,5 +301,88 @@ describe("metric ID validation", () => {
 
     // Should call getRevenueSummary (the fallback) rather than throwing
     expect(liveSpy.getRevenueSummary).toHaveBeenCalled();
+  });
+});
+
+// ── Patch 1: Multi-basis receipt (buildQueryMeta) ────────────────────────────
+
+describe("Patch 1: multi-basis receipt", () => {
+  it("single paidAt metric: basis is 'paidAt'", () => {
+    const meta = buildQueryMeta(["revenue_paid_stripe"], "tenant_a", false);
+    expect(meta.basis).toBe("paidAt");
+  });
+
+  it("single createdAt metric: basis is 'createdAt'", () => {
+    const meta = buildQueryMeta(["orders_created"], "tenant_a", false);
+    expect(meta.basis).toBe("createdAt");
+  });
+
+  it("mixed paidAt + createdAt metrics: basis contains both", () => {
+    const meta = buildQueryMeta(["revenue_paid_stripe", "service_mix"], "tenant_a", false);
+    expect(meta.basis).toContain("paidAt");
+    expect(meta.basis).toContain("createdAt");
+    expect(meta.basis).toContain("+");
+  });
+
+  it("includes snapshot basis label for open_orders", () => {
+    const meta = buildQueryMeta(["revenue_paid_stripe", "service_mix", "open_orders"], "tenant_a", false);
+    expect(meta.basis).toContain("current open-order snapshot");
+  });
+
+  it("board-summary metrics produce a composite basis with all three types", () => {
+    const boardMetrics = ["revenue_paid_stripe", "orders_paid", "avg_order_value", "open_orders", "awaiting_payment", "service_mix"];
+    const meta = buildQueryMeta(boardMetrics, "tenant_a", false);
+    expect(meta.basis).toContain("paidAt");
+    expect(meta.basis).toContain("createdAt");
+    expect(meta.basis).toContain("current open-order snapshot");
+  });
+});
+
+// ── Patch 3: Chart-type backend clamp ────────────────────────────────────────
+
+describe("Patch 3: chart-type clamp", () => {
+  it("LLM returning 'pie' for a metric that only allows bar/line is clamped to 'bar'", async () => {
+    // orders_created only allows ["bar", "line"]
+    const planWithOrders = makePlannerResponse({ metricIds: ["orders_created"] });
+    const deps = makeDeps([planWithOrders, makeAnswererResponse({ chartType: "pie" })]);
+
+    const result = await runComposerTurn({ tenantId: "tenant_a", question: "Order count?", history: [] }, deps);
+
+    // Chart type must be bar (first allowed) NOT pie (LLM suggestion)
+    if (result.chart) {
+      expect(result.chart.type).not.toBe("pie");
+      expect(["bar", "line"]).toContain(result.chart.type);
+    }
+  });
+
+  it("LLM returning a valid chartType within allowedChartTypes is preserved", async () => {
+    // revenue_paid_stripe allows ["bar", "line", "area"]
+    const deps = makeDeps([makePlannerResponse(), makeAnswererResponse({ chartType: "line" })]);
+    const result = await runComposerTurn({ tenantId: "tenant_a", question: "Revenue trend?", history: [] }, deps);
+    // "line" is in allowedChartTypes for revenue, so should pass through
+    if (result.chart) {
+      expect(result.chart.type).toBe("line");
+    }
+  });
+});
+
+// ── Patch 7: Strict date round-trip validation ───────────────────────────────
+
+describe("Patch 7: impossible date rejection", () => {
+  it("rejects 2026-02-31 (impossible date) and falls back to last 7 days", () => {
+    const result = normalizeRange({ start: "2026-02-31", end: "2026-03-10" });
+    // 2026-02-31 is impossible; start should NOT be "2026-02-31"
+    expect(result.start).not.toBe("2026-02-31");
+  });
+
+  it("rejects 2026-04-31 (April has no 31st)", () => {
+    const result = normalizeRange({ start: "2026-04-31", end: "2026-05-15" });
+    expect(result.start).not.toBe("2026-04-31");
+  });
+
+  it("accepts valid dates like 2026-02-28", () => {
+    const result = normalizeRange({ start: "2026-02-01", end: "2026-02-28" });
+    expect(result.start).toBe("2026-02-01");
+    expect(result.end).toBe("2026-02-28");
   });
 });

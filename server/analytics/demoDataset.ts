@@ -148,8 +148,45 @@ export function demoRepeatCustomerStats(
 
 export function demoMetricComparison(
   _tenantId: string,
-  params: { currentRange: DateRange; groupBy: "day" | "week" | "month"; basis?: string }
+  params: { metricId: string; currentRange: DateRange; groupBy: "day" | "week" | "month"; basis?: string }
 ): MetricComparison {
+  const metricId = params.metricId ?? "revenue_paid_stripe";
+
+  // Non-revenue metric comparisons
+  if (metricId === "orders_created") {
+    return {
+      unit: "count", current: 87, previous: 82, absChange: 5,
+      pctChange: Math.round((5 / 82) * 10000) / 100,
+      currentOrders: 0, previousOrders: 0, currentAov: 0, previousAov: 0,
+      volumeEffect: 0, aovEffect: 0, driversByServiceType: [],
+    };
+  }
+  if (metricId === "orders_paid") {
+    return {
+      unit: "count", current: 83, previous: 79, absChange: 4,
+      pctChange: Math.round((4 / 79) * 10000) / 100,
+      currentOrders: 0, previousOrders: 0, currentAov: 0, previousAov: 0,
+      volumeEffect: 0, aovEffect: 0, driversByServiceType: [],
+    };
+  }
+  if (metricId === "avg_order_value") {
+    return {
+      unit: "currency", current: 49.2, previous: 48.4, absChange: 0.8,
+      pctChange: Math.round((0.8 / 48.4) * 10000) / 100,
+      currentOrders: 0, previousOrders: 0, currentAov: 0, previousAov: 0,
+      volumeEffect: 0, aovEffect: 0, driversByServiceType: [],
+    };
+  }
+  if (metricId === "wash_fold_weight") {
+    return {
+      unit: "weight_lbs", current: 1214, previous: 1150, absChange: 64,
+      pctChange: Math.round((64 / 1150) * 10000) / 100,
+      currentOrders: 0, previousOrders: 0, currentAov: 0, previousAov: 0,
+      volumeEffect: 0, aovEffect: 0, driversByServiceType: [],
+    };
+  }
+
+  // Default: revenue_paid_stripe
   const curRevenue = 4280;
   const prevRevenue = 3968;
   const curOrders = 87;
@@ -158,6 +195,7 @@ export function demoMetricComparison(
   const prevAov = 48.4;
 
   return {
+    unit: "currency",
     current: curRevenue,
     previous: prevRevenue,
     absChange: curRevenue - prevRevenue,

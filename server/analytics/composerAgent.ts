@@ -81,7 +81,7 @@ type AnalyticsSource = {
   ) => Promise<RepeatCustomerStats> | RepeatCustomerStats;
   getMetricComparison: (
     tenantId: string,
-    params: { currentRange: DateRange; comparisonRange?: DateRange; groupBy: "day" | "week" | "month"; basis?: "paidAt" | "createdAt" }
+    params: { metricId: string; currentRange: DateRange; comparisonRange?: DateRange; groupBy: "day" | "week" | "month"; basis?: "paidAt" | "createdAt" }
   ) => Promise<MetricComparison> | MetricComparison;
   getDataCompleteness: (tenantId: string) => Promise<DataCompleteness> | DataCompleteness;
 };
@@ -121,8 +121,13 @@ export const defaultComposerDeps: ComposerDeps = {
 // ── Date validation / clamping (Step 2) ───────────────────────────────────────
 
 export function normalizeRange(range: { start?: string; end?: string }): DateRange {
-  const isISO = (s?: string): s is string =>
-    !!s && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
+  // Patch 7: strict ISO date validation with round-trip — reject impossible dates like 2026-02-31
+  // that Date.parse normalizes silently (would become 2026-03-03).
+  const isISO = (s?: string): s is string => {
+    if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    const parsed = new Date(s + "T00:00:00Z");
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === s;
+  };
 
   const today = new Date();
   const fallbackEnd = today.toISOString().slice(0, 10);
@@ -230,12 +235,19 @@ function formatCurrency(n: number): string {
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** Format a value according to metric unit — used in comparison headline/table. */
+import type { MetricUnit } from "./metricRegistry";
+function formatValue(unit: MetricUnit, n: number): string {
+  if (unit === "currency") return formatCurrency(n);
+  if (unit === "weight_lbs") return `${n} lbs`;
+  return String(n);
+}
+
 function buildChart(
   results: QueryResults,
-  chartType: "bar" | "line" | "area" | "pie" | "none",
+  chartType: "bar" | "line" | "area" | "pie",
   metricIds: string[]
 ): ComposerChart | null {
-  if (chartType === "none") return null;
 
   // Revenue time series
   if (results.revenue?.series.length) {
@@ -317,17 +329,26 @@ function buildTable(results: QueryResults): ComposerTable | null {
   // Comparison table — must come before revenue series
   if (results.comparison) {
     const c = results.comparison;
+    const unit = c.unit ?? "currency";
     const dir = c.absChange > 0 ? "▲" : c.absChange < 0 ? "▼" : "—";
-    return {
-      columns: ["Metric", "This period", "Previous period", "Change"],
-      rows: [
-        ["Revenue", formatCurrency(c.current), formatCurrency(c.previous), `${dir} ${formatCurrency(Math.abs(c.absChange))} (${c.pctChange > 0 ? "+" : ""}${c.pctChange}%)`],
+    const rows: Array<Array<string | number>> = [
+      [
+        unit === "currency" ? "Revenue" : unit === "weight_lbs" ? "Weight (lbs)" : "Count",
+        formatValue(unit, c.current),
+        formatValue(unit, c.previous),
+        `${dir} ${formatValue(unit, Math.abs(c.absChange))} (${c.pctChange > 0 ? "+" : ""}${c.pctChange}%)`,
+      ],
+    ];
+    // Revenue bridge rows only for currency metric
+    if (unit === "currency" && (c.currentOrders > 0 || c.previousOrders > 0)) {
+      rows.push(
         ["Orders", String(c.currentOrders), String(c.previousOrders), String(c.currentOrders - c.previousOrders)],
         ["Avg order value", formatCurrency(c.currentAov), formatCurrency(c.previousAov), `${dir} ${formatCurrency(Math.abs(c.currentAov - c.previousAov))}`],
         ["Volume effect", "", "", formatCurrency(c.volumeEffect)],
         ["AOV effect", "", "", formatCurrency(c.aovEffect)],
-      ],
-    };
+      );
+    }
+    return { columns: ["Metric", "This period", "Previous period", "Change"], rows };
   }
 
   // Revenue time series table
@@ -383,20 +404,26 @@ function buildTable(results: QueryResults): ComposerTable | null {
 function buildHeadline(results: QueryResults, headlineLabel: string): ComposerHeadline | null {
   if (results.comparison) {
     const c = results.comparison;
+    const unit = c.unit ?? "currency";
     const direction: "up" | "down" | "flat" =
       c.absChange > 0 ? "up" : c.absChange < 0 ? "down" : "flat";
+    // Revenue bridge subStats only for currency
+    const subStats: Array<{ label: string; value: string }> =
+      unit === "currency" && c.currentOrders > 0
+        ? [
+            { label: "Orders", value: String(c.currentOrders) },
+            { label: "Avg order", value: formatCurrency(c.currentAov) },
+          ]
+        : [];
     return {
-      label: headlineLabel || "Revenue",
-      value: formatCurrency(c.current),
+      label: headlineLabel || (unit === "currency" ? "Revenue" : unit === "weight_lbs" ? "Lbs processed" : "Count"),
+      value: formatValue(unit, c.current),
       delta: {
         direction,
         pct: Math.abs(c.pctChange),
         label: `${Math.abs(c.pctChange)}% vs prior period`,
       },
-      subStats: [
-        { label: "Orders", value: String(c.currentOrders) },
-        { label: "Avg order", value: formatCurrency(c.currentAov) },
-      ],
+      subStats: subStats.length ? subStats : undefined,
     };
   }
 
@@ -476,7 +503,11 @@ async function executeMetrics(
         ? source.getRepeatCustomerStats(tenantId, { range })
         : Promise.resolve(null),
       needsComparison
-        ? source.getMetricComparison(tenantId, { currentRange: range, groupBy })
+        ? source.getMetricComparison(tenantId, {
+            metricId: plan.metricIds.find((id) => METRICS[id]?.supportsComparison) ?? "revenue_paid_stripe",
+            currentRange: range,
+            groupBy,
+          })
         : Promise.resolve(null),
       needsCompleteness
         ? source.getDataCompleteness(tenantId)
@@ -530,7 +561,7 @@ export async function runBoardMeetingSummary(
     source.getRevenueSummary(tenantId, { range, groupBy: "day" }),
     source.getOrderStats(tenantId, { range }),
     source.getOpenOrderStats(tenantId),
-    source.getMetricComparison(tenantId, { currentRange: range, groupBy: "day" }),
+    source.getMetricComparison(tenantId, { metricId: "revenue_paid_stripe", currentRange: range, groupBy: "day" }),
   ]);
 
   const results: QueryResults = {
@@ -579,7 +610,7 @@ export async function runBoardMeetingSummary(
   return {
     answer: llmOutput.answer,
     headline: buildHeadline(results, "This week so far"),
-    chart: buildChart(results, comparison ? "bar" : "bar", fixedMetricIds),
+    chart: buildChart(results, "bar", fixedMetricIds),
     table: buildTable(results),
     actions: mapActionIds(llmOutput.actionIds ?? []),
     meta,
@@ -706,7 +737,16 @@ export async function runComposerTurn(
   );
 
   // ── Assemble final answer — backend owns all numbers and meta ─────────────
-  const chartType = llmOutput.chartType === "none" ? "none" : (llmOutput.chartType ?? "bar");
+  // Patch 3: Clamp chartType against allowedChartTypes before calling buildChart.
+  // Backend enforces this; LLM output is only a hint.
+  let chartType: "bar" | "line" | "area" | "pie" | "none" = llmOutput.chartType ?? "bar";
+  if (chartType !== "none") {
+    if (allowedChartTypes.length === 0) {
+      chartType = "none";
+    } else if (!allowedChartTypes.includes(chartType as "bar" | "line" | "area" | "pie")) {
+      chartType = allowedChartTypes[0];
+    }
+  }
   const chart = chartType === "none" ? null : buildChart(results, chartType, metricIds);
   const table = buildTable(results);
   const headline = buildHeadline(results, llmOutput.headlineLabel ?? "");

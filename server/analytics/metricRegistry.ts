@@ -2,7 +2,7 @@ export type MetricUnit = "currency" | "count" | "weight_lbs";
 
 export type QueryMeta = {
   source: string;
-  basis: "paidAt" | "createdAt";
+  basis: string; // composite e.g. "paidAt + createdAt + current open-order snapshot"
   includedSources: string[];
   excludedSources: string[];
   tenantId: string;
@@ -15,6 +15,7 @@ export type MetricDef = {
   label: string;
   unit: MetricUnit;
   dateBasis: "paidAt" | "createdAt";
+  snapshot?: boolean; // true for metrics that are current-state snapshots (open_orders, awaiting_payment)
   includedSources: string[];
   excludedSources: string[];
   allowedGroupBy: Array<"day" | "week" | "month">;
@@ -96,6 +97,7 @@ export const METRICS: Record<string, MetricDef> = {
     label: "Open orders",
     unit: "count",
     dateBasis: "createdAt",
+    snapshot: true,
     includedSources: ["Active orders: new, collected, processing, ready"],
     excludedSources: ["Delivered and cancelled orders"],
     allowedGroupBy: [],
@@ -108,6 +110,7 @@ export const METRICS: Record<string, MetricDef> = {
     label: "Awaiting payment",
     unit: "count",
     dateBasis: "createdAt",
+    snapshot: true,
     includedSources: ["Orders in collected/processing/ready with paid=false"],
     excludedSources: ["New orders not yet intaken", "Paid orders"],
     allowedGroupBy: [],
@@ -160,7 +163,8 @@ export function getMetric(id: string): MetricDef | undefined {
 }
 
 /** Builds deterministic provenance meta from the selected metrics.
- *  Called by the composer — LLM output for `meta` is always discarded. */
+ *  Called by the composer — LLM output for `meta` is always discarded.
+ *  Patch 1: basis is now a composite string covering all date/snapshot bases used. */
 export function buildQueryMeta(
   metricIds: string[],
   tenantId: string,
@@ -170,9 +174,17 @@ export function buildQueryMeta(
   const primary = defs[0];
   const allIncluded = Array.from(new Set(defs.flatMap((d) => d.includedSources)));
   const allExcluded = Array.from(new Set(defs.flatMap((d) => d.excludedSources)));
+
+  // Collect distinct basis labels preserving order.
+  const basisLabels: string[] = [];
+  for (const def of defs) {
+    const label = def.snapshot ? "current open-order snapshot" : def.dateBasis;
+    if (!basisLabels.includes(label)) basisLabels.push(label);
+  }
+
   return {
     source: primary?.label ?? "Laundromat analytics",
-    basis: primary?.dateBasis ?? "createdAt",
+    basis: basisLabels.join(" + ") || "createdAt",
     includedSources: allIncluded,
     excludedSources: allExcluded,
     tenantId,

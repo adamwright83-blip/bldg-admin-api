@@ -34,11 +34,15 @@ export type RepeatCustomerStats = {
   repeatRate: number;
 };
 
+export type MetricUnit = "currency" | "count" | "weight_lbs";
+
 export type MetricComparison = {
+  unit: MetricUnit;
   current: number;
   previous: number;
   absChange: number;
   pctChange: number;
+  // Revenue-specific bridge fields (zero for non-revenue metrics)
   currentOrders: number;
   previousOrders: number;
   currentAov: number;
@@ -237,10 +241,13 @@ export async function getRepeatCustomerStats(
 }
 
 /**
- * Price/volume decomposition: compares currentRange vs comparisonRange for revenue.
+ * Metric-aware comparison: compares currentRange vs comparisonRange for the given metricId.
  * comparisonRange defaults to the equal-length period immediately preceding currentRange.
  *
- * Bridge identities:
+ * Revenue bridge (volumeEffect / aovEffect) only applies to revenue_paid_stripe.
+ * Other metrics return unit-appropriate current/previous values with zero bridge fields.
+ *
+ * Bridge identities (revenue only):
  *   volumeEffect  = (orders_cur - orders_prev) * aov_prev
  *   aovEffect     = (aov_cur - aov_prev) * orders_cur
  *   sum ≈ absChange (within rounding)
@@ -248,68 +255,128 @@ export async function getRepeatCustomerStats(
 export async function getMetricComparison(
   tenantId: string,
   params: {
+    metricId: string;
     currentRange: DateRange;
     comparisonRange?: DateRange;
     groupBy: "day" | "week" | "month";
     basis?: "paidAt" | "createdAt";
   }
 ): Promise<MetricComparison> {
-  const empty = (): MetricComparison => ({
-    current: 0, previous: 0, absChange: 0, pctChange: 0,
+  const emptyResult = (unit: MetricUnit): MetricComparison => ({
+    unit, current: 0, previous: 0, absChange: 0, pctChange: 0,
     currentOrders: 0, previousOrders: 0, currentAov: 0, previousAov: 0,
     volumeEffect: 0, aovEffect: 0, driversByServiceType: [],
   });
 
   const db = await getDb();
-  if (!db) return empty();
+  if (!db) return emptyResult("currency");
 
-  // Compute comparisonRange as previous equal-length period if not supplied.
   const compRange = params.comparisonRange ?? previousEqualPeriod(params.currentRange);
 
-  const [cur, prev] = await Promise.all([
-    getRevenueSummary(tenantId, { range: params.currentRange, groupBy: params.groupBy, basis: params.basis }),
-    getRevenueSummary(tenantId, { range: compRange, groupBy: params.groupBy, basis: params.basis }),
-  ]);
+  const computePct = (cur: number, prev: number) =>
+    prev > 0 ? Math.round(((cur - prev) / prev) * 10000) / 100 : 0;
+  const r2 = (n: number) => Math.round(n * 100) / 100;
 
-  const [curStats, prevStats] = await Promise.all([
-    getOrderStats(tenantId, { range: params.currentRange }),
-    getOrderStats(tenantId, { range: compRange }),
-  ]);
+  switch (params.metricId) {
+    case "revenue_paid_stripe": {
+      const [cur, prev] = await Promise.all([
+        getRevenueSummary(tenantId, { range: params.currentRange, groupBy: params.groupBy, basis: params.basis }),
+        getRevenueSummary(tenantId, { range: compRange, groupBy: params.groupBy, basis: params.basis }),
+      ]);
+      const [curStats, prevStats] = await Promise.all([
+        getOrderStats(tenantId, { range: params.currentRange }),
+        getOrderStats(tenantId, { range: compRange }),
+      ]);
+      const absChange = r2(cur.totalRevenue - prev.totalRevenue);
+      const allServiceTypes = Array.from(new Set([
+        ...Object.keys(curStats.byServiceType),
+        ...Object.keys(prevStats.byServiceType),
+      ]));
+      return {
+        unit: "currency",
+        current: cur.totalRevenue,
+        previous: prev.totalRevenue,
+        absChange,
+        pctChange: computePct(cur.totalRevenue, prev.totalRevenue),
+        currentOrders: cur.orderCount,
+        previousOrders: prev.orderCount,
+        currentAov: cur.avgOrderValue,
+        previousAov: prev.avgOrderValue,
+        volumeEffect: r2((cur.orderCount - prev.orderCount) * (prev.avgOrderValue ?? 0)),
+        aovEffect: r2((cur.avgOrderValue - prev.avgOrderValue) * cur.orderCount),
+        driversByServiceType: allServiceTypes.map((key) => ({
+          key,
+          cur: curStats.byServiceType[key] ?? 0,
+          prev: prevStats.byServiceType[key] ?? 0,
+          delta: (curStats.byServiceType[key] ?? 0) - (prevStats.byServiceType[key] ?? 0),
+        })),
+      };
+    }
 
-  const absChange = Math.round((cur.totalRevenue - prev.totalRevenue) * 100) / 100;
-  const pctChange =
-    prev.totalRevenue > 0
-      ? Math.round(((cur.totalRevenue - prev.totalRevenue) / prev.totalRevenue) * 10000) / 100
-      : 0;
+    case "orders_paid": {
+      const [cur, prev] = await Promise.all([
+        getRevenueSummary(tenantId, { range: params.currentRange, groupBy: params.groupBy, basis: "paidAt" }),
+        getRevenueSummary(tenantId, { range: compRange, groupBy: params.groupBy, basis: "paidAt" }),
+      ]);
+      const absChange = cur.orderCount - prev.orderCount;
+      return {
+        ...emptyResult("count"),
+        current: cur.orderCount,
+        previous: prev.orderCount,
+        absChange,
+        pctChange: computePct(cur.orderCount, prev.orderCount),
+      };
+    }
 
-  const volumeEffect = Math.round((cur.orderCount - prev.orderCount) * (prev.avgOrderValue ?? 0) * 100) / 100;
-  const aovEffect = Math.round((cur.avgOrderValue - prev.avgOrderValue) * cur.orderCount * 100) / 100;
+    case "avg_order_value": {
+      const [cur, prev] = await Promise.all([
+        getRevenueSummary(tenantId, { range: params.currentRange, groupBy: params.groupBy, basis: "paidAt" }),
+        getRevenueSummary(tenantId, { range: compRange, groupBy: params.groupBy, basis: "paidAt" }),
+      ]);
+      const absChange = r2(cur.avgOrderValue - prev.avgOrderValue);
+      return {
+        ...emptyResult("currency"),
+        current: cur.avgOrderValue,
+        previous: prev.avgOrderValue,
+        absChange,
+        pctChange: computePct(cur.avgOrderValue, prev.avgOrderValue),
+      };
+    }
 
-  // Per-service-type revenue comparison (order count as proxy since we have total per type).
-  const allServiceTypes = new Set([
-    ...Object.keys(curStats.byServiceType),
-    ...Object.keys(prevStats.byServiceType),
-  ]);
-  const driversByServiceType = Array.from(allServiceTypes).map((key) => ({
-    key,
-    cur: curStats.byServiceType[key] ?? 0,
-    prev: prevStats.byServiceType[key] ?? 0,
-    delta: (curStats.byServiceType[key] ?? 0) - (prevStats.byServiceType[key] ?? 0),
-  }));
+    case "orders_created": {
+      const [curStats, prevStats] = await Promise.all([
+        getOrderStats(tenantId, { range: params.currentRange }),
+        getOrderStats(tenantId, { range: compRange }),
+      ]);
+      const absChange = curStats.totalOrders - prevStats.totalOrders;
+      return {
+        ...emptyResult("count"),
+        current: curStats.totalOrders,
+        previous: prevStats.totalOrders,
+        absChange,
+        pctChange: computePct(curStats.totalOrders, prevStats.totalOrders),
+      };
+    }
 
-  return {
-    current: cur.totalRevenue,
-    previous: prev.totalRevenue,
-    absChange,
-    pctChange,
-    currentOrders: cur.orderCount,
-    previousOrders: prev.orderCount,
-    currentAov: cur.avgOrderValue,
-    previousAov: prev.avgOrderValue,
-    volumeEffect,
-    aovEffect,
-    driversByServiceType,
-  };
+    case "wash_fold_weight": {
+      const [curStats, prevStats] = await Promise.all([
+        getOrderStats(tenantId, { range: params.currentRange, serviceType: "wash_fold" }),
+        getOrderStats(tenantId, { range: compRange, serviceType: "wash_fold" }),
+      ]);
+      const absChange = r2(curStats.totalWeightLbs - prevStats.totalWeightLbs);
+      return {
+        ...emptyResult("weight_lbs"),
+        current: curStats.totalWeightLbs,
+        previous: prevStats.totalWeightLbs,
+        absChange,
+        pctChange: computePct(curStats.totalWeightLbs, prevStats.totalWeightLbs),
+      };
+    }
+
+    default:
+      // Unknown metricId — fallback to revenue comparison
+      return getMetricComparison(tenantId, { ...params, metricId: "revenue_paid_stripe" });
+  }
 }
 
 function previousEqualPeriod(range: DateRange): DateRange {
@@ -353,13 +420,25 @@ export async function getDataCompleteness(tenantId: string): Promise<DataComplet
       connected.push({ source: "CleanCloud import", description: "Legacy order history imported" });
     }
 
-    // Clearent / XplorPay — no tenantId column; check if any rows exist globally
-    const [clearRow] = await db
-      .select({ cnt: sql<number>`COUNT(*)` })
-      .from(clearentTransactions);
-    if (Number(clearRow?.cnt ?? 0) > 0) {
-      connected.push({ source: "Clearent / XplorPay", description: "Card-reader transactions imported" });
+    // Clearent / XplorPay — clearentTransactions has no tenantId column, so global rows
+    // cannot prove this tenant's connection. Only mark connected for the internal default
+    // tenant (platform-level data); all other tenants get the not-tenant-confirmed entry.
+    if (tenantId === "default") {
+      const [clearRow] = await db
+        .select({ cnt: sql<number>`COUNT(*)` })
+        .from(clearentTransactions);
+      if (Number(clearRow?.cnt ?? 0) > 0) {
+        connected.push({ source: "Clearent / XplorPay", description: "Card-reader transactions imported (platform-level)" });
+      }
     }
+  }
+
+  // Non-default tenants: Clearent is not tenant-scoped — always report as unconfirmed.
+  if (tenantId !== "default") {
+    missing.push({
+      source: "Clearent / XplorPay",
+      prevents: "platform import exists but tenant-specific connection is not confirmed — clearentTransactions is not tenant-scoped",
+    });
   }
 
   // Always-missing categories (not yet connected in any tenant).

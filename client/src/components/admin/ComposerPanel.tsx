@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import {
   BarChart, Bar,
@@ -247,6 +248,29 @@ function ReceiptFooter({ meta }: { meta: ComposerMeta }) {
   );
 }
 
+/** Central action dispatcher — every action type has visible behavior (Patch 6).
+ *  No silent no-ops: open_view navigates, copy_summary copies, create_task/draft_sms
+ *  show a queued toast until real modal wiring is added. */
+function dispatchAction(action: ActionDef, onNavigate: (path: string) => void, answerText: string) {
+  switch (action.type) {
+    case "open_view":
+      if (action.route) onNavigate(action.route);
+      break;
+    case "copy_summary":
+      navigator.clipboard?.writeText(answerText).catch(() => {});
+      toast.success("Summary copied to clipboard");
+      break;
+    case "create_task":
+      toast.info(`${action.label} — queued for next patch`);
+      break;
+    case "draft_sms":
+      toast.info(`${action.label} — queued for next patch`);
+      break;
+    default:
+      toast.info(action.label);
+  }
+}
+
 function ActionButtons({
   actions,
   onNavigate,
@@ -262,13 +286,7 @@ function ActionButtons({
       {actions.map((action) => (
         <button
           key={action.id}
-          onClick={() => {
-            if (action.type === "copy_summary") {
-              navigator.clipboard?.writeText(answerText).catch(() => {});
-            } else if (action.route) {
-              onNavigate(action.route);
-            }
-          }}
+          onClick={() => dispatchAction(action, onNavigate, answerText)}
           className="text-[11px] px-3 py-1.5 border border-[#D8D1C4] rounded text-black/70 hover:bg-black hover:text-white transition-colors flex items-center gap-1"
         >
           {action.requiresApproval && <span className="text-amber-500">●</span>}
@@ -332,14 +350,26 @@ export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Patch 5: clear conversation when demo mode toggles so histories never mix.
+  const toggleDemo = () => {
+    setDemoMode((d) => {
+      const next = !d;
+      setMessages([]);
+      if (messages.length > 0) {
+        toast.info(`Switched to ${next ? "demo" : "live"} data — conversation reset.`);
+      }
+      return next;
+    });
+  };
+
+  // Patch 8: always add a user bubble, including for the summary button.
   const send = (question: string, mode?: "summary") => {
-    if ((!question.trim() && !mode) || ask.isPending) return;
+    const displayText = mode === "summary" ? "Summarize my week" : question;
+    if (!displayText.trim() || ask.isPending) return;
     const history = messages.map((m) => ({ role: m.role, content: m.content }));
-    if (!mode) {
-      setMessages((prev) => [...prev, { role: "user", content: question }]);
-    }
+    setMessages((prev) => [...prev, { role: "user", content: displayText }]);
     setInput("");
-    ask.mutate({ question: question || "Summarize my business this week.", history, mode, demoMode });
+    ask.mutate({ question: displayText, history, mode, demoMode });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -364,7 +394,7 @@ export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-1.5 cursor-pointer select-none">
             <div
-              onClick={() => setDemoMode((d) => !d)}
+              onClick={toggleDemo}
               className={`w-7 h-4 rounded-full transition-colors relative cursor-pointer ${demoMode ? "bg-amber-400" : "bg-black/15"}`}
             >
               <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${demoMode ? "translate-x-3.5" : "translate-x-0.5"}`} />
@@ -372,7 +402,7 @@ export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
             <span className="text-[10px] text-black/45">Demo</span>
           </label>
           <button
-            onClick={() => send("", "summary")}
+            onClick={() => send("Summarize my week", "summary")}
             disabled={ask.isPending}
             className="text-[10px] text-black/45 hover:text-black/70 transition-colors disabled:opacity-30 border border-[#D8D1C4] px-2 py-1 rounded"
           >

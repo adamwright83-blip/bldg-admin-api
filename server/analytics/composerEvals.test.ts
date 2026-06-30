@@ -43,6 +43,7 @@ const openOrdersA: OpenOrderStats = {
 };
 
 const comparisonA: MetricComparison = {
+  unit: "currency",
   current: 420.0,
   previous: 350.0,
   absChange: 70.0,
@@ -126,7 +127,7 @@ function makeFixtureDeps(revenue: RevenueSummary, extras: {
       getOrderStats: vi.fn().mockResolvedValue({ totalOrders: 0, byStatus: {}, byServiceType: {}, totalWeightLbs: 0, avgOrderValue: 0 }),
       getOpenOrderStats: vi.fn().mockResolvedValue(extras.openOrders ?? { openTotal: 0, byStatus: {}, awaitingPayment: 0 }),
       getRepeatCustomerStats: vi.fn().mockResolvedValue({ totalCustomers: 0, repeatCustomers: 0, oneTimeCustomers: 0, repeatRate: 0 }),
-      getMetricComparison: vi.fn().mockResolvedValue(extras.comparison ?? { current: 0, previous: 0, absChange: 0, pctChange: 0, currentOrders: 0, previousOrders: 0, currentAov: 0, previousAov: 0, volumeEffect: 0, aovEffect: 0, driversByServiceType: [] }),
+      getMetricComparison: vi.fn().mockResolvedValue(extras.comparison ?? { unit: "currency" as const, current: 0, previous: 0, absChange: 0, pctChange: 0, currentOrders: 0, previousOrders: 0, currentAov: 0, previousAov: 0, volumeEffect: 0, aovEffect: 0, driversByServiceType: [] }),
       getDataCompleteness: vi.fn().mockResolvedValue(extras.completeness ?? { connected: [], missing: [] }),
     } as any,
     demoSource: {
@@ -134,7 +135,7 @@ function makeFixtureDeps(revenue: RevenueSummary, extras: {
       getOrderStats: vi.fn().mockResolvedValue({ totalOrders: 0, byStatus: {}, byServiceType: {}, totalWeightLbs: 0, avgOrderValue: 0 }),
       getOpenOrderStats: vi.fn().mockResolvedValue({ openTotal: 0, byStatus: {}, awaitingPayment: 0 }),
       getRepeatCustomerStats: vi.fn().mockResolvedValue({ totalCustomers: 0, repeatCustomers: 0, oneTimeCustomers: 0, repeatRate: 0 }),
-      getMetricComparison: vi.fn().mockResolvedValue({ current: 0, previous: 0, absChange: 0, pctChange: 0, currentOrders: 0, previousOrders: 0, currentAov: 0, previousAov: 0, volumeEffect: 0, aovEffect: 0, driversByServiceType: [] }),
+      getMetricComparison: vi.fn().mockResolvedValue({ unit: "currency" as const, current: 0, previous: 0, absChange: 0, pctChange: 0, currentOrders: 0, previousOrders: 0, currentAov: 0, previousAov: 0, volumeEffect: 0, aovEffect: 0, driversByServiceType: [] }),
       getDataCompleteness: vi.fn().mockResolvedValue({ connected: [], missing: [] }),
     } as any,
   };
@@ -216,7 +217,7 @@ describe("Fixture golden tests — open orders", () => {
         getOrderStats: vi.fn().mockResolvedValue({ totalOrders: 0, byStatus: {}, byServiceType: {}, totalWeightLbs: 0, avgOrderValue: 0 }),
         getOpenOrderStats: vi.fn().mockResolvedValue(openOrdersA),
         getRepeatCustomerStats: vi.fn().mockResolvedValue({ totalCustomers: 0, repeatCustomers: 0, oneTimeCustomers: 0, repeatRate: 0 }),
-        getMetricComparison: vi.fn().mockResolvedValue({ current: 0, previous: 0, absChange: 0, pctChange: 0, currentOrders: 0, previousOrders: 0, currentAov: 0, previousAov: 0, volumeEffect: 0, aovEffect: 0, driversByServiceType: [] }),
+        getMetricComparison: vi.fn().mockResolvedValue({ unit: "currency" as const, current: 0, previous: 0, absChange: 0, pctChange: 0, currentOrders: 0, previousOrders: 0, currentAov: 0, previousAov: 0, volumeEffect: 0, aovEffect: 0, driversByServiceType: [] }),
         getDataCompleteness: vi.fn().mockResolvedValue({ connected: [], missing: [] }),
       } as any,
       demoSource: {} as any,
@@ -270,7 +271,7 @@ describe("Fixture golden tests — completeness scanner", () => {
         getOrderStats: vi.fn().mockResolvedValue({ totalOrders: 0, byStatus: {}, byServiceType: {}, totalWeightLbs: 0, avgOrderValue: 0 }),
         getOpenOrderStats: vi.fn().mockResolvedValue({ openTotal: 0, byStatus: {}, awaitingPayment: 0 }),
         getRepeatCustomerStats: vi.fn().mockResolvedValue({ totalCustomers: 0, repeatCustomers: 0, oneTimeCustomers: 0, repeatRate: 0 }),
-        getMetricComparison: vi.fn().mockResolvedValue({ current: 0, previous: 0, absChange: 0, pctChange: 0, currentOrders: 0, previousOrders: 0, currentAov: 0, previousAov: 0, volumeEffect: 0, aovEffect: 0, driversByServiceType: [] }),
+        getMetricComparison: vi.fn().mockResolvedValue({ unit: "currency" as const, current: 0, previous: 0, absChange: 0, pctChange: 0, currentOrders: 0, previousOrders: 0, currentAov: 0, previousAov: 0, volumeEffect: 0, aovEffect: 0, driversByServiceType: [] }),
         getDataCompleteness: vi.fn().mockResolvedValue(completenessA),
       } as any,
       demoSource: {} as any,
