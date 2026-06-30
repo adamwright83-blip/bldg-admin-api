@@ -25,28 +25,6 @@ type OpsBoardHomeProps = {
   outreachLogging: boolean;
 };
 
-const KINGDOM_CTA_LINKS = [
-  { label: "Counter", detail: "Create orders and run intake", path: "/new-order" },
-  { label: "Pipeline", detail: "Live orders and pickups", path: "/live" },
-  { label: "Money owed", detail: "Payment recovery queue", path: "/payment-reconciliation" },
-  { label: "Customers", detail: "Profiles and repeat business", path: "/customers" },
-  { label: "Performance", detail: "Operations event history", path: "/operations-events" },
-  { label: "Mission Control", detail: "HELD corporate workspace", path: "/mission-control" },
-];
-
-function KingdomCtaRail({ onNavigate }: { onNavigate: (path: string) => void }) {
-  return (
-    <section className="ops-kingdom-cta-rail" aria-label="Open deeper admin sections">
-      {KINGDOM_CTA_LINKS.map((item) => (
-        <button key={item.path} type="button" onClick={() => onNavigate(item.path)}>
-          <span>{item.label}</span>
-          <small>{item.detail}</small>
-        </button>
-      ))}
-    </section>
-  );
-}
-
 export function OpsBoardHome({
   data,
   experienceMode = "kingdom",
@@ -99,9 +77,8 @@ export function OpsBoardHome({
               allowDemoMode={false}
               className="ops-kingdom-composer"
               onNavigate={onNavigate}
-              variant="operator-home"
+              variant="kingdom-sage"
             />
-            <KingdomCtaRail onNavigate={onNavigate} />
           </>
         )}
         <MobileBottomNav onNavigate={onNavigate} />
@@ -120,9 +97,8 @@ export function OpsBoardHome({
                 allowDemoMode={false}
                 className="ops-kingdom-composer"
                 onNavigate={onNavigate}
-                variant="operator-home"
+                variant="kingdom-sage"
               />
-              <KingdomCtaRail onNavigate={onNavigate} />
             </div>
           </>
         )}

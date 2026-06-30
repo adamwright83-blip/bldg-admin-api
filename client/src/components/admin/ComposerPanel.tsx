@@ -82,7 +82,7 @@ export type ComposerPanelProps = {
   className?: string;
   defaultDemoMode?: boolean;
   allowDemoMode?: boolean;
-  variant?: "default" | "operator-home";
+  variant?: "default" | "operator-home" | "kingdom-sage";
 };
 
 const CHART_COLORS = ["#111111", "#6B7280", "#374151", "#9CA3AF", "#1F2937"];
@@ -102,6 +102,41 @@ const DEMO_RECOMMENDATIONS = [
   "Add 2 dryer cycles between 4–7 PM to reduce wait times.",
   "Re-engage at-risk customers with a personalized offer.",
 ];
+
+const KINGDOM_SAGE_CHIPS = [
+  "This week summary",
+  "Unpaid orders",
+  "Pickup & delivery",
+  "Repeat trends",
+];
+
+function EmptySageInsight() {
+  return (
+    <div className="ks-insight-empty">
+      <div>
+        <span className="ks-mini-kicker">Live Laundry Butler</span>
+        <h3>Ask the Sage for the next clear move.</h3>
+        <p>
+          Your answer will appear here with the live summary, chart, verification table,
+          recommended action, and receipt.
+        </p>
+      </div>
+      <div className="ks-placeholder-chart" aria-hidden="true">
+        <span style={{ height: "42%" }} />
+        <span style={{ height: "62%" }} />
+        <span style={{ height: "54%" }} />
+        <span style={{ height: "74%" }} />
+        <span style={{ height: "48%" }} />
+        <span style={{ height: "68%" }} />
+        <span style={{ height: "58%" }} />
+      </div>
+      <div className="ks-insight-note">
+        <strong>Ready for live data</strong>
+        <span>No demo names or sample customers are used on Kingdom.</span>
+      </div>
+    </div>
+  );
+}
 
 function HeadlineCard({ headline }: { headline: ComposerHeadline }) {
   const deltaColor =
@@ -411,6 +446,80 @@ export function ComposerPanel({
   };
 
   const isOperatorHome = variant === "operator-home";
+  const isKingdomSage = variant === "kingdom-sage";
+  const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+  const latestQuestion = [...messages].reverse().find((message) => message.role === "user");
+
+  if (isKingdomSage) {
+    return (
+      <section className={`ks-composer-panel ${className}`.trim()} aria-label="Operator Analyst">
+        <div className="ks-composer-left">
+          <span className="ks-orb" aria-hidden="true" />
+          <div className="ks-title-block">
+            <span>Operator Analyst</span>
+            <h2>Your AI sage for cleaner margins, happier customers, and a better-run store.</h2>
+          </div>
+
+          <form onSubmit={handleSubmit} className="ks-question-box">
+            <label htmlFor="kingdom-sage-input">Ask your question, seek guidance, or summon insights...</label>
+            <div className="ks-input-row">
+              <input
+                id="kingdom-sage-input"
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask live data..."
+                disabled={ask.isPending}
+              />
+              <button type="submit" disabled={!input.trim() || ask.isPending}>
+                <Sparkles className="h-4 w-4" aria-hidden="true" />
+                Ask the Sage
+              </button>
+            </div>
+          </form>
+
+          <div className="ks-chip-row" aria-label="Suggested questions">
+            {KINGDOM_SAGE_CHIPS.map((chip) => (
+              <button key={chip} type="button" onClick={() => send(chip)} disabled={ask.isPending}>
+                {chip}
+              </button>
+            ))}
+          </div>
+
+          <p className="ks-privacy-note">Your data is private, secure, and used only to guide your kingdom.</p>
+        </div>
+
+        <div className="ks-insight-panel">
+          <div className="ks-insight-header">
+            <div>
+              <span>Sage's Insight</span>
+              <h3>{latestQuestion?.content ?? "Weekly Revenue Overview"}</h3>
+            </div>
+            <button type="button" onClick={() => toast.info("Export is queued for a future patch.")}>
+              Export
+            </button>
+          </div>
+
+          <div className="ks-insight-body">
+            {ask.isPending ? (
+              <div className="ks-loading-state">
+                <span />
+                Checking live order data...
+              </div>
+            ) : latestAssistant?.result ? (
+              <AssistantBubble result={latestAssistant.result} onNavigate={onNavigate} />
+            ) : latestAssistant ? (
+              <p className="ks-error-text">{latestAssistant.content}</p>
+            ) : (
+              <EmptySageInsight />
+            )}
+            <div ref={bottomRef} />
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   const rootClassName = isOperatorHome
     ? `oa-composer-panel ${className}`.trim()
     : `bg-white border border-[#E8E4DC] rounded-lg flex flex-col ${className}`.trim();
