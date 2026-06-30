@@ -2,11 +2,20 @@ import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import {
-  BarChart, Bar,
-  LineChart, Line,
-  AreaChart, Area,
-  PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
   ResponsiveContainer,
 } from "recharts";
 
@@ -71,19 +80,16 @@ export type ComposerPanelProps = {
   onNavigate: (path: string) => void;
 };
 
-// ── Constants ───────────────────────────────────────────────────────────────
-
 const CHART_COLORS = ["#111111", "#6B7280", "#374151", "#9CA3AF", "#1F2937"];
 
 const EXAMPLE_CHIPS = [
   "Revenue last 7 days",
   "Open orders right now",
   "Compare this week to last week",
-  "Wash & fold vs dry cleaning this month",
-  "What data do you have?",
+  "Wash & fold vs dry cleaning",
+  "What data is connected?",
+  "Summarize my week",
 ];
-
-// ── Sub-components ──────────────────────────────────────────────────────────
 
 function HeadlineCard({ headline }: { headline: ComposerHeadline }) {
   const deltaColor =
@@ -96,7 +102,7 @@ function HeadlineCard({ headline }: { headline: ComposerHeadline }) {
     headline.delta?.direction === "up" ? "▲" : headline.delta?.direction === "down" ? "▼" : "—";
 
   return (
-    <div className="bg-[#F5F2ED] rounded border border-[#E8E4DC] px-4 py-3 mb-3">
+    <div className="rounded-lg border border-[#E8E4DC] bg-[#F8F5EF] px-4 py-3 mb-3">
       <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-black/40 mb-1">
         {headline.label}
       </div>
@@ -109,7 +115,7 @@ function HeadlineCard({ headline }: { headline: ComposerHeadline }) {
         )}
       </div>
       {headline.subStats && (
-        <div className="flex gap-4 mt-2">
+        <div className="flex flex-wrap gap-4 mt-2">
           {headline.subStats.map((s) => (
             <div key={s.label} className="text-xs text-black/55">
               <span className="font-semibold text-black/70">{s.value}</span> {s.label}
@@ -228,13 +234,13 @@ function ReceiptFooter({ meta }: { meta: ComposerMeta }) {
   const excluded = meta.excludedSources.slice(0, 2).join(", ");
   return (
     <div className="mt-3 text-[10px] text-black/35 leading-relaxed border-t border-[#F0EDE8] pt-2">
-      <span>Source: {meta.source}</span>
+      <span>Receipt: {meta.source}</span>
       <span className="mx-1">·</span>
       <span>Basis: {meta.basis}</span>
       {excluded && (
         <>
           <span className="mx-1">·</span>
-          <span>Excluded: {excluded}</span>
+          <span>Not included: {excluded}</span>
         </>
       )}
       <span className="mx-1">·</span>
@@ -248,9 +254,6 @@ function ReceiptFooter({ meta }: { meta: ComposerMeta }) {
   );
 }
 
-/** Central action dispatcher — every action type has visible behavior (Patch 6).
- *  No silent no-ops: open_view navigates, copy_summary copies, create_task/draft_sms
- *  show a queued toast until real modal wiring is added. */
 function dispatchAction(action: ActionDef, onNavigate: (path: string) => void, answerText: string) {
   switch (action.type) {
     case "open_view":
@@ -323,8 +326,6 @@ function AssistantBubble({
   );
 }
 
-// ── Main component ──────────────────────────────────────────────────────────
-
 export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -350,7 +351,6 @@ export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Patch 5: clear conversation when demo mode toggles so histories never mix.
   const toggleDemo = () => {
     setDemoMode((d) => {
       const next = !d;
@@ -362,7 +362,6 @@ export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
     });
   };
 
-  // Patch 8: always add a user bubble, including for the summary button.
   const send = (question: string, mode?: "summary") => {
     const displayText = mode === "summary" ? "Summarize my week" : question;
     if (!displayText.trim() || ask.isPending) return;
@@ -379,19 +378,22 @@ export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
 
   return (
     <div className="bg-white border border-[#E8E4DC] rounded-lg flex flex-col" style={{ minHeight: 340, maxHeight: 680 }}>
-      {/* Demo banner */}
       {demoMode && (
         <div className="bg-amber-400 text-amber-900 text-center text-xs font-bold py-1.5 tracking-wide uppercase rounded-t-lg">
           DEMO DATA — NOT YOUR STORE
         </div>
       )}
 
-      {/* Header */}
-      <div className={`px-4 py-3 border-b border-[#E8E4DC] flex items-center justify-between ${demoMode ? "" : ""}`}>
-        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-black/55">
-          Operator Analyst
-        </span>
-        <div className="flex items-center gap-3">
+      <div className="px-4 py-3 border-b border-[#E8E4DC] flex items-start justify-between gap-4">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-black/55">
+            Operator Analyst
+          </div>
+          <div className="text-[11px] text-black/40 mt-1">
+            Ask your store about paid revenue, open work, service mix, repeat customers, and data gaps.
+          </div>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
           <label className="flex items-center gap-1.5 cursor-pointer select-none">
             <div
               onClick={toggleDemo}
@@ -406,7 +408,7 @@ export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
             disabled={ask.isPending}
             className="text-[10px] text-black/45 hover:text-black/70 transition-colors disabled:opacity-30 border border-[#D8D1C4] px-2 py-1 rounded"
           >
-            Summarize my week
+            Weekly operating summary
           </button>
           {messages.length > 0 && (
             <button onClick={() => setMessages([])} className="text-[10px] text-black/35 hover:text-black/60 transition-colors">
@@ -416,16 +418,17 @@ export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
         </div>
       </div>
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4 min-h-0">
         {messages.length === 0 && (
           <div className="space-y-3 pt-1">
-            <p className="text-xs text-black/40">Ask a question about your laundromat data.</p>
+            <p className="text-xs text-black/40">
+              Answers include the chart, verification table, action buttons, and receipt showing what data was used.
+            </p>
             <div className="flex flex-wrap gap-2">
               {EXAMPLE_CHIPS.map((chip) => (
                 <button
                   key={chip}
-                  onClick={() => send(chip)}
+                  onClick={() => chip === "Summarize my week" ? send(chip, "summary") : send(chip)}
                   className="text-[11px] px-3 py-1.5 rounded-full border border-[#D8D1C4] text-black/60 hover:bg-[#F5F2ED] hover:text-black transition-colors"
                 >
                   {chip}
@@ -450,19 +453,18 @@ export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
         {ask.isPending && (
           <div className="flex items-center gap-2 text-xs text-black/40">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-black/30 animate-pulse" />
-            Gathering data…
+            Checking live order data…
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
       <form onSubmit={handleSubmit} className="px-4 py-3 border-t border-[#E8E4DC] flex gap-2">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={demoMode ? "Ask about demo data…" : "e.g. Revenue last 7 days"}
+          placeholder={demoMode ? "Ask about demo store data…" : "Ask about revenue, orders, payment gaps, service mix, customers, or connected data…"}
           disabled={ask.isPending}
           className="flex-1 text-sm border border-[#D8D1C4] rounded px-3 py-2 bg-white placeholder-black/30 focus:outline-none focus:border-black/40 disabled:opacity-50"
         />
