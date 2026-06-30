@@ -22,6 +22,14 @@ type BuildingFilter =
 type EventTypeFilter = "all" | "pickup_completed" | "dropoff_completed";
 type HistorySortKey = "event" | "charged" | "placed" | "delivered";
 type HistorySortDirection = "desc" | "asc";
+type HistoryOrderRow = {
+  key: string;
+  orderId: number | null;
+  primary: OperationsEventRow;
+  pickup: OperationsEventRow | null;
+  dropoff: OperationsEventRow | null;
+  events: OperationsEventRow[];
+};
 
 const PAGE_SIZE = 50;
 const OPERATOR_TIME_ZONE = "America/Los_Angeles";
@@ -85,6 +93,13 @@ function chargedDisplay(row: OperationsEventRow): {
   };
 }
 
+function lifecycleLabel(row: HistoryOrderRow): string {
+  if (row.pickup && row.dropoff) return "Delivered";
+  if (row.pickup) return "Picked up";
+  if (row.dropoff) return "Delivered";
+  return row.primary.sourceEventType;
+}
+
 function toTime(value: unknown): number | null {
   if (!value) return null;
   const d = value instanceof Date ? value : new Date(String(value));
@@ -115,32 +130,61 @@ function rowPlacedTime(row: OperationsEventRow): number | null {
   return toTime(orderSnapshot(row)?.createdAt);
 }
 
-function buildDeliveredTimeByOrder(
-  rows: OperationsEventRow[]
-): Map<number, number> {
-  const delivered = new Map<number, number>();
-  for (const row of rows) {
-    if (!row.orderId || row.sourceEventType !== "dropoff_completed") continue;
-    const time = rowEventTime(row);
-    if (time == null) continue;
-    const existing = delivered.get(row.orderId);
-    if (existing == null || time > existing) delivered.set(row.orderId, time);
-  }
-  return delivered;
+function orderEventTime(row: HistoryOrderRow): number | null {
+  const times = row.events
+    .map(event => rowEventTime(event))
+    .filter((time): time is number => time != null);
+  return times.length ? Math.max(...times) : null;
 }
 
-function sortTimeForRow(
-  row: OperationsEventRow,
-  sortKey: HistorySortKey,
-  deliveredTimeByOrder: Map<number, number>
+function sortTimeForOrder(
+  row: HistoryOrderRow,
+  sortKey: HistorySortKey
 ): number | null {
-  if (sortKey === "charged") return rowChargedTime(row);
-  if (sortKey === "placed") return rowPlacedTime(row);
-  if (sortKey === "delivered") {
-    if (!row.orderId) return null;
-    return deliveredTimeByOrder.get(row.orderId) ?? null;
+  if (sortKey === "charged") return rowChargedTime(row.primary);
+  if (sortKey === "placed") return rowPlacedTime(row.primary);
+  if (sortKey === "delivered")
+    return row.dropoff ? rowEventTime(row.dropoff) : null;
+  return orderEventTime(row);
+}
+
+function buildOrderRows(rows: OperationsEventRow[]): HistoryOrderRow[] {
+  const grouped = new Map<string, HistoryOrderRow>();
+  for (const event of rows) {
+    const key = event.orderId ? `order-${event.orderId}` : `event-${event.id}`;
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, {
+        key,
+        orderId: event.orderId,
+        primary: event,
+        pickup: event.sourceEventType === "pickup_completed" ? event : null,
+        dropoff: event.sourceEventType === "dropoff_completed" ? event : null,
+        events: [event],
+      });
+      continue;
+    }
+
+    existing.events.push(event);
+    if ((rowEventTime(event) ?? 0) > (rowEventTime(existing.primary) ?? 0)) {
+      existing.primary = event;
+    }
+    if (
+      event.sourceEventType === "pickup_completed" &&
+      (!existing.pickup ||
+        (rowEventTime(event) ?? 0) > (rowEventTime(existing.pickup) ?? 0))
+    ) {
+      existing.pickup = event;
+    }
+    if (
+      event.sourceEventType === "dropoff_completed" &&
+      (!existing.dropoff ||
+        (rowEventTime(event) ?? 0) > (rowEventTime(existing.dropoff) ?? 0))
+    ) {
+      existing.dropoff = event;
+    }
   }
-  return rowEventTime(row);
+  return Array.from(grouped.values());
 }
 
 function downloadCsv(filename: string, csv: string) {
@@ -155,8 +199,17 @@ function downloadCsv(filename: string, csv: string) {
   URL.revokeObjectURL(url);
 }
 
-function RawSnapshot({ row }: { row: OperationsEventRow }) {
-  const raw = row.rawJson ? JSON.stringify(row.rawJson, null, 2) : "";
+function RawSnapshot({ row }: { row: HistoryOrderRow }) {
+  const raw = JSON.stringify(
+    row.events.map(event => ({
+      id: event.id,
+      sourceEventType: event.sourceEventType,
+      actualEventTimestamp: event.actualEventTimestamp,
+      rawJson: event.rawJson,
+    })),
+    null,
+    2
+  );
   if (!raw)
     return <p className="text-xs text-black/45">No raw snapshot captured.</p>;
   return (
@@ -177,7 +230,7 @@ export default function OperationsEventsPage() {
     useState<HistorySortDirection>("desc");
   const [customerSearch, setCustomerSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [expanded, setExpanded] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const debouncedSearch = useDebounce(customerSearch, 300);
 
   const queryInput = useMemo(
@@ -206,18 +259,22 @@ export default function OperationsEventsPage() {
   const exportCsv = trpc.admin.operationsEvents.exportCsv.useMutation();
   const data = events.data;
   const sortedRows = useMemo(() => {
-    const rows = [...(data?.rows ?? [])];
-    const deliveredTimeByOrder = buildDeliveredTimeByOrder(rows);
+    const rows = buildOrderRows(data?.rows ?? []);
     const direction = sortDirection === "asc" ? 1 : -1;
     return rows.sort((a, b) => {
-      const aTime = sortTimeForRow(a, sortKey, deliveredTimeByOrder);
-      const bTime = sortTimeForRow(b, sortKey, deliveredTimeByOrder);
+      const aTime = sortTimeForOrder(a, sortKey);
+      const bTime = sortTimeForOrder(b, sortKey);
       if (aTime == null && bTime == null) {
-        return (rowEventTime(b) ?? 0) - (rowEventTime(a) ?? 0) || b.id - a.id;
+        return (
+          (orderEventTime(b) ?? 0) - (orderEventTime(a) ?? 0) ||
+          b.primary.id - a.primary.id
+        );
       }
       if (aTime == null) return 1;
       if (bTime == null) return -1;
-      return (aTime - bTime) * direction || (b.id - a.id) * direction;
+      return (
+        (aTime - bTime) * direction || (b.primary.id - a.primary.id) * direction
+      );
     });
   }, [data?.rows, sortDirection, sortKey]);
 
@@ -430,15 +487,15 @@ export default function OperationsEventsPage() {
             <thead className="bg-black/[0.03] text-left text-xs uppercase tracking-wide text-black/50">
               <tr>
                 <th className="w-10 px-3 py-3" />
-                <th className="px-3 py-3">Event timestamp</th>
-                <th className="px-3 py-3">Event type</th>
+                <th className="px-3 py-3">Order placed</th>
+                <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3">Customer</th>
                 <th className="px-3 py-3">Charged</th>
+                <th className="px-3 py-3">Picked up</th>
+                <th className="px-3 py-3">Delivered</th>
                 <th className="px-3 py-3">Business unit</th>
                 <th className="px-3 py-3">Building / Tower / Unit</th>
                 <th className="px-3 py-3">Scheduled</th>
-                <th className="px-3 py-3">Actor</th>
-                <th className="px-3 py-3">Vendor</th>
                 <th className="px-3 py-3">Order</th>
               </tr>
             </thead>
@@ -454,20 +511,20 @@ export default function OperationsEventsPage() {
                 </tr>
               ) : sortedRows.length ? (
                 sortedRows.map(row => {
-                  const charged = chargedDisplay(row);
+                  const charged = chargedDisplay(row.primary);
                   return (
-                    <Fragment key={row.id}>
+                    <Fragment key={row.key}>
                       <tr className="align-top hover:bg-black/[0.02]">
                         <td className="px-3 py-3">
                           <button
                             type="button"
                             className="rounded p-1 hover:bg-black/5"
                             onClick={() =>
-                              setExpanded(expanded === row.id ? null : row.id)
+                              setExpanded(expanded === row.key ? null : row.key)
                             }
                             aria-label="Toggle raw snapshot"
                           >
-                            {expanded === row.id ? (
+                            {expanded === row.key ? (
                               <ChevronDown className="h-4 w-4" />
                             ) : (
                               <ChevronRight className="h-4 w-4" />
@@ -475,15 +532,27 @@ export default function OperationsEventsPage() {
                           </button>
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap">
-                          {formatDateTime(row.actualEventTimestamp)}
-                        </td>
-                        <td className="px-3 py-3 font-mono text-xs">
-                          {row.sourceEventType}
+                          {formatDateTime(
+                            orderSnapshot(row.primary)?.createdAt as
+                              | string
+                              | Date
+                              | null
+                              | undefined
+                          )}
                         </td>
                         <td className="px-3 py-3">
-                          <div className="font-medium">{row.customerName}</div>
+                          <span className="rounded bg-black/[0.04] px-2 py-1 text-xs font-medium text-black/70">
+                            {lifecycleLabel(row)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="font-medium">
+                            {row.primary.customerName}
+                          </div>
                           <div className="text-xs text-black/45">
-                            {row.customerEmail || row.customerPhone || "-"}
+                            {row.primary.customerEmail ||
+                              row.primary.customerPhone ||
+                              "-"}
                           </div>
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap">
@@ -502,27 +571,53 @@ export default function OperationsEventsPage() {
                             </div>
                           ) : null}
                         </td>
-                        <td className="px-3 py-3">{row.businessUnitLabel}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <div>
+                            {row.pickup
+                              ? formatDateTime(row.pickup.actualEventTimestamp)
+                              : "-"}
+                          </div>
+                          <div className="text-xs text-black/45">
+                            {row.pickup?.actorDisplayName || ""}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <div>
+                            {row.dropoff
+                              ? formatDateTime(row.dropoff.actualEventTimestamp)
+                              : "-"}
+                          </div>
+                          <div className="text-xs text-black/45">
+                            {row.dropoff?.actorDisplayName || ""}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          {row.primary.businessUnitLabel}
+                        </td>
                         <td className="px-3 py-3">
                           <div>
-                            {row.buildingName || row.buildingSlug || "-"}
+                            {row.primary.buildingName ||
+                              row.primary.buildingSlug ||
+                              "-"}
                           </div>
                           <div className="text-xs text-black/45">
-                            {[row.tower, row.unit ? `Unit ${row.unit}` : null]
+                            {[
+                              row.primary.tower,
+                              row.primary.unit
+                                ? `Unit ${row.primary.unit}`
+                                : null,
+                            ]
                               .filter(Boolean)
-                              .join(" / ") || row.buildingResolutionStatus}
+                              .join(" / ") ||
+                              row.primary.buildingResolutionStatus}
                           </div>
                         </td>
                         <td className="px-3 py-3">
-                          <div>{row.scheduledDate || "-"}</div>
+                          <div>{row.primary.scheduledDate || "-"}</div>
                           <div className="text-xs text-black/45">
-                            {row.scheduledWindow || "-"}
+                            {row.primary.scheduledWindow || "-"}
                           </div>
                         </td>
-                        <td className="px-3 py-3">
-                          {row.actorDisplayName || "-"}
-                        </td>
-                        <td className="px-3 py-3">{row.vendorId ?? "-"}</td>
                         <td className="px-3 py-3">
                           {row.orderId ? (
                             <a
@@ -536,7 +631,7 @@ export default function OperationsEventsPage() {
                           )}
                         </td>
                       </tr>
-                      {expanded === row.id ? (
+                      {expanded === row.key ? (
                         <tr>
                           <td className="px-3 py-3" />
                           <td className="px-3 py-3" colSpan={10}>
@@ -563,7 +658,7 @@ export default function OperationsEventsPage() {
         <div className="flex items-center justify-between border-t border-black/10 px-3 py-3 text-sm text-black/60">
           <span>
             Page {data?.page ?? page} of {data?.totalPages ?? 1} ·{" "}
-            {data?.totalRows ?? 0} events
+            {sortedRows.length} orders shown from {data?.totalRows ?? 0} events
           </span>
           <div className="flex gap-2">
             <Button
