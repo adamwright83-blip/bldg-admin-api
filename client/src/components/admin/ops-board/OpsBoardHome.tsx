@@ -17,12 +17,13 @@ import { OpsBoardModals } from "./OpsBoardModals";
 import { EmergencyTaskComposer } from "./EmergencyTaskComposer";
 import { SkyBackdrop, SkyBar, useCommandSky } from "../CommandSky";
 import { ReflectionDigest, WarStrip } from "../CommandCockpitBand";
-import { ComposerPanel } from "../ComposerPanel";
 import { CommandLanternKingdom } from "../CommandLanternKingdom";
+import { OperatorAnalystHome } from "../operator-analyst/OperatorAnalystHome";
 import type { AdminHomeData, LogOutreachPayload, OpsBoardModal } from "./types";
 
 type OpsBoardHomeProps = {
   data: AdminHomeData;
+  experienceMode?: "kingdom" | "operator-demo";
   loading?: boolean;
   error?: boolean;
   operatorName: string;
@@ -35,6 +36,7 @@ type OpsBoardHomeProps = {
 
 export function OpsBoardHome({
   data,
+  experienceMode = "kingdom",
   loading,
   error,
   operatorName,
@@ -48,6 +50,7 @@ export function OpsBoardHome({
   // COMMAND SKY — the merged Board+Cockpit weather. The whole home breathes
   // with it; hope events (Log a Win) can turn it blue right now.
   const sky = useCommandSky();
+  const isOperatorDemo = experienceMode === "operator-demo";
 
   const openCollectionPriority = () => {
     const rawOrderId =
@@ -88,56 +91,64 @@ export function OpsBoardHome({
         </div>
       ) : null}
 
-      <SkyBackdrop tone={sky.data?.tone} />
+      {!isOperatorDemo ? <SkyBackdrop tone={sky.data?.tone} /> : null}
 
       {/* THE SPINE — what greets the operator, in order: weather → money
           heartbeat + Mission Control + the math → the war. Everything legacy
           lives BELOW the spine; the merged content leads, never trails. */}
       <div className="ops-mobile-board">
         <MobileTopBar operatorName={operatorName} onOpenMobileNav={onOpenMobileNav} />
-        <CommandLanternKingdom onNavigate={onNavigate} />
-        <SkyBar />
-        <WarStrip onNavigate={onNavigate} />
-        <StatusStrip data={data} includeRunRate={false} />
-        <EmergencyTaskComposer />
-        <HeroCard onQuickInput={openQuickReceiptInput} />
-        <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} onNavigate={onNavigate} />
-        <RunRateCard data={data} />
-        <KpiGrid data={data} onNavigate={onNavigate} />
-        <TerritoryProgression data={data} />
-        <RevenueAtRisk data={data} onOpenModal={setModal} />
-        <PerformanceGauges data={data} />
-        <ReflectionDigest onNavigate={onNavigate} />
-        <QuickActions onNavigate={onNavigate} onOpenModal={setModal} />
-        <div className="px-4 pb-4">
-          <ComposerPanel onNavigate={onNavigate} />
-        </div>
+        {isOperatorDemo ? (
+          <OperatorAnalystHome onNavigate={onNavigate} />
+        ) : (
+          <>
+            <CommandLanternKingdom onNavigate={onNavigate} />
+            <SkyBar />
+            <WarStrip onNavigate={onNavigate} />
+            <StatusStrip data={data} includeRunRate={false} />
+            <EmergencyTaskComposer />
+            <HeroCard onQuickInput={openQuickReceiptInput} />
+            <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} onNavigate={onNavigate} />
+            <RunRateCard data={data} />
+            <KpiGrid data={data} onNavigate={onNavigate} />
+            <TerritoryProgression data={data} />
+            <RevenueAtRisk data={data} onOpenModal={setModal} />
+            <PerformanceGauges data={data} />
+            <ReflectionDigest onNavigate={onNavigate} />
+            <QuickActions onNavigate={onNavigate} onOpenModal={setModal} />
+          </>
+        )}
         <MobileBottomNav onNavigate={onNavigate} />
       </div>
 
       <div className="ops-desktop-board">
-        <CommandLanternKingdom onNavigate={onNavigate} />
-        <SkyBar />
-        <WarStrip onNavigate={onNavigate} />
-        <StatusStrip data={data} />
-        <EmergencyTaskComposer />
-        <div className="ops-desktop-hero-row">
-          <HeroCard onQuickInput={openQuickReceiptInput} />
-          <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} onNavigate={onNavigate} />
-        </div>
-        <KpiGrid data={data} onNavigate={onNavigate} />
-        <div className="ops-desktop-territory-row">
-          <TerritoryProgression data={data} />
-          <RevenueAtRisk data={data} onOpenModal={setModal} />
-        </div>
-        <div className="ops-desktop-performance-row">
-          <PerformanceGauges data={data} />
-          <QuickActions onNavigate={onNavigate} onOpenModal={setModal} />
-        </div>
-        <ReflectionDigest onNavigate={onNavigate} />
-        <div className="px-4 pb-6">
-          <ComposerPanel onNavigate={onNavigate} />
-        </div>
+        {isOperatorDemo ? (
+          <OperatorAnalystHome onNavigate={onNavigate} />
+        ) : (
+          <>
+            <CommandLanternKingdom onNavigate={onNavigate} />
+            <SkyBar />
+            <div className="ops-secondary-grid">
+              <WarStrip onNavigate={onNavigate} />
+              <StatusStrip data={data} />
+            </div>
+            <EmergencyTaskComposer />
+            <div className="ops-desktop-hero-row">
+              <HeroCard onQuickInput={openQuickReceiptInput} />
+              <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} onNavigate={onNavigate} />
+            </div>
+            <KpiGrid data={data} onNavigate={onNavigate} />
+            <div className="ops-desktop-territory-row">
+              <TerritoryProgression data={data} />
+              <RevenueAtRisk data={data} onOpenModal={setModal} />
+            </div>
+            <div className="ops-desktop-performance-row">
+              <PerformanceGauges data={data} />
+              <QuickActions onNavigate={onNavigate} onOpenModal={setModal} />
+            </div>
+            <ReflectionDigest onNavigate={onNavigate} />
+          </>
+        )}
       </div>
 
       <OpsBoardModals

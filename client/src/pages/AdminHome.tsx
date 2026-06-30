@@ -7,6 +7,7 @@ import { buildOpsBoardData } from "@/components/admin/ops-board/opsBoardData";
 import type { LogOutreachPayload } from "@/components/admin/ops-board/types";
 
 type AdminHomeProps = {
+  experienceMode?: "kingdom" | "operator-demo";
   operatorName?: string;
   onOpenMobileNav?: () => void;
   onNavigate?: (path: string) => void;
@@ -14,6 +15,7 @@ type AdminHomeProps = {
 };
 
 export default function AdminHome({
+  experienceMode = "kingdom",
   operatorName = "Admin",
   onOpenMobileNav = () => undefined,
   onNavigate = (path) => {
@@ -104,6 +106,7 @@ export default function AdminHome({
   return (
     <OpsBoardHome
       data={data}
+      experienceMode={experienceMode}
       loading={loading}
       error={error}
       operatorName={operatorName}

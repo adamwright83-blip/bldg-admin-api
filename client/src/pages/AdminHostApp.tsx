@@ -144,6 +144,7 @@ export default function AdminHostApp() {
   }, [path, navigate]);
 
   const isHome = isAdminCommandCenterPath(path);
+  const isOperatorDemo = path === "/demo";
   const isLive = path === "/live";
   const isLevel4 = path === "/level4";
   const isPnl = path === "/pnl";
@@ -169,8 +170,8 @@ export default function AdminHostApp() {
 
   useEffect(() => {
     if (path === "/admin") return;
-    if (!isHome && !isLive && !isLevel4 && !isOperatorReflection && activeTab === null) navigate("/", { replace: true });
-  }, [isHome, isLive, isLevel4, isOperatorReflection, activeTab, path, navigate]);
+    if (!isHome && !isOperatorDemo && !isLive && !isLevel4 && !isOperatorReflection && activeTab === null) navigate("/", { replace: true });
+  }, [isHome, isOperatorDemo, isLive, isLevel4, isOperatorReflection, activeTab, path, navigate]);
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -263,6 +264,15 @@ export default function AdminHostApp() {
             onClick={() => setMobileNavOpen(false)}
           >
             🏰 Kingdom
+          </Link>
+          <Link
+            href="/demo"
+            className={`block rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+              isOperatorDemo ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
+            }`}
+            onClick={() => setMobileNavOpen(false)}
+          >
+            ✨ Demo Mode
           </Link>
           <Link
             href="/new-order"
@@ -364,7 +374,7 @@ export default function AdminHostApp() {
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        {!isHome ? (
+        {!isHome && !isOperatorDemo ? (
           <>
             <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-black/10 bg-white px-4 py-2 md:py-3 md:px-6">
               <button
@@ -437,8 +447,9 @@ export default function AdminHostApp() {
           </>
         ) : null}
 
-        {isHome ? (
+        {isHome || isOperatorDemo ? (
           <AdminHome
+            experienceMode={isOperatorDemo ? "operator-demo" : "kingdom"}
             operatorName={user?.name || "Admin"}
             onOpenMobileNav={() => setMobileNavOpen(true)}
             onNavigate={(path) => navigate(path)}

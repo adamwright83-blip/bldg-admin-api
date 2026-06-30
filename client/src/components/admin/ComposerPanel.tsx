@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { Mic, Send, Sparkles } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -78,17 +79,27 @@ type Message = {
 
 export type ComposerPanelProps = {
   onNavigate: (path: string) => void;
+  className?: string;
+  defaultDemoMode?: boolean;
+  variant?: "default" | "operator-home";
 };
 
 const CHART_COLORS = ["#111111", "#6B7280", "#374151", "#9CA3AF", "#1F2937"];
 
 const EXAMPLE_CHIPS = [
-  "Revenue last 7 days",
-  "Open orders right now",
-  "Compare this week to last week",
-  "Wash & fold vs dry cleaning",
+  "Week over week summary",
+  "Unpaid orders",
+  "Pickup & delivery opportunities",
+  "Repeat customer trends",
+  "Staffing & utilization",
   "What data is connected?",
-  "Summarize my week",
+];
+
+const DEMO_RECOMMENDATIONS = [
+  "Send payment reminders for 6+ day overdue orders.",
+  "Expand pickup windows on Saturdays to capture ~12 more orders/week.",
+  "Add 2 dryer cycles between 4–7 PM to reduce wait times.",
+  "Re-engage at-risk customers with a personalized offer.",
 ];
 
 function HeadlineCard({ headline }: { headline: ComposerHeadline }) {
@@ -326,11 +337,27 @@ function AssistantBubble({
   );
 }
 
-export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
+// ── Main component ──────────────────────────────────────────────────────────
+
+function getInitialDemoMode(defaultDemoMode: boolean) {
+  if (typeof window === "undefined") return defaultDemoMode;
+  const saved = window.localStorage.getItem("operatorAnalystDemoMode");
+  if (saved === "false") return false;
+  if (saved === "true") return true;
+  return defaultDemoMode;
+}
+
+export function ComposerPanel({
+  onNavigate,
+  className = "",
+  defaultDemoMode = false,
+  variant = "default",
+}: ComposerPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [demoMode, setDemoMode] = useState(false);
+  const [demoMode, setDemoMode] = useState(() => getInitialDemoMode(defaultDemoMode));
   const bottomRef = useRef<HTMLDivElement>(null);
+  const hasUserInteractedRef = useRef(false);
 
   const ask = trpc.admin.askComposer.useMutation({
     onSuccess(data) {
@@ -348,12 +375,15 @@ export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
   });
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (hasUserInteractedRef.current && messages.length > 0) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
   }, [messages]);
 
   const toggleDemo = () => {
     setDemoMode((d) => {
       const next = !d;
+      window.localStorage.setItem("operatorAnalystDemoMode", String(next));
       setMessages([]);
       if (messages.length > 0) {
         toast.info(`Switched to ${next ? "demo" : "live"} data — conversation reset.`);
@@ -365,6 +395,7 @@ export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
   const send = (question: string, mode?: "summary") => {
     const displayText = mode === "summary" ? "Summarize my week" : question;
     if (!displayText.trim() || ask.isPending) return;
+    hasUserInteractedRef.current = true;
     const history = messages.map((m) => ({ role: m.role, content: m.content }));
     setMessages((prev) => [...prev, { role: "user", content: displayText }]);
     setInput("");
@@ -376,65 +407,107 @@ export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
     send(input);
   };
 
+  const isOperatorHome = variant === "operator-home";
+  const rootClassName = isOperatorHome
+    ? `oa-composer-panel ${className}`.trim()
+    : `bg-white border border-[#E8E4DC] rounded-lg flex flex-col ${className}`.trim();
+
   return (
-    <div className="bg-white border border-[#E8E4DC] rounded-lg flex flex-col" style={{ minHeight: 340, maxHeight: 680 }}>
+    <div className={rootClassName} style={isOperatorHome ? undefined : { minHeight: 340, maxHeight: 680 }}>
+      {/* Demo banner */}
       {demoMode && (
-        <div className="bg-amber-400 text-amber-900 text-center text-xs font-bold py-1.5 tracking-wide uppercase rounded-t-lg">
+        <div className={isOperatorHome ? "oa-demo-banner" : "bg-amber-400 text-amber-900 text-center text-xs font-bold py-1.5 tracking-wide uppercase rounded-t-lg"}>
           DEMO DATA — NOT YOUR STORE
         </div>
       )}
 
-      <div className="px-4 py-3 border-b border-[#E8E4DC] flex items-start justify-between gap-4">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-black/55">
-            Operator Analyst
-          </div>
-          <div className="text-[11px] text-black/40 mt-1">
-            Ask your store about paid revenue, open work, service mix, repeat customers, and data gaps.
-          </div>
+      {/* Header */}
+      <div className={isOperatorHome ? "oa-composer-head" : "px-4 py-3 border-b border-[#E8E4DC] flex items-center justify-between"}>
+        <div className={isOperatorHome ? "oa-composer-title" : ""}>
+          {isOperatorHome ? <img src="/admin-assets/operator-analyst/operator-orb.png" alt="" /> : null}
+          <span>
+            <strong className={isOperatorHome ? "" : "text-xs font-semibold uppercase tracking-[0.14em] text-black/55"}>
+              Operator Analyst
+            </strong>
+            {isOperatorHome ? (
+              <small>Your AI partner for stronger margins, happier customers, and a better-run store.</small>
+            ) : null}
+          </span>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <label className="flex items-center gap-1.5 cursor-pointer select-none">
-            <div
-              onClick={toggleDemo}
-              className={`w-7 h-4 rounded-full transition-colors relative cursor-pointer ${demoMode ? "bg-amber-400" : "bg-black/15"}`}
-            >
-              <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${demoMode ? "translate-x-3.5" : "translate-x-0.5"}`} />
-            </div>
-            <span className="text-[10px] text-black/45">Demo</span>
-          </label>
+        <div className={isOperatorHome ? "oa-composer-tools" : "flex items-center gap-3"}>
           <button
-            onClick={() => send("Summarize my week", "summary")}
-            disabled={ask.isPending}
-            className="text-[10px] text-black/45 hover:text-black/70 transition-colors disabled:opacity-30 border border-[#D8D1C4] px-2 py-1 rounded"
+            type="button"
+            onClick={toggleDemo}
+            className={isOperatorHome ? "oa-segmented-toggle" : "flex items-center gap-1.5 cursor-pointer select-none"}
+            aria-pressed={demoMode}
           >
-            Weekly operating summary
+            {isOperatorHome ? <span className={!demoMode ? "is-active" : ""}>Live</span> : null}
+            <span className={demoMode ? "is-active" : ""}>{isOperatorHome ? "Demo" : "Demo"}</span>
+            {!isOperatorHome ? (
+              <span
+                className={`w-7 h-4 rounded-full transition-colors relative cursor-pointer ${demoMode ? "bg-amber-400" : "bg-black/15"}`}
+              >
+                <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${demoMode ? "translate-x-3.5" : "translate-x-0.5"}`} />
+              </span>
+            ) : null}
+          </button>
+          {isOperatorHome ? (
+            <span className="oa-mode-pill">
+              <i />
+              Demo Mode
+              <small>Sample Store Data</small>
+            </span>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              if (isOperatorHome) {
+                toast.info("Sources and notes appear in each Operator Analyst receipt.");
+                return;
+              }
+              send("Summarize my week", "summary");
+            }}
+            disabled={ask.isPending}
+            className={isOperatorHome ? "oa-source-button" : "text-[10px] text-black/45 hover:text-black/70 transition-colors disabled:opacity-30 border border-[#D8D1C4] px-2 py-1 rounded"}
+          >
+            {isOperatorHome ? "Sources & Notes" : "Summarize my week"}
           </button>
           {messages.length > 0 && (
-            <button onClick={() => setMessages([])} className="text-[10px] text-black/35 hover:text-black/60 transition-colors">
+            <button type="button" onClick={() => setMessages([])} className={isOperatorHome ? "oa-clear-button" : "text-[10px] text-black/35 hover:text-black/60 transition-colors"}>
               Clear
             </button>
           )}
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4 min-h-0">
+      {/* Messages */}
+      <div className={isOperatorHome ? "oa-messages" : "flex-1 overflow-y-auto px-4 py-3 space-y-4 min-h-0"}>
         {messages.length === 0 && (
-          <div className="space-y-3 pt-1">
-            <p className="text-xs text-black/40">
-              Answers include the chart, verification table, action buttons, and receipt showing what data was used.
+          <div className={isOperatorHome ? "oa-empty-state" : "space-y-3 pt-1"}>
+            <p>
+              {isOperatorHome
+                ? "Ask a question or choose a sample prompt. Operator Analyst will return a chart, verification table, recommended next steps, and a receipt showing what data was used."
+                : "Ask a question about your laundromat data."}
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className={isOperatorHome ? "oa-chip-row" : "flex flex-wrap gap-2"}>
               {EXAMPLE_CHIPS.map((chip) => (
                 <button
                   key={chip}
-                  onClick={() => chip === "Summarize my week" ? send(chip, "summary") : send(chip)}
-                  className="text-[11px] px-3 py-1.5 rounded-full border border-[#D8D1C4] text-black/60 hover:bg-[#F5F2ED] hover:text-black transition-colors"
+                  onClick={() => send(chip)}
+                  className={isOperatorHome ? "oa-chip" : "text-[11px] px-3 py-1.5 rounded-full border border-[#D8D1C4] text-black/60 hover:bg-[#F5F2ED] hover:text-black transition-colors"}
                 >
                   {chip}
                 </button>
               ))}
             </div>
+            {isOperatorHome ? (
+              <div className="oa-demo-recommendations">
+                <strong>Recommended Next Steps</strong>
+                {DEMO_RECOMMENDATIONS.map((item) => (
+                  <span key={item}>{item}</span>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -451,7 +524,7 @@ export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
         ))}
 
         {ask.isPending && (
-          <div className="flex items-center gap-2 text-xs text-black/40">
+          <div className={isOperatorHome ? "oa-loading" : "flex items-center gap-2 text-xs text-black/40"}>
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-black/30 animate-pulse" />
             Checking live order data…
           </div>
@@ -459,21 +532,31 @@ export function ComposerPanel({ onNavigate }: ComposerPanelProps) {
         <div ref={bottomRef} />
       </div>
 
-      <form onSubmit={handleSubmit} className="px-4 py-3 border-t border-[#E8E4DC] flex gap-2">
+      {/* Input */}
+      <form onSubmit={handleSubmit} className={isOperatorHome ? "oa-input-form" : "px-4 py-3 border-t border-[#E8E4DC] flex gap-2"}>
+        {isOperatorHome ? <Mic className="h-4 w-4" aria-hidden="true" /> : null}
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={demoMode ? "Ask about demo store data…" : "Ask about revenue, orders, payment gaps, service mix, customers, or connected data…"}
+          placeholder={
+            isOperatorHome
+              ? "Ask about revenue, orders, payment gaps, service mix, customers, or connected data…"
+              : demoMode
+                ? "Ask about demo data…"
+                : "e.g. Revenue last 7 days"
+          }
           disabled={ask.isPending}
-          className="flex-1 text-sm border border-[#D8D1C4] rounded px-3 py-2 bg-white placeholder-black/30 focus:outline-none focus:border-black/40 disabled:opacity-50"
+          className={isOperatorHome ? "" : "flex-1 text-sm border border-[#D8D1C4] rounded px-3 py-2 bg-white placeholder-black/30 focus:outline-none focus:border-black/40 disabled:opacity-50"}
         />
         <button
           type="submit"
           disabled={!input.trim() || ask.isPending}
-          className="px-4 py-2 bg-black text-white text-xs rounded font-medium disabled:opacity-40 hover:bg-black/80 transition-colors"
+          className={isOperatorHome ? "" : "px-4 py-2 bg-black text-white text-xs rounded font-medium disabled:opacity-40 hover:bg-black/80 transition-colors"}
         >
-          Ask
+          {isOperatorHome ? <Sparkles className="h-4 w-4" aria-hidden="true" /> : null}
+          {isOperatorHome ? "Analyze" : "Ask"}
+          {isOperatorHome ? <Send className="h-4 w-4" aria-hidden="true" /> : null}
         </button>
       </form>
     </div>

@@ -17,6 +17,7 @@ import AdminCatalog from "./pages/AdminCatalog";
 const LOCAL_ADMIN_PATHS = new Set([
   "/admin",
   "/home",
+  "/demo",
   "/live",
   "/new-order",
   "/customers",
@@ -48,6 +49,7 @@ function AdminHostRouter() {
       <Route path="/pricing" component={AdminCatalog} />
       <Route path="/admin" component={AdminHostApp} />
       <Route path="/home" component={AdminHostApp} />
+      <Route path="/demo" component={AdminHostApp} />
       <Route path="/live" component={AdminHostApp} />
       <Route path="/new-order" component={AdminHostApp} />
       <Route path="/customers" component={AdminHostApp} />
