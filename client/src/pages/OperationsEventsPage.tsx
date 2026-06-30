@@ -370,38 +370,6 @@ export default function OperationsEventsPage() {
             className="mt-1"
           />
         </label>
-        <div className="md:col-span-6 grid gap-3 sm:grid-cols-2">
-          <label className="text-xs font-medium text-black/60">
-            Sort rows by
-            <select
-              value={sortKey}
-              onChange={e => {
-                setSortKey(e.target.value as HistorySortKey);
-                setExpanded(null);
-              }}
-              className="mt-1 h-10 w-full rounded border border-black/15 bg-white px-3 text-sm"
-            >
-              <option value="event">Event date</option>
-              <option value="charged">Card charged date</option>
-              <option value="placed">Order placed date</option>
-              <option value="delivered">Order delivered date</option>
-            </select>
-          </label>
-          <label className="text-xs font-medium text-black/60">
-            Direction
-            <select
-              value={sortDirection}
-              onChange={e => {
-                setSortDirection(e.target.value as HistorySortDirection);
-                setExpanded(null);
-              }}
-              className="mt-1 h-10 w-full rounded border border-black/15 bg-white px-3 text-sm"
-            >
-              <option value="desc">Newest first</option>
-              <option value="asc">Oldest first</option>
-            </select>
-          </label>
-        </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-4">
@@ -421,6 +389,39 @@ export default function OperationsEventsPage() {
             <p className="mt-2 text-2xl font-semibold text-black">{value}</p>
           </div>
         ))}
+      </div>
+
+      <div className="grid gap-3 rounded border border-black/10 bg-white p-3 sm:grid-cols-2">
+        <label className="text-xs font-medium text-black/60">
+          Sort rows by
+          <select
+            value={sortKey}
+            onChange={e => {
+              setSortKey(e.target.value as HistorySortKey);
+              setExpanded(null);
+            }}
+            className="mt-1 h-10 w-full rounded border border-black/15 bg-white px-3 text-sm"
+          >
+            <option value="event">Event date</option>
+            <option value="charged">Card charged date</option>
+            <option value="placed">Order placed date</option>
+            <option value="delivered">Order delivered date</option>
+          </select>
+        </label>
+        <label className="text-xs font-medium text-black/60">
+          Direction
+          <select
+            value={sortDirection}
+            onChange={e => {
+              setSortDirection(e.target.value as HistorySortDirection);
+              setExpanded(null);
+            }}
+            className="mt-1 h-10 w-full rounded border border-black/15 bg-white px-3 text-sm"
+          >
+            <option value="desc">Newest first</option>
+            <option value="asc">Oldest first</option>
+          </select>
+        </label>
       </div>
 
       <div className="overflow-hidden rounded border border-black/10 bg-white">
