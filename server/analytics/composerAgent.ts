@@ -5,6 +5,7 @@ import {
   getOrderStats,
   getOpenOrderStats,
   getRepeatCustomerStats,
+  getTopCustomersByRevenue,
   getMetricComparison,
   getDataCompleteness,
 } from "./analyticsQueries";
@@ -14,6 +15,7 @@ import type {
   OrderStats,
   OpenOrderStats,
   RepeatCustomerStats,
+  CustomerRevenueStats,
   MetricComparison,
   DataCompleteness,
 } from "./analyticsQueries";
@@ -22,6 +24,7 @@ import {
   demoOrderStats,
   demoOpenOrderStats,
   demoRepeatCustomerStats,
+  demoTopCustomersByRevenue,
   demoMetricComparison,
   demoDataCompleteness,
 } from "./demoDataset";
@@ -79,6 +82,10 @@ type AnalyticsSource = {
     tenantId: string,
     params: { range: DateRange }
   ) => Promise<RepeatCustomerStats> | RepeatCustomerStats;
+  getTopCustomersByRevenue: (
+    tenantId: string,
+    params: { range: DateRange; limit?: number }
+  ) => Promise<CustomerRevenueStats> | CustomerRevenueStats;
   getMetricComparison: (
     tenantId: string,
     params: { metricId: string; currentRange: DateRange; comparisonRange?: DateRange; groupBy: "day" | "week" | "month"; basis?: "paidAt" | "createdAt" }
@@ -91,6 +98,7 @@ const liveSource: AnalyticsSource = {
   getOrderStats,
   getOpenOrderStats,
   getRepeatCustomerStats,
+  getTopCustomersByRevenue,
   getMetricComparison,
   getDataCompleteness,
 };
@@ -100,6 +108,7 @@ const demoSource: AnalyticsSource = {
   getOrderStats: (t, p) => Promise.resolve(demoOrderStats(t, p)),
   getOpenOrderStats: (t) => Promise.resolve(demoOpenOrderStats(t)),
   getRepeatCustomerStats: (t, p) => Promise.resolve(demoRepeatCustomerStats(t, p)),
+  getTopCustomersByRevenue: (t, p) => Promise.resolve(demoTopCustomersByRevenue(t, p)),
   getMetricComparison: (t, p) => Promise.resolve(demoMetricComparison(t, p)),
   getDataCompleteness: (t) => Promise.resolve(demoDataCompleteness(t)),
 };
@@ -227,6 +236,7 @@ type QueryResults = {
   stats: OrderStats | null;
   openOrders: OpenOrderStats | null;
   repeatCustomers: RepeatCustomerStats | null;
+  customerRevenue: CustomerRevenueStats | null;
   comparison: MetricComparison | null;
   completeness: DataCompleteness | null;
 };
@@ -265,6 +275,21 @@ function buildChart(
         { period: "Previous", value: c.previous },
         { period: "Current", value: c.current },
       ],
+    };
+  }
+
+  // Revenue time series (only for non-comparison revenue questions)
+  if (results.customerRevenue?.customers.length) {
+    return {
+      type: "bar",
+      title: "Top customers by paid revenue",
+      xKey: "customerName",
+      series: [{ key: "revenue", label: "Revenue ($)" }],
+      data: results.customerRevenue.customers.map((customer) => ({
+        customerName: customer.customerName,
+        revenue: customer.revenue,
+        orderCount: customer.orderCount,
+      })),
     };
   }
 
@@ -356,6 +381,19 @@ function buildTable(results: QueryResults): ComposerTable | null {
   }
 
   // Revenue time series table
+  if (results.customerRevenue?.customers.length) {
+    return {
+      columns: ["Customer", "Revenue", "Orders", "Avg order"],
+      rows: results.customerRevenue.customers.map((customer) => [
+        customer.customerName,
+        formatCurrency(customer.revenue),
+        customer.orderCount,
+        formatCurrency(customer.avgOrderValue),
+      ]),
+    };
+  }
+
+  // Revenue time series table
   if (results.revenue?.series.length) {
     return {
       columns: ["Date", "Revenue", "Orders"],
@@ -442,6 +480,19 @@ function buildHeadline(results: QueryResults, headlineLabel: string): ComposerHe
     };
   }
 
+  if (results.customerRevenue?.customers.length) {
+    const top = results.customerRevenue.customers[0];
+    return {
+      label: headlineLabel || "Top grossing customer",
+      value: top.customerName,
+      subStats: [
+        { label: "Revenue", value: formatCurrency(top.revenue) },
+        { label: "Orders", value: String(top.orderCount) },
+        { label: "Avg order", value: formatCurrency(top.avgOrderValue) },
+      ],
+    };
+  }
+
   if (results.openOrders) {
     return {
       label: headlineLabel || "Open orders",
@@ -477,6 +528,7 @@ async function executeMetrics(
     stats: null,
     openOrders: null,
     repeatCustomers: null,
+    customerRevenue: null,
     comparison: null,
     completeness: null,
   };
@@ -487,12 +539,13 @@ async function executeMetrics(
   const needsStats = ids.has("orders_created") || ids.has("wash_fold_weight") || ids.has("service_mix");
   const needsOpen = ids.has("open_orders") || ids.has("awaiting_payment");
   const needsRepeat = ids.has("repeat_customer_count");
+  const needsCustomerRevenue = ids.has("top_customer_revenue");
   const needsCompleteness = plan.intent === "completeness";
   const needsComparison = plan.compareToPrevious;
 
   const groupBy = plan.groupBy;
 
-  const [revenue, stats, openOrders, repeatCustomers, comparison, completeness] =
+  const [revenue, stats, openOrders, repeatCustomers, customerRevenue, comparison, completeness] =
     await Promise.all([
       needsRevenue
         ? source.getRevenueSummary(tenantId, { range, groupBy })
@@ -505,6 +558,9 @@ async function executeMetrics(
         : Promise.resolve(null),
       needsRepeat
         ? source.getRepeatCustomerStats(tenantId, { range })
+        : Promise.resolve(null),
+      needsCustomerRevenue
+        ? source.getTopCustomersByRevenue(tenantId, { range, limit: 6 })
         : Promise.resolve(null),
       needsComparison
         ? source.getMetricComparison(tenantId, {
@@ -522,6 +578,7 @@ async function executeMetrics(
   results.stats = stats;
   results.openOrders = openOrders;
   results.repeatCustomers = repeatCustomers;
+  results.customerRevenue = customerRevenue;
   results.comparison = comparison;
   results.completeness = completeness;
 
@@ -574,6 +631,7 @@ export async function runBoardMeetingSummary(
     openOrders,
     comparison,
     repeatCustomers: null,
+    customerRevenue: null,
     completeness: null,
   };
 
@@ -665,6 +723,7 @@ export async function runComposerTurn(
           "orders_created/service_mix/wash_fold_weight: volume, mix, lbs questions.",
           "open_orders/awaiting_payment: current open order snapshot.",
           "repeat_customer_count: loyalty/repeat questions.",
+          "top_customer_revenue: top grossing customer, best customer, biggest spender, customer revenue ranking.",
           "compareToPrevious: true when the question asks about change, trends, 'vs', 'compared to', 'why'.",
           "intent='completeness' for: 'what can you tell me?', 'what data do you have?', 'does this include cash?'",
           "groupBy: 'day' for ≤14 days, 'week' for ≤90 days, 'month' for >90 days.",
@@ -698,6 +757,7 @@ export async function runComposerTurn(
     stats: results.stats,
     openOrders: results.openOrders,
     repeatCustomers: results.repeatCustomers,
+    customerRevenue: results.customerRevenue,
     comparison: results.comparison,
     completeness: results.completeness,
     dateRange: range,
@@ -727,6 +787,7 @@ export async function runComposerTurn(
           `actionIds: 0-2 most relevant from: ${ACTION_IDS.join(", ")}. Empty array if none relevant.`,
           "If completeness data is present, explain what is and is not connected — be honest about gaps.",
           "If comparison data is present, explain whether the change was driven by volume or pricing.",
+          "If customerRevenue data is present, name the top customer directly.",
         ].join("\n"),
       },
       ...historyMessages(history),
@@ -756,11 +817,17 @@ export async function runComposerTurn(
   const headline = buildHeadline(results, llmOutput.headlineLabel ?? "");
   const actions = mapActionIds(llmOutput.actionIds ?? []);
 
+  let answer = llmOutput.answer;
+  if (results.customerRevenue?.customers.length) {
+    const [top] = results.customerRevenue.customers;
+    answer = `${top.customerName} is the top grossing customer for this period, with ${formatCurrency(top.revenue)} across ${top.orderCount} paid orders. Average order value is ${formatCurrency(top.avgOrderValue)}.`;
+  }
+
   // Meta is always backend-built; LLM never writes it.
   const meta: QueryMeta & { dateRange: DateRange } = {
     ...buildQueryMeta(metricIds, tenantId, demoMode),
     dateRange: range,
   };
 
-  return { answer: llmOutput.answer, headline, chart, table, actions, meta };
+  return { answer, headline, chart, table, actions, meta };
 }

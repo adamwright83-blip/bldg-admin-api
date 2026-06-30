@@ -1,22 +1,13 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import {
-  HeroCard,
-  KpiGrid,
-  MissionStack,
   MobileBottomNav,
   MobileTopBar,
-  PerformanceGauges,
-  QuickActions,
-  RevenueAtRisk,
-  RunRateCard,
-  StatusStrip,
-  TerritoryProgression,
 } from "./OpsBoardCards";
 import { OpsBoardModals } from "./OpsBoardModals";
-import { EmergencyTaskComposer } from "./EmergencyTaskComposer";
 import { SkyBackdrop, SkyBar, useCommandSky } from "../CommandSky";
-import { ReflectionDigest, WarStrip } from "../CommandCockpitBand";
+import { WarStrip } from "../CommandCockpitBand";
+import { ComposerPanel } from "../ComposerPanel";
 import { CommandLanternKingdom } from "../CommandLanternKingdom";
 import { OperatorAnalystHome } from "../operator-analyst/OperatorAnalystHome";
 import type { AdminHomeData, LogOutreachPayload, OpsBoardModal } from "./types";
@@ -33,6 +24,28 @@ type OpsBoardHomeProps = {
   onLogOutreach: (payload: LogOutreachPayload) => Promise<void>;
   outreachLogging: boolean;
 };
+
+const KINGDOM_CTA_LINKS = [
+  { label: "Counter", detail: "Create orders and run intake", path: "/new-order" },
+  { label: "Pipeline", detail: "Live orders and pickups", path: "/live" },
+  { label: "Money owed", detail: "Payment recovery queue", path: "/payment-reconciliation" },
+  { label: "Customers", detail: "Profiles and repeat business", path: "/customers" },
+  { label: "Performance", detail: "Operations event history", path: "/operations-events" },
+  { label: "Mission Control", detail: "HELD corporate workspace", path: "/mission-control" },
+];
+
+function KingdomCtaRail({ onNavigate }: { onNavigate: (path: string) => void }) {
+  return (
+    <section className="ops-kingdom-cta-rail" aria-label="Open deeper admin sections">
+      {KINGDOM_CTA_LINKS.map((item) => (
+        <button key={item.path} type="button" onClick={() => onNavigate(item.path)}>
+          <span>{item.label}</span>
+          <small>{item.detail}</small>
+        </button>
+      ))}
+    </section>
+  );
+}
 
 export function OpsBoardHome({
   data,
@@ -52,29 +65,6 @@ export function OpsBoardHome({
   const sky = useCommandSky();
   const isOperatorDemo = experienceMode === "operator-demo";
 
-  const openCollectionPriority = () => {
-    const rawOrderId =
-      data.collectionPriority.orderId ??
-      Number(data.collectionPriority.orderNumber.replace(/[^0-9]/g, ""));
-    const orderId = Number.isInteger(rawOrderId) && rawOrderId > 0 ? rawOrderId : null;
-
-    if (orderId) {
-      onNavigate(`/intake?orderId=${orderId}`);
-      return;
-    }
-
-    if (data.collectionPriority.phone) {
-      onOpenCustomer(data.collectionPriority.phone);
-      return;
-    }
-
-    setModal({ kind: "collect_daniel" });
-  };
-
-  const openQuickReceiptInput = () => {
-    onNavigate("/intake?quickReceipt=1");
-  };
-
   if (loading) {
     return (
       <div className="ops-board-home ops-board-loading">
@@ -84,7 +74,7 @@ export function OpsBoardHome({
   }
 
   return (
-    <div className="ops-board-home">
+    <div className={`ops-board-home ${isOperatorDemo ? "ops-operator-demo-home" : "ops-kingdom-home"}`}>
       {error ? (
         <div className="ops-data-warning">
           Live dashboard metrics could not fully load. The board is using safe fallbacks where data is missing.
@@ -105,17 +95,13 @@ export function OpsBoardHome({
             <CommandLanternKingdom onNavigate={onNavigate} />
             <SkyBar />
             <WarStrip onNavigate={onNavigate} />
-            <StatusStrip data={data} includeRunRate={false} />
-            <EmergencyTaskComposer />
-            <HeroCard onQuickInput={openQuickReceiptInput} />
-            <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} onNavigate={onNavigate} />
-            <RunRateCard data={data} />
-            <KpiGrid data={data} onNavigate={onNavigate} />
-            <TerritoryProgression data={data} />
-            <RevenueAtRisk data={data} onOpenModal={setModal} />
-            <PerformanceGauges data={data} />
-            <ReflectionDigest onNavigate={onNavigate} />
-            <QuickActions onNavigate={onNavigate} onOpenModal={setModal} />
+            <ComposerPanel
+              className="ops-kingdom-composer"
+              defaultDemoMode
+              onNavigate={onNavigate}
+              variant="operator-home"
+            />
+            <KingdomCtaRail onNavigate={onNavigate} />
           </>
         )}
         <MobileBottomNav onNavigate={onNavigate} />
@@ -128,25 +114,16 @@ export function OpsBoardHome({
           <>
             <CommandLanternKingdom onNavigate={onNavigate} />
             <SkyBar />
-            <div className="ops-secondary-grid">
-              <WarStrip onNavigate={onNavigate} />
-              <StatusStrip data={data} />
+            <WarStrip onNavigate={onNavigate} />
+            <div className="ops-kingdom-command-row">
+              <ComposerPanel
+                className="ops-kingdom-composer"
+                defaultDemoMode
+                onNavigate={onNavigate}
+                variant="operator-home"
+              />
+              <KingdomCtaRail onNavigate={onNavigate} />
             </div>
-            <EmergencyTaskComposer />
-            <div className="ops-desktop-hero-row">
-              <HeroCard onQuickInput={openQuickReceiptInput} />
-              <MissionStack data={data} onOpenModal={setModal} onOpenCollectionPriority={openCollectionPriority} onNavigate={onNavigate} />
-            </div>
-            <KpiGrid data={data} onNavigate={onNavigate} />
-            <div className="ops-desktop-territory-row">
-              <TerritoryProgression data={data} />
-              <RevenueAtRisk data={data} onOpenModal={setModal} />
-            </div>
-            <div className="ops-desktop-performance-row">
-              <PerformanceGauges data={data} />
-              <QuickActions onNavigate={onNavigate} onOpenModal={setModal} />
-            </div>
-            <ReflectionDigest onNavigate={onNavigate} />
           </>
         )}
       </div>

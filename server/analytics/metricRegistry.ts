@@ -154,6 +154,22 @@ export const METRICS: Record<string, MetricDef> = {
     supportsComparison: false,
     resolver: "getRepeatCustomerStats",
   },
+  top_customer_revenue: {
+    id: "top_customer_revenue",
+    label: "Top customers by paid revenue",
+    unit: "currency",
+    dateBasis: "paidAt",
+    includedSources: [
+      "Orders marked paid in admin (Stripe/native)",
+      "Grouped by customer name and phone",
+      "Columns: orders.firstName, orders.lastName, orders.phone, orders.total",
+    ],
+    excludedSources: STRIPE_EXCLUDED,
+    allowedGroupBy: [],
+    allowedChartTypes: ["bar"],
+    supportsComparison: false,
+    resolver: "getTopCustomersByRevenue",
+  },
 };
 
 export const METRIC_IDS = Object.keys(METRICS);

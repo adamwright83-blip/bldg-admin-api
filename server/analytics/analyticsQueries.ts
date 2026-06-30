@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "../db";
 import { orders, cleancloudPaidOrders, clearentTransactions } from "../../drizzle/schema";
 
@@ -32,6 +32,18 @@ export type RepeatCustomerStats = {
   repeatCustomers: number;
   oneTimeCustomers: number;
   repeatRate: number;
+};
+
+export type CustomerRevenueRow = {
+  customerName: string;
+  phone: string;
+  revenue: number;
+  orderCount: number;
+  avgOrderValue: number;
+};
+
+export type CustomerRevenueStats = {
+  customers: CustomerRevenueRow[];
 };
 
 export type MetricUnit = "currency" | "count" | "weight_lbs";
@@ -237,6 +249,54 @@ export async function getRepeatCustomerStats(
     repeatCustomers,
     oneTimeCustomers,
     repeatRate: totalCustomers > 0 ? Math.round((repeatCustomers / totalCustomers) * 100) / 100 : 0,
+  };
+}
+
+/** Paid revenue grouped by customer, highest grossing first. */
+export async function getTopCustomersByRevenue(
+  tenantId: string,
+  params: { range: DateRange; limit?: number }
+): Promise<CustomerRevenueStats> {
+  const db = await getDb();
+  if (!db) return { customers: [] };
+
+  const revenueExpr = sql<string>`COALESCE(SUM(${orders.total}), 0)`;
+  const orderCountExpr = sql<number>`COUNT(*)`;
+
+  const rows = await db
+    .select({
+      firstName: orders.firstName,
+      lastName: orders.lastName,
+      phone: orders.phone,
+      revenue: revenueExpr,
+      orderCount: orderCountExpr,
+    })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.tenantId, tenantId),
+        sql`${orders.paid} = true`,
+        sql`DATE(${orders.paidAt}) >= ${params.range.start}`,
+        sql`DATE(${orders.paidAt}) <= ${params.range.end}`
+      )
+    )
+    .groupBy(orders.phone, orders.firstName, orders.lastName)
+    .orderBy(desc(revenueExpr))
+    .limit(params.limit ?? 5);
+
+  return {
+    customers: rows.map((row) => {
+      const revenue = Number(row.revenue);
+      const orderCount = Number(row.orderCount);
+      const customerName = `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim() || "Unknown customer";
+      return {
+        customerName,
+        phone: row.phone ?? "",
+        revenue: Math.round(revenue * 100) / 100,
+        orderCount,
+        avgOrderValue: orderCount > 0 ? Math.round((revenue / orderCount) * 100) / 100 : 0,
+      };
+    }),
   };
 }
 

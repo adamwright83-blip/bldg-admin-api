@@ -3023,6 +3023,47 @@ button.ops-kpi-card:hover {
   gap: 16px;
 }
 
+.ops-kingdom-cta-rail {
+  display: grid;
+  gap: 8px;
+}
+
+.ops-kingdom-cta-rail button {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(177, 132, 55, 0.18);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(251, 248, 241, 0.72));
+  color: #15110c;
+  text-align: left;
+  padding: 9px 11px;
+  box-shadow: 0 10px 24px rgba(70, 47, 19, 0.06);
+}
+
+.ops-kingdom-cta-rail button:hover {
+  border-color: rgba(185, 133, 53, 0.34);
+  background: #fff8e8;
+}
+
+.ops-kingdom-cta-rail span,
+.ops-kingdom-cta-rail small {
+  display: block;
+}
+
+.ops-kingdom-cta-rail span {
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.ops-kingdom-cta-rail small {
+  margin-top: 4px;
+  color: rgba(21, 17, 12, 0.52);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
 @media (max-width: 1023px) {
   .oa-home {
     grid-template-columns: minmax(0, 1fr);
@@ -3146,11 +3187,21 @@ button.ops-kpi-card:hover {
   .oa-provenance > div {
     border-top: 0;
   }
+
+  .ops-kingdom-cta-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (min-width: 1024px) {
   .ops-board-home {
     padding: 24px;
+  }
+
+  .ops-kingdom-home {
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .ops-mobile-board {
@@ -3162,6 +3213,75 @@ button.ops-kpi-card:hover {
     margin: 0 auto;
     display: grid;
     gap: 16px;
+  }
+
+  .ops-kingdom-home .ops-desktop-board {
+    height: calc(100vh - 48px);
+    grid-template-rows: minmax(250px, 36vh) auto auto minmax(0, 1fr);
+    align-content: start;
+    overflow: hidden;
+  }
+
+  .ops-kingdom-home .lk {
+    height: 100%;
+    min-height: 250px;
+    margin-bottom: 0;
+  }
+
+  .ops-kingdom-home .sky-bar {
+    min-height: 54px;
+  }
+
+  .ops-kingdom-home .ops-war-strip {
+    min-height: 40px;
+  }
+
+  .ops-kingdom-command-row {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 244px;
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .ops-kingdom-command-row .oa-composer-panel {
+    min-height: 0;
+  }
+
+  .ops-kingdom-composer .oa-demo-banner {
+    padding: 4px 10px;
+  }
+
+  .ops-kingdom-composer .oa-composer-head {
+    padding: 12px 16px 10px;
+  }
+
+  .ops-kingdom-composer .oa-composer-title img {
+    width: 42px;
+    height: 42px;
+  }
+
+  .ops-kingdom-composer .oa-composer-title strong {
+    font-size: 22px;
+  }
+
+  .ops-kingdom-composer .oa-messages {
+    max-height: 176px;
+    padding: 12px 16px;
+  }
+
+  .ops-kingdom-composer .oa-empty-state {
+    grid-template-columns: minmax(0, 1fr) 286px;
+    gap: 14px;
+  }
+
+  .ops-kingdom-composer .oa-input-form {
+    margin: 0 16px 12px;
+  }
+
+  .ops-kingdom-command-row .ops-kingdom-cta-rail {
+    align-content: stretch;
+    grid-template-rows: repeat(6, minmax(0, 1fr));
   }
 
   .ops-desktop-board .ops-status-strip {

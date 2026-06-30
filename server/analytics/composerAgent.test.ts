@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { runComposerTurn, normalizeRange } from "./composerAgent";
 import type { ComposerDeps } from "./composerAgent";
 import { buildQueryMeta } from "./metricRegistry";
-import type { RevenueSummary, OrderStats, OpenOrderStats, RepeatCustomerStats, MetricComparison, DataCompleteness } from "./analyticsQueries";
+import type { RevenueSummary, OrderStats, OpenOrderStats, RepeatCustomerStats, CustomerRevenueStats, MetricComparison, DataCompleteness } from "./analyticsQueries";
 
 // ── Fixture data with KNOWN values (used in golden tests) ────────────────────
 
@@ -35,6 +35,13 @@ const mockRepeat: RepeatCustomerStats = {
   repeatCustomers: 7,
   oneTimeCustomers: 13,
   repeatRate: 0.35,
+};
+
+const mockCustomerRevenue: CustomerRevenueStats = {
+  customers: [
+    { customerName: "Karen Bernstein", phone: "(323) 555-0184", revenue: 684.5, orderCount: 9, avgOrderValue: 76.06 },
+    { customerName: "John Olajuwon", phone: "(323) 555-0137", revenue: 612.25, orderCount: 8, avgOrderValue: 76.53 },
+  ],
 };
 
 const mockComparison: MetricComparison = {
@@ -110,6 +117,7 @@ const mockLiveSource = {
   getOrderStats: vi.fn().mockResolvedValue(mockStats),
   getOpenOrderStats: vi.fn().mockResolvedValue(mockOpenOrders),
   getRepeatCustomerStats: vi.fn().mockResolvedValue(mockRepeat),
+  getTopCustomersByRevenue: vi.fn().mockResolvedValue(mockCustomerRevenue),
   getMetricComparison: vi.fn().mockResolvedValue(mockComparison),
   getDataCompleteness: vi.fn().mockResolvedValue(mockCompleteness),
 };
@@ -119,6 +127,7 @@ const mockDemoSource = {
   getOrderStats: vi.fn().mockResolvedValue(mockStats),
   getOpenOrderStats: vi.fn().mockResolvedValue(mockOpenOrders),
   getRepeatCustomerStats: vi.fn().mockResolvedValue(mockRepeat),
+  getTopCustomersByRevenue: vi.fn().mockResolvedValue(mockCustomerRevenue),
   getMetricComparison: vi.fn().mockResolvedValue(mockComparison),
   getDataCompleteness: vi.fn().mockResolvedValue(mockCompleteness),
 };
@@ -286,6 +295,33 @@ describe("demo mode", () => {
       deps
     );
     expect(result.meta.demoMode).toBe(true);
+  });
+});
+
+describe("customer revenue ranking", () => {
+  it("answers top grossing customer questions with a customer name and ranking table", async () => {
+    const deps = makeDeps([
+      makePlannerResponse({ metricIds: ["top_customer_revenue"] }),
+      makeAnswererResponse({
+        answer: "The data does not include a customer-level breakdown.",
+        headlineLabel: "Top grossing customer",
+      }),
+    ]);
+
+    const result = await runComposerTurn({
+      tenantId: "tenant_a",
+      question: "Who is my top grossing customer?",
+      history: [],
+      demoMode: true,
+    }, deps);
+
+    expect(result.answer).toContain("Karen Bernstein");
+    expect(result.answer).toContain("$684.50");
+    expect(result.headline?.value).toBe("Karen Bernstein");
+    expect(result.table?.columns).toEqual(["Customer", "Revenue", "Orders", "Avg order"]);
+    expect(result.table?.rows[0]).toEqual(["Karen Bernstein", "$684.50", 9, "$76.06"]);
+    expect(result.chart?.title).toBe("Top customers by paid revenue");
+    expect(result.meta.source).toBe("Top customers by paid revenue");
   });
 });
 
