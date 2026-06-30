@@ -1036,15 +1036,6 @@ export const appRouter = router({
                 .enum(["all", "pickup_completed", "dropoff_completed"])
                 .default("all"),
               customerSearch: z.string().max(120).optional(),
-              sortBy: z
-                .enum([
-                  "event_date",
-                  "card_charged_date",
-                  "order_placed_date",
-                  "order_delivered_date",
-                ])
-                .default("event_date"),
-              sortDirection: z.enum(["desc", "asc"]).default("desc"),
               page: z.number().int().min(1).default(1),
               pageSize: z.number().int().min(1).max(200).default(50),
             })
@@ -1073,15 +1064,6 @@ export const appRouter = router({
                 .enum(["all", "pickup_completed", "dropoff_completed"])
                 .default("all"),
               customerSearch: z.string().max(120).optional(),
-              sortBy: z
-                .enum([
-                  "event_date",
-                  "card_charged_date",
-                  "order_placed_date",
-                  "order_delivered_date",
-                ])
-                .default("event_date"),
-              sortDirection: z.enum(["desc", "asc"]).default("desc"),
             })
             .optional()
         )

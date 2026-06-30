@@ -1,48 +1,11 @@
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  getTableColumns,
-  gte,
-  lt,
-  or,
-  sql,
-  type SQL,
-} from "drizzle-orm";
-import {
-  operationsEvents,
-  orders,
-  type OperationsEvent,
-} from "../drizzle/schema";
-import {
-  getDashboardTimeZone,
-  zonedDayStartUtc,
-  zonedNextDayYmd,
-  zonedYmd,
-} from "./dashboardZoned";
+import { and, desc, eq, getTableColumns, gte, lt, or, sql, type SQL } from "drizzle-orm";
+import { operationsEvents, orders, type OperationsEvent } from "../drizzle/schema";
+import { getDashboardTimeZone, zonedDayStartUtc, zonedNextDayYmd, zonedYmd } from "./dashboardZoned";
 import { getDb } from "./db";
 
-export type OperationsEventsBusinessUnit =
-  | "all"
-  | "laundry_butler"
-  | "laundry_farm";
-export type OperationsEventsBuilding =
-  | "all"
-  | "opus_la"
-  | "century_park_east"
-  | "other"
-  | "unresolved";
-export type OperationsEventsEventType =
-  | "all"
-  | "pickup_completed"
-  | "dropoff_completed";
-export type OperationsEventsSortBy =
-  | "event_date"
-  | "card_charged_date"
-  | "order_placed_date"
-  | "order_delivered_date";
-export type OperationsEventsSortDirection = "desc" | "asc";
+export type OperationsEventsBusinessUnit = "all" | "laundry_butler" | "laundry_farm";
+export type OperationsEventsBuilding = "all" | "opus_la" | "century_park_east" | "other" | "unresolved";
+export type OperationsEventsEventType = "all" | "pickup_completed" | "dropoff_completed";
 
 export type OperationsEventsFilters = {
   startDate?: string | null;
@@ -51,8 +14,6 @@ export type OperationsEventsFilters = {
   building?: OperationsEventsBuilding;
   eventType?: OperationsEventsEventType;
   customerSearch?: string | null;
-  sortBy?: OperationsEventsSortBy;
-  sortDirection?: OperationsEventsSortDirection;
   page?: number;
   pageSize?: number;
 };
@@ -61,13 +22,9 @@ export type OperationsEventDashboardRow = OperationsEvent & {
   chargedAmount: string | null;
   paid: boolean | null;
   paidAt: Date | null;
-  orderCreatedAt: Date | null;
-  orderDeliveredAt: Date | null;
 };
 
-export type NormalizedOperationsEventsFilters = Required<
-  Omit<OperationsEventsFilters, "customerSearch">
-> & {
+export type NormalizedOperationsEventsFilters = Required<Omit<OperationsEventsFilters, "customerSearch">> & {
   customerSearch: string;
   startUtc: Date;
   endExclusiveUtc: Date;
@@ -99,8 +56,6 @@ export const OPERATIONS_EVENTS_CSV_COLUMNS = [
   "charged_amount",
   "paid",
   "paid_at",
-  "order_created_at",
-  "order_delivered_at",
   "bag_count",
   "garment_count",
   "weight_lbs",
@@ -120,14 +75,10 @@ export function normalizeOperationsEventsFilters(
   const endDate = input.endDate?.trim() || zonedYmd(now, timeZone);
   const fallbackStart = new Date(now);
   fallbackStart.setUTCDate(fallbackStart.getUTCDate() - 30);
-  const startDate =
-    input.startDate?.trim() || zonedYmd(fallbackStart, timeZone);
+  const startDate = input.startDate?.trim() || zonedYmd(fallbackStart, timeZone);
   const endExclusiveDate = zonedNextDayYmd(endDate, timeZone);
   const page = Math.max(1, Math.trunc(input.page ?? 1));
-  const pageSize = Math.min(
-    Math.max(1, Math.trunc(input.pageSize ?? DEFAULT_PAGE_SIZE)),
-    200
-  );
+  const pageSize = Math.min(Math.max(1, Math.trunc(input.pageSize ?? DEFAULT_PAGE_SIZE)), 200);
   return {
     startDate,
     endDate,
@@ -135,8 +86,6 @@ export function normalizeOperationsEventsFilters(
     building: input.building ?? "all",
     eventType: input.eventType ?? "all",
     customerSearch: input.customerSearch?.trim() ?? "",
-    sortBy: input.sortBy ?? "event_date",
-    sortDirection: input.sortDirection ?? "desc",
     page,
     pageSize,
     startUtc: zonedDayStartUtc(startDate, timeZone),
@@ -158,28 +107,18 @@ function knownBuildingWhere(building: "opus_la" | "century_park_east"): SQL {
   ) as SQL;
 }
 
-export function operationsEventsWhere(
-  filters: NormalizedOperationsEventsFilters
-): SQL | undefined {
+export function operationsEventsWhere(filters: NormalizedOperationsEventsFilters): SQL | undefined {
   const clauses: SQL[] = [
     gte(operationsEvents.actualEventTimestamp, filters.startUtc),
     lt(operationsEvents.actualEventTimestamp, filters.endExclusiveUtc),
   ];
 
-  if (filters.businessUnit === "laundry_butler")
-    clauses.push(eq(operationsEvents.tenantId, "default"));
-  if (filters.businessUnit === "laundry_farm")
-    clauses.push(eq(operationsEvents.tenantId, "laundry_farm"));
-  if (filters.eventType !== "all")
-    clauses.push(eq(operationsEvents.sourceEventType, filters.eventType));
+  if (filters.businessUnit === "laundry_butler") clauses.push(eq(operationsEvents.tenantId, "default"));
+  if (filters.businessUnit === "laundry_farm") clauses.push(eq(operationsEvents.tenantId, "laundry_farm"));
+  if (filters.eventType !== "all") clauses.push(eq(operationsEvents.sourceEventType, filters.eventType));
   if (filters.building === "unresolved") {
-    clauses.push(
-      eq(operationsEvents.buildingResolutionStatus, "unresolved_needs_mapping")
-    );
-  } else if (
-    filters.building === "opus_la" ||
-    filters.building === "century_park_east"
-  ) {
+    clauses.push(eq(operationsEvents.buildingResolutionStatus, "unresolved_needs_mapping"));
+  } else if (filters.building === "opus_la" || filters.building === "century_park_east") {
     clauses.push(knownBuildingWhere(filters.building));
   } else if (filters.building === "other") {
     clauses.push(
@@ -208,12 +147,7 @@ export function operationsEventsWhere(
 
 function csvCell(value: unknown): string {
   if (value == null) return "";
-  const raw =
-    value instanceof Date
-      ? value.toISOString()
-      : typeof value === "object"
-        ? JSON.stringify(value)
-        : String(value);
+  const raw = value instanceof Date ? value.toISOString() : typeof value === "object" ? JSON.stringify(value) : String(value);
   return /[",\n\r]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
 }
 
@@ -223,58 +157,10 @@ function operationsEventDashboardSelect() {
     chargedAmount: orders.total,
     paid: orders.paid,
     paidAt: orders.paidAt,
-    orderCreatedAt: orders.createdAt,
-    orderDeliveredAt: sql<Date | null>`(
-      SELECT MAX(oe_delivered.actualEventTimestamp)
-      FROM operations_events oe_delivered
-      WHERE oe_delivered.orderId = ${orders.id}
-        AND oe_delivered.sourceEventType = 'dropoff_completed'
-    )`,
   };
 }
 
-function operationsEventsSortExpression(sortBy: OperationsEventsSortBy) {
-  if (sortBy === "card_charged_date") return orders.paidAt;
-  if (sortBy === "order_placed_date") return orders.createdAt;
-  if (sortBy === "order_delivered_date") {
-    return sql<Date | null>`(
-      SELECT MAX(oe_delivered.actualEventTimestamp)
-      FROM operations_events oe_delivered
-      WHERE oe_delivered.orderId = ${orders.id}
-        AND oe_delivered.sourceEventType = 'dropoff_completed'
-    )`;
-  }
-  return operationsEvents.actualEventTimestamp;
-}
-
-export function operationsEventsOrderBy(
-  filters: Pick<NormalizedOperationsEventsFilters, "sortBy" | "sortDirection">
-) {
-  const sortExpression = operationsEventsSortExpression(filters.sortBy);
-  const primary =
-    filters.sortDirection === "asc"
-      ? asc(sortExpression)
-      : desc(sortExpression);
-  const eventTieBreaker =
-    filters.sortDirection === "asc"
-      ? asc(operationsEvents.actualEventTimestamp)
-      : desc(operationsEvents.actualEventTimestamp);
-  const idTieBreaker =
-    filters.sortDirection === "asc"
-      ? asc(operationsEvents.id)
-      : desc(operationsEvents.id);
-
-  return [
-    sql`${sortExpression} IS NULL`,
-    primary,
-    eventTieBreaker,
-    idTieBreaker,
-  ] as const;
-}
-
-export function operationsEventsToCsv(
-  rows: OperationsEventDashboardRow[]
-): string {
+export function operationsEventsToCsv(rows: OperationsEventDashboardRow[]): string {
   const lines = [OPERATIONS_EVENTS_CSV_COLUMNS.join(",")];
   for (const row of rows) {
     const values = [
@@ -302,8 +188,6 @@ export function operationsEventsToCsv(
       row.chargedAmount,
       row.paid,
       row.paidAt,
-      row.orderCreatedAt,
-      row.orderDeliveredAt,
       row.bagCount,
       row.garmentCount,
       row.weightLbs,
@@ -320,50 +204,30 @@ export function operationsEventsToCsv(
 export function summarizeOperationsEventRows(rows: OperationsEvent[]) {
   return {
     totalEvents: rows.length,
-    pickupCount: rows.filter(row => row.sourceEventType === "pickup_completed")
-      .length,
-    dropoffCount: rows.filter(
-      row => row.sourceEventType === "dropoff_completed"
-    ).length,
-    unresolvedBuildingCount: rows.filter(
-      row => row.buildingResolutionStatus === "unresolved_needs_mapping"
-    ).length,
+    pickupCount: rows.filter((row) => row.sourceEventType === "pickup_completed").length,
+    dropoffCount: rows.filter((row) => row.sourceEventType === "dropoff_completed").length,
+    unresolvedBuildingCount: rows.filter((row) => row.buildingResolutionStatus === "unresolved_needs_mapping").length,
   };
 }
 
 export function operationEventWithinDashboardDateRange(
   row: OperationsEvent,
-  filters: Pick<
-    NormalizedOperationsEventsFilters,
-    "startUtc" | "endExclusiveUtc"
-  >
+  filters: Pick<NormalizedOperationsEventsFilters, "startUtc" | "endExclusiveUtc">
 ): boolean {
   const ts = row.actualEventTimestamp.getTime();
-  return (
-    ts >= filters.startUtc.getTime() && ts < filters.endExclusiveUtc.getTime()
-  );
+  return ts >= filters.startUtc.getTime() && ts < filters.endExclusiveUtc.getTime();
 }
 
-export function operationsEventsCsvFilename(
-  filters: NormalizedOperationsEventsFilters
-): string {
-  const parts = [
-    "operations-events",
-    `${filters.startDate}-to-${filters.endDate}`,
-  ];
-  if (filters.businessUnit !== "all")
-    parts.push(filters.businessUnit === "laundry_butler" ? "LB" : "LF");
-  if (filters.building !== "all")
-    parts.push(filters.building.replace(/_/g, "-"));
-  if (filters.eventType !== "all")
-    parts.push(filters.eventType.replace(/_/g, "-"));
+export function operationsEventsCsvFilename(filters: NormalizedOperationsEventsFilters): string {
+  const parts = ["operations-events", `${filters.startDate}-to-${filters.endDate}`];
+  if (filters.businessUnit !== "all") parts.push(filters.businessUnit === "laundry_butler" ? "LB" : "LF");
+  if (filters.building !== "all") parts.push(filters.building.replace(/_/g, "-"));
+  if (filters.eventType !== "all") parts.push(filters.eventType.replace(/_/g, "-"));
   if (filters.customerSearch) parts.push("search");
   return `${parts.join("-")}.csv`;
 }
 
-export async function listOperationsEvents(
-  input: OperationsEventsFilters = {}
-) {
+export async function listOperationsEvents(input: OperationsEventsFilters = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const filters = normalizeOperationsEventsFilters(input);
@@ -376,7 +240,7 @@ export async function listOperationsEvents(
       .from(operationsEvents)
       .leftJoin(orders, eq(operationsEvents.orderId, orders.id))
       .where(where)
-      .orderBy(...operationsEventsOrderBy(filters))
+      .orderBy(desc(operationsEvents.actualEventTimestamp), desc(operationsEvents.id))
       .limit(filters.pageSize)
       .offset(offset),
     db
@@ -390,22 +254,14 @@ export async function listOperationsEvents(
       .where(where),
   ]);
 
-  const summary = totals[0] ?? {
-    totalEvents: 0,
-    pickupCount: 0,
-    dropoffCount: 0,
-    unresolvedBuildingCount: 0,
-  };
+  const summary = totals[0] ?? { totalEvents: 0, pickupCount: 0, dropoffCount: 0, unresolvedBuildingCount: 0 };
   return {
     filters,
     rows,
     page: filters.page,
     pageSize: filters.pageSize,
     totalRows: Number(summary.totalEvents ?? 0),
-    totalPages: Math.max(
-      1,
-      Math.ceil(Number(summary.totalEvents ?? 0) / filters.pageSize)
-    ),
+    totalPages: Math.max(1, Math.ceil(Number(summary.totalEvents ?? 0) / filters.pageSize)),
     summary: {
       totalEvents: Number(summary.totalEvents ?? 0),
       pickupCount: Number(summary.pickupCount ?? 0),
@@ -415,9 +271,7 @@ export async function listOperationsEvents(
   };
 }
 
-export async function exportOperationsEventsCsv(
-  input: OperationsEventsFilters = {}
-) {
+export async function exportOperationsEventsCsv(input: OperationsEventsFilters = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const filters = normalizeOperationsEventsFilters(input);
@@ -426,7 +280,7 @@ export async function exportOperationsEventsCsv(
     .from(operationsEvents)
     .leftJoin(orders, eq(operationsEvents.orderId, orders.id))
     .where(operationsEventsWhere(filters))
-    .orderBy(...operationsEventsOrderBy(filters));
+    .orderBy(desc(operationsEvents.actualEventTimestamp), desc(operationsEvents.id));
   return {
     filename: operationsEventsCsvFilename(filters),
     csv: operationsEventsToCsv(rows),

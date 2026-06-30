@@ -7,15 +7,12 @@ import {
   operationEventWithinDashboardDateRange,
   normalizeOperationsEventsFilters,
   operationsEventsCsvFilename,
-  operationsEventsOrderBy,
   operationsEventsToCsv,
   operationsEventsWhere,
   summarizeOperationsEventRows,
 } from "./operationsEventsDashboard";
 
-function event(
-  overrides: Partial<OperationsEventDashboardRow> = {}
-): OperationsEventDashboardRow {
+function event(overrides: Partial<OperationsEventDashboardRow> = {}): OperationsEventDashboardRow {
   const ts = new Date("2026-05-14T20:15:00.000Z");
   return {
     id: 1,
@@ -43,8 +40,6 @@ function event(
     chargedAmount: "42.50",
     paid: true,
     paidAt: new Date("2026-05-15T02:30:00.000Z"),
-    orderCreatedAt: new Date("2026-05-14T19:45:00.000Z"),
-    orderDeliveredAt: null,
     bagCount: 2,
     garmentCount: null,
     weightLbs: "12.50",
@@ -55,31 +50,19 @@ function event(
   };
 }
 
-function whereSql(
-  input: Parameters<typeof normalizeOperationsEventsFilters>[0]
-) {
+function whereSql(input: Parameters<typeof normalizeOperationsEventsFilters>[0]) {
   const dialect = new MySqlDialect();
-  const where = operationsEventsWhere(
-    normalizeOperationsEventsFilters(
-      input,
-      new Date("2026-05-14T19:00:00.000Z")
-    )
-  );
+  const where = operationsEventsWhere(normalizeOperationsEventsFilters(input, new Date("2026-05-14T19:00:00.000Z")));
   return dialect.sqlToQuery(where!);
 }
 
 describe("operations events dashboard helpers", () => {
   it("defaults dashboard query filters to the last 30 days", () => {
-    const filters = normalizeOperationsEventsFilters(
-      {},
-      new Date("2026-05-14T19:00:00.000Z")
-    );
+    const filters = normalizeOperationsEventsFilters({}, new Date("2026-05-14T19:00:00.000Z"));
     expect(filters.startDate).toBe("2026-04-14");
     expect(filters.endDate).toBe("2026-05-14");
     expect(filters.page).toBe(1);
     expect(filters.pageSize).toBe(50);
-    expect(filters.sortBy).toBe("event_date");
-    expect(filters.sortDirection).toBe("desc");
   });
 
   it("preserves event type, business unit, building, and customer filters", () => {
@@ -90,8 +73,6 @@ describe("operations events dashboard helpers", () => {
       businessUnit: "laundry_farm",
       building: "unresolved",
       customerSearch: "Moj",
-      sortBy: "card_charged_date",
-      sortDirection: "asc",
       page: 2,
     });
     expect(filters).toMatchObject({
@@ -101,8 +82,6 @@ describe("operations events dashboard helpers", () => {
       businessUnit: "laundry_farm",
       building: "unresolved",
       customerSearch: "Moj",
-      sortBy: "card_charged_date",
-      sortDirection: "asc",
       page: 2,
       pageSize: 50,
     });
@@ -115,20 +94,12 @@ describe("operations events dashboard helpers", () => {
     });
     expect(filters.timeZone).toBe("America/Los_Angeles");
     expect(filters.startUtc.toISOString()).toBe("2026-04-15T07:00:00.000Z");
-    expect(filters.endExclusiveUtc.toISOString()).toBe(
-      "2026-05-16T07:00:00.000Z"
-    );
+    expect(filters.endExclusiveUtc.toISOString()).toBe("2026-05-16T07:00:00.000Z");
 
     const query = whereSql({ startDate: "2026-04-15", endDate: "2026-05-15" });
-    expect(query.sql).toContain(
-      "`operations_events`.`actualEventTimestamp` >= ?"
-    );
-    expect(query.sql).toContain(
-      "`operations_events`.`actualEventTimestamp` < ?"
-    );
-    expect(query.sql).not.toContain(
-      "`operations_events`.`actualEventTimestamp` <= ?"
-    );
+    expect(query.sql).toContain("`operations_events`.`actualEventTimestamp` >= ?");
+    expect(query.sql).toContain("`operations_events`.`actualEventTimestamp` < ?");
+    expect(query.sql).not.toContain("`operations_events`.`actualEventTimestamp` <= ?");
   });
 
   it("includes the verified production smoke-test rows when the UI end date is 05/15/2026", () => {
@@ -154,9 +125,7 @@ describe("operations events dashboard helpers", () => {
       }),
     ];
 
-    expect(
-      rows.every(row => operationEventWithinDashboardDateRange(row, filters))
-    ).toBe(true);
+    expect(rows.every((row) => operationEventWithinDashboardDateRange(row, filters))).toBe(true);
   });
 
   it("keeps the displayed end date inclusive but excludes the following Los Angeles local day", () => {
@@ -164,18 +133,8 @@ describe("operations events dashboard helpers", () => {
       startDate: "2026-05-15",
       endDate: "2026-05-15",
     });
-    expect(
-      operationEventWithinDashboardDateRange(
-        event({ actualEventTimestamp: new Date("2026-05-16T06:59:59.999Z") }),
-        filters
-      )
-    ).toBe(true);
-    expect(
-      operationEventWithinDashboardDateRange(
-        event({ actualEventTimestamp: new Date("2026-05-16T07:00:00.000Z") }),
-        filters
-      )
-    ).toBe(false);
+    expect(operationEventWithinDashboardDateRange(event({ actualEventTimestamp: new Date("2026-05-16T06:59:59.999Z") }), filters)).toBe(true);
+    expect(operationEventWithinDashboardDateRange(event({ actualEventTimestamp: new Date("2026-05-16T07:00:00.000Z") }), filters)).toBe(false);
   });
 
   it("event type filter restricts results to pickup or dropoff events", () => {
@@ -193,15 +152,7 @@ describe("operations events dashboard helpers", () => {
   it("does not exclude tenantId default rows when business unit filter is All", () => {
     const query = whereSql({ businessUnit: "all" });
     expect(query.sql).not.toContain("`operations_events`.`tenantId` = ?");
-    expect(
-      operationEventWithinDashboardDateRange(
-        event({ tenantId: "default" }),
-        normalizeOperationsEventsFilters(
-          {},
-          new Date("2026-05-14T19:00:00.000Z")
-        )
-      )
-    ).toBe(true);
+    expect(operationEventWithinDashboardDateRange(event({ tenantId: "default" }), normalizeOperationsEventsFilters({}))).toBe(true);
   });
 
   it("summarizes the verified fixture rows as total 2, pickup 1, dropoff 1", () => {
@@ -229,31 +180,21 @@ describe("operations events dashboard helpers", () => {
   it("building filter handles known and unresolved building buckets", () => {
     const opus = whereSql({ building: "opus_la" });
     expect(opus.sql).toContain("`operations_events`.`buildingSlug` = ?");
-    expect(opus.sql).toContain(
-      "LOWER(`operations_events`.`buildingName`) LIKE ?"
-    );
+    expect(opus.sql).toContain("LOWER(`operations_events`.`buildingName`) LIKE ?");
     expect(opus.params).toContain("opusla");
     expect(opus.params).toContain("%opus%");
 
     const unresolved = whereSql({ building: "unresolved" });
-    expect(unresolved.sql).toContain(
-      "`operations_events`.`buildingResolutionStatus` = ?"
-    );
+    expect(unresolved.sql).toContain("`operations_events`.`buildingResolutionStatus` = ?");
     expect(unresolved.params).toContain("unresolved_needs_mapping");
   });
 
   it("customer search uses MySQL-safe LIKE clauses for name, email, and phone", () => {
     const query = whereSql({ customerSearch: "Moj" });
     expect(query.sql).not.toMatch(/\bILIKE\b/i);
-    expect(query.sql).toContain(
-      "LOWER(`operations_events`.`customerName`) LIKE ?"
-    );
-    expect(query.sql).toContain(
-      "LOWER(COALESCE(`operations_events`.`customerEmail`, '')) LIKE ?"
-    );
-    expect(query.sql).toContain(
-      "COALESCE(`operations_events`.`customerPhone`, '') LIKE ?"
-    );
+    expect(query.sql).toContain("LOWER(`operations_events`.`customerName`) LIKE ?");
+    expect(query.sql).toContain("LOWER(COALESCE(`operations_events`.`customerEmail`, '')) LIKE ?");
+    expect(query.sql).toContain("COALESCE(`operations_events`.`customerPhone`, '') LIKE ?");
     expect(query.params).toContain("%moj%");
     expect(query.params).toContain("%Moj%");
   });
@@ -268,13 +209,9 @@ describe("operations events dashboard helpers", () => {
     expect(csv).toContain("2026-05-14T20:15:00.000Z");
     expect(csv).toContain("pickup_completed");
     expect(csv).toContain("Moj Salon");
-    expect(csv).toContain(
-      "42.50,true,2026-05-15T02:30:00.000Z,2026-05-14T19:45:00.000Z,"
-    );
+    expect(csv).toContain("42.50,true,2026-05-15T02:30:00.000Z");
     expect(csv).toContain("12.50");
-    expect(csv).toContain(
-      '"{""orderSnapshot"":{""id"":42,""firstName"":""Moj""}}"'
-    );
+    expect(csv).toContain('"{""orderSnapshot"":{""id"":42,""firstName"":""Moj""}}"');
   });
 
   it("operations event dashboard rows include charged order fields without losing event fields", () => {
@@ -285,8 +222,6 @@ describe("operations events dashboard helpers", () => {
       chargedAmount: "38.00",
       paid: true,
       paidAt: new Date("2026-05-16T01:00:00.000Z"),
-      orderCreatedAt: new Date("2026-05-15T22:00:00.000Z"),
-      orderDeliveredAt: new Date("2026-05-16T03:00:00.000Z"),
     });
 
     expect(row).toMatchObject({
@@ -298,29 +233,6 @@ describe("operations events dashboard helpers", () => {
       paid: true,
     });
     expect(row.paidAt?.toISOString()).toBe("2026-05-16T01:00:00.000Z");
-    expect(row.orderCreatedAt?.toISOString()).toBe("2026-05-15T22:00:00.000Z");
-    expect(row.orderDeliveredAt?.toISOString()).toBe(
-      "2026-05-16T03:00:00.000Z"
-    );
-  });
-
-  it("can order rows by event, card charged, placed, or delivered dates", () => {
-    const source = readFileSync(
-      new URL("./operationsEventsDashboard.ts", import.meta.url),
-      "utf8"
-    );
-    expect(source).toContain('sortBy === "card_charged_date"');
-    expect(source).toContain("return orders.paidAt");
-    expect(source).toContain('sortBy === "order_placed_date"');
-    expect(source).toContain("return orders.createdAt");
-    expect(source).toContain('sortBy === "order_delivered_date"');
-    expect(source).toContain("SELECT MAX(oe_delivered.actualEventTimestamp)");
-
-    const orderBy = operationsEventsOrderBy({
-      sortBy: "order_delivered_date",
-      sortDirection: "desc",
-    });
-    expect(orderBy.length).toBe(4);
   });
 
   it("CSV filename reflects active filters", () => {
@@ -338,56 +250,29 @@ describe("operations events dashboard helpers", () => {
   });
 
   it("customer search implementation is MySQL-safe and does not use ILIKE", () => {
-    const source = readFileSync(
-      new URL("./operationsEventsDashboard.ts", import.meta.url),
-      "utf8"
-    );
+    const source = readFileSync(new URL("./operationsEventsDashboard.ts", import.meta.url), "utf8");
     expect(source).not.toMatch(/\bILIKE\b/i);
     expect(source).toContain("LOWER(${operationsEvents.customerName}) LIKE");
-    expect(source).toContain(
-      "LOWER(COALESCE(${operationsEvents.customerEmail}, '')) LIKE"
-    );
-    expect(source).toContain(
-      "COALESCE(${operationsEvents.customerPhone}, '') LIKE"
-    );
+    expect(source).toContain("LOWER(COALESCE(${operationsEvents.customerEmail}, '')) LIKE");
+    expect(source).toContain("COALESCE(${operationsEvents.customerPhone}, '') LIKE");
   });
 
   it("list and CSV queries join operations events to orders for charged amounts", () => {
-    const source = readFileSync(
-      new URL("./operationsEventsDashboard.ts", import.meta.url),
-      "utf8"
-    );
-    expect(source).toContain(
-      "leftJoin(orders, eq(operationsEvents.orderId, orders.id))"
-    );
+    const source = readFileSync(new URL("./operationsEventsDashboard.ts", import.meta.url), "utf8");
+    expect(source).toContain("leftJoin(orders, eq(operationsEvents.orderId, orders.id))");
     expect(source).toContain("chargedAmount: orders.total");
     expect(source).toContain("paid: orders.paid");
     expect(source).toContain("paidAt: orders.paidAt");
-    expect(source).toContain("orderCreatedAt: orders.createdAt");
-    expect(source).toContain("orderDeliveredAt:");
   });
 
   it("chargeCard persists Stripe payment truth before non-critical side effects", () => {
-    const source = readFileSync(
-      new URL("./routers.ts", import.meta.url),
-      "utf8"
-    );
-    const stripeCreate = source.indexOf(
-      "paymentIntent = await stripe.paymentIntents.create"
-    );
-    const paidUpdate = source.indexOf(
-      "await updateOrderIntake(input.orderId, {\n            paid: true"
-    );
-    const ensureEvent = source.indexOf(
-      "await ensurePickupCompletedOperationsEventForOrder(input.orderId"
-    );
-    const receipt = source.indexOf(
-      "const receiptToken = await new jose.SignJWT"
-    );
-    const sms = source.indexOf("await notifyCardCharged(");
-    const sheets = source.indexOf(
-      "await writeOrderToSheet(order, input.amountCents)"
-    );
+    const source = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
+    const stripeCreate = source.indexOf("paymentIntent = await stripe.paymentIntents.create");
+    const paidUpdate = source.indexOf("await updateOrderIntake(input.orderId, {\n            paid: true");
+    const ensureEvent = source.indexOf("await ensurePickupCompletedOperationsEventForOrder(input.orderId");
+    const receipt = source.indexOf("const receiptToken = await new jose.SignJWT");
+    const sms = source.indexOf("await notifyCardCharged(order.phone");
+    const sheets = source.indexOf("await writeOrderToSheet(order, input.amountCents)");
     const opsTask = source.indexOf("const task = await createOpsTask");
 
     expect(stripeCreate).toBeGreaterThan(-1);
@@ -399,22 +284,15 @@ describe("operations events dashboard helpers", () => {
     expect(opsTask).toBeGreaterThan(paidUpdate);
     expect(source).toContain("total: centsToDollars(input.amountCents)");
     expect(source).toContain('source: "admin_chargeCard"');
-    expect(source).toContain(
-      "[Receipt] Failed to generate receipt after successful charge:"
-    );
+    expect(source).toContain("[Receipt] Failed to generate receipt after successful charge:");
   });
 
   it("repair script updates paid order truth and ensures an operations event", () => {
-    const source = readFileSync(
-      new URL("../scripts/repair-stripe-paid-order.ts", import.meta.url),
-      "utf8"
-    );
-    expect(source).toContain('paymentIntent.status !== "succeeded"');
+    const source = readFileSync(new URL("../scripts/repair-stripe-paid-order.ts", import.meta.url), "utf8");
+    expect(source).toContain("paymentIntent.status !== \"succeeded\"");
     expect(source).toContain("paid: true");
     expect(source).toContain("stripePaymentIntentId: paymentIntent.id");
     expect(source).toContain("total: centsToDollars(paymentIntent.amount)");
-    expect(source).toContain(
-      "ensurePickupCompletedOperationsEventForOrder(orderId"
-    );
+    expect(source).toContain("ensurePickupCompletedOperationsEventForOrder(orderId");
   });
 });
