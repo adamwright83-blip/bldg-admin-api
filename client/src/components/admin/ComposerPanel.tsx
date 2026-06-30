@@ -81,6 +81,7 @@ export type ComposerPanelProps = {
   onNavigate: (path: string) => void;
   className?: string;
   defaultDemoMode?: boolean;
+  allowDemoMode?: boolean;
   variant?: "default" | "operator-home";
 };
 
@@ -351,11 +352,12 @@ export function ComposerPanel({
   onNavigate,
   className = "",
   defaultDemoMode = false,
+  allowDemoMode = true,
   variant = "default",
 }: ComposerPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [demoMode, setDemoMode] = useState(() => getInitialDemoMode(defaultDemoMode));
+  const [demoMode, setDemoMode] = useState(() => allowDemoMode && getInitialDemoMode(defaultDemoMode));
   const bottomRef = useRef<HTMLDivElement>(null);
   const hasUserInteractedRef = useRef(false);
 
@@ -381,6 +383,7 @@ export function ComposerPanel({
   }, [messages]);
 
   const toggleDemo = () => {
+    if (!allowDemoMode) return;
     setDemoMode((d) => {
       const next = !d;
       window.localStorage.setItem("operatorAnalystDemoMode", String(next));
@@ -399,7 +402,7 @@ export function ComposerPanel({
     const history = messages.map((m) => ({ role: m.role, content: m.content }));
     setMessages((prev) => [...prev, { role: "user", content: displayText }]);
     setInput("");
-    ask.mutate({ question: displayText, history, mode, demoMode });
+    ask.mutate({ question: displayText, history, mode, demoMode: allowDemoMode ? demoMode : false });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -415,7 +418,7 @@ export function ComposerPanel({
   return (
     <div className={rootClassName} style={isOperatorHome ? undefined : { minHeight: 340, maxHeight: 680 }}>
       {/* Demo banner */}
-      {demoMode && (
+      {allowDemoMode && demoMode && (
         <div className={isOperatorHome ? "oa-demo-banner" : "bg-amber-400 text-amber-900 text-center text-xs font-bold py-1.5 tracking-wide uppercase rounded-t-lg"}>
           DEMO DATA — NOT YOUR STORE
         </div>
@@ -435,23 +438,25 @@ export function ComposerPanel({
           </span>
         </div>
         <div className={isOperatorHome ? "oa-composer-tools" : "flex items-center gap-3"}>
-          <button
-            type="button"
-            onClick={toggleDemo}
-            className={isOperatorHome ? "oa-segmented-toggle" : "flex items-center gap-1.5 cursor-pointer select-none"}
-            aria-pressed={demoMode}
-          >
-            {isOperatorHome ? <span className={!demoMode ? "is-active" : ""}>Live</span> : null}
-            <span className={demoMode ? "is-active" : ""}>{isOperatorHome ? "Demo" : "Demo"}</span>
-            {!isOperatorHome ? (
-              <span
-                className={`w-7 h-4 rounded-full transition-colors relative cursor-pointer ${demoMode ? "bg-amber-400" : "bg-black/15"}`}
-              >
-                <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${demoMode ? "translate-x-3.5" : "translate-x-0.5"}`} />
-              </span>
-            ) : null}
-          </button>
-          {isOperatorHome ? (
+          {allowDemoMode ? (
+            <button
+              type="button"
+              onClick={toggleDemo}
+              className={isOperatorHome ? "oa-segmented-toggle" : "flex items-center gap-1.5 cursor-pointer select-none"}
+              aria-pressed={demoMode}
+            >
+              {isOperatorHome ? <span className={!demoMode ? "is-active" : ""}>Live</span> : null}
+              <span className={demoMode ? "is-active" : ""}>{isOperatorHome ? "Demo" : "Demo"}</span>
+              {!isOperatorHome ? (
+                <span
+                  className={`w-7 h-4 rounded-full transition-colors relative cursor-pointer ${demoMode ? "bg-amber-400" : "bg-black/15"}`}
+                >
+                  <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${demoMode ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                </span>
+              ) : null}
+            </button>
+          ) : null}
+          {isOperatorHome && allowDemoMode ? (
             <span className="oa-mode-pill">
               <i />
               Demo Mode

@@ -96,8 +96,8 @@ export function OpsBoardHome({
             <SkyBar />
             <WarStrip onNavigate={onNavigate} />
             <ComposerPanel
+              allowDemoMode={false}
               className="ops-kingdom-composer"
-              defaultDemoMode
               onNavigate={onNavigate}
               variant="operator-home"
             />
@@ -117,8 +117,8 @@ export function OpsBoardHome({
             <WarStrip onNavigate={onNavigate} />
             <div className="ops-kingdom-command-row">
               <ComposerPanel
+                allowDemoMode={false}
                 className="ops-kingdom-composer"
-                defaultDemoMode
                 onNavigate={onNavigate}
                 variant="operator-home"
               />
