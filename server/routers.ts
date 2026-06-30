@@ -733,6 +733,20 @@ export const appRouter = router({
 
   /* ===== ADMIN ROUTES (protected — owner only) ===== */
   admin: router({
+    askComposer: adminProcedure
+      .input(
+        z.object({
+          question: z.string().min(1).max(500),
+          history: z
+            .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() }))
+            .max(20)
+            .optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { runComposerTurn } = await import("./analytics/composerAgent");
+        return runComposerTurn({ tenantId: ctx.tenantId, question: input.question, history: input.history ?? [] });
+      }),
     requestJobCards: requestJobCardRouter,
     proposalReview: vendorProposalReviewRouter,
     firstRealProposalBootstrap: firstRealProposalBootstrapRouter,

@@ -17,6 +17,7 @@ import { OpsBoardModals } from "./OpsBoardModals";
 import { EmergencyTaskComposer } from "./EmergencyTaskComposer";
 import { SkyBackdrop, SkyBar, useCommandSky } from "../CommandSky";
 import { ReflectionDigest, WarStrip } from "../CommandCockpitBand";
+import { ComposerPanel } from "../ComposerPanel";
 import { CommandLanternKingdom } from "../CommandLanternKingdom";
 import type { AdminHomeData, LogOutreachPayload, OpsBoardModal } from "./types";
 
@@ -108,6 +109,9 @@ export function OpsBoardHome({
         <PerformanceGauges data={data} />
         <ReflectionDigest onNavigate={onNavigate} />
         <QuickActions onNavigate={onNavigate} onOpenModal={setModal} />
+        <div className="px-4 pb-4">
+          <ComposerPanel />
+        </div>
         <MobileBottomNav onNavigate={onNavigate} />
       </div>
 
@@ -131,6 +135,9 @@ export function OpsBoardHome({
           <QuickActions onNavigate={onNavigate} onOpenModal={setModal} />
         </div>
         <ReflectionDigest onNavigate={onNavigate} />
+        <div className="px-4 pb-6">
+          <ComposerPanel />
+        </div>
       </div>
 
       <OpsBoardModals
