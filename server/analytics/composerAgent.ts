@@ -245,6 +245,30 @@ function formatCurrency(n: number): string {
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function isoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function daysAgoRange(endIso: string, days: number): DateRange {
+  const end = new Date(endIso + "T00:00:00Z");
+  const start = new Date(end);
+  start.setUTCDate(end.getUTCDate() - (days - 1));
+  return { start: isoDate(start), end: endIso };
+}
+
+function allTimeRange(endIso: string): DateRange {
+  return { start: "1970-01-01", end: endIso };
+}
+
+function isTopCustomerQuestion(question: string): boolean {
+  return /\b(top|highest|biggest|best|most)\b/i.test(question) &&
+    /\b(customer|client|spender|grossing|revenue)\b/i.test(question);
+}
+
+function hasExplicitTimeframe(question: string): boolean {
+  return /\b(today|yesterday|week|month|year|quarter|last\s+\d+|past\s+\d+|\d+\s*(day|days|week|weeks|month|months)|all\s*time|lifetime|since|between|from)\b/i.test(question);
+}
+
 /** Format a value according to metric unit — used in comparison headline/table. */
 import type { MetricUnit } from "./metricRegistry";
 function formatValue(unit: MetricUnit, n: number): string {
@@ -382,6 +406,18 @@ function buildTable(results: QueryResults): ComposerTable | null {
 
   // Revenue time series table
   if (results.customerRevenue?.customers.length) {
+    if (results.customerRevenue.windows?.length) {
+      return {
+        columns: ["Timeframe", "Top customer", "Revenue", "Orders", "Avg order"],
+        rows: results.customerRevenue.windows.map((window) => [
+          window.label,
+          window.customerName,
+          formatCurrency(window.revenue),
+          window.orderCount,
+          formatCurrency(window.avgOrderValue),
+        ]),
+      };
+    }
     return {
       columns: ["Customer", "Revenue", "Orders", "Avg order"],
       rows: results.customerRevenue.customers.map((customer) => [
@@ -521,7 +557,8 @@ async function executeMetrics(
   tenantId: string,
   plan: PlannerOutput,
   range: DateRange,
-  source: AnalyticsSource
+  source: AnalyticsSource,
+  options?: { includeCustomerRevenueWindows?: boolean; today?: string }
 ): Promise<QueryResults> {
   const results: QueryResults = {
     revenue: null,
@@ -574,11 +611,32 @@ async function executeMetrics(
         : Promise.resolve(null),
     ]);
 
+  let customerRevenueWithWindows = customerRevenue;
+  if (needsCustomerRevenue && customerRevenue && options?.includeCustomerRevenueWindows) {
+    const today = options.today ?? new Date().toISOString().slice(0, 10);
+    const windowSpecs: Array<{ label: string; range: DateRange }> = [
+      { label: "Past 7 days", range: daysAgoRange(today, 7) },
+      { label: "Past 30 days", range: daysAgoRange(today, 30) },
+      { label: "All time", range: allTimeRange(today) },
+    ];
+    const windows = await Promise.all(
+      windowSpecs.map(async (spec) => {
+        const stats = await source.getTopCustomersByRevenue(tenantId, { range: spec.range, limit: 1 });
+        const top = stats.customers[0];
+        return top ? { ...top, label: spec.label, range: spec.range } : null;
+      })
+    );
+    customerRevenueWithWindows = {
+      ...customerRevenue,
+      windows: windows.filter((w): w is NonNullable<typeof w> => Boolean(w)),
+    };
+  }
+
   results.revenue = revenue;
   results.stats = stats;
   results.openOrders = openOrders;
   results.repeatCustomers = repeatCustomers;
-  results.customerRevenue = customerRevenue;
+  results.customerRevenue = customerRevenueWithWindows;
   results.comparison = comparison;
   results.completeness = completeness;
 
@@ -742,14 +800,24 @@ export async function runComposerTurn(
 
   // Validate metric IDs against registry (drop unknown ones, fallback to revenue).
   const validMetricIds = rawPlan.metricIds.filter((id) => METRICS[id]);
-  const metricIds = validMetricIds.length > 0 ? validMetricIds : ["revenue_paid_stripe"];
+  const inferredTopCustomer = isTopCustomerQuestion(question);
+  const metricIds = inferredTopCustomer
+    ? ["top_customer_revenue"]
+    : validMetricIds.length > 0
+      ? validMetricIds
+      : ["revenue_paid_stripe"];
   const plan: PlannerOutput = { ...rawPlan, metricIds };
 
   // Clamp/validate date range.
-  const range = normalizeRange(plan.range);
+  const range = inferredTopCustomer && !hasExplicitTimeframe(question)
+    ? allTimeRange(today)
+    : normalizeRange(plan.range);
 
   // ── Execute queries (tenantId always from ctx, never from LLM) ────────────
-  const results = await executeMetrics(tenantId, plan, range, source);
+  const results = await executeMetrics(tenantId, plan, range, source, {
+    includeCustomerRevenueWindows: inferredTopCustomer && !hasExplicitTimeframe(question),
+    today,
+  });
 
   // ── Build data structures deterministically ────────────────────────────────
   const dataContext = JSON.stringify({
@@ -820,7 +888,11 @@ export async function runComposerTurn(
   let answer = llmOutput.answer;
   if (results.customerRevenue?.customers.length) {
     const [top] = results.customerRevenue.customers;
-    answer = `${top.customerName} is the top grossing customer for this period, with ${formatCurrency(top.revenue)} across ${top.orderCount} paid orders. Average order value is ${formatCurrency(top.avgOrderValue)}.`;
+    const timeframe = range.start <= "1970-01-02" ? "all time" : "for this period";
+    const windowCopy = results.customerRevenue.windows?.length
+      ? " I also included 7-day, 30-day, and all-time context below."
+      : "";
+    answer = `${top.customerName} is the top grossing customer ${timeframe}, with ${formatCurrency(top.revenue)} across ${top.orderCount} paid orders. Average order value is ${formatCurrency(top.avgOrderValue)}.${windowCopy}`;
   }
 
   // Meta is always backend-built; LLM never writes it.

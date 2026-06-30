@@ -42,8 +42,14 @@ export type CustomerRevenueRow = {
   avgOrderValue: number;
 };
 
+export type CustomerRevenueWindow = CustomerRevenueRow & {
+  label: string;
+  range: DateRange;
+};
+
 export type CustomerRevenueStats = {
   customers: CustomerRevenueRow[];
+  windows?: CustomerRevenueWindow[];
 };
 
 export type MetricUnit = "currency" | "count" | "weight_lbs";

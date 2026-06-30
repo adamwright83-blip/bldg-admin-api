@@ -39,8 +39,8 @@ const mockRepeat: RepeatCustomerStats = {
 
 const mockCustomerRevenue: CustomerRevenueStats = {
   customers: [
+    { customerName: "Ryan Cohen", phone: "(323) 555-0101", revenue: 8240.75, orderCount: 62, avgOrderValue: 132.92 },
     { customerName: "Karen Bernstein", phone: "(323) 555-0184", revenue: 684.5, orderCount: 9, avgOrderValue: 76.06 },
-    { customerName: "John Olajuwon", phone: "(323) 555-0137", revenue: 612.25, orderCount: 8, avgOrderValue: 76.53 },
   ],
 };
 
@@ -299,29 +299,81 @@ describe("demo mode", () => {
 });
 
 describe("customer revenue ranking", () => {
-  it("answers top grossing customer questions with a customer name and ranking table", async () => {
+  it("defaults vague highest-grossing customer questions to all time and includes timeframe context", async () => {
+    const customerRevenueSpy = vi.fn().mockImplementation((_tenantId: string, params: { range: { start: string; end: string } }) => {
+      if (params.range.start <= "1970-01-02") {
+        return Promise.resolve({
+          customers: [
+            { customerName: "Ryan Cohen", phone: "(323) 555-0101", revenue: 8240.75, orderCount: 62, avgOrderValue: 132.92 },
+          ],
+        });
+      }
+      const days = Math.round((Date.parse(params.range.end) - Date.parse(params.range.start)) / 864e5) + 1;
+      if (days <= 7) {
+        return Promise.resolve({
+          customers: [
+            { customerName: "Abe Chung", phone: "(323) 555-0122", revenue: 81, orderCount: 1, avgOrderValue: 81 },
+          ],
+        });
+      }
+      return Promise.resolve({
+        customers: [
+          { customerName: "Karen Bernstein", phone: "(323) 555-0184", revenue: 684.5, orderCount: 9, avgOrderValue: 76.06 },
+        ],
+      });
+    });
     const deps = makeDeps([
       makePlannerResponse({ metricIds: ["top_customer_revenue"] }),
       makeAnswererResponse({
         answer: "The data does not include a customer-level breakdown.",
         headlineLabel: "Top grossing customer",
       }),
-    ]);
+    ], { getTopCustomersByRevenue: customerRevenueSpy });
 
     const result = await runComposerTurn({
       tenantId: "tenant_a",
-      question: "Who is my top grossing customer?",
+      question: "Who is my highest grossing customer?",
       history: [],
-      demoMode: true,
     }, deps);
 
-    expect(result.answer).toContain("Karen Bernstein");
-    expect(result.answer).toContain("$684.50");
-    expect(result.headline?.value).toBe("Karen Bernstein");
-    expect(result.table?.columns).toEqual(["Customer", "Revenue", "Orders", "Avg order"]);
-    expect(result.table?.rows[0]).toEqual(["Karen Bernstein", "$684.50", 9, "$76.06"]);
+    expect(customerRevenueSpy.mock.calls[0][1].range.start).toBe("1970-01-01");
+    expect(result.answer).toContain("Ryan Cohen");
+    expect(result.answer).toContain("all time");
+    expect(result.headline?.value).toBe("Ryan Cohen");
+    expect(result.table?.columns).toEqual(["Timeframe", "Top customer", "Revenue", "Orders", "Avg order"]);
+    expect(result.table?.rows).toEqual([
+      ["Past 7 days", "Abe Chung", "$81.00", 1, "$81.00"],
+      ["Past 30 days", "Karen Bernstein", "$684.50", 9, "$76.06"],
+      ["All time", "Ryan Cohen", "$8,240.75", 62, "$132.92"],
+    ]);
     expect(result.chart?.title).toBe("Top customers by paid revenue");
     expect(result.meta.source).toBe("Top customers by paid revenue");
+  });
+
+  it("honors an explicit customer revenue timeframe instead of forcing all time", async () => {
+    const customerRevenueSpy = vi.fn().mockResolvedValue({
+      customers: [
+        { customerName: "Abe Chung", phone: "(323) 555-0122", revenue: 81, orderCount: 1, avgOrderValue: 81 },
+      ],
+    });
+    const deps = makeDeps([
+      makePlannerResponse({
+        metricIds: ["top_customer_revenue"],
+        range: { start: "2025-06-22", end: "2025-06-29" },
+      }),
+      makeAnswererResponse({ headlineLabel: "Top customer revenue (last 7 days)" }),
+    ], { getTopCustomersByRevenue: customerRevenueSpy });
+
+    const result = await runComposerTurn({
+      tenantId: "tenant_a",
+      question: "Who is my highest grossing customer in the past 7 days?",
+      history: [],
+    }, deps);
+
+    expect(customerRevenueSpy.mock.calls[0][1].range.start).toBe("2025-06-22");
+    expect(result.answer).toContain("Abe Chung");
+    expect(result.answer).not.toContain("all time");
+    expect(result.table?.columns).toEqual(["Customer", "Revenue", "Orders", "Avg order"]);
   });
 });
 

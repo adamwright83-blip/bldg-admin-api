@@ -149,19 +149,29 @@ export function demoRepeatCustomerStats(
 
 export function demoTopCustomersByRevenue(
   _tenantId: string,
-  _params: { range: DateRange; limit?: number }
+  params: { range: DateRange; limit?: number }
 ): CustomerRevenueStats {
-  const customers = [
-    { customerName: "Karen Bernstein", phone: "(323) 555-0184", revenue: 684.5, orderCount: 9 },
-    { customerName: "John Olajuwon", phone: "(323) 555-0137", revenue: 612.25, orderCount: 8 },
-    { customerName: "Josie Phillips", phone: "(323) 555-0199", revenue: 548.1, orderCount: 7 },
-    { customerName: "Steve David", phone: "(323) 555-0172", revenue: 492.75, orderCount: 6 },
-    { customerName: "Adam Styles", phone: "(323) 555-0146", revenue: 438.6, orderCount: 6 },
-    { customerName: "Gerry Sullivan", phone: "(323) 555-0155", revenue: 397.4, orderCount: 5 },
-  ];
+  const isAllTime = params.range.start <= "1970-01-02";
+  const customers = isAllTime
+    ? [
+        { customerName: "Ryan Cohen", phone: "(323) 555-0101", revenue: 8240.75, orderCount: 62 },
+        { customerName: "Karen Bernstein", phone: "(323) 555-0184", revenue: 4684.5, orderCount: 49 },
+        { customerName: "John Olajuwon", phone: "(323) 555-0137", revenue: 3612.25, orderCount: 38 },
+        { customerName: "Josie Phillips", phone: "(323) 555-0199", revenue: 2548.1, orderCount: 27 },
+        { customerName: "Steve David", phone: "(323) 555-0172", revenue: 1492.75, orderCount: 16 },
+        { customerName: "Adam Styles", phone: "(323) 555-0146", revenue: 938.6, orderCount: 11 },
+      ]
+    : [
+        { customerName: "Abe Chung", phone: "(323) 555-0117", revenue: 81, orderCount: 1 },
+        { customerName: "Karen Bernstein", phone: "(323) 555-0184", revenue: 684.5, orderCount: 9 },
+        { customerName: "John Olajuwon", phone: "(323) 555-0137", revenue: 612.25, orderCount: 8 },
+        { customerName: "Josie Phillips", phone: "(323) 555-0199", revenue: 548.1, orderCount: 7 },
+        { customerName: "Steve David", phone: "(323) 555-0172", revenue: 492.75, orderCount: 6 },
+        { customerName: "Gerry Sullivan", phone: "(323) 555-0155", revenue: 397.4, orderCount: 5 },
+      ].sort((a, b) => b.revenue - a.revenue);
 
   return {
-    customers: customers.slice(0, _params.limit ?? 5).map((customer) => ({
+    customers: customers.slice(0, params.limit ?? 5).map((customer) => ({
       ...customer,
       avgOrderValue: Math.round((customer.revenue / customer.orderCount) * 100) / 100,
     })),
