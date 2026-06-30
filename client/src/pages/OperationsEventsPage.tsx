@@ -9,11 +9,23 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { trpc } from "@/lib/trpc";
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
-type OperationsEventRow = RouterOutput["admin"]["operationsEvents"]["list"]["rows"][number];
+type OperationsEventRow =
+  RouterOutput["admin"]["operationsEvents"]["list"]["rows"][number];
 
 type BusinessUnitFilter = "all" | "laundry_butler" | "laundry_farm";
-type BuildingFilter = "all" | "opus_la" | "century_park_east" | "other" | "unresolved";
+type BuildingFilter =
+  | "all"
+  | "opus_la"
+  | "century_park_east"
+  | "other"
+  | "unresolved";
 type EventTypeFilter = "all" | "pickup_completed" | "dropoff_completed";
+type SortBy =
+  | "event_date"
+  | "card_charged_date"
+  | "order_placed_date"
+  | "order_delivered_date";
+type SortDirection = "desc" | "asc";
 
 const PAGE_SIZE = 50;
 const OPERATOR_TIME_ZONE = "America/Los_Angeles";
@@ -25,7 +37,7 @@ function dateInputValue(date: Date): string {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(date);
-  const value = (type: string) => parts.find((part) => part.type === type)?.value;
+  const value = (type: string) => parts.find(part => part.type === type)?.value;
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
@@ -61,7 +73,11 @@ function formatMoney(value: string | number | null | undefined): string | null {
   }).format(amount);
 }
 
-function chargedDisplay(row: OperationsEventRow): { label: string; detail: string | null; muted?: boolean } {
+function chargedDisplay(row: OperationsEventRow): {
+  label: string;
+  detail: string | null;
+  muted?: boolean;
+} {
   if (!row.orderId) return { label: "-", detail: null, muted: true };
   if (!row.paid) return { label: "Unpaid", detail: null, muted: true };
 
@@ -87,7 +103,8 @@ function downloadCsv(filename: string, csv: string) {
 
 function RawSnapshot({ row }: { row: OperationsEventRow }) {
   const raw = row.rawJson ? JSON.stringify(row.rawJson, null, 2) : "";
-  if (!raw) return <p className="text-xs text-black/45">No raw snapshot captured.</p>;
+  if (!raw)
+    return <p className="text-xs text-black/45">No raw snapshot captured.</p>;
   return (
     <pre className="max-h-80 overflow-auto rounded border border-black/10 bg-black/[0.03] p-3 text-xs leading-relaxed text-black/70">
       {raw}
@@ -101,6 +118,8 @@ export default function OperationsEventsPage() {
   const [businessUnit, setBusinessUnit] = useState<BusinessUnitFilter>("all");
   const [building, setBuilding] = useState<BuildingFilter>("all");
   const [eventType, setEventType] = useState<EventTypeFilter>("all");
+  const [sortBy, setSortBy] = useState<SortBy>("event_date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [customerSearch, setCustomerSearch] = useState("");
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -113,11 +132,23 @@ export default function OperationsEventsPage() {
       businessUnit,
       building,
       eventType,
+      sortBy,
+      sortDirection,
       customerSearch: debouncedSearch || undefined,
       page,
       pageSize: PAGE_SIZE,
     }),
-    [building, businessUnit, debouncedSearch, endDate, eventType, page, startDate]
+    [
+      building,
+      businessUnit,
+      debouncedSearch,
+      endDate,
+      eventType,
+      page,
+      sortBy,
+      sortDirection,
+      startDate,
+    ]
   );
 
   const events = trpc.admin.operationsEvents.list.useQuery(queryInput);
@@ -130,6 +161,8 @@ export default function OperationsEventsPage() {
     setBusinessUnit("all");
     setBuilding("all");
     setEventType("all");
+    setSortBy("event_date");
+    setSortDirection("desc");
     setCustomerSearch("");
     setPage(1);
     setExpanded(null);
@@ -143,10 +176,14 @@ export default function OperationsEventsPage() {
         businessUnit,
         building,
         eventType,
+        sortBy,
+        sortDirection,
         customerSearch: debouncedSearch || undefined,
       });
       downloadCsv(result.filename, result.csv);
-      toast.success(`Exported ${result.rowCount} operations event${result.rowCount === 1 ? "" : "s"}`);
+      toast.success(
+        `Exported ${result.rowCount} operations event${result.rowCount === 1 ? "" : "s"}`
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "CSV export failed");
     }
@@ -156,8 +193,12 @@ export default function OperationsEventsPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Operations Events</h1>
-          <p className="mt-1 text-sm text-black/55">Pickup and dropoff truth across all orders.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Operations Events
+          </h1>
+          <p className="mt-1 text-sm text-black/55">
+            Pickup and dropoff truth across all orders.
+          </p>
         </div>
         <Button
           type="button"
@@ -170,18 +211,41 @@ export default function OperationsEventsPage() {
         </Button>
       </div>
 
-      <div className="grid gap-3 rounded border border-black/10 bg-white p-3 md:grid-cols-6">
+      <div className="grid gap-3 rounded border border-black/10 bg-white p-3 md:grid-cols-8">
         <label className="text-xs font-medium text-black/60">
           Start
-          <Input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPage(1); }} className="mt-1" />
+          <Input
+            type="date"
+            value={startDate}
+            onChange={e => {
+              setStartDate(e.target.value);
+              setPage(1);
+            }}
+            className="mt-1"
+          />
         </label>
         <label className="text-xs font-medium text-black/60">
           End
-          <Input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPage(1); }} className="mt-1" />
+          <Input
+            type="date"
+            value={endDate}
+            onChange={e => {
+              setEndDate(e.target.value);
+              setPage(1);
+            }}
+            className="mt-1"
+          />
         </label>
         <label className="text-xs font-medium text-black/60">
           Business unit
-          <select value={businessUnit} onChange={(e) => { setBusinessUnit(e.target.value as BusinessUnitFilter); setPage(1); }} className="mt-1 h-10 w-full rounded border border-black/15 bg-white px-3 text-sm">
+          <select
+            value={businessUnit}
+            onChange={e => {
+              setBusinessUnit(e.target.value as BusinessUnitFilter);
+              setPage(1);
+            }}
+            className="mt-1 h-10 w-full rounded border border-black/15 bg-white px-3 text-sm"
+          >
             <option value="all">All</option>
             <option value="laundry_butler">Laundry Butler</option>
             <option value="laundry_farm">Laundry Farm</option>
@@ -189,7 +253,14 @@ export default function OperationsEventsPage() {
         </label>
         <label className="text-xs font-medium text-black/60">
           Building
-          <select value={building} onChange={(e) => { setBuilding(e.target.value as BuildingFilter); setPage(1); }} className="mt-1 h-10 w-full rounded border border-black/15 bg-white px-3 text-sm">
+          <select
+            value={building}
+            onChange={e => {
+              setBuilding(e.target.value as BuildingFilter);
+              setPage(1);
+            }}
+            className="mt-1 h-10 w-full rounded border border-black/15 bg-white px-3 text-sm"
+          >
             <option value="all">All</option>
             <option value="opus_la">OPUS LA</option>
             <option value="century_park_east">Century Park East</option>
@@ -199,23 +270,68 @@ export default function OperationsEventsPage() {
         </label>
         <label className="text-xs font-medium text-black/60">
           Event type
-          <select value={eventType} onChange={(e) => { setEventType(e.target.value as EventTypeFilter); setPage(1); }} className="mt-1 h-10 w-full rounded border border-black/15 bg-white px-3 text-sm">
+          <select
+            value={eventType}
+            onChange={e => {
+              setEventType(e.target.value as EventTypeFilter);
+              setPage(1);
+            }}
+            className="mt-1 h-10 w-full rounded border border-black/15 bg-white px-3 text-sm"
+          >
             <option value="all">All</option>
             <option value="pickup_completed">pickup_completed</option>
             <option value="dropoff_completed">dropoff_completed</option>
           </select>
         </label>
+        <label className="text-xs font-medium text-black/60">
+          Sort by
+          <select
+            value={sortBy}
+            onChange={e => {
+              setSortBy(e.target.value as SortBy);
+              setPage(1);
+            }}
+            className="mt-1 h-10 w-full rounded border border-black/15 bg-white px-3 text-sm"
+          >
+            <option value="event_date">Event date</option>
+            <option value="card_charged_date">Card charged date</option>
+            <option value="order_placed_date">Order placed date</option>
+            <option value="order_delivered_date">Order delivered date</option>
+          </select>
+        </label>
+        <label className="text-xs font-medium text-black/60">
+          Direction
+          <select
+            value={sortDirection}
+            onChange={e => {
+              setSortDirection(e.target.value as SortDirection);
+              setPage(1);
+            }}
+            className="mt-1 h-10 w-full rounded border border-black/15 bg-white px-3 text-sm"
+          >
+            <option value="desc">Newest first</option>
+            <option value="asc">Oldest first</option>
+          </select>
+        </label>
         <div className="flex items-end">
-          <Button type="button" variant="outline" className="w-full gap-2" onClick={resetFilters}>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full gap-2"
+            onClick={resetFilters}
+          >
             <RotateCcw className="h-4 w-4" />
             Reset
           </Button>
         </div>
-        <label className="md:col-span-6 text-xs font-medium text-black/60">
+        <label className="md:col-span-8 text-xs font-medium text-black/60">
           Customer search
           <Input
             value={customerSearch}
-            onChange={(e) => { setCustomerSearch(e.target.value); setPage(1); }}
+            onChange={e => {
+              setCustomerSearch(e.target.value);
+              setPage(1);
+            }}
             placeholder="Search name, email, or phone"
             className="mt-1"
           />
@@ -229,8 +345,13 @@ export default function OperationsEventsPage() {
           ["Dropoffs completed", data?.summary.dropoffCount ?? 0],
           ["Unresolved buildings", data?.summary.unresolvedBuildingCount ?? 0],
         ].map(([label, value]) => (
-          <div key={label} className="rounded border border-black/10 bg-white p-4">
-            <p className="text-xs uppercase tracking-wide text-black/45">{label}</p>
+          <div
+            key={label}
+            className="rounded border border-black/10 bg-white p-4"
+          >
+            <p className="text-xs uppercase tracking-wide text-black/45">
+              {label}
+            </p>
             <p className="mt-2 text-2xl font-semibold text-black">{value}</p>
           </div>
         ))}
@@ -256,40 +377,105 @@ export default function OperationsEventsPage() {
             </thead>
             <tbody className="divide-y divide-black/10">
               {events.isLoading ? (
-                <tr><td className="px-3 py-8 text-center text-black/45" colSpan={11}>Loading events...</td></tr>
+                <tr>
+                  <td
+                    className="px-3 py-8 text-center text-black/45"
+                    colSpan={11}
+                  >
+                    Loading events...
+                  </td>
+                </tr>
               ) : data?.rows.length ? (
-                data.rows.map((row) => {
+                data.rows.map(row => {
                   const charged = chargedDisplay(row);
                   return (
                     <Fragment key={row.id}>
                       <tr className="align-top hover:bg-black/[0.02]">
                         <td className="px-3 py-3">
-                          <button type="button" className="rounded p-1 hover:bg-black/5" onClick={() => setExpanded(expanded === row.id ? null : row.id)} aria-label="Toggle raw snapshot">
-                            {expanded === row.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                          <button
+                            type="button"
+                            className="rounded p-1 hover:bg-black/5"
+                            onClick={() =>
+                              setExpanded(expanded === row.id ? null : row.id)
+                            }
+                            aria-label="Toggle raw snapshot"
+                          >
+                            {expanded === row.id ? (
+                              <ChevronDown className="h-4 w-4" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
                           </button>
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap">{formatDateTime(row.actualEventTimestamp)}</td>
-                        <td className="px-3 py-3 font-mono text-xs">{row.sourceEventType}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {formatDateTime(row.actualEventTimestamp)}
+                        </td>
+                        <td className="px-3 py-3 font-mono text-xs">
+                          {row.sourceEventType}
+                        </td>
                         <td className="px-3 py-3">
                           <div className="font-medium">{row.customerName}</div>
-                          <div className="text-xs text-black/45">{row.customerEmail || row.customerPhone || "-"}</div>
+                          <div className="text-xs text-black/45">
+                            {row.customerEmail || row.customerPhone || "-"}
+                          </div>
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap">
-                          <div className={charged.muted ? "font-medium text-black/45" : "font-semibold text-black"}>{charged.label}</div>
-                          {charged.detail ? <div className="text-xs text-black/45">{charged.detail}</div> : null}
+                          <div
+                            className={
+                              charged.muted
+                                ? "font-medium text-black/45"
+                                : "font-semibold text-black"
+                            }
+                          >
+                            {charged.label}
+                          </div>
+                          {charged.detail ? (
+                            <div className="text-xs text-black/45">
+                              {charged.detail}
+                            </div>
+                          ) : null}
                         </td>
                         <td className="px-3 py-3">{row.businessUnitLabel}</td>
                         <td className="px-3 py-3">
-                          <div>{row.buildingName || row.buildingSlug || "-"}</div>
-                          <div className="text-xs text-black/45">{[row.tower, row.unit ? `Unit ${row.unit}` : null].filter(Boolean).join(" / ") || row.buildingResolutionStatus}</div>
+                          <div>
+                            {row.buildingName || row.buildingSlug || "-"}
+                          </div>
+                          <div className="text-xs text-black/45">
+                            {[row.tower, row.unit ? `Unit ${row.unit}` : null]
+                              .filter(Boolean)
+                              .join(" / ") || row.buildingResolutionStatus}
+                          </div>
                         </td>
                         <td className="px-3 py-3">
                           <div>{row.scheduledDate || "-"}</div>
-                          <div className="text-xs text-black/45">{row.scheduledWindow || "-"}</div>
+                          <div className="text-xs text-black/45">
+                            {row.scheduledWindow || "-"}
+                          </div>
                         </td>
-                        <td className="px-3 py-3">{row.actorDisplayName || "-"}</td>
+                        <td className="px-3 py-3">
+                          {row.actorDisplayName || "-"}
+                        </td>
                         <td className="px-3 py-3">{row.vendorId ?? "-"}</td>
-                        <td className="px-3 py-3">{row.orderId ? <a className="underline decoration-black/20 underline-offset-2 hover:decoration-black" href={`/intake?orderId=${row.orderId}`}>#{row.orderId}</a> : "-"}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {row.orderId ? (
+                            <>
+                              <a
+                                className="underline decoration-black/20 underline-offset-2 hover:decoration-black"
+                                href={`/intake?orderId=${row.orderId}`}
+                              >
+                                #{row.orderId}
+                              </a>
+                              <div className="mt-1 text-xs text-black/45">
+                                Placed {formatDateTime(row.orderCreatedAt)}
+                              </div>
+                              <div className="text-xs text-black/45">
+                                Delivered {formatDateTime(row.orderDeliveredAt)}
+                              </div>
+                            </>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
                       </tr>
                       {expanded === row.id ? (
                         <tr>
@@ -303,18 +489,42 @@ export default function OperationsEventsPage() {
                   );
                 })
               ) : (
-                <tr><td className="px-3 py-8 text-center text-black/45" colSpan={11}>No operations events match these filters.</td></tr>
+                <tr>
+                  <td
+                    className="px-3 py-8 text-center text-black/45"
+                    colSpan={11}
+                  >
+                    No operations events match these filters.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         </div>
         <div className="flex items-center justify-between border-t border-black/10 px-3 py-3 text-sm text-black/60">
           <span>
-            Page {data?.page ?? page} of {data?.totalPages ?? 1} · {data?.totalRows ?? 0} events
+            Page {data?.page ?? page} of {data?.totalPages ?? 1} ·{" "}
+            {data?.totalRows ?? 0} events
           </span>
           <div className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</Button>
-            <Button type="button" variant="outline" size="sm" disabled={!data || page >= data.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!data || page >= data.totalPages}
+              onClick={() => setPage(p => p + 1)}
+            >
+              Next
+            </Button>
           </div>
         </div>
       </div>
