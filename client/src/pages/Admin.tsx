@@ -649,6 +649,10 @@ function legacyDryCleanCatalogRows(): DryCleanCatalogRow[] {
   }));
 }
 
+function openCatalogPricing() {
+  window.open("/catalog", "_blank", "noopener,noreferrer");
+}
+
 function buildSelectedWashFoldUpcharges(
   selectedUpcharges: Record<string, boolean>
 ): Record<string, UpchargeEntry> {
@@ -771,6 +775,11 @@ function NewOrderTab({
     { includeArchived: false },
     { enabled: form.serviceType === "dry_cleaning" }
   );
+  const handleOpenPricing = useCallback(() => {
+    setCheckoutResult(null);
+    setForm(f => ({ ...f, serviceType: "dry_cleaning" }));
+    openCatalogPricing();
+  }, []);
 
   const pendingSeedPrefill = useRef(false);
 
@@ -1265,6 +1274,7 @@ function NewOrderTab({
             })}
             <button
               type="button"
+              onClick={handleOpenPricing}
               className="flex min-h-[74px] items-center gap-3 border border-dashed border-black/20 bg-white px-3 py-3 text-left text-black/55 hover:border-black/35 hover:text-black"
             >
               <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-black/10">
@@ -1424,6 +1434,9 @@ function NewOrderTab({
                   dcQtys={dcQtys}
                   setDcQtys={setDcQtys}
                   catalogRows={catalogRows}
+                  onAddGarment={handleOpenPricing}
+                  onRefreshPricing={() => void catalogQuery.refetch()}
+                  isRefreshing={catalogQuery.isFetching}
                 />
               )}
             </div>
@@ -2779,6 +2792,9 @@ function IntakeDetail({
           dcQtys={dcQtys}
           setDcQtys={setDcQtys}
           catalogRows={catalogRows}
+          onAddGarment={openCatalogPricing}
+          onRefreshPricing={() => void catalogQuery.refetch()}
+          isRefreshing={catalogQuery.isFetching}
         />
       )}
 
@@ -3020,6 +3036,9 @@ function DryCleanIntake({
   dcQtys,
   setDcQtys,
   catalogRows,
+  onAddGarment,
+  onRefreshPricing,
+  isRefreshing = false,
 }: {
   dcQtys: Record<string, number>;
   setDcQtys: (v: Record<string, number>) => void;
@@ -3029,6 +3048,9 @@ function DryCleanIntake({
     category: string;
     standardPriceCents: number;
   }>;
+  onAddGarment?: () => void;
+  onRefreshPricing?: () => void;
+  isRefreshing?: boolean;
 }) {
   const categories = useMemo(() => {
     const cats: Record<string, typeof catalogRows> = {};
@@ -3041,6 +3063,49 @@ function DryCleanIntake({
 
   return (
     <div className="space-y-6">
+      {(onAddGarment || onRefreshPricing) && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border border-black/10 bg-white px-3 py-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-black/50">
+              Dry-cleaning price list
+            </p>
+            <p className="mt-0.5 text-xs text-black/45">
+              Add a garment in Catalog, then refresh pricing here.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {onAddGarment ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2 border-black/20 text-black"
+                onClick={onAddGarment}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add garment
+              </Button>
+            ) : null}
+            {onRefreshPricing ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2 border-black/20 text-black"
+                onClick={onRefreshPricing}
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Search className="h-3.5 w-3.5" />
+                )}
+                Refresh pricing
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      )}
       {Object.entries(categories).map(([cat, items]) => (
         <div key={cat}>
           <h3 className="text-xs font-medium text-black/50 uppercase tracking-wider mb-2">
