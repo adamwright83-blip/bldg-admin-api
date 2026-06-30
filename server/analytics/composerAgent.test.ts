@@ -386,3 +386,92 @@ describe("Patch 7: impossible date rejection", () => {
     expect(result.end).toBe("2026-02-28");
   });
 });
+
+// ── Comparison chart priority + unit-aware labels ─────────────────────────
+
+describe("comparison chart correctness", () => {
+  function makeComparisonPlan(metricIds: string[]) {
+    return makePlannerResponse({ metricIds, compareToPrevious: true, intent: "comparison" });
+  }
+
+  function makeComparisonWithUnit(unit: "currency" | "count" | "weight_lbs", current = 420, previous = 350) {
+    return {
+      unit,
+      current,
+      previous,
+      absChange: current - previous,
+      pctChange: Math.round(((current - previous) / previous) * 10000) / 100,
+      currentOrders: unit === "currency" ? 8 : 0,
+      previousOrders: unit === "currency" ? 7 : 0,
+      currentAov: unit === "currency" ? 52.5 : 0,
+      previousAov: unit === "currency" ? 50 : 0,
+      volumeEffect: unit === "currency" ? 50 : 0,
+      aovEffect: unit === "currency" ? 20 : 0,
+      driversByServiceType: [],
+    };
+  }
+
+  it("revenue comparison renders current-vs-previous chart, not revenue time series", async () => {
+    const compResult = makeComparisonWithUnit("currency");
+    const compSpy = { ...mockLiveSource, getMetricComparison: vi.fn().mockResolvedValue(compResult) };
+    const deps = makeDeps([makeComparisonPlan(["revenue_paid_stripe"]), makeAnswererResponse({ chartType: "bar" })], compSpy);
+
+    const result = await runComposerTurn({ tenantId: "tenant_a", question: "Compare this week to last week?", history: [] }, deps);
+
+    // Chart must be comparison (period-based), not revenue time series (bucket-based)
+    expect(result.chart).not.toBeNull();
+    expect(result.chart?.xKey).toBe("period");
+    expect(result.chart?.data[0]).toHaveProperty("value");
+    expect(result.chart?.data[0]).not.toHaveProperty("bucket");
+    expect(result.chart?.data[0]).not.toHaveProperty("revenue");
+  });
+
+  it("revenue comparison chart uses label 'Revenue ($)' (currency unit)", async () => {
+    const compResult = makeComparisonWithUnit("currency");
+    const compSpy = { ...mockLiveSource, getMetricComparison: vi.fn().mockResolvedValue(compResult) };
+    const deps = makeDeps([makeComparisonPlan(["revenue_paid_stripe"]), makeAnswererResponse({ chartType: "bar" })], compSpy);
+
+    const result = await runComposerTurn({ tenantId: "tenant_a", question: "Revenue comparison?", history: [] }, deps);
+    expect(result.chart?.series[0]?.label).toBe("Revenue ($)");
+  });
+
+  it("orders_created comparison chart uses label 'Count', not 'Revenue ($)'", async () => {
+    const compResult = makeComparisonWithUnit("count", 87, 82);
+    const compSpy = { ...mockLiveSource, getMetricComparison: vi.fn().mockResolvedValue(compResult) };
+    const deps = makeDeps([makeComparisonPlan(["orders_created"]), makeAnswererResponse({ chartType: "bar" })], compSpy);
+
+    const result = await runComposerTurn({ tenantId: "tenant_a", question: "Order count this week vs last?", history: [] }, deps);
+    expect(result.chart?.series[0]?.label).toBe("Count");
+    expect(result.chart?.series[0]?.label).not.toBe("Revenue ($)");
+  });
+
+  it("orders_paid comparison chart uses label 'Count'", async () => {
+    const compResult = makeComparisonWithUnit("count", 83, 79);
+    const compSpy = { ...mockLiveSource, getMetricComparison: vi.fn().mockResolvedValue(compResult) };
+    const deps = makeDeps([makeComparisonPlan(["orders_paid"]), makeAnswererResponse({ chartType: "bar" })], compSpy);
+
+    const result = await runComposerTurn({ tenantId: "tenant_a", question: "Paid orders this vs last week?", history: [] }, deps);
+    expect(result.chart?.series[0]?.label).toBe("Count");
+  });
+
+  it("wash_fold_weight comparison chart uses label 'Lbs'", async () => {
+    const compResult = makeComparisonWithUnit("weight_lbs", 1214, 1150);
+    const compSpy = { ...mockLiveSource, getMetricComparison: vi.fn().mockResolvedValue(compResult) };
+    const deps = makeDeps([makeComparisonPlan(["wash_fold_weight"]), makeAnswererResponse({ chartType: "bar" })], compSpy);
+
+    const result = await runComposerTurn({ tenantId: "tenant_a", question: "Weight this week vs last?", history: [] }, deps);
+    expect(result.chart?.series[0]?.label).toBe("Lbs");
+  });
+
+  it("comparison data uses neutral key 'value', not 'revenue'", async () => {
+    const compResult = makeComparisonWithUnit("count", 87, 82);
+    const compSpy = { ...mockLiveSource, getMetricComparison: vi.fn().mockResolvedValue(compResult) };
+    const deps = makeDeps([makeComparisonPlan(["orders_created"]), makeAnswererResponse({ chartType: "bar" })], compSpy);
+
+    const result = await runComposerTurn({ tenantId: "tenant_a", question: "Orders comparison?", history: [] }, deps);
+    // data rows use key "value", not "revenue"
+    expect(result.chart?.data[0]).toHaveProperty("value");
+    expect(result.chart?.data[0]).not.toHaveProperty("revenue");
+    expect(result.chart?.series[0]?.key).toBe("value");
+  });
+});

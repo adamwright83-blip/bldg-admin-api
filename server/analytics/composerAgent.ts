@@ -249,7 +249,26 @@ function buildChart(
   metricIds: string[]
 ): ComposerChart | null {
 
-  // Revenue time series
+  // Comparison chart — must come BEFORE revenue time series so comparison questions
+  // render current-vs-previous, not the raw revenue series.
+  if (results.comparison) {
+    const c = results.comparison;
+    const unit = c.unit ?? "currency";
+    const valueLabel =
+      unit === "count" ? "Count" : unit === "weight_lbs" ? "Lbs" : "Revenue ($)";
+    return {
+      type: "bar",
+      title: "Current vs previous period",
+      xKey: "period",
+      series: [{ key: "value", label: valueLabel }],
+      data: [
+        { period: "Previous", value: c.previous },
+        { period: "Current", value: c.current },
+      ],
+    };
+  }
+
+  // Revenue time series (only for non-comparison revenue questions)
   if (results.revenue?.series.length) {
     return {
       type: chartType,
@@ -264,21 +283,6 @@ function buildChart(
         revenue: p.revenue,
         orderCount: p.orderCount,
       })),
-    };
-  }
-
-  // Comparison chart
-  if (results.comparison) {
-    const c = results.comparison;
-    return {
-      type: "bar",
-      title: "Current vs previous period",
-      xKey: "period",
-      series: [{ key: "revenue", label: "Revenue ($)" }],
-      data: [
-        { period: "Previous", revenue: c.previous },
-        { period: "Current", revenue: c.current },
-      ],
     };
   }
 

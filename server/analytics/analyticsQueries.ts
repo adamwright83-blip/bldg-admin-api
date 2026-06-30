@@ -269,7 +269,15 @@ export async function getMetricComparison(
   });
 
   const db = await getDb();
-  if (!db) return emptyResult("currency");
+  if (!db) {
+    const unitForMetric: MetricUnit =
+      params.metricId === "orders_created" || params.metricId === "orders_paid"
+        ? "count"
+        : params.metricId === "wash_fold_weight"
+          ? "weight_lbs"
+          : "currency";
+    return emptyResult(unitForMetric);
+  }
 
   const compRange = params.comparisonRange ?? previousEqualPeriod(params.currentRange);
 

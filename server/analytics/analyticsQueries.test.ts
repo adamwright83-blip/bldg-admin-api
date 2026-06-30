@@ -121,17 +121,41 @@ describe("getMetricComparison", () => {
     expect(result.unit).toBe("currency");
   });
 
-  it("returns unit=count for orders_created (db unavailable falls to default path)", async () => {
-    // With no DB, falls back to empty() which has unit:"currency" for revenue default.
-    // Test that known metric branches exist (structural check).
+  it("returns unit=count for orders_created when db unavailable", async () => {
     const result = await getMetricComparison("tenant_a", {
       metricId: "orders_created",
       currentRange: { start: "2025-06-22", end: "2025-06-29" },
       groupBy: "day",
     });
-    // With no DB, the early-return empty() is called with "currency" default.
-    // Verified the branch exists; unit correctness is confirmed via demoDataset.
+    expect(result.unit).toBe("count");
     expect(result.current).toBe(0);
+  });
+
+  it("returns unit=count for orders_paid when db unavailable", async () => {
+    const result = await getMetricComparison("tenant_a", {
+      metricId: "orders_paid",
+      currentRange: { start: "2025-06-22", end: "2025-06-29" },
+      groupBy: "day",
+    });
+    expect(result.unit).toBe("count");
+  });
+
+  it("returns unit=weight_lbs for wash_fold_weight when db unavailable", async () => {
+    const result = await getMetricComparison("tenant_a", {
+      metricId: "wash_fold_weight",
+      currentRange: { start: "2025-06-22", end: "2025-06-29" },
+      groupBy: "day",
+    });
+    expect(result.unit).toBe("weight_lbs");
+  });
+
+  it("returns unit=currency for revenue_paid_stripe when db unavailable", async () => {
+    const result = await getMetricComparison("tenant_a", {
+      metricId: "revenue_paid_stripe",
+      currentRange: { start: "2025-06-22", end: "2025-06-29" },
+      groupBy: "day",
+    });
+    expect(result.unit).toBe("currency");
   });
 });
 
