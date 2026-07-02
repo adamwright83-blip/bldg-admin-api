@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { Loader2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, Phone, X } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 import {
   MobileBottomNav,
   MobileTopBar,
@@ -9,7 +10,7 @@ import { SkyBackdrop, SkyBar, useCommandSky } from "../CommandSky";
 import { WarStrip } from "../CommandCockpitBand";
 import { ComposerPanel } from "../ComposerPanel";
 import { CommandLanternKingdom } from "../CommandLanternKingdom";
-import { SaleslayBattleCanvas } from "../saleslay-game/SaleslayBattleCanvas";
+import { SaleslayBattleCanvas, type SaleslayBattleCanvasHandle } from "../saleslay-game/SaleslayBattleCanvas";
 import { OperatorAnalystHome } from "../operator-analyst/OperatorAnalystHome";
 import type { AdminHomeData, LogOutreachPayload, OpsBoardModal } from "./types";
 
@@ -89,6 +90,66 @@ export function OpsBoardHome({
     return () => window.cancelAnimationFrame(raf);
   }, [sageOpen]);
 
+  // Bold Pitch (real outbound call) — the game never queries leads or
+  // places calls itself. Pressing the weapon only requests this picker; the
+  // actual admin.startBoldPitchCall mutation starts the bridge-through-
+  // cellphone call, and the reward only lands once polling confirms the
+  // customer leg connected >=20s (via admin.getBoldPitchCallAttempt),
+  // reported back into the engine through the imperative canvas handle.
+  const canvasRef = useRef<SaleslayBattleCanvasHandle | null>(null);
+  const [callPickerOpen, setCallPickerOpen] = useState(false);
+  const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
+  const [activeAttemptId, setActiveAttemptId] = useState<number | null>(null);
+  const leads = trpc.admin.listLeads.useQuery(undefined, { enabled: callPickerOpen });
+  const startCall = trpc.admin.startBoldPitchCall.useMutation({
+    onSuccess: (data) => {
+      setActiveAttemptId(data.attemptId);
+    },
+    onError: (err) => {
+      canvasRef.current?.failWeaponAction("call", err.message);
+    },
+  });
+  // Poll the attempt until Twilio's status callbacks resolve it to a
+  // terminal state — the mutation above only starts the call, it can't
+  // know the outcome synchronously.
+  const attempt = trpc.admin.getBoldPitchCallAttempt.useQuery(
+    { attemptId: activeAttemptId ?? -1 },
+    { enabled: activeAttemptId != null, refetchInterval: 2500 }
+  );
+  useEffect(() => {
+    if (!attempt.data) return;
+    const status = attempt.data.status;
+    if (status === "completed_success") {
+      canvasRef.current?.completeWeaponAction("call");
+      setActiveAttemptId(null);
+      setCallPickerOpen(false);
+      setSelectedLeadId(null);
+    } else if (status === "completed_no_connect" || status === "failed") {
+      canvasRef.current?.failWeaponAction(
+        "call",
+        attempt.data.failureReason ?? "The call didn't connect long enough."
+      );
+      setActiveAttemptId(null);
+    }
+  }, [attempt.data]);
+  useEffect(() => {
+    if (!callPickerOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !startCall.isPending && activeAttemptId == null) {
+        setCallPickerOpen(false);
+        setSelectedLeadId(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callPickerOpen, startCall.isPending, activeAttemptId]);
+
+  const handleStartCall = () => {
+    if (selectedLeadId == null || startCall.isPending || activeAttemptId != null) return;
+    startCall.mutate({ leadId: selectedLeadId });
+  };
+
   if (loading) {
     return (
       <div className="ops-board-home ops-board-loading">
@@ -105,10 +166,74 @@ export function OpsBoardHome({
     <div className="ops-saleslay-stage">
       <section className="ops-saleslay-preview" aria-label="Saleslay Battle Preview">
         <SaleslayBattleCanvas
+          ref={canvasRef}
           sageOpen={sageOpen}
           onAskSage={() => setSageOpen(true)}
+          callPickerOpen={callPickerOpen}
+          onOpenCallPicker={() => setCallPickerOpen(true)}
         />
       </section>
+
+      {/* Bold Pitch — compact lead picker + explicit confirmation. Never
+          dials on the initial click/key; the real startBoldPitchCall
+          mutation only runs once the operator picks a lead and presses
+          Call here, and the reward only lands once polling confirms the
+          customer leg connected. */}
+      <div className={`ops-pickup-picker ${callPickerOpen ? "is-open" : ""}`}>
+        <div className="ops-pickup-picker-frame">
+          <button
+            type="button"
+            className="ops-pickup-picker-close"
+            aria-label="Cancel call"
+            disabled={startCall.isPending || activeAttemptId != null}
+            onClick={() => {
+              setCallPickerOpen(false);
+              setSelectedLeadId(null);
+            }}
+          >
+            <X size={14} />
+          </button>
+          <div className="ops-pickup-picker-head">
+            <Phone size={16} aria-hidden="true" />
+            <span>Bold Pitch — place a sales call</span>
+          </div>
+          {leads.isLoading ? (
+            <p className="ops-pickup-picker-status">Loading leads…</p>
+          ) : (leads.data ?? []).length > 0 ? (
+            <ul className="ops-pickup-picker-list">
+              {(leads.data ?? []).map((lead) => (
+                <li key={lead.id}>
+                  <button
+                    type="button"
+                    className={`ops-pickup-picker-row ${selectedLeadId === lead.id ? "is-selected" : ""}`}
+                    disabled={startCall.isPending || activeAttemptId != null || !lead.phone}
+                    onClick={() => setSelectedLeadId(lead.id)}
+                  >
+                    <span className="ops-pickup-picker-name">{lead.name}</span>
+                    <span className="ops-pickup-picker-meta">{lead.phone ?? "no phone on file"}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="ops-pickup-picker-status">No leads available to call right now.</p>
+          )}
+          {startCall.error ? (
+            <p className="ops-pickup-picker-error">Couldn't start that call: {startCall.error.message}</p>
+          ) : null}
+          {activeAttemptId != null ? (
+            <p className="ops-pickup-picker-status">Calling… waiting to see if the customer connects.</p>
+          ) : null}
+          <button
+            type="button"
+            className="ops-pickup-picker-confirm"
+            disabled={selectedLeadId == null || startCall.isPending || activeAttemptId != null}
+            onClick={handleStartCall}
+          >
+            {startCall.isPending || activeAttemptId != null ? "Calling…" : "Call"}
+          </button>
+        </div>
+      </div>
 
       <div className={`ops-sage-summon ${sageOpen ? "is-open" : ""}`}>
         <div className="ops-sage-summon-frame">

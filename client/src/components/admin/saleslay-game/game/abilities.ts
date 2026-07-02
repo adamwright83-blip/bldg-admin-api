@@ -40,6 +40,12 @@ export const ABILITY_CONFIG: AbilityDef[] = [
     contractCents: 15_000,
     cooldownMs: 8_000,
     logText: "Sales call logged: +65 XP, +$150 contract progress.",
+    // Real weapon: pressing it opens the lead picker (see
+    // SaleslayBattleCanvas) instead of firing immediately, and the reward
+    // only lands once the real Bold Pitch call attempt (server/salesCalls.ts)
+    // confirms the customer leg connected >=20s. Never eligible for Auto's
+    // demo simulation.
+    autoEligible: false,
   },
   {
     id: "pickup",

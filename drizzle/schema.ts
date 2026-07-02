@@ -364,6 +364,54 @@ export type Lead = typeof leads.$inferSelect;
 export type InsertLead = typeof leads.$inferInsert;
 
 /**
+ * Sales call attempts — durable record of every Bold Pitch outbound call
+ * (Saleslay's "call" weapon). Bridge-through-cellphone architecture: Twilio
+ * dials the rep's own cellphone first (repLegCallSid), and only once that
+ * leg is answered does it dial the lead/customer (customerLegCallSid). The
+ * reward-eligible event is the CUSTOMER leg reaching >=20s connected
+ * duration, mirroring the existing Level 4 war call-strike rule in
+ * server/level4Twilio.ts. One row per attempt; idempotent on
+ * repLegCallSid so a duplicate Twilio status callback can never double-count.
+ */
+export const salesCallAttempts = mysqlTable(
+  "sales_call_attempts",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenant_id", { length: 64 }).default("default").notNull(),
+    leadId: int("lead_id"),
+    orderId: int("order_id"),
+    repPhone: varchar("rep_phone", { length: 30 }).notNull(),
+    customerPhone: varchar("customer_phone", { length: 30 }).notNull(),
+    callerId: varchar("caller_id", { length: 30 }).notNull(),
+    repLegCallSid: varchar("rep_leg_call_sid", { length: 64 }),
+    customerLegCallSid: varchar("customer_leg_call_sid", { length: 64 }),
+    status: mysqlEnum("status", [
+      "dialing_rep",
+      "rep_connected",
+      "dialing_customer",
+      "customer_connected",
+      "completed_success",
+      "completed_no_connect",
+      "failed",
+    ])
+      .default("dialing_rep")
+      .notNull(),
+    customerLegDurationSec: int("customer_leg_duration_sec"),
+    recordingEnabled: boolean("recording_enabled").default(false).notNull(),
+    rewardGranted: boolean("reward_granted").default(false).notNull(),
+    failureReason: varchar("failure_reason", { length: 255 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    repLegCallSidIdx: uniqueIndex("sales_call_attempts_rep_leg_call_sid_idx").on(table.repLegCallSid),
+  })
+);
+
+export type SalesCallAttempt = typeof salesCallAttempts.$inferSelect;
+export type InsertSalesCallAttempt = typeof salesCallAttempts.$inferInsert;
+
+/**
  * Tenant-scoped sellable SKUs for admin catalog + resident-facing price lists.
  */
 export const catalogItems = mysqlTable(

@@ -25,6 +25,7 @@ import { runAgentTool } from "../agents/agentRuntime";
 import { registerVendorOnboardingSessionRoutes } from "../vendorOnboardingSessionApi";
 import { registerVendorBookingPublicRoutes } from "../vendorBookingPublicApi";
 import { registerLevel4TwilioRoutes } from "../level4Twilio";
+import { registerSalesCallRoutes } from "../salesCalls";
 import { registerCleanCloudImportRoutes } from "../cleancloudImportRoute";
 import { registerClearentImportRoutes } from "../clearentImportRoute";
 import { registerPaymentReconciliationRoutes } from "../paymentReconciliationRoute";
@@ -250,6 +251,10 @@ async function startServer() {
   // Level 4 War — Twilio call-strike status callbacks (armed; quiet until
   // the Twilio account is activated for real traffic).
   registerLevel4TwilioRoutes(app);
+  // Bold Pitch — Saleslay "call" weapon. Bridge-through-cellphone dial +
+  // status callbacks; armed but only functional once the Twilio account is
+  // verified for real outbound voice traffic.
+  registerSalesCallRoutes(app);
 
   const vendorOnboardingStartSchema = z.object({
     businessName: z.string().max(255).optional().nullable(),

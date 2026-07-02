@@ -107,6 +107,7 @@ import {
   hydrateCustomerAggregates,
 } from "./customerProfile";
 import { ENV } from "./_core/env";
+import { startBoldPitchCall, getBoldPitchCallAttempt } from "./salesCalls";
 import { notifyOwner } from "./_core/notification";
 import {
   notifyPickupEnRoute,
@@ -2790,6 +2791,67 @@ export const appRouter = router({
         });
 
         return { success: true };
+      }),
+
+    /** Bold Pitch (Saleslay "call" weapon) — starts a real bridge-through-
+     * cellphone outbound call. Never called from Auto mode; the frontend
+     * only invokes this after an explicit operator confirmation, mirroring
+     * the "Fulfill the Promise" picker+confirm pattern this replaces. The
+     * reward only lands once the customer leg is confirmed >=20s connected
+     * via the Twilio status webhook — this mutation itself does not decide
+     * success, it only starts the attempt. */
+    startBoldPitchCall: adminProcedure
+      .input(
+        z.object({
+          leadId: z.number().optional(),
+          orderId: z.number().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        let customerPhone: string | null = null;
+        if (input.leadId != null) {
+          const lead = await getLeadById(input.leadId);
+          customerPhone = lead?.phone ?? null;
+        } else if (input.orderId != null) {
+          const order = await getOrderById(input.orderId);
+          customerPhone = order?.phone ?? null;
+        }
+        if (!customerPhone) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "No phone number found for that lead/order." });
+        }
+        const repPhone = process.env.SALESLAY_BOLD_PITCH_REP_PHONE;
+        if (!repPhone) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Bold Pitch rep phone is not configured (SALESLAY_BOLD_PITCH_REP_PHONE).",
+          });
+        }
+        try {
+          const { attemptId } = await startBoldPitchCall({
+            tenantId: ctx.tenantId ?? "default",
+            leadId: input.leadId ?? null,
+            orderId: input.orderId ?? null,
+            repPhone,
+            customerPhone,
+          });
+          return { attemptId };
+        } catch (err) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: err instanceof Error ? err.message : "Failed to start Bold Pitch call",
+          });
+        }
+      }),
+
+    /** Poll a Bold Pitch attempt's status — the frontend uses this to know
+     * when to report completeWeaponAction/failWeaponAction back into the
+     * Saleslay engine once Twilio's status callbacks resolve the call. */
+    getBoldPitchCallAttempt: adminProcedure
+      .input(z.object({ attemptId: z.number() }))
+      .query(async ({ input }) => {
+        const attempt = await getBoldPitchCallAttempt(input.attemptId);
+        if (!attempt) throw new TRPCError({ code: "NOT_FOUND" });
+        return attempt;
       }),
 
     /** Mark ready — platform or vendor (vendor scoped to own orders) */
