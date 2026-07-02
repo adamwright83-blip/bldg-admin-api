@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
+import { Suspense, lazy } from "react";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -13,6 +14,17 @@ import VendorPortal from "./pages/VendorPortal";
 import DigitalReceiptPage from "./pages/DigitalReceiptPage";
 import LaundryFarmHome from "./pages/LaundryFarmHome";
 import AdminCatalog from "./pages/AdminCatalog";
+
+// BORESLAY marketing site (boreslay.com) — lazy so the admin bundle never pays for it.
+const BoreslayLanding = lazy(() => import("./pages/BoreslayLanding"));
+
+function BoreslayLandingRoute() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#FAF7F2" }} />}>
+      <BoreslayLanding />
+    </Suspense>
+  );
+}
 
 const LOCAL_ADMIN_PATHS = new Set([
   "/admin",
@@ -44,6 +56,9 @@ const LOCAL_ADMIN_PATHS = new Set([
 function AdminHostRouter() {
   return (
     <Switch>
+      {/* Public BORESLAY landing — served at admin.bldg.chat/boreslay until
+          boreslay.com is purchased and pointed at this project. */}
+      <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
       <Route path="/pricing" component={AdminCatalog} />
@@ -81,6 +96,8 @@ function Router() {
   const hostname =
     typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
   const { tenant } = useTenant();
+  const isBoreslayHost =
+    hostname === "boreslay.com" || hostname === "www.boreslay.com";
   const isAdminHost = hostname === "admin.bldg.chat";
   const isLocalAdminPath =
     (hostname === "localhost" || hostname === "127.0.0.1") &&
@@ -91,12 +108,17 @@ function Router() {
     ? hostname.replace(".ops.bldg.chat", "")
     : null;
 
+  if (isBoreslayHost) {
+    return <BoreslayLandingRoute />;
+  }
+
   if (isAdminHost || isLocalAdminPath) {
     return <AdminHostRouter />;
   }
 
   return (
     <Switch>
+      <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
       <Route path="/pricing" component={AdminCatalog} />

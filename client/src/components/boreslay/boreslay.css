@@ -1,0 +1,233 @@
+/*
+ * BORESLAY landing — scoped design tokens.
+ * Conversion system: light trust page, dark product band, one orange trigger.
+ * Orange is reserved for CTAs only (Von Restorff isolation) — never reuse it
+ * for decoration elsewhere on this page.
+ */
+.bs-root {
+  --bs-bg: #faf7f2;
+  --bs-surface: #ffffff;
+  --bs-ink: #1a1712;
+  --bs-ink-soft: #4a443b;
+  --bs-navy: #1e3a5f;
+  --bs-orange: #f2600c;
+  --bs-orange-press: #d9540a;
+  --bs-dark: #2c2824;
+  --bs-dark-elev: #3d3630;
+  --bs-gold: #c9a96e;
+  --bs-line: #e8e0d3;
+  --bs-cream: #f5f0e8;
+
+  font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--bs-ink);
+  background: var(--bs-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.bs-display {
+  font-family: "Barlow Condensed", ui-sans-serif, system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.02;
+  text-transform: uppercase;
+}
+
+.bs-serif {
+  font-family: "Fraunces", Georgia, serif;
+}
+
+.bs-mono {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+
+.bs-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 28px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--bs-orange);
+  color: #fff;
+  font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  text-decoration: none;
+  box-shadow: 0 10px 24px rgba(242, 96, 12, 0.28);
+  transition: transform 120ms ease, background 120ms ease;
+}
+
+.bs-cta:hover {
+  background: var(--bs-orange-press);
+  transform: translateY(-1px);
+}
+
+.bs-cta:active {
+  transform: translateY(0);
+}
+
+.bs-cta-quiet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 15px 24px;
+  border: 1.5px solid var(--bs-ink);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--bs-ink);
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 120ms ease;
+}
+
+.bs-cta-quiet:hover {
+  background: rgba(26, 23, 18, 0.05);
+}
+
+.bs-field {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1.5px solid var(--bs-line);
+  border-radius: 10px;
+  background: var(--bs-surface);
+  color: var(--bs-ink);
+  font-size: 17px;
+  outline: none;
+}
+
+.bs-field:focus {
+  border-color: var(--bs-navy);
+}
+
+.bs-field::placeholder {
+  color: #9b9184;
+}
+
+/* On the dark final band the same fields stay white — that white-on-dark
+   contrast is the tested conversion pattern this section replicates. */
+
+.bs-chip {
+  padding: 12px 18px;
+  border: 1.5px solid var(--bs-line);
+  border-radius: 999px;
+  background: var(--bs-surface);
+  color: var(--bs-ink);
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 100ms ease, background 100ms ease;
+}
+
+.bs-chip:hover {
+  border-color: var(--bs-navy);
+}
+
+.bs-chip[data-selected="true"] {
+  border-color: var(--bs-navy);
+  background: var(--bs-navy);
+  color: #fff;
+}
+
+.bs-container {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.bs-hero-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 44px;
+  align-items: center;
+}
+
+.bs-steps-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 40px;
+}
+
+.bs-tour-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 36px;
+}
+
+.bs-final-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 36px;
+  align-items: start;
+}
+
+.bs-mobile-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  background: rgba(250, 247, 242, 0.94);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--bs-line);
+}
+
+@media (max-width: 767px) {
+  .bs-nav-links,
+  .bs-nav-cta {
+    display: none !important;
+  }
+
+  /* leave room for the sticky bar */
+  .bs-root main {
+    padding-bottom: 76px;
+  }
+}
+
+@media (min-width: 768px) {
+  .bs-mobile-bar {
+    display: none;
+  }
+
+  .bs-steps-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .bs-tour-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 960px) {
+  .bs-hero-grid {
+    grid-template-columns: 1.05fr 1fr;
+  }
+
+  .bs-final-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 56px;
+  }
+}
+
+@keyframes bs-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bs-fade-up {
+  animation: bs-fade-up 420ms ease both;
+}

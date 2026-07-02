@@ -36,7 +36,7 @@ import { registerMarketplacePaymentDryRunRoutes } from "../marketplacePayments/m
 import { registerLaundryFarmSheetSyncRoutes } from "../laundryFarmSheetSyncRoute";
 import { registerResidentProposalReadRoutes, registerResidentProposalConsentRoute } from "../procurement/residentProposalReadApi";
 import { registerAgentMailVendorReplyWebhookRoutes } from "../procurement/agentMailVendorReplyWebhookRoute";
-import { PUBLIC_FORM_ORIGINS, buildAdminCorsOptions } from "./corsConfig";
+import { buildAdminCorsOptions, isPublicFormOrigin } from "./corsConfig";
 import { z } from "zod";
 import { buildBldgIntakeOrder } from "../residentIntake";
 import {
@@ -123,7 +123,7 @@ async function startServer() {
     const origin = req.headers.origin as string | undefined;
     console.log(`[Leads v9] OPTIONS from: ${origin}`);
     
-    if (origin && PUBLIC_FORM_ORIGINS.includes(origin)) {
+    if (origin && isPublicFormOrigin(origin)) {
       setLeadsCorsHeaders(res, origin);
       res.setHeader("Access-Control-Max-Age", "86400");
       console.log(`[Leads v9] OPTIONS OK`);
@@ -150,7 +150,7 @@ async function startServer() {
       console.log(`[Leads v9] POST from: ${origin}, body length: ${body.length}`);
 
       // Set CORS header first, before any processing
-      if (origin && PUBLIC_FORM_ORIGINS.includes(origin)) {
+      if (origin && isPublicFormOrigin(origin)) {
         setLeadsCorsHeaders(res, origin);
       } else if (origin) {
         console.warn(`[Leads v9] POST BLOCKED: ${origin}`);
@@ -170,7 +170,7 @@ async function startServer() {
 
       try {
         const { createLead } = await import("../db");
-        const { name, building_name, role, email, number_of_units, phone, source, source_url } = data;
+        const { name, building_name, role, email, number_of_units, phone, source, source_url, notes } = data;
 
         // Validate required fields
         if (!name || !building_name || !email) {
@@ -191,17 +191,33 @@ async function startServer() {
           phone: phone || null,
           source: source || "add_your_building_form",
           sourceUrl: source_url || null,
+          notes: typeof notes === "string" && notes.trim() ? notes.trim().slice(0, 2000) : null,
         });
 
         console.log(`[Leads v9] SUCCESS - Lead created: id=${leadId}`);
 
+        const isBoreslayLead = typeof source === "string" && source.startsWith("boreslay");
+
         // Notify owner (non-blocking, don't await)
         import("./notification").then(({ notifyOwner }) => {
           notifyOwner({
-            title: `New Building Lead: ${building_name}`,
-            content: `${name} submitted the form.\nBuilding: ${building_name}\nEmail: ${email}`,
+            title: isBoreslayLead
+              ? `New BORESLAY Lead: ${building_name}`
+              : `New Building Lead: ${building_name}`,
+            content: `${name} submitted the form.\n${isBoreslayLead ? "Business" : "Building"}: ${building_name}\nEmail: ${email}${phone ? `\nPhone: ${phone}` : ""}${notes ? `\n${notes}` : ""}`,
           }).catch(err => console.warn("[Leads v9] Notify failed:", err));
         });
+
+        // BORESLAY landing promises "Adam will text you within the hour" —
+        // fire an SMS to the owner's phone so that promise is keepable.
+        if (isBoreslayLead && process.env.BORESLAY_LEAD_NOTIFY_PHONE) {
+          import("./sms").then(({ sendSMS }) => {
+            sendSMS(
+              process.env.BORESLAY_LEAD_NOTIFY_PHONE!,
+              `BORESLAY lead: ${name} (${building_name})${role ? ` · ${role}` : ""}${phone ? ` · ${phone}` : ""} · ${email}${notes ? ` · ${notes}` : ""}`.slice(0, 320)
+            ).catch(err => console.warn("[Leads v9] Owner SMS failed:", err));
+          });
+        }
 
         return res.status(200).json({ success: true, id: leadId.toString() });
       } catch (err) {

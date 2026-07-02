@@ -2218,6 +2218,7 @@ export async function createLead(data: {
   phone?: string | null;
   source?: string | null;
   sourceUrl?: string | null;
+  notes?: string | null;
 }): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -2231,6 +2232,7 @@ export async function createLead(data: {
     phone: data.phone ?? null,
     source: data.source ?? "add_your_building_form",
     sourceUrl: data.sourceUrl ?? null,
+    notes: data.notes ?? null,
     status: "New",
     isRead: false,
   });
