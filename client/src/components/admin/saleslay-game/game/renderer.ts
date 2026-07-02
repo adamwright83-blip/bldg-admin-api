@@ -197,7 +197,7 @@ function drawSelectionRing(ctx: CanvasRenderingContext2D, state: BattleState, x:
   ctx.strokeStyle = "#6fc4ff";
   ctx.lineWidth = ready ? 4 : 3;
   ctx.beginPath();
-  ctx.ellipse(x, y + 58, 74, 20, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y + 76, 104, 26, 0, 0, Math.PI * 2);
   ctx.stroke();
   ctx.restore();
 }
@@ -224,26 +224,27 @@ function drawDragon(ctx: CanvasRenderingContext2D, state: BattleState, sprites: 
   if (winding) ctx.translate(x - DRAGON_X, 0);
 
   if (spriteReady(sprite)) {
-    ctx.drawImage(sprite, x - 90, y - 90, 180, 180);
+    ctx.drawImage(sprite, x - 128, y - 128, 256, 256);
   } else {
-    // placeholder dragon: body + head + wing + snout, blue-ish
+    // placeholder dragon: body + head + wing + snout, blue-ish. Scaled up
+    // (~15% of canvas width) so the combatants dominate the composition.
     ctx.fillStyle = "#3aa0c9";
     ctx.beginPath();
-    ctx.ellipse(x, y, winding ? 76 : 70, 46, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y, winding ? 106 : 98, 64, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(x + 65, y - 20, 30, 24, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + 90, y - 28, 42, 34, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "#2a7fa3";
     ctx.beginPath();
-    ctx.moveTo(x - 10, y - 30);
-    ctx.lineTo(x - 60, y - 90);
-    ctx.lineTo(x + 20, y - 45);
+    ctx.moveTo(x - 14, y - 42);
+    ctx.lineTo(x - 84, y - 126);
+    ctx.lineTo(x + 28, y - 62);
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = "#f4d35e";
     ctx.beginPath();
-    ctx.arc(x + 82, y - 24, 5, 0, Math.PI * 2);
+    ctx.arc(x + 114, y - 34, 7, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
@@ -288,32 +289,59 @@ function drawVillain(ctx: CanvasRenderingContext2D, state: BattleState, sprites:
   if (flashing) ctx.filter = "brightness(1.6) saturate(1.6) hue-rotate(-20deg)";
 
   if (spriteReady(sprite)) {
-    ctx.drawImage(sprite, x - 90, y - 100, 180, 190);
+    ctx.drawImage(sprite, x - 128, y - 142, 256, 270);
   } else {
-    // placeholder: cloaked figure with a clock-face head
+    // placeholder: cloaked figure with an EXPRESSIVE clock-face head — evil
+    // eyes and a cunning mouth, never a blank dial. Scaled up (~18% of
+    // canvas width) to match Spark's presence.
     ctx.fillStyle = "#4b3a54";
     ctx.beginPath();
-    ctx.moveTo(x - 55, y + 40);
-    ctx.lineTo(x - 40, y - 60);
-    ctx.lineTo(x + 40, y - 60);
-    ctx.lineTo(x + 55, y + 40);
+    ctx.moveTo(x - 78, y + 56);
+    ctx.lineTo(x - 56, y - 84);
+    ctx.lineTo(x + 56, y - 84);
+    ctx.lineTo(x + 78, y + 56);
     ctx.closePath();
     ctx.fill();
 
     ctx.fillStyle = "#f2ead8";
     ctx.beginPath();
-    ctx.arc(x, y - 90, 34, 0, Math.PI * 2);
+    ctx.arc(x, y - 128, 48, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = "#3a2f42";
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 4;
     ctx.stroke();
-    // clock hands
-    ctx.strokeStyle = "#3a2f42";
+
+    // Evil eyes — angled brows over dark pupils.
+    ctx.fillStyle = "#2a1f2e";
     ctx.beginPath();
-    ctx.moveTo(x, y - 90);
-    ctx.lineTo(x, y - 108);
-    ctx.moveTo(x, y - 90);
-    ctx.lineTo(x + 14, y - 84);
+    ctx.ellipse(x - 16, y - 132, 6, 8, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x + 16, y - 132, 6, 8, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#2a1f2e";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x - 26, y - 144);
+    ctx.lineTo(x - 8, y - 138);
+    ctx.moveTo(x + 26, y - 144);
+    ctx.lineTo(x + 8, y - 138);
+    ctx.stroke();
+
+    // Cunning crooked mouth.
+    ctx.beginPath();
+    ctx.moveTo(x - 20, y - 112);
+    ctx.quadraticCurveTo(x, y - 100, x + 22, y - 116);
+    ctx.stroke();
+
+    // Clock hands, still present but no longer the only facial feature.
+    ctx.strokeStyle = "#3a2f42";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 128);
+    ctx.lineTo(x, y - 150);
+    ctx.moveTo(x, y - 128);
+    ctx.lineTo(x + 18, y - 120);
     ctx.stroke();
   }
   ctx.restore();

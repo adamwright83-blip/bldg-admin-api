@@ -19,10 +19,13 @@ import type { BattleSnapshot, BattleState, BusinessEvent } from "./types";
 export const CANVAS_W = 1280;
 export const CANVAS_H = 720;
 
-export const DRAGON_X = 220;
-export const DRAGON_Y = 520;
-export const VILLAIN_X = 1040;
-export const VILLAIN_Y = 520;
+// Positions leave a clear combat lane: SAGE owns the far-left edge of the
+// board, Spark sits well clear of SAGE and the bottom HUD, the villain sits
+// well clear of the right-column HUD stack (notice board / ledger / contract).
+export const DRAGON_X = 300;
+export const DRAGON_Y = 440;
+export const VILLAIN_X = 960;
+export const VILLAIN_Y = 440;
 export const HIT_RADIUS = 60;
 
 const AUTO_ACTION_MIN_MS = 1_800;

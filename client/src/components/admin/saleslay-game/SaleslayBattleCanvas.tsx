@@ -6,10 +6,10 @@
  * sales-move fantasy labels. Plain <canvas> + requestAnimationFrame for the
  * battlefield; a diegetic HTML/CSS HUD overlays it — hanging sign, Kingdom
  * Influence beam, notice board, ledger, carved-token ability tray, pinned
- * contract, and SAGE resting beside the board. Local game state only — no
- * tRPC, no network, no real side effects. SAGE never mounts its own
- * composer: activating it calls back to the parent, which summons the real,
- * already-mounted ComposerPanel.
+ * contract — and SAGE stands in-world at the lower-left edge of the board,
+ * not in a sidebar. Local game state only — no tRPC, no network, no real
+ * side effects. SAGE never mounts its own composer: activating it calls
+ * back to the parent, which summons the real, already-mounted ComposerPanel.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Coins, Flame, Heart, Mail, Package, Phone, Sparkles, Zap } from "lucide-react";
@@ -66,7 +66,8 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
   const [pressedKey, setPressedKey] = useState<string | null>(null);
   const [autoMode, setAutoModeState] = useState(false);
 
-  // Pause the simulation (not a reset) while Sage is summoned.
+  // Pause the simulation (not a reset) while Sage is summoned — engine time
+  // itself freezes, so cooldowns/Auto timers don't jump on close.
   useEffect(() => {
     engineRef.current!.setPaused(sageOpen);
   }, [sageOpen]);
@@ -167,41 +168,47 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
 
   return (
     <div className="slb-root">
-      <div className="slb-board-row">
-        {/* SAGE — a resting oracle character beside the board, not a panel.
-            Ask Sage never opens anything itself; it only asks the parent to
-            summon the real composer. */}
+      <div className="slb-canvas-wrap">
+        <canvas
+          ref={canvasRef}
+          className="slb-canvas"
+          style={{ aspectRatio: `${CANVAS_W} / ${CANVAS_H}` }}
+        />
+
+        {/* SAGE — an in-world oracle character at the lower-left edge of the
+            battlefield, not a sidebar. Irregular silhouette, no enclosing
+            rectangle. Ask Sage never opens anything itself; it only asks
+            the parent to summon the real composer. */}
         <div className={`slb-sage ${sageOpen ? "is-awakened" : ""}`}>
           <div className="slb-sage-figure" aria-hidden="true">
-            <Sparkles size={22} />
+            <span className="slb-sage-core">
+              <Sparkles size={18} />
+            </span>
           </div>
-          <span className="slb-sage-name">Sage</span>
+          <div className="slb-sage-label">
+            <span className="slb-sage-name">Sage</span>
+            <span className="slb-sage-role">Oracle of deals</span>
+          </div>
           <p className="slb-sage-insight">Lead with convenience, then price.</p>
           <button type="button" className="slb-sage-ask-btn" onClick={() => onAskSage?.()}>
-            Ask Sage
+            <span className="slb-sage-ask-label">Ask Sage</span>
+            <span className="slb-sage-ask-hint">Summon counsel</span>
           </button>
         </div>
 
-        <div className="slb-canvas-wrap">
-          <canvas
-            ref={canvasRef}
-            className="slb-canvas"
-            style={{ aspectRatio: `${CANVAS_W} / ${CANVAS_H}` }}
-          />
+        {/* HUD overlay — every block is a physical object in Spark's world. */}
+        <div className="slb-hud">
+          {/* Top row, three explicit zones: True Net | Kingdom Influence | Blockers */}
+          <div className="slb-truenet-ropes" aria-hidden="true" />
+          <div className="slb-sign slb-sign--truenet">
+            <span className="slb-sign-label">True net</span>
+            <b className="slb-sign-value">{usd(snapshot.trueNetCents)}</b>
+          </div>
+          <div className="slb-sign slb-sign--gain">
+            <span className="slb-sign-gain">+{usd(snapshot.todayGainCents)} today</span>
+          </div>
 
-          {/* HUD overlay — every block is a physical object in Spark's world. */}
-          <div className="slb-hud">
-            {/* Hanging True Net sign */}
-            <div className="slb-truenet-ropes" aria-hidden="true" />
-            <div className="slb-sign slb-sign--truenet">
-              <span className="slb-sign-label">True net</span>
-              <b className="slb-sign-value">{usd(snapshot.trueNetCents)}</b>
-            </div>
-            <div className="slb-sign slb-sign--gain">
-              <span className="slb-sign-gain">+{usd(snapshot.todayGainCents)} today</span>
-            </div>
-
-            {/* Kingdom Influence beam meter — chunky, high-contrast, readable at a glance */}
+          <div className="slb-beam-zone">
             <div className="slb-beam-title" aria-hidden="true">
               <span>Kingdom influence</span>
               <i>Tug of war</i>
@@ -215,112 +222,106 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
                   {!fogNarrow ? <span className="slb-beam-pct">{Math.round(100 - frontierPct)}%</span> : null}
                 </div>
                 <div className="slb-beam-knot" style={{ left: `${frontierPct}%` }} />
+                {sparkNarrow ? (
+                  <span className="slb-beam-endcap slb-beam-endcap--spark">{Math.round(frontierPct)}%</span>
+                ) : null}
+                {fogNarrow ? (
+                  <span className="slb-beam-endcap slb-beam-endcap--fog">{Math.round(100 - frontierPct)}%</span>
+                ) : null}
               </div>
-              {sparkNarrow ? (
-                <span className="slb-beam-endcap slb-beam-endcap--spark">{Math.round(frontierPct)}%</span>
-              ) : null}
-              {fogNarrow ? (
-                <span className="slb-beam-endcap slb-beam-endcap--fog">{Math.round(100 - frontierPct)}%</span>
-              ) : null}
             </div>
             <div className="slb-beam-labels">
               <span className="slb-beam-label slb-beam-label--spark">Spark's realm</span>
               <span className="slb-beam-label slb-beam-label--fog">The Procrastinator</span>
             </div>
+          </div>
 
-            {/* Notice board — three blocker counters */}
-            <div className="slb-noticeboard">
-              <div className="slb-poster" style={{ transform: "rotate(-2deg)" }}>
-                <div className={`slb-badge ${snapshot.blockers.overdueReturns === 0 ? "is-clear" : ""}`}>
-                  {snapshot.blockers.overdueReturns}
-                </div>
-                <span>Overdue returns</span>
+          <div className="slb-noticeboard">
+            <div className="slb-poster" style={{ transform: "rotate(-2deg)" }}>
+              <div className={`slb-badge ${snapshot.blockers.overdueReturns === 0 ? "is-clear" : ""}`}>
+                {snapshot.blockers.overdueReturns}
               </div>
-              <div className="slb-poster" style={{ transform: "rotate(1.5deg)" }}>
-                <div className={`slb-badge ${snapshot.blockers.failedPayments === 0 ? "is-clear" : ""}`}>
-                  {snapshot.blockers.failedPayments}
-                </div>
-                <span>Failed payments</span>
-              </div>
-              <div className="slb-poster" style={{ transform: "rotate(-1deg)" }}>
-                <div className={`slb-badge ${snapshot.blockers.blockedOrders === 0 ? "is-clear" : ""}`}>
-                  {snapshot.blockers.blockedOrders}
-                </div>
-                <span>Blocked orders</span>
-              </div>
+              <span>Overdue returns</span>
             </div>
-
-            {/* Spark plaque */}
-            <div className="slb-plaque">
-              <div className="slb-plaque-head">
-                <span className="slb-plaque-title">Spark · Lv 4</span>
-                <span className="slb-xp-pill">
-                  <Coins size={11} aria-hidden="true" /> {snapshot.xp.toLocaleString("en-US")} XP
-                </span>
+            <div className="slb-poster" style={{ transform: "rotate(1.5deg)" }}>
+              <div className={`slb-badge ${snapshot.blockers.failedPayments === 0 ? "is-clear" : ""}`}>
+                {snapshot.blockers.failedPayments}
               </div>
-              <div className={`slb-pips slb-pips--hp ${lowHp ? "is-pulsing" : ""}`}>
-                {hearts.map((on, i) => (
-                  <Heart key={i} size={15} className={on ? "is-on" : "is-off"} aria-hidden="true" />
-                ))}
-              </div>
-              <div className="slb-pips slb-pips--energy">
-                {bolts.map((on, i) => (
-                  <Zap key={i} size={15} className={on ? "is-on" : "is-off"} aria-hidden="true" />
-                ))}
-              </div>
+              <span>Failed payments</span>
             </div>
-
-            {/* Open ledger battle log */}
-            <div className="slb-ledger" aria-live="polite">
-              <div className="slb-ledger-page slb-ledger-page--left">
-                <span className="slb-ledger-title">Battle log</span>
-                {log.slice(0, 2).map((entry) => (
-                  <p key={entry.id} className="slb-ledger-line">{entry.text}</p>
-                ))}
+            <div className="slb-poster" style={{ transform: "rotate(-1deg)" }}>
+              <div className={`slb-badge ${snapshot.blockers.blockedOrders === 0 ? "is-clear" : ""}`}>
+                {snapshot.blockers.blockedOrders}
               </div>
-              <div className="slb-ledger-page slb-ledger-page--right">
-                {log.slice(2, 5).map((entry) => (
-                  <p key={entry.id} className="slb-ledger-line">{entry.text}</p>
-                ))}
-              </div>
+              <span>Blocked orders</span>
             </div>
+          </div>
 
-            {banner ? <div className="slb-banner-toast">{banner}</div> : null}
+          {/* Right-middle: single chronological Battle Log, clear of the villain */}
+          <div className="slb-ledger" aria-live="polite">
+            <span className="slb-ledger-title">Battle log</span>
+            {log.slice(0, 4).map((entry, i) => (
+              <p key={entry.id} className={`slb-ledger-line ${i === 0 ? "is-newest" : ""}`}>
+                {entry.text}
+              </p>
+            ))}
+          </div>
 
-            {/* Carved-enamel ability tray */}
-            <div className="slb-tray">
-              <TrayButton
-                label={FIRE_FLAVOR_NAME}
-                shortcut="SPACE"
-                icon={<Flame size={14} />}
-                tokenClass="token-fire"
-                engineRef={engineRef}
-                cooldownId={FIRE_COOLDOWN_ID}
-                tick={cooldownTick}
-                pressed={pressedKey === FIRE_COOLDOWN_ID}
-                onClick={handleFireClick}
-              />
-              {ABILITY_CONFIG.map((ability) => {
-                const Icon = ABILITY_ICONS[ability.id];
-                return (
-                  <TrayButton
-                    key={ability.id}
-                    label={ability.flavorName}
-                    shortcut={ability.key}
-                    icon={<Icon size={14} />}
-                    tokenClass={`token-${ability.id}`}
-                    engineRef={engineRef}
-                    cooldownId={ability.id}
-                    tick={cooldownTick}
-                    disabled={villainDefeated}
-                    pressed={pressedKey === ability.id}
-                    onClick={() => handleAbilityClick(ability.id)}
-                  />
-                );
-              })}
+          {banner ? <div className="slb-banner-toast">{banner}</div> : null}
+
+          {/* Bottom row: Spark plaque | ability tray | contract + controls */}
+          <div className="slb-plaque">
+            <div className="slb-plaque-head">
+              <span className="slb-plaque-title">Spark · Lv 4</span>
+              <span className="slb-xp-pill">
+                <Coins size={11} aria-hidden="true" /> {snapshot.xp.toLocaleString("en-US")} XP
+              </span>
             </div>
+            <div className={`slb-pips slb-pips--hp ${lowHp ? "is-pulsing" : ""}`}>
+              {hearts.map((on, i) => (
+                <Heart key={i} size={15} className={on ? "is-on" : "is-off"} aria-hidden="true" />
+              ))}
+            </div>
+            <div className="slb-pips slb-pips--energy">
+              {bolts.map((on, i) => (
+                <Zap key={i} size={15} className={on ? "is-on" : "is-off"} aria-hidden="true" />
+              ))}
+            </div>
+          </div>
 
-            {/* Pinned parchment Daily Contract */}
+          <div className="slb-tray">
+            <TrayButton
+              label={FIRE_FLAVOR_NAME}
+              shortcut="SPACE"
+              icon={<Flame size={16} />}
+              tokenClass="token-fire"
+              engineRef={engineRef}
+              cooldownId={FIRE_COOLDOWN_ID}
+              tick={cooldownTick}
+              pressed={pressedKey === FIRE_COOLDOWN_ID}
+              onClick={handleFireClick}
+            />
+            {ABILITY_CONFIG.map((ability) => {
+              const Icon = ABILITY_ICONS[ability.id];
+              return (
+                <TrayButton
+                  key={ability.id}
+                  label={ability.flavorName}
+                  shortcut={ability.key}
+                  icon={<Icon size={16} />}
+                  tokenClass={`token-${ability.id}`}
+                  engineRef={engineRef}
+                  cooldownId={ability.id}
+                  tick={cooldownTick}
+                  disabled={villainDefeated}
+                  pressed={pressedKey === ability.id}
+                  onClick={() => handleAbilityClick(ability.id)}
+                />
+              );
+            })}
+          </div>
+
+          <div className="slb-contract-cluster">
             <div className="slb-contract">
               <div className="slb-contract-nail" aria-hidden="true" />
               <span className="slb-contract-label">Daily contract</span>
@@ -339,8 +340,6 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
                 </>
               ) : null}
             </div>
-
-            {/* Auto / Retreat controls */}
             <div className="slb-controls">
               <button
                 type="button"
@@ -349,7 +348,7 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
               >
                 Auto
               </button>
-              <button type="button" className="slb-control-btn" onClick={handleRetreat}>
+              <button type="button" className="slb-control-btn slb-control-btn--danger" onClick={handleRetreat}>
                 Retreat
               </button>
             </div>
