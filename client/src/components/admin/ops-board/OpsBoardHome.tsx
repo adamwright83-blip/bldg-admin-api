@@ -111,8 +111,18 @@ export function OpsBoardHome({
     (order) => !recentlyCompletedOrderIds.has(order.id)
   );
   const completePickup = trpc.admin.updateStatus.useMutation({
-    onSuccess: (_data, variables) => {
-      canvasRef.current?.completeWeaponAction("pickup");
+    onSuccess: (data, variables) => {
+      // The server's atomic guard already prevented a duplicate SMS/war
+      // event, but if THIS request lost the race (someone else's request
+      // completed the same order a moment earlier), the real-world event
+      // already happened via THAT request — awarding a second reward here
+      // would double-credit one real action. Treat it as "nothing new to
+      // reward," not a failure.
+      if (data.alreadyCompleted) {
+        canvasRef.current?.failWeaponAction("pickup", "That order was already marked as picked up.");
+      } else {
+        canvasRef.current?.completeWeaponAction("pickup");
+      }
       setRecentlyCompletedOrderIds((prev) => new Set(prev).add(variables.orderId));
       setPickupPickerOpen(false);
       setSelectedOrderId(null);

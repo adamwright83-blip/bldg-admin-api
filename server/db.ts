@@ -715,6 +715,37 @@ export async function getOrdersByDateAndStatus(
     .orderBy(desc(orders.createdAt));
 }
 
+/**
+ * Atomically transitions an order to "collected" ONLY if it is currently
+ * "new" or "intake-pending" — the durable DB-level guard behind pickup
+ * completion (Saleslay's Fulfill the Promise, and the "Pickup Complete"
+ * buttons in AdminLive/Admin/VendorPortal, all of which already only
+ * invoke this transition from that same starting state).
+ *
+ * This is a single conditional UPDATE (`WHERE status IN (...)`), not a
+ * read-then-write — so concurrent requests, network retries, duplicate
+ * browser tabs, or two staff members acting at once cannot both "win" the
+ * transition. `transitioned` is only true for whichever request's UPDATE
+ * actually changed a row; every other caller (including the exact same
+ * request retried) sees `transitioned: false` against the resulting order,
+ * which routers.ts uses to skip re-sending the pickup SMS.
+ */
+export async function attemptOrderPickupCollection(
+  orderId: number
+): Promise<{ transitioned: boolean; order: Order | undefined }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db
+    .update(orders)
+    .set({ status: "collected" })
+    .where(and(eq(orders.id, orderId), inArray(orders.status, ["new", "intake-pending"])));
+  const affectedRows = Number((result as { [0]?: { affectedRows?: number } })[0]?.affectedRows ?? 0);
+
+  const order = await getOrderById(orderId);
+  return { transitioned: affectedRows > 0, order };
+}
+
 export async function updateOrderStatus(
   orderId: number,
   status: Order["status"],

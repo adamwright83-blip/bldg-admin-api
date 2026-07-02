@@ -30,6 +30,7 @@ import {
   getOrdersByStatus,
   getOrdersByDateAndStatus,
   updateOrderStatus,
+  attemptOrderPickupCollection,
   updateOrderBuildingSlugForCustomer,
   updateOrderIntake,
   searchCustomerByPhone,
@@ -2758,6 +2759,44 @@ export const appRouter = router({
             message: "Charge the order before marking it delivered.",
           });
         }
+
+        if (input.status === "collected") {
+          // Durable, atomic guard (server-side, not browser state): only
+          // the ONE request that actually flips new|intake-pending ->
+          // collected records the war event or sends the pickup SMS.
+          // Repeated requests, network retries, duplicate tabs, or two
+          // staff members racing all resolve to the same idempotent
+          // "already completed" result and never double-send.
+          const { transitioned, order: collectedOrder } = await attemptOrderPickupCollection(input.orderId);
+          if (!collectedOrder) throw new Error("Order not found");
+          if (!transitioned) {
+            return { success: true, alreadyCompleted: true };
+          }
+
+          await updateOrderStatus(input.orderId, "collected", {
+            source: "driver_app_bldg",
+            actorUserId: ctx.user?.id ?? null,
+            actorDisplayName: ctx.user?.name ?? ctx.user?.email ?? null,
+          });
+
+          recordWarActionSafe({
+            tenantId: ctx.tenantId ?? "default",
+            kind: "stage_advance",
+            dedupeKey: `stage:${input.orderId}:collected`,
+            meta: { orderId: input.orderId, status: "collected" },
+          });
+
+          try {
+            await notifyPickupEnRoute(collectedOrder.phone);
+          } catch (err) {
+            console.warn("[SMS] Failed to send pickup notification:", err);
+          }
+
+          return { success: true, alreadyCompleted: false };
+        }
+
+        // All other transitions: unchanged existing behavior — this
+        // hardening pass only touches the collected/pickup-completion path.
         await updateOrderStatus(input.orderId, input.status, {
           source: "driver_app_bldg",
           actorUserId: ctx.user?.id ?? null,
@@ -2773,18 +2812,6 @@ export const appRouter = router({
           dedupeKey: `stage:${input.orderId}:${input.status}`,
           meta: { orderId: input.orderId, status: input.status },
         });
-
-        // SMS: Pickup en route when marking as collected
-        if (input.status === "collected") {
-          const order = await getOrderById(input.orderId);
-          if (order) {
-            try {
-              await notifyPickupEnRoute(order.phone);
-            } catch (err) {
-              console.warn("[SMS] Failed to send pickup notification:", err);
-            }
-          }
-        }
 
         return { success: true };
       }),
