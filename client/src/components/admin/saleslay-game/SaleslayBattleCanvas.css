@@ -1,7 +1,8 @@
 /* Saleslay Battle Canvas — storybook mercantile battle board.
-   Every major block is a physical object (wood, rope, wax, parchment, ink)
-   but stays chunky, high-contrast, and obviously clickable — a toy game
-   board, not a renaissance-fair UI kit. */
+   Every major block is a physical object (wood, rope, parchment, ink,
+   carved enamel, forged metal) but stays chunky, high-contrast, and
+   obviously clickable — a toy game board, not a renaissance-fair UI kit.
+   No wax-seal shapes anywhere in this file. */
 
 .slb-root {
   --slb-wood: linear-gradient(180deg, #9a6a3c, #6e4726);
@@ -12,8 +13,8 @@
   --slb-spark-blue: #3f8fd8;
   --slb-fog-violet: #7a63b8;
   --slb-gold: #f2c14e;
-  --slb-red-wax: #c94f3f;
-  --slb-green-wax: #5a9a5c;
+  --slb-red-enamel: #c94f3f;
+  --slb-green-enamel: #5a9a5c;
   width: 100%;
   font-family: "Nunito", "Segoe UI", system-ui, sans-serif;
 }
@@ -32,107 +33,59 @@
   padding: 10px;
 }
 
-/* ---------- SAGE COMMAND console (far-left edge, decorative) ---------- */
+/* ---------- SAGE — a resting oracle character, not a panel ---------- */
 
 .slb-sage {
-  width: 200px;
-  flex: 0 0 200px;
-  background: linear-gradient(180deg, #5a3d24, #3a2614);
-  border-radius: 10px;
-  border: 2px solid #2c1c0f;
-  padding: 12px 10px;
+  width: 140px;
+  flex: 0 0 140px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 10px 6px;
+  text-align: center;
 }
 
-.slb-sage-lantern {
-  width: 34px;
-  height: 34px;
-  margin: 0 auto;
-  border-radius: 50%;
-  background: radial-gradient(circle, #ffd98a, #f2a33c 70%);
-  color: #4a2f0c;
+.slb-sage-figure {
+  width: 64px;
+  height: 96px;
+  margin-bottom: 4px;
+  border-radius: 50% 50% 42% 42%;
+  background: radial-gradient(circle at 50% 32%, #7a63c9, #3a2a63 78%);
+  color: #d9c9ff;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 14px rgba(255, 190, 90, 0.6);
+  box-shadow: 0 0 16px rgba(130, 100, 220, 0.4);
+  transition: box-shadow 0.3s ease;
+}
+.slb-sage.is-awakened .slb-sage-figure {
+  box-shadow: 0 0 26px rgba(160, 130, 255, 0.75);
 }
 
-.slb-sage-plaque {
-  text-align: center;
-  color: #f0e2c0;
-}
-.slb-sage-title {
-  display: block;
+.slb-sage-name {
   font-size: 13px;
   font-weight: 800;
-}
-.slb-sage-sub {
-  display: block;
-  font-size: 10px;
-  font-weight: 700;
-  color: #c9ad7c;
+  color: #e8dcff;
+  letter-spacing: 0.03em;
 }
 
-.slb-sage-card {
-  background: #f5ecd4;
-  border-radius: 8px;
-  padding: 8px 9px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.slb-sage-card-label {
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  color: #8a6a3e;
-}
-.slb-sage-card-hint {
-  font-size: 11px;
+.slb-sage-insight {
+  margin: 0;
+  font-size: 10.5px;
   font-weight: 700;
-  color: var(--slb-ink);
+  color: #b9a8e0;
   line-height: 1.3;
-}
-.slb-sage-card-value {
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--slb-ink);
-}
-
-.slb-sage-moves {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 2px;
-}
-.slb-sage-move-btn {
-  background: #fff;
-  border: 1.5px solid var(--slb-parch-line);
-  border-radius: 6px;
-  padding: 5px 7px;
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--slb-ink);
-  cursor: pointer;
-  text-align: left;
-  transition: transform 0.1s ease;
-}
-.slb-sage-move-btn:hover {
-  border-color: var(--slb-gold);
-}
-.slb-sage-move-btn:active {
-  transform: scale(0.96);
 }
 
 .slb-sage-ask-btn {
-  margin-top: auto;
+  width: 100%;
   background: var(--slb-gold);
   color: #4a2f0c;
   border: none;
   border-radius: 8px;
-  padding: 8px;
+  padding: 7px;
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
@@ -224,73 +177,114 @@
   color: #9fdc8c;
 }
 
-/* Chunky kingdom beam meter */
+/* Kingdom Influence beam meter */
+.slb-beam-title {
+  position: absolute;
+  left: 50%;
+  top: 1.5%;
+  transform: translateX(-50%);
+  background: var(--slb-wood-dark);
+  border: 2px solid #2c1c0f;
+  border-radius: 6px;
+  padding: 2px 12px;
+  text-align: center;
+  z-index: 1;
+}
+.slb-beam-title span {
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--slb-gold);
+  letter-spacing: 0.05em;
+}
+.slb-beam-title i {
+  display: block;
+  font-size: 8px;
+  font-weight: 700;
+  font-style: normal;
+  color: #c9ad7c;
+}
+
 .slb-beam {
   position: absolute;
-  left: 24%;
-  top: 4%;
-  width: 52%;
+  left: 22%;
+  top: 5.5%;
+  width: 56%;
   height: 6.5%;
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-.slb-beam-medallion {
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff8e6;
-  border: 2px solid var(--slb-wood-dark);
-}
-.slb-beam-medallion--lantern {
-  background: #f2a33c;
-}
-.slb-beam-medallion--clock {
-  background: var(--slb-fog-violet);
 }
 .slb-beam-track {
   position: relative;
   flex: 1;
   height: 100%;
   border-radius: 8px;
-  border: 2px solid var(--slb-wood-dark);
+  border: 3px solid var(--slb-wood-dark);
   overflow: visible;
   display: flex;
   background: #241a2e;
 }
-.slb-beam-fill-spark {
-  height: 100%;
-  background: var(--slb-spark-blue);
-  border-radius: 6px 0 0 6px;
-  transition: width 0.3s ease;
-}
+.slb-beam-fill-spark,
 .slb-beam-fill-fog {
   height: 100%;
-  background: var(--slb-fog-violet);
-  border-radius: 0 6px 6px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: width 0.3s ease;
+  overflow: hidden;
+}
+.slb-beam-fill-spark {
+  background: var(--slb-spark-blue);
+  border-radius: 5px 0 0 5px;
+  justify-content: flex-start;
+}
+.slb-beam-fill-fog {
+  background: var(--slb-fog-violet);
+  border-radius: 0 5px 5px 0;
+  justify-content: flex-end;
+}
+.slb-beam-pct {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 8px;
+  white-space: nowrap;
 }
 .slb-beam-knot {
   position: absolute;
   top: 50%;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #ffdd8a, #c9922e);
-  border: 2px solid #7a5a1e;
+  background: radial-gradient(circle at 35% 30%, #d8dce2, #7c828c);
+  border: 2px solid #4a4e56;
   transform: translate(-50%, -50%);
   transition: left 0.3s ease;
   box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
 }
+.slb-beam-endcap {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--slb-wood-dark);
+  border-radius: 999px;
+  padding: 2px 6px;
+}
+.slb-beam-endcap--spark {
+  left: -6px;
+}
+.slb-beam-endcap--fog {
+  right: -6px;
+}
+
 .slb-beam-labels {
   position: absolute;
-  left: 24%;
-  top: 11.5%;
-  width: 52%;
+  left: 22%;
+  top: 12.5%;
+  width: 56%;
   display: flex;
   justify-content: space-between;
   font-size: 11px;
@@ -303,7 +297,7 @@
   color: #c4b3f0;
 }
 
-/* Notice board with wanted posters */
+/* Notice board — three blocker counters */
 .slb-noticeboard {
   position: absolute;
   right: 2.5%;
@@ -324,12 +318,13 @@
   padding: 5px 4px;
   text-align: center;
 }
-.slb-wax {
+.slb-badge {
   width: 22px;
   height: 22px;
   margin: 0 auto 3px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #e0705f, var(--slb-red-wax));
+  border-radius: 5px;
+  background: linear-gradient(160deg, #e0705f, var(--slb-red-enamel));
+  border: 1.5px solid #7a2a1f;
   color: #fff2ea;
   font-size: 13px;
   font-weight: 800;
@@ -337,8 +332,9 @@
   align-items: center;
   justify-content: center;
 }
-.slb-wax.is-clear {
-  background: radial-gradient(circle at 35% 30%, #8fbf8f, var(--slb-green-wax));
+.slb-badge.is-clear {
+  background: linear-gradient(160deg, #8fbf8f, var(--slb-green-enamel));
+  border-color: #2e5c30;
   color: #eafcea;
 }
 .slb-poster span {
@@ -390,8 +386,8 @@
   margin-bottom: 3px;
 }
 .slb-pips--hp svg.is-on {
-  color: var(--slb-red-wax);
-  fill: var(--slb-red-wax);
+  color: var(--slb-red-enamel);
+  fill: var(--slb-red-enamel);
 }
 .slb-pips--energy svg.is-on {
   color: #58c0e0;
@@ -462,7 +458,7 @@
   border-radius: 8px;
 }
 
-/* Wax-seal ability tray */
+/* Carved-enamel ability tray */
 .slb-tray {
   position: absolute;
   bottom: 3%;
@@ -505,26 +501,29 @@
   cursor: not-allowed;
 }
 
-.slb-seal {
+/* Carved enamel action tokens — hard physical edge, inset rune-stone look.
+   Deliberately NOT circular-drip/wax-shaped. */
+.slb-token {
   position: absolute;
   top: -12px;
   left: 50%;
   transform: translateX(-50%);
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff2ea;
-  border: 2px solid rgba(0, 0, 0, 0.25);
+  border: 2px solid rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.18);
   z-index: 1;
 }
-.seal-fire { background: radial-gradient(circle at 35% 30%, #ef7a5a, #b0341f); }
-.seal-email { background: radial-gradient(circle at 35% 30%, #6ba6dd, #2c5a8a); }
-.seal-call { background: radial-gradient(circle at 35% 30%, #6fc08a, #2e6e4a); }
-.seal-pickup { background: radial-gradient(circle at 35% 30%, #a988e0, #5e3f96); }
-.seal-collect { background: radial-gradient(circle at 35% 30%, #f0c05a, #9a742a); }
+.token-fire { background: linear-gradient(160deg, #ef7a5a, #b0341f); }
+.token-call { background: linear-gradient(160deg, #6fc08a, #2e6e4a); }
+.token-pickup { background: linear-gradient(160deg, #a988e0, #5e3f96); }
+.token-email { background: linear-gradient(160deg, #6ba6dd, #2c5a8a); }
+.token-collect { background: linear-gradient(160deg, #f0c05a, #9a742a); }
 
 .slb-tray-cooldown {
   position: absolute;
@@ -544,10 +543,11 @@
 .slb-tray-label {
   position: relative;
   z-index: 1;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 800;
   color: var(--slb-ink);
   text-align: center;
+  line-height: 1.1;
 }
 .slb-tray-key {
   position: relative;
@@ -561,7 +561,7 @@
 .slb-contract {
   position: absolute;
   right: 2.5%;
-  bottom: 3%;
+  bottom: 16%;
   width: 25%;
   background: var(--slb-parch);
   border: 1.5px solid var(--slb-parch-line);
@@ -613,19 +613,82 @@
   color: #6e5a3e;
   margin-top: 4px;
 }
-.slb-contract-seal {
+
+/* Completion: self-writing signature + stitched thread + brass clasp.
+   No stamp, no wax seal. */
+.slb-contract-signature {
+  height: 12px;
+  margin-top: 4px;
+  background:
+    linear-gradient(90deg, transparent 0%, var(--slb-ink) 0%) no-repeat;
+  background-size: 100% 2px;
+  background-position: center;
+  position: relative;
+}
+.slb-contract-signature::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-bottom: 2px solid var(--slb-ink);
+  clip-path: polygon(0 0, 0 0, 0 100%, 0 100%);
+  animation: slb-signature-draw 0.6s ease forwards;
+}
+@keyframes slb-signature-draw {
+  to { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+}
+.slb-contract-thread {
+  height: 2px;
+  margin-top: 6px;
+  background: repeating-linear-gradient(90deg, var(--slb-gold) 0 4px, transparent 4px 8px);
+  width: 0%;
+  animation: slb-thread-draw 0.5s ease 0.4s forwards;
+}
+@keyframes slb-thread-draw {
+  to { width: 100%; }
+}
+.slb-contract-clasp {
   position: absolute;
   right: 8px;
   bottom: 8px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #e0705f, var(--slb-red-wax));
-  animation: slb-seal-slam 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: linear-gradient(160deg, #e8c873, #9a742a);
+  border: 1.5px solid #6a4e18;
+  animation: slb-clasp-snap 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) 0.7s backwards;
 }
-@keyframes slb-seal-slam {
+@keyframes slb-clasp-snap {
   from { transform: scale(1.8); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
+}
+
+/* Auto / Retreat controls */
+.slb-controls {
+  position: absolute;
+  right: 2.5%;
+  bottom: 3%;
+  width: 25%;
+  display: flex;
+  gap: 6px;
+}
+.slb-control-btn {
+  flex: 1;
+  background: var(--slb-wood);
+  border: 2px solid var(--slb-wood-dark);
+  border-radius: 6px;
+  color: #f0e2c0;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 6px 0;
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+.slb-control-btn:active {
+  transform: scale(0.94);
+}
+.slb-control-btn.is-lit {
+  background: linear-gradient(160deg, #6fc08a, #2e6e4a);
+  border-color: #1e4a30;
 }
 
 @media (max-width: 900px) {
@@ -636,16 +699,20 @@
     width: 100%;
     flex-direction: row;
     align-items: center;
-    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 10px;
   }
-  .slb-sage-plaque {
+  .slb-sage-figure {
+    margin-bottom: 0;
+  }
+  .slb-sage-insight {
+    flex: 1;
     text-align: left;
   }
-  .slb-sage-card {
-    flex: 1 1 140px;
-  }
   .slb-sage-ask-btn {
-    flex: 1 1 100%;
+    width: auto;
+    flex: 0 0 auto;
+    padding: 7px 14px;
   }
 }
 
@@ -660,5 +727,13 @@
   }
   .slb-sign-value {
     font-size: 16px;
+  }
+  .slb-contract,
+  .slb-controls {
+    bottom: auto;
+    position: static;
+    width: 100%;
+    margin-top: 6px;
+    transform: none;
   }
 }

@@ -3789,6 +3789,61 @@ button.ops-kpi-card:hover {
   }
 }
 
+/* SAGE summon shell — frames the EXISTING kingdom-sage ComposerPanel instance
+   when Saleslay's "Ask Sage" is pressed. Closed: normal in-flow position.
+   Open: overlay positioning around the same node (never a second mount). */
+.ops-sage-summon {
+  position: relative;
+}
+.ops-sage-summon.is-open {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.ops-sage-summon-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 12, 32, 0.65);
+  backdrop-filter: blur(2px);
+}
+.ops-sage-summon.is-open .ops-sage-summon-frame {
+  position: relative;
+  width: min(760px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  border-radius: 22px;
+  border: 2px solid rgba(160, 130, 255, 0.45);
+  box-shadow: 0 0 0 6px rgba(90, 60, 160, 0.12), 0 24px 60px rgba(0, 0, 0, 0.45);
+  animation: ops-sage-summon-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+@keyframes ops-sage-summon-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+.ops-sage-summon-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(20, 12, 32, 0.7);
+  color: #f0e2ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.ops-sage-summon-close:hover {
+  background: rgba(20, 12, 32, 0.9);
+}
+
 @media (min-width: 1280px) {
   .ops-board-home {
     padding: 32px;

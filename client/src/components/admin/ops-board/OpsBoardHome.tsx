@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2, X } from "lucide-react";
 import {
   MobileBottomNav,
   MobileTopBar,
@@ -44,6 +44,19 @@ export function OpsBoardHome({
   const sky = useCommandSky();
   const isOperatorDemo = experienceMode === "operator-demo";
 
+  // SAGE summon — Ask Sage on the Saleslay board asks us to reposition the
+  // ALREADY-mounted ComposerPanel into an overlay; it never mounts a second
+  // composer or fakes one inside the game layer.
+  const [sageOpen, setSageOpen] = useState(false);
+  useEffect(() => {
+    if (!sageOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSageOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [sageOpen]);
+
   if (loading) {
     return (
       <div className="ops-board-home ops-board-loading">
@@ -75,14 +88,31 @@ export function OpsBoardHome({
             <SkyBar />
             <WarStrip onNavigate={onNavigate} />
             <section className="ops-saleslay-preview" aria-label="Saleslay Battle Preview">
-              <SaleslayBattleCanvas />
+              <SaleslayBattleCanvas sageOpen={sageOpen} onAskSage={() => setSageOpen(true)} />
             </section>
-            <ComposerPanel
-              allowDemoMode={false}
-              className="ops-kingdom-composer"
-              onNavigate={onNavigate}
-              variant="kingdom-sage"
-            />
+            <div className={`ops-sage-summon ${sageOpen ? "is-open" : ""}`}>
+              {sageOpen ? (
+                <div className="ops-sage-summon-backdrop" onClick={() => setSageOpen(false)} />
+              ) : null}
+              <div className="ops-sage-summon-frame">
+                {sageOpen ? (
+                  <button
+                    type="button"
+                    className="ops-sage-summon-close"
+                    aria-label="Close Sage"
+                    onClick={() => setSageOpen(false)}
+                  >
+                    <X size={16} />
+                  </button>
+                ) : null}
+                <ComposerPanel
+                  allowDemoMode={false}
+                  className="ops-kingdom-composer"
+                  onNavigate={onNavigate}
+                  variant="kingdom-sage"
+                />
+              </div>
+            </div>
           </>
         )}
         <MobileBottomNav onNavigate={onNavigate} />
@@ -97,15 +127,32 @@ export function OpsBoardHome({
             <SkyBar />
             <WarStrip onNavigate={onNavigate} />
             <section className="ops-saleslay-preview" aria-label="Saleslay Battle Preview">
-              <SaleslayBattleCanvas />
+              <SaleslayBattleCanvas sageOpen={sageOpen} onAskSage={() => setSageOpen(true)} />
             </section>
             <div className="ops-kingdom-command-row">
-              <ComposerPanel
-                allowDemoMode={false}
-                className="ops-kingdom-composer"
-                onNavigate={onNavigate}
-                variant="kingdom-sage"
-              />
+              <div className={`ops-sage-summon ${sageOpen ? "is-open" : ""}`}>
+                {sageOpen ? (
+                  <div className="ops-sage-summon-backdrop" onClick={() => setSageOpen(false)} />
+                ) : null}
+                <div className="ops-sage-summon-frame">
+                  {sageOpen ? (
+                    <button
+                      type="button"
+                      className="ops-sage-summon-close"
+                      aria-label="Close Sage"
+                      onClick={() => setSageOpen(false)}
+                    >
+                      <X size={16} />
+                    </button>
+                  ) : null}
+                  <ComposerPanel
+                    allowDemoMode={false}
+                    className="ops-kingdom-composer"
+                    onNavigate={onNavigate}
+                    variant="kingdom-sage"
+                  />
+                </div>
+              </div>
             </div>
           </>
         )}

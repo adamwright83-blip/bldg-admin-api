@@ -2,17 +2,18 @@
  * SALESLAY BATTLE CANVAS — a no-engine, demo-only playable slice.
  *
  * Spark the dragon fights The Procrastinator using the same four business
- * actions the real admin performs (email, call, pickup, payment). Plain
- * <canvas> + requestAnimationFrame for the battlefield; a diegetic HTML/CSS
- * HUD (hanging sign, notice board, ledger, wax-seal ability tray, parchment
- * contract, SAGE command console) overlays it. Local game state only — no
- * tRPC, no network, no real side effects. The SAGE console is decorative
- * set-dressing that points at the real Sage composer rendered below on the
- * Kingdom home; it never talks to the backend itself.
+ * actions the real admin performs (email, call, pickup, payment), shown as
+ * sales-move fantasy labels. Plain <canvas> + requestAnimationFrame for the
+ * battlefield; a diegetic HTML/CSS HUD overlays it — hanging sign, Kingdom
+ * Influence beam, notice board, ledger, carved-token ability tray, pinned
+ * contract, and SAGE resting beside the board. Local game state only — no
+ * tRPC, no network, no real side effects. SAGE never mounts its own
+ * composer: activating it calls back to the parent, which summons the real,
+ * already-mounted ComposerPanel.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Coins, Flame, Heart, Mail, Package, Phone, ScrollText, Sparkles, Zap } from "lucide-react";
-import { ABILITY_CONFIG, FIRE_COOLDOWN_ID, type AbilityId } from "./game/abilities";
+import { Coins, Flame, Heart, Mail, Package, Phone, Sparkles, Zap } from "lucide-react";
+import { ABILITY_CONFIG, FIRE_COOLDOWN_ID, FIRE_FLAVOR_NAME, type AbilityId } from "./game/abilities";
 import { CANVAS_H, CANVAS_W, SaleslayBattleEngine } from "./game/engine";
 import { draw, loadSprites, type SpriteSet } from "./game/renderer";
 import type { BattleSnapshot, LogEntry } from "./game/types";
@@ -30,14 +31,6 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable;
 }
 
-/** Scrolls to (and lightly flags) the real Sage composer below the board,
- * and fires a reserved hook event the ComposerPanel can opt into later to
- * prefill a question. The game layer never talks to tRPC itself. */
-function pingRealSage(prompt: string) {
-  document.querySelector(".ops-kingdom-composer")?.scrollIntoView({ behavior: "smooth", block: "center" });
-  window.dispatchEvent(new CustomEvent("saleslay:ask-sage", { detail: { prompt } }));
-}
-
 const ABILITY_ICONS: Record<AbilityId, typeof Mail> = {
   email: Mail,
   call: Phone,
@@ -45,9 +38,19 @@ const ABILITY_ICONS: Record<AbilityId, typeof Mail> = {
   collect: Coins,
 };
 
-const QUICK_MOVES = ["Draft follow-up", "Handle objection", "Win-back customer"];
+const NARROW_FILL_PCT = 12;
 
-export function SaleslayBattleCanvas() {
+type SaleslayBattleCanvasProps = {
+  /** True while the real Sage composer is summoned in an overlay above the
+   * board (owned by the parent). The battle pauses and keyboard input is
+   * disabled while true — never mutated locally. */
+  sageOpen?: boolean;
+  /** Called when the player activates Ask Sage. The game never opens the
+   * composer itself — it only asks the parent to. */
+  onAskSage?: () => void;
+};
+
+export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBattleCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<SaleslayBattleEngine | null>(null);
   const spritesRef = useRef<SpriteSet>({});
@@ -61,6 +64,12 @@ export function SaleslayBattleCanvas() {
   const [frontierPct, setFrontierPct] = useState(50);
   const [contractComplete, setContractComplete] = useState(false);
   const [pressedKey, setPressedKey] = useState<string | null>(null);
+  const [autoMode, setAutoModeState] = useState(false);
+
+  // Pause the simulation (not a reset) while Sage is summoned.
+  useEffect(() => {
+    engineRef.current!.setPaused(sageOpen);
+  }, [sageOpen]);
 
   // Sprite loading (no-op fallback handled by renderer).
   useEffect(() => {
@@ -102,14 +111,17 @@ export function SaleslayBattleCanvas() {
       setBanner(state.banner?.text ?? null);
       setFrontierPct(state.frontierPct);
       setContractComplete(state.contractComplete);
+      setAutoModeState(state.autoMode);
       setCooldownTick((t) => t + 1);
     }, 100);
     return () => window.clearInterval(id);
   }, []);
 
-  // Keyboard controls.
+  // Keyboard controls — hard-disabled while Sage is summoned, in addition to
+  // the isTypingTarget guard (which only protects against typing elsewhere).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (sageOpen) return;
       if (isTypingTarget(e.target)) return;
       const engine = engineRef.current!;
       if (e.code === "Space") {
@@ -128,10 +140,12 @@ export function SaleslayBattleCanvas() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [sageOpen]);
 
   const handleAbilityClick = (id: AbilityId) => engineRef.current!.useAbility(id);
   const handleFireClick = () => engineRef.current!.fireBasic();
+  const handleAutoToggle = () => engineRef.current!.setAutoMode(!autoMode);
+  const handleRetreat = () => engineRef.current!.reset({ preserveAutoMode: false });
 
   const contractPct = Math.min(
     100,
@@ -148,44 +162,23 @@ export function SaleslayBattleCanvas() {
   }, [snapshot.dragonEnergy]);
 
   const lowHp = snapshot.dragonHp < 40;
+  const sparkNarrow = frontierPct < NARROW_FILL_PCT;
+  const fogNarrow = 100 - frontierPct < NARROW_FILL_PCT;
 
   return (
     <div className="slb-root">
       <div className="slb-board-row">
-        {/* SAGE COMMAND — physical console, points at the real composer below. Decorative only. */}
-        <div className="slb-sage">
-          <div className="slb-sage-lantern" aria-hidden="true">
-            <Sparkles size={18} />
+        {/* SAGE — a resting oracle character beside the board, not a panel.
+            Ask Sage never opens anything itself; it only asks the parent to
+            summon the real composer. */}
+        <div className={`slb-sage ${sageOpen ? "is-awakened" : ""}`}>
+          <div className="slb-sage-figure" aria-hidden="true">
+            <Sparkles size={22} />
           </div>
-          <div className="slb-sage-plaque">
-            <span className="slb-sage-title">Sage command</span>
-            <span className="slb-sage-sub">Sales + revenue co-pilot</span>
-          </div>
-
-          <div className="slb-sage-card">
-            <span className="slb-sage-card-label">Revenue scan</span>
-            <span className="slb-sage-card-hint">Gross revenue · Last 30 days</span>
-            <b className="slb-sage-card-value">{usd(snapshot.trueNetCents)}</b>
-          </div>
-
-          <div className="slb-sage-card">
-            <span className="slb-sage-card-label">Call edge</span>
-            <span className="slb-sage-card-hint">Lead with convenience, then price.</span>
-          </div>
-
-          <div className="slb-sage-card">
-            <span className="slb-sage-card-label">Quick moves</span>
-            <div className="slb-sage-moves">
-              {QUICK_MOVES.map((move) => (
-                <button key={move} type="button" className="slb-sage-move-btn" onClick={() => pingRealSage(move)}>
-                  {move}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button type="button" className="slb-sage-ask-btn" onClick={() => pingRealSage("")}>
-            Ask Sage&hellip;
+          <span className="slb-sage-name">Sage</span>
+          <p className="slb-sage-insight">Lead with convenience, then price.</p>
+          <button type="button" className="slb-sage-ask-btn" onClick={() => onAskSage?.()}>
+            Ask Sage
           </button>
         </div>
 
@@ -208,41 +201,49 @@ export function SaleslayBattleCanvas() {
               <span className="slb-sign-gain">+{usd(snapshot.todayGainCents)} today</span>
             </div>
 
-            {/* Kingdom beam meter — chunky, high-contrast, readable at a glance */}
+            {/* Kingdom Influence beam meter — chunky, high-contrast, readable at a glance */}
+            <div className="slb-beam-title" aria-hidden="true">
+              <span>Kingdom influence</span>
+              <i>Tug of war</i>
+            </div>
             <div className="slb-beam">
-              <div className="slb-beam-medallion slb-beam-medallion--lantern" aria-hidden="true">
-                <Flame size={14} />
-              </div>
               <div className="slb-beam-track">
-                <div className="slb-beam-fill-spark" style={{ width: `${frontierPct}%` }} />
-                <div className="slb-beam-fill-fog" style={{ width: `${100 - frontierPct}%` }} />
+                <div className="slb-beam-fill-spark" style={{ width: `${frontierPct}%` }}>
+                  {!sparkNarrow ? <span className="slb-beam-pct">{Math.round(frontierPct)}%</span> : null}
+                </div>
+                <div className="slb-beam-fill-fog" style={{ width: `${100 - frontierPct}%` }}>
+                  {!fogNarrow ? <span className="slb-beam-pct">{Math.round(100 - frontierPct)}%</span> : null}
+                </div>
                 <div className="slb-beam-knot" style={{ left: `${frontierPct}%` }} />
               </div>
-              <div className="slb-beam-medallion slb-beam-medallion--clock" aria-hidden="true">
-                <ScrollText size={14} />
-              </div>
+              {sparkNarrow ? (
+                <span className="slb-beam-endcap slb-beam-endcap--spark">{Math.round(frontierPct)}%</span>
+              ) : null}
+              {fogNarrow ? (
+                <span className="slb-beam-endcap slb-beam-endcap--fog">{Math.round(100 - frontierPct)}%</span>
+              ) : null}
             </div>
             <div className="slb-beam-labels">
-              <span className="slb-beam-label slb-beam-label--spark">Spark's realm {Math.round(frontierPct)}%</span>
-              <span className="slb-beam-label slb-beam-label--fog">{Math.round(100 - frontierPct)}% the procrastinator</span>
+              <span className="slb-beam-label slb-beam-label--spark">Spark's realm</span>
+              <span className="slb-beam-label slb-beam-label--fog">The Procrastinator</span>
             </div>
 
-            {/* Notice board — wanted posters for the three blockers */}
+            {/* Notice board — three blocker counters */}
             <div className="slb-noticeboard">
               <div className="slb-poster" style={{ transform: "rotate(-2deg)" }}>
-                <div className={`slb-wax ${snapshot.blockers.overdueReturns === 0 ? "is-clear" : ""}`}>
+                <div className={`slb-badge ${snapshot.blockers.overdueReturns === 0 ? "is-clear" : ""}`}>
                   {snapshot.blockers.overdueReturns}
                 </div>
                 <span>Overdue returns</span>
               </div>
               <div className="slb-poster" style={{ transform: "rotate(1.5deg)" }}>
-                <div className={`slb-wax ${snapshot.blockers.failedPayments === 0 ? "is-clear" : ""}`}>
+                <div className={`slb-badge ${snapshot.blockers.failedPayments === 0 ? "is-clear" : ""}`}>
                   {snapshot.blockers.failedPayments}
                 </div>
                 <span>Failed payments</span>
               </div>
               <div className="slb-poster" style={{ transform: "rotate(-1deg)" }}>
-                <div className={`slb-wax ${snapshot.blockers.blockedOrders === 0 ? "is-clear" : ""}`}>
+                <div className={`slb-badge ${snapshot.blockers.blockedOrders === 0 ? "is-clear" : ""}`}>
                   {snapshot.blockers.blockedOrders}
                 </div>
                 <span>Blocked orders</span>
@@ -286,13 +287,13 @@ export function SaleslayBattleCanvas() {
 
             {banner ? <div className="slb-banner-toast">{banner}</div> : null}
 
-            {/* Wax-seal ability tray */}
+            {/* Carved-enamel ability tray */}
             <div className="slb-tray">
               <TrayButton
-                label="Fire"
+                label={FIRE_FLAVOR_NAME}
                 shortcut="SPACE"
                 icon={<Flame size={14} />}
-                sealClass="seal-fire"
+                tokenClass="token-fire"
                 engineRef={engineRef}
                 cooldownId={FIRE_COOLDOWN_ID}
                 tick={cooldownTick}
@@ -304,10 +305,10 @@ export function SaleslayBattleCanvas() {
                 return (
                   <TrayButton
                     key={ability.id}
-                    label={ability.label}
+                    label={ability.flavorName}
                     shortcut={ability.key}
                     icon={<Icon size={14} />}
-                    sealClass={`seal-${ability.id}`}
+                    tokenClass={`token-${ability.id}`}
                     engineRef={engineRef}
                     cooldownId={ability.id}
                     tick={cooldownTick}
@@ -330,7 +331,27 @@ export function SaleslayBattleCanvas() {
               <span className="slb-contract-value">
                 {usd(snapshot.dailyContractProgressCents)} / {usd(snapshot.dailyContractTargetCents)}
               </span>
-              {contractComplete ? <div className="slb-contract-seal" aria-hidden="true" /> : null}
+              {contractComplete ? (
+                <>
+                  <div className="slb-contract-signature" aria-hidden="true" />
+                  <div className="slb-contract-thread" aria-hidden="true" />
+                  <div className="slb-contract-clasp" aria-hidden="true" />
+                </>
+              ) : null}
+            </div>
+
+            {/* Auto / Retreat controls */}
+            <div className="slb-controls">
+              <button
+                type="button"
+                className={`slb-control-btn ${autoMode ? "is-lit" : ""}`}
+                onClick={handleAutoToggle}
+              >
+                Auto
+              </button>
+              <button type="button" className="slb-control-btn" onClick={handleRetreat}>
+                Retreat
+              </button>
             </div>
           </div>
         </div>
@@ -343,7 +364,7 @@ function TrayButton({
   label,
   shortcut,
   icon,
-  sealClass,
+  tokenClass,
   engineRef,
   cooldownId,
   tick,
@@ -354,7 +375,7 @@ function TrayButton({
   label: string;
   shortcut: string;
   icon: React.ReactNode;
-  sealClass: string;
+  tokenClass: string;
   engineRef: React.MutableRefObject<SaleslayBattleEngine | null>;
   cooldownId: string;
   tick: number;
@@ -376,7 +397,7 @@ function TrayButton({
       disabled={disabled || remaining > 0}
       onClick={onClick}
     >
-      <span className={`slb-seal ${sealClass}`} aria-hidden="true">
+      <span className={`slb-token ${tokenClass}`} aria-hidden="true">
         {icon}
       </span>
       {pct > 0 ? (

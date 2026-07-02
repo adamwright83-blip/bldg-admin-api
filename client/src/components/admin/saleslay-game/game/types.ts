@@ -67,13 +67,23 @@ export type BannerState = {
   createdAt: number;
 } | null;
 
+/** A business-action fireball waiting out its attack windup before it
+ * actually spawns and travels — the reward still lands when it arrives. */
+export type PendingShot = {
+  id: number;
+  fireAt: number;
+  abilityId?: string;
+};
+
 export type BattleState = {
   snapshot: BattleSnapshot;
   dragonBobT: number;
   dragonHitFlashUntil: number;
   dragonCelebrating: boolean;
+  dragonWindupUntil: number;
   villainShuffleT: number;
   villainHitFlashUntil: number;
+  villainTelegraphUntil: number;
   villainDefeated: boolean;
   villainDefeatedAt: number;
   villainAttackCooldownMs: number;
@@ -82,6 +92,7 @@ export type BattleState = {
    * canvas lantern/fog split so both agree on the same frontier line. */
   frontierPct: number;
   fireballs: Fireball[];
+  pendingShots: PendingShot[];
   excuses: ExcuseProjectile[];
   floaters: Floater[];
   log: LogEntry[];
@@ -89,4 +100,9 @@ export type BattleState = {
   shakeUntil: number;
   cooldowns: Record<string, number>;
   nextId: number;
+  /** Attract mode — demo-only, local, never touches real business data. */
+  autoMode: boolean;
+  autoActionAt: number;
+  autoResetAt: number;
+  paused: boolean;
 };

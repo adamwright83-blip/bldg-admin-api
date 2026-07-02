@@ -8,9 +8,13 @@ export type SpriteSet = Partial<
   Record<
     | "background"
     | "dragon_idle"
-    | "dragon_fire"
+    | "dragon_attack"
+    | "dragon_hit"
+    | "dragon_victory"
     | "villain_idle"
+    | "villain_attack"
     | "villain_hit"
+    | "villain_defeat"
     | "fireball"
     | "excuse_projectile",
     HTMLImageElement
@@ -20,9 +24,13 @@ export type SpriteSet = Partial<
 const SPRITE_FILES: Record<keyof SpriteSet, string> = {
   background: "/assets/saleslay/background.png",
   dragon_idle: "/assets/saleslay/dragon_idle.png",
-  dragon_fire: "/assets/saleslay/dragon_fire.png",
+  dragon_attack: "/assets/saleslay/dragon_attack.png",
+  dragon_hit: "/assets/saleslay/dragon_hit.png",
+  dragon_victory: "/assets/saleslay/dragon_victory.png",
   villain_idle: "/assets/saleslay/villain_idle.png",
+  villain_attack: "/assets/saleslay/villain_attack.png",
   villain_hit: "/assets/saleslay/villain_hit.png",
+  villain_defeat: "/assets/saleslay/villain_defeat.png",
   fireball: "/assets/saleslay/fireball.png",
   excuse_projectile: "/assets/saleslay/excuse_projectile.png",
 };
@@ -179,15 +187,41 @@ function drawBackground(ctx: CanvasRenderingContext2D, state: BattleState, sprit
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 }
 
+/** Soft pulsing ring under Spark — reads as "this is your character." */
+function drawSelectionRing(ctx: CanvasRenderingContext2D, state: BattleState, x: number, y: number) {
+  if (state.villainDefeated) return;
+  const pulse = 0.75 + Math.sin(state.dragonBobT * 2.4) * 0.15;
+  const ready = Date.now() >= state.dragonWindupUntil;
+  ctx.save();
+  ctx.globalAlpha = (ready ? 0.5 : 0.32) * pulse;
+  ctx.strokeStyle = "#6fc4ff";
+  ctx.lineWidth = ready ? 4 : 3;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 58, 74, 20, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawDragon(ctx: CanvasRenderingContext2D, state: BattleState, sprites: SpriteSet) {
+  const winding = Date.now() < state.dragonWindupUntil;
   const bob = Math.sin(state.dragonBobT * (state.dragonCelebrating ? 6 : 2.2)) * (state.dragonCelebrating ? 18 : 8);
-  const x = DRAGON_X;
+  const x = DRAGON_X - (winding ? 8 : 0);
   const y = DRAGON_Y + bob;
+
+  drawSelectionRing(ctx, state, DRAGON_X, DRAGON_Y);
+
   const flashing = Date.now() < state.dragonHitFlashUntil;
-  const sprite = sprites.dragon_idle;
+  const sprite = state.dragonCelebrating
+    ? sprites.dragon_victory
+    : winding
+      ? sprites.dragon_attack
+      : flashing
+        ? sprites.dragon_hit
+        : sprites.dragon_idle;
 
   ctx.save();
   if (flashing) ctx.filter = "brightness(1.8) saturate(1.4)";
+  if (winding) ctx.translate(x - DRAGON_X, 0);
 
   if (spriteReady(sprite)) {
     ctx.drawImage(sprite, x - 90, y - 90, 180, 180);
@@ -195,7 +229,7 @@ function drawDragon(ctx: CanvasRenderingContext2D, state: BattleState, sprites: 
     // placeholder dragon: body + head + wing + snout, blue-ish
     ctx.fillStyle = "#3aa0c9";
     ctx.beginPath();
-    ctx.ellipse(x, y, 70, 46, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y, winding ? 76 : 70, 46, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
     ctx.ellipse(x + 65, y - 20, 30, 24, 0, 0, Math.PI * 2);
@@ -230,7 +264,8 @@ function drawVillain(ctx: CanvasRenderingContext2D, state: BattleState, sprites:
   const defeatAge = state.villainDefeated ? Date.now() - state.villainDefeatedAt : -1;
   if (state.villainDefeated && defeatAge > DEFEAT_FADE_MS) return;
 
-  const shuffle = Math.sin(state.villainShuffleT * 1.4) * 10;
+  const telegraphing = Date.now() < state.villainTelegraphUntil;
+  const shuffle = telegraphing ? -6 : Math.sin(state.villainShuffleT * 1.4) * 10;
   const hitAgeMs = HIT_FLASH_DURATION_MS - (state.villainHitFlashUntil - Date.now());
   const flashing = hitAgeMs >= 0 && hitAgeMs < HIT_FLASH_DURATION_MS;
   // Knockback: snaps away from the dragon on impact, eases back to rest.
@@ -239,8 +274,14 @@ function drawVillain(ctx: CanvasRenderingContext2D, state: BattleState, sprites:
     : 0;
   const x = VILLAIN_X + shuffle + stagger;
   const defeatFadeT = state.villainDefeated ? Math.min(1, defeatAge / DEFEAT_FADE_MS) : 0;
-  const y = VILLAIN_Y + defeatFadeT * 40;
-  const sprite = flashing ? sprites.villain_hit : sprites.villain_idle;
+  const y = VILLAIN_Y + defeatFadeT * 40 - (telegraphing ? 6 : 0);
+  const sprite = state.villainDefeated
+    ? sprites.villain_defeat
+    : flashing
+      ? sprites.villain_hit
+      : telegraphing
+        ? sprites.villain_attack
+        : sprites.villain_idle;
 
   ctx.save();
   ctx.globalAlpha = 1 - defeatFadeT;
