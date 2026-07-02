@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Loader2, PackageCheck, X } from "lucide-react";
-import { trpc } from "@/lib/trpc";
+import { useEffect, useState } from "react";
+import { Loader2, X } from "lucide-react";
 import {
   MobileBottomNav,
   MobileTopBar,
@@ -10,7 +9,7 @@ import { SkyBackdrop, SkyBar, useCommandSky } from "../CommandSky";
 import { WarStrip } from "../CommandCockpitBand";
 import { ComposerPanel } from "../ComposerPanel";
 import { CommandLanternKingdom } from "../CommandLanternKingdom";
-import { SaleslayBattleCanvas, type SaleslayBattleCanvasHandle } from "../saleslay-game/SaleslayBattleCanvas";
+import { SaleslayBattleCanvas } from "../saleslay-game/SaleslayBattleCanvas";
 import { OperatorAnalystHome } from "../operator-analyst/OperatorAnalystHome";
 import type { AdminHomeData, LogOutreachPayload, OpsBoardModal } from "./types";
 
@@ -90,70 +89,6 @@ export function OpsBoardHome({
     return () => window.cancelAnimationFrame(raf);
   }, [sageOpen]);
 
-  // Fulfill the Promise (real pickup completion) — the game never queries
-  // or mutates orders itself. Pressing the weapon only requests this
-  // picker; the actual admin.updateStatus mutation and its confirmed
-  // success/failure are reported back into the engine through the
-  // imperative canvas handle, never by guessing at animation timing.
-  const canvasRef = useRef<SaleslayBattleCanvasHandle | null>(null);
-  const [pickupPickerOpen, setPickupPickerOpen] = useState(false);
-  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
-  // Belt-and-suspenders against double-completion: the query cache may not
-  // have re-fetched yet if the picker is closed and reopened quickly, so a
-  // just-completed order is excluded from the visible list from THIS
-  // session's memory too, not only once the server round-trips a refetch.
-  const [recentlyCompletedOrderIds, setRecentlyCompletedOrderIds] = useState<Set<number>>(new Set());
-  const utils = trpc.useUtils();
-  const eligibleOrders = trpc.admin.listPickupEligibleOrders.useQuery(undefined, {
-    enabled: pickupPickerOpen,
-  });
-  const visibleEligibleOrders = (eligibleOrders.data ?? []).filter(
-    (order) => !recentlyCompletedOrderIds.has(order.id)
-  );
-  const completePickup = trpc.admin.updateStatus.useMutation({
-    onSuccess: (data, variables) => {
-      // The server's atomic guard already prevented a duplicate SMS/war
-      // event, but if THIS request lost the race (someone else's request
-      // completed the same order a moment earlier), the real-world event
-      // already happened via THAT request — awarding a second reward here
-      // would double-credit one real action. Treat it as "nothing new to
-      // reward," not a failure.
-      if (data.alreadyCompleted) {
-        canvasRef.current?.failWeaponAction("pickup", "That order was already marked as picked up.");
-      } else {
-        canvasRef.current?.completeWeaponAction("pickup");
-      }
-      setRecentlyCompletedOrderIds((prev) => new Set(prev).add(variables.orderId));
-      setPickupPickerOpen(false);
-      setSelectedOrderId(null);
-      void utils.admin.listPickupEligibleOrders.invalidate();
-    },
-    onError: (err) => {
-      canvasRef.current?.failWeaponAction("pickup", err.message);
-      // Picker stays open so the operator can retry or pick another order —
-      // no automatic retry, no reward, no order mutation on failure.
-    },
-  });
-  useEffect(() => {
-    if (!pickupPickerOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !completePickup.isPending) {
-        setPickupPickerOpen(false);
-        setSelectedOrderId(null);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickupPickerOpen, completePickup.isPending]);
-
-  const handleConfirmPickup = () => {
-    // Disabled state below already blocks a second click while pending —
-    // this guard is a second, cheap line of defense against double-submit.
-    if (selectedOrderId == null || completePickup.isPending) return;
-    completePickup.mutate({ orderId: selectedOrderId, status: "collected" });
-  };
-
   if (loading) {
     return (
       <div className="ops-board-home ops-board-loading">
@@ -170,72 +105,10 @@ export function OpsBoardHome({
     <div className="ops-saleslay-stage">
       <section className="ops-saleslay-preview" aria-label="Saleslay Battle Preview">
         <SaleslayBattleCanvas
-          ref={canvasRef}
           sageOpen={sageOpen}
           onAskSage={() => setSageOpen(true)}
-          pickupPickerOpen={pickupPickerOpen}
-          onOpenPickupPicker={() => setPickupPickerOpen(true)}
         />
       </section>
-
-      {/* Fulfill the Promise — compact eligible-order picker + explicit
-          confirmation. Never fires on the initial click/key; the real
-          admin.updateStatus mutation only runs once the operator picks an
-          order and presses Confirm here. */}
-      <div className={`ops-pickup-picker ${pickupPickerOpen ? "is-open" : ""}`}>
-        <div className="ops-pickup-picker-frame">
-          <button
-            type="button"
-            className="ops-pickup-picker-close"
-            aria-label="Cancel pickup"
-            disabled={completePickup.isPending}
-            onClick={() => {
-              setPickupPickerOpen(false);
-              setSelectedOrderId(null);
-            }}
-          >
-            <X size={14} />
-          </button>
-          <div className="ops-pickup-picker-head">
-            <PackageCheck size={16} aria-hidden="true" />
-            <span>Fulfill the Promise — complete a pickup</span>
-          </div>
-          {eligibleOrders.isLoading ? (
-            <p className="ops-pickup-picker-status">Loading orders awaiting pickup…</p>
-          ) : visibleEligibleOrders.length > 0 ? (
-            <ul className="ops-pickup-picker-list">
-              {visibleEligibleOrders.map((order) => (
-                <li key={order.id}>
-                  <button
-                    type="button"
-                    className={`ops-pickup-picker-row ${selectedOrderId === order.id ? "is-selected" : ""}`}
-                    disabled={completePickup.isPending}
-                    onClick={() => setSelectedOrderId(order.id)}
-                  >
-                    <span className="ops-pickup-picker-name">
-                      {order.firstName} {order.lastName}
-                    </span>
-                    <span className="ops-pickup-picker-meta">{order.status}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="ops-pickup-picker-status">No orders are awaiting pickup right now.</p>
-          )}
-          {completePickup.error ? (
-            <p className="ops-pickup-picker-error">Couldn't complete that pickup: {completePickup.error.message}</p>
-          ) : null}
-          <button
-            type="button"
-            className="ops-pickup-picker-confirm"
-            disabled={selectedOrderId == null || completePickup.isPending}
-            onClick={handleConfirmPickup}
-          >
-            {completePickup.isPending ? "Completing…" : "Confirm pickup"}
-          </button>
-        </div>
-      </div>
 
       <div className={`ops-sage-summon ${sageOpen ? "is-open" : ""}`}>
         <div className="ops-sage-summon-frame">

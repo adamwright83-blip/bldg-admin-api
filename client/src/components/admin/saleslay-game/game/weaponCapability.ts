@@ -43,7 +43,13 @@ export type WeaponCapability = {
 export const WEAPON_REAL_CAPABILITY: Record<string, string> = {
   fire: "Future real quick-action capability (kept capability-addressable)",
   call: "Real outbound phone call",
-  pickup: "Real pickup/task completion workflow",
+  // NOT operational order pickup — Saleslay never mutates order status or
+  // sends driver/pickup SMS (that's the separate driver-app product). The
+  // "pickup" ability id is a historical leftover; its permanent future
+  // meaning is completing a promised sales next step for a lead (quote,
+  // pricing, proposal, samples, booking link, info, callback, custom
+  // offer). No real behavior is implemented for it yet.
+  pickup: "Real completion of a promised sales next step (not order pickup)",
   email: "Real email or SMS follow-up",
   collect: "Real payment request or collection workflow",
 };

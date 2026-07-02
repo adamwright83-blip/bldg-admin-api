@@ -83,32 +83,21 @@ type SaleslayBattleCanvasProps = {
   /** Called when the player activates Ask Sage. The game never opens the
    * composer itself — it only asks the parent to. */
   onAskSage?: () => void;
-  /** True while the parent-owned "Fulfill the Promise" order picker is
-   * open. Same pause/keyboard-disable treatment as sageOpen — the game
-   * never queries or mutates orders itself; it only asks the parent to
-   * open the picker via onOpenPickupPicker. */
-  pickupPickerOpen?: boolean;
-  /** Called when the player activates Fulfill the Promise (button or key).
-   * Never fires a shot or mutates anything directly — real completion
-   * comes back through the imperative handle below once the parent's own
-   * tRPC mutation confirms success or failure. */
-  onOpenPickupPicker?: () => void;
 };
 
-/** Imperative surface the parent uses to report a real weapon action's
+/** Imperative surface a parent can use to report a real weapon action's
  * outcome back into the engine it owns internally. The game stays
- * tRPC-free (see file header); OpsBoardHome performs the actual
- * admin.updateStatus mutation and calls these once it resolves. */
+ * tRPC-free (see file header) — no weapon uses this today; "pickup" is
+ * back to the ordinary demo path. Kept as generic, reusable plumbing for
+ * the next real-action weapon (Bold Pitch: outbound sales call), which
+ * will need the exact same pattern OpsBoardHome already proved with SAGE. */
 export type SaleslayBattleCanvasHandle = {
   completeWeaponAction: (id: AbilityId) => void;
   failWeaponAction: (id: AbilityId, reason?: string) => void;
 };
 
 export const SaleslayBattleCanvas = forwardRef<SaleslayBattleCanvasHandle, SaleslayBattleCanvasProps>(
-  function SaleslayBattleCanvas(
-    { sageOpen = false, onAskSage, pickupPickerOpen = false, onOpenPickupPicker },
-    ref
-  ) {
+  function SaleslayBattleCanvas({ sageOpen = false, onAskSage }, ref) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<SaleslayBattleEngine | null>(null);
   const spritesRef = useRef<SpriteSet>({});
@@ -125,12 +114,11 @@ export const SaleslayBattleCanvas = forwardRef<SaleslayBattleCanvasHandle, Sales
   const [autoMode, setAutoModeState] = useState(false);
   const hudArt = useHudArt();
 
-  // Pause the simulation (not a reset) while Sage is summoned OR the pickup
-  // picker is open — engine time itself freezes, so cooldowns/Auto timers
-  // don't jump on close.
+  // Pause the simulation (not a reset) while Sage is summoned — engine time
+  // itself freezes, so cooldowns/Auto timers don't jump on close.
   useEffect(() => {
-    engineRef.current!.setPaused(sageOpen || pickupPickerOpen);
-  }, [sageOpen, pickupPickerOpen]);
+    engineRef.current!.setPaused(sageOpen);
+  }, [sageOpen]);
 
   // Imperative surface for the parent's real-action outcome (see
   // SaleslayBattleCanvasHandle above).
@@ -193,7 +181,7 @@ export const SaleslayBattleCanvas = forwardRef<SaleslayBattleCanvasHandle, Sales
   // the isTypingTarget guard (which only protects against typing elsewhere).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (sageOpen || pickupPickerOpen) return;
+      if (sageOpen) return;
       if (isTypingTarget(e.target)) return;
       const engine = engineRef.current!;
       if (e.code === "Space") {
@@ -205,13 +193,6 @@ export const SaleslayBattleCanvas = forwardRef<SaleslayBattleCanvasHandle, Sales
       }
       const ability = ABILITY_CONFIG.find((a) => a.key === e.key);
       if (ability) {
-        // Fulfill the Promise is a real weapon: the key never mutates an
-        // order directly, only requests the parent's picker+confirmation
-        // step. No cooldown/shot is consumed by this key press.
-        if (ability.id === "pickup") {
-          if (engine.getWeaponStatus("pickup") === "ready") onOpenPickupPicker?.();
-          return;
-        }
         engine.startWeaponAction(ability.id);
         setPressedKey(ability.id);
         window.setTimeout(() => setPressedKey(null), 140);
@@ -219,16 +200,13 @@ export const SaleslayBattleCanvas = forwardRef<SaleslayBattleCanvasHandle, Sales
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [sageOpen, pickupPickerOpen, onOpenPickupPicker]);
+  }, [sageOpen]);
 
-  // Demo path today for every ability except "pickup"; a future real-action
-  // adapter for the others replaces what startWeaponAction does internally
-  // per ability without this call site or the tray UI changing.
+  // Demo path for every ability, including "pickup" — no weapon mutates
+  // production state today. The imperative handle above stays available
+  // for a future real-action weapon (Bold Pitch) to report outcomes back
+  // in, the same way OpsBoardHome already does for SAGE.
   const handleAbilityClick = (id: AbilityId) => {
-    if (id === "pickup") {
-      if (engineRef.current!.getWeaponStatus("pickup") === "ready") onOpenPickupPicker?.();
-      return;
-    }
     engineRef.current!.startWeaponAction(id);
   };
   const handleFireClick = () => engineRef.current!.startWeaponAction("fire");

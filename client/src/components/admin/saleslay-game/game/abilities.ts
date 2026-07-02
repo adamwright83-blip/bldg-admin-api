@@ -20,10 +20,12 @@ export type AbilityDef = {
   contractCents: number;
   cooldownMs: number;
   logText: string;
-  /** False for abilities wired to a real production action (currently only
-   * "pickup"). Auto mode must never execute real calls/messages/order
-   * mutations/payments, so it skips any ability with this set to false —
-   * see engine.ts runAutoAction(). Defaults to true when omitted. */
+  /** False for abilities wired to a real production action. None are
+   * currently wired — this stays reserved for the next real-action weapon
+   * (Bold Pitch: outbound sales call). Auto mode must never execute real
+   * calls/messages/order mutations/payments, so it skips any ability with
+   * this set to false — see engine.ts runAutoAction(). Defaults to true
+   * when omitted. */
   autoEligible?: boolean;
 };
 
@@ -49,11 +51,17 @@ export const ABILITY_CONFIG: AbilityDef[] = [
     contractCents: 10_000,
     cooldownMs: 6_000,
     logText: "Pickup completed: +50 XP, +$100 contract progress.",
-    // Real weapon: pressing it opens the eligible-order picker (see
-    // SaleslayBattleCanvas) instead of firing immediately, and the reward
-    // only lands once the real admin.updateStatus mutation confirms
-    // success. Never eligible for Auto's demo simulation.
-    autoEligible: false,
+    // Demo-only for now, like the other weapons. The "pickup" id is a
+    // historical leftover from an earlier (reverted) wiring to the
+    // driver-app order-collection workflow — Saleslay is a sales/marketing
+    // game and must never mutate order status or send operational SMS.
+    // Its permanent future meaning is "complete a promised sales next
+    // step" (quote, pricing, proposal, samples, booking link, callback,
+    // custom offer) for a lead — not laundry pickup. No real behavior is
+    // implemented for it yet; do not add a fake version. When that real
+    // sales-next-step system exists, wire it the same way Bold Pitch will
+    // be wired: autoEligible: false, plus completeWeaponAction/
+    // failWeaponAction reported back via SaleslayBattleCanvasHandle.
   },
   {
     id: "email",
