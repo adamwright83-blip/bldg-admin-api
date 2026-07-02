@@ -3789,48 +3789,67 @@ button.ops-kpi-card:hover {
   }
 }
 
-/* SAGE summon shell — frames the EXISTING kingdom-sage ComposerPanel instance
-   when Saleslay's "Ask Sage" is pressed. Closed: normal in-flow position.
-   Open: overlay positioning around the same node (never a second mount). */
-.ops-sage-summon {
+/* Saleslay stage — wraps the battle canvas + its SAGE summon composer as
+   ONE positioned unit, so the summon panel can anchor near the in-world
+   SAGE character instead of the viewport. Mounted exactly once (gated by
+   isDesktop in OpsBoardHome), never once per responsive branch. */
+.ops-saleslay-stage {
   position: relative;
 }
-.ops-sage-summon.is-open {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-.ops-sage-summon-backdrop {
+
+/* SAGE summon shell — frames the EXISTING sage-summon ComposerPanel
+   instance. The panel is ALWAYS mounted (state survives close); closed
+   state is a zero-footprint hidden host, not removed from the tree. Open
+   state is a compact panel anchored near SAGE — never a full-screen modal,
+   never a backdrop that dims the battle. */
+.ops-sage-summon {
   position: absolute;
   inset: 0;
-  background: rgba(20, 12, 32, 0.65);
-  backdrop-filter: blur(2px);
+  visibility: hidden;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ops-sage-summon.is-open {
+  inset: auto;
+  left: 2%;
+  bottom: 3%;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 20;
 }
 .ops-sage-summon.is-open .ops-sage-summon-frame {
   position: relative;
-  width: min(760px, 100%);
-  max-height: 90vh;
+  width: clamp(340px, 31vw, 430px);
+  max-height: min(460px, 58vh);
   overflow-y: auto;
-  border-radius: 22px;
-  border: 2px solid rgba(160, 130, 255, 0.45);
-  box-shadow: 0 0 0 6px rgba(90, 60, 160, 0.12), 0 24px 60px rgba(0, 0, 0, 0.45);
-  animation: ops-sage-summon-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+  border-radius: 18px;
+  border: 2px solid rgba(160, 130, 255, 0.5);
+  background: #1c1430;
+  box-shadow:
+    0 0 0 4px rgba(90, 60, 160, 0.16),
+    0 0 32px rgba(120, 90, 220, 0.35),
+    0 16px 40px rgba(0, 0, 0, 0.4);
+  animation: ops-sage-summon-in 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+  transform-origin: bottom left;
 }
 @keyframes ops-sage-summon-in {
-  from { opacity: 0; transform: scale(0.92); }
-  to { opacity: 1; transform: scale(1); }
+  from { opacity: 0; transform: scale(0.9) translate(-8px, 8px); }
+  to { opacity: 1; transform: scale(1) translate(0, 0); }
 }
 .ops-sage-summon-close {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 8px;
+  right: 8px;
   z-index: 2;
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   border: none;
   background: rgba(20, 12, 32, 0.7);
@@ -3842,6 +3861,151 @@ button.ops-kpi-card:hover {
 }
 .ops-sage-summon-close:hover {
   background: rgba(20, 12, 32, 0.9);
+}
+
+/* Compact "ask Sage" composer — the ComposerPanel `sage-summon` variant.
+   Same tRPC mutation and AssistantBubble as every other variant; only the
+   chrome is game-scaled. Dark oracle exterior, light inset for the
+   (Tailwind, black-on-white) answer content so it stays readable. */
+.ss-composer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 14px 14px 12px;
+  color: #f0e6ff;
+}
+.ss-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-right: 22px;
+}
+.ss-orb {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 30%, #b79bff, #3a2a63 78%);
+  box-shadow: 0 0 10px rgba(150, 120, 240, 0.6);
+}
+.ss-header-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.ss-header-text strong {
+  font-size: 13px;
+  font-weight: 800;
+}
+.ss-header-text span {
+  font-size: 10px;
+  font-weight: 600;
+  color: #c6b4f0;
+}
+.ss-input-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.ss-input-row input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  border: 1px solid rgba(160, 130, 255, 0.35);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f5eeff;
+}
+.ss-input-row input::placeholder {
+  color: rgba(230, 220, 255, 0.45);
+}
+.ss-input-row input:focus {
+  outline: none;
+  border-color: rgba(190, 160, 255, 0.8);
+}
+.ss-input-row button {
+  width: 36px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(160deg, #b79bff, #6f4fc9);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.ss-input-row button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.ss-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+.ss-chip-row button {
+  font-size: 10.5px;
+  font-weight: 600;
+  border: 1px solid rgba(160, 130, 255, 0.3);
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #ded0ff;
+  cursor: pointer;
+}
+.ss-chip-row button:hover:not(:disabled) {
+  background: rgba(160, 130, 255, 0.18);
+}
+.ss-result {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: #f7f3ec;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.ss-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(46, 36, 24, 0.6);
+}
+.ss-loading span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(46, 36, 24, 0.4);
+  animation: ss-pulse 1s ease-in-out infinite;
+}
+@keyframes ss-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+.ss-empty-text,
+.ss-error-text {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(46, 36, 24, 0.7);
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .ops-sage-summon.is-open {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    top: auto;
+  }
+  .ops-sage-summon.is-open .ops-sage-summon-frame {
+    width: calc(100vw - 24px);
+    max-width: none;
+    max-height: 46vh;
+  }
 }
 
 @media (min-width: 1280px) {

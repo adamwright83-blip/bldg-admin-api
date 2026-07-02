@@ -82,7 +82,7 @@ export type ComposerPanelProps = {
   className?: string;
   defaultDemoMode?: boolean;
   allowDemoMode?: boolean;
-  variant?: "default" | "operator-home" | "kingdom-sage";
+  variant?: "default" | "operator-home" | "kingdom-sage" | "sage-summon";
 };
 
 const CHART_COLORS = ["#111111", "#6B7280", "#374151", "#9CA3AF", "#1F2937"];
@@ -447,8 +447,66 @@ export function ComposerPanel({
 
   const isOperatorHome = variant === "operator-home";
   const isKingdomSage = variant === "kingdom-sage";
+  const isSageSummon = variant === "sage-summon";
   const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
   const latestQuestion = [...messages].reverse().find((message) => message.role === "user");
+
+  // Compact presentation for the in-game SAGE summon surface: same state,
+  // same tRPC mutation, same AssistantBubble rendering as every other
+  // variant — only the chrome around it is smaller. No wizard illustration,
+  // no two-column analytics canvas, no export controls.
+  if (isSageSummon) {
+    return (
+      <section className={`ss-composer ${className}`.trim()} aria-label="Ask Sage">
+        <div className="ss-header">
+          <span className="ss-orb" aria-hidden="true" />
+          <div className="ss-header-text">
+            <strong>Sage</strong>
+            <span>Oracle of deals</span>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="ss-input-row">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask about revenue, orders, customers…"
+            disabled={ask.isPending}
+          />
+          <button type="submit" disabled={!input.trim() || ask.isPending} aria-label="Ask Sage">
+            <Send className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </form>
+
+        <div className="ss-chip-row" aria-label="Suggested questions">
+          {KINGDOM_SAGE_CHIPS.slice(0, 3).map((chip) => (
+            <button key={chip} type="button" onClick={() => send(chip)} disabled={ask.isPending}>
+              {chip}
+            </button>
+          ))}
+        </div>
+
+        <div className="ss-result">
+          {ask.isPending ? (
+            <div className="ss-loading">
+              <span />
+              Checking live order data...
+            </div>
+          ) : latestAssistant?.result ? (
+            <AssistantBubble result={latestAssistant.result} onNavigate={onNavigate} />
+          ) : latestAssistant ? (
+            <p className="ss-error-text">{latestAssistant.content}</p>
+          ) : (
+            <p className="ss-empty-text">
+              Ask Sage anything about your store — revenue, orders, customers, sales coaching, or a follow-up to draft.
+            </p>
+          )}
+          <div ref={bottomRef} />
+        </div>
+      </section>
+    );
+  }
 
   if (isKingdomSage) {
     return (
