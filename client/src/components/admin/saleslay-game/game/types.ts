@@ -75,8 +75,12 @@ export type BattleState = {
   villainShuffleT: number;
   villainHitFlashUntil: number;
   villainDefeated: boolean;
+  villainDefeatedAt: number;
   villainAttackCooldownMs: number;
   contractComplete: boolean;
+  /** 0..100 eased "who is winning" value shared by the DOM meter and the
+   * canvas lantern/fog split so both agree on the same frontier line. */
+  frontierPct: number;
   fireballs: Fireball[];
   excuses: ExcuseProjectile[];
   floaters: Floater[];

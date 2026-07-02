@@ -46,11 +46,48 @@ function spriteReady(img: HTMLImageElement | undefined): img is HTMLImageElement
   return !!img && img.complete && img.naturalWidth > 0;
 }
 
-function drawBackground(ctx: CanvasRenderingContext2D, sprites: SpriteSet) {
+/** Slow drifting island silhouette — cheap parallax, no assets needed. */
+function drawIsland(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number, alpha: number) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = "#241b3a";
+  ctx.beginPath();
+  ctx.ellipse(x, y, 70 * scale, 22 * scale, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x - 14 * scale, y - 18 * scale);
+  ctx.lineTo(x - 4 * scale, y - 40 * scale);
+  ctx.lineTo(x + 6 * scale, y - 18 * scale);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawClothesline(ctx: CanvasRenderingContext2D, t: number) {
+  ctx.save();
+  ctx.globalAlpha = 0.35;
+  ctx.strokeStyle = "#c9b48a";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(240, 200);
+  ctx.quadraticCurveTo(640, 250 + Math.sin(t * 0.4) * 4, 1000, 190);
+  ctx.stroke();
+  const spots = [[400, 214], [640, 236], [860, 210]];
+  const colors = ["#7bbcb0", "#e8d9b0", "#d88a70"];
+  spots.forEach(([sx, sy], i) => {
+    ctx.fillStyle = colors[i];
+    ctx.fillRect(sx - 13, sy, 26, 20);
+  });
+  ctx.restore();
+}
+
+function drawBackground(ctx: CanvasRenderingContext2D, state: BattleState, sprites: SpriteSet) {
   if (spriteReady(sprites.background)) {
     ctx.drawImage(sprites.background, 0, 0, CANVAS_W, CANVAS_H);
     return;
   }
+
+  // Base sky.
   const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
   grad.addColorStop(0, "#1c2340");
   grad.addColorStop(0.55, "#2b3a63");
@@ -58,20 +95,88 @@ function drawBackground(ctx: CanvasRenderingContext2D, sprites: SpriteSet) {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-  // ground
-  ctx.fillStyle = "#0e1122";
-  ctx.fillRect(0, CANVAS_H - 120, CANVAS_W, 120);
+  // Frontier split: warm lantern light on Spark's side, cool fog on the
+  // Procrastinator's side. frontierPct (0..100) is shared with the DOM meter.
+  const frontierX = (state.frontierPct / 100) * CANVAS_W;
 
-  // faint floating castle silhouette, purely decorative
-  ctx.fillStyle = "rgba(255,255,255,0.05)";
+  const warm = ctx.createRadialGradient(DRAGON_X, DRAGON_Y - 60, 40, DRAGON_X, DRAGON_Y - 60, frontierX * 0.9 + 120);
+  warm.addColorStop(0, "rgba(255, 176, 90, 0.22)");
+  warm.addColorStop(1, "rgba(255, 176, 90, 0)");
+  ctx.fillStyle = warm;
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+  const cool = ctx.createRadialGradient(
+    VILLAIN_X,
+    VILLAIN_Y - 80,
+    40,
+    VILLAIN_X,
+    VILLAIN_Y - 80,
+    (CANVAS_W - frontierX) * 0.9 + 140
+  );
+  cool.addColorStop(0, "rgba(140, 110, 190, 0.28)");
+  cool.addColorStop(1, "rgba(140, 110, 190, 0)");
+  ctx.fillStyle = cool;
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+  // Parallax islands, drifting slowly, dimmer on the fog side.
+  const t = state.dragonBobT;
+  drawIsland(ctx, 340, 150 + Math.sin(t * 0.15) * 6, 1, 0.75);
+  drawIsland(ctx, 560, 120 + Math.sin(t * 0.12 + 1) * 5, 0.65, 0.55);
+  drawIsland(ctx, 900, 160 + Math.sin(t * 0.18 + 2) * 6, 0.85, 0.5);
+
+  drawClothesline(ctx, t);
+
+  // Frontier seam line — subtle, matches the DOM meter's knot position.
+  ctx.save();
+  ctx.globalAlpha = 0.18;
+  ctx.strokeStyle = "#f4d35e";
+  ctx.setLineDash([6, 8]);
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(560, 260);
-  ctx.lineTo(720, 260);
-  ctx.lineTo(700, 180);
-  ctx.lineTo(640, 220);
-  ctx.lineTo(580, 180);
-  ctx.closePath();
-  ctx.fill();
+  ctx.moveTo(frontierX, 0);
+  ctx.lineTo(frontierX, CANVAS_H - 120);
+  ctx.stroke();
+  ctx.restore();
+
+  // Ground.
+  const floor = ctx.createLinearGradient(0, CANVAS_H - 120, 0, CANVAS_H);
+  floor.addColorStop(0, "#241a2e");
+  floor.addColorStop(1, "#120d18");
+  ctx.fillStyle = floor;
+  ctx.fillRect(0, CANVAS_H - 120, CANVAS_W, 120);
+  ctx.fillStyle = "rgba(255,255,255,0.05)";
+  [[220, 45], [520, 30], [820, 40]].forEach(([fx, fw]) => {
+    ctx.beginPath();
+    ctx.ellipse(fx, CANVAS_H - 30, fw, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Scattered excuse scraps on the villain's floor side — flavor only.
+  ctx.save();
+  ctx.globalAlpha = 0.3;
+  ctx.fillStyle = "#c9c9c9";
+  [[880, CANVAS_H - 55], [960, CANVAS_H - 40], [1040, CANVAS_H - 60]].forEach(([px, py]) => {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(0.3);
+    ctx.fillRect(-10, -6, 20, 12);
+    ctx.restore();
+  });
+  ctx.restore();
+
+  // Vignette so HUD corners stay readable.
+  const vignette = ctx.createRadialGradient(
+    CANVAS_W / 2,
+    CANVAS_H / 2,
+    CANVAS_H * 0.35,
+    CANVAS_W / 2,
+    CANVAS_H / 2,
+    CANVAS_W * 0.7
+  );
+  vignette.addColorStop(0, "rgba(0,0,0,0)");
+  vignette.addColorStop(1, "rgba(0,0,0,0.35)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 }
 
 function drawDragon(ctx: CanvasRenderingContext2D, state: BattleState, sprites: SpriteSet) {
@@ -119,9 +224,12 @@ function drawDragon(ctx: CanvasRenderingContext2D, state: BattleState, sprites: 
 
 const HIT_FLASH_DURATION_MS = 220;
 const STAGGER_DISTANCE_PX = 22;
+const DEFEAT_FADE_MS = 500;
 
 function drawVillain(ctx: CanvasRenderingContext2D, state: BattleState, sprites: SpriteSet) {
-  if (state.villainDefeated) return;
+  const defeatAge = state.villainDefeated ? Date.now() - state.villainDefeatedAt : -1;
+  if (state.villainDefeated && defeatAge > DEFEAT_FADE_MS) return;
+
   const shuffle = Math.sin(state.villainShuffleT * 1.4) * 10;
   const hitAgeMs = HIT_FLASH_DURATION_MS - (state.villainHitFlashUntil - Date.now());
   const flashing = hitAgeMs >= 0 && hitAgeMs < HIT_FLASH_DURATION_MS;
@@ -130,10 +238,12 @@ function drawVillain(ctx: CanvasRenderingContext2D, state: BattleState, sprites:
     ? STAGGER_DISTANCE_PX * (1 - hitAgeMs / HIT_FLASH_DURATION_MS)
     : 0;
   const x = VILLAIN_X + shuffle + stagger;
-  const y = VILLAIN_Y;
+  const defeatFadeT = state.villainDefeated ? Math.min(1, defeatAge / DEFEAT_FADE_MS) : 0;
+  const y = VILLAIN_Y + defeatFadeT * 40;
   const sprite = flashing ? sprites.villain_hit : sprites.villain_idle;
 
   ctx.save();
+  ctx.globalAlpha = 1 - defeatFadeT;
   if (flashing) ctx.filter = "brightness(1.6) saturate(1.6) hue-rotate(-20deg)";
 
   if (spriteReady(sprite)) {
@@ -199,13 +309,17 @@ function drawFloaters(ctx: CanvasRenderingContext2D, state: BattleState) {
   for (const f of state.floaters) {
     const age = (now - f.createdAt) / 900;
     const rise = age * 40;
+    const popScale = age < 0.11 ? 1.3 - (age / 0.11) * 0.3 : 1;
+    ctx.save();
     ctx.globalAlpha = Math.max(0, 1 - age);
     ctx.fillStyle = f.color;
     ctx.font = "bold 20px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(f.text, f.x, f.y - rise);
+    ctx.translate(f.x, f.y - rise);
+    ctx.scale(popScale, popScale);
+    ctx.fillText(f.text, 0, 0);
+    ctx.restore();
   }
-  ctx.globalAlpha = 1;
 }
 
 function drawBanner(ctx: CanvasRenderingContext2D, state: BattleState) {
@@ -232,7 +346,7 @@ export function draw(ctx: CanvasRenderingContext2D, state: BattleState, sprites:
     ctx.translate((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
   }
 
-  drawBackground(ctx, sprites);
+  drawBackground(ctx, state, sprites);
   drawDragon(ctx, state, sprites);
   drawVillain(ctx, state, sprites);
 

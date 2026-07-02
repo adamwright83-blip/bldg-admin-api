@@ -45,8 +45,10 @@ function freshState(): BattleState {
     villainShuffleT: 0,
     villainHitFlashUntil: 0,
     villainDefeated: false,
+    villainDefeatedAt: 0,
     villainAttackCooldownMs: VILLAIN_ATTACK_INTERVAL_MS,
     contractComplete: false,
+    frontierPct: 50,
     fireballs: [],
     excuses: [],
     floaters: [],
@@ -106,6 +108,7 @@ export class SaleslayBattleEngine {
     this.pushFloater(VILLAIN_X, VILLAIN_Y - 80, `-${amount}`, "#ff6b6b");
     if (snap.villainHp <= 0 && !this.state.villainDefeated) {
       this.state.villainDefeated = true;
+      this.state.villainDefeatedAt = Date.now();
       this.state.banner = { text: "DAY WON — THE KINGDOM ADVANCES", createdAt: Date.now() };
       this.state.dragonCelebrating = true;
       this.pushLog("The Procrastinator retreats. DAY WON.");
@@ -173,6 +176,7 @@ export class SaleslayBattleEngine {
       this.state.contractComplete = true;
       snap.xp += DAILY_CONTRACT_COMPLETE_BONUS_XP;
       this.state.banner = { text: "DAILY CONTRACT COMPLETE", createdAt: Date.now() };
+      this.state.shakeUntil = Date.now() + 300;
       this.pushLog("Daily Contract complete: +500 XP.");
     }
   }
@@ -257,6 +261,14 @@ export class SaleslayBattleEngine {
     const now = Date.now();
     state.floaters = state.floaters.filter((f) => now - f.createdAt < 900);
     if (state.banner && now - state.banner.createdAt > 2_600) state.banner = null;
+
+    // Ease the shared frontier value toward "who is winning" so the DOM
+    // meter and the canvas lantern/fog split always agree.
+    const damageDealt = 100 - state.snapshot.villainHp;
+    const damageTaken = 100 - state.snapshot.dragonHp;
+    const totalDamage = damageDealt + damageTaken || 1;
+    const frontierTarget = (damageDealt / totalDamage) * 100;
+    state.frontierPct += (frontierTarget - state.frontierPct) * Math.min(1, dt * 2);
   }
 
   getSnapshot(): BattleSnapshot {
