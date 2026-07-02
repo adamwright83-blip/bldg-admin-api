@@ -60,17 +60,17 @@
 
 .slb-sage {
   position: absolute;
-  left: 1%;
-  top: 36%;
-  bottom: 21%;
-  width: 14%;
-  min-width: 96px;
-  max-width: 168px;
+  left: 0.3%;
+  top: 25%;
+  bottom: 19%;
+  width: 14.5%;
+  min-width: 100px;
+  max-width: 176px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 6px;
   z-index: 2;
   pointer-events: none;
 }
@@ -78,9 +78,44 @@
   pointer-events: auto;
 }
 
+/* Localized figure-ground separation — a soft aura behind SAGE and a
+   brightened ground ellipse beneath his feet, so he reads as a distinct
+   character against the background art instead of blending into it.
+   Deliberately NOT a rectangle/card — both shapes sit behind the figure
+   only, via negative z-index, and never box the whole SAGE zone. */
+.slb-sage::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 6%;
+  width: 150%;
+  height: 78%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at center, rgba(150, 118, 240, 0.4) 0%, rgba(90, 70, 160, 0.16) 45%, transparent 72%);
+  filter: blur(2px);
+  z-index: -2;
+  pointer-events: none;
+}
+.slb-sage::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 14%;
+  width: 92%;
+  height: 14%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at center, rgba(200, 180, 255, 0.35) 0%, transparent 75%);
+  z-index: -1;
+  pointer-events: none;
+}
+.slb-sage.is-awakened::before {
+  background: radial-gradient(ellipse at center, rgba(180, 150, 255, 0.55) 0%, rgba(110, 85, 190, 0.22) 45%, transparent 72%);
+}
+
 .slb-sage-figure {
-  width: 78%;
-  aspect-ratio: 3 / 4;
+  position: relative;
+  width: 84%;
+  aspect-ratio: 3 / 5;
   /* Irregular oracle-bust silhouette — asymmetric clip-path, no rectangle. */
   clip-path: polygon(
     22% 0%, 52% 3%, 78% 12%, 94% 32%, 100% 56%, 90% 80%,
@@ -90,11 +125,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  filter: drop-shadow(0 0 12px rgba(140, 108, 230, 0.45));
+  filter: drop-shadow(0 0 16px rgba(150, 118, 240, 0.6)) drop-shadow(0 3px 8px rgba(0, 0, 0, 0.5));
   transition: filter 0.3s ease;
 }
+.slb-sage-figure::after {
+  /* Thin brighter rim so the silhouette separates from dark background art
+     even when the aura glow alone isn't enough contrast. */
+  content: "";
+  position: absolute;
+  inset: 0;
+  clip-path: inherit;
+  box-shadow: inset 0 0 0 1.5px rgba(210, 195, 255, 0.55);
+  pointer-events: none;
+}
 .slb-sage.is-awakened .slb-sage-figure {
-  filter: drop-shadow(0 0 20px rgba(170, 140, 255, 0.85));
+  filter: drop-shadow(0 0 24px rgba(180, 150, 255, 0.9)) drop-shadow(0 3px 8px rgba(0, 0, 0, 0.5));
 }
 .slb-sage-core {
   color: #e4d6ff;
@@ -105,39 +150,43 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  line-height: 1.1;
+  line-height: 1.15;
+  gap: 1px;
 }
 .slb-sage-name {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 800;
-  color: #f0e6ff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.6);
   letter-spacing: 0.03em;
 }
 .slb-sage-role {
-  font-size: 8.5px;
+  font-size: 9.5px;
   font-weight: 700;
-  color: #c6b4f0;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  color: #d9c9ff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.6);
 }
 
 .slb-sage-insight {
-  margin: 0;
-  font-size: 9.5px;
+  margin: 2px 0 0;
+  font-size: 10.5px;
   font-weight: 700;
-  color: #ded0ff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
-  line-height: 1.25;
+  color: #f0e8ff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 8px rgba(0, 0, 0, 0.7);
+  line-height: 1.3;
   text-align: center;
 }
 
 /* The launcher — a chunky rune-tablet control, not a full-width sidebar
-   button. Clearly a <button>: real hover/active/focus states. */
+   button. Clearly a <button>: real hover/active/focus states. Given
+   extra glow + size so it can't get lost in dark root/floor clutter. */
 .slb-sage-ask-btn {
+  position: relative;
   width: 100%;
-  min-height: 48px;
+  min-height: 54px;
+  margin-top: 4px;
   clip-path: polygon(6% 0%, 94% 0%, 100% 28%, 100% 100%, 0% 100%, 0% 28%);
-  background: linear-gradient(160deg, #ffdd8a, var(--slb-gold) 55%, #c9922e);
+  background: linear-gradient(160deg, #ffe6a3, var(--slb-gold) 50%, #c9922e);
   border: 2px solid #7a5a1e;
   color: #3a2408;
   display: flex;
@@ -146,10 +195,12 @@
   justify-content: center;
   gap: 1px;
   cursor: pointer;
-  transition: transform 0.12s ease, filter 0.15s ease;
+  box-shadow: 0 0 14px rgba(255, 210, 120, 0.5), 0 3px 8px rgba(0, 0, 0, 0.45);
+  transition: transform 0.12s ease, filter 0.15s ease, box-shadow 0.15s ease;
 }
 .slb-sage-ask-btn:hover {
-  filter: brightness(1.08);
+  filter: brightness(1.1);
+  box-shadow: 0 0 20px rgba(255, 210, 120, 0.7), 0 3px 8px rgba(0, 0, 0, 0.45);
 }
 .slb-sage-ask-btn:active {
   transform: scale(0.95);
@@ -159,15 +210,15 @@
   outline-offset: 2px;
 }
 .slb-sage-ask-label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
 }
 .slb-sage-ask-hint {
-  font-size: 8px;
+  font-size: 8.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  opacity: 0.75;
+  opacity: 0.8;
 }
 
 /* ---------- Top row: True Net | Kingdom Influence | Blockers ---------- */
