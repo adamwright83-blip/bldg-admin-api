@@ -2704,6 +2704,30 @@ export const appRouter = router({
         }
       }),
 
+    /** Orders eligible for pickup completion (not yet collected), scoped to
+     * the current tenant — powers the Saleslay "Fulfill the Promise"
+     * picker. Read-only; the actual completion goes through updateStatus
+     * below so it stays the single source of truth for that transition. */
+    listPickupEligibleOrders: adminProcedure.query(async ({ ctx }) => {
+      const tenantId = ctx.tenantId ?? "default";
+      const [newOrders, pendingOrders] = await Promise.all([
+        getOrdersByStatus("new"),
+        getOrdersByStatus("intake-pending"),
+      ]);
+      return [...newOrders, ...pendingOrders]
+        .filter((o) => (o.tenantId ?? "default") === tenantId)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 25)
+        .map((o) => ({
+          id: o.id,
+          firstName: o.firstName,
+          lastName: o.lastName,
+          phone: o.phone,
+          status: o.status,
+          createdAt: o.createdAt,
+        }));
+    }),
+
     /** Update order status — platform or vendor (vendor scoped to own orders) */
     updateStatus: platformOrVendorProcedure
       .input(

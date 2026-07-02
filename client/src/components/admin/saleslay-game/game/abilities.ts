@@ -20,6 +20,11 @@ export type AbilityDef = {
   contractCents: number;
   cooldownMs: number;
   logText: string;
+  /** False for abilities wired to a real production action (currently only
+   * "pickup"). Auto mode must never execute real calls/messages/order
+   * mutations/payments, so it skips any ability with this set to false —
+   * see engine.ts runAutoAction(). Defaults to true when omitted. */
+  autoEligible?: boolean;
 };
 
 export const ABILITY_CONFIG: AbilityDef[] = [
@@ -44,6 +49,11 @@ export const ABILITY_CONFIG: AbilityDef[] = [
     contractCents: 10_000,
     cooldownMs: 6_000,
     logText: "Pickup completed: +50 XP, +$100 contract progress.",
+    // Real weapon: pressing it opens the eligible-order picker (see
+    // SaleslayBattleCanvas) instead of firing immediately, and the reward
+    // only lands once the real admin.updateStatus mutation confirms
+    // success. Never eligible for Auto's demo simulation.
+    autoEligible: false,
   },
   {
     id: "email",

@@ -11,7 +11,7 @@
  * side effects. SAGE never mounts its own composer: activating it calls
  * back to the parent, which summons the real, already-mounted ComposerPanel.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Coins, Flame, Heart, Mail, Package, Phone, Sparkles, Zap } from "lucide-react";
 import { ABILITY_CONFIG, FIRE_COOLDOWN_ID, FIRE_FLAVOR_NAME, type AbilityId } from "./game/abilities";
 import { CANVAS_H, CANVAS_W, SaleslayBattleEngine } from "./game/engine";
@@ -83,9 +83,32 @@ type SaleslayBattleCanvasProps = {
   /** Called when the player activates Ask Sage. The game never opens the
    * composer itself — it only asks the parent to. */
   onAskSage?: () => void;
+  /** True while the parent-owned "Fulfill the Promise" order picker is
+   * open. Same pause/keyboard-disable treatment as sageOpen — the game
+   * never queries or mutates orders itself; it only asks the parent to
+   * open the picker via onOpenPickupPicker. */
+  pickupPickerOpen?: boolean;
+  /** Called when the player activates Fulfill the Promise (button or key).
+   * Never fires a shot or mutates anything directly — real completion
+   * comes back through the imperative handle below once the parent's own
+   * tRPC mutation confirms success or failure. */
+  onOpenPickupPicker?: () => void;
 };
 
-export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBattleCanvasProps) {
+/** Imperative surface the parent uses to report a real weapon action's
+ * outcome back into the engine it owns internally. The game stays
+ * tRPC-free (see file header); OpsBoardHome performs the actual
+ * admin.updateStatus mutation and calls these once it resolves. */
+export type SaleslayBattleCanvasHandle = {
+  completeWeaponAction: (id: AbilityId) => void;
+  failWeaponAction: (id: AbilityId, reason?: string) => void;
+};
+
+export const SaleslayBattleCanvas = forwardRef<SaleslayBattleCanvasHandle, SaleslayBattleCanvasProps>(
+  function SaleslayBattleCanvas(
+    { sageOpen = false, onAskSage, pickupPickerOpen = false, onOpenPickupPicker },
+    ref
+  ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<SaleslayBattleEngine | null>(null);
   const spritesRef = useRef<SpriteSet>({});
@@ -102,11 +125,23 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
   const [autoMode, setAutoModeState] = useState(false);
   const hudArt = useHudArt();
 
-  // Pause the simulation (not a reset) while Sage is summoned — engine time
-  // itself freezes, so cooldowns/Auto timers don't jump on close.
+  // Pause the simulation (not a reset) while Sage is summoned OR the pickup
+  // picker is open — engine time itself freezes, so cooldowns/Auto timers
+  // don't jump on close.
   useEffect(() => {
-    engineRef.current!.setPaused(sageOpen);
-  }, [sageOpen]);
+    engineRef.current!.setPaused(sageOpen || pickupPickerOpen);
+  }, [sageOpen, pickupPickerOpen]);
+
+  // Imperative surface for the parent's real-action outcome (see
+  // SaleslayBattleCanvasHandle above).
+  useImperativeHandle(
+    ref,
+    () => ({
+      completeWeaponAction: (id: AbilityId) => engineRef.current?.completeWeaponAction(id),
+      failWeaponAction: (id: AbilityId, reason?: string) => engineRef.current?.failWeaponAction(id, reason),
+    }),
+    []
+  );
 
   // Sprite loading (no-op fallback handled by renderer).
   useEffect(() => {
@@ -158,7 +193,7 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
   // the isTypingTarget guard (which only protects against typing elsewhere).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (sageOpen) return;
+      if (sageOpen || pickupPickerOpen) return;
       if (isTypingTarget(e.target)) return;
       const engine = engineRef.current!;
       if (e.code === "Space") {
@@ -170,6 +205,13 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
       }
       const ability = ABILITY_CONFIG.find((a) => a.key === e.key);
       if (ability) {
+        // Fulfill the Promise is a real weapon: the key never mutates an
+        // order directly, only requests the parent's picker+confirmation
+        // step. No cooldown/shot is consumed by this key press.
+        if (ability.id === "pickup") {
+          if (engine.getWeaponStatus("pickup") === "ready") onOpenPickupPicker?.();
+          return;
+        }
         engine.startWeaponAction(ability.id);
         setPressedKey(ability.id);
         window.setTimeout(() => setPressedKey(null), 140);
@@ -177,12 +219,18 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [sageOpen]);
+  }, [sageOpen, pickupPickerOpen, onOpenPickupPicker]);
 
-  // Demo path today; a future real-action adapter (phone/email/pickup/
-  // payment) replaces what startWeaponAction does internally per ability
-  // without this call site or the tray UI changing.
-  const handleAbilityClick = (id: AbilityId) => engineRef.current!.startWeaponAction(id);
+  // Demo path today for every ability except "pickup"; a future real-action
+  // adapter for the others replaces what startWeaponAction does internally
+  // per ability without this call site or the tray UI changing.
+  const handleAbilityClick = (id: AbilityId) => {
+    if (id === "pickup") {
+      if (engineRef.current!.getWeaponStatus("pickup") === "ready") onOpenPickupPicker?.();
+      return;
+    }
+    engineRef.current!.startWeaponAction(id);
+  };
   const handleFireClick = () => engineRef.current!.startWeaponAction("fire");
   const handleAutoToggle = () => engineRef.current!.setAutoMode(!autoMode);
   const handleRetreat = () => engineRef.current!.reset({ preserveAutoMode: false });
@@ -430,7 +478,8 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
       </div>
     </div>
   );
-}
+  }
+);
 
 function TrayButton({
   label,

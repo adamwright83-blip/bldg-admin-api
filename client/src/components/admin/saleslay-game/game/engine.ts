@@ -186,16 +186,22 @@ export class SaleslayBattleEngine {
   }
 
   /** Credits the reward for a real (non-demo) confirmed success, bypassing
-   * the projectile travel time entirely — for use once a real adapter
-   * exists. Unused by the current demo path, which resolves on fireball
-   * landing instead (see update()). */
+   * the projectile travel time entirely — a real order mutation's server
+   * round-trip has nothing to do with fireball travel time. Puts the
+   * ability on cooldown from the moment of CONFIRMED success (not from the
+   * original click), so a repeated press can't double-complete the same
+   * real action, and plays Spark's attack pose so the hit still reads as
+   * an attack even though no projectile was queued/traveled. */
   completeWeaponAction(id: AbilityId) {
     const ability = ABILITY_CONFIG.find((a) => a.id === id);
-    if (ability) this.applyAbilityReward(ability);
+    if (!ability) return;
+    this.setCooldown(id, ability.cooldownMs);
+    this.state.dragonWindupUntil = Date.now() + DRAGON_WINDUP_MS;
+    this.applyAbilityReward(ability);
   }
 
-  /** Records a real action failure without crediting any reward. No demo
-   * path can fail today; reserved for future adapters. */
+  /** Records a real action failure without crediting any reward or
+   * touching cooldown — the player may retry immediately. */
   failWeaponAction(id: AbilityId | "fire", reason?: string) {
     this.pushLog(reason ? `${id} action failed: ${reason}` : `${id} action failed.`);
   }
@@ -326,9 +332,14 @@ export class SaleslayBattleEngine {
    * its extra pause on top of the normal jitter (not overwrite it). */
   private runAutoAction(): boolean {
     let usedCollect = false;
+    // Auto is demo-only by hard rule: any ability with autoEligible===false
+    // (currently "pickup", which requires a real confirmed order mutation)
+    // is never included in Auto's pool, in the burst pool below, or
+    // reachable through autoUseAbility at all.
+    const autoEligible = (a: (typeof ABILITY_CONFIG)[number]) => a.autoEligible !== false;
     const options: Array<{ act: () => boolean; id: AbilityId | "fire" }> = [
       { act: () => this.autoFireBasic(), id: "fire" },
-      ...ABILITY_CONFIG.filter((a) => !this.isOnCooldown(a.id)).map((a) => ({
+      ...ABILITY_CONFIG.filter((a) => autoEligible(a) && !this.isOnCooldown(a.id)).map((a) => ({
         act: () => this.autoUseAbility(a.id),
         id: a.id,
       })),
@@ -340,7 +351,7 @@ export class SaleslayBattleEngine {
 
     if (acted && this.rng() < AUTO_BURST_CHANCE) {
       // Short two-action burst: queue a second pick shortly after.
-      const remaining = ABILITY_CONFIG.filter((a) => !this.isOnCooldown(a.id));
+      const remaining = ABILITY_CONFIG.filter((a) => autoEligible(a) && !this.isOnCooldown(a.id));
       if (remaining.length > 0) {
         const second = remaining[Math.floor(this.rng() * remaining.length)];
         if (this.autoUseAbility(second.id) && second.id === "collect") usedCollect = true;
