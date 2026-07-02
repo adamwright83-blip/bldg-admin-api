@@ -54,6 +54,49 @@ function spriteReady(img: HTMLImageElement | undefined): img is HTMLImageElement
   return !!img && img.complete && img.naturalWidth > 0;
 }
 
+/** Per-sprite placement so poses with different amounts of transparent
+ * canvas padding still align to one stable baseline and render at a
+ * consistent visual size — measured once from each source PNG's actual
+ * non-transparent bounding box, not guessed. Never distorts the source
+ * pixels; all normalization happens at draw time. */
+type SpritePlacement = {
+  /** canvas width / canvas height of the source PNG. */
+  aspect: number;
+  /** (content bottom - content top) / canvas height. */
+  contentHeightFrac: number;
+  /** content bottom / canvas height — where the feet/base sit in-canvas. */
+  baselineFrac: number;
+  /** content horizontal center / canvas width. */
+  centerXFrac: number;
+};
+
+const SPRITE_PLACEMENT: Partial<Record<keyof SpriteSet, SpritePlacement>> = {
+  dragon_idle: { aspect: 1302 / 1454, contentHeightFrac: 0.979, baselineFrac: 0.988, centerXFrac: 0.497 },
+  villain_idle: { aspect: 1122 / 1402, contentHeightFrac: 0.965, baselineFrac: 0.984, centerXFrac: 0.5 },
+  villain_attack: { aspect: 1, contentHeightFrac: 0.616, baselineFrac: 0.824, centerXFrac: 0.503 },
+  villain_hit: { aspect: 1, contentHeightFrac: 0.807, baselineFrac: 0.91, centerXFrac: 0.484 },
+  villain_defeat: { aspect: 1, contentHeightFrac: 0.805, baselineFrac: 0.901, centerXFrac: 0.478 },
+};
+
+/** Draws a sprite so its measured content — not its raw canvas — is
+ * `targetContentHeight` tall, bottom-anchored at (baselineX, baselineY).
+ * This is what keeps idle/attack/hit/defeat from visually jumping even
+ * though each source PNG has a different amount of padding. */
+function drawPlacedSprite(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  placement: SpritePlacement,
+  baselineX: number,
+  baselineY: number,
+  targetContentHeight: number
+) {
+  const drawHeight = targetContentHeight / placement.contentHeightFrac;
+  const drawWidth = drawHeight * placement.aspect;
+  const drawX = baselineX - placement.centerXFrac * drawWidth;
+  const drawY = baselineY - placement.baselineFrac * drawHeight;
+  ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+}
+
 /** Slow drifting island silhouette — cheap parallax, no assets needed. */
 function drawIsland(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number, alpha: number) {
   ctx.save();
@@ -90,25 +133,36 @@ function drawClothesline(ctx: CanvasRenderingContext2D, t: number) {
 }
 
 function drawBackground(ctx: CanvasRenderingContext2D, state: BattleState, sprites: SpriteSet) {
-  if (spriteReady(sprites.background)) {
-    ctx.drawImage(sprites.background, 0, 0, CANVAS_W, CANVAS_H);
-    return;
+  const backgroundSprite = sprites.background;
+  const hasArt = spriteReady(backgroundSprite);
+
+  if (hasArt) {
+    // Approved battlefield art already encodes the blue-left/purple-right
+    // identity; canvas (1280x720, 16:9) and the source (1672x941, ~16:9)
+    // are within 0.1% of the same aspect ratio, so a direct fill neither
+    // stretches nor crops the left/right contrast zones.
+    ctx.drawImage(backgroundSprite, 0, 0, CANVAS_W, CANVAS_H);
+  } else {
+    // Base sky.
+    const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+    grad.addColorStop(0, "#1c2340");
+    grad.addColorStop(0.55, "#2b3a63");
+    grad.addColorStop(1, "#12162a");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
   }
 
-  // Base sky.
-  const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-  grad.addColorStop(0, "#1c2340");
-  grad.addColorStop(0.55, "#2b3a63");
-  grad.addColorStop(1, "#12162a");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
   // Frontier split: warm lantern light on Spark's side, cool fog on the
-  // Procrastinator's side. frontierPct (0..100) is shared with the DOM meter.
+  // Procrastinator's side. frontierPct (0..100) is shared with the DOM
+  // meter. This is a RUNTIME OVERLAY above the base layer (art or
+  // procedural) — it must never be skipped just because real art loaded,
+  // or the live "who's winning" emphasis stops reading on the battlefield.
   const frontierX = (state.frontierPct / 100) * CANVAS_W;
+  const warmAlpha = hasArt ? 0.16 : 0.22;
+  const coolAlpha = hasArt ? 0.2 : 0.28;
 
   const warm = ctx.createRadialGradient(DRAGON_X, DRAGON_Y - 60, 40, DRAGON_X, DRAGON_Y - 60, frontierX * 0.9 + 120);
-  warm.addColorStop(0, "rgba(255, 176, 90, 0.22)");
+  warm.addColorStop(0, `rgba(255, 176, 90, ${warmAlpha})`);
   warm.addColorStop(1, "rgba(255, 176, 90, 0)");
   ctx.fillStyle = warm;
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
@@ -121,22 +175,49 @@ function drawBackground(ctx: CanvasRenderingContext2D, state: BattleState, sprit
     VILLAIN_Y - 80,
     (CANVAS_W - frontierX) * 0.9 + 140
   );
-  cool.addColorStop(0, "rgba(140, 110, 190, 0.28)");
+  cool.addColorStop(0, `rgba(140, 110, 190, ${coolAlpha})`);
   cool.addColorStop(1, "rgba(140, 110, 190, 0)");
   ctx.fillStyle = cool;
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-  // Parallax islands, drifting slowly, dimmer on the fog side.
-  const t = state.dragonBobT;
-  drawIsland(ctx, 340, 150 + Math.sin(t * 0.15) * 6, 1, 0.75);
-  drawIsland(ctx, 560, 120 + Math.sin(t * 0.12 + 1) * 5, 0.65, 0.55);
-  drawIsland(ctx, 900, 160 + Math.sin(t * 0.18 + 2) * 6, 0.85, 0.5);
+  if (!hasArt) {
+    // Procedural set-dressing — only when there's no real background art
+    // to avoid layering redundant/conflicting environment shapes over it.
+    const t = state.dragonBobT;
+    drawIsland(ctx, 340, 150 + Math.sin(t * 0.15) * 6, 1, 0.75);
+    drawIsland(ctx, 560, 120 + Math.sin(t * 0.12 + 1) * 5, 0.65, 0.55);
+    drawIsland(ctx, 900, 160 + Math.sin(t * 0.18 + 2) * 6, 0.85, 0.5);
+    drawClothesline(ctx, t);
 
-  drawClothesline(ctx, t);
+    const floor = ctx.createLinearGradient(0, CANVAS_H - 120, 0, CANVAS_H);
+    floor.addColorStop(0, "#241a2e");
+    floor.addColorStop(1, "#120d18");
+    ctx.fillStyle = floor;
+    ctx.fillRect(0, CANVAS_H - 120, CANVAS_W, 120);
+    ctx.fillStyle = "rgba(255,255,255,0.05)";
+    [[220, 45], [520, 30], [820, 40]].forEach(([fx, fw]) => {
+      ctx.beginPath();
+      ctx.ellipse(fx, CANVAS_H - 30, fw, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = "#c9c9c9";
+    [[880, CANVAS_H - 55], [960, CANVAS_H - 40], [1040, CANVAS_H - 60]].forEach(([px, py]) => {
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(0.3);
+      ctx.fillRect(-10, -6, 20, 12);
+      ctx.restore();
+    });
+    ctx.restore();
+  }
 
   // Frontier seam line — subtle, matches the DOM meter's knot position.
+  // Always drawn, on art or procedural, so the two stay in sync.
   ctx.save();
-  ctx.globalAlpha = 0.18;
+  ctx.globalAlpha = hasArt ? 0.12 : 0.18;
   ctx.strokeStyle = "#f4d35e";
   ctx.setLineDash([6, 8]);
   ctx.lineWidth = 2;
@@ -146,33 +227,8 @@ function drawBackground(ctx: CanvasRenderingContext2D, state: BattleState, sprit
   ctx.stroke();
   ctx.restore();
 
-  // Ground.
-  const floor = ctx.createLinearGradient(0, CANVAS_H - 120, 0, CANVAS_H);
-  floor.addColorStop(0, "#241a2e");
-  floor.addColorStop(1, "#120d18");
-  ctx.fillStyle = floor;
-  ctx.fillRect(0, CANVAS_H - 120, CANVAS_W, 120);
-  ctx.fillStyle = "rgba(255,255,255,0.05)";
-  [[220, 45], [520, 30], [820, 40]].forEach(([fx, fw]) => {
-    ctx.beginPath();
-    ctx.ellipse(fx, CANVAS_H - 30, fw, 8, 0, 0, Math.PI * 2);
-    ctx.fill();
-  });
-
-  // Scattered excuse scraps on the villain's floor side — flavor only.
-  ctx.save();
-  ctx.globalAlpha = 0.3;
-  ctx.fillStyle = "#c9c9c9";
-  [[880, CANVAS_H - 55], [960, CANVAS_H - 40], [1040, CANVAS_H - 60]].forEach(([px, py]) => {
-    ctx.save();
-    ctx.translate(px, py);
-    ctx.rotate(0.3);
-    ctx.fillRect(-10, -6, 20, 12);
-    ctx.restore();
-  });
-  ctx.restore();
-
-  // Vignette so HUD corners stay readable.
+  // Vignette so HUD corners stay readable — keeps the background
+  // "substantially darker and less visually dominant than the characters."
   const vignette = ctx.createRadialGradient(
     CANVAS_W / 2,
     CANVAS_H / 2,
@@ -182,7 +238,7 @@ function drawBackground(ctx: CanvasRenderingContext2D, state: BattleState, sprit
     CANVAS_W * 0.7
   );
   vignette.addColorStop(0, "rgba(0,0,0,0)");
-  vignette.addColorStop(1, "rgba(0,0,0,0.35)");
+  vignette.addColorStop(1, `rgba(0,0,0,${hasArt ? 0.4 : 0.35})`);
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 }
@@ -202,6 +258,9 @@ function drawSelectionRing(ctx: CanvasRenderingContext2D, state: BattleState, x:
   ctx.restore();
 }
 
+const DRAGON_BASELINE_Y = DRAGON_Y + 70;
+const DRAGON_TARGET_CONTENT_H = 280; // ~19.5% of canvas width for dragon_idle's aspect
+
 function drawDragon(ctx: CanvasRenderingContext2D, state: BattleState, sprites: SpriteSet) {
   const winding = Date.now() < state.dragonWindupUntil;
   const bob = Math.sin(state.dragonBobT * (state.dragonCelebrating ? 6 : 2.2)) * (state.dragonCelebrating ? 18 : 8);
@@ -211,19 +270,27 @@ function drawDragon(ctx: CanvasRenderingContext2D, state: BattleState, sprites: 
   drawSelectionRing(ctx, state, DRAGON_X, DRAGON_Y);
 
   const flashing = Date.now() < state.dragonHitFlashUntil;
-  const sprite = state.dragonCelebrating
-    ? sprites.dragon_victory
+  const spriteKey: keyof SpriteSet = state.dragonCelebrating
+    ? "dragon_victory"
     : winding
-      ? sprites.dragon_attack
+      ? "dragon_attack"
       : flashing
-        ? sprites.dragon_hit
-        : sprites.dragon_idle;
+        ? "dragon_hit"
+        : "dragon_idle";
+  const sprite = sprites[spriteKey];
+  const placement = SPRITE_PLACEMENT[spriteKey];
 
   ctx.save();
   if (flashing) ctx.filter = "brightness(1.8) saturate(1.4)";
   if (winding) ctx.translate(x - DRAGON_X, 0);
 
-  if (spriteReady(sprite)) {
+  if (spriteReady(sprite) && placement) {
+    // Matches the original sprite-draw convention of using `x` (not
+    // DRAGON_X) under the active windup translate — same subtle lean as
+    // the previous implementation, unchanged.
+    drawPlacedSprite(ctx, sprite, placement, x, DRAGON_BASELINE_Y + bob, DRAGON_TARGET_CONTENT_H);
+  } else if (spriteReady(sprite)) {
+    // Sprite present but no measured placement yet — generic centered draw.
     ctx.drawImage(sprite, x - 128, y - 128, 256, 256);
   } else {
     // placeholder dragon: body + head + wing + snout, blue-ish. Scaled up
@@ -260,6 +327,8 @@ function drawDragon(ctx: CanvasRenderingContext2D, state: BattleState, sprites: 
 const HIT_FLASH_DURATION_MS = 220;
 const STAGGER_DISTANCE_PX = 22;
 const DEFEAT_FADE_MS = 500;
+const VILLAIN_BASELINE_Y = VILLAIN_Y + 60;
+const VILLAIN_TARGET_CONTENT_H = 280; // ~17.5-22% of canvas width across poses
 
 function drawVillain(ctx: CanvasRenderingContext2D, state: BattleState, sprites: SpriteSet) {
   const defeatAge = state.villainDefeated ? Date.now() - state.villainDefeatedAt : -1;
@@ -276,19 +345,29 @@ function drawVillain(ctx: CanvasRenderingContext2D, state: BattleState, sprites:
   const x = VILLAIN_X + shuffle + stagger;
   const defeatFadeT = state.villainDefeated ? Math.min(1, defeatAge / DEFEAT_FADE_MS) : 0;
   const y = VILLAIN_Y + defeatFadeT * 40 - (telegraphing ? 6 : 0);
-  const sprite = state.villainDefeated
-    ? sprites.villain_defeat
+  const spriteKey: keyof SpriteSet = state.villainDefeated
+    ? "villain_defeat"
     : flashing
-      ? sprites.villain_hit
+      ? "villain_hit"
       : telegraphing
-        ? sprites.villain_attack
-        : sprites.villain_idle;
+        ? "villain_attack"
+        : "villain_idle";
+  const sprite = sprites[spriteKey];
+  const placement = SPRITE_PLACEMENT[spriteKey];
 
   ctx.save();
   ctx.globalAlpha = 1 - defeatFadeT;
   if (flashing) ctx.filter = "brightness(1.6) saturate(1.6) hue-rotate(-20deg)";
 
-  if (spriteReady(sprite)) {
+  if (spriteReady(sprite) && placement) {
+    // villain_attack's baked Excuse Scroll is only shown during the
+    // telegraph window (this branch); once the telegraph resolves the
+    // engine spawns the real excuse projectile and the sprite reverts to
+    // villain_idle/villain_hit, so the baked art and the live projectile
+    // are never rendered at the same time — no duplicate scroll.
+    const baselineY = VILLAIN_BASELINE_Y + (y - VILLAIN_Y);
+    drawPlacedSprite(ctx, sprite, placement, x, baselineY, VILLAIN_TARGET_CONTENT_H);
+  } else if (spriteReady(sprite)) {
     ctx.drawImage(sprite, x - 128, y - 142, 256, 270);
   } else {
     // placeholder: cloaked figure with an EXPRESSIVE clock-face head — evil

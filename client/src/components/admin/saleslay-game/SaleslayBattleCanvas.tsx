@@ -40,6 +40,41 @@ const ABILITY_ICONS: Record<AbilityId, typeof Mail> = {
 
 const NARROW_FILL_PCT = 12;
 
+/** Major HUD art — each loads independently; a missing/failed file just
+ * never sets its key, and CSS keeps the existing fallback for that one
+ * element only. No all-or-nothing dependency between assets. Small UI
+ * assets (ability tokens/icons, pips, blocker counters, contract clasp,
+ * Auto/Retreat bases) are intentionally NOT in this manifest yet — they
+ * stay on their CSS fallback until delivered. */
+const HUD_ART_FILES = {
+  signTruenet: "/assets/saleslay/hud/sign_truenet.png",
+  meterFrame: "/assets/saleslay/hud/meter_frame.png",
+  meterKnot: "/assets/saleslay/hud/meter_knot.png",
+  boardBlockers: "/assets/saleslay/hud/board_blockers.png",
+  sageCtaFrame: "/assets/saleslay/hud/sage_cta_frame.png",
+  sageIdle: "/assets/saleslay/sage_idle.png",
+  sageAwakened: "/assets/saleslay/sage_awakened.png",
+} as const;
+type HudArtKey = keyof typeof HUD_ART_FILES;
+
+function useHudArt(): Partial<Record<HudArtKey, boolean>> {
+  const [loaded, setLoaded] = useState<Partial<Record<HudArtKey, boolean>>>({});
+  useEffect(() => {
+    let active = true;
+    (Object.keys(HUD_ART_FILES) as HudArtKey[]).forEach((key) => {
+      const img = new Image();
+      img.onload = () => {
+        if (active) setLoaded((prev) => ({ ...prev, [key]: true }));
+      };
+      img.src = HUD_ART_FILES[key];
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  return loaded;
+}
+
 type SaleslayBattleCanvasProps = {
   /** True while the real Sage composer is summoned in an overlay above the
    * board (owned by the parent). The battle pauses and keyboard input is
@@ -65,6 +100,7 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
   const [contractComplete, setContractComplete] = useState(false);
   const [pressedKey, setPressedKey] = useState<string | null>(null);
   const [autoMode, setAutoModeState] = useState(false);
+  const hudArt = useHudArt();
 
   // Pause the simulation (not a reset) while Sage is summoned — engine time
   // itself freezes, so cooldowns/Auto timers don't jump on close.
@@ -180,17 +216,34 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
             rectangle. Ask Sage never opens anything itself; it only asks
             the parent to summon the real composer. */}
         <div className={`slb-sage ${sageOpen ? "is-awakened" : ""}`}>
-          <div className="slb-sage-figure" aria-hidden="true">
-            <span className="slb-sage-core">
-              <Sparkles size={18} />
-            </span>
+          <div
+            className={`slb-sage-figure ${
+              sageOpen
+                ? hudArt.sageAwakened
+                  ? "slb-art-sage-awakened"
+                  : ""
+                : hudArt.sageIdle
+                  ? "slb-art-sage-idle"
+                  : ""
+            }`}
+            aria-hidden="true"
+          >
+            {!hudArt.sageIdle && !hudArt.sageAwakened ? (
+              <span className="slb-sage-core">
+                <Sparkles size={18} />
+              </span>
+            ) : null}
           </div>
           <div className="slb-sage-label">
             <span className="slb-sage-name">Sage</span>
             <span className="slb-sage-role">Oracle of deals</span>
           </div>
           <p className="slb-sage-insight">Lead with convenience, then price.</p>
-          <button type="button" className="slb-sage-ask-btn" onClick={() => onAskSage?.()}>
+          <button
+            type="button"
+            className={`slb-sage-ask-btn ${hudArt.sageCtaFrame ? "slb-art-sage-cta" : ""}`}
+            onClick={() => onAskSage?.()}
+          >
             <span className="slb-sage-ask-label">Ask Sage</span>
             <span className="slb-sage-ask-hint">Summon counsel</span>
           </button>
@@ -198,22 +251,36 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
 
         {/* HUD overlay — every block is a physical object in Spark's world. */}
         <div className="slb-hud">
-          {/* Top row, three explicit zones: True Net | Kingdom Influence | Blockers */}
-          <div className="slb-truenet-ropes" aria-hidden="true" />
-          <div className="slb-sign slb-sign--truenet">
-            <span className="slb-sign-label">True net</span>
-            <b className="slb-sign-value">{usd(snapshot.trueNetCents)}</b>
-          </div>
-          <div className="slb-sign slb-sign--gain">
-            <span className="slb-sign-gain">+{usd(snapshot.todayGainCents)} today</span>
-          </div>
+          {/* Top row, three explicit zones: True Net | Kingdom Influence | Blockers.
+              The delivered sign art combines the main plank + gain plank into
+              one image, so when it's loaded we render ONE element with both
+              values as live text over their respective blank surfaces —
+              never a second duplicate gain plank underneath it. */}
+          {hudArt.signTruenet ? (
+            <div className="slb-sign-combined slb-art-sign-truenet">
+              <span className="slb-sign-combined-label">True net</span>
+              <b className="slb-sign-combined-value">{usd(snapshot.trueNetCents)}</b>
+              <span className="slb-sign-combined-gain">+{usd(snapshot.todayGainCents)} today</span>
+            </div>
+          ) : (
+            <>
+              <div className="slb-truenet-ropes" aria-hidden="true" />
+              <div className="slb-sign slb-sign--truenet">
+                <span className="slb-sign-label">True net</span>
+                <b className="slb-sign-value">{usd(snapshot.trueNetCents)}</b>
+              </div>
+              <div className="slb-sign slb-sign--gain">
+                <span className="slb-sign-gain">+{usd(snapshot.todayGainCents)} today</span>
+              </div>
+            </>
+          )}
 
           <div className="slb-beam-zone">
             <div className="slb-beam-title" aria-hidden="true">
               <span>Kingdom influence</span>
               <i>Tug of war</i>
             </div>
-            <div className="slb-beam">
+            <div className={`slb-beam ${hudArt.meterFrame ? "slb-art-meter-frame" : ""}`}>
               <div className="slb-beam-track">
                 <div className="slb-beam-fill-spark" style={{ width: `${frontierPct}%` }}>
                   {!sparkNarrow ? <span className="slb-beam-pct">{Math.round(frontierPct)}%</span> : null}
@@ -221,7 +288,10 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
                 <div className="slb-beam-fill-fog" style={{ width: `${100 - frontierPct}%` }}>
                   {!fogNarrow ? <span className="slb-beam-pct">{Math.round(100 - frontierPct)}%</span> : null}
                 </div>
-                <div className="slb-beam-knot" style={{ left: `${frontierPct}%` }} />
+                <div
+                  className={`slb-beam-knot ${hudArt.meterKnot ? "slb-art-meter-knot" : ""}`}
+                  style={{ left: `${frontierPct}%` }}
+                />
                 {sparkNarrow ? (
                   <span className="slb-beam-endcap slb-beam-endcap--spark">{Math.round(frontierPct)}%</span>
                 ) : null}
@@ -236,7 +306,7 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
             </div>
           </div>
 
-          <div className="slb-noticeboard">
+          <div className={`slb-noticeboard ${hudArt.boardBlockers ? "slb-art-board-blockers" : ""}`}>
             <div className="slb-poster" style={{ transform: "rotate(-2deg)" }}>
               <div className={`slb-badge ${snapshot.blockers.overdueReturns === 0 ? "is-clear" : ""}`}>
                 {snapshot.blockers.overdueReturns}

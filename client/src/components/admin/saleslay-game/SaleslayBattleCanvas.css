@@ -781,3 +781,119 @@
     font-size: 15px;
   }
 }
+
+/* ================= Installed major HUD art =================
+   Each rule below only applies once its `slb-art-*` class is present
+   (set in TSX after the corresponding image successfully loads), so a
+   missing/failed asset never disables another and always falls back to
+   the existing CSS-drawn treatment above. Decorative art layers use
+   pointer-events:none; live values stay real text above them. Small UI
+   assets (ability tokens/icons, pips, blocker counters, contract clasp,
+   Auto/Retreat bases) intentionally have no rules here yet — they are
+   still on fallback until delivered. */
+
+/* SAGE idle/awakened character art — replaces the CSS gradient bust.
+   Only one of the two classes is ever applied at a time (mirrors
+   sageOpen), so idle/awakened never render simultaneously. */
+.slb-sage-figure.slb-art-sage-idle,
+.slb-sage-figure.slb-art-sage-awakened {
+  background: none;
+  background-image: var(--slb-sage-figure-img);
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center bottom;
+  clip-path: none;
+  pointer-events: none;
+}
+.slb-sage-figure.slb-art-sage-idle {
+  --slb-sage-figure-img: url("/assets/saleslay/sage_idle.png");
+}
+.slb-sage-figure.slb-art-sage-awakened {
+  --slb-sage-figure-img: url("/assets/saleslay/sage_awakened.png");
+}
+
+/* Ask Sage launcher — the delivered art is an asymmetric oracle tablet
+   with its own baked border, so the CSS clip-path/gradient step aside in
+   favor of the image; the button element itself is unchanged (still a
+   real <button> with hover/active/focus states). */
+.slb-sage-ask-btn.slb-art-sage-cta {
+  clip-path: none;
+  border: none;
+  background: url("/assets/saleslay/hud/sage_cta_frame.png") center / 100% 100% no-repeat;
+}
+
+/* True Net — combined hanging sign (main plank + gain plank in one
+   image); live text sits over each blank surface, positioned by the
+   image's own proportions. Ropes are baked into this art, so the
+   separate CSS rope element is skipped when this class is active. */
+.slb-sign-combined {
+  position: absolute;
+  left: 1%;
+  top: 0;
+  width: 20%;
+  aspect-ratio: 1825 / 862;
+  background: url("/assets/saleslay/hud/sign_truenet.png") center / contain no-repeat;
+  pointer-events: none;
+}
+.slb-sign-combined-label {
+  position: absolute;
+  left: 50%;
+  top: 20%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #d9c69c;
+  white-space: nowrap;
+}
+.slb-sign-combined-value {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  transform: translateX(-50%);
+  font-family: Georgia, serif;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--slb-gold);
+  white-space: nowrap;
+}
+.slb-sign-combined-gain {
+  position: absolute;
+  left: 50%;
+  top: 81%;
+  transform: translateX(-50%);
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #9fdc8c;
+  white-space: nowrap;
+}
+
+/* Kingdom Influence frame + knot — the frame's blank interior becomes the
+   live fill track; the knot art replaces the CSS gradient marker. */
+.slb-beam.slb-art-meter-frame {
+  background: url("/assets/saleslay/hud/meter_frame.png") center / 100% 100% no-repeat;
+  padding: 0 9%;
+}
+.slb-beam.slb-art-meter-frame .slb-beam-track {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+.slb-beam-knot.slb-art-meter-knot {
+  background: url("/assets/saleslay/hud/meter_knot.png") center / contain no-repeat;
+  border: none;
+  box-shadow: none;
+}
+
+/* Blocker notice board — blank three-card frame; live wooden-counter
+   fallback badges (slb-badge) remain layered above it until Adam
+   delivers the dedicated counter_blocker_active/clear art. */
+.slb-noticeboard.slb-art-board-blockers {
+  background: url("/assets/saleslay/hud/board_blockers.png") center / 100% 100% no-repeat;
+  border: none;
+}
+.slb-noticeboard.slb-art-board-blockers .slb-poster {
+  background: transparent;
+  border: none;
+}
