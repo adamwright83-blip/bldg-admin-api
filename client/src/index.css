@@ -3878,8 +3878,22 @@ button.ops-kpi-card:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   padding-right: 22px;
+  flex-shrink: 0;
+}
+.ss-clear-btn {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(230, 220, 255, 0.55);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.ss-clear-btn:hover {
+  color: #ded0ff;
 }
 .ss-orb {
   width: 22px;
@@ -3906,7 +3920,7 @@ button.ops-kpi-card:hover {
 .ss-input-row {
   display: flex;
   gap: 6px;
-  margin-bottom: 8px;
+  flex-shrink: 0;
 }
 .ss-input-row input {
   flex: 1;
@@ -3944,7 +3958,8 @@ button.ops-kpi-card:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  margin-bottom: 10px;
+  margin: 8px 0;
+  flex-shrink: 0;
 }
 .ss-chip-row button {
   font-size: 10.5px;
@@ -3959,14 +3974,93 @@ button.ops-kpi-card:hover {
 .ss-chip-row button:hover:not(:disabled) {
   background: rgba(160, 130, 255, 0.18);
 }
-.ss-result {
+
+/* Scrollable ephemeral thread — grows to fill the fixed-size shell; the
+   input row (below, outside this element) stays put at the bottom. */
+.ss-thread {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   background: #f7f3ec;
   border-radius: 10px;
   padding: 10px 12px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
+
+/* Compact oracle-consultation turn block — not a chat bubble, no avatar,
+   no per-line timestamp. Small YOU/SAGE label + a restrained × to delete. */
+.ss-turn {
+  position: relative;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(46, 36, 24, 0.08);
+}
+.ss-turn:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.ss-turn-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
+.ss-turn-label {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(46, 36, 24, 0.45);
+}
+.ss-turn--user .ss-turn-label {
+  color: #6f4fc9;
+}
+.ss-turn-delete {
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(46, 36, 24, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.ss-turn:hover .ss-turn-delete,
+.ss-turn-delete:focus-visible {
+  opacity: 1;
+}
+.ss-turn-delete:hover,
+.ss-turn-delete:focus-visible {
+  background: rgba(46, 36, 24, 0.1);
+  color: rgba(46, 36, 24, 0.8);
+  outline: none;
+}
+@media (hover: none) {
+  /* Touch devices have no hover — keep the control reachable, just quiet. */
+  .ss-turn-delete {
+    opacity: 0.45;
+  }
+}
+.ss-turn-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: rgba(46, 36, 24, 0.85);
+}
+.ss-turn--user .ss-turn-text {
+  font-weight: 600;
+}
+.ss-turn-result {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .ss-loading {
   display: flex;
   align-items: center;

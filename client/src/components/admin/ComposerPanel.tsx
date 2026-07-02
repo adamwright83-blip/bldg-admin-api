@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { Mic, Send, Sparkles } from "lucide-react";
+import { Mic, Send, Sparkles, X } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -109,6 +109,11 @@ const KINGDOM_SAGE_CHIPS = [
   "Pickup & delivery",
   "Repeat trends",
 ];
+
+/** The `sage-summon` thread is a temporary, in-memory-only consultation —
+ * never written to localStorage/sessionStorage/backend. It self-clears
+ * after this much inactivity so it never becomes a permanent chat log. */
+const SAGE_THREAD_TTL_MS = 30_000;
 
 function EmptySageInsight() {
   return (
@@ -395,6 +400,27 @@ export function ComposerPanel({
   const [demoMode, setDemoMode] = useState(() => allowDemoMode && getInitialDemoMode(defaultDemoMode));
   const bottomRef = useRef<HTMLDivElement>(null);
   const hasUserInteractedRef = useRef(false);
+  const isSageSummonVariant = variant === "sage-summon";
+
+  // Ephemeral thread expiry — sage-summon only. One canonical timer; never
+  // persisted anywhere. Reset (not started) by post-response activity, not
+  // by the act of submitting — a request in flight must never be cleared.
+  const expiryTimerRef = useRef<number | null>(null);
+  const cancelThreadExpiry = useCallback(() => {
+    if (expiryTimerRef.current !== null) {
+      window.clearTimeout(expiryTimerRef.current);
+      expiryTimerRef.current = null;
+    }
+  }, []);
+  const resetThreadExpiry = useCallback(() => {
+    if (!isSageSummonVariant) return;
+    cancelThreadExpiry();
+    expiryTimerRef.current = window.setTimeout(() => {
+      setMessages([]);
+      expiryTimerRef.current = null;
+    }, SAGE_THREAD_TTL_MS);
+  }, [isSageSummonVariant, cancelThreadExpiry]);
+  useEffect(() => cancelThreadExpiry, [cancelThreadExpiry]);
 
   const ask = trpc.admin.askComposer.useMutation({
     onSuccess(data) {
@@ -402,12 +428,14 @@ export function ComposerPanel({
         ...prev,
         { role: "assistant", content: data.answer, result: data as ComposerAnswer },
       ]);
+      resetThreadExpiry();
     },
     onError(err) {
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: `Error: ${err.message}` },
       ]);
+      resetThreadExpiry();
     },
   });
 
@@ -416,6 +444,19 @@ export function ComposerPanel({
       bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }, [messages]);
+
+  const handleDeleteMessage = (index: number) => {
+    // Removing from `messages` also removes it from the context sequence
+    // `send()` builds for the next request — no separate context array to
+    // keep in sync, so a deleted message can never leak into a follow-up.
+    setMessages((prev) => prev.filter((_, i) => i !== index));
+    resetThreadExpiry();
+  };
+
+  const handleClearThread = () => {
+    setMessages([]);
+    cancelThreadExpiry();
+  };
 
   const toggleDemo = () => {
     if (!allowDemoMode) return;
@@ -437,6 +478,10 @@ export function ComposerPanel({
     const history = messages.map((m) => ({ role: m.role, content: m.content }));
     setMessages((prev) => [...prev, { role: "user", content: displayText }]);
     setInput("");
+    // A request is now in flight — cancel any pending expiry rather than
+    // restarting it. onSuccess/onError schedule the real countdown once the
+    // response actually completes, so the thread is never cleared mid-ask.
+    cancelThreadExpiry();
     ask.mutate({ question: displayText, history, mode, demoMode: allowDemoMode ? demoMode : false });
   };
 
@@ -453,24 +498,90 @@ export function ComposerPanel({
 
   // Compact presentation for the in-game SAGE summon surface: same state,
   // same tRPC mutation, same AssistantBubble rendering as every other
-  // variant — only the chrome around it is smaller. No wizard illustration,
-  // no two-column analytics canvas, no export controls.
+  // variant — only the chrome around it is smaller. A real, but EPHEMERAL,
+  // multi-turn thread: never persisted anywhere, self-clears after 30s of
+  // inactivity (see resetThreadExpiry/SAGE_THREAD_TTL_MS above).
   if (isSageSummon) {
     return (
-      <section className={`ss-composer ${className}`.trim()} aria-label="Ask Sage">
+      <section
+        className={`ss-composer ${className}`.trim()}
+        aria-label="Ask Sage"
+        onClick={resetThreadExpiry}
+        onFocus={resetThreadExpiry}
+        onMouseUp={resetThreadExpiry}
+      >
         <div className="ss-header">
           <span className="ss-orb" aria-hidden="true" />
           <div className="ss-header-text">
             <strong>Sage</strong>
             <span>Oracle of deals</span>
           </div>
+          {messages.length > 0 ? (
+            <button type="button" className="ss-clear-btn" onClick={handleClearThread}>
+              Clear thread
+            </button>
+          ) : null}
         </div>
+
+        <div className="ss-thread" onScroll={resetThreadExpiry}>
+          {messages.length === 0 ? (
+            <p className="ss-empty-text">
+              Ask Sage anything about your store — revenue, orders, customers, sales coaching, or a follow-up to
+              draft.
+            </p>
+          ) : (
+            messages.map((m, i) => (
+              <div key={i} className={`ss-turn ss-turn--${m.role}`}>
+                <div className="ss-turn-head">
+                  <span className="ss-turn-label">{m.role === "user" ? "You" : "Sage"}</span>
+                  <button
+                    type="button"
+                    className="ss-turn-delete"
+                    aria-label="Delete this message"
+                    onClick={() => handleDeleteMessage(i)}
+                  >
+                    <X size={11} aria-hidden="true" />
+                  </button>
+                </div>
+                {m.role === "user" ? (
+                  <p className="ss-turn-text">{m.content}</p>
+                ) : m.result ? (
+                  <div className="ss-turn-result">
+                    <AssistantBubble result={m.result} onNavigate={onNavigate} />
+                  </div>
+                ) : (
+                  <p className="ss-turn-text ss-error-text">{m.content}</p>
+                )}
+              </div>
+            ))
+          )}
+          {ask.isPending ? (
+            <div className="ss-loading">
+              <span />
+              Checking live order data...
+            </div>
+          ) : null}
+          <div ref={bottomRef} />
+        </div>
+
+        {messages.length === 0 ? (
+          <div className="ss-chip-row" aria-label="Suggested questions">
+            {KINGDOM_SAGE_CHIPS.slice(0, 3).map((chip) => (
+              <button key={chip} type="button" onClick={() => send(chip)} disabled={ask.isPending}>
+                {chip}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         <form onSubmit={handleSubmit} className="ss-input-row">
           <input
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              resetThreadExpiry();
+            }}
             placeholder="Ask about revenue, orders, customers…"
             disabled={ask.isPending}
           />
@@ -478,32 +589,6 @@ export function ComposerPanel({
             <Send className="h-4 w-4" aria-hidden="true" />
           </button>
         </form>
-
-        <div className="ss-chip-row" aria-label="Suggested questions">
-          {KINGDOM_SAGE_CHIPS.slice(0, 3).map((chip) => (
-            <button key={chip} type="button" onClick={() => send(chip)} disabled={ask.isPending}>
-              {chip}
-            </button>
-          ))}
-        </div>
-
-        <div className="ss-result">
-          {ask.isPending ? (
-            <div className="ss-loading">
-              <span />
-              Checking live order data...
-            </div>
-          ) : latestAssistant?.result ? (
-            <AssistantBubble result={latestAssistant.result} onNavigate={onNavigate} />
-          ) : latestAssistant ? (
-            <p className="ss-error-text">{latestAssistant.content}</p>
-          ) : (
-            <p className="ss-empty-text">
-              Ask Sage anything about your store — revenue, orders, customers, sales coaching, or a follow-up to draft.
-            </p>
-          )}
-          <div ref={bottomRef} />
-        </div>
       </section>
     );
   }
