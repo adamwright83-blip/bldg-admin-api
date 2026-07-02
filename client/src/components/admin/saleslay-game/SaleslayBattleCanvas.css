@@ -1,0 +1,258 @@
+.slb-root {
+  width: 100%;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #0c0e1a;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.slb-canvas-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1280 / 720;
+}
+
+.slb-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.slb-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: "Inter", system-ui, sans-serif;
+  color: #f2ead8;
+}
+
+.slb-panel {
+  position: absolute;
+  background: rgba(12, 14, 26, 0.72);
+  border: 1px solid rgba(244, 211, 94, 0.35);
+  border-radius: 10px;
+  padding: 8px 12px;
+  backdrop-filter: blur(4px);
+}
+
+.slb-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(242, 234, 216, 0.65);
+}
+
+.slb-panel--truenet {
+  top: 3%;
+  left: 3%;
+}
+.slb-panel--truenet .slb-value {
+  display: block;
+  font-size: 26px;
+  font-weight: 800;
+  color: #ffe8a3;
+}
+.slb-panel--truenet .slb-gain {
+  font-size: 12px;
+  color: #6fdc8c;
+  font-weight: 600;
+}
+
+.slb-panel--meter {
+  top: 3%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40%;
+  min-width: 260px;
+}
+.slb-meter-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.slb-meter-bar {
+  height: 10px;
+  border-radius: 6px;
+  background: rgba(255, 90, 90, 0.35);
+  overflow: hidden;
+}
+.slb-meter-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #5ac8fa, #4bd88a);
+  transition: width 0.25s ease;
+}
+
+.slb-panel--blockers {
+  top: 3%;
+  right: 3%;
+  display: flex;
+  gap: 14px;
+}
+.slb-blocker {
+  text-align: center;
+}
+.slb-blocker b {
+  display: block;
+  font-size: 20px;
+  font-weight: 800;
+}
+.slb-blocker span {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(242, 234, 216, 0.65);
+}
+
+.slb-panel--dragon {
+  bottom: 22%;
+  left: 3%;
+  min-width: 180px;
+}
+
+.slb-panel--contract {
+  bottom: 22%;
+  right: 3%;
+  min-width: 220px;
+}
+
+.slb-stat-bar {
+  position: relative;
+  height: 16px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  margin-top: 4px;
+  overflow: hidden;
+}
+.slb-stat-bar span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+}
+.slb-stat-fill {
+  height: 100%;
+  transition: width 0.2s ease;
+}
+.slb-stat-bar--hp .slb-stat-fill {
+  background: #e2554a;
+}
+.slb-stat-bar--energy .slb-stat-fill {
+  background: #4bb7d8;
+}
+.slb-stat-bar--contract .slb-stat-fill {
+  background: #f4d35e;
+}
+
+.slb-panel--log {
+  top: 32%;
+  right: 3%;
+  width: 260px;
+  min-height: 90px;
+}
+.slb-panel--log ul {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.slb-panel--log li {
+  font-size: 11px;
+  line-height: 1.3;
+  color: rgba(242, 234, 216, 0.85);
+}
+
+.slb-banner-toast {
+  position: absolute;
+  top: 34%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 10, 20, 0.85);
+  border: 1px solid #f4d35e;
+  color: #f4d35e;
+  font-weight: 800;
+  font-size: 18px;
+  padding: 10px 22px;
+  border-radius: 8px;
+  letter-spacing: 0.03em;
+}
+
+.slb-actionbar {
+  position: absolute;
+  bottom: 3%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.slb-action-btn {
+  position: relative;
+  width: 78px;
+  height: 56px;
+  border-radius: 10px;
+  border: 1px solid rgba(244, 211, 94, 0.5);
+  background: rgba(20, 22, 38, 0.85);
+  color: #f2ead8;
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  transition: transform 0.1s ease;
+}
+.slb-action-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: #f4d35e;
+}
+.slb-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.slb-action-cooldown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
+  transition: height 0.1s linear;
+}
+.slb-action-label {
+  position: relative;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  z-index: 1;
+}
+.slb-action-key {
+  position: relative;
+  font-size: 9px;
+  color: rgba(244, 211, 94, 0.85);
+  z-index: 1;
+}
+
+@media (max-width: 720px) {
+  .slb-panel--log {
+    display: none;
+  }
+  .slb-action-btn {
+    width: 56px;
+    height: 46px;
+  }
+  .slb-panel--truenet .slb-value {
+    font-size: 18px;
+  }
+}

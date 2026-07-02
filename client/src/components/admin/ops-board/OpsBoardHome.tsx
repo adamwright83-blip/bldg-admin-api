@@ -9,6 +9,7 @@ import { SkyBackdrop, SkyBar, useCommandSky } from "../CommandSky";
 import { WarStrip } from "../CommandCockpitBand";
 import { ComposerPanel } from "../ComposerPanel";
 import { CommandLanternKingdom } from "../CommandLanternKingdom";
+import { SaleslayBattleCanvas } from "../saleslay-game/SaleslayBattleCanvas";
 import { OperatorAnalystHome } from "../operator-analyst/OperatorAnalystHome";
 import type { AdminHomeData, LogOutreachPayload, OpsBoardModal } from "./types";
 
@@ -73,6 +74,9 @@ export function OpsBoardHome({
             <CommandLanternKingdom onNavigate={onNavigate} />
             <SkyBar />
             <WarStrip onNavigate={onNavigate} />
+            <section className="ops-saleslay-preview" aria-label="Saleslay Battle Preview">
+              <SaleslayBattleCanvas />
+            </section>
             <ComposerPanel
               allowDemoMode={false}
               className="ops-kingdom-composer"
@@ -92,6 +96,9 @@ export function OpsBoardHome({
             <CommandLanternKingdom onNavigate={onNavigate} />
             <SkyBar />
             <WarStrip onNavigate={onNavigate} />
+            <section className="ops-saleslay-preview" aria-label="Saleslay Battle Preview">
+              <SaleslayBattleCanvas />
+            </section>
             <div className="ops-kingdom-command-row">
               <ComposerPanel
                 allowDemoMode={false}
