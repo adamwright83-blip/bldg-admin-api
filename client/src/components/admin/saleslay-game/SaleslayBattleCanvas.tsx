@@ -163,14 +163,14 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
       const engine = engineRef.current!;
       if (e.code === "Space") {
         e.preventDefault();
-        engine.fireBasic();
+        engine.startWeaponAction("fire");
         setPressedKey(FIRE_COOLDOWN_ID);
         window.setTimeout(() => setPressedKey(null), 140);
         return;
       }
       const ability = ABILITY_CONFIG.find((a) => a.key === e.key);
       if (ability) {
-        engine.useAbility(ability.id);
+        engine.startWeaponAction(ability.id);
         setPressedKey(ability.id);
         window.setTimeout(() => setPressedKey(null), 140);
       }
@@ -179,8 +179,11 @@ export function SaleslayBattleCanvas({ sageOpen = false, onAskSage }: SaleslayBa
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [sageOpen]);
 
-  const handleAbilityClick = (id: AbilityId) => engineRef.current!.useAbility(id);
-  const handleFireClick = () => engineRef.current!.fireBasic();
+  // Demo path today; a future real-action adapter (phone/email/pickup/
+  // payment) replaces what startWeaponAction does internally per ability
+  // without this call site or the tray UI changing.
+  const handleAbilityClick = (id: AbilityId) => engineRef.current!.startWeaponAction(id);
+  const handleFireClick = () => engineRef.current!.startWeaponAction("fire");
   const handleAutoToggle = () => engineRef.current!.setAutoMode(!autoMode);
   const handleRetreat = () => engineRef.current!.reset({ preserveAutoMode: false });
 
@@ -457,12 +460,17 @@ function TrayButton({
   const duration = engine?.getCooldownDuration(cooldownId) ?? 1;
   const pct = duration > 0 ? Math.min(100, (remaining / duration) * 100) : 0;
   const secondsLeft = Math.ceil(remaining / 1000);
+  // Derived weapon-capability status (see game/weaponCapability.ts) — today
+  // this only ever resolves to ready/working/cooldown/disabled since the
+  // demo path can't fail or go "live"; the CSS hooks for the other states
+  // exist for a future real-action adapter.
+  const weaponStatus = engine?.getWeaponStatus(cooldownId as Parameters<typeof engine.getWeaponStatus>[0]) ?? "ready";
   void tick; // force re-render on the HUD sync interval
 
   return (
     <button
       type="button"
-      className={`slb-tray-btn ${pressed ? "is-pressed" : ""}`}
+      className={`slb-tray-btn slb-ability--${weaponStatus} ${pressed ? "is-pressed" : ""}`}
       disabled={disabled || remaining > 0}
       onClick={onClick}
     >

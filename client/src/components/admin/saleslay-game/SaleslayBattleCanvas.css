@@ -602,6 +602,29 @@
   cursor: not-allowed;
 }
 
+/* Weapon-capability state hooks (see game/weaponCapability.ts). Today only
+   ready/working/cooldown/disabled ever apply — success/failed/live/etc.
+   are wired here for a future real-action adapter and stay unused/inert
+   until then, restrained on purpose (no new ornament, no baked text). */
+.slb-ability--working {
+  filter: saturate(1.15);
+}
+.slb-ability--live {
+  box-shadow: 0 0 0 2px rgba(90, 200, 120, 0.6), 0 0 10px rgba(90, 200, 120, 0.4);
+}
+.slb-ability--success {
+  box-shadow: 0 0 0 2px rgba(90, 200, 120, 0.8);
+}
+.slb-ability--failed {
+  box-shadow: 0 0 0 2px rgba(220, 90, 80, 0.7);
+}
+.slb-ability--cooldown {
+  filter: saturate(0.85);
+}
+.slb-ability--disabled {
+  filter: grayscale(0.4);
+}
+
 /* Carved enamel action tokens — hard physical edge, inset rune-stone look.
    overflow:visible on the button (above) means this never clips. */
 .slb-token {

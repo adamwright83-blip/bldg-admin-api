@@ -15,6 +15,7 @@ import {
   type AbilityId,
 } from "./abilities";
 import type { BattleSnapshot, BattleState, BusinessEvent } from "./types";
+import type { WeaponActionStatus } from "./weaponCapability";
 
 export const CANVAS_W = 1280;
 export const CANVAS_H = 720;
@@ -168,6 +169,54 @@ export class SaleslayBattleEngine {
     this.setCooldown(id, ability.cooldownMs);
     this.queueShot(id);
     this.cancelAutoMode();
+  }
+
+  // ── Weapon-capability adapter surface (see weaponCapability.ts) ──────────
+  // Today these run the exact same demo path as useAbility/fireBasic — the
+  // reward still lands when the fireball reaches the villain. A future
+  // real-action adapter (phone/email/pickup/payment) will call
+  // completeWeaponAction() directly once the real business milestone fires
+  // (call connected, message sent, task completed, payment collected)
+  // instead of relying on the fireball's travel time, with no HUD rewrite.
+
+  /** Launches a weapon action. Demo path: identical to useAbility/fireBasic. */
+  startWeaponAction(id: AbilityId | "fire") {
+    if (id === "fire") this.fireBasic();
+    else this.useAbility(id);
+  }
+
+  /** Credits the reward for a real (non-demo) confirmed success, bypassing
+   * the projectile travel time entirely — for use once a real adapter
+   * exists. Unused by the current demo path, which resolves on fireball
+   * landing instead (see update()). */
+  completeWeaponAction(id: AbilityId) {
+    const ability = ABILITY_CONFIG.find((a) => a.id === id);
+    if (ability) this.applyAbilityReward(ability);
+  }
+
+  /** Records a real action failure without crediting any reward. No demo
+   * path can fail today; reserved for future adapters. */
+  failWeaponAction(id: AbilityId | "fire", reason?: string) {
+    this.pushLog(reason ? `${id} action failed: ${reason}` : `${id} action failed.`);
+  }
+
+  /** Derived (not stored) so it can never drift from the real cooldown/
+   * in-flight state — a pending or traveling shot for this ability reads
+   * as "working"; otherwise cooldown vs. ready. "success"/"failed"/
+   * "live"/etc. are defined in WeaponActionStatus for future adapters but
+   * have no demo-path trigger yet. */
+  getWeaponStatus(id: AbilityId | "fire"): WeaponActionStatus {
+    const state = this.state;
+    // A plain SPACE shot carries no abilityId — match undefined for "fire".
+    const matches = (shotAbilityId: string | undefined) =>
+      id === "fire" ? shotAbilityId === undefined : shotAbilityId === id;
+    const hasPendingOrInFlight =
+      state.pendingShots.some((s) => matches(s.abilityId)) ||
+      state.fireballs.some((f) => matches(f.abilityId));
+    if (hasPendingOrInFlight) return "working";
+    if (this.isOnCooldown(id === "fire" ? FIRE_COOLDOWN_ID : id)) return "cooldown";
+    if (id !== "fire" && state.villainDefeated) return "disabled";
+    return "ready";
   }
 
   /** Internal variant used by attract mode — does NOT cancel auto (it IS auto). */
