@@ -142,7 +142,10 @@ export function SaleslayBattleCanvas() {
           </div>
 
           <div className="slb-panel slb-panel--dragon">
-            <span className="slb-label">Spark · Level 4</span>
+            <div className="slb-dragon-head">
+              <span className="slb-label">Spark · Level 4</span>
+              <span className="slb-xp-badge">{snapshot.xp.toLocaleString("en-US")} XP</span>
+            </div>
             <div className="slb-stat-bar slb-stat-bar--hp">
               <div className="slb-stat-fill" style={{ width: `${snapshot.dragonHp}%` }} />
               <span>{Math.round(snapshot.dragonHp)}/100 HP</span>

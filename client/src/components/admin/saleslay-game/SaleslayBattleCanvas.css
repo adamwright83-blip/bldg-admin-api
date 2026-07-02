@@ -109,6 +109,22 @@
   color: rgba(242, 234, 216, 0.65);
 }
 
+.slb-dragon-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.slb-xp-badge {
+  font-size: 10px;
+  font-weight: 800;
+  color: #1c1408;
+  background: #f4d35e;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
 .slb-panel--dragon {
   bottom: 22%;
   left: 3%;

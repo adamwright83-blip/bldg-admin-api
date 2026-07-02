@@ -117,12 +117,20 @@ function drawDragon(ctx: CanvasRenderingContext2D, state: BattleState, sprites: 
   }
 }
 
+const HIT_FLASH_DURATION_MS = 220;
+const STAGGER_DISTANCE_PX = 22;
+
 function drawVillain(ctx: CanvasRenderingContext2D, state: BattleState, sprites: SpriteSet) {
   if (state.villainDefeated) return;
   const shuffle = Math.sin(state.villainShuffleT * 1.4) * 10;
-  const x = VILLAIN_X + shuffle;
+  const hitAgeMs = HIT_FLASH_DURATION_MS - (state.villainHitFlashUntil - Date.now());
+  const flashing = hitAgeMs >= 0 && hitAgeMs < HIT_FLASH_DURATION_MS;
+  // Knockback: snaps away from the dragon on impact, eases back to rest.
+  const stagger = flashing
+    ? STAGGER_DISTANCE_PX * (1 - hitAgeMs / HIT_FLASH_DURATION_MS)
+    : 0;
+  const x = VILLAIN_X + shuffle + stagger;
   const y = VILLAIN_Y;
-  const flashing = Date.now() < state.villainHitFlashUntil;
   const sprite = flashing ? sprites.villain_hit : sprites.villain_idle;
 
   ctx.save();
