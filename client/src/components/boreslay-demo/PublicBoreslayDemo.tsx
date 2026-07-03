@@ -11,7 +11,12 @@ export function PublicBoreslayDemo() {
   const [state, setState] = useState<PublicBattleState>(() => engineRef.current.state);
   const [engaged, setEngaged] = useState(false);
   const [joystick, setJoystick] = useState({ x: 0, y: 0 });
-  const [presentation, setPresentation] = useState(() => getPresentationMode(window.innerWidth, window.innerHeight));
+  const detectPresentation = () => getPresentationMode(
+    window.innerWidth,
+    window.visualViewport?.height ?? window.innerHeight,
+    window.matchMedia("(pointer: coarse)").matches && Math.min(window.screen.width, window.screen.height) <= 700
+  );
+  const [presentation, setPresentation] = useState(detectPresentation);
 
   const sync = useCallback(() => setState({ ...engineRef.current.state, spark: { ...engineRef.current.state.spark }, boss: { ...engineRef.current.state.boss }, projectiles: [...engineRef.current.state.projectiles], hazards: [...engineRef.current.state.hazards] }), []);
   const updateMovement = useCallback(() => {
@@ -27,7 +32,7 @@ export function PublicBoreslayDemo() {
   }, [sync]);
 
   useEffect(() => {
-    const update = () => setPresentation(getPresentationMode(window.innerWidth, window.visualViewport?.height ?? window.innerHeight));
+    const update = () => setPresentation(detectPresentation());
     update(); window.addEventListener("resize", update); window.visualViewport?.addEventListener("resize", update);
     return () => { window.removeEventListener("resize", update); window.visualViewport?.removeEventListener("resize", update); };
   }, []);

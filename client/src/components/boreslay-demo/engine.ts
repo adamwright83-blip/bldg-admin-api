@@ -6,7 +6,8 @@ export type Vec = { x: number; y: number };
 export type Projectile = { id: number; kind: "fire" | "excuse"; x: number; y: number; vx: number; vy: number; radius: number };
 export type Hazard = { id: number; x: number; y: number; radius: number; telegraphUntil: number; activeUntil: number; hit: boolean };
 export type PresentationMode = "portrait" | "landscape";
-export const getPresentationMode = (width: number, height: number): PresentationMode => width <= 700 && height > width ? "portrait" : "landscape";
+export const getPresentationMode = (width: number, height: number, narrowTouchScreen = false): PresentationMode =>
+  (width <= 700 && height > width) || narrowTouchScreen ? "portrait" : "landscape";
 
 export type PublicBattleState = {
   time: number;
