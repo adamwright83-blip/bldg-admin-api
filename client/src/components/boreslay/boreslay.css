@@ -181,6 +181,8 @@
 }
 
 @media (max-width: 767px) {
+  .bs-game-header { height: 54px !important; }
+  .bs-game-tagline { display: none; }
   .bs-nav-links,
   .bs-nav-cta {
     display: none !important;

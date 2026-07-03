@@ -1,0 +1,126 @@
+export const ARENA_WIDTH = 1200;
+export const ARENA_HEIGHT = 650;
+
+export type DemoStatus = "idle" | "playing" | "paused" | "victory" | "defeat";
+export type Vec = { x: number; y: number };
+export type Projectile = { id: number; kind: "fire" | "excuse"; x: number; y: number; vx: number; vy: number; radius: number };
+export type Hazard = { id: number; x: number; y: number; radius: number; telegraphUntil: number; activeUntil: number; hit: boolean };
+
+export type PublicBattleState = {
+  time: number;
+  status: DemoStatus;
+  spark: Vec & { hp: number; energy: number; facing: Vec; dashUntil: number; dashReadyAt: number; invulnerableUntil: number };
+  boss: Vec & { hp: number; staggerUntil: number; telegraph: "none" | "excuse" | "burst"; telegraphUntil: number };
+  projectiles: Projectile[];
+  hazards: Hazard[];
+  influence: number;
+  contractRemainingMs: number;
+  fireReadyAt: number;
+  nextBossAttackAt: number;
+  nextId: number;
+  message: string;
+};
+
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+const distance = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
+const normalize = (v: Vec): Vec => {
+  const d = Math.hypot(v.x, v.y) || 1;
+  return { x: v.x / d, y: v.y / d };
+};
+
+export function createBattleState(): PublicBattleState {
+  return {
+    time: 0,
+    status: "idle",
+    spark: { x: 260, y: 440, hp: 100, energy: 100, facing: { x: 1, y: 0 }, dashUntil: 0, dashReadyAt: 0, invulnerableUntil: 0 },
+    boss: { x: 930, y: 330, hp: 100, staggerUntil: 0, telegraph: "none", telegraphUntil: 0 },
+    projectiles: [], hazards: [], influence: 50, contractRemainingMs: 270_000,
+    fireReadyAt: 0, nextBossAttackAt: 2300, nextId: 1,
+    message: "Press Play Demo to enter the arena.",
+  };
+}
+
+export class PublicBoreslayEngine {
+  state = createBattleState();
+  private movement: Vec = { x: 0, y: 0 };
+  private attackIndex = 0;
+
+  start() { if (this.state.status === "idle" || this.state.status === "paused") { this.state.status = "playing"; this.state.message = "Move, dodge, and burn through the excuses."; } }
+  pause() { if (this.state.status === "playing") { this.state.status = "paused"; this.state.message = "Battle paused. Your exact position is preserved."; } }
+  reset() { this.state = createBattleState(); this.movement = { x: 0, y: 0 }; this.attackIndex = 0; }
+  setMovement(x: number, y: number) { this.movement = normalize({ x, y }); if (x === 0 && y === 0) this.movement = { x: 0, y: 0 }; }
+  setAim(x: number, y: number) { this.state.spark.facing = normalize({ x: x - this.state.spark.x, y: y - this.state.spark.y }); }
+
+  dash() {
+    const s = this.state;
+    if (s.status !== "playing" || s.time < s.spark.dashReadyAt || s.spark.energy < 20) return false;
+    const dir = this.movement.x || this.movement.y ? this.movement : s.spark.facing;
+    s.spark.x = clamp(s.spark.x + dir.x * 135, 80, ARENA_WIDTH - 80);
+    s.spark.y = clamp(s.spark.y + dir.y * 135, 170, ARENA_HEIGHT - 70);
+    s.spark.energy -= 20; s.spark.dashUntil = s.time + 180; s.spark.invulnerableUntil = s.time + 420; s.spark.dashReadyAt = s.time + 1500;
+    return true;
+  }
+
+  fire() {
+    const s = this.state;
+    if (s.status !== "playing" || s.time < s.fireReadyAt || s.spark.energy < 8) return false;
+    const f = s.spark.facing;
+    s.projectiles.push({ id: s.nextId++, kind: "fire", x: s.spark.x + f.x * 55, y: s.spark.y - 35 + f.y * 25, vx: f.x * 650, vy: f.y * 650, radius: 28 });
+    s.spark.energy -= 8; s.fireReadyAt = s.time + 330;
+    return true;
+  }
+
+  private hurtSpark(amount: number) {
+    const s = this.state;
+    if (s.time < s.spark.invulnerableUntil || s.status !== "playing") return false;
+    s.spark.hp = Math.max(0, s.spark.hp - amount); s.spark.invulnerableUntil = s.time + 700; s.influence = clamp(s.influence - 7, 0, 100);
+    if (s.spark.hp === 0) { s.status = "defeat"; s.influence = 5; s.message = "The Procrastinator wins this round. Rise and fight again."; }
+    return true;
+  }
+
+  private hurtBoss(amount: number) {
+    const s = this.state;
+    s.boss.hp = Math.max(0, s.boss.hp - amount); s.boss.staggerUntil = s.time + 220; s.influence = clamp(s.influence + 4, 0, 100);
+    if (s.boss.hp === 0) { s.status = "victory"; s.influence = 100; s.message = "Contract conquered. The Procrastinator is defeated!"; }
+  }
+
+  private launchAttack() {
+    const s = this.state;
+    if (s.boss.telegraph !== "none") return;
+    const kind = this.attackIndex++ % 2 === 0 ? "excuse" : "burst";
+    s.boss.telegraph = kind; s.boss.telegraphUntil = s.time + (kind === "excuse" ? 720 : 900);
+  }
+
+  update(dtMs: number) {
+    const s = this.state;
+    if (s.status !== "playing") return;
+    const dt = Math.min(dtMs, 50); s.time += dt; s.contractRemainingMs = Math.max(0, s.contractRemainingMs - dt);
+    const speed = s.time < s.spark.dashUntil ? 520 : 235;
+    s.spark.x = clamp(s.spark.x + this.movement.x * speed * dt / 1000, 70, ARENA_WIDTH - 70);
+    s.spark.y = clamp(s.spark.y + this.movement.y * speed * dt / 1000, 180, ARENA_HEIGHT - 65);
+    s.spark.energy = clamp(s.spark.energy + 10 * dt / 1000, 0, 100);
+
+    if (s.time >= s.nextBossAttackAt && s.boss.telegraph === "none") this.launchAttack();
+    if (s.boss.telegraph !== "none" && s.time >= s.boss.telegraphUntil) {
+      if (s.boss.telegraph === "excuse") {
+        const predicted = { x: s.spark.x + this.movement.x * 90, y: s.spark.y + this.movement.y * 90 };
+        const dir = normalize({ x: predicted.x - s.boss.x, y: predicted.y - s.boss.y });
+        s.projectiles.push({ id: s.nextId++, kind: "excuse", x: s.boss.x - 55, y: s.boss.y, vx: dir.x * 340, vy: dir.y * 340, radius: 32 });
+      } else {
+        s.hazards.push({ id: s.nextId++, x: s.spark.x, y: s.spark.y, radius: 115, telegraphUntil: s.time + 520, activeUntil: s.time + 900, hit: false });
+      }
+      s.boss.telegraph = "none"; s.nextBossAttackAt = s.time + 2100;
+    }
+
+    const live: Projectile[] = [];
+    for (const p of s.projectiles) {
+      p.x += p.vx * dt / 1000; p.y += p.vy * dt / 1000;
+      if (p.kind === "fire" && distance(p, s.boss) < p.radius + 62) { this.hurtBoss(8); continue; }
+      if (p.kind === "excuse" && distance(p, s.spark) < p.radius + 34) { this.hurtSpark(16); continue; }
+      if (p.x > -80 && p.x < ARENA_WIDTH + 80 && p.y > -80 && p.y < ARENA_HEIGHT + 80) live.push(p);
+    }
+    s.projectiles = live;
+    for (const h of s.hazards) if (!h.hit && s.time >= h.telegraphUntil && s.time <= h.activeUntil && distance(h, s.spark) < h.radius + 30) { h.hit = this.hurtSpark(22); }
+    s.hazards = s.hazards.filter(h => s.time <= h.activeUntil);
+  }
+}
