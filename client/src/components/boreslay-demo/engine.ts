@@ -24,7 +24,7 @@ export type PublicBattleState = {
   message: string;
   lastBossHitAt: number;
   lastSparkHitAt: number;
-  mission: { status: FollowUpMissionStatus; readyAt: number; deployment: SimulatedCrewMissionDeployment | null; progress: number; stage: number; dispatch: string | null; rewardApplied: boolean };
+  mission: { status: FollowUpMissionStatus; readyAt: number; deployment: SimulatedCrewMissionDeployment | null; progress: number; stage: number; dispatch: string | null; finalResultAt: number | null; strikeAt: number | null; rewardApplied: boolean };
 };
 
 export type PublicBusinessCombatResult = { source: "simulated-crew-mission"; simulated: true; label: string; bossDamage?: number; sparkEnergyRestore?: number; contractTimeRestoreMs?: number; influenceGain?: number; message?: string };
@@ -45,7 +45,7 @@ export function createBattleState(): PublicBattleState {
     projectiles: [], hazards: [], influence: 50, contractRemainingMs: 270_000,
     fireReadyAt: 0, nextBossAttackAt: 2300, nextId: 1,
     message: "Press Play Demo to enter the arena.", lastBossHitAt: -1, lastSparkHitAt: -1,
-    mission: { status: "charging", readyAt: 15000, deployment: null, progress: 0, stage: 0, dispatch: null, rewardApplied: false },
+    mission: { status: "charging", readyAt: 15000, deployment: null, progress: 0, stage: 0, dispatch: null, finalResultAt: null, strikeAt: null, rewardApplied: false },
   };
 }
 
@@ -63,7 +63,7 @@ export class PublicBoreslayEngine {
   openFollowUpBriefing() { const m=this.state.mission;if(this.state.status!=="playing"||m.status!=="ready")return false;m.status="briefing";this.state.status="paused";this.state.message="SCOUT FOUND AN OPENING";return true; }
   closeFollowUpBriefing() { const m=this.state.mission;if(m.status!=="briefing")return false;m.status="ready";this.state.status="playing";this.state.message="Follow Up remains ready.";return true; }
   deployFollowUp() { const m=this.state.mission;if(m.status!=="briefing")return false;m.deployment=this.missionAdapter.deployCrewMission(this.state.time);m.status="working";this.state.status="playing";this.state.message="SCOUT DEPLOYED · CREW WORKING";return true; }
-  applyBusinessCombatResult(result: PublicBusinessCombatResult) { if(!result.simulated||this.state.status!=="playing")return;this.hurtBoss(result.bossDamage??0);this.state.spark.energy=clamp(this.state.spark.energy+(result.sparkEnergyRestore??0),0,100);this.state.contractRemainingMs=Math.min(300000,this.state.contractRemainingMs+(result.contractTimeRestoreMs??0));this.state.influence=clamp(this.state.influence+(result.influenceGain??0),0,100);this.state.message=result.message??result.label; }
+  applyBusinessCombatResult(result: PublicBusinessCombatResult) { if(!result.simulated||this.state.status!=="playing")return;this.hurtBoss(result.bossDamage??0,0);this.state.spark.energy=clamp(this.state.spark.energy+(result.sparkEnergyRestore??0),0,100);this.state.contractRemainingMs=Math.min(300000,this.state.contractRemainingMs+(result.contractTimeRestoreMs??0));this.state.influence=clamp(this.state.influence+(result.influenceGain??0),0,100);this.state.message=result.message??result.label; }
 
   dash() {
     const s = this.state;
@@ -92,9 +92,9 @@ export class PublicBoreslayEngine {
     return true;
   }
 
-  private hurtBoss(amount: number) {
+  private hurtBoss(amount: number, influenceGain = 4) {
     const s = this.state;
-    s.boss.hp = Math.max(0, s.boss.hp - amount); s.boss.staggerUntil = s.time + 260; s.lastBossHitAt = s.time; s.influence = clamp(s.influence + 4, 0, 100);
+    s.boss.hp = Math.max(0, s.boss.hp - amount); s.boss.staggerUntil = s.time + 260; s.lastBossHitAt = s.time; s.influence = clamp(s.influence + influenceGain, 0, 100);
     if (s.boss.hp === 0) { s.status = "victory"; s.influence = 100; s.message = "Contract conquered. The Procrastinator is defeated!"; }
   }
 
@@ -116,7 +116,9 @@ export class PublicBoreslayEngine {
 
     const mission=s.mission;
     if(mission.status==="charging"&&s.time>=mission.readyAt){mission.status="ready";s.message="FOLLOW UP READY";}
-    if((mission.status==="working"||mission.status==="result-incoming")&&mission.deployment){const p=this.missionAdapter.advanceCrewMission(mission.deployment,s.time);mission.progress=p.progress;if(p.stage>mission.stage){mission.stage=p.stage;mission.dispatch=p.message;mission.status="result-incoming";}if(p.stage===3&&!mission.rewardApplied){const result=this.missionAdapter.resolveCrewMission(mission.deployment);mission.rewardApplied=true;mission.status="resolved";this.applyBusinessCombatResult({source:"simulated-crew-mission",simulated:true,label:"FOLLOW-THROUGH STRIKE",bossDamage:result.combatRewards.bossDamage,influenceGain:result.combatRewards.influenceGain,sparkEnergyRestore:result.combatRewards.energyRestore,contractTimeRestoreMs:result.combatRewards.contractTimeRestoreMs,message:"THE CREW FOLLOWED THROUGH. +20 MOMENTUM."});}}
+    if((mission.status==="working"||mission.status==="result-incoming")&&mission.deployment){const p=this.missionAdapter.advanceCrewMission(mission.deployment,s.time);mission.progress=p.progress;if(p.stage>mission.stage){mission.stage=p.stage;mission.dispatch=p.message;if(p.stage===3){mission.status="final-result";mission.finalResultAt=s.time;}else mission.status="result-incoming";}}
+    if(mission.status==="final-result"&&mission.finalResultAt!==null&&s.time-mission.finalResultAt>=3000&&!mission.rewardApplied&&mission.deployment){const result=this.missionAdapter.resolveCrewMission(mission.deployment);mission.rewardApplied=true;mission.status="strike";mission.strikeAt=s.time;this.applyBusinessCombatResult({source:"simulated-crew-mission",simulated:true,label:"FOLLOW-THROUGH STRIKE",bossDamage:result.combatRewards.bossDamage,influenceGain:result.combatRewards.influenceGain,sparkEnergyRestore:result.combatRewards.energyRestore,contractTimeRestoreMs:result.combatRewards.contractTimeRestoreMs,message:"THE CREW FOLLOWED THROUGH. +20 MOMENTUM."});}
+    if(mission.status==="strike"&&mission.strikeAt!==null&&s.time-mission.strikeAt>=450)mission.status="resolved";
 
     if (s.time >= s.nextBossAttackAt && s.boss.telegraph === "none") this.launchAttack();
     if (s.boss.telegraph !== "none" && s.time >= s.boss.telegraphUntil) {

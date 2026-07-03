@@ -1,5 +1,5 @@
 export type SimulatedCrewMissionId = "follow-up";
-export type FollowUpMissionStatus = "charging" | "ready" | "briefing" | "working" | "result-incoming" | "resolved";
+export type FollowUpMissionStatus = "charging" | "ready" | "briefing" | "working" | "result-incoming" | "final-result" | "strike" | "resolved";
 export type SimulatedCrewMissionDeployment = { missionId: SimulatedCrewMissionId; simulated: true; deployedAt: number; seed: string };
 export type SimulatedCrewMissionProgress = { stage: 0 | 1 | 2 | 3; progress: number; message: string | null };
 export type SimulatedCrewMissionResult = {
