@@ -24,7 +24,10 @@ export type PublicBattleState = {
   message: string;
   lastBossHitAt: number;
   lastSparkHitAt: number;
+  mission: { status: FollowUpMissionStatus; readyAt: number; deployment: SimulatedCrewMissionDeployment | null; progress: number; stage: number; dispatch: string | null; rewardApplied: boolean };
 };
+
+export type PublicBusinessCombatResult = { source: "simulated-crew-mission"; simulated: true; label: string; bossDamage?: number; sparkEnergyRestore?: number; contractTimeRestoreMs?: number; influenceGain?: number; message?: string };
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 const distance = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -42,6 +45,7 @@ export function createBattleState(): PublicBattleState {
     projectiles: [], hazards: [], influence: 50, contractRemainingMs: 270_000,
     fireReadyAt: 0, nextBossAttackAt: 2300, nextId: 1,
     message: "Press Play Demo to enter the arena.", lastBossHitAt: -1, lastSparkHitAt: -1,
+    mission: { status: "charging", readyAt: 15000, deployment: null, progress: 0, stage: 0, dispatch: null, rewardApplied: false },
   };
 }
 
@@ -49,12 +53,17 @@ export class PublicBoreslayEngine {
   state = createBattleState();
   private movement: Vec = { x: 0, y: 0 };
   private attackIndex = 0;
+  private missionAdapter = new BrowserLocalBoreslayDemoAdapter();
 
   start() { if (this.state.status === "idle" || this.state.status === "paused") { this.state.status = "playing"; this.state.message = "Move, dodge, and burn through the excuses."; } }
   pause() { if (this.state.status === "playing") { this.state.status = "paused"; this.state.message = "Battle paused. Your exact position is preserved."; } }
-  reset() { this.state = createBattleState(); this.movement = { x: 0, y: 0 }; this.attackIndex = 0; }
+  reset() { this.state = createBattleState(); this.movement = { x: 0, y: 0 }; this.attackIndex = 0; this.missionAdapter.reset(); }
   setMovement(x: number, y: number) { this.movement = normalize({ x, y }); if (x === 0 && y === 0) this.movement = { x: 0, y: 0 }; }
   setAim(x: number, y: number) { this.state.spark.facing = normalize({ x: x - this.state.spark.x, y: y - this.state.spark.y }); }
+  openFollowUpBriefing() { const m=this.state.mission;if(this.state.status!=="playing"||m.status!=="ready")return false;m.status="briefing";this.state.status="paused";this.state.message="SCOUT FOUND AN OPENING";return true; }
+  closeFollowUpBriefing() { const m=this.state.mission;if(m.status!=="briefing")return false;m.status="ready";this.state.status="playing";this.state.message="Follow Up remains ready.";return true; }
+  deployFollowUp() { const m=this.state.mission;if(m.status!=="briefing")return false;m.deployment=this.missionAdapter.deployCrewMission(this.state.time);m.status="working";this.state.status="playing";this.state.message="SCOUT DEPLOYED · CREW WORKING";return true; }
+  applyBusinessCombatResult(result: PublicBusinessCombatResult) { if(!result.simulated||this.state.status!=="playing")return;this.hurtBoss(result.bossDamage??0);this.state.spark.energy=clamp(this.state.spark.energy+(result.sparkEnergyRestore??0),0,100);this.state.contractRemainingMs=Math.min(300000,this.state.contractRemainingMs+(result.contractTimeRestoreMs??0));this.state.influence=clamp(this.state.influence+(result.influenceGain??0),0,100);this.state.message=result.message??result.label; }
 
   dash() {
     const s = this.state;
@@ -105,6 +114,10 @@ export class PublicBoreslayEngine {
     s.spark.y = clamp(s.spark.y + this.movement.y * speed * dt / 1000, 180, ARENA_HEIGHT - 65);
     s.spark.energy = clamp(s.spark.energy + 10 * dt / 1000, 0, 100);
 
+    const mission=s.mission;
+    if(mission.status==="charging"&&s.time>=mission.readyAt){mission.status="ready";s.message="FOLLOW UP READY";}
+    if((mission.status==="working"||mission.status==="result-incoming")&&mission.deployment){const p=this.missionAdapter.advanceCrewMission(mission.deployment,s.time);mission.progress=p.progress;if(p.stage>mission.stage){mission.stage=p.stage;mission.dispatch=p.message;mission.status="result-incoming";}if(p.stage===3&&!mission.rewardApplied){const result=this.missionAdapter.resolveCrewMission(mission.deployment);mission.rewardApplied=true;mission.status="resolved";this.applyBusinessCombatResult({source:"simulated-crew-mission",simulated:true,label:"FOLLOW-THROUGH STRIKE",bossDamage:result.combatRewards.bossDamage,influenceGain:result.combatRewards.influenceGain,sparkEnergyRestore:result.combatRewards.energyRestore,contractTimeRestoreMs:result.combatRewards.contractTimeRestoreMs,message:"THE CREW FOLLOWED THROUGH. +20 MOMENTUM."});}}
+
     if (s.time >= s.nextBossAttackAt && s.boss.telegraph === "none") this.launchAttack();
     if (s.boss.telegraph !== "none" && s.time >= s.boss.telegraphUntil) {
       if (s.boss.telegraph === "excuse") {
@@ -114,18 +127,19 @@ export class PublicBoreslayEngine {
       } else {
         s.hazards.push({ id: s.nextId++, x: s.spark.x, y: s.spark.y, radius: 115, telegraphUntil: s.time + 520, activeUntil: s.time + 900, hit: false });
       }
-      s.boss.telegraph = "none"; s.nextBossAttackAt = s.time + 2100;
+      s.boss.telegraph = "none"; s.nextBossAttackAt = s.time + 3000;
     }
 
     const live: Projectile[] = [];
     for (const p of s.projectiles) {
       p.x += p.vx * dt / 1000; p.y += p.vy * dt / 1000;
       if (p.kind === "fire" && distance(p, s.boss) < p.radius + 62) { this.hurtBoss(8); continue; }
-      if (p.kind === "excuse" && distance(p, s.spark) < p.radius + 34) { this.hurtSpark(16); continue; }
+      if (p.kind === "excuse" && distance(p, s.spark) < p.radius + 34) { this.hurtSpark(6); continue; }
       if (p.x > -80 && p.x < ARENA_WIDTH + 80 && p.y > -80 && p.y < ARENA_HEIGHT + 80) live.push(p);
     }
     s.projectiles = live;
-    for (const h of s.hazards) if (!h.hit && s.time >= h.telegraphUntil && s.time <= h.activeUntil && distance(h, s.spark) < h.radius + 30) { h.hit = this.hurtSpark(22); }
+    for (const h of s.hazards) if (!h.hit && s.time >= h.telegraphUntil && s.time <= h.activeUntil && distance(h, s.spark) < h.radius + 30) { h.hit = this.hurtSpark(8); }
     s.hazards = s.hazards.filter(h => s.time <= h.activeUntil);
   }
 }
+import { BrowserLocalBoreslayDemoAdapter, type FollowUpMissionStatus, type SimulatedCrewMissionDeployment } from "./PublicBoreslayDemoAdapter";

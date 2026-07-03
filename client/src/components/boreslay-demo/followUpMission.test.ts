@@ -1,0 +1,15 @@
+import { describe, expect, it } from "vitest";
+import { BrowserLocalBoreslayDemoAdapter } from "./PublicBoreslayDemoAdapter";
+import { PublicBoreslayEngine } from "./engine";
+
+function readyEngine() { const e=new PublicBoreslayEngine();e.start();e.state.spark.invulnerableUntil=999999;for(let i=0;i<300;i++)e.update(50);return e; }
+describe("simulated Follow Up mission",()=>{
+  it("begins charging and becomes ready deterministically",()=>{const e=new PublicBoreslayEngine();expect(e.state.mission.status).toBe("charging");e.start();e.state.spark.invulnerableUntil=999999;for(let i=0;i<300;i++)e.update(50);expect(e.state.mission.status).toBe("ready");});
+  it("cannot deploy early",()=>{const e=new PublicBoreslayEngine();e.start();expect(e.openFollowUpBriefing()).toBe(false);expect(e.deployFollowUp()).toBe(false);});
+  it("briefing pauses and NOT NOW preserves readiness",()=>{const e=readyEngine();expect(e.openFollowUpBriefing()).toBe(true);const t=e.state.time;e.update(5000);expect(e.state.time).toBe(t);expect(e.closeFollowUpBriefing()).toBe(true);expect(e.state.mission.status).toBe("ready");});
+  it("deploys, stages deterministic simulated results, and resolves once",()=>{const e=readyEngine();e.openFollowUpBriefing();expect(e.deployFollowUp()).toBe(true);expect(e.state.mission.status).toBe("working");const hp=e.state.boss.hp;for(let i=0;i<50;i++)e.update(50);expect(e.state.mission.stage).toBe(1);for(let i=0;i<50;i++)e.update(50);expect(e.state.mission.stage).toBe(2);for(let i=0;i<50;i++)e.update(50);expect(e.state.mission.status).toBe("resolved");expect(e.state.boss.hp).toBe(hp-20);const resolvedHp=e.state.boss.hp;for(let i=0;i<50;i++)e.update(50);expect(e.state.boss.hp).toBe(resolvedHp);expect(e.state.mission.rewardApplied).toBe(true);});
+  it("applies influence, energy and time rewards with clamping",()=>{const e=readyEngine();e.state.spark.energy=10;const influence=e.state.influence;const time=e.state.contractRemainingMs;e.openFollowUpBriefing();e.deployFollowUp();for(let i=0;i<150;i++)e.update(50);expect(e.state.spark.energy).toBeGreaterThanOrEqual(30);expect(e.state.influence).toBeGreaterThan(influence);expect(e.state.contractRemainingMs).toBeGreaterThan(time-7500);});
+  it("restart invalidates deployment and resets the mission",()=>{const e=readyEngine();e.openFollowUpBriefing();e.deployFollowUp();e.reset();expect(e.state.mission.status).toBe("charging");expect(e.state.mission.deployment).toBeNull();});
+  it("defeat prevents delayed mission reward",()=>{const e=readyEngine();e.openFollowUpBriefing();e.deployFollowUp();e.state.status="defeat";e.update(10000);expect(e.state.mission.rewardApplied).toBe(false);});
+  it("adapter returns ordered explicitly simulated results and no production capability",()=>{const a=new BrowserLocalBoreslayDemoAdapter();const d=a.deployCrewMission(1000);expect(a.advanceCrewMission(d,3500).stage).toBe(1);expect(a.advanceCrewMission(d,6000).stage).toBe(2);expect(a.advanceCrewMission(d,8500).stage).toBe(3);expect(a.resolveCrewMission(d).simulated).toBe(true);expect(a.productionMutationsReachable).toBe(false);});
+});
