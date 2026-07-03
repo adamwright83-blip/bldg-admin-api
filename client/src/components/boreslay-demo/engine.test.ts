@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { ARENA_WIDTH, PublicBoreslayEngine } from "./engine";
+import { ARENA_WIDTH, PublicBoreslayEngine, getPresentationMode } from "./engine";
 
 const playing = () => { const e = new PublicBoreslayEngine(); e.start(); return e; };
 describe("PublicBoreslayEngine", () => {
@@ -14,4 +14,6 @@ describe("PublicBoreslayEngine", () => {
     const source = readFileSync(new URL("./PublicBoreslayDemo.tsx", import.meta.url), "utf8");
     for (const forbidden of ["@/lib/trpc", "OpsBoardHome", "ComposerPanel", "salesCalls", "twilio", "server/", "drizzle/"]) expect(source.toLowerCase()).not.toContain(forbidden.toLowerCase());
   });
+  it("selects a purpose-built portrait presentation", () => { expect(getPresentationMode(390,844)).toBe("portrait"); expect(getPresentationMode(844,390)).toBe("landscape"); });
+  it("restart restores readable actor spawns", () => { const e=playing();e.state.spark.x=900;e.state.boss.hp=0;e.reset();expect(e.state.spark.x).toBe(260);expect(e.state.boss.x-e.state.spark.x).toBeGreaterThan(500);expect(e.state.status).toBe("idle"); });
 });

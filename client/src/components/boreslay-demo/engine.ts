@@ -5,6 +5,8 @@ export type DemoStatus = "idle" | "playing" | "paused" | "victory" | "defeat";
 export type Vec = { x: number; y: number };
 export type Projectile = { id: number; kind: "fire" | "excuse"; x: number; y: number; vx: number; vy: number; radius: number };
 export type Hazard = { id: number; x: number; y: number; radius: number; telegraphUntil: number; activeUntil: number; hit: boolean };
+export type PresentationMode = "portrait" | "landscape";
+export const getPresentationMode = (width: number, height: number): PresentationMode => width <= 700 && height > width ? "portrait" : "landscape";
 
 export type PublicBattleState = {
   time: number;
@@ -19,6 +21,8 @@ export type PublicBattleState = {
   nextBossAttackAt: number;
   nextId: number;
   message: string;
+  lastBossHitAt: number;
+  lastSparkHitAt: number;
 };
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
@@ -36,7 +40,7 @@ export function createBattleState(): PublicBattleState {
     boss: { x: 930, y: 330, hp: 100, staggerUntil: 0, telegraph: "none", telegraphUntil: 0 },
     projectiles: [], hazards: [], influence: 50, contractRemainingMs: 270_000,
     fireReadyAt: 0, nextBossAttackAt: 2300, nextId: 1,
-    message: "Press Play Demo to enter the arena.",
+    message: "Press Play Demo to enter the arena.", lastBossHitAt: -1, lastSparkHitAt: -1,
   };
 }
 
@@ -73,14 +77,14 @@ export class PublicBoreslayEngine {
   private hurtSpark(amount: number) {
     const s = this.state;
     if (s.time < s.spark.invulnerableUntil || s.status !== "playing") return false;
-    s.spark.hp = Math.max(0, s.spark.hp - amount); s.spark.invulnerableUntil = s.time + 700; s.influence = clamp(s.influence - 7, 0, 100);
+    s.spark.hp = Math.max(0, s.spark.hp - amount); s.spark.invulnerableUntil = s.time + 700; s.lastSparkHitAt = s.time; s.influence = clamp(s.influence - 7, 0, 100);
     if (s.spark.hp === 0) { s.status = "defeat"; s.influence = 5; s.message = "The Procrastinator wins this round. Rise and fight again."; }
     return true;
   }
 
   private hurtBoss(amount: number) {
     const s = this.state;
-    s.boss.hp = Math.max(0, s.boss.hp - amount); s.boss.staggerUntil = s.time + 220; s.influence = clamp(s.influence + 4, 0, 100);
+    s.boss.hp = Math.max(0, s.boss.hp - amount); s.boss.staggerUntil = s.time + 260; s.lastBossHitAt = s.time; s.influence = clamp(s.influence + 4, 0, 100);
     if (s.boss.hp === 0) { s.status = "victory"; s.influence = 100; s.message = "Contract conquered. The Procrastinator is defeated!"; }
   }
 
