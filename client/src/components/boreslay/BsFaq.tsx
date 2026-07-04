@@ -8,7 +8,7 @@ const FAQS = [
   },
   {
     q: "Is this another marketing agency?",
-    a: "No. Agencies charge $1,500+ a month, take weeks to start, and send you reports about impressions. BORESLAY goes out and gets business — new customers, reviews, win-backs, follow-up — and reports in dollars booked. You see every message before it goes out.",
+    a: "No. Agencies charge $1,500+ a month, take weeks to start, and send you reports about impressions. Your AI crew goes out and gets business — new customers, reviews, win-backs, follow-up — and every real result reports back in True Net dollars, not clicks.",
   },
   {
     q: "What if it doesn't pay for itself?",
@@ -20,7 +20,11 @@ const FAQS = [
   },
   {
     q: "Am I signing a contract?",
-    a: "A three-month initial commitment, then month-to-month. No annual contract, no cancellation fee. Three months exists because campaigns need a few cycles to show their real numbers.",
+    a: "No. $299/month, cancel anytime. No setup fees, no annual lock-in.",
+  },
+  {
+    q: "Is the demo on this page real customer activity?",
+    a: "No — everything in the Game Demo above is simulated. It never sends a real text, makes a real call, or touches real customer data. It exists so you can see how the crew missions work before connecting your business.",
   },
 ];
 

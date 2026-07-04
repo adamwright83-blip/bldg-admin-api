@@ -1,22 +1,22 @@
 /*
- * BORESLAY landing — scoped design tokens.
- * Conversion system: light trust page, dark product band, one orange trigger.
- * Orange is reserved for CTAs only (Von Restorff isolation) — never reuse it
- * for decoration elsewhere on this page.
+ * BORESLAY landing — dark cinematic action-RPG palette, matching the
+ * playable Spark-vs-Procrastinator demo above. Gold/orange is the CTA
+ * trigger color; green/violet are reserved for crew-mission and Reality
+ * Rift accents respectively.
  */
 .bs-root {
-  --bs-bg: #faf7f2;
-  --bs-surface: #ffffff;
-  --bs-ink: #1a1712;
-  --bs-ink-soft: #4a443b;
-  --bs-navy: #1e3a5f;
-  --bs-orange: #f2600c;
-  --bs-orange-press: #d9540a;
-  --bs-dark: #2c2824;
-  --bs-dark-elev: #3d3630;
-  --bs-gold: #c9a96e;
-  --bs-line: #e8e0d3;
-  --bs-cream: #f5f0e8;
+  --bs-bg: #03070a;
+  --bs-surface: #14181c;
+  --bs-ink: #f5ecda;
+  --bs-ink-soft: rgba(245, 236, 218, 0.68);
+  --bs-navy: #4ADE80;
+  --bs-orange: #f3b51b;
+  --bs-orange-press: #d99e0f;
+  --bs-dark: #03070a;
+  --bs-dark-elev: #14181c;
+  --bs-gold: #f3b51b;
+  --bs-line: rgba(245, 236, 218, 0.14);
+  --bs-cream: #f5ecda;
 
   font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 17px;
@@ -51,14 +51,14 @@
   border: 0;
   border-radius: 12px;
   background: var(--bs-orange);
-  color: #fff;
+  color: #14100a;
   font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.2;
   cursor: pointer;
   text-decoration: none;
-  box-shadow: 0 10px 24px rgba(242, 96, 12, 0.28);
+  box-shadow: 0 10px 24px rgba(243, 181, 27, 0.28);
   transition: transform 120ms ease, background 120ms ease;
 }
 
@@ -168,6 +168,40 @@
   align-items: start;
 }
 
+.bs-realm-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+.bs-crew-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.bs-truenet-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+.bs-pricing-grid {
+  grid-template-columns: 1fr;
+}
+
+.bs-proof-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+@media (min-width: 768px) {
+  .bs-proof-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .bs-mobile-bar {
   position: fixed;
   left: 0;
@@ -205,6 +239,28 @@
 
   .bs-tour-grid {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  .bs-realm-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .bs-crew-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .bs-truenet-grid {
+    grid-template-columns: 1.1fr 1fr;
+  }
+
+  .bs-pricing-grid {
+    grid-template-columns: 1.3fr 1fr;
+  }
+}
+
+@media (min-width: 1100px) {
+  .bs-realm-grid {
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 

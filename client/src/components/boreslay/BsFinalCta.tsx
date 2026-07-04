@@ -8,16 +8,13 @@ export function BsFinalCta() {
         <div>
           <h2
             className="bs-display"
-            style={{ fontSize: "clamp(38px, 5.5vw, 60px)", color: "var(--bs-cream)", margin: "0 0 14px" }}
+            style={{ fontSize: "clamp(34px, 5vw, 52px)", color: "var(--bs-cream)", margin: "0 0 14px" }}
           >
-            See where BORESLAY can find revenue in your business.
+            Your next win is one mission away.
           </h2>
-          <p style={{ color: "rgba(245,240,232,0.72)", fontSize: 18, maxWidth: 460, margin: "0 0 14px" }}>
-            Answer three questions. Adam will build your first mission around your actual customers,
-            unfinished follow-up, and current goals.
-          </p>
-          <p className="bs-mono" style={{ color: "rgba(245,240,232,0.55)", fontSize: 13.5, margin: 0 }}>
-            15 minutes · phone or Zoom · no sales pitch
+          <p style={{ color: "rgba(245,240,232,0.72)", fontSize: 18, maxWidth: 460, margin: 0 }}>
+            Answer three questions. Adam will build your crew's first mission around your actual
+            business and walk you through it — phone or Zoom, whenever suits you.
           </p>
         </div>
         <div
@@ -34,7 +31,7 @@ export function BsFinalCta() {
       <footer className="bs-container" style={{ marginTop: 64, paddingTop: 24, borderTop: "1px solid rgba(245,240,232,0.14)", display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
         <BsWordmark light />
         <p style={{ color: "rgba(245,240,232,0.55)", fontSize: 14, margin: 0 }}>
-          Built in Los Angeles by an operator, for operators. © {new Date().getFullYear()} BORESLAY.
+          A game that grows your business. © {new Date().getFullYear()} BORESLAY.
         </p>
       </footer>
     </section>

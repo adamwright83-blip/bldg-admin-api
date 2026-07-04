@@ -1,8 +1,20 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import "../components/boreslay/boreslay.css";
 import { PublicBoreslayDemo } from "../components/boreslay-demo/PublicBoreslayDemo";
+import { BsCrew } from "../components/boreslay/BsCrew";
+import { BsFaq } from "../components/boreslay/BsFaq";
+import { BsFinalCta } from "../components/boreslay/BsFinalCta";
+import { BsIntakeModal } from "../components/boreslay/BsIntake";
+import { BsNav } from "../components/boreslay/BsNav";
+import { BsPricing } from "../components/boreslay/BsPricing";
+import { BsProofPanels } from "../components/boreslay/BsProofPanels";
+import { BsRealms } from "../components/boreslay/BsRealms";
+import { BsTrueNet } from "../components/boreslay/BsTrueNet";
 
 export default function BoreslayLanding() {
+  const [intakeOpen, setIntakeOpen] = useState(false);
+  const openIntake = () => setIntakeOpen(true);
+
   useEffect(() => {
     const prevTitle = document.title;
     document.title = "BORESLAY — Play the game. Command the crew. Grow your business.";
@@ -10,7 +22,7 @@ export default function BoreslayLanding() {
     const prevDescription = meta?.getAttribute("content") ?? null;
     meta?.setAttribute(
       "content",
-      "Play as Spark in BORESLAY's public boss-fight demo and defeat The Procrastinator in a real-time fantasy action game."
+      "Play as Spark in BORESLAY's public boss-fight demo, deploy your AI crew, and see real business missions become in-game power. Built for laundromats, plumbers, landscapers, and contractors."
     );
     return () => {
       document.title = prevTitle;
@@ -19,12 +31,19 @@ export default function BoreslayLanding() {
   }, []);
 
   return (
-    <div className="bs-root" style={{ minHeight: "100vh", background: "#03070a" }}>
-      <header className="bs-game-header" style={{ height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 clamp(18px, 4vw, 60px)", color: "#f5eee2", background: "#020405", borderBottom: "1px solid rgba(239,178,31,.2)" }}>
-        <div className="bs-display" style={{ fontSize: 27, letterSpacing: ".04em" }}><span style={{ color: "#f4b91c" }}>ϟ</span> BORE<span style={{ color: "#f4b91c" }}>SLAY</span></div>
-        <span className="bs-mono bs-game-tagline" style={{ fontSize: 11, color: "#a79b88" }}>THE ACTION RPG FOR REAL BUSINESS GROWTH</span>
-      </header>
-      <main><PublicBoreslayDemo /></main>
+    <div className="bs-root" style={{ minHeight: "100vh" }}>
+      <BsNav onCta={openIntake} />
+      <main>
+        <PublicBoreslayDemo />
+        <BsProofPanels />
+        <BsRealms />
+        <BsCrew />
+        <BsTrueNet />
+        <BsPricing onCta={openIntake} />
+        <BsFaq />
+        <BsFinalCta />
+      </main>
+      <BsIntakeModal open={intakeOpen} onClose={() => setIntakeOpen(false)} />
     </div>
   );
 }

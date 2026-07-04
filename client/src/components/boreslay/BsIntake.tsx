@@ -192,7 +192,7 @@ export function BsIntakeForm({ dark = false }: { dark?: boolean }) {
             disabled={!contactValid || submitting}
             onClick={handleSubmit}
           >
-            {submitting ? "Sending…" : "Show Me My First Customer Mission"}
+            {submitting ? "Sending…" : "Connect My Business"}
             {!submitting && <ArrowRight size={20} />}
           </button>
           <p style={{ color: subColor, fontSize: 13.5, textAlign: "center", margin: 0 }}>
