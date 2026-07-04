@@ -2,12 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import "../components/boreslay/boreslay.css";
 import { PublicBoreslayDemo } from "../components/boreslay-demo/PublicBoreslayDemo";
 import { BsCrew } from "../components/boreslay/BsCrew";
-import { BsDemoIntro } from "../components/boreslay/BsDemoIntro";
 import { BsFaq } from "../components/boreslay/BsFaq";
 import { BsFinalCta } from "../components/boreslay/BsFinalCta";
 import { BsFirstPlayer } from "../components/boreslay/BsFirstPlayer";
 import { BsGameLoop } from "../components/boreslay/BsGameLoop";
-import { BsHero } from "../components/boreslay/BsHero";
 import { BsIntakeModal } from "../components/boreslay/BsIntake";
 import { BsIntakeSection } from "../components/boreslay/BsIntakeSection";
 import { BsNav } from "../components/boreslay/BsNav";
@@ -19,12 +17,15 @@ import { BsTrueNet } from "../components/boreslay/BsTrueNet";
 export default function BoreslayLanding() {
   const [intakeOpen, setIntakeOpen] = useState(false);
   const openIntake = () => setIntakeOpen(true);
-  const demoRef = useRef<HTMLDivElement>(null);
-  const scrollToDemo = () => demoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const crewRef = useRef<HTMLDivElement>(null);
+  const [demoActive, setDemoActive] = useState(false);
+  const scrollToCrew = () =>
+    crewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   useEffect(() => {
     const prevTitle = document.title;
-    document.title = "BORESLAY — Play the game. Command the crew. Grow your business.";
+    document.title =
+      "BORESLAY — Play the game. Command the crew. Grow your business.";
     const meta = document.querySelector('meta[name="description"]');
     const prevDescription = meta?.getAttribute("content") ?? null;
     meta?.setAttribute(
@@ -33,23 +34,25 @@ export default function BoreslayLanding() {
     );
     return () => {
       document.title = prevTitle;
-      if (meta && prevDescription !== null) meta.setAttribute("content", prevDescription);
+      if (meta && prevDescription !== null)
+        meta.setAttribute("content", prevDescription);
     };
   }, []);
 
   return (
     <div className="bs-root" style={{ minHeight: "100vh" }}>
-      <BsNav onCta={openIntake} />
+      <BsNav onCta={openIntake} subdued={!demoActive} />
       <main>
-        <BsHero onPlayDemo={scrollToDemo} />
-        <BsDemoIntro />
-        <div ref={demoRef}>
-          <PublicBoreslayDemo />
+        <PublicBoreslayDemo
+          onActiveChange={setDemoActive}
+          onVictoryCta={scrollToCrew}
+        />
+        <div ref={crewRef}>
+          <BsCrew />
         </div>
         <BsGameLoop />
         <BsProofPanels />
         <BsRealms />
-        <BsCrew />
         <BsFirstPlayer />
         <BsTrueNet />
         <BsPricing onCta={openIntake} />

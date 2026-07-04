@@ -2,20 +2,42 @@ export function BsWordmark({ light = false }: { light?: boolean }) {
   return (
     <span
       className="bs-display"
-      style={{ fontSize: 24, letterSpacing: "0.02em", color: light ? "#F5F0E8" : "var(--bs-ink)", display: "flex", flexDirection: "column", lineHeight: 1.1 }}
+      style={{
+        fontSize: 24,
+        letterSpacing: "0.02em",
+        color: light ? "#F5F0E8" : "var(--bs-ink)",
+        display: "flex",
+        flexDirection: "column",
+        lineHeight: 1.1,
+      }}
     >
       <span>
         <span style={{ color: "var(--bs-gold)" }}>⚡</span> BORE
         <span style={{ color: "var(--bs-orange)" }}>SLAY</span>
       </span>
-      <span className="bs-mono" style={{ fontSize: 9.5, letterSpacing: "0.1em", color: light ? "rgba(245,240,232,0.5)" : "var(--bs-ink-soft)", fontWeight: 400, textTransform: "uppercase" }}>
+      <span
+        className="bs-mono"
+        style={{
+          fontSize: 9.5,
+          letterSpacing: "0.1em",
+          color: light ? "rgba(245,240,232,0.5)" : "var(--bs-ink-soft)",
+          fontWeight: 400,
+          textTransform: "uppercase",
+        }}
+      >
         The action RPG for real business growth
       </span>
     </span>
   );
 }
 
-export function BsNav({ onCta }: { onCta: () => void }) {
+export function BsNav({
+  onCta,
+  subdued = false,
+}: {
+  onCta: () => void;
+  subdued?: boolean;
+}) {
   return (
     <header
       style={{
@@ -36,7 +58,11 @@ export function BsNav({ onCta }: { onCta: () => void }) {
           height: 68,
         }}
       >
-        <a href="#top" style={{ textDecoration: "none" }} aria-label="BORESLAY home">
+        <a
+          href="#top"
+          style={{ textDecoration: "none" }}
+          aria-label="BORESLAY home"
+        >
           <BsWordmark light />
         </a>
         <nav className="bs-nav-links" style={{ display: "flex", gap: 24 }}>
@@ -63,7 +89,16 @@ export function BsNav({ onCta }: { onCta: () => void }) {
             </a>
           ))}
         </nav>
-        <button type="button" className="bs-cta bs-nav-cta" style={{ padding: "11px 18px", fontSize: 15, background: "var(--bs-gold)", boxShadow: "0 10px 24px rgba(201,169,110,0.3)" }} onClick={onCta}>
+        <button
+          type="button"
+          className={`bs-cta bs-nav-cta${subdued ? " is-subdued" : ""}`}
+          style={{
+            padding: "11px 18px",
+            fontSize: 15,
+            background: "var(--bs-gold)",
+          }}
+          onClick={onCta}
+        >
           Join the Expedition
         </button>
       </div>
