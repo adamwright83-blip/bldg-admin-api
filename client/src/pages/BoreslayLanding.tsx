@@ -1,26 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import "../components/boreslay/boreslay.css";
 import { PublicBoreslayDemo } from "../components/boreslay-demo/PublicBoreslayDemo";
-import { BsCrew } from "../components/boreslay/BsCrew";
-import { BsFaq } from "../components/boreslay/BsFaq";
-import { BsFinalCta } from "../components/boreslay/BsFinalCta";
-import { BsFirstPlayer } from "../components/boreslay/BsFirstPlayer";
-import { BsGameLoop } from "../components/boreslay/BsGameLoop";
+import { BsCanonicalSections } from "../components/boreslay/BsCanonicalSections";
 import { BsIntakeModal } from "../components/boreslay/BsIntake";
-import { BsIntakeSection } from "../components/boreslay/BsIntakeSection";
 import { BsNav } from "../components/boreslay/BsNav";
-import { BsPricing } from "../components/boreslay/BsPricing";
-import { BsProofPanels } from "../components/boreslay/BsProofPanels";
-import { BsRealms } from "../components/boreslay/BsRealms";
-import { BsTrueNet } from "../components/boreslay/BsTrueNet";
 
 export default function BoreslayLanding() {
   const [intakeOpen, setIntakeOpen] = useState(false);
   const openIntake = () => setIntakeOpen(true);
-  const crewRef = useRef<HTMLDivElement>(null);
   const [demoActive, setDemoActive] = useState(false);
-  const scrollToCrew = () =>
-    crewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const scrollTo = (selector: string) =>
+    document
+      .querySelector(selector)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   useEffect(() => {
     const prevTitle = document.title;
@@ -45,20 +37,12 @@ export default function BoreslayLanding() {
       <main>
         <PublicBoreslayDemo
           onActiveChange={setDemoActive}
-          onVictoryCta={scrollToCrew}
+          onVictoryCta={() => scrollTo("#crew")}
         />
-        <div ref={crewRef}>
-          <BsCrew />
-        </div>
-        <BsGameLoop />
-        <BsProofPanels />
-        <BsRealms />
-        <BsFirstPlayer />
-        <BsTrueNet />
-        <BsPricing onCta={openIntake} />
-        <BsFaq />
-        <BsIntakeSection />
-        <BsFinalCta onCta={openIntake} />
+        <BsCanonicalSections
+          onCta={openIntake}
+          onPlayFirst={() => scrollTo("#top")}
+        />
       </main>
       <BsIntakeModal open={intakeOpen} onClose={() => setIntakeOpen(false)} />
     </div>
