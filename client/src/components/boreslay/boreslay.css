@@ -196,6 +196,18 @@
   gap: 20px;
 }
 
+.bs-loop-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 28px;
+}
+
+@media (min-width: 900px) {
+  .bs-loop-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
 @media (min-width: 768px) {
   .bs-proof-grid {
     grid-template-columns: 1fr 1fr;

@@ -1,13 +1,17 @@
 import { Check } from "lucide-react";
 
 const INCLUDED = [
-  "All crew members: Spark, Sage, Scout, Closer, Treasurer, Guardian",
-  "All realms and missions",
-  "Live SAGE coaching during Reality Rifts",
-  "True Net tracking — revenue minus what it actually cost you",
-  "Customer reactivation and estimate follow-up",
+  "Spark, Sage, Scout, Closer, Treasurer, and Guardian",
+  "All current realms and mission types",
+  "Playable business missions",
+  "True Net tracking",
+  "Customer reactivation",
+  "Estimate follow-up",
+  "Payment reminder missions",
   "Review and reputation missions",
-  "New-customer missions where operationally supported",
+  "New-customer opportunity missions where supported",
+  "Live Sage coaching during Reality Rifts when available",
+  "Human support from the BORESLAY team",
 ];
 
 export function BsPricing({ onCta }: { onCta: () => void }) {
@@ -30,8 +34,9 @@ export function BsPricing({ onCta }: { onCta: () => void }) {
               <span className="bs-display" style={{ fontSize: 52, color: "var(--bs-ink)" }}>$299</span>
               <span style={{ fontSize: 18, color: "var(--bs-ink-soft)", fontWeight: 600 }}>/ month</span>
             </div>
-            <p style={{ color: "var(--bs-ink-soft)", fontSize: 15, margin: "6px 0 0" }}>
-              Cancel anytime. Just results.
+            <p style={{ color: "var(--bs-ink-soft)", fontSize: 15.5, margin: "10px 0 0" }}>
+              A complete business-growth crew inside a game you'll actually want to play. One
+              price. The whole crew. Every current realm. Month to month — cancel anytime.
             </p>
             <ul style={{ listStyle: "none", padding: 0, margin: "22px 0 0", display: "grid", gap: 11 }}>
               {INCLUDED.map(item => (
@@ -47,7 +52,9 @@ export function BsPricing({ onCta }: { onCta: () => void }) {
               Connect My Business
             </button>
             <p style={{ fontSize: 14, color: "var(--bs-ink-soft)", textAlign: "center", margin: 0 }}>
-              Start your expedition in 60 seconds.
+              Setup starts with a short conversation about your business. No credit card required
+              for the demo. One reopened estimate can cover the month — and Treasurer will show
+              you whether it did.
             </p>
           </div>
         </div>

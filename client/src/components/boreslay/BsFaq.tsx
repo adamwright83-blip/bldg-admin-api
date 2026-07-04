@@ -4,27 +4,31 @@ import { useState } from "react";
 const FAQS = [
   {
     q: "I'm not technical. Can I actually run this?",
-    a: "If you can read a text message and reply YES or NO, you can run BORESLAY. Setup is done with you on a call, and after that the product hands you one next action a day. There is nothing to configure and no dashboard homework.",
+    a: "Good — it wasn't built for software teams. If you can run a laundromat, a plumbing company, a landscaping crew, or a cleaning route, you can run this. The crew handles the system work and hands you clear missions, decisions, and next steps.",
   },
   {
-    q: "Is this another marketing agency?",
-    a: "No. Agencies charge $1,500+ a month, take weeks to start, and send you reports about impressions. Your AI crew goes out and gets business — new customers, reviews, win-backs, follow-up — and every real result reports back in True Net dollars, not clicks.",
+    q: "Is this a marketing agency?",
+    a: "No. No retainer, no account manager, no monthly deck explaining why nothing happened. BORESLAY is software with an AI crew built inside it. Some missions involve outreach, follow-up, reviews, or acquisition — but you're commanding a crew, not renting one.",
   },
   {
     q: "What if it doesn't pay for itself?",
-    a: "The math is public: at typical job sizes, 2–3 recovered customers cover the month. On your first call Adam builds your first mission from your real numbers — if the math doesn't work for your shop, he'll tell you that on the call and you keep your money.",
+    a: "Then the ledger will say so, in ink. True Net exists so you never have to take our word for what a mission produced. You'll see what it made and what it cost — every time.",
   },
   {
-    q: "Do messages send without my OK?",
-    a: "Never. Every mission is staged for your approval — you read the exact texts and emails before anything leaves the building. No surprise blasts, no AI freelancing with your customers.",
+    q: "Do messages send without my approval?",
+    a: "Not unless you explicitly turn that on. High-impact or sensitive outreach can be gated behind your approval before anything goes out. You decide how much rope the crew gets.",
   },
   {
-    q: "Am I signing a contract?",
-    a: "No. $299/month, cancel anytime. No setup fees, no annual lock-in.",
+    q: "Am I signing a long-term contract?",
+    a: "No. Month to month. The game has to earn next month.",
   },
   {
-    q: "Is the demo on this page real customer activity?",
-    a: "No — everything in the Game Demo above is simulated. It never sends a real text, makes a real call, or touches real customer data. It exists so you can see how the crew missions work before connecting your business.",
+    q: "Is the demo showing real customer activity?",
+    a: "No. The public demo runs simulated business outcomes so anyone can play safely. Connected businesses run on their own live data and activity.",
+  },
+  {
+    q: "Will BORESLAY work outside laundromats?",
+    a: "It's being built first inside laundromats and service businesses — where the founder operates — then expanded to other owner-run businesses with the same sales, follow-up, payment, and retention fights.",
   },
 ];
 
