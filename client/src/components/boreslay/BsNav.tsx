@@ -3,7 +3,7 @@ export function BsWordmark({ light = false }: { light?: boolean }) {
     <span
       className="bs-display"
       style={{
-        fontSize: 24,
+        fontSize: 29,
         letterSpacing: "0.02em",
         color: light ? "#F5F0E8" : "var(--bs-ink)",
         display: "flex",
@@ -18,7 +18,7 @@ export function BsWordmark({ light = false }: { light?: boolean }) {
       <span
         className="bs-mono"
         style={{
-          fontSize: 9.5,
+          fontSize: 10,
           letterSpacing: "0.1em",
           color: light ? "rgba(245,240,232,0.5)" : "var(--bs-ink-soft)",
           fontWeight: 400,
@@ -44,9 +44,9 @@ export function BsNav({
         position: "sticky",
         top: 0,
         zIndex: 50,
-        background: "rgba(13, 11, 18, 0.92)",
-        backdropFilter: "blur(8px)",
-        borderBottom: "1px solid rgba(201,169,110,0.2)",
+        background: "rgba(4, 13, 23, 0.94)",
+        backdropFilter: "blur(10px)",
+        borderBottom: "1px solid rgba(224, 210, 177, 0.28)",
       }}
     >
       <div
@@ -55,7 +55,9 @@ export function BsNav({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          height: 68,
+          height: 86,
+          width: "calc(100% - 96px)",
+          maxWidth: "none",
         }}
       >
         <a
@@ -65,7 +67,7 @@ export function BsNav({
         >
           <BsWordmark light />
         </a>
-        <nav className="bs-nav-links" style={{ display: "flex", gap: 24 }}>
+        <nav className="bs-nav-links" style={{ display: "flex", gap: 38 }}>
           {[
             ["Game Demo", "#top"],
             ["How it works", "#how"],
@@ -80,9 +82,10 @@ export function BsNav({
               style={{
                 color: "rgba(245,240,232,0.72)",
                 textDecoration: "none",
-                fontSize: 14.5,
+                fontSize: 15,
                 fontWeight: 600,
                 letterSpacing: "0.02em",
+                whiteSpace: "nowrap",
               }}
             >
               {label.toUpperCase()}
@@ -94,8 +97,9 @@ export function BsNav({
           className={`bs-cta bs-nav-cta${subdued ? " is-subdued" : ""}`}
           style={{
             padding: "11px 18px",
-            fontSize: 15,
+            fontSize: 16,
             background: "var(--bs-gold)",
+            minWidth: 215,
           }}
           onClick={onCta}
         >

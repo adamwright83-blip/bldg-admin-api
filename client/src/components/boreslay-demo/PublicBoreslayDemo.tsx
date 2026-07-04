@@ -259,7 +259,7 @@ export function PublicBoreslayDemo({
         >
           <span className="pbd-spark-shadow" />
           <img
-            src="/assets/saleslay/dragon_idle.png"
+            src="/assets/boreslay-hero/spark-reference.png"
             alt="Spark, the blue dragon wearing the WRIGHT STUFF watch-face chain"
           />
           {state.time < state.spark.dashUntil && (
@@ -274,7 +274,7 @@ export function PublicBoreslayDemo({
           }}
         >
           <img
-            src="/assets/boreslay-hero/procrastinator-onesie.png"
+            src="/assets/boreslay-hero/procrastinator-reference.png"
             alt="The Procrastinator, an angry clock-faced boss in a gray plush blanket onesie"
           />
           {state.boss.telegraph !== "none" && (
@@ -286,12 +286,12 @@ export function PublicBoreslayDemo({
           )}
         </div>
         {presentationState === "marketing" && (
-          <div className="pbd-hero-scroll" aria-hidden="true">
-            <i />
-            <strong>Do it tomorrow</strong>
-            <i />
-            <em />
-          </div>
+          <img
+            className="pbd-hero-scroll"
+            src="/assets/boreslay-hero/scroll-reference.png"
+            alt=""
+            aria-hidden="true"
+          />
         )}
         {state.projectiles.map(p =>
           p.kind === "fire" ? (
@@ -319,12 +319,11 @@ export function PublicBoreslayDemo({
                 top: `${(p.y / ARENA_HEIGHT) * 100}%`,
               }}
             >
-              <div className="pbd-excuse">
-                <i />
-                <strong>Do it tomorrow</strong>
-                <i />
-                <em aria-hidden="true" />
-              </div>
+              <img
+                className="pbd-excuse"
+                src="/assets/boreslay-hero/scroll-reference.png"
+                alt="Do it tomorrow excuse scroll"
+              />
               <span className="pbd-violet-trail" />
             </div>
           )
@@ -446,14 +445,18 @@ export function PublicBoreslayDemo({
             <div className="pbd-marketing-copy">
               <span>A WORLD FIRST</span>
               <h1>
-                THE VIDEO GAME THAT HUNTS DOWN
+                THE VIDEO GAME
+                <br />
+                THAT HUNTS DOWN
                 <br />
                 NEW BUSINESS.
               </h1>
               <p>
                 Your AI crew does the chasing.
                 <br />
-                When only a human can win it, BORESLAY calls you in.
+                When only a human can win it,
+                <br />
+                <strong>BORESLAY</strong> calls you in.
               </p>
               <button
                 onClick={play}
@@ -462,12 +465,8 @@ export function PublicBoreslayDemo({
                 onFocus={() => setCtaAwake(true)}
                 onBlur={() => setCtaAwake(false)}
               >
-                PLAY THE FIRST MISSION
+                <span aria-hidden="true">⚔</span> PLAY THE FIRST MISSION
               </button>
-              <small>
-                No signup. No credit card. Start playing now and see how the
-                mission works.
-              </small>
             </div>
           </div>
         )}
@@ -562,6 +561,9 @@ export function PublicBoreslayDemo({
         </span>
         <span>
           <b>DASH</b> SPACE
+        </span>
+        <span>
+          <b>SPACE</b>
         </span>
         <span>
           <b>FIRE BREATH</b> CLICK / F
