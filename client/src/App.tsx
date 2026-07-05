@@ -17,11 +17,20 @@ import AdminCatalog from "./pages/AdminCatalog";
 
 // BORESLAY marketing site (boreslay.com) — lazy so the admin bundle never pays for it.
 const BoreslayLanding = lazy(() => import("./pages/BoreslayLanding"));
+const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
 
 function BoreslayLandingRoute() {
   return (
     <Suspense fallback={<div style={{ minHeight: "100vh", background: "#FAF7F2" }} />}>
       <BoreslayLanding />
+    </Suspense>
+  );
+}
+
+function RallyDemoRoute() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#05060b" }} />}>
+      <RallyDemo />
     </Suspense>
   );
 }
@@ -51,6 +60,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/vendors",
   "/level4",
   "/operator-reflection",
+  "/boreslay-rally",
 ]);
 
 function AdminHostRouter() {
@@ -59,6 +69,7 @@ function AdminHostRouter() {
       {/* Public BORESLAY landing — served at admin.bldg.chat/boreslay until
           boreslay.com is purchased and pointed at this project. */}
       <Route path="/boreslay" component={BoreslayLandingRoute} />
+      <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
       <Route path="/pricing" component={AdminCatalog} />
@@ -108,6 +119,10 @@ function Router() {
     ? hostname.replace(".ops.bldg.chat", "")
     : null;
 
+  if (isBoreslayHost && window.location.pathname === "/boreslay-rally") {
+    return <RallyDemoRoute />;
+  }
+
   if (isBoreslayHost) {
     return <BoreslayLandingRoute />;
   }
@@ -119,6 +134,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/boreslay" component={BoreslayLandingRoute} />
+      <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
       <Route path="/pricing" component={AdminCatalog} />

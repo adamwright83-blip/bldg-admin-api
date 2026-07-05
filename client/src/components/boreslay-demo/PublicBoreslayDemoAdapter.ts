@@ -2,9 +2,20 @@ export type SimulatedCrewMissionId = "follow-up";
 export type FollowUpMissionStatus = "charging" | "ready" | "briefing" | "working" | "result-incoming" | "final-result" | "strike" | "resolved";
 export type SimulatedCrewMissionDeployment = { missionId: SimulatedCrewMissionId; simulated: true; deployedAt: number; seed: string };
 export type SimulatedCrewMissionProgress = { stage: 0 | 1 | 2 | 3; progress: number; message: string | null };
+export type RallyEffects = {
+  breakFreeze?: boolean;
+  returnForceMultiplier?: number;
+  gateShield?: boolean;
+};
 export type SimulatedCrewMissionResult = {
   missionId: SimulatedCrewMissionId; simulated: true; repliesReceived: 2; estimatesReopened: 1; estimatedOpportunityCents: 74000;
-  combatRewards: { bossDamage: 20; influenceGain: 12; energyRestore: 20; contractTimeRestoreMs: 10000 };
+  combatRewards: {
+    bossDamage: 20;
+    influenceGain: 12;
+    energyRestore: 20;
+    contractTimeRestoreMs: 10000;
+    rallyEffects?: RallyEffects;
+  };
 };
 
 export interface PublicBoreslayDemoAdapter {
@@ -28,6 +39,6 @@ export class BrowserLocalBoreslayDemoAdapter implements PublicBoreslayDemoAdapte
     if (elapsed >= 2500) return { stage: 1, progress: elapsed / 7500, message: "SIMULATED · 2 REPLIES RECEIVED" };
     return { stage: 0, progress: elapsed / 7500, message: null };
   }
-  resolveCrewMission(_deployment: SimulatedCrewMissionDeployment): SimulatedCrewMissionResult { return { missionId: "follow-up", simulated: true, repliesReceived: 2, estimatesReopened: 1, estimatedOpportunityCents: 74000, combatRewards: { bossDamage: 20, influenceGain: 12, energyRestore: 20, contractTimeRestoreMs: 10000 } }; }
+  resolveCrewMission(_deployment: SimulatedCrewMissionDeployment): SimulatedCrewMissionResult { return { missionId: "follow-up", simulated: true, repliesReceived: 2, estimatesReopened: 1, estimatedOpportunityCents: 74000, combatRewards: { bossDamage: 20, influenceGain: 12, energyRestore: 20, contractTimeRestoreMs: 10000, rallyEffects: { breakFreeze: true, returnForceMultiplier: 3 } } }; }
   reset(seed = "boreslay-public-follow-up-v1") { this.seed = seed; }
 }
