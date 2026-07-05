@@ -69,13 +69,41 @@ export class RallyParticlePool {
       case "ignite":
         this.spawn(event, "ember", this.reducedMotion ? 2 : 8, 90, 220);
         break;
+      case "breath_start":
+        this.spawn(event, "ember", this.reducedMotion ? 2 : 12, 70, 190);
+        break;
+      case "breath_contact":
+        this.spawn(event, "ember", this.reducedMotion ? 3 : 14, 130, 360);
+        break;
+      case "charged_release":
+        this.spawn(event, "ember", this.reducedMotion ? 4 : 22, 180, 460);
+        break;
+      case "breath_exhausted":
+        this.spawn(
+          event,
+          "spark",
+          this.reducedMotion ? 2 : RALLY_CONFIG.fire.exhaustedPuffCount,
+          30,
+          90
+        );
+        break;
       case "freeze_cast":
       case "freeze_break":
         this.spawn(event, "ice", this.reducedMotion ? 5 : 20, 180, 360);
         break;
       case "gate_score_for":
       case "gate_score_against":
-        this.spawn(event, "shard", this.reducedMotion ? 8 : 38, 250, 520);
+        this.spawn(
+          event,
+          "shard",
+          this.reducedMotion
+            ? 8
+            : event.banked
+              ? RALLY_CONFIG.ceremony.impactParticleMax
+              : RALLY_CONFIG.ceremony.impactParticleMin,
+          250,
+          520
+        );
         break;
       default:
         break;

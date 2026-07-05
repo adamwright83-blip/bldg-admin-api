@@ -24,27 +24,51 @@ function crossing(side: "spark" | "clockhead", lives = 3) {
   return engine;
 }
 
+const impactAt = RALLY_CONFIG.ceremony.ingestionMs + RALLY_CONFIG.ceremony.hitStopMs;
+const ceremonyTotal =
+  RALLY_CONFIG.ceremony.ingestionMs +
+  RALLY_CONFIG.ceremony.hitStopMs +
+  RALLY_CONFIG.ceremony.reactionMs +
+  RALLY_CONFIG.ceremony.bannerMs +
+  RALLY_CONFIG.ceremony.beatMs +
+  RALLY_CONFIG.ceremony.serveTelegraphMs;
+
+function reachImpact(engine: RallyEngine) {
+  engine.advanceFrame(impactAt);
+}
+
+function finishCeremony(engine: RallyEngine) {
+  engine.advanceFrame(ceremonyTotal + 1);
+}
+
 describe("RallyEngine scoring", () => {
   it("lets a first-timer score by tracking the scroll and holding Fire Breath", () => {
     const engine = new RallyEngine({ seed: 23 });
     engine.start();
     engine.setAim(RALLY_CONFIG.arena.width, 340);
     engine.setBreath(true);
-    const thirtySeconds = RALLY_CONFIG.simulation.fixedHz * 30;
-    for (let step = 0; step < thirtySeconds && engine.state.clockheadLives === 3; step += 1) {
+    const thirtyFiveSeconds = RALLY_CONFIG.simulation.fixedHz * 35;
+    for (let step = 0; step < thirtyFiveSeconds && !engine.state.ceremony; step += 1) {
       engine.setMovement(0, Math.sign(engine.state.excuse.y - engine.state.spark.y));
       engine.setAim(RALLY_CONFIG.arena.width, 340);
       engine.advanceFixedSteps(1);
     }
+    expect(engine.state.ceremony).not.toBeNull();
+    reachImpact(engine);
     expect(engine.state.clockheadLives).toBeLessThan(3);
   });
 
   it("scores a swept gate-plane crossing at the 980 px/s cap", () => {
     const engine = crossing("clockhead");
     engine.advanceFixedSteps(1);
+    expect(engine.state.ceremony?.snapshot.x).toBe(RALLY_CONFIG.arena.width);
+    expect(engine.state.clockheadLives).toBe(3);
+    reachImpact(engine);
     expect(engine.state.clockheadLives).toBe(2);
-    expect(engine.state.excuse.inPlay).toBe(false);
+    expect(engine.state.excuse.inPlay).toBe(true);
     expect(engine.consumeEvents().some(event => event.type === "gate_score_for")).toBe(true);
+    finishCeremony(engine);
+    expect(engine.state.excuse.inPlay).toBe(false);
   });
 
   it("does not score when the center crosses outside the gate opening", () => {
@@ -56,20 +80,48 @@ describe("RallyEngine scoring", () => {
     expect(engine.state.excuse.vx).toBeGreaterThan(0);
   });
 
-  it("makes an ignited gate score count double", () => {
+  it("keeps an ignited gate score at one point", () => {
     const engine = crossing("clockhead");
     engine.state.excuse.ignitedUntil = 9999;
     engine.advanceFixedSteps(1);
-    expect(engine.state.clockheadLives).toBe(1);
+    reachImpact(engine);
+    expect(engine.state.clockheadLives).toBe(2);
   });
 
   it("reaches victory and defeat through gate lives, not hit points", () => {
     const victory = crossing("clockhead", 1);
     victory.advanceFixedSteps(1);
+    reachImpact(victory);
+    expect(victory.state.status).toBe("playing");
+    finishCeremony(victory);
     expect(victory.state.status).toBe("victory");
 
     const defeat = crossing("spark", 1);
     defeat.advanceFixedSteps(1);
+    reachImpact(defeat);
+    finishCeremony(defeat);
     expect(defeat.state.status).toBe("defeat");
+  });
+
+  it("commits a sealed score once across a frame-drop spike", () => {
+    const engine = crossing("clockhead");
+    engine.advanceFixedSteps(1);
+    expect(engine.state.ceremony?.committed).toBe(false);
+    engine.advanceFrame(ceremonyTotal * 3);
+    expect(engine.state.clockheadLives).toBe(2);
+    expect(engine.state.ceremony).toBeNull();
+    engine.advanceFrame(ceremonyTotal * 3);
+    expect(engine.state.clockheadLives).toBe(2);
+  });
+
+  it("keeps an open mission interactive while a score ceremony runs", () => {
+    const engine = crossing("clockhead");
+    engine.state.mission.status = "ready";
+    engine.state.mission.readyAt = 0;
+    engine.state.mission.acceptDeadline = 20_000;
+    engine.advanceFixedSteps(1);
+    expect(engine.state.ceremony).not.toBeNull();
+    expect(engine.acceptRescue()).toBe(true);
+    expect(engine.state.mission.status).toBe("accepted");
   });
 });

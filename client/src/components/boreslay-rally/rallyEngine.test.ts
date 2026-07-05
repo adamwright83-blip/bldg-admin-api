@@ -15,6 +15,60 @@ const putExcuseInPlay = (engine: RallyEngine) => {
 };
 
 describe("RallyEngine physics", () => {
+  it("applies Fire Breath force immediately while anticipation is still building", () => {
+    const engine = playingEngine();
+    putExcuseInPlay(engine);
+    Object.assign(engine.state.excuse, {
+      x: engine.state.spark.x + 140,
+      y: engine.state.spark.y,
+      prevX: engine.state.spark.x + 140,
+      prevY: engine.state.spark.y,
+      vx: 0,
+      vy: 0,
+    });
+    engine.setAim(engine.state.excuse.x, engine.state.excuse.y);
+    engine.setBreath(true);
+    expect(engine.consumeEvents().some(event => event.type === "breath_start")).toBe(true);
+    engine.advanceFixedSteps(1);
+    expect(engine.state.spark.breathHeldMs).toBeLessThan(
+      RALLY_CONFIG.spark.breathAnticipationMs
+    );
+    expect(engine.state.excuse.vx).toBeGreaterThan(0);
+    expect(engine.consumeEvents().some(event => event.type === "breath_contact")).toBe(true);
+  });
+
+  it("makes charged ignite visual and forceful without staggering Clockhead", () => {
+    const engine = playingEngine();
+    putExcuseInPlay(engine);
+    Object.assign(engine.state.excuse, {
+      x: engine.state.spark.x + 140,
+      y: engine.state.spark.y,
+      prevX: engine.state.spark.x + 140,
+      prevY: engine.state.spark.y,
+      vx: 0,
+      vy: 0,
+    });
+    engine.setAim(engine.state.excuse.x, engine.state.excuse.y);
+    engine.setBreath(true);
+    engine.advanceFixedSteps(
+      Math.ceil(RALLY_CONFIG.spark.chargedBreathMs / FIXED_STEP_MS) + 1
+    );
+    engine.setBreath(false);
+    expect(engine.state.excuse.ignitedUntil).toBeGreaterThan(engine.state.timeMs);
+    expect(engine.consumeEvents().some(event => event.type === "charged_release")).toBe(true);
+    Object.assign(engine.state.excuse, {
+      x: engine.state.clockhead.x - 70,
+      y: engine.state.clockhead.y,
+      prevX: engine.state.clockhead.x - 70,
+      prevY: engine.state.clockhead.y,
+      vx: 420,
+      vy: 0,
+      lastTouchAt: -Infinity,
+    });
+    engine.advanceFixedSteps(1);
+    expect(engine.state.clockhead.staggerUntil).toBe(0);
+  });
+
   it("applies wall restitution", () => {
     const engine = playingEngine();
     putExcuseInPlay(engine);

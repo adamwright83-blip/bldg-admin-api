@@ -29,9 +29,25 @@ export class RallyAudio {
       case "serve":
         this.sweep(220, 480, 0.18, "triangle", 0.08);
         break;
+      case "breath_start":
+        this.sweep(120, 520, 0.12, "sawtooth", 0.055);
+        this.noise(0.08, 0.03, 700);
+        break;
       case "breath_loop":
         this.noise(0.09, 0.028, 900);
         this.tone(110, 0.08, "sawtooth", 0.025);
+        break;
+      case "breath_contact":
+        this.noise(0.07, 0.045, 2400);
+        this.tone(420, 0.06, "triangle", 0.035);
+        break;
+      case "charged_release":
+        this.sweep(180, 1180, 0.24, "sawtooth", 0.08);
+        this.noise(0.16, 0.055, 540);
+        break;
+      case "breath_exhausted":
+        this.tone(72, 0.06, "square", 0.045);
+        this.tone(54, 0.08, "square", 0.03);
         break;
       case "return":
         this.tone(180 + tier * 85, 0.13, "square", 0.11);
@@ -55,6 +71,9 @@ export class RallyAudio {
         break;
       case "rescue_ready":
         this.chord([330, 440, 660], 0.22, 0.055);
+        break;
+      case "score_sealed":
+        this.sweep(560, 130, 0.22, "sine", 0.06);
         break;
       case "gate_score_for":
         this.noise(0.16, 0.11, 1800);

@@ -11,7 +11,11 @@ export type RallyTelegraph = "none" | "swat" | "freeze";
 export type RallyMissionStatus = "locked" | "ready" | "accepted" | "expired";
 export type RallyEventType =
   | "serve"
+  | "breath_start"
   | "breath_loop"
+  | "breath_contact"
+  | "breath_exhausted"
+  | "charged_release"
   | "return"
   | "wall_bounce"
   | "bumper_bank"
@@ -20,8 +24,10 @@ export type RallyEventType =
   | "freeze_break"
   | "rescue_ready"
   | "rescue_accepted"
+  | "score_sealed"
   | "gate_score_for"
   | "gate_score_against"
+  | "ceremony_complete"
   | "victory"
   | "defeat"
   | "status";
@@ -33,10 +39,35 @@ export type RallyEvent = {
   y?: number;
   tier?: 0 | 1 | 2 | 3;
   side?: RallySide;
+  points?: number;
+  banked?: boolean;
   message?: string;
 };
 
 export type RallyVec = { x: number; y: number };
+
+export type RallyScoreSnapshot = {
+  victim: RallySide;
+  scorer: RallySide;
+  points: number;
+  banked: boolean;
+  mode: "portal";
+  x: number;
+  y: number;
+  startX: number;
+  startY: number;
+  vx: number;
+  vy: number;
+  tick: number;
+  ignited: boolean;
+};
+
+export type RallyCeremony = {
+  elapsedRealMs: number;
+  committed: boolean;
+  outcome: "victory" | "defeat" | null;
+  snapshot: RallyScoreSnapshot;
+};
 
 export type RallyExcuse = RallyVec & {
   prevX: number;
@@ -56,6 +87,7 @@ export type RallyExcuse = RallyVec & {
 };
 
 export type RallyState = {
+  tick: number;
   timeMs: number;
   status: DemoStatus;
   message: string;
@@ -72,6 +104,8 @@ export type RallyState = {
     dashReadyAt: number;
     breathHeldMs: number;
     breathing: boolean;
+    lastBreathContactAt: number;
+    exhaustedNotified: boolean;
   };
   clockhead: RallyVec & {
     prevX: number;
@@ -90,6 +124,7 @@ export type RallyState = {
   influence: number;
   serveAt: number | null;
   servingSide: RallySide;
+  ceremony: RallyCeremony | null;
   mission: {
     status: RallyMissionStatus;
     readyAt: number | null;
@@ -144,6 +179,7 @@ function createExcuse(): RallyExcuse {
 
 export function createRallyState(reducedMotion = false): RallyState {
   return {
+    tick: 0,
     timeMs: 0,
     status: "idle",
     message: "Keep the Excuse out of your Gate. Fire it into his.",
@@ -162,6 +198,8 @@ export function createRallyState(reducedMotion = false): RallyState {
       dashReadyAt: 0,
       breathHeldMs: 0,
       breathing: false,
+      lastBreathContactAt: -Infinity,
+      exhaustedNotified: false,
     },
     clockhead: {
       x: RALLY_CONFIG.clockhead.spawnX,
@@ -182,6 +220,7 @@ export function createRallyState(reducedMotion = false): RallyState {
     influence: RALLY_CONFIG.scoring.startingInfluence,
     serveAt: null,
     servingSide: "clockhead",
+    ceremony: null,
     mission: {
       status: "locked",
       readyAt: null,
@@ -273,13 +312,25 @@ export class RallyEngine {
     if (this.breathRequested === active) return;
     if (!active && this.state.spark.breathHeldMs >= RALLY_CONFIG.spark.chargedBreathMs) {
       this.state.excuse.ignitedUntil = this.state.timeMs + RALLY_CONFIG.excuse.igniteMs;
-      this.state.message = "CHARGED IGNITE — the next score hits twice.";
+      this.state.message = "CHARGED IGNITE — the Excuse burns hotter.";
       this.emit("ignite", this.state.excuse.x, this.state.excuse.y);
+      this.emit("charged_release", this.state.spark.x, this.state.spark.y);
     }
     this.breathRequested = active;
+    if (
+      active &&
+      this.state.status === "playing" &&
+      this.state.timeMs >= this.state.spark.frozenUntil &&
+      this.state.spark.energy > 0
+    ) {
+      const mouth = this.sparkMouthPosition();
+      this.state.spark.exhaustedNotified = false;
+      this.emit("breath_start", mouth.x, mouth.y);
+    }
     if (!active) {
       this.state.spark.breathing = false;
       this.state.spark.breathHeldMs = 0;
+      this.state.spark.exhaustedNotified = false;
     }
   }
 
@@ -358,6 +409,11 @@ export class RallyEngine {
   }
 
   advanceFrame(frameMs: number) {
+    if (this.state.status === "paused" || this.state.status === "idle") return;
+    if (this.state.ceremony) {
+      this.advanceCeremony(frameMs);
+      return;
+    }
     if (this.state.status !== "playing") return;
     let remaining = clamp(frameMs, 0, RALLY_CONFIG.simulation.maxFrameMs);
     if (this.hitStopRemainingMs > 0) {
@@ -386,6 +442,7 @@ export class RallyEngine {
     const { state } = this;
     const values = [
       state.timeMs,
+      state.tick,
       state.spark.x,
       state.spark.y,
       state.spark.energy,
@@ -402,6 +459,7 @@ export class RallyEngine {
       state.sparkLives,
       state.clockheadLives,
       state.influence,
+      state.ceremony?.committed ? 1 : 0,
       this.randomState,
     ].map(value => Math.round(value * 1000));
     return values.join(":");
@@ -409,8 +467,9 @@ export class RallyEngine {
 
   private stepFixed(dtMs: number) {
     const state = this.state;
-    if (state.status !== "playing") return;
+    if (state.status !== "playing" || state.ceremony) return;
     const dt = dtMs / 1000;
+    state.tick += 1;
     state.timeMs += dtMs;
     if (!state.reducedMotion) {
       state.trauma = Math.max(
@@ -511,12 +570,35 @@ export class RallyEngine {
         distanceToExcuse <= RALLY_CONFIG.spark.breathRange &&
         angle <= (RALLY_CONFIG.spark.breathHalfAngleDegrees * Math.PI) / 180
       ) {
-        excuse.vx += this.aim.x * RALLY_CONFIG.spark.breathAcceleration * dt;
-        excuse.vy += this.aim.y * RALLY_CONFIG.spark.breathAcceleration * dt;
+        const charged = spark.breathHeldMs >= RALLY_CONFIG.spark.chargedBreathMs;
+        const acceleration =
+          RALLY_CONFIG.spark.breathAcceleration *
+          (charged ? RALLY_CONFIG.spark.chargedBreathForceMultiplier : 1);
+        excuse.vx += this.aim.x * acceleration * dt;
+        excuse.vy += this.aim.y * acceleration * dt;
         this.capExcuseSpeed();
+        if (
+          this.state.timeMs - spark.lastBreathContactAt >=
+          RALLY_CONFIG.spark.breathContactEventIntervalMs
+        ) {
+          spark.lastBreathContactAt = this.state.timeMs;
+          this.emit("breath_contact", excuse.x, excuse.y);
+        }
       }
-      if (Math.floor((spark.breathHeldMs - dtMs) / 150) !== Math.floor(spark.breathHeldMs / 150)) {
-        this.emit("breath_loop", spark.x, spark.y);
+      if (
+        Math.floor((spark.breathHeldMs - dtMs) / RALLY_CONFIG.spark.breathEventIntervalMs) !==
+        Math.floor(spark.breathHeldMs / RALLY_CONFIG.spark.breathEventIntervalMs)
+      ) {
+        const mouth = this.sparkMouthPosition();
+        this.emit("breath_loop", mouth.x, mouth.y);
+      }
+      if (
+        spark.energy < RALLY_CONFIG.spark.breathExhaustedThreshold &&
+        !spark.exhaustedNotified
+      ) {
+        spark.exhaustedNotified = true;
+        const mouth = this.sparkMouthPosition();
+        this.emit("breath_exhausted", mouth.x, mouth.y);
       }
     } else {
       spark.breathing = false;
@@ -524,6 +606,9 @@ export class RallyEngine {
         RALLY_CONFIG.spark.energyMax,
         spark.energy + RALLY_CONFIG.spark.energyRegenPerSecond * dt
       );
+      if (spark.energy >= RALLY_CONFIG.spark.breathExhaustedThreshold) {
+        spark.exhaustedNotified = false;
+      }
     }
   }
 
@@ -665,7 +750,7 @@ export class RallyEngine {
     const excuse = this.state.excuse;
     const withinGate = excuse.y >= RALLY_CONFIG.arena.gateTop && excuse.y <= RALLY_CONFIG.arena.gateBottom;
     if (withinGate && beforeX >= 0 && excuse.x < 0 && excuse.vx < 0) {
-      this.scoreAgainst("spark");
+      this.sealPortalScore("spark");
       return true;
     }
     if (
@@ -674,7 +759,7 @@ export class RallyEngine {
       excuse.x > RALLY_CONFIG.arena.width &&
       excuse.vx > 0
     ) {
-      this.scoreAgainst("clockhead");
+      this.sealPortalScore("clockhead");
       return true;
     }
     return false;
@@ -815,11 +900,6 @@ export class RallyEngine {
           this.state.timeMs + RALLY_CONFIG.clockhead.whiffRecoveryMs;
         return;
       }
-      if (excuse.ignitedUntil > this.state.timeMs) {
-        excuse.ignitedUntil = 0;
-        this.state.clockhead.staggerUntil = this.state.timeMs + RALLY_CONFIG.clockhead.staggerMs;
-        this.state.message = "IGNITED — Clockhead lost the beat!";
-      }
       const direction = normalize(
         Math.min(-0.35, excuse.x - this.state.clockhead.x),
         excuse.y - this.state.clockhead.y
@@ -859,47 +939,125 @@ export class RallyEngine {
     this.emit("return", excuse.x, excuse.y, side);
   }
 
-  private scoreAgainst(side: RallySide) {
+  private sealPortalScore(victim: RallySide) {
+    if (this.state.ceremony) return;
     const excuse = this.state.excuse;
-    const ignitedDouble = side === "clockhead" && excuse.ignitedUntil > this.state.timeMs;
-    const damage = ignitedDouble ? 2 : 1;
-    if (side === "spark") {
-      this.state.sparkLives = Math.max(0, this.state.sparkLives - damage);
+    const scorer: RallySide = victim === "spark" ? "clockhead" : "spark";
+    const x = victim === "spark" ? 0 : RALLY_CONFIG.arena.width;
+    this.state.ceremony = {
+      elapsedRealMs: 0,
+      committed: false,
+      outcome: null,
+      snapshot: {
+        victim,
+        scorer,
+        points: 1,
+        banked: false,
+        mode: "portal",
+        x,
+        y: excuse.y,
+        startX: excuse.x,
+        startY: excuse.y,
+        vx: excuse.vx,
+        vy: excuse.vy,
+        tick: this.state.tick,
+        ignited: excuse.ignitedUntil > this.state.timeMs,
+      },
+    };
+    this.state.message = "REALITY GATE SHATTERED!";
+    this.emit("score_sealed", x, excuse.y, victim, 1, false);
+  }
+
+  private advanceCeremony(frameMs: number) {
+    const ceremony = this.state.ceremony;
+    if (!ceremony) return;
+    ceremony.elapsedRealMs += Math.max(0, frameMs);
+    const impactAt =
+      RALLY_CONFIG.ceremony.ingestionMs + RALLY_CONFIG.ceremony.hitStopMs;
+    if (!ceremony.committed && ceremony.elapsedRealMs >= impactAt) {
+      this.commitCeremonyScore(ceremony);
+    }
+    if (ceremony.elapsedRealMs >= this.ceremonyTotalMs()) {
+      this.finishCeremony(ceremony);
+    }
+  }
+
+  private commitCeremonyScore(ceremony: RallyCeremony) {
+    if (ceremony.committed) return;
+    ceremony.committed = true;
+    const { snapshot } = ceremony;
+    if (snapshot.victim === "spark") {
+      this.state.sparkLives = Math.max(0, this.state.sparkLives - snapshot.points);
       this.state.influence = clamp(
         this.state.influence + RALLY_CONFIG.scoring.influenceWhenScoredOn,
         0,
         100
       );
-      this.emit("gate_score_against", 0, excuse.y, side);
+      this.emit(
+        "gate_score_against",
+        snapshot.x,
+        snapshot.y,
+        snapshot.victim,
+        snapshot.points,
+        snapshot.banked
+      );
     } else {
-      this.state.clockheadLives = Math.max(0, this.state.clockheadLives - damage);
+      this.state.clockheadLives = Math.max(0, this.state.clockheadLives - snapshot.points);
       this.state.influence = clamp(
         this.state.influence + RALLY_CONFIG.scoring.influenceOnScore,
         0,
         100
       );
-      this.emit("gate_score_for", RALLY_CONFIG.arena.width, excuse.y, side);
+      this.emit(
+        "gate_score_for",
+        snapshot.x,
+        snapshot.y,
+        snapshot.victim,
+        snapshot.points,
+        snapshot.banked
+      );
     }
-    excuse.inPlay = false;
-    excuse.ignitedUntil = 0;
-    this.addHitStop(RALLY_CONFIG.feel.scoreHitStopMs);
     this.addTrauma(RALLY_CONFIG.feel.traumaScore);
+    if (this.state.clockheadLives === 0) ceremony.outcome = "victory";
+    if (this.state.sparkLives === 0) ceremony.outcome = "defeat";
+  }
 
-    if (this.state.clockheadLives === 0) {
+  private finishCeremony(ceremony: RallyCeremony) {
+    if (!ceremony.committed) this.commitCeremonyScore(ceremony);
+    const { snapshot, outcome } = ceremony;
+    this.state.excuse.inPlay = false;
+    this.state.excuse.ignitedUntil = 0;
+    this.state.ceremony = null;
+    this.emit("ceremony_complete", snapshot.x, snapshot.y, snapshot.victim);
+    if (outcome === "victory") {
       this.state.status = "victory";
       this.state.message = "CLOCKHEAD'S GATE IS HISTORY. Reality wins.";
       this.emit("victory");
       return;
     }
-    if (this.state.sparkLives === 0) {
+    if (outcome === "defeat") {
       this.state.status = "defeat";
       this.state.message = "The Excuse got through. Rally again.";
       this.emit("defeat");
       return;
     }
-    this.state.servingSide = side;
-    this.state.serveAt = this.state.timeMs + RALLY_CONFIG.scoring.resetMs;
-    this.state.message = side === "clockhead" ? "REALITY GATE SHATTERED!" : "Gate hit. Take the serve back.";
+    this.state.servingSide = snapshot.victim;
+    this.state.serveAt = this.state.timeMs;
+    this.state.message =
+      snapshot.victim === "clockhead"
+        ? "REALITY GATE SHATTERED!"
+        : "Gate hit. Take the serve back.";
+  }
+
+  private ceremonyTotalMs() {
+    return (
+      RALLY_CONFIG.ceremony.ingestionMs +
+      RALLY_CONFIG.ceremony.hitStopMs +
+      RALLY_CONFIG.ceremony.reactionMs +
+      RALLY_CONFIG.ceremony.bannerMs +
+      RALLY_CONFIG.ceremony.beatMs +
+      RALLY_CONFIG.ceremony.serveTelegraphMs
+    );
   }
 
   private wallBounce() {
@@ -929,6 +1087,13 @@ export class RallyEngine {
     return tier0 + ((tier3 - tier0) * tier) / 3;
   }
 
+  private sparkMouthPosition() {
+    return {
+      x: this.state.spark.x + this.state.spark.facing.x * RALLY_CONFIG.spark.mouthOffset,
+      y: this.state.spark.y + this.state.spark.facing.y * RALLY_CONFIG.spark.mouthOffset,
+    };
+  }
+
   private addHitStop(durationMs: number) {
     this.hitStopRemainingMs = Math.max(this.hitStopRemainingMs, durationMs);
   }
@@ -942,7 +1107,9 @@ export class RallyEngine {
     type: RallyEventType,
     x?: number,
     y?: number,
-    side?: RallySide
+    side?: RallySide,
+    points?: number,
+    banked?: boolean
   ) {
     this.events.push({
       type,
@@ -950,6 +1117,8 @@ export class RallyEngine {
       x,
       y,
       side,
+      points,
+      banked,
       tier: this.state.excuse.speedTier,
       message: this.state.message,
     });

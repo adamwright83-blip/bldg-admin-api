@@ -80,7 +80,9 @@ export class RallyRenderer {
     this.drawSpark(context, state, alpha);
     this.drawClockhead(context, state, alpha);
     this.drawExcuse(context, state, alpha);
+    this.drawCeremonyGoalMask(context, state);
     particles.draw(context);
+    this.drawCeremonyOverlay(context, state);
     this.drawArenaVignette(context);
     context.restore();
   }
@@ -152,18 +154,91 @@ export class RallyRenderer {
     const angle = Math.atan2(facing.y, facing.x);
     const halfAngle = (RALLY_CONFIG.spark.breathHalfAngleDegrees * Math.PI) / 180;
     const charge = Math.min(1, state.spark.breathHeldMs / RALLY_CONFIG.spark.chargedBreathMs);
-    const length = RALLY_CONFIG.spark.breathRange;
-    const gradient = context.createRadialGradient(sparkX, sparkY, 8, sparkX, sparkY, length);
-    gradient.addColorStop(0, "rgba(255,245,170,0.96)");
-    gradient.addColorStop(0.3, `rgba(255,122,38,${0.72 + charge * 0.18})`);
-    gradient.addColorStop(1, "rgba(235,44,18,0)");
+    const anticipation = Math.min(
+      1,
+      state.spark.breathHeldMs / RALLY_CONFIG.spark.breathAnticipationMs
+    );
+    const streamLength = RALLY_CONFIG.spark.breathRange * (0.35 + anticipation * 0.65);
+    const widthMultiplier =
+      1 + charge * (RALLY_CONFIG.spark.chargedBreathWidthMultiplier - 1);
+    const mouthX = sparkX + facing.x * RALLY_CONFIG.spark.mouthOffset;
+    const mouthY = sparkY + facing.y * RALLY_CONFIG.spark.mouthOffset;
+    const normalX = -facing.y;
+    const normalY = facing.x;
+    const flameClock = state.timeMs + state.spark.breathHeldMs;
     context.save();
-    context.fillStyle = gradient;
+    context.globalCompositeOperation = "lighter";
+    const mouthGlow = context.createRadialGradient(
+      mouthX,
+      mouthY,
+      0,
+      mouthX,
+      mouthY,
+      RALLY_CONFIG.fire.mouthGlowRadius
+    );
+    mouthGlow.addColorStop(0, charge > 0.92 ? "rgba(220,248,255,0.98)" : "rgba(255,251,205,0.98)");
+    mouthGlow.addColorStop(1, "rgba(255,86,20,0)");
+    context.fillStyle = mouthGlow;
     context.beginPath();
-    context.moveTo(sparkX, sparkY);
-    context.arc(sparkX, sparkY, length, angle - halfAngle, angle + halfAngle);
-    context.closePath();
+    context.arc(mouthX, mouthY, RALLY_CONFIG.fire.mouthGlowRadius, 0, TAU);
     context.fill();
+
+    for (let layer = 0; layer < 5; layer += 1) {
+      const layerRatio = layer / 4;
+      const phase = flameClock * 0.024 + layer * 1.73;
+      const wave = Math.sin(phase) * (8 + layerRatio * 16);
+      const spread = Math.tan(halfAngle) * streamLength * widthMultiplier;
+      const endX = mouthX + facing.x * streamLength + normalX * wave;
+      const endY = mouthY + facing.y * streamLength + normalY * wave;
+      const startOffset = (layer - 2) * RALLY_CONFIG.fire.coreWidth * 0.22;
+      const gradient = context.createLinearGradient(mouthX, mouthY, endX, endY);
+      gradient.addColorStop(0, charge > 0.92 ? "rgba(218,248,255,0.98)" : "rgba(255,252,220,0.98)");
+      gradient.addColorStop(0.45, `rgba(255,${Math.round(164 - layerRatio * 60)},32,${0.9 - layerRatio * 0.08})`);
+      gradient.addColorStop(1, "rgba(229,35,12,0)");
+      context.strokeStyle = gradient;
+      context.lineCap = "round";
+      context.lineWidth =
+        RALLY_CONFIG.fire.coreWidth +
+        layerRatio * RALLY_CONFIG.fire.bodyWidth * widthMultiplier;
+      context.beginPath();
+      context.moveTo(mouthX + normalX * startOffset, mouthY + normalY * startOffset);
+      context.bezierCurveTo(
+        mouthX + facing.x * streamLength * 0.34 + normalX * wave * 0.3,
+        mouthY + facing.y * streamLength * 0.34 + normalY * wave * 0.3,
+        mouthX + facing.x * streamLength * 0.72 - normalX * wave * 0.25,
+        mouthY + facing.y * streamLength * 0.72 - normalY * wave * 0.25,
+        endX + normalX * spread * (layerRatio - 0.5) * 0.24,
+        endY + normalY * spread * (layerRatio - 0.5) * 0.24
+      );
+      context.stroke();
+    }
+
+    for (let index = 0; index < RALLY_CONFIG.fire.emberCount; index += 1) {
+      const noise = this.noise(flameClock * 0.001 + index * 19.37);
+      const along = 0.12 + noise * 0.88;
+      const flutter =
+        (this.noise(flameClock * 0.0017 + index * 7.11) - 0.5) *
+        Math.tan(halfAngle) *
+        streamLength *
+        along;
+      const x = mouthX + facing.x * streamLength * along + normalX * flutter;
+      const y = mouthY + facing.y * streamLength * along + normalY * flutter;
+      context.fillStyle = charge > 0.92 && index % 3 === 0 ? "#dffbff" : "#ffb43d";
+      context.beginPath();
+      context.arc(x, y, 1.5 + noise * 3.5, 0, TAU);
+      context.fill();
+    }
+    context.globalCompositeOperation = "source-over";
+    for (let index = 0; index < RALLY_CONFIG.fire.smokeCount; index += 1) {
+      const along = (index + 1) / (RALLY_CONFIG.fire.smokeCount + 1);
+      const curl = Math.sin(flameClock * 0.008 + index * 2.3) * 18;
+      const x = mouthX + facing.x * streamLength * along + normalX * curl;
+      const y = mouthY + facing.y * streamLength * along + normalY * curl - along * 18;
+      context.fillStyle = `rgba(58,31,38,${0.12 * (1 - along)})`;
+      context.beginPath();
+      context.arc(x, y, 7 + along * 10, 0, TAU);
+      context.fill();
+    }
     context.restore();
   }
 
@@ -232,6 +307,7 @@ export class RallyRenderer {
 
     context.save();
     context.translate(x, y);
+    this.applyCeremonyReaction(context, state, "spark");
     if (state.spark.facing.x < 0) context.scale(-1, 1);
     const recoil = state.spark.breathing ? 1 - Math.sin(state.timeMs * 0.035) * 0.035 : 1;
     context.scale(recoil, 2 - recoil);
@@ -258,6 +334,7 @@ export class RallyRenderer {
     }
     context.save();
     context.translate(x, y);
+    this.applyCeremonyReaction(context, state, "clockhead");
     this.drawSheetFrame(context, this.assets.clockhead, frame, 4, 2, 220, 248, 0, 8);
     context.restore();
   }
@@ -265,8 +342,8 @@ export class RallyRenderer {
   private drawExcuse(context: CanvasRenderingContext2D, state: RallyState, alpha: number) {
     const excuse = state.excuse;
     if (!excuse.inPlay) return;
-    const x = lerp(excuse.prevX, excuse.x, alpha);
-    const y = lerp(excuse.prevY, excuse.y, alpha);
+    let x = lerp(excuse.prevX, excuse.x, alpha);
+    let y = lerp(excuse.prevY, excuse.y, alpha);
     const angle = Math.atan2(excuse.vy, excuse.vx);
     const speed = Math.hypot(excuse.vx, excuse.vy);
     const speedRatio = Math.min(1, speed / RALLY_CONFIG.excuse.maxSpeed);
@@ -274,10 +351,34 @@ export class RallyRenderer {
     const squash = 1 - (1 - RALLY_CONFIG.feel.minSquash) * speedRatio;
     const frame = Math.floor(excuse.spin) % 8;
 
+    let ceremonyScale = 1;
+    if (state.ceremony) {
+      const { snapshot } = state.ceremony;
+      const progress = Math.min(
+        1,
+        state.ceremony.elapsedRealMs / RALLY_CONFIG.ceremony.ingestionMs
+      );
+      const eased = 1 - (1 - progress) ** 3;
+      const spiral = Math.sin(progress * TAU * RALLY_CONFIG.ceremony.ingestionTurns) *
+        RALLY_CONFIG.excuse.radius * (1 - progress);
+      const normal = snapshot.x === 0 ? 1 : -1;
+      x = lerp(snapshot.startX, snapshot.x, eased);
+      y = lerp(snapshot.startY, snapshot.y, eased) + spiral * normal;
+      ceremonyScale = Math.max(
+        RALLY_CONFIG.ceremony.ingestionMinScale,
+        1 - eased
+      );
+      if (state.ceremony.elapsedRealMs > RALLY_CONFIG.ceremony.ingestionMs) return;
+    }
+
     context.save();
     context.translate(x, y);
     context.rotate(angle);
-    context.scale(stretch, squash);
+    context.scale(
+      stretch * ceremonyScale,
+      squash * ceremonyScale *
+        (state.ceremony ? RALLY_CONFIG.ceremony.ingestionSquash : 1)
+    );
     if (excuse.ignitedUntil > state.timeMs) {
       context.shadowColor = "#ff5b21";
       context.shadowBlur = 30;
@@ -345,6 +446,135 @@ export class RallyRenderer {
       context.stroke();
     }
     context.restore();
+  }
+
+  private applyCeremonyReaction(
+    context: CanvasRenderingContext2D,
+    state: RallyState,
+    side: "spark" | "clockhead"
+  ) {
+    const ceremony = state.ceremony;
+    if (!ceremony || ceremony.snapshot.victim !== side || state.reducedMotion) return;
+    const reactionStart =
+      RALLY_CONFIG.ceremony.ingestionMs + RALLY_CONFIG.ceremony.hitStopMs;
+    const progress = Math.max(
+      0,
+      Math.min(
+        1,
+        (ceremony.elapsedRealMs - reactionStart) / RALLY_CONFIG.ceremony.reactionMs
+      )
+    );
+    if (progress <= 0) return;
+    const wobble = Math.sin(progress * Math.PI * 5) * (1 - progress);
+    context.rotate(wobble * 0.22);
+    context.scale(1 + Math.abs(wobble) * 0.16, 1 - Math.abs(wobble) * 0.12);
+  }
+
+  private drawCeremonyGoalMask(context: CanvasRenderingContext2D, state: RallyState) {
+    const ceremony = state.ceremony;
+    if (!ceremony) return;
+    const { snapshot } = ceremony;
+    const progress = Math.min(
+      1,
+      ceremony.elapsedRealMs / RALLY_CONFIG.ceremony.ingestionMs
+    );
+    const color = snapshot.victim === "spark" ? "255,91,38" : "66,173,255";
+    const inward = snapshot.x === 0 ? 1 : -1;
+    context.save();
+    context.translate(snapshot.x + inward * 8, snapshot.y);
+    context.scale(0.4, 1);
+    const portal = context.createRadialGradient(0, 0, 2, 0, 0, 98);
+    portal.addColorStop(0, "rgba(0,0,0,0.98)");
+    portal.addColorStop(0.58, `rgba(${color},${0.24 + progress * 0.34})`);
+    portal.addColorStop(0.83, `rgba(${color},0.92)`);
+    portal.addColorStop(1, `rgba(${color},0)`);
+    context.fillStyle = portal;
+    context.beginPath();
+    context.arc(0, 0, 104, 0, TAU);
+    context.fill();
+    context.restore();
+  }
+
+  private drawCeremonyOverlay(context: CanvasRenderingContext2D, state: RallyState) {
+    const ceremony = state.ceremony;
+    if (!ceremony) return;
+    const impactAt =
+      RALLY_CONFIG.ceremony.ingestionMs + RALLY_CONFIG.ceremony.hitStopMs;
+    const bannerAt = impactAt + RALLY_CONFIG.ceremony.reactionMs;
+    const beatAt = bannerAt + RALLY_CONFIG.ceremony.bannerMs;
+    const serveAt = beatAt + RALLY_CONFIG.ceremony.beatMs;
+    if (ceremony.elapsedRealMs >= bannerAt && ceremony.elapsedRealMs < serveAt) {
+      const raw = Math.min(
+        1,
+        (ceremony.elapsedRealMs - bannerAt) / RALLY_CONFIG.ceremony.bannerMs
+      );
+      const overshoot =
+        raw < 0.72
+          ? (raw / 0.72) * RALLY_CONFIG.ceremony.bannerOvershoot
+          : lerp(RALLY_CONFIG.ceremony.bannerOvershoot, 1, (raw - 0.72) / 0.28);
+      context.save();
+      context.translate(RALLY_CONFIG.arena.width / 2, RALLY_CONFIG.arena.height * 0.69);
+      if (!state.reducedMotion) {
+        context.rotate((RALLY_CONFIG.ceremony.bannerTiltDegrees * Math.PI) / 180);
+      }
+      context.scale(overshoot, overshoot);
+      context.fillStyle = "rgba(12,8,12,0.94)";
+      context.strokeStyle = "#f0aa39";
+      context.lineWidth = 5;
+      context.beginPath();
+      context.roundRect(-330, -74, 660, 148, 18);
+      context.fill();
+      context.stroke();
+      context.fillStyle = "#fff1bd";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.font = "900 52px Impact, Haettenschweiler, sans-serif";
+      context.fillText("REALITY GATE SHATTERED!", 0, -22);
+      context.fillStyle = "#ffb345";
+      context.font = "900 26px Impact, Haettenschweiler, sans-serif";
+      context.fillText("+1", 0, 35);
+      context.restore();
+    }
+
+    if (ceremony.elapsedRealMs >= serveAt) {
+      const remaining = Math.max(
+        0,
+        RALLY_CONFIG.ceremony.serveTelegraphMs -
+          (ceremony.elapsedRealMs - serveAt)
+      );
+      const tick = Math.max(
+        1,
+        Math.ceil((remaining / RALLY_CONFIG.ceremony.serveTelegraphMs) * 3)
+      );
+      const direction = ceremony.snapshot.victim === "spark" ? 1 : -1;
+      context.save();
+      context.translate(RALLY_CONFIG.arena.width / 2, RALLY_CONFIG.arena.height / 2);
+      context.fillStyle = "rgba(5,6,12,0.78)";
+      context.beginPath();
+      context.arc(0, 0, 58, 0, TAU);
+      context.fill();
+      context.fillStyle = "#fff1bd";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.font = "900 58px Impact, Haettenschweiler, sans-serif";
+      context.fillText(String(tick), 0, 0);
+      context.strokeStyle = ceremony.snapshot.victim === "spark" ? "#ff6b3c" : "#5db8ff";
+      context.lineWidth = 10;
+      context.lineCap = "round";
+      context.beginPath();
+      context.moveTo(-95 * direction, 0);
+      context.lineTo(-155 * direction, 0);
+      context.lineTo(-135 * direction, -18);
+      context.moveTo(-155 * direction, 0);
+      context.lineTo(-135 * direction, 18);
+      context.stroke();
+      context.restore();
+    }
+  }
+
+  private noise(value: number) {
+    const sine = Math.sin(value * 12.9898) * 43758.5453;
+    return sine - Math.floor(sine);
   }
 
   private drawArenaVignette(context: CanvasRenderingContext2D) {
