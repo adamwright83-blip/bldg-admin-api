@@ -2,6 +2,7 @@ import {
   BrowserLocalBoreslayDemoAdapter,
   type PublicBoreslayDemoAdapter,
   type SimulatedCrewMissionDeployment,
+  type SimulatedCrewMissionResult,
 } from "../boreslay-demo/PublicBoreslayDemoAdapter";
 import type { DemoStatus } from "../boreslay-demo/engine";
 import { FIXED_STEP_MS, RALLY_CONFIG } from "./rallyConfig";
@@ -198,6 +199,22 @@ export type RallyEngineOptions = {
   seed?: number;
   scoringMode?: "portal" | "buttHybrid";
   adapter?: PublicBoreslayDemoAdapter;
+  replay?: boolean;
+};
+
+export type RallyInputEvent = {
+  tick: number;
+  order: number;
+  type: "start" | "movement" | "aim" | "breath" | "dash" | "power_selected" | "power_cast" | "mission_accept" | "ai_power";
+  payload?: Record<string, unknown>;
+};
+
+export type RallyReplayRecord = {
+  seed: number;
+  scoringMode: "portal" | "buttHybrid";
+  initialConfigHash: string;
+  initialRngState: number;
+  inputLog: RallyInputEvent[];
 };
 
 const clamp = (value: number, min: number, max: number) =>
@@ -214,6 +231,16 @@ const rotate = (vector: RallyVec, radians: number): RallyVec => ({
   x: vector.x * Math.cos(radians) - vector.y * Math.sin(radians),
   y: vector.x * Math.sin(radians) + vector.y * Math.cos(radians),
 });
+
+export function configHash() {
+  const source = JSON.stringify(RALLY_CONFIG);
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
 
 function createExcuse(): RallyExcuse {
   const points = RALLY_CONFIG.excuse.trailPoints;
@@ -350,16 +377,22 @@ export class RallyEngine {
   private adapter: PublicBoreslayDemoAdapter;
   private initialSeed: number;
   private randomState: number;
+  private replayMode: boolean;
+  private inputLog: RallyInputEvent[] = [];
+  private inputOrder = 0;
+  private initialRngState = 0;
 
   constructor(options: RallyEngineOptions = {}) {
     this.initialSeed = options.seed ?? RALLY_CONFIG.simulation.seed;
     this.randomState = this.initialSeed >>> 0;
+    this.replayMode = options.replay ?? false;
     this.state = createRallyState(
       options.reducedMotion ?? false,
       options.scoringMode ?? RALLY_CONFIG.scoring.mode
     );
     this.adapter = options.adapter ?? new BrowserLocalBoreslayDemoAdapter();
     this.chooseAiLoadout();
+    this.initialRngState = this.randomState;
   }
 
   get interpolationAlpha() {
@@ -381,6 +414,7 @@ export class RallyEngine {
       this.state.servingSide = "clockhead";
     }
     this.emit("status");
+    this.recordInput("start");
   }
 
   pause() {
@@ -403,6 +437,9 @@ export class RallyEngine {
     this.events = [];
     this.randomState = this.initialSeed >>> 0;
     this.chooseAiLoadout();
+    this.initialRngState = this.randomState;
+    this.inputLog = [];
+    this.inputOrder = 0;
     this.adapter.reset(`boreslay-rally-${this.initialSeed}`);
   }
 
@@ -414,10 +451,12 @@ export class RallyEngine {
   setMovement(x: number, y: number) {
     if (x === 0 && y === 0) {
       this.movement = { x: 0, y: 0 };
+      this.recordInput("movement", { x: 0, y: 0 });
       return;
     }
     this.movement = normalize(x, y);
     this.state.spark.facing = { ...this.movement };
+    this.recordInput("movement", { x, y });
   }
 
   setAim(x: number, y: number) {
@@ -427,6 +466,7 @@ export class RallyEngine {
     };
     this.aim = normalize(x - this.state.spark.x, y - this.state.spark.y);
     this.state.spark.facing = { ...this.aim };
+    this.recordInput("aim", { x, y });
   }
 
   selectPower(power: RallyPowerId) {
@@ -435,11 +475,13 @@ export class RallyEngine {
     const existing = loadout.indexOf(power);
     if (existing >= 0) {
       loadout.splice(existing, 1);
+      this.recordInput("power_selected", { power });
       return true;
     }
     if (loadout.length >= RALLY_CONFIG.powers.slots) loadout.shift();
     loadout.push(power);
     this.emit("power_selected", undefined, undefined, "spark", undefined, undefined, power);
+    this.recordInput("power_selected", { power });
     return true;
   }
 
@@ -505,6 +547,7 @@ export class RallyEngine {
       this.state.spark.breathHeldMs = 0;
       this.state.spark.exhaustedNotified = false;
     }
+    this.recordInput("breath", { active });
   }
 
   dash() {
@@ -536,6 +579,7 @@ export class RallyEngine {
     spark.invulnerableUntil = timeMs + RALLY_CONFIG.spark.dashInvulnerabilityMs;
     spark.dashReadyAt = timeMs + RALLY_CONFIG.spark.dashCooldownMs;
     this.emit("dash", spark.x, spark.y, "spark");
+    this.recordInput("dash");
 
     const excuse = this.state.excuse;
     if (
@@ -563,6 +607,18 @@ export class RallyEngine {
       `boreslay-rally-rescue-${this.initialSeed}`
     );
     const result = this.adapter.resolveCrewMission(mission.deployment);
+    this.applyMissionResult(result);
+    this.recordInput("mission_accept", { result: result as unknown as Record<string, unknown> });
+    return true;
+  }
+
+  applyRecordedMission(result: SimulatedCrewMissionResult) {
+    this.state.mission.status = "ready";
+    this.applyMissionResult(result);
+  }
+
+  private applyMissionResult(result: SimulatedCrewMissionResult) {
+    const mission = this.state.mission;
     const effects = result.combatRewards.rallyEffects;
     mission.status = "accepted";
     if (effects?.breakFreeze) this.state.spark.frozenUntil = this.state.timeMs;
@@ -578,7 +634,54 @@ export class RallyEngine {
     this.state.message = "SIMULATED MISSION ACCEPTED — Closer broke the freeze.";
     this.emit("freeze_break", this.state.spark.x, this.state.spark.y);
     this.emit("rescue_accepted");
+  }
+
+  getReplayRecord(): RallyReplayRecord {
+    return {
+      seed: this.initialSeed,
+      scoringMode: this.state.scoringMode,
+      initialConfigHash: configHash(),
+      initialRngState: this.initialRngState,
+      inputLog: this.inputLog.map(event => ({
+        ...event,
+        payload: event.payload ? structuredClone(event.payload) : undefined,
+      })),
+    };
+  }
+
+  serializeRandomState() {
+    return this.randomState;
+  }
+
+  restoreRandomState(randomState: number) {
+    if (!this.replayMode) return false;
+    this.randomState = randomState >>> 0;
     return true;
+  }
+
+  applyReplayInput(event: RallyInputEvent) {
+    const payload = event.payload ?? {};
+    switch (event.type) {
+      case "start": this.start(); break;
+      case "movement": this.setMovement(Number(payload.x), Number(payload.y)); break;
+      case "aim": this.setAim(Number(payload.x), Number(payload.y)); break;
+      case "breath": this.setBreath(Boolean(payload.active)); break;
+      case "dash": this.dash(); break;
+      case "power_selected": this.selectPower(payload.power as RallyPowerId); break;
+      case "power_cast":
+        this.activatePower(
+          payload.power as RallyPowerId,
+          Number(payload.x),
+          Number(payload.y),
+          "spark"
+        );
+        break;
+      case "mission_accept":
+        this.applyRecordedMission(payload.result as unknown as SimulatedCrewMissionResult);
+        break;
+      case "ai_power":
+        break;
+    }
   }
 
   advanceFrame(frameMs: number) {
@@ -816,6 +919,7 @@ export class RallyEngine {
       this.emit("receipts_on", this.state.excuse.x, this.state.excuse.y, side, undefined, undefined, power);
     }
     this.emit("power_cast", x, y, side, undefined, undefined, power);
+    this.recordInput(side === "spark" ? "power_cast" : "ai_power", { power, x, y });
   }
 
   private updateServe() {
@@ -1661,5 +1765,15 @@ export class RallyEngine {
   private random() {
     this.randomState = (1664525 * this.randomState + 1013904223) >>> 0;
     return this.randomState / 0x100000000;
+  }
+
+  private recordInput(type: RallyInputEvent["type"], payload?: Record<string, unknown>) {
+    if (this.replayMode) return;
+    this.inputLog.push({
+      tick: this.state.tick,
+      order: this.inputOrder++,
+      type,
+      payload,
+    });
   }
 }

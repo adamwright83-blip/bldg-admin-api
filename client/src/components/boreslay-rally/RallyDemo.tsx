@@ -4,6 +4,7 @@ import { RallyEngine, type RallyPowerId, type RallyState } from "./rallyEngine";
 import { RALLY_CONFIG } from "./rallyConfig";
 import { RallyParticlePool } from "./rallyParticles";
 import { RallyRenderer } from "./rallyRenderer";
+import { RallyClipExporter } from "./rallyShare";
 import "./rally.css";
 
 type HudState = {
@@ -87,6 +88,14 @@ export function RallyDemo() {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [engaged, setEngaged] = useState(false);
   const [joystick, setJoystick] = useState({ x: 0, y: 0 });
+  const [clipRequest, setClipRequest] = useState<{ tick: number; nonce: number } | null>(null);
+  const [clip, setClip] = useState<{
+    status: "cutting" | "ready" | "error";
+    progress: number;
+    blob?: Blob;
+    extension?: string;
+  } | null>(null);
+  const clipAbortRef = useRef<AbortController | null>(null);
 
   const syncHud = useCallback(() => {
     setHud(snapshotHud(engineRef.current!.state));
@@ -118,6 +127,14 @@ export function RallyDemo() {
       for (const event of events) {
         audioRef.current.handleEvent(event);
         particlesRef.current.handleEvent(event);
+        if (
+          (event.type === "gate_score_for" &&
+            event.banked &&
+            engine.state.scoringMode === "buttHybrid") ||
+          event.type === "victory"
+        ) {
+          setClipRequest({ tick: engine.state.tick, nonce: performance.now() });
+        }
       }
       particlesRef.current.update(engine.hitStopMs > 0 ? 0 : frameMs);
       if (canvasRef.current) {
@@ -137,6 +154,35 @@ export function RallyDemo() {
     animationFrame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animationFrame);
   }, [syncHud]);
+
+  useEffect(() => {
+    if (!clipRequest) return;
+    const controller = new AbortController();
+    clipAbortRef.current?.abort();
+    clipAbortRef.current = controller;
+    setClip({ status: "cutting", progress: 0 });
+    const exporter = new RallyClipExporter();
+    void exporter.cut(engineRef.current!.getReplayRecord(), clipRequest.tick, {
+      signal: controller.signal,
+      onProgress: progress => setClip(current => current?.status === "cutting"
+        ? { ...current, progress }
+        : current),
+    }).then(result => {
+      setClip({
+        status: "ready",
+        progress: 1,
+        blob: result.blob,
+        extension: result.extension,
+      });
+    }).catch(error => {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setClip(null);
+      } else {
+        setClip({ status: "error", progress: 0 });
+      }
+    });
+    return () => controller.abort();
+  }, [clipRequest]);
 
   const updateMovement = useCallback(() => {
     const keys = keysRef.current;
@@ -277,6 +323,22 @@ export function RallyDemo() {
       ? 0
       : Math.max(0, (hud.missionDeadline - hud.timeMs) / 1000);
 
+  const shareClip = async () => {
+    if (!clip?.blob || !clip.extension) return;
+    const file = new File([clip.blob], `boreslay-bash.${clip.extension}`, { type: clip.blob.type });
+    const shareData = { files: [file], title: "BORESLAY", text: "BORESLAY Rally" };
+    if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+      await navigator.share(shareData);
+      return;
+    }
+    const url = URL.createObjectURL(clip.blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = file.name;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
   return (
     <main className={`rally-page mode-${hud.scoringMode}${hud.reducedMotion ? " is-reduced" : ""}`}>
       <section className="rally-shell" aria-label="BORESLAY Excuse Rally vertical slice">
@@ -393,6 +455,24 @@ export function RallyDemo() {
                 </button>
                 <strong>{acceptRemaining.toFixed(1)}s</strong>
               </div>
+            </div>
+          )}
+
+          {clip && (
+            <div className="rally-share" role="status">
+              {clip.status === "cutting" ? (
+                <>
+                  <b>CUTTING YOUR CLIP… {Math.round(clip.progress * 100)}%</b>
+                  <button type="button" onClick={() => clipAbortRef.current?.abort()}>CANCEL</button>
+                </>
+              ) : clip.status === "ready" ? (
+                <>
+                  <b>Clip is created on your device. Nothing is uploaded anywhere; local-only.</b>
+                  <button type="button" onClick={() => void shareClip()}>SHARE THE BASH</button>
+                </>
+              ) : (
+                <b>CLIP UNAVAILABLE — PLAY CONTINUES</b>
+              )}
             </div>
           )}
 

@@ -92,20 +92,39 @@ export class RallyRenderer {
     particles: RallyParticlePool
   ) {
     const bounds = canvas.getBoundingClientRect();
-    if (bounds.width <= 0 || bounds.height <= 0) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const targetWidth = Math.round(bounds.width * dpr);
-    const targetHeight = Math.round(bounds.height * dpr);
+    const replayCanvas = canvas.dataset.rallyReplay === "true";
+    if (!replayCanvas && (bounds.width <= 0 || bounds.height <= 0)) return;
+    const width = replayCanvas ? canvas.width : bounds.width;
+    const height = replayCanvas ? canvas.height : bounds.height;
+    const dpr = replayCanvas ? 1 : Math.min(window.devicePixelRatio || 1, 2);
+    const targetWidth = Math.round(width * dpr);
+    const targetHeight = Math.round(height * dpr);
     if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
       canvas.width = targetWidth;
       canvas.height = targetHeight;
     }
     const context = canvas.getContext("2d");
     if (!context) return;
-    const scaleX = bounds.width / RALLY_CONFIG.arena.width;
-    const scaleY = bounds.height / RALLY_CONFIG.arena.height;
-    context.setTransform(dpr * scaleX, 0, 0, dpr * scaleY, 0, 0);
-    context.clearRect(0, 0, RALLY_CONFIG.arena.width, RALLY_CONFIG.arena.height);
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, targetWidth, targetHeight);
+    if (replayCanvas) {
+      const exportCanvas = canvas as HTMLCanvasElement & { rallyFocusX?: number; rallyFocusY?: number };
+      const scale = (width / RALLY_CONFIG.arena.width) * RALLY_CONFIG.replay.followZoom;
+      const focusX = exportCanvas.rallyFocusX ?? state.excuse.x;
+      const focusY = exportCanvas.rallyFocusY ?? state.excuse.y;
+      context.setTransform(
+        scale,
+        0,
+        0,
+        scale,
+        width / 2 - focusX * scale,
+        height * 0.48 - focusY * scale
+      );
+    } else {
+      const scaleX = width / RALLY_CONFIG.arena.width;
+      const scaleY = height / RALLY_CONFIG.arena.height;
+      context.setTransform(dpr * scaleX, 0, 0, dpr * scaleY, 0, 0);
+    }
     context.imageSmoothingEnabled = true;
 
     const shake = state.reducedMotion ? 0 : state.trauma * state.trauma;

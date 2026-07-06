@@ -148,6 +148,17 @@ export const RALLY_CONFIG = {
     matchPointVignetteAlpha: 0.2,
     landingDustCount: 9,
   },
+  replay: {
+    maxSimMs: 120000,
+    captureFps: 30,
+    followZoom: 1.4,
+    slowPreMs: 2200,
+    slowScale: 0.5,
+    postMs: 800,
+    introCardMs: 600,
+    outroCardMs: 900,
+    scoreStripHeightPx: 210,
+  },
   powers: {
     slots: 2,
     mobileButtonMinPx: 48,
