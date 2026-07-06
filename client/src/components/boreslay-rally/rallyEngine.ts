@@ -7,6 +7,7 @@ import type { DemoStatus } from "../boreslay-demo/engine";
 import { FIXED_STEP_MS, RALLY_CONFIG } from "./rallyConfig";
 
 export type RallySide = "spark" | "clockhead";
+export type RallyPowerId = "redTape" | "hardNo" | "deadlineStamp" | "receipts";
 export type RallyTelegraph = "none" | "swat" | "freeze";
 export type RallyMissionStatus = "locked" | "ready" | "accepted" | "expired";
 export type RallyEventType =
@@ -32,6 +33,15 @@ export type RallyEventType =
   | "sudden_death"
   | "victory"
   | "defeat"
+  | "power_selected"
+  | "power_cast"
+  | "tape_place"
+  | "tape_sling"
+  | "shield_up"
+  | "shield_break"
+  | "stamp_tick"
+  | "stamp_slam"
+  | "receipts_on"
   | "status";
 
 export type RallyEvent = {
@@ -44,6 +54,16 @@ export type RallyEvent = {
   points?: number;
   banked?: boolean;
   message?: string;
+  power?: RallyPowerId;
+};
+
+export type RallyPlacedSurface = {
+  x: number;
+  y: number;
+  angle: number;
+  liveAt: number;
+  expiresAt: number;
+  consumed: boolean;
 };
 
 export type RallyVec = { x: number; y: number };
@@ -140,6 +160,17 @@ export type RallyState = {
   regulationExpired: boolean;
   tutorialSlowUntil: number;
   firstPlayerContact: boolean;
+  powers: {
+    loadout: RallyPowerId[];
+    aiLoadout: RallyPowerId[];
+    spent: Record<RallyPowerId, boolean>;
+    aiSpent: Record<RallyPowerId, boolean>;
+    placement: { power: RallyPowerId; startedAt: number; startedTick: number; x: number; y: number } | null;
+    hardNoUntil: Record<RallySide, number>;
+    redTape: RallyPlacedSurface | null;
+    deadlineStamp: (RallyPlacedSurface & { impactAt: number; slammed: boolean }) | null;
+    receiptsUntil: number;
+  };
   influence: number;
   serveAt: number | null;
   servingSide: RallySide;
@@ -270,6 +301,17 @@ export function createRallyState(
     regulationExpired: false,
     tutorialSlowUntil: 0,
     firstPlayerContact: false,
+    powers: {
+      loadout: ["redTape", "hardNo"],
+      aiLoadout: [],
+      spent: { redTape: false, hardNo: false, deadlineStamp: false, receipts: false },
+      aiSpent: { redTape: false, hardNo: false, deadlineStamp: false, receipts: false },
+      placement: null,
+      hardNoUntil: { spark: 0, clockhead: 0 },
+      redTape: null,
+      deadlineStamp: null,
+      receiptsUntil: 0,
+    },
     influence: RALLY_CONFIG.scoring.startingInfluence,
     serveAt: null,
     servingSide: "clockhead",
@@ -290,6 +332,10 @@ export class RallyEngine {
   private hitStopRemainingMs = 0;
   private movement: RallyVec = { x: 0, y: 0 };
   private aim: RallyVec = { x: 1, y: 0 };
+  private powerAim: RallyVec = {
+    x: RALLY_CONFIG.arena.width / 2,
+    y: RALLY_CONFIG.arena.height / 2,
+  };
   private breathRequested = false;
   private events: RallyEvent[] = [];
   private adapter: PublicBoreslayDemoAdapter;
@@ -304,6 +350,7 @@ export class RallyEngine {
       options.scoringMode ?? RALLY_CONFIG.scoring.mode
     );
     this.adapter = options.adapter ?? new BrowserLocalBoreslayDemoAdapter();
+    this.chooseAiLoadout();
   }
 
   get interpolationAlpha() {
@@ -342,9 +389,11 @@ export class RallyEngine {
     this.hitStopRemainingMs = 0;
     this.movement = { x: 0, y: 0 };
     this.aim = { x: 1, y: 0 };
+    this.powerAim = { x: RALLY_CONFIG.arena.width / 2, y: RALLY_CONFIG.arena.height / 2 };
     this.breathRequested = false;
     this.events = [];
     this.randomState = this.initialSeed >>> 0;
+    this.chooseAiLoadout();
     this.adapter.reset(`boreslay-rally-${this.initialSeed}`);
   }
 
@@ -363,8 +412,64 @@ export class RallyEngine {
   }
 
   setAim(x: number, y: number) {
+    this.powerAim = {
+      x: clamp(x, 0, RALLY_CONFIG.arena.width),
+      y: clamp(y, 0, RALLY_CONFIG.arena.height),
+    };
     this.aim = normalize(x - this.state.spark.x, y - this.state.spark.y);
     this.state.spark.facing = { ...this.aim };
+  }
+
+  selectPower(power: RallyPowerId) {
+    if (this.state.status !== "idle") return false;
+    const loadout = this.state.powers.loadout;
+    const existing = loadout.indexOf(power);
+    if (existing >= 0) {
+      loadout.splice(existing, 1);
+      return true;
+    }
+    if (loadout.length >= RALLY_CONFIG.powers.slots) loadout.shift();
+    loadout.push(power);
+    this.emit("power_selected", undefined, undefined, "spark", undefined, undefined, power);
+    return true;
+  }
+
+  beginPower(slot: number, x = this.powerAim.x, y = this.powerAim.y) {
+    const power = this.state.powers.loadout[slot];
+    if (
+      this.state.status !== "playing" ||
+      !power ||
+      this.state.powers.spent[power] ||
+      this.state.powers.placement
+    ) return false;
+    if (power === "redTape" || power === "deadlineStamp") {
+      this.state.powers.placement = {
+        power,
+        startedAt: this.state.timeMs,
+        startedTick: this.state.tick,
+        x: clamp(x, 0, RALLY_CONFIG.arena.width),
+        y: clamp(y, 0, RALLY_CONFIG.arena.height),
+      };
+      return true;
+    }
+    this.activatePower(power, x, y, "spark");
+    return true;
+  }
+
+  updatePowerAim(x: number, y: number) {
+    const placement = this.state.powers.placement;
+    if (!placement) return;
+    placement.x = clamp(x, 0, RALLY_CONFIG.arena.width);
+    placement.y = clamp(y, 0, RALLY_CONFIG.arena.height);
+  }
+
+  confirmPower(x?: number, y?: number) {
+    const placement = this.state.powers.placement;
+    if (!placement) return false;
+    if (x !== undefined && y !== undefined) this.updatePowerAim(x, y);
+    this.state.powers.placement = null;
+    this.activatePower(placement.power, placement.x, placement.y, "spark");
+    return true;
   }
 
   setBreath(active: boolean) {
@@ -519,6 +624,12 @@ export class RallyEngine {
       state.clockheadScore,
       state.regulationRemainingMs,
       state.suddenDeath ? 1 : 0,
+      state.powers.hardNoUntil.spark,
+      state.powers.hardNoUntil.clockhead,
+      state.powers.redTape?.expiresAt ?? 0,
+      state.powers.deadlineStamp?.expiresAt ?? 0,
+      state.powers.receiptsUntil,
+      ...state.powers.loadout.map(power => state.powers.spent[power] ? 1 : 0),
       state.influence,
       state.ceremony?.committed ? 1 : 0,
       this.randomState,
@@ -532,8 +643,12 @@ export class RallyEngine {
     const tutorialSlow =
       !state.firstPlayerContact &&
       state.tutorialSlowUntil > state.timeMs;
+    const placementSlow = state.powers.placement !== null;
     const scaledDtMs =
-      dtMs * (tutorialSlow ? RALLY_CONFIG.scoring.firstServeTimeScale : 1);
+      dtMs * Math.min(
+        tutorialSlow ? RALLY_CONFIG.scoring.firstServeTimeScale : 1,
+        placementSlow ? RALLY_CONFIG.powers.placementTimeScale : 1
+      );
     const dt = scaledDtMs / 1000;
     state.tick += 1;
     state.timeMs += scaledDtMs;
@@ -564,6 +679,7 @@ export class RallyEngine {
     this.updateSpark(dt, scaledDtMs);
     this.updateClockhead(dt);
     this.updateButtTargets(dt);
+    this.updatePowers();
     this.updateExcuse(dt);
     this.maybeTriggerRescue();
   }
@@ -600,6 +716,96 @@ export class RallyEngine {
       this.state.message = "The rescue window closed. Hold the gate.";
       this.emit("status");
     }
+  }
+
+  private updatePowers() {
+    const powers = this.state.powers;
+    if (
+      powers.placement &&
+      (this.state.tick - powers.placement.startedTick) * FIXED_STEP_MS >=
+        RALLY_CONFIG.powers.placementMaxMs
+    ) this.confirmPower();
+
+    if (powers.redTape && this.state.timeMs >= powers.redTape.expiresAt) {
+      powers.redTape = null;
+    }
+    const stamp = powers.deadlineStamp;
+    if (stamp && !stamp.slammed && this.state.timeMs >= stamp.impactAt) {
+      stamp.slammed = true;
+      this.emit("stamp_slam", stamp.x, stamp.y, "spark", undefined, undefined, "deadlineStamp");
+      const excuse = this.state.excuse;
+      if (
+        excuse.inPlay &&
+        length(excuse.x - stamp.x, excuse.y - stamp.y) <=
+          RALLY_CONFIG.powers.deadlineStamp.zoneRadius + RALLY_CONFIG.excuse.radius
+      ) {
+        const side: RallySide = stamp.x < RALLY_CONFIG.arena.width / 2 ? "spark" : "clockhead";
+        const direction = normalize(side === "spark" ? 1 : -1, (excuse.y - stamp.y) * 0.01);
+        this.returnExcuse(side, direction, RALLY_CONFIG.powers.deadlineStamp.launchMultiplier);
+      }
+    }
+    if (stamp && this.state.timeMs >= stamp.expiresAt) powers.deadlineStamp = null;
+    this.maybeUseAiPower();
+  }
+
+  private chooseAiLoadout() {
+    const pool: RallyPowerId[] = ["redTape", "hardNo", "deadlineStamp", "receipts"];
+    const first = Math.floor(this.random() * pool.length);
+    const firstPower = pool.splice(first, 1)[0];
+    const secondPower = pool.splice(Math.floor(this.random() * pool.length), 1)[0];
+    this.state.powers.aiLoadout = [firstPower, secondPower];
+  }
+
+  private maybeUseAiPower() {
+    const { excuse, powers } = this.state;
+    if (!excuse.inPlay || excuse.vx <= 0 || excuse.speedTier < 2) return;
+    const power = powers.aiLoadout.find(candidate => !powers.aiSpent[candidate]);
+    if (!power) return;
+    const target = this.state.buttTargets.clockhead;
+    const x = power === "deadlineStamp" ? excuse.x : target.x - 110;
+    const y = power === "deadlineStamp" ? excuse.y : target.y;
+    this.activatePower(power, x, y, "clockhead");
+  }
+
+  private activatePower(power: RallyPowerId, x: number, y: number, side: RallySide) {
+    const powers = this.state.powers;
+    const spent = side === "spark" ? powers.spent : powers.aiSpent;
+    if (spent[power]) return;
+    spent[power] = true;
+    if (power === "redTape") {
+      const angle = side === "spark" ? -0.34 : Math.PI + 0.34;
+      powers.redTape = {
+        x,
+        y,
+        angle,
+        liveAt: this.state.timeMs + RALLY_CONFIG.powers.redTape.telegraphMs,
+        expiresAt: this.state.timeMs + RALLY_CONFIG.powers.redTape.lifetimeMs,
+        consumed: false,
+      };
+      this.emit("tape_place", x, y, side, undefined, undefined, power);
+    } else if (power === "hardNo") {
+      powers.hardNoUntil[side] = this.state.timeMs + RALLY_CONFIG.powers.hardNo.maxMs;
+      this.emit("shield_up", x, y, side, undefined, undefined, power);
+    } else if (power === "deadlineStamp") {
+      const impactAt = this.state.timeMs + RALLY_CONFIG.powers.deadlineStamp.telegraphMs;
+      powers.deadlineStamp = {
+        x,
+        y,
+        angle: side === "spark"
+          ? RALLY_CONFIG.powers.deadlineStamp.surfaceAngleRadians
+          : Math.PI - RALLY_CONFIG.powers.deadlineStamp.surfaceAngleRadians,
+        liveAt: impactAt,
+        impactAt,
+        expiresAt: impactAt + RALLY_CONFIG.powers.deadlineStamp.surfaceLifetimeMs,
+        consumed: false,
+        slammed: false,
+      };
+      this.emit("stamp_tick", x, y, side, undefined, undefined, power);
+    } else {
+      powers.receiptsUntil = this.state.timeMs + RALLY_CONFIG.powers.receipts.lifetimeMs;
+      this.emit("receipts_on", this.state.excuse.x, this.state.excuse.y, side, undefined, undefined, power);
+    }
+    this.emit("power_cast", x, y, side, undefined, undefined, power);
   }
 
   private updateServe() {
@@ -889,6 +1095,7 @@ export class RallyEngine {
         if (this.resolveButtTargetSweep(beforeX, beforeY)) return;
       } else if (this.resolveGateCrossing(beforeX)) return;
       this.resolveFighterContact();
+      this.resolvePowerSurfaces();
       this.resolveBumpers();
       this.resolveStraightWalls();
       if (this.state.scoringMode === "portal") this.resolveGatePosts();
@@ -932,7 +1139,98 @@ export class RallyEngine {
     const target = this.state.buttTargets[hit.side];
     excuse.x = startX + (excuse.x - startX) * hit.t;
     excuse.y = startY + (excuse.y - startY) * hit.t;
+    if (this.state.powers.hardNoUntil[hit.side] > this.state.timeMs) {
+      this.state.powers.hardNoUntil[hit.side] = 0;
+      const direction = { x: hit.side === "spark" ? 1 : -1, y: 0 };
+      this.returnExcuse(hit.side, direction, RALLY_CONFIG.powers.redTape.forceMultiplier);
+      this.state.message = "HARD NO. Score denied.";
+      this.emit("shield_break", target.x, target.y, hit.side, undefined, undefined, "hardNo");
+      return true;
+    }
     this.sealScore(hit.side, "buttHybrid", target.x, target.y);
+    return true;
+  }
+
+  private resolvePowerSurfaces() {
+    const powers = this.state.powers;
+    const tape = powers.redTape;
+    if (
+      tape &&
+      !tape.consumed &&
+      this.state.timeMs >= tape.liveAt &&
+      this.resolvePlacedSurface(
+        tape,
+        RALLY_CONFIG.powers.redTape.length,
+        RALLY_CONFIG.powers.redTape.collisionRadius,
+        RALLY_CONFIG.powers.redTape.forceMultiplier,
+        RALLY_CONFIG.powers.redTape.tangentBias
+      )
+    ) {
+      tape.consumed = true;
+      this.state.excuse.bankState = true;
+      this.emit("tape_sling", tape.x, tape.y, undefined, undefined, undefined, "redTape");
+    }
+    const stamp = powers.deadlineStamp;
+    if (stamp?.slammed) {
+      this.resolvePlacedSurface(
+        stamp,
+        RALLY_CONFIG.powers.deadlineStamp.surfaceLength,
+        RALLY_CONFIG.powers.deadlineStamp.collisionRadius,
+        1,
+        0
+      );
+    }
+  }
+
+  private resolvePlacedSurface(
+    surface: RallyPlacedSurface,
+    surfaceLength: number,
+    collisionRadius: number,
+    forceMultiplier: number,
+    tangentBias: number
+  ) {
+    const excuse = this.state.excuse;
+    const tangent = { x: Math.cos(surface.angle), y: Math.sin(surface.angle) };
+    const normal = { x: -tangent.y, y: tangent.x };
+    const half = surfaceLength / 2;
+    const ax = surface.x - tangent.x * half;
+    const ay = surface.y - tangent.y * half;
+    const projection = clamp(
+      (excuse.x - ax) * tangent.x + (excuse.y - ay) * tangent.y,
+      0,
+      surfaceLength
+    );
+    const closestX = ax + tangent.x * projection;
+    const closestY = ay + tangent.y * projection;
+    const minimum = RALLY_CONFIG.excuse.radius + collisionRadius;
+    const dx = excuse.x - closestX;
+    const dy = excuse.y - closestY;
+    if (length(dx, dy) >= minimum) return false;
+    const collisionNormal = normalize(dx || normal.x, dy || normal.y);
+    const into = excuse.vx * collisionNormal.x + excuse.vy * collisionNormal.y;
+    if (into >= 0) return false;
+    const speed = Math.min(
+      RALLY_CONFIG.excuse.maxSpeed,
+      length(excuse.vx, excuse.vy) * forceMultiplier
+    );
+    let reflected = normalize(
+      excuse.vx - 2 * into * collisionNormal.x,
+      excuse.vy - 2 * into * collisionNormal.y
+    );
+    if (tangentBias > 0) {
+      const opponentSign = excuse.lastTouchedBy === "clockhead" ? -1 : 1;
+      const biasedTangent = tangent.x * opponentSign < 0
+        ? { x: -tangent.x, y: -tangent.y }
+        : tangent;
+      reflected = normalize(
+        reflected.x + biasedTangent.x * tangentBias,
+        reflected.y + biasedTangent.y * tangentBias
+      );
+    }
+    excuse.x = closestX + collisionNormal.x * minimum;
+    excuse.y = closestY + collisionNormal.y * minimum;
+    excuse.vx = reflected.x * speed;
+    excuse.vy = reflected.y * speed;
     return true;
   }
 
@@ -1328,7 +1626,8 @@ export class RallyEngine {
     y?: number,
     side?: RallySide,
     points?: number,
-    banked?: boolean
+    banked?: boolean,
+    power?: RallyPowerId
   ) {
     this.events.push({
       type,
@@ -1340,6 +1639,7 @@ export class RallyEngine {
       banked,
       tier: this.state.excuse.speedTier,
       message: this.state.message,
+      power,
     });
   }
 

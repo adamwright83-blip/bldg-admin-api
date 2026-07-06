@@ -62,6 +62,28 @@ export class RallyAudio {
       case "ignite":
         this.sweep(240, 960, 0.26, "sawtooth", 0.07);
         break;
+      case "tape_place":
+        this.noise(0.12, 0.04, 3100);
+        break;
+      case "tape_sling":
+        this.sweep(180, 720, 0.16, "square", 0.06);
+        break;
+      case "shield_up":
+        this.chord([260, 390, 520], 0.22, 0.06);
+        break;
+      case "shield_break":
+        this.noise(0.18, 0.09, 3600);
+        this.tone(110, 0.2, "square", 0.06);
+        break;
+      case "stamp_tick":
+        this.tone(880, 0.07, "square", 0.04);
+        break;
+      case "stamp_slam":
+        this.sweep(170, 45, 0.28, "sawtooth", 0.1);
+        break;
+      case "receipts_on":
+        this.sweep(440, 1320, 0.34, "sine", 0.05);
+        break;
       case "freeze_cast":
         this.sweep(760, 160, 0.42, "sine", 0.08);
         break;

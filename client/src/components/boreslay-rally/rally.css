@@ -199,6 +199,38 @@
   cursor: pointer;
 }
 
+.rally-power-bar {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  bottom: clamp(38px, 5.2vw, 68px);
+  display: flex;
+  gap: 8px;
+  transform: translateX(-50%);
+}
+
+.rally-power-bar button {
+  min-width: 132px;
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 2px solid #d7a845;
+  border-radius: 7px;
+  color: #fff0bd;
+  background: rgba(10, 8, 12, 0.9);
+  font: 900 12px / 1 Impact, sans-serif;
+  cursor: pointer;
+}
+
+.rally-power-bar button.is-placing { box-shadow: 0 0 22px #ffd358; }
+.rally-power-bar button:disabled { opacity: 0.34; filter: grayscale(1); }
+.rally-power-bar kbd { color: #131019; background: #ffd358; padding: 4px 6px; border-radius: 4px; }
+.rally-power-bar i { color: #55df8b; font-style: normal; }
+.rally-power-bar button:disabled i { color: #706b6a; }
+
 .rally-sound {
   left: clamp(10px, 1.5vw, 22px);
   padding: 10px 13px;
@@ -352,6 +384,41 @@
   letter-spacing: 0.08em;
 }
 
+.rally-intro {
+  padding-block: clamp(16px, 2.2vw, 28px);
+}
+
+.rally-intro h1 { font-size: clamp(34px, 5.7vw, 76px); }
+
+.rally-loadout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 auto 14px;
+}
+
+.rally-loadout button {
+  min-height: 54px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding: 7px 10px;
+  color: #3d2419;
+  background: rgba(255, 246, 212, 0.46);
+  border-color: #7d5126;
+  box-shadow: none;
+  font-family: system-ui, sans-serif;
+}
+
+.rally-loadout button.is-selected {
+  color: #fff6d9;
+  background: linear-gradient(180deg, #b74028, #702218);
+  box-shadow: inset 0 0 0 2px #f0bb54;
+}
+
+.rally-loadout b { font: 900 14px / 1 Impact, sans-serif; letter-spacing: 0.04em; }
+.rally-loadout span { font-size: 10px; font-weight: 750; }
+
 .rally-result.is-victory {
   box-shadow: 0 0 80px rgba(255, 126, 42, 0.45), 0 24px 60px rgba(0, 0, 0, 0.56);
 }
@@ -438,6 +505,8 @@
   .rally-fighter strong { font-size: clamp(12px, 3.3vw, 24px); }
   .rally-lives i { width: clamp(13px, 3.7vw, 25px); border-width: 1px; font-size: 10px; }
   .rally-center-hud small { display: none; }
+  .rally-power-bar { bottom: 118px; gap: 6px; }
+  .rally-power-bar button { min-width: 112px; min-height: 48px; font-size: 10px; }
   .rally-joystick {
     position: absolute;
     z-index: 6;
@@ -503,6 +572,10 @@
   .rally-gate p { margin-bottom: 8px; font-size: 11px; }
   .rally-gate button { min-height: 38px; padding-inline: 18px; font-size: 12px; }
   .rally-gate small { display: none; }
+  .rally-loadout { gap: 5px; margin-bottom: 8px; }
+  .rally-loadout button { min-height: 42px; padding: 4px 6px; }
+  .rally-loadout b { font-size: 11px; }
+  .rally-loadout span { display: none; }
   .rally-stage.is-idle .rally-sound {
     left: 8px;
     bottom: 5px;

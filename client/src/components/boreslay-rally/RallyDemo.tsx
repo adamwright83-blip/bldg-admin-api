@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RallyAudio } from "./rallyAudio";
-import { RallyEngine, type RallyState } from "./rallyEngine";
+import { RallyEngine, type RallyPowerId, type RallyState } from "./rallyEngine";
 import { RALLY_CONFIG } from "./rallyConfig";
 import { RallyParticlePool } from "./rallyParticles";
 import { RallyRenderer } from "./rallyRenderer";
@@ -22,6 +22,9 @@ type HudState = {
   missionDeadline: number | null;
   timeMs: number;
   reducedMotion: boolean;
+  powerLoadout: RallyPowerId[];
+  powerSpent: Record<RallyPowerId, boolean>;
+  placingPower: RallyPowerId | null;
 };
 
 const snapshotHud = (state: RallyState): HudState => ({
@@ -40,9 +43,18 @@ const snapshotHud = (state: RallyState): HudState => ({
   missionDeadline: state.mission.acceptDeadline,
   timeMs: state.timeMs,
   reducedMotion: state.reducedMotion,
+  powerLoadout: [...state.powers.loadout],
+  powerSpent: { ...state.powers.spent },
+  placingPower: state.powers.placement?.power ?? null,
 });
 
 const SCORE_SLOTS = [0, 1, 2, 3, 4] as const;
+const POWER_META: Record<RallyPowerId, { name: string; note: string }> = {
+  redTape: { name: "RED TAPE", note: "Place a rebound ribbon" },
+  hardNo: { name: "HARD NO", note: "Block one certain score" },
+  deadlineStamp: { name: "DEADLINE STAMP", note: "Plant a timed launcher" },
+  receipts: { name: "RECEIPTS", note: "Reveal the scroll's path" },
+};
 
 const formatClock = (remainingMs: number) => {
   const seconds = Math.max(0, Math.ceil(remainingMs / 1000));
@@ -150,6 +162,8 @@ export function RallyDemo() {
       "KeyF",
       "Space",
       "Escape",
+      "Digit1",
+      "Digit2",
     ]);
     const onKeyDown = (event: KeyboardEvent) => {
       if (gameplayCodes.has(event.code)) event.preventDefault();
@@ -161,12 +175,18 @@ export function RallyDemo() {
       }
       keysRef.current.add(event.code);
       updateMovement();
+      if ((event.code === "Digit1" || event.code === "Digit2") && !event.repeat) {
+        engineRef.current!.beginPower(event.code === "Digit1" ? 0 : 1);
+      }
       if (event.code === "KeyF") engineRef.current!.setBreath(true);
       if (event.code === "Space" && !event.repeat) engineRef.current!.dash();
     };
     const onKeyUp = (event: KeyboardEvent) => {
       keysRef.current.delete(event.code);
       updateMovement();
+      if (event.code === "Digit1" || event.code === "Digit2") {
+        engineRef.current!.confirmPower();
+      }
       if (event.code === "KeyF") engineRef.current!.setBreath(false);
     };
     const clearInput = () => {
@@ -217,10 +237,10 @@ export function RallyDemo() {
   const aimAtPointer = (clientX: number, clientY: number) => {
     const bounds = canvasRef.current?.getBoundingClientRect();
     if (!bounds) return;
-    engineRef.current!.setAim(
-      ((clientX - bounds.left) / bounds.width) * RALLY_CONFIG.arena.width,
-      ((clientY - bounds.top) / bounds.height) * RALLY_CONFIG.arena.height
-    );
+    const x = ((clientX - bounds.left) / bounds.width) * RALLY_CONFIG.arena.width;
+    const y = ((clientY - bounds.top) / bounds.height) * RALLY_CONFIG.arena.height;
+    engineRef.current!.setAim(x, y);
+    engineRef.current!.updatePowerAim(x, y);
   };
 
   const joystickMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -268,11 +288,16 @@ export function RallyDemo() {
             if (engaged && event.pointerType === "mouse") aimAtPointer(event.clientX, event.clientY);
           }}
           onPointerDown={event => {
-            if (!engaged || event.pointerType !== "mouse") return;
+            if (!engaged) return;
             aimAtPointer(event.clientX, event.clientY);
-            engineRef.current!.setBreath(true);
+            if (
+              event.pointerType === "mouse" &&
+              !engineRef.current!.state.powers.placement
+            ) engineRef.current!.setBreath(true);
           }}
-          onPointerUp={() => engineRef.current!.setBreath(false)}
+          onPointerUp={() => {
+            if (!engineRef.current!.confirmPower()) engineRef.current!.setBreath(false);
+          }}
           onPointerLeave={() => engineRef.current!.setBreath(false)}
           aria-label="Excuse Rally arena. Use WASD or arrow keys to move, hold F or the mouse to breathe fire, Space to dash, and Escape to pause."
         >
@@ -312,6 +337,27 @@ export function RallyDemo() {
           <button className="rally-sound" type="button" onPointerDown={event => event.stopPropagation()} onClick={toggleSound}>
             {soundEnabled ? "SOUND ON" : "SOUND OFF"}
           </button>
+          {engaged && (
+            <div className="rally-power-bar" aria-label="Power loadout">
+              {hud.powerLoadout.map((power, index) => (
+                <button
+                  key={power}
+                  type="button"
+                  className={hud.placingPower === power ? "is-placing" : ""}
+                  disabled={hud.powerSpent[power]}
+                  onPointerDown={event => event.stopPropagation()}
+                  onClick={() => {
+                    engineRef.current!.beginPower(index);
+                    syncHud();
+                  }}
+                >
+                  <kbd>{index + 1}</kbd>
+                  <span>{POWER_META[power].name}</span>
+                  <i aria-hidden="true">●</i>
+                </button>
+              ))}
+            </div>
+          )}
           {engaged && (
             <button
               className="rally-pause"
@@ -355,7 +401,28 @@ export function RallyDemo() {
               <span>PHASE 1 · VERTICAL SLICE</span>
               <h1>EXCUSE RALLY</h1>
               <p>{hud.scoringMode === "buttHybrid" ? "Bank the Excuse off the wall and bash the target behind him." : "Keep the Excuse out of your Gate. Fire it into his."}</p>
-              <button type="button" onClick={begin}>ENTER THE RALLY</button>
+              <div className="rally-loadout" aria-label="Pick two powers">
+                {Object.entries(POWER_META).map(([id, meta]) => {
+                  const power = id as RallyPowerId;
+                  const selected = hud.powerLoadout.includes(power);
+                  return (
+                    <button
+                      key={power}
+                      type="button"
+                      className={selected ? "is-selected" : ""}
+                      aria-pressed={selected}
+                      onClick={() => {
+                        engineRef.current!.selectPower(power);
+                        syncHud();
+                      }}
+                    >
+                      <b>{meta.name}</b>
+                      <span>{meta.note}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button type="button" onClick={begin} disabled={hud.powerLoadout.length !== RALLY_CONFIG.powers.slots}>ENTER THE RALLY</button>
               <small>WASD / ARROWS · HOLD F / CLICK · SPACE TO DASH</small>
             </div>
           )}

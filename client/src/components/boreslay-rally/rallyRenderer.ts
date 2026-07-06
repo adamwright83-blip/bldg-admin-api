@@ -2,7 +2,7 @@ import arenaBackgroundUrl from "@/assets/boreslay-rally/arena-background.webp";
 import clockheadSheetUrl from "@/assets/boreslay-rally/clockhead-sheet.webp";
 import excuseSheetUrl from "@/assets/boreslay-rally/excuse-sheet.webp";
 import sparkSheetUrl from "@/assets/boreslay-rally/spark-sheet.webp";
-import type { RallyState } from "./rallyEngine";
+import type { RallyState, RallyVec } from "./rallyEngine";
 import { RALLY_CONFIG } from "./rallyConfig";
 import type { RallyParticlePool } from "./rallyParticles";
 
@@ -22,6 +22,51 @@ const loadImage = (source: string, onLoad: () => void) => {
   image.src = source;
   return image;
 };
+
+export function predictReceiptPath(state: RallyState) {
+  const points: RallyVec[] = [];
+  let x = state.excuse.x;
+  let y = state.excuse.y;
+  let vx = state.excuse.vx;
+  let vy = state.excuse.vy;
+  const radius = RALLY_CONFIG.excuse.radius;
+  const { width, height, cornerLeg, wallRestitution, bumperRestitution } = RALLY_CONFIG.arena;
+  const bumpers = [
+    { ax: 0, ay: cornerLeg, bx: cornerLeg, by: 0, nx: 1, ny: 1 },
+    { ax: width - cornerLeg, ay: 0, bx: width, by: cornerLeg, nx: -1, ny: 1 },
+    { ax: 0, ay: height - cornerLeg, bx: cornerLeg, by: height, nx: 1, ny: -1 },
+    { ax: width - cornerLeg, ay: height, bx: width, by: height - cornerLeg, nx: -1, ny: -1 },
+  ];
+  for (let step = 0; step < RALLY_CONFIG.powers.receipts.lookaheadSteps; step += 1) {
+    x += vx * RALLY_CONFIG.powers.receipts.lookaheadStepSeconds;
+    y += vy * RALLY_CONFIG.powers.receipts.lookaheadStepSeconds;
+    if (y < radius) { y = radius; vy = Math.abs(vy) * wallRestitution; }
+    if (y > height - radius) { y = height - radius; vy = -Math.abs(vy) * wallRestitution; }
+    if (x < radius) { x = radius; vx = Math.abs(vx) * wallRestitution; }
+    if (x > width - radius) { x = width - radius; vx = -Math.abs(vx) * wallRestitution; }
+    for (const bumper of bumpers) {
+      const abx = bumper.bx - bumper.ax;
+      const aby = bumper.by - bumper.ay;
+      const t = Math.max(0, Math.min(1, ((x - bumper.ax) * abx + (y - bumper.ay) * aby) / (abx ** 2 + aby ** 2)));
+      const closestX = bumper.ax + abx * t;
+      const closestY = bumper.ay + aby * t;
+      const dx = x - closestX;
+      const dy = y - closestY;
+      if (Math.hypot(dx, dy) >= radius) continue;
+      const magnitude = Math.hypot(bumper.nx, bumper.ny);
+      const nx = bumper.nx / magnitude;
+      const ny = bumper.ny / magnitude;
+      const dot = vx * nx + vy * ny;
+      if (dot >= 0) continue;
+      x = closestX + nx * radius;
+      y = closestY + ny * radius;
+      vx = (vx - 2 * dot * nx) * bumperRestitution;
+      vy = (vy - 2 * dot * ny) * bumperRestitution;
+    }
+    points.push({ x, y });
+  }
+  return points;
+}
 
 export class RallyRenderer {
   private assets: RallyAssets;
@@ -76,6 +121,8 @@ export class RallyRenderer {
     this.drawSealedWalls(context, state);
     this.drawGateThreats(context, state);
     this.drawButtTargets(context, state, alpha);
+    this.drawPowerSurfaces(context, state);
+    this.drawReceipts(context, state);
     this.drawBreath(context, state, alpha);
     this.drawTrail(context, state);
     this.drawTelegraph(context, state, alpha);
@@ -185,6 +232,120 @@ export class RallyRenderer {
       context.fill();
       context.restore();
     }
+  }
+
+  private drawPowerSurfaces(context: CanvasRenderingContext2D, state: RallyState) {
+    const { powers } = state;
+    const targetShield = (side: "spark" | "clockhead") => {
+      if (powers.hardNoUntil[side] <= state.timeMs) return;
+      const target = state.buttTargets[side];
+      const pulse = state.reducedMotion ? 0 : Math.sin(state.timeMs * 0.018) * 3;
+      context.save();
+      context.strokeStyle = side === "spark" ? "#ffcb69" : "#75d4ff";
+      context.fillStyle = side === "spark" ? "rgba(255,97,45,0.16)" : "rgba(62,154,255,0.16)";
+      context.lineWidth = 8;
+      context.beginPath();
+      context.arc(
+        target.x,
+        target.y,
+        target.radius + RALLY_CONFIG.powers.hardNo.domePadding + pulse,
+        Math.PI,
+        TAU
+      );
+      context.fill();
+      context.stroke();
+      context.fillStyle = "#fff3c6";
+      context.font = "900 19px Impact, sans-serif";
+      context.textAlign = "center";
+      context.fillText("HARD NO.", target.x, target.y - target.radius - 26);
+      context.restore();
+    };
+    targetShield("spark");
+    targetShield("clockhead");
+
+    const tape = powers.redTape;
+    if (tape) {
+      const live = state.timeMs >= tape.liveAt;
+      context.save();
+      context.translate(tape.x, tape.y);
+      context.rotate(tape.angle);
+      context.globalAlpha = tape.consumed ? 0.22 : 1;
+      context.strokeStyle = live ? "#f2c84b" : "rgba(242,200,75,0.45)";
+      context.lineWidth = RALLY_CONFIG.powers.redTape.collisionRadius * 2;
+      if (!live) context.setLineDash([22, 15]);
+      context.beginPath();
+      context.moveTo(-RALLY_CONFIG.powers.redTape.length / 2, 0);
+      context.lineTo(RALLY_CONFIG.powers.redTape.length / 2, 0);
+      context.stroke();
+      context.fillStyle = "#28160a";
+      context.font = "900 16px Impact, sans-serif";
+      context.textAlign = "center";
+      context.fillText("RED TAPE", 0, 5);
+      context.restore();
+    }
+
+    const stamp = powers.deadlineStamp;
+    if (stamp) {
+      const telegraph = Math.min(
+        1,
+        1 - (stamp.impactAt - state.timeMs) / RALLY_CONFIG.powers.deadlineStamp.telegraphMs
+      );
+      context.save();
+      context.translate(stamp.x, stamp.y);
+      context.globalAlpha = stamp.slammed ? 0.92 : 0.3 + telegraph * 0.5;
+      context.fillStyle = stamp.slammed ? "rgba(160,34,31,0.34)" : "rgba(16,5,9,0.5)";
+      context.strokeStyle = "#ff7460";
+      context.lineWidth = 5;
+      context.beginPath();
+      context.arc(0, 0, RALLY_CONFIG.powers.deadlineStamp.zoneRadius, 0, TAU);
+      context.fill();
+      context.stroke();
+      context.fillStyle = "#fff0bd";
+      context.font = `900 ${Math.round(22 + telegraph * 16)}px Impact, sans-serif`;
+      context.textAlign = "center";
+      context.fillText(stamp.slammed ? "SLAM" : "DEADLINE", 0, 8);
+      if (stamp.slammed) {
+        context.rotate(stamp.angle);
+        context.strokeStyle = "#ffb05e";
+        context.lineWidth = RALLY_CONFIG.powers.deadlineStamp.collisionRadius * 2;
+        context.beginPath();
+        context.moveTo(-RALLY_CONFIG.powers.deadlineStamp.surfaceLength / 2, 0);
+        context.lineTo(RALLY_CONFIG.powers.deadlineStamp.surfaceLength / 2, 0);
+        context.stroke();
+      }
+      context.restore();
+    }
+
+    const placement = powers.placement;
+    if (placement) {
+      context.save();
+      context.strokeStyle = "rgba(255,244,190,0.82)";
+      context.setLineDash([10, 9]);
+      context.lineWidth = 4;
+      context.beginPath();
+      context.arc(placement.x, placement.y, 64, 0, TAU);
+      context.stroke();
+      context.fillStyle = "#fff0bd";
+      context.font = "900 22px Impact, sans-serif";
+      context.textAlign = "center";
+      context.fillText("RELEASE TO PLACE", placement.x, placement.y - 78);
+      context.restore();
+    }
+  }
+
+  private drawReceipts(context: CanvasRenderingContext2D, state: RallyState) {
+    if (state.powers.receiptsUntil <= state.timeMs || !state.excuse.inPlay) return;
+    const path = predictReceiptPath(state);
+    context.save();
+    context.fillStyle = "rgba(215,248,255,0.68)";
+    for (let index = 0; index < path.length; index += RALLY_CONFIG.powers.receipts.dotStride) {
+      const point = path[index];
+      context.globalAlpha = 0.72 * (1 - index / path.length) + 0.14;
+      context.beginPath();
+      context.arc(point.x, point.y, 5, 0, TAU);
+      context.fill();
+    }
+    context.restore();
   }
 
   private drawGateGlow(
