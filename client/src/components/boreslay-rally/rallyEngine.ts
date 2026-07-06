@@ -33,6 +33,7 @@ export type RallyEventType =
   | "sudden_death"
   | "victory"
   | "defeat"
+  | "dash"
   | "power_selected"
   | "power_cast"
   | "tape_place"
@@ -55,6 +56,7 @@ export type RallyEvent = {
   banked?: boolean;
   message?: string;
   power?: RallyPowerId;
+  variation?: number;
 };
 
 export type RallyPlacedSurface = {
@@ -82,7 +84,14 @@ export type RallyScoreSnapshot = {
   vy: number;
   tick: number;
   ignited: boolean;
+  bark: string | null;
 };
+
+const CLOCKHEAD_SCORE_BARKS = [
+  "FILED UNDER: TOMORROW.",
+  "SNOOZE BUTTON WINS.",
+  "DEADLINE? WHAT DEADLINE?",
+] as const;
 
 export type RallyCeremony = {
   elapsedRealMs: number;
@@ -526,6 +535,7 @@ export class RallyEngine {
     spark.dashUntil = timeMs + RALLY_CONFIG.spark.dashDurationMs;
     spark.invulnerableUntil = timeMs + RALLY_CONFIG.spark.dashInvulnerabilityMs;
     spark.dashReadyAt = timeMs + RALLY_CONFIG.spark.dashCooldownMs;
+    this.emit("dash", spark.x, spark.y, "spark");
 
     const excuse = this.state.excuse;
     if (
@@ -1472,6 +1482,9 @@ export class RallyEngine {
         vy: excuse.vy,
         tick: this.state.tick,
         ignited: excuse.ignitedUntil > this.state.timeMs,
+        bark: victim === "spark"
+          ? CLOCKHEAD_SCORE_BARKS[Math.floor(this.random() * CLOCKHEAD_SCORE_BARKS.length)]
+          : null,
       },
     };
     this.state.message = mode === "portal" ? "REALITY GATE SHATTERED!" : "BUTT BASH!";
@@ -1498,6 +1511,7 @@ export class RallyEngine {
     const { snapshot } = ceremony;
     if (snapshot.victim === "spark") {
       this.state.clockheadScore += snapshot.points;
+      if (snapshot.bark) this.state.message = snapshot.bark;
       this.state.influence = clamp(
         this.state.influence + RALLY_CONFIG.scoring.influenceWhenScoredOn,
         0,
@@ -1640,6 +1654,7 @@ export class RallyEngine {
       tier: this.state.excuse.speedTier,
       message: this.state.message,
       power,
+      variation: this.random() * 2 - 1,
     });
   }
 

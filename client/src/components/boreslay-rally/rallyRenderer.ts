@@ -116,6 +116,10 @@ export class RallyRenderer {
     context.save();
     context.translate(RALLY_CONFIG.arena.width / 2 + shakeX, RALLY_CONFIG.arena.height / 2 + shakeY);
     context.rotate(shakeRotation);
+    const tierZoom = !state.reducedMotion && state.excuse.speedTier === 3
+      ? RALLY_CONFIG.juice.tierThreeZoom
+      : 1;
+    context.scale(tierZoom, tierZoom);
     context.translate(-RALLY_CONFIG.arena.width / 2, -RALLY_CONFIG.arena.height / 2);
     this.drawBackground(context, state);
     this.drawSealedWalls(context, state);
@@ -133,7 +137,7 @@ export class RallyRenderer {
     particles.draw(context);
     this.drawCeremonyOverlay(context, state);
     this.drawFirstServeCue(context, state);
-    this.drawArenaVignette(context);
+    this.drawArenaVignette(context, state);
     context.restore();
   }
 
@@ -530,8 +534,19 @@ export class RallyRenderer {
     this.applyCeremonyReaction(context, state, "spark");
     if (state.spark.facing.x < 0) context.scale(-1, 1);
     const recoil = state.spark.breathing ? 1 - Math.sin(state.timeMs * 0.035) * 0.035 : 1;
-    context.scale(recoil, 2 - recoil);
+    const dashProgress = state.timeMs < state.spark.dashUntil && !state.reducedMotion
+      ? Math.sin(((state.spark.dashUntil - state.timeMs) / RALLY_CONFIG.spark.dashDurationMs) * Math.PI)
+      : 0;
+    context.scale(
+      recoil * (1 + dashProgress * RALLY_CONFIG.juice.dashSquash),
+      (2 - recoil) * (1 - dashProgress * RALLY_CONFIG.juice.dashSquash)
+    );
     this.drawSheetFrame(context, this.assets.spark, frame, 4, 2, 190, 213, 0, 14);
+    if (state.timeMs < state.spark.frozenUntil) {
+      context.globalCompositeOperation = "source-atop";
+      context.fillStyle = "rgba(111, 220, 255, 0.38)";
+      context.fillRect(-95, -92, 190, 213);
+    }
     context.restore();
 
     if (state.timeMs < state.spark.frozenUntil) this.drawIcePrison(context, x, y);
@@ -555,6 +570,9 @@ export class RallyRenderer {
     context.save();
     context.translate(x, y);
     this.applyCeremonyReaction(context, state, "clockhead");
+    if (state.clockhead.telegraph === "swat" && !state.reducedMotion) {
+      context.rotate(-RALLY_CONFIG.juice.swatLeanRadians);
+    }
     this.drawSheetFrame(context, this.assets.clockhead, frame, 4, 2, 220, 248, 0, 8);
     context.restore();
   }
@@ -764,15 +782,17 @@ export class RallyRenderer {
       context.textAlign = "center";
       context.textBaseline = "middle";
       context.font = "900 52px Impact, Haettenschweiler, sans-serif";
-      const headline = ceremony.snapshot.mode === "buttHybrid"
-        ? ceremony.snapshot.banked ? "BUTT BASH!" : "EXPOSED!"
-        : "REALITY GATE SHATTERED!";
+      const headline = ceremony.snapshot.bark ?? (
+        ceremony.snapshot.mode === "buttHybrid"
+          ? ceremony.snapshot.banked ? "BUTT BASH!" : "EXPOSED!"
+          : "REALITY GATE SHATTERED!"
+      );
       context.fillText(headline, 0, -22);
       context.fillStyle = "#ffb345";
       context.font = "900 26px Impact, Haettenschweiler, sans-serif";
       const subline = ceremony.snapshot.banked
         ? `RETURNED TO SENDER · +${ceremony.snapshot.points}`
-        : `DIRECT HIT · +${ceremony.snapshot.points}`;
+        : `+${ceremony.snapshot.points}`;
       context.fillText(subline, 0, 35);
       context.restore();
     }
@@ -855,12 +875,19 @@ export class RallyRenderer {
     return sine - Math.floor(sine);
   }
 
-  private drawArenaVignette(context: CanvasRenderingContext2D) {
+  private drawArenaVignette(context: CanvasRenderingContext2D, state: RallyState) {
     const gradient = context.createRadialGradient(600, 320, 190, 600, 320, 720);
     gradient.addColorStop(0, "rgba(0,0,0,0)");
     gradient.addColorStop(0.78, "rgba(0,0,0,0.04)");
     gradient.addColorStop(1, "rgba(0,0,0,0.42)");
     context.fillStyle = gradient;
     context.fillRect(0, 0, RALLY_CONFIG.arena.width, RALLY_CONFIG.arena.height);
+    if (
+      state.sparkScore >= RALLY_CONFIG.scoring.winScore - 1 ||
+      state.clockheadScore >= RALLY_CONFIG.scoring.winScore - 1
+    ) {
+      context.fillStyle = `rgba(102, 10, 16, ${RALLY_CONFIG.juice.matchPointVignetteAlpha})`;
+      context.fillRect(0, 0, RALLY_CONFIG.arena.width, RALLY_CONFIG.arena.height);
+    }
   }
 }

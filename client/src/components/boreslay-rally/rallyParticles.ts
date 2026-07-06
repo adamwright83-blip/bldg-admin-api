@@ -61,6 +61,15 @@ export class RallyParticlePool {
       case "return":
         this.spawn(event, "spark", this.reducedMotion ? 4 : 15, 260, 430);
         break;
+      case "dash":
+        this.spawn(
+          event,
+          "spark",
+          this.reducedMotion ? 3 : RALLY_CONFIG.juice.landingDustCount,
+          70,
+          190
+        );
+        break;
       case "wall_bounce":
       case "bumper_bank":
         this.spawn(event, "spark", this.reducedMotion ? 3 : 10, 160, 300);
