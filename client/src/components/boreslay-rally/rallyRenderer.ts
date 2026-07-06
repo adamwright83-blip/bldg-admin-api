@@ -73,7 +73,9 @@ export class RallyRenderer {
     context.rotate(shakeRotation);
     context.translate(-RALLY_CONFIG.arena.width / 2, -RALLY_CONFIG.arena.height / 2);
     this.drawBackground(context, state);
+    this.drawSealedWalls(context, state);
     this.drawGateThreats(context, state);
+    this.drawButtTargets(context, state, alpha);
     this.drawBreath(context, state, alpha);
     this.drawTrail(context, state);
     this.drawTelegraph(context, state, alpha);
@@ -83,6 +85,7 @@ export class RallyRenderer {
     this.drawCeremonyGoalMask(context, state);
     particles.draw(context);
     this.drawCeremonyOverlay(context, state);
+    this.drawFirstServeCue(context, state);
     this.drawArenaVignette(context);
     context.restore();
   }
@@ -118,7 +121,7 @@ export class RallyRenderer {
   }
 
   private drawGateThreats(context: CanvasRenderingContext2D, state: RallyState) {
-    if (!state.excuse.inPlay) return;
+    if (state.scoringMode !== "portal" || !state.excuse.inPlay) return;
     const leftThreat = state.excuse.vx < 0 && state.excuse.x < RALLY_CONFIG.arena.gateThreatDistance;
     const rightThreat =
       state.excuse.vx > 0 &&
@@ -126,6 +129,62 @@ export class RallyRenderer {
     const pulse = 0.55 + Math.sin(state.timeMs * 0.018) * 0.35;
     if (leftThreat) this.drawGateGlow(context, 0, "#ff572d", pulse);
     if (rightThreat) this.drawGateGlow(context, RALLY_CONFIG.arena.width, "#38bdff", pulse);
+  }
+
+  private drawSealedWalls(context: CanvasRenderingContext2D, state: RallyState) {
+    if (state.scoringMode !== "buttHybrid") return;
+    const { width, gateTop, gateBottom } = RALLY_CONFIG.arena;
+    context.save();
+    context.strokeStyle = "rgba(242, 192, 91, 0.9)";
+    context.shadowColor = "rgba(255, 127, 42, 0.7)";
+    context.shadowBlur = 18;
+    context.lineWidth = 18;
+    context.beginPath();
+    context.moveTo(1, gateTop);
+    context.lineTo(1, gateBottom);
+    context.moveTo(width - 1, gateTop);
+    context.lineTo(width - 1, gateBottom);
+    context.stroke();
+    context.restore();
+  }
+
+  private drawButtTargets(
+    context: CanvasRenderingContext2D,
+    state: RallyState,
+    alpha: number
+  ) {
+    if (state.scoringMode !== "buttHybrid") return;
+    for (const side of ["spark", "clockhead"] as const) {
+      const target = state.buttTargets[side];
+      const x = lerp(target.prevX, target.x, alpha);
+      const y = lerp(target.prevY, target.y, alpha);
+      const speed = Math.hypot(target.wobble.vx, target.wobble.vy);
+      const squash = state.reducedMotion ? 0 : Math.min(0.12, speed * 0.004);
+      const warm = side === "spark";
+      context.save();
+      context.translate(x, y);
+      context.scale(1 + squash, 1 - squash);
+      context.shadowColor = warm ? "#ff6738" : "#54b9ff";
+      context.shadowBlur = 20;
+      context.fillStyle = warm ? "#d9543b" : "#5b86b8";
+      context.strokeStyle = "#f5d49a";
+      context.lineWidth = 5;
+      context.beginPath();
+      context.arc(0, 0, target.radius, 0, TAU);
+      context.fill();
+      context.stroke();
+      context.shadowBlur = 0;
+      context.strokeStyle = warm ? "#5b1420" : "#152d5e";
+      context.lineWidth = 7;
+      context.beginPath();
+      context.arc(0, 0, target.radius * 0.52, 0, TAU);
+      context.stroke();
+      context.fillStyle = "#fff0bd";
+      context.beginPath();
+      context.arc(0, 0, 7, 0, TAU);
+      context.fill();
+      context.restore();
+    }
   }
 
   private drawGateGlow(
@@ -479,6 +538,21 @@ export class RallyRenderer {
       ceremony.elapsedRealMs / RALLY_CONFIG.ceremony.ingestionMs
     );
     const color = snapshot.victim === "spark" ? "255,91,38" : "66,173,255";
+    if (snapshot.mode === "buttHybrid") {
+      context.save();
+      context.translate(snapshot.x, snapshot.y);
+      const target = context.createRadialGradient(0, 0, 2, 0, 0, 72);
+      target.addColorStop(0, "rgba(0,0,0,0.98)");
+      target.addColorStop(0.46, `rgba(${color},0.5)`);
+      target.addColorStop(0.72, `rgba(${color},0.96)`);
+      target.addColorStop(1, `rgba(${color},0)`);
+      context.fillStyle = target;
+      context.beginPath();
+      context.arc(0, 0, 74, 0, TAU);
+      context.fill();
+      context.restore();
+      return;
+    }
     const inward = snapshot.x === 0 ? 1 : -1;
     context.save();
     context.translate(snapshot.x + inward * 8, snapshot.y);
@@ -529,10 +603,16 @@ export class RallyRenderer {
       context.textAlign = "center";
       context.textBaseline = "middle";
       context.font = "900 52px Impact, Haettenschweiler, sans-serif";
-      context.fillText("REALITY GATE SHATTERED!", 0, -22);
+      const headline = ceremony.snapshot.mode === "buttHybrid"
+        ? ceremony.snapshot.banked ? "BUTT BASH!" : "EXPOSED!"
+        : "REALITY GATE SHATTERED!";
+      context.fillText(headline, 0, -22);
       context.fillStyle = "#ffb345";
       context.font = "900 26px Impact, Haettenschweiler, sans-serif";
-      context.fillText("+1", 0, 35);
+      const subline = ceremony.snapshot.banked
+        ? `RETURNED TO SENDER · +${ceremony.snapshot.points}`
+        : `DIRECT HIT · +${ceremony.snapshot.points}`;
+      context.fillText(subline, 0, 35);
       context.restore();
     }
 
@@ -570,6 +650,43 @@ export class RallyRenderer {
       context.stroke();
       context.restore();
     }
+  }
+
+  private drawFirstServeCue(context: CanvasRenderingContext2D, state: RallyState) {
+    if (
+      state.scoringMode !== "buttHybrid" ||
+      state.firstPlayerContact ||
+      state.tutorialSlowUntil <= state.timeMs
+    ) return;
+    const target = state.buttTargets.clockhead;
+    const pulse = 0.5 + Math.sin(state.timeMs * 0.02) * 0.5;
+    context.save();
+    context.strokeStyle = `rgba(255, 231, 128, ${0.55 + pulse * 0.4})`;
+    context.lineWidth = 7;
+    context.beginPath();
+    context.arc(
+      target.x,
+      target.y,
+      RALLY_CONFIG.buttTarget.tutorialPulseRadius + pulse * 10,
+      0,
+      TAU
+    );
+    context.stroke();
+    context.fillStyle = "#fff0bd";
+    context.textAlign = "center";
+    context.font = "900 34px Impact, Haettenschweiler, sans-serif";
+    context.fillText("HIT THE TARGET", target.x - 10, target.y - 92);
+    context.strokeStyle = "#fff0bd";
+    context.lineWidth = 8;
+    context.lineCap = "round";
+    context.beginPath();
+    context.moveTo(target.x - 118, target.y - 38);
+    context.lineTo(target.x - 56, target.y - 12);
+    context.lineTo(target.x - 74, target.y - 38);
+    context.moveTo(target.x - 56, target.y - 12);
+    context.lineTo(target.x - 86, target.y - 4);
+    context.stroke();
+    context.restore();
   }
 
   private noise(value: number) {

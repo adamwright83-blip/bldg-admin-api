@@ -28,6 +28,8 @@ export type RallyEventType =
   | "gate_score_for"
   | "gate_score_against"
   | "ceremony_complete"
+  | "regulation_expired"
+  | "sudden_death"
   | "victory"
   | "defeat"
   | "status";
@@ -51,7 +53,7 @@ export type RallyScoreSnapshot = {
   scorer: RallySide;
   points: number;
   banked: boolean;
-  mode: "portal";
+  mode: "portal" | "buttHybrid";
   x: number;
   y: number;
   startX: number;
@@ -80,10 +82,18 @@ export type RallyExcuse = RallyVec & {
   lastTouchedBy: RallySide | null;
   lastTouchAt: number;
   rallyCount: number;
+  bankState: boolean;
   inPlay: boolean;
   trailX: Float32Array;
   trailY: Float32Array;
   trailHead: number;
+};
+
+export type ButtTarget = RallyVec & {
+  prevX: number;
+  prevY: number;
+  radius: number;
+  wobble: RallyVec & { vx: number; vy: number };
 };
 
 export type RallyState = {
@@ -91,6 +101,7 @@ export type RallyState = {
   timeMs: number;
   status: DemoStatus;
   message: string;
+  scoringMode: "portal" | "buttHybrid";
   reducedMotion: boolean;
   trauma: number;
   spark: RallyVec & {
@@ -110,6 +121,7 @@ export type RallyState = {
   clockhead: RallyVec & {
     prevX: number;
     prevY: number;
+    facing: RallyVec;
     staggerUntil: number;
     telegraph: RallyTelegraph;
     telegraphUntil: number;
@@ -117,10 +129,17 @@ export type RallyState = {
     whiffUntil: number;
     freezeReadyAt: number;
     freezeUses: number;
+    exposedUntil: number;
   };
+  buttTargets: Record<RallySide, ButtTarget>;
   excuse: RallyExcuse;
-  sparkLives: number;
-  clockheadLives: number;
+  sparkScore: number;
+  clockheadScore: number;
+  regulationRemainingMs: number;
+  suddenDeath: boolean;
+  regulationExpired: boolean;
+  tutorialSlowUntil: number;
+  firstPlayerContact: boolean;
   influence: number;
   serveAt: number | null;
   servingSide: RallySide;
@@ -134,9 +153,10 @@ export type RallyState = {
   };
 };
 
-type RallyEngineOptions = {
+export type RallyEngineOptions = {
   reducedMotion?: boolean;
   seed?: number;
+  scoringMode?: "portal" | "buttHybrid";
   adapter?: PublicBoreslayDemoAdapter;
 };
 
@@ -170,6 +190,7 @@ function createExcuse(): RallyExcuse {
     lastTouchedBy: null,
     lastTouchAt: -Infinity,
     rallyCount: 0,
+    bankState: false,
     inPlay: false,
     trailX: new Float32Array(points),
     trailY: new Float32Array(points),
@@ -177,12 +198,27 @@ function createExcuse(): RallyExcuse {
   };
 }
 
-export function createRallyState(reducedMotion = false): RallyState {
+const createButtTarget = (x: number, y: number): ButtTarget => ({
+  x,
+  y,
+  prevX: x,
+  prevY: y,
+  radius: RALLY_CONFIG.buttTarget.radius,
+  wobble: { x: 0, y: 0, vx: 0, vy: 0 },
+});
+
+export function createRallyState(
+  reducedMotion = false,
+  scoringMode: "portal" | "buttHybrid" = RALLY_CONFIG.scoring.mode
+): RallyState {
   return {
     tick: 0,
     timeMs: 0,
     status: "idle",
-    message: "Keep the Excuse out of your Gate. Fire it into his.",
+    message: scoringMode === "buttHybrid"
+      ? "Bank the Excuse and hit the target behind Clockhead."
+      : "Keep the Excuse out of your Gate. Fire it into his.",
+    scoringMode,
     reducedMotion,
     trauma: 0,
     spark: {
@@ -206,6 +242,7 @@ export function createRallyState(reducedMotion = false): RallyState {
       y: RALLY_CONFIG.clockhead.spawnY,
       prevX: RALLY_CONFIG.clockhead.spawnX,
       prevY: RALLY_CONFIG.clockhead.spawnY,
+      facing: { x: -1, y: 0 },
       staggerUntil: 0,
       telegraph: "none",
       telegraphUntil: 0,
@@ -213,10 +250,26 @@ export function createRallyState(reducedMotion = false): RallyState {
       whiffUntil: 0,
       freezeReadyAt: 0,
       freezeUses: 0,
+      exposedUntil: 0,
+    },
+    buttTargets: {
+      spark: createButtTarget(
+        RALLY_CONFIG.spark.spawnX - RALLY_CONFIG.buttTarget.offset,
+        RALLY_CONFIG.spark.spawnY
+      ),
+      clockhead: createButtTarget(
+        RALLY_CONFIG.clockhead.spawnX + RALLY_CONFIG.buttTarget.offset,
+        RALLY_CONFIG.clockhead.spawnY
+      ),
     },
     excuse: createExcuse(),
-    sparkLives: RALLY_CONFIG.scoring.startingLives,
-    clockheadLives: RALLY_CONFIG.scoring.startingLives,
+    sparkScore: 0,
+    clockheadScore: 0,
+    regulationRemainingMs: RALLY_CONFIG.scoring.regulationMs,
+    suddenDeath: false,
+    regulationExpired: false,
+    tutorialSlowUntil: 0,
+    firstPlayerContact: false,
     influence: RALLY_CONFIG.scoring.startingInfluence,
     serveAt: null,
     servingSide: "clockhead",
@@ -246,7 +299,10 @@ export class RallyEngine {
   constructor(options: RallyEngineOptions = {}) {
     this.initialSeed = options.seed ?? RALLY_CONFIG.simulation.seed;
     this.randomState = this.initialSeed >>> 0;
-    this.state = createRallyState(options.reducedMotion ?? false);
+    this.state = createRallyState(
+      options.reducedMotion ?? false,
+      options.scoringMode ?? RALLY_CONFIG.scoring.mode
+    );
     this.adapter = options.adapter ?? new BrowserLocalBoreslayDemoAdapter();
   }
 
@@ -261,7 +317,9 @@ export class RallyEngine {
   start() {
     if (this.state.status !== "idle" && this.state.status !== "paused") return;
     this.state.status = "playing";
-    this.state.message = "Rally the Excuse into Clockhead's Reality Gate.";
+    this.state.message = this.state.scoringMode === "buttHybrid"
+      ? "Hit the target behind Clockhead. Bank shots score double."
+      : "Rally the Excuse into Clockhead's Reality Gate.";
     if (!this.state.excuse.inPlay && this.state.serveAt === null) {
       this.state.serveAt = this.state.timeMs + 480;
       this.state.servingSide = "clockhead";
@@ -278,7 +336,8 @@ export class RallyEngine {
 
   reset() {
     const reducedMotion = this.state.reducedMotion;
-    this.state = createRallyState(reducedMotion);
+    const scoringMode = this.state.scoringMode;
+    this.state = createRallyState(reducedMotion, scoringMode);
     this.accumulatorMs = 0;
     this.hitStopRemainingMs = 0;
     this.movement = { x: 0, y: 0 };
@@ -392,7 +451,6 @@ export class RallyEngine {
     const effects = result.combatRewards.rallyEffects;
     mission.status = "accepted";
     if (effects?.breakFreeze) this.state.spark.frozenUntil = this.state.timeMs;
-    if (effects?.gateShield) this.state.sparkLives = Math.max(1, this.state.sparkLives);
 
     const multiplier = effects?.returnForceMultiplier ?? RALLY_CONFIG.rescue.returnForceMultiplier;
     if (this.state.excuse.inPlay) {
@@ -456,8 +514,11 @@ export class RallyEngine {
       state.excuse.vx,
       state.excuse.vy,
       state.excuse.rallyCount,
-      state.sparkLives,
-      state.clockheadLives,
+      state.excuse.bankState ? 1 : 0,
+      state.sparkScore,
+      state.clockheadScore,
+      state.regulationRemainingMs,
+      state.suddenDeath ? 1 : 0,
       state.influence,
       state.ceremony?.committed ? 1 : 0,
       this.randomState,
@@ -468,9 +529,16 @@ export class RallyEngine {
   private stepFixed(dtMs: number) {
     const state = this.state;
     if (state.status !== "playing" || state.ceremony) return;
-    const dt = dtMs / 1000;
+    const tutorialSlow =
+      !state.firstPlayerContact &&
+      state.tutorialSlowUntil > state.timeMs;
+    const scaledDtMs =
+      dtMs * (tutorialSlow ? RALLY_CONFIG.scoring.firstServeTimeScale : 1);
+    const dt = scaledDtMs / 1000;
     state.tick += 1;
-    state.timeMs += dtMs;
+    state.timeMs += scaledDtMs;
+    this.updateRegulationClock(scaledDtMs);
+    if (state.status !== "playing") return;
     if (!state.reducedMotion) {
       state.trauma = Math.max(
         0,
@@ -484,15 +552,41 @@ export class RallyEngine {
     state.spark.prevY = state.spark.y;
     state.clockhead.prevX = state.clockhead.x;
     state.clockhead.prevY = state.clockhead.y;
+    state.buttTargets.spark.prevX = state.buttTargets.spark.x;
+    state.buttTargets.spark.prevY = state.buttTargets.spark.y;
+    state.buttTargets.clockhead.prevX = state.buttTargets.clockhead.x;
+    state.buttTargets.clockhead.prevY = state.buttTargets.clockhead.y;
     state.excuse.prevX = state.excuse.x;
     state.excuse.prevY = state.excuse.y;
 
     this.updateMission();
     this.updateServe();
-    this.updateSpark(dt, dtMs);
+    this.updateSpark(dt, scaledDtMs);
     this.updateClockhead(dt);
+    this.updateButtTargets(dt);
     this.updateExcuse(dt);
     this.maybeTriggerRescue();
+  }
+
+  private updateRegulationClock(dtMs: number) {
+    const state = this.state;
+    if (state.regulationExpired || state.suddenDeath) return;
+    state.regulationRemainingMs = Math.max(0, state.regulationRemainingMs - dtMs);
+    if (state.regulationRemainingMs > 0) return;
+    state.regulationExpired = true;
+    this.emit("regulation_expired");
+    if (state.sparkScore === state.clockheadScore) {
+      state.suddenDeath = true;
+      state.message = "SUDDEN DEATH — next score takes the contract.";
+      this.emit("sudden_death");
+      return;
+    }
+    const sparkWins = state.sparkScore > state.clockheadScore;
+    state.status = sparkWins ? "victory" : "defeat";
+    state.message = sparkWins
+      ? "CONTRACT WON. Reality outscored the Excuse."
+      : "CONTRACT LOST. The Excuse owned the clock.";
+    this.emit(sparkWins ? "victory" : "defeat");
   }
 
   private updateMission() {
@@ -528,11 +622,16 @@ export class RallyEngine {
     excuse.lastTouchedBy = side;
     excuse.lastTouchAt = this.state.timeMs;
     excuse.rallyCount = 0;
+    excuse.bankState = false;
     excuse.inPlay = true;
     excuse.trailX.fill(excuse.x);
     excuse.trailY.fill(excuse.y);
     excuse.trailHead = 0;
     this.state.serveAt = null;
+    if (firstServe) {
+      this.state.tutorialSlowUntil =
+        this.state.timeMs + RALLY_CONFIG.scoring.firstServeSlowMs;
+    }
     this.state.message = side === "clockhead" ? "Clockhead serves the Excuse." : "Spark serves with fire.";
     this.emit("serve", excuse.x, excuse.y);
   }
@@ -576,6 +675,8 @@ export class RallyEngine {
           (charged ? RALLY_CONFIG.spark.chargedBreathForceMultiplier : 1);
         excuse.vx += this.aim.x * acceleration * dt;
         excuse.vy += this.aim.y * acceleration * dt;
+        excuse.bankState = false;
+        this.state.firstPlayerContact = true;
         this.capExcuseSpeed();
         if (
           this.state.timeMs - spark.lastBreathContactAt >=
@@ -615,6 +716,13 @@ export class RallyEngine {
   private updateClockhead(dt: number) {
     const clockhead = this.state.clockhead;
     if (this.state.timeMs < clockhead.staggerUntil) return;
+
+    if (this.state.timeMs < clockhead.exposedUntil) {
+      clockhead.facing = { x: 1, y: 0 };
+    } else {
+      const focus = this.state.excuse.inPlay ? this.state.excuse : this.state.spark;
+      clockhead.facing = normalize(focus.x - clockhead.x, focus.y - clockhead.y);
+    }
 
     const targetY = clamp(
       this.state.excuse.inPlay ? this.state.excuse.y : RALLY_CONFIG.clockhead.spawnY,
@@ -675,6 +783,9 @@ export class RallyEngine {
     const error = (this.random() - 0.5) * (110 - accuracy * 70);
     const direction = normalize(-excuse.x, cornerY + error - excuse.y);
     this.returnExcuse("clockhead", direction, RALLY_CONFIG.clockhead.swatMultiplier);
+    clockhead.exposedUntil =
+      this.state.timeMs + RALLY_CONFIG.buttTarget.clockheadExposureMs;
+    clockhead.facing = { x: 1, y: 0 };
 
     if (
       clockhead.freezeUses === 0 &&
@@ -706,14 +817,56 @@ export class RallyEngine {
   }
 
   private maybeTriggerRescue() {
-    const { excuse, mission, spark, sparkLives } = this.state;
+    const { excuse, mission, spark, clockheadScore } = this.state;
     if (mission.status !== "locked" || !excuse.inPlay || excuse.vx >= 0) return;
     const frozenAndInbound =
       this.state.timeMs < spark.frozenUntil &&
+      this.isButtTargetExposed("spark") &&
       excuse.x < RALLY_CONFIG.arena.width / 2;
-    const desperateGate = sparkLives === 1;
+    const desperateGate = clockheadScore >= RALLY_CONFIG.scoring.winScore - 1;
     const tierThreeInbound = excuse.speedTier === 3;
     if (frozenAndInbound || desperateGate || tierThreeInbound) this.openRescue();
+  }
+
+  private updateButtTargets(dt: number) {
+    const { width, height } = RALLY_CONFIG.arena;
+    const { radius, offset, wallInset, springStiffness, springDamping } =
+      RALLY_CONFIG.buttTarget;
+    const update = (side: RallySide) => {
+      const fighter = side === "spark" ? this.state.spark : this.state.clockhead;
+      const target = this.state.buttTargets[side];
+      const desiredX = clamp(
+        fighter.x - fighter.facing.x * offset,
+        wallInset + radius,
+        width - wallInset - radius
+      );
+      const desiredY = clamp(
+        fighter.y - fighter.facing.y * offset,
+        wallInset + radius,
+        height - wallInset - radius
+      );
+      target.wobble.vx += (desiredX - target.x) * springStiffness * dt;
+      target.wobble.vy += (desiredY - target.y) * springStiffness * dt;
+      const damping = Math.exp(-springDamping * dt);
+      target.wobble.vx *= damping;
+      target.wobble.vy *= damping;
+      target.wobble.x = clamp(target.wobble.x + target.wobble.vx * dt, -8, 8);
+      target.wobble.y = clamp(target.wobble.y + target.wobble.vy * dt, -8, 8);
+      target.x = desiredX;
+      target.y = desiredY;
+    };
+    update("spark");
+    update("clockhead");
+  }
+
+  private isButtTargetExposed(side: RallySide) {
+    if (this.state.scoringMode !== "buttHybrid") return true;
+    const target = this.state.buttTargets[side];
+    const excuse = this.state.excuse;
+    const fighter = side === "spark" ? this.state.spark : this.state.clockhead;
+    const toTarget = normalize(target.x - excuse.x, target.y - excuse.y);
+    const toBody = normalize(fighter.x - excuse.x, fighter.y - excuse.y);
+    return toTarget.x * toBody.x + toTarget.y * toBody.y < 0.995;
   }
 
   private updateExcuse(dt: number) {
@@ -721,22 +874,66 @@ export class RallyEngine {
     if (!excuse.inPlay) return;
     const speedBeforeStep = length(excuse.vx, excuse.vy);
     const collisionSteps =
-      speedBeforeStep >= RALLY_CONFIG.excuse.continuousCollisionSpeed ? 2 : 1;
+      speedBeforeStep >= RALLY_CONFIG.excuse.continuousCollisionSpeed
+        ? 3
+        : speedBeforeStep >= RALLY_CONFIG.buttTarget.highSpeedSubstepThreshold
+          ? 2
+          : 1;
     const collisionDt = dt / collisionSteps;
     for (let step = 0; step < collisionSteps; step += 1) {
       const beforeX = excuse.x;
+      const beforeY = excuse.y;
       excuse.x += excuse.vx * collisionDt;
       excuse.y += excuse.vy * collisionDt;
-      if (this.resolveGateCrossing(beforeX)) return;
+      if (this.state.scoringMode === "buttHybrid") {
+        if (this.resolveButtTargetSweep(beforeX, beforeY)) return;
+      } else if (this.resolveGateCrossing(beforeX)) return;
+      this.resolveFighterContact();
       this.resolveBumpers();
       this.resolveStraightWalls();
-      this.resolveGatePosts();
-      this.resolveFighterContact();
+      if (this.state.scoringMode === "portal") this.resolveGatePosts();
       this.capExcuseSpeed();
     }
     excuse.spin += length(excuse.vx, excuse.vy) * dt * 0.008;
     this.updateTrail();
     excuse.speedTier = this.speedTier(length(excuse.vx, excuse.vy));
+  }
+
+  private resolveButtTargetSweep(startX: number, startY: number) {
+    const excuse = this.state.excuse;
+    const candidates = (["spark", "clockhead"] as const)
+      .map(side => {
+        const target = this.state.buttTargets[side];
+        const relativeStartX = startX - target.prevX;
+        const relativeStartY = startY - target.prevY;
+        const relativeEndX = excuse.x - target.x;
+        const relativeEndY = excuse.y - target.y;
+        const dx = relativeEndX - relativeStartX;
+        const dy = relativeEndY - relativeStartY;
+        const hitRadius = target.radius + RALLY_CONFIG.excuse.radius;
+        const c = relativeStartX ** 2 + relativeStartY ** 2 - hitRadius ** 2;
+        if (c <= 0) return { side, t: 0 };
+        const a = dx ** 2 + dy ** 2;
+        if (a <= Number.EPSILON) return null;
+        const b = 2 * (relativeStartX * dx + relativeStartY * dy);
+        const discriminant = b ** 2 - 4 * a * c;
+        if (discriminant < 0) return null;
+        const t = (-b - Math.sqrt(discriminant)) / (2 * a);
+        return t >= 0 && t <= 1 ? { side, t } : null;
+      })
+      .filter((candidate): candidate is { side: RallySide; t: number } => candidate !== null)
+      .sort((left, right) => left.t - right.t);
+    if (candidates.length === 0) return false;
+    if (
+      candidates.length > 1 &&
+      Math.abs(candidates[0].t - candidates[1].t) <= RALLY_CONFIG.buttTarget.tieEpsilon
+    ) return false;
+    const hit = candidates[0];
+    const target = this.state.buttTargets[hit.side];
+    excuse.x = startX + (excuse.x - startX) * hit.t;
+    excuse.y = startY + (excuse.y - startY) * hit.t;
+    this.sealScore(hit.side, "buttHybrid", target.x, target.y);
+    return true;
   }
 
   private updateTrail() {
@@ -783,7 +980,8 @@ export class RallyEngine {
       this.wallBounce();
     }
 
-    const besideGate = excuse.y < gateTop || excuse.y > gateBottom;
+    const besideGate =
+      this.state.scoringMode === "buttHybrid" || excuse.y < gateTop || excuse.y > gateBottom;
     if (
       besideGate &&
       excuse.x < radius &&
@@ -844,6 +1042,7 @@ export class RallyEngine {
     excuse.vy = reflected.y * RALLY_CONFIG.arena.bumperRestitution;
     this.addHitStop(RALLY_CONFIG.feel.bumperHitStopMs);
     this.addTrauma(RALLY_CONFIG.feel.traumaBank);
+    excuse.bankState = true;
     this.emit("bumper_bank", excuse.x, excuse.y);
   }
 
@@ -924,6 +1123,8 @@ export class RallyEngine {
     excuse.lastTouchedBy = side;
     excuse.lastTouchAt = this.state.timeMs;
     excuse.rallyCount += 1;
+    excuse.bankState = false;
+    if (side === "spark") this.state.firstPlayerContact = true;
     excuse.speedTier = this.speedTier(nextSpeed);
     if (side === "spark") {
       this.state.influence = clamp(
@@ -940,10 +1141,21 @@ export class RallyEngine {
   }
 
   private sealPortalScore(victim: RallySide) {
+    const x = victim === "spark" ? 0 : RALLY_CONFIG.arena.width;
+    this.sealScore(victim, "portal", x, this.state.excuse.y);
+  }
+
+  private sealScore(
+    victim: RallySide,
+    mode: "portal" | "buttHybrid",
+    x: number,
+    y: number
+  ) {
     if (this.state.ceremony) return;
     const excuse = this.state.excuse;
     const scorer: RallySide = victim === "spark" ? "clockhead" : "spark";
-    const x = victim === "spark" ? 0 : RALLY_CONFIG.arena.width;
+    const banked = excuse.bankState;
+    const points = banked ? 2 : 1;
     this.state.ceremony = {
       elapsedRealMs: 0,
       committed: false,
@@ -951,11 +1163,11 @@ export class RallyEngine {
       snapshot: {
         victim,
         scorer,
-        points: 1,
-        banked: false,
-        mode: "portal",
+        points,
+        banked,
+        mode,
         x,
-        y: excuse.y,
+        y,
         startX: excuse.x,
         startY: excuse.y,
         vx: excuse.vx,
@@ -964,8 +1176,8 @@ export class RallyEngine {
         ignited: excuse.ignitedUntil > this.state.timeMs,
       },
     };
-    this.state.message = "REALITY GATE SHATTERED!";
-    this.emit("score_sealed", x, excuse.y, victim, 1, false);
+    this.state.message = mode === "portal" ? "REALITY GATE SHATTERED!" : "BUTT BASH!";
+    this.emit("score_sealed", x, y, victim, points, banked);
   }
 
   private advanceCeremony(frameMs: number) {
@@ -987,7 +1199,7 @@ export class RallyEngine {
     ceremony.committed = true;
     const { snapshot } = ceremony;
     if (snapshot.victim === "spark") {
-      this.state.sparkLives = Math.max(0, this.state.sparkLives - snapshot.points);
+      this.state.clockheadScore += snapshot.points;
       this.state.influence = clamp(
         this.state.influence + RALLY_CONFIG.scoring.influenceWhenScoredOn,
         0,
@@ -1002,7 +1214,7 @@ export class RallyEngine {
         snapshot.banked
       );
     } else {
-      this.state.clockheadLives = Math.max(0, this.state.clockheadLives - snapshot.points);
+      this.state.sparkScore += snapshot.points;
       this.state.influence = clamp(
         this.state.influence + RALLY_CONFIG.scoring.influenceOnScore,
         0,
@@ -1018,8 +1230,14 @@ export class RallyEngine {
       );
     }
     this.addTrauma(RALLY_CONFIG.feel.traumaScore);
-    if (this.state.clockheadLives === 0) ceremony.outcome = "victory";
-    if (this.state.sparkLives === 0) ceremony.outcome = "defeat";
+    if (
+      this.state.sparkScore >= RALLY_CONFIG.scoring.winScore ||
+      (this.state.suddenDeath && snapshot.scorer === "spark")
+    ) ceremony.outcome = "victory";
+    if (
+      this.state.clockheadScore >= RALLY_CONFIG.scoring.winScore ||
+      (this.state.suddenDeath && snapshot.scorer === "clockhead")
+    ) ceremony.outcome = "defeat";
   }
 
   private finishCeremony(ceremony: RallyCeremony) {
@@ -1031,7 +1249,7 @@ export class RallyEngine {
     this.emit("ceremony_complete", snapshot.x, snapshot.y, snapshot.victim);
     if (outcome === "victory") {
       this.state.status = "victory";
-      this.state.message = "CLOCKHEAD'S GATE IS HISTORY. Reality wins.";
+      this.state.message = "CONTRACT WON. Reality beats the Excuse.";
       this.emit("victory");
       return;
     }
@@ -1045,8 +1263,8 @@ export class RallyEngine {
     this.state.serveAt = this.state.timeMs;
     this.state.message =
       snapshot.victim === "clockhead"
-        ? "REALITY GATE SHATTERED!"
-        : "Gate hit. Take the serve back.";
+        ? snapshot.mode === "buttHybrid" ? "BUTT BASH!" : "REALITY GATE SHATTERED!"
+        : snapshot.mode === "buttHybrid" ? "Target hit. Take the serve back." : "Gate hit. Take the serve back.";
   }
 
   private ceremonyTotalMs() {
@@ -1062,6 +1280,7 @@ export class RallyEngine {
 
   private wallBounce() {
     const excuse = this.state.excuse;
+    excuse.bankState = true;
     this.emit("wall_bounce", excuse.x, excuse.y);
   }
 

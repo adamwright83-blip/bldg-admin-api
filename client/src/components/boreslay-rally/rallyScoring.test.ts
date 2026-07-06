@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { RallyEngine } from "./rallyEngine";
 import { RALLY_CONFIG } from "./rallyConfig";
 
-function crossing(side: "spark" | "clockhead", lives = 3) {
-  const engine = new RallyEngine();
+function crossing(side: "spark" | "clockhead", scorerScore = 0) {
+  const engine = new RallyEngine({ scoringMode: "portal" });
   engine.start();
   engine.state.serveAt = null;
-  engine.state.sparkLives = side === "spark" ? lives : 3;
-  engine.state.clockheadLives = side === "clockhead" ? lives : 3;
+  engine.state.clockheadScore = side === "spark" ? scorerScore : 0;
+  engine.state.sparkScore = side === "clockhead" ? scorerScore : 0;
   engine.state.excuse.inPlay = true;
   engine.state.excuse.y = 330;
   engine.state.excuse.prevY = 330;
@@ -43,7 +43,7 @@ function finishCeremony(engine: RallyEngine) {
 
 describe("RallyEngine scoring", () => {
   it("lets a first-timer score by tracking the scroll and holding Fire Breath", () => {
-    const engine = new RallyEngine({ seed: 23 });
+    const engine = new RallyEngine({ seed: 23, scoringMode: "buttHybrid" });
     engine.start();
     engine.setAim(RALLY_CONFIG.arena.width, 340);
     engine.setBreath(true);
@@ -55,16 +55,16 @@ describe("RallyEngine scoring", () => {
     }
     expect(engine.state.ceremony).not.toBeNull();
     reachImpact(engine);
-    expect(engine.state.clockheadLives).toBeLessThan(3);
+    expect(engine.state.sparkScore).toBeGreaterThan(0);
   });
 
   it("scores a swept gate-plane crossing at the 980 px/s cap", () => {
     const engine = crossing("clockhead");
     engine.advanceFixedSteps(1);
     expect(engine.state.ceremony?.snapshot.x).toBe(RALLY_CONFIG.arena.width);
-    expect(engine.state.clockheadLives).toBe(3);
+    expect(engine.state.sparkScore).toBe(0);
     reachImpact(engine);
-    expect(engine.state.clockheadLives).toBe(2);
+    expect(engine.state.sparkScore).toBe(1);
     expect(engine.state.excuse.inPlay).toBe(true);
     expect(engine.consumeEvents().some(event => event.type === "gate_score_for")).toBe(true);
     finishCeremony(engine);
@@ -76,7 +76,7 @@ describe("RallyEngine scoring", () => {
     engine.state.excuse.y = 150;
     engine.state.excuse.prevY = 150;
     engine.advanceFixedSteps(1);
-    expect(engine.state.sparkLives).toBe(3);
+    expect(engine.state.clockheadScore).toBe(0);
     expect(engine.state.excuse.vx).toBeGreaterThan(0);
   });
 
@@ -85,18 +85,18 @@ describe("RallyEngine scoring", () => {
     engine.state.excuse.ignitedUntil = 9999;
     engine.advanceFixedSteps(1);
     reachImpact(engine);
-    expect(engine.state.clockheadLives).toBe(2);
+    expect(engine.state.sparkScore).toBe(1);
   });
 
-  it("reaches victory and defeat through gate lives, not hit points", () => {
-    const victory = crossing("clockhead", 1);
+  it("reaches victory and defeat at five points", () => {
+    const victory = crossing("clockhead", 4);
     victory.advanceFixedSteps(1);
     reachImpact(victory);
     expect(victory.state.status).toBe("playing");
     finishCeremony(victory);
     expect(victory.state.status).toBe("victory");
 
-    const defeat = crossing("spark", 1);
+    const defeat = crossing("spark", 4);
     defeat.advanceFixedSteps(1);
     reachImpact(defeat);
     finishCeremony(defeat);
@@ -108,10 +108,10 @@ describe("RallyEngine scoring", () => {
     engine.advanceFixedSteps(1);
     expect(engine.state.ceremony?.committed).toBe(false);
     engine.advanceFrame(ceremonyTotal * 3);
-    expect(engine.state.clockheadLives).toBe(2);
+    expect(engine.state.sparkScore).toBe(1);
     expect(engine.state.ceremony).toBeNull();
     engine.advanceFrame(ceremonyTotal * 3);
-    expect(engine.state.clockheadLives).toBe(2);
+    expect(engine.state.sparkScore).toBe(1);
   });
 
   it("keeps an open mission interactive while a score ceremony runs", () => {

@@ -3,7 +3,7 @@ import { RallyEngine } from "./rallyEngine";
 import { FIXED_STEP_MS, RALLY_CONFIG } from "./rallyConfig";
 
 const playingEngine = (options: ConstructorParameters<typeof RallyEngine>[0] = {}) => {
-  const engine = new RallyEngine(options);
+  const engine = new RallyEngine({ scoringMode: "portal", ...options });
   engine.start();
   engine.state.serveAt = null;
   return engine;
@@ -102,8 +102,8 @@ describe("RallyEngine physics", () => {
     });
     engine.advanceFixedSteps(1);
     expect(engine.state.excuse.vx).toBeGreaterThan(0);
-    expect(engine.state.sparkLives).toBe(3);
-    expect(engine.state.clockheadLives).toBe(3);
+    expect(engine.state.sparkScore).toBe(0);
+    expect(engine.state.clockheadScore).toBe(0);
   });
 
   it("keeps return speed monotonic and caps it at tier three", () => {

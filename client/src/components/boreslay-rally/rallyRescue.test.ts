@@ -5,10 +5,10 @@ import { RALLY_CONFIG } from "./rallyConfig";
 
 describe("Rally rescue mission", () => {
   it("also surfaces at a one-life gate or a tier-three inbound", () => {
-    const engine = new RallyEngine();
+    const engine = new RallyEngine({ scoringMode: "portal" });
     engine.start();
     engine.state.serveAt = null;
-    engine.state.sparkLives = 1;
+    engine.state.clockheadScore = RALLY_CONFIG.scoring.winScore - 1;
     engine.state.excuse.inPlay = true;
     engine.state.excuse.x = 700;
     engine.state.excuse.y = 330;
@@ -19,7 +19,7 @@ describe("Rally rescue mission", () => {
   });
 
   it("scripts the first freeze at rally five and opens the rescue beat", () => {
-    const engine = new RallyEngine({ seed: 7 });
+    const engine = new RallyEngine({ seed: 7, scoringMode: "portal" });
     engine.start();
     engine.state.serveAt = null;
     engine.state.excuse.inPlay = true;
@@ -42,7 +42,7 @@ describe("Rally rescue mission", () => {
   });
 
   it("accepts with one tap, breaks freeze, and returns with triple force", () => {
-    const engine = new RallyEngine();
+    const engine = new RallyEngine({ scoringMode: "portal" });
     engine.start();
     engine.state.serveAt = null;
     engine.state.spark.frozenUntil = 9999;
@@ -64,7 +64,7 @@ describe("Rally rescue mission", () => {
   });
 
   it("treats twenty seconds as time to accept, not time to complete", () => {
-    const engine = new RallyEngine();
+    const engine = new RallyEngine({ scoringMode: "portal" });
     engine.start();
     engine.state.serveAt = null;
     engine.state.mission.status = "ready";

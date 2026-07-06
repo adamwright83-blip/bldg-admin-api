@@ -9,8 +9,11 @@ import "./rally.css";
 type HudState = {
   status: RallyState["status"];
   message: string;
-  sparkLives: number;
-  clockheadLives: number;
+  sparkScore: number;
+  clockheadScore: number;
+  scoringMode: RallyState["scoringMode"];
+  regulationRemainingMs: number;
+  suddenDeath: boolean;
   influence: number;
   energy: number;
   rallyCount: number;
@@ -24,8 +27,11 @@ type HudState = {
 const snapshotHud = (state: RallyState): HudState => ({
   status: state.status,
   message: state.message,
-  sparkLives: state.sparkLives,
-  clockheadLives: state.clockheadLives,
+  sparkScore: state.sparkScore,
+  clockheadScore: state.clockheadScore,
+  scoringMode: state.scoringMode,
+  regulationRemainingMs: state.regulationRemainingMs,
+  suddenDeath: state.suddenDeath,
   influence: state.influence,
   energy: state.spark.energy,
   rallyCount: state.excuse.rallyCount,
@@ -36,7 +42,12 @@ const snapshotHud = (state: RallyState): HudState => ({
   reducedMotion: state.reducedMotion,
 });
 
-const LIFE_SLOTS = [0, 1, 2] as const;
+const SCORE_SLOTS = [0, 1, 2, 3, 4] as const;
+
+const formatClock = (remainingMs: number) => {
+  const seconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+};
 
 export function RallyDemo() {
   const reducedMotionQuery =
@@ -44,7 +55,14 @@ export function RallyDemo() {
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const engineRef = useRef<RallyEngine | null>(null);
   if (!engineRef.current) {
-    engineRef.current = new RallyEngine({ reducedMotion: reducedMotionQuery });
+    const params = new URLSearchParams(window.location.search);
+    const scoring = params.get("scoring");
+    const parsedSeed = Number(params.get("seed"));
+    engineRef.current = new RallyEngine({
+      reducedMotion: reducedMotionQuery,
+      scoringMode: scoring === "portal" ? "portal" : "buttHybrid",
+      seed: Number.isFinite(parsedSeed) && parsedSeed > 0 ? parsedSeed : undefined,
+    });
   }
   const rendererRef = useRef<RallyRenderer | null>(null);
   const particlesRef = useRef(new RallyParticlePool());
@@ -240,7 +258,7 @@ export function RallyDemo() {
       : Math.max(0, (hud.missionDeadline - hud.timeMs) / 1000);
 
   return (
-    <main className={`rally-page${hud.reducedMotion ? " is-reduced" : ""}`}>
+    <main className={`rally-page mode-${hud.scoringMode}${hud.reducedMotion ? " is-reduced" : ""}`}>
       <section className="rally-shell" aria-label="BORESLAY Excuse Rally vertical slice">
         <div
           ref={arenaRef}
@@ -263,9 +281,9 @@ export function RallyDemo() {
           <div className="rally-hud" aria-label="Rally status">
             <div className="rally-fighter rally-fighter--spark">
               <strong>SPARK</strong>
-              <div className="rally-lives" aria-label={`${hud.sparkLives} gate lives remaining`}>
-                {LIFE_SLOTS.map(slot => (
-                  <i key={slot} className={slot < hud.sparkLives ? "is-live" : ""} aria-hidden="true">🔥</i>
+              <div className="rally-lives" aria-label={`${hud.sparkScore} of 5 points`}>
+                {SCORE_SLOTS.map(slot => (
+                  <i key={slot} className={slot < hud.sparkScore ? "is-live" : ""} aria-hidden="true">🔥</i>
                 ))}
               </div>
               <div className="rally-energy" aria-label={`${Math.round(hud.energy)} percent fire energy`}>
@@ -273,6 +291,8 @@ export function RallyDemo() {
               </div>
             </div>
             <div className="rally-center-hud">
+              <small>DAILY CONTRACT</small>
+              <time>{hud.suddenDeath ? "SUDDEN DEATH" : formatClock(hud.regulationRemainingMs)}</time>
               <b>RALLY ×{hud.rallyCount}</b>
               <small>KINGDOM INFLUENCE</small>
               <div className="rally-influence" aria-label={`${Math.round(hud.influence)} percent Kingdom Influence`}>
@@ -281,9 +301,9 @@ export function RallyDemo() {
             </div>
             <div className="rally-fighter rally-fighter--clock">
               <strong>CLOCKHEAD</strong>
-              <div className="rally-lives" aria-label={`${hud.clockheadLives} gate lives remaining`}>
-                {LIFE_SLOTS.map(slot => (
-                  <i key={slot} className={slot < hud.clockheadLives ? "is-live" : ""} aria-hidden="true">⌛</i>
+              <div className="rally-lives" aria-label={`${hud.clockheadScore} of 5 points`}>
+                {SCORE_SLOTS.map(slot => (
+                  <i key={slot} className={slot < hud.clockheadScore ? "is-live" : ""} aria-hidden="true">⌛</i>
                 ))}
               </div>
             </div>
@@ -334,7 +354,7 @@ export function RallyDemo() {
             <div className="rally-gate rally-intro">
               <span>PHASE 1 · VERTICAL SLICE</span>
               <h1>EXCUSE RALLY</h1>
-              <p>Keep the Excuse out of your Gate. Fire it into his.</p>
+              <p>{hud.scoringMode === "buttHybrid" ? "Bank the Excuse off the wall and bash the target behind him." : "Keep the Excuse out of your Gate. Fire it into his."}</p>
               <button type="button" onClick={begin}>ENTER THE RALLY</button>
               <small>WASD / ARROWS · HOLD F / CLICK · SPACE TO DASH</small>
             </div>
