@@ -159,6 +159,9 @@ export const RALLY_CONFIG = {
     outroCardMs: 900,
     scoreStripHeightPx: 210,
   },
+  metrics: {
+    maxBufferedEvents: 1000,
+  },
   powers: {
     slots: 2,
     mobileButtonMinPx: 48,

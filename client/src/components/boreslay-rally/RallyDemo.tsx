@@ -5,6 +5,7 @@ import { RALLY_CONFIG } from "./rallyConfig";
 import { RallyParticlePool } from "./rallyParticles";
 import { RallyRenderer } from "./rallyRenderer";
 import { RallyClipExporter } from "./rallyShare";
+import { RallyMetrics } from "./rallyMetrics";
 import "./rally.css";
 
 type HudState = {
@@ -77,6 +78,14 @@ export function RallyDemo() {
       seed: Number.isFinite(parsedSeed) && parsedSeed > 0 ? parsedSeed : undefined,
     });
   }
+  const metricsRef = useRef<RallyMetrics | null>(null);
+  if (!metricsRef.current) {
+    const params = new URLSearchParams(window.location.search);
+    metricsRef.current = new RallyMetrics(
+      engineRef.current.state.scoringMode,
+      params.has("scoring") ? "url" : "default"
+    );
+  }
   const rendererRef = useRef<RallyRenderer | null>(null);
   const particlesRef = useRef(new RallyParticlePool());
   const audioRef = useRef(new RallyAudio());
@@ -127,12 +136,14 @@ export function RallyDemo() {
       for (const event of events) {
         audioRef.current.handleEvent(event);
         particlesRef.current.handleEvent(event);
+        metricsRef.current!.handleEvent(event, engine.state);
         if (
           (event.type === "gate_score_for" &&
             event.banked &&
             engine.state.scoringMode === "buttHybrid") ||
           event.type === "victory"
         ) {
+          metricsRef.current!.shareOffered();
           setClipRequest({ tick: engine.state.tick, nonce: performance.now() });
         }
       }
@@ -183,6 +194,22 @@ export function RallyDemo() {
     });
     return () => controller.abort();
   }, [clipRequest]);
+
+  useEffect(() => {
+    const onBeforeUnload = () => metricsRef.current?.quitIfActive();
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      metricsRef.current?.quitIfActive();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("debug") !== "1") return;
+    const debugWindow = window as Window & { __boreslayRallyEngine?: RallyEngine };
+    debugWindow.__boreslayRallyEngine = engineRef.current!;
+    return () => { delete debugWindow.__boreslayRallyEngine; };
+  }, []);
 
   const updateMovement = useCallback(() => {
     const keys = keysRef.current;
@@ -258,7 +285,7 @@ export function RallyDemo() {
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = "BORESLAY: EXCUSE RALLY — Phase 1";
+    document.title = "BORESLAY: EXCUSE RALLY";
     return () => {
       document.title = previousTitle;
     };
@@ -266,15 +293,18 @@ export function RallyDemo() {
 
   const begin = () => {
     engineRef.current!.start();
+    metricsRef.current!.matchStart();
     setEngaged(true);
     syncHud();
     arenaRef.current?.focus();
   };
 
   const restart = () => {
+    metricsRef.current!.rematch();
     engineRef.current!.reset();
     particlesRef.current.clear();
     engineRef.current!.start();
+    metricsRef.current!.matchStart();
     setEngaged(true);
     syncHud();
     arenaRef.current?.focus();
@@ -328,6 +358,7 @@ export function RallyDemo() {
     const file = new File([clip.blob], `boreslay-bash.${clip.extension}`, { type: clip.blob.type });
     const shareData = { files: [file], title: "BORESLAY", text: "BORESLAY Rally" };
     if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+      metricsRef.current!.shareAccepted();
       await navigator.share(shareData);
       return;
     }
@@ -336,12 +367,13 @@ export function RallyDemo() {
     anchor.href = url;
     anchor.download = file.name;
     anchor.click();
+    metricsRef.current!.shareAccepted();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   return (
     <main className={`rally-page mode-${hud.scoringMode}${hud.reducedMotion ? " is-reduced" : ""}`}>
-      <section className="rally-shell" aria-label="BORESLAY Excuse Rally vertical slice">
+      <section className="rally-shell" aria-label="BORESLAY Excuse Rally">
         <div
           ref={arenaRef}
           className={`rally-stage is-${hud.status} tier-${hud.speedTier}`}
@@ -478,7 +510,7 @@ export function RallyDemo() {
 
           {hud.status === "idle" && (
             <div className="rally-gate rally-intro">
-              <span>PHASE 1 · VERTICAL SLICE</span>
+              <span>DAILY CONTRACT · FIRST TO 5</span>
               <h1>EXCUSE RALLY</h1>
               <p>{hud.scoringMode === "buttHybrid" ? "Bank the Excuse off the wall and bash the target behind him." : "Keep the Excuse out of your Gate. Fire it into his."}</p>
               <div className="rally-loadout" aria-label="Pick two powers">
@@ -491,9 +523,10 @@ export function RallyDemo() {
                       type="button"
                       className={selected ? "is-selected" : ""}
                       aria-pressed={selected}
-                      onClick={() => {
-                        engineRef.current!.selectPower(power);
-                        syncHud();
+                    onClick={() => {
+                      engineRef.current!.selectPower(power);
+                      metricsRef.current!.powerSelected(power);
+                      syncHud();
                       }}
                     >
                       <b>{meta.name}</b>
@@ -559,6 +592,29 @@ export function RallyDemo() {
           </div>
 
           <div className="rally-status" aria-live="polite">{hud.message}</div>
+          {new URLSearchParams(window.location.search).get("debug") === "1" && (
+            <div className="rally-debug">
+              <b>LOCAL METRICS · {hud.scoringMode}</b>
+              <pre>{JSON.stringify(metricsRef.current!.exportData().session, null, 2)}</pre>
+              <button
+                type="button"
+                onClick={() => {
+                  const blob = new Blob(
+                    [JSON.stringify(metricsRef.current!.exportData(), null, 2)],
+                    { type: "application/json" }
+                  );
+                  const url = URL.createObjectURL(blob);
+                  const anchor = document.createElement("a");
+                  anchor.href = url;
+                  anchor.download = "boreslay-rally-metrics.json";
+                  anchor.click();
+                  setTimeout(() => URL.revokeObjectURL(url), 0);
+                }}
+              >
+                EXPORT JSON
+              </button>
+            </div>
+          )}
         </div>
         <div className="rally-controls" aria-hidden="true">
           <span><b>MOVE</b> WASD / ARROWS</span>

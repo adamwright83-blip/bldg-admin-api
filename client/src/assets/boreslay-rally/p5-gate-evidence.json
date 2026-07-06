@@ -1,0 +1,48 @@
+{
+  "capturedAt": "2026-07-05",
+  "browser": "Google Chrome 149.0.7827.201 headless",
+  "performance": {
+    "status": "FAIL",
+    "scenario": "buttHybrid, active Fire Breath, RED TAPE, HARD NO, DEADLINE STAMP, RECEIPTS, rescue card open with SIMULATED visible",
+    "profiles": [
+      {
+        "profile": "Chrome DevTools Protocol CPU throttle 4x, 1440x1000",
+        "samples": 355,
+        "averageFrameMs": 55.8197,
+        "p90FrameMs": 67.2,
+        "p99FrameMs": 67.7
+      },
+      {
+        "profile": "Chrome DevTools Protocol CPU throttle 2x, 1440x1000",
+        "samples": 355,
+        "averageFrameMs": 25.4442,
+        "p90FrameMs": 34.0,
+        "p99FrameMs": 34.3
+      }
+    ]
+  },
+  "weight": {
+    "status": "PASS",
+    "productionRallyJsGzipBytes": 25540,
+    "productionRallyCssGzipBytes": 4031,
+    "totalCodeGzipBytes": 29571,
+    "budgetBytes": 143360
+  },
+  "mobileReducedMotion": {
+    "status": "PASS",
+    "profile": "844x390 landscape, deviceScaleFactor 2, touch emulation, prefers-reduced-motion reduce",
+    "reducedMotionClass": true,
+    "simulatedLabel": "SIMULATED",
+    "powerButtonPx": [112, 48],
+    "breathButtonPx": [86, 82],
+    "dashButtonPx": [72, 68]
+  },
+  "integrity": {
+    "status": "PASS",
+    "rallyTestFiles": 8,
+    "rallyTests": 39,
+    "mathRandomOccurrencesInEngine": 0,
+    "viteProductionBuild": "PASS"
+  },
+  "humanBehaviorGates": "UNVERIFIED - HUMAN PLAYTEST REQUIRED"
+}
