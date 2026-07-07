@@ -43,6 +43,7 @@ import {
   getVendorById,
   listVendors,
   updateVendorIsActive,
+  updateVendorPlatformFeePercent,
   updateVendorConnectAccount,
   updateVendorConnectStatus,
   createVendorCoverage,
@@ -3803,6 +3804,21 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    updateVendorPlatformFee: protectedProcedure
+      .input(
+        z.object({
+          vendorId: z.number(),
+          platformFeePercent: z.number().min(0).max(100),
+        })
+      )
+      .mutation(async ({ input }) => {
+        await updateVendorPlatformFeePercent(
+          input.vendorId,
+          input.platformFeePercent
+        );
+        return { success: true };
+      }),
+
     setVendorUserPassword: adminProcedure
       .input(
         z.object({
@@ -3927,6 +3943,7 @@ export const appRouter = router({
         );
 
         const currentlyDue = account.requirements?.currently_due ?? [];
+        const eventuallyDue = account.requirements?.eventually_due ?? [];
         const pastDue = account.requirements?.past_due ?? [];
         const disabledReason = account.requirements?.disabled_reason ?? null;
 
@@ -3947,6 +3964,7 @@ export const appRouter = router({
           payoutsEnabled: account.payouts_enabled,
           detailsSubmitted: account.details_submitted,
           currentlyDue,
+          eventuallyDue,
           pastDue,
           disabledReason,
         };

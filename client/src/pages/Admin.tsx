@@ -4343,6 +4343,8 @@ function VendorsTab() {
   const vendorsQuery = trpc.admin.listVendors.useQuery();
   const createVendorMutation = trpc.admin.createVendor.useMutation();
   const updateActiveMutation = trpc.admin.updateVendorActive.useMutation();
+  const updatePlatformFeeMutation =
+    trpc.admin.updateVendorPlatformFee.useMutation();
   const createAccountMutation = trpc.admin.createConnectAccount.useMutation();
   const onboardingLinkMutation =
     trpc.admin.createConnectOnboardingLink.useMutation();
@@ -4363,6 +4365,7 @@ function VendorsTab() {
         payoutsEnabled: boolean;
         detailsSubmitted: boolean;
         currentlyDue: string[];
+        eventuallyDue: string[];
         pastDue: string[];
         disabledReason: string | null;
       }
@@ -4375,6 +4378,9 @@ function VendorsTab() {
   const updateVendorSlugMutation = trpc.admin.updateVendorSlug.useMutation();
   const [vendorEdits, setVendorEdits] = useState<
     Record<number, { slug: string; brandName: string; logoUrl: string }>
+  >({});
+  const [platformFeeEdits, setPlatformFeeEdits] = useState<
+    Record<number, string>
   >({});
   const [vendorPassword, setVendorPassword] = useState<
     Record<number, { email: string; password: string }>
@@ -4411,7 +4417,7 @@ function VendorsTab() {
 
   const handleOpenOnboarding = async (vendorId: number) => {
     const result = await onboardingLinkMutation.mutateAsync({ vendorId });
-    window.open(result.url, "_blank");
+    window.location.assign(result.url);
   };
 
   const handleCopyOnboarding = async (vendorId: number) => {
@@ -4427,6 +4433,29 @@ function VendorsTab() {
 
   const handleToggleActive = async (vendorId: number, isActive: boolean) => {
     await updateActiveMutation.mutateAsync({ vendorId, isActive });
+    vendorsQuery.refetch();
+  };
+
+  const handleUpdatePlatformFee = async (vendorId: number) => {
+    const rawValue = platformFeeEdits[vendorId];
+    const platformFeePercent = Number.parseFloat(rawValue ?? "");
+    if (
+      !Number.isFinite(platformFeePercent) ||
+      platformFeePercent < 0 ||
+      platformFeePercent > 100
+    ) {
+      return;
+    }
+
+    await updatePlatformFeeMutation.mutateAsync({
+      vendorId,
+      platformFeePercent,
+    });
+    setPlatformFeeEdits(prev => {
+      const next = { ...prev };
+      delete next[vendorId];
+      return next;
+    });
     vendorsQuery.refetch();
   };
 
@@ -4573,6 +4602,7 @@ function VendorsTab() {
             const currentlyDue: string[] =
               liveStatus?.currentlyDue ??
               (vendor.currentlyDue ? JSON.parse(vendor.currentlyDue) : []);
+            const eventuallyDue: string[] = liveStatus?.eventuallyDue ?? [];
             const pastDue: string[] =
               liveStatus?.pastDue ??
               (vendor.pastDue ? JSON.parse(vendor.pastDue) : []);
@@ -4584,6 +4614,16 @@ function VendorsTab() {
               liveStatus?.chargesEnabled ?? vendor.chargesEnabled;
             const detailsSubmitted =
               liveStatus?.detailsSubmitted ?? vendor.detailsSubmitted;
+            const platformFeeValue =
+              platformFeeEdits[vendor.id] ??
+              (vendor.platformFeePercent != null
+                ? String(parseFloat(vendor.platformFeePercent as string))
+                : String(import.meta.env.VITE_PLATFORM_FEE_PERCENT ?? "5"));
+            const parsedPlatformFee = Number.parseFloat(platformFeeValue);
+            const platformFeeInvalid =
+              !Number.isFinite(parsedPlatformFee) ||
+              parsedPlatformFee < 0 ||
+              parsedPlatformFee > 100;
 
             return (
               <div key={vendor.id} className="border border-black/10 p-4">
@@ -4608,12 +4648,6 @@ function VendorsTab() {
                         {vendor.email} · {vendor.country ?? "US"}
                       </p>
                     )}
-                    <p className="text-xs text-black/40 mt-0.5">
-                      Platform fee:{" "}
-                      {vendor.platformFeePercent != null
-                        ? `${parseFloat(vendor.platformFeePercent as string)}%`
-                        : `${import.meta.env.VITE_PLATFORM_FEE_PERCENT ?? "5"}% (global default)`}
-                    </p>
                     {vendor.stripeConnectAccountId && (
                       <p className="text-xs text-black/30 mt-0.5 font-mono">
                         {vendor.stripeConnectAccountId.slice(0, 8)}…
@@ -4629,6 +4663,55 @@ function VendorsTab() {
                   >
                     {vendor.isActive ? "Deactivate" : "Activate"}
                   </button>
+                </div>
+
+                {/* Platform fee */}
+                <div className="mb-3 p-3 bg-black/5 rounded text-xs">
+                  <label className="block font-medium text-black/70 mb-1">
+                    Platform fee
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.1}
+                        value={platformFeeValue}
+                        onChange={e =>
+                          setPlatformFeeEdits(prev => ({
+                            ...prev,
+                            [vendor.id]: e.target.value,
+                          }))
+                        }
+                        className="w-24 border border-black/20 rounded-l px-2 py-1.5 text-sm bg-white"
+                        aria-label={`${vendor.name} platform fee percent`}
+                      />
+                      <span className="border border-l-0 border-black/20 rounded-r px-2 py-1.5 text-sm bg-white text-black/50">
+                        %
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs"
+                      disabled={
+                        platformFeeInvalid ||
+                        updatePlatformFeeMutation.isPending
+                      }
+                      onClick={() => handleUpdatePlatformFee(vendor.id)}
+                    >
+                      {updatePlatformFeeMutation.isPending ? (
+                        <Loader2 className="animate-spin w-3 h-3 mr-1" />
+                      ) : null}
+                      Save
+                    </Button>
+                    {vendor.platformFeePercent == null && (
+                      <span className="text-black/40">
+                        Global default currently applies.
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Vendor portal: slug, brand, logo, password */}
@@ -4837,6 +4920,7 @@ function VendorsTab() {
 
                 {/* Requirements */}
                 {(currentlyDue.length > 0 ||
+                  eventuallyDue.length > 0 ||
                   pastDue.length > 0 ||
                   disabledReason) && (
                   <div className="mb-3 p-3 bg-amber-50 border border-amber-200 text-xs">
@@ -4852,6 +4936,18 @@ function VendorsTab() {
                         </span>
                         <ul className="mt-0.5 space-y-0.5 text-amber-700">
                           {currentlyDue.map(r => (
+                            <li key={r}>· {r}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {eventuallyDue.length > 0 && (
+                      <div className="mb-1">
+                        <span className="font-medium text-amber-800">
+                          Eventually due:
+                        </span>
+                        <ul className="mt-0.5 space-y-0.5 text-amber-700">
+                          {eventuallyDue.map(r => (
                             <li key={r}>· {r}</li>
                           ))}
                         </ul>
@@ -4898,7 +4994,7 @@ function VendorsTab() {
                         {onboardingLinkMutation.isPending ? (
                           <Loader2 className="animate-spin w-3 h-3 mr-1" />
                         ) : null}
-                        Open Onboarding
+                        Continue Onboarding
                       </Button>
                       <Button
                         size="sm"
@@ -4908,7 +5004,7 @@ function VendorsTab() {
                         disabled={onboardingLinkMutation.isPending}
                       >
                         <Copy className="w-3 h-3 mr-1" />
-                        Copy Link
+                        Copy Onboarding Link
                       </Button>
                       <Button
                         size="sm"

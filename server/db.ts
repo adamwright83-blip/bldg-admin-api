@@ -1287,6 +1287,18 @@ export async function updateVendorIsActive(id: number, isActive: boolean): Promi
   await db.update(vendors).set({ isActive }).where(eq(vendors.id, id));
 }
 
+export async function updateVendorPlatformFeePercent(
+  id: number,
+  platformFeePercent: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(vendors).set({
+    platformFeePercent: platformFeePercent.toString(),
+  }).where(eq(vendors.id, id));
+}
+
 export async function updateVendorConnectAccount(
   id: number,
   stripeConnectAccountId: string
