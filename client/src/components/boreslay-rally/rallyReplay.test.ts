@@ -6,7 +6,7 @@ import { cleanupCapture, selectRallyExportKind } from "./rallyShare";
 
 describe("Rally deterministic replay and export", () => {
   it("re-simulates identical hashes at every recorded keyframe", () => {
-    const live = new RallyEngine({ seed: 8842, scoringMode: "buttHybrid" });
+    const live = new RallyEngine({ controlMode: "flight", seed: 8842, scoringMode: "buttHybrid" });
     const hashes = new Map<number, string>();
     live.start();
     live.setMovement(1, -0.2);
@@ -30,7 +30,7 @@ describe("Rally deterministic replay and export", () => {
 
   it("replays mission acceptance as data with zero adapter calls", () => {
     const liveAdapter = new BrowserLocalBoreslayDemoAdapter();
-    const live = new RallyEngine({ seed: 19, adapter: liveAdapter });
+    const live = new RallyEngine({ controlMode: "flight", seed: 19, adapter: liveAdapter });
     live.start();
     live.state.mission.status = "ready";
     live.state.mission.readyAt = 0;

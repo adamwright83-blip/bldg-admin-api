@@ -3,7 +3,7 @@ import { FIXED_STEP_MS, RALLY_CONFIG } from "./rallyConfig";
 import { RallyEngine } from "./rallyEngine";
 
 const playing = () => {
-  const engine = new RallyEngine({ scoringMode: "buttHybrid", seed: 91 });
+  const engine = new RallyEngine({ controlMode: "flight", scoringMode: "buttHybrid", seed: 91 });
   engine.start();
   engine.state.serveAt = null;
   return engine;

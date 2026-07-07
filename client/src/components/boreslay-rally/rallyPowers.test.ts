@@ -4,7 +4,7 @@ import { RallyEngine } from "./rallyEngine";
 import { predictReceiptPath } from "./rallyRenderer";
 
 const playing = () => {
-  const engine = new RallyEngine({ scoringMode: "buttHybrid", seed: 712 });
+  const engine = new RallyEngine({ controlMode: "flight", scoringMode: "buttHybrid", seed: 712 });
   engine.start();
   engine.state.serveAt = null;
   engine.state.powers.aiLoadout = [];
@@ -20,8 +20,8 @@ const exposeClockTarget = (engine: RallyEngine) => {
 
 describe("Rally power loadout", () => {
   it("uses seeded AI picks and exactly two slots", () => {
-    const one = new RallyEngine({ seed: 44 });
-    const two = new RallyEngine({ seed: 44 });
+    const one = new RallyEngine({ controlMode: "flight", seed: 44 });
+    const two = new RallyEngine({ controlMode: "flight", seed: 44 });
     expect(one.state.powers.aiLoadout).toEqual(two.state.powers.aiLoadout);
     expect(new Set(one.state.powers.aiLoadout).size).toBe(RALLY_CONFIG.powers.slots);
   });

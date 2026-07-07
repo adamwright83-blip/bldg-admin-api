@@ -12,8 +12,16 @@ export type RallyControlMode = "duel" | "flight";
 export type RallyPowerId = "redTape" | "hardNo" | "deadlineStamp" | "receipts";
 export type RallyTelegraph = "none" | "swat" | "freeze";
 export type RallyMissionStatus = "locked" | "ready" | "accepted" | "expired";
+export type RallyStrikeKind = "flat" | "arc" | "spike" | "lob";
+export type RallyDuelIntent = "PRESSURE" | "CONTEST" | "GUARD" | "BAIT";
 export type RallyEventType =
   | "serve"
+  | "jump"
+  | "strike_crack"
+  | "strike_whiff"
+  | "contact_dink"
+  | "contact_header"
+  | "crossover"
   | "breath_start"
   | "breath_loop"
   | "breath_contact"
@@ -115,9 +123,25 @@ export type RallyExcuse = RallyVec & {
   rallyCount: number;
   bankState: boolean;
   inPlay: boolean;
+  stallMs: number;
   trailX: Float32Array;
   trailY: Float32Array;
   trailHead: number;
+};
+
+export type RallyDuelFighter = {
+  vy: number;
+  grounded: boolean;
+  coyoteMs: number;
+  jumpBufferMs: number;
+  moveDir: number;
+  vxInst: number;
+  strikeCooldownUntil: number;
+  swingUntil: number;
+  swingKind: RallyStrikeKind | null;
+  squash: number;
+  meter: number;
+  surgeUntil: number;
 };
 
 export type ButtTarget = RallyVec & {
@@ -162,6 +186,17 @@ export type RallyState = {
     freezeReadyAt: number;
     freezeUses: number;
     exposedUntil: number;
+  };
+  duel: {
+    spark: RallyDuelFighter;
+    clockhead: RallyDuelFighter;
+    aiIntent: RallyDuelIntent;
+    aiIntentUntil: number;
+    aiTilt: number;
+    aiThinkAt: number;
+    aiPendingStrikeAt: number;
+    aiPendingStrikeKind: 0 | 1;
+    playerHabits: Record<RallyStrikeKind | "header", number>;
   };
   buttTargets: Record<RallySide, ButtTarget>;
   excuse: RallyExcuse;
@@ -208,7 +243,19 @@ export type RallyEngineOptions = {
 export type RallyInputEvent = {
   tick: number;
   order: number;
-  type: "start" | "movement" | "aim" | "breath" | "dash" | "power_selected" | "power_cast" | "mission_accept" | "ai_power";
+  type:
+    | "start"
+    | "movement"
+    | "aim"
+    | "jump"
+    | "strike"
+    | "breath"
+    | "dash"
+    | "power_selected"
+    | "power_cast"
+    | "mission_accept"
+    | "ai_power"
+    | "ai_decision";
   payload?: Record<string, unknown>;
 };
 
@@ -263,6 +310,7 @@ function createExcuse(): RallyExcuse {
     rallyCount: 0,
     bankState: false,
     inPlay: false,
+    stallMs: 0,
     trailX: new Float32Array(points),
     trailY: new Float32Array(points),
     trailHead: 0,
@@ -276,6 +324,21 @@ const createButtTarget = (x: number, y: number): ButtTarget => ({
   prevY: y,
   radius: RALLY_CONFIG.buttTarget.radius,
   wobble: { x: 0, y: 0, vx: 0, vy: 0 },
+});
+
+const createDuelFighter = (): RallyDuelFighter => ({
+  vy: 0,
+  grounded: true,
+  coyoteMs: RALLY_CONFIG.duel.coyoteMs,
+  jumpBufferMs: 0,
+  moveDir: 0,
+  vxInst: 0,
+  strikeCooldownUntil: 0,
+  swingUntil: 0,
+  swingKind: null,
+  squash: 0,
+  meter: 0,
+  surgeUntil: 0,
 });
 
 export function createRallyState(
@@ -333,6 +396,17 @@ export function createRallyState(
       freezeReadyAt: 0,
       freezeUses: 0,
       exposedUntil: 0,
+    },
+    duel: {
+      spark: createDuelFighter(),
+      clockhead: createDuelFighter(),
+      aiIntent: "CONTEST",
+      aiIntentUntil: 0,
+      aiTilt: 0,
+      aiThinkAt: 0,
+      aiPendingStrikeAt: 0,
+      aiPendingStrikeKind: 0,
+      playerHabits: { flat: 0, arc: 0, spike: 0, lob: 0, header: 0 },
     },
     buttTargets: {
       spark: createButtTarget(
@@ -426,7 +500,8 @@ export class RallyEngine {
       ? "Hit the target behind Clockhead. Bank shots score double."
       : "Rally the Excuse into Clockhead's Reality Gate.";
     if (!this.state.excuse.inPlay && this.state.serveAt === null) {
-      this.state.serveAt = this.state.timeMs + 480;
+      this.state.serveAt = this.state.timeMs +
+        (this.state.controlMode === "duel" ? RALLY_CONFIG.duel.serveMs : 480);
       this.state.servingSide = "clockhead";
     }
     this.emit("status");
@@ -484,6 +559,18 @@ export class RallyEngine {
     this.aim = normalize(x - this.state.spark.x, y - this.state.spark.y);
     this.state.spark.facing = { ...this.aim };
     this.recordInput("aim", { x, y });
+  }
+
+  jump() {
+    if (this.state.controlMode !== "duel" || this.state.status !== "playing") return false;
+    this.state.duel.spark.jumpBufferMs = RALLY_CONFIG.duel.bufferMs;
+    this.recordInput("jump");
+    return true;
+  }
+
+  duelStrike(kind: "strike" | "loft") {
+    if (this.state.controlMode !== "duel") return false;
+    return this.tryDuelStrike("spark", kind === "loft" ? 1 : 0);
   }
 
   selectPower(power: RallyPowerId) {
@@ -683,6 +770,8 @@ export class RallyEngine {
       case "start": this.start(); break;
       case "movement": this.setMovement(Number(payload.x), Number(payload.y)); break;
       case "aim": this.setAim(Number(payload.x), Number(payload.y)); break;
+      case "jump": this.jump(); break;
+      case "strike": this.duelStrike(payload.kind === "loft" ? "loft" : "strike"); break;
       case "breath": this.setBreath(Boolean(payload.active)); break;
       case "dash": this.dash(); break;
       case "power_selected": this.selectPower(payload.power as RallyPowerId); break;
@@ -698,6 +787,7 @@ export class RallyEngine {
         this.applyRecordedMission(payload.result as unknown as SimulatedCrewMissionResult);
         break;
       case "ai_power":
+      case "ai_decision":
         break;
     }
   }
@@ -737,20 +827,31 @@ export class RallyEngine {
     const values = [
       state.timeMs,
       state.tick,
+      state.controlMode === "duel" ? 1 : 0,
       state.spark.x,
       state.spark.y,
       state.spark.energy,
       state.spark.frozenUntil,
+      state.duel.spark.vy,
+      state.duel.spark.grounded ? 1 : 0,
+      state.duel.spark.strikeCooldownUntil,
+      state.duel.spark.meter,
       state.clockhead.x,
       state.clockhead.y,
       state.clockhead.staggerUntil,
       state.clockhead.whiffUntil,
+      state.duel.clockhead.vy,
+      state.duel.clockhead.grounded ? 1 : 0,
+      state.duel.clockhead.strikeCooldownUntil,
+      state.duel.clockhead.meter,
+      state.duel.aiTilt,
       state.excuse.x,
       state.excuse.y,
       state.excuse.vx,
       state.excuse.vy,
       state.excuse.rallyCount,
       state.excuse.bankState ? 1 : 0,
+      state.excuse.stallMs,
       state.sparkScore,
       state.clockheadScore,
       state.regulationRemainingMs,
@@ -771,6 +872,10 @@ export class RallyEngine {
   private stepFixed(dtMs: number) {
     const state = this.state;
     if (state.status !== "playing" || state.ceremony) return;
+    if (state.controlMode === "duel") {
+      this.stepDuelFixed(dtMs);
+      return;
+    }
     const tutorialSlow =
       !state.firstPlayerContact &&
       state.tutorialSlowUntil > state.timeMs;
@@ -813,6 +918,432 @@ export class RallyEngine {
     this.updatePowers();
     this.updateExcuse(dt);
     this.maybeTriggerRescue();
+  }
+
+  private stepDuelFixed(dtMs: number) {
+    const state = this.state;
+    const dt = dtMs / 1000;
+    state.tick += 1;
+    state.timeMs += dtMs;
+    this.updateRegulationClock(dtMs);
+    if (state.status !== "playing") return;
+    if (!state.reducedMotion) {
+      state.trauma = Math.max(
+        0,
+        state.trauma - RALLY_CONFIG.feel.traumaDecayPerSecond * dt
+      );
+    } else {
+      state.trauma = 0;
+    }
+
+    state.spark.prevX = state.spark.x;
+    state.spark.prevY = state.spark.y;
+    state.clockhead.prevX = state.clockhead.x;
+    state.clockhead.prevY = state.clockhead.y;
+    state.buttTargets.spark.prevX = state.buttTargets.spark.x;
+    state.buttTargets.spark.prevY = state.buttTargets.spark.y;
+    state.buttTargets.clockhead.prevX = state.buttTargets.clockhead.x;
+    state.buttTargets.clockhead.prevY = state.buttTargets.clockhead.y;
+    state.excuse.prevX = state.excuse.x;
+    state.excuse.prevY = state.excuse.y;
+
+    this.updateMission();
+    this.updateServe();
+    this.updateDuelAi(dt);
+    this.updateDuelFighter("spark", dt, this.movement.x);
+    this.updateDuelFighter("clockhead", dt, state.duel.clockhead.moveDir);
+    this.resolveDuelFighterPush();
+    this.updateDuelFacing();
+    this.updateButtTargets(dt);
+    this.updateDuelExcuse(dt);
+    this.maybeTriggerRescue();
+  }
+
+  private resetDuelFightersForServe() {
+    const { groundY } = RALLY_CONFIG.duel;
+    this.state.spark.x = 300;
+    this.state.spark.y = groundY;
+    this.state.spark.prevX = this.state.spark.x;
+    this.state.spark.prevY = this.state.spark.y;
+    this.state.spark.facing = { x: 1, y: 0 };
+    this.state.spark.frozenUntil = 0;
+    this.state.clockhead.x = 900;
+    this.state.clockhead.y = groundY;
+    this.state.clockhead.prevX = this.state.clockhead.x;
+    this.state.clockhead.prevY = this.state.clockhead.y;
+    this.state.clockhead.facing = { x: -1, y: 0 };
+    this.state.clockhead.telegraph = "none";
+    this.state.clockhead.telegraphUntil = 0;
+    this.state.duel.spark = { ...createDuelFighter(), meter: this.state.duel.spark.meter };
+    this.state.duel.clockhead = { ...createDuelFighter(), meter: this.state.duel.clockhead.meter };
+  }
+
+  private updateDuelFighter(side: RallySide, dt: number, moveX: number) {
+    const fighter = side === "spark" ? this.state.spark : this.state.clockhead;
+    const duel = this.state.duel[side];
+    const radius = side === "spark" ? RALLY_CONFIG.spark.radius : RALLY_CONFIG.clockhead.radius;
+    const speed = side === "spark" ? RALLY_CONFIG.duel.moveSpeedP : RALLY_CONFIG.duel.moveSpeedAI;
+    const frozen = side === "spark" && this.state.timeMs < fighter.frozenUntil;
+    const moveDir = frozen ? 0 : clamp(moveX, -1, 1);
+    duel.moveDir = moveDir;
+    duel.vxInst = moveDir * speed;
+    fighter.x = clamp(fighter.x + duel.vxInst * dt, radius + 42, RALLY_CONFIG.arena.width - radius - 42);
+
+    if (duel.grounded) duel.coyoteMs = RALLY_CONFIG.duel.coyoteMs;
+    else duel.coyoteMs = Math.max(0, duel.coyoteMs - dt * 1000);
+    if (frozen) duel.jumpBufferMs = 0;
+    else duel.jumpBufferMs = Math.max(0, duel.jumpBufferMs - dt * 1000);
+    if (duel.jumpBufferMs > 0 && (duel.grounded || duel.coyoteMs > 0)) {
+      duel.vy = -RALLY_CONFIG.duel.jumpVelocity;
+      duel.grounded = false;
+      duel.coyoteMs = 0;
+      duel.jumpBufferMs = 0;
+      this.emit("jump", fighter.x, fighter.y, side);
+    }
+
+    if (!duel.grounded) {
+      duel.vy += RALLY_CONFIG.duel.gravity * dt;
+      fighter.y += duel.vy * dt;
+      if (fighter.y >= RALLY_CONFIG.duel.groundY) {
+        fighter.y = RALLY_CONFIG.duel.groundY;
+        duel.vy = 0;
+        duel.grounded = true;
+        duel.squash = Math.max(duel.squash, 0.5);
+      }
+    }
+    duel.swingUntil = Math.max(0, duel.swingUntil - dt * 1000);
+    if (duel.swingUntil === 0) duel.swingKind = null;
+    duel.squash = Math.max(0, duel.squash - dt * 3);
+    if (duel.surgeUntil > 0) duel.surgeUntil = Math.max(0, duel.surgeUntil - dt * 1000);
+  }
+
+  private updateDuelFacing() {
+    const gap = this.state.clockhead.x - this.state.spark.x;
+    if (gap > RALLY_CONFIG.duel.fighterDeadband && this.state.spark.facing.x !== 1) {
+      this.state.spark.facing = { x: 1, y: 0 };
+      this.state.clockhead.facing = { x: -1, y: 0 };
+      this.state.duel.aiTilt = clamp(this.state.duel.aiTilt + RALLY_CONFIG.duel.tiltCrossover, 0, 1);
+      this.emit("crossover", this.state.spark.x, this.state.spark.y, "spark");
+    } else if (gap < -RALLY_CONFIG.duel.fighterDeadband && this.state.spark.facing.x !== -1) {
+      this.state.spark.facing = { x: -1, y: 0 };
+      this.state.clockhead.facing = { x: 1, y: 0 };
+      this.state.duel.aiTilt = clamp(this.state.duel.aiTilt + RALLY_CONFIG.duel.tiltCrossover, 0, 1);
+      this.emit("crossover", this.state.spark.x, this.state.spark.y, "spark");
+    }
+  }
+
+  private resolveDuelFighterPush() {
+    const spark = this.state.spark;
+    const clockhead = this.state.clockhead;
+    const dx = clockhead.x - spark.x;
+    const dy = (clockhead.y - RALLY_CONFIG.clockhead.radius * 0.2) -
+      (spark.y - RALLY_CONFIG.spark.radius * 0.2);
+    const min = (RALLY_CONFIG.spark.radius + RALLY_CONFIG.clockhead.radius) *
+      RALLY_CONFIG.duel.fighterSoftMinScale;
+    const distance = length(dx, dy);
+    if (distance <= 0 || distance >= min || Math.abs(dy) >= min * RALLY_CONFIG.duel.fighterSoftOverlap) return;
+    const push = ((min - distance) * 0.5) * Math.sign(dx || 1);
+    spark.x = clamp(spark.x - push, RALLY_CONFIG.spark.radius + 42, RALLY_CONFIG.arena.width - RALLY_CONFIG.spark.radius - 42);
+    clockhead.x = clamp(clockhead.x + push, RALLY_CONFIG.clockhead.radius + 42, RALLY_CONFIG.arena.width - RALLY_CONFIG.clockhead.radius - 42);
+  }
+
+  private updateDuelAi(dt: number) {
+    const duel = this.state.duel;
+    if (this.state.timeMs >= duel.aiIntentUntil) {
+      this.rollDuelAiIntent();
+    }
+    duel.aiTilt = Math.max(0, duel.aiTilt - RALLY_CONFIG.duel.tiltDecayPerSecond * dt);
+    if (this.state.timeMs >= duel.aiThinkAt) {
+      duel.aiThinkAt = this.state.timeMs + 90;
+      const targetX = this.duelAiTargetX();
+      const delta = targetX - this.state.clockhead.x;
+      duel.clockhead.moveDir = Math.abs(delta) > 14 ? Math.sign(delta) : 0;
+      const blocked =
+        duel.clockhead.grounded &&
+        duel.clockhead.moveDir !== 0 &&
+        Math.sign(this.state.spark.x - this.state.clockhead.x) === duel.clockhead.moveDir &&
+        Math.abs(this.state.spark.x - this.state.clockhead.x) <
+          RALLY_CONFIG.spark.radius + RALLY_CONFIG.clockhead.radius + 26 &&
+        this.state.duel.spark.grounded;
+      const headerSeek =
+        duel.aiIntent === "PRESSURE" &&
+        duel.clockhead.grounded &&
+        Math.abs(this.state.excuse.x - this.state.clockhead.x) < 120 &&
+        this.state.excuse.y < this.state.clockhead.y - 40 &&
+        this.state.excuse.y > 60;
+      if (blocked || headerSeek) duel.clockhead.jumpBufferMs = RALLY_CONFIG.duel.bufferMs;
+    }
+    const inRange =
+      this.state.excuse.inPlay &&
+      length(this.state.excuse.x - this.state.clockhead.x, this.state.excuse.y - this.state.clockhead.y) <=
+        RALLY_CONFIG.duel.strikeRange + RALLY_CONFIG.duel.excuseRadius;
+    if (duel.aiPendingStrikeAt > 0 && this.state.timeMs >= duel.aiPendingStrikeAt) {
+      duel.aiPendingStrikeAt = 0;
+      if (inRange) this.tryDuelStrike("clockhead", duel.aiPendingStrikeKind);
+    } else if (
+      inRange &&
+      this.state.timeMs >= duel.clockhead.strikeCooldownUntil &&
+      this.state.timeMs - this.state.excuse.lastTouchAt > 250
+    ) {
+      const kind = this.state.duel.spark.grounded ? (this.random() < 0.62 ? 1 : 0) : 0;
+      if (duel.aiIntent === "BAIT" && this.random() < 0.6) {
+        duel.aiPendingStrikeAt =
+          this.state.timeMs +
+          RALLY_CONFIG.duel.aiBaitDelayMinMs +
+          this.random() * (RALLY_CONFIG.duel.aiBaitDelayMaxMs - RALLY_CONFIG.duel.aiBaitDelayMinMs);
+        duel.aiPendingStrikeKind = kind;
+        this.recordInput("ai_decision", { intent: duel.aiIntent, pendingStrikeAt: duel.aiPendingStrikeAt, kind });
+      } else {
+        this.tryDuelStrike("clockhead", kind);
+      }
+    }
+  }
+
+  private duelAiTargetX() {
+    const { aiIntent } = this.state.duel;
+    const { width } = RALLY_CONFIG.arena;
+    switch (aiIntent) {
+      case "PRESSURE":
+        return clamp(this.state.excuse.x + (this.state.excuse.x > this.state.clockhead.x ? 20 : -20), 110, width - 110);
+      case "GUARD":
+        return clamp(this.state.excuse.x + 130, width * 0.55, width - 120);
+      case "BAIT":
+        return width * 0.62 + Math.sin(this.state.timeMs / 300) * 26;
+      case "CONTEST":
+      default:
+        return clamp(this.state.excuse.x + 40, width * 0.3, width - 110);
+    }
+  }
+
+  private rollDuelAiIntent() {
+    const duel = this.state.duel;
+    const diff = this.state.clockheadScore - this.state.sparkScore;
+    const seconds = this.state.regulationRemainingMs / 1000;
+    const tilt = duel.aiTilt;
+    const weights: Record<RallyDuelIntent, number> = {
+      PRESSURE: 0.28 * RALLY_CONFIG.duel.aiAggro + tilt * 0.25,
+      CONTEST: 0.32,
+      GUARD: 0.22 - tilt * 0.08,
+      BAIT: 0.18 - tilt * 0.05,
+    };
+    if (diff < 0) weights.PRESSURE += 0.14;
+    if (diff > 1) {
+      weights.GUARD += 0.12;
+      weights.BAIT += 0.06;
+    }
+    if (seconds < 20 && diff <= 0) weights.PRESSURE += 0.22;
+    if (this.state.excuse.x < RALLY_CONFIG.arena.width * 0.42) weights.CONTEST += 0.1;
+    let total = 0;
+    for (const intent of Object.keys(weights) as RallyDuelIntent[]) {
+      weights[intent] = Math.max(0.02, weights[intent]);
+      total += weights[intent];
+    }
+    let roll = this.random() * total;
+    for (const intent of Object.keys(weights) as RallyDuelIntent[]) {
+      roll -= weights[intent];
+      if (roll <= 0) {
+        duel.aiIntent = intent;
+        break;
+      }
+    }
+    duel.aiIntentUntil =
+      this.state.timeMs +
+      RALLY_CONFIG.duel.aiIntentMinMs +
+      this.random() * (RALLY_CONFIG.duel.aiIntentMaxMs - RALLY_CONFIG.duel.aiIntentMinMs);
+    this.recordInput("ai_decision", { intent: duel.aiIntent, until: duel.aiIntentUntil });
+  }
+
+  private tryDuelStrike(side: RallySide, strikeButton: 0 | 1) {
+    if (this.state.status !== "playing" || !this.state.excuse.inPlay) return false;
+    const actor = side === "spark" ? this.state.spark : this.state.clockhead;
+    const duel = this.state.duel[side];
+    if (side === "spark" && this.state.timeMs < actor.frozenUntil) return false;
+    if (this.state.timeMs < duel.strikeCooldownUntil) return false;
+    const grounded = duel.grounded;
+    const kind: RallyStrikeKind = grounded
+      ? strikeButton === 0 ? "flat" : "arc"
+      : strikeButton === 0 ? "spike" : "lob";
+    duel.strikeCooldownUntil = this.state.timeMs + RALLY_CONFIG.duel.strikeCooldownMs;
+    duel.swingUntil = 140;
+    duel.swingKind = kind;
+    if (side === "spark") {
+      this.state.duel.playerHabits[kind] += 1;
+      this.recordInput("strike", { kind: strikeButton === 0 ? "strike" : "loft", cell: kind });
+    } else {
+      this.recordInput("ai_decision", { action: "strike", cell: kind });
+    }
+    const dx = this.state.excuse.x - actor.x;
+    const dy = this.state.excuse.y - actor.y;
+    if (length(dx, dy) > RALLY_CONFIG.duel.strikeRange + RALLY_CONFIG.duel.excuseRadius) {
+      this.emit("strike_whiff", actor.x, actor.y, side);
+      return false;
+    }
+
+    const { speed, angle } = this.duelStrikeSpec(kind);
+    const multiplier = side === "spark" && duel.surgeUntil > 0 ? RALLY_CONFIG.duel.surgeMultiplier : 1;
+    const radians = (angle * Math.PI) / 180;
+    const direction = actor.facing.x >= 0 ? 1 : -1;
+    this.state.excuse.vx = Math.cos(radians) * speed * multiplier * direction;
+    this.state.excuse.vy = -Math.sin(radians) * speed * multiplier;
+    this.state.excuse.spin = 8 * direction;
+    this.state.excuse.lastTouchedBy = side;
+    this.state.excuse.lastTouchAt = this.state.timeMs;
+    this.state.excuse.rallyCount += 1;
+    this.state.excuse.bankState = false;
+    this.state.excuse.stallMs = 0;
+    this.state.excuse.speedTier = this.speedTier(length(this.state.excuse.vx, this.state.excuse.vy));
+    if (side === "spark") this.state.firstPlayerContact = true;
+    duel.meter = clamp(duel.meter + RALLY_CONFIG.duel.powerRate, 0, 100);
+    this.addHitStop(RALLY_CONFIG.feel.returnHitStopMs);
+    this.addTrauma(RALLY_CONFIG.feel.traumaReturn);
+    this.emit("strike_crack", this.state.excuse.x, this.state.excuse.y, side);
+    return true;
+  }
+
+  private duelStrikeSpec(kind: RallyStrikeKind) {
+    switch (kind) {
+      case "flat":
+        return { speed: RALLY_CONFIG.duel.strikeFlatSpeed, angle: RALLY_CONFIG.duel.strikeFlatAngle };
+      case "arc":
+        return { speed: RALLY_CONFIG.duel.strikeArcSpeed, angle: RALLY_CONFIG.duel.strikeArcAngle };
+      case "spike":
+        return { speed: RALLY_CONFIG.duel.strikeSpikeSpeed, angle: RALLY_CONFIG.duel.strikeSpikeAngle };
+      case "lob":
+        return { speed: RALLY_CONFIG.duel.strikeLobSpeed, angle: RALLY_CONFIG.duel.strikeLobAngle };
+    }
+  }
+
+  private updateDuelExcuse(dt: number) {
+    const excuse = this.state.excuse;
+    if (!excuse.inPlay) return;
+    const speedBeforeStep = length(excuse.vx, excuse.vy);
+    const collisionSteps =
+      speedBeforeStep >= RALLY_CONFIG.excuse.continuousCollisionSpeed
+        ? 3
+        : speedBeforeStep >= RALLY_CONFIG.buttTarget.highSpeedSubstepThreshold
+          ? 2
+          : 1;
+    const collisionDt = dt / collisionSteps;
+    for (let step = 0; step < collisionSteps; step += 1) {
+      excuse.vy += RALLY_CONFIG.duel.gravity * RALLY_CONFIG.duel.ballGravScale * collisionDt;
+      excuse.vx *= 1 - RALLY_CONFIG.duel.drag * collisionDt;
+      this.capDuelExcuseSpeed();
+      const beforeX = excuse.x;
+      const beforeY = excuse.y;
+      excuse.x += excuse.vx * collisionDt;
+      excuse.y += excuse.vy * collisionDt;
+      if (this.state.scoringMode === "buttHybrid") {
+        if (this.resolveButtTargetSweep(beforeX, beforeY)) return;
+      }
+      this.resolveDuelFighterContact();
+      this.resolveDuelStraightWalls();
+      this.capDuelExcuseSpeed();
+    }
+    const speed = length(excuse.vx, excuse.vy);
+    if (speed < 90 && excuse.y > RALLY_CONFIG.duel.groundY - 40) {
+      excuse.stallMs += dt * 1000;
+      if (excuse.stallMs > RALLY_CONFIG.duel.antiStallMs) {
+        excuse.vy = -640;
+        excuse.vx = (this.random() < 0.5 ? -1 : 1) * 220;
+        excuse.stallMs = 0;
+      }
+    } else {
+      excuse.stallMs = 0;
+    }
+    excuse.spin += length(excuse.vx, excuse.vy) * dt * 0.008;
+    this.updateTrail();
+    excuse.speedTier = this.speedTier(length(excuse.vx, excuse.vy));
+  }
+
+  private resolveDuelStraightWalls() {
+    const excuse = this.state.excuse;
+    const radius = RALLY_CONFIG.duel.excuseRadius;
+    const floorY = RALLY_CONFIG.duel.groundY + RALLY_CONFIG.duel.groundPad - radius;
+    if (excuse.x < radius) {
+      excuse.x = radius;
+      excuse.vx = Math.abs(excuse.vx) * RALLY_CONFIG.duel.restWall;
+      this.wallBounce();
+    } else if (excuse.x > RALLY_CONFIG.arena.width - radius) {
+      excuse.x = RALLY_CONFIG.arena.width - radius;
+      excuse.vx = -Math.abs(excuse.vx) * RALLY_CONFIG.duel.restWall;
+      this.wallBounce();
+    }
+    if (excuse.y < radius) {
+      excuse.y = radius;
+      excuse.vy = Math.abs(excuse.vy) * RALLY_CONFIG.duel.restWall;
+      this.wallBounce();
+    } else if (excuse.y > floorY) {
+      excuse.y = floorY;
+      excuse.vy = -Math.abs(excuse.vy) * RALLY_CONFIG.duel.restFloor;
+      if (Math.abs(excuse.vx) < 70) {
+        excuse.vx = (70 + this.random() * 40) * Math.sign(excuse.vx || (this.random() < 0.5 ? -1 : 1));
+      }
+      this.emit("wall_bounce", excuse.x, excuse.y);
+    }
+  }
+
+  private resolveDuelFighterContact() {
+    if (this.state.timeMs - this.state.excuse.lastTouchAt < RALLY_CONFIG.excuse.contactLockMs) return;
+    if (this.resolveDuelBodyContact("spark")) return;
+    this.resolveDuelBodyContact("clockhead");
+  }
+
+  private resolveDuelBodyContact(side: RallySide) {
+    const fighter = side === "spark" ? this.state.spark : this.state.clockhead;
+    const duel = this.state.duel[side];
+    const fighterRadius = side === "spark" ? RALLY_CONFIG.spark.radius : RALLY_CONFIG.clockhead.radius;
+    const fx = fighter.x;
+    const fy = fighter.y - fighterRadius * 0.2;
+    const excuse = this.state.excuse;
+    const dx = excuse.x - fx;
+    const dy = excuse.y - fy;
+    const distance = length(dx, dy);
+    const minimum = RALLY_CONFIG.duel.excuseRadius + fighterRadius;
+    if (distance <= 0 || distance >= minimum) return false;
+    const nx = dx / distance;
+    const ny = dy / distance;
+    excuse.x = fx + nx * minimum;
+    excuse.y = fy + ny * minimum;
+    const relVx = excuse.vx - duel.vxInst;
+    const relVy = excuse.vy - duel.vy;
+    const dot = relVx * nx + relVy * ny;
+    if (dot >= 0) return false;
+    excuse.vx = (relVx - 2 * dot * nx) * 0.82 + duel.vxInst * RALLY_CONFIG.duel.headerPower;
+    excuse.vy = (relVy - 2 * dot * ny) * 0.82 + duel.vy * 0.9 * RALLY_CONFIG.duel.headerPower;
+    const standingDink = duel.grounded && Math.abs(duel.vxInst) < 1 && Math.abs(duel.vy) < 1;
+    if (standingDink) {
+      const speed = length(excuse.vx, excuse.vy);
+      if (speed > RALLY_CONFIG.duel.maxDinkSpeed) {
+        const scale = RALLY_CONFIG.duel.maxDinkSpeed / speed;
+        excuse.vx *= scale;
+        excuse.vy *= scale;
+      }
+    }
+    excuse.lastTouchedBy = side;
+    excuse.lastTouchAt = this.state.timeMs;
+    excuse.rallyCount += 1;
+    excuse.bankState = false;
+    excuse.stallMs = 0;
+    if (side === "spark") this.state.firstPlayerContact = true;
+    duel.meter = clamp(duel.meter + RALLY_CONFIG.duel.powerRate * RALLY_CONFIG.duel.touchPowerScale, 0, 100);
+    const header = !duel.grounded || Math.abs(duel.vxInst) > 60;
+    if (side === "spark" && header) this.state.duel.playerHabits.header += 1;
+    const speed = length(excuse.vx, excuse.vy);
+    excuse.speedTier = this.speedTier(speed);
+    this.emit(header ? "contact_header" : "contact_dink", excuse.x, excuse.y, side);
+    if (header && speed > RALLY_CONFIG.buttTarget.highSpeedSubstepThreshold) {
+      this.addTrauma(RALLY_CONFIG.feel.traumaReturn * 0.5);
+    }
+    return true;
+  }
+
+  private capDuelExcuseSpeed() {
+    const excuse = this.state.excuse;
+    const speed = length(excuse.vx, excuse.vy);
+    if (speed <= RALLY_CONFIG.duel.maxSpeed) return;
+    const scale = RALLY_CONFIG.duel.maxSpeed / speed;
+    excuse.vx *= scale;
+    excuse.vy *= scale;
   }
 
   private updateRegulationClock(dtMs: number) {
@@ -946,6 +1477,10 @@ export class RallyEngine {
   }
 
   private launchServe(side: RallySide) {
+    if (this.state.controlMode === "duel") {
+      this.launchDuelServe(side);
+      return;
+    }
     const excuse = this.state.excuse;
     const firstServe = this.state.timeMs < 2000 && excuse.rallyCount === 0;
     excuse.x = side === "clockhead" ? RALLY_CONFIG.clockhead.spawnX - 75 : RALLY_CONFIG.spark.spawnX + 75;
@@ -971,6 +1506,32 @@ export class RallyEngine {
         this.state.timeMs + RALLY_CONFIG.scoring.firstServeSlowMs;
     }
     this.state.message = side === "clockhead" ? "Clockhead serves the Excuse." : "Spark serves with fire.";
+    this.emit("serve", excuse.x, excuse.y);
+  }
+
+  private launchDuelServe(side: RallySide) {
+    const excuse = this.state.excuse;
+    this.resetDuelFightersForServe();
+    excuse.x = side === "clockhead" ? 880 : 320;
+    excuse.y = 170;
+    excuse.prevX = excuse.x;
+    excuse.prevY = excuse.y;
+    excuse.vx = 0;
+    excuse.vy = 0;
+    excuse.spin = 0;
+    excuse.speedTier = 0;
+    excuse.ignitedUntil = 0;
+    excuse.lastTouchedBy = side;
+    excuse.lastTouchAt = this.state.timeMs;
+    excuse.rallyCount = 0;
+    excuse.bankState = false;
+    excuse.inPlay = true;
+    excuse.stallMs = 0;
+    excuse.trailX.fill(excuse.x);
+    excuse.trailY.fill(excuse.y);
+    excuse.trailHead = 0;
+    this.state.serveAt = null;
+    this.state.message = side === "clockhead" ? "Clockhead serves the Excuse." : "Spark serves the Excuse.";
     this.emit("serve", excuse.x, excuse.y);
   }
 

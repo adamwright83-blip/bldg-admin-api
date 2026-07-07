@@ -3,7 +3,7 @@ import { RallyEngine } from "./rallyEngine";
 import { RALLY_CONFIG } from "./rallyConfig";
 
 function crossing(side: "spark" | "clockhead", scorerScore = 0) {
-  const engine = new RallyEngine({ scoringMode: "portal" });
+  const engine = new RallyEngine({ controlMode: "flight", scoringMode: "portal" });
   engine.start();
   engine.state.serveAt = null;
   engine.state.clockheadScore = side === "spark" ? scorerScore : 0;
@@ -43,7 +43,7 @@ function finishCeremony(engine: RallyEngine) {
 
 describe("RallyEngine scoring", () => {
   it("lets a first-timer score by tracking the scroll and holding Fire Breath", () => {
-    const engine = new RallyEngine({ seed: 23, scoringMode: "buttHybrid" });
+    const engine = new RallyEngine({ controlMode: "flight", seed: 23, scoringMode: "buttHybrid" });
     engine.start();
     engine.setAim(RALLY_CONFIG.arena.width, 340);
     engine.setBreath(true);

@@ -3,7 +3,7 @@ import { RallyEngine } from "./rallyEngine";
 import { FIXED_STEP_MS, RALLY_CONFIG } from "./rallyConfig";
 
 const playingEngine = (options: ConstructorParameters<typeof RallyEngine>[0] = {}) => {
-  const engine = new RallyEngine({ scoringMode: "portal", ...options });
+  const engine = new RallyEngine({ controlMode: "flight", scoringMode: "portal", ...options });
   engine.start();
   engine.state.serveAt = null;
   return engine;
@@ -146,7 +146,7 @@ describe("RallyEngine physics", () => {
 
   it("produces the same state hash for the same fixed input script", () => {
     const run = () => {
-      const engine = new RallyEngine({ seed: 424242 });
+      const engine = new RallyEngine({ controlMode: "flight", seed: 424242 });
       engine.start();
       engine.setMovement(1, -0.25);
       engine.advanceFixedSteps(120);

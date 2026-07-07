@@ -5,7 +5,7 @@ import { RallyEngine } from "./rallyEngine";
 describe("announcer and juice determinism", () => {
   it("rotates only locked Clockhead score barks from seeded RNG", () => {
     const scoreAgainst = (seed: number) => {
-      const engine = new RallyEngine({ seed, scoringMode: "portal" });
+      const engine = new RallyEngine({ controlMode: "flight", seed, scoringMode: "portal" });
       engine.start();
       engine.state.serveAt = null;
       Object.assign(engine.state.excuse, {
@@ -31,7 +31,7 @@ describe("announcer and juice determinism", () => {
 
   it("gives repeated effects deterministic non-identical audio variation", () => {
     const collect = () => {
-      const engine = new RallyEngine({ seed: 2026 });
+      const engine = new RallyEngine({ controlMode: "flight", seed: 2026 });
       engine.start();
       const values: number[] = [];
       for (let index = 0; index < 20; index += 1) {
