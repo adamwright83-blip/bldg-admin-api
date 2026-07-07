@@ -4349,6 +4349,7 @@ function VendorsTab() {
   const onboardingLinkMutation =
     trpc.admin.createConnectOnboardingLink.useMutation();
   const statusMutation = trpc.admin.getConnectAccountStatus.useMutation();
+  const replaceAccountMutation = trpc.admin.replaceConnectAccount.useMutation();
 
   const [newVendor, setNewVendor] = useState({
     name: "",
@@ -4384,6 +4385,15 @@ function VendorsTab() {
   >({});
   const [vendorPassword, setVendorPassword] = useState<
     Record<number, { email: string; password: string }>
+  >({});
+  const [replaceConfirmVendorId, setReplaceConfirmVendorId] = useState<
+    number | null
+  >(null);
+  const [replaceResultMap, setReplaceResultMap] = useState<
+    Record<
+      number,
+      { oldAccountId: string | null; newAccountId: string; onboardingUrl: string }
+    >
   >({});
 
   const handleCreateVendor = async () => {
@@ -4423,6 +4433,13 @@ function VendorsTab() {
   const handleCopyOnboarding = async (vendorId: number) => {
     const result = await onboardingLinkMutation.mutateAsync({ vendorId });
     await navigator.clipboard.writeText(result.url);
+  };
+
+  const handleReplaceAccount = async (vendorId: number) => {
+    const result = await replaceAccountMutation.mutateAsync({ vendorId });
+    setReplaceResultMap(prev => ({ ...prev, [vendorId]: result }));
+    setReplaceConfirmVendorId(null);
+    vendorsQuery.refetch();
   };
 
   const handleRefreshStatus = async (vendorId: number) => {
@@ -4968,6 +4985,67 @@ function VendorsTab() {
                   </div>
                 )}
 
+                {/* Replace-account result banner */}
+                {replaceResultMap[vendor.id] && (
+                  <div className="mb-3 p-3 bg-blue-50 border border-blue-200 text-xs space-y-1">
+                    <p className="font-medium text-blue-900">
+                      New Connect account created: {replaceResultMap[vendor.id].newAccountId}
+                    </p>
+                    <p className="text-blue-800">
+                      Old account ({replaceResultMap[vendor.id].oldAccountId ?? "none"}) was left untouched.
+                    </p>
+                    <Button
+                      size="sm"
+                      className="bg-black text-white hover:bg-black/90 text-xs mt-1"
+                      onClick={() =>
+                        window.location.assign(
+                          replaceResultMap[vendor.id].onboardingUrl
+                        )
+                      }
+                    >
+                      Continue Onboarding
+                    </Button>
+                  </div>
+                )}
+
+                {/* Replace-account confirmation */}
+                {replaceConfirmVendorId === vendor.id && (
+                  <div className="mb-3 p-3 bg-red-50 border border-red-200 text-xs space-y-2">
+                    <p className="font-medium text-red-900">
+                      Replace Connect account for {vendor.name}?
+                    </p>
+                    <p className="text-red-800">
+                      Current account: {vendor.stripeConnectAccountId ?? "none"}
+                    </p>
+                    <p className="text-red-800">
+                      This account will NOT be deleted or modified. A brand-new
+                      Stripe Connect account will be created and assigned to
+                      this vendor instead.
+                    </p>
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        className="bg-red-700 text-white hover:bg-red-800 text-xs"
+                        onClick={() => handleReplaceAccount(vendor.id)}
+                        disabled={replaceAccountMutation.isPending}
+                      >
+                        {replaceAccountMutation.isPending ? (
+                          <Loader2 className="animate-spin w-3 h-3 mr-1" />
+                        ) : null}
+                        Confirm Replace
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-black text-black text-xs"
+                        onClick={() => setReplaceConfirmVendorId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Actions */}
                 <div className="flex flex-wrap gap-2">
                   {!vendor.stripeConnectAccountId ? (
@@ -5018,9 +5096,23 @@ function VendorsTab() {
                         ) : null}
                         Refresh Status
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-red-700 text-red-700 hover:bg-red-50 text-xs"
+                        onClick={() => setReplaceConfirmVendorId(vendor.id)}
+                        disabled={replaceAccountMutation.isPending}
+                      >
+                        Replace Connected Account
+                      </Button>
                     </>
                   )}
                 </div>
+                {vendor.stripeConnectAccountId && (
+                  <p className="mt-1 text-[11px] text-black/40">
+                    Use this only when a vendor is linked to the wrong Stripe account.
+                  </p>
+                )}
               </div>
             );
           })}

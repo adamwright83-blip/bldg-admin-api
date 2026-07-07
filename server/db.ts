@@ -1309,6 +1309,29 @@ export async function updateVendorConnectAccount(
   await db.update(vendors).set({ stripeConnectAccountId }).where(eq(vendors.id, id));
 }
 
+/**
+ * Replace a vendor's Stripe Connect account with a brand-new one and reset
+ * Connect status columns so the vendor goes through onboarding again.
+ * Does NOT touch the old Stripe account or any historical orders.
+ */
+export async function replaceVendorConnectAccount(
+  id: number,
+  newStripeConnectAccountId: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(vendors).set({
+    stripeConnectAccountId: newStripeConnectAccountId,
+    chargesEnabled: false,
+    payoutsEnabled: false,
+    detailsSubmitted: false,
+    currentlyDue: null,
+    pastDue: null,
+    disabledReason: null,
+  }).where(eq(vendors.id, id));
+}
+
 export async function updateVendorConnectStatus(
   id: number,
   status: {

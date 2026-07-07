@@ -45,6 +45,7 @@ import {
   updateVendorIsActive,
   updateVendorPlatformFeePercent,
   updateVendorConnectAccount,
+  replaceVendorConnectAccount,
   updateVendorConnectStatus,
   createVendorCoverage,
   updateVendorCoverage,
@@ -3904,6 +3905,61 @@ export const appRouter = router({
           `[Connect] Created Express account ${account.id} for vendor #${input.vendorId} (${vendor.name})`
         );
         return { accountId: account.id };
+      }),
+
+    // Use this only when a vendor is linked to the wrong Stripe Connect account.
+    // Creates a brand-new Connect Express account and assigns it to the vendor.
+    // The old account is never modified or deleted.
+    replaceConnectAccount: adminProcedure
+      .input(
+        z.object({
+          vendorId: z.number(),
+          allowReplaceFromNull: z.boolean().default(false),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const vendor = await getVendorById(input.vendorId);
+        if (!vendor) throw new Error("Vendor not found");
+        if (!vendor.stripeConnectAccountId && !input.allowReplaceFromNull) {
+          throw new Error(
+            "Vendor has no existing Connect account. Use Create Connect Account instead."
+          );
+        }
+
+        const oldAccountId = vendor.stripeConnectAccountId ?? null;
+
+        const stripe = getStripe();
+        const account = await stripe.accounts.create({
+          type: "express",
+          business_type: "company",
+          country: vendor.country ?? "US",
+          company: { name: vendor.name },
+          email: vendor.email ?? undefined,
+          capabilities: {
+            card_payments: { requested: true },
+            transfers: { requested: true },
+          },
+        });
+
+        await replaceVendorConnectAccount(input.vendorId, account.id);
+
+        console.log(
+          `[Connect] Replaced Connect account for vendor #${input.vendorId} (${vendor.name}): ${oldAccountId ?? "(none)"} -> ${account.id}. Old account untouched.`
+        );
+
+        const link = await stripe.accountLinks.create({
+          account: account.id,
+          type: "account_onboarding",
+          refresh_url: `${ENV.adminBaseUrl}/admin?tab=Vendors`,
+          return_url: `${ENV.adminBaseUrl}/admin?tab=Vendors`,
+          collection_options: { fields: "eventually_due" },
+        });
+
+        return {
+          oldAccountId,
+          newAccountId: account.id,
+          onboardingUrl: link.url,
+        };
       }),
 
     createConnectOnboardingLink: protectedProcedure
