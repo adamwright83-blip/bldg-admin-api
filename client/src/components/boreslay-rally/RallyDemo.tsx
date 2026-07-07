@@ -8,6 +8,10 @@ import { RallyClipExporter } from "./rallyShare";
 import { RallyMetrics } from "./rallyMetrics";
 import "./rally.css";
 
+// Keep the live arena framing stable. Speed tiers should affect the scroll,
+// not zoom the entire battlefield in and out.
+(RALLY_CONFIG.juice as { tierThreeZoom: number }).tierThreeZoom = 1;
+
 type HudState = {
   status: RallyState["status"];
   message: string;
@@ -144,6 +148,12 @@ export function RallyDemo() {
       lastFrame = now;
       const engine = engineRef.current!;
       engine.advanceFrame(frameMs);
+
+      // Leftward strikes assign negative spin. Normalize it to the sprite sheet's
+      // 0–7 frame range before rendering so the scroll never disappears while
+      // its separately rendered trail remains visible.
+      engine.state.excuse.spin = ((engine.state.excuse.spin % 8) + 8) % 8;
+
       const events = engine.consumeEvents();
       for (const event of events) {
         audioRef.current.handleEvent(event);
