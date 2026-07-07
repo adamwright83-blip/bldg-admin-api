@@ -141,12 +141,16 @@ export class RallyRenderer {
     context.scale(tierZoom, tierZoom);
     context.translate(-RALLY_CONFIG.arena.width / 2, -RALLY_CONFIG.arena.height / 2);
     this.drawBackground(context, state);
-    this.drawSealedWalls(context, state);
-    this.drawGateThreats(context, state);
+    if (state.controlMode !== "duel") {
+      this.drawSealedWalls(context, state);
+      this.drawGateThreats(context, state);
+    }
     this.drawButtTargets(context, state, alpha);
-    this.drawPowerSurfaces(context, state);
-    this.drawReceipts(context, state);
-    this.drawBreath(context, state, alpha);
+    if (state.controlMode !== "duel") {
+      this.drawPowerSurfaces(context, state);
+      this.drawReceipts(context, state);
+      this.drawBreath(context, state, alpha);
+    }
     this.drawTrail(context, state);
     this.drawTelegraph(context, state, alpha);
     this.drawSpark(context, state, alpha);
@@ -161,6 +165,32 @@ export class RallyRenderer {
   }
 
   private drawBackground(context: CanvasRenderingContext2D, state: RallyState) {
+    if (state.controlMode === "duel") {
+      context.fillStyle = "#11151d";
+      context.fillRect(0, 0, RALLY_CONFIG.arena.width, RALLY_CONFIG.arena.height);
+      context.fillStyle = "#1a2233";
+      context.fillRect(
+        0,
+        RALLY_CONFIG.duel.groundY + RALLY_CONFIG.duel.groundPad,
+        RALLY_CONFIG.arena.width,
+        RALLY_CONFIG.arena.height - RALLY_CONFIG.duel.groundY - RALLY_CONFIG.duel.groundPad
+      );
+      context.strokeStyle = "#2a3550";
+      context.lineWidth = 4;
+      context.strokeRect(2, 2, RALLY_CONFIG.arena.width - 4, RALLY_CONFIG.duel.groundY + RALLY_CONFIG.duel.groundPad - 2);
+      context.strokeStyle = "#232c44";
+      context.beginPath();
+      context.moveTo(RALLY_CONFIG.arena.width / 2, RALLY_CONFIG.duel.groundY + RALLY_CONFIG.duel.groundPad);
+      context.lineTo(RALLY_CONFIG.arena.width / 2, RALLY_CONFIG.duel.groundY - 40);
+      context.stroke();
+      if (state.clockhead.telegraph === "freeze") {
+        const pulse = state.reducedMotion ? 0.55 : 0.38 + Math.sin(state.timeMs * 0.03) * 0.18;
+        context.strokeStyle = `rgba(125, 211, 252, ${pulse})`;
+        context.lineWidth = 8;
+        context.strokeRect(8, 8, RALLY_CONFIG.arena.width - 16, RALLY_CONFIG.duel.groundY + RALLY_CONFIG.duel.groundPad - 16);
+      }
+      return;
+    }
     if (this.assets.background.complete && this.assets.background.naturalWidth > 0) {
       context.drawImage(
         this.assets.background,
@@ -234,6 +264,40 @@ export class RallyRenderer {
       context.save();
       context.translate(x, y);
       context.scale(1 + squash, 1 - squash);
+      if (state.controlMode === "duel") {
+        const fighter = side === "spark" ? state.spark : state.clockhead;
+        const back = fighter.facing.x >= 0 ? -1 : 1;
+        const angle = (RALLY_CONFIG.duel.slotAngleDeg * Math.PI) / 180;
+        const ux = back * Math.cos(angle);
+        const uy = -Math.sin(angle);
+        const half = RALLY_CONFIG.duel.slotLen / 2;
+        context.shadowColor = warm ? "#ff6738" : "#54b9ff";
+        context.shadowBlur = 16;
+        context.fillStyle = warm ? "#d9543b" : "#5b86b8";
+        context.strokeStyle = "#0a0d13";
+        context.lineWidth = 3;
+        context.beginPath();
+        context.arc(back * -6, -14, 20, 0, TAU);
+        context.arc(back * 2, 14, 22, 0, TAU);
+        context.fill();
+        context.stroke();
+        context.shadowBlur = 0;
+        context.strokeStyle = "#f5b841";
+        context.lineWidth = 5;
+        context.lineCap = "round";
+        context.beginPath();
+        context.moveTo(-ux * half, -uy * half);
+        context.lineTo(ux * half, uy * half);
+        context.stroke();
+        if (RALLY_CONFIG.duel.slotEtch) {
+          context.fillStyle = "rgba(245, 184, 65, 0.62)";
+          context.font = "800 9px ui-monospace, Menlo, monospace";
+          context.textAlign = "center";
+          context.fillText("INSERT EXCUSE", back * 10, -36);
+        }
+        context.restore();
+        continue;
+      }
       context.shadowColor = warm ? "#ff6738" : "#54b9ff";
       context.shadowBlur = 20;
       context.fillStyle = warm ? "#d9543b" : "#5b86b8";
@@ -514,6 +578,7 @@ export class RallyRenderer {
   private drawTelegraph(context: CanvasRenderingContext2D, state: RallyState, alpha: number) {
     const clockhead = state.clockhead;
     if (clockhead.telegraph === "none") return;
+    if (state.controlMode === "duel" && clockhead.telegraph === "freeze") return;
     const x = lerp(clockhead.prevX, clockhead.x, alpha);
     const y = lerp(clockhead.prevY, clockhead.y, alpha);
     const remaining = Math.max(0, clockhead.telegraphUntil - state.timeMs);
@@ -854,6 +919,7 @@ export class RallyRenderer {
 
   private drawFirstServeCue(context: CanvasRenderingContext2D, state: RallyState) {
     if (
+      state.controlMode === "duel" ||
       state.scoringMode !== "buttHybrid" ||
       state.firstPlayerContact ||
       state.tutorialSlowUntil <= state.timeMs

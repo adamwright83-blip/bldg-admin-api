@@ -19,6 +19,9 @@ type HudState = {
   suddenDeath: boolean;
   influence: number;
   energy: number;
+  sparkMeter: number;
+  clockheadMeter: number;
+  surgeReady: boolean;
   rallyCount: number;
   speedTier: 0 | 1 | 2 | 3;
   missionStatus: RallyState["mission"]["status"];
@@ -40,7 +43,10 @@ const snapshotHud = (state: RallyState): HudState => ({
   regulationRemainingMs: state.regulationRemainingMs,
   suddenDeath: state.suddenDeath,
   influence: state.influence,
-  energy: state.spark.energy,
+  energy: state.controlMode === "duel" ? state.duel.spark.meter : state.spark.energy,
+  sparkMeter: state.duel.spark.meter,
+  clockheadMeter: state.duel.clockhead.meter,
+  surgeReady: state.controlMode === "duel" && state.duel.spark.meter >= 100,
   rallyCount: state.excuse.rallyCount,
   speedTier: state.excuse.speedTier,
   missionStatus: state.mission.status,
@@ -238,6 +244,12 @@ export function RallyDemo() {
       "ArrowLeft",
       "ArrowRight",
       "KeyF",
+      "KeyJ",
+      "KeyK",
+      "KeyL",
+      "KeyP",
+      "KeyX",
+      "KeyZ",
       "Space",
       "Escape",
       "Digit1",
@@ -253,6 +265,22 @@ export function RallyDemo() {
       }
       keysRef.current.add(event.code);
       updateMovement();
+      if (engineRef.current!.state.controlMode === "duel") {
+        if ((event.code === "KeyW" || event.code === "ArrowUp" || event.code === "Space") && !event.repeat) {
+          engineRef.current!.jump();
+        }
+        if ((event.code === "KeyJ" || event.code === "KeyZ") && !event.repeat) {
+          engineRef.current!.duelStrike("strike");
+        }
+        if ((event.code === "KeyK" || event.code === "KeyX") && !event.repeat) {
+          engineRef.current!.duelStrike("loft");
+        }
+        if ((event.code === "KeyL" || event.code === "KeyP" || event.code === "Digit1") && !event.repeat) {
+          engineRef.current!.duelPower();
+        }
+        syncHud();
+        return;
+      }
       if ((event.code === "Digit1" || event.code === "Digit2") && !event.repeat) {
         engineRef.current!.beginPower(event.code === "Digit1" ? 0 : 1);
       }
@@ -262,6 +290,7 @@ export function RallyDemo() {
     const onKeyUp = (event: KeyboardEvent) => {
       keysRef.current.delete(event.code);
       updateMovement();
+      if (engineRef.current!.state.controlMode === "duel") return;
       if (event.code === "Digit1" || event.code === "Digit2") {
         engineRef.current!.confirmPower();
       }
@@ -384,10 +413,13 @@ export function RallyDemo() {
           className={`rally-stage is-${hud.status} tier-${hud.speedTier}`}
           tabIndex={engaged ? 0 : -1}
           onPointerMove={event => {
-            if (engaged && event.pointerType === "mouse") aimAtPointer(event.clientX, event.clientY);
+            if (engaged && hud.controlMode === "flight" && event.pointerType === "mouse") {
+              aimAtPointer(event.clientX, event.clientY);
+            }
           }}
           onPointerDown={event => {
             if (!engaged) return;
+            if (hud.controlMode === "duel") return;
             aimAtPointer(event.clientX, event.clientY);
             if (
               event.pointerType === "mouse" &&
@@ -395,9 +427,12 @@ export function RallyDemo() {
             ) engineRef.current!.setBreath(true);
           }}
           onPointerUp={() => {
+            if (hud.controlMode === "duel") return;
             if (!engineRef.current!.confirmPower()) engineRef.current!.setBreath(false);
           }}
-          onPointerLeave={() => engineRef.current!.setBreath(false)}
+          onPointerLeave={() => {
+            if (hud.controlMode === "flight") engineRef.current!.setBreath(false);
+          }}
           aria-label="Excuse Rally arena. Use WASD or arrow keys to move, hold F or the mouse to breathe fire, Space to dash, and Escape to pause."
         >
           <canvas ref={canvasRef} className="rally-canvas" aria-hidden="true" />
@@ -430,13 +465,18 @@ export function RallyDemo() {
                   <i key={slot} className={slot < hud.clockheadScore ? "is-live" : ""} aria-hidden="true">⌛</i>
                 ))}
               </div>
+              {hud.controlMode === "duel" && (
+                <div className="rally-energy rally-energy--clock" aria-label={`${Math.round(hud.clockheadMeter)} percent freeze meter`}>
+                  <span style={{ width: `${hud.clockheadMeter}%` }} />
+                </div>
+              )}
             </div>
           </div>
 
           <button className="rally-sound" type="button" onPointerDown={event => event.stopPropagation()} onClick={toggleSound}>
             {soundEnabled ? "SOUND ON" : "SOUND OFF"}
           </button>
-          {engaged && (
+          {engaged && hud.controlMode === "flight" && (
             <div className="rally-power-bar" aria-label="Power loadout">
               {hud.powerLoadout.map((power, index) => (
                 <button
@@ -518,30 +558,32 @@ export function RallyDemo() {
               <span>DAILY CONTRACT · FIRST TO 5</span>
               <h1>EXCUSE RALLY</h1>
               <p>{hud.scoringMode === "buttHybrid" ? "Bank the Excuse off the wall and bash the target behind him." : "Keep the Excuse out of your Gate. Fire it into his."}</p>
-              <div className="rally-loadout" aria-label="Pick two powers">
-                {Object.entries(POWER_META).map(([id, meta]) => {
-                  const power = id as RallyPowerId;
-                  const selected = hud.powerLoadout.includes(power);
-                  return (
-                    <button
-                      key={power}
-                      type="button"
-                      className={selected ? "is-selected" : ""}
-                      aria-pressed={selected}
-                    onClick={() => {
-                      engineRef.current!.selectPower(power);
-                      metricsRef.current!.powerSelected(power);
-                      syncHud();
-                      }}
-                    >
-                      <b>{meta.name}</b>
-                      <span>{meta.note}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <button type="button" onClick={begin} disabled={hud.powerLoadout.length !== RALLY_CONFIG.powers.slots}>ENTER THE RALLY</button>
-              <small>WASD / ARROWS · HOLD F / CLICK · SPACE TO DASH</small>
+              {hud.controlMode === "flight" && (
+                <div className="rally-loadout" aria-label="Pick two powers">
+                  {Object.entries(POWER_META).map(([id, meta]) => {
+                    const power = id as RallyPowerId;
+                    const selected = hud.powerLoadout.includes(power);
+                    return (
+                      <button
+                        key={power}
+                        type="button"
+                        className={selected ? "is-selected" : ""}
+                        aria-pressed={selected}
+                        onClick={() => {
+                          engineRef.current!.selectPower(power);
+                          metricsRef.current!.powerSelected(power);
+                          syncHud();
+                        }}
+                      >
+                        <b>{meta.name}</b>
+                        <span>{meta.note}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <button type="button" onClick={begin} disabled={hud.controlMode === "flight" && hud.powerLoadout.length !== RALLY_CONFIG.powers.slots}>ENTER THE RALLY</button>
+              <small>{hud.controlMode === "duel" ? "A/D OR ARROWS · W JUMP · J STRIKE · K LOFT · L POWER" : "WASD / ARROWS · HOLD F / CLICK · SPACE TO DASH"}</small>
             </div>
           )}
 
@@ -562,39 +604,112 @@ export function RallyDemo() {
             </div>
           )}
 
-          <div
-            className="rally-joystick"
-            aria-hidden="true"
-            onPointerDown={joystickMove}
-            onPointerMove={joystickMove}
-            onPointerUp={endJoystick}
-            onPointerCancel={endJoystick}
-          >
-            <i style={{ transform: `translate(${joystick.x * 34}px, ${joystick.y * 34}px)` }} />
-          </div>
-          <div className="rally-touch-actions">
-            <button
-              type="button"
-              onPointerDown={event => {
-                event.stopPropagation();
-                engineRef.current!.setAim(RALLY_CONFIG.clockhead.spawnX, RALLY_CONFIG.clockhead.spawnY);
-                engineRef.current!.setBreath(true);
-              }}
-              onPointerUp={() => engineRef.current!.setBreath(false)}
-              onPointerCancel={() => engineRef.current!.setBreath(false)}
-            >
-              BREATH
-            </button>
-            <button
-              type="button"
-              onPointerDown={event => {
-                event.stopPropagation();
-                engineRef.current!.dash();
-              }}
-            >
-              DASH
-            </button>
-          </div>
+          {hud.controlMode === "flight" ? (
+            <>
+              <div
+                className="rally-joystick"
+                aria-hidden="true"
+                onPointerDown={joystickMove}
+                onPointerMove={joystickMove}
+                onPointerUp={endJoystick}
+                onPointerCancel={endJoystick}
+              >
+                <i style={{ transform: `translate(${joystick.x * 34}px, ${joystick.y * 34}px)` }} />
+              </div>
+              <div className="rally-touch-actions">
+                <button
+                  type="button"
+                  onPointerDown={event => {
+                    event.stopPropagation();
+                    engineRef.current!.setAim(RALLY_CONFIG.clockhead.spawnX, RALLY_CONFIG.clockhead.spawnY);
+                    engineRef.current!.setBreath(true);
+                  }}
+                  onPointerUp={() => engineRef.current!.setBreath(false)}
+                  onPointerCancel={() => engineRef.current!.setBreath(false)}
+                >
+                  BREATH
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={event => {
+                    event.stopPropagation();
+                    engineRef.current!.dash();
+                  }}
+                >
+                  DASH
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="rally-duel-pad rally-duel-pad--move" aria-hidden="true">
+                <button
+                  type="button"
+                  onPointerDown={event => {
+                    event.stopPropagation();
+                    engineRef.current!.setMovement(-1, 0);
+                  }}
+                  onPointerUp={() => engineRef.current!.setMovement(0, 0)}
+                  onPointerCancel={() => engineRef.current!.setMovement(0, 0)}
+                >
+                  ◀
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={event => {
+                    event.stopPropagation();
+                    engineRef.current!.setMovement(1, 0);
+                  }}
+                  onPointerUp={() => engineRef.current!.setMovement(0, 0)}
+                  onPointerCancel={() => engineRef.current!.setMovement(0, 0)}
+                >
+                  ▶
+                </button>
+              </div>
+              <div className="rally-duel-pad rally-duel-pad--actions">
+                <button
+                  type="button"
+                  className={hud.surgeReady ? "is-ready" : ""}
+                  onPointerDown={event => {
+                    event.stopPropagation();
+                    engineRef.current!.duelPower();
+                    syncHud();
+                  }}
+                >
+                  POWER
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={event => {
+                    event.stopPropagation();
+                    engineRef.current!.jump();
+                  }}
+                >
+                  JUMP
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={event => {
+                    event.stopPropagation();
+                    engineRef.current!.duelStrike("strike");
+                    syncHud();
+                  }}
+                >
+                  STRIKE
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={event => {
+                    event.stopPropagation();
+                    engineRef.current!.duelStrike("loft");
+                    syncHud();
+                  }}
+                >
+                  LOFT
+                </button>
+              </div>
+            </>
+          )}
 
           <div className="rally-status" aria-live="polite">{hud.message}</div>
           {new URLSearchParams(window.location.search).get("debug") === "1" && (
@@ -623,8 +738,8 @@ export function RallyDemo() {
         </div>
         <div className="rally-controls" aria-hidden="true">
           <span><b>MOVE</b> WASD / ARROWS</span>
-          <span><b>BREATH</b> HOLD F / CLICK</span>
-          <span><b>DASH</b> SPACE</span>
+          <span><b>{hud.controlMode === "duel" ? "JUMP" : "BREATH"}</b> {hud.controlMode === "duel" ? "W / SPACE" : "HOLD F / CLICK"}</span>
+          <span><b>{hud.controlMode === "duel" ? "STRIKE" : "DASH"}</b> {hud.controlMode === "duel" ? "J / K / L" : "SPACE"}</span>
           <span><b>PAUSE</b> ESC</span>
         </div>
       </section>

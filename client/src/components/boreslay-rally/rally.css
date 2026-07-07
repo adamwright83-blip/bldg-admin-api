@@ -139,6 +139,10 @@
   transition: width 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+.rally-energy--clock span {
+  background: linear-gradient(90deg, #7dd3fc, #f16a5a);
+}
+
 .rally-center-hud {
   display: grid;
   justify-items: center;
@@ -494,20 +498,65 @@
 }
 
 .rally-joystick,
-.rally-touch-actions {
+.rally-touch-actions,
+.rally-duel-pad {
   display: none;
 }
 
 .rally-stage.is-idle .rally-joystick,
 .rally-stage.is-idle .rally-touch-actions,
+.rally-stage.is-idle .rally-duel-pad,
 .rally-stage.is-paused .rally-joystick,
 .rally-stage.is-paused .rally-touch-actions,
+.rally-stage.is-paused .rally-duel-pad,
 .rally-stage.is-victory .rally-joystick,
 .rally-stage.is-victory .rally-touch-actions,
+.rally-stage.is-victory .rally-duel-pad,
 .rally-stage.is-defeat .rally-joystick,
-.rally-stage.is-defeat .rally-touch-actions {
+.rally-stage.is-defeat .rally-touch-actions,
+.rally-stage.is-defeat .rally-duel-pad {
   opacity: 0;
   pointer-events: none;
+}
+
+.rally-duel-pad {
+  position: absolute;
+  z-index: 6;
+  gap: 10px;
+  touch-action: none;
+}
+
+.rally-duel-pad--move {
+  left: 18px;
+  bottom: 24px;
+}
+
+.rally-duel-pad--actions {
+  right: 18px;
+  bottom: 24px;
+}
+
+.rally-duel-pad button {
+  min-width: 58px;
+  min-height: 58px;
+  border: 1px solid rgba(245, 184, 65, 0.58);
+  border-radius: 12px;
+  color: #ece7d8;
+  background: rgba(26, 32, 48, 0.82);
+  box-shadow: inset 0 0 20px rgba(245, 184, 65, 0.08), 0 8px 20px rgba(0, 0, 0, 0.36);
+  font: 900 10px / 1 ui-monospace, Menlo, monospace;
+  letter-spacing: 0.05em;
+}
+
+.rally-duel-pad button:active,
+.rally-duel-pad button.is-ready {
+  color: #0a0d13;
+  background: #f5b841;
+  border-color: #f5b841;
+}
+
+.rally-duel-pad button.is-ready {
+  animation: rally-power-ready 800ms ease-in-out infinite alternate;
 }
 
 .rally-controls {
@@ -544,6 +593,11 @@
 @keyframes rally-tier-pulse {
   from { transform: scale(1); }
   to { transform: scale(1.045); }
+}
+
+@keyframes rally-power-ready {
+  from { box-shadow: inset 0 0 20px rgba(245, 184, 65, 0.08), 0 8px 20px rgba(0, 0, 0, 0.36); }
+  to { box-shadow: inset 0 0 28px rgba(241, 106, 90, 0.35), 0 0 22px rgba(241, 106, 90, 0.55); }
 }
 
 @media (pointer: coarse), (max-width: 760px) {
@@ -588,6 +642,9 @@
     display: flex;
     align-items: end;
     gap: 12px;
+  }
+  .rally-duel-pad {
+    display: flex;
   }
   .rally-touch-actions button {
     width: 72px;
@@ -639,6 +696,9 @@
   .rally-touch-actions { right: 9px; bottom: 8px; transform: none; gap: 7px; }
   .rally-touch-actions button { width: 64px; min-height: 64px; font-size: 9px; }
   .rally-touch-actions button:first-child { width: 72px; min-height: 72px; }
+  .rally-duel-pad--move { left: 10px; bottom: 8px; }
+  .rally-duel-pad--actions { right: 9px; bottom: 8px; gap: 7px; }
+  .rally-duel-pad button { min-width: 52px; min-height: 52px; font-size: 8px; border-radius: 10px; }
 }
 
 @media (orientation: landscape) and (max-height: 500px) {

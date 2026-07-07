@@ -43,6 +43,19 @@ export class RallyAudio {
       case "serve":
         this.sweep(220, 480, 0.18, "triangle", 0.08);
         break;
+      case "strike_crack":
+        this.tone(320 + tier * 70, 0.08, "square", 0.11);
+        this.noise(0.045, 0.055, 2800);
+        break;
+      case "contact_dink":
+        this.tone(145, 0.05, "sine", 0.05);
+        break;
+      case "contact_header":
+        this.tone(230 + tier * 80, 0.09, "triangle", 0.075);
+        break;
+      case "surge_on":
+        this.sweep(180, 720, 0.28, "sawtooth", 0.08);
+        break;
       case "breath_start":
         this.sweep(120, 520, 0.12, "sawtooth", 0.055);
         this.noise(0.08, 0.03, 700);
@@ -101,6 +114,9 @@ export class RallyAudio {
         break;
       case "freeze_cast":
         this.sweep(760, 160, 0.42, "sine", 0.08);
+        break;
+      case "frozen":
+        this.tone(520, 0.16, "triangle", 0.06);
         break;
       case "freeze_break":
         this.noise(0.13, 0.08, 4200);
