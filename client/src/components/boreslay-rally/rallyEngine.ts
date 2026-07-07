@@ -8,6 +8,7 @@ import type { DemoStatus } from "../boreslay-demo/engine";
 import { FIXED_STEP_MS, RALLY_CONFIG } from "./rallyConfig";
 
 export type RallySide = "spark" | "clockhead";
+export type RallyControlMode = "duel" | "flight";
 export type RallyPowerId = "redTape" | "hardNo" | "deadlineStamp" | "receipts";
 export type RallyTelegraph = "none" | "swat" | "freeze";
 export type RallyMissionStatus = "locked" | "ready" | "accepted" | "expired";
@@ -131,6 +132,7 @@ export type RallyState = {
   timeMs: number;
   status: DemoStatus;
   message: string;
+  controlMode: RallyControlMode;
   scoringMode: "portal" | "buttHybrid";
   reducedMotion: boolean;
   trauma: number;
@@ -197,6 +199,7 @@ export type RallyState = {
 export type RallyEngineOptions = {
   reducedMotion?: boolean;
   seed?: number;
+  controlMode?: RallyControlMode;
   scoringMode?: "portal" | "buttHybrid";
   adapter?: PublicBoreslayDemoAdapter;
   replay?: boolean;
@@ -211,6 +214,7 @@ export type RallyInputEvent = {
 
 export type RallyReplayRecord = {
   seed: number;
+  controlMode: RallyControlMode;
   scoringMode: "portal" | "buttHybrid";
   initialConfigHash: string;
   initialRngState: number;
@@ -276,8 +280,18 @@ const createButtTarget = (x: number, y: number): ButtTarget => ({
 
 export function createRallyState(
   reducedMotion = false,
-  scoringMode: "portal" | "buttHybrid" = RALLY_CONFIG.scoring.mode
+  controlModeOrScoringMode: RallyControlMode | "portal" | "buttHybrid" = RALLY_CONFIG.controls,
+  scoringModeOverride?: "portal" | "buttHybrid"
 ): RallyState {
+  const controlMode: RallyControlMode =
+    controlModeOrScoringMode === "flight" || controlModeOrScoringMode === "duel"
+      ? controlModeOrScoringMode
+      : RALLY_CONFIG.controls;
+  const scoringMode: "portal" | "buttHybrid" =
+    scoringModeOverride ??
+    (controlModeOrScoringMode === "portal" || controlModeOrScoringMode === "buttHybrid"
+      ? controlModeOrScoringMode
+      : RALLY_CONFIG.scoring.mode);
   return {
     tick: 0,
     timeMs: 0,
@@ -285,6 +299,7 @@ export function createRallyState(
     message: scoringMode === "buttHybrid"
       ? "Bank the Excuse and hit the target behind Clockhead."
       : "Keep the Excuse out of your Gate. Fire it into his.",
+    controlMode,
     scoringMode,
     reducedMotion,
     trauma: 0,
@@ -388,6 +403,7 @@ export class RallyEngine {
     this.replayMode = options.replay ?? false;
     this.state = createRallyState(
       options.reducedMotion ?? false,
+      options.controlMode ?? RALLY_CONFIG.controls,
       options.scoringMode ?? RALLY_CONFIG.scoring.mode
     );
     this.adapter = options.adapter ?? new BrowserLocalBoreslayDemoAdapter();
@@ -426,8 +442,9 @@ export class RallyEngine {
 
   reset() {
     const reducedMotion = this.state.reducedMotion;
+    const controlMode = this.state.controlMode;
     const scoringMode = this.state.scoringMode;
-    this.state = createRallyState(reducedMotion, scoringMode);
+    this.state = createRallyState(reducedMotion, controlMode, scoringMode);
     this.accumulatorMs = 0;
     this.hitStopRemainingMs = 0;
     this.movement = { x: 0, y: 0 };
@@ -639,6 +656,7 @@ export class RallyEngine {
   getReplayRecord(): RallyReplayRecord {
     return {
       seed: this.initialSeed,
+      controlMode: this.state.controlMode,
       scoringMode: this.state.scoringMode,
       initialConfigHash: configHash(),
       initialRngState: this.initialRngState,

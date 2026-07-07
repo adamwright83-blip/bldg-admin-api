@@ -50,6 +50,7 @@ export function replayToTick(
   }
   const engine = new RallyEngine({
     seed: record.seed,
+    controlMode: record.controlMode,
     scoringMode: record.scoringMode,
     replay: true,
     adapter,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RallyAudio } from "./rallyAudio";
-import { RallyEngine, type RallyPowerId, type RallyState } from "./rallyEngine";
+import { RallyEngine, type RallyControlMode, type RallyPowerId, type RallyState } from "./rallyEngine";
 import { RALLY_CONFIG } from "./rallyConfig";
 import { RallyParticlePool } from "./rallyParticles";
 import { RallyRenderer } from "./rallyRenderer";
@@ -11,6 +11,7 @@ import "./rally.css";
 type HudState = {
   status: RallyState["status"];
   message: string;
+  controlMode: RallyState["controlMode"];
   sparkScore: number;
   clockheadScore: number;
   scoringMode: RallyState["scoringMode"];
@@ -32,6 +33,7 @@ type HudState = {
 const snapshotHud = (state: RallyState): HudState => ({
   status: state.status,
   message: state.message,
+  controlMode: state.controlMode,
   sparkScore: state.sparkScore,
   clockheadScore: state.clockheadScore,
   scoringMode: state.scoringMode,
@@ -71,9 +73,12 @@ export function RallyDemo() {
   if (!engineRef.current) {
     const params = new URLSearchParams(window.location.search);
     const scoring = params.get("scoring");
+    const controlsParam = params.get("controls");
+    const controlMode: RallyControlMode = controlsParam === "flight" ? "flight" : RALLY_CONFIG.controls;
     const parsedSeed = Number(params.get("seed"));
     engineRef.current = new RallyEngine({
       reducedMotion: reducedMotionQuery,
+      controlMode,
       scoringMode: scoring === "portal" ? "portal" : "buttHybrid",
       seed: Number.isFinite(parsedSeed) && parsedSeed > 0 ? parsedSeed : undefined,
     });
@@ -83,7 +88,7 @@ export function RallyDemo() {
     const params = new URLSearchParams(window.location.search);
     metricsRef.current = new RallyMetrics(
       engineRef.current.state.scoringMode,
-      params.has("scoring") ? "url" : "default"
+      params.has("controls") || params.has("scoring") ? "url" : "default"
     );
   }
   const rendererRef = useRef<RallyRenderer | null>(null);
@@ -372,7 +377,7 @@ export function RallyDemo() {
   };
 
   return (
-    <main className={`rally-page mode-${hud.scoringMode}${hud.reducedMotion ? " is-reduced" : ""}`}>
+    <main className={`rally-page mode-${hud.scoringMode} controls-${hud.controlMode}${hud.reducedMotion ? " is-reduced" : ""}`}>
       <section className="rally-shell" aria-label="BORESLAY Excuse Rally">
         <div
           ref={arenaRef}
