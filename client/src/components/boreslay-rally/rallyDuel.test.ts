@@ -255,3 +255,61 @@ describe("duel AI mood brain", () => {
     expect(engine.state.duel.aiTilt).toBeLessThan(tilted);
   });
 });
+
+describe("duel meter powers and rescue", () => {
+  it("activates Fire Surge, boosts the next strike, and pierces Clockhead once", () => {
+    const engine = duelEngine();
+    engine.state.duel.spark.meter = 100;
+    expect(engine.duelPower()).toBe(true);
+    expect(engine.state.duel.spark.meter).toBe(0);
+    engine.state.excuse.x = engine.state.spark.x + 90;
+    engine.state.excuse.y = engine.state.spark.y - 10;
+    expect(engine.duelStrike("strike")).toBe(true);
+    expect(speed(engine)).toBeGreaterThan(RALLY_CONFIG.duel.strikeFlatSpeed);
+    expect(engine.state.excuse.ignitedUntil).toBeGreaterThan(engine.state.timeMs);
+
+    engine.state.duel.clockhead.strikeCooldownUntil = Number.MAX_SAFE_INTEGER;
+    engine.state.duel.aiThinkAt = Number.MAX_SAFE_INTEGER;
+    engine.state.duel.aiIntentUntil = Number.MAX_SAFE_INTEGER;
+    Object.assign(engine.state.excuse, {
+      x: engine.state.clockhead.x - 20,
+      y: engine.state.clockhead.y - RALLY_CONFIG.clockhead.radius * 0.2,
+      prevX: engine.state.clockhead.x - 20,
+      prevY: engine.state.clockhead.y - RALLY_CONFIG.clockhead.radius * 0.2,
+      vx: 520,
+      vy: 0,
+      lastTouchedBy: "spark",
+      lastTouchAt: -Infinity,
+      ignitedUntil: engine.state.timeMs + RALLY_CONFIG.duel.ignitedMs,
+      piercedClockheadBlock: false,
+    });
+    engine.advanceFixedSteps(1);
+    expect(engine.state.excuse.lastTouchedBy).toBe("spark");
+    expect(engine.state.excuse.piercedClockheadBlock).toBe(true);
+  });
+
+  it("casts Time Freeze at a mean moment, opens rescue, and accepts with duel triple force", () => {
+    const engine = duelEngine();
+    engine.state.duel.clockhead.meter = 100;
+    engine.state.duel.spark.grounded = false;
+    Object.assign(engine.state.excuse, {
+      x: engine.state.spark.x + 180,
+      y: engine.state.spark.y - 90,
+      prevX: engine.state.spark.x + 180,
+      prevY: engine.state.spark.y - 90,
+      vx: -420,
+      vy: 0,
+      lastTouchedBy: "clockhead",
+      lastTouchAt: -Infinity,
+    });
+    engine.advanceFixedSteps(1);
+    expect(engine.consumeEvents().some(event => event.type === "freeze_cast")).toBe(true);
+    engine.advanceFixedSteps(Math.ceil(RALLY_CONFIG.duel.freezeTelegraphMs / FIXED_STEP_MS) + 1);
+    expect(engine.state.spark.frozenUntil).toBeGreaterThan(engine.state.timeMs);
+    expect(engine.state.mission.status).toBe("ready");
+    expect(engine.acceptRescue()).toBe(true);
+    expect(engine.state.spark.frozenUntil).toBe(engine.state.timeMs);
+    expect(engine.state.excuse.lastTouchedBy).toBe("spark");
+    expect(speed(engine)).toBeCloseTo(RALLY_CONFIG.duel.maxSpeed, 6);
+  });
+});
