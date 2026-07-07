@@ -94,7 +94,8 @@ export function RallyDemo() {
     const params = new URLSearchParams(window.location.search);
     metricsRef.current = new RallyMetrics(
       engineRef.current.state.scoringMode,
-      params.has("controls") || params.has("scoring") ? "url" : "default"
+      params.has("controls") || params.has("scoring") ? "url" : "default",
+      engineRef.current.state.controlMode
     );
   }
   const rendererRef = useRef<RallyRenderer | null>(null);

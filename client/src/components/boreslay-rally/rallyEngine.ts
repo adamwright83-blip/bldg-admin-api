@@ -22,6 +22,7 @@ export type RallyEventType =
   | "contact_dink"
   | "contact_header"
   | "crossover"
+  | "wrong_guess_conceded"
   | "surge_on"
   | "frozen"
   | "breath_start"
@@ -69,6 +70,8 @@ export type RallyEvent = {
   message?: string;
   power?: RallyPowerId;
   variation?: number;
+  mixup?: RallyStrikeKind;
+  ownGoal?: boolean;
 };
 
 export type RallyPlacedSurface = {
@@ -201,6 +204,7 @@ export type RallyState = {
     aiPendingStrikeAt: number;
     aiPendingStrikeKind: 0 | 1;
     aiReadQueue: { readyAt: number }[];
+    wrongGuessCooldownUntil: number;
     playerHabits: Record<RallyStrikeKind | "header", number>;
   };
   buttTargets: Record<RallySide, ButtTarget>;
@@ -415,6 +419,7 @@ export function createRallyState(
       aiPendingStrikeAt: 0,
       aiPendingStrikeKind: 0,
       aiReadQueue: [],
+      wrongGuessCooldownUntil: 0,
       playerHabits: { flat: 0, arc: 0, spike: 0, lob: 0, header: 0 },
     },
     buttTargets: {
@@ -1016,7 +1021,7 @@ export class RallyEngine {
     const duel = this.state.duel[side];
     const radius = side === "spark" ? RALLY_CONFIG.spark.radius : RALLY_CONFIG.clockhead.radius;
     const speed = side === "spark" ? RALLY_CONFIG.duel.moveSpeedP : RALLY_CONFIG.duel.moveSpeedAI;
-    const frozen = side === "spark" && this.state.timeMs < fighter.frozenUntil;
+    const frozen = side === "spark" && this.state.timeMs < this.state.spark.frozenUntil;
     const moveDir = frozen ? 0 : clamp(moveX, -1, 1);
     duel.moveDir = moveDir;
     duel.vxInst = moveDir * speed;
@@ -1288,7 +1293,7 @@ export class RallyEngine {
     if (this.state.status !== "playing" || !this.state.excuse.inPlay) return false;
     const actor = side === "spark" ? this.state.spark : this.state.clockhead;
     const duel = this.state.duel[side];
-    if (side === "spark" && this.state.timeMs < actor.frozenUntil) return false;
+    if (side === "spark" && this.state.timeMs < this.state.spark.frozenUntil) return false;
     if (this.state.timeMs < duel.strikeCooldownUntil) return false;
     const grounded = duel.grounded;
     const kind: RallyStrikeKind = grounded
@@ -1331,7 +1336,7 @@ export class RallyEngine {
     duel.meter = clamp(duel.meter + RALLY_CONFIG.duel.powerRate, 0, 100);
     this.addHitStop(RALLY_CONFIG.feel.returnHitStopMs);
     this.addTrauma(RALLY_CONFIG.feel.traumaReturn);
-    this.emit("strike_crack", this.state.excuse.x, this.state.excuse.y, side);
+    this.emit("strike_crack", this.state.excuse.x, this.state.excuse.y, side).mixup = kind;
     return true;
   }
 
@@ -1370,6 +1375,7 @@ export class RallyEngine {
       if (this.state.scoringMode === "buttHybrid") {
         if (excuse.lastTouchedBy !== null && this.resolveDuelSlotSweep(beforeX, beforeY)) return;
       }
+      this.maybeEmitDuelWrongGuess();
       this.resolveDuelFighterContact();
       this.resolveDuelStraightWalls();
       this.capDuelExcuseSpeed();
@@ -1414,6 +1420,21 @@ export class RallyEngine {
         excuse.vx = (70 + this.random() * 40) * Math.sign(excuse.vx || (this.random() < 0.5 ? -1 : 1));
       }
       this.emit("wall_bounce", excuse.x, excuse.y);
+    }
+  }
+
+  private maybeEmitDuelWrongGuess() {
+    if (
+      this.state.timeMs < this.state.duel.wrongGuessCooldownUntil ||
+      this.state.duel.spark.grounded ||
+      this.state.excuse.lastTouchedBy !== "clockhead"
+    ) return;
+    if (
+      Math.abs(this.state.excuse.x - this.state.spark.x) < 12 &&
+      this.state.excuse.y > this.state.spark.y + RALLY_CONFIG.spark.radius * 0.6
+    ) {
+      this.state.duel.wrongGuessCooldownUntil = this.state.timeMs + 500;
+      this.emit("wrong_guess_conceded", this.state.excuse.x, this.state.excuse.y, "spark");
     }
   }
 
@@ -2466,7 +2487,7 @@ export class RallyEngine {
         snapshot.victim,
         snapshot.points,
         snapshot.banked
-      );
+      ).ownGoal = snapshot.ownGoal;
     } else {
       this.state.sparkScore += snapshot.points;
       if (this.state.controlMode === "duel") {
@@ -2488,7 +2509,7 @@ export class RallyEngine {
         snapshot.victim,
         snapshot.points,
         snapshot.banked
-      );
+      ).ownGoal = snapshot.ownGoal;
     }
     this.addTrauma(RALLY_CONFIG.feel.traumaScore);
     if (
@@ -2595,7 +2616,7 @@ export class RallyEngine {
     banked?: boolean,
     power?: RallyPowerId
   ) {
-    this.events.push({
+    const event: RallyEvent = {
       type,
       at: this.state.timeMs,
       x,
@@ -2607,7 +2628,9 @@ export class RallyEngine {
       message: this.state.message,
       power,
       variation: this.random() * 2 - 1,
-    });
+    };
+    this.events.push(event);
+    return event;
   }
 
   private random() {

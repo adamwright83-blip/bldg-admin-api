@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { FIXED_STEP_MS, RALLY_CONFIG } from "./rallyConfig";
 import { RallyEngine } from "./rallyEngine";
@@ -311,5 +313,62 @@ describe("duel meter powers and rescue", () => {
     expect(engine.state.spark.frozenUntil).toBe(engine.state.timeMs);
     expect(engine.state.excuse.lastTouchedBy).toBe("spark");
     expect(speed(engine)).toBeCloseTo(RALLY_CONFIG.duel.maxSpeed, 6);
+  });
+});
+
+describe("duel P6 determinism gates", () => {
+  it("keeps Math.random banned from the headless engine", () => {
+    const engineSource = readFileSync(
+      fileURLToPath(new URL("./rallyEngine.ts", import.meta.url)),
+      "utf8"
+    );
+    expect(engineSource).not.toContain("Math.random");
+  });
+
+  it("hashes identically across a scripted duel with AI decisions and powers", () => {
+    const run = () => {
+      const engine = new RallyEngine({ controlMode: "duel", seed: 13579 });
+      engine.start();
+      engine.state.serveAt = null;
+      engine.state.duel.spark.meter = 100;
+      expect(engine.duelPower()).toBe(true);
+      Object.assign(engine.state.excuse, {
+        inPlay: true,
+        x: engine.state.spark.x + 90,
+        y: engine.state.spark.y - 10,
+        prevX: engine.state.spark.x + 90,
+        prevY: engine.state.spark.y - 10,
+        vx: 0,
+        vy: 0,
+        lastTouchedBy: "clockhead",
+        lastTouchAt: -Infinity,
+      });
+      engine.duelStrike("strike");
+      engine.advanceFixedSteps(45);
+      engine.state.duel.clockhead.meter = 100;
+      engine.state.duel.spark.grounded = false;
+      Object.assign(engine.state.excuse, {
+        x: engine.state.spark.x + 180,
+        y: engine.state.spark.y - 90,
+        prevX: engine.state.spark.x + 180,
+        prevY: engine.state.spark.y - 90,
+        vx: -420,
+        vy: 0,
+        lastTouchedBy: "clockhead",
+        lastTouchAt: -Infinity,
+      });
+      engine.advanceFixedSteps(Math.ceil(RALLY_CONFIG.duel.freezeTelegraphMs / FIXED_STEP_MS) + 12);
+      if (engine.state.mission.status === "ready") engine.acceptRescue();
+      engine.advanceFixedSteps(90);
+      return {
+        hash: engine.stateHash(),
+        aiEvents: engine.getReplayRecord().inputLog.filter(event => event.type === "ai_decision").length,
+        powerEvents: engine.getReplayRecord().inputLog.filter(event => event.type === "power_cast").length,
+      };
+    };
+    const first = run();
+    expect(first.aiEvents).toBeGreaterThan(0);
+    expect(first.powerEvents).toBeGreaterThan(0);
+    expect(first).toEqual(run());
   });
 });

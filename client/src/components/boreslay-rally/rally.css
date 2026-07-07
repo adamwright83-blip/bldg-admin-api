@@ -669,7 +669,11 @@
 }
 
 @media (orientation: portrait) and (max-width: 760px) {
-  .rally-page { min-height: 100dvh; }
+  .rally-page {
+    min-height: 100dvh;
+    place-content: start center;
+    place-items: start center;
+  }
   .rally-shell { width: 100vw; }
   .rally-stage { aspect-ratio: 1200 / 650; }
   .rally-joystick { width: 118px; left: 14px; bottom: 12px; transform: translateY(115%); }
@@ -687,6 +691,13 @@
   .rally-stage.is-idle .rally-sound {
     left: 8px;
     bottom: 5px;
+    padding: 6px 8px;
+    transform: none;
+    font-size: 8px;
+  }
+  .rally-page.controls-duel .rally-stage:not(.is-idle):not(.is-paused):not(.is-victory):not(.is-defeat) .rally-sound {
+    left: 8px;
+    bottom: 68px;
     padding: 6px 8px;
     transform: none;
     font-size: 8px;

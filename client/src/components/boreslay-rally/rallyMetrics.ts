@@ -3,6 +3,7 @@ import { RALLY_CONFIG } from "./rallyConfig";
 
 export type RallyMetricName =
   | "variant"
+  | "control_mode"
   | "match_start"
   | "match_end"
   | "time_to_first_score"
@@ -14,6 +15,13 @@ export type RallyMetricName =
   | "quit_mid_match"
   | "power_selected"
   | "power_used"
+  | "mixup_used"
+  | "wrong_guess_conceded"
+  | "headers"
+  | "crossovers"
+  | "own_goals"
+  | "surges"
+  | "frozen"
   | "avg_rally_tier"
   | "bash_count"
   | "share_offered"
@@ -39,19 +47,23 @@ export class RallyMetrics {
   private rallyTiers: number[] = [];
   private storage?: Storage;
   readonly mode: RallyState["scoringMode"];
+  readonly controlMode: RallyState["controlMode"];
   readonly source: "default" | "url";
 
   constructor(
     mode: RallyState["scoringMode"],
     source: "default" | "url",
+    controlMode: RallyState["controlMode"] = RALLY_CONFIG.controls,
     storage: Storage | undefined = typeof localStorage === "undefined" ? undefined : localStorage,
     now = Date.now()
   ) {
     this.mode = mode;
+    this.controlMode = controlMode;
     this.source = source;
     this.storage = storage;
     this.sessionStartedAt = now;
     this.track("variant", mode, { source });
+    this.track("control_mode", controlMode, { source });
   }
 
   matchStart() {
@@ -100,6 +112,13 @@ export class RallyMetrics {
     if (event.type === "serve") this.serveIndex += 1;
     if (event.type === "return") this.rallyTiers.push(event.tier ?? 0);
     if (event.type === "power_cast") this.track("power_used", event.power ?? "unknown");
+    if (event.type === "strike_crack") this.track("mixup_used", event.mixup ?? "unknown");
+    if (event.type === "wrong_guess_conceded") this.track("wrong_guess_conceded", true);
+    if (event.type === "contact_header") this.track("headers", 1);
+    if (event.type === "crossover") this.track("crossovers", 1);
+    if (event.ownGoal) this.track("own_goals", 1);
+    if (event.type === "surge_on") this.track("surges", 1);
+    if (event.type === "frozen") this.track("frozen", 1);
     if (event.type === "regulation_expired") this.track("regulation_expired", true);
     if (event.type === "sudden_death") this.track("sudden_death", true);
     if (
@@ -134,6 +153,7 @@ export class RallyMetrics {
       generatedAt: new Date().toISOString(),
       session: {
         mode: this.mode,
+        controlMode: this.controlMode,
         source: this.source,
         matches: this.matches,
         sessionLengthMs: Date.now() - this.sessionStartedAt,
