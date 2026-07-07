@@ -197,6 +197,7 @@ export type RallyState = {
     aiThinkAt: number;
     aiPendingStrikeAt: number;
     aiPendingStrikeKind: 0 | 1;
+    aiReadQueue: { readyAt: number }[];
     playerHabits: Record<RallyStrikeKind | "header", number>;
   };
   buttTargets: Record<RallySide, ButtTarget>;
@@ -409,6 +410,7 @@ export function createRallyState(
       aiThinkAt: 0,
       aiPendingStrikeAt: 0,
       aiPendingStrikeKind: 0,
+      aiReadQueue: [],
       playerHabits: { flat: 0, arc: 0, spike: 0, lob: 0, header: 0 },
     },
     buttTargets: {
@@ -848,6 +850,9 @@ export class RallyEngine {
       state.duel.clockhead.strikeCooldownUntil,
       state.duel.clockhead.meter,
       state.duel.aiTilt,
+      state.duel.aiIntent.length,
+      state.duel.aiIntentUntil,
+      state.duel.aiReadQueue.length,
       state.excuse.x,
       state.excuse.y,
       state.excuse.vx,
@@ -1056,6 +1061,7 @@ export class RallyEngine {
       this.rollDuelAiIntent();
     }
     duel.aiTilt = Math.max(0, duel.aiTilt - RALLY_CONFIG.duel.tiltDecayPerSecond * dt);
+    this.processDuelAiReads();
     if (this.state.timeMs >= duel.aiThinkAt) {
       duel.aiThinkAt = this.state.timeMs + 90;
       const targetX = this.duelAiTargetX();
@@ -1100,6 +1106,62 @@ export class RallyEngine {
         this.tryDuelStrike("clockhead", kind);
       }
     }
+  }
+
+  private queueDuelAiRead() {
+    const delay = RALLY_CONFIG.duel.aiReadDelayMs * (1 - this.state.duel.aiTilt * 0.25);
+    this.state.duel.aiReadQueue.push({ readyAt: this.state.timeMs + delay });
+    this.recordInput("ai_decision", { action: "queue_read", readyAt: this.state.timeMs + delay });
+  }
+
+  private processDuelAiReads() {
+    const queue = this.state.duel.aiReadQueue;
+    for (let index = queue.length - 1; index >= 0; index -= 1) {
+      if (this.state.timeMs < queue[index].readyAt) continue;
+      queue.splice(index, 1);
+      const whiff = RALLY_CONFIG.duel.aiWhiff + this.state.duel.aiTilt * 0.12;
+      const topHabit = this.topDuelHabit();
+      if (
+        topHabit === "arc" &&
+        this.random() < RALLY_CONFIG.duel.aiPatternCounterCap &&
+        this.state.duel.clockhead.grounded
+      ) {
+        this.state.duel.clockhead.jumpBufferMs = RALLY_CONFIG.duel.bufferMs;
+        this.recordInput("ai_decision", { action: "counter_habit", habit: topHabit });
+        continue;
+      }
+      if (this.random() < whiff) {
+        this.recordInput("ai_decision", { action: "read_whiff", whiff });
+        continue;
+      }
+      const excuse = this.state.excuse;
+      const dxTime = (this.state.clockhead.x - excuse.x) / (excuse.vx || 1);
+      if (dxTime > 0 && dxTime < 1.2) {
+        const predictedY =
+          excuse.y +
+          excuse.vy * dxTime +
+          0.5 * RALLY_CONFIG.duel.gravity * RALLY_CONFIG.duel.ballGravScale * dxTime * dxTime;
+        if (
+          predictedY < this.state.clockhead.y - RALLY_CONFIG.clockhead.radius * 1.05 &&
+          this.state.duel.clockhead.grounded
+        ) {
+          this.state.duel.clockhead.jumpBufferMs = RALLY_CONFIG.duel.bufferMs;
+          this.recordInput("ai_decision", { action: "ballistic_jump", predictedY });
+        }
+      }
+    }
+  }
+
+  private topDuelHabit(): RallyStrikeKind | "header" | null {
+    let top: RallyStrikeKind | "header" | null = null;
+    let count = 1;
+    for (const [habit, value] of Object.entries(this.state.duel.playerHabits) as [RallyStrikeKind | "header", number][]) {
+      if (value > count) {
+        top = habit;
+        count = value;
+      }
+    }
+    return top;
   }
 
   private duelAiTargetX() {
@@ -1172,6 +1234,7 @@ export class RallyEngine {
     if (side === "spark") {
       this.state.duel.playerHabits[kind] += 1;
       this.recordInput("strike", { kind: strikeButton === 0 ? "strike" : "loft", cell: kind });
+      this.queueDuelAiRead();
     } else {
       this.recordInput("ai_decision", { action: "strike", cell: kind });
     }
@@ -2291,6 +2354,13 @@ export class RallyEngine {
       );
     } else {
       this.state.sparkScore += snapshot.points;
+      if (this.state.controlMode === "duel") {
+        this.state.duel.aiTilt = clamp(
+          this.state.duel.aiTilt + RALLY_CONFIG.duel.tiltConcede,
+          0,
+          1
+        );
+      }
       this.state.influence = clamp(
         this.state.influence + RALLY_CONFIG.scoring.influenceOnScore,
         0,

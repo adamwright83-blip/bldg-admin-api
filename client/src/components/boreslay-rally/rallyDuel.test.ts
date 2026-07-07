@@ -201,3 +201,57 @@ describe("duel coin-slot scoring", () => {
     });
   });
 });
+
+describe("duel AI mood brain", () => {
+  it("logs seeded AI decisions and keeps them deterministic for the same script", () => {
+    const run = () => {
+      const engine = new RallyEngine({ controlMode: "duel", seed: 9901 });
+      engine.start();
+      engine.state.serveAt = null;
+      Object.assign(engine.state.excuse, {
+        inPlay: true,
+        x: 610,
+        y: 330,
+        prevX: 610,
+        prevY: 330,
+        vx: 120,
+        vy: -60,
+        lastTouchedBy: "spark",
+        lastTouchAt: -Infinity,
+      });
+      engine.advanceFixedSteps(260);
+      return {
+        hash: engine.stateHash(),
+        aiLog: engine.getReplayRecord().inputLog.filter(event => event.type === "ai_decision"),
+      };
+    };
+    const first = run();
+    expect(first.aiLog.length).toBeGreaterThan(0);
+    expect(first).toEqual(run());
+  });
+
+  it("queues a delayed defensive read when the player strikes", () => {
+    const engine = duelEngine();
+    engine.state.excuse.x = engine.state.spark.x + 90;
+    engine.state.excuse.y = engine.state.spark.y - 10;
+    expect(engine.duelStrike("loft")).toBe(true);
+    const queued = engine.getReplayRecord().inputLog.find(
+      event => event.type === "ai_decision" && event.payload?.action === "queue_read"
+    );
+    expect(queued).toBeTruthy();
+    engine.advanceFixedSteps(Math.ceil(RALLY_CONFIG.duel.aiReadDelayMs / FIXED_STEP_MS) + 4);
+    expect(engine.state.duel.aiReadQueue).toHaveLength(0);
+  });
+
+  it("raises and then decays AI tilt when Clockhead concedes", () => {
+    const engine = prepareSlotEngine();
+    placeExcuseAtSlot(engine, "clockhead", -360, 0, false, "spark");
+    engine.advanceFixedSteps(1);
+    reachDuelImpact(engine);
+    expect(engine.state.duel.aiTilt).toBeGreaterThanOrEqual(RALLY_CONFIG.duel.tiltConcede - 0.001);
+    const tilted = engine.state.duel.aiTilt;
+    engine.advanceFrame(RALLY_CONFIG.duel.ceremonyMs + 1);
+    engine.advanceFixedSteps(120);
+    expect(engine.state.duel.aiTilt).toBeLessThan(tilted);
+  });
+});
