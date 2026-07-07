@@ -94,6 +94,7 @@ export type RallyScoreSnapshot = {
   vy: number;
   tick: number;
   ignited: boolean;
+  ownGoal: boolean;
   bark: string | null;
 };
 
@@ -272,6 +273,8 @@ const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
 const length = (x: number, y: number) => Math.hypot(x, y);
+
+const lerp = (from: number, to: number, alpha: number) => from + (to - from) * alpha;
 
 const normalize = (x: number, y: number): RallyVec => {
   const magnitude = length(x, y) || 1;
@@ -1233,7 +1236,7 @@ export class RallyEngine {
       excuse.x += excuse.vx * collisionDt;
       excuse.y += excuse.vy * collisionDt;
       if (this.state.scoringMode === "buttHybrid") {
-        if (this.resolveButtTargetSweep(beforeX, beforeY)) return;
+        if (excuse.lastTouchedBy !== null && this.resolveDuelSlotSweep(beforeX, beforeY)) return;
       }
       this.resolveDuelFighterContact();
       this.resolveDuelStraightWalls();
@@ -1844,6 +1847,82 @@ export class RallyEngine {
     return true;
   }
 
+  private duelSlotSegment(side: RallySide, progress = 1) {
+    const target = this.state.buttTargets[side];
+    const fighter = side === "spark" ? this.state.spark : this.state.clockhead;
+    const back = fighter.facing.x >= 0 ? -1 : 1;
+    const x = lerp(target.prevX, target.x, progress);
+    const y = lerp(target.prevY, target.y, progress);
+    const angle = (RALLY_CONFIG.duel.slotAngleDeg * Math.PI) / 180;
+    const ux = back * Math.cos(angle);
+    const uy = -Math.sin(angle);
+    const half = RALLY_CONFIG.duel.slotLen / 2;
+    return {
+      side,
+      back,
+      x1: x - ux * half,
+      y1: y - uy * half,
+      x2: x + ux * half,
+      y2: y + uy * half,
+    };
+  }
+
+  private resolveDuelSlotSweep(startX: number, startY: number) {
+    const excuse = this.state.excuse;
+    const speed = length(excuse.vx, excuse.vy);
+    const samples = speed > RALLY_CONFIG.buttTarget.highSpeedSubstepThreshold ? 8 : 3;
+    const candidates: { side: RallySide; t: number; x: number; y: number }[] = [];
+    for (const side of ["spark", "clockhead"] as const) {
+      for (let index = 0; index <= samples; index += 1) {
+        const t = index / samples;
+        const x = lerp(startX, excuse.x, t);
+        const y = lerp(startY, excuse.y, t);
+        const segment = this.duelSlotSegment(side, t);
+        if (!this.segmentCircleHit(segment, x, y, RALLY_CONFIG.duel.excuseRadius)) continue;
+        const inward = (excuse.vx * segment.back < 0) || (excuse.vy > 40);
+        if (!inward) continue;
+        candidates.push({ side, t, x, y });
+        break;
+      }
+    }
+    if (candidates.length === 0) return false;
+    candidates.sort((left, right) => left.t - right.t);
+    if (
+      candidates.length > 1 &&
+      Math.abs(candidates[0].t - candidates[1].t) <= RALLY_CONFIG.buttTarget.tieEpsilon
+    ) return false;
+    const hit = candidates[0];
+    const target = this.state.buttTargets[hit.side];
+    excuse.x = hit.x;
+    excuse.y = hit.y;
+    this.sealScore(
+      hit.side,
+      "buttHybrid",
+      target.x,
+      target.y,
+      excuse.lastTouchedBy === hit.side
+    );
+    return true;
+  }
+
+  private segmentCircleHit(
+    segment: { x1: number; y1: number; x2: number; y2: number },
+    cx: number,
+    cy: number,
+    radius: number
+  ) {
+    const dx = segment.x2 - segment.x1;
+    const dy = segment.y2 - segment.y1;
+    const t = clamp(
+      ((cx - segment.x1) * dx + (cy - segment.y1) * dy) / (dx * dx + dy * dy),
+      0,
+      1
+    );
+    const px = segment.x1 + dx * t;
+    const py = segment.y1 + dy * t;
+    return length(cx - px, cy - py) <= radius;
+  }
+
   private resolvePowerSurfaces() {
     const powers = this.state.powers;
     const tape = powers.redTape;
@@ -2140,7 +2219,8 @@ export class RallyEngine {
     victim: RallySide,
     mode: "portal" | "buttHybrid",
     x: number,
-    y: number
+    y: number,
+    ownGoal = false
   ) {
     if (this.state.ceremony) return;
     const excuse = this.state.excuse;
@@ -2165,6 +2245,7 @@ export class RallyEngine {
         vy: excuse.vy,
         tick: this.state.tick,
         ignited: excuse.ignitedUntil > this.state.timeMs,
+        ownGoal,
         bark: victim === "spark"
           ? CLOCKHEAD_SCORE_BARKS[Math.floor(this.random() * CLOCKHEAD_SCORE_BARKS.length)]
           : null,
@@ -2255,7 +2336,9 @@ export class RallyEngine {
       return;
     }
     this.state.servingSide = snapshot.victim;
-    this.state.serveAt = this.state.timeMs;
+    this.state.serveAt = this.state.controlMode === "duel"
+      ? this.state.timeMs + RALLY_CONFIG.duel.serveMs
+      : this.state.timeMs;
     this.state.message =
       snapshot.victim === "clockhead"
         ? snapshot.mode === "buttHybrid" ? "BUTT BASH!" : "REALITY GATE SHATTERED!"
@@ -2263,6 +2346,7 @@ export class RallyEngine {
   }
 
   private ceremonyTotalMs() {
+    if (this.state.controlMode === "duel") return RALLY_CONFIG.duel.ceremonyMs;
     return (
       RALLY_CONFIG.ceremony.ingestionMs +
       RALLY_CONFIG.ceremony.hitStopMs +

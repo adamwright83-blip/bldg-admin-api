@@ -31,6 +31,52 @@ const duelEngine = () => {
 const speed = (engine: RallyEngine) =>
   Math.hypot(engine.state.excuse.vx, engine.state.excuse.vy);
 
+const prepareSlotEngine = () => {
+  const engine = duelEngine();
+  engine.state.excuse.inPlay = false;
+  engine.advanceFixedSteps(1);
+  for (const target of Object.values(engine.state.buttTargets)) {
+    target.prevX = target.x;
+    target.prevY = target.y;
+  }
+  engine.state.duel.clockhead.strikeCooldownUntil = Number.MAX_SAFE_INTEGER;
+  engine.state.duel.aiThinkAt = Number.MAX_SAFE_INTEGER;
+  engine.state.duel.aiIntentUntil = Number.MAX_SAFE_INTEGER;
+  return engine;
+};
+
+const slotCenter = (engine: RallyEngine, side: "spark" | "clockhead") => {
+  const target = engine.state.buttTargets[side];
+  return { x: target.x, y: target.y };
+};
+
+const placeExcuseAtSlot = (
+  engine: RallyEngine,
+  side: "spark" | "clockhead",
+  vx: number,
+  vy: number,
+  bankState: boolean,
+  lastTouchedBy: "spark" | "clockhead"
+) => {
+  const point = slotCenter(engine, side);
+  Object.assign(engine.state.excuse, {
+    inPlay: true,
+    x: point.x,
+    y: point.y,
+    prevX: point.x,
+    prevY: point.y,
+    vx,
+    vy,
+    lastTouchedBy,
+    lastTouchAt: -Infinity,
+    bankState,
+  });
+};
+
+const reachDuelImpact = (engine: RallyEngine) => {
+  engine.advanceFrame(RALLY_CONFIG.ceremony.ingestionMs + RALLY_CONFIG.ceremony.hitStopMs);
+};
+
 describe("duel physics", () => {
   it("keeps a standing body touch in the dink speed class and clears bank state", () => {
     const engine = duelEngine();
@@ -68,5 +114,90 @@ describe("duel physics", () => {
       airtimeMs += FIXED_STEP_MS;
     }
     expect(airtimeMs / 1000).toBeGreaterThanOrEqual(RALLY_CONFIG.duel.minLobHangS);
+  });
+});
+
+describe("duel coin-slot scoring", () => {
+  it.each([
+    ["Spark bank", "spark", 360, 0, true, true],
+    ["Spark front", "spark", -360, 0, true, false],
+    ["Clockhead bank", "clockhead", -360, 0, true, true],
+    ["Clockhead front", "clockhead", 360, 0, true, false],
+    ["Drop-in", "clockhead", 0, 120, false, true],
+  ] as const)("applies the fixed inward slot test for %s", (_label, side, vx, vy, bank, shouldScore) => {
+    const engine = prepareSlotEngine();
+    placeExcuseAtSlot(engine, side, vx, vy, bank, side === "spark" ? "clockhead" : "spark");
+    engine.advanceFixedSteps(1);
+    expect(engine.state.ceremony !== null).toBe(shouldScore);
+  });
+
+  it("attributes own goals to the slot owner's opponent and prefixes the snapshot", () => {
+    const engine = prepareSlotEngine();
+    placeExcuseAtSlot(engine, "clockhead", -360, 0, false, "clockhead");
+    engine.advanceFixedSteps(1);
+    expect(engine.state.ceremony?.snapshot).toMatchObject({
+      victim: "clockhead",
+      scorer: "spark",
+      ownGoal: true,
+      points: 1,
+    });
+    reachDuelImpact(engine);
+    expect(engine.state.sparkScore).toBe(1);
+  });
+
+  it("keeps banked slot inserts worth two points", () => {
+    const engine = prepareSlotEngine();
+    placeExcuseAtSlot(engine, "clockhead", -360, 0, true, "spark");
+    engine.advanceFixedSteps(1);
+    expect(engine.state.ceremony?.snapshot).toMatchObject({
+      victim: "clockhead",
+      scorer: "spark",
+      banked: true,
+      points: 2,
+    });
+    reachDuelImpact(engine);
+    expect(engine.state.sparkScore).toBe(2);
+  });
+
+  it("keeps duel targets clamped inside every arena edge without shrinking fighter bounds", () => {
+    const engine = prepareSlotEngine();
+    const poses = [
+      { side: "spark" as const, x: -500, y: -500, facing: { x: 1, y: 0 } },
+      { side: "spark" as const, x: 1700, y: 1200, facing: { x: -1, y: 0 } },
+      { side: "clockhead" as const, x: -400, y: 1000, facing: { x: 1, y: 0 } },
+      { side: "clockhead" as const, x: 1600, y: -300, facing: { x: -1, y: 0 } },
+    ];
+    for (const pose of poses) {
+      const fighter = engine.state[pose.side];
+      Object.assign(fighter, { x: pose.x, y: pose.y, facing: pose.facing });
+      engine.advanceFixedSteps(1);
+      const target = engine.state.buttTargets[pose.side];
+      expect(target.x - target.radius).toBeGreaterThanOrEqual(0);
+      expect(target.y - target.radius).toBeGreaterThanOrEqual(0);
+      expect(target.x + target.radius).toBeLessThanOrEqual(RALLY_CONFIG.arena.width);
+      expect(target.y + target.radius).toBeLessThanOrEqual(RALLY_CONFIG.arena.height);
+    }
+  });
+
+  it("catches a max-speed insert that would tunnel past the slot in one fixed step", () => {
+    const engine = prepareSlotEngine();
+    const target = slotCenter(engine, "clockhead");
+    Object.assign(engine.state.excuse, {
+      inPlay: true,
+      x: target.x + RALLY_CONFIG.duel.excuseRadius + 5,
+      y: target.y,
+      prevX: target.x + RALLY_CONFIG.duel.excuseRadius + 5,
+      prevY: target.y,
+      vx: -RALLY_CONFIG.duel.maxSpeed,
+      vy: 0,
+      lastTouchedBy: "spark",
+      lastTouchAt: -Infinity,
+      bankState: true,
+    });
+    engine.advanceFixedSteps(1);
+    expect(engine.state.ceremony?.snapshot).toMatchObject({
+      victim: "clockhead",
+      points: 2,
+    });
   });
 });

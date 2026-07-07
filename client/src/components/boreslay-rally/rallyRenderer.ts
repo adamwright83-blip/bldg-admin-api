@@ -809,9 +809,9 @@ export class RallyRenderer {
       context.fillText(headline, 0, -22);
       context.fillStyle = "#ffb345";
       context.font = "900 26px Impact, Haettenschweiler, sans-serif";
-      const subline = ceremony.snapshot.banked
+      const subline = `${ceremony.snapshot.ownGoal ? "OWN GOAL · " : ""}${ceremony.snapshot.banked
         ? `RETURNED TO SENDER · +${ceremony.snapshot.points}`
-        : `+${ceremony.snapshot.points}`;
+        : `+${ceremony.snapshot.points}`}`;
       context.fillText(subline, 0, 35);
       context.restore();
     }
