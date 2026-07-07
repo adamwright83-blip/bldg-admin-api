@@ -1,5 +1,6 @@
 import arenaBackgroundUrl from "@/assets/boreslay-rally/arena-background.webp";
 import clockheadSheetUrl from "@/assets/boreslay-rally/clockhead-sheet.webp";
+import duelArenaBackgroundUrl from "@/assets/boreslay-rally/duel-arena-background.png";
 import excuseSheetUrl from "@/assets/boreslay-rally/excuse-sheet.webp";
 import sparkSheetUrl from "@/assets/boreslay-rally/spark-sheet.webp";
 import type { RallyState, RallyVec } from "./rallyEngine";
@@ -8,6 +9,7 @@ import type { RallyParticlePool } from "./rallyParticles";
 
 type RallyAssets = {
   background: HTMLImageElement;
+  duelBackground: HTMLImageElement;
   spark: HTMLImageElement;
   clockhead: HTMLImageElement;
   excuse: HTMLImageElement;
@@ -75,10 +77,11 @@ export class RallyRenderer {
   constructor(onReady?: () => void) {
     const onLoad = () => {
       this.loaded += 1;
-      if (this.loaded === 4) onReady?.();
+      if (this.loaded === 5) onReady?.();
     };
     this.assets = {
       background: loadImage(arenaBackgroundUrl, onLoad),
+      duelBackground: loadImage(duelArenaBackgroundUrl, onLoad),
       spark: loadImage(sparkSheetUrl, onLoad),
       clockhead: loadImage(clockheadSheetUrl, onLoad),
       excuse: loadImage(excuseSheetUrl, onLoad),
@@ -166,23 +169,7 @@ export class RallyRenderer {
 
   private drawBackground(context: CanvasRenderingContext2D, state: RallyState) {
     if (state.controlMode === "duel") {
-      context.fillStyle = "#11151d";
-      context.fillRect(0, 0, RALLY_CONFIG.arena.width, RALLY_CONFIG.arena.height);
-      context.fillStyle = "#1a2233";
-      context.fillRect(
-        0,
-        RALLY_CONFIG.duel.groundY + RALLY_CONFIG.duel.groundPad,
-        RALLY_CONFIG.arena.width,
-        RALLY_CONFIG.arena.height - RALLY_CONFIG.duel.groundY - RALLY_CONFIG.duel.groundPad
-      );
-      context.strokeStyle = "#2a3550";
-      context.lineWidth = 4;
-      context.strokeRect(2, 2, RALLY_CONFIG.arena.width - 4, RALLY_CONFIG.duel.groundY + RALLY_CONFIG.duel.groundPad - 2);
-      context.strokeStyle = "#232c44";
-      context.beginPath();
-      context.moveTo(RALLY_CONFIG.arena.width / 2, RALLY_CONFIG.duel.groundY + RALLY_CONFIG.duel.groundPad);
-      context.lineTo(RALLY_CONFIG.arena.width / 2, RALLY_CONFIG.duel.groundY - 40);
-      context.stroke();
+      this.drawDuelBackground(context);
       if (state.clockhead.telegraph === "freeze") {
         const pulse = state.reducedMotion ? 0.55 : 0.38 + Math.sin(state.timeMs * 0.03) * 0.18;
         context.strokeStyle = `rgba(125, 211, 252, ${pulse})`;
@@ -218,6 +205,42 @@ export class RallyRenderer {
       RALLY_CONFIG.arena.width / 2,
       RALLY_CONFIG.arena.height
     );
+  }
+
+  private drawDuelBackground(context: CanvasRenderingContext2D) {
+    const image = this.assets.duelBackground;
+    if (image.complete && image.naturalWidth > 0) {
+      const cropTop = 155;
+      const cropHeight = 575;
+      context.drawImage(
+        image,
+        0,
+        cropTop,
+        image.naturalWidth,
+        cropHeight,
+        0,
+        0,
+        RALLY_CONFIG.arena.width,
+        RALLY_CONFIG.arena.height
+      );
+    } else {
+      const gradient = context.createLinearGradient(0, 0, RALLY_CONFIG.arena.width, RALLY_CONFIG.arena.height);
+      gradient.addColorStop(0, "#124d8f");
+      gradient.addColorStop(0.58, "#6ec4ff");
+      gradient.addColorStop(0.59, "#78a83a");
+      gradient.addColorStop(1, "#7b4a24");
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, RALLY_CONFIG.arena.width, RALLY_CONFIG.arena.height);
+    }
+
+    context.strokeStyle = "rgba(255, 191, 73, 0.72)";
+    context.lineWidth = 4;
+    context.strokeRect(2, 2, RALLY_CONFIG.arena.width - 4, RALLY_CONFIG.arena.height - 4);
+    context.strokeStyle = "rgba(11, 28, 52, 0.42)";
+    context.beginPath();
+    context.moveTo(RALLY_CONFIG.arena.width / 2, RALLY_CONFIG.duel.groundY + RALLY_CONFIG.duel.groundPad);
+    context.lineTo(RALLY_CONFIG.arena.width / 2, RALLY_CONFIG.duel.groundY - 54);
+    context.stroke();
   }
 
   private drawGateThreats(context: CanvasRenderingContext2D, state: RallyState) {
