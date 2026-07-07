@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
+import "./components/boreslay-rally/clockheadCuckooVisual";
+import "./components/boreslay-rally/clockheadTargetVisual";
 import App from "./App";
 import { canRedirectToLoginUrl, getLoginUrl } from "./const";
 import "./index.css";
