@@ -1,0 +1,51 @@
+name: Boreslay Rally CI
+
+on:
+  pull_request:
+    paths:
+      - "client/src/components/boreslay-rally/**"
+      - "client/src/main.tsx"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/boreslay-rally-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-rally:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm check
+
+      - name: Run Rally tests
+        run: >-
+          pnpm exec vitest run
+          client/src/components/boreslay-rally/rallyEngine.test.ts
+          client/src/components/boreslay-rally/rallyEngine.duel.test.ts
+          client/src/components/boreslay-rally/rallyMetrics.test.ts
+          client/src/components/boreslay-rally/rallyStudioPhysics.test.ts
+
+      - name: Production build
+        run: pnpm build
