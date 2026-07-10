@@ -16,9 +16,10 @@ const target = (x: number, y: number) => ({
 });
 
 describe("Boreslay studio contract", () => {
-  it("uses the reference landscape proportions and a 60-second match", () => {
+  it("uses the reference landscape proportions, a 60-second match, and no first prompt before 35 seconds", () => {
     expect(RALLY_CONFIG.arena.width / RALLY_CONFIG.arena.height).toBeCloseTo(600 / 269, 5);
     expect(RALLY_CONFIG.scoring.regulationMs).toBe(60_000);
+    expect(RALLY_CONFIG.rescue.minimumMatchAgeMs).toBe(35_000);
   });
 
   it.each([
@@ -50,7 +51,7 @@ describe("Boreslay studio contract", () => {
     expect(Math.hypot(excuse.vx, excuse.vy)).toBeGreaterThan(Math.abs(vx));
   });
 
-  it("lets Closer hold the inbound scroll without stealing match time", () => {
+  it("lets Closer hold the inbound scroll without stealing match time, then resumes play after acceptance", () => {
     const engine = new RallyEngine({ controlMode: "duel", scoringMode: "buttHybrid", seed: 77 });
     engine.start();
     engine.state.serveAt = null;
@@ -74,7 +75,12 @@ describe("Boreslay studio contract", () => {
 
     expect(engine.acceptRescue()).toBe(true);
     expect(engine.state.mission.status).toBe("accepted");
+    expect(engine.state.status).toBe("playing");
     expect(engine.state.spark.frozenUntil).toBe(engine.state.timeMs);
     expect(engine.state.excuse.vx).toBeGreaterThan(0);
+
+    const acceptedAtX = engine.state.excuse.x;
+    engine.advanceFixedSteps(10);
+    expect(engine.state.excuse.x).toBeGreaterThan(acceptedAtX);
   });
 });
