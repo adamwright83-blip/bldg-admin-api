@@ -37,7 +37,10 @@ const API_BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
 export const BOOKING_URL: string | undefined = import.meta.env.VITE_BOOKING_URL;
 
-export async function submitBoreslayLead(answers: BsIntakeAnswers): Promise<void> {
+export async function submitBoreslayLead(
+  answers: BsIntakeAnswers,
+  source = "boreslay_landing"
+): Promise<void> {
   const res = await fetch(`${API_BASE}/api/leads/submit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -48,7 +51,7 @@ export async function submitBoreslayLead(answers: BsIntakeAnswers): Promise<void
       email: answers.email,
       number_of_units: answers.monthlyVolume,
       phone: answers.phone,
-      source: "boreslay_landing",
+      source,
       source_url: typeof window !== "undefined" ? window.location.href : null,
       notes: `Need: ${answers.primaryNeed} · Volume: ${answers.monthlyVolume}`,
     }),
