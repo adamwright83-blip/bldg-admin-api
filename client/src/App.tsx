@@ -42,7 +42,9 @@ function DayforgeLandingRoute() {
 
 function RallyDemoRoute() {
   return (
-    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#05060b" }} />}>
+    <Suspense
+      fallback={<div style={{ minHeight: "100vh", background: "#05060b" }} />}
+    >
       <RallyDemo />
     </Suspense>
   );
@@ -75,6 +77,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/operator-reflection",
   "/boreslay-rally",
   "/dayforge",
+  "/landingfinal",
 ]);
 
 function AdminHostRouter() {
@@ -83,6 +86,7 @@ function AdminHostRouter() {
       {/* Public landing pages are also reachable from the admin host for previewing. */}
       <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/dayforge" component={DayforgeLandingRoute} />
+      <Route path="/landingfinal" component={DayforgeLandingRoute} />
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
@@ -149,6 +153,7 @@ function Router() {
     <Switch>
       <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/dayforge" component={DayforgeLandingRoute} />
+      <Route path="/landingfinal" component={DayforgeLandingRoute} />
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
