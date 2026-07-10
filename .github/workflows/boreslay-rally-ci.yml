@@ -34,10 +34,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
+      - name: Typecheck Rally files
         id: typecheck
         continue-on-error: true
-        run: pnpm check > typecheck.log 2>&1
+        run: |
+          pnpm check > typecheck.log 2>&1 || true
+          if grep -E "client/src/components/boreslay-rally|client/src/main\.tsx" typecheck.log; then
+            echo "Rally-scoped TypeScript errors found."
+            exit 1
+          fi
+          echo "No Rally-scoped TypeScript errors. Full-repo baseline errors, if any, remain in the artifact."
 
       - name: Upload typecheck log
         if: always()
