@@ -1,3 +1,8 @@
+.rally-stage {
+  width: min(100dvw, 223.048327dvh);
+  height: min(100dvh, 44.833333dvw);
+}
+
 .controls-duel .rally-rescue h2,
 .controls-duel .rally-rescue p,
 .controls-duel .rally-rescue button {
