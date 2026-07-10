@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { RallyEngine } from "./rallyEngine";
 import { RALLY_CONFIG } from "./rallyConfig";
 import {
   getRallyStudioBumpers,
@@ -47,5 +48,33 @@ describe("Boreslay studio contract", () => {
     expect(Math.sign(excuse.vx)).toBe(side === "spark" ? 1 : -1);
     expect(excuse.vy).toBeGreaterThan(0);
     expect(Math.hypot(excuse.vx, excuse.vy)).toBeGreaterThan(Math.abs(vx));
+  });
+
+  it("lets Closer hold the inbound scroll without stealing match time", () => {
+    const engine = new RallyEngine({ controlMode: "duel", scoringMode: "buttHybrid", seed: 77 });
+    engine.start();
+    engine.state.serveAt = null;
+    engine.state.excuse.inPlay = true;
+    engine.state.excuse.x = engine.state.spark.x + 150;
+    engine.state.excuse.y = engine.state.spark.y - 60;
+    engine.state.excuse.vx = -700;
+    engine.state.excuse.vy = 90;
+    engine.state.excuse.lastTouchedBy = "clockhead";
+    engine.state.mission.status = "ready";
+    engine.state.mission.readyAt = engine.state.timeMs;
+    engine.state.mission.acceptDeadline = engine.state.timeMs + RALLY_CONFIG.rescue.acceptWindowMs;
+
+    const regulationBefore = engine.state.regulationRemainingMs;
+    engine.advanceFixedSteps(30);
+
+    expect(engine.state.regulationRemainingMs).toBe(regulationBefore);
+    expect(engine.state.excuse.vx).toBe(0);
+    expect(engine.state.excuse.vy).toBe(0);
+    expect(engine.state.excuse.inPlay).toBe(true);
+
+    expect(engine.acceptRescue()).toBe(true);
+    expect(engine.state.mission.status).toBe("accepted");
+    expect(engine.state.spark.frozenUntil).toBe(engine.state.timeMs);
+    expect(engine.state.excuse.vx).toBeGreaterThan(0);
   });
 });
