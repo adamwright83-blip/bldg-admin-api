@@ -105,6 +105,8 @@ export function resolveRallyStudioBumper(
 type RallyEnginePrivate = {
   state: RallyState;
   resolveDuelStraightWalls(): void;
+  updateDuelExcuse(dt: number): void;
+  updateRegulationClock(dtMs: number): void;
   maybeTriggerDuelRescue(): void;
   openRescue(): void;
   emit(
@@ -117,8 +119,16 @@ type RallyEnginePrivate = {
   addTrauma(amount: number): void;
 };
 
+type HeldDeathScroll = {
+  vx: number;
+  vy: number;
+};
+
+const rescueHolds = new WeakMap<object, HeldDeathScroll>();
 const prototype = RallyEngine.prototype as unknown as RallyEnginePrivate;
 const resolveStraightWalls = prototype.resolveDuelStraightWalls;
+const updateDuelExcuse = prototype.updateDuelExcuse;
+const updateRegulationClock = prototype.updateRegulationClock;
 
 prototype.resolveDuelStraightWalls = function resolveStudioWalls() {
   resolveStraightWalls.call(this);
@@ -134,6 +144,56 @@ prototype.resolveDuelStraightWalls = function resolveStudioWalls() {
     this.emit("bumper_bank", excuse.x, excuse.y, bumper.side);
     break;
   }
+};
+
+prototype.updateRegulationClock = function preserveTheSixtySecondContract(dtMs) {
+  if (this.state.controlMode === "duel" && this.state.mission.status === "ready") return;
+  updateRegulationClock.call(this, dtMs);
+};
+
+prototype.updateDuelExcuse = function holdTheDeathScroll(dt) {
+  const state = this.state;
+  const excuse = state.excuse;
+  const existingHold = rescueHolds.get(this as unknown as object);
+
+  if (state.mission.status === "ready" && excuse.inPlay && !state.ceremony) {
+    if (!existingHold) {
+      rescueHolds.set(this as unknown as object, { vx: excuse.vx, vy: excuse.vy });
+      excuse.trailX.fill(excuse.x);
+      excuse.trailY.fill(excuse.y);
+      excuse.trailHead = 0;
+    }
+
+    const target = state.buttTargets.spark;
+    const minimumX = target.x + target.radius + RALLY_CONFIG.duel.excuseRadius + 48;
+    const maximumX = state.spark.x + 178;
+    const heldX = clamp(excuse.x, minimumX, Math.max(minimumX, maximumX));
+    const heldY = clamp(
+      excuse.y,
+      150,
+      RALLY_CONFIG.duel.groundY - RALLY_CONFIG.duel.excuseRadius - 28
+    );
+
+    excuse.prevX = heldX;
+    excuse.prevY = heldY;
+    excuse.x = heldX;
+    excuse.y = heldY;
+    excuse.vx = 0;
+    excuse.vy = 0;
+    excuse.stallMs = 0;
+    return;
+  }
+
+  if (existingHold) {
+    if (state.mission.status === "expired" && excuse.inPlay && !state.ceremony) {
+      excuse.vx = existingHold.vx;
+      excuse.vy = existingHold.vy;
+      excuse.lastTouchAt = state.timeMs;
+    }
+    rescueHolds.delete(this as unknown as object);
+  }
+
+  updateDuelExcuse.call(this, dt);
 };
 
 prototype.maybeTriggerDuelRescue = function openMissionOnlyAtPeakThreat() {
