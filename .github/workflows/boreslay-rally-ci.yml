@@ -35,15 +35,52 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: pnpm check
+        id: typecheck
+        continue-on-error: true
+        run: pnpm check > typecheck.log 2>&1
+
+      - name: Upload typecheck log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boreslay-typecheck-log
+          path: typecheck.log
 
       - name: Run Rally tests
+        id: rally_tests
+        continue-on-error: true
         run: >-
           pnpm exec vitest run
           client/src/components/boreslay-rally/rallyEngine.test.ts
           client/src/components/boreslay-rally/rallyEngine.duel.test.ts
           client/src/components/boreslay-rally/rallyMetrics.test.ts
           client/src/components/boreslay-rally/rallyStudioPhysics.test.ts
+          > rally-tests.log 2>&1
+
+      - name: Upload Rally test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boreslay-test-log
+          path: rally-tests.log
 
       - name: Production build
-        run: pnpm build
+        id: production_build
+        continue-on-error: true
+        run: pnpm build > build.log 2>&1
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boreslay-build-log
+          path: build.log
+
+      - name: Enforce validation result
+        if: always()
+        run: |
+          failed=0
+          if [ "${{ steps.typecheck.outcome }}" != "success" ]; then failed=1; fi
+          if [ "${{ steps.rally_tests.outcome }}" != "success" ]; then failed=1; fi
+          if [ "${{ steps.production_build.outcome }}" != "success" ]; then failed=1; fi
+          exit "$failed"
