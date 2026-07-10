@@ -213,7 +213,7 @@ export const RALLY_CONFIG = {
   rescue: {
     acceptWindowMs: 20000,
     returnForceMultiplier: 3,
-    minimumMatchAgeMs: 6000,
+    minimumMatchAgeMs: 35000,
     minimumInboundSpeed: 180,
     minimumThreatEtaSeconds: 0.16,
     maximumThreatEtaSeconds: 1.05,
