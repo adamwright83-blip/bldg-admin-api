@@ -109,6 +109,7 @@ type RallyEnginePrivate = {
   updateRegulationClock(dtMs: number): void;
   maybeTriggerDuelRescue(): void;
   openRescue(): void;
+  acceptRescue(): boolean;
   emit(
     type: "bumper_bank",
     x?: number,
@@ -129,6 +130,7 @@ const prototype = RallyEngine.prototype as unknown as RallyEnginePrivate;
 const resolveStraightWalls = prototype.resolveDuelStraightWalls;
 const updateDuelExcuse = prototype.updateDuelExcuse;
 const updateRegulationClock = prototype.updateRegulationClock;
+const acceptRescue = prototype.acceptRescue;
 
 prototype.resolveDuelStraightWalls = function resolveStudioWalls() {
   resolveStraightWalls.call(this);
@@ -149,6 +151,26 @@ prototype.resolveDuelStraightWalls = function resolveStudioWalls() {
 prototype.updateRegulationClock = function preserveTheSixtySecondContract(dtMs) {
   if (this.state.controlMode === "duel" && this.state.mission.status === "ready") return;
   updateRegulationClock.call(this, dtMs);
+};
+
+prototype.acceptRescue = function acceptStudioRescue() {
+  const state = this.state;
+  if (state.mission.status !== "ready") return false;
+
+  const previousStatus = state.status;
+  if (previousStatus !== "victory" && previousStatus !== "defeat") {
+    state.status = "playing";
+  }
+
+  const accepted = acceptRescue.call(this);
+  if (!accepted) {
+    state.status = previousStatus;
+    return false;
+  }
+
+  state.status = "playing";
+  state.message = "MISSION ACCEPTED — Closer returned the Death Scroll.";
+  return true;
 };
 
 prototype.updateDuelExcuse = function holdTheDeathScroll(dt) {
@@ -188,6 +210,21 @@ prototype.updateDuelExcuse = function holdTheDeathScroll(dt) {
     if (state.mission.status === "expired" && excuse.inPlay && !state.ceremony) {
       excuse.vx = existingHold.vx;
       excuse.vy = existingHold.vy;
+      excuse.lastTouchAt = state.timeMs;
+    } else if (
+      state.mission.status === "accepted" &&
+      excuse.inPlay &&
+      !state.ceremony &&
+      length(excuse.vx, excuse.vy) < 1
+    ) {
+      const counterSpeed = Math.min(
+        RALLY_CONFIG.duel.maxSpeed,
+        Math.max(RALLY_CONFIG.duel.strikeFlatSpeed, length(existingHold.vx, existingHold.vy)) *
+          RALLY_CONFIG.rescue.returnForceMultiplier
+      );
+      excuse.vx = counterSpeed;
+      excuse.vy = -Math.max(120, Math.abs(existingHold.vy));
+      excuse.lastTouchedBy = "spark";
       excuse.lastTouchAt = state.timeMs;
     }
     rescueHolds.delete(this as unknown as object);
@@ -241,3 +278,20 @@ prototype.maybeTriggerDuelRescue = function openMissionOnlyAtPeakThreat() {
     this.openRescue();
   }
 };
+
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "pointerup",
+    event => {
+      if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const button = target.closest(".rally-rescue button");
+      if (!(button instanceof HTMLButtonElement)) return;
+
+      event.preventDefault();
+      queueMicrotask(() => button.click());
+    },
+    { capture: true }
+  );
+}
