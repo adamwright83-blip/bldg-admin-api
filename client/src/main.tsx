@@ -4,14 +4,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
+import App from "./App";
+import { canRedirectToLoginUrl, getLoginUrl } from "./const";
+import "./index.css";
+import "./components/boreslay-rally/rally.css";
 import "./components/boreslay-rally/clockheadCuckooVisual";
 import "./components/boreslay-rally/clockheadTargetVisual";
 import "./components/boreslay-rally/rallyStudioPhysics";
 import "./components/boreslay-rally/rallyStudioVisual";
 import "./components/boreslay-rally/rallyStudioPass.css";
-import App from "./App";
-import { canRedirectToLoginUrl, getLoginUrl } from "./const";
-import "./index.css";
+import "./components/boreslay-rally/rallyStudioCopy.css";
 
 const queryClient = new QueryClient();
 
