@@ -15,14 +15,27 @@ import DigitalReceiptPage from "./pages/DigitalReceiptPage";
 import LaundryFarmHome from "./pages/LaundryFarmHome";
 import AdminCatalog from "./pages/AdminCatalog";
 
-// BORESLAY marketing site (boreslay.com) — lazy so the admin bundle never pays for it.
+// Public product sites are lazy so the operational admin bundle never pays for them.
 const BoreslayLanding = lazy(() => import("./pages/BoreslayLanding"));
+const DayforgeLanding = lazy(() => import("./pages/DayforgeLanding"));
 const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
+
+function PublicLandingFallback() {
+  return <div style={{ minHeight: "100vh", background: "#F6F1E8" }} />;
+}
 
 function BoreslayLandingRoute() {
   return (
-    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#FAF7F2" }} />}>
+    <Suspense fallback={<PublicLandingFallback />}>
       <BoreslayLanding />
+    </Suspense>
+  );
+}
+
+function DayforgeLandingRoute() {
+  return (
+    <Suspense fallback={<PublicLandingFallback />}>
+      <DayforgeLanding />
     </Suspense>
   );
 }
@@ -61,14 +74,15 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/level4",
   "/operator-reflection",
   "/boreslay-rally",
+  "/dayforge",
 ]);
 
 function AdminHostRouter() {
   return (
     <Switch>
-      {/* Public BORESLAY landing — served at admin.bldg.chat/boreslay until
-          boreslay.com is purchased and pointed at this project. */}
+      {/* Public landing pages are also reachable from the admin host for previewing. */}
       <Route path="/boreslay" component={BoreslayLandingRoute} />
+      <Route path="/dayforge" component={DayforgeLandingRoute} />
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
@@ -134,6 +148,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/boreslay" component={BoreslayLandingRoute} />
+      <Route path="/dayforge" component={DayforgeLandingRoute} />
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
