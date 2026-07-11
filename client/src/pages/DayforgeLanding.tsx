@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import rallyScreenshot from "@/assets/boreslay-rally/p5-final-browser-proof.png";
 import "./dayforge-landing.css";
+import "./dayforge-hero-unified.css";
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 const BOOKING_URL: string | undefined = import.meta.env.VITE_BOOKING_URL;
@@ -228,84 +229,18 @@ function HeroSystemVisual() {
     >
       <img
         className="df3-hero-art"
-        src="/assets/dayforge-final/mission-foundry-hero.png"
-        alt="A glass and marble mission foundry connecting business data, analysis, a game screen, a phone, and a local laundry visit"
+        src="/assets/dayforge-final/unified-revenue-machine-hero.png"
+        alt="A single connected DayForge machine where live business data enters Sage, Sage finds missed revenue, BORESLAY starts a mission, the mission arrives on a phone, and action leads to a laundry visit"
         width={1672}
         height={941}
         decoding="async"
       />
-      <div className="df3-hero-step-rail" aria-hidden="true">
-        <span>
-          <b>01</b> Live data
-        </span>
-        <span>
-          <b>02</b> Sage finds the cause
-        </span>
-        <span>
-          <b>03</b> BORESLAY mission
-        </span>
-        <span>
-          <b>04</b> Action changes the business
-        </span>
-      </div>
       <a
-        className="df3-hero-game-screen"
+        className="df3-hero-game-hotspot"
         href="/boreslay-rally"
-        aria-label="Open the real BORESLAY Rally game"
-      >
-        <img
-          src={rallyScreenshot}
-          alt="Real BORESLAY Rally gameplay with Spark battling Clockhead"
-          width={1440}
-          height={913}
-          decoding="async"
-        />
-        <span>Mission incoming</span>
-      </a>
-      <div
-        className="df3-hero-phone-screen"
-        aria-label="Example mobile mission"
-      >
-        <small>Mission ready</small>
-        <strong>Recover 8 customers</strong>
-        <b>$12,400</b>
-      </div>
-      <div
-        className="df3-mobile-pipeline"
-        aria-label="Illustrative DayForge product flow"
-      >
-        <article>
-          <span>01</span>
-          <CircleDollarSign />
-          <div>
-            <b>Live business data</b>
-            <small>Orders, customers, routes, and revenue.</small>
-          </div>
-        </article>
-        <article>
-          <span>02</span>
-          <Sparkles />
-          <div>
-            <b>Sage finds the cause</b>
-            <small>18 valuable customers went quiet.</small>
-          </div>
-        </article>
-        <article className="is-game">
-          <span>03</span>
-          <div>
-            <b>BORESLAY starts the mission</b>
-            <img src={rallyScreenshot} alt="Real BORESLAY Rally gameplay" />
-          </div>
-        </article>
-        <article className="is-success">
-          <span>04</span>
-          <CheckCircle2 />
-          <div>
-            <b>Action changes the business</b>
-            <small>Outcome recorded. Next move ready.</small>
-          </div>
-        </article>
-      </div>
+        aria-label="Play the BORESLAY Rally game shown in the hero"
+        title="Play BORESLAY Rally"
+      />
     </div>
   );
 }

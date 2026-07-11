@@ -1,8 +1,11 @@
 import arenaBackgroundUrl from "@/assets/boreslay-rally/arena-background.webp";
-import clockheadSheetUrl from "@/assets/boreslay-rally/clockhead-sheet.webp";
 import duelArenaBackgroundUrl from "@/assets/boreslay-rally/duel-arena-background.png";
 import excuseSheetUrl from "@/assets/boreslay-rally/excuse-sheet.webp";
+import procrastinatorCuckooTargetUrl from "@/assets/boreslay-rally/procrastinator-cuckoo-target.png";
+import procrastinatorUrl from "@/assets/boreslay-rally/procrastinator-v2.png";
 import sparkSheetUrl from "@/assets/boreslay-rally/spark-sheet.webp";
+import sparkButtLeftUrl from "@/assets/boreslay-rally/spark-butt-left.png";
+import sparkButtRightUrl from "@/assets/boreslay-rally/spark-butt-right.png";
 import type { RallyState, RallyVec } from "./rallyEngine";
 import { RALLY_CONFIG } from "./rallyConfig";
 import type { RallyParticlePool } from "./rallyParticles";
@@ -13,10 +16,14 @@ type RallyAssets = {
   spark: HTMLImageElement;
   clockhead: HTMLImageElement;
   excuse: HTMLImageElement;
+  clockheadButt: HTMLImageElement;
+  sparkButtLeft: HTMLImageElement;
+  sparkButtRight: HTMLImageElement;
 };
 
 const TAU = Math.PI * 2;
-const lerp = (from: number, to: number, alpha: number) => from + (to - from) * alpha;
+const lerp = (from: number, to: number, alpha: number) =>
+  from + (to - from) * alpha;
 
 const loadImage = (source: string, onLoad: () => void) => {
   const image = new Image();
@@ -32,24 +39,55 @@ export function predictReceiptPath(state: RallyState) {
   let vx = state.excuse.vx;
   let vy = state.excuse.vy;
   const radius = RALLY_CONFIG.excuse.radius;
-  const { width, height, cornerLeg, wallRestitution, bumperRestitution } = RALLY_CONFIG.arena;
+  const { width, height, cornerLeg, wallRestitution, bumperRestitution } =
+    RALLY_CONFIG.arena;
   const bumpers = [
     { ax: 0, ay: cornerLeg, bx: cornerLeg, by: 0, nx: 1, ny: 1 },
     { ax: width - cornerLeg, ay: 0, bx: width, by: cornerLeg, nx: -1, ny: 1 },
     { ax: 0, ay: height - cornerLeg, bx: cornerLeg, by: height, nx: 1, ny: -1 },
-    { ax: width - cornerLeg, ay: height, bx: width, by: height - cornerLeg, nx: -1, ny: -1 },
+    {
+      ax: width - cornerLeg,
+      ay: height,
+      bx: width,
+      by: height - cornerLeg,
+      nx: -1,
+      ny: -1,
+    },
   ];
-  for (let step = 0; step < RALLY_CONFIG.powers.receipts.lookaheadSteps; step += 1) {
+  for (
+    let step = 0;
+    step < RALLY_CONFIG.powers.receipts.lookaheadSteps;
+    step += 1
+  ) {
     x += vx * RALLY_CONFIG.powers.receipts.lookaheadStepSeconds;
     y += vy * RALLY_CONFIG.powers.receipts.lookaheadStepSeconds;
-    if (y < radius) { y = radius; vy = Math.abs(vy) * wallRestitution; }
-    if (y > height - radius) { y = height - radius; vy = -Math.abs(vy) * wallRestitution; }
-    if (x < radius) { x = radius; vx = Math.abs(vx) * wallRestitution; }
-    if (x > width - radius) { x = width - radius; vx = -Math.abs(vx) * wallRestitution; }
+    if (y < radius) {
+      y = radius;
+      vy = Math.abs(vy) * wallRestitution;
+    }
+    if (y > height - radius) {
+      y = height - radius;
+      vy = -Math.abs(vy) * wallRestitution;
+    }
+    if (x < radius) {
+      x = radius;
+      vx = Math.abs(vx) * wallRestitution;
+    }
+    if (x > width - radius) {
+      x = width - radius;
+      vx = -Math.abs(vx) * wallRestitution;
+    }
     for (const bumper of bumpers) {
       const abx = bumper.bx - bumper.ax;
       const aby = bumper.by - bumper.ay;
-      const t = Math.max(0, Math.min(1, ((x - bumper.ax) * abx + (y - bumper.ay) * aby) / (abx ** 2 + aby ** 2)));
+      const t = Math.max(
+        0,
+        Math.min(
+          1,
+          ((x - bumper.ax) * abx + (y - bumper.ay) * aby) /
+            (abx ** 2 + aby ** 2)
+        )
+      );
       const closestX = bumper.ax + abx * t;
       const closestY = bumper.ay + aby * t;
       const dx = x - closestX;
@@ -77,14 +115,17 @@ export class RallyRenderer {
   constructor(onReady?: () => void) {
     const onLoad = () => {
       this.loaded += 1;
-      if (this.loaded === 5) onReady?.();
+      if (this.loaded === 8) onReady?.();
     };
     this.assets = {
       background: loadImage(arenaBackgroundUrl, onLoad),
       duelBackground: loadImage(duelArenaBackgroundUrl, onLoad),
       spark: loadImage(sparkSheetUrl, onLoad),
-      clockhead: loadImage(clockheadSheetUrl, onLoad),
+      clockhead: loadImage(procrastinatorUrl, onLoad),
       excuse: loadImage(excuseSheetUrl, onLoad),
+      clockheadButt: loadImage(procrastinatorCuckooTargetUrl, onLoad),
+      sparkButtLeft: loadImage(sparkButtLeftUrl, onLoad),
+      sparkButtRight: loadImage(sparkButtRightUrl, onLoad),
     };
   }
 
@@ -111,8 +152,12 @@ export class RallyRenderer {
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.clearRect(0, 0, targetWidth, targetHeight);
     if (replayCanvas) {
-      const exportCanvas = canvas as HTMLCanvasElement & { rallyFocusX?: number; rallyFocusY?: number };
-      const scale = (width / RALLY_CONFIG.arena.width) * RALLY_CONFIG.replay.followZoom;
+      const exportCanvas = canvas as HTMLCanvasElement & {
+        rallyFocusX?: number;
+        rallyFocusY?: number;
+      };
+      const scale =
+        (width / RALLY_CONFIG.arena.width) * RALLY_CONFIG.replay.followZoom;
       const focusX = exportCanvas.rallyFocusX ?? state.excuse.x;
       const focusY = exportCanvas.rallyFocusY ?? state.excuse.y;
       context.setTransform(
@@ -136,13 +181,20 @@ export class RallyRenderer {
     const shakeRotation = Math.sin(state.timeMs * 0.033) * shake * 0.006;
 
     context.save();
-    context.translate(RALLY_CONFIG.arena.width / 2 + shakeX, RALLY_CONFIG.arena.height / 2 + shakeY);
+    context.translate(
+      RALLY_CONFIG.arena.width / 2 + shakeX,
+      RALLY_CONFIG.arena.height / 2 + shakeY
+    );
     context.rotate(shakeRotation);
-    const tierZoom = !state.reducedMotion && state.excuse.speedTier === 3
-      ? RALLY_CONFIG.juice.tierThreeZoom
-      : 1;
+    const tierZoom =
+      !state.reducedMotion && state.excuse.speedTier === 3
+        ? RALLY_CONFIG.juice.tierThreeZoom
+        : 1;
     context.scale(tierZoom, tierZoom);
-    context.translate(-RALLY_CONFIG.arena.width / 2, -RALLY_CONFIG.arena.height / 2);
+    context.translate(
+      -RALLY_CONFIG.arena.width / 2,
+      -RALLY_CONFIG.arena.height / 2
+    );
     this.drawBackground(context, state);
     if (state.controlMode !== "duel") {
       this.drawSealedWalls(context, state);
@@ -171,14 +223,24 @@ export class RallyRenderer {
     if (state.controlMode === "duel") {
       this.drawDuelBackground(context);
       if (state.clockhead.telegraph === "freeze") {
-        const pulse = state.reducedMotion ? 0.55 : 0.38 + Math.sin(state.timeMs * 0.03) * 0.18;
+        const pulse = state.reducedMotion
+          ? 0.55
+          : 0.38 + Math.sin(state.timeMs * 0.03) * 0.18;
         context.strokeStyle = `rgba(125, 211, 252, ${pulse})`;
         context.lineWidth = 8;
-        context.strokeRect(8, 8, RALLY_CONFIG.arena.width - 16, RALLY_CONFIG.duel.groundY + RALLY_CONFIG.duel.groundPad - 16);
+        context.strokeRect(
+          8,
+          8,
+          RALLY_CONFIG.arena.width - 16,
+          RALLY_CONFIG.duel.groundY + RALLY_CONFIG.duel.groundPad - 16
+        );
       }
       return;
     }
-    if (this.assets.background.complete && this.assets.background.naturalWidth > 0) {
+    if (
+      this.assets.background.complete &&
+      this.assets.background.naturalWidth > 0
+    ) {
       context.drawImage(
         this.assets.background,
         0,
@@ -187,17 +249,32 @@ export class RallyRenderer {
         RALLY_CONFIG.arena.height
       );
     } else {
-      const gradient = context.createLinearGradient(0, 0, RALLY_CONFIG.arena.width, 0);
+      const gradient = context.createLinearGradient(
+        0,
+        0,
+        RALLY_CONFIG.arena.width,
+        0
+      );
       gradient.addColorStop(0, "#3a1420");
       gradient.addColorStop(0.5, "#19162b");
       gradient.addColorStop(1, "#071a39");
       context.fillStyle = gradient;
-      context.fillRect(0, 0, RALLY_CONFIG.arena.width, RALLY_CONFIG.arena.height);
+      context.fillRect(
+        0,
+        0,
+        RALLY_CONFIG.arena.width,
+        RALLY_CONFIG.arena.height
+      );
     }
 
     const pulse = 0.5 + Math.sin(state.timeMs * 0.003) * 0.5;
     context.fillStyle = `rgba(255, 80, 30, ${0.025 + pulse * 0.02})`;
-    context.fillRect(0, 0, RALLY_CONFIG.arena.width / 2, RALLY_CONFIG.arena.height);
+    context.fillRect(
+      0,
+      0,
+      RALLY_CONFIG.arena.width / 2,
+      RALLY_CONFIG.arena.height
+    );
     context.fillStyle = `rgba(30, 110, 255, ${0.03 + (1 - pulse) * 0.02})`;
     context.fillRect(
       RALLY_CONFIG.arena.width / 2,
@@ -224,37 +301,68 @@ export class RallyRenderer {
         RALLY_CONFIG.arena.height
       );
     } else {
-      const gradient = context.createLinearGradient(0, 0, RALLY_CONFIG.arena.width, RALLY_CONFIG.arena.height);
+      const gradient = context.createLinearGradient(
+        0,
+        0,
+        RALLY_CONFIG.arena.width,
+        RALLY_CONFIG.arena.height
+      );
       gradient.addColorStop(0, "#124d8f");
       gradient.addColorStop(0.58, "#6ec4ff");
       gradient.addColorStop(0.59, "#78a83a");
       gradient.addColorStop(1, "#7b4a24");
       context.fillStyle = gradient;
-      context.fillRect(0, 0, RALLY_CONFIG.arena.width, RALLY_CONFIG.arena.height);
+      context.fillRect(
+        0,
+        0,
+        RALLY_CONFIG.arena.width,
+        RALLY_CONFIG.arena.height
+      );
     }
 
     context.strokeStyle = "rgba(255, 191, 73, 0.72)";
     context.lineWidth = 4;
-    context.strokeRect(2, 2, RALLY_CONFIG.arena.width - 4, RALLY_CONFIG.arena.height - 4);
+    context.strokeRect(
+      2,
+      2,
+      RALLY_CONFIG.arena.width - 4,
+      RALLY_CONFIG.arena.height - 4
+    );
     context.strokeStyle = "rgba(11, 28, 52, 0.42)";
     context.beginPath();
-    context.moveTo(RALLY_CONFIG.arena.width / 2, RALLY_CONFIG.duel.groundY + RALLY_CONFIG.duel.groundPad);
-    context.lineTo(RALLY_CONFIG.arena.width / 2, RALLY_CONFIG.duel.groundY - 54);
+    context.moveTo(
+      RALLY_CONFIG.arena.width / 2,
+      RALLY_CONFIG.duel.groundY + RALLY_CONFIG.duel.groundPad
+    );
+    context.lineTo(
+      RALLY_CONFIG.arena.width / 2,
+      RALLY_CONFIG.duel.groundY - 54
+    );
     context.stroke();
   }
 
-  private drawGateThreats(context: CanvasRenderingContext2D, state: RallyState) {
+  private drawGateThreats(
+    context: CanvasRenderingContext2D,
+    state: RallyState
+  ) {
     if (state.scoringMode !== "portal" || !state.excuse.inPlay) return;
-    const leftThreat = state.excuse.vx < 0 && state.excuse.x < RALLY_CONFIG.arena.gateThreatDistance;
+    const leftThreat =
+      state.excuse.vx < 0 &&
+      state.excuse.x < RALLY_CONFIG.arena.gateThreatDistance;
     const rightThreat =
       state.excuse.vx > 0 &&
-      RALLY_CONFIG.arena.width - state.excuse.x < RALLY_CONFIG.arena.gateThreatDistance;
+      RALLY_CONFIG.arena.width - state.excuse.x <
+        RALLY_CONFIG.arena.gateThreatDistance;
     const pulse = 0.55 + Math.sin(state.timeMs * 0.018) * 0.35;
     if (leftThreat) this.drawGateGlow(context, 0, "#ff572d", pulse);
-    if (rightThreat) this.drawGateGlow(context, RALLY_CONFIG.arena.width, "#38bdff", pulse);
+    if (rightThreat)
+      this.drawGateGlow(context, RALLY_CONFIG.arena.width, "#38bdff", pulse);
   }
 
-  private drawSealedWalls(context: CanvasRenderingContext2D, state: RallyState) {
+  private drawSealedWalls(
+    context: CanvasRenderingContext2D,
+    state: RallyState
+  ) {
     if (state.scoringMode !== "buttHybrid") return;
     const { width, gateTop, gateBottom } = RALLY_CONFIG.arena;
     context.save();
@@ -288,35 +396,14 @@ export class RallyRenderer {
       context.translate(x, y);
       context.scale(1 + squash, 1 - squash);
       if (state.controlMode === "duel") {
-        const fighter = side === "spark" ? state.spark : state.clockhead;
-        const back = fighter.facing.x >= 0 ? -1 : 1;
-        const angle = (RALLY_CONFIG.duel.slotAngleDeg * Math.PI) / 180;
-        const ux = back * Math.cos(angle);
-        const uy = -Math.sin(angle);
-        const half = RALLY_CONFIG.duel.slotLen / 2;
-        context.shadowColor = warm ? "#ff6738" : "#54b9ff";
-        context.shadowBlur = 16;
-        context.fillStyle = warm ? "#d9543b" : "#5b86b8";
-        context.strokeStyle = "#0a0d13";
-        context.lineWidth = 3;
-        context.beginPath();
-        context.arc(back * -6, -14, 20, 0, TAU);
-        context.arc(back * 2, 14, 22, 0, TAU);
-        context.fill();
-        context.stroke();
-        context.shadowBlur = 0;
-        context.strokeStyle = "#f5b841";
-        context.lineWidth = 5;
-        context.lineCap = "round";
-        context.beginPath();
-        context.moveTo(-ux * half, -uy * half);
-        context.lineTo(ux * half, uy * half);
-        context.stroke();
-        if (RALLY_CONFIG.duel.slotEtch) {
-          context.fillStyle = "rgba(245, 184, 65, 0.62)";
-          context.font = "800 9px ui-monospace, Menlo, monospace";
-          context.textAlign = "center";
-          context.fillText("INSERT EXCUSE", back * 10, -36);
+        if (side === "spark") {
+          const fighter = state.spark;
+          const back = fighter.facing.x >= 0 ? -1 : 1;
+          const sprite =
+            back < 0 ? this.assets.sparkButtLeft : this.assets.sparkButtRight;
+          this.drawButtSprite(context, sprite);
+        } else {
+          this.drawButtSprite(context, this.assets.clockheadButt, 122);
         }
         context.restore();
         continue;
@@ -344,15 +431,37 @@ export class RallyRenderer {
     }
   }
 
-  private drawPowerSurfaces(context: CanvasRenderingContext2D, state: RallyState) {
+  private drawButtSprite(
+    context: CanvasRenderingContext2D,
+    image: HTMLImageElement,
+    drawHeight = 96
+  ) {
+    if (!image.complete || image.naturalWidth <= 0) return;
+    const drawWidth = drawHeight * (image.naturalWidth / image.naturalHeight);
+    context.drawImage(
+      image,
+      -drawWidth / 2,
+      -drawHeight / 2,
+      drawWidth,
+      drawHeight
+    );
+  }
+
+  private drawPowerSurfaces(
+    context: CanvasRenderingContext2D,
+    state: RallyState
+  ) {
     const { powers } = state;
     const targetShield = (side: "spark" | "clockhead") => {
       if (powers.hardNoUntil[side] <= state.timeMs) return;
       const target = state.buttTargets[side];
-      const pulse = state.reducedMotion ? 0 : Math.sin(state.timeMs * 0.018) * 3;
+      const pulse = state.reducedMotion
+        ? 0
+        : Math.sin(state.timeMs * 0.018) * 3;
       context.save();
       context.strokeStyle = side === "spark" ? "#ffcb69" : "#75d4ff";
-      context.fillStyle = side === "spark" ? "rgba(255,97,45,0.16)" : "rgba(62,154,255,0.16)";
+      context.fillStyle =
+        side === "spark" ? "rgba(255,97,45,0.16)" : "rgba(62,154,255,0.16)";
       context.lineWidth = 8;
       context.beginPath();
       context.arc(
@@ -398,12 +507,16 @@ export class RallyRenderer {
     if (stamp) {
       const telegraph = Math.min(
         1,
-        1 - (stamp.impactAt - state.timeMs) / RALLY_CONFIG.powers.deadlineStamp.telegraphMs
+        1 -
+          (stamp.impactAt - state.timeMs) /
+            RALLY_CONFIG.powers.deadlineStamp.telegraphMs
       );
       context.save();
       context.translate(stamp.x, stamp.y);
       context.globalAlpha = stamp.slammed ? 0.92 : 0.3 + telegraph * 0.5;
-      context.fillStyle = stamp.slammed ? "rgba(160,34,31,0.34)" : "rgba(16,5,9,0.5)";
+      context.fillStyle = stamp.slammed
+        ? "rgba(160,34,31,0.34)"
+        : "rgba(16,5,9,0.5)";
       context.strokeStyle = "#ff7460";
       context.lineWidth = 5;
       context.beginPath();
@@ -417,7 +530,8 @@ export class RallyRenderer {
       if (stamp.slammed) {
         context.rotate(stamp.angle);
         context.strokeStyle = "#ffb05e";
-        context.lineWidth = RALLY_CONFIG.powers.deadlineStamp.collisionRadius * 2;
+        context.lineWidth =
+          RALLY_CONFIG.powers.deadlineStamp.collisionRadius * 2;
         context.beginPath();
         context.moveTo(-RALLY_CONFIG.powers.deadlineStamp.surfaceLength / 2, 0);
         context.lineTo(RALLY_CONFIG.powers.deadlineStamp.surfaceLength / 2, 0);
@@ -444,11 +558,16 @@ export class RallyRenderer {
   }
 
   private drawReceipts(context: CanvasRenderingContext2D, state: RallyState) {
-    if (state.powers.receiptsUntil <= state.timeMs || !state.excuse.inPlay) return;
+    if (state.powers.receiptsUntil <= state.timeMs || !state.excuse.inPlay)
+      return;
     const path = predictReceiptPath(state);
     context.save();
     context.fillStyle = "rgba(215,248,255,0.68)";
-    for (let index = 0; index < path.length; index += RALLY_CONFIG.powers.receipts.dotStride) {
+    for (
+      let index = 0;
+      index < path.length;
+      index += RALLY_CONFIG.powers.receipts.dotStride
+    ) {
       const point = path[index];
       context.globalAlpha = 0.72 * (1 - index / path.length) + 0.14;
       context.beginPath();
@@ -464,8 +583,16 @@ export class RallyRenderer {
     color: string,
     pulse: number
   ) {
-    const centerY = (RALLY_CONFIG.arena.gateTop + RALLY_CONFIG.arena.gateBottom) / 2;
-    const gradient = context.createRadialGradient(x, centerY, 10, x, centerY, 190);
+    const centerY =
+      (RALLY_CONFIG.arena.gateTop + RALLY_CONFIG.arena.gateBottom) / 2;
+    const gradient = context.createRadialGradient(
+      x,
+      centerY,
+      10,
+      x,
+      centerY,
+      190
+    );
     gradient.addColorStop(0, `${color}cc`);
     gradient.addColorStop(0.42, `${color}44`);
     gradient.addColorStop(1, `${color}00`);
@@ -476,19 +603,29 @@ export class RallyRenderer {
     context.restore();
   }
 
-  private drawBreath(context: CanvasRenderingContext2D, state: RallyState, alpha: number) {
-    if (!state.spark.breathing || state.timeMs < state.spark.frozenUntil) return;
+  private drawBreath(
+    context: CanvasRenderingContext2D,
+    state: RallyState,
+    alpha: number
+  ) {
+    if (!state.spark.breathing || state.timeMs < state.spark.frozenUntil)
+      return;
     const sparkX = lerp(state.spark.prevX, state.spark.x, alpha);
     const sparkY = lerp(state.spark.prevY, state.spark.y, alpha);
     const facing = state.spark.facing;
     const angle = Math.atan2(facing.y, facing.x);
-    const halfAngle = (RALLY_CONFIG.spark.breathHalfAngleDegrees * Math.PI) / 180;
-    const charge = Math.min(1, state.spark.breathHeldMs / RALLY_CONFIG.spark.chargedBreathMs);
+    const halfAngle =
+      (RALLY_CONFIG.spark.breathHalfAngleDegrees * Math.PI) / 180;
+    const charge = Math.min(
+      1,
+      state.spark.breathHeldMs / RALLY_CONFIG.spark.chargedBreathMs
+    );
     const anticipation = Math.min(
       1,
       state.spark.breathHeldMs / RALLY_CONFIG.spark.breathAnticipationMs
     );
-    const streamLength = RALLY_CONFIG.spark.breathRange * (0.35 + anticipation * 0.65);
+    const streamLength =
+      RALLY_CONFIG.spark.breathRange * (0.35 + anticipation * 0.65);
     const widthMultiplier =
       1 + charge * (RALLY_CONFIG.spark.chargedBreathWidthMultiplier - 1);
     const mouthX = sparkX + facing.x * RALLY_CONFIG.spark.mouthOffset;
@@ -506,7 +643,10 @@ export class RallyRenderer {
       mouthY,
       RALLY_CONFIG.fire.mouthGlowRadius
     );
-    mouthGlow.addColorStop(0, charge > 0.92 ? "rgba(220,248,255,0.98)" : "rgba(255,251,205,0.98)");
+    mouthGlow.addColorStop(
+      0,
+      charge > 0.92 ? "rgba(220,248,255,0.98)" : "rgba(255,251,205,0.98)"
+    );
     mouthGlow.addColorStop(1, "rgba(255,86,20,0)");
     context.fillStyle = mouthGlow;
     context.beginPath();
@@ -522,8 +662,14 @@ export class RallyRenderer {
       const endY = mouthY + facing.y * streamLength + normalY * wave;
       const startOffset = (layer - 2) * RALLY_CONFIG.fire.coreWidth * 0.22;
       const gradient = context.createLinearGradient(mouthX, mouthY, endX, endY);
-      gradient.addColorStop(0, charge > 0.92 ? "rgba(218,248,255,0.98)" : "rgba(255,252,220,0.98)");
-      gradient.addColorStop(0.45, `rgba(255,${Math.round(164 - layerRatio * 60)},32,${0.9 - layerRatio * 0.08})`);
+      gradient.addColorStop(
+        0,
+        charge > 0.92 ? "rgba(218,248,255,0.98)" : "rgba(255,252,220,0.98)"
+      );
+      gradient.addColorStop(
+        0.45,
+        `rgba(255,${Math.round(164 - layerRatio * 60)},32,${0.9 - layerRatio * 0.08})`
+      );
       gradient.addColorStop(1, "rgba(229,35,12,0)");
       context.strokeStyle = gradient;
       context.lineCap = "round";
@@ -531,7 +677,10 @@ export class RallyRenderer {
         RALLY_CONFIG.fire.coreWidth +
         layerRatio * RALLY_CONFIG.fire.bodyWidth * widthMultiplier;
       context.beginPath();
-      context.moveTo(mouthX + normalX * startOffset, mouthY + normalY * startOffset);
+      context.moveTo(
+        mouthX + normalX * startOffset,
+        mouthY + normalY * startOffset
+      );
       context.bezierCurveTo(
         mouthX + facing.x * streamLength * 0.34 + normalX * wave * 0.3,
         mouthY + facing.y * streamLength * 0.34 + normalY * wave * 0.3,
@@ -553,7 +702,8 @@ export class RallyRenderer {
         along;
       const x = mouthX + facing.x * streamLength * along + normalX * flutter;
       const y = mouthY + facing.y * streamLength * along + normalY * flutter;
-      context.fillStyle = charge > 0.92 && index % 3 === 0 ? "#dffbff" : "#ffb43d";
+      context.fillStyle =
+        charge > 0.92 && index % 3 === 0 ? "#dffbff" : "#ffb43d";
       context.beginPath();
       context.arc(x, y, 1.5 + noise * 3.5, 0, TAU);
       context.fill();
@@ -563,7 +713,8 @@ export class RallyRenderer {
       const along = (index + 1) / (RALLY_CONFIG.fire.smokeCount + 1);
       const curl = Math.sin(flameClock * 0.008 + index * 2.3) * 18;
       const x = mouthX + facing.x * streamLength * along + normalX * curl;
-      const y = mouthY + facing.y * streamLength * along + normalY * curl - along * 18;
+      const y =
+        mouthY + facing.y * streamLength * along + normalY * curl - along * 18;
       context.fillStyle = `rgba(58,31,38,${0.12 * (1 - along)})`;
       context.beginPath();
       context.arc(x, y, 7 + along * 10, 0, TAU);
@@ -573,7 +724,12 @@ export class RallyRenderer {
   }
 
   private drawTrail(context: CanvasRenderingContext2D, state: RallyState) {
-    if (state.reducedMotion || !state.excuse.inPlay || state.excuse.speedTier === 0) return;
+    if (
+      state.reducedMotion ||
+      !state.excuse.inPlay ||
+      state.excuse.speedTier === 0
+    )
+      return;
     const excuse = state.excuse;
     const colors = ["#f4d28a", "#ffd866", "#ff8a35", "#fff2a4"];
     const count = excuse.trailX.length;
@@ -598,10 +754,15 @@ export class RallyRenderer {
     context.restore();
   }
 
-  private drawTelegraph(context: CanvasRenderingContext2D, state: RallyState, alpha: number) {
+  private drawTelegraph(
+    context: CanvasRenderingContext2D,
+    state: RallyState,
+    alpha: number
+  ) {
     const clockhead = state.clockhead;
     if (clockhead.telegraph === "none") return;
-    if (state.controlMode === "duel" && clockhead.telegraph === "freeze") return;
+    if (state.controlMode === "duel" && clockhead.telegraph === "freeze")
+      return;
     const x = lerp(clockhead.prevX, clockhead.x, alpha);
     const y = lerp(clockhead.prevY, clockhead.y, alpha);
     const remaining = Math.max(0, clockhead.telegraphUntil - state.timeMs);
@@ -616,7 +777,13 @@ export class RallyRenderer {
     context.lineWidth = 8;
     context.globalAlpha = 0.45 + progress * 0.45;
     context.beginPath();
-    context.arc(x, y, 90 + progress * 50, -Math.PI / 2, -Math.PI / 2 + TAU * progress);
+    context.arc(
+      x,
+      y,
+      90 + progress * 50,
+      -Math.PI / 2,
+      -Math.PI / 2 + TAU * progress
+    );
     context.stroke();
     context.setLineDash([12, 10]);
     context.lineWidth = 3;
@@ -626,7 +793,11 @@ export class RallyRenderer {
     context.restore();
   }
 
-  private drawSpark(context: CanvasRenderingContext2D, state: RallyState, alpha: number) {
+  private drawSpark(
+    context: CanvasRenderingContext2D,
+    state: RallyState,
+    alpha: number
+  ) {
     const x = lerp(state.spark.prevX, state.spark.x, alpha);
     const y = lerp(state.spark.prevY, state.spark.y, alpha);
     let frame = Math.floor(state.timeMs / 360) % 2;
@@ -634,21 +805,44 @@ export class RallyRenderer {
     else if (state.timeMs < state.spark.frozenUntil) frame = 6;
     else if (state.timeMs < state.spark.dashUntil) frame = 4;
     else if (state.spark.breathing) frame = 3;
-    else if (Math.hypot(state.spark.x - state.spark.prevX, state.spark.y - state.spark.prevY) > 0.2) frame = 2;
+    else if (
+      Math.hypot(
+        state.spark.x - state.spark.prevX,
+        state.spark.y - state.spark.prevY
+      ) > 0.2
+    )
+      frame = 2;
 
     context.save();
     context.translate(x, y);
     this.applyCeremonyReaction(context, state, "spark");
     if (state.spark.facing.x < 0) context.scale(-1, 1);
-    const recoil = state.spark.breathing ? 1 - Math.sin(state.timeMs * 0.035) * 0.035 : 1;
-    const dashProgress = state.timeMs < state.spark.dashUntil && !state.reducedMotion
-      ? Math.sin(((state.spark.dashUntil - state.timeMs) / RALLY_CONFIG.spark.dashDurationMs) * Math.PI)
-      : 0;
+    const recoil = state.spark.breathing
+      ? 1 - Math.sin(state.timeMs * 0.035) * 0.035
+      : 1;
+    const dashProgress =
+      state.timeMs < state.spark.dashUntil && !state.reducedMotion
+        ? Math.sin(
+            ((state.spark.dashUntil - state.timeMs) /
+              RALLY_CONFIG.spark.dashDurationMs) *
+              Math.PI
+          )
+        : 0;
     context.scale(
       recoil * (1 + dashProgress * RALLY_CONFIG.juice.dashSquash),
       (2 - recoil) * (1 - dashProgress * RALLY_CONFIG.juice.dashSquash)
     );
-    this.drawSheetFrame(context, this.assets.spark, frame, 4, 2, 190, 213, 0, 14);
+    this.drawSheetFrame(
+      context,
+      this.assets.spark,
+      frame,
+      4,
+      2,
+      190,
+      213,
+      0,
+      14
+    );
     if (state.timeMs < state.spark.frozenUntil) {
       context.globalCompositeOperation = "source-atop";
       context.fillStyle = "rgba(111, 220, 255, 0.38)";
@@ -656,35 +850,64 @@ export class RallyRenderer {
     }
     context.restore();
 
-    if (state.timeMs < state.spark.frozenUntil) this.drawIcePrison(context, x, y);
+    if (state.timeMs < state.spark.frozenUntil)
+      this.drawIcePrison(context, x, y);
   }
 
-  private drawClockhead(context: CanvasRenderingContext2D, state: RallyState, alpha: number) {
+  private drawClockhead(
+    context: CanvasRenderingContext2D,
+    state: RallyState,
+    alpha: number
+  ) {
     const x = lerp(state.clockhead.prevX, state.clockhead.x, alpha);
     const y = lerp(state.clockhead.prevY, state.clockhead.y, alpha);
-    let frame = Math.floor(state.timeMs / 420) % 2;
-    if (state.status === "victory") frame = 6;
-    else if (state.timeMs < state.clockhead.staggerUntil) frame = 5;
-    else if (state.timeMs < state.clockhead.whiffUntil) frame = 7;
-    else if (state.clockhead.telegraph === "freeze") frame = 4;
-    else if (state.clockhead.telegraph === "swat") {
-      const progress =
-        1 -
-        Math.max(0, state.clockhead.telegraphUntil - state.timeMs) /
-          RALLY_CONFIG.clockhead.swatTelegraphMs;
-      frame = progress > 0.72 ? 3 : 2;
-    }
     context.save();
     context.translate(x, y);
     this.applyCeremonyReaction(context, state, "clockhead");
     if (state.clockhead.telegraph === "swat" && !state.reducedMotion) {
       context.rotate(-RALLY_CONFIG.juice.swatLeanRadians);
     }
-    this.drawSheetFrame(context, this.assets.clockhead, frame, 4, 2, 220, 248, 0, 8);
+    if (!state.reducedMotion) {
+      context.translate(0, Math.sin(state.timeMs * 0.008) * 2);
+      if (state.clockhead.telegraph === "freeze") {
+        const pulse = 1 + Math.sin(state.timeMs * 0.025) * 0.018;
+        context.scale(pulse, pulse);
+      }
+    }
+    if (state.timeMs < state.clockhead.staggerUntil) {
+      const wobble = Math.sin(state.timeMs * 0.05) * 0.05;
+      context.rotate(wobble);
+    }
+    this.drawClockheadVillain(context, state.clockhead.facing.x);
     context.restore();
   }
 
-  private drawExcuse(context: CanvasRenderingContext2D, state: RallyState, alpha: number) {
+  private drawClockheadVillain(
+    context: CanvasRenderingContext2D,
+    facingX: number
+  ) {
+    const image = this.assets.clockhead;
+    if (!image.complete || image.naturalWidth <= 0) return;
+    const drawHeight = 224;
+    const drawWidth = drawHeight * (image.naturalWidth / image.naturalHeight);
+    const groundOffsetY = -5;
+    context.save();
+    if (facingX > 0) context.scale(-1, 1);
+    context.drawImage(
+      image,
+      -drawWidth / 2,
+      -drawHeight / 2 + groundOffsetY,
+      drawWidth,
+      drawHeight
+    );
+    context.restore();
+  }
+
+  private drawExcuse(
+    context: CanvasRenderingContext2D,
+    state: RallyState,
+    alpha: number
+  ) {
     const excuse = state.excuse;
     if (!excuse.inPlay) return;
     let x = lerp(excuse.prevX, excuse.x, alpha);
@@ -704,8 +927,10 @@ export class RallyRenderer {
         state.ceremony.elapsedRealMs / RALLY_CONFIG.ceremony.ingestionMs
       );
       const eased = 1 - (1 - progress) ** 3;
-      const spiral = Math.sin(progress * TAU * RALLY_CONFIG.ceremony.ingestionTurns) *
-        RALLY_CONFIG.excuse.radius * (1 - progress);
+      const spiral =
+        Math.sin(progress * TAU * RALLY_CONFIG.ceremony.ingestionTurns) *
+        RALLY_CONFIG.excuse.radius *
+        (1 - progress);
       const normal = snapshot.x === 0 ? 1 : -1;
       x = lerp(snapshot.startX, snapshot.x, eased);
       y = lerp(snapshot.startY, snapshot.y, eased) + spiral * normal;
@@ -713,7 +938,8 @@ export class RallyRenderer {
         RALLY_CONFIG.ceremony.ingestionMinScale,
         1 - eased
       );
-      if (state.ceremony.elapsedRealMs > RALLY_CONFIG.ceremony.ingestionMs) return;
+      if (state.ceremony.elapsedRealMs > RALLY_CONFIG.ceremony.ingestionMs)
+        return;
     }
 
     context.save();
@@ -721,7 +947,8 @@ export class RallyRenderer {
     context.rotate(angle);
     context.scale(
       stretch * ceremonyScale,
-      squash * ceremonyScale *
+      squash *
+        ceremonyScale *
         (state.ceremony ? RALLY_CONFIG.ceremony.ingestionSquash : 1)
     );
     if (excuse.ignitedUntil > state.timeMs) {
@@ -732,7 +959,17 @@ export class RallyRenderer {
       context.ellipse(0, 0, 62, 38, 0, 0, TAU);
       context.fill();
     }
-    this.drawSheetFrame(context, this.assets.excuse, frame, 4, 2, 196, 220, 0, 0);
+    this.drawSheetFrame(
+      context,
+      this.assets.excuse,
+      frame,
+      4,
+      2,
+      196,
+      220,
+      0,
+      0
+    );
     if (frame === 0 || frame === 7) {
       context.rotate(-0.025);
       context.fillStyle = "#4f2815";
@@ -773,7 +1010,11 @@ export class RallyRenderer {
     );
   }
 
-  private drawIcePrison(context: CanvasRenderingContext2D, x: number, y: number) {
+  private drawIcePrison(
+    context: CanvasRenderingContext2D,
+    x: number,
+    y: number
+  ) {
     context.save();
     context.translate(x, y + 62);
     context.fillStyle = "rgba(112, 222, 255, 0.68)";
@@ -799,14 +1040,16 @@ export class RallyRenderer {
     side: "spark" | "clockhead"
   ) {
     const ceremony = state.ceremony;
-    if (!ceremony || ceremony.snapshot.victim !== side || state.reducedMotion) return;
+    if (!ceremony || ceremony.snapshot.victim !== side || state.reducedMotion)
+      return;
     const reactionStart =
       RALLY_CONFIG.ceremony.ingestionMs + RALLY_CONFIG.ceremony.hitStopMs;
     const progress = Math.max(
       0,
       Math.min(
         1,
-        (ceremony.elapsedRealMs - reactionStart) / RALLY_CONFIG.ceremony.reactionMs
+        (ceremony.elapsedRealMs - reactionStart) /
+          RALLY_CONFIG.ceremony.reactionMs
       )
     );
     if (progress <= 0) return;
@@ -815,7 +1058,10 @@ export class RallyRenderer {
     context.scale(1 + Math.abs(wobble) * 0.16, 1 - Math.abs(wobble) * 0.12);
   }
 
-  private drawCeremonyGoalMask(context: CanvasRenderingContext2D, state: RallyState) {
+  private drawCeremonyGoalMask(
+    context: CanvasRenderingContext2D,
+    state: RallyState
+  ) {
     const ceremony = state.ceremony;
     if (!ceremony) return;
     const { snapshot } = ceremony;
@@ -855,7 +1101,10 @@ export class RallyRenderer {
     context.restore();
   }
 
-  private drawCeremonyOverlay(context: CanvasRenderingContext2D, state: RallyState) {
+  private drawCeremonyOverlay(
+    context: CanvasRenderingContext2D,
+    state: RallyState
+  ) {
     const ceremony = state.ceremony;
     if (!ceremony) return;
     const impactAt =
@@ -863,7 +1112,10 @@ export class RallyRenderer {
     const bannerAt = impactAt + RALLY_CONFIG.ceremony.reactionMs;
     const beatAt = bannerAt + RALLY_CONFIG.ceremony.bannerMs;
     const serveAt = beatAt + RALLY_CONFIG.ceremony.beatMs;
-    if (ceremony.elapsedRealMs >= bannerAt && ceremony.elapsedRealMs < serveAt) {
+    if (
+      ceremony.elapsedRealMs >= bannerAt &&
+      ceremony.elapsedRealMs < serveAt
+    ) {
       const raw = Math.min(
         1,
         (ceremony.elapsedRealMs - bannerAt) / RALLY_CONFIG.ceremony.bannerMs
@@ -873,9 +1125,14 @@ export class RallyRenderer {
           ? (raw / 0.72) * RALLY_CONFIG.ceremony.bannerOvershoot
           : lerp(RALLY_CONFIG.ceremony.bannerOvershoot, 1, (raw - 0.72) / 0.28);
       context.save();
-      context.translate(RALLY_CONFIG.arena.width / 2, RALLY_CONFIG.arena.height * 0.69);
+      context.translate(
+        RALLY_CONFIG.arena.width / 2,
+        RALLY_CONFIG.arena.height * 0.69
+      );
       if (!state.reducedMotion) {
-        context.rotate((RALLY_CONFIG.ceremony.bannerTiltDegrees * Math.PI) / 180);
+        context.rotate(
+          (RALLY_CONFIG.ceremony.bannerTiltDegrees * Math.PI) / 180
+        );
       }
       context.scale(overshoot, overshoot);
       context.fillStyle = "rgba(12,8,12,0.94)";
@@ -889,17 +1146,21 @@ export class RallyRenderer {
       context.textAlign = "center";
       context.textBaseline = "middle";
       context.font = "900 52px Impact, Haettenschweiler, sans-serif";
-      const headline = ceremony.snapshot.bark ?? (
-        ceremony.snapshot.mode === "buttHybrid"
-          ? ceremony.snapshot.banked ? "BUTT BASH!" : "EXPOSED!"
-          : "REALITY GATE SHATTERED!"
-      );
+      const headline =
+        ceremony.snapshot.bark ??
+        (ceremony.snapshot.mode === "buttHybrid"
+          ? ceremony.snapshot.banked
+            ? "BUTT BASH!"
+            : "EXPOSED!"
+          : "REALITY GATE SHATTERED!");
       context.fillText(headline, 0, -22);
       context.fillStyle = "#ffb345";
       context.font = "900 26px Impact, Haettenschweiler, sans-serif";
-      const subline = `${ceremony.snapshot.ownGoal ? "OWN GOAL · " : ""}${ceremony.snapshot.banked
-        ? `RETURNED TO SENDER · +${ceremony.snapshot.points}`
-        : `+${ceremony.snapshot.points}`}`;
+      const subline = `${ceremony.snapshot.ownGoal ? "OWN GOAL · " : ""}${
+        ceremony.snapshot.banked
+          ? `RETURNED TO SENDER · +${ceremony.snapshot.points}`
+          : `+${ceremony.snapshot.points}`
+      }`;
       context.fillText(subline, 0, 35);
       context.restore();
     }
@@ -916,7 +1177,10 @@ export class RallyRenderer {
       );
       const direction = ceremony.snapshot.victim === "spark" ? 1 : -1;
       context.save();
-      context.translate(RALLY_CONFIG.arena.width / 2, RALLY_CONFIG.arena.height / 2);
+      context.translate(
+        RALLY_CONFIG.arena.width / 2,
+        RALLY_CONFIG.arena.height / 2
+      );
       context.fillStyle = "rgba(5,6,12,0.78)";
       context.beginPath();
       context.arc(0, 0, 58, 0, TAU);
@@ -926,7 +1190,8 @@ export class RallyRenderer {
       context.textBaseline = "middle";
       context.font = "900 58px Impact, Haettenschweiler, sans-serif";
       context.fillText(String(tick), 0, 0);
-      context.strokeStyle = ceremony.snapshot.victim === "spark" ? "#ff6b3c" : "#5db8ff";
+      context.strokeStyle =
+        ceremony.snapshot.victim === "spark" ? "#ff6b3c" : "#5db8ff";
       context.lineWidth = 10;
       context.lineCap = "round";
       context.beginPath();
@@ -940,13 +1205,17 @@ export class RallyRenderer {
     }
   }
 
-  private drawFirstServeCue(context: CanvasRenderingContext2D, state: RallyState) {
+  private drawFirstServeCue(
+    context: CanvasRenderingContext2D,
+    state: RallyState
+  ) {
     if (
       state.controlMode === "duel" ||
       state.scoringMode !== "buttHybrid" ||
       state.firstPlayerContact ||
       state.tutorialSlowUntil <= state.timeMs
-    ) return;
+    )
+      return;
     const target = state.buttTargets.clockhead;
     const pulse = 0.5 + Math.sin(state.timeMs * 0.02) * 0.5;
     context.save();
@@ -983,7 +1252,10 @@ export class RallyRenderer {
     return sine - Math.floor(sine);
   }
 
-  private drawArenaVignette(context: CanvasRenderingContext2D, state: RallyState) {
+  private drawArenaVignette(
+    context: CanvasRenderingContext2D,
+    state: RallyState
+  ) {
     const gradient = context.createRadialGradient(600, 320, 190, 600, 320, 720);
     gradient.addColorStop(0, "rgba(0,0,0,0)");
     gradient.addColorStop(0.78, "rgba(0,0,0,0.04)");
@@ -995,7 +1267,12 @@ export class RallyRenderer {
       state.clockheadScore >= RALLY_CONFIG.scoring.winScore - 1
     ) {
       context.fillStyle = `rgba(102, 10, 16, ${RALLY_CONFIG.juice.matchPointVignetteAlpha})`;
-      context.fillRect(0, 0, RALLY_CONFIG.arena.width, RALLY_CONFIG.arena.height);
+      context.fillRect(
+        0,
+        0,
+        RALLY_CONFIG.arena.width,
+        RALLY_CONFIG.arena.height
+      );
     }
   }
 }

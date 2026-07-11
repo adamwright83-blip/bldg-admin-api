@@ -10,6 +10,24 @@ const cssSource = fs.readFileSync(
   path.resolve(import.meta.dirname, "dayforge-landing.css"),
   "utf8"
 );
+const heroCssSource = fs.readFileSync(
+  path.resolve(import.meta.dirname, "dayforge-hero-unified.css"),
+  "utf8"
+);
+const rallyRendererSource = fs.readFileSync(
+  path.resolve(
+    import.meta.dirname,
+    "..",
+    "components",
+    "boreslay-rally",
+    "rallyRenderer.ts"
+  ),
+  "utf8"
+);
+const mainSource = fs.readFileSync(
+  path.resolve(import.meta.dirname, "..", "main.tsx"),
+  "utf8"
+);
 const appSource = fs.readFileSync(
   path.resolve(import.meta.dirname, "..", "App.tsx"),
   "utf8"
@@ -35,8 +53,14 @@ describe("DayForge final landing contract", () => {
     expect(pageSource).toContain("Then go get it.");
     expect(pageSource).toContain("p5-final-browser-proof.png");
     expect(pageSource).toContain('href="/boreslay-rally"');
-    expect(pageSource).toContain("mission-foundry-hero.png");
     expect(pageSource).toContain("screen-to-street.png");
+    expect(pageSource).toContain("unified-revenue-machine-hero.png");
+    expect(pageSource).toContain('className="df3-hero-game-hotspot"');
+    expect(pageSource).not.toContain('className="df3-hero-phone-screen"');
+    expect(heroCssSource).toContain(".df3-hero-game-hotspot");
+    expect(rallyRendererSource).toContain("procrastinator-v2.png");
+    expect(rallyRendererSource).toContain("procrastinator-cuckoo-target.png");
+    expect(mainSource).not.toContain("clockheadCuckooVisual");
   });
 
   it("submits demo leads through the production lead endpoint with a distinct source", () => {
