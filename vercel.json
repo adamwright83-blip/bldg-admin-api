@@ -22,6 +22,7 @@
     { "source": "/boreslay", "destination": "/index.html" },
     { "source": "/dayforge", "destination": "/index.html" },
     { "source": "/landingfinal", "destination": "/index.html" },
+    { "source": "/dayforgenew", "destination": "/codexlfinal.html" },
     { "source": "/boreslay-rally", "destination": "/index.html" },
     { "source": "/404", "destination": "/index.html" }
   ]

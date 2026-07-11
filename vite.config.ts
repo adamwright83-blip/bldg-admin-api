@@ -21,6 +21,16 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        app: path.resolve(import.meta.dirname, "client", "index.html"),
+        codexlfinal: path.resolve(
+          import.meta.dirname,
+          "client",
+          "codexlfinal.html"
+        ),
+      },
+    },
   },
   server: {
     host: true,
