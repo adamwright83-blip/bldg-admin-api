@@ -312,14 +312,25 @@
     display: none;
   }
 
+  .lf-hero h1 {
+    font-size: clamp(44px, 4.9vw, 64px);
+  }
+
+  /* Grid collage: no panel may cover another panel's UI. */
   .lf-hero-diorama {
-    display: block;
-    position: relative;
-    min-height: 700px;
+    display: grid;
+    grid-template-columns: minmax(236px, 260px) 1fr;
+    grid-template-areas:
+      "phone sage"
+      "phone game"
+      "phone photo";
+    gap: 44px 26px;
+    align-items: start;
+    padding-top: 28px;
   }
 
   .lf-exhibit {
-    position: absolute;
+    position: relative;
     border-radius: 16px;
   }
 
@@ -337,75 +348,44 @@
   }
 
   .lf-exhibit-sage {
-    top: 0;
-    right: 0;
-    width: 336px;
-    transform: rotate(1.2deg);
-    z-index: 1;
+    grid-area: sage;
+    width: 100%;
+    transform: rotate(0.8deg);
   }
 
-  .lf-exhibit-sage .lf-sage-table td {
-    padding: 7px 8px;
-  }
-
+  .lf-exhibit-sage .lf-sage-table td,
   .lf-exhibit-sage .lf-sage-table th {
     padding: 7px 8px;
   }
 
+  .lf-exhibit-sage .lf-sage-table th {
+    white-space: normal;
+  }
+
   .lf-exhibit-game {
-    top: 322px;
-    right: 0;
-    width: 292px;
-    transform: rotate(-1.2deg);
-    z-index: 2;
+    grid-area: game;
+    width: 100%;
+    transform: rotate(-0.8deg);
   }
 
   .lf-exhibit-phone {
-    bottom: 0;
-    left: 0;
-    width: 252px;
-    z-index: 3;
+    grid-area: phone;
+    width: 100%;
+    align-self: center;
+  }
+
+  .lf-exhibit-phone .lf-phone {
+    width: 100%;
   }
 
   .lf-exhibit-photo {
-    bottom: -8px;
-    right: 12px;
-    width: 190px;
-    z-index: 4;
-  }
-
-  .lf-flow-2 {
-    display: none;
+    grid-area: photo;
+    width: min(250px, 88%);
+    transform: rotate(0.8deg);
   }
 
   .lf-diorama-flow {
-    position: absolute;
-    z-index: 4;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: var(--lf-ink);
-    color: var(--lf-gold);
-    box-shadow: 0 6px 16px rgba(36, 28, 17, 0.35);
-  }
-
-  .lf-diorama-flow svg {
-    width: 20px;
-    height: 20px;
-  }
-
-  .lf-flow-1 {
-    top: 200px;
-    right: 140px;
-  }
-
-  .lf-flow-2 {
-    top: 380px;
-    left: 250px;
-    transform: rotate(45deg);
+    display: none;
   }
 }
 
