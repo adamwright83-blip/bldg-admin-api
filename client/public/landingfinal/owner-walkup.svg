@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1200" role="img" aria-label="Laundromat owner walking toward a commercial building entrance with printed collateral in hand">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F8D9A8"/>
+      <stop offset="0.45" stop-color="#F3C387"/>
+      <stop offset="1" stop-color="#E8A867"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9FB6C4"/>
+      <stop offset="0.5" stop-color="#7E9AAC"/>
+      <stop offset="1" stop-color="#5F7E92"/>
+    </linearGradient>
+    <linearGradient id="glassDoor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C7D8E2"/>
+      <stop offset="1" stop-color="#8FA9BA"/>
+    </linearGradient>
+    <linearGradient id="walk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#D9C3A3"/>
+      <stop offset="1" stop-color="#C4A87F"/>
+    </linearGradient>
+    <linearGradient id="stone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B9AC97"/>
+      <stop offset="1" stop-color="#9C8E77"/>
+    </linearGradient>
+  </defs>
+
+  <!-- sky -->
+  <rect width="1600" height="820" fill="url(#sky)"/>
+  <circle cx="330" cy="240" r="110" fill="#FBEBC9" opacity="0.9"/>
+  <circle cx="330" cy="240" r="170" fill="#FBEBC9" opacity="0.35"/>
+
+  <!-- distant skyline -->
+  <g fill="#C98F5F" opacity="0.55">
+    <rect x="60" y="470" width="150" height="350"/>
+    <rect x="230" y="530" width="110" height="290"/>
+    <rect x="360" y="430" width="90" height="390"/>
+    <rect x="470" y="560" width="140" height="260"/>
+  </g>
+  <g fill="#B87A4C" opacity="0.5">
+    <rect x="130" y="560" width="120" height="260"/>
+    <rect x="420" y="500" width="70" height="320"/>
+    <rect x="540" y="470" width="60" height="350"/>
+  </g>
+
+  <!-- commercial building, right -->
+  <g>
+    <rect x="820" y="120" width="780" height="700" fill="url(#stone)"/>
+    <rect x="820" y="120" width="780" height="26" fill="#847660"/>
+    <!-- window grid -->
+    <g fill="url(#glass)">
+      <rect x="860" y="180" width="150" height="120"/>
+      <rect x="1040" y="180" width="150" height="120"/>
+      <rect x="1220" y="180" width="150" height="120"/>
+      <rect x="1400" y="180" width="150" height="120"/>
+      <rect x="860" y="330" width="150" height="120"/>
+      <rect x="1040" y="330" width="150" height="120"/>
+      <rect x="1220" y="330" width="150" height="120"/>
+      <rect x="1400" y="330" width="150" height="120"/>
+    </g>
+    <g fill="#FBEBC9" opacity="0.35">
+      <polygon points="860,180 1010,180 860,300"/>
+      <polygon points="1040,330 1190,330 1040,450"/>
+      <polygon points="1220,180 1370,180 1220,300"/>
+    </g>
+    <!-- entrance -->
+    <rect x="1010" y="470" width="440" height="350" fill="#6E604B"/>
+    <rect x="1035" y="470" width="390" height="330" fill="url(#glassDoor)"/>
+    <rect x="1225" y="470" width="12" height="330" fill="#54493A"/>
+    <rect x="1150" y="600" width="14" height="90" rx="7" fill="#3E362B"/>
+    <rect x="1290" y="600" width="14" height="90" rx="7" fill="#3E362B"/>
+    <g fill="#FBEBC9" opacity="0.3">
+      <polygon points="1035,470 1180,470 1035,700"/>
+    </g>
+    <!-- awning -->
+    <polygon points="980,470 1480,470 1450,410 1010,410" fill="#7A4E33"/>
+    <rect x="980" y="462" width="500" height="14" fill="#5E3A25"/>
+    <!-- blank sign panel (generic) -->
+    <rect x="1090" y="352" width="280" height="44" rx="6" fill="#54493A" opacity="0.85"/>
+  </g>
+
+  <!-- ground -->
+  <rect x="0" y="820" width="1600" height="380" fill="url(#walk)"/>
+  <!-- walkway to door -->
+  <polygon points="620,1200 1120,1200 1240,820 1020,820" fill="#E4D2B4"/>
+  <g stroke="#B49B76" stroke-width="5" opacity="0.7">
+    <line x1="700" y1="1120" x2="1210" y2="1120"/>
+    <line x1="760" y1="1030" x2="1190" y2="1030"/>
+    <line x1="820" y1="950" x2="1175" y2="950"/>
+    <line x1="870" y1="890" x2="1160" y2="890"/>
+  </g>
+  <!-- curb + planters -->
+  <rect x="0" y="820" width="1600" height="18" fill="#8F7F66"/>
+  <g>
+    <rect x="270" y="900" width="190" height="120" rx="10" fill="#7A6A52"/>
+    <ellipse cx="365" cy="885" rx="105" ry="48" fill="#4E6B3C"/>
+    <ellipse cx="320" cy="862" rx="60" ry="36" fill="#5C7D46"/>
+    <ellipse cx="415" cy="866" rx="55" ry="32" fill="#43602F"/>
+  </g>
+  <g>
+    <rect x="1440" y="880" width="160" height="110" rx="10" fill="#7A6A52"/>
+    <ellipse cx="1525" cy="866" rx="90" ry="42" fill="#4E6B3C"/>
+    <ellipse cx="1490" cy="846" rx="52" ry="30" fill="#5C7D46"/>
+  </g>
+
+  <!-- long morning shadow of the figure -->
+  <ellipse cx="700" cy="1085" rx="300" ry="42" fill="#8A744F" opacity="0.45"/>
+
+  <!-- owner, from behind three-quarter, walking toward entrance -->
+  <g>
+    <!-- back leg (mid-stride) -->
+    <path d="M842 905 L868 990 L858 1078 L884 1082 L902 985 L878 898 Z" fill="#8C6F4E"/>
+    <path d="M856 1074 L892 1078 L900 1096 L850 1094 Z" fill="#3E362B"/>
+    <!-- front leg -->
+    <path d="M800 902 L790 995 L770 1088 L742 1084 L768 988 L774 896 Z" fill="#9C7D59"/>
+    <path d="M736 1080 L774 1086 L768 1104 L726 1098 Z" fill="#3E362B"/>
+    <!-- torso: navy polo -->
+    <path d="M772 742 Q768 700 806 690 L862 690 Q898 702 894 748 L888 830 Q884 912 838 910 Q790 912 782 832 Z" fill="#2E4260"/>
+    <path d="M806 690 L862 690 Q874 694 880 704 L836 720 L790 702 Q796 694 806 690 Z" fill="#243450"/>
+    <!-- far arm swinging -->
+    <path d="M884 740 Q914 780 906 828 L890 862 L872 850 L888 812 Q890 776 876 752 Z" fill="#2E4260"/>
+    <ellipse cx="882" cy="862" rx="13" ry="15" fill="#C89B72"/>
+    <!-- head -->
+    <ellipse cx="836" cy="656" rx="34" ry="37" fill="#C89B72"/>
+    <path d="M800 650 Q802 616 836 616 Q870 616 872 650 Q854 640 836 640 Q818 640 800 650 Z" fill="#3A2E22"/>
+    <path d="M804 664 Q806 690 820 698 L806 700 Q798 684 804 664 Z" fill="#B0855C"/>
+    <!-- near arm holding collateral folder -->
+    <path d="M782 744 Q756 786 762 826 L776 856 L796 846 L784 810 Q784 778 796 756 Z" fill="#2E4260"/>
+    <!-- printed collateral under arm -->
+    <g transform="rotate(-8 776 852)">
+      <rect x="726" y="826" width="104" height="74" rx="4" fill="#F6EFE2" stroke="#CBBFA8" stroke-width="3"/>
+      <rect x="738" y="840" width="52" height="8" rx="4" fill="#E8590C"/>
+      <rect x="738" y="856" width="76" height="5" rx="2.5" fill="#9C8E77"/>
+      <rect x="738" y="868" width="66" height="5" rx="2.5" fill="#9C8E77"/>
+      <rect x="738" y="880" width="70" height="5" rx="2.5" fill="#C4B69C"/>
+    </g>
+    <ellipse cx="778" cy="858" rx="13" ry="15" fill="#C89B72"/>
+  </g>
+</svg>

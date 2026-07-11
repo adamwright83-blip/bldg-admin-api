@@ -18,6 +18,7 @@ import AdminCatalog from "./pages/AdminCatalog";
 // Public product sites are lazy so the operational admin bundle never pays for them.
 const BoreslayLanding = lazy(() => import("./pages/BoreslayLanding"));
 const DayforgeLanding = lazy(() => import("./pages/DayforgeLanding"));
+const LandingFinal = lazy(() => import("./pages/LandingFinal"));
 const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
 
 function PublicLandingFallback() {
@@ -36,6 +37,14 @@ function DayforgeLandingRoute() {
   return (
     <Suspense fallback={<PublicLandingFallback />}>
       <DayforgeLanding />
+    </Suspense>
+  );
+}
+
+function LandingFinalRoute() {
+  return (
+    <Suspense fallback={<PublicLandingFallback />}>
+      <LandingFinal />
     </Suspense>
   );
 }
@@ -86,7 +95,7 @@ function AdminHostRouter() {
       {/* Public landing pages are also reachable from the admin host for previewing. */}
       <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/dayforge" component={DayforgeLandingRoute} />
-      <Route path="/landingfinal" component={DayforgeLandingRoute} />
+      <Route path="/landingfinal" component={LandingFinalRoute} />
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
@@ -153,7 +162,7 @@ function Router() {
     <Switch>
       <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/dayforge" component={DayforgeLandingRoute} />
-      <Route path="/landingfinal" component={DayforgeLandingRoute} />
+      <Route path="/landingfinal" component={LandingFinalRoute} />
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
