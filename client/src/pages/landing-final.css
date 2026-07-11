@@ -315,7 +315,7 @@
   .lf-hero-diorama {
     display: block;
     position: relative;
-    min-height: 620px;
+    min-height: 700px;
   }
 
   .lf-exhibit {
@@ -353,9 +353,9 @@
   }
 
   .lf-exhibit-game {
-    top: 268px;
+    top: 322px;
     right: 0;
-    width: 300px;
+    width: 292px;
     transform: rotate(-1.2deg);
     z-index: 2;
   }
@@ -368,10 +368,14 @@
   }
 
   .lf-exhibit-photo {
-    bottom: 12px;
+    bottom: -8px;
     right: 12px;
-    width: 200px;
-    z-index: 2;
+    width: 190px;
+    z-index: 4;
+  }
+
+  .lf-flow-2 {
+    display: none;
   }
 
   .lf-diorama-flow {
@@ -1017,6 +1021,48 @@
 .lf-scene.is-compact .lf-scene-abilities,
 .lf-scene.is-compact .lf-hud-meter {
   display: none;
+}
+
+/* Compact scenes (hero exhibits) always use the tall stage + small plaque
+   so the duel stays visible above the mission dialog. */
+.lf-scene.is-compact {
+  aspect-ratio: 20 / 17;
+}
+
+.lf-scene.is-compact .lf-scene-dragon {
+  left: 4%;
+  bottom: 38%;
+  width: 42%;
+}
+
+.lf-scene.is-compact .lf-scene-boss {
+  right: 5%;
+  bottom: 39%;
+  width: 26%;
+}
+
+.lf-scene.is-compact .lf-plaque {
+  bottom: 4%;
+  padding: 9px 11px;
+}
+
+.lf-scene.is-compact .lf-plaque-kicker {
+  font-size: 10.5px;
+}
+
+.lf-scene.is-compact .lf-plaque-title {
+  font-size: 16px;
+}
+
+.lf-scene.is-compact .lf-plaque-body {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.lf-scene.is-compact .lf-plaque-cta {
+  margin-top: 6px;
+  font-size: 10.5px;
+  padding: 4px 9px;
 }
 
 /* Narrow screens: taller stage + compact plaque so the duel stays visible. */
