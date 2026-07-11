@@ -14,7 +14,6 @@ import {
   Compass,
   Menu,
   MessageSquareText,
-  Phone,
   Route,
   ShieldCheck,
   Sparkles,
@@ -94,16 +93,6 @@ const OPERATING_CAPABILITIES = [
   ],
 ] as const;
 
-const OUTCOMES = [
-  "Customer reactivated",
-  "Follow-up scheduled",
-  "Offer requested",
-  "Wrong contact information",
-  "Customer declined",
-  "Service problem discovered",
-  "New opportunity identified",
-] as const;
-
 type LeadForm = {
   businessName: string;
   name: string;
@@ -117,6 +106,21 @@ const EMPTY_FORM: LeadForm = {
   email: "",
   phone: "",
 };
+
+function trackLandingEvent(
+  event: string,
+  details: Record<string, string | number> = {}
+) {
+  if (typeof window === "undefined") return;
+  const payload = { event, page: "dayforge_landing_final", ...details };
+  const trackedWindow = window as Window & {
+    dataLayer?: Array<Record<string, unknown>>;
+  };
+  trackedWindow.dataLayer?.push(payload);
+  window.dispatchEvent(
+    new CustomEvent("dayforge:conversion", { detail: payload })
+  );
+}
 
 function scrollToSection(selector: string) {
   document
@@ -141,16 +145,21 @@ function Eyebrow({ children }: { children: ReactNode }) {
 
 function DemoButton({
   onClick,
+  source = "page",
   className = "",
 }: {
   onClick: () => void;
+  source?: string;
   className?: string;
 }) {
   return (
     <button
       className={`df2-button df2-button-primary ${className}`}
       type="button"
-      onClick={onClick}
+      onClick={() => {
+        trackLandingEvent("demo_cta_click", { source });
+        onClick();
+      }}
     >
       Book a 15-minute demo <ArrowRight />
     </button>
@@ -174,7 +183,11 @@ function Header({ onDemo }: { onDemo: () => void }) {
             </a>
           ))}
         </nav>
-        <DemoButton onClick={onDemo} className="df2-header-cta" />
+        <DemoButton
+          onClick={onDemo}
+          source="header"
+          className="df2-header-cta"
+        />
         <button
           className="df2-menu"
           type="button"
@@ -207,91 +220,208 @@ function Header({ onDemo }: { onDemo: () => void }) {
   );
 }
 
-function SageAnalysis() {
+function HeroSystemVisual() {
   return (
     <div
-      className="df2-analysis"
-      aria-label="Example Sage analysis of a revenue decline"
+      className="df3-hero-system"
+      aria-label="Live business data flows through Sage into a BORESLAY mission and completed real-world action"
     >
-      <header className="df2-analysis-header">
-        <span className="df2-sage-avatar">S</span>
-        <div>
-          <strong>Sage</strong>
-          <span>Investigating your business now</span>
-        </div>
-        <b>Example business analysis</b>
-      </header>
-      <div className="df2-analysis-body">
-        <div className="df2-metric-row">
-          <article>
-            <span>Revenue — this month</span>
-            <strong>$28,420</strong>
-            <small className="is-down">
-              <TrendingDown />
-              40% vs. two months ago
-            </small>
-          </article>
-          <article>
-            <span>Repeat orders</span>
-            <strong>−37%</strong>
-            <small className="is-down">Largest negative change</small>
-          </article>
-          <article>
-            <span>Average order value</span>
-            <strong>$48.70</strong>
-            <small className="is-stable">Stable</small>
-          </article>
-        </div>
-        <div className="df2-sage-message">
-          <span>Sage</span>
-          <strong>
-            Revenue is down 40% from two months ago. I’m checking what changed.
-          </strong>
-        </div>
-        <div className="df2-checked">
-          <span>What I checked</span>
+      <img
+        className="df3-hero-art"
+        src="/assets/dayforge-final/mission-foundry-hero.png"
+        alt="A glass and marble mission foundry connecting business data, analysis, a game screen, a phone, and a local laundry visit"
+        width={1672}
+        height={941}
+        decoding="async"
+      />
+      <div className="df3-hero-step-rail" aria-hidden="true">
+        <span>
+          <b>01</b> Live data
+        </span>
+        <span>
+          <b>02</b> Sage finds the cause
+        </span>
+        <span>
+          <b>03</b> BORESLAY mission
+        </span>
+        <span>
+          <b>04</b> Action changes the business
+        </span>
+      </div>
+      <a
+        className="df3-hero-game-screen"
+        href="/boreslay-rally"
+        aria-label="Open the real BORESLAY Rally game"
+      >
+        <img
+          src={rallyScreenshot}
+          alt="Real BORESLAY Rally gameplay with Spark battling Clockhead"
+          width={1440}
+          height={913}
+          decoding="async"
+        />
+        <span>Mission incoming</span>
+      </a>
+      <div
+        className="df3-hero-phone-screen"
+        aria-label="Example mobile mission"
+      >
+        <small>Mission ready</small>
+        <strong>Recover 8 customers</strong>
+        <b>$12,400</b>
+      </div>
+      <div
+        className="df3-mobile-pipeline"
+        aria-label="Illustrative DayForge product flow"
+      >
+        <article>
+          <span>01</span>
+          <CircleDollarSign />
           <div>
-            <b>
-              <Check /> Routes normal
-            </b>
-            <b>
-              <Check /> Order value stable
-            </b>
-            <b>
-              <Check /> New customers stable
-            </b>
-            <b className="is-alert">! Repeat orders down 37%</b>
+            <b>Live business data</b>
+            <small>Orders, customers, routes, and revenue.</small>
           </div>
-        </div>
-        <article className="df2-root-cause">
-          <span>I found the main cause.</span>
-          <h3>18 high-value customers haven’t ordered in 60+ days.</h3>
+        </article>
+        <article>
+          <span>02</span>
+          <Sparkles />
           <div>
-            <b>
-              <strong>$14,860</strong> prior 90-day revenue
-            </b>
-            <b>
-              <strong>12</strong> no open service issues
-            </b>
-            <b>
-              <strong>8</strong> best targets ranked
-            </b>
+            <b>Sage finds the cause</b>
+            <small>18 valuable customers went quiet.</small>
           </div>
-          <footer>
-            <p>I drafted a personal follow-up for every target.</p>
-            <button
-              type="button"
-              onClick={() => scrollToSection("#mission-ready")}
-            >
-              Review customers
-            </button>
-            <a href="/boreslay-rally">
-              Start mission <ArrowRight />
-            </a>
-          </footer>
+        </article>
+        <article className="is-game">
+          <span>03</span>
+          <div>
+            <b>BORESLAY starts the mission</b>
+            <img src={rallyScreenshot} alt="Real BORESLAY Rally gameplay" />
+          </div>
+        </article>
+        <article className="is-success">
+          <span>04</span>
+          <CheckCircle2 />
+          <div>
+            <b>Action changes the business</b>
+            <small>Outcome recorded. Next move ready.</small>
+          </div>
         </article>
       </div>
     </div>
+  );
+}
+
+function MissionFlowSection() {
+  return (
+    <section className="df3-flow-section" id="driver-mission">
+      <div className="df3-flow-heading">
+        <Eyebrow>How DayForge works</Eyebrow>
+        <h2>From live business data to completed action.</h2>
+        <p>
+          How a real opportunity becomes a completed sales visit—in three steps.
+        </p>
+      </div>
+      <div className="df3-flow-stage">
+        <img
+          className="df3-flow-art"
+          src="/assets/dayforge-final/screen-to-street.png"
+          alt="A glass pipeline connecting a desktop game, a mobile mission, and a real-world laundry visit"
+          width={1672}
+          height={941}
+          loading="lazy"
+          decoding="async"
+        />
+        <div className="df3-flow-labels">
+          <article>
+            <span>1</span>
+            <div>
+              <b>Start on desktop</b>
+              <p>
+                Sage finds a missed opportunity and drops it into the game as a
+                mission worth real money.
+              </p>
+            </div>
+          </article>
+          <article>
+            <span>2</span>
+            <div>
+              <b>Check your phone</b>
+              <p>
+                See who to contact, what to offer, and exactly what the account
+                may be worth.
+              </p>
+            </div>
+          </article>
+          <article>
+            <span>3</span>
+            <div>
+              <b>Drive. Meet. Win.</b>
+              <p>
+                Make the visit, record the outcome, and move the business
+                forward.
+              </p>
+            </div>
+          </article>
+        </div>
+        <a
+          className="df3-flow-game"
+          href="/boreslay-rally"
+          aria-label="Play the real BORESLAY Rally game"
+        >
+          <img
+            src={rallyScreenshot}
+            alt="Real BORESLAY Rally gameplay"
+            width={1440}
+            height={913}
+            loading="lazy"
+          />
+        </a>
+        <div
+          className="df3-flow-phone"
+          aria-label="Example prepared mobile mission"
+        >
+          <small>New mission</small>
+          <b>Sunrise Suites</b>
+          <span>40-room hotel</span>
+          <strong>$24,800</strong>
+          <i>Press to drive</i>
+        </div>
+      </div>
+      <div className="df3-flow-mobile">
+        <article>
+          <span>1</span>
+          <h3>Start on desktop</h3>
+          <p>
+            Sage finds the opportunity and turns it into a mission inside
+            BORESLAY.
+          </p>
+          <img src={rallyScreenshot} alt="Real BORESLAY Rally gameplay" />
+        </article>
+        <article>
+          <span>2</span>
+          <h3>Check your phone</h3>
+          <p>The target, value, message, and next move are already prepared.</p>
+          <div className="df3-mobile-phone">
+            <small>New mission</small>
+            <b>Sunrise Suites</b>
+            <strong>$24,800 annual value</strong>
+            <i>Press to drive</i>
+          </div>
+        </article>
+        <article>
+          <span>3</span>
+          <h3>Drive. Meet. Win.</h3>
+          <p>
+            Complete the visit, record the result, and let Sage determine what
+            happens next.
+          </p>
+          <Route />
+        </article>
+      </div>
+      <p className="df3-flow-statement">
+        Insight without action does not change the business.{" "}
+        <strong>Completed action does.</strong>
+      </p>
+    </section>
   );
 }
 
@@ -301,6 +431,7 @@ function DemoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     "idle" | "submitting" | "success" | "error"
   >("idle");
   const closeRef = useRef<HTMLButtonElement>(null);
+  const formStartedRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -323,6 +454,7 @@ function DemoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     event.preventDefault();
     if (status === "submitting") return;
     setStatus("submitting");
+    trackLandingEvent("demo_form_submit");
     try {
       const response = await fetch(`${API_BASE}/api/leads/submit`, {
         method: "POST",
@@ -343,9 +475,11 @@ function DemoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
       if (!response.ok)
         throw new Error(`Lead submission failed (${response.status})`);
       setStatus("success");
+      trackLandingEvent("demo_form_complete");
     } catch (error) {
       console.error("[DayForge] demo request failed", error);
       setStatus("error");
+      trackLandingEvent("demo_form_error");
     }
   };
 
@@ -406,7 +540,14 @@ function DemoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
               Tell us where to reach you. We’ll show how Sage can find a real
               opportunity and turn it into a mission.
             </p>
-            <form onSubmit={submit}>
+            <form
+              onSubmit={submit}
+              onFocusCapture={() => {
+                if (formStartedRef.current) return;
+                formStartedRef.current = true;
+                trackLandingEvent("demo_form_start");
+              }}
+            >
               <label>
                 Business name
                 <input
@@ -491,60 +632,9 @@ function DemoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-function PhoneMission() {
-  return (
-    <div className="df2-phone-wrap">
-      <div className="df2-phone">
-        <header>
-          <span>DAYFORGE DRIVER</span>
-          <b>MISSION 1 OF 8</b>
-        </header>
-        <div className="df2-phone-progress">
-          <i />
-        </div>
-        <Eyebrow>Recover customer</Eyebrow>
-        <h3>Sarah Johnson</h3>
-        <dl>
-          <div>
-            <dt>Previous value</dt>
-            <dd>$1,240 / 6 months</dd>
-          </div>
-          <div>
-            <dt>Last order</dt>
-            <dd>74 days ago</dd>
-          </div>
-          <div>
-            <dt>Known issue</dt>
-            <dd>None</dd>
-          </div>
-        </dl>
-        <article>
-          <span>Recommended action</span>
-          <p>
-            Call Sarah and ask whether her pickup schedule changed. Mention that
-            Tuesday evening service is now available in her area.
-          </p>
-        </article>
-        <blockquote>
-          “Hi Sarah, this is Adam from Sunset Laundry. I noticed it has been a
-          little while since your last pickup…”
-        </blockquote>
-        <button type="button">
-          <Phone /> Start call
-        </button>
-        <a href="#product">View customer history</a>
-      </div>
-      <aside>
-        <Sparkles />
-        <span>Prepared by Sage</span>
-        <b>No blank page. No searching for what to say.</b>
-      </aside>
-    </div>
-  );
-}
-
 export default function DayforgeLanding() {
   const [demoOpen, setDemoOpen] = useState(false);
+  const [showMobileCta, setShowMobileCta] = useState(false);
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -562,6 +652,39 @@ export default function DayforgeLanding() {
     };
   }, []);
 
+  useEffect(() => {
+    const reached = new Set<number>();
+    const thresholds = [25, 50, 75, 90];
+    const onScroll = () => {
+      const maxScroll =
+        document.documentElement.scrollHeight - window.innerHeight;
+      if (maxScroll <= 0) return;
+      const depth = Math.round((window.scrollY / maxScroll) * 100);
+      thresholds.forEach(threshold => {
+        if (depth >= threshold && !reached.has(threshold)) {
+          reached.add(threshold);
+          trackLandingEvent("scroll_depth", { percent: threshold });
+        }
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    const hero = document.querySelector(".df3-hero");
+    if (!hero) return;
+    const observer = new IntersectionObserver(
+      entries => {
+        const entry = entries[0];
+        if (entry) setShowMobileCta(!entry.isIntersecting);
+      },
+      { threshold: 0.05 }
+    );
+    observer.observe(hero);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="df2-root" id="top">
       <a className="df2-skip" href="#main">
@@ -569,8 +692,9 @@ export default function DayforgeLanding() {
       </a>
       <Header onDemo={() => setDemoOpen(true)} />
       <main id="main">
-        <section className="df2-hero">
-          <div className="df2-hero-copy">
+        <section className="df3-hero">
+          <HeroSystemVisual />
+          <div className="df3-hero-copy">
             <Eyebrow>DayForge for laundry</Eyebrow>
             <h1>
               Find the revenue you’re missing.
@@ -578,57 +702,34 @@ export default function DayforgeLanding() {
               <em>Then go get it.</em>
             </h1>
             <p>
-              DayForge runs the day. Sage finds what changed and why. BORESLAY
-              turns the next move into a mission you actually complete.
+              DayForge watches your store’s data, finds the revenue you are
+              missing, and turns the next move into a mission you actually
+              complete.
             </p>
-            <div className="df2-hero-actions">
-              <DemoButton onClick={() => setDemoOpen(true)} />
+            <div className="df3-hero-actions">
+              <DemoButton onClick={() => setDemoOpen(true)} source="hero" />
               <button
                 className="df2-button df2-button-secondary"
                 type="button"
-                onClick={() => scrollToSection("#story")}
+                onClick={() => {
+                  trackLandingEvent("product_story_click", { source: "hero" });
+                  scrollToSection("#driver-mission");
+                }}
               >
-                Watch the product story <ChevronRight />
+                See how it works <ChevronRight />
               </button>
             </div>
-            <div className="df2-proof-list" aria-label="Product proof points">
+            <div className="df3-proof-list" aria-label="Product proof points">
               <span>
-                <Check /> Laundry-built
+                <ShieldCheck /> Built for laundry
               </span>
               <span>
-                <Check /> Real business data
+                <CircleDollarSign /> Real business data
               </span>
               <span>
-                <Check /> Real-world actions
+                <Target /> Real-world actions
               </span>
             </div>
-            <div className="df2-story-steps">
-              <b>One hero. One continuous sales story.</b>
-              <ol>
-                <li>Sage spots the revenue drop.</li>
-                <li>Sage proves the cause.</li>
-                <li>BORESLAY gets the recovery done.</li>
-              </ol>
-            </div>
-          </div>
-          <div className="df2-hero-visual">
-            <SageAnalysis />
-            <a
-              className="df2-rally-peek"
-              href="/boreslay-rally"
-              aria-label="Open the real BORESLAY Rally game"
-            >
-              <img
-                src={rallyScreenshot}
-                alt="Real BORESLAY Rally game showing Spark battling Clockhead"
-                width={1440}
-                height={913}
-                decoding="async"
-              />
-              <span>
-                <b>Real in-game capture</b> Open BORESLAY Rally <ArrowRight />
-              </span>
-            </a>
           </div>
         </section>
 
@@ -868,89 +969,7 @@ export default function DayforgeLanding() {
           </footer>
         </section>
 
-        <section className="df2-game-section">
-          <div className="df2-section-heading is-light">
-            <Eyebrow>The business mission enters the match</Eyebrow>
-            <h2>Your next sales action becomes part of the fight.</h2>
-            <p>
-              You are in the middle of a BORESLAY match. Spark is battling
-              Clockhead. The game is not a reward pasted onto the software—the
-              live business opportunity becomes part of the game itself.
-            </p>
-          </div>
-          <div className="df2-game-frame">
-            <img
-              src={rallyScreenshot}
-              alt="Live BORESLAY Rally gameplay with Spark returning an attack to Clockhead"
-              width={1440}
-              height={913}
-              loading="lazy"
-              decoding="async"
-            />
-            <article>
-              <Eyebrow>Sage mission interrupts the match</Eyebrow>
-              <h3>Reactivate 8 high-value customers</h3>
-              <p>Estimated revenue at risk</p>
-              <strong>$12,400</strong>
-              <a href="/boreslay-rally">
-                Open mission <ArrowRight />
-              </a>
-            </article>
-          </div>
-          <div className="df2-closer-line">
-            <span>Closer:</span> “I can hold this off for 20 seconds. Sage found
-            a revenue recovery mission. Check your phone now.”
-          </div>
-        </section>
-
-        <section className="df2-driver" id="driver-mission">
-          <div className="df2-section-copy">
-            <Eyebrow>From the game to the real world</Eyebrow>
-            <h2>The mission tells you exactly what to do next.</h2>
-            <p>
-              The DayForge Driver app opens with the first prepared action. You
-              are not handed “do more sales.” You receive a specific person,
-              account, destination, message, or objective.
-            </p>
-            <strong className="df2-closing">
-              The blank page is gone. The next move is ready.
-            </strong>
-          </div>
-          <PhoneMission />
-        </section>
-
-        <section className="df2-progress">
-          <div className="df2-section-heading">
-            <Eyebrow>Complete the work. Continue the fight.</Eyebrow>
-            <h2>Every completed action changes what happens next.</h2>
-            <p>
-              Record the outcome immediately after the call, visit, text, or
-              follow-up. DayForge updates the customer record. Sage determines
-              the next step. BORESLAY rewards completed action and resumes the
-              match.
-            </p>
-          </div>
-          <div className="df2-outcomes">
-            {OUTCOMES.map(outcome => (
-              <span key={outcome}>
-                <Check />
-                {outcome}
-              </span>
-            ))}
-          </div>
-          <article className="df2-reward">
-            <Zap />
-            <div>
-              <Eyebrow>Mission complete</Eyebrow>
-              <h3>Success Rock earned. Triple-Power counterattack unlocked.</h3>
-            </div>
-            <b>+1</b>
-          </article>
-          <p className="df2-center-closing">
-            The reward is not for opening a report. It is for completing the
-            business action.
-          </p>
-        </section>
+        <MissionFlowSection />
 
         <section className="df2-missions">
           <div className="df2-section-heading">
@@ -974,50 +993,6 @@ export default function DayforgeLanding() {
               </article>
             ))}
           </div>
-        </section>
-
-        <section className="df2-expedition">
-          <div className="df2-section-copy">
-            <Eyebrow>Some sales cannot happen from a desk</Eyebrow>
-            <h2>DayForge can send you out the door prepared.</h2>
-            <p>
-              For high-value local opportunities, Sage can build a complete
-              field mission: research, pitch, leave-behind, route, and a clear
-              definition of success.
-            </p>
-            <strong className="df2-closing">
-              It does not merely advise you to pursue local partnerships. It
-              prepares the pursuit and helps carry it through.
-            </strong>
-          </div>
-          <article className="df2-expedition-card">
-            <header>
-              <Compass />
-              <div>
-                <Eyebrow>Win the building</Eyebrow>
-                <h3>The Marlowe Apartments</h3>
-              </div>
-            </header>
-            <div className="df2-expedition-stats">
-              <span>
-                <b>42</b>potential recurring customers
-              </span>
-              <span>
-                <b>Luxury residential</b>pickup partnership
-              </span>
-            </div>
-            <ol>
-              <li>Review the property briefing</li>
-              <li>Open the prepared manager pitch</li>
-              <li>Pick up the printed leave-behind</li>
-              <li>Navigate to the building</li>
-              <li>Ask for resident services</li>
-              <li>Record the result before leaving</li>
-            </ol>
-            <button type="button" onClick={() => scrollToSection("#contact")}>
-              Begin expedition <ArrowRight />
-            </button>
-          </article>
         </section>
 
         <section className="df2-operating">
@@ -1046,47 +1021,6 @@ export default function DayforgeLanding() {
             <b>Sage understands the business.</b>
             <b>BORESLAY gets the growth work completed.</b>
           </footer>
-        </section>
-
-        <section className="df2-operators">
-          <div className="df2-section-copy">
-            <Eyebrow>Useful on the first day</Eyebrow>
-            <h2>
-              You should not need an analyst to understand your own business.
-            </h2>
-            <p>
-              DayForge is designed for owners moving between customers,
-              employees, machines, routes, problems, and sales opportunities.
-            </p>
-          </div>
-          <div className="df2-operator-points">
-            <p>
-              <CheckCircle2 />
-              <span>
-                <b>Plain language</b>Sage explains what it sees without
-                analyst-speak.
-              </span>
-            </p>
-            <p>
-              <CheckCircle2 />
-              <span>
-                <b>Evidence attached</b>Every recommendation connects to the
-                business record.
-              </span>
-            </p>
-            <p>
-              <CheckCircle2 />
-              <span>
-                <b>Defined action</b>Every mission has a clear finish line.
-              </span>
-            </p>
-            <p>
-              <CheckCircle2 />
-              <span>
-                <b>Closed loop</b>Every result returns to the operating record.
-              </span>
-            </p>
-          </div>
         </section>
 
         <section className="df2-switching" id="switching">
@@ -1133,93 +1067,6 @@ export default function DayforgeLanding() {
                 the result.
               </p>
             </article>
-          </div>
-        </section>
-
-        <section className="df2-comparison">
-          <div className="df2-section-heading">
-            <Eyebrow>Software usually ends at the recommendation</Eyebrow>
-            <h2>DayForge is built around completion.</h2>
-          </div>
-          <div className="df2-comparison-table">
-            <div>
-              <span>Traditional dashboard</span>
-              <p>Here is what happened.</p>
-              <b>Sage</b>
-              <strong>
-                Here is what changed, why it changed, and what may be
-                recoverable.
-              </strong>
-            </div>
-            <div>
-              <span>Traditional CRM</span>
-              <p>Here is a list of people you should contact.</p>
-              <b>Sage</b>
-              <strong>
-                Here are the strongest targets, the evidence, and the prepared
-                action.
-              </strong>
-            </div>
-            <div>
-              <span>Traditional task manager</span>
-              <p>Remember to follow up.</p>
-              <b>BORESLAY</b>
-              <strong>
-                Complete this specific action now to advance the mission.
-              </strong>
-            </div>
-            <div>
-              <span>Traditional business game</span>
-              <p>Play to earn fictional progress.</p>
-              <b>BORESLAY</b>
-              <strong>Real business progress changes the game.</strong>
-            </div>
-          </div>
-          <p className="df2-center-closing">
-            Operating data becomes understanding. Understanding becomes a
-            mission. The mission becomes completed work.
-          </p>
-        </section>
-
-        <section className="df2-worlds">
-          <div className="df2-world-art" aria-hidden="true">
-            <img
-              src="/assets/boreslay-sections/final-panorama.webp"
-              alt=""
-              loading="lazy"
-              decoding="async"
-            />
-            <img
-              src="/assets/boreslay-hero/spark-reference.png"
-              alt=""
-              loading="lazy"
-              decoding="async"
-            />
-            <span>YOUR BUSINESS. YOUR WORLD.</span>
-          </div>
-          <div className="df2-section-copy">
-            <Eyebrow>
-              Your business does not have to look like every other dashboard
-            </Eyebrow>
-            <h2>
-              The operating system can live inside a world your team wants to
-              enter.
-            </h2>
-            <p>
-              DayForge can present the business through a custom visual world
-              built around your company, team, goals, and game experience.
-            </p>
-            <p>
-              The world does not replace the operating truth beneath it. It
-              gives that truth a more engaging place to live.
-            </p>
-            <div className="df2-world-chips">
-              <span>Custom characters</span>
-              <span>Company environments</span>
-              <span>Branded missions</span>
-              <span>Team progress</span>
-              <span>Business milestones</span>
-            </div>
           </div>
         </section>
 
@@ -1270,7 +1117,7 @@ export default function DayforgeLanding() {
               built for completion.
             </p>
             <div>
-              <DemoButton onClick={() => setDemoOpen(true)} />
+              <DemoButton onClick={() => setDemoOpen(true)} source="final" />
               <button
                 className="df2-button df2-button-inverse"
                 type="button"
@@ -1296,9 +1143,12 @@ export default function DayforgeLanding() {
         <a href="mailto:adam@bldg.chat">adam@bldg.chat</a>
       </footer>
       <button
-        className="df2-mobile-cta"
+        className={`df2-mobile-cta${showMobileCta ? " is-visible" : ""}`}
         type="button"
-        onClick={() => setDemoOpen(true)}
+        onClick={() => {
+          trackLandingEvent("demo_cta_click", { source: "mobile_sticky" });
+          setDemoOpen(true);
+        }}
       >
         Book a 15-minute demo <ArrowRight />
       </button>

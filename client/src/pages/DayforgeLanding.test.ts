@@ -35,6 +35,8 @@ describe("DayForge final landing contract", () => {
     expect(pageSource).toContain("Then go get it.");
     expect(pageSource).toContain("p5-final-browser-proof.png");
     expect(pageSource).toContain('href="/boreslay-rally"');
+    expect(pageSource).toContain("mission-foundry-hero.png");
+    expect(pageSource).toContain("screen-to-street.png");
   });
 
   it("submits demo leads through the production lead endpoint with a distinct source", () => {
@@ -51,5 +53,7 @@ describe("DayForge final landing contract", () => {
     expect(pageSource).toContain('className="df2-skip"');
     expect(cssSource).toContain("@media (prefers-reduced-motion: reduce)");
     expect(cssSource).toContain(".df2-mobile-cta");
+    expect(pageSource).toContain('trackLandingEvent("demo_cta_click"');
+    expect(pageSource).toContain('trackLandingEvent("scroll_depth"');
   });
 });
