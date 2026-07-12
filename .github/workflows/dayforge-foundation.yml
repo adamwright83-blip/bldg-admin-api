@@ -1,0 +1,41 @@
+name: DayForge mission foundation
+
+on:
+  pull_request:
+    paths:
+      - "client/src/pages/TerritoryPreview.tsx"
+      - "client/src/pages/CommercialSalesMission.tsx"
+      - "client/src/pages/territory-preview.css"
+      - "client/src/pages/commercial-sales-mission.css"
+      - "client/src/components/boreslay-rally/ProductionBoreslayMissionAdapter.ts"
+      - "shared/commercialMission*.ts"
+      - "server/territory/**"
+      - "client/src/App.tsx"
+      - ".github/workflows/dayforge-foundation.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm check
+      - name: DayForge foundation tests
+        run: >-
+          pnpm vitest run
+          shared/commercialMission.test.ts
+          shared/commercialMissionLifecycle.test.ts
+          server/territory/scoreLaundryOpportunity.test.ts
+          client/src/components/boreslay-rally/ProductionBoreslayMissionAdapter.test.ts
+      - name: Production build
+        run: pnpm build
