@@ -20,6 +20,9 @@ const BoreslayLanding = lazy(() => import("./pages/BoreslayLanding"));
 const DayforgeLanding = lazy(() => import("./pages/DayforgeLanding"));
 const LandingFinal = lazy(() => import("./pages/LandingFinal"));
 const TerritoryPreview = lazy(() => import("./pages/TerritoryPreview"));
+const CommercialSalesMission = lazy(
+  () => import("./pages/CommercialSalesMission")
+);
 const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
 
 function PublicLandingFallback() {
@@ -54,6 +57,16 @@ function TerritoryPreviewRoute() {
   return (
     <Suspense fallback={<PublicLandingFallback />}>
       <TerritoryPreview />
+    </Suspense>
+  );
+}
+
+function CommercialSalesMissionRoute() {
+  return (
+    <Suspense
+      fallback={<div style={{ minHeight: "100vh", background: "#0b1422" }} />}
+    >
+      <CommercialSalesMission />
     </Suspense>
   );
 }
@@ -107,6 +120,10 @@ function AdminHostRouter() {
       <Route path="/dayforge" component={DayforgeLandingRoute} />
       <Route path="/landingfinal" component={LandingFinalRoute} />
       <Route path="/territory-preview" component={TerritoryPreviewRoute} />
+      <Route
+        path="/driver/sales-mission/:missionId"
+        component={CommercialSalesMissionRoute}
+      />
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
@@ -175,6 +192,10 @@ function Router() {
       <Route path="/dayforge" component={DayforgeLandingRoute} />
       <Route path="/landingfinal" component={LandingFinalRoute} />
       <Route path="/territory-preview" component={TerritoryPreviewRoute} />
+      <Route
+        path="/driver/sales-mission/:missionId"
+        component={CommercialSalesMissionRoute}
+      />
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
