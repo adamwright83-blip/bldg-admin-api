@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import {
+  COMMERCIAL_MISSION_DEMO_STORAGE_KEY,
   DEMO_MISSION,
   DEMO_OPPORTUNITIES,
   formatCurrencyFromCents,
@@ -134,6 +135,13 @@ function MissionPreview({
     mission.estimatedAnnualValueCents
   );
 
+  function stagePhoneMission() {
+    window.localStorage.setItem(
+      COMMERCIAL_MISSION_DEMO_STORAGE_KEY,
+      JSON.stringify({ ...mission, status: "phone_ready" })
+    );
+  }
+
   return (
     <section className="tp-mission" aria-labelledby="tp-mission-title">
       <button className="tp-back" type="button" onClick={onBack}>
@@ -197,6 +205,13 @@ function MissionPreview({
       <div className="tp-mission-actions">
         <a
           className="tp-primary"
+          href={`/driver/sales-mission/${mission.id}`}
+          onClick={stagePhoneMission}
+        >
+          Open the phone mission <Smartphone />
+        </a>
+        <a
+          className="tp-back"
           href={SCHEDULER_URL ?? "mailto:adam@bldg.chat?subject=Map%20my%20territory"}
           target={SCHEDULER_URL ? "_blank" : undefined}
           rel={SCHEDULER_URL ? "noreferrer" : undefined}
@@ -204,8 +219,8 @@ function MissionPreview({
           Save this territory and map mine <ArrowRight />
         </a>
         <p>
-          This preview proves the product flow before scheduling: territory →
-          opportunity → mission.
+          The visitor now experiences the complete handoff before scheduling:
+          territory → opportunity → mission → phone.
         </p>
       </div>
     </section>
@@ -229,7 +244,7 @@ export default function TerritoryPreview() {
     [selectedOpportunity]
   );
 
-  const submitAddress = (event: React.FormEvent<HTMLFormElement>) => {
+  const submitAddress = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const clean = address.trim();
     if (!clean) return;
