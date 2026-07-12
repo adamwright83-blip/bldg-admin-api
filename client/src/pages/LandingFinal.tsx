@@ -83,7 +83,7 @@ function track(event: string, properties: Record<string, unknown> = {}) {
 
 const CTA_LABEL = "MAP MY TERRITORY";
 const CTA_NOTE =
-  "See the winnable accounts around your store in a 15-minute live demo.";
+  "See the commercial accounts worth pursuing around your store in a 15-minute live demo.";
 const PROOF_LINE =
   "Built by a laundromat operator. Running daily in our own LA stores.";
 
@@ -574,7 +574,8 @@ function OsSection() {
             <p>
               Run the counter on DayForge or connect the tools you already
               use. Orders, customers, services, pricing, routes, and open
-              capacity become one live picture — the one Sage reasons from.
+              capacity become one live picture — that is what Sage uses to
+              decide which opportunities actually fit your business.
             </p>
             <span className="lf-os-note">
               <ShieldCheck /> Start connected. Move more of the operation when
@@ -711,6 +712,23 @@ function OsSection() {
             </div>
           </div>
         </div>
+
+        <div className="lf-os-groups" aria-label="What DayForge covers">
+          <article>
+            <b>Run the store</b>
+            <span>
+              Orders &amp; customers · Services &amp; pricing · Production
+              &amp; capacity · Pickup routes
+            </span>
+          </article>
+          <article>
+            <b>Grow the store</b>
+            <span>
+              Commercial-account ranking · Field missions · Lapsed-customer
+              recovery · Mission results &amp; follow-up
+            </span>
+          </article>
+        </div>
       </div>
     </section>
   );
@@ -736,14 +754,14 @@ function FounderSection() {
         </div>
         <div className="lf-founder-copy">
           <span className="lf-eyebrow">Why DayForge exists</span>
-          <h2>Two founder lives. One operating system.</h2>
+          <h2>One founder. Two operating worlds.</h2>
           <div className="lf-founder-duo">
             <article>
-              <span>01 · The laundromat operator</span>
+              <span>01 · The laundry operator</span>
               <b>Knows the work.</b>
               <p>
-                The counter, the routes, the margins — and the growth work
-                that keeps getting pushed to tomorrow.
+                Knows the counter, the routes, the margins — and the growth
+                work that keeps getting pushed to tomorrow.
               </p>
             </article>
             <article>
@@ -752,14 +770,14 @@ function FounderSection() {
               <p>
                 Built a cloud-gaming company to{" "}
                 <strong>$1.6 million in revenue in under 11 months</strong>.
-                Knows how missions and progress make hard things easier to
-                start.
+                Knows how missions, progression, and rewards make difficult
+                work easier to begin and finish.
               </p>
             </article>
           </div>
           <p className="lf-founder-reveal">
-            <b>Same founder.</b> Business software knows what should happen.
-            Games know how to make you want to finish. DayForge does both.
+            <b>Same founder.</b> One side knows what the business needs. The
+            other knows how to make the work happen. DayForge combines both.
           </p>
         </div>
       </div>
@@ -818,8 +836,8 @@ function SchedulerModal({ open, onClose }: { open: boolean; onClose: () => void 
           Let’s map the commercial accounts around your store.
         </h2>
         <p className="lf-modal-sub">
-          Pick a time below. 15 minutes, live on a screen share — you keep what
-          you see either way.
+          Choose a time for your 15-minute live territory session — you keep
+          what you see either way.
         </p>
         {SCHEDULER_URL ? (
           <div className="lf-modal-frame">
@@ -882,9 +900,14 @@ const FAQS: Array<{ id: string; q: string; a: ReactNode }> = [
     a: "Your phone gives you the route, the prep, the person to ask for, the pitch, and the leave-behind. You drive, walk in, and ask for the business. Printed collateral is paid directly to the print shop at cost — it isn’t marked up or bundled into the subscription.",
   },
   {
-    id: "only-laundromats",
-    q: "Is it only for laundromats?",
-    a: "DayForge for Laundry is built for fluff & fold and laundromat operators. More trades are coming.",
+    id: "pos-replacement",
+    q: "Do I have to replace my current POS?",
+    a: "No. You can begin by connecting the tools you already use and move more of the operation into DayForge when you’re ready.",
+  },
+  {
+    id: "mission-length",
+    q: "How long does a field mission take?",
+    a: "It’s built to fit a working owner’s day — one drive, one print-shop stop, one walk-in visit. Most missions fit inside an hour, door to door.",
   },
   {
     id: "demo",
@@ -1017,10 +1040,10 @@ export default function LandingFinal() {
               </span>
               <h1>Stop driving past businesses that could be paying you.</h1>
               <p className="lf-hero-sub">
-                DayForge ranks the local commercial accounts you can
-                realistically win — what each could be worth, who to ask for,
-                and what to bring — then turns the best one into a game-driven
-                mission that gets you through the door ready to pitch.
+                DayForge ranks the local commercial accounts worth pursuing —
+                what each could be worth, who to ask for, and what to bring —
+                then turns the best one into a game-driven mission that gets
+                you through the door ready to pitch.
               </p>
               <div className="lf-hero-cta">
                 {/* The 90-second tour button joins lf-hero-actions when the
@@ -1132,16 +1155,9 @@ export default function LandingFinal() {
                 </span>
                 <h3>Most aren’t worth your gas. One is.</h3>
                 <p>
-                  Sage checks every commercial property near your store. Most
-                  aren’t worth your gas. One is: a property management company
-                  running 15 buildings — towels, mats, and tenant laundry worth
-                  an estimated $24,800 a year. Sage tells you who to ask for
-                  and what offer makes sense.
-                </p>
-                <p>
-                  Sage knows because DayForge runs the store — your services,
-                  pricing, routes, and open capacity — and reads the territory
-                  around it.
+                  DayForge compares nearby commercial properties with your
+                  services, pricing, routes, and open capacity. It surfaces
+                  the account worth pursuing first — and explains why.
                 </p>
               </div>
               <div className="lf-ch-visual">
@@ -1153,6 +1169,10 @@ export default function LandingFinal() {
                     Ask for the operations manager
                   </span>
                 </div>
+                <p className="lf-support-line">
+                  Westview fits your service, falls inside an existing route,
+                  and fills capacity you already have available.
+                </p>
               </div>
             </div>
 
@@ -1161,7 +1181,7 @@ export default function LandingFinal() {
                 <span className="lf-ch-kicker">
                   <b>2</b> It becomes today’s mission.
                 </span>
-                <h3>The boss is the account.</h3>
+                <h3>The boss is the problem standing between you and the account.</h3>
                 <p>
                   The opportunity doesn’t go on a list. It lands inside a game
                   on your desktop — and it’s today’s mission to complete.
@@ -1194,9 +1214,9 @@ export default function LandingFinal() {
                 </span>
                 <h3>Clean polo. Quote sheet. Press to drive.</h3>
                 <p>
-                  First stop isn’t the account — it’s the print shop. DayForge
-                  already sent your leave-behind: your services, your pricing,
-                  your name. Pick it up. Keep driving.
+                  Who to ask for. What to say. What to bring. Your quote and
+                  leave-behind are prepared, printed, and waiting on the
+                  route.
                 </p>
               </div>
               <div className="lf-ch-visual lf-ch3-visual">
@@ -1213,8 +1233,9 @@ export default function LandingFinal() {
                 </span>
                 <h3>You walk in ready.</h3>
                 <p>
-                  Your phone tells you who to ask for, the one benefit to lead
-                  with, and what to leave behind. Then you walk in.
+                  Your phone tells you who to ask for, the strongest benefit
+                  to lead with, and what to leave behind. You arrive prepared
+                  to start the conversation.
                 </p>
               </div>
               <div className="lf-ch-visual">
@@ -1256,15 +1277,14 @@ export default function LandingFinal() {
               <span className="lf-eyebrow">The twist</span>
               <h2>Dashboards get ignored. Games get played.</h2>
               <p>
-                Every business tool you’ve bought gave you another list of
-                things to do. The list lost. Not because you’re lazy — because
-                a list has no pull.
+                Most business tools hand you another list of tasks. The list
+                loses — not because you’re lazy, but because a list has no
+                pull.
               </p>
               <p>
-                DayForge is built the other way. Your best opportunity arrives
-                inside a game with momentum, progress, and a mission that
-                doesn’t end on the screen. You don’t just check DayForge. You
-                play it — and the mission walks you out the door.
+                DayForge turns the best opportunity into a playable mission
+                with momentum, progress, and a real-world finish line. The
+                game does not replace the work. It gets the work started.
               </p>
               <div className="lf-name-reveal">
                 <b>MEET BORESLAY</b>
@@ -1287,9 +1307,10 @@ export default function LandingFinal() {
               <span className="lf-eyebrow">Already-won business</span>
               <h2>It notices when good customers disappear, too.</h2>
               <p>
-                Regulars rarely quit out loud. They just stop showing up.
-                DayForge catches it early — and writes the first draft of the
-                message that brings them back.
+                Good customers rarely announce that they’re leaving. They just
+                stop ordering. DayForge notices when a valuable regular goes
+                quiet, checks for unresolved problems, and drafts a message
+                for you to review.
               </p>
             </div>
             <div className="lf-watch-grid">
@@ -1344,8 +1365,7 @@ export default function LandingFinal() {
                     <small>Draft · win-back text · Marisol V.</small>
                     Hi Marisol — it’s Adam at Sunset Wash. It’s been a few
                     weeks since your last pickup and I wanted to check in.
-                    Want me to hold your usual Thursday spot this week? First
-                    bag’s on us.
+                    Want me to hold your usual Thursday spot this week?
                   </div>
                   <div className="lf-draft-actions" aria-hidden="true">
                     <span className="lf-draft-btn">
@@ -1409,25 +1429,31 @@ export default function LandingFinal() {
                 </div>
                 <small>Everything. One location, one territory.</small>
               </div>
+              <span className="lf-plan-group">Run the business</span>
               <ul className="lf-plan-list">
                 <li>
-                  <Check /> DayForge POS, orders &amp; customer management
+                  <Check /> POS, orders &amp; customer management
                 </li>
                 <li>
-                  <Check /> Services, pricing, capacity &amp; route operations
+                  <Check /> Services, pricing &amp; capacity
                 </li>
                 <li>
-                  <Check /> Sage operating &amp; territory intelligence
+                  <Check /> Pickup routes &amp; field operations
+                </li>
+              </ul>
+              <span className="lf-plan-group">Grow the business</span>
+              <ul className="lf-plan-list">
+                <li>
+                  <Check /> Sage account ranking &amp; operating intelligence
                 </li>
                 <li>
-                  <Check /> BORESLAY playable growth missions
+                  <Check /> BORESLAY desktop missions
                 </li>
                 <li>
-                  <Check /> Phone-guided field visits
+                  <Check /> Phone-guided sales visits
                 </li>
                 <li>
-                  <Check /> Pitch prep, quote sheets &amp; printed
-                  leave-behinds
+                  <Check /> Pitch prep &amp; printed leave-behinds
                 </li>
                 <li>
                   <Check /> Lapsed-customer recovery
@@ -1471,11 +1497,7 @@ export default function LandingFinal() {
         <section className="lf-finalband" id="final-cta">
           <div className="lf-wrap">
             <h2>Stop passing the next account you could win.</h2>
-            <MapCta
-              source="final"
-              onOpen={openScheduler}
-              note="See the winnable commercial accounts around your store in a 15-minute live demo."
-            />
+            <MapCta source="final" onOpen={openScheduler} />
           </div>
         </section>
       </main>
@@ -1490,7 +1512,7 @@ export default function LandingFinal() {
 
       {/* Sticky CTA bar — active between Section 3 and the final band. */}
       <div className={`lf-sticky${stickyVisible ? " is-visible" : ""}`}>
-        <span>See the winnable accounts around your store.</span>
+        <span>See the commercial accounts worth pursuing around your store.</span>
         <button
           className="lf-btn"
           type="button"

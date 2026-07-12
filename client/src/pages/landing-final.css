@@ -3073,3 +3073,67 @@
   font-size: 17px;
   margin-right: 6px;
 }
+
+/* ---- v3: support line, OS run/grow strip, plan-card groups ---- */
+
+.lf-root .lf-support-line {
+  margin-top: 12px;
+  font-size: 13.5px;
+  color: var(--lf-ink-soft);
+  max-width: 52ch;
+}
+
+.lf-os-groups {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+@media (min-width: 760px) {
+  .lf-os-groups {
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+}
+
+.lf-os-groups article {
+  display: grid;
+  gap: 4px;
+  padding: 13px 16px;
+  background: #fff;
+  border: 1px solid var(--lf-line);
+  border-left: 4px solid var(--lf-gold);
+  border-radius: 12px;
+}
+
+.lf-os-groups article:last-child {
+  border-left-color: var(--lf-ember);
+}
+
+.lf-os-groups b {
+  font-family: var(--lf-display);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.lf-os-groups span {
+  font-size: 13px;
+  color: var(--lf-ink-soft);
+}
+
+.lf-plan-group {
+  display: block;
+  padding: 16px 26px 0;
+  font-family: var(--lf-display);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--lf-ember-deep);
+}
+
+.lf-plan-group + .lf-plan-list {
+  padding-top: 10px;
+}
