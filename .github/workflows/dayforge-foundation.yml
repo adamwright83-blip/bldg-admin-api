@@ -29,17 +29,58 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+
       - name: Typecheck
-        run: pnpm check
+        id: typecheck
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm check 2>&1 | tee dayforge-typecheck.log
+
       - name: DayForge foundation tests
-        run: >-
-          pnpm vitest run
-          shared/commercialMission.test.ts
-          shared/commercialMissionLifecycle.test.ts
-          server/territory/scoreLaundryOpportunity.test.ts
-          server/commercialMissions/opsTaskCommercialMissionStore.test.ts
-          server/churnRadar/scoreCustomerChurn.test.ts
-          server/churnRadar/buildWinBackDraft.test.ts
-          client/src/components/boreslay-rally/ProductionBoreslayMissionAdapter.test.ts
+        id: tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm vitest run \
+            shared/commercialMission.test.ts \
+            shared/commercialMissionLifecycle.test.ts \
+            server/territory/scoreLaundryOpportunity.test.ts \
+            server/commercialMissions/opsTaskCommercialMissionStore.test.ts \
+            server/churnRadar/scoreCustomerChurn.test.ts \
+            server/churnRadar/buildWinBackDraft.test.ts \
+            client/src/components/boreslay-rally/ProductionBoreslayMissionAdapter.test.ts \
+            2>&1 | tee dayforge-tests.log
+
       - name: Production build
-        run: pnpm build
+        id: build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm build 2>&1 | tee dayforge-build.log
+
+      - name: Upload validation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dayforge-validation-${{ github.run_number }}
+          path: |
+            dayforge-typecheck.log
+            dayforge-tests.log
+            dayforge-build.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Enforce validation result
+        if: always()
+        shell: bash
+        run: |
+          echo "typecheck=${{ steps.typecheck.outcome }}"
+          echo "tests=${{ steps.tests.outcome }}"
+          echo "build=${{ steps.build.outcome }}"
+          test "${{ steps.typecheck.outcome }}" = "success"
+          test "${{ steps.tests.outcome }}" = "success"
+          test "${{ steps.build.outcome }}" = "success"
