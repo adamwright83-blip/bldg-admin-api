@@ -17,10 +17,10 @@ import {
   Target,
   X,
 } from "lucide-react";
-import ownerWestviewEntry from "@/assets/codex-l-final/owner-westview-entry.avif";
-import printedLeaveBehind from "@/assets/codex-l-final/printed-leave-behind.avif";
-import rentReaperInterrupt from "@/assets/codex-l-final/rent-reaper-interrupt.avif";
-import rentReaperVictory from "@/assets/codex-l-final/rent-reaper-victory.avif";
+import ownerWestviewEntry from "@/assets/codex-l-final/owner-westview-entry.jpg";
+import printedLeaveBehind from "@/assets/codex-l-final/printed-leave-behind.jpg";
+import rentReaperInterrupt from "@/assets/codex-l-final/rent-reaper-interrupt.jpg";
+import rentReaperVictory from "@/assets/codex-l-final/rent-reaper-victory.jpg";
 import {
   getCodexLandingAnalytics,
   trackCtaClick,
@@ -184,20 +184,6 @@ function HeroExhibit() {
         <HeroPhone />
       </div>
 
-      <figure className="clf-exhibit-photo">
-        <img
-          src={ownerWestviewEntry}
-          alt="Concept photo of a laundromat owner approaching a commercial building with collateral"
-          width={1200}
-          height={675}
-          loading="eager"
-          decoding="async"
-        />
-        <figcaption>
-          <span aria-hidden="true" /> FIELD VISIT READY
-        </figcaption>
-      </figure>
-
       <div className="clf-exhibit-plinth" aria-hidden="true">
         <span>01 · FIND</span>
         <span>02 · PLAY</span>
@@ -293,8 +279,9 @@ function MissionInterruptMockup() {
         alt="Concept render of the Rent Reaper mission in BORESLAY"
         width={1200}
         height={675}
-        loading="lazy"
+        loading="eager"
         decoding="async"
+        fetchPriority="high"
       />
       <div className="clf-game-topline">
         <span>BORESLAY</span>
@@ -387,7 +374,7 @@ function VisitPrepMockup() {
           alt="Concept photo of a printed laundry-services leave-behind at a print shop"
           width={960}
           height={720}
-          loading="lazy"
+          loading="eager"
           decoding="async"
         />
         <figcaption>LEAVE-BEHIND · PRINTED &amp; READY</figcaption>
@@ -405,7 +392,7 @@ function FieldVisitMockup() {
         alt="Concept photo of a laundromat owner walking toward a commercial account with collateral"
         width={1200}
         height={675}
-        loading="lazy"
+        loading="eager"
         decoding="async"
       />
       <div className="clf-pitch-card">
@@ -439,7 +426,7 @@ function VictoryMockup() {
         alt="Concept render of the Rent Reaper defeated in BORESLAY"
         width={1200}
         height={675}
-        loading="lazy"
+        loading="eager"
         decoding="async"
       />
       <div className="clf-victory-hud">

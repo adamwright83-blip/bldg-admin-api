@@ -2930,3 +2930,293 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Image-led correction: the rendered scenes are the story, not decoration. */
+.clf-exhibit {
+  min-height: 490px;
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  isolation: isolate;
+  background: #040811;
+}
+
+.clf-exhibit::before {
+  z-index: 4;
+  color: rgba(255, 240, 197, 0.76);
+}
+
+.clf-exhibit-rail,
+.clf-exhibit-photo {
+  display: none;
+}
+
+.clf-exhibit-game {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: auto;
+  height: auto;
+  aspect-ratio: auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.clf-exhibit-game img {
+  object-position: 64% center;
+}
+
+.clf-exhibit-game::after {
+  background:
+    linear-gradient(90deg, rgba(2, 6, 13, 0.58) 0%, rgba(2, 6, 13, 0.12) 58%, rgba(2, 6, 13, 0.08)),
+    linear-gradient(0deg, rgba(2, 6, 13, 0.46), transparent 42%);
+}
+
+.clf-exhibit-game-hud {
+  inset: auto auto 25px 20px;
+  width: min(48%, 260px);
+  text-align: left;
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.9);
+}
+
+.clf-exhibit-game-hud strong {
+  font-size: clamp(27px, 8vw, 46px);
+}
+
+.clf-exhibit-sage {
+  position: absolute;
+  z-index: 3;
+  top: 34px;
+  left: 18px;
+  width: min(44%, 255px);
+  display: block;
+  overflow: hidden;
+  border: 3px solid #161d27;
+  border-radius: 9px;
+  background: #f7f9fb;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.34);
+}
+
+.clf-exhibit-panel-top,
+.clf-exhibit-sage-row {
+  display: grid;
+}
+
+.clf-exhibit-panel-top {
+  grid-template-columns: 1fr auto;
+  padding: 7px 8px;
+  color: #e5efff;
+  background: var(--clf-navy);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 5px;
+}
+
+.clf-exhibit-panel-top span {
+  color: #83aaff;
+  font-weight: 800;
+}
+
+.clf-exhibit-sage-row {
+  grid-template-columns: 1fr auto;
+  gap: 5px;
+  padding: 7px;
+  border-bottom: 1px solid var(--clf-line);
+  font-size: 6px;
+}
+
+.clf-exhibit-sage-row > div {
+  display: grid;
+  min-width: 0;
+}
+
+.clf-exhibit-sage-row small {
+  color: #77818d;
+  font-size: 5px;
+}
+
+.clf-exhibit-sage-row > span {
+  display: none;
+}
+
+.clf-exhibit-sage-row > b {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 6px;
+}
+
+.clf-exhibit-phone {
+  position: absolute;
+  z-index: 3;
+  right: 18px;
+  bottom: 22px;
+  width: min(47%, 220px);
+}
+
+.clf-phone-hero {
+  min-height: 318px;
+  padding: 0 10px 10px;
+}
+
+.clf-phone-hero > p {
+  margin-top: 10px;
+  font-size: 16px;
+}
+
+.clf-phone-value strong {
+  font-size: 24px;
+}
+
+.clf-exhibit-plinth {
+  z-index: 3;
+  right: auto;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  min-height: 24px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(4, 9, 18, 0.82);
+  color: #d7bd84;
+}
+
+.clf-game-frame {
+  min-height: 286px;
+}
+
+.clf-game-interrupt > img {
+  object-position: 62% center;
+}
+
+.clf-mission-interrupt-card {
+  right: auto;
+  bottom: 14px;
+  left: 14px;
+  width: min(48%, 410px);
+  padding: 13px;
+  background: rgba(4, 10, 19, 0.77);
+}
+
+.clf-mission-interrupt-card p {
+  font-size: clamp(8px, 1.2vw, 12px);
+}
+
+.clf-prep-visual {
+  min-height: 930px;
+  padding: 300px 14px 25px;
+}
+
+.clf-prep-phones {
+  position: relative;
+  z-index: 2;
+}
+
+.clf-collateral-photo {
+  top: 16px;
+  right: 14px;
+  bottom: auto;
+  left: 14px;
+  height: 260px;
+  transform: none;
+  border-width: 5px;
+}
+
+.clf-collateral-photo img {
+  object-position: center;
+}
+
+.clf-field-visual {
+  padding-bottom: 112px;
+}
+
+.clf-field-photo {
+  aspect-ratio: 4 / 3;
+  object-position: 85% center;
+}
+
+.clf-pitch-card {
+  right: 16px;
+  bottom: 0;
+  left: 16px;
+  background: rgba(255, 253, 248, 0.9);
+}
+
+.clf-game-victory > img {
+  object-position: 58% center;
+}
+
+.clf-victory-hud {
+  right: 14px;
+  bottom: 14px;
+  left: 14px;
+  background: rgba(4, 10, 19, 0.72);
+}
+
+@media (min-width: 48rem) {
+  .clf-exhibit {
+    min-height: 610px;
+  }
+
+  .clf-exhibit-sage {
+    top: 52px;
+    left: 30px;
+    width: 230px;
+  }
+
+  .clf-exhibit-game-hud {
+    bottom: 42px;
+    left: 30px;
+    width: 285px;
+  }
+
+  .clf-exhibit-phone {
+    right: 35px;
+    bottom: 42px;
+    width: 230px;
+  }
+
+  .clf-phone-hero {
+    min-height: 375px;
+    padding: 0 13px 13px;
+  }
+
+  .clf-prep-visual {
+    min-height: 580px;
+    padding: 40px 45% 35px 25px;
+  }
+
+  .clf-collateral-photo {
+    top: 36px;
+    right: 28px;
+    bottom: 36px;
+    left: auto;
+    width: 38%;
+    height: auto;
+  }
+
+  .clf-field-visual {
+    padding-bottom: 42px;
+  }
+
+  .clf-field-photo {
+    aspect-ratio: 16 / 10;
+    object-position: center;
+  }
+
+  .clf-pitch-card {
+    right: 28px;
+    bottom: 14px;
+    left: auto;
+    width: 320px;
+  }
+
+  .clf-game-victory {
+    min-height: 500px;
+  }
+
+  .clf-victory-hud {
+    right: 28px;
+    bottom: 26px;
+    left: auto;
+    width: min(46%, 420px);
+  }
+}

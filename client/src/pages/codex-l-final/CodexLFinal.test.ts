@@ -85,10 +85,10 @@ describe("CodexLFinal landing contract", () => {
   it("keeps BORESLAY spelling, concept assets, and exact mission proof", () => {
     expect(pageSource).toContain("BORESLAY");
     expect(pageSource).not.toContain("BOORSLAY");
-    expect(pageSource).toContain("rent-reaper-interrupt.avif");
-    expect(pageSource).toContain("rent-reaper-victory.avif");
-    expect(pageSource).toContain("owner-westview-entry.avif");
-    expect(pageSource).toContain("printed-leave-behind.avif");
+    expect(pageSource).toContain("rent-reaper-interrupt.jpg");
+    expect(pageSource).toContain("rent-reaper-victory.jpg");
+    expect(pageSource).toContain("owner-westview-entry.jpg");
+    expect(pageSource).toContain("printed-leave-behind.jpg");
     expect(pageSource).not.toContain("boreslay-rally");
     expect(pageSource).not.toContain("Clocklord");
     expect(pageSource).toContain("Westview Property Management");
