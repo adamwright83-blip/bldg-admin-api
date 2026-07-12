@@ -5,10 +5,13 @@ on:
     paths:
       - "client/src/pages/TerritoryPreview.tsx"
       - "client/src/pages/CommercialSalesMission.tsx"
+      - "client/src/pages/CommercialProposalPrint.tsx"
       - "client/src/pages/territory-preview.css"
       - "client/src/pages/commercial-sales-mission.css"
+      - "client/src/pages/commercial-proposal-print.css"
       - "client/src/components/boreslay-rally/ProductionBoreslayMissionAdapter.ts"
       - "shared/commercialMission*.ts"
+      - "shared/commercialProposal*.ts"
       - "server/territory/**"
       - "server/commercialMissions/**"
       - "server/churnRadar/**"
@@ -56,6 +59,7 @@ jobs:
           pnpm vitest run \
             shared/commercialMission.test.ts \
             shared/commercialMissionLifecycle.test.ts \
+            shared/commercialProposal.test.ts \
             server/territory/scoreLaundryOpportunity.test.ts \
             server/commercialMissions/opsTaskCommercialMissionStore.test.ts \
             server/churnRadar/scoreCustomerChurn.test.ts \
