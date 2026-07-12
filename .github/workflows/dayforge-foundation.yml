@@ -10,6 +10,7 @@ on:
       - "client/src/components/boreslay-rally/ProductionBoreslayMissionAdapter.ts"
       - "shared/commercialMission*.ts"
       - "server/territory/**"
+      - "server/commercialMissions/**"
       - "client/src/App.tsx"
       - ".github/workflows/dayforge-foundation.yml"
   workflow_dispatch:
@@ -36,6 +37,7 @@ jobs:
           shared/commercialMission.test.ts
           shared/commercialMissionLifecycle.test.ts
           server/territory/scoreLaundryOpportunity.test.ts
+          server/commercialMissions/opsTaskCommercialMissionStore.test.ts
           client/src/components/boreslay-rally/ProductionBoreslayMissionAdapter.test.ts
       - name: Production build
         run: pnpm build
