@@ -1,22 +1,30 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  Activity,
   ArrowDown,
   ArrowRight,
   Check,
   CheckCircle2,
+  CircleDollarSign,
   FileText,
   Flame,
+  Gauge,
   Hand,
   MapPin,
   Navigation,
+  PackageCheck,
   Pencil,
   Plus,
   Printer,
+  Route,
   ScrollText,
   Send,
   ShieldCheck,
   Sparkles,
+  Store,
+  TrendingUp,
   User,
+  Users,
   Wind,
   X,
   Zap,
@@ -84,6 +92,32 @@ type CtaSource = "hero" | "mission" | "sticky" | "pricing" | "final";
 /* ------------------------------------------------------------------ */
 /* Shared bits                                                         */
 /* ------------------------------------------------------------------ */
+
+/* Sage's sigil: compass ticks + watching eye. Not a sparkle. */
+function SageGlyph({ compact = false }: { compact?: boolean }) {
+  return (
+    <span
+      className={`lf-sage-glyph${compact ? " is-compact" : ""}`}
+      aria-hidden="true"
+    >
+      <svg viewBox="0 0 64 64" fill="none">
+        <circle cx="32" cy="32" r="25" stroke="currentColor" strokeWidth="4" />
+        <path
+          d="M32 3v8M32 53v8M3 32h8M53 32h8"
+          stroke="currentColor"
+          strokeWidth="4"
+          strokeLinecap="round"
+        />
+        <path
+          d="M19 32c4.5-7.5 9-11 13-11s8.5 3.5 13 11c-4.5 7.5-9 11-13 11s-8.5-3.5-13-11Z"
+          stroke="currentColor"
+          strokeWidth="3.5"
+        />
+        <circle cx="32" cy="32" r="4.5" fill="currentColor" />
+      </svg>
+    </span>
+  );
+}
 
 function DayforgeMark() {
   return (
@@ -242,13 +276,38 @@ function SageWindow({ mini = false }: { mini?: boolean }) {
         </span>
         <b>Sage — Commercial territory · 3 miles around your store</b>
       </div>
+      <div className="lf-sage-head" aria-hidden="true">
+        <SageGlyph />
+        <span>
+          <small>Sage · Operating intelligence</small>
+          <b>Territory briefing</b>
+        </span>
+        <em>
+          <i /> Live
+        </em>
+      </div>
       {!mini ? (
-        <div className="lf-sage-summary">
-          <Sparkles />
-          <span>
-            Checked <b>247</b> commercial properties near you ·{" "}
-            <b>4 worth a visit</b>
-          </span>
+        <div className="lf-sage-evidence" aria-hidden="true">
+          <article>
+            <header>
+              <Store /> From your operation
+            </header>
+            <ul>
+              <li>Capacity fits — Tue + Thu room open</li>
+              <li>Commercial wash &amp; fold enabled</li>
+              <li>Your route passes within 0.6 mi</li>
+            </ul>
+          </article>
+          <article>
+            <header>
+              <MapPin /> From your territory
+            </header>
+            <ul>
+              <li>247 commercial properties checked</li>
+              <li>Decision-maker identified</li>
+              <li>Westview is 1.4 mi from your store</li>
+            </ul>
+          </article>
         </div>
       ) : null}
       <table className="lf-sage-table">
@@ -309,6 +368,18 @@ function SageWindow({ mini = false }: { mini?: boolean }) {
           </tr>
         </tbody>
       </table>
+      {!mini ? (
+        <div className="lf-sage-says" aria-hidden="true">
+          <SageGlyph compact />
+          <span>
+            <small>Sage says</small>
+            <b>
+              Sell one invoice for all 15 buildings — less staff time lost to
+              laundry.
+            </b>
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -466,33 +537,233 @@ function PhonePrintStop() {
   );
 }
 
-/* Printed leave-behind, shown as a designed one-pager */
+/* Printed leave-behind, photographed at the print shop */
 
-function CollateralCard() {
+function CollateralPhoto() {
   return (
-    <div
-      className="lf-collateral"
-      role="img"
-      aria-label="The printed leave-behind: a one-page flyer with the store's commercial services, pricing, and owner's name"
-    >
-      <div className="lf-collateral-head" aria-hidden="true">
-        <i>
-          <Zap />
-        </i>
-        SUNSET WASH
-      </div>
-      <h5 aria-hidden="true">Commercial laundry for your buildings</h5>
-      <small aria-hidden="true">Towels · mats · linens · tenant laundry</small>
-      <ul aria-hidden="true">
-        <li>Pickup and delivery on your schedule</li>
-        <li>One invoice for all 15 buildings</li>
-        <li>Next-day turnaround, tracked by the pound</li>
-      </ul>
-      <div className="lf-collateral-foot" aria-hidden="true">
-        <span>Adam · Owner</span>
-        <span>(213) 555-0114</span>
+    <div className="lf-collateral-photo lf-shot">
+      <img
+        src="/landingfinal/collateral.jpg"
+        alt="Concept photo of the printed commercial laundry leave-behind at the print shop"
+        width={1200}
+        height={900}
+        loading="lazy"
+      />
+      <span className="lf-photo-tag">Concept photo</span>
+      <div className="lf-kit-chip" aria-hidden="true">
+        <Printer /> Westview visit kit — printed &amp; paid
       </div>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* The operating system underneath (POS / operations mockup)           */
+/* ------------------------------------------------------------------ */
+
+function OsSection() {
+  return (
+    <section className="lf-os" id="os">
+      <div className="lf-wrap">
+        <div className="lf-os-head">
+          <div>
+            <span className="lf-eyebrow">The operating system underneath</span>
+            <h2>First, DayForge learns how your store actually runs.</h2>
+          </div>
+          <div>
+            <p>
+              Run the counter on DayForge or connect the tools you already
+              use. Orders, customers, services, pricing, routes, and open
+              capacity become one live picture — the one Sage reasons from.
+            </p>
+            <span className="lf-os-note">
+              <ShieldCheck /> Start connected. Move more of the operation when
+              you’re ready.
+            </span>
+          </div>
+        </div>
+
+        <div
+          className="lf-os-window lf-shot"
+          role="img"
+          aria-label="DayForge point-of-sale and operations dashboard: today's sales, live production, and open capacity"
+        >
+          <aside className="lf-os-side" aria-hidden="true">
+            <span className="lf-os-mark">
+              <Zap /> DAYFORGE
+            </span>
+            <nav>
+              <b className="is-active">
+                <Activity /> Today
+              </b>
+              <b>
+                <PackageCheck /> Orders
+              </b>
+              <b>
+                <Users /> Customers
+              </b>
+              <b>
+                <Route /> Routes
+              </b>
+              <b>
+                <Gauge /> Capacity
+              </b>
+              <b>
+                <CircleDollarSign /> Pricing
+              </b>
+              <b>
+                <TrendingUp /> Growth
+              </b>
+            </nav>
+            <div className="lf-os-loc">
+              <i>LA</i>
+              <span>
+                <b>Sunset Wash</b>
+                <small>Store 01 · Live</small>
+              </span>
+            </div>
+          </aside>
+
+          <div className="lf-os-main" aria-hidden="true">
+            <header>
+              <div>
+                <small>Good morning, Adam</small>
+                <b>Your store is ready for the day.</b>
+              </div>
+              <em>All systems live</em>
+            </header>
+            <div className="lf-os-kpis">
+              <article>
+                <span>Net sales today</span>
+                <b>$4,842</b>
+                <em>↑ 18% vs. last Tue</em>
+              </article>
+              <article>
+                <span>Active orders</span>
+                <b>84</b>
+                <em>31 ready by 4 PM</em>
+              </article>
+              <article>
+                <span>Production load</span>
+                <b>73%</b>
+                <em>27% capacity open</em>
+              </article>
+              <article>
+                <span>Route value</span>
+                <b>$1,906</b>
+                <em>18 stops · 2 gaps</em>
+              </article>
+            </div>
+            <div className="lf-os-panels">
+              <article className="lf-os-orders">
+                <header>
+                  <b>Live production</b>
+                  <span>84 orders moving</span>
+                </header>
+                <div className="lf-os-row is-head">
+                  <span>Order</span>
+                  <span>Service</span>
+                  <span>Due</span>
+                  <span>Status</span>
+                </div>
+                <div className="lf-os-row">
+                  <span>
+                    <b>#1048</b> Maya Chen
+                  </span>
+                  <span>Wash &amp; fold</span>
+                  <span>11:30 AM</span>
+                  <i className="is-wash">WASHING</i>
+                </div>
+                <div className="lf-os-row">
+                  <span>
+                    <b>#1049</b> Westside Spa
+                  </span>
+                  <span>Commercial</span>
+                  <span>1:00 PM</span>
+                  <i className="is-fold">FOLDING</i>
+                </div>
+                <div className="lf-os-row">
+                  <span>
+                    <b>#1050</b> Luis Ortega
+                  </span>
+                  <span>Pickup &amp; delivery</span>
+                  <span>3:15 PM</span>
+                  <i className="is-ready">READY</i>
+                </div>
+              </article>
+              <article className="lf-os-capacity">
+                <header>
+                  <b>Today’s capacity</b>
+                  <span>Room to grow</span>
+                </header>
+                <div className="lf-os-ring">
+                  <b>27%</b>
+                  <small>open</small>
+                </div>
+                <div className="lf-os-says">
+                  <SageGlyph compact />
+                  <span>
+                    <b>Sage sees sellable room.</b> Enough Tue/Thu capacity for
+                    one commercial account.
+                  </span>
+                </div>
+              </article>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Founder story                                                       */
+/* ------------------------------------------------------------------ */
+
+function FounderSection() {
+  return (
+    <section className="lf-founder" id="founder">
+      <div className="lf-wrap lf-founder-grid">
+        <div className="lf-founder-media">
+          <img
+            className="lf-shot"
+            src="/landingfinal/founder.jpg"
+            alt="The same founder shown working the laundromat floor and building a cloud game"
+            width={1672}
+            height={941}
+            loading="lazy"
+          />
+        </div>
+        <div className="lf-founder-copy">
+          <span className="lf-eyebrow">Why DayForge exists</span>
+          <h2>Two founder lives. One operating system.</h2>
+          <div className="lf-founder-duo">
+            <article>
+              <span>01 · The laundromat operator</span>
+              <b>Knows the work.</b>
+              <p>
+                The counter, the routes, the margins — and the growth work
+                that keeps getting pushed to tomorrow.
+              </p>
+            </article>
+            <article>
+              <span>02 · The cloud-gaming founder</span>
+              <b>Knows the pull.</b>
+              <p>
+                Built a cloud-gaming company to{" "}
+                <strong>$1.6 million in revenue in under 11 months</strong>.
+                Knows how missions and progress make hard things easier to
+                start.
+              </p>
+            </article>
+          </div>
+          <p className="lf-founder-reveal">
+            <b>Same founder.</b> Business software knows what should happen.
+            Games know how to make you want to finish. DayForge does both.
+          </p>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -588,7 +859,7 @@ const FAQS: Array<{ id: string; q: string; a: ReactNode }> = [
   {
     id: "play-game",
     q: "Do I have to play the game?",
-    a: "The game is how missions arrive — it’s what makes them actually happen instead of sitting on a list. Sessions are short and built for a working owner’s day.",
+    a: "You don’t have to be a gamer. BORESLAY is a short, simple game inside DayForge. It turns the next action into something you start now instead of another task you save for later.",
   },
   {
     id: "not-sales",
@@ -603,7 +874,7 @@ const FAQS: Array<{ id: string; q: string; a: ReactNode }> = [
   {
     id: "ranking",
     q: "How does DayForge decide an account is worth pursuing?",
-    a: "It weighs distance, business type, likely laundry demand, and estimated contract value, and ranks what’s realistically winnable for a store your size.",
+    a: "Sage combines your services, pricing, capacity, routes, and customer patterns with territory signals such as business type, distance, likely laundry demand, decision-maker, and estimated value. It ranks the fit and shows you why.",
   },
   {
     id: "field-mission",
@@ -637,7 +908,7 @@ function FaqList() {
               aria-expanded={isOpen}
               onClick={() => {
                 setOpenId(current => (current === id ? null : id));
-                if (!isOpen) track("faq_open", { question: id });
+                if (!isOpen) track("faq_open", { question_id: id });
               }}
             >
               {q}
@@ -787,10 +1058,10 @@ export default function LandingFinal() {
                   <img
                     className="lf-shot"
                     style={{ borderRadius: 16 }}
-                    src="/landingfinal/owner-walkup.svg"
+                    src="/landingfinal/owner-walkup.jpg"
                     alt="Owner walking toward a commercial building entrance with printed collateral in hand"
-                    width={1600}
-                    height={1200}
+                    width={1200}
+                    height={900}
                   />
                 </div>
               </div>
@@ -814,10 +1085,10 @@ export default function LandingFinal() {
                 <img
                   className="lf-shot"
                   style={{ borderRadius: 16 }}
-                  src="/landingfinal/owner-walkup.svg"
+                  src="/landingfinal/owner-walkup.jpg"
                   alt="Owner walking toward a commercial building entrance"
-                  width={1600}
-                  height={1200}
+                  width={1200}
+                  height={900}
                 />
               </div>
               <span className="lf-diorama-flow lf-flow-1" aria-hidden="true">
@@ -867,6 +1138,11 @@ export default function LandingFinal() {
                   an estimated $24,800 a year. Sage tells you who to ask for
                   and what offer makes sense.
                 </p>
+                <p>
+                  Sage knows because DayForge runs the store — your services,
+                  pricing, routes, and open capacity — and reads the territory
+                  around it.
+                </p>
               </div>
               <div className="lf-ch-visual">
                 <SageWindow />
@@ -892,6 +1168,21 @@ export default function LandingFinal() {
                 </p>
               </div>
               <div className="lf-ch-visual">
+                {/* Handholding before any fantasy art: define BORESLAY first. */}
+                <div className="lf-bridge">
+                  <div className="lf-bridge-eq" aria-hidden="true">
+                    <span>BORE</span>
+                    <i>+</i>
+                    <span>SLAY</span>
+                    <b>=</b>
+                    <strong>BORESLAY</strong>
+                  </div>
+                  <p>
+                    The game inside DayForge for slaying business boredom.
+                    Sage’s pick becomes a playable mission — the boss is the
+                    account’s problem. The win is a signed customer.
+                  </p>
+                </div>
                 <GameScene mode="interrupt" />
               </div>
             </div>
@@ -911,7 +1202,7 @@ export default function LandingFinal() {
               <div className="lf-ch-visual lf-ch3-visual">
                 <PhonePrep />
                 <PhonePrintStop />
-                <CollateralCard />
+                <CollateralPhoto />
               </div>
             </div>
 
@@ -929,13 +1220,13 @@ export default function LandingFinal() {
               <div className="lf-ch-visual">
                 <div className="lf-photo-major lf-shot">
                   <img
-                    src="/landingfinal/owner-walkup.svg"
+                    src="/landingfinal/owner-walkup.jpg"
                     alt="Owner, collateral in hand, walking toward a commercial building entrance"
-                    width={1600}
-                    height={1200}
+                    width={1200}
+                    height={900}
                     loading="lazy"
                   />
-                  <span className="lf-photo-tag">Concept render</span>
+                  <span className="lf-photo-tag">Concept photo</span>
                   <div className="lf-photo-inset" aria-hidden="true">
                     <em>Through the door</em>
                     <b>Ask for: Dana R., operations manager</b>
@@ -1008,7 +1299,7 @@ export default function LandingFinal() {
                 aria-label="DayForge table showing three top customers who went quiet with no complaints filed"
               >
                 <div className="lf-card-head" aria-hidden="true">
-                  <Sparkles /> Regulars — unusual quiet
+                  <SageGlyph compact /> Sage — regulars gone unusually quiet
                 </div>
                 <table className="lf-quiet-table" aria-hidden="true">
                   <thead>
@@ -1047,7 +1338,7 @@ export default function LandingFinal() {
                   aria-label="Sage's editable draft win-back message with edit and send buttons"
                 >
                   <div className="lf-card-head" aria-hidden="true">
-                    <Sparkles /> Sage — draft ready for your review
+                    <SageGlyph compact /> Sage — draft ready for your review
                   </div>
                   <div className="lf-draft-msg" aria-hidden="true">
                     <small>Draft · win-back text · Marisol V.</small>
@@ -1075,6 +1366,12 @@ export default function LandingFinal() {
             </div>
           </div>
         </section>
+
+        {/* ======== THE OPERATING SYSTEM UNDERNEATH ======== */}
+        <OsSection />
+
+        {/* ======== FOUNDER STORY ======== */}
+        <FounderSection />
 
         {/* ======== SECTION 6 — ROI + PRICING ======== */}
         <section className="lf-roi" id="pricing">
@@ -1114,10 +1411,16 @@ export default function LandingFinal() {
               </div>
               <ul className="lf-plan-list">
                 <li>
-                  <Check /> Sage account ranking &amp; business intelligence
+                  <Check /> DayForge POS, orders &amp; customer management
                 </li>
                 <li>
-                  <Check /> BORESLAY desktop missions
+                  <Check /> Services, pricing, capacity &amp; route operations
+                </li>
+                <li>
+                  <Check /> Sage operating &amp; territory intelligence
+                </li>
+                <li>
+                  <Check /> BORESLAY playable growth missions
                 </li>
                 <li>
                   <Check /> Phone-guided field visits
