@@ -15,6 +15,8 @@
     "shared/commercialMissionLifecycle.ts",
     "shared/commercialProposal.ts",
     "server/territory/scoreLaundryOpportunity.ts",
+    "server/territory/territoryDiscovery.ts",
+    "server/territory/demoTerritoryProvider.ts",
     "server/churnRadar/scoreCustomerChurn.ts",
     "server/churnRadar/buildWinBackDraft.ts",
     "client/src/components/boreslay-rally/ProductionBoreslayMissionAdapter.ts",
