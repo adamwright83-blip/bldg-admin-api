@@ -68,6 +68,8 @@ describe("DayForge flagship contract", () => {
     expect(analytics).toContain('"https://us.i.posthog.com"');
     expect(analytics).toContain('"cta_click"');
     expect(analytics).toContain('"faq_open"');
+    expect(analytics).toContain("{ question_id: questionId }");
+    expect(analytics).not.toContain("{ question: questionId }");
     expect(analytics).toContain("capture_pageleave: true");
     expect(analytics).toContain("autocapture: false");
   });
@@ -88,7 +90,7 @@ describe("DayForge flagship contract", () => {
     expect(content.match(/paid directly to the print shop at cost/g)).toHaveLength(1);
   });
 
-  it("keeps the deck's locked copy and mission structure", () => {
+  it("keeps the outcome, operating-system, Sage, BORESLAY, and mission story", () => {
     expect(component).toContain(
       "Stop driving past businesses that could be paying you."
     );
@@ -97,6 +99,14 @@ describe("DayForge flagship contract", () => {
     );
     expect(component).toContain("Dashboards get ignored. Games get played.");
     expect(component).toContain("MEET BORESLAY");
+    expect(component).toContain("DayForge runs your fluff-and-fold operation");
+    expect(component).toContain("First, DayForge learns how your store actually runs.");
+    expect(component).toContain("FROM YOUR OPERATION");
+    expect(component).toContain("FROM YOUR TERRITORY");
+    expect(component).toMatch(/our\s+game for slaying business boredom/);
+    expect(component).toContain("The gamified cure for the boring gap");
+    expect(component).toContain("Two founder lives. One operating system.");
+    expect(component).toContain("$1.6 million in revenue in under 11 months");
     expect(component).toContain(
       "It notices when good customers disappear, too."
     );
@@ -109,6 +119,10 @@ describe("DayForge flagship contract", () => {
     expect(component).toContain("One closed account ≈ 10+ years of DayForge");
     // Big honest type only — the illustrative math must not become a calculator.
     expect(component).not.toContain('type="range"');
+    expect(component).not.toContain('loading="lazy"');
+    expect(component.indexOf("function BoreslayBridge")).toBeLessThan(
+      component.indexOf("src={bossTheDrain}")
+    );
   });
 
   it("uses only independent flagship concept assets", () => {

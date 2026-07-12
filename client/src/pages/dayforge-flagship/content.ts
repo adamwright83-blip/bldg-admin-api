@@ -1,6 +1,8 @@
 export const PRICING_FEATURES = [
-  "Sage account ranking & business intelligence",
-  "BORESLAY desktop missions",
+  "DayForge POS, orders & customer management",
+  "Services, pricing, capacity & route operations",
+  "Sage operating & territory intelligence",
+  "BORESLAY playable growth missions",
   "Phone-guided field visits",
   "Pitch prep, quote sheets & printed leave-behinds",
   "Lapsed-customer recovery",
@@ -51,7 +53,7 @@ export const FAQS = [
     id: "game-required",
     question: "Do I have to play the game?",
     answer:
-      "The game is how missions arrive — it's what makes them actually happen instead of sitting on a list. Sessions are short and built for a working owner's day.",
+      "You don't have to be a gamer. BORESLAY is a short, simple game inside DayForge. It turns the next action into something you start now instead of another task you save for later.",
   },
   {
     id: "sales-experience",
@@ -69,7 +71,7 @@ export const FAQS = [
     id: "account-ranking",
     question: "How does DayForge decide an account is worth pursuing?",
     answer:
-      "It weighs distance, business type, likely laundry demand, and estimated contract value, and ranks what's realistically winnable for a store your size.",
+      "Sage combines your services, pricing, capacity, routes, and customer patterns with territory signals such as business type, distance, likely laundry demand, decision-maker, and estimated value. It ranks the fit and shows you why.",
   },
   {
     id: "field-mission",

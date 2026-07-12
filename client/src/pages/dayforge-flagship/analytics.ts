@@ -53,6 +53,6 @@ export function trackCtaClick(source: CtaSource): void {
 
 export function trackFaqOpen(questionId: FaqId): void {
   void getFlagshipAnalytics().then(client => {
-    client?.capture("faq_open", { question: questionId });
+    client?.capture("faq_open", { question_id: questionId });
   });
 }
