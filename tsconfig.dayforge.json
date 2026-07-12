@@ -13,6 +13,7 @@
     "shared/commercialMission.ts",
     "shared/commercialMissionFactory.ts",
     "shared/commercialMissionLifecycle.ts",
+    "shared/commercialProposal.ts",
     "server/territory/scoreLaundryOpportunity.ts",
     "server/churnRadar/scoreCustomerChurn.ts",
     "server/churnRadar/buildWinBackDraft.ts",
