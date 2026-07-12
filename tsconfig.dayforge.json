@@ -17,7 +17,8 @@
     "server/territory/scoreLaundryOpportunity.ts",
     "server/churnRadar/scoreCustomerChurn.ts",
     "server/churnRadar/buildWinBackDraft.ts",
-    "client/src/components/boreslay-rally/ProductionBoreslayMissionAdapter.ts"
+    "client/src/components/boreslay-rally/ProductionBoreslayMissionAdapter.ts",
+    "client/src/components/boreslay-rally/TrpcBoreslayMissionTransport.ts"
   ],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"]
 }
