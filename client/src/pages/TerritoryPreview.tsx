@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -13,45 +13,20 @@ import {
   Smartphone,
   Sparkles,
 } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 import {
   COMMERCIAL_MISSION_DEMO_STORAGE_KEY,
-  DEMO_MISSION,
   DEMO_OPPORTUNITIES,
   formatCurrencyFromCents,
-  formatMissionCode,
   type CommercialMission,
   type CommercialOpportunity,
 } from "@shared/commercialMission";
+import { buildCommercialMissionFromOpportunity } from "@shared/commercialMissionFactory";
 import "./territory-preview.css";
 
 const SCHEDULER_URL: string | undefined = import.meta.env.VITE_SCHEDULER_URL;
 
 type PreviewPhase = "entry" | "scanning" | "results" | "mission";
-
-function missionFromOpportunity(
-  opportunity: CommercialOpportunity
-): CommercialMission {
-  if (opportunity.id === DEMO_MISSION.accountId) return DEMO_MISSION;
-
-  return {
-    ...DEMO_MISSION,
-    id: opportunity.id,
-    code: formatMissionCode(opportunity.id % 1000),
-    accountId: opportunity.id,
-    accountName: opportunity.accountName,
-    accountType: opportunity.accountType,
-    accountLocationCount: opportunity.locationCount,
-    estimatedAnnualValueCents: opportunity.estimatedAnnualValueCents,
-    estimateConfidence: opportunity.grade,
-    primarySignal: opportunity.primarySignal,
-    reasons: opportunity.reasons,
-    decisionMaker: {
-      name: null,
-      title: "Operations Manager",
-    },
-    status: "selected",
-  };
-}
 
 function OpportunityCard({
   opportunity,
@@ -92,12 +67,18 @@ function OpportunityCard({
   );
 }
 
-function TerritoryMap({ selectedId }: { selectedId: number }) {
+function TerritoryMap({
+  selectedId,
+  opportunities,
+}: {
+  selectedId: number;
+  opportunities: CommercialOpportunity[];
+}) {
   return (
     <div
       className="tp-map"
       role="img"
-      aria-label="Preview map showing four ranked commercial laundry opportunities near the entered store"
+      aria-label="Preview map showing ranked commercial laundry opportunities near the entered store"
     >
       <div className="tp-map-grid" aria-hidden="true" />
       <span className="tp-road tp-road-one" aria-hidden="true" />
@@ -107,7 +88,7 @@ function TerritoryMap({ selectedId }: { selectedId: number }) {
         <span>YOUR STORE</span>
         <MapPin />
       </span>
-      {DEMO_OPPORTUNITIES.map((opportunity, index) => (
+      {opportunities.slice(0, 4).map((opportunity, index) => (
         <span
           key={opportunity.id}
           className={`tp-map-pin tp-map-pin-${index + 1}${
@@ -233,14 +214,34 @@ export default function TerritoryPreview() {
   const [submittedAddress, setSubmittedAddress] = useState("");
   const [selectedId, setSelectedId] = useState(DEMO_OPPORTUNITIES[0].id);
 
+  const previewQuery = trpc.system.commercialMission.previewTerritory.useQuery(
+    { address: submittedAddress || "preview" },
+    {
+      enabled: submittedAddress.length >= 3,
+      retry: false,
+      staleTime: 5 * 60 * 1000,
+    }
+  );
+
+  const opportunities =
+    (previewQuery.data?.opportunities as CommercialOpportunity[] | undefined) ??
+    DEMO_OPPORTUNITIES;
+
+  useEffect(() => {
+    if (!previewQuery.data || phase !== "scanning") return;
+    setSelectedId(previewQuery.data.opportunities[0]?.id ?? DEMO_OPPORTUNITIES[0].id);
+    setPhase("results");
+  }, [phase, previewQuery.data]);
+
   const selectedOpportunity = useMemo(
     () =>
-      DEMO_OPPORTUNITIES.find(opportunity => opportunity.id === selectedId) ??
-      DEMO_OPPORTUNITIES[0],
-    [selectedId]
+      opportunities.find(opportunity => opportunity.id === selectedId) ??
+      opportunities[0],
+    [opportunities, selectedId]
   );
+
   const mission = useMemo(
-    () => missionFromOpportunity(selectedOpportunity),
+    () => buildCommercialMissionFromOpportunity(selectedOpportunity),
     [selectedOpportunity]
   );
 
@@ -250,7 +251,6 @@ export default function TerritoryPreview() {
     if (!clean) return;
     setSubmittedAddress(clean);
     setPhase("scanning");
-    window.setTimeout(() => setPhase("results"), 900);
   };
 
   if (phase === "mission") {
@@ -307,9 +307,9 @@ export default function TerritoryPreview() {
             <Navigation />
             <h2>Your territory starts with your store.</h2>
             <p>
-              The production version will geocode the address, discover nearby
-              commercial laundry buyers, score them against your routes and
-              capacity, and show why each account is—or is not—worth your gas.
+              DayForge will geocode the address, discover nearby commercial
+              laundry buyers, score them against routes and capacity, and show
+              why each account is—or is not—worth the gas.
             </p>
           </div>
         ) : null}
@@ -319,6 +319,11 @@ export default function TerritoryPreview() {
             <div className="tp-radar" aria-hidden="true"><i /></div>
             <h2>Scanning the streets around {submittedAddress}</h2>
             <p>Checking account type, likely laundry demand, route fit, and estimated value.</p>
+            {previewQuery.error ? (
+              <button type="button" className="tp-back" onClick={() => previewQuery.refetch()}>
+                Retry territory scan
+              </button>
+            ) : null}
           </div>
         ) : null}
 
@@ -327,20 +332,23 @@ export default function TerritoryPreview() {
             <div className="tp-results-head">
               <div>
                 <span className="tp-kicker">PREVIEW TERRITORY</span>
-                <h2>{DEMO_OPPORTUNITIES.length} accounts worth examining first.</h2>
+                <h2>{opportunities.length} accounts worth examining first.</h2>
                 <p>
                   Demo-ranked around <b>{submittedAddress}</b>. Select an account
                   to see why it fits.
                 </p>
               </div>
-              <button type="button" className="tp-reset" onClick={() => setPhase("entry")}>
+              <button type="button" className="tp-reset" onClick={() => {
+                setSubmittedAddress("");
+                setPhase("entry");
+              }}>
                 Change address
               </button>
             </div>
 
             <div className="tp-results-layout">
               <div className="tp-opportunity-list">
-                {DEMO_OPPORTUNITIES.map(opportunity => (
+                {opportunities.map(opportunity => (
                   <OpportunityCard
                     key={opportunity.id}
                     opportunity={opportunity}
@@ -349,7 +357,10 @@ export default function TerritoryPreview() {
                   />
                 ))}
               </div>
-              <TerritoryMap selectedId={selectedId} />
+              <TerritoryMap
+                selectedId={selectedId}
+                opportunities={opportunities}
+              />
             </div>
 
             <aside className="tp-selected">
