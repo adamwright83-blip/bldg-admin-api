@@ -35,9 +35,9 @@ export const SAGE_ACCOUNTS = [
 ] as const;
 
 export const QUIET_CUSTOMERS = [
-  { name: "Maya Chen", monthlyValue: "$680", daysQuiet: "46 days" },
-  { name: "Luis Ortega", monthlyValue: "$540", daysQuiet: "58 days" },
-  { name: "Amina Brooks", monthlyValue: "$720", daysQuiet: "63 days" },
+  { name: "Maya Chen", monthlyValue: "$680", daysQuiet: "21 days" },
+  { name: "Luis Ortega", monthlyValue: "$540", daysQuiet: "19 days" },
+  { name: "Amina Brooks", monthlyValue: "$720", daysQuiet: "26 days" },
 ] as const;
 
 export const FAQS = [

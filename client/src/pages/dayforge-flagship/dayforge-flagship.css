@@ -1660,3 +1660,247 @@
 .ff-page.is-poster .ff-sticky {
   display: none;
 }
+
+/* ---- Deck-spec additions: credibility strip, mission interrupt,
+   name reveal, static ROI, plan-card proof line ---- */
+
+.ff-credline {
+  padding: 22px 20px;
+  border-bottom: 1px solid var(--ff-line);
+  background: var(--ff-ivory);
+}
+
+.ff-credline p {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 6px;
+  margin: 0;
+  color: var(--ff-ink);
+  text-align: center;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.ff-credline i {
+  font-style: normal;
+  color: var(--ff-brass);
+}
+
+.ff-interrupt {
+  min-width: 0;
+  overflow: hidden;
+  color: white;
+  border: 1px solid rgba(242, 207, 133, 0.45);
+  border-radius: 18px;
+  background: var(--ff-ink);
+  box-shadow: var(--ff-shadow);
+}
+
+.ff-interrupt > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 15px;
+  border-bottom: 1px solid rgba(242, 207, 133, 0.25);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+}
+
+.ff-interrupt > header span { color: var(--ff-brass-hi); }
+.ff-interrupt > header b { color: #dbe8f7; }
+.ff-interrupt > header em { color: #66e0a4; font-style: normal; }
+
+.ff-interrupt-body {
+  display: grid;
+}
+
+.ff-interrupt-body > img {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 5 / 4;
+  object-fit: cover;
+  object-position: center 20%;
+}
+
+.ff-interrupt-brief {
+  display: grid;
+  gap: 11px;
+  align-content: center;
+  justify-items: start;
+  padding: 24px 22px 26px;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(10, 99, 255, 0.2), transparent 42%),
+    var(--ff-ink-2);
+}
+
+.ff-interrupt-brief > span {
+  color: var(--ff-brass-hi);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+}
+
+.ff-interrupt-brief h4 {
+  font-family: "Fraunces", serif;
+  font-size: clamp(27px, 7vw, 42px);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--ff-brass-hi);
+}
+
+.ff-interrupt-brief > p {
+  color: #bdc9d8;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.ff-interrupt-brief > b {
+  color: #66e0a4;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.ff-interrupt-brief > em {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  padding: 13px 17px;
+  color: var(--ff-ink);
+  border-radius: 9px;
+  background: linear-gradient(180deg, #f7dc9d, #d9a441);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  font-weight: 700;
+  font-style: normal;
+  letter-spacing: 0.09em;
+}
+
+.ff-interrupt-brief > em svg { width: 13px; }
+
+@media (min-width: 48rem) {
+  .ff-interrupt-body {
+    grid-template-columns: 0.92fr 1.08fr;
+  }
+
+  .ff-interrupt-body > img {
+    aspect-ratio: auto;
+    min-height: 460px;
+  }
+}
+
+.ff-name-reveal {
+  max-width: 650px;
+  margin-top: 24px;
+  padding: 16px 18px;
+  border: 1px solid rgba(242, 207, 133, 0.4);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ff-name-reveal b {
+  color: var(--ff-brass-hi);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+}
+
+.ff-name-reveal p {
+  margin-top: 6px;
+  color: #bdc9d8;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.ff-payoff-copy > p + p { margin-top: 12px; }
+
+.ff-roi-static {
+  max-width: 980px;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin: 52px auto 0;
+  padding: 36px 20px 40px;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ff-roi-label {
+  color: var(--ff-brass-hi);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+}
+
+.ff-roi-big strong {
+  display: block;
+  margin-top: 10px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: clamp(52px, 15vw, 112px);
+  line-height: 1;
+}
+
+.ff-roi-big span,
+.ff-roi-lesser span {
+  display: block;
+  margin-top: 9px;
+  color: #9fb0c3;
+  font-size: 12px;
+}
+
+.ff-roi-vs {
+  padding: 10px 0 4px;
+  color: #8395aa;
+  font-family: "Fraunces", serif;
+  font-size: 17px;
+}
+
+.ff-roi-lesser strong {
+  display: block;
+  color: #c7d5e5;
+  font-family: "JetBrains Mono", monospace;
+  font-size: clamp(30px, 8vw, 54px);
+  line-height: 1;
+}
+
+.ff-roi-equals {
+  margin-top: 18px;
+  color: #66e0a4;
+  font-family: "JetBrains Mono", monospace;
+  font-size: clamp(11px, 2.6vw, 15px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.ff-price-proof {
+  max-width: 760px;
+  margin: 16px auto 0;
+  color: #9fb0c3;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ff-draft-card footer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.ff-draft-card footer button svg { width: 12px; }

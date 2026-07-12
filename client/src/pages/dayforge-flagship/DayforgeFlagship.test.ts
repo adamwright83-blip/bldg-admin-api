@@ -88,6 +88,29 @@ describe("DayForge flagship contract", () => {
     expect(content.match(/paid directly to the print shop at cost/g)).toHaveLength(1);
   });
 
+  it("keeps the deck's locked copy and mission structure", () => {
+    expect(component).toContain(
+      "Stop driving past businesses that could be paying you."
+    );
+    expect(component).toContain(
+      "How does a business on your street become your customer?"
+    );
+    expect(component).toContain("Dashboards get ignored. Games get played.");
+    expect(component).toContain("MEET BORESLAY");
+    expect(component).toContain(
+      "It notices when good customers disappear, too."
+    );
+    expect(component).toContain("One account can pay for years of DayForge.");
+    expect(component).toContain("Fair questions.");
+    expect(component).toContain(
+      "Stop passing the next account you could win."
+    );
+    expect(component).toContain("Defeat the Drain and win the contract.");
+    expect(component).toContain("One closed account ≈ 10+ years of DayForge");
+    // Big honest type only — the illustrative math must not become a calculator.
+    expect(component).not.toContain('type="range"');
+  });
+
   it("uses only independent flagship concept assets", () => {
     expect(component).toContain("@/assets/dayforge-flagship/");
     expect(component).not.toContain("codex-l-final");

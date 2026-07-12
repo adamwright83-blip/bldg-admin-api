@@ -20,6 +20,7 @@ export function getFlagshipAnalytics(): Promise<PostHog | null> {
         POSTHOG_KEY,
         {
           api_host: POSTHOG_HOST,
+          defaults: "2025-05-24",
           capture_pageview: true,
           capture_pageleave: true,
           autocapture: false,
@@ -52,6 +53,6 @@ export function trackCtaClick(source: CtaSource): void {
 
 export function trackFaqOpen(questionId: FaqId): void {
   void getFlagshipAnalytics().then(client => {
-    client?.capture("faq_open", { question_id: questionId });
+    client?.capture("faq_open", { question: questionId });
   });
 }
