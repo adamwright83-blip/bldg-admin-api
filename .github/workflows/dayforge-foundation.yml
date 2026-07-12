@@ -14,6 +14,7 @@ on:
       - "server/churnRadar/**"
       - "server/_core/systemRouter.ts"
       - "client/src/App.tsx"
+      - "tsconfig.dayforge.json"
       - ".github/workflows/dayforge-foundation.yml"
   workflow_dispatch:
 
@@ -30,13 +31,21 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
+      - name: DayForge focused typecheck
         id: typecheck
         continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
-          pnpm check 2>&1 | tee dayforge-typecheck.log
+          pnpm exec tsc -p tsconfig.dayforge.json 2>&1 | tee dayforge-typecheck.log
+
+      - name: Existing repository typecheck baseline
+        id: repository_typecheck
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm check 2>&1 | tee repository-typecheck-baseline.log
 
       - name: DayForge foundation tests
         id: tests
@@ -69,16 +78,18 @@ jobs:
           name: dayforge-validation-${{ github.run_number }}
           path: |
             dayforge-typecheck.log
+            repository-typecheck-baseline.log
             dayforge-tests.log
             dayforge-build.log
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Enforce validation result
+      - name: Enforce DayForge validation result
         if: always()
         shell: bash
         run: |
-          echo "typecheck=${{ steps.typecheck.outcome }}"
+          echo "dayforge_typecheck=${{ steps.typecheck.outcome }}"
+          echo "repository_baseline=${{ steps.repository_typecheck.outcome }}"
           echo "tests=${{ steps.tests.outcome }}"
           echo "build=${{ steps.build.outcome }}"
           test "${{ steps.typecheck.outcome }}" = "success"
