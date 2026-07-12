@@ -19,6 +19,7 @@ import AdminCatalog from "./pages/AdminCatalog";
 const BoreslayLanding = lazy(() => import("./pages/BoreslayLanding"));
 const DayforgeLanding = lazy(() => import("./pages/DayforgeLanding"));
 const LandingFinal = lazy(() => import("./pages/LandingFinal"));
+const TerritoryPreview = lazy(() => import("./pages/TerritoryPreview"));
 const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
 
 function PublicLandingFallback() {
@@ -45,6 +46,14 @@ function LandingFinalRoute() {
   return (
     <Suspense fallback={<PublicLandingFallback />}>
       <LandingFinal />
+    </Suspense>
+  );
+}
+
+function TerritoryPreviewRoute() {
+  return (
+    <Suspense fallback={<PublicLandingFallback />}>
+      <TerritoryPreview />
     </Suspense>
   );
 }
@@ -87,6 +96,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/boreslay-rally",
   "/dayforge",
   "/landingfinal",
+  "/territory-preview",
 ]);
 
 function AdminHostRouter() {
@@ -96,6 +106,7 @@ function AdminHostRouter() {
       <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/dayforge" component={DayforgeLandingRoute} />
       <Route path="/landingfinal" component={LandingFinalRoute} />
+      <Route path="/territory-preview" component={TerritoryPreviewRoute} />
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
@@ -163,6 +174,7 @@ function Router() {
       <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/dayforge" component={DayforgeLandingRoute} />
       <Route path="/landingfinal" component={LandingFinalRoute} />
+      <Route path="/territory-preview" component={TerritoryPreviewRoute} />
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
