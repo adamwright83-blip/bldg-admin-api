@@ -9,7 +9,7 @@ on:
       - "client/src/pages/territory-preview.css"
       - "client/src/pages/commercial-sales-mission.css"
       - "client/src/pages/commercial-proposal-print.css"
-      - "client/src/components/boreslay-rally/ProductionBoreslayMissionAdapter.ts"
+      - "client/src/components/boreslay-rally/*Mission*.ts"
       - "shared/commercialMission*.ts"
       - "shared/commercialProposal*.ts"
       - "server/territory/**"
@@ -65,6 +65,7 @@ jobs:
             server/churnRadar/scoreCustomerChurn.test.ts \
             server/churnRadar/buildWinBackDraft.test.ts \
             client/src/components/boreslay-rally/ProductionBoreslayMissionAdapter.test.ts \
+            client/src/components/boreslay-rally/TrpcBoreslayMissionTransport.test.ts \
             2>&1 | tee dayforge-tests.log
 
       - name: Production build
