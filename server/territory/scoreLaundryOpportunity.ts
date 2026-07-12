@@ -123,7 +123,9 @@ export function scoreLaundryOpportunity(
     reasons.push("Recurring textile demand is likely");
   }
   if (input.demand.locationCount > 1) {
-    reasons.push(`${input.demand.locationCount} locations can be served under one account`);
+    reasons.push(
+      `${input.demand.locationCount} locations can be served under one account`
+    );
   }
   if (input.demand.signalStrength >= 70) {
     reasons.push("A recent public signal makes the timing stronger");
@@ -133,7 +135,9 @@ export function scoreLaundryOpportunity(
   if (input.operatorFit.commercialWashFoldEnabled) operatorFitScore += 7;
   if (input.operatorFit.distanceMiles <= input.operatorFit.serviceRadiusMiles) {
     operatorFitScore += 6;
-    reasons.push(`${input.operatorFit.distanceMiles.toFixed(1)} miles from the store`);
+    reasons.push(
+      `${input.operatorFit.distanceMiles.toFixed(1)} miles from the store`
+    );
   } else {
     risks.push("Outside the configured service radius");
   }
@@ -180,9 +184,16 @@ export function scoreLaundryOpportunity(
   }
   salesFitScore = clamp(salesFitScore, 0, 25);
 
-  const score = clamp(round(demandScore + operatorFitScore + salesFitScore), 0, 100);
-  const ordersPerMonth = Math.max(4, input.demand.likelyOrdersPerMonth ?? 4);
-  const poundsPerOrder = weeklyPounds / 4 * (4 / ordersPerMonth);
+  const score = clamp(
+    round(demandScore + operatorFitScore + salesFitScore),
+    0,
+    100
+  );
+  const ordersPerMonth = Math.max(
+    4,
+    input.demand.likelyOrdersPerMonth ?? 4
+  );
+  const poundsPerOrder = (weeklyPounds / 4) * (4 / ordersPerMonth);
   const monthlyRevenueCents = round(
     poundsPerOrder * ordersPerMonth * input.averagePricePerPoundCents
   );
@@ -196,7 +207,7 @@ export function scoreLaundryOpportunity(
     salesFitScore,
     estimatedAnnualValueCents,
     estimatedWeeklyPounds: weeklyPounds,
-    reasons: reasons.slice(0, 6),
+    reasons: reasons.slice(0, 8),
     risks: risks.slice(0, 6),
   };
 }
