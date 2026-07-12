@@ -52,7 +52,7 @@ const FALLBACK_EMAIL = "adam@bldg.chat";
 const OWNER_FIELD_VISIT = "/dayforgeflagship/owner-field-visit.jpg";
 const RAW_SCHEDULER_URL = import.meta.env.VITE_SCHEDULER_URL?.trim();
 
-export function validatedSchedulerUrl(rawUrl = RAW_SCHEDULER_URL): string | undefined {
+function validatedSchedulerUrl(rawUrl = RAW_SCHEDULER_URL): string | undefined {
   if (!rawUrl) return undefined;
   try {
     const candidate = new URL(rawUrl);
