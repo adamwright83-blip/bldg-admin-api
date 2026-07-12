@@ -5,6 +5,8 @@ import {
 } from "@shared/commercialMission";
 import { buildCommercialMissionFromOpportunity } from "@shared/commercialMissionFactory";
 import { adminProcedure, publicProcedure, router } from "../_core/trpc";
+import { DemoTerritoryProvider } from "../territory/demoTerritoryProvider";
+import { discoverLaundryTerritory } from "../territory/territoryDiscovery";
 import {
   createPersistedCommercialMission,
   getPersistedCommercialMission,
@@ -13,6 +15,7 @@ import {
 } from "./opsTaskCommercialMissionStore";
 
 const actorTypeSchema = z.enum(["system", "operator", "driver", "game"]);
+const demoTerritoryProvider = new DemoTerritoryProvider();
 
 export const commercialMissionRouter = router({
   previewTerritory: publicProcedure
@@ -21,12 +24,35 @@ export const commercialMissionRouter = router({
         address: z.string().trim().min(3).max(240),
       })
     )
-    .query(({ input }) => {
-      const strongest = DEMO_OPPORTUNITIES[0];
+    .query(async ({ input }) => {
+      const territory = await discoverLaundryTerritory({
+        addressOrBusiness: input.address,
+        provider: demoTerritoryProvider,
+        operator: {
+          tenantId: "dayforge-preview",
+          serviceRadiusMiles: 3,
+          commercialWashFoldEnabled: true,
+          averagePricePerPoundCents: 250,
+          availableWeeklyCapacityPounds: 900,
+          routePoints: [
+            { lat: 34.078, lng: -118.257 },
+            { lat: 34.071, lng: -118.248 },
+          ],
+          turnaroundCompatibleByDefault: true,
+          pickupDaysCompatibleByDefault: true,
+        },
+        limit: 20,
+      });
+      const strongest = territory.opportunities[0] ?? DEMO_OPPORTUNITIES[0];
       return {
         previewMode: true as const,
+        provider: "demo" as const,
         address: input.address,
-        opportunities: DEMO_OPPORTUNITIES,
+        center: territory.center,
+        providerCandidateCount: territory.providerCandidateCount,
+        dedupedCandidateCount: territory.dedupedCandidateCount,
+        opportunities: territory.opportunities,
+        evidenceByOpportunityId: territory.evidenceByOpportunityId,
         suggestedMission: buildCommercialMissionFromOpportunity(strongest),
       };
     }),
