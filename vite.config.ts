@@ -29,6 +29,11 @@ export default defineConfig({
           "client",
           "codexlfinal.html"
         ),
+        dayforgeflagship: path.resolve(
+          import.meta.dirname,
+          "client",
+          "dayforgeflagship.html"
+        ),
       },
     },
   },
