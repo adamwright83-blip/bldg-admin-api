@@ -11,6 +11,8 @@ on:
       - "shared/commercialMission*.ts"
       - "server/territory/**"
       - "server/commercialMissions/**"
+      - "server/churnRadar/**"
+      - "server/_core/systemRouter.ts"
       - "client/src/App.tsx"
       - ".github/workflows/dayforge-foundation.yml"
   workflow_dispatch:
@@ -38,6 +40,8 @@ jobs:
           shared/commercialMissionLifecycle.test.ts
           server/territory/scoreLaundryOpportunity.test.ts
           server/commercialMissions/opsTaskCommercialMissionStore.test.ts
+          server/churnRadar/scoreCustomerChurn.test.ts
+          server/churnRadar/buildWinBackDraft.test.ts
           client/src/components/boreslay-rally/ProductionBoreslayMissionAdapter.test.ts
       - name: Production build
         run: pnpm build
