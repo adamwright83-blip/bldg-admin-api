@@ -2,6 +2,7 @@ import { z } from "zod";
 import { notifyOwner } from "./notification";
 import { adminProcedure, publicProcedure, router } from "./trpc";
 import { commercialMissionRouter } from "../commercialMissions/commercialMissionRouter";
+import { churnRadarRouter } from "../churnRadar/churnRadarRouter";
 
 export const systemRouter = router({
   health: publicProcedure
@@ -15,6 +16,7 @@ export const systemRouter = router({
     })),
 
   commercialMission: commercialMissionRouter,
+  churnRadar: churnRadarRouter,
 
   notifyOwner: adminProcedure
     .input(
