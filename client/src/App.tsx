@@ -23,6 +23,9 @@ const TerritoryPreview = lazy(() => import("./pages/TerritoryPreview"));
 const CommercialSalesMission = lazy(
   () => import("./pages/CommercialSalesMission")
 );
+const CommercialProposalPrint = lazy(
+  () => import("./pages/CommercialProposalPrint")
+);
 const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
 
 function PublicLandingFallback() {
@@ -67,6 +70,14 @@ function CommercialSalesMissionRoute() {
       fallback={<div style={{ minHeight: "100vh", background: "#0b1422" }} />}
     >
       <CommercialSalesMission />
+    </Suspense>
+  );
+}
+
+function CommercialProposalPrintRoute() {
+  return (
+    <Suspense fallback={<PublicLandingFallback />}>
+      <CommercialProposalPrint />
     </Suspense>
   );
 }
@@ -123,6 +134,10 @@ function AdminHostRouter() {
       <Route
         path="/driver/sales-mission/:missionId"
         component={CommercialSalesMissionRoute}
+      />
+      <Route
+        path="/commercial-proposal/:missionId"
+        component={CommercialProposalPrintRoute}
       />
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
@@ -195,6 +210,10 @@ function Router() {
       <Route
         path="/driver/sales-mission/:missionId"
         component={CommercialSalesMissionRoute}
+      />
+      <Route
+        path="/commercial-proposal/:missionId"
+        component={CommercialProposalPrintRoute}
       />
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
