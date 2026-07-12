@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useLocation, useRoute } from "wouter";
 import {
+  COMMERCIAL_MISSION_DEMO_STORAGE_KEY,
   DEMO_MISSION,
   formatCurrencyFromCents,
   type CommercialMission,
@@ -38,25 +39,68 @@ type Screen =
 
 type VisitOutcome = "follow_up" | "won" | "lost" | null;
 
-const STORAGE_KEY = "dayforge:commercial-sales-mission:demo";
+type PrepKey = "polo" | "quote" | "collateral";
+
+type PrepItem = {
+  key: PrepKey;
+  icon: ReactNode;
+  title: string;
+  body: string;
+};
+
+const PREP_ITEMS: PrepItem[] = [
+  {
+    key: "polo",
+    icon: <Shirt />,
+    title: "Clean polo + jeans",
+    body: "Presentable, practical, operator-ready.",
+  },
+  {
+    key: "quote",
+    icon: <FileText />,
+    title: "Quote sheet",
+    body: "Pricing and service outline checked.",
+  },
+  {
+    key: "collateral",
+    icon: <BriefcaseBusiness />,
+    title: "Leave-behind",
+    body: "Branded flyer and contact card ready.",
+  },
+];
+
+function isCommercialMission(value: unknown): value is CommercialMission {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Partial<CommercialMission>;
+  return (
+    typeof candidate.id === "number" &&
+    typeof candidate.code === "string" &&
+    typeof candidate.accountName === "string" &&
+    typeof candidate.estimatedAnnualValueCents === "number" &&
+    typeof candidate.status === "string" &&
+    !!candidate.decisionMaker &&
+    Array.isArray(candidate.discoveryQuestions) &&
+    Array.isArray(candidate.objections)
+  );
+}
 
 function initialMission(): CommercialMission {
-  if (typeof window === "undefined") {
-    return { ...DEMO_MISSION, status: "phone_ready" };
-  }
+  const fallback = { ...DEMO_MISSION, status: "phone_ready" as const };
+  if (typeof window === "undefined") return fallback;
+
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEMO_MISSION, status: "phone_ready" };
-    const parsed = JSON.parse(raw) as CommercialMission;
-    if (parsed.id !== DEMO_MISSION.id) {
-      return { ...DEMO_MISSION, status: "phone_ready" };
-    }
+    const raw = window.localStorage.getItem(
+      COMMERCIAL_MISSION_DEMO_STORAGE_KEY
+    );
+    if (!raw) return fallback;
+    const parsed: unknown = JSON.parse(raw);
+    if (!isCommercialMission(parsed)) return fallback;
     if (parsed.status === "won" || parsed.status === "lost") {
-      return { ...DEMO_MISSION, status: "phone_ready" };
+      return { ...parsed, status: "phone_ready" };
     }
     return parsed;
   } catch {
-    return { ...DEMO_MISSION, status: "phone_ready" };
+    return fallback;
   }
 }
 
@@ -115,12 +159,29 @@ function ActionButton({
   );
 }
 
+function safeTransition(
+  mission: CommercialMission,
+  toStatus: CommercialMissionStatus,
+  metadata: Record<string, unknown>
+): CommercialMission {
+  if (mission.status === toStatus) return mission;
+  try {
+    return transitionCommercialMission(mission, toStatus, {
+      actorType: "driver",
+      actorId: "demo-operator",
+      metadata,
+    }).mission;
+  } catch {
+    return { ...mission, status: toStatus };
+  }
+}
+
 export default function CommercialSalesMission() {
   const [, params] = useRoute("/driver/sales-mission/:missionId");
   const [, setLocation] = useLocation();
   const [screen, setScreen] = useState<Screen>("briefing");
   const [mission, setMission] = useState<CommercialMission>(initialMission);
-  const [prep, setPrep] = useState({
+  const [prep, setPrep] = useState<Record<PrepKey, boolean>>({
     polo: false,
     quote: false,
     collateral: false,
@@ -134,61 +195,35 @@ export default function CommercialSalesMission() {
     [mission.estimatedAnnualValueCents]
   );
   const missionId = params?.missionId ?? String(mission.id);
-  const allPrepDone = prep.polo && prep.quote && prep.collateral;
+  const allPrepDone = Object.values(prep).every(Boolean);
 
   function persist(next: CommercialMission) {
     setMission(next);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    }
+    window.localStorage.setItem(
+      COMMERCIAL_MISSION_DEMO_STORAGE_KEY,
+      JSON.stringify(next)
+    );
   }
 
   function move(nextScreen: Screen) {
-    const targetStatus = statusForScreen(nextScreen);
-    if (targetStatus === mission.status) {
-      setScreen(nextScreen);
-      return;
-    }
-
-    const transitioned = transitionCommercialMission(mission, targetStatus, {
-      actorType: "driver",
-      actorId: "demo-operator",
-      metadata: { fromScreen: screen, toScreen: nextScreen },
+    const next = safeTransition(mission, statusForScreen(nextScreen), {
+      fromScreen: screen,
+      toScreen: nextScreen,
     });
-    persist(transitioned.mission);
+    persist(next);
     setScreen(nextScreen);
   }
 
   function finishVisit(nextOutcome: Exclude<VisitOutcome, null>) {
     setOutcome(nextOutcome);
-    let nextMission: CommercialMission;
-
-    try {
-      nextMission = transitionCommercialMission(mission, "visit_completed", {
-        actorType: "driver",
-        actorId: "demo-operator",
-        metadata: { notes },
-      }).mission;
-    } catch {
-      nextMission = { ...mission, status: "visit_completed" };
-    }
-
-    try {
-      nextMission = transitionCommercialMission(nextMission, nextOutcome, {
-        actorType: "operator",
-        actorId: "demo-operator",
-        metadata: { notes },
-      }).mission;
-    } catch {
-      nextMission = { ...nextMission, status: nextOutcome };
-    }
-
-    persist(nextMission);
+    let next = safeTransition(mission, "visit_completed", { notes });
+    next = safeTransition(next, nextOutcome, { notes });
+    persist(next);
     setScreen("complete");
   }
 
   function resetDemo() {
-    window.localStorage.removeItem(STORAGE_KEY);
+    window.localStorage.removeItem(COMMERCIAL_MISSION_DEMO_STORAGE_KEY);
     setMission({ ...DEMO_MISSION, status: "phone_ready" });
     setPrep({ polo: false, quote: false, collateral: false });
     setPrintReady(false);
@@ -222,30 +257,25 @@ export default function CommercialSalesMission() {
         </nav>
 
         <div className="csm-progress" aria-label={`Mission ${mission.status}`}>
-          {[
-            "briefing",
-            "prep",
-            "print",
-            "destination",
-            "talk-track",
-            "outcome",
-          ].map((step, index) => {
-            const currentIndex = [
-              "briefing",
-              "prep",
-              "print",
-              "destination",
-              "talk-track",
-              "outcome",
-              "complete",
-            ].indexOf(screen);
-            return (
-              <i
-                key={step}
-                className={index <= currentIndex ? "is-done" : ""}
-              />
-            );
-          })}
+          {["briefing", "prep", "print", "destination", "talk-track", "outcome"].map(
+            (step, index) => {
+              const currentIndex = [
+                "briefing",
+                "prep",
+                "print",
+                "destination",
+                "talk-track",
+                "outcome",
+                "complete",
+              ].indexOf(screen);
+              return (
+                <i
+                  key={step}
+                  className={index <= currentIndex ? "is-done" : ""}
+                />
+              );
+            }
+          )}
         </div>
 
         <section className="csm-screen">
@@ -253,7 +283,7 @@ export default function CommercialSalesMission() {
             <>
               <ScreenHeader
                 eyebrow="MISSION UNLOCKED"
-                title="Westview is ready for the field."
+                title={`${mission.accountName} is ready for the field.`}
                 body="The same account you played for on desktop is now on your phone."
               />
               <div className="csm-hero-card">
@@ -261,10 +291,11 @@ export default function CommercialSalesMission() {
                   <Building2 />
                 </div>
                 <div>
-                  <small>PROPERTY MANAGEMENT</small>
+                  <small>{mission.accountType.toUpperCase()}</small>
                   <h2>{mission.accountName}</h2>
                   <p>
-                    {mission.accountLocationCount} buildings · {mission.primarySignal}
+                    {mission.accountLocationCount} location
+                    {mission.accountLocationCount === 1 ? "" : "s"} · {mission.primarySignal}
                   </p>
                 </div>
                 <strong>
@@ -277,8 +308,8 @@ export default function CommercialSalesMission() {
                   <UserRound />
                   <span>
                     <small>ASK FOR</small>
-                    <b>{mission.decisionMaker.name}</b>
-                    <em>{mission.decisionMaker.title}</em>
+                    <b>{mission.decisionMaker.name ?? "Operations manager"}</b>
+                    <em>{mission.decisionMaker.title ?? "Decision-maker"}</em>
                   </span>
                 </article>
                 <article>
@@ -292,9 +323,9 @@ export default function CommercialSalesMission() {
                 <article>
                   <MapPin />
                   <span>
-                    <small>ROUTE FIT</small>
-                    <b>0.6 miles from current route</b>
-                    <em>Tuesday + Thursday capacity open</em>
+                    <small>WHY IT FITS</small>
+                    <b>{mission.reasons[0] ?? "Inside your service area"}</b>
+                    <em>{mission.reasons[1] ?? "Capacity and route fit look strong"}</em>
                   </span>
                 </article>
               </div>
@@ -309,29 +340,10 @@ export default function CommercialSalesMission() {
               <ScreenHeader
                 eyebrow="STEP 1 OF 5"
                 title="Look ready before you walk in."
-                body="The mission does not begin at the front door. It begins with how you show up."
+                body="The mission starts with how you show up."
               />
               <div className="csm-checklist">
-                {[
-                  {
-                    key: "polo" as const,
-                    icon: <Shirt />,
-                    title: "Clean polo + jeans",
-                    body: "Presentable, practical, operator-ready.",
-                  },
-                  {
-                    key: "quote" as const,
-                    icon: <FileText />,
-                    title: "Quote sheet",
-                    body: "Pricing and service outline checked.",
-                  },
-                  {
-                    key: "collateral" as const,
-                    icon: <BriefcaseBusiness />,
-                    title: "Leave-behind",
-                    body: "Branded flyer and contact card ready.",
-                  },
-                ].map(item => (
+                {PREP_ITEMS.map(item => (
                   <button
                     type="button"
                     key={item.key}
@@ -377,13 +389,13 @@ export default function CommercialSalesMission() {
                 <div>
                   <small>PRINT PICKUP</small>
                   <h2>FedEx Office · Beverly Blvd</h2>
-                  <p>1.2 miles · on the way to Westview</p>
+                  <p>On the way to {mission.accountName}</p>
                 </div>
                 <em>{printReady ? "READY" : "PROCESSING"}</em>
               </div>
               <div className="csm-print-code">
                 <small>PICKUP CODE</small>
-                <strong>DF-042</strong>
+                <strong>DF-{String(mission.id).slice(-3).padStart(3, "0")}</strong>
                 <p>1 branded commercial laundry proposal · 5 leave-behind flyers</p>
               </div>
               {!printReady ? (
@@ -403,7 +415,7 @@ export default function CommercialSalesMission() {
               <ScreenHeader
                 eyebrow="STEP 3 OF 5"
                 title="Now go finish the mission."
-                body="The game ended on the screen. The same mission continues at Westview."
+                body={`The game ended on the screen. The same mission continues at ${mission.accountName}.`}
               />
               <div className="csm-map-card">
                 <div className="csm-map-grid" />
@@ -423,13 +435,13 @@ export default function CommercialSalesMission() {
                   <small>DESTINATION</small>
                   <b>{mission.accountName}</b>
                   <em>
-                    Ask for {mission.decisionMaker.name}, {mission.decisionMaker.title}
+                    Ask for {mission.decisionMaker.name ?? "the operations manager"}
                   </em>
                 </div>
                 <strong>11 MIN</strong>
               </div>
               <ActionButton onClick={() => move("talk-track")}>
-                <MapPin /> I’m outside Westview
+                <MapPin /> I’m outside
               </ActionButton>
             </>
           ) : null}
@@ -479,7 +491,7 @@ export default function CommercialSalesMission() {
                 <textarea
                   value={notes}
                   onChange={event => setNotes(event.target.value)}
-                  placeholder="Met Dana. She wants pricing for three buildings first…"
+                  placeholder="Met the operations manager. They want pricing for three locations first…"
                   rows={5}
                 />
               </label>
@@ -512,9 +524,7 @@ export default function CommercialSalesMission() {
           {screen === "complete" ? (
             <>
               <div className={`csm-complete${outcome === "won" ? " is-won" : ""}`}>
-                <span>
-                  {outcome === "won" ? <CheckCircle2 /> : <Clock3 />}
-                </span>
+                <span>{outcome === "won" ? <CheckCircle2 /> : <Clock3 />}</span>
                 <small>{mission.code}</small>
                 <h1>
                   {outcome === "won"
