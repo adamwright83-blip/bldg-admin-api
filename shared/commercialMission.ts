@@ -14,6 +14,9 @@ export const COMMERCIAL_MISSION_STATUSES = [
   "lost",
 ] as const;
 
+export const COMMERCIAL_MISSION_DEMO_STORAGE_KEY =
+  "dayforge:commercial-sales-mission:demo";
+
 export type CommercialMissionStatus =
   (typeof COMMERCIAL_MISSION_STATUSES)[number];
 
