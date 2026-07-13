@@ -37,6 +37,7 @@ import type {
   NormalizedTenantOrder,
 } from "../../shared/tenantImports";
 import { getDb } from "../db";
+import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
 
 export type PublicSaasPlan = {
   planKey: string;
@@ -215,16 +216,38 @@ export async function startSaasOnboarding(input: {
   const slug = normalizeSaasTenantSlug(input.slug);
   if (slug.length < 3) throw new Error("A valid tenant slug is required");
   try {
-    await db.insert(dayforgeSaasOnboardingSessions).values({
-      id: sessionId,
-      resumeTokenHash: hashSecret(resumeToken),
-      businessName: input.businessName.trim(),
-      slug,
-      ownerEmail: normalizeSaasEmail(input.ownerEmail),
-      currentStep: "business",
-      version: 1,
-      startRequestId: input.requestId,
-      expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+    await db.transaction(async tx => {
+      await tx.insert(dayforgeSaasOnboardingSessions).values({
+        id: sessionId,
+        resumeTokenHash: hashSecret(resumeToken),
+        businessName: input.businessName.trim(),
+        slug,
+        ownerEmail: normalizeSaasEmail(input.ownerEmail),
+        currentStep: "business",
+        version: 1,
+        startRequestId: input.requestId,
+        expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      });
+      const correlationId = `saas-onboarding:${sessionId}`;
+      await writeDayforgeEventWith(tx, {
+        anonymousSessionId: sessionId,
+        actor: { type: "public", id: null },
+        entityType: "saas_onboarding_session",
+        entityId: sessionId,
+        eventName: "tenant_signup_started",
+        before: null,
+        after: { sessionId, status: "draft", currentStep: "business" },
+        source: "saas_onboarding",
+        correlationId,
+        idempotencyKey: `${correlationId}:signup_started`,
+        productEvent: {
+          name: "tenant_signup_started",
+          properties: {
+            sourcePlacement: "dayforge_onboarding",
+            planKey: "unselected",
+          },
+        },
+      });
     });
   } catch (error) {
     if (!duplicateKey(error)) throw error;
@@ -1044,6 +1067,26 @@ export async function activateOnboardingOwner(input: {
       .update(dayforgeSaasOnboardingSessions)
       .set({ status: "complete", currentStep: "complete" })
       .where(eq(dayforgeSaasOnboardingSessions.id, session.id));
+    const correlationId = `saas-onboarding:${session.id}`;
+    await writeDayforgeEventWith(tx, {
+      tenantId,
+      actor: { type: "owner", id: openId },
+      entityType: "saas_tenant",
+      entityId: tenantId,
+      eventName: "tenant_signup_completed",
+      before: { tenantId, status: "configuring", onboardingStep: "owner_activation" },
+      after: { tenantId, status: "active", onboardingStep: "complete" },
+      source: "saas_onboarding",
+      correlationId,
+      idempotencyKey: `${correlationId}:signup_completed`,
+      productEvent: {
+        name: "tenant_signup_completed",
+        properties: {
+          sourcePlacement: "dayforge_onboarding",
+          planKey: subscription.planKey,
+        },
+      },
+    });
   });
   return { tenantId, openId };
 }

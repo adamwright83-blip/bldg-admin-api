@@ -2,7 +2,6 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   dayforgeTerritoryProcedure,
-  publicProcedure,
   router,
 } from "../_core/trpc";
 import { createCommercialMission } from "../commercialMissions/commercialMissionStore";
@@ -11,7 +10,6 @@ import {
   type LaundryTerritoryOperatorContext,
 } from "./territoryDiscovery";
 import { GooglePlacesTerritoryProvider } from "./googlePlacesTerritoryProvider";
-import { assertTerritoryPreviewRateLimit } from "./territoryRateLimit";
 import {
   getPersistedTerritoryResult,
   getTerritoryOperatorProfile,
@@ -50,65 +48,7 @@ function provider() {
   return new GooglePlacesTerritoryProvider(key);
 }
 
-function publicOperator(): LaundryTerritoryOperatorContext {
-  return {
-    tenantId: "public-preview",
-    serviceRadiusMiles: Number(process.env.TERRITORY_PREVIEW_RADIUS_MILES ?? 3),
-    commercialWashFoldEnabled: true,
-    averagePricePerPoundCents: Number(
-      process.env.TERRITORY_PREVIEW_PRICE_PER_POUND_CENTS ?? 250
-    ),
-    availableWeeklyCapacityPounds: Number(
-      process.env.TERRITORY_PREVIEW_CAPACITY_POUNDS ?? 600
-    ),
-    routePoints: [],
-    turnaroundCompatibleByDefault: true,
-    pickupDaysCompatibleByDefault: true,
-  };
-}
-
-function clientKey(req: {
-  headers: Record<string, unknown>;
-  socket?: { remoteAddress?: string | undefined };
-}): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  return String(
-    Array.isArray(forwarded)
-      ? forwarded[0]
-      : (forwarded ?? req.socket?.remoteAddress ?? "unknown")
-  )
-    .split(",")[0]!
-    .trim();
-}
-
 export const territoryRouter = router({
-  publicPreview: publicProcedure
-    .input(scanInput)
-    .query(async ({ ctx, input }) => {
-      try {
-        assertTerritoryPreviewRateLimit(clientKey(ctx.req));
-      } catch (error) {
-        throw new TRPCError({
-          code: "TOO_MANY_REQUESTS",
-          message: (error as Error).message,
-        });
-      }
-      const result = await discoverLaundryTerritory({
-        addressOrBusiness: input.address,
-        provider: provider(),
-        operator: publicOperator(),
-        limit: 12,
-      });
-      const persisted = await persistTerritoryScan({
-        tenantId: null,
-        mode: "public_preview",
-        addressQuery: input.address,
-        createdBy: null,
-        result,
-      });
-      return { ...result, ...persisted };
-    }),
-
   profile: dayforgeTerritoryProcedure.query(({ ctx }) =>
     getTerritoryOperatorProfile(ctx.tenantId)
   ),

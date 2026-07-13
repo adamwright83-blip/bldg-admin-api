@@ -664,6 +664,10 @@ export async function recordCommercialMissionVisitOutcome(input: {
         toStatus: "visit_completed",
         actor: { type: "driver", id: input.actorId },
         idempotencyKey: `field-visit-completed:${input.requestId}`,
+        metadata: {
+          visitOutcome: input.outcome,
+          collateralDelivered: input.collateralDelivered,
+        },
       });
       await transitionCommercialMissionWith(tx, {
         tenantId: input.tenantId,

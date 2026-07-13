@@ -45,13 +45,19 @@ import {
   lookupVerifiedResidentCardByPhone,
   verifyStripePaymentMethodOwnership,
 } from "../residentPaymentMethods";
+import {
+  configuredTrustProxy,
+  dayforgeSecurityHeaders,
+  resolveTrustedClientIp,
+} from "../dayforgeSecurity/dayforgeSecurity";
+import { registerDayforgeRetentionRoute } from "../dayforgeRetention/retentionRoute";
 
 const warnedUnknownTenantHosts = new Set<string>();
 const vendorOnboardingRateLimit = new Map<string, { count: number; resetAt: number }>();
 const authLoginFailures = new Map<string, { count: number; resetAt: number }>();
 
 function rateLimitKey(req: express.Request, email?: string) {
-  const ip = req.ip || req.socket.remoteAddress || "unknown-ip";
+  const ip = resolveTrustedClientIp(req);
   return `${ip}:${email?.toLowerCase().trim() || "unknown-email"}`;
 }
 
@@ -67,7 +73,7 @@ function isVendorOnboardingRateLimited(req: express.Request, email?: string, now
 }
 
 function authLoginKey(req: express.Request, role: "admin" | "driver") {
-  const ip = req.ip || req.socket.remoteAddress || "unknown-ip";
+  const ip = resolveTrustedClientIp(req);
   return `${ip}:${role}`;
 }
 
@@ -135,6 +141,8 @@ async function startServer() {
   validateStripeEnv();
 
   const app = express();
+  app.set("trust proxy", configuredTrustProxy());
+  app.use(dayforgeSecurityHeaders());
   const server = createServer(app);
 
   console.log("[Boot] v9 — REST endpoint for leads with robust error handling");
@@ -298,6 +306,7 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  registerDayforgeRetentionRoute(app);
   registerDayforgeSaasAuthRoute(app);
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);

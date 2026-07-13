@@ -15,6 +15,7 @@ import {
   readCommercialMissionWith,
   type CommercialMissionTransaction,
 } from "../commercialMissions/commercialMissionStore";
+import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
 
 const PROPOSAL_READY_STATUSES = new Set([
   "phone_ready",
@@ -40,6 +41,32 @@ function isDuplicateKeyError(error: unknown): boolean {
 
 function contentHash(snapshot: CommercialLaundryProposalSnapshot): string {
   return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+}
+
+function estimatedValueBand(cents: number): string {
+  if (cents < 5_000_00) return "under_5k";
+  if (cents < 15_000_00) return "5k_to_15k";
+  if (cents < 30_000_00) return "15k_to_30k";
+  if (cents < 75_000_00) return "30k_to_75k";
+  return "75k_plus";
+}
+
+function proposalAuditSnapshot(input: {
+  id: string;
+  missionId: number;
+  version: number;
+  status: "draft" | "approved" | "superseded" | "void";
+  contentHash: string;
+  validThrough: Date;
+}) {
+  return {
+    proposalId: input.id,
+    missionId: input.missionId,
+    version: input.version,
+    status: input.status,
+    contentHash: input.contentHash,
+    validThrough: input.validThrough.toISOString(),
+  };
 }
 
 function profileFromRow(
@@ -270,6 +297,39 @@ export async function generateCommercialProposal(input: {
         idempotencyKey: `proposal-generated:${input.requestId}`,
         metadataJson: { version, contentHash: contentHash(snapshot) },
       });
+      const projectionCorrelationId = `commercial-proposal:${id}:${input.requestId}`;
+      await writeDayforgeEventWith(tx, {
+        tenantId: input.tenantId,
+        actor: { type: "operator", id: input.actorId },
+        entityType: "commercial_proposal",
+        entityId: id,
+        eventName: "proposal_created",
+        before: null,
+        after: proposalAuditSnapshot({
+          id,
+          missionId: input.missionId,
+          version,
+          status: "draft",
+          contentHash: contentHash(snapshot),
+          validThrough: new Date(snapshot.validThrough),
+        }),
+        source: "commercial_proposal",
+        correlationId: projectionCorrelationId,
+        idempotencyKey: `${projectionCorrelationId}:created`,
+        productEvent: {
+          name: "proposal_created",
+          missionId: input.missionId,
+          accountId: mission.account.accountId,
+          opportunityId: mission.opportunity.opportunityId,
+          properties: {
+            versionNumber: version,
+            templateKey: "tenant_commercial_profile_v1",
+            estimatedValueBand: estimatedValueBand(
+              snapshot.pricing.estimatedAnnualValueCents
+            ),
+          },
+        },
+      });
       return id;
     });
   } catch (error) {
@@ -377,6 +437,27 @@ export async function approveCommercialProposal(input: {
         actorId: input.actorId,
         idempotencyKey: `proposal-approved:${input.requestId}`,
         metadataJson: { version: target.version },
+      });
+      const projectionCorrelationId = `commercial-proposal:${input.proposalId}:${input.requestId}`;
+      await writeDayforgeEventWith(tx, {
+        tenantId: input.tenantId,
+        actor: { type: "operator", id: input.actorId },
+        entityType: "commercial_proposal",
+        entityId: input.proposalId,
+        eventName: "proposal_approved",
+        before: proposalAuditSnapshot(target),
+        after: proposalAuditSnapshot({ ...target, status: "approved" }),
+        source: "commercial_proposal",
+        correlationId: projectionCorrelationId,
+        idempotencyKey: `${projectionCorrelationId}:approved`,
+        productEvent: {
+          name: "proposal_approved",
+          missionId: input.missionId,
+          properties: {
+            versionNumber: target.version,
+            approvalSource: "tenant_operator",
+          },
+        },
       });
     });
   } catch (error) {

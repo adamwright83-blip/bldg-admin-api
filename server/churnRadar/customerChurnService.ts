@@ -21,6 +21,7 @@ import {
   type CustomerHistoryObservation,
 } from "@shared/customerChurn";
 import { getDb } from "../db";
+import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
 
 type OrderRow = typeof orders.$inferSelect;
 type Transaction = Parameters<
@@ -48,6 +49,13 @@ function isDuplicateKeyError(error: unknown): boolean {
 function cents(value: string | null): number {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) : 0;
+}
+
+function recoveredRevenueBand(centsValue: number): string {
+  if (centsValue < 100_00) return "under_100";
+  if (centsValue < 500_00) return "100_to_500";
+  if (centsValue < 1_500_00) return "500_to_1500";
+  return "1500_plus";
 }
 
 function normalizePhone(value: string): string {
@@ -408,6 +416,37 @@ export async function runCustomerChurnScan(input: {
     await db.transaction(async tx => {
       if (snapshots.length > 0)
         await tx.insert(customerChurnSnapshots).values(snapshots);
+      for (const snapshot of snapshots.filter(item => (item.score ?? 0) >= 40)) {
+        const correlationId = `churn-scan:${scanId}`;
+        await writeDayforgeEventWith(tx, {
+          tenantId: input.tenantId,
+          actor: { type: "system", id: "dayforge-churn-radar" },
+          entityType: "customer_churn_snapshot",
+          entityId: snapshot.id,
+          eventName: "churn_risk_detected",
+          before: null,
+          after: {
+            snapshotId: snapshot.id,
+            scanId,
+            score: snapshot.score,
+            grade: snapshot.grade,
+            confidence: snapshot.confidence,
+            historyOrderCount: snapshot.historyOrderCount,
+            signalCount: Array.isArray(snapshot.reasonsJson) ? snapshot.reasonsJson.length : 0,
+          },
+          source: "churn_radar",
+          correlationId,
+          idempotencyKey: `${correlationId}:snapshot:${snapshot.id}:risk`,
+          productEvent: {
+            name: "churn_risk_detected",
+            properties: {
+              riskBand: snapshot.grade,
+              confidenceBand: snapshot.confidence,
+              signalCount: Array.isArray(snapshot.reasonsJson) ? snapshot.reasonsJson.length : 0,
+            },
+          },
+        });
+      }
       await tx
         .update(customerChurnScans)
         .set({
@@ -758,6 +797,28 @@ export async function createCustomerRecoveryIntervention(input: {
         idempotencyKey: `recovery-created:${input.requestId}`,
         metadataJson: { opsTaskId, churnSnapshotId: snapshot.id, draftId },
       });
+      const projectionCorrelationId = `recovery-intervention:${id}:${input.requestId}`;
+      await writeDayforgeEventWith(tx, {
+        tenantId: input.tenantId,
+        actor: { type: "operator", id: input.actorId },
+        entityType: "customer_recovery_intervention",
+        entityId: id,
+        eventName: "win_back_prepared",
+        before: null,
+        after: {
+          interventionId: id,
+          churnSnapshotId: snapshot.id,
+          status: "draft_pending_review",
+          draftVersion: 1,
+        },
+        source: "churn_radar",
+        correlationId: projectionCorrelationId,
+        idempotencyKey: `${projectionCorrelationId}:prepared`,
+        productEvent: {
+          name: "win_back_prepared",
+          properties: { channel: "sms_manual", riskBand: snapshot.grade },
+        },
+      });
       await tx.insert(opsTaskEvents).values({
         tenantId: input.tenantId,
         taskId: opsTaskId,
@@ -1015,6 +1076,31 @@ export async function approveCustomerRecoveryDraft(input: {
           version: target.version,
           contentHash: target.contentHash,
           outreachSent: false,
+        },
+      });
+      const projectionCorrelationId = `recovery-intervention:${input.interventionId}:${input.requestId}`;
+      await writeDayforgeEventWith(tx, {
+        tenantId: input.tenantId,
+        actor: { type: "operator", id: input.actorId },
+        entityType: "customer_recovery_intervention",
+        entityId: input.interventionId,
+        eventName: "win_back_approved",
+        before: {
+          interventionId: input.interventionId,
+          status: intervention.status,
+          draftVersion: target.version,
+        },
+        after: {
+          interventionId: input.interventionId,
+          status: "approved",
+          draftVersion: target.version,
+        },
+        source: "churn_radar",
+        correlationId: projectionCorrelationId,
+        idempotencyKey: `${projectionCorrelationId}:approved`,
+        productEvent: {
+          name: "win_back_approved",
+          properties: { channel: "sms_manual", approvalSource: "tenant_operator" },
         },
       });
       await tx.insert(opsTaskEvents).values({
@@ -1422,6 +1508,42 @@ async function markRecoveredWith(
       orderId: input.order.id,
       recoveredRevenueCents,
       paidAt: input.order.paidAt?.toISOString() ?? null,
+    },
+  });
+  const projectionCorrelationId = `recovery-intervention:${input.intervention.id}:order:${input.order.id}`;
+  await writeDayforgeEventWith(tx, {
+    tenantId: input.tenantId,
+    actor: { type: "system", id: "dayforge-attribution" },
+    entityType: "customer_recovery_intervention",
+    entityId: input.intervention.id,
+    eventName: "customer_returned",
+    before: { status: input.intervention.status, recoveredOrderId: null },
+    after: { status: "recovered", recoveredOrderId: input.order.id },
+    source: "churn_radar_attribution",
+    correlationId: projectionCorrelationId,
+    idempotencyKey: `${projectionCorrelationId}:customer_returned`,
+    productEvent: {
+      name: "customer_returned",
+      properties: { attributionConfidence: "paid_order_after_contact" },
+    },
+  });
+  await writeDayforgeEventWith(tx, {
+    tenantId: input.tenantId,
+    actor: { type: "system", id: "dayforge-attribution" },
+    entityType: "customer_recovery_intervention",
+    entityId: input.intervention.id,
+    eventName: "recovered_revenue_realized",
+    before: { recoveredRevenueCents: input.intervention.recoveredRevenueCents },
+    after: { recoveredRevenueCents, recoveredOrderId: input.order.id },
+    source: "churn_radar_attribution",
+    correlationId: projectionCorrelationId,
+    idempotencyKey: `${projectionCorrelationId}:recovered_revenue_realized`,
+    productEvent: {
+      name: "recovered_revenue_realized",
+      properties: {
+        revenueBand: recoveredRevenueBand(recoveredRevenueCents),
+        attributionConfidence: "paid_order_after_contact",
+      },
     },
   });
   await tx.insert(opsTaskEvents).values({

@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node", "vitest/globals", "@playwright/test"]
+  },
+  "include": [
+    "server/dayforgeRelease/**/*.ts",
+    "server/territory/testSupport/**/*.ts",
+    "playwright.dayforge.config.ts",
+    "e2e/dayforge/**/*.ts"
+  ]
+}

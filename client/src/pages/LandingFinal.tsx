@@ -66,8 +66,16 @@ function initAnalytics() {
         api_host: POSTHOG_HOST,
         defaults: "2025-05-24",
         capture_pageview: true,
-        autocapture: true,
-        person_profiles: "identified_only",
+        capture_pageleave: true,
+        autocapture: false,
+        capture_dead_clicks: false,
+        capture_exceptions: false,
+        capture_performance: false,
+        disable_session_recording: true,
+        disable_surveys: true,
+        disable_product_tours: true,
+        disable_conversations: true,
+        person_profiles: "never",
       });
       posthogClient = posthog;
     })
@@ -136,7 +144,7 @@ function MapCta({
   note = CTA_NOTE,
 }: {
   source: CtaSource;
-  onOpen: () => void;
+  onOpen: (source: CtaSource) => void;
   note?: string | null;
 }) {
   return (
@@ -146,7 +154,7 @@ function MapCta({
         type="button"
         onClick={() => {
           track("cta_click", { source });
-          onOpen();
+          onOpen(source);
         }}
       >
         {CTA_LABEL} <ArrowRight />
@@ -953,7 +961,11 @@ export default function LandingFinal() {
   const [schedulerOpen, setSchedulerOpen] = useState(false);
   const [stickyVisible, setStickyVisible] = useState(false);
 
-  const openScheduler = useCallback(() => setSchedulerOpen(true), []);
+  const openTerritoryPreview = useCallback((source: CtaSource) => {
+    const destination = new URL("/territory-preview", window.location.origin);
+    destination.searchParams.set("placement", source);
+    window.location.assign(destination.toString());
+  }, []);
 
   useEffect(() => {
     initAnalytics();
@@ -1049,7 +1061,7 @@ export default function LandingFinal() {
                 {/* The 90-second tour button joins lf-hero-actions when the
                     video exists. */}
                 <div className="lf-hero-actions">
-                  <MapCta source="hero" onOpen={openScheduler} />
+                  <MapCta source="hero" onOpen={openTerritoryPreview} />
                 </div>
                 <p className="lf-proofline">
                   <ShieldCheck /> {PROOF_LINE}
@@ -1265,7 +1277,7 @@ export default function LandingFinal() {
           <div className="lf-midcta">
             <div className="lf-wrap">
               <h2>What businesses are you driving past?</h2>
-              <MapCta source="mission" onOpen={openScheduler} />
+              <MapCta source="mission" onOpen={openTerritoryPreview} />
             </div>
           </div>
         </section>
@@ -1471,7 +1483,7 @@ export default function LandingFinal() {
                   type="button"
                   onClick={() => {
                     track("cta_click", { source: "pricing" });
-                    openScheduler();
+                    openTerritoryPreview("pricing");
                   }}
                 >
                   {CTA_LABEL} <ArrowRight />
@@ -1497,7 +1509,7 @@ export default function LandingFinal() {
         <section className="lf-finalband" id="final-cta">
           <div className="lf-wrap">
             <h2>Stop passing the next account you could win.</h2>
-            <MapCta source="final" onOpen={openScheduler} />
+            <MapCta source="final" onOpen={openTerritoryPreview} />
           </div>
         </section>
       </main>
@@ -1520,7 +1532,7 @@ export default function LandingFinal() {
           aria-hidden={!stickyVisible}
           onClick={() => {
             track("cta_click", { source: "sticky" });
-            openScheduler();
+            openTerritoryPreview("sticky");
           }}
         >
           {CTA_LABEL} <ArrowRight />

@@ -2117,6 +2117,7 @@ export const dayforgeAuditEvents = mysqlTable(
       "admin",
       "operator",
       "field",
+      "game",
       "stripe",
       "system",
     ]).notNull(),
@@ -2141,6 +2142,195 @@ export const dayforgeAuditEvents = mysqlTable(
       table.entityType,
       table.entityId,
       table.createdAt
+    ),
+  })
+);
+
+/**
+ * Privacy-safe, append-only product funnel events. Business truth remains in
+ * the domain tables and dayforge_audit_events; this table is an analytics
+ * projection containing only allowlisted aggregate properties.
+ */
+export const dayforgeProductEvents = mysqlTable(
+  "dayforge_product_events",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    scopeKey: varchar("scopeKey", { length: 191 }).notNull(),
+    tenantId: varchar("tenantId", { length: 64 }),
+    anonymousSessionId: varchar("anonymousSessionId", { length: 64 }),
+    actorType: mysqlEnum("actorType", [
+      "public",
+      "owner",
+      "admin",
+      "operator",
+      "field",
+      "game",
+      "stripe",
+      "system",
+    ]).notNull(),
+    actorId: varchar("actorId", { length: 128 }),
+    entityType: varchar("entityType", { length: 96 }),
+    entityId: varchar("entityId", { length: 128 }),
+    missionId: int("missionId"),
+    accountId: int("accountId"),
+    opportunityId: int("opportunityId"),
+    customerId: int("customerId"),
+    eventName: varchar("eventName", { length: 96 }).notNull(),
+    eventVersion: int("eventVersion").notNull().default(1),
+    propertiesJson: json("propertiesJson").notNull(),
+    source: varchar("source", { length: 96 }).notNull(),
+    correlationId: varchar("correlationId", { length: 191 }).notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    occurredAt: timestamp("occurredAt").defaultNow().notNull(),
+    purgeAfter: timestamp("purgeAfter"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_dayforge_product_event_idempotency").on(
+      table.scopeKey,
+      table.idempotencyKey
+    ),
+    tenantEventIdx: index("idx_dayforge_product_event_tenant_name").on(
+      table.tenantId,
+      table.eventName,
+      table.occurredAt
+    ),
+    missionTimelineIdx: index("idx_dayforge_product_event_mission").on(
+      table.tenantId,
+      table.missionId,
+      table.occurredAt
+    ),
+    accountTimelineIdx: index("idx_dayforge_product_event_account").on(
+      table.tenantId,
+      table.accountId,
+      table.occurredAt
+    ),
+    anonymousTimelineIdx: index("idx_dayforge_product_event_anonymous").on(
+      table.anonymousSessionId,
+      table.occurredAt
+    ),
+    purgeIdx: index("idx_dayforge_product_event_purge").on(table.purgeAfter),
+  })
+);
+
+/**
+ * Anonymous public preview state. Only a token hash is stored; raw bearer
+ * tokens and raw client IP addresses never enter the database.
+ */
+export const dayforgePublicPreviewSessions = mysqlTable(
+  "dayforge_public_preview_sessions",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    ipHash: varchar("ipHash", { length: 64 }).notNull(),
+    status: mysqlEnum("status", [
+      "running",
+      "completed",
+      "failed",
+      "converting",
+      "converted",
+      "expired",
+    ])
+      .notNull()
+      .default("running"),
+    addressQuery: varchar("addressQuery", { length: 512 }).notNull(),
+    attributionJson: json("attributionJson"),
+    providerName: varchar("providerName", { length: 64 }),
+    resultCount: int("resultCount").notNull().default(0),
+    executionStartedAt: timestamp("executionStartedAt"),
+    executionLeaseUntil: timestamp("executionLeaseUntil"),
+    executionAttemptCount: int("executionAttemptCount").notNull().default(0),
+    scanSessionId: varchar("scanSessionId", { length: 64 }),
+    selectedCandidateKey: varchar("selectedCandidateKey", { length: 191 }),
+    sampleMissionCreatedAt: timestamp("sampleMissionCreatedAt"),
+    convertedTenantId: varchar("convertedTenantId", { length: 64 }),
+    convertedMissionId: int("convertedMissionId"),
+    expiresAt: timestamp("expiresAt").notNull(),
+    purgeAfter: timestamp("purgeAfter").notNull(),
+    failureCode: varchar("failureCode", { length: 96 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tokenHashUnique: uniqueIndex("uq_dayforge_public_preview_token").on(
+      table.tokenHash
+    ),
+    scanSessionUnique: uniqueIndex("uq_dayforge_public_preview_scan").on(
+      table.scanSessionId
+    ),
+    statusExpiresIdx: index("idx_dayforge_public_preview_status_expires").on(
+      table.status,
+      table.expiresAt
+    ),
+    ipCreatedIdx: index("idx_dayforge_public_preview_ip_created").on(
+      table.ipHash,
+      table.createdAt
+    ),
+    purgeIdx: index("idx_dayforge_public_preview_purge").on(table.purgeAfter),
+  })
+);
+
+/** Durable fixed-window rate counters keyed only by server-generated hashes. */
+export const dayforgeRateLimitBuckets = mysqlTable(
+  "dayforge_rate_limit_buckets",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    scopeKey: varchar("scopeKey", { length: 191 }).notNull(),
+    bucketKey: varchar("bucketKey", { length: 191 }).notNull(),
+    action: varchar("action", { length: 96 }).notNull(),
+    windowStart: timestamp("windowStart").notNull(),
+    windowSeconds: int("windowSeconds").notNull(),
+    requestCount: int("requestCount").notNull().default(0),
+    expiresAt: timestamp("expiresAt").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    windowUnique: uniqueIndex("uq_dayforge_rate_limit_window").on(
+      table.scopeKey,
+      table.bucketKey,
+      table.action,
+      table.windowStart
+    ),
+    expiryIdx: index("idx_dayforge_rate_limit_expiry").on(table.expiresAt),
+    scopeActionIdx: index("idx_dayforge_rate_limit_scope_action").on(
+      table.scopeKey,
+      table.action,
+      table.windowStart
+    ),
+  })
+);
+
+/** Provider-wide daily usage and circuit-breaker state. */
+export const dayforgeProviderBudgets = mysqlTable(
+  "dayforge_provider_budgets",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    providerName: varchar("providerName", { length: 64 }).notNull(),
+    operation: varchar("operation", { length: 96 }).notNull(),
+    budgetDate: varchar("budgetDate", { length: 10 }).notNull(),
+    requestCount: int("requestCount").notNull().default(0),
+    estimatedCostMicros: int("estimatedCostMicros").notNull().default(0),
+    failureCount: int("failureCount").notNull().default(0),
+    consecutiveFailureCount: int("consecutiveFailureCount")
+      .notNull()
+      .default(0),
+    circuitState: mysqlEnum("circuitState", ["closed", "open", "half_open"])
+      .notNull()
+      .default("closed"),
+    circuitOpenedAt: timestamp("circuitOpenedAt"),
+    lastFailureAt: timestamp("lastFailureAt"),
+    lastSuccessAt: timestamp("lastSuccessAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    providerOperationDayUnique: uniqueIndex(
+      "uq_dayforge_provider_budget_day"
+    ).on(table.providerName, table.operation, table.budgetDate),
+    circuitIdx: index("idx_dayforge_provider_budget_circuit").on(
+      table.circuitState,
+      table.updatedAt
     ),
   })
 );
