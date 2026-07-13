@@ -472,6 +472,7 @@ export type InsertDrycleanReceiptIntake = typeof drycleanReceiptIntakes.$inferIn
 
 export const cleancloudImportBatches = mysqlTable("cleancloud_import_batches", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
   source: varchar("source", { length: 64 }).notNull().default("cleancloud"),
   sourceFileName: varchar("sourceFileName", { length: 255 }).notNull(),
   importedRowCount: int("importedRowCount").notNull().default(0),
@@ -563,7 +564,11 @@ export const cleancloudPaidOrders = mysqlTable(
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   (table) => ({
-    orderReportUnique: uniqueIndex("uq_cleancloud_paid_order_report").on(table.cleancloudOrderId, table.sourceReportType),
+    orderReportUnique: uniqueIndex("uq_cleancloud_paid_order_report").on(
+      table.tenantId,
+      table.cleancloudOrderId,
+      table.sourceReportType
+    ),
     batchIdx: index("idx_cleancloud_paid_orders_batch").on(table.importBatchId),
     paymentDateIdx: index("idx_cleancloud_paid_orders_payment_date").on(table.paymentDateUtc),
     paidDateIdx: index("idx_cleancloud_paid_orders_paid_date").on(table.paidDateUtc),
@@ -1693,6 +1698,562 @@ export const commercialMissionFinalRewards = mysqlTable(
     tenantIdempotencyUnique: uniqueIndex(
       "uq_commercial_final_rewards_tenant_idempotency"
     ).on(table.tenantId, table.idempotencyKey),
+  })
+);
+
+export const dayforgeSaasTenants = mysqlTable(
+  "dayforge_saas_tenants",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    slug: varchar("slug", { length: 64 }).notNull(),
+    businessName: varchar("businessName", { length: 255 }).notNull(),
+    brandName: varchar("brandName", { length: 255 }).notNull(),
+    logoUrl: varchar("logoUrl", { length: 1024 }),
+    primaryColor: varchar("primaryColor", { length: 16 }).notNull(),
+    contactName: varchar("contactName", { length: 255 }).notNull(),
+    contactEmail: varchar("contactEmail", { length: 320 }).notNull(),
+    contactPhone: varchar("contactPhone", { length: 64 }),
+    website: varchar("website", { length: 512 }),
+    timeZone: varchar("timeZone", { length: 64 }).notNull(),
+    proposalTemplateKey: varchar("proposalTemplateKey", { length: 128 }),
+    status: mysqlEnum("status", [
+      "provisioning",
+      "configuring",
+      "active",
+      "delinquent",
+      "suspended",
+      "canceled",
+    ])
+      .notNull()
+      .default("provisioning"),
+    onboardingStep: varchar("onboardingStep", { length: 64 })
+      .notNull()
+      .default("business"),
+    onboardingCompletedAt: timestamp("onboardingCompletedAt"),
+    billingStateUpdatedAt: timestamp("billingStateUpdatedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    slugUnique: uniqueIndex("uq_dayforge_saas_tenants_slug").on(table.slug),
+  })
+);
+
+export const dayforgeSaasTenantLocations = mysqlTable(
+  "dayforge_saas_tenant_locations",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    locationKey: varchar("locationKey", { length: 64 }).notNull(),
+    label: varchar("label", { length: 128 }).notNull(),
+    address: varchar("address", { length: 512 }).notNull(),
+    latitude: decimal("latitude", { precision: 10, scale: 7 }),
+    longitude: decimal("longitude", { precision: 10, scale: 7 }),
+    serviceRadiusMiles: decimal("serviceRadiusMiles", {
+      precision: 6,
+      scale: 2,
+    }).notNull(),
+    maxPoundsPerDay: int("maxPoundsPerDay").notNull(),
+    maxPoundsByWeekdayJson: json("maxPoundsByWeekdayJson").notNull(),
+    openCapacityPoundsPerWeek: int("openCapacityPoundsPerWeek").notNull(),
+    pickupDaysJson: json("pickupDaysJson").notNull(),
+    routeWindowsJson: json("routeWindowsJson").notNull(),
+    turnaroundHours: int("turnaroundHours").notNull(),
+    deliveryEnabled: boolean("deliveryEnabled").notNull().default(true),
+    isPrimary: boolean("isPrimary").notNull().default(false),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantLocationUnique: uniqueIndex("uq_dayforge_saas_locations_key").on(
+      table.tenantId,
+      table.locationKey
+    ),
+    tenantPrimaryIdx: index("idx_dayforge_saas_locations_tenant").on(
+      table.tenantId,
+      table.isPrimary
+    ),
+  })
+);
+
+export const dayforgeSaasTenantDomains = mysqlTable(
+  "dayforge_saas_tenant_domains",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    hostname: varchar("hostname", { length: 255 }).notNull(),
+    verifiedAt: timestamp("verifiedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    hostnameUnique: uniqueIndex("uq_dayforge_saas_tenant_domain").on(
+      table.hostname
+    ),
+    tenantIdx: index("idx_dayforge_saas_tenant_domains_tenant").on(
+      table.tenantId
+    ),
+  })
+);
+
+export const dayforgeSaasTenantServices = mysqlTable(
+  "dayforge_saas_tenant_services",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    locationId: int("locationId").notNull().default(0),
+    serviceKey: varchar("serviceKey", { length: 96 }).notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    commercialEnabled: boolean("commercialEnabled").notNull().default(false),
+    pricePerPoundCents: int("pricePerPoundCents"),
+    minimumOrderCents: int("minimumOrderCents"),
+    terms: text("terms"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantServiceUnique: uniqueIndex("uq_dayforge_saas_services_key").on(
+      table.tenantId,
+      table.locationId,
+      table.serviceKey
+    ),
+  })
+);
+
+export const dayforgeSaasTenantInvites = mysqlTable(
+  "dayforge_saas_tenant_invites",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    emailNormalized: varchar("emailNormalized", { length: 320 }).notNull(),
+    role: mysqlEnum("role", ["owner", "admin", "operator", "field"]).notNull(),
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    status: mysqlEnum("status", ["pending", "accepted", "revoked", "expired"])
+      .notNull()
+      .default("pending"),
+    invitedByOpenId: varchar("invitedByOpenId", { length: 64 }),
+    expiresAt: timestamp("expiresAt").notNull(),
+    acceptedAt: timestamp("acceptedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tokenUnique: uniqueIndex("uq_dayforge_saas_invite_token").on(
+      table.tokenHash
+    ),
+    tenantEmailIdx: index("idx_dayforge_saas_invites_tenant_email").on(
+      table.tenantId,
+      table.emailNormalized,
+      table.status
+    ),
+  })
+);
+
+export const dayforgeSaasMemberships = mysqlTable(
+  "dayforge_saas_memberships",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    userOpenId: varchar("userOpenId", { length: 64 }).notNull(),
+    role: mysqlEnum("role", ["owner", "admin", "operator", "field"]).notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantUserUnique: uniqueIndex("uq_dayforge_saas_membership_user").on(
+      table.tenantId,
+      table.userOpenId
+    ),
+    tenantRoleIdx: index("idx_dayforge_saas_memberships_tenant_role").on(
+      table.tenantId,
+      table.role,
+      table.active
+    ),
+  })
+);
+
+export const dayforgeSaasUserCredentials = mysqlTable(
+  "dayforge_saas_user_credentials",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    userOpenId: varchar("userOpenId", { length: 64 }).notNull(),
+    emailNormalized: varchar("emailNormalized", { length: 320 }).notNull(),
+    passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+    failedLoginCount: int("failedLoginCount").notNull().default(0),
+    lockedUntil: timestamp("lockedUntil"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantEmailUnique: uniqueIndex(
+      "uq_dayforge_saas_credentials_tenant_email"
+    ).on(table.tenantId, table.emailNormalized),
+    openIdUnique: uniqueIndex("uq_dayforge_saas_credentials_open_id").on(
+      table.userOpenId
+    ),
+  })
+);
+
+export const dayforgeSaasOnboardingSessions = mysqlTable(
+  "dayforge_saas_onboarding_sessions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    resumeTokenHash: varchar("resumeTokenHash", { length: 64 }).notNull(),
+    businessName: varchar("businessName", { length: 255 }).notNull(),
+    slug: varchar("slug", { length: 64 }).notNull(),
+    ownerEmail: varchar("ownerEmail", { length: 320 }).notNull(),
+    currentStep: varchar("currentStep", { length: 64 })
+      .notNull()
+      .default("business"),
+    version: int("version").notNull().default(1),
+    configurationJson: json("configurationJson"),
+    status: mysqlEnum("status", [
+      "draft",
+      "checkout_pending",
+      "provisioned",
+      "configuring",
+      "complete",
+      "expired",
+    ])
+      .notNull()
+      .default("draft"),
+    tenantId: varchar("tenantId", { length: 64 }),
+    planKey: varchar("planKey", { length: 96 }),
+    stripeCheckoutSessionId: varchar("stripeCheckoutSessionId", {
+      length: 255,
+    }),
+    stripeCustomerId: varchar("stripeCustomerId", { length: 255 }),
+    stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }),
+    startRequestId: varchar("startRequestId", { length: 36 }).notNull(),
+    checkoutRequestId: varchar("checkoutRequestId", { length: 36 }),
+    expiresAt: timestamp("expiresAt").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tokenUnique: uniqueIndex("uq_dayforge_saas_onboarding_token").on(
+      table.resumeTokenHash
+    ),
+    startRequestUnique: uniqueIndex(
+      "uq_dayforge_saas_onboarding_start_request"
+    ).on(table.startRequestId),
+    checkoutUnique: uniqueIndex("uq_dayforge_saas_onboarding_checkout").on(
+      table.stripeCheckoutSessionId
+    ),
+    subscriptionUnique: uniqueIndex(
+      "uq_dayforge_saas_onboarding_subscription"
+    ).on(table.stripeSubscriptionId),
+    emailIdx: index("idx_dayforge_saas_onboarding_email").on(
+      table.ownerEmail,
+      table.createdAt
+    ),
+  })
+);
+
+export const dayforgeSaasBillingPlans = mysqlTable(
+  "dayforge_saas_billing_plans",
+  {
+    planKey: varchar("planKey", { length: 96 }).primaryKey(),
+    displayName: varchar("displayName", { length: 255 }).notNull(),
+    stripePriceId: varchar("stripePriceId", { length: 255 }).notNull(),
+    stripeProductId: varchar("stripeProductId", { length: 255 }),
+    trialDays: int("trialDays").notNull().default(0),
+    foundingPlan: boolean("foundingPlan").notNull().default(false),
+    availabilityStartsAt: timestamp("availabilityStartsAt"),
+    availabilityEndsAt: timestamp("availabilityEndsAt"),
+    maxSubscriptions: int("maxSubscriptions"),
+    claimedSubscriptions: int("claimedSubscriptions").notNull().default(0),
+    rulesJson: json("rulesJson").notNull(),
+    entitlementsJson: json("entitlementsJson").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    stripePriceUnique: uniqueIndex("uq_dayforge_saas_billing_price").on(
+      table.stripePriceId
+    ),
+  })
+);
+
+export const dayforgeSaasCheckoutSessions = mysqlTable(
+  "dayforge_saas_checkout_sessions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    onboardingSessionId: varchar("onboardingSessionId", { length: 36 }).notNull(),
+    planKey: varchar("planKey", { length: 96 }).notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    stripeCheckoutSessionId: varchar("stripeCheckoutSessionId", { length: 255 }),
+    status: mysqlEnum("status", ["reserved", "open", "completed", "expired"])
+      .notNull()
+      .default("reserved"),
+    claimedSlot: boolean("claimedSlot").notNull().default(true),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    onboardingUnique: uniqueIndex("uq_dayforge_checkout_onboarding").on(
+      table.onboardingSessionId
+    ),
+    requestUnique: uniqueIndex("uq_dayforge_checkout_request").on(
+      table.requestId
+    ),
+    stripeUnique: uniqueIndex("uq_dayforge_checkout_stripe").on(
+      table.stripeCheckoutSessionId
+    ),
+  })
+);
+
+export const dayforgeSaasSubscriptions = mysqlTable(
+  "dayforge_saas_subscriptions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    planKey: varchar("planKey", { length: 96 }).notNull(),
+    stripeCustomerId: varchar("stripeCustomerId", { length: 255 }).notNull(),
+    stripeSubscriptionId: varchar("stripeSubscriptionId", {
+      length: 255,
+    }).notNull(),
+    status: mysqlEnum("status", [
+      "none",
+      "trialing",
+      "active",
+      "past_due",
+      "unpaid",
+      "paused",
+      "incomplete",
+      "incomplete_expired",
+      "canceled",
+    ]).notNull(),
+    cancelAtPeriodEnd: boolean("cancelAtPeriodEnd").notNull().default(false),
+    currentPeriodEnd: timestamp("currentPeriodEnd"),
+    trialEnd: timestamp("trialEnd"),
+    graceEndsAt: timestamp("graceEndsAt"),
+    accessEndsAt: timestamp("accessEndsAt"),
+    delinquentAt: timestamp("delinquentAt"),
+    lastInvoicePaidAt: timestamp("lastInvoicePaidAt"),
+    latestInvoiceId: varchar("latestInvoiceId", { length: 255 }),
+    lastStripeEventId: varchar("lastStripeEventId", { length: 255 }).notNull(),
+    lastStripeEventCreatedAt: timestamp("lastStripeEventCreatedAt").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantUnique: uniqueIndex("uq_dayforge_saas_subscriptions_tenant").on(
+      table.tenantId
+    ),
+    stripeUnique: uniqueIndex("uq_dayforge_saas_subscriptions_stripe").on(
+      table.stripeSubscriptionId
+    ),
+    customerIdx: index("idx_dayforge_saas_subscriptions_customer").on(
+      table.stripeCustomerId
+    ),
+  })
+);
+
+export const dayforgeSaasEntitlements = mysqlTable(
+  "dayforge_saas_entitlements",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    entitlementKey: varchar("entitlementKey", { length: 96 }).notNull(),
+    source: mysqlEnum("source", ["plan", "manual"]).notNull().default("plan"),
+    enabled: boolean("enabled").notNull().default(false),
+    expiresAt: timestamp("expiresAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantEntitlementUnique: uniqueIndex(
+      "uq_dayforge_saas_entitlement"
+    ).on(table.tenantId, table.entitlementKey, table.source),
+  })
+);
+
+export const dayforgeSaasBillingEvents = mysqlTable(
+  "dayforge_saas_billing_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    stripeEventId: varchar("stripeEventId", { length: 255 }).notNull(),
+    eventType: varchar("eventType", { length: 128 }).notNull(),
+    livemode: boolean("livemode").notNull().default(false),
+    stripeCreatedAt: timestamp("stripeCreatedAt").notNull(),
+    payloadHash: varchar("payloadHash", { length: 64 }).notNull(),
+    tenantId: varchar("tenantId", { length: 64 }),
+    objectId: varchar("objectId", { length: 255 }),
+    status: mysqlEnum("status", [
+      "processing",
+      "processed",
+      "ignored",
+      "failed",
+    ])
+      .notNull()
+      .default("processing"),
+    errorCode: varchar("errorCode", { length: 128 }),
+    metadataJson: json("metadataJson"),
+    processingStartedAt: timestamp("processingStartedAt").defaultNow().notNull(),
+    attemptCount: int("attemptCount").notNull().default(1),
+    processedAt: timestamp("processedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    stripeEventUnique: uniqueIndex("uq_dayforge_saas_billing_event").on(
+      table.stripeEventId
+    ),
+  })
+);
+
+export const dayforgeAuditEvents = mysqlTable(
+  "dayforge_audit_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    scopeKey: varchar("scopeKey", { length: 191 }).notNull(),
+    tenantId: varchar("tenantId", { length: 64 }),
+    actorType: mysqlEnum("actorType", [
+      "public",
+      "owner",
+      "admin",
+      "operator",
+      "field",
+      "stripe",
+      "system",
+    ]).notNull(),
+    actorId: varchar("actorId", { length: 128 }),
+    entityType: varchar("entityType", { length: 96 }).notNull(),
+    entityId: varchar("entityId", { length: 128 }).notNull(),
+    eventName: varchar("eventName", { length: 96 }).notNull(),
+    beforeJson: json("beforeJson"),
+    afterJson: json("afterJson"),
+    source: varchar("source", { length: 96 }).notNull(),
+    correlationId: varchar("correlationId", { length: 191 }).notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_dayforge_audit_idempotency").on(
+      table.scopeKey,
+      table.idempotencyKey
+    ),
+    tenantEntityIdx: index("idx_dayforge_audit_tenant_entity").on(
+      table.tenantId,
+      table.entityType,
+      table.entityId,
+      table.createdAt
+    ),
+  })
+);
+
+export const dayforgeSaasImportConnections = mysqlTable(
+  "dayforge_saas_import_connections",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    providerKey: varchar("providerKey", { length: 96 }).notNull(),
+    status: mysqlEnum("status", [
+      "configured",
+      "connected",
+      "error",
+      "disabled",
+    ])
+      .notNull()
+      .default("configured"),
+    credentialReference: varchar("credentialReference", { length: 255 }),
+    configurationJson: json("configurationJson").notNull(),
+    lastImportedAt: timestamp("lastImportedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantProviderUnique: uniqueIndex(
+      "uq_dayforge_saas_import_connection"
+    ).on(table.tenantId, table.providerKey),
+  })
+);
+
+export const dayforgeSaasImportRuns = mysqlTable(
+  "dayforge_saas_import_runs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    connectionId: int("connectionId").notNull(),
+    status: mysqlEnum("status", [
+      "started",
+      "completed",
+      "completed_with_errors",
+      "failed",
+    ]).notNull(),
+    sourceCursor: varchar("sourceCursor", { length: 512 }),
+    importedCustomers: int("importedCustomers").notNull().default(0),
+    importedOrders: int("importedOrders").notNull().default(0),
+    skippedRecords: int("skippedRecords").notNull().default(0),
+    errorJson: json("errorJson"),
+    startedAt: timestamp("startedAt").defaultNow().notNull(),
+    completedAt: timestamp("completedAt"),
+  },
+  table => ({
+    tenantStartedIdx: index("idx_dayforge_saas_import_runs_tenant").on(
+      table.tenantId,
+      table.startedAt
+    ),
+  })
+);
+
+export const dayforgeSaasExternalCustomers = mysqlTable(
+  "dayforge_saas_external_customers",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    connectionId: int("connectionId").notNull(),
+    providerKey: varchar("providerKey", { length: 96 }).notNull(),
+    externalId: varchar("externalId", { length: 191 }).notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    email: varchar("email", { length: 320 }),
+    phone: varchar("phone", { length: 64 }),
+    factsJson: json("factsJson").notNull(),
+    sourceCapturedAt: timestamp("sourceCapturedAt").notNull(),
+    importRunId: varchar("importRunId", { length: 36 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    externalUnique: uniqueIndex("uq_dayforge_external_customer").on(
+      table.tenantId,
+      table.connectionId,
+      table.externalId
+    ),
+  })
+);
+
+export const dayforgeSaasExternalOrders = mysqlTable(
+  "dayforge_saas_external_orders",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    connectionId: int("connectionId").notNull(),
+    providerKey: varchar("providerKey", { length: 96 }).notNull(),
+    externalId: varchar("externalId", { length: 191 }).notNull(),
+    externalCustomerId: varchar("externalCustomerId", { length: 191 }),
+    totalCents: int("totalCents").notNull(),
+    paid: boolean("paid").notNull().default(false),
+    occurredAt: timestamp("occurredAt"),
+    factsJson: json("factsJson").notNull(),
+    sourceCapturedAt: timestamp("sourceCapturedAt").notNull(),
+    importRunId: varchar("importRunId", { length: 36 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    externalUnique: uniqueIndex("uq_dayforge_external_order").on(
+      table.tenantId,
+      table.connectionId,
+      table.externalId
+    ),
+    tenantOccurredIdx: index("idx_dayforge_external_orders_tenant_occurred").on(
+      table.tenantId,
+      table.occurredAt
+    ),
   })
 );
 

@@ -1,0 +1,218 @@
+.df-onboarding {
+  min-height: 100vh;
+  padding: 48px 20px;
+  color: #f7f8fb;
+  background:
+    radial-gradient(
+      circle at 85% 10%,
+      rgba(240, 90, 18, 0.22),
+      transparent 32%
+    ),
+    #07111d;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.df-onboarding__card {
+  width: min(780px, 100%);
+  margin: 0 auto;
+  padding: clamp(28px, 5vw, 52px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  background: rgba(9, 22, 36, 0.94);
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.4);
+}
+.df-onboarding__card--compact {
+  width: min(520px, 100%);
+}
+
+.df-onboarding__mark {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  color: white;
+  background: #f05a12;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.df-onboarding__eyebrow {
+  margin: 18px 0 8px;
+  color: #ff7a38;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+.df-onboarding h1 {
+  max-width: 620px;
+  margin: 0;
+  font-size: clamp(34px, 6vw, 58px);
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+}
+.df-onboarding__intro {
+  max-width: 650px;
+  color: #b8c4d2;
+  font-size: 17px;
+  line-height: 1.6;
+}
+.df-onboarding__form {
+  display: grid;
+  gap: 16px;
+  margin-top: 30px;
+}
+.df-onboarding__grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.df-onboarding__wide {
+  grid-column: 1 / -1;
+}
+.df-onboarding label {
+  display: grid;
+  gap: 7px;
+  color: #c9d3df;
+  font-size: 13px;
+  font-weight: 700;
+}
+.df-onboarding input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #314355;
+  border-radius: 10px;
+  padding: 13px 14px;
+  color: #fff;
+  background: #0c1c2c;
+  font: inherit;
+}
+.df-onboarding input:focus {
+  border-color: #ff6a20;
+  outline: 3px solid rgba(255, 106, 32, 0.16);
+}
+.df-onboarding select {
+  border: 1px solid #314355;
+  border-radius: 10px;
+  padding: 13px 14px;
+  color: #fff;
+  background: #0c1c2c;
+  font: inherit;
+}
+.df-onboarding button {
+  min-height: 50px;
+  border: 0;
+  border-radius: 10px;
+  padding: 12px 20px;
+  color: white;
+  background: linear-gradient(135deg, #ff6a20, #df4300);
+  font-size: 15px;
+  font-weight: 850;
+  cursor: pointer;
+}
+.df-onboarding button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+.df-onboarding__plan {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #31522e;
+  border-radius: 12px;
+  padding: 16px;
+  background: #102313;
+  color: #d9f5d5;
+}
+.df-onboarding__error,
+.df-onboarding__success,
+.df-onboarding__status {
+  margin-top: 22px;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.df-onboarding__error {
+  border: 1px solid #8c322b;
+  color: #ffd2cc;
+  background: #351714;
+}
+.df-onboarding__success {
+  border: 1px solid #3d6f38;
+  color: #dff7db;
+  background: #102d14;
+}
+.df-onboarding__status {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #314355;
+  background: #0c1c2c;
+}
+.df-onboarding__status a {
+  color: #ff8b52;
+  font-weight: 800;
+}
+.df-onboarding__fineprint {
+  margin: 24px 0 0;
+  color: #718296;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.df-onboarding__settings {
+  display: grid;
+  gap: 18px;
+  margin-top: 28px;
+}
+.df-onboarding__settings section {
+  border: 1px solid #24384a;
+  border-radius: 14px;
+  padding: 20px;
+  background: #0a1928;
+}
+.df-onboarding__settings h2 {
+  margin-top: 0;
+}
+.df-onboarding__settings button {
+  margin-top: 10px;
+}
+.df-onboarding__members {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+.df-onboarding__members li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #24384a;
+  padding: 8px 0;
+}
+.df-onboarding__invite {
+  grid-template-columns: 2fr 1fr auto;
+  align-items: end;
+}
+.df-onboarding__success a {
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .df-onboarding {
+    padding: 18px 10px;
+  }
+  .df-onboarding__card {
+    padding: 24px 18px;
+    border-radius: 18px;
+  }
+  .df-onboarding__grid {
+    grid-template-columns: 1fr;
+  }
+  .df-onboarding__wide {
+    grid-column: auto;
+  }
+  .df-onboarding__plan {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .df-onboarding__invite {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { adminProcedure, router } from "../_core/trpc";
+import { dayforgePipelineProcedure, router } from "../_core/trpc";
 import {
   advanceCommercialRelationshipStage,
   approveCommercialAgreement,
@@ -15,8 +15,10 @@ import {
 const requestId = z.string().uuid();
 
 export const commercialPipelineRouter = router({
-  list: adminProcedure.query(({ ctx }) => listCommercialPipeline(ctx.tenantId)),
-  detail: adminProcedure
+  list: dayforgePipelineProcedure.query(({ ctx }) =>
+    listCommercialPipeline(ctx.tenantId)
+  ),
+  detail: dayforgePipelineProcedure
     .input(z.object({ pipelineId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       getCommercialPipelineDetail({
@@ -24,7 +26,7 @@ export const commercialPipelineRouter = router({
         pipelineId: input.pipelineId,
       })
     ),
-  advanceRelationship: adminProcedure
+  advanceRelationship: dayforgePipelineProcedure
     .input(
       z.object({
         pipelineId: z.number().int().positive(),
@@ -46,7 +48,7 @@ export const commercialPipelineRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  resolve: adminProcedure
+  resolve: dayforgePipelineProcedure
     .input(
       z.object({
         pipelineId: z.number().int().positive(),
@@ -63,7 +65,7 @@ export const commercialPipelineRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  scheduleFollowUp: adminProcedure
+  scheduleFollowUp: dayforgePipelineProcedure
     .input(
       z
         .object({
@@ -88,7 +90,7 @@ export const commercialPipelineRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  completeFollowUp: adminProcedure
+  completeFollowUp: dayforgePipelineProcedure
     .input(
       z.object({
         pipelineId: z.number().int().positive(),
@@ -103,7 +105,7 @@ export const commercialPipelineRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  approveAgreement: adminProcedure
+  approveAgreement: dayforgePipelineProcedure
     .input(
       z.object({
         pipelineId: z.number().int().positive(),
@@ -129,7 +131,7 @@ export const commercialPipelineRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  attributeOrder: adminProcedure
+  attributeOrder: dayforgePipelineProcedure
     .input(
       z.object({
         pipelineId: z.number().int().positive(),
@@ -149,7 +151,7 @@ export const commercialPipelineRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  reconcileRevenue: adminProcedure.mutation(({ ctx }) =>
+  reconcileRevenue: dayforgePipelineProcedure.mutation(({ ctx }) =>
     reconcileCommercialPipelineRevenue(ctx.tenantId)
   ),
 });
