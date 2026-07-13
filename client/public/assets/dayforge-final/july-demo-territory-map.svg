@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">DayForge territory intelligence map</title>
+  <desc id="desc">A stylized city map showing a highlighted Westview Property Management opportunity near a laundromat route.</desc>
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7f4e9"/>
+      <stop offset="1" stop-color="#e8eadf"/>
+    </linearGradient>
+    <linearGradient id="park" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#dfead4"/>
+      <stop offset="1" stop-color="#c7ddbc"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#dceef0"/>
+      <stop offset="1" stop-color="#c4e0e5"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#56a94c" stop-opacity=".45"/>
+      <stop offset=".45" stop-color="#56a94c" stop-opacity=".2"/>
+      <stop offset="1" stop-color="#56a94c" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#183047" flood-opacity=".22"/>
+    </filter>
+    <filter id="pinShadow" x="-60%" y="-60%" width="220%" height="220%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#10253d" flood-opacity=".28"/>
+    </filter>
+    <pattern id="microGrid" width="42" height="42" patternUnits="userSpaceOnUse">
+      <path d="M42 0H0V42" fill="none" stroke="#cdd3c8" stroke-width="1" opacity=".45"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="720" rx="36" fill="url(#paper)"/>
+  <rect width="1200" height="720" rx="36" fill="url(#microGrid)" opacity=".75"/>
+
+  <path d="M850 -10C955 110 1030 218 1210 264V-10Z" fill="url(#water)" opacity=".9"/>
+  <path d="M0 535C155 480 252 512 370 720H0Z" fill="url(#park)" opacity=".92"/>
+  <path d="M815 430c130-44 255 18 385 150v140H895c-41-91-68-181-80-290Z" fill="url(#park)" opacity=".68"/>
+
+  <g fill="#ebe7d9" stroke="#d5d3c8" stroke-width="2" opacity=".96">
+    <path d="M60 55h180l24 122-199 38Z"/>
+    <path d="M282 42h194l-8 148-186-6Z"/>
+    <path d="M502 64h176l16 129-186 16Z"/>
+    <path d="M712 62h172l39 143-196 4Z"/>
+    <path d="M925 72h190l12 148-167 26Z"/>
+    <path d="M70 252h164l21 139-190 11Z"/>
+    <path d="M294 242h176l4 145-190 20Z"/>
+    <path d="M514 250h170l22 145-186 12Z"/>
+    <path d="M740 244h162l30 141-183 24Z"/>
+    <path d="M960 270h176l-9 146-166 13Z"/>
+    <path d="M250 456h205l-22 151-186-1Z"/>
+    <path d="M492 448h194l17 154-210 10Z"/>
+    <path d="M720 456h176l31 136-195 19Z"/>
+  </g>
+
+  <g fill="none" stroke="#c5c8bf" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M-50 168C160 112 354 150 585 132S984 90 1250 149" stroke-width="48"/>
+    <path d="M90 -40c75 142 145 246 254 350s181 230 264 470" stroke-width="44"/>
+    <path d="M-40 470c225-26 385-61 575-87s408-5 710 108" stroke-width="46"/>
+    <path d="M938 -20c-66 122-100 240-108 386s38 236 144 382" stroke-width="42"/>
+  </g>
+  <g fill="none" stroke="#fffefa" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M-50 168C160 112 354 150 585 132S984 90 1250 149" stroke-width="32"/>
+    <path d="M90 -40c75 142 145 246 254 350s181 230 264 470" stroke-width="28"/>
+    <path d="M-40 470c225-26 385-61 575-87s408-5 710 108" stroke-width="30"/>
+    <path d="M938 -20c-66 122-100 240-108 386s38 236 144 382" stroke-width="26"/>
+  </g>
+
+  <g fill="none" stroke="#faf9f3" stroke-width="13" stroke-linecap="round" opacity=".98">
+    <path d="M230 0c-9 124 8 219 42 322s31 230 5 398"/>
+    <path d="M468 0c-4 103 11 190 44 276s51 230 30 444"/>
+    <path d="M700 0c-10 118 2 218 34 311s51 208 51 409"/>
+    <path d="M1066 0c-36 98-43 200-15 306s34 225 7 414"/>
+    <path d="M0 305c188-18 364-13 546 13s412 41 654 2"/>
+    <path d="M0 590c179 12 333 3 504-28s405-34 696 22"/>
+    <path d="M110 80c138 132 246 207 405 246s316 42 589 159"/>
+    <path d="M0 385c145 39 265 94 374 171s219 106 378 139"/>
+  </g>
+
+  <path d="M150 550C300 486 413 456 543 406s226-84 333-174" fill="none" stroke="#2f8449" stroke-width="9" stroke-linecap="round" stroke-dasharray="18 14" opacity=".9"/>
+  <path d="M150 550C300 486 413 456 543 406s226-84 333-174" fill="none" stroke="#bde1c4" stroke-width="3" stroke-linecap="round" stroke-dasharray="18 14" opacity=".95"/>
+
+  <g transform="translate(142 551)" filter="url(#pinShadow)">
+    <circle r="23" fill="#0c2941"/>
+    <circle r="15" fill="#f45b1f"/>
+    <path d="M-8 -3h16M-8 3h16" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <g filter="url(#pinShadow)">
+    <g transform="translate(296 204)"><path d="M0 24C-17 6-22-4-22-15a22 22 0 1 1 44 0C22-4 17 6 0 24Z" fill="#f26722"/><circle cy="-15" r="8" fill="#fff"/></g>
+    <g transform="translate(427 328)"><path d="M0 24C-17 6-22-4-22-15a22 22 0 1 1 44 0C22-4 17 6 0 24Z" fill="#f26722"/><circle cy="-15" r="8" fill="#fff"/></g>
+    <g transform="translate(705 194)"><path d="M0 24C-17 6-22-4-22-15a22 22 0 1 1 44 0C22-4 17 6 0 24Z" fill="#f26722"/><circle cy="-15" r="8" fill="#fff"/></g>
+    <g transform="translate(1006 351)"><path d="M0 24C-17 6-22-4-22-15a22 22 0 1 1 44 0C22-4 17 6 0 24Z" fill="#f26722"/><circle cy="-15" r="8" fill="#fff"/></g>
+    <g transform="translate(550 566)"><path d="M0 24C-17 6-22-4-22-15a22 22 0 1 1 44 0C22-4 17 6 0 24Z" fill="#687786"/><circle cy="-15" r="8" fill="#fff"/></g>
+    <g transform="translate(915 555)"><path d="M0 24C-17 6-22-4-22-15a22 22 0 1 1 44 0C22-4 17 6 0 24Z" fill="#687786"/><circle cy="-15" r="8" fill="#fff"/></g>
+  </g>
+
+  <g transform="translate(833 276)">
+    <circle r="148" fill="url(#halo)"/>
+    <circle r="88" fill="none" stroke="#2f8449" stroke-width="3" opacity=".2"/>
+    <circle r="60" fill="none" stroke="#2f8449" stroke-width="4" opacity=".35"/>
+    <circle r="38" fill="#fff" stroke="#2f8449" stroke-width="7" filter="url(#softShadow)"/>
+    <circle r="18" fill="#2f8449"/>
+    <circle r="7" fill="#dff2e3"/>
+  </g>
+
+  <g transform="translate(624 72)" filter="url(#softShadow)">
+    <rect width="398" height="106" rx="24" fill="#0b2135"/>
+    <rect x="1.5" y="1.5" width="395" height="103" rx="22.5" fill="none" stroke="#f59b42" stroke-opacity=".65" stroke-width="3"/>
+    <g transform="translate(22 21)">
+      <rect width="62" height="62" rx="18" fill="#183b52"/>
+      <path d="M13 46V23l18-12 18 12v23M21 46V28h20v18M17 22h28" fill="none" stroke="#f6a04b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <text x="104" y="31" fill="#f9d890" font-family="Inter,Arial,sans-serif" font-size="14" font-weight="800" letter-spacing="1.2">NEW HIGH-VALUE BUSINESS NEARBY</text>
+    <text x="104" y="58" fill="#ffffff" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="800">Westview Property Management</text>
+    <text x="104" y="83" fill="#c4d4df" font-family="Inter,Arial,sans-serif" font-size="16">15 buildings · 0.2 miles from your route</text>
+  </g>
+
+  <g transform="translate(776 386)" filter="url(#softShadow)">
+    <rect width="334" height="118" rx="24" fill="#fffef9" stroke="#d8d6ca" stroke-width="2"/>
+    <text x="24" y="30" fill="#607286" font-family="Inter,Arial,sans-serif" font-size="13" font-weight="800" letter-spacing="1.1">TOP OPPORTUNITY</text>
+    <text x="24" y="61" fill="#0b2135" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="850">MISSION 042</text>
+    <text x="24" y="91" fill="#2f8449" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="900">$24,800 / year</text>
+    <g transform="translate(276 59)"><circle r="25" fill="#e9f4ec"/><path d="M-10 5-2-4l7 6 10-13" fill="none" stroke="#2f8449" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></g>
+  </g>
+
+  <text x="42" y="680" fill="#6c7984" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="700" letter-spacing=".9">SIMULATED PROVIDER · NO REAL BUSINESS CONTACTED</text>
+</svg>
