@@ -233,6 +233,11 @@ export function dayforgeSecurityHeaders(
     "https://maps.googleapis.com",
     "https://maps.gstatic.com",
     ...configuredScripts,
+    // Vite's dev-only inline react-refresh preamble and esbuild transform
+    // require 'unsafe-inline'/'unsafe-eval' locally; production serves
+    // prebuilt static bundles with no inline scripts, so this never widens
+    // the production policy.
+    ...(env.NODE_ENV === "production" ? [] : ["'unsafe-inline'", "'unsafe-eval'"]),
   ];
   const connectSources = [
     "'self'",
