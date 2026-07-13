@@ -3,10 +3,13 @@ import { resolve } from "node:path";
 import mysql from "mysql2/promise";
 
 export function dayforgeReleaseMigrationFilenames(
-  filenames: readonly string[]
+  filenames: readonly string[],
+  fromPrefix?: string
 ): string[] {
+  const normalizedFrom = fromPrefix?.trim();
   return filenames
     .filter(filename => /^\d{4}_.+\.sql$/.test(filename))
+    .filter(filename => !normalizedFrom || filename.slice(0, 4) >= normalizedFrom)
     .sort((left, right) => left.localeCompare(right));
 }
 
@@ -20,6 +23,7 @@ export function normalizeDayforgeReleaseMigrationSql(sql: string): string {
 export async function applyDayforgeReleaseMigrations(input: {
   databaseUrl: string;
   migrationDirectory?: string;
+  fromPrefix?: string;
 }): Promise<string[]> {
   if (process.env.DAYFORGE_RELEASE_DB !== "1") {
     throw new Error(
@@ -29,10 +33,14 @@ export async function applyDayforgeReleaseMigrations(input: {
   const migrationDirectory =
     input.migrationDirectory ?? resolve(process.cwd(), "drizzle");
   const filenames = dayforgeReleaseMigrationFilenames(
-    await readdir(migrationDirectory)
+    await readdir(migrationDirectory),
+    input.fromPrefix
   );
   if (filenames.length === 0) {
-    throw new Error(`No release migrations found in ${migrationDirectory}`);
+    throw new Error(
+      `No release migrations found in ${migrationDirectory}` +
+        (input.fromPrefix ? ` at or after ${input.fromPrefix}` : "")
+    );
   }
 
   const connection = await mysql.createConnection({
@@ -56,7 +64,8 @@ export async function applyDayforgeReleaseMigrations(input: {
 async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (!databaseUrl) throw new Error("DATABASE_URL is required");
-  await applyDayforgeReleaseMigrations({ databaseUrl });
+  const fromPrefix = process.env.DAYFORGE_RELEASE_FROM?.trim();
+  await applyDayforgeReleaseMigrations({ databaseUrl, fromPrefix });
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
