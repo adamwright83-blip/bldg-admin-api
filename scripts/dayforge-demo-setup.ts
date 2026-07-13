@@ -7,6 +7,7 @@
 import "dotenv/config";
 import { ENV } from "../server/_core/env";
 import { seedDemoTenant } from "../server/dayforgeDemo/demoTenantSeed";
+import { printDemoUrls } from "./dayforgeDemoUrls";
 
 async function main() {
   if (!ENV.dayforgeDemoEnabled) {
@@ -22,9 +23,7 @@ async function main() {
   console.log(`  slug:       ${result.slug}`);
   console.log(`  mission:    ${result.mission.code} (id ${result.mission.id}) — ${result.mission.account.name}`);
   console.log("");
-  console.log("Local URLs:");
-  console.log(`  Admin app:       http://localhost:5173/`);
-  console.log(`  Demo tenant app: http://localhost:5173/?tenant=${result.slug}`);
+  printDemoUrls(result.mission.id);
   process.exit(0);
 }
 
