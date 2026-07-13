@@ -7,6 +7,7 @@ This document tracks the additive migration and configuration order for the stac
 1. **PR A — canonical mission:** apply `drizzle/0035_commercial_mission_spine.sql` before deploying code that reads commercial accounts, opportunities, missions, steps, events, or visit outcomes.
 2. **PR B — territory intelligence:** after 0035, apply `drizzle/0036_territory_intelligence.sql` before enabling authenticated territory scans. Configure one server-only Google key through `GOOGLE_MAPS_API_KEY` or `GOOGLE_PLACES_API_KEY`; keep the provider disabled when neither is present.
 3. **PR C — BORESLAY mission integration:** after 0035, apply `drizzle/0037_commercial_mission_game_results.sql` before exposing mission-bearing Rally links. PR C adds no environment variable.
+4. **PR D — field mission:** after 0035 and 0037, apply `drizzle/0038_commercial_mission_field.sql` before creating driver sessions or exposing phone handoffs. Configure `DRIVER_PASSWORD`, `DRIVER_OPEN_ID`, `DRIVER_APP_ORIGIN`, and `JWT_SECRET` before enabling the route. `DRIVER_OPEN_ID` must match the mission assignee; `JWT_SECRET` signs one-time handoff tokens and must not be exposed to the client.
 
 These migrations are additive and are not assumed to run automatically in Railway. Application rollout must be gated until the required tables exist.
 
@@ -19,9 +20,18 @@ These migrations are additive and are not assumed to run automatically in Railwa
 - Completion writes the attempt outcome, immutable replay, qualifying result, reward, `game_completed` transition, and `phone_ready` transition in one database transaction.
 - The Rally simulation and replay inputs remain local and deterministic. Network state wraps match start/end; it never enters the physics loop or replay adapter.
 
+## PR D invariants
+
+- Driver login creates a signed `driver` session. The 0038 role-enum migration must land before the first driver user is persisted.
+- Every field read and mutation derives the tenant and actor from the signed session. A driver can only read or mutate a mission assigned to that driver's `openId`; administrators retain an explicit tenant-scoped override.
+- Phone handoff links expire after 24 hours, are bound to one tenant, mission, and assignee, store only a SHA-256 token hash, and can be consumed once. Repeating the same handoff request UUID returns the same signed URL until it expires.
+- Preparation snapshots the tenant's active checklist into the mission. Later template changes never rewrite an in-progress visit.
+- Checklist, notes, departure, arrival, and outcome writes use optimistic versions and immutable mission-event idempotency keys. Required preparation items must be complete or explicitly skipped before departure.
+- `won` records a field outcome and estimated contract value, not realized revenue. Realized revenue remains zero until a paid order is attributed in a later revenue-ledger slice.
+
 ## Safe deployment checks
 
-Before application deployment, verify the PR C tables:
+Before application deployment, verify the PR C and PR D tables and the expanded user role:
 
 ```sql
 SHOW TABLES LIKE 'commercial_mission_game_attempts';
@@ -29,6 +39,12 @@ SHOW TABLES LIKE 'commercial_mission_game_results';
 SHOW TABLES LIKE 'commercial_mission_game_rewards';
 SHOW INDEX FROM commercial_mission_game_results;
 SHOW INDEX FROM commercial_mission_game_rewards;
+SHOW COLUMNS FROM users LIKE 'role';
+SHOW TABLES LIKE 'tenant_field_checklist_templates';
+SHOW TABLES LIKE 'commercial_mission_field_states';
+SHOW TABLES LIKE 'commercial_mission_field_checklist_items';
+SHOW TABLES LIKE 'commercial_mission_phone_handoffs';
+SHOW INDEX FROM commercial_visit_outcomes;
 ```
 
-After deployment, verify that a controlled mission produces multiple attempt rows when retried, exactly one result, exactly one reward, and exactly one `phone_unlocked` event. Never run `drizzle-kit push` against production without reviewing the exact generated diff.
+After deployment, verify that a controlled mission produces multiple attempt rows when retried, exactly one result, exactly one reward, and exactly one `phone_unlocked` event. Then issue a driver handoff, consume it as the assigned driver, refresh on a second device, and confirm that the same persisted checklist, notes, arrival, and terminal outcome resume without duplicate events. Never run `drizzle-kit push` against production without reviewing the exact generated diff.

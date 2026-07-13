@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Building2, Clock3, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Building2, Clock3, Link2, ShieldCheck } from "lucide-react";
 import { LoginForm } from "@/components/LoginForm";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
@@ -20,6 +20,9 @@ export default function CommercialMissionAdmin() {
     { enabled: isAuthenticated },
   );
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [handoffMessage, setHandoffMessage] = useState<string | null>(null);
+  const [handoffUrl, setHandoffUrl] = useState<string | null>(null);
+  const createHandoff = trpc.system.commercialMission.createPhoneHandoff.useMutation();
   useEffect(() => {
     if (selectedId === null && list.data?.[0]) setSelectedId(list.data[0].id);
   }, [list.data, selectedId]);
@@ -69,7 +72,11 @@ export default function CommercialMissionAdmin() {
                 <button
                   type="button"
                   key={mission.id}
-                  onClick={() => setSelectedId(mission.id)}
+                  onClick={() => {
+                    setSelectedId(mission.id);
+                    setHandoffMessage(null);
+                    setHandoffUrl(null);
+                  }}
                   className={`w-full rounded-xl border p-3 text-left transition ${
                     selectedId === mission.id
                       ? "border-orange-400/70 bg-orange-400/10"
@@ -96,9 +103,45 @@ export default function CommercialMissionAdmin() {
                     <h2 className="mt-1 text-2xl font-black">{selected.account.name}</h2>
                     <p className="mt-1 text-sm text-slate-400">Mission ID {selected.id} · Version {selected.version} · {selected.account.address}</p>
                   </div>
-                  <div className="rounded-xl bg-emerald-400/10 px-4 py-3 text-right">
-                    <small className="block text-[10px] font-bold uppercase tracking-wider text-emerald-300">Potential annual value</small>
-                    <b className="text-xl text-emerald-200">{money(selected.opportunity.estimatedAnnualValueCents)}</b>
+                  <div className="grid gap-2 text-right">
+                    <div className="rounded-xl bg-emerald-400/10 px-4 py-3">
+                      <small className="block text-[10px] font-bold uppercase tracking-wider text-emerald-300">Potential annual value</small>
+                      <b className="text-xl text-emerald-200">{money(selected.opportunity.estimatedAnnualValueCents)}</b>
+                    </div>
+                    {["phone_ready", "preparing", "en_route", "arrived"].includes(selected.status) ? (
+                      <button
+                        type="button"
+                        disabled={createHandoff.isPending || !selected.assignedTo}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-400/40 px-3 py-2 text-xs font-bold text-orange-200 disabled:opacity-40"
+                        onClick={async () => {
+                          setHandoffMessage(null);
+                          setHandoffUrl(null);
+                          try {
+                            const handoff = await createHandoff.mutateAsync({
+                              missionId: selected.id,
+                              requestId: crypto.randomUUID(),
+                            });
+                            setHandoffUrl(handoff.secureUrl);
+                            try {
+                              await navigator.clipboard.writeText(handoff.secureUrl);
+                              setHandoffMessage("Secure 24-hour field link copied");
+                            } catch {
+                              setHandoffMessage("Secure field link ready below");
+                            }
+                          } catch (error) {
+                            setHandoffMessage(error instanceof Error ? error.message : "Could not create field link");
+                          }
+                        }}
+                      >
+                        <Link2 className="h-4 w-4" /> Copy secure phone link
+                      </button>
+                    ) : null}
+                    {handoffUrl ? (
+                      <a className="break-all text-left text-[11px] text-orange-300 underline" href={handoffUrl} target="_blank" rel="noreferrer">
+                        Open generated field link
+                      </a>
+                    ) : null}
+                    {handoffMessage ? <small role="status" className="text-slate-400">{handoffMessage}</small> : null}
                   </div>
                 </div>
 

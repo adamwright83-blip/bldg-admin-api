@@ -20,6 +20,7 @@ const BoreslayLanding = lazy(() => import("./pages/BoreslayLanding"));
 const DayforgeLanding = lazy(() => import("./pages/DayforgeLanding"));
 const LandingFinal = lazy(() => import("./pages/LandingFinal"));
 const CommercialMissionAdmin = lazy(() => import("./pages/CommercialMissionAdmin"));
+const CommercialSalesMission = lazy(() => import("./pages/CommercialSalesMission"));
 const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
 
 function PublicLandingFallback() {
@@ -56,6 +57,16 @@ function RallyDemoRoute() {
       fallback={<div style={{ minHeight: "100vh", background: "#05060b" }} />}
     >
       <RallyDemo />
+    </Suspense>
+  );
+}
+
+function CommercialSalesMissionRoute() {
+  return (
+    <Suspense
+      fallback={<div style={{ minHeight: "100vh", background: "#08111d" }} />}
+    >
+      <CommercialSalesMission />
     </Suspense>
   );
 }
@@ -102,6 +113,7 @@ function AdminHostRouter() {
         <Suspense fallback={<PublicLandingFallback />}><CommercialMissionAdmin /></Suspense>
       </Route>
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
+      <Route path="/driver/sales-mission/:missionId" component={CommercialSalesMissionRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
       <Route path="/pricing" component={AdminCatalog} />
@@ -169,6 +181,7 @@ function Router() {
       <Route path="/dayforge" component={DayforgeLandingRoute} />
       <Route path="/landingfinal" component={LandingFinalRoute} />
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
+      <Route path="/driver/sales-mission/:missionId" component={CommercialSalesMissionRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
       <Route path="/pricing" component={AdminCatalog} />

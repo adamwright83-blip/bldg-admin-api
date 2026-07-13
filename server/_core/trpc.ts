@@ -1,4 +1,4 @@
-import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
+import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from "@shared/const";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
@@ -34,6 +34,19 @@ export const adminProcedure = t.procedure.use(
 
 export const platformProcedure = adminProcedure;
 
+export const adminOrDriverProcedure = t.procedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+    if (
+      !ctx.user ||
+      (ctx.user.role !== "admin" && ctx.user.role !== "driver")
+    ) {
+      throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+    }
+    return next({ ctx: { ...ctx, user: ctx.user } });
+  })
+);
+
 const requireVendorSession = t.middleware(async opts => {
   const { ctx, next } = opts;
   if (!ctx.vendorSession) {
@@ -44,15 +57,18 @@ const requireVendorSession = t.middleware(async opts => {
 
 export const vendorProcedure = t.procedure.use(requireVendorSession);
 
-/** Requires either platform admin (user.role=admin) OR vendor session. For order mutations — chargeCard stays platform-only. */
+/** Requires an authenticated platform operator (admin or driver) OR a vendor session. For order operations; chargeCard stays admin-only. */
 export const platformOrVendorProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
-    const isPlatform = ctx.user && ctx.user.role === "admin";
+    const isPlatformOperator =
+      ctx.user && (ctx.user.role === "admin" || ctx.user.role === "driver");
     const isVendor = !!ctx.vendorSession;
-    if (!isPlatform && !isVendor) {
+    if (!isPlatformOperator && !isVendor) {
       throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
     }
-    return next({ ctx: { ...ctx, user: ctx.user, vendorSession: ctx.vendorSession } });
+    return next({
+      ctx: { ...ctx, user: ctx.user, vendorSession: ctx.vendorSession },
+    });
   })
 );
