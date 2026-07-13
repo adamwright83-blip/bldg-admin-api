@@ -146,6 +146,18 @@ describe("DayForge request security", () => {
       expect.stringContaining("https://api.example.com")
     );
     expect(setHeader).toHaveBeenCalledWith(
+      "Content-Security-Policy",
+      expect.stringContaining(
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com"
+      )
+    );
+    expect(setHeader).toHaveBeenCalledWith(
+      "Content-Security-Policy",
+      expect.stringContaining(
+        "font-src 'self' data: https://fonts.gstatic.com"
+      )
+    );
+    expect(setHeader).toHaveBeenCalledWith(
       "Cross-Origin-Opener-Policy",
       "same-origin-allow-popups"
     );
