@@ -9,6 +9,7 @@ This document tracks the additive migration and configuration order for the stac
 3. **PR C — BORESLAY mission integration:** after 0035, apply `drizzle/0037_commercial_mission_game_results.sql` before exposing mission-bearing Rally links. PR C adds no environment variable.
 4. **PR D — field mission:** after 0035 and 0037, apply `drizzle/0038_commercial_mission_field.sql` before creating driver sessions or exposing phone handoffs. Configure `DRIVER_PASSWORD`, `DRIVER_OPEN_ID`, `DRIVER_APP_ORIGIN`, and `JWT_SECRET` before enabling the route. `DRIVER_OPEN_ID` must match the mission assignee; `JWT_SECRET` signs one-time handoff tokens and must not be exposed to the client.
 5. **PR E — proposals and collateral:** after 0035 and 0038, apply `drizzle/0039_commercial_proposals.sql` before operators configure proposal profiles or generate collateral. PR E adds no environment variable. Configure each tenant's proposal profile in DayForge before allowing that tenant to generate a proposal.
+6. **PR F — Churn Radar:** after the existing tenant order tables and ops-task migrations, apply `drizzle/0040_customer_churn_recovery.sql` before running a tenant scan or creating a recovery mission. PR F adds no environment variable and does not enable automated outbound messaging.
 
 These migrations are additive and are not assumed to run automatically in Railway. Application rollout must be gated until the required tables exist.
 
@@ -39,6 +40,16 @@ These migrations are additive and are not assumed to run automatically in Railwa
 - `browser_print_opened` means DayForge successfully opened the browser print workflow; it does not claim that a printer completed the job or that collateral was delivered.
 - Annual opportunity value remains labeled as a confidence-scored planning estimate. The generated leave-behind explicitly states that it is not a guarantee or binding service agreement.
 
+## PR F invariants
+
+- A scan reads real tenant-scoped `orders` and considers only customers with at least two completed or paid orders. A current active order suppresses win-back action rather than competing with an existing service.
+- Every risk result is an immutable snapshot with source order IDs, source timestamps, confidence, calculations, estimates, and explicit unavailable evidence. The current schema has no reliable structured unresolved-issue source, so the interface states that gap instead of inventing a signal.
+- A recovery action is an existing `stale_customer` ops task plus a linked recovery intervention. It is not a disconnected alert or message record. A nullable active-customer key and tenant-scoped unique index prevent concurrent requests from creating two active recovery missions for one customer.
+- Win-back copy is deterministic and fact-grounded. Editing creates a new immutable version; approval is valid only for the exact latest message and content hash. Because no promotion source is configured, edited copy cannot promise discounts, coupons, free service, or other incentives.
+- Human approval and current recorded SMS marketing consent are separate gates. Contact preparation locks the intervention, latest draft, and permission in one transaction; an opt-out, expired permission, revised draft, or changed mission state blocks contact.
+- DayForge never auto-sends the recovery SMS. It can open the native SMS composer only for a validated 10-digit US phone after both gates pass. “Contacted” is an explicit operator report and remains labeled provider-delivery-unverified.
+- A later paid order for the same tenant-scoped customer identity can attribute recovered revenue exactly once. Attribution completes the linked ops task and records realized revenue separately from estimated monthly impact.
+
 ## Safe deployment checks
 
 Before application deployment, verify the PR C, PR D, and PR E tables and the expanded user role:
@@ -60,6 +71,16 @@ SHOW TABLES LIKE 'commercial_proposals';
 SHOW TABLES LIKE 'commercial_proposal_events';
 SHOW INDEX FROM commercial_proposals;
 SHOW INDEX FROM commercial_proposal_events;
+SHOW TABLES LIKE 'tenant_customer_recovery_profiles';
+SHOW TABLES LIKE 'customer_churn_scans';
+SHOW TABLES LIKE 'customer_churn_snapshots';
+SHOW TABLES LIKE 'customer_contact_permissions';
+SHOW TABLES LIKE 'customer_recovery_interventions';
+SHOW TABLES LIKE 'customer_recovery_drafts';
+SHOW TABLES LIKE 'customer_recovery_events';
+SHOW INDEX FROM customer_recovery_interventions;
+SHOW INDEX FROM customer_recovery_drafts;
+SHOW INDEX FROM customer_recovery_events;
 ```
 
-After deployment, verify that a controlled mission produces multiple attempt rows when retried, exactly one result, exactly one reward, and exactly one `phone_unlocked` event. Then issue a driver handoff, consume it as the assigned driver, refresh on a second device, and confirm that the same persisted checklist, notes, arrival, and terminal outcome resume without duplicate events. Finally, generate two proposal versions, approve only the latest, confirm the driver sees that exact version, and confirm an unapproved or expired proposal cannot satisfy the collateral checklist. Never run `drizzle-kit push` against production without reviewing the exact generated diff.
+After deployment, verify that a controlled mission produces multiple attempt rows when retried, exactly one result, exactly one reward, and exactly one `phone_unlocked` event. Then issue a driver handoff, consume it as the assigned driver, refresh on a second device, and confirm that the same persisted checklist, notes, arrival, and terminal outcome resume without duplicate events. Generate two proposal versions, approve only the latest, confirm the driver sees that exact version, and confirm an unapproved or expired proposal cannot satisfy the collateral checklist. Finally, run a Churn Radar scan against a controlled tenant, confirm active orders are suppressed, revise and approve a recovery draft, verify missing or expired consent blocks the SMS composer, and attribute exactly one later paid order to the intervention. Never run `drizzle-kit push` against production without reviewing the exact generated diff.

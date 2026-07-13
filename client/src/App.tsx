@@ -23,6 +23,7 @@ const CommercialMissionAdmin = lazy(() => import("./pages/CommercialMissionAdmin
 const CommercialSalesMission = lazy(() => import("./pages/CommercialSalesMission"));
 const CommercialProposalPrint = lazy(() => import("./pages/CommercialProposalPrint"));
 const CommercialProposalSettings = lazy(() => import("./pages/CommercialProposalSettings"));
+const ChurnRadarPage = lazy(() => import("./pages/ChurnRadarPage"));
 const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
 
 function PublicLandingFallback() {
@@ -107,6 +108,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/level4",
   "/commercial-missions",
   "/commercial-proposal-settings",
+  "/churn-radar",
   "/operator-reflection",
   "/boreslay-rally",
   "/dayforge",
@@ -128,6 +130,9 @@ function AdminHostRouter() {
       <Route path="/commercial-proposal/:missionId" component={CommercialProposalPrintRoute} />
       <Route path="/commercial-proposal-settings">
         <Suspense fallback={<PublicLandingFallback />}><CommercialProposalSettings /></Suspense>
+      </Route>
+      <Route path="/churn-radar">
+        <Suspense fallback={<PublicLandingFallback />}><ChurnRadarPage /></Suspense>
       </Route>
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />

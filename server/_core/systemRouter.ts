@@ -4,10 +4,12 @@ import { adminProcedure, publicProcedure, router } from "./trpc";
 import { commercialMissionRouter } from "../commercialMissions/commercialMissionRouter";
 import { territoryRouter } from "../territory/territoryRouter";
 import { commercialProposalRouter } from "../commercialProposals/commercialProposalRouter";
+import { churnRadarRouter } from "../churnRadar/churnRadarRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
   commercialProposal: commercialProposalRouter,
+  churnRadar: churnRadarRouter,
   territory: territoryRouter,
   health: publicProcedure
     .input(

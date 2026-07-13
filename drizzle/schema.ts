@@ -1150,6 +1150,229 @@ export const commercialProposalEvents = mysqlTable("commercial_proposal_events",
   tenantProposalIdx: index("idx_commercial_proposal_events_tenant_proposal").on(table.tenantId, table.proposalId, table.createdAt),
 }));
 
+export const tenantCustomerRecoveryProfiles = mysqlTable(
+  "tenant_customer_recovery_profiles",
+  {
+    tenantId: varchar("tenantId", { length: 64 }).primaryKey(),
+    storeName: varchar("storeName", { length: 255 }).notNull(),
+    senderName: varchar("senderName", { length: 255 }).notNull(),
+    schedulingUrl: varchar("schedulingUrl", { length: 1024 }),
+    createdBy: varchar("createdBy", { length: 128 }).notNull(),
+    updatedBy: varchar("updatedBy", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  }
+);
+
+export const customerChurnScans = mysqlTable(
+  "customer_churn_scans",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    status: mysqlEnum("status", ["running", "completed", "failed"])
+      .notNull()
+      .default("running"),
+    sourceOrderCount: int("sourceOrderCount").notNull().default(0),
+    customerCount: int("customerCount").notNull().default(0),
+    atRiskCount: int("atRiskCount").notNull().default(0),
+    errorMessage: text("errorMessage"),
+    computedAt: timestamp("computedAt"),
+    createdBy: varchar("createdBy", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantRequestUnique: uniqueIndex(
+      "uq_customer_churn_scans_tenant_request"
+    ).on(table.tenantId, table.requestId),
+    tenantCreatedIdx: index("idx_customer_churn_scans_tenant_created").on(
+      table.tenantId,
+      table.createdAt
+    ),
+  })
+);
+
+export const customerChurnSnapshots = mysqlTable(
+  "customer_churn_snapshots",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    scanId: varchar("scanId", { length: 36 }).notNull(),
+    customerKeyHash: varchar("customerKeyHash", { length: 64 }).notNull(),
+    customerName: varchar("customerName", { length: 255 }).notNull(),
+    customerPhone: varchar("customerPhone", { length: 30 }).notNull(),
+    lastOrderId: int("lastOrderId").notNull(),
+    score: int("score").notNull(),
+    grade: mysqlEnum("grade", ["low", "medium", "high"]).notNull(),
+    confidence: mysqlEnum("confidence", ["low", "medium", "high"]).notNull(),
+    historyOrderCount: int("historyOrderCount").notNull(),
+    expectedCadenceDays: int("expectedCadenceDays").notNull(),
+    lastServiceAt: timestamp("lastServiceAt").notNull(),
+    daysSinceLastOrder: int("daysSinceLastOrder").notNull(),
+    daysLate: int("daysLate").notNull(),
+    averageOrderValueCents: int("averageOrderValueCents").notNull(),
+    estimatedMonthlyImpactCents: int("estimatedMonthlyImpactCents").notNull(),
+    recentVolumeChangePct: int("recentVolumeChangePct"),
+    activeOrderCount: int("activeOrderCount").notNull().default(0),
+    recommendedAction: mysqlEnum("recommendedAction", [
+      "watch",
+      "prepare_win_back",
+      "contact_now",
+    ]).notNull(),
+    lastServiceLabel: varchar("lastServiceLabel", { length: 64 }).notNull(),
+    reasonsJson: json("reasonsJson").notNull(),
+    evidenceJson: json("evidenceJson").notNull(),
+    sourceOrderIdsJson: json("sourceOrderIdsJson").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    scanCustomerUnique: uniqueIndex(
+      "uq_customer_churn_snapshots_scan_customer"
+    ).on(table.scanId, table.customerKeyHash),
+    tenantScoreIdx: index("idx_customer_churn_snapshots_tenant_score").on(
+      table.tenantId,
+      table.score,
+      table.createdAt
+    ),
+    tenantCustomerIdx: index("idx_customer_churn_snapshots_tenant_customer").on(
+      table.tenantId,
+      table.customerKeyHash,
+      table.createdAt
+    ),
+  })
+);
+
+export const customerContactPermissions = mysqlTable(
+  "customer_contact_permissions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    customerKeyHash: varchar("customerKeyHash", { length: 64 }).notNull(),
+    channel: mysqlEnum("channel", ["sms"]).notNull().default("sms"),
+    purpose: mysqlEnum("purpose", ["win_back_marketing"])
+      .notNull()
+      .default("win_back_marketing"),
+    status: mysqlEnum("status", ["opted_in", "opted_out"]).notNull(),
+    sourceReference: varchar("sourceReference", { length: 512 }).notNull(),
+    capturedAt: timestamp("capturedAt").notNull(),
+    expiresAt: timestamp("expiresAt"),
+    recordedBy: varchar("recordedBy", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    permissionScopeUnique: uniqueIndex(
+      "uq_customer_contact_permissions_scope"
+    ).on(table.tenantId, table.customerKeyHash, table.channel, table.purpose),
+    tenantStatusIdx: index("idx_customer_contact_permissions_tenant_status").on(
+      table.tenantId,
+      table.status
+    ),
+  })
+);
+
+export const customerRecoveryInterventions = mysqlTable(
+  "customer_recovery_interventions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    churnSnapshotId: varchar("churnSnapshotId", { length: 36 }).notNull(),
+    customerKeyHash: varchar("customerKeyHash", { length: 64 }).notNull(),
+    activeCustomerKeyHash: varchar("activeCustomerKeyHash", { length: 64 }),
+    opsTaskId: int("opsTaskId").notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    status: mysqlEnum("status", [
+      "draft_pending_review",
+      "approved",
+      "contacted",
+      "dismissed",
+      "recovered",
+      "unsuccessful",
+    ])
+      .notNull()
+      .default("draft_pending_review"),
+    assignedTo: varchar("assignedTo", { length: 128 }),
+    approvedBy: varchar("approvedBy", { length: 128 }),
+    approvedAt: timestamp("approvedAt"),
+    contactedAt: timestamp("contactedAt"),
+    recoveredAt: timestamp("recoveredAt"),
+    recoveredOrderId: int("recoveredOrderId"),
+    recoveredRevenueCents: int("recoveredRevenueCents").notNull().default(0),
+    createdBy: varchar("createdBy", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantRequestUnique: uniqueIndex(
+      "uq_customer_recovery_interventions_tenant_request"
+    ).on(table.tenantId, table.requestId),
+    tenantActiveCustomerUnique: uniqueIndex(
+      "uq_customer_recovery_interventions_tenant_active_customer"
+    ).on(table.tenantId, table.activeCustomerKeyHash),
+    tenantStatusIdx: index(
+      "idx_customer_recovery_interventions_tenant_status"
+    ).on(table.tenantId, table.status, table.updatedAt),
+    tenantCustomerIdx: index(
+      "idx_customer_recovery_interventions_tenant_customer"
+    ).on(table.tenantId, table.customerKeyHash, table.updatedAt),
+  })
+);
+
+export const customerRecoveryDrafts = mysqlTable(
+  "customer_recovery_drafts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    interventionId: varchar("interventionId", { length: 36 }).notNull(),
+    version: int("version").notNull(),
+    channel: mysqlEnum("channel", ["sms"]).notNull().default("sms"),
+    status: mysqlEnum("status", ["draft", "approved", "superseded", "void"])
+      .notNull()
+      .default("draft"),
+    message: text("message").notNull(),
+    factsUsedJson: json("factsUsedJson").notNull(),
+    contentHash: varchar("contentHash", { length: 64 }).notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    createdBy: varchar("createdBy", { length: 128 }).notNull(),
+    approvedBy: varchar("approvedBy", { length: 128 }),
+    approvedAt: timestamp("approvedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    interventionVersionUnique: uniqueIndex(
+      "uq_customer_recovery_drafts_intervention_version"
+    ).on(table.tenantId, table.interventionId, table.version),
+    tenantRequestUnique: uniqueIndex(
+      "uq_customer_recovery_drafts_tenant_request"
+    ).on(table.tenantId, table.requestId),
+    tenantInterventionIdx: index(
+      "idx_customer_recovery_drafts_tenant_intervention"
+    ).on(table.tenantId, table.interventionId, table.createdAt),
+  })
+);
+
+export const customerRecoveryEvents = mysqlTable(
+  "customer_recovery_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    interventionId: varchar("interventionId", { length: 36 }).notNull(),
+    eventName: varchar("eventName", { length: 64 }).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    metadataJson: json("metadataJson").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantIdempotencyUnique: uniqueIndex(
+      "uq_customer_recovery_events_tenant_idempotency"
+    ).on(table.tenantId, table.idempotencyKey),
+    tenantInterventionIdx: index(
+      "idx_customer_recovery_events_tenant_intervention"
+    ).on(table.tenantId, table.interventionId, table.createdAt),
+  })
+);
+
 export type CommercialAccount = typeof commercialAccounts.$inferSelect;
 export type CommercialOpportunityRow = typeof commercialOpportunities.$inferSelect;
 export type CommercialMissionRow = typeof commercialMissions.$inferSelect;
