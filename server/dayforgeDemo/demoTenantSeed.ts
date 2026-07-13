@@ -1,13 +1,21 @@
 import { eq } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 import { getDb } from "../db";
 import { ENV } from "../_core/env";
 import {
+  dayforgeSaasEntitlements,
   dayforgeSaasMemberships,
+  dayforgeSaasSubscriptions,
   dayforgeSaasTenantLocations,
   dayforgeSaasTenants,
+  dayforgeSaasUserCredentials,
   orders,
   users,
 } from "../../drizzle/schema";
+import {
+  normalizeSaasEmail,
+  normalizeSaasTenantSlug,
+} from "../../shared/saasTenant";
 import {
   createCommercialMission,
   getCommercialMissionByIdempotencyKey,
@@ -19,6 +27,15 @@ export const DEMO_TENANT_BUSINESS_NAME = "Sunset Laundry Demo";
 export const DEMO_OWNER_OPEN_ID = "dayforge-demo-owner";
 export const DEMO_FIELD_OPEN_ID = "dayforge-demo-field";
 export const DEMO_CHURN_CUSTOMER_NAME = "Sarah Johnson";
+export const DEMO_OWNER_EMAIL = "demo-owner@sunsetlaundry.example";
+export const DEMO_FIELD_EMAIL = "demo-field@sunsetlaundry.example";
+/**
+ * Fixed, publicly-documented boss-demo password (docs/dayforge-boss-demo.md).
+ * This only ever unlocks the DAYFORGE_DEMO_ENABLED-gated demo tenant's owner
+ * and field logins via /dayforge-login — never a production tenant — so a
+ * well-known value here is intentional, not a leaked secret.
+ */
+export const DEMO_TENANT_PASSWORD = "SunsetDemo2026!";
 
 export function demoTenantSlug(): string {
   return ENV.dayforgeDemoTenantSlug;
@@ -41,7 +58,7 @@ async function upsertDemoTenant(): Promise<string> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const tenantId = demoTenantId();
-  const slug = demoTenantSlug();
+  const slug = normalizeSaasTenantSlug(demoTenantSlug());
 
   await db
     .insert(dayforgeSaasTenants)
@@ -160,6 +177,34 @@ async function upsertDemoUsers(tenantId: string): Promise<void> {
       active: true,
     })
     .onDuplicateKeyUpdate({ set: { role: "field", active: true } });
+
+  // Without a credentials row, /dayforge-login (POST /api/dayforge/auth/login)
+  // has nothing to authenticate against and the demo tenant's owner/field
+  // logins are unreachable through the actual product UI.
+  const passwordHash = await bcrypt.hash(DEMO_TENANT_PASSWORD, 12);
+  await db
+    .insert(dayforgeSaasUserCredentials)
+    .values({
+      tenantId,
+      userOpenId: DEMO_OWNER_OPEN_ID,
+      emailNormalized: normalizeSaasEmail(DEMO_OWNER_EMAIL),
+      passwordHash,
+    })
+    .onDuplicateKeyUpdate({
+      set: { passwordHash, failedLoginCount: 0, lockedUntil: null },
+    });
+
+  await db
+    .insert(dayforgeSaasUserCredentials)
+    .values({
+      tenantId,
+      userOpenId: DEMO_FIELD_OPEN_ID,
+      emailNormalized: normalizeSaasEmail(DEMO_FIELD_EMAIL),
+      passwordHash,
+    })
+    .onDuplicateKeyUpdate({
+      set: { passwordHash, failedLoginCount: 0, lockedUntil: null },
+    });
 }
 
 /** MISSION 042 / Westview Property Management — the canonical demo storyline mission. */
@@ -257,6 +302,50 @@ async function ensureChurnCustomer(tenantId: string): Promise<void> {
   await db.insert(orders).values(ordersToInsert);
 }
 
+const DEMO_ENTITLEMENT_KEYS = [
+  "territory_intelligence",
+  "boreslay",
+  "dayforge_field",
+  "commercial_pipeline",
+  "churn_radar",
+] as const;
+
+/**
+ * Grants the demo tenant the entitlements every other tenant only gets from
+ * a real paid Stripe subscription. This is a SIMULATED billing state, never
+ * a live charge — server/dayforgeDemo/providerStatus.ts independently reports
+ * Stripe as NOT_CONFIGURED/TEST based on real env vars regardless of this.
+ */
+async function ensureDemoEntitlements(tenantId: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .insert(dayforgeSaasSubscriptions)
+    .values({
+      tenantId,
+      planKey: "demo",
+      stripeCustomerId: `demo_cus_${tenantId}`,
+      stripeSubscriptionId: `demo_sub_${tenantId}`,
+      status: "trialing",
+      lastStripeEventId: `demo_evt_${tenantId}`,
+      lastStripeEventCreatedAt: new Date(),
+    })
+    .onDuplicateKeyUpdate({ set: { status: "trialing" } });
+
+  for (const entitlementKey of DEMO_ENTITLEMENT_KEYS) {
+    await db
+      .insert(dayforgeSaasEntitlements)
+      .values({
+        tenantId,
+        entitlementKey,
+        source: "manual",
+        enabled: true,
+      })
+      .onDuplicateKeyUpdate({ set: { enabled: true } });
+  }
+}
+
 export type DemoSeedResult = {
   tenantId: string;
   slug: string;
@@ -268,6 +357,7 @@ export async function seedDemoTenant(): Promise<DemoSeedResult> {
   assertDemoEnabled();
   const tenantId = await upsertDemoTenant();
   await upsertDemoUsers(tenantId);
+  await ensureDemoEntitlements(tenantId);
   const mission = await ensureDemoMission(tenantId);
   await ensureChurnCustomer(tenantId);
   return { tenantId, slug: demoTenantSlug(), mission };

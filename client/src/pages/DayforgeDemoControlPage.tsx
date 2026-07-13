@@ -125,46 +125,53 @@ export default function DayforgeDemoControlPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // field names must match server/dayforgeDemo router output
+  // dayforgeDemoRouter is registered inside systemRouter as `dayforgeDemo`
+  // (server/_core/systemRouter.ts), and systemRouter itself is mounted at
+  // appRouter's `system` key (server/routers.ts) — so the client path is
+  // trpc.system.dayforgeDemo, not trpc.dayforgeDemo.
   const statusQuery = (
     trpc as unknown as {
-      dayforgeDemo: {
-        getStatus: {
-          useQuery: (
-            input: undefined,
-            opts: { enabled: boolean; refetchInterval?: number }
-          ) => {
-            data: DayforgeDemoStatus | undefined;
-            isLoading: boolean;
-            error: { message: string } | null;
-            refetch: () => Promise<unknown>;
+      system: {
+        dayforgeDemo: {
+          getStatus: {
+            useQuery: (
+              input: undefined,
+              opts: { enabled: boolean; refetchInterval?: number }
+            ) => {
+              data: DayforgeDemoStatus | undefined;
+              isLoading: boolean;
+              error: { message: string } | null;
+              refetch: () => Promise<unknown>;
+            };
           };
-        };
-        reset: {
-          useMutation: () => {
-            mutateAsync: (input?: unknown) => Promise<unknown>;
-            isPending: boolean;
+          reset: {
+            useMutation: () => {
+              mutateAsync: (input?: unknown) => Promise<unknown>;
+              isPending: boolean;
+            };
           };
         };
       };
     }
-  ).dayforgeDemo.getStatus.useQuery(undefined, {
+  ).system.dayforgeDemo.getStatus.useQuery(undefined, {
     enabled: isAuthenticated && DEMO_MODE_ENABLED,
     refetchInterval: 5000,
   });
 
   const resetMutation = (
     trpc as unknown as {
-      dayforgeDemo: {
-        reset: {
-          useMutation: () => {
-            mutateAsync: (input?: unknown) => Promise<unknown>;
-            isPending: boolean;
+      system: {
+        dayforgeDemo: {
+          reset: {
+            useMutation: () => {
+              mutateAsync: (input?: unknown) => Promise<unknown>;
+              isPending: boolean;
+            };
           };
         };
       };
     }
-  ).dayforgeDemo.reset.useMutation();
+  ).system.dayforgeDemo.reset.useMutation();
 
   if (!DEMO_MODE_ENABLED) {
     return (
