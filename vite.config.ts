@@ -8,6 +8,11 @@ const plugins = [react(), tailwindcss(), jsxLocPlugin()];
 
 export default defineConfig({
   plugins,
+  define: {
+    "import.meta.env.VITE_DAYFORGE_DEMO_MODE": JSON.stringify(
+      process.env.VITE_DAYFORGE_DEMO_MODE ?? "true"
+    ),
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
