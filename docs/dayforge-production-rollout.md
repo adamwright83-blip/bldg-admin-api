@@ -12,7 +12,7 @@ This document tracks the additive migration and configuration order for the stac
 6. **PR F — Churn Radar:** after the existing tenant order tables and ops-task migrations, apply `drizzle/0040_customer_churn_recovery.sql` before running a tenant scan or creating a recovery mission. PR F adds no environment variable and does not enable automated outbound messaging.
 7. **PR G — revenue pipeline and account conversion:** after 0035-0040, apply `drizzle/0041_commercial_pipeline_conversion.sql` before creating another commercial mission. PR G adds no environment variable. It backfills stable account identity on future mission writes, projects every mission transition into one pipeline, and creates the commercial customer graph only when the canonical mission is won.
 8. **PR H — SaaS onboarding and billing:** after 0035-0041, apply `drizzle/0042_dayforge_saas_onboarding_billing.sql` before opening self-service onboarding or tenant product access. Configure the namespaced Stripe variables in `docs/dayforge-saas-onboarding-billing.md`, register the signed billing webhook, and verify a complete Stripe test-mode lifecycle before live mode. Do not reuse resident-payment Stripe customers, events, or ledger state.
-9. **PR I — public journey, analytics, and release gates:** after 0035-0042, apply `drizzle/0043_dayforge_analytics_release.sql` before linking public calls to action to `/territory-preview`. Configure the preview credentials, provider key, exact browser origins, proxy trust, and retention secret below. The deterministic provider is CI-only and cannot be selected in production.
+9. **PR I — public journey, analytics, and release gates:** after 0035-0042, apply `drizzle/0043_dayforge_analytics_release.sql` and then `drizzle/0044_dayforge_release_order_compatibility.sql` before linking public calls to action to `/territory-preview`. The compatibility migration safely converges historical order-routing columns that previously existed only in pushed schemas. Configure the preview credentials, provider key, exact browser origins, proxy trust, and retention secret below. The deterministic provider is CI-only and cannot be selected in production.
 
 These migrations are additive and are not assumed to run automatically in Railway. Application rollout must be gated until the required tables exist.
 
@@ -175,6 +175,13 @@ SHOW TABLES LIKE 'dayforge_provider_budgets';
 SHOW COLUMNS FROM dayforge_audit_events LIKE 'actorType';
 SHOW INDEX FROM dayforge_product_events;
 SHOW INDEX FROM dayforge_public_preview_sessions;
+SHOW COLUMNS FROM orders LIKE 'buildingSlug';
+SHOW COLUMNS FROM orders LIKE 'vendorId';
+SHOW COLUMNS FROM orders LIKE 'vendorNameSnapshot';
+SHOW COLUMNS FROM orders LIKE 'routingPrioritySnapshot';
+SHOW COLUMNS FROM orders LIKE 'platformFeeCents';
+SHOW COLUMNS FROM orders LIKE 'vendorPayoutCents';
+SHOW COLUMNS FROM orders LIKE 'stripeConnectedAccountIdSnapshot';
 ```
 
 After deployment, verify that a controlled mission produces multiple attempt rows when retried, exactly one result, exactly one reward, and exactly one `phone_unlocked` event. Then issue a driver handoff, consume it as the assigned driver, refresh on a second device, and confirm that the same persisted checklist, notes, arrival, and terminal outcome resume without duplicate events. Generate two proposal versions, approve only the latest, confirm the driver sees that exact version, and confirm an unapproved or expired proposal cannot satisfy the collateral checklist. Run a Churn Radar scan against a controlled tenant, confirm active orders are suppressed, revise and approve a recovery draft, verify missing or expired consent blocks the SMS composer, and attribute exactly one later paid order to the intervention. Take one controlled commercial mission through follow-up, verbal yes, won, agreement approval, and first-order attribution. Confirm the account, locations, contacts, customer, route, history, and reward remain singular when requests are retried; confirm realized revenue remains zero until the attributed order is paid.
