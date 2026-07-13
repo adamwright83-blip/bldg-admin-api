@@ -819,6 +819,155 @@ export const opsTaskEvents = mysqlTable("ops_task_events", {
 export type OpsTaskEvent = typeof opsTaskEvents.$inferSelect;
 export type InsertOpsTaskEvent = typeof opsTaskEvents.$inferInsert;
 
+export const commercialAccounts = mysqlTable("commercial_accounts", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  accountType: varchar("accountType", { length: 96 }).notNull(),
+  providerName: varchar("providerName", { length: 64 }),
+  providerAccountId: varchar("providerAccountId", { length: 191 }),
+  website: varchar("website", { length: 512 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantNameIdx: index("idx_commercial_accounts_tenant_name").on(table.tenantId, table.name),
+  tenantProviderUnique: uniqueIndex("uq_commercial_accounts_tenant_provider").on(
+    table.tenantId,
+    table.providerName,
+    table.providerAccountId,
+  ),
+}));
+
+export const commercialAccountLocations = mysqlTable("commercial_account_locations", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  accountId: int("accountId").notNull(),
+  label: varchar("label", { length: 128 }),
+  address: varchar("address", { length: 512 }).notNull(),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
+  isPrimary: boolean("isPrimary").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantAccountIdx: index("idx_commercial_locations_tenant_account").on(table.tenantId, table.accountId),
+}));
+
+export const commercialAccountContacts = mysqlTable("commercial_account_contacts", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  accountId: int("accountId").notNull(),
+  name: varchar("name", { length: 255 }),
+  title: varchar("title", { length: 255 }),
+  email: varchar("email", { length: 320 }),
+  phone: varchar("phone", { length: 64 }),
+  sourceUrl: varchar("sourceUrl", { length: 1024 }),
+  sourcedAt: timestamp("sourcedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantAccountIdx: index("idx_commercial_contacts_tenant_account").on(table.tenantId, table.accountId),
+}));
+
+export const commercialOpportunities = mysqlTable("commercial_opportunities", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  accountId: int("accountId").notNull(),
+  score: int("score").notNull(),
+  grade: mysqlEnum("grade", ["low", "medium", "high"]).notNull(),
+  estimatedAnnualValueCents: int("estimatedAnnualValueCents").notNull(),
+  estimateConfidence: mysqlEnum("estimateConfidence", ["low", "medium", "high"]).notNull(),
+  primarySignal: text("primarySignal").notNull(),
+  reasonsJson: json("reasonsJson").notNull(),
+  risksJson: json("risksJson").notNull(),
+  evidenceJson: json("evidenceJson").notNull(),
+  scoredAt: timestamp("scoredAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantAccountIdx: index("idx_commercial_opportunities_tenant_account").on(table.tenantId, table.accountId),
+  tenantScoreIdx: index("idx_commercial_opportunities_tenant_score").on(table.tenantId, table.score),
+}));
+
+export const commercialMissions = mysqlTable("commercial_missions", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  opportunityId: int("opportunityId"),
+  opsTaskId: int("opsTaskId"),
+  assignedTo: varchar("assignedTo", { length: 128 }),
+  code: varchar("code", { length: 32 }).notNull(),
+  status: mysqlEnum("status", [
+    "candidate", "selected", "game_ready", "game_active", "game_completed",
+    "phone_ready", "preparing", "en_route", "arrived", "visit_completed",
+    "follow_up", "won", "lost",
+  ]).notNull().default("candidate"),
+  version: int("version").notNull().default(1),
+  accountSnapshotJson: json("accountSnapshotJson").notNull(),
+  opportunitySnapshotJson: json("opportunitySnapshotJson").notNull(),
+  missionBriefJson: json("missionBriefJson").notNull(),
+  expiresAt: timestamp("expiresAt"),
+  createdBy: varchar("createdBy", { length: 128 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  completedAt: timestamp("completedAt"),
+}, (table) => ({
+  tenantCodeUnique: uniqueIndex("uq_commercial_missions_tenant_code").on(table.tenantId, table.code),
+  tenantStatusIdx: index("idx_commercial_missions_tenant_status").on(table.tenantId, table.status),
+  tenantAssigneeIdx: index("idx_commercial_missions_tenant_assignee").on(table.tenantId, table.assignedTo),
+}));
+
+export const commercialMissionEvents = mysqlTable("commercial_mission_events", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  eventName: varchar("eventName", { length: 64 }).notNull(),
+  fromStatus: varchar("fromStatus", { length: 32 }),
+  toStatus: varchar("toStatus", { length: 32 }),
+  actorType: mysqlEnum("actorType", ["system", "operator", "driver", "game"]).notNull(),
+  actorId: varchar("actorId", { length: 128 }),
+  idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+  metadataJson: json("metadataJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantMissionIdx: index("idx_commercial_mission_events_tenant_mission").on(table.tenantId, table.missionId),
+  tenantIdempotencyUnique: uniqueIndex("uq_commercial_mission_events_tenant_idempotency").on(table.tenantId, table.idempotencyKey),
+}));
+
+export const commercialMissionSteps = mysqlTable("commercial_mission_steps", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  stepKey: varchar("stepKey", { length: 64 }).notNull(),
+  label: varchar("label", { length: 255 }).notNull(),
+  detail: text("detail").notNull(),
+  status: mysqlEnum("status", ["locked", "ready", "active", "completed", "skipped"]).notNull(),
+  position: int("position").notNull(),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantMissionStepUnique: uniqueIndex("uq_commercial_mission_steps_tenant_mission_key").on(table.tenantId, table.missionId, table.stepKey),
+}));
+
+export const commercialVisitOutcomes = mysqlTable("commercial_visit_outcomes", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  outcome: mysqlEnum("outcome", ["follow_up", "won", "lost"]).notNull(),
+  notes: text("notes"),
+  followUpAt: timestamp("followUpAt"),
+  estimatedContractValueCents: int("estimatedContractValueCents"),
+  recordedBy: varchar("recordedBy", { length: 128 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantMissionIdx: index("idx_commercial_visit_outcomes_tenant_mission").on(table.tenantId, table.missionId),
+}));
+
+export type CommercialAccount = typeof commercialAccounts.$inferSelect;
+export type CommercialOpportunityRow = typeof commercialOpportunities.$inferSelect;
+export type CommercialMissionRow = typeof commercialMissions.$inferSelect;
+export type CommercialMissionEventRow = typeof commercialMissionEvents.$inferSelect;
+
 export const level4Missions = mysqlTable("level4_missions", {
   id: int("id").autoincrement().primaryKey(),
   tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
