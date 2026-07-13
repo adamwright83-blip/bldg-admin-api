@@ -19,6 +19,8 @@ export type CommercialMissionConfidence = "low" | "medium" | "high";
 
 export type CommercialMissionAccountSnapshot = {
   accountId: number;
+  providerName?: string | null;
+  providerAccountId?: string | null;
   name: string;
   accountType: string;
   address: string;

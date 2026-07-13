@@ -310,6 +310,13 @@ export default function AdminHostApp() {
             📡 Revenue Radar
           </Link>
           <Link
+            href="/commercial-pipeline"
+            className="block rounded-md px-3 py-2 text-sm font-semibold text-black/70 transition-colors hover:bg-black/5 hover:text-black"
+            onClick={() => setMobileNavOpen(false)}
+          >
+            📈 Revenue Pipeline
+          </Link>
+          <Link
             href="/churn-radar"
             className="block rounded-md px-3 py-2 text-sm font-semibold text-black/70 transition-colors hover:bg-black/5 hover:text-black"
             onClick={() => setMobileNavOpen(false)}
