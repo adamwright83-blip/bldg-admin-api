@@ -175,10 +175,21 @@ function affectedRows(result: unknown): number {
   return Number((result as { [0]?: { affectedRows?: number } })[0]?.affectedRows ?? 0);
 }
 
-function isDuplicateKeyError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: string; errno?: number };
-  return candidate.code === "ER_DUP_ENTRY" || candidate.errno === 1062;
+export function isDuplicateKeyError(error: unknown): boolean {
+  let candidate: unknown = error;
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (!candidate || typeof candidate !== "object") return false;
+    const databaseError = candidate as {
+      code?: string;
+      errno?: number;
+      cause?: unknown;
+    };
+    if (databaseError.code === "ER_DUP_ENTRY" || databaseError.errno === 1062) {
+      return true;
+    }
+    candidate = databaseError.cause;
+  }
+  return false;
 }
 
 function asDate(value: Date | null): string | null {
