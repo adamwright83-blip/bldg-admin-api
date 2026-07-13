@@ -19,12 +19,28 @@ import AdminCatalog from "./pages/AdminCatalog";
 const BoreslayLanding = lazy(() => import("./pages/BoreslayLanding"));
 const DayforgeLanding = lazy(() => import("./pages/DayforgeLanding"));
 const LandingFinal = lazy(() => import("./pages/LandingFinal"));
-const CommercialMissionAdmin = lazy(() => import("./pages/CommercialMissionAdmin"));
-const CommercialSalesMission = lazy(() => import("./pages/CommercialSalesMission"));
-const CommercialProposalPrint = lazy(() => import("./pages/CommercialProposalPrint"));
-const CommercialProposalSettings = lazy(() => import("./pages/CommercialProposalSettings"));
+const CommercialMissionAdmin = lazy(
+  () => import("./pages/CommercialMissionAdmin")
+);
+const CommercialSalesMission = lazy(
+  () => import("./pages/CommercialSalesMission")
+);
+const CommercialProposalPrint = lazy(
+  () => import("./pages/CommercialProposalPrint")
+);
+const CommercialProposalSettings = lazy(
+  () => import("./pages/CommercialProposalSettings")
+);
 const ChurnRadarPage = lazy(() => import("./pages/ChurnRadarPage"));
-const CommercialPipelinePage = lazy(() => import("./pages/CommercialPipelinePage"));
+const CommercialPipelinePage = lazy(
+  () => import("./pages/CommercialPipelinePage")
+);
+const DayforgeOnboardingPage = lazy(
+  () => import("./pages/DayforgeOnboardingPage")
+);
+const DayforgeLoginPage = lazy(() => import("./pages/DayforgeLoginPage"));
+const DayforgeSettingsPage = lazy(() => import("./pages/DayforgeSettingsPage"));
+const DayforgeInvitePage = lazy(() => import("./pages/DayforgeInvitePage"));
 const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
 
 function PublicLandingFallback() {
@@ -77,7 +93,9 @@ function CommercialSalesMissionRoute() {
 
 function CommercialProposalPrintRoute() {
   return (
-    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#dfe4e9" }} />}>
+    <Suspense
+      fallback={<div style={{ minHeight: "100vh", background: "#dfe4e9" }} />}
+    >
       <CommercialProposalPrint />
     </Suspense>
   );
@@ -115,6 +133,10 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/boreslay-rally",
   "/dayforge",
   "/landingfinal",
+  "/dayforge-onboarding",
+  "/dayforge-login",
+  "/dayforge-settings",
+  "/dayforge-invite",
 ]);
 
 function AdminHostRouter() {
@@ -124,20 +146,54 @@ function AdminHostRouter() {
       <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/dayforge" component={DayforgeLandingRoute} />
       <Route path="/landingfinal" component={LandingFinalRoute} />
+      <Route path="/dayforge-onboarding">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeOnboardingPage />
+        </Suspense>
+      </Route>
+      <Route path="/dayforge-login">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeLoginPage />
+        </Suspense>
+      </Route>
+      <Route path="/dayforge-invite">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeInvitePage />
+        </Suspense>
+      </Route>
+      <Route path="/dayforge-settings">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeSettingsPage />
+        </Suspense>
+      </Route>
       <Route path="/commercial-missions">
-        <Suspense fallback={<PublicLandingFallback />}><CommercialMissionAdmin /></Suspense>
+        <Suspense fallback={<PublicLandingFallback />}>
+          <CommercialMissionAdmin />
+        </Suspense>
       </Route>
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
-      <Route path="/driver/sales-mission/:missionId" component={CommercialSalesMissionRoute} />
-      <Route path="/commercial-proposal/:missionId" component={CommercialProposalPrintRoute} />
+      <Route
+        path="/driver/sales-mission/:missionId"
+        component={CommercialSalesMissionRoute}
+      />
+      <Route
+        path="/commercial-proposal/:missionId"
+        component={CommercialProposalPrintRoute}
+      />
       <Route path="/commercial-proposal-settings">
-        <Suspense fallback={<PublicLandingFallback />}><CommercialProposalSettings /></Suspense>
+        <Suspense fallback={<PublicLandingFallback />}>
+          <CommercialProposalSettings />
+        </Suspense>
       </Route>
       <Route path="/churn-radar">
-        <Suspense fallback={<PublicLandingFallback />}><ChurnRadarPage /></Suspense>
+        <Suspense fallback={<PublicLandingFallback />}>
+          <ChurnRadarPage />
+        </Suspense>
       </Route>
       <Route path="/commercial-pipeline">
-        <Suspense fallback={<PublicLandingFallback />}><CommercialPipelinePage /></Suspense>
+        <Suspense fallback={<PublicLandingFallback />}>
+          <CommercialPipelinePage />
+        </Suspense>
       </Route>
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
@@ -205,9 +261,35 @@ function Router() {
       <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/dayforge" component={DayforgeLandingRoute} />
       <Route path="/landingfinal" component={LandingFinalRoute} />
+      <Route path="/dayforge-onboarding">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeOnboardingPage />
+        </Suspense>
+      </Route>
+      <Route path="/dayforge-login">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeLoginPage />
+        </Suspense>
+      </Route>
+      <Route path="/dayforge-invite">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeInvitePage />
+        </Suspense>
+      </Route>
+      <Route path="/dayforge-settings">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeSettingsPage />
+        </Suspense>
+      </Route>
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
-      <Route path="/driver/sales-mission/:missionId" component={CommercialSalesMissionRoute} />
-      <Route path="/commercial-proposal/:missionId" component={CommercialProposalPrintRoute} />
+      <Route
+        path="/driver/sales-mission/:missionId"
+        component={CommercialSalesMissionRoute}
+      />
+      <Route
+        path="/commercial-proposal/:missionId"
+        component={CommercialProposalPrintRoute}
+      />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
       <Route path="/pricing" component={AdminCatalog} />

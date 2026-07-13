@@ -87,7 +87,8 @@ describe("Churn Radar production contract", () => {
   });
 
   it("derives every tenant and actor from the admin session", () => {
-    expect(router).toContain("adminProcedure");
+    expect(router).toContain("dayforgeChurnProcedure");
+    expect(router).not.toContain("adminProcedure");
     expect(router).toContain("tenantId: ctx.tenantId");
     expect(router).toContain("actorId: ctx.user.openId");
     expect(router).not.toContain("actorId: input.actorId");

@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { adminProcedure, router } from "../_core/trpc";
+import { dayforgeChurnProcedure, router } from "../_core/trpc";
 import {
   approveCustomerRecoveryDraft,
   createCustomerRecoveryIntervention,
@@ -24,11 +24,11 @@ function required<T>(value: T | null, message: string): T {
 }
 
 export const churnRadarRouter = router({
-  profile: adminProcedure.query(({ ctx }) =>
+  profile: dayforgeChurnProcedure.query(({ ctx }) =>
     getCustomerRecoveryProfile(ctx.tenantId)
   ),
 
-  saveProfile: adminProcedure
+  saveProfile: dayforgeChurnProcedure
     .input(
       z.object({
         storeName: z.string().trim().min(1).max(255),
@@ -44,11 +44,11 @@ export const churnRadarRouter = router({
       })
     ),
 
-  latestScan: adminProcedure.query(({ ctx }) =>
+  latestScan: dayforgeChurnProcedure.query(({ ctx }) =>
     getLatestChurnScan(ctx.tenantId)
   ),
 
-  runScan: adminProcedure
+  runScan: dayforgeChurnProcedure
     .input(z.object({ requestId: uuid }))
     .mutation(({ ctx, input }) =>
       runCustomerChurnScan({
@@ -58,11 +58,11 @@ export const churnRadarRouter = router({
       })
     ),
 
-  interventions: adminProcedure.query(({ ctx }) =>
+  interventions: dayforgeChurnProcedure.query(({ ctx }) =>
     listRecoveryInterventions(ctx.tenantId)
   ),
 
-  intervention: adminProcedure
+  intervention: dayforgeChurnProcedure
     .input(z.object({ interventionId: uuid }))
     .query(async ({ ctx, input }) =>
       required(
@@ -74,7 +74,7 @@ export const churnRadarRouter = router({
       )
     ),
 
-  createIntervention: adminProcedure
+  createIntervention: dayforgeChurnProcedure
     .input(z.object({ snapshotId: uuid, requestId: uuid }))
     .mutation(async ({ ctx, input }) =>
       required(
@@ -87,7 +87,7 @@ export const churnRadarRouter = router({
       )
     ),
 
-  reviseDraft: adminProcedure
+  reviseDraft: dayforgeChurnProcedure
     .input(
       z.object({
         interventionId: uuid,
@@ -106,7 +106,7 @@ export const churnRadarRouter = router({
       )
     ),
 
-  approveDraft: adminProcedure
+  approveDraft: dayforgeChurnProcedure
     .input(
       z.object({
         interventionId: uuid,
@@ -127,7 +127,7 @@ export const churnRadarRouter = router({
       })
     ),
 
-  setPermission: adminProcedure
+  setPermission: dayforgeChurnProcedure
     .input(
       z
         .object({
@@ -164,7 +164,7 @@ export const churnRadarRouter = router({
       })
     ),
 
-  prepareManualContact: adminProcedure
+  prepareManualContact: dayforgeChurnProcedure
     .input(
       z.object({
         interventionId: uuid,
@@ -181,7 +181,7 @@ export const churnRadarRouter = router({
       })
     ),
 
-  markContacted: adminProcedure
+  markContacted: dayforgeChurnProcedure
     .input(
       z.object({
         interventionId: uuid,

@@ -6,6 +6,7 @@ import { territoryRouter } from "../territory/territoryRouter";
 import { commercialProposalRouter } from "../commercialProposals/commercialProposalRouter";
 import { churnRadarRouter } from "../churnRadar/churnRadarRouter";
 import { commercialPipelineRouter } from "../commercialPipeline/commercialPipelineRouter";
+import { saasRouter } from "../saas/saasRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
@@ -13,6 +14,7 @@ export const systemRouter = router({
   churnRadar: churnRadarRouter,
   commercialPipeline: commercialPipelineRouter,
   territory: territoryRouter,
+  saas: saasRouter,
   health: publicProcedure
     .input(
       z.object({

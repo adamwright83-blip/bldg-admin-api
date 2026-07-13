@@ -66,8 +66,10 @@ describe("commercial proposal production contract", () => {
   });
 
   it("derives tenant and actor from signed procedures", () => {
-    expect(router).toContain("adminProcedure");
-    expect(router).toContain("adminOrDriverProcedure");
+    expect(router).toContain("dayforgeProposalOperatorProcedure");
+    expect(router).toContain("dayforgeProposalFieldProcedure");
+    expect(router).not.toContain("adminProcedure");
+    expect(router).not.toContain("adminOrDriverProcedure");
     expect(router).not.toContain("protectedProcedure");
     expect(router).toContain("assertDriverCanReadMission");
     expect(router).toContain("tenantId: ctx.tenantId");

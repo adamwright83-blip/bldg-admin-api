@@ -1,6 +1,10 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { adminOrDriverProcedure, adminProcedure, router } from "../_core/trpc";
+import {
+  dayforgeProposalFieldProcedure,
+  dayforgeProposalOperatorProcedure,
+  router,
+} from "../_core/trpc";
 import { assertDriverCanReadMission } from "../commercialMissions/commercialMissionAuthorization";
 import { getCommercialMission } from "../commercialMissions/commercialMissionStore";
 import {
@@ -57,35 +61,37 @@ async function authorizedMission(input: {
 }
 
 export const commercialProposalRouter = router({
-  profile: adminProcedure.query(({ ctx }) =>
+  profile: dayforgeProposalOperatorProcedure.query(({ ctx }) =>
     getCommercialProposalProfile(ctx.tenantId)
   ),
 
-  saveProfile: adminProcedure.input(profileSchema).mutation(({ ctx, input }) =>
-    saveCommercialProposalProfile({
-      tenantId: ctx.tenantId,
-      actorId: ctx.user.openId,
-      profile: input,
-    })
-  ),
+  saveProfile: dayforgeProposalOperatorProcedure
+    .input(profileSchema)
+    .mutation(({ ctx, input }) =>
+      saveCommercialProposalProfile({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        profile: input,
+      })
+    ),
 
-  forMission: adminOrDriverProcedure
+  forMission: dayforgeProposalFieldProcedure
     .input(z.object({ missionId: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
       await authorizedMission({
         tenantId: ctx.tenantId,
         missionId: input.missionId,
         userId: ctx.user.openId,
-        isAdmin: ctx.user.role === "admin",
+        isAdmin: ctx.dayforgeMembership.role !== "field",
       });
       return getLatestCommercialProposalForMission({
         tenantId: ctx.tenantId,
         missionId: input.missionId,
-        approvedOnly: ctx.user.role !== "admin",
+        approvedOnly: ctx.dayforgeMembership.role === "field",
       });
     }),
 
-  generate: adminProcedure
+  generate: dayforgeProposalOperatorProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -100,7 +106,7 @@ export const commercialProposalRouter = router({
       })
     ),
 
-  approve: adminProcedure
+  approve: dayforgeProposalOperatorProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -116,7 +122,7 @@ export const commercialProposalRouter = router({
       })
     ),
 
-  recordBrowserPrint: adminOrDriverProcedure
+  recordBrowserPrint: dayforgeProposalFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -129,7 +135,7 @@ export const commercialProposalRouter = router({
         tenantId: ctx.tenantId,
         missionId: input.missionId,
         userId: ctx.user.openId,
-        isAdmin: ctx.user.role === "admin",
+        isAdmin: ctx.dayforgeMembership.role !== "field",
       });
       return recordCommercialProposalBrowserPrint({
         ...input,

@@ -35,6 +35,7 @@ describe("commercial mission production spine", () => {
   it("derives actor authority from the authenticated procedure", () => {
     expect(router).not.toContain("actorType: actorTypeSchema");
     expect(router).toContain('actor: { type: "operator", id: ctx.user.openId }');
-    expect(router).toContain('actor: { type: ctx.user.role === "admin" ? "operator" : "driver"');
+    expect(router).toContain("dayforgeMissionOperatorProcedure");
+    expect(router).toContain("dayforgeMissionFieldProcedure");
   });
 });
