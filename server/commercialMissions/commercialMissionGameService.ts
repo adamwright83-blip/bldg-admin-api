@@ -11,17 +11,12 @@ import {
   type CommercialMissionGameTelemetry,
 } from "@shared/commercialMissionGame";
 import { getDb } from "../db";
+import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
 import {
   getCommercialMission,
   readCommercialMissionWith,
   transitionCommercialMissionWith,
 } from "./commercialMissionStore";
-
-function isDuplicateKeyError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: string; errno?: number };
-  return candidate.code === "ER_DUP_ENTRY" || candidate.errno === 1062;
-}
 
 function attemptView(row: typeof commercialMissionGameAttempts.$inferSelect) {
   return {
@@ -116,6 +111,12 @@ export async function startCommercialMissionGame(input: {
       if (mission.version !== input.expectedVersion) {
         throw new Error(`Commercial mission version conflict: expected ${input.expectedVersion}, found ${mission.version}`);
       }
+      const previousAttempts = await tx.select({ id: commercialMissionGameAttempts.id }).from(commercialMissionGameAttempts).where(and(
+        eq(commercialMissionGameAttempts.tenantId, input.tenantId),
+        eq(commercialMissionGameAttempts.missionId, input.missionId),
+      ));
+      const retry = previousAttempts.length > 0;
+      const attemptNumber = previousAttempts.length + 1;
       if (mission.status === "game_active") {
         const now = new Date();
         const activeAttempts = await tx.select().from(commercialMissionGameAttempts).where(and(
@@ -161,7 +162,7 @@ export async function startCommercialMissionGame(input: {
         toStatus: "game_active",
         actor: { type: "game", id: input.playerId },
         idempotencyKey: `game-start:${input.gameAttemptId}`,
-        metadata: { gameAttemptId: input.gameAttemptId },
+        metadata: { gameAttemptId: input.gameAttemptId, retry, attemptNumber },
       });
     });
   } catch (error) {

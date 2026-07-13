@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import {
   commercialAccountContacts,
@@ -12,6 +13,7 @@ import {
   type CommercialMissionRow,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
 import {
   formatMissionCode,
   type CommercialMission,
@@ -29,20 +31,149 @@ import {
   createCommercialPipelineForMissionWith,
   syncCommercialPipelineForMissionTransitionWith,
 } from "../commercialPipeline/commercialPipelineCore";
+import {
+  writeDayforgeEventWith,
+  type DayforgeServerActor,
+} from "../dayforgeEvents/dayforgeEventStore";
 
 type Actor = {
   type: "system" | "operator" | "driver" | "game";
   id: string | null;
 };
 
-function affectedRows(result: unknown): number {
-  return Number((result as { [0]?: { affectedRows?: number } })[0]?.affectedRows ?? 0);
+function dayforgeActor(actor: Actor): DayforgeServerActor {
+  return {
+    type: actor.type === "driver" ? "field" : actor.type,
+    id: actor.id,
+  };
 }
 
-function isDuplicateKeyError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: string; errno?: number };
-  return candidate.code === "ER_DUP_ENTRY" || candidate.errno === 1062;
+function missionProjectionCorrelationId(missionId: number, requestKey: string): string {
+  const requestHash = createHash("sha256").update(requestKey).digest("hex").slice(0, 32);
+  return `commercial-mission:${missionId}:${requestHash}`;
+}
+
+function missionAuditSnapshot(mission: CommercialMission) {
+  return {
+    missionId: mission.id,
+    missionCode: mission.code,
+    accountId: mission.account.accountId,
+    opportunityId: mission.opportunity.opportunityId,
+    assignedTo: mission.assignedTo,
+    status: mission.status,
+    version: mission.version,
+    estimatedAnnualValueCents: mission.opportunity.estimatedAnnualValueCents,
+    estimateConfidence: mission.opportunity.estimateConfidence,
+    score: mission.opportunity.score,
+  };
+}
+
+function productEventForMissionLifecycle(input: {
+  eventName: string;
+  metadata?: Record<string, unknown>;
+}) {
+  switch (input.eventName) {
+    case "mission_created": return "mission_created" as const;
+    case "game_started":
+      return input.metadata?.retry === true
+        ? "mission_game_retried" as const
+        : "mission_game_started" as const;
+    case "game_abandoned": return "mission_game_abandoned" as const;
+    case "game_completed": return "mission_game_completed" as const;
+    case "phone_unlocked": return "mission_phone_unlocked" as const;
+    case "preparation_started": return "field_preparation_started" as const;
+    case "departed": return "field_departed" as const;
+    case "arrived": return "field_arrived" as const;
+    case "visit_completed": return "visit_completed" as const;
+    case "follow_up_required": return "follow_up_created" as const;
+    case "account_won": return "account_won" as const;
+    case "account_lost": return "account_lost" as const;
+    default: return null;
+  }
+}
+
+function sourceForMissionLifecycle(eventName: string): string {
+  if (eventName.startsWith("game_") || eventName === "phone_unlocked") return "boreslay";
+  if (["preparation_started", "departed", "arrived", "visit_completed", "follow_up_required"].includes(eventName)) {
+    return "dayforge_field";
+  }
+  return "commercial_mission";
+}
+
+function estimatedValueBand(cents: number): string {
+  if (cents < 5_000_00) return "under_5k";
+  if (cents < 15_000_00) return "5k_to_15k";
+  if (cents < 30_000_00) return "15k_to_30k";
+  if (cents < 75_000_00) return "30k_to_75k";
+  return "75k_plus";
+}
+
+function numericMetadata(metadata: Record<string, unknown> | undefined, key: string): number | undefined {
+  const value = metadata?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function stringMetadata(metadata: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = metadata?.[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function productPropertiesForMissionLifecycle(input: {
+  productEventName: NonNullable<ReturnType<typeof productEventForMissionLifecycle>>;
+  mission: CommercialMission;
+  metadata?: Record<string, unknown>;
+}) {
+  const valueBand = estimatedValueBand(input.mission.opportunity.estimatedAnnualValueCents);
+  switch (input.productEventName) {
+    case "mission_created":
+      return { missionKind: "commercial_acquisition", sourceKind: "dayforge_radar", estimatedValueBand: valueBand };
+    case "mission_game_started":
+      return { attemptNumber: numericMetadata(input.metadata, "attemptNumber"), gameMode: "boreslay_commercial_mission" };
+    case "mission_game_abandoned":
+      return {
+        attemptNumber: numericMetadata(input.metadata, "attemptNumber"),
+        durationMs: numericMetadata(input.metadata, "durationMs"),
+        abandonmentReasonCode: stringMetadata(input.metadata, "reason") ?? "recovered_by_retry",
+      };
+    case "mission_game_retried":
+      return { attemptNumber: numericMetadata(input.metadata, "attemptNumber"), priorOutcome: "abandoned" };
+    case "mission_game_completed":
+      return {
+        attemptNumber: numericMetadata(input.metadata, "attemptNumber"),
+        durationMs: numericMetadata(input.metadata, "durationMs"),
+        outcome: "qualified",
+      };
+    case "mission_phone_unlocked":
+      return { unlockSource: "qualifying_game_result", attemptNumber: numericMetadata(input.metadata, "attemptNumber") };
+    case "field_preparation_started":
+      return {
+        resume: false,
+        checklistItemCount: Array.isArray(input.metadata?.checklistItemKeys)
+          ? input.metadata.checklistItemKeys.length
+          : undefined,
+      };
+    case "field_departed": return { navigationMode: "operator_selected" };
+    case "field_arrived": return { arrivalMethod: stringMetadata(input.metadata, "checkInMethod") };
+    case "visit_completed":
+      return {
+        outcome: stringMetadata(input.metadata, "visitOutcome") ?? "recorded",
+        proofKind: input.metadata?.collateralDelivered === true ? "collateral_delivered" : "operator_attestation",
+      };
+    case "follow_up_created": {
+      const followUpAt = stringMetadata(input.metadata, "followUpAt");
+      const dueInDays = followUpAt
+        ? Math.max(0, Math.ceil((Date.parse(followUpAt) - Date.now()) / 86_400_000))
+        : undefined;
+      return { followUpKind: "field_visit", dueInDays };
+    }
+    case "account_won": return { sourceKind: "field_visit", estimatedValueBand: valueBand };
+    case "account_lost":
+      return { sourceKind: "field_visit", lossReasonCode: stringMetadata(input.metadata, "reason") ?? "not_recorded" };
+  }
+}
+
+function affectedRows(result: unknown): number {
+  return Number((result as { [0]?: { affectedRows?: number } })[0]?.affectedRows ?? 0);
 }
 
 function asDate(value: Date | null): string | null {
@@ -151,7 +282,7 @@ export async function createCommercialMission(input: {
       const accountRows = await tx.select({ id: commercialAccounts.id }).from(commercialAccounts).where(and(
         eq(commercialAccounts.tenantId, input.tenantId),
         eq(commercialAccounts.identityKey, identityKey),
-      )).limit(1);
+      )).limit(1).for("update");
       const accountId = accountRows[0]?.id;
       if (!accountId) throw new Error("Commercial account identity was not persisted");
       await tx.insert(commercialAccountLocations).values({
@@ -284,6 +415,53 @@ export async function createCommercialMission(input: {
 
       const created = await readCommercialMissionWith(tx, { tenantId: input.tenantId, missionId });
       if (!created) throw new Error("Commercial mission insert did not return a row");
+      const projectionCorrelationId = missionProjectionCorrelationId(missionId, input.idempotencyKey);
+      await writeDayforgeEventWith(tx, {
+        tenantId: input.tenantId,
+        actor: dayforgeActor(input.actor),
+        entityType: "commercial_mission",
+        entityId: String(missionId),
+        eventName: "mission_created",
+        before: null,
+        after: missionAuditSnapshot(created),
+        source: "commercial_mission",
+        correlationId: projectionCorrelationId,
+        idempotencyKey: `${projectionCorrelationId}:mission_created`,
+        productEvent: {
+          name: "mission_created",
+          missionId,
+          accountId,
+          opportunityId,
+          properties: {
+            missionKind: "commercial_acquisition",
+            sourceKind: input.idempotencyKey.startsWith("public-preview:")
+              ? "public_territory_preview"
+              : "dayforge_radar",
+            estimatedValueBand: estimatedValueBand(created.opportunity.estimatedAnnualValueCents),
+          },
+        },
+      });
+      if (created.assignedTo) {
+        await writeDayforgeEventWith(tx, {
+          tenantId: input.tenantId,
+          actor: dayforgeActor(input.actor),
+          entityType: "commercial_mission",
+          entityId: String(missionId),
+          eventName: "mission_assigned",
+          before: { assignedTo: null },
+          after: { assignedTo: created.assignedTo, version: created.version },
+          source: "commercial_mission",
+          correlationId: projectionCorrelationId,
+          idempotencyKey: `${projectionCorrelationId}:mission_assigned`,
+          productEvent: {
+            name: "mission_assigned",
+            missionId,
+            accountId,
+            opportunityId,
+            properties: { assigneeRole: "field", assignmentSource: "mission_creation" },
+          },
+        });
+      }
       return created;
     });
   } catch (error) {
@@ -455,6 +633,33 @@ export async function transitionCommercialMissionWith(
 
       const transitioned = await readCommercialMissionWith(tx, input);
       if (!transitioned) throw new Error("Commercial mission transition did not return a row");
+      const productEventName = productEventForMissionLifecycle({ eventName, metadata: input.metadata });
+      const projectionCorrelationId = missionProjectionCorrelationId(input.missionId, input.idempotencyKey);
+      await writeDayforgeEventWith(tx, {
+        tenantId: input.tenantId,
+        actor: dayforgeActor(input.actor),
+        entityType: "commercial_mission",
+        entityId: String(input.missionId),
+        eventName,
+        before: missionAuditSnapshot(current),
+        after: missionAuditSnapshot(transitioned),
+        source: sourceForMissionLifecycle(eventName),
+        correlationId: projectionCorrelationId,
+        idempotencyKey: `${projectionCorrelationId}:${eventName}`,
+        productEvent: productEventName
+          ? {
+              name: productEventName,
+              missionId: input.missionId,
+              accountId: transitioned.account.accountId,
+              opportunityId: transitioned.opportunity.opportunityId,
+              properties: productPropertiesForMissionLifecycle({
+                productEventName,
+                mission: transitioned,
+                metadata: input.metadata,
+              }),
+            }
+          : undefined,
+      });
       return transitioned;
 }
 

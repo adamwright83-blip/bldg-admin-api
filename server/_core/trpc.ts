@@ -11,6 +11,7 @@ import {
   resolveDayforgeMembership,
   roleAllows,
 } from "../saas/tenantAccess";
+import { assertTrpcMutationOrigin } from "../dayforgeSecurity/dayforgeSecurity";
 
 const VENDOR_UNAUTHED_MSG = "Please login to the vendor portal (10003)";
 
@@ -19,7 +20,26 @@ const t = initTRPC.context<TrpcContext>().create({
 });
 
 export const router = t.router;
-export const publicProcedure = t.procedure;
+const mutationOriginGuard = t.middleware(async opts => {
+  // Direct in-process callers (including policy/store tests) have no HTTP
+  // request and therefore no browser CSRF surface. Express always supplies
+  // req for network calls.
+  if (!opts.ctx.req?.headers) return opts.next();
+  const decision = assertTrpcMutationOrigin({
+    req: opts.ctx.req,
+    isMutation: opts.type === "mutation",
+  });
+  if (!decision.allowed) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Invalid request origin",
+    });
+  }
+  return opts.next();
+});
+
+const baseProcedure = t.procedure.use(mutationOriginGuard);
+export const publicProcedure = baseProcedure;
 
 const requireUser = t.middleware(async opts => {
   const { ctx, next } = opts;
@@ -29,9 +49,9 @@ const requireUser = t.middleware(async opts => {
   return next({ ctx: { ...ctx, user: ctx.user } });
 });
 
-export const protectedProcedure = t.procedure.use(requireUser);
+export const protectedProcedure = baseProcedure.use(requireUser);
 
-export const adminProcedure = t.procedure.use(
+export const adminProcedure = baseProcedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
     if (!ctx.user || ctx.user.role !== "admin") {
@@ -47,7 +67,7 @@ function dayforgeProcedure(input: {
   entitlement: DayforgeEntitlement;
   roles: readonly SaasTenantMemberRole[];
 }) {
-  return t.procedure.use(
+  return baseProcedure.use(
     t.middleware(async opts => {
       const { ctx, next } = opts;
       if (!ctx.user) {
@@ -85,7 +105,7 @@ function dayforgeProcedure(input: {
 function dayforgeTenantProcedureForRoles(
   roles: readonly SaasTenantMemberRole[]
 ) {
-  return t.procedure.use(
+  return baseProcedure.use(
     t.middleware(async opts => {
       const { ctx, next } = opts;
       if (!ctx.user) {
@@ -149,7 +169,7 @@ export const dayforgeChurnProcedure = dayforgeProcedure({
   roles: operatorRoles,
 });
 
-export const adminOrDriverProcedure = t.procedure.use(
+export const adminOrDriverProcedure = baseProcedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
     if (
@@ -170,10 +190,10 @@ const requireVendorSession = t.middleware(async opts => {
   return next({ ctx: { ...ctx, vendorSession: ctx.vendorSession } });
 });
 
-export const vendorProcedure = t.procedure.use(requireVendorSession);
+export const vendorProcedure = baseProcedure.use(requireVendorSession);
 
 /** Requires an authenticated platform operator (admin or driver) OR a vendor session. For order operations; chargeCard stays admin-only. */
-export const platformOrVendorProcedure = t.procedure.use(
+export const platformOrVendorProcedure = baseProcedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
     const isPlatformOperator =

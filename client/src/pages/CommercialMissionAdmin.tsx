@@ -30,9 +30,9 @@ export default function CommercialMissionAdmin() {
     if (selectedId === null && list.data?.[0]) setSelectedId(list.data[0].id);
   }, [list.data, selectedId]);
   const selected = list.data?.find(mission => mission.id === selectedId) ?? null;
-  const events = trpc.system.commercialMission.events.useQuery(
+  const timeline = trpc.system.commercialMission.timeline.useQuery(
     { missionId: selectedId ?? 0 },
-    { enabled: isAuthenticated && selectedId !== null },
+    { enabled: isAuthenticated && selectedId !== null, retry: false },
   );
   const proposal = trpc.system.commercialProposal.forMission.useQuery(
     { missionId: selectedId ?? 1 },
@@ -254,20 +254,25 @@ export default function CommercialMissionAdmin() {
                     </div>
                   </article>
                   <article>
-                    <h3 className="mb-3 font-bold">Event history</h3>
+                    <h3 className="mb-3 font-bold">Unified journey history</h3>
                     <div className="space-y-2">
-                      {events.isLoading ? <p className="text-sm text-slate-400">Loading event history…</p> : null}
-                      {events.data?.map(event => (
+                      {timeline.isLoading ? <p className="text-sm text-slate-400">Loading territory, BORESLAY, Field, proposal, and revenue history…</p> : null}
+                      {timeline.error ? <p className="text-sm text-red-300">{timeline.error.message}</p> : null}
+                      {timeline.data?.items.map(event => (
                         <div key={event.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
                           <div className="flex items-center justify-between gap-2">
                             <b className="text-sm">{event.eventName.replaceAll("_", " ")}</b>
                             <time className="text-[10px] text-slate-500">{new Date(event.createdAt).toLocaleString()}</time>
                           </div>
                           <p className="mt-1 text-xs text-slate-400">
-                            {event.fromStatus ?? "start"} → {event.toStatus ?? "recorded"} · {event.actorType}
+                            {event.source} · {event.entityType} · {event.actorType}
                           </p>
+                          <p className="mt-1 truncate text-[10px] text-slate-600">Correlation: {event.correlationId}</p>
                         </div>
                       ))}
+                      {!timeline.isLoading && timeline.data?.items.length === 0 ? (
+                        <p className="text-sm text-slate-400">No projected journey events yet.</p>
+                      ) : null}
                     </div>
                   </article>
                 </div>

@@ -3,6 +3,7 @@ import { notifyOwner } from "./notification";
 import { adminProcedure, publicProcedure, router } from "./trpc";
 import { commercialMissionRouter } from "../commercialMissions/commercialMissionRouter";
 import { territoryRouter } from "../territory/territoryRouter";
+import { publicTerritoryRouter } from "../territory/publicPreviewRouter";
 import { commercialProposalRouter } from "../commercialProposals/commercialProposalRouter";
 import { churnRadarRouter } from "../churnRadar/churnRadarRouter";
 import { commercialPipelineRouter } from "../commercialPipeline/commercialPipelineRouter";
@@ -14,6 +15,7 @@ export const systemRouter = router({
   churnRadar: churnRadarRouter,
   commercialPipeline: commercialPipelineRouter,
   territory: territoryRouter,
+  publicTerritory: publicTerritoryRouter,
   saas: saasRouter,
   health: publicProcedure
     .input(

@@ -32,6 +32,10 @@ describe("commercial mission production spine", () => {
     expect(store).toContain("commercial mission transition lost an optimistic concurrency race".replace(/^c/, "C"));
   });
 
+  it("uses a current locking read after the account identity upsert", () => {
+    expect(store).toContain('eq(commercialAccounts.identityKey, identityKey),\n      )).limit(1).for("update")');
+  });
+
   it("derives actor authority from the authenticated procedure", () => {
     expect(router).not.toContain("actorType: actorTypeSchema");
     expect(router).toContain('actor: { type: "operator", id: ctx.user.openId }');

@@ -5,8 +5,10 @@ import { FIELD_OUTCOME_REASONS } from "@shared/commercialMissionField";
 import {
   dayforgeMissionFieldProcedure,
   dayforgeMissionOperatorProcedure,
+  dayforgeTenantAdminProcedure,
   router,
 } from "../_core/trpc";
+import { listDayforgeTimeline } from "../dayforgeEvents/dayforgeTimeline";
 import {
   assertDriverCanReadMission,
   assertDriverTransitionAllowed,
@@ -83,6 +85,36 @@ function notFound(): never {
 }
 
 export const commercialMissionRouter = router({
+  timeline: dayforgeTenantAdminProcedure
+    .input(
+      z
+        .object({
+          missionId: z.number().int().positive().optional(),
+          accountId: z.number().int().positive().optional(),
+          correlationId: z.string().trim().min(1).max(191).optional(),
+          cursor: z
+            .object({
+              createdAt: z.coerce.date(),
+              id: z.number().int().positive(),
+            })
+            .optional(),
+          limit: z.number().int().min(1).max(250).default(100),
+        })
+        .default({ limit: 100 })
+    )
+    .query(({ ctx, input }) =>
+      listDayforgeTimeline({
+        tenantId: ctx.tenantId,
+        filter: {
+          missionId: input.missionId,
+          accountId: input.accountId,
+          correlationId: input.correlationId,
+        },
+        cursor: input.cursor,
+        limit: input.limit,
+      })
+    ),
+
   create: dayforgeMissionOperatorProcedure
     .input(
       z.object({

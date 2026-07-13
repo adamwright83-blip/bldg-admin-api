@@ -22,11 +22,13 @@ import {
   type CommercialPipelineStage,
 } from "@shared/commercialPipeline";
 import { getDb } from "../db";
+import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
 import {
   getCommercialMission,
   getCommercialMissionByIdempotencyKey,
   transitionCommercialMission,
 } from "../commercialMissions/commercialMissionStore";
+import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
 
 type Transaction = Parameters<
   Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]
@@ -38,15 +40,17 @@ function affectedRows(result: unknown): number {
   );
 }
 
-function isDuplicateKeyError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: string; errno?: number };
-  return candidate.code === "ER_DUP_ENTRY" || candidate.errno === 1062;
-}
-
 function cents(value: string | null): number {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) : 0;
+}
+
+function revenueBand(centsValue: number): string {
+  if (centsValue < 100_00) return "under_100";
+  if (centsValue < 500_00) return "100_to_500";
+  if (centsValue < 1_500_00) return "500_to_1500";
+  if (centsValue < 5_000_00) return "1500_to_5000";
+  return "5000_plus";
 }
 
 async function readPipelineWith(
@@ -954,6 +958,19 @@ export async function attributeCommercialOrder(input: {
         tenantId: input.tenantId,
         missionId: pipeline.missionId,
       });
+      const refreshedPipelineRows = await tx
+        .select()
+        .from(commercialPipelineRecords)
+        .where(
+          and(
+            eq(commercialPipelineRecords.tenantId, input.tenantId),
+            eq(commercialPipelineRecords.id, pipeline.id)
+          )
+        )
+        .limit(1);
+      const refreshedPipeline = refreshedPipelineRows[0];
+      if (!refreshedPipeline)
+        throw new Error("Commercial pipeline disappeared during attribution");
       await tx.insert(commercialMissionEvents).values({
         tenantId: input.tenantId,
         missionId: pipeline.missionId,
@@ -989,6 +1006,44 @@ export async function attributeCommercialOrder(input: {
           paidRevenueCents: paidCents,
         },
       });
+      if (paidCents > 0) {
+        const projectionCorrelationId = `commercial-pipeline:${pipeline.id}:order:${input.requestId}`;
+        await writeDayforgeEventWith(tx, {
+          tenantId: input.tenantId,
+          actor: { type: "operator", id: input.actorId },
+          entityType: "commercial_pipeline",
+          entityId: String(pipeline.id),
+          eventName: "revenue_realized",
+          before: {
+            missionId: pipeline.missionId,
+            accountId: pipeline.accountId,
+            customerId: pipeline.commercialCustomerId,
+            paidRevenueCents: pipeline.paidRevenueCents,
+            realizedRevenueCents: pipeline.realizedRevenueCents,
+          },
+          after: {
+            missionId: refreshedPipeline.missionId,
+            accountId: refreshedPipeline.accountId,
+            customerId: refreshedPipeline.commercialCustomerId,
+            paidRevenueCents: refreshedPipeline.paidRevenueCents,
+            realizedRevenueCents: refreshedPipeline.realizedRevenueCents,
+          },
+          source: "commercial_pipeline",
+          correlationId: projectionCorrelationId,
+          idempotencyKey: `${projectionCorrelationId}:revenue_realized`,
+          productEvent: {
+            name: "revenue_realized",
+            missionId: pipeline.missionId,
+            accountId: pipeline.accountId,
+            opportunityId: pipeline.opportunityId,
+            customerId: pipeline.commercialCustomerId,
+            properties: {
+              revenueBand: revenueBand(paidCents),
+              attributionConfidence: "provider_paid_order",
+            },
+          },
+        });
+      }
     });
   } catch (error) {
     if (!isDuplicateKeyError(error)) throw error;
