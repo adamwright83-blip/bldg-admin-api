@@ -42,6 +42,13 @@ jobs:
       DAYFORGE_PUBLIC_PREVIEW_FINGERPRINT_SECRET: dayforge-release-preview-fingerprint-000000000000
       DAYFORGE_ALLOWED_ORIGINS: http://127.0.0.1:4173
       DRIVER_APP_ORIGIN: http://127.0.0.1:4173
+      # Required for e2e/dayforge/bossDemoJourney.spec.ts to exercise the real
+      # /julydemo control page instead of its "demo mode is off" placeholder.
+      # VITE_DAYFORGE_DEMO_MODE is a client build-time flag baked in by the
+      # "Build production bundles" step below.
+      DAYFORGE_DEMO_ENABLED: "true"
+      DAYFORGE_DEMO_TENANT_SLUG: sunset-laundry-demo
+      VITE_DAYFORGE_DEMO_MODE: "true"
 
     steps:
       - name: Check out repository
