@@ -114,3 +114,4 @@ temp/
 .webdev/
 .vercel
 test-results
+playwright-report

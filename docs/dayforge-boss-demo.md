@@ -65,12 +65,11 @@ variables below are the real names the code reads — confirmed against
   `DAYFORGE_STRIPE_TRIAL_DAYS`, `DAYFORGE_STRIPE_FOUNDING_PLAN`,
   `DAYFORGE_STRIPE_FOUNDING_AVAILABILITY`, `DAYFORGE_STRIPE_MAX_SUBSCRIPTIONS`,
   `DAYFORGE_STRIPE_ENTITLEMENTS`, `DAYFORGE_BILLING_GRACE_DAYS`.
-- Note: `server/dayforgeDemo/providerStatus.ts` reports the Stripe demo chip
-  by checking the *marketplace* `STRIPE_SECRET_KEY` (`sk_test_...` → `TEST`,
-  `sk_live_...` → `LIVE`, unset → `NOT_CONFIGURED`), which is a different
-  variable from the DayForge-billing-specific
-  `DAYFORGE_BILLING_STRIPE_SECRET_KEY` above. Set both if you want the demo
-  control page's Stripe chip and real DayForge billing calls to agree.
+- `server/dayforgeDemo/providerStatus.ts` reports the Stripe demo chip by
+  checking `DAYFORGE_BILLING_STRIPE_SECRET_KEY` directly (the same variable
+  `server/saas/saasBilling.ts` uses for real DayForge billing calls): unset
+  or shorter than 20 characters → `NOT_CONFIGURED`, an `sk_live_...` key →
+  `LIVE`, anything else (e.g. `sk_test_...`) → `TEST`.
 
 **SMS (Twilio, used for Churn Radar's manual SMS composer):**
 
@@ -112,10 +111,6 @@ migrations are manually maintained, per `docs/dayforge-release-gates.md`).
 
 ### 6. Demo tenant setup/reset/verify
 
-These npm scripts are owned by a companion workstream
-(`server/dayforgeDemo/` demo-tenant seed/reset/verify infra) landing
-alongside this branch. Once merged, run them in this order:
-
 ```bash
 pnpm dayforge:demo:setup     # seeds the sunset-laundry-demo tenant
 pnpm dayforge:demo:verify    # confirms seed data and migrations are consistent
@@ -126,6 +121,16 @@ seeded starting state (also reachable from the "Reset demo" button on
 `/dayforge-demo`, gated behind a confirm step). `pnpm dayforge:migrations:verify`
 confirms the applied schema matches what the release gate expects.
 
+Or run all of the above (env validation, DB connect, migrations, demo
+reset+seed, server start, smoke check) in one command:
+
+```bash
+pnpm dayforge:demo
+```
+
+It prints every URL below plus current provider status and exits leaving the
+server running in the background if it had to start one.
+
 ### 7. Start the app
 
 ```bash
@@ -135,9 +140,46 @@ pnpm dev
 This runs `tsx watch server/_core/index.ts`, which serves both the API and
 the Vite-built client on `http://localhost:3000` (override with `PORT`).
 There is no separate client dev server process — Vite is wired through the
-same Express process via `vite.config.ts`.
+same Express process via `vite.config.ts`. (`pnpm dayforge:demo` above does
+this step for you if the server isn't already running.)
 
-### 8. Provider status verification
+**Known gotcha:** `server/_core/index.ts` loads `.env` via an *async*
+`await import("dotenv/config")`, but some modules (`server/_core/env.ts`)
+are evaluated synchronously before that import resolves, so `JWT_SECRET`
+and similar vars can silently read as empty on the very first boot from a
+fresh `.env` file (you'll see `DOMException [DataError]: Zero-length key is
+not supported` in the server log on login). If you hit this, export the
+required vars directly in your shell instead of relying on the `.env` file,
+e.g. `set -a; source .env; set +a; pnpm dev`, or just restart the dev
+server once — subsequent restarts pick up `.env` correctly once the module
+cache is warm.
+
+### 8. Log in
+
+Two separate login systems exist in this codebase — using the wrong one is
+the most common way to get a confusing "not found" or "not enabled for the
+tenant" error mid-demo:
+
+- **DayForge tenant login** (`/dayforge-login`) — the one you want for
+  BORESLAY, Field, Proposal, Pipeline, and Churn Radar, because it's the
+  only login that resolves your session to the `sunset-laundry-demo` tenant:
+  - Workspace slug: `sunset-laundry-demo`
+  - Email: `demo-owner@sunsetlaundry.example` (or `demo-field@sunsetlaundry.example`
+    for the driver/field role)
+  - Password: `SunsetDemo2026!`
+  - (`server/dayforgeDemo/demoTenantSeed.ts` seeds this password's bcrypt
+    hash into `dayforge_saas_user_credentials` on every `dayforge:demo:setup`
+    / `dayforge:demo:reset` run; it's a fixed, publicly-documented demo-only
+    value, never a production secret.)
+- **Legacy admin login** (the `LoginForm` on `/dayforge-demo` and
+  `/commercial-missions`) — role `admin`, password from the `ADMIN_PASSWORD`
+  env var. This unlocks the demo control page and the legacy mission-admin
+  view, but it is **tenant-blind**: it does not resolve to the demo tenant,
+  so opening BORESLAY/Field/Pipeline/Churn Radar in this session will 404 or
+  403 even though the demo tenant is fully seeded. Use it only for
+  `/dayforge-demo` itself.
+
+### 9. Provider status verification
 
 Open `http://localhost:3000/dayforge-demo` (requires
 `VITE_DAYFORGE_DEMO_MODE=true`, `DAYFORGE_DEMO_ENABLED=true`, and an
@@ -148,7 +190,7 @@ confirm every chip matches what you intend to demo *before* the room fills
 up. A red/`NOT_CONFIGURED` chip mid-presentation is the single most avoidable
 failure in this runbook.
 
-### 9. Browser requirements
+### 10. Browser requirements
 
 - A recent Chromium-based browser (Chrome/Edge) or Safari. The release gate's
   own browser story runs on desktop and mobile Chromium
@@ -199,8 +241,9 @@ you can drive from that control page and just click "Open" on each row.
    injecting network state into the replay/physics loop.
 6. **Unlock phone mission** — back on `/commercial-missions`. Show the
    exactly-once `phone_unlocked` event and the one-time secure handoff link.
-7. **Open DayForge Field** — `/driver/sales-mission/:missionId`. Sign in as
-   the assigned driver (or use the handoff link), show the mission brief.
+7. **Open DayForge Field** — `/driver/sales-mission/:missionId`. Sign in via
+   `/dayforge-login` as `demo-field@sunsetlaundry.example` (see "Log in"
+   above) or use the phone handoff link, show the mission brief.
 8. **Complete preparation** — same page. Walk the tenant-configured checklist;
    required items must be completed or explicitly skipped before departure.
 9. **View approved proposal** — `/commercial-proposal/:missionId`. Show the
@@ -306,10 +349,14 @@ dev/demo setup:
 - **Google/territory:** `LIVE` only if `GOOGLE_MAPS_API_KEY` or
   `GOOGLE_PLACES_API_KEY` is set; otherwise `NOT_CONFIGURED` and the demo is
   running against seeded/deterministic data, not live business discovery.
-- **Stripe:** `NOT_CONFIGURED` with no key, `SIMULATED` if a key is set but
-  `MARKETPLACE_PAYMENTS_ENABLED` isn't `true`, `TEST` for an `sk_test_` key,
-  `LIVE` only for an `sk_live_` key. A typical dev box will show `TEST` at
-  best.
+- **Stripe:** `NOT_CONFIGURED` with no `DAYFORGE_BILLING_STRIPE_SECRET_KEY`
+  (or one under 20 characters), `TEST` for any other key (e.g. `sk_test_`),
+  `LIVE` only for an `sk_live_` key. The demo tenant's own subscription
+  row is always a fixed `trialing`-status simulated record seeded by
+  `dayforge:demo:setup`/`reset` — it grants BORESLAY/Field/Pipeline/Churn
+  Radar access without touching Stripe at all, independent of whatever this
+  chip reports; the chip only reflects whether *real* Stripe calls would
+  succeed if a tenant tried to check out.
 - **Email:** `NOT_CONFIGURED` unless all three `AGENTMAIL_*` variables are
   set. Not part of the core 15-step checklist.
 - **SMS:** `NOT_CONFIGURED` unless all three `TWILIO_*` variables are set.
@@ -333,6 +380,8 @@ dev/demo setup:
 From `client/src/App.tsx`:
 
 - `/dayforge` — public landing.
+- `/dayforge-login` — DayForge tenant login (slug + email + password); see
+  "Log in" above for the demo credentials.
 - `/territory-preview` — territory scan/results.
 - `/commercial-missions` — mission admin/timeline.
 - `/boreslay-rally` — BORESLAY game.
