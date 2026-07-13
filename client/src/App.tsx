@@ -43,6 +43,9 @@ const DayforgeLoginPage = lazy(() => import("./pages/DayforgeLoginPage"));
 const DayforgeSettingsPage = lazy(() => import("./pages/DayforgeSettingsPage"));
 const DayforgeInvitePage = lazy(() => import("./pages/DayforgeInvitePage"));
 const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
+const DayforgeDemoControlPage = lazy(
+  () => import("./pages/DayforgeDemoControlPage")
+);
 
 function PublicLandingFallback() {
   return <div style={{ minHeight: "100vh", background: "#F6F1E8" }} />;
@@ -139,6 +142,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/churn-radar",
   "/commercial-pipeline",
   "/operator-reflection",
+  "/dayforge-demo",
   "/boreslay-rally",
   "/dayforge",
   "/landingfinal",
@@ -147,6 +151,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/dayforge-login",
   "/dayforge-settings",
   "/dayforge-invite",
+  "/billing",
 ]);
 
 function AdminHostRouter() {
@@ -177,9 +182,19 @@ function AdminHostRouter() {
           <DayforgeSettingsPage />
         </Suspense>
       </Route>
+      <Route path="/billing">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeSettingsPage />
+        </Suspense>
+      </Route>
       <Route path="/commercial-missions">
         <Suspense fallback={<PublicLandingFallback />}>
           <CommercialMissionAdmin />
+        </Suspense>
+      </Route>
+      <Route path="/dayforge-demo">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeDemoControlPage />
         </Suspense>
       </Route>
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
@@ -289,6 +304,11 @@ function Router() {
         </Suspense>
       </Route>
       <Route path="/dayforge-settings">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeSettingsPage />
+        </Suspense>
+      </Route>
+      <Route path="/billing">
         <Suspense fallback={<PublicLandingFallback />}>
           <DayforgeSettingsPage />
         </Suspense>
