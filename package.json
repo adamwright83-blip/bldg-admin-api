@@ -13,7 +13,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:dayforge:release": "vitest run server/dayforgeRelease server/territory server/commercialMissions server/commercialProposals server/commercialPipeline server/dayforgeEvents shared/dayforgeEvents.test.ts",
+    "test:dayforge:release": "vitest run server/dayforgeRelease server/territory server/commercialMissions server/commercialProposals server/commercialPipeline server/dayforgeEvents server/mysqlErrors.test.ts shared/dayforgeEvents.test.ts",
     "test:dayforge:release:integration": "vitest run --config vitest.integration.config.ts server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts",
     "test:dayforge:release:e2e": "playwright test --config playwright.dayforge.config.ts",
     "check:dayforge:release": "tsc --project tsconfig.dayforge-release.json",

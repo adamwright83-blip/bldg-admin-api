@@ -11,17 +11,12 @@ import {
   type CommercialMissionGameTelemetry,
 } from "@shared/commercialMissionGame";
 import { getDb } from "../db";
+import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
 import {
   getCommercialMission,
   readCommercialMissionWith,
   transitionCommercialMissionWith,
 } from "./commercialMissionStore";
-
-function isDuplicateKeyError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: string; errno?: number };
-  return candidate.code === "ER_DUP_ENTRY" || candidate.errno === 1062;
-}
 
 function attemptView(row: typeof commercialMissionGameAttempts.$inferSelect) {
   return {

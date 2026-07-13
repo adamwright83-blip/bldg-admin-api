@@ -15,6 +15,7 @@ import {
   type FieldOutcomeReason,
 } from "@shared/commercialMissionField";
 import { getDb } from "../db";
+import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
 import {
   getCommercialMission,
   readCommercialMissionWith,
@@ -25,12 +26,6 @@ function affectedRows(result: unknown): number {
   return Number(
     (result as { [0]?: { affectedRows?: number } })[0]?.affectedRows ?? 0
   );
-}
-
-function isDuplicateKeyError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: string; errno?: number };
-  return candidate.code === "ER_DUP_ENTRY" || candidate.errno === 1062;
 }
 
 function hashToken(token: string): string {

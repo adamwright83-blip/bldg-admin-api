@@ -37,6 +37,7 @@ import type {
   NormalizedTenantOrder,
 } from "../../shared/tenantImports";
 import { getDb } from "../db";
+import { isMysqlDuplicateKeyError as duplicateKey } from "../mysqlErrors";
 import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
 
 export type PublicSaasPlan = {
@@ -54,11 +55,6 @@ function affectedRows(result: unknown): number {
   return Number(
     (result as { [0]?: { affectedRows?: number } })[0]?.affectedRows ?? 0
   );
-}
-
-function duplicateKey(error: unknown): boolean {
-  const candidate = error as { code?: string; errno?: number };
-  return candidate?.code === "ER_DUP_ENTRY" || candidate?.errno === 1062;
 }
 
 function allEntitlementsFromEnv(): DayforgeEntitlement[] {
