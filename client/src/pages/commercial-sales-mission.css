@@ -295,6 +295,12 @@
   font-size: 10px;
   line-height: 1.45;
 }
+.csm-collateral-note a {
+  color: #1e5fae;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .csm-privacy {
   color: #6f7885;
   font-size: 10px;

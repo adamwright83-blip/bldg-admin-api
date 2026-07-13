@@ -3,9 +3,11 @@ import { notifyOwner } from "./notification";
 import { adminProcedure, publicProcedure, router } from "./trpc";
 import { commercialMissionRouter } from "../commercialMissions/commercialMissionRouter";
 import { territoryRouter } from "../territory/territoryRouter";
+import { commercialProposalRouter } from "../commercialProposals/commercialProposalRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
+  commercialProposal: commercialProposalRouter,
   territory: territoryRouter,
   health: publicProcedure
     .input(

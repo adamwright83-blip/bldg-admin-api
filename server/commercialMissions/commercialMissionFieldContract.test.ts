@@ -61,6 +61,12 @@ describe("DayForge Field production contract", () => {
       "Field preparation has no required checklist items"
     );
     expect(service).toContain("const concurrentRows = await db");
+    expect(service).toContain(
+      "Approve a current proposal before marking the leave-behind ready"
+    );
+    expect(service).toContain(
+      "Approve a current proposal before departing for the visit"
+    );
   });
 
   it("derives assignment and actor from the signed session", () => {

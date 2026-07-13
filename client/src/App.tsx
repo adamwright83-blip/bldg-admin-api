@@ -21,6 +21,8 @@ const DayforgeLanding = lazy(() => import("./pages/DayforgeLanding"));
 const LandingFinal = lazy(() => import("./pages/LandingFinal"));
 const CommercialMissionAdmin = lazy(() => import("./pages/CommercialMissionAdmin"));
 const CommercialSalesMission = lazy(() => import("./pages/CommercialSalesMission"));
+const CommercialProposalPrint = lazy(() => import("./pages/CommercialProposalPrint"));
+const CommercialProposalSettings = lazy(() => import("./pages/CommercialProposalSettings"));
 const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
 
 function PublicLandingFallback() {
@@ -71,6 +73,14 @@ function CommercialSalesMissionRoute() {
   );
 }
 
+function CommercialProposalPrintRoute() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#dfe4e9" }} />}>
+      <CommercialProposalPrint />
+    </Suspense>
+  );
+}
+
 const LOCAL_ADMIN_PATHS = new Set([
   "/admin",
   "/home",
@@ -96,6 +106,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/vendors",
   "/level4",
   "/commercial-missions",
+  "/commercial-proposal-settings",
   "/operator-reflection",
   "/boreslay-rally",
   "/dayforge",
@@ -114,6 +125,10 @@ function AdminHostRouter() {
       </Route>
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/driver/sales-mission/:missionId" component={CommercialSalesMissionRoute} />
+      <Route path="/commercial-proposal/:missionId" component={CommercialProposalPrintRoute} />
+      <Route path="/commercial-proposal-settings">
+        <Suspense fallback={<PublicLandingFallback />}><CommercialProposalSettings /></Suspense>
+      </Route>
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
       <Route path="/pricing" component={AdminCatalog} />
@@ -182,6 +197,7 @@ function Router() {
       <Route path="/landingfinal" component={LandingFinalRoute} />
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route path="/driver/sales-mission/:missionId" component={CommercialSalesMissionRoute} />
+      <Route path="/commercial-proposal/:missionId" component={CommercialProposalPrintRoute} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
       <Route path="/pricing" component={AdminCatalog} />
