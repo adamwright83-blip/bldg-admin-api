@@ -6,10 +6,32 @@ proposals, Churn Radar, pipeline/revenue, tenant onboarding + Stripe billing,
 and security — is already built (PRs #11-#19; see
 `docs/dayforge-feature-inventory.md`, `docs/dayforge-production-rollout.md`,
 `docs/dayforge-release-gates.md`, `docs/dayforge-saas-onboarding-billing.md`).
-This document only tells you how to stand it up and drive it in front of a
-room.
 
-## Before the meeting
+## Presenter-facing URL
+
+**The intended URL is `https://admin.bldg.chat/julydemo`.** As of this
+writing that is not yet live — `admin.bldg.chat` currently serves a
+static-only Vercel deployment with no backend attached to it at all (see
+`docs/dayforge-production-deployment.md` for the full investigation and the
+exact remaining steps: merging the DayForge stack to `main`, running
+migrations against production, and wiring `admin.bldg.chat` to a backend).
+
+The full, real, working application from this same repository **is already
+live today at `https://api.bldg.chat`**, deployed via Railway from `main`.
+Once the DayForge stack merges and the demo tenant is enabled there (see the
+deployment doc), the boss-facing URL is `https://api.bldg.chat/julydemo` —
+functionally identical to `/julydemo` anywhere else, just a different
+hostname than the one originally requested. That decision (present at
+`api.bldg.chat`, or invest in wiring `admin.bldg.chat` to a backend first)
+is a deployment call for whoever has production access, not something this
+document assumes for you.
+
+**Everything below this point is the engineering/local-development
+appendix** — it stands the app up on your own machine for testing,
+debugging, and driving the browser-automation checks. It is not what you
+should show your boss; use the deployed URL above for that.
+
+## Before the meeting (local engineering setup)
 
 ### 1. Checkout
 
