@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Building2, Clock3, FileCheck2, Link2, Settings2, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Building2, Clock3, FileCheck2, Link2, Radar, Settings2, ShieldCheck } from "lucide-react";
 import { LoginForm } from "@/components/LoginForm";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
@@ -57,6 +57,9 @@ export default function CommercialMissionAdmin() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link href="/churn-radar" className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/40 px-3 py-2 text-sm text-emerald-200 hover:bg-emerald-400/10">
+              <Radar className="h-4 w-4" /> Churn Radar
+            </Link>
             <Link href="/commercial-proposal-settings" className="inline-flex items-center gap-2 rounded-lg border border-orange-400/40 px-3 py-2 text-sm text-orange-200 hover:bg-orange-400/10">
               <Settings2 className="h-4 w-4" /> Proposal profile
             </Link>
