@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/api/:path*", "destination": "https://api.bldg.chat/api/:path*" },
     { "source": "/receipt/:path*", "destination": "/index.html" },
     { "source": "/welcome", "destination": "/index.html" },
     { "source": "/admin", "destination": "/index.html" },
