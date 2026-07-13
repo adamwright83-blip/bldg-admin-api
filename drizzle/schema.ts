@@ -949,6 +949,55 @@ export const commercialMissionSteps = mysqlTable("commercial_mission_steps", {
   tenantMissionStepUnique: uniqueIndex("uq_commercial_mission_steps_tenant_mission_key").on(table.tenantId, table.missionId, table.stepKey),
 }));
 
+export const commercialMissionGameAttempts = mysqlTable("commercial_mission_game_attempts", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  missionVersion: int("missionVersion").notNull(),
+  playerId: varchar("playerId", { length: 128 }).notNull(),
+  status: mysqlEnum("status", ["active", "abandoned", "failed", "qualified"]).notNull().default("active"),
+  startedAt: timestamp("startedAt").defaultNow().notNull(),
+  endedAt: timestamp("endedAt"),
+  durationMs: int("durationMs"),
+  telemetryJson: json("telemetryJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantMissionIdx: index("idx_commercial_game_attempts_tenant_mission").on(table.tenantId, table.missionId, table.startedAt),
+  tenantPlayerIdx: index("idx_commercial_game_attempts_tenant_player").on(table.tenantId, table.playerId, table.startedAt),
+}));
+
+export const commercialMissionGameResults = mysqlTable("commercial_mission_game_results", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  missionVersion: int("missionVersion").notNull(),
+  gameAttemptId: varchar("gameAttemptId", { length: 36 }).notNull(),
+  playerId: varchar("playerId", { length: 128 }).notNull(),
+  sparkScore: int("sparkScore").notNull(),
+  clockheadScore: int("clockheadScore").notNull(),
+  durationMs: int("durationMs").notNull(),
+  replayJson: json("replayJson").notNull(),
+  qualifiedAt: timestamp("qualifiedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantMissionUnique: uniqueIndex("uq_commercial_game_results_tenant_mission").on(table.tenantId, table.missionId),
+  tenantAttemptUnique: uniqueIndex("uq_commercial_game_results_tenant_attempt").on(table.tenantId, table.gameAttemptId),
+}));
+
+export const commercialMissionGameRewards = mysqlTable("commercial_mission_game_rewards", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  gameResultId: int("gameResultId").notNull(),
+  playerId: varchar("playerId", { length: 128 }).notNull(),
+  xpAwarded: int("xpAwarded").notNull(),
+  streakDays: int("streakDays").notNull(),
+  awardedAt: timestamp("awardedAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantMissionUnique: uniqueIndex("uq_commercial_game_rewards_tenant_mission").on(table.tenantId, table.missionId),
+  tenantResultUnique: uniqueIndex("uq_commercial_game_rewards_tenant_result").on(table.tenantId, table.gameResultId),
+}));
+
 export const commercialVisitOutcomes = mysqlTable("commercial_visit_outcomes", {
   id: int("id").autoincrement().primaryKey(),
   tenantId: varchar("tenantId", { length: 64 }).notNull(),
@@ -967,6 +1016,9 @@ export type CommercialAccount = typeof commercialAccounts.$inferSelect;
 export type CommercialOpportunityRow = typeof commercialOpportunities.$inferSelect;
 export type CommercialMissionRow = typeof commercialMissions.$inferSelect;
 export type CommercialMissionEventRow = typeof commercialMissionEvents.$inferSelect;
+export type CommercialMissionGameAttemptRow = typeof commercialMissionGameAttempts.$inferSelect;
+export type CommercialMissionGameResultRow = typeof commercialMissionGameResults.$inferSelect;
+export type CommercialMissionGameRewardRow = typeof commercialMissionGameRewards.$inferSelect;
 
 export const territoryOperatorProfiles = mysqlTable("territory_operator_profiles", {
   tenantId: varchar("tenantId", { length: 64 }).primaryKey(),

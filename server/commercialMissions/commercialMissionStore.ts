@@ -62,7 +62,11 @@ function decodeMission(row: CommercialMissionRow, steps: CommercialMissionStep[]
   };
 }
 
-async function readMissionWith(
+export type CommercialMissionTransaction = Parameters<
+  Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]
+>[0];
+
+export async function readCommercialMissionWith(
   query: Pick<NonNullable<Awaited<ReturnType<typeof getDb>>>, "select">,
   input: { tenantId: string; missionId: number },
 ): Promise<CommercialMission | null> {
@@ -114,7 +118,7 @@ export async function createCommercialMission(input: {
         ))
         .limit(1);
       if (existingEvent[0]) {
-        const existing = await readMissionWith(tx, {
+        const existing = await readCommercialMissionWith(tx, {
           tenantId: input.tenantId,
           missionId: existingEvent[0].missionId,
         });
@@ -236,7 +240,7 @@ export async function createCommercialMission(input: {
         note: `${code} created for ${input.account.name}`,
       });
 
-      const created = await readMissionWith(tx, { tenantId: input.tenantId, missionId });
+      const created = await readCommercialMissionWith(tx, { tenantId: input.tenantId, missionId });
       if (!created) throw new Error("Commercial mission insert did not return a row");
       return created;
     });
@@ -257,7 +261,7 @@ export async function getCommercialMission(input: {
 }): Promise<CommercialMission | null> {
   const db = await getDb();
   if (!db) return null;
-  return readMissionWith(db, input);
+  return readCommercialMissionWith(db, input);
 }
 
 export async function listCommercialMissions(input: {
@@ -276,7 +280,7 @@ export async function listCommercialMissions(input: {
     .where(where)
     .orderBy(desc(commercialMissions.updatedAt), desc(commercialMissions.id))
     .limit(Math.min(Math.max(input.limit ?? 100, 1), 250));
-  const missions = await Promise.all(rows.map(row => readMissionWith(db, {
+  const missions = await Promise.all(rows.map(row => readCommercialMissionWith(db, {
     tenantId: input.tenantId,
     missionId: row.id,
   })));
@@ -314,7 +318,30 @@ export async function transitionCommercialMission(input: {
   if (!db) throw new Error("Database not available");
 
   try {
-    return await db.transaction(async tx => {
+    return await db.transaction(tx => transitionCommercialMissionWith(tx, input));
+  } catch (error) {
+    if (!isDuplicateKeyError(error)) throw error;
+    const replay = await getCommercialMissionByIdempotencyKey({
+      tenantId: input.tenantId,
+      idempotencyKey: input.idempotencyKey,
+    });
+    if (!replay || replay.id !== input.missionId) throw error;
+    return replay;
+  }
+}
+
+export async function transitionCommercialMissionWith(
+  tx: CommercialMissionTransaction,
+  input: {
+    tenantId: string;
+    missionId: number;
+    expectedVersion: number;
+    toStatus: CommercialMissionStatus;
+    actor: Actor;
+    idempotencyKey: string;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<CommercialMission> {
       const replayEvent = await tx
         .select({ missionId: commercialMissionEvents.missionId })
         .from(commercialMissionEvents)
@@ -327,12 +354,12 @@ export async function transitionCommercialMission(input: {
         if (replayEvent[0].missionId !== input.missionId) {
           throw new Error("Idempotency key is already bound to a different commercial mission");
         }
-        const replay = await readMissionWith(tx, { tenantId: input.tenantId, missionId: replayEvent[0].missionId });
+        const replay = await readCommercialMissionWith(tx, { tenantId: input.tenantId, missionId: replayEvent[0].missionId });
         if (!replay) throw new Error("Idempotent transition result is missing");
         return replay;
       }
 
-      const current = await readMissionWith(tx, input);
+      const current = await readCommercialMissionWith(tx, input);
       if (!current) throw new Error("Commercial mission not found");
       if (current.version !== input.expectedVersion) {
         throw new Error(`Commercial mission version conflict: expected ${input.expectedVersion}, found ${current.version}`);
@@ -375,19 +402,9 @@ export async function transitionCommercialMission(input: {
         }).where(and(eq(opsTasks.tenantId, input.tenantId), eq(opsTasks.id, current.opsTaskId)));
       }
 
-      const transitioned = await readMissionWith(tx, input);
+      const transitioned = await readCommercialMissionWith(tx, input);
       if (!transitioned) throw new Error("Commercial mission transition did not return a row");
       return transitioned;
-    });
-  } catch (error) {
-    if (!isDuplicateKeyError(error)) throw error;
-    const replay = await getCommercialMissionByIdempotencyKey({
-      tenantId: input.tenantId,
-      idempotencyKey: input.idempotencyKey,
-    });
-    if (!replay || replay.id !== input.missionId) throw error;
-    return replay;
-  }
 }
 
 export async function listCommercialMissionEvents(input: {

@@ -96,3 +96,9 @@ PR #10 must remain open until all of the following are true:
 5. No extraction commit changes or deletes the locked landing-page implementation.
 
 After these checks, PR #10 may be closed as **superseded by the archive plus PRs A-F**, never as discarded work.
+
+## Production extraction progress
+
+- **PR A / #11:** normalized canonical commercial mission, tenant-scoped lifecycle, authorization, idempotency, ops-task bridge, and admin visibility.
+- **PR B / #12:** real server-only geocoding/business discovery, evidence provenance, laundry scoring, tenant operating profile, durable scans, and mission creation.
+- **PR C:** existing Rally integration with persisted mission HUD, multi-attempt history, immutable qualifying result, server-calculated reward, and exactly-once phone unlock. Experimental PR #10 adapters remain archived; the production integration deliberately wraps the existing deterministic engine instead of inserting network state into replay simulation.

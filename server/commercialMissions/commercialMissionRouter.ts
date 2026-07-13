@@ -13,6 +13,12 @@ import {
   listCommercialMissions,
   transitionCommercialMission,
 } from "./commercialMissionStore";
+import {
+  abandonCommercialMissionGame,
+  completeCommercialMissionGame,
+  getCommercialMissionGameState,
+  startCommercialMissionGame,
+} from "./commercialMissionGameService";
 
 const accountSchema = z.object({
   name: z.string().trim().min(1).max(255),
@@ -142,5 +148,78 @@ export const commercialMissionRouter = router({
         tenantId: ctx.tenantId,
         actor: { type: ctx.user.role === "admin" ? "operator" : "driver", id: ctx.user.openId },
       });
+    }),
+
+  gameStart: protectedProcedure
+    .input(z.object({
+      missionId: z.number().int().positive(),
+      expectedVersion: z.number().int().positive(),
+      gameAttemptId: z.string().uuid(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({ tenantId: ctx.tenantId, missionId: input.missionId });
+      if (!mission) return notFound();
+      try {
+        assertDriverCanReadMission({ mission, userId: ctx.user.openId, isAdmin: ctx.user.role === "admin" });
+      } catch (error) {
+        throw new TRPCError({ code: "FORBIDDEN", message: (error as Error).message });
+      }
+      return startCommercialMissionGame({ ...input, tenantId: ctx.tenantId, playerId: ctx.user.openId });
+    }),
+
+  gameState: protectedProcedure
+    .input(z.object({ missionId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({ tenantId: ctx.tenantId, missionId: input.missionId });
+      if (!mission) return notFound();
+      try {
+        assertDriverCanReadMission({ mission, userId: ctx.user.openId, isAdmin: ctx.user.role === "admin" });
+      } catch (error) {
+        throw new TRPCError({ code: "FORBIDDEN", message: (error as Error).message });
+      }
+      return getCommercialMissionGameState({ tenantId: ctx.tenantId, missionId: input.missionId });
+    }),
+
+  gameAbandon: protectedProcedure
+    .input(z.object({
+      missionId: z.number().int().positive(),
+      expectedVersion: z.number().int().positive(),
+      gameAttemptId: z.string().uuid(),
+      reason: z.enum(["defeat", "quit", "restart"]),
+      durationMs: z.number().int().nonnegative().max(3_600_000),
+      telemetry: z.record(z.string(), z.unknown()).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({ tenantId: ctx.tenantId, missionId: input.missionId });
+      if (!mission) return notFound();
+      try {
+        assertDriverCanReadMission({ mission, userId: ctx.user.openId, isAdmin: ctx.user.role === "admin" });
+      } catch (error) {
+        throw new TRPCError({ code: "FORBIDDEN", message: (error as Error).message });
+      }
+      return abandonCommercialMissionGame({ ...input, tenantId: ctx.tenantId, playerId: ctx.user.openId });
+    }),
+
+  gameComplete: protectedProcedure
+    .input(z.object({
+      missionId: z.number().int().positive(),
+      expectedVersion: z.number().int().positive(),
+      gameAttemptId: z.string().uuid(),
+      telemetry: z.object({
+        sparkScore: z.number().int().min(5).max(99),
+        clockheadScore: z.number().int().min(0).max(99),
+        durationMs: z.number().int().positive().max(3_600_000),
+        replay: z.record(z.string(), z.unknown()).refine(value => JSON.stringify(value).length <= 250_000, "Replay is too large"),
+      }),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({ tenantId: ctx.tenantId, missionId: input.missionId });
+      if (!mission) return notFound();
+      try {
+        assertDriverCanReadMission({ mission, userId: ctx.user.openId, isAdmin: ctx.user.role === "admin" });
+      } catch (error) {
+        throw new TRPCError({ code: "FORBIDDEN", message: (error as Error).message });
+      }
+      return completeCommercialMissionGame({ ...input, tenantId: ctx.tenantId, playerId: ctx.user.openId });
     }),
 });
