@@ -968,6 +968,56 @@ export type CommercialOpportunityRow = typeof commercialOpportunities.$inferSele
 export type CommercialMissionRow = typeof commercialMissions.$inferSelect;
 export type CommercialMissionEventRow = typeof commercialMissionEvents.$inferSelect;
 
+export const territoryOperatorProfiles = mysqlTable("territory_operator_profiles", {
+  tenantId: varchar("tenantId", { length: 64 }).primaryKey(),
+  storeName: varchar("storeName", { length: 255 }).notNull(),
+  storeAddress: varchar("storeAddress", { length: 512 }).notNull(),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  serviceRadiusMiles: decimal("serviceRadiusMiles", { precision: 6, scale: 2 }).notNull().default("3.00"),
+  commercialWashFoldEnabled: boolean("commercialWashFoldEnabled").notNull().default(true),
+  averagePricePerPoundCents: int("averagePricePerPoundCents").notNull(),
+  availableWeeklyCapacityPounds: int("availableWeeklyCapacityPounds").notNull(),
+  routePointsJson: json("routePointsJson").notNull(),
+  turnaroundCompatibleByDefault: boolean("turnaroundCompatibleByDefault").notNull().default(true),
+  pickupDaysCompatibleByDefault: boolean("pickupDaysCompatibleByDefault").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const territoryScanSessions = mysqlTable("territory_scan_sessions", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }),
+  mode: mysqlEnum("mode", ["public_preview", "tenant"]).notNull(),
+  addressQuery: varchar("addressQuery", { length: 512 }).notNull(),
+  centerJson: json("centerJson").notNull(),
+  providerName: varchar("providerName", { length: 64 }).notNull(),
+  resultCount: int("resultCount").notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdBy: varchar("createdBy", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantCreatedIdx: index("idx_territory_scan_sessions_tenant_created").on(table.tenantId, table.createdAt),
+  expiresIdx: index("idx_territory_scan_sessions_expires").on(table.expiresAt),
+}));
+
+export const territoryScanResults = mysqlTable("territory_scan_results", {
+  id: int("id").autoincrement().primaryKey(),
+  scanSessionId: varchar("scanSessionId", { length: 64 }).notNull(),
+  tenantId: varchar("tenantId", { length: 64 }),
+  candidateKey: varchar("candidateKey", { length: 191 }).notNull(),
+  providerName: varchar("providerName", { length: 64 }).notNull(),
+  providerAccountId: varchar("providerAccountId", { length: 191 }).notNull(),
+  accountSnapshotJson: json("accountSnapshotJson").notNull(),
+  scoreSnapshotJson: json("scoreSnapshotJson").notNull(),
+  evidenceJson: json("evidenceJson").notNull(),
+  sourceCapturedAt: timestamp("sourceCapturedAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  sessionCandidateUnique: uniqueIndex("uq_territory_scan_results_session_candidate").on(table.scanSessionId, table.candidateKey),
+  tenantSessionIdx: index("idx_territory_scan_results_tenant_session").on(table.tenantId, table.scanSessionId),
+}));
+
 export const level4Missions = mysqlTable("level4_missions", {
   id: int("id").autoincrement().primaryKey(),
   tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
