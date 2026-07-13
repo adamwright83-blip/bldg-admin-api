@@ -28,6 +28,15 @@ export const systemRouter = router({
     .query(() => ({
       ok: true,
     })),
+  dayforgeDeployment: publicProcedure.query(() => ({
+    ok: true,
+    dayforgeStack: true,
+    demoEnabled: process.env.DAYFORGE_DEMO_ENABLED === "true",
+    commitSha:
+      process.env.RAILWAY_GIT_COMMIT_SHA ??
+      process.env.VERCEL_GIT_COMMIT_SHA ??
+      "unknown",
+  })),
 
   notifyOwner: adminProcedure
     .input(
