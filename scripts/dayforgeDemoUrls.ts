@@ -1,15 +1,19 @@
 /**
- * Shared "what to open next" printer for the boss-demo CLI scripts.
- * The app is one unified Express + Vite-middleware server (see
- * server/_core/index.ts, default PORT=3000) — there is no separate
- * frontend origin/port in dev or prod.
+ * Shared "what to open next" printer for the boss-demo CLI scripts. This is
+ * an ENGINEERING tool for local development/debugging — the boss-facing
+ * presentation URL is the deployed production domain
+ * (https://admin.bldg.chat/julydemo, see docs/dayforge-boss-demo.md), never
+ * this localhost output. The app is one unified Express + Vite-middleware
+ * server (see server/_core/index.ts, default PORT=3000) — there is no
+ * separate frontend origin/port in dev or prod.
  */
 const PORT = process.env.PORT || "3000";
 const BASE_URL = `http://localhost:${PORT}`;
 
 export function printDemoUrls(missionId: number | string): void {
-  console.log("Local URLs:");
-  console.log(`  Demo control:    ${BASE_URL}/dayforge-demo`);
+  console.log("Local engineering URLs (not for presenting to the room —");
+  console.log("see docs/dayforge-boss-demo.md for the deployed presentation URL):");
+  console.log(`  Demo control:    ${BASE_URL}/julydemo`);
   console.log(`  Landing:         ${BASE_URL}/dayforge`);
   console.log(`  Territory:       ${BASE_URL}/territory-preview`);
   console.log(`  DayForge login:  ${BASE_URL}/dayforge-login`);

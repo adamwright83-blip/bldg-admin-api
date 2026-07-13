@@ -65,6 +65,14 @@ test.describe("Boss demo journey — desktop", () => {
       page.getByRole("heading", { name: /admin sign in/i })
     ).toBeVisible({ timeout: 15_000 });
 
+    // ---- /julydemo is the canonical boss-demo control route; /dayforge-demo
+    // redirects to it for backward compatibility ----
+    await page.goto("/dayforge-demo");
+    await page.waitForURL(/\/julydemo$/, { timeout: 10_000 });
+    await expect(
+      page.getByRole("heading", { name: /admin sign in/i })
+    ).toBeVisible({ timeout: 15_000 });
+
     expect(consoleErrors).toEqual([]);
   });
 });

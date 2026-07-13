@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Suspense, lazy } from "react";
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { TenantProvider, useTenant } from "./hooks/useTenant";
@@ -143,6 +143,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/commercial-pipeline",
   "/operator-reflection",
   "/dayforge-demo",
+  "/julydemo",
   "/boreslay-rally",
   "/dayforge",
   "/landingfinal",
@@ -192,10 +193,14 @@ function AdminHostRouter() {
           <CommercialMissionAdmin />
         </Suspense>
       </Route>
-      <Route path="/dayforge-demo">
+      <Route path="/julydemo">
         <Suspense fallback={<PublicLandingFallback />}>
           <DayforgeDemoControlPage />
         </Suspense>
+      </Route>
+      {/* Kept for backward compatibility with earlier links/bookmarks; /julydemo is canonical. */}
+      <Route path="/dayforge-demo">
+        <Redirect to="/julydemo" />
       </Route>
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
       <Route
