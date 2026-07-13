@@ -22,6 +22,13 @@ import {
   type CommercialMissionStep,
 } from "@shared/commercialMission";
 import { eventNameForCommercialMissionTransition } from "@shared/commercialMissionLifecycle";
+import {
+  commercialAccountIdentityKey,
+  commercialContactIdentityKey,
+  commercialLocationIdentityKey,
+  createCommercialPipelineForMissionWith,
+  syncCommercialPipelineForMissionTransitionWith,
+} from "../commercialPipeline/commercialPipelineCore";
 
 type Actor = {
   type: "system" | "operator" | "driver" | "game";
@@ -126,28 +133,53 @@ export async function createCommercialMission(input: {
         return existing;
       }
 
-      const accountInsert = await tx.insert(commercialAccounts).values({
+      const identityKey = commercialAccountIdentityKey(input.account);
+      await tx.insert(commercialAccounts).values({
         tenantId: input.tenantId,
+        identityKey,
         name: input.account.name,
         accountType: input.account.accountType,
-      });
-      const accountId = Number(accountInsert[0].insertId);
+        providerName: input.account.providerName ?? null,
+        providerAccountId: input.account.providerAccountId ?? null,
+      }).onDuplicateKeyUpdate({ set: {
+        identityKey,
+        name: input.account.name,
+        accountType: input.account.accountType,
+        providerName: input.account.providerName ?? null,
+        providerAccountId: input.account.providerAccountId ?? null,
+      }});
+      const accountRows = await tx.select({ id: commercialAccounts.id }).from(commercialAccounts).where(and(
+        eq(commercialAccounts.tenantId, input.tenantId),
+        eq(commercialAccounts.identityKey, identityKey),
+      )).limit(1);
+      const accountId = accountRows[0]?.id;
+      if (!accountId) throw new Error("Commercial account identity was not persisted");
       await tx.insert(commercialAccountLocations).values({
         tenantId: input.tenantId,
         accountId,
+        locationKey: commercialLocationIdentityKey(input.account),
         label: "Primary",
         address: input.account.address,
         latitude: String(input.account.latitude),
         longitude: String(input.account.longitude),
         isPrimary: true,
-      });
+      }).onDuplicateKeyUpdate({ set: {
+        address: input.account.address,
+        latitude: String(input.account.latitude),
+        longitude: String(input.account.longitude),
+        isPrimary: true,
+      }});
       if (input.account.decisionMaker.name || input.account.decisionMaker.title) {
         await tx.insert(commercialAccountContacts).values({
           tenantId: input.tenantId,
           accountId,
+          contactKey: commercialContactIdentityKey(input.account.decisionMaker),
           name: input.account.decisionMaker.name,
           title: input.account.decisionMaker.title,
-        });
+        }).onDuplicateKeyUpdate({ set: {
+          name: input.account.decisionMaker.name,
+          title: input.account.decisionMaker.title,
+        }});
       }
       const opportunityInsert = await tx.insert(commercialOpportunities).values({
         tenantId: input.tenantId,
@@ -204,6 +236,16 @@ export async function createCommercialMission(input: {
         .update(commercialMissions)
         .set({ code })
         .where(and(eq(commercialMissions.tenantId, input.tenantId), eq(commercialMissions.id, missionId)));
+
+      await createCommercialPipelineForMissionWith(tx, {
+        tenantId: input.tenantId,
+        accountId,
+        opportunityId,
+        missionId,
+        estimatedContractValueCents: input.opportunity.estimatedAnnualValueCents,
+        actor: input.actor,
+        correlationId: input.idempotencyKey,
+      });
 
       if (input.steps.length > 0) {
         await tx.insert(commercialMissionSteps).values(
@@ -401,6 +443,15 @@ export async function transitionCommercialMissionWith(
           metadataJson: { commercialMissionId: current.id, commercialMissionStatus: input.toStatus },
         }).where(and(eq(opsTasks.tenantId, input.tenantId), eq(opsTasks.id, current.opsTaskId)));
       }
+
+      await syncCommercialPipelineForMissionTransitionWith(tx, {
+        tenantId: input.tenantId,
+        mission: current,
+        toStatus: input.toStatus,
+        actor: input.actor,
+        correlationId: input.idempotencyKey,
+        metadata: input.metadata,
+      });
 
       const transitioned = await readCommercialMissionWith(tx, input);
       if (!transitioned) throw new Error("Commercial mission transition did not return a row");

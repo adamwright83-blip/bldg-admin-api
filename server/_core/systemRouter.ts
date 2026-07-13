@@ -5,11 +5,13 @@ import { commercialMissionRouter } from "../commercialMissions/commercialMission
 import { territoryRouter } from "../territory/territoryRouter";
 import { commercialProposalRouter } from "../commercialProposals/commercialProposalRouter";
 import { churnRadarRouter } from "../churnRadar/churnRadarRouter";
+import { commercialPipelineRouter } from "../commercialPipeline/commercialPipelineRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
   commercialProposal: commercialProposalRouter,
   churnRadar: churnRadarRouter,
+  commercialPipeline: commercialPipelineRouter,
   territory: territoryRouter,
   health: publicProcedure
     .input(

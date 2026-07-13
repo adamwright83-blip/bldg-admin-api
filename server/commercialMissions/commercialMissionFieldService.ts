@@ -672,7 +672,18 @@ export async function recordCommercialMissionVisitOutcome(input: {
         toStatus: input.outcome,
         actor: { type: "driver", id: input.actorId },
         idempotencyKey: `field-outcome:${input.requestId}`,
-        metadata: { visitOutcome: input.outcome, reason: input.reason ?? null },
+        metadata: {
+          visitOutcome: input.outcome,
+          reason: input.reason ?? null,
+          decisionMakerStatus: input.decisionMakerStatus,
+          collateralDelivered: input.collateralDelivered,
+          quoteRequested: input.quoteRequested,
+          pilotRequested: input.pilotRequested,
+          followUpRequested: input.followUpRequested,
+          followUpAt: input.followUpAt?.toISOString() ?? null,
+          notes: input.notes,
+          requestId: input.requestId,
+        },
       });
     });
   } catch (error) {

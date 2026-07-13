@@ -88,6 +88,8 @@ export const territoryRouter = router({
       tenantId: ctx.tenantId,
       assignedTo: input.assignedTo,
       account: {
+        providerName: result.providerName,
+        providerAccountId: result.providerAccountId,
         name: result.account.name,
         accountType: result.account.accountType,
         address: result.account.address,
