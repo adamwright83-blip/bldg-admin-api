@@ -287,7 +287,7 @@ export async function createCommercialMission(input: {
       const accountRows = await tx.select({ id: commercialAccounts.id }).from(commercialAccounts).where(and(
         eq(commercialAccounts.tenantId, input.tenantId),
         eq(commercialAccounts.identityKey, identityKey),
-      )).limit(1);
+      )).limit(1).for("update");
       const accountId = accountRows[0]?.id;
       if (!accountId) throw new Error("Commercial account identity was not persisted");
       await tx.insert(commercialAccountLocations).values({
