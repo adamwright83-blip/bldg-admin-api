@@ -4,6 +4,7 @@ import { dayforgeSaasTenants, orders } from "../../drizzle/schema";
 import { getCommercialMissionByIdempotencyKey } from "../commercialMissions/commercialMissionStore";
 import {
   DEMO_MISSION_IDEMPOTENCY_KEY,
+  DEMO_MISSION_PUBLIC_CODE,
   demoTenantId,
   demoTenantSlug,
 } from "./demoTenantSeed";
@@ -109,6 +110,11 @@ export async function verifyDemoTenant(): Promise<DemoVerifyReport> {
   });
 
   if (mission) {
+    checks.push({
+      name: "mission_public_code_stable",
+      pass: mission.code === DEMO_MISSION_PUBLIC_CODE,
+      detail: `code=${mission.code} (internal id=${mission.id})`,
+    });
     checks.push({
       name: "mission_account_linked",
       pass: mission.account.name === "Westview Property Management",

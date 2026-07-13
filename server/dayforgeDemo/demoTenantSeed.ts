@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { getDb } from "../db";
 import { ENV } from "../_core/env";
 import {
+  commercialMissions,
   dayforgeSaasEntitlements,
   dayforgeSaasMemberships,
   dayforgeSaasSubscriptions,
@@ -207,6 +208,23 @@ async function upsertDemoUsers(tenantId: string): Promise<void> {
     });
 }
 
+/**
+ * The demo story is told through a stable public code, "MISSION 042" —
+ * every presentation surface (Radar, BORESLAY, Field, proposal, pipeline,
+ * timeline) reads `mission.code`, never the internal `mission.id`. The
+ * internal id is free to change on every reset (it's the real primary key
+ * used for joins/authorization/events); the code must not.
+ *
+ * commercial_missions.code normally defaults to `formatMissionCode(id)`
+ * (server/commercialMissions/commercialMissionStore.ts) — fine for real
+ * tenants, where a mission is created once and never regenerated. The demo
+ * tenant is different: demoTenantReset.ts deletes and recreates this row on
+ * every reset, so left alone its code would drift ("MISSION 029", "MISSION
+ * 033", ...) even though the story is always the same account. Overwrite it
+ * here, once, right after creation.
+ */
+export const DEMO_MISSION_PUBLIC_CODE = "MISSION 042";
+
 /** MISSION 042 / Westview Property Management — the canonical demo storyline mission. */
 async function ensureDemoMission(tenantId: string): Promise<CommercialMission> {
   const existing = await getCommercialMissionByIdempotencyKey({
@@ -215,7 +233,7 @@ async function ensureDemoMission(tenantId: string): Promise<CommercialMission> {
   });
   if (existing) return existing;
 
-  return createCommercialMission({
+  const created = await createCommercialMission({
     tenantId,
     assignedTo: DEMO_FIELD_OPEN_ID,
     actor: { type: "system", id: "dayforge-demo-seed" },
@@ -256,6 +274,20 @@ async function ensureDemoMission(tenantId: string): Promise<CommercialMission> {
       { key: "proposal", label: "Proposal", detail: "Send pricing for portfolio-wide service.", status: "locked", position: 4 },
     ],
   });
+
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(commercialMissions)
+    .set({ code: DEMO_MISSION_PUBLIC_CODE })
+    .where(
+      and(
+        eq(commercialMissions.tenantId, tenantId),
+        eq(commercialMissions.id, created.id)
+      )
+    );
+
+  return { ...created, code: DEMO_MISSION_PUBLIC_CODE };
 }
 
 /** Sarah Johnson — a second demo customer with order history tuned for Churn Radar. */
