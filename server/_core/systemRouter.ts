@@ -2,9 +2,11 @@ import { z } from "zod";
 import { notifyOwner } from "./notification";
 import { adminProcedure, publicProcedure, router } from "./trpc";
 import { commercialMissionRouter } from "../commercialMissions/commercialMissionRouter";
+import { territoryRouter } from "../territory/territoryRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
+  territory: territoryRouter,
   health: publicProcedure
     .input(
       z.object({
