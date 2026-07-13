@@ -483,7 +483,9 @@ describe.skipIf(!runDatabaseGate)(
             requestId: `order-${suffix}`,
           }),
         ]);
-        expect(attributions.every(item => item.pipeline.firstOrderId === orderId)).toBe(true);
+        expect(attributions.every(item => item.firstOrderId === orderId)).toBe(
+          true
+        );
         const persistedAttributions = await db
           .select()
           .from(commercialOrderAttributions)
@@ -498,11 +500,11 @@ describe.skipIf(!runDatabaseGate)(
           tenantId,
           pipelineId: pipelineRow.id,
         });
-        expect(finalPipeline?.pipeline.realizedRevenueCents).toBe(24_000);
-        expect(finalPipeline?.pipeline.invoicedRevenueCents).toBe(0);
+        expect(finalPipeline?.values.realizedRevenueCents).toBe(24_000);
+        expect(finalPipeline?.values.invoicedRevenueCents).toBe(0);
         assertNoFabricatedExternalTruth({
           invoicedRevenueCents:
-            finalPipeline?.pipeline.invoicedRevenueCents ?? -1,
+            finalPipeline?.values.invoicedRevenueCents ?? -1,
           invoiceEvidenceAvailable: false,
         });
 
