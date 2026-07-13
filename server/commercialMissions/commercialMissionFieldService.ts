@@ -1,10 +1,11 @@
 import { createHash, createHmac } from "node:crypto";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
 import {
   commercialMissionEvents,
   commercialMissionFieldChecklistItems,
   commercialMissionFieldStates,
   commercialMissionPhoneHandoffs,
+  commercialProposals,
   commercialVisitOutcomes,
   tenantFieldChecklistTemplates,
 } from "../../drizzle/schema";
@@ -64,7 +65,7 @@ export async function getCommercialMissionFieldState(input: {
   if (!db) throw new Error("Database not available");
   const mission = await getCommercialMission(input);
   if (!mission) return null;
-  const [states, checklist, outcomes] = await Promise.all([
+  const [states, checklist, outcomes, proposals] = await Promise.all([
     db
       .select()
       .from(commercialMissionFieldStates)
@@ -94,6 +95,24 @@ export async function getCommercialMissionFieldState(input: {
           eq(commercialVisitOutcomes.missionId, input.missionId)
         )
       )
+      .limit(1),
+    db
+      .select({
+        id: commercialProposals.id,
+        version: commercialProposals.version,
+        status: commercialProposals.status,
+        validThrough: commercialProposals.validThrough,
+      })
+      .from(commercialProposals)
+      .where(
+        and(
+          eq(commercialProposals.tenantId, input.tenantId),
+          eq(commercialProposals.missionId, input.missionId),
+          eq(commercialProposals.status, "approved"),
+          gt(commercialProposals.validThrough, new Date())
+        )
+      )
+      .orderBy(sql`${commercialProposals.version} DESC`)
       .limit(1),
   ]);
   const state = states[0] ?? null;
@@ -136,6 +155,14 @@ export async function getCommercialMissionFieldState(input: {
           followUpRequested: outcome.followUpRequested,
           reason: outcome.reason,
           evidence: outcome.evidenceJson as Record<string, unknown>,
+        }
+      : null,
+    proposal: proposals[0]
+      ? {
+          id: proposals[0].id,
+          version: proposals[0].version,
+          status: proposals[0].status,
+          validThrough: proposals[0].validThrough.toISOString(),
         }
       : null,
     navigationUrl: navigationUrl(mission.account.address),
@@ -276,6 +303,24 @@ export async function updateCommercialMissionFieldChecklist(input: {
       throw new Error("Field state version conflict");
     if (input.status === "skipped" && item.required)
       throw new Error("A required preparation item cannot be skipped");
+    if (input.itemKey === "collateral" && input.status === "completed") {
+      const approved = await tx
+        .select({ id: commercialProposals.id })
+        .from(commercialProposals)
+        .where(
+          and(
+            eq(commercialProposals.tenantId, input.tenantId),
+            eq(commercialProposals.missionId, input.missionId),
+            eq(commercialProposals.status, "approved"),
+            gt(commercialProposals.validThrough, new Date())
+          )
+        )
+        .limit(1);
+      if (!approved[0])
+        throw new Error(
+          "Approve a current proposal before marking the leave-behind ready"
+        );
+    }
     await tx
       .update(commercialMissionFieldChecklistItems)
       .set({
@@ -372,6 +417,22 @@ export async function departCommercialMissionField(input: {
     if (incomplete.length > 0)
       throw new Error(
         `Complete required preparation: ${incomplete.map(item => item.itemKey).join(", ")}`
+      );
+    const currentProposal = await tx
+      .select({ id: commercialProposals.id })
+      .from(commercialProposals)
+      .where(
+        and(
+          eq(commercialProposals.tenantId, input.tenantId),
+          eq(commercialProposals.missionId, input.missionId),
+          eq(commercialProposals.status, "approved"),
+          gt(commercialProposals.validThrough, new Date())
+        )
+      )
+      .limit(1);
+    if (!currentProposal[0])
+      throw new Error(
+        "Approve a current proposal before departing for the visit"
       );
     const fieldUpdate = await tx
       .update(commercialMissionFieldStates)

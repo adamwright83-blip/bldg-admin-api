@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Building2, Clock3, Link2, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Building2, Clock3, FileCheck2, Link2, Settings2, ShieldCheck } from "lucide-react";
 import { LoginForm } from "@/components/LoginForm";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
@@ -22,7 +22,10 @@ export default function CommercialMissionAdmin() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [handoffMessage, setHandoffMessage] = useState<string | null>(null);
   const [handoffUrl, setHandoffUrl] = useState<string | null>(null);
+  const [proposalMessage, setProposalMessage] = useState<string | null>(null);
   const createHandoff = trpc.system.commercialMission.createPhoneHandoff.useMutation();
+  const generateProposal = trpc.system.commercialProposal.generate.useMutation();
+  const approveProposal = trpc.system.commercialProposal.approve.useMutation();
   useEffect(() => {
     if (selectedId === null && list.data?.[0]) setSelectedId(list.data[0].id);
   }, [list.data, selectedId]);
@@ -30,6 +33,10 @@ export default function CommercialMissionAdmin() {
   const events = trpc.system.commercialMission.events.useQuery(
     { missionId: selectedId ?? 0 },
     { enabled: isAuthenticated && selectedId !== null },
+  );
+  const proposal = trpc.system.commercialProposal.forMission.useQuery(
+    { missionId: selectedId ?? 1 },
+    { enabled: isAuthenticated && selectedId !== null, retry: false },
   );
 
   if (authLoading) {
@@ -49,9 +56,14 @@ export default function CommercialMissionAdmin() {
               Field, proposals, and outcomes will read this same record.
             </p>
           </div>
-          <Link href="/" className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-sm text-slate-300 hover:bg-white/5">
-            <ArrowLeft className="h-4 w-4" /> Admin
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/commercial-proposal-settings" className="inline-flex items-center gap-2 rounded-lg border border-orange-400/40 px-3 py-2 text-sm text-orange-200 hover:bg-orange-400/10">
+              <Settings2 className="h-4 w-4" /> Proposal profile
+            </Link>
+            <Link href="/" className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-sm text-slate-300 hover:bg-white/5">
+              <ArrowLeft className="h-4 w-4" /> Admin
+            </Link>
+          </div>
         </header>
 
         <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
@@ -76,6 +88,7 @@ export default function CommercialMissionAdmin() {
                     setSelectedId(mission.id);
                     setHandoffMessage(null);
                     setHandoffUrl(null);
+                    setProposalMessage(null);
                   }}
                   className={`w-full rounded-xl border p-3 text-left transition ${
                     selectedId === mission.id
@@ -107,6 +120,65 @@ export default function CommercialMissionAdmin() {
                     <div className="rounded-xl bg-emerald-400/10 px-4 py-3">
                       <small className="block text-[10px] font-bold uppercase tracking-wider text-emerald-300">Potential annual value</small>
                       <b className="text-xl text-emerald-200">{money(selected.opportunity.estimatedAnnualValueCents)}</b>
+                    </div>
+                    <div className="grid gap-2 rounded-xl border border-white/10 bg-black/20 p-3 text-left">
+                      <small className="font-bold uppercase tracking-wider text-slate-500">Collateral</small>
+                      {proposal.data ? (
+                        <span className="text-xs text-slate-300">
+                          Version {proposal.data.version} · {proposal.data.status}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-500">No proposal version yet</span>
+                      )}
+                      <button
+                        type="button"
+                        disabled={generateProposal.isPending}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-xs font-bold disabled:opacity-40"
+                        onClick={async () => {
+                          setProposalMessage(null);
+                          try {
+                            const created = await generateProposal.mutateAsync({
+                              missionId: selected.id,
+                              requestId: crypto.randomUUID(),
+                            });
+                            setProposalMessage(`Draft version ${created.version} generated`);
+                            await proposal.refetch();
+                          } catch (error) {
+                            setProposalMessage(error instanceof Error ? error.message : "Could not generate proposal");
+                          }
+                        }}
+                      >
+                        <FileCheck2 className="h-4 w-4" /> {proposal.data ? "Generate new version" : "Generate proposal"}
+                      </button>
+                      {proposal.data?.status === "draft" ? (
+                        <button
+                          type="button"
+                          disabled={approveProposal.isPending}
+                          className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-white disabled:opacity-40"
+                          onClick={async () => {
+                            setProposalMessage(null);
+                            try {
+                              const approved = await approveProposal.mutateAsync({
+                                missionId: selected.id,
+                                proposalId: proposal.data!.id,
+                                requestId: crypto.randomUUID(),
+                              });
+                              setProposalMessage(`Version ${approved.version} approved for the field`);
+                              await proposal.refetch();
+                            } catch (error) {
+                              setProposalMessage(error instanceof Error ? error.message : "Could not approve proposal");
+                            }
+                          }}
+                        >
+                          Approve version {proposal.data.version}
+                        </button>
+                      ) : null}
+                      {proposal.data ? (
+                        <a className="text-center text-xs font-bold text-orange-300 underline" href={`/commercial-proposal/${selected.id}`}>
+                          {proposal.data.status === "approved" ? "Open approved leave-behind" : "Review internal draft"}
+                        </a>
+                      ) : null}
+                      {proposalMessage ? <small role="status" className="text-slate-400">{proposalMessage}</small> : null}
                     </div>
                     {["phone_ready", "preparing", "en_route", "arrived"].includes(selected.status) ? (
                       <button

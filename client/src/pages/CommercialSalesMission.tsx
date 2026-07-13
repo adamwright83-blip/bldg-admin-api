@@ -166,6 +166,7 @@ export default function CommercialSalesMission() {
 
   const allRequiredReady =
     Boolean(state?.checklist.some(item => item.required)) &&
+    Boolean(state?.proposal) &&
     (state?.checklist.every(
       item => !item.required || item.status === "completed"
     ) ??
@@ -395,7 +396,10 @@ export default function CommercialSalesMission() {
                     type="button"
                     key={item.itemKey}
                     className={item.status === "completed" ? "is-complete" : ""}
-                    disabled={busy}
+                    disabled={
+                      busy ||
+                      (item.itemKey === "collateral" && !state.proposal)
+                    }
                     onClick={() =>
                       void mutate(
                         () =>
@@ -431,11 +435,19 @@ export default function CommercialSalesMission() {
                 <FileText />
                 <div>
                   <b>Proposal & collateral</b>
-                  <p>
-                    The approved version and print status attach here in the
-                    proposal production stack. DayForge will never display demo
-                    collateral as ready.
-                  </p>
+                  {state.proposal ? (
+                    <p>
+                      Approved version {state.proposal.version} is current. {" "}
+                      <a href={`/commercial-proposal/${missionId}`}>
+                        Open or print the leave-behind.
+                      </a>
+                    </p>
+                  ) : (
+                    <p>
+                      No current approved proposal. DayForge will not let this
+                      mission claim the leave-behind is ready.
+                    </p>
+                  )}
                 </div>
               </div>
               <ActionButton

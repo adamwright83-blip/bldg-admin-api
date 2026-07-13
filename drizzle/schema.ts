@@ -1092,6 +1092,64 @@ export const commercialMissionPhoneHandoffs = mysqlTable("commercial_mission_pho
   tenantMissionIdx: index("idx_commercial_phone_handoffs_tenant_mission").on(table.tenantId, table.missionId, table.createdAt),
 }));
 
+export const tenantCommercialProposalProfiles = mysqlTable("tenant_commercial_proposal_profiles", {
+  tenantId: varchar("tenantId", { length: 64 }).primaryKey(),
+  storeName: varchar("storeName", { length: 255 }).notNull(),
+  operatorName: varchar("operatorName", { length: 255 }).notNull(),
+  phone: varchar("phone", { length: 64 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  website: varchar("website", { length: 512 }).notNull(),
+  address: varchar("address", { length: 512 }).notNull(),
+  logoUrl: varchar("logoUrl", { length: 1024 }),
+  commercialPricePerPoundCents: int("commercialPricePerPoundCents").notNull(),
+  minimumOrderCents: int("minimumOrderCents"),
+  turnaroundLabel: varchar("turnaroundLabel", { length: 255 }).notNull(),
+  pickupScheduleLabel: varchar("pickupScheduleLabel", { length: 255 }).notNull(),
+  serviceAreaLabel: varchar("serviceAreaLabel", { length: 255 }).notNull(),
+  insuranceLabel: varchar("insuranceLabel", { length: 255 }),
+  servicesJson: json("servicesJson").notNull(),
+  createdBy: varchar("createdBy", { length: 128 }).notNull(),
+  updatedBy: varchar("updatedBy", { length: 128 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const commercialProposals = mysqlTable("commercial_proposals", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  version: int("version").notNull(),
+  status: mysqlEnum("status", ["draft", "approved", "superseded", "void"]).notNull().default("draft"),
+  snapshotJson: json("snapshotJson").notNull(),
+  contentHash: varchar("contentHash", { length: 64 }).notNull(),
+  requestId: varchar("requestId", { length: 36 }).notNull(),
+  validThrough: timestamp("validThrough").notNull(),
+  createdBy: varchar("createdBy", { length: 128 }).notNull(),
+  approvedBy: varchar("approvedBy", { length: 128 }),
+  approvedAt: timestamp("approvedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantMissionVersionUnique: uniqueIndex("uq_commercial_proposals_tenant_mission_version").on(table.tenantId, table.missionId, table.version),
+  tenantRequestUnique: uniqueIndex("uq_commercial_proposals_tenant_request").on(table.tenantId, table.requestId),
+  tenantMissionStatusIdx: index("idx_commercial_proposals_tenant_mission_status").on(table.tenantId, table.missionId, table.status, table.createdAt),
+}));
+
+export const commercialProposalEvents = mysqlTable("commercial_proposal_events", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  proposalId: varchar("proposalId", { length: 36 }).notNull(),
+  eventName: varchar("eventName", { length: 64 }).notNull(),
+  actorId: varchar("actorId", { length: 128 }).notNull(),
+  idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+  metadataJson: json("metadataJson").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantIdempotencyUnique: uniqueIndex("uq_commercial_proposal_events_tenant_idempotency").on(table.tenantId, table.idempotencyKey),
+  tenantProposalIdx: index("idx_commercial_proposal_events_tenant_proposal").on(table.tenantId, table.proposalId, table.createdAt),
+}));
+
 export type CommercialAccount = typeof commercialAccounts.$inferSelect;
 export type CommercialOpportunityRow = typeof commercialOpportunities.$inferSelect;
 export type CommercialMissionRow = typeof commercialMissions.$inferSelect;
