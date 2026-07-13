@@ -1,0 +1,101 @@
+name: DayForge release gates
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dayforge-release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-journey:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: dayforge_release
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      CI: "true"
+      NODE_ENV: ci
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/dayforge_release
+      DAYFORGE_RELEASE_DB: "1"
+      DAYFORGE_RELEASE_TEST_MODE: "1"
+      APP_SHARED_API_SECRET: dayforge-release-app-secret-000000000000000000000
+      JWT_SECRET: dayforge-release-jwt-secret-000000000000000000000
+      STRIPE_SECRET_KEY: dayforge-release-placeholder-not-used
+      DAYFORGE_PUBLIC_PREVIEW_TOKEN_SECRET: dayforge-release-preview-token-0000000000000000000
+      DAYFORGE_PUBLIC_PREVIEW_FINGERPRINT_SECRET: dayforge-release-preview-fingerprint-000000000000
+      DAYFORGE_ALLOWED_ORIGINS: http://127.0.0.1:4173
+      DRIVER_APP_ORIGIN: http://127.0.0.1:4173
+      # Required for e2e/dayforge/bossDemoJourney.spec.ts to exercise the real
+      # /julydemo control page instead of its "demo mode is off" placeholder.
+      # VITE_DAYFORGE_DEMO_MODE is a client build-time flag baked in by the
+      # "Build production bundles" step below.
+      DAYFORGE_DEMO_ENABLED: "true"
+      DAYFORGE_DEMO_TENANT_SLUG: sunset-laundry-demo
+      VITE_DAYFORGE_DEMO_MODE: "true"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run deterministic DayForge contracts
+        run: pnpm test:dayforge:release
+
+      - name: Type-check the release harness
+        run: pnpm check:dayforge:release
+
+      - name: Apply sequential migrations to MySQL 8
+        run: pnpm db:dayforge:release
+
+      - name: Run production-service release journey
+        run: pnpm test:dayforge:release:integration
+
+      - name: Build production bundles
+        run: pnpm build
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Verify public preview on desktop and mobile
+        run: pnpm test:dayforge:release:e2e
+
+      - name: Upload browser evidence on failure
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dayforge-playwright-evidence
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7

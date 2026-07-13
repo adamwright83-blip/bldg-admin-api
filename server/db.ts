@@ -82,7 +82,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     };
     const updateSet: Record<string, unknown> = {};
 
-    const textFields = ["name", "email", "loginMethod"] as const;
+    const textFields = ["name", "email", "loginMethod", "tenantId"] as const;
     type TextField = (typeof textFields)[number];
 
     const assignNullable = (field: TextField) => {

@@ -10,7 +10,7 @@ export const users = mysqlTable("users", {
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: mysqlEnum("role", ["user", "admin", "driver"]).default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -472,6 +472,7 @@ export type InsertDrycleanReceiptIntake = typeof drycleanReceiptIntakes.$inferIn
 
 export const cleancloudImportBatches = mysqlTable("cleancloud_import_batches", {
   id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
   source: varchar("source", { length: 64 }).notNull().default("cleancloud"),
   sourceFileName: varchar("sourceFileName", { length: 255 }).notNull(),
   importedRowCount: int("importedRowCount").notNull().default(0),
@@ -563,7 +564,11 @@ export const cleancloudPaidOrders = mysqlTable(
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   (table) => ({
-    orderReportUnique: uniqueIndex("uq_cleancloud_paid_order_report").on(table.cleancloudOrderId, table.sourceReportType),
+    orderReportUnique: uniqueIndex("uq_cleancloud_paid_order_report").on(
+      table.tenantId,
+      table.cleancloudOrderId,
+      table.sourceReportType
+    ),
     batchIdx: index("idx_cleancloud_paid_orders_batch").on(table.importBatchId),
     paymentDateIdx: index("idx_cleancloud_paid_orders_payment_date").on(table.paymentDateUtc),
     paidDateIdx: index("idx_cleancloud_paid_orders_paid_date").on(table.paidDateUtc),
@@ -818,6 +823,1687 @@ export const opsTaskEvents = mysqlTable("ops_task_events", {
 
 export type OpsTaskEvent = typeof opsTaskEvents.$inferSelect;
 export type InsertOpsTaskEvent = typeof opsTaskEvents.$inferInsert;
+
+export const commercialAccounts = mysqlTable("commercial_accounts", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  identityKey: varchar("identityKey", { length: 64 }),
+  name: varchar("name", { length: 255 }).notNull(),
+  accountType: varchar("accountType", { length: 96 }).notNull(),
+  providerName: varchar("providerName", { length: 64 }),
+  providerAccountId: varchar("providerAccountId", { length: 191 }),
+  website: varchar("website", { length: 512 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantNameIdx: index("idx_commercial_accounts_tenant_name").on(table.tenantId, table.name),
+  tenantIdentityUnique: uniqueIndex("uq_commercial_accounts_tenant_identity").on(table.tenantId, table.identityKey),
+  tenantProviderUnique: uniqueIndex("uq_commercial_accounts_tenant_provider").on(
+    table.tenantId,
+    table.providerName,
+    table.providerAccountId,
+  ),
+}));
+
+export const commercialAccountLocations = mysqlTable("commercial_account_locations", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  accountId: int("accountId").notNull(),
+  locationKey: varchar("locationKey", { length: 64 }),
+  label: varchar("label", { length: 128 }),
+  address: varchar("address", { length: 512 }).notNull(),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
+  isPrimary: boolean("isPrimary").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantAccountIdx: index("idx_commercial_locations_tenant_account").on(table.tenantId, table.accountId),
+  tenantAccountLocationUnique: uniqueIndex("uq_commercial_locations_tenant_account_key").on(table.tenantId, table.accountId, table.locationKey),
+}));
+
+export const commercialAccountContacts = mysqlTable("commercial_account_contacts", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  accountId: int("accountId").notNull(),
+  contactKey: varchar("contactKey", { length: 64 }),
+  name: varchar("name", { length: 255 }),
+  title: varchar("title", { length: 255 }),
+  email: varchar("email", { length: 320 }),
+  phone: varchar("phone", { length: 64 }),
+  sourceUrl: varchar("sourceUrl", { length: 1024 }),
+  sourcedAt: timestamp("sourcedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantAccountIdx: index("idx_commercial_contacts_tenant_account").on(table.tenantId, table.accountId),
+  tenantAccountContactUnique: uniqueIndex("uq_commercial_contacts_tenant_account_key").on(table.tenantId, table.accountId, table.contactKey),
+}));
+
+export const commercialOpportunities = mysqlTable("commercial_opportunities", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  accountId: int("accountId").notNull(),
+  score: int("score").notNull(),
+  grade: mysqlEnum("grade", ["low", "medium", "high"]).notNull(),
+  estimatedAnnualValueCents: int("estimatedAnnualValueCents").notNull(),
+  estimateConfidence: mysqlEnum("estimateConfidence", ["low", "medium", "high"]).notNull(),
+  primarySignal: text("primarySignal").notNull(),
+  reasonsJson: json("reasonsJson").notNull(),
+  risksJson: json("risksJson").notNull(),
+  evidenceJson: json("evidenceJson").notNull(),
+  scoredAt: timestamp("scoredAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantAccountIdx: index("idx_commercial_opportunities_tenant_account").on(table.tenantId, table.accountId),
+  tenantScoreIdx: index("idx_commercial_opportunities_tenant_score").on(table.tenantId, table.score),
+}));
+
+export const commercialMissions = mysqlTable("commercial_missions", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  opportunityId: int("opportunityId"),
+  opsTaskId: int("opsTaskId"),
+  assignedTo: varchar("assignedTo", { length: 128 }),
+  code: varchar("code", { length: 32 }).notNull(),
+  status: mysqlEnum("status", [
+    "candidate", "selected", "game_ready", "game_active", "game_completed",
+    "phone_ready", "preparing", "en_route", "arrived", "visit_completed",
+    "follow_up", "won", "lost",
+  ]).notNull().default("candidate"),
+  version: int("version").notNull().default(1),
+  accountSnapshotJson: json("accountSnapshotJson").notNull(),
+  opportunitySnapshotJson: json("opportunitySnapshotJson").notNull(),
+  missionBriefJson: json("missionBriefJson").notNull(),
+  expiresAt: timestamp("expiresAt"),
+  createdBy: varchar("createdBy", { length: 128 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  completedAt: timestamp("completedAt"),
+}, (table) => ({
+  tenantCodeUnique: uniqueIndex("uq_commercial_missions_tenant_code").on(table.tenantId, table.code),
+  tenantStatusIdx: index("idx_commercial_missions_tenant_status").on(table.tenantId, table.status),
+  tenantAssigneeIdx: index("idx_commercial_missions_tenant_assignee").on(table.tenantId, table.assignedTo),
+}));
+
+export const commercialMissionEvents = mysqlTable("commercial_mission_events", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  eventName: varchar("eventName", { length: 64 }).notNull(),
+  fromStatus: varchar("fromStatus", { length: 32 }),
+  toStatus: varchar("toStatus", { length: 32 }),
+  actorType: mysqlEnum("actorType", ["system", "operator", "driver", "game"]).notNull(),
+  actorId: varchar("actorId", { length: 128 }),
+  idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+  metadataJson: json("metadataJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantMissionIdx: index("idx_commercial_mission_events_tenant_mission").on(table.tenantId, table.missionId),
+  tenantIdempotencyUnique: uniqueIndex("uq_commercial_mission_events_tenant_idempotency").on(table.tenantId, table.idempotencyKey),
+}));
+
+export const commercialMissionSteps = mysqlTable("commercial_mission_steps", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  stepKey: varchar("stepKey", { length: 64 }).notNull(),
+  label: varchar("label", { length: 255 }).notNull(),
+  detail: text("detail").notNull(),
+  status: mysqlEnum("status", ["locked", "ready", "active", "completed", "skipped"]).notNull(),
+  position: int("position").notNull(),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantMissionStepUnique: uniqueIndex("uq_commercial_mission_steps_tenant_mission_key").on(table.tenantId, table.missionId, table.stepKey),
+}));
+
+export const commercialMissionGameAttempts = mysqlTable("commercial_mission_game_attempts", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  missionVersion: int("missionVersion").notNull(),
+  playerId: varchar("playerId", { length: 128 }).notNull(),
+  status: mysqlEnum("status", ["active", "abandoned", "failed", "qualified"]).notNull().default("active"),
+  startedAt: timestamp("startedAt").defaultNow().notNull(),
+  endedAt: timestamp("endedAt"),
+  durationMs: int("durationMs"),
+  telemetryJson: json("telemetryJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantMissionIdx: index("idx_commercial_game_attempts_tenant_mission").on(table.tenantId, table.missionId, table.startedAt),
+  tenantPlayerIdx: index("idx_commercial_game_attempts_tenant_player").on(table.tenantId, table.playerId, table.startedAt),
+}));
+
+export const commercialMissionGameResults = mysqlTable("commercial_mission_game_results", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  missionVersion: int("missionVersion").notNull(),
+  gameAttemptId: varchar("gameAttemptId", { length: 36 }).notNull(),
+  playerId: varchar("playerId", { length: 128 }).notNull(),
+  sparkScore: int("sparkScore").notNull(),
+  clockheadScore: int("clockheadScore").notNull(),
+  durationMs: int("durationMs").notNull(),
+  replayJson: json("replayJson").notNull(),
+  qualifiedAt: timestamp("qualifiedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantMissionUnique: uniqueIndex("uq_commercial_game_results_tenant_mission").on(table.tenantId, table.missionId),
+  tenantAttemptUnique: uniqueIndex("uq_commercial_game_results_tenant_attempt").on(table.tenantId, table.gameAttemptId),
+}));
+
+export const commercialMissionGameRewards = mysqlTable("commercial_mission_game_rewards", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  gameResultId: int("gameResultId").notNull(),
+  playerId: varchar("playerId", { length: 128 }).notNull(),
+  xpAwarded: int("xpAwarded").notNull(),
+  streakDays: int("streakDays").notNull(),
+  awardedAt: timestamp("awardedAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantMissionUnique: uniqueIndex("uq_commercial_game_rewards_tenant_mission").on(table.tenantId, table.missionId),
+  tenantResultUnique: uniqueIndex("uq_commercial_game_rewards_tenant_result").on(table.tenantId, table.gameResultId),
+}));
+
+export const commercialVisitOutcomes = mysqlTable("commercial_visit_outcomes", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  outcome: mysqlEnum("outcome", ["follow_up", "won", "lost"]).notNull(),
+  notes: text("notes"),
+  followUpAt: timestamp("followUpAt"),
+  estimatedContractValueCents: int("estimatedContractValueCents"),
+  decisionMakerStatus: mysqlEnum("decisionMakerStatus", ["met", "unavailable", "not_recorded"]).notNull().default("not_recorded"),
+  collateralDelivered: boolean("collateralDelivered").notNull().default(false),
+  quoteRequested: boolean("quoteRequested").notNull().default(false),
+  pilotRequested: boolean("pilotRequested").notNull().default(false),
+  followUpRequested: boolean("followUpRequested").notNull().default(false),
+  reason: varchar("reason", { length: 64 }),
+  evidenceJson: json("evidenceJson").notNull(),
+  recordedBy: varchar("recordedBy", { length: 128 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantMissionIdx: index("idx_commercial_visit_outcomes_tenant_mission").on(table.tenantId, table.missionId),
+  tenantMissionUnique: uniqueIndex("uq_commercial_visit_outcomes_tenant_mission").on(table.tenantId, table.missionId),
+}));
+
+export const tenantFieldChecklistTemplates = mysqlTable("tenant_field_checklist_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  itemKey: varchar("itemKey", { length: 64 }).notNull(),
+  label: varchar("label", { length: 255 }).notNull(),
+  detail: text("detail").notNull(),
+  required: boolean("required").notNull().default(true),
+  position: int("position").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantItemUnique: uniqueIndex("uq_tenant_field_checklist_item").on(table.tenantId, table.itemKey),
+  tenantPositionIdx: index("idx_tenant_field_checklist_position").on(table.tenantId, table.position),
+}));
+
+export const commercialMissionFieldStates = mysqlTable("commercial_mission_field_states", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  version: int("version").notNull().default(1),
+  notes: text("notes").notNull(),
+  preparationStartedAt: timestamp("preparationStartedAt"),
+  departedAt: timestamp("departedAt"),
+  arrivedAt: timestamp("arrivedAt"),
+  checkInMethod: mysqlEnum("checkInMethod", ["manual", "location"]),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  locationAccuracyMeters: int("locationAccuracyMeters"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantMissionUnique: uniqueIndex("uq_commercial_field_states_tenant_mission").on(table.tenantId, table.missionId),
+}));
+
+export const commercialMissionFieldChecklistItems = mysqlTable("commercial_mission_field_checklist_items", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  itemKey: varchar("itemKey", { length: 64 }).notNull(),
+  label: varchar("label", { length: 255 }).notNull(),
+  detail: text("detail").notNull(),
+  required: boolean("required").notNull(),
+  position: int("position").notNull(),
+  status: mysqlEnum("status", ["pending", "completed", "skipped"]).notNull().default("pending"),
+  completedAt: timestamp("completedAt"),
+  completedBy: varchar("completedBy", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantMissionItemUnique: uniqueIndex("uq_commercial_field_items_tenant_mission_item").on(table.tenantId, table.missionId, table.itemKey),
+  tenantMissionPositionIdx: index("idx_commercial_field_items_tenant_mission_position").on(table.tenantId, table.missionId, table.position),
+}));
+
+export const commercialMissionPhoneHandoffs = mysqlTable("commercial_mission_phone_handoffs", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  assignedTo: varchar("assignedTo", { length: 128 }).notNull(),
+  channel: mysqlEnum("channel", ["secure_link", "sms", "email"]).notNull(),
+  tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+  targetMasked: varchar("targetMasked", { length: 320 }),
+  expiresAt: timestamp("expiresAt").notNull(),
+  consumedAt: timestamp("consumedAt"),
+  consumedBy: varchar("consumedBy", { length: 128 }),
+  createdBy: varchar("createdBy", { length: 128 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantTokenUnique: uniqueIndex("uq_commercial_phone_handoffs_tenant_token").on(table.tenantId, table.tokenHash),
+  tenantMissionIdx: index("idx_commercial_phone_handoffs_tenant_mission").on(table.tenantId, table.missionId, table.createdAt),
+}));
+
+export const tenantCommercialProposalProfiles = mysqlTable("tenant_commercial_proposal_profiles", {
+  tenantId: varchar("tenantId", { length: 64 }).primaryKey(),
+  storeName: varchar("storeName", { length: 255 }).notNull(),
+  operatorName: varchar("operatorName", { length: 255 }).notNull(),
+  phone: varchar("phone", { length: 64 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  website: varchar("website", { length: 512 }).notNull(),
+  address: varchar("address", { length: 512 }).notNull(),
+  logoUrl: varchar("logoUrl", { length: 1024 }),
+  commercialPricePerPoundCents: int("commercialPricePerPoundCents").notNull(),
+  minimumOrderCents: int("minimumOrderCents"),
+  turnaroundLabel: varchar("turnaroundLabel", { length: 255 }).notNull(),
+  pickupScheduleLabel: varchar("pickupScheduleLabel", { length: 255 }).notNull(),
+  serviceAreaLabel: varchar("serviceAreaLabel", { length: 255 }).notNull(),
+  insuranceLabel: varchar("insuranceLabel", { length: 255 }),
+  servicesJson: json("servicesJson").notNull(),
+  createdBy: varchar("createdBy", { length: 128 }).notNull(),
+  updatedBy: varchar("updatedBy", { length: 128 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const commercialProposals = mysqlTable("commercial_proposals", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  version: int("version").notNull(),
+  status: mysqlEnum("status", ["draft", "approved", "superseded", "void"]).notNull().default("draft"),
+  snapshotJson: json("snapshotJson").notNull(),
+  contentHash: varchar("contentHash", { length: 64 }).notNull(),
+  requestId: varchar("requestId", { length: 36 }).notNull(),
+  validThrough: timestamp("validThrough").notNull(),
+  createdBy: varchar("createdBy", { length: 128 }).notNull(),
+  approvedBy: varchar("approvedBy", { length: 128 }),
+  approvedAt: timestamp("approvedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tenantMissionVersionUnique: uniqueIndex("uq_commercial_proposals_tenant_mission_version").on(table.tenantId, table.missionId, table.version),
+  tenantRequestUnique: uniqueIndex("uq_commercial_proposals_tenant_request").on(table.tenantId, table.requestId),
+  tenantMissionStatusIdx: index("idx_commercial_proposals_tenant_mission_status").on(table.tenantId, table.missionId, table.status, table.createdAt),
+}));
+
+export const commercialProposalEvents = mysqlTable("commercial_proposal_events", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }).notNull(),
+  missionId: int("missionId").notNull(),
+  proposalId: varchar("proposalId", { length: 36 }).notNull(),
+  eventName: varchar("eventName", { length: 64 }).notNull(),
+  actorId: varchar("actorId", { length: 128 }).notNull(),
+  idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+  metadataJson: json("metadataJson").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantIdempotencyUnique: uniqueIndex("uq_commercial_proposal_events_tenant_idempotency").on(table.tenantId, table.idempotencyKey),
+  tenantProposalIdx: index("idx_commercial_proposal_events_tenant_proposal").on(table.tenantId, table.proposalId, table.createdAt),
+}));
+
+export const tenantCustomerRecoveryProfiles = mysqlTable(
+  "tenant_customer_recovery_profiles",
+  {
+    tenantId: varchar("tenantId", { length: 64 }).primaryKey(),
+    storeName: varchar("storeName", { length: 255 }).notNull(),
+    senderName: varchar("senderName", { length: 255 }).notNull(),
+    schedulingUrl: varchar("schedulingUrl", { length: 1024 }),
+    createdBy: varchar("createdBy", { length: 128 }).notNull(),
+    updatedBy: varchar("updatedBy", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  }
+);
+
+export const customerChurnScans = mysqlTable(
+  "customer_churn_scans",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    status: mysqlEnum("status", ["running", "completed", "failed"])
+      .notNull()
+      .default("running"),
+    sourceOrderCount: int("sourceOrderCount").notNull().default(0),
+    customerCount: int("customerCount").notNull().default(0),
+    atRiskCount: int("atRiskCount").notNull().default(0),
+    errorMessage: text("errorMessage"),
+    computedAt: timestamp("computedAt"),
+    createdBy: varchar("createdBy", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantRequestUnique: uniqueIndex(
+      "uq_customer_churn_scans_tenant_request"
+    ).on(table.tenantId, table.requestId),
+    tenantCreatedIdx: index("idx_customer_churn_scans_tenant_created").on(
+      table.tenantId,
+      table.createdAt
+    ),
+  })
+);
+
+export const customerChurnSnapshots = mysqlTable(
+  "customer_churn_snapshots",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    scanId: varchar("scanId", { length: 36 }).notNull(),
+    customerKeyHash: varchar("customerKeyHash", { length: 64 }).notNull(),
+    customerName: varchar("customerName", { length: 255 }).notNull(),
+    customerPhone: varchar("customerPhone", { length: 30 }).notNull(),
+    lastOrderId: int("lastOrderId").notNull(),
+    score: int("score").notNull(),
+    grade: mysqlEnum("grade", ["low", "medium", "high"]).notNull(),
+    confidence: mysqlEnum("confidence", ["low", "medium", "high"]).notNull(),
+    historyOrderCount: int("historyOrderCount").notNull(),
+    expectedCadenceDays: int("expectedCadenceDays").notNull(),
+    lastServiceAt: timestamp("lastServiceAt").notNull(),
+    daysSinceLastOrder: int("daysSinceLastOrder").notNull(),
+    daysLate: int("daysLate").notNull(),
+    averageOrderValueCents: int("averageOrderValueCents").notNull(),
+    estimatedMonthlyImpactCents: int("estimatedMonthlyImpactCents").notNull(),
+    recentVolumeChangePct: int("recentVolumeChangePct"),
+    activeOrderCount: int("activeOrderCount").notNull().default(0),
+    recommendedAction: mysqlEnum("recommendedAction", [
+      "watch",
+      "prepare_win_back",
+      "contact_now",
+    ]).notNull(),
+    lastServiceLabel: varchar("lastServiceLabel", { length: 64 }).notNull(),
+    reasonsJson: json("reasonsJson").notNull(),
+    evidenceJson: json("evidenceJson").notNull(),
+    sourceOrderIdsJson: json("sourceOrderIdsJson").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    scanCustomerUnique: uniqueIndex(
+      "uq_customer_churn_snapshots_scan_customer"
+    ).on(table.scanId, table.customerKeyHash),
+    tenantScoreIdx: index("idx_customer_churn_snapshots_tenant_score").on(
+      table.tenantId,
+      table.score,
+      table.createdAt
+    ),
+    tenantCustomerIdx: index("idx_customer_churn_snapshots_tenant_customer").on(
+      table.tenantId,
+      table.customerKeyHash,
+      table.createdAt
+    ),
+  })
+);
+
+export const customerContactPermissions = mysqlTable(
+  "customer_contact_permissions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    customerKeyHash: varchar("customerKeyHash", { length: 64 }).notNull(),
+    channel: mysqlEnum("channel", ["sms"]).notNull().default("sms"),
+    purpose: mysqlEnum("purpose", ["win_back_marketing"])
+      .notNull()
+      .default("win_back_marketing"),
+    status: mysqlEnum("status", ["opted_in", "opted_out"]).notNull(),
+    sourceReference: varchar("sourceReference", { length: 512 }).notNull(),
+    capturedAt: timestamp("capturedAt").notNull(),
+    expiresAt: timestamp("expiresAt"),
+    recordedBy: varchar("recordedBy", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    permissionScopeUnique: uniqueIndex(
+      "uq_customer_contact_permissions_scope"
+    ).on(table.tenantId, table.customerKeyHash, table.channel, table.purpose),
+    tenantStatusIdx: index("idx_customer_contact_permissions_tenant_status").on(
+      table.tenantId,
+      table.status
+    ),
+  })
+);
+
+export const customerRecoveryInterventions = mysqlTable(
+  "customer_recovery_interventions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    churnSnapshotId: varchar("churnSnapshotId", { length: 36 }).notNull(),
+    customerKeyHash: varchar("customerKeyHash", { length: 64 }).notNull(),
+    activeCustomerKeyHash: varchar("activeCustomerKeyHash", { length: 64 }),
+    opsTaskId: int("opsTaskId").notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    status: mysqlEnum("status", [
+      "draft_pending_review",
+      "approved",
+      "contacted",
+      "dismissed",
+      "recovered",
+      "unsuccessful",
+    ])
+      .notNull()
+      .default("draft_pending_review"),
+    assignedTo: varchar("assignedTo", { length: 128 }),
+    approvedBy: varchar("approvedBy", { length: 128 }),
+    approvedAt: timestamp("approvedAt"),
+    contactedAt: timestamp("contactedAt"),
+    recoveredAt: timestamp("recoveredAt"),
+    recoveredOrderId: int("recoveredOrderId"),
+    recoveredRevenueCents: int("recoveredRevenueCents").notNull().default(0),
+    createdBy: varchar("createdBy", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantRequestUnique: uniqueIndex(
+      "uq_customer_recovery_interventions_tenant_request"
+    ).on(table.tenantId, table.requestId),
+    tenantActiveCustomerUnique: uniqueIndex(
+      "uq_customer_recovery_interventions_tenant_active_customer"
+    ).on(table.tenantId, table.activeCustomerKeyHash),
+    tenantStatusIdx: index(
+      "idx_customer_recovery_interventions_tenant_status"
+    ).on(table.tenantId, table.status, table.updatedAt),
+    tenantCustomerIdx: index(
+      "idx_customer_recovery_interventions_tenant_customer"
+    ).on(table.tenantId, table.customerKeyHash, table.updatedAt),
+  })
+);
+
+export const customerRecoveryDrafts = mysqlTable(
+  "customer_recovery_drafts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    interventionId: varchar("interventionId", { length: 36 }).notNull(),
+    version: int("version").notNull(),
+    channel: mysqlEnum("channel", ["sms"]).notNull().default("sms"),
+    status: mysqlEnum("status", ["draft", "approved", "superseded", "void"])
+      .notNull()
+      .default("draft"),
+    message: text("message").notNull(),
+    factsUsedJson: json("factsUsedJson").notNull(),
+    contentHash: varchar("contentHash", { length: 64 }).notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    createdBy: varchar("createdBy", { length: 128 }).notNull(),
+    approvedBy: varchar("approvedBy", { length: 128 }),
+    approvedAt: timestamp("approvedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    interventionVersionUnique: uniqueIndex(
+      "uq_customer_recovery_drafts_intervention_version"
+    ).on(table.tenantId, table.interventionId, table.version),
+    tenantRequestUnique: uniqueIndex(
+      "uq_customer_recovery_drafts_tenant_request"
+    ).on(table.tenantId, table.requestId),
+    tenantInterventionIdx: index(
+      "idx_customer_recovery_drafts_tenant_intervention"
+    ).on(table.tenantId, table.interventionId, table.createdAt),
+  })
+);
+
+export const customerRecoveryEvents = mysqlTable(
+  "customer_recovery_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    interventionId: varchar("interventionId", { length: 36 }).notNull(),
+    eventName: varchar("eventName", { length: 64 }).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    metadataJson: json("metadataJson").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantIdempotencyUnique: uniqueIndex(
+      "uq_customer_recovery_events_tenant_idempotency"
+    ).on(table.tenantId, table.idempotencyKey),
+    tenantInterventionIdx: index(
+      "idx_customer_recovery_events_tenant_intervention"
+    ).on(table.tenantId, table.interventionId, table.createdAt),
+  })
+);
+
+export const commercialPipelineRecords = mysqlTable(
+  "commercial_pipeline_records",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    accountId: int("accountId").notNull(),
+    opportunityId: int("opportunityId").notNull(),
+    missionId: int("missionId").notNull(),
+    stage: mysqlEnum("stage", [
+      "discovered",
+      "qualified",
+      "mission_created",
+      "game_ready",
+      "field_ready",
+      "visit_planned",
+      "visited",
+      "follow_up",
+      "proposal_sent",
+      "pilot_requested",
+      "verbal_yes",
+      "won",
+      "lost",
+    ]).notNull(),
+    version: int("version").notNull().default(1),
+    estimatedContractValueCents: int("estimatedContractValueCents").notNull(),
+    approvedContractValueCents: int("approvedContractValueCents"),
+    invoicedRevenueCents: int("invoicedRevenueCents").notNull().default(0),
+    paidRevenueCents: int("paidRevenueCents").notNull().default(0),
+    realizedRevenueCents: int("realizedRevenueCents").notNull().default(0),
+    commercialCustomerId: int("commercialCustomerId"),
+    firstOrderId: int("firstOrderId"),
+    nextFollowUpAt: timestamp("nextFollowUpAt"),
+    lossReason: varchar("lossReason", { length: 128 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantOpportunityUnique: uniqueIndex(
+      "uq_commercial_pipeline_tenant_opportunity"
+    ).on(table.tenantId, table.opportunityId),
+    tenantMissionUnique: uniqueIndex(
+      "uq_commercial_pipeline_tenant_mission"
+    ).on(table.tenantId, table.missionId),
+    tenantStageIdx: index("idx_commercial_pipeline_tenant_stage").on(
+      table.tenantId,
+      table.stage,
+      table.updatedAt
+    ),
+  })
+);
+
+export const commercialPipelineEvents = mysqlTable(
+  "commercial_pipeline_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    pipelineId: int("pipelineId").notNull(),
+    missionId: int("missionId").notNull(),
+    fromStage: varchar("fromStage", { length: 32 }),
+    toStage: varchar("toStage", { length: 32 }).notNull(),
+    actorType: mysqlEnum("actorType", [
+      "system",
+      "operator",
+      "driver",
+      "game",
+    ]).notNull(),
+    actorId: varchar("actorId", { length: 128 }),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    correlationId: varchar("correlationId", { length: 191 }).notNull(),
+    metadataJson: json("metadataJson"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantIdempotencyUnique: uniqueIndex(
+      "uq_commercial_pipeline_events_tenant_idempotency"
+    ).on(table.tenantId, table.idempotencyKey),
+    tenantPipelineIdx: index(
+      "idx_commercial_pipeline_events_tenant_pipeline"
+    ).on(table.tenantId, table.pipelineId, table.createdAt),
+  })
+);
+
+export const commercialCustomers = mysqlTable(
+  "commercial_customers",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    accountId: int("accountId").notNull(),
+    sourceMissionId: int("sourceMissionId").notNull(),
+    status: mysqlEnum("status", ["active", "paused", "churned", "closed"])
+      .notNull()
+      .default("active"),
+    approvedAnnualValueCents: int("approvedAnnualValueCents"),
+    firstOrderId: int("firstOrderId"),
+    convertedAt: timestamp("convertedAt").defaultNow().notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantAccountUnique: uniqueIndex(
+      "uq_commercial_customers_tenant_account"
+    ).on(table.tenantId, table.accountId),
+    tenantMissionUnique: uniqueIndex(
+      "uq_commercial_customers_tenant_source_mission"
+    ).on(table.tenantId, table.sourceMissionId),
+  })
+);
+
+export const commercialCustomerLocations = mysqlTable(
+  "commercial_customer_locations",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    commercialCustomerId: int("commercialCustomerId").notNull(),
+    locationId: int("locationId").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantCustomerLocationUnique: uniqueIndex(
+      "uq_commercial_customer_locations_scope"
+    ).on(table.tenantId, table.commercialCustomerId, table.locationId),
+  })
+);
+
+export const commercialCustomerContacts = mysqlTable(
+  "commercial_customer_contacts",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    commercialCustomerId: int("commercialCustomerId").notNull(),
+    contactId: int("contactId").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantCustomerContactUnique: uniqueIndex(
+      "uq_commercial_customer_contacts_scope"
+    ).on(table.tenantId, table.commercialCustomerId, table.contactId),
+  })
+);
+
+export const commercialServiceExpectations = mysqlTable(
+  "commercial_service_expectations",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    commercialCustomerId: int("commercialCustomerId").notNull(),
+    sourceMissionId: int("sourceMissionId").notNull(),
+    sourceProposalId: varchar("sourceProposalId", { length: 36 }),
+    sourceProposalVersion: int("sourceProposalVersion"),
+    status: mysqlEnum("status", ["proposed", "approved", "active", "paused"])
+      .notNull()
+      .default("approved"),
+    pricePerPoundCents: int("pricePerPoundCents"),
+    minimumOrderCents: int("minimumOrderCents"),
+    expectedWeeklyPounds: int("expectedWeeklyPounds"),
+    capacityReservedPoundsPerWeek: int("capacityReservedPoundsPerWeek").notNull().default(0),
+    pickupScheduleLabel: varchar("pickupScheduleLabel", { length: 255 }),
+    turnaroundLabel: varchar("turnaroundLabel", { length: 255 }),
+    serviceAreaLabel: varchar("serviceAreaLabel", { length: 255 }),
+    approvedAt: timestamp("approvedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantCustomerMissionUnique: uniqueIndex(
+      "uq_commercial_service_expectations_scope"
+    ).on(table.tenantId, table.commercialCustomerId, table.sourceMissionId),
+  })
+);
+
+export const commercialAgreements = mysqlTable(
+  "commercial_agreements",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    commercialCustomerId: int("commercialCustomerId").notNull(),
+    missionId: int("missionId").notNull(),
+    proposalId: varchar("proposalId", { length: 36 }),
+    proposalVersion: int("proposalVersion"),
+    status: mysqlEnum("status", [
+      "verbal_yes",
+      "pending_signature",
+      "approved",
+      "declined",
+    ])
+      .notNull()
+      .default("verbal_yes"),
+    approvedAnnualValueCents: int("approvedAnnualValueCents"),
+    evidenceReference: varchar("evidenceReference", { length: 1024 }),
+    recordedBy: varchar("recordedBy", { length: 128 }).notNull(),
+    approvedAt: timestamp("approvedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantMissionUnique: uniqueIndex(
+      "uq_commercial_agreements_tenant_mission"
+    ).on(table.tenantId, table.missionId),
+    tenantCustomerIdx: index("idx_commercial_agreements_tenant_customer").on(
+      table.tenantId,
+      table.commercialCustomerId
+    ),
+  })
+);
+
+export const commercialRouteAssignments = mysqlTable(
+  "commercial_route_assignments",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    commercialCustomerId: int("commercialCustomerId").notNull(),
+    locationId: int("locationId").notNull(),
+    serviceExpectationId: int("serviceExpectationId").notNull(),
+    status: mysqlEnum("status", ["planned", "active", "paused", "ended"])
+      .notNull()
+      .default("planned"),
+    routeLabel: varchar("routeLabel", { length: 255 }).notNull(),
+    routeWindowLabel: varchar("routeWindowLabel", { length: 255 }),
+    capacityReservedPoundsPerWeek: int("capacityReservedPoundsPerWeek").notNull().default(0),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantCustomerLocationUnique: uniqueIndex(
+      "uq_commercial_route_assignments_scope"
+    ).on(table.tenantId, table.commercialCustomerId, table.locationId),
+  })
+);
+
+export const commercialFollowUps = mysqlTable(
+  "commercial_follow_ups",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    pipelineId: int("pipelineId").notNull(),
+    missionId: int("missionId").notNull(),
+    status: mysqlEnum("status", ["open", "completed", "cancelled"])
+      .notNull()
+      .default("open"),
+    dueAt: timestamp("dueAt").notNull(),
+    note: text("note").notNull(),
+    assignedTo: varchar("assignedTo", { length: 128 }),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    createdBy: varchar("createdBy", { length: 128 }).notNull(),
+    completedAt: timestamp("completedAt"),
+    completedBy: varchar("completedBy", { length: 128 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantRequestUnique: uniqueIndex(
+      "uq_commercial_follow_ups_tenant_request"
+    ).on(table.tenantId, table.requestId),
+    tenantStatusDueIdx: index("idx_commercial_follow_ups_tenant_due").on(
+      table.tenantId,
+      table.status,
+      table.dueAt
+    ),
+  })
+);
+
+export const commercialOrderAttributions = mysqlTable(
+  "commercial_order_attributions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    commercialCustomerId: int("commercialCustomerId").notNull(),
+    missionId: int("missionId").notNull(),
+    orderId: int("orderId").notNull(),
+    attributionType: mysqlEnum("attributionType", ["first_order", "recurring"])
+      .notNull(),
+    invoicedCents: int("invoicedCents").notNull().default(0),
+    paidCents: int("paidCents").notNull().default(0),
+    realizedCents: int("realizedCents").notNull().default(0),
+    paidAt: timestamp("paidAt"),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    createdBy: varchar("createdBy", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantOrderUnique: uniqueIndex(
+      "uq_commercial_order_attributions_tenant_order"
+    ).on(table.tenantId, table.orderId),
+    tenantRequestUnique: uniqueIndex(
+      "uq_commercial_order_attributions_tenant_request"
+    ).on(table.tenantId, table.requestId),
+    tenantCustomerIdx: index(
+      "idx_commercial_order_attributions_tenant_customer"
+    ).on(table.tenantId, table.commercialCustomerId, table.createdAt),
+  })
+);
+
+export const commercialMissionFinalRewards = mysqlTable(
+  "commercial_mission_final_rewards",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    missionId: int("missionId").notNull(),
+    commercialCustomerId: int("commercialCustomerId").notNull(),
+    playerId: varchar("playerId", { length: 128 }).notNull(),
+    xpAwarded: int("xpAwarded").notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    awardedAt: timestamp("awardedAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantMissionUnique: uniqueIndex(
+      "uq_commercial_final_rewards_tenant_mission"
+    ).on(table.tenantId, table.missionId),
+    tenantIdempotencyUnique: uniqueIndex(
+      "uq_commercial_final_rewards_tenant_idempotency"
+    ).on(table.tenantId, table.idempotencyKey),
+  })
+);
+
+export const dayforgeSaasTenants = mysqlTable(
+  "dayforge_saas_tenants",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    slug: varchar("slug", { length: 64 }).notNull(),
+    businessName: varchar("businessName", { length: 255 }).notNull(),
+    brandName: varchar("brandName", { length: 255 }).notNull(),
+    logoUrl: varchar("logoUrl", { length: 1024 }),
+    primaryColor: varchar("primaryColor", { length: 16 }).notNull(),
+    contactName: varchar("contactName", { length: 255 }).notNull(),
+    contactEmail: varchar("contactEmail", { length: 320 }).notNull(),
+    contactPhone: varchar("contactPhone", { length: 64 }),
+    website: varchar("website", { length: 512 }),
+    timeZone: varchar("timeZone", { length: 64 }).notNull(),
+    proposalTemplateKey: varchar("proposalTemplateKey", { length: 128 }),
+    status: mysqlEnum("status", [
+      "provisioning",
+      "configuring",
+      "active",
+      "delinquent",
+      "suspended",
+      "canceled",
+    ])
+      .notNull()
+      .default("provisioning"),
+    onboardingStep: varchar("onboardingStep", { length: 64 })
+      .notNull()
+      .default("business"),
+    onboardingCompletedAt: timestamp("onboardingCompletedAt"),
+    billingStateUpdatedAt: timestamp("billingStateUpdatedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    slugUnique: uniqueIndex("uq_dayforge_saas_tenants_slug").on(table.slug),
+  })
+);
+
+export const dayforgeSaasTenantLocations = mysqlTable(
+  "dayforge_saas_tenant_locations",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    locationKey: varchar("locationKey", { length: 64 }).notNull(),
+    label: varchar("label", { length: 128 }).notNull(),
+    address: varchar("address", { length: 512 }).notNull(),
+    latitude: decimal("latitude", { precision: 10, scale: 7 }),
+    longitude: decimal("longitude", { precision: 10, scale: 7 }),
+    serviceRadiusMiles: decimal("serviceRadiusMiles", {
+      precision: 6,
+      scale: 2,
+    }).notNull(),
+    maxPoundsPerDay: int("maxPoundsPerDay").notNull(),
+    maxPoundsByWeekdayJson: json("maxPoundsByWeekdayJson").notNull(),
+    openCapacityPoundsPerWeek: int("openCapacityPoundsPerWeek").notNull(),
+    pickupDaysJson: json("pickupDaysJson").notNull(),
+    routeWindowsJson: json("routeWindowsJson").notNull(),
+    turnaroundHours: int("turnaroundHours").notNull(),
+    deliveryEnabled: boolean("deliveryEnabled").notNull().default(true),
+    isPrimary: boolean("isPrimary").notNull().default(false),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantLocationUnique: uniqueIndex("uq_dayforge_saas_locations_key").on(
+      table.tenantId,
+      table.locationKey
+    ),
+    tenantPrimaryIdx: index("idx_dayforge_saas_locations_tenant").on(
+      table.tenantId,
+      table.isPrimary
+    ),
+  })
+);
+
+export const dayforgeSaasTenantDomains = mysqlTable(
+  "dayforge_saas_tenant_domains",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    hostname: varchar("hostname", { length: 255 }).notNull(),
+    verifiedAt: timestamp("verifiedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    hostnameUnique: uniqueIndex("uq_dayforge_saas_tenant_domain").on(
+      table.hostname
+    ),
+    tenantIdx: index("idx_dayforge_saas_tenant_domains_tenant").on(
+      table.tenantId
+    ),
+  })
+);
+
+export const dayforgeSaasTenantServices = mysqlTable(
+  "dayforge_saas_tenant_services",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    locationId: int("locationId").notNull().default(0),
+    serviceKey: varchar("serviceKey", { length: 96 }).notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    commercialEnabled: boolean("commercialEnabled").notNull().default(false),
+    pricePerPoundCents: int("pricePerPoundCents"),
+    minimumOrderCents: int("minimumOrderCents"),
+    terms: text("terms"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantServiceUnique: uniqueIndex("uq_dayforge_saas_services_key").on(
+      table.tenantId,
+      table.locationId,
+      table.serviceKey
+    ),
+  })
+);
+
+export const dayforgeSaasTenantInvites = mysqlTable(
+  "dayforge_saas_tenant_invites",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    emailNormalized: varchar("emailNormalized", { length: 320 }).notNull(),
+    role: mysqlEnum("role", ["owner", "admin", "operator", "field"]).notNull(),
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    status: mysqlEnum("status", ["pending", "accepted", "revoked", "expired"])
+      .notNull()
+      .default("pending"),
+    invitedByOpenId: varchar("invitedByOpenId", { length: 64 }),
+    expiresAt: timestamp("expiresAt").notNull(),
+    acceptedAt: timestamp("acceptedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tokenUnique: uniqueIndex("uq_dayforge_saas_invite_token").on(
+      table.tokenHash
+    ),
+    tenantEmailIdx: index("idx_dayforge_saas_invites_tenant_email").on(
+      table.tenantId,
+      table.emailNormalized,
+      table.status
+    ),
+  })
+);
+
+export const dayforgeSaasMemberships = mysqlTable(
+  "dayforge_saas_memberships",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    userOpenId: varchar("userOpenId", { length: 64 }).notNull(),
+    role: mysqlEnum("role", ["owner", "admin", "operator", "field"]).notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantUserUnique: uniqueIndex("uq_dayforge_saas_membership_user").on(
+      table.tenantId,
+      table.userOpenId
+    ),
+    tenantRoleIdx: index("idx_dayforge_saas_memberships_tenant_role").on(
+      table.tenantId,
+      table.role,
+      table.active
+    ),
+  })
+);
+
+export const dayforgeSaasUserCredentials = mysqlTable(
+  "dayforge_saas_user_credentials",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    userOpenId: varchar("userOpenId", { length: 64 }).notNull(),
+    emailNormalized: varchar("emailNormalized", { length: 320 }).notNull(),
+    passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+    failedLoginCount: int("failedLoginCount").notNull().default(0),
+    lockedUntil: timestamp("lockedUntil"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantEmailUnique: uniqueIndex(
+      "uq_dayforge_saas_credentials_tenant_email"
+    ).on(table.tenantId, table.emailNormalized),
+    openIdUnique: uniqueIndex("uq_dayforge_saas_credentials_open_id").on(
+      table.userOpenId
+    ),
+  })
+);
+
+export const dayforgeSaasOnboardingSessions = mysqlTable(
+  "dayforge_saas_onboarding_sessions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    resumeTokenHash: varchar("resumeTokenHash", { length: 64 }).notNull(),
+    businessName: varchar("businessName", { length: 255 }).notNull(),
+    slug: varchar("slug", { length: 64 }).notNull(),
+    ownerEmail: varchar("ownerEmail", { length: 320 }).notNull(),
+    currentStep: varchar("currentStep", { length: 64 })
+      .notNull()
+      .default("business"),
+    version: int("version").notNull().default(1),
+    configurationJson: json("configurationJson"),
+    status: mysqlEnum("status", [
+      "draft",
+      "checkout_pending",
+      "provisioned",
+      "configuring",
+      "complete",
+      "expired",
+    ])
+      .notNull()
+      .default("draft"),
+    tenantId: varchar("tenantId", { length: 64 }),
+    planKey: varchar("planKey", { length: 96 }),
+    stripeCheckoutSessionId: varchar("stripeCheckoutSessionId", {
+      length: 255,
+    }),
+    stripeCustomerId: varchar("stripeCustomerId", { length: 255 }),
+    stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }),
+    startRequestId: varchar("startRequestId", { length: 36 }).notNull(),
+    checkoutRequestId: varchar("checkoutRequestId", { length: 36 }),
+    expiresAt: timestamp("expiresAt").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tokenUnique: uniqueIndex("uq_dayforge_saas_onboarding_token").on(
+      table.resumeTokenHash
+    ),
+    startRequestUnique: uniqueIndex(
+      "uq_dayforge_saas_onboarding_start_request"
+    ).on(table.startRequestId),
+    checkoutUnique: uniqueIndex("uq_dayforge_saas_onboarding_checkout").on(
+      table.stripeCheckoutSessionId
+    ),
+    subscriptionUnique: uniqueIndex(
+      "uq_dayforge_saas_onboarding_subscription"
+    ).on(table.stripeSubscriptionId),
+    emailIdx: index("idx_dayforge_saas_onboarding_email").on(
+      table.ownerEmail,
+      table.createdAt
+    ),
+  })
+);
+
+export const dayforgeSaasBillingPlans = mysqlTable(
+  "dayforge_saas_billing_plans",
+  {
+    planKey: varchar("planKey", { length: 96 }).primaryKey(),
+    displayName: varchar("displayName", { length: 255 }).notNull(),
+    stripePriceId: varchar("stripePriceId", { length: 255 }).notNull(),
+    stripeProductId: varchar("stripeProductId", { length: 255 }),
+    trialDays: int("trialDays").notNull().default(0),
+    foundingPlan: boolean("foundingPlan").notNull().default(false),
+    availabilityStartsAt: timestamp("availabilityStartsAt"),
+    availabilityEndsAt: timestamp("availabilityEndsAt"),
+    maxSubscriptions: int("maxSubscriptions"),
+    claimedSubscriptions: int("claimedSubscriptions").notNull().default(0),
+    rulesJson: json("rulesJson").notNull(),
+    entitlementsJson: json("entitlementsJson").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    stripePriceUnique: uniqueIndex("uq_dayforge_saas_billing_price").on(
+      table.stripePriceId
+    ),
+  })
+);
+
+export const dayforgeSaasCheckoutSessions = mysqlTable(
+  "dayforge_saas_checkout_sessions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    onboardingSessionId: varchar("onboardingSessionId", { length: 36 }).notNull(),
+    planKey: varchar("planKey", { length: 96 }).notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    stripeCheckoutSessionId: varchar("stripeCheckoutSessionId", { length: 255 }),
+    status: mysqlEnum("status", ["reserved", "open", "completed", "expired"])
+      .notNull()
+      .default("reserved"),
+    claimedSlot: boolean("claimedSlot").notNull().default(true),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    onboardingUnique: uniqueIndex("uq_dayforge_checkout_onboarding").on(
+      table.onboardingSessionId
+    ),
+    requestUnique: uniqueIndex("uq_dayforge_checkout_request").on(
+      table.requestId
+    ),
+    stripeUnique: uniqueIndex("uq_dayforge_checkout_stripe").on(
+      table.stripeCheckoutSessionId
+    ),
+  })
+);
+
+export const dayforgeSaasSubscriptions = mysqlTable(
+  "dayforge_saas_subscriptions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    planKey: varchar("planKey", { length: 96 }).notNull(),
+    stripeCustomerId: varchar("stripeCustomerId", { length: 255 }).notNull(),
+    stripeSubscriptionId: varchar("stripeSubscriptionId", {
+      length: 255,
+    }).notNull(),
+    status: mysqlEnum("status", [
+      "none",
+      "trialing",
+      "active",
+      "past_due",
+      "unpaid",
+      "paused",
+      "incomplete",
+      "incomplete_expired",
+      "canceled",
+    ]).notNull(),
+    cancelAtPeriodEnd: boolean("cancelAtPeriodEnd").notNull().default(false),
+    currentPeriodEnd: timestamp("currentPeriodEnd"),
+    trialEnd: timestamp("trialEnd"),
+    graceEndsAt: timestamp("graceEndsAt"),
+    accessEndsAt: timestamp("accessEndsAt"),
+    delinquentAt: timestamp("delinquentAt"),
+    lastInvoicePaidAt: timestamp("lastInvoicePaidAt"),
+    latestInvoiceId: varchar("latestInvoiceId", { length: 255 }),
+    lastStripeEventId: varchar("lastStripeEventId", { length: 255 }).notNull(),
+    lastStripeEventCreatedAt: timestamp("lastStripeEventCreatedAt").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantUnique: uniqueIndex("uq_dayforge_saas_subscriptions_tenant").on(
+      table.tenantId
+    ),
+    stripeUnique: uniqueIndex("uq_dayforge_saas_subscriptions_stripe").on(
+      table.stripeSubscriptionId
+    ),
+    customerIdx: index("idx_dayforge_saas_subscriptions_customer").on(
+      table.stripeCustomerId
+    ),
+  })
+);
+
+export const dayforgeSaasEntitlements = mysqlTable(
+  "dayforge_saas_entitlements",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    entitlementKey: varchar("entitlementKey", { length: 96 }).notNull(),
+    source: mysqlEnum("source", ["plan", "manual"]).notNull().default("plan"),
+    enabled: boolean("enabled").notNull().default(false),
+    expiresAt: timestamp("expiresAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantEntitlementUnique: uniqueIndex(
+      "uq_dayforge_saas_entitlement"
+    ).on(table.tenantId, table.entitlementKey, table.source),
+  })
+);
+
+export const dayforgeSaasBillingEvents = mysqlTable(
+  "dayforge_saas_billing_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    stripeEventId: varchar("stripeEventId", { length: 255 }).notNull(),
+    eventType: varchar("eventType", { length: 128 }).notNull(),
+    livemode: boolean("livemode").notNull().default(false),
+    stripeCreatedAt: timestamp("stripeCreatedAt").notNull(),
+    payloadHash: varchar("payloadHash", { length: 64 }).notNull(),
+    tenantId: varchar("tenantId", { length: 64 }),
+    objectId: varchar("objectId", { length: 255 }),
+    status: mysqlEnum("status", [
+      "processing",
+      "processed",
+      "ignored",
+      "failed",
+    ])
+      .notNull()
+      .default("processing"),
+    errorCode: varchar("errorCode", { length: 128 }),
+    metadataJson: json("metadataJson"),
+    processingStartedAt: timestamp("processingStartedAt").defaultNow().notNull(),
+    attemptCount: int("attemptCount").notNull().default(1),
+    processedAt: timestamp("processedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    stripeEventUnique: uniqueIndex("uq_dayforge_saas_billing_event").on(
+      table.stripeEventId
+    ),
+  })
+);
+
+export const dayforgeAuditEvents = mysqlTable(
+  "dayforge_audit_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    scopeKey: varchar("scopeKey", { length: 191 }).notNull(),
+    tenantId: varchar("tenantId", { length: 64 }),
+    actorType: mysqlEnum("actorType", [
+      "public",
+      "owner",
+      "admin",
+      "operator",
+      "field",
+      "game",
+      "stripe",
+      "system",
+    ]).notNull(),
+    actorId: varchar("actorId", { length: 128 }),
+    entityType: varchar("entityType", { length: 96 }).notNull(),
+    entityId: varchar("entityId", { length: 128 }).notNull(),
+    eventName: varchar("eventName", { length: 96 }).notNull(),
+    beforeJson: json("beforeJson"),
+    afterJson: json("afterJson"),
+    source: varchar("source", { length: 96 }).notNull(),
+    correlationId: varchar("correlationId", { length: 191 }).notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_dayforge_audit_idempotency").on(
+      table.scopeKey,
+      table.idempotencyKey
+    ),
+    tenantEntityIdx: index("idx_dayforge_audit_tenant_entity").on(
+      table.tenantId,
+      table.entityType,
+      table.entityId,
+      table.createdAt
+    ),
+  })
+);
+
+/**
+ * Privacy-safe, append-only product funnel events. Business truth remains in
+ * the domain tables and dayforge_audit_events; this table is an analytics
+ * projection containing only allowlisted aggregate properties.
+ */
+export const dayforgeProductEvents = mysqlTable(
+  "dayforge_product_events",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    scopeKey: varchar("scopeKey", { length: 191 }).notNull(),
+    tenantId: varchar("tenantId", { length: 64 }),
+    anonymousSessionId: varchar("anonymousSessionId", { length: 64 }),
+    actorType: mysqlEnum("actorType", [
+      "public",
+      "owner",
+      "admin",
+      "operator",
+      "field",
+      "game",
+      "stripe",
+      "system",
+    ]).notNull(),
+    actorId: varchar("actorId", { length: 128 }),
+    entityType: varchar("entityType", { length: 96 }),
+    entityId: varchar("entityId", { length: 128 }),
+    missionId: int("missionId"),
+    accountId: int("accountId"),
+    opportunityId: int("opportunityId"),
+    customerId: int("customerId"),
+    eventName: varchar("eventName", { length: 96 }).notNull(),
+    eventVersion: int("eventVersion").notNull().default(1),
+    propertiesJson: json("propertiesJson").notNull(),
+    source: varchar("source", { length: 96 }).notNull(),
+    correlationId: varchar("correlationId", { length: 191 }).notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    occurredAt: timestamp("occurredAt").defaultNow().notNull(),
+    purgeAfter: timestamp("purgeAfter"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_dayforge_product_event_idempotency").on(
+      table.scopeKey,
+      table.idempotencyKey
+    ),
+    tenantEventIdx: index("idx_dayforge_product_event_tenant_name").on(
+      table.tenantId,
+      table.eventName,
+      table.occurredAt
+    ),
+    missionTimelineIdx: index("idx_dayforge_product_event_mission").on(
+      table.tenantId,
+      table.missionId,
+      table.occurredAt
+    ),
+    accountTimelineIdx: index("idx_dayforge_product_event_account").on(
+      table.tenantId,
+      table.accountId,
+      table.occurredAt
+    ),
+    anonymousTimelineIdx: index("idx_dayforge_product_event_anonymous").on(
+      table.anonymousSessionId,
+      table.occurredAt
+    ),
+    purgeIdx: index("idx_dayforge_product_event_purge").on(table.purgeAfter),
+  })
+);
+
+/**
+ * Anonymous public preview state. Only a token hash is stored; raw bearer
+ * tokens and raw client IP addresses never enter the database.
+ */
+export const dayforgePublicPreviewSessions = mysqlTable(
+  "dayforge_public_preview_sessions",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    ipHash: varchar("ipHash", { length: 64 }).notNull(),
+    status: mysqlEnum("status", [
+      "running",
+      "completed",
+      "failed",
+      "converting",
+      "converted",
+      "expired",
+    ])
+      .notNull()
+      .default("running"),
+    addressQuery: varchar("addressQuery", { length: 512 }).notNull(),
+    attributionJson: json("attributionJson"),
+    providerName: varchar("providerName", { length: 64 }),
+    resultCount: int("resultCount").notNull().default(0),
+    executionStartedAt: timestamp("executionStartedAt"),
+    executionLeaseUntil: timestamp("executionLeaseUntil"),
+    executionAttemptCount: int("executionAttemptCount").notNull().default(0),
+    scanSessionId: varchar("scanSessionId", { length: 64 }),
+    selectedCandidateKey: varchar("selectedCandidateKey", { length: 191 }),
+    sampleMissionCreatedAt: timestamp("sampleMissionCreatedAt"),
+    convertedTenantId: varchar("convertedTenantId", { length: 64 }),
+    convertedMissionId: int("convertedMissionId"),
+    expiresAt: timestamp("expiresAt").notNull(),
+    purgeAfter: timestamp("purgeAfter").notNull(),
+    failureCode: varchar("failureCode", { length: 96 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tokenHashUnique: uniqueIndex("uq_dayforge_public_preview_token").on(
+      table.tokenHash
+    ),
+    scanSessionUnique: uniqueIndex("uq_dayforge_public_preview_scan").on(
+      table.scanSessionId
+    ),
+    statusExpiresIdx: index("idx_dayforge_public_preview_status_expires").on(
+      table.status,
+      table.expiresAt
+    ),
+    ipCreatedIdx: index("idx_dayforge_public_preview_ip_created").on(
+      table.ipHash,
+      table.createdAt
+    ),
+    purgeIdx: index("idx_dayforge_public_preview_purge").on(table.purgeAfter),
+  })
+);
+
+/** Durable fixed-window rate counters keyed only by server-generated hashes. */
+export const dayforgeRateLimitBuckets = mysqlTable(
+  "dayforge_rate_limit_buckets",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    scopeKey: varchar("scopeKey", { length: 191 }).notNull(),
+    bucketKey: varchar("bucketKey", { length: 191 }).notNull(),
+    action: varchar("action", { length: 96 }).notNull(),
+    windowStart: timestamp("windowStart").notNull(),
+    windowSeconds: int("windowSeconds").notNull(),
+    requestCount: int("requestCount").notNull().default(0),
+    expiresAt: timestamp("expiresAt").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    windowUnique: uniqueIndex("uq_dayforge_rate_limit_window").on(
+      table.scopeKey,
+      table.bucketKey,
+      table.action,
+      table.windowStart
+    ),
+    expiryIdx: index("idx_dayforge_rate_limit_expiry").on(table.expiresAt),
+    scopeActionIdx: index("idx_dayforge_rate_limit_scope_action").on(
+      table.scopeKey,
+      table.action,
+      table.windowStart
+    ),
+  })
+);
+
+/** Provider-wide daily usage and circuit-breaker state. */
+export const dayforgeProviderBudgets = mysqlTable(
+  "dayforge_provider_budgets",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    providerName: varchar("providerName", { length: 64 }).notNull(),
+    operation: varchar("operation", { length: 96 }).notNull(),
+    budgetDate: varchar("budgetDate", { length: 10 }).notNull(),
+    requestCount: int("requestCount").notNull().default(0),
+    estimatedCostMicros: int("estimatedCostMicros").notNull().default(0),
+    failureCount: int("failureCount").notNull().default(0),
+    consecutiveFailureCount: int("consecutiveFailureCount")
+      .notNull()
+      .default(0),
+    circuitState: mysqlEnum("circuitState", ["closed", "open", "half_open"])
+      .notNull()
+      .default("closed"),
+    circuitOpenedAt: timestamp("circuitOpenedAt"),
+    lastFailureAt: timestamp("lastFailureAt"),
+    lastSuccessAt: timestamp("lastSuccessAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    providerOperationDayUnique: uniqueIndex(
+      "uq_dayforge_provider_budget_day"
+    ).on(table.providerName, table.operation, table.budgetDate),
+    circuitIdx: index("idx_dayforge_provider_budget_circuit").on(
+      table.circuitState,
+      table.updatedAt
+    ),
+  })
+);
+
+export const dayforgeSaasImportConnections = mysqlTable(
+  "dayforge_saas_import_connections",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    providerKey: varchar("providerKey", { length: 96 }).notNull(),
+    status: mysqlEnum("status", [
+      "configured",
+      "connected",
+      "error",
+      "disabled",
+    ])
+      .notNull()
+      .default("configured"),
+    credentialReference: varchar("credentialReference", { length: 255 }),
+    configurationJson: json("configurationJson").notNull(),
+    lastImportedAt: timestamp("lastImportedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantProviderUnique: uniqueIndex(
+      "uq_dayforge_saas_import_connection"
+    ).on(table.tenantId, table.providerKey),
+  })
+);
+
+export const dayforgeSaasImportRuns = mysqlTable(
+  "dayforge_saas_import_runs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    connectionId: int("connectionId").notNull(),
+    status: mysqlEnum("status", [
+      "started",
+      "completed",
+      "completed_with_errors",
+      "failed",
+    ]).notNull(),
+    sourceCursor: varchar("sourceCursor", { length: 512 }),
+    importedCustomers: int("importedCustomers").notNull().default(0),
+    importedOrders: int("importedOrders").notNull().default(0),
+    skippedRecords: int("skippedRecords").notNull().default(0),
+    errorJson: json("errorJson"),
+    startedAt: timestamp("startedAt").defaultNow().notNull(),
+    completedAt: timestamp("completedAt"),
+  },
+  table => ({
+    tenantStartedIdx: index("idx_dayforge_saas_import_runs_tenant").on(
+      table.tenantId,
+      table.startedAt
+    ),
+  })
+);
+
+export const dayforgeSaasExternalCustomers = mysqlTable(
+  "dayforge_saas_external_customers",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    connectionId: int("connectionId").notNull(),
+    providerKey: varchar("providerKey", { length: 96 }).notNull(),
+    externalId: varchar("externalId", { length: 191 }).notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    email: varchar("email", { length: 320 }),
+    phone: varchar("phone", { length: 64 }),
+    factsJson: json("factsJson").notNull(),
+    sourceCapturedAt: timestamp("sourceCapturedAt").notNull(),
+    importRunId: varchar("importRunId", { length: 36 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    externalUnique: uniqueIndex("uq_dayforge_external_customer").on(
+      table.tenantId,
+      table.connectionId,
+      table.externalId
+    ),
+  })
+);
+
+export const dayforgeSaasExternalOrders = mysqlTable(
+  "dayforge_saas_external_orders",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    connectionId: int("connectionId").notNull(),
+    providerKey: varchar("providerKey", { length: 96 }).notNull(),
+    externalId: varchar("externalId", { length: 191 }).notNull(),
+    externalCustomerId: varchar("externalCustomerId", { length: 191 }),
+    totalCents: int("totalCents").notNull(),
+    paid: boolean("paid").notNull().default(false),
+    occurredAt: timestamp("occurredAt"),
+    factsJson: json("factsJson").notNull(),
+    sourceCapturedAt: timestamp("sourceCapturedAt").notNull(),
+    importRunId: varchar("importRunId", { length: 36 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    externalUnique: uniqueIndex("uq_dayforge_external_order").on(
+      table.tenantId,
+      table.connectionId,
+      table.externalId
+    ),
+    tenantOccurredIdx: index("idx_dayforge_external_orders_tenant_occurred").on(
+      table.tenantId,
+      table.occurredAt
+    ),
+  })
+);
+
+export type CommercialAccount = typeof commercialAccounts.$inferSelect;
+export type CommercialOpportunityRow = typeof commercialOpportunities.$inferSelect;
+export type CommercialMissionRow = typeof commercialMissions.$inferSelect;
+export type CommercialMissionEventRow = typeof commercialMissionEvents.$inferSelect;
+export type CommercialMissionGameAttemptRow = typeof commercialMissionGameAttempts.$inferSelect;
+export type CommercialMissionGameResultRow = typeof commercialMissionGameResults.$inferSelect;
+export type CommercialMissionGameRewardRow = typeof commercialMissionGameRewards.$inferSelect;
+
+export const territoryOperatorProfiles = mysqlTable("territory_operator_profiles", {
+  tenantId: varchar("tenantId", { length: 64 }).primaryKey(),
+  storeName: varchar("storeName", { length: 255 }).notNull(),
+  storeAddress: varchar("storeAddress", { length: 512 }).notNull(),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  serviceRadiusMiles: decimal("serviceRadiusMiles", { precision: 6, scale: 2 }).notNull().default("3.00"),
+  commercialWashFoldEnabled: boolean("commercialWashFoldEnabled").notNull().default(true),
+  averagePricePerPoundCents: int("averagePricePerPoundCents").notNull(),
+  availableWeeklyCapacityPounds: int("availableWeeklyCapacityPounds").notNull(),
+  routePointsJson: json("routePointsJson").notNull(),
+  turnaroundCompatibleByDefault: boolean("turnaroundCompatibleByDefault").notNull().default(true),
+  pickupDaysCompatibleByDefault: boolean("pickupDaysCompatibleByDefault").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const territoryScanSessions = mysqlTable("territory_scan_sessions", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  tenantId: varchar("tenantId", { length: 64 }),
+  mode: mysqlEnum("mode", ["public_preview", "tenant"]).notNull(),
+  addressQuery: varchar("addressQuery", { length: 512 }).notNull(),
+  centerJson: json("centerJson").notNull(),
+  providerName: varchar("providerName", { length: 64 }).notNull(),
+  resultCount: int("resultCount").notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdBy: varchar("createdBy", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tenantCreatedIdx: index("idx_territory_scan_sessions_tenant_created").on(table.tenantId, table.createdAt),
+  expiresIdx: index("idx_territory_scan_sessions_expires").on(table.expiresAt),
+}));
+
+export const territoryScanResults = mysqlTable("territory_scan_results", {
+  id: int("id").autoincrement().primaryKey(),
+  scanSessionId: varchar("scanSessionId", { length: 64 }).notNull(),
+  tenantId: varchar("tenantId", { length: 64 }),
+  candidateKey: varchar("candidateKey", { length: 191 }).notNull(),
+  providerName: varchar("providerName", { length: 64 }).notNull(),
+  providerAccountId: varchar("providerAccountId", { length: 191 }).notNull(),
+  accountSnapshotJson: json("accountSnapshotJson").notNull(),
+  scoreSnapshotJson: json("scoreSnapshotJson").notNull(),
+  evidenceJson: json("evidenceJson").notNull(),
+  sourceCapturedAt: timestamp("sourceCapturedAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  sessionCandidateUnique: uniqueIndex("uq_territory_scan_results_session_candidate").on(table.scanSessionId, table.candidateKey),
+  tenantSessionIdx: index("idx_territory_scan_results_tenant_session").on(table.tenantId, table.scanSessionId),
+}));
 
 export const level4Missions = mysqlTable("level4_missions", {
   id: int("id").autoincrement().primaryKey(),

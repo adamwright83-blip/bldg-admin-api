@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { CommercialMission } from "@shared/commercialMission";
+import type { CommercialMissionGameReward } from "@shared/commercialMissionGame";
+import { trpc } from "@/lib/trpc";
 import { RallyAudio } from "./rallyAudio";
 import { RallyEngine, type RallyControlMode, type RallyPowerId, type RallyState } from "./rallyEngine";
 import { RALLY_CONFIG } from "./rallyConfig";
@@ -76,6 +79,23 @@ const formatClock = (remainingMs: number) => {
 };
 
 export function RallyDemo() {
+  const missionIdParam = new URLSearchParams(window.location.search).get("missionId");
+  const parsedMissionId = Number(missionIdParam);
+  const missionId = Number.isInteger(parsedMissionId) && parsedMissionId > 0 ? parsedMissionId : null;
+  const missionQuery = trpc.system.commercialMission.gameState.useQuery(
+    { missionId: missionId ?? 1 },
+    { enabled: missionId !== null, retry: false },
+  );
+  const gameStart = trpc.system.commercialMission.gameStart.useMutation();
+  const gameAbandon = trpc.system.commercialMission.gameAbandon.useMutation();
+  const gameComplete = trpc.system.commercialMission.gameComplete.useMutation();
+  const [commercialMission, setCommercialMission] = useState<CommercialMission | null>(null);
+  const [gameReward, setGameReward] = useState<CommercialMissionGameReward | null>(null);
+  const [missionError, setMissionError] = useState<string | null>(null);
+  const commercialMissionRef = useRef<CommercialMission | null>(null);
+  const gameAttemptIdRef = useRef(crypto.randomUUID());
+  const terminalReportedRef = useRef<"victory" | "defeat" | null>(null);
+  const engagedRef = useRef(false);
   const reducedMotionQuery =
     typeof window !== "undefined" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -121,6 +141,22 @@ export function RallyDemo() {
     extension?: string;
   } | null>(null);
   const clipAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    engagedRef.current = engaged;
+  }, [engaged]);
+
+  useEffect(() => {
+    if (!missionQuery.data) return;
+    setCommercialMission(missionQuery.data.mission);
+    commercialMissionRef.current = missionQuery.data.mission;
+    setGameReward(missionQuery.data.reward);
+  }, [missionQuery.data]);
+
+  const adoptMission = useCallback((mission: CommercialMission) => {
+    commercialMissionRef.current = mission;
+    setCommercialMission(mission);
+  }, []);
 
   const syncHud = useCallback(() => {
     setHud(snapshotHud(engineRef.current!.state));
@@ -225,6 +261,24 @@ export function RallyDemo() {
       metricsRef.current?.quitIfActive();
     };
   }, []);
+
+  useEffect(() => {
+    if (missionId === null) return;
+    const onPageHide = () => {
+      const mission = commercialMissionRef.current;
+      if (!engagedRef.current || mission?.status !== "game_active" || terminalReportedRef.current) return;
+      gameAbandon.mutate({
+        missionId,
+        expectedVersion: mission.version,
+        gameAttemptId: gameAttemptIdRef.current,
+        reason: "quit",
+        durationMs: Math.max(0, Math.round(engineRef.current?.state.timeMs ?? 0)),
+        telemetry: { lifecycle: "pagehide" },
+      });
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => window.removeEventListener("pagehide", onPageHide);
+  }, [gameAbandon, missionId]);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("debug") !== "1") return;
@@ -336,7 +390,23 @@ export function RallyDemo() {
     };
   }, []);
 
-  const begin = () => {
+  const begin = async () => {
+    if (missionId !== null) {
+      const mission = commercialMissionRef.current;
+      if (!mission) return;
+      setMissionError(null);
+      try {
+        const active = await gameStart.mutateAsync({
+          missionId,
+          expectedVersion: mission.version,
+          gameAttemptId: gameAttemptIdRef.current,
+        });
+        adoptMission(active.mission);
+      } catch (error) {
+        setMissionError(error instanceof Error ? error.message : "The mission could not be started.");
+        return;
+      }
+    }
     engineRef.current!.start();
     metricsRef.current!.matchStart();
     setEngaged(true);
@@ -344,7 +414,25 @@ export function RallyDemo() {
     arenaRef.current?.focus();
   };
 
-  const restart = () => {
+  const restart = async () => {
+    if (missionId !== null) {
+      const mission = commercialMissionRef.current;
+      if (!mission || mission.status !== "game_ready") return;
+      gameAttemptIdRef.current = crypto.randomUUID();
+      terminalReportedRef.current = null;
+      setMissionError(null);
+      try {
+        const active = await gameStart.mutateAsync({
+          missionId,
+          expectedVersion: mission.version,
+          gameAttemptId: gameAttemptIdRef.current,
+        });
+        adoptMission(active.mission);
+      } catch (error) {
+        setMissionError(error instanceof Error ? error.message : "The mission could not be restarted.");
+        return;
+      }
+    }
     metricsRef.current!.rematch();
     engineRef.current!.reset();
     particlesRef.current.clear();
@@ -354,6 +442,45 @@ export function RallyDemo() {
     syncHud();
     arenaRef.current?.focus();
   };
+
+  useEffect(() => {
+    if (missionId === null || terminalReportedRef.current || (hud.status !== "victory" && hud.status !== "defeat")) return;
+    const mission = commercialMissionRef.current;
+    if (!mission || mission.status !== "game_active") return;
+    terminalReportedRef.current = hud.status;
+    if (hud.status === "defeat") {
+      void gameAbandon.mutateAsync({
+        missionId,
+        expectedVersion: mission.version,
+        gameAttemptId: gameAttemptIdRef.current,
+        reason: "defeat",
+        durationMs: Math.max(0, Math.round(hud.timeMs)),
+        telemetry: { sparkScore: hud.sparkScore, clockheadScore: hud.clockheadScore },
+      }).then(state => adoptMission(state.mission)).catch(error => {
+        terminalReportedRef.current = null;
+        setMissionError(error instanceof Error ? error.message : "The loss could not be recorded.");
+      });
+      return;
+    }
+    const replay = JSON.parse(JSON.stringify(engineRef.current!.getReplayRecord())) as Record<string, unknown>;
+    void gameComplete.mutateAsync({
+      missionId,
+      expectedVersion: mission.version,
+      gameAttemptId: gameAttemptIdRef.current,
+      telemetry: {
+        sparkScore: hud.sparkScore,
+        clockheadScore: hud.clockheadScore,
+        durationMs: Math.max(1, Math.round(hud.timeMs)),
+        replay,
+      },
+    }).then(result => {
+      adoptMission(result.mission);
+      setGameReward(result.reward);
+    }).catch(error => {
+      terminalReportedRef.current = null;
+      setMissionError(error instanceof Error ? error.message : "The victory could not be recorded.");
+    });
+  }, [adoptMission, gameAbandon, gameComplete, hud.clockheadScore, hud.sparkScore, hud.status, hud.timeMs, missionId]);
 
   const aimAtPointer = (clientX: number, clientY: number) => {
     const bounds = canvasRef.current?.getBoundingClientRect();
@@ -419,6 +546,28 @@ export function RallyDemo() {
   return (
     <main className={`rally-page mode-${hud.scoringMode} controls-${hud.controlMode}${hud.reducedMotion ? " is-reduced" : ""}`}>
       <section className="rally-shell" aria-label="BORESLAY Excuse Rally">
+        {missionId !== null && (
+          <aside className="rally-commercial-mission" aria-live="polite">
+            {missionQuery.isLoading ? (
+              <strong>LOADING PERSISTED MISSION…</strong>
+            ) : missionQuery.error ? (
+              <strong>MISSION UNAVAILABLE · {missionQuery.error.message}</strong>
+            ) : commercialMission ? (
+              <>
+                <span>{commercialMission.code}</span>
+                <strong>{commercialMission.account.name}</strong>
+                <b>${Math.round(commercialMission.opportunity.estimatedAnnualValueCents / 100).toLocaleString()} POTENTIAL ANNUAL VALUE</b>
+                <small>
+                  {commercialMission.account.decisionMaker.name
+                    ? `${commercialMission.account.decisionMaker.name} · ${commercialMission.account.decisionMaker.title ?? "Decision-maker"}`
+                    : "Decision-maker research pending"}
+                  {` · OBJECTIVE: ${(missionQuery.data?.objective ?? "Complete the BORESLAY match to unlock the field mission").toUpperCase()}`}
+                </small>
+              </>
+            ) : null}
+          </aside>
+        )}
+        {missionError && <div className="rally-mission-error" role="alert">{missionError}</div>}
         <div
           ref={arenaRef}
           className={`rally-stage is-${hud.status} tier-${hud.speedTier}`}
@@ -593,7 +742,21 @@ export function RallyDemo() {
                   })}
                 </div>
               )}
-              <button type="button" onClick={begin} disabled={hud.controlMode === "flight" && hud.powerLoadout.length !== RALLY_CONFIG.powers.slots}>ENTER THE RALLY</button>
+              {missionId !== null && commercialMission?.status === "phone_ready" ? (
+                <a href={`/driver/sales-mission/${missionId}`}>PHONE MISSION UNLOCKED · OPEN FIELD MISSION</a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void begin()}
+                  disabled={
+                    (hud.controlMode === "flight" && hud.powerLoadout.length !== RALLY_CONFIG.powers.slots) ||
+                    gameStart.isPending ||
+                    (missionId !== null && (!commercialMission || !["game_ready", "game_active"].includes(commercialMission.status)))
+                  }
+                >
+                  {gameStart.isPending ? "OPENING MISSION…" : "ENTER THE RALLY"}
+                </button>
+              )}
               <small>{hud.controlMode === "duel" ? "A/D OR ARROWS · W JUMP · J STRIKE · K LOFT · L POWER" : "WASD / ARROWS · HOLD F / CLICK · SPACE TO DASH"}</small>
             </div>
           )}
@@ -611,7 +774,16 @@ export function RallyDemo() {
               <span>{hud.status === "victory" ? "REALITY WINS" : "THE EXCUSE GOT THROUGH"}</span>
               <h1>{hud.status === "victory" ? "CLOCKHEAD SHATTERED" : "RALLY AGAIN"}</h1>
               <p>{hud.message}</p>
-              <button type="button" onClick={restart}>PLAY AGAIN</button>
+              {gameReward?.phoneMissionReady ? (
+                <>
+                  <p>+{gameReward.xpAwarded} XP · {gameReward.streakDays} DAY STREAK · PHONE MISSION UNLOCKED</p>
+                  <a href={`/driver/sales-mission/${missionId}`}>OPEN FIELD MISSION</a>
+                </>
+              ) : hud.status === "victory" && missionId !== null ? (
+                <button type="button" disabled>SECURING PHONE MISSION…</button>
+              ) : (
+                <button type="button" onClick={() => void restart()} disabled={gameAbandon.isPending || (missionId !== null && commercialMission?.status !== "game_ready")}>PLAY AGAIN</button>
+              )}
             </div>
           )}
 

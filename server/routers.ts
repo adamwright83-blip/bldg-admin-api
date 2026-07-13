@@ -17,6 +17,7 @@ import {
   publicProcedure,
   protectedProcedure,
   adminProcedure,
+  adminOrDriverProcedure,
   platformOrVendorProcedure,
   vendorProcedure,
   router,
@@ -4076,7 +4077,7 @@ export const appRouter = router({
 
     /* ===== CATALOG (Revenue Control Surface) — platform admin, tenant-scoped by Host ===== */
     catalog: router({
-      list: adminProcedure
+      list: adminOrDriverProcedure
         .input(z.object({ includeArchived: z.boolean().optional() }).optional())
         .query(async ({ ctx, input }) => {
           return listCatalogItemsForAdmin(ctx.tenantId, {

@@ -35,7 +35,11 @@ export type CleanCloudPaidOrderImportSummary = {
   candidateClearentRowCount: number;
   unresolvedBuildingCount: number;
   importStatus: "completed" | "completed_with_errors" | "failed";
-  errors: Array<{ rowNumber?: number; message: string; rawRowPreview?: string }>;
+  errors: Array<{
+    rowNumber?: number;
+    message: string;
+    rawRowPreview?: string;
+  }>;
 };
 
 const monthByName: Record<string, number> = {
@@ -70,9 +74,11 @@ function normalizeHeader(value: string): string {
 }
 
 function pick(row: CsvRecord, aliases: string[]): string {
-  const exact = aliases.find((alias) => row[alias] != null);
+  const exact = aliases.find(alias => row[alias] != null);
   if (exact) return row[exact] ?? "";
-  const normalized = new Map(Object.keys(row).map((key) => [normalizeHeader(key), key]));
+  const normalized = new Map(
+    Object.keys(row).map(key => [normalizeHeader(key), key])
+  );
   for (const alias of aliases) {
     const key = normalized.get(normalizeHeader(alias));
     if (key) return row[key] ?? "";
@@ -80,9 +86,14 @@ function pick(row: CsvRecord, aliases: string[]): string {
   return "";
 }
 
-export function parseCleanCloudPaidReportType(value: unknown): CleanCloudPaidReportType {
-  const normalized = String(value ?? "").toLowerCase().replace(/[\s-]+/g, "_");
-  if (normalized === "orders_revenue" || normalized === "revenue") return "orders_revenue";
+export function parseCleanCloudPaidReportType(
+  value: unknown
+): CleanCloudPaidReportType {
+  const normalized = String(value ?? "")
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (normalized === "orders_revenue" || normalized === "revenue")
+    return "orders_revenue";
   return "orders_sales";
 }
 
@@ -98,26 +109,53 @@ export function parseCleanCloudMoneyCents(value: unknown): number | null {
 }
 
 function parseCleanCloudBool(value: unknown): boolean {
-  const normalized = String(value ?? "").trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "paid";
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  return (
+    normalized === "1" ||
+    normalized === "true" ||
+    normalized === "yes" ||
+    normalized === "paid"
+  );
 }
 
 export function parseCleanCloudPacificDate(value: unknown): Date | null {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
 
-  const nameMatch = raw.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  const nameMatch = raw.match(
+    /^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
+  );
   if (nameMatch) {
-    const [, dayRaw, monthRaw, yearRaw, hourRaw = "0", minuteRaw = "0", secondRaw = "0"] = nameMatch;
+    const [
+      ,
+      dayRaw,
+      monthRaw,
+      yearRaw,
+      hourRaw = "0",
+      minuteRaw = "0",
+      secondRaw = "0",
+    ] = nameMatch;
     const month = monthByName[monthRaw.toLowerCase()];
     if (!month) return null;
     const localIso = `${yearRaw}-${String(month).padStart(2, "0")}-${String(Number(dayRaw)).padStart(2, "0")}T${String(Number(hourRaw)).padStart(2, "0")}:${String(Number(minuteRaw)).padStart(2, "0")}:${String(Number(secondRaw)).padStart(2, "0")}`;
     return fromZonedTime(localIso, PACIFIC_TIME_ZONE);
   }
 
-  const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?:\s*([AP]M))?)?$/i);
+  const slashMatch = raw.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?:\s*([AP]M))?)?$/i
+  );
   if (slashMatch) {
-    const [, monthRaw, dayRaw, yearRaw, hourRaw = "0", minuteRaw = "0", meridiemRaw] = slashMatch;
+    const [
+      ,
+      monthRaw,
+      dayRaw,
+      yearRaw,
+      hourRaw = "0",
+      minuteRaw = "0",
+      meridiemRaw,
+    ] = slashMatch;
     let hour = Number(hourRaw);
     const meridiem = meridiemRaw?.toUpperCase();
     if (meridiem === "PM" && hour < 12) hour += 12;
@@ -126,10 +164,16 @@ export function parseCleanCloudPacificDate(value: unknown): Date | null {
     return fromZonedTime(localIso, PACIFIC_TIME_ZONE);
   }
 
-  const isoDate = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  const isoDate = raw.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/
+  );
   if (isoDate) {
-    const [, year, month, day, hour = "0", minute = "0", second = "0"] = isoDate;
-    return fromZonedTime(`${year}-${month}-${day}T${hour}:${minute}:${second}`, PACIFIC_TIME_ZONE);
+    const [, year, month, day, hour = "0", minute = "0", second = "0"] =
+      isoDate;
+    return fromZonedTime(
+      `${year}-${month}-${day}T${hour}:${minute}:${second}`,
+      PACIFIC_TIME_ZONE
+    );
   }
 
   const parsed = new Date(raw);
@@ -141,11 +185,18 @@ function normalizePhone(value: string): string | null {
   return digits || null;
 }
 
-function isClearentCandidate(row: Pick<InsertCleancloudPaidOrder, "paid" | "paymentType" | "cardPaymentType">): boolean {
+function isClearentCandidate(
+  row: Pick<
+    InsertCleancloudPaidOrder,
+    "paid" | "paymentType" | "cardPaymentType"
+  >
+): boolean {
   return Boolean(
     row.paid &&
       String(row.paymentType ?? "").toLowerCase() === "card" &&
-      String(row.cardPaymentType ?? "").toLowerCase().includes("clearent")
+      String(row.cardPaymentType ?? "")
+        .toLowerCase()
+        .includes("clearent")
   );
 }
 
@@ -154,10 +205,15 @@ function inferLocation(address: string | null, unit: string | null) {
   if (tower.propertyGroup !== "unknown") {
     return {
       buildingName: tower.propertyDisplayName,
-      buildingSlug: tower.propertyGroup === "opus_la" ? "opusla" : "centuryparkeast",
-      tower: tower.towerDisplayName === "Unknown Tower" ? null : tower.towerDisplayName,
+      buildingSlug:
+        tower.propertyGroup === "opus_la" ? "opusla" : "centuryparkeast",
+      tower:
+        tower.towerDisplayName === "Unknown Tower"
+          ? null
+          : tower.towerDisplayName,
       unit,
-      buildingResolutionStatus: tower.towerKey === "unknown" ? "unresolved_needs_mapping" : "resolved",
+      buildingResolutionStatus:
+        tower.towerKey === "unknown" ? "unresolved_needs_mapping" : "resolved",
     } as const;
   }
 
@@ -166,7 +222,9 @@ function inferLocation(address: string | null, unit: string | null) {
     buildingSlug: null,
     tower: null,
     unit,
-    buildingResolutionStatus: address ? "unresolved_needs_mapping" : "not_applicable",
+    buildingResolutionStatus: address
+      ? "unresolved_needs_mapping"
+      : "not_applicable",
   } as const;
 }
 
@@ -178,25 +236,45 @@ export function normalizeCleanCloudPaidOrderRow(
     importBatchId: number;
     tenantId?: string;
   }
-): { normalized: InsertCleancloudPaidOrder | null; error?: string; candidateForClearent: boolean } {
-  const cleancloudOrderId = pick(row, ["Order ID", "Order Id", "OrderID"]).trim();
+): {
+  normalized: InsertCleancloudPaidOrder | null;
+  error?: string;
+  candidateForClearent: boolean;
+} {
+  const cleancloudOrderId = pick(row, [
+    "Order ID",
+    "Order Id",
+    "OrderID",
+  ]).trim();
   if (!cleancloudOrderId) {
-    return { normalized: null, error: "Missing Order ID", candidateForClearent: false };
+    return {
+      normalized: null,
+      error: "Missing Order ID",
+      candidateForClearent: false,
+    };
   }
 
   const customerName = pick(row, ["Customer", "Customer Name"]).trim();
   if (!customerName) {
-    return { normalized: null, error: "Missing Customer", candidateForClearent: false };
+    return {
+      normalized: null,
+      error: "Missing Customer",
+      candidateForClearent: false,
+    };
   }
 
   const address = pick(row, ["Address"]).trim() || null;
-  const unitMatch = address?.match(/\b(?:apt|apartment|unit|suite|#)\s*#?([A-Za-z0-9-]+)/i);
+  const unitMatch = address?.match(
+    /\b(?:apt|apartment|unit|suite|#)\s*#?([A-Za-z0-9-]+)/i
+  );
   const unit = unitMatch?.[1] ?? null;
   const location = inferLocation(address, unit);
   const totalCents =
     input.sourceReportType === "orders_sales"
-      ? parseCleanCloudMoneyCents(pick(row, ["Total after Credit Used"])) ?? parseCleanCloudMoneyCents(pick(row, ["Total"])) ?? 0
-      : parseCleanCloudMoneyCents(pick(row, ["Total"])) ?? 0;
+      ? (parseCleanCloudMoneyCents(pick(row, ["Total after Credit Used"])) ??
+        parseCleanCloudMoneyCents(pick(row, ["Total"])) ??
+        0)
+      : (parseCleanCloudMoneyCents(pick(row, ["Total"])) ?? 0);
 
   const normalized: InsertCleancloudPaidOrder = {
     tenantId: input.tenantId ?? "default",
@@ -204,14 +282,21 @@ export function normalizeCleanCloudPaidOrderRow(
     sourceFileName: input.sourceFileName,
     importBatchId: input.importBatchId,
     cleancloudOrderId,
-    cleancloudCustomerId: pick(row, ["Customer ID", "Customer Id"]).trim() || null,
+    cleancloudCustomerId:
+      pick(row, ["Customer ID", "Customer Id"]).trim() || null,
     customerName,
     customerEmail: pick(row, ["Email"]).trim() || null,
     customerPhone: normalizePhone(pick(row, ["Phone"])),
     address,
     placedAtUtc: parseCleanCloudPacificDate(pick(row, ["Placed"])),
-    paymentDateUtc: input.sourceReportType === "orders_sales" ? parseCleanCloudPacificDate(pick(row, ["Payment Date"])) : null,
-    paidDateUtc: input.sourceReportType === "orders_revenue" ? parseCleanCloudPacificDate(pick(row, ["Paid Date"])) : null,
+    paymentDateUtc:
+      input.sourceReportType === "orders_sales"
+        ? parseCleanCloudPacificDate(pick(row, ["Payment Date"]))
+        : null,
+    paidDateUtc:
+      input.sourceReportType === "orders_revenue"
+        ? parseCleanCloudPacificDate(pick(row, ["Paid Date"]))
+        : null,
     readyByDateUtc: parseCleanCloudPacificDate(pick(row, ["Ready By"])),
     collectedAtUtc: parseCleanCloudPacificDate(pick(row, ["Collected"])),
     cleanedAtUtc: parseCleanCloudPacificDate(pick(row, ["Cleaned"])),
@@ -236,8 +321,17 @@ export function normalizeCleanCloudPaidOrderRow(
   return { normalized, candidateForClearent: isClearentCandidate(normalized) };
 }
 
-export function sumCleanCloudClearentCandidates(rows: Array<Pick<CleancloudPaidOrder, "paid" | "paymentType" | "cardPaymentType" | "totalCents">>): number {
-  return rows.filter(isClearentCandidate).reduce((sum, row) => sum + row.totalCents, 0);
+export function sumCleanCloudClearentCandidates(
+  rows: Array<
+    Pick<
+      CleancloudPaidOrder,
+      "paid" | "paymentType" | "cardPaymentType" | "totalCents"
+    >
+  >
+): number {
+  return rows
+    .filter(isClearentCandidate)
+    .reduce((sum, row) => sum + row.totalCents, 0);
 }
 
 export async function importCleanCloudPaidOrders(input: {
@@ -249,11 +343,13 @@ export async function importCleanCloudPaidOrders(input: {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
 
-  const sourceFileName = input.sourceFileName?.trim() || `cleancloud-${input.sourceReportType}.csv`;
+  const sourceFileName =
+    input.sourceFileName?.trim() || `cleancloud-${input.sourceReportType}.csv`;
   const rows = parseCsv(input.csvText);
   const [batch] = await db
     .insert(cleancloudImportBatches)
     .values({
+      tenantId: input.tenantId ?? "default",
       source: `cleancloud_${input.sourceReportType}`,
       sourceFileName,
       importedRowCount: 0,
@@ -282,20 +378,35 @@ export async function importCleanCloudPaidOrders(input: {
 
     if (!normalized.normalized) {
       skippedRowCount += 1;
-      errors.push({ rowNumber: index + 2, message: normalized.error ?? "Skipped row", rawRowPreview: JSON.stringify(row).slice(0, 500) });
+      errors.push({
+        rowNumber: index + 2,
+        message: normalized.error ?? "Skipped row",
+        rawRowPreview: JSON.stringify(row).slice(0, 500),
+      });
       continue;
     }
 
     if (normalized.candidateForClearent) candidateClearentRowCount += 1;
-    if (normalized.normalized.buildingResolutionStatus === "unresolved_needs_mapping") unresolvedBuildingCount += 1;
+    if (
+      normalized.normalized.buildingResolutionStatus ===
+      "unresolved_needs_mapping"
+    )
+      unresolvedBuildingCount += 1;
 
     const existing = await db
       .select({ id: cleancloudPaidOrders.id })
       .from(cleancloudPaidOrders)
       .where(
         and(
-          eq(cleancloudPaidOrders.cleancloudOrderId, normalized.normalized.cleancloudOrderId),
-          eq(cleancloudPaidOrders.sourceReportType, normalized.normalized.sourceReportType)
+          eq(cleancloudPaidOrders.tenantId, input.tenantId ?? "default"),
+          eq(
+            cleancloudPaidOrders.cleancloudOrderId,
+            normalized.normalized.cleancloudOrderId
+          ),
+          eq(
+            cleancloudPaidOrders.sourceReportType,
+            normalized.normalized.sourceReportType
+          )
         )
       )
       .limit(1);

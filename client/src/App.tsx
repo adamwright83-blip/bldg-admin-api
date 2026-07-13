@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Suspense, lazy } from "react";
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { TenantProvider, useTenant } from "./hooks/useTenant";
@@ -19,7 +19,33 @@ import AdminCatalog from "./pages/AdminCatalog";
 const BoreslayLanding = lazy(() => import("./pages/BoreslayLanding"));
 const DayforgeLanding = lazy(() => import("./pages/DayforgeLanding"));
 const LandingFinal = lazy(() => import("./pages/LandingFinal"));
+const TerritoryPreview = lazy(() => import("./pages/TerritoryPreview"));
+const CommercialMissionAdmin = lazy(
+  () => import("./pages/CommercialMissionAdmin")
+);
+const CommercialSalesMission = lazy(
+  () => import("./pages/CommercialSalesMission")
+);
+const CommercialProposalPrint = lazy(
+  () => import("./pages/CommercialProposalPrint")
+);
+const CommercialProposalSettings = lazy(
+  () => import("./pages/CommercialProposalSettings")
+);
+const ChurnRadarPage = lazy(() => import("./pages/ChurnRadarPage"));
+const CommercialPipelinePage = lazy(
+  () => import("./pages/CommercialPipelinePage")
+);
+const DayforgeOnboardingPage = lazy(
+  () => import("./pages/DayforgeOnboardingPage")
+);
+const DayforgeLoginPage = lazy(() => import("./pages/DayforgeLoginPage"));
+const DayforgeSettingsPage = lazy(() => import("./pages/DayforgeSettingsPage"));
+const DayforgeInvitePage = lazy(() => import("./pages/DayforgeInvitePage"));
 const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
+const DayforgeDemoControlPage = lazy(
+  () => import("./pages/DayforgeDemoControlPage")
+);
 
 function PublicLandingFallback() {
   return <div style={{ minHeight: "100vh", background: "#F6F1E8" }} />;
@@ -49,12 +75,40 @@ function LandingFinalRoute() {
   );
 }
 
+function TerritoryPreviewRoute() {
+  return (
+    <Suspense fallback={<PublicLandingFallback />}>
+      <TerritoryPreview />
+    </Suspense>
+  );
+}
+
 function RallyDemoRoute() {
   return (
     <Suspense
       fallback={<div style={{ minHeight: "100vh", background: "#05060b" }} />}
     >
       <RallyDemo />
+    </Suspense>
+  );
+}
+
+function CommercialSalesMissionRoute() {
+  return (
+    <Suspense
+      fallback={<div style={{ minHeight: "100vh", background: "#08111d" }} />}
+    >
+      <CommercialSalesMission />
+    </Suspense>
+  );
+}
+
+function CommercialProposalPrintRoute() {
+  return (
+    <Suspense
+      fallback={<div style={{ minHeight: "100vh", background: "#dfe4e9" }} />}
+    >
+      <CommercialProposalPrint />
     </Suspense>
   );
 }
@@ -83,10 +137,22 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/leads",
   "/vendors",
   "/level4",
+  "/commercial-missions",
+  "/commercial-proposal-settings",
+  "/churn-radar",
+  "/commercial-pipeline",
   "/operator-reflection",
+  "/dayforge-demo",
+  "/julydemo",
   "/boreslay-rally",
   "/dayforge",
   "/landingfinal",
+  "/territory-preview",
+  "/dayforge-onboarding",
+  "/dayforge-login",
+  "/dayforge-settings",
+  "/dayforge-invite",
+  "/billing",
 ]);
 
 function AdminHostRouter() {
@@ -96,7 +162,70 @@ function AdminHostRouter() {
       <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/dayforge" component={DayforgeLandingRoute} />
       <Route path="/landingfinal" component={LandingFinalRoute} />
+      <Route path="/territory-preview" component={TerritoryPreviewRoute} />
+      <Route path="/dayforge-onboarding">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeOnboardingPage />
+        </Suspense>
+      </Route>
+      <Route path="/dayforge-login">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeLoginPage />
+        </Suspense>
+      </Route>
+      <Route path="/dayforge-invite">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeInvitePage />
+        </Suspense>
+      </Route>
+      <Route path="/dayforge-settings">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeSettingsPage />
+        </Suspense>
+      </Route>
+      <Route path="/billing">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeSettingsPage />
+        </Suspense>
+      </Route>
+      <Route path="/commercial-missions">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <CommercialMissionAdmin />
+        </Suspense>
+      </Route>
+      <Route path="/julydemo">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeDemoControlPage />
+        </Suspense>
+      </Route>
+      {/* Kept for backward compatibility with earlier links/bookmarks; /julydemo is canonical. */}
+      <Route path="/dayforge-demo">
+        <Redirect to="/julydemo" />
+      </Route>
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
+      <Route
+        path="/driver/sales-mission/:missionId"
+        component={CommercialSalesMissionRoute}
+      />
+      <Route
+        path="/commercial-proposal/:missionId"
+        component={CommercialProposalPrintRoute}
+      />
+      <Route path="/commercial-proposal-settings">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <CommercialProposalSettings />
+        </Suspense>
+      </Route>
+      <Route path="/churn-radar">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <ChurnRadarPage />
+        </Suspense>
+      </Route>
+      <Route path="/commercial-pipeline">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <CommercialPipelinePage />
+        </Suspense>
+      </Route>
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
       <Route path="/pricing" component={AdminCatalog} />
@@ -163,7 +292,41 @@ function Router() {
       <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/dayforge" component={DayforgeLandingRoute} />
       <Route path="/landingfinal" component={LandingFinalRoute} />
+      <Route path="/territory-preview" component={TerritoryPreviewRoute} />
+      <Route path="/dayforge-onboarding">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeOnboardingPage />
+        </Suspense>
+      </Route>
+      <Route path="/dayforge-login">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeLoginPage />
+        </Suspense>
+      </Route>
+      <Route path="/dayforge-invite">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeInvitePage />
+        </Suspense>
+      </Route>
+      <Route path="/dayforge-settings">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeSettingsPage />
+        </Suspense>
+      </Route>
+      <Route path="/billing">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeSettingsPage />
+        </Suspense>
+      </Route>
       <Route path="/boreslay-rally" component={RallyDemoRoute} />
+      <Route
+        path="/driver/sales-mission/:missionId"
+        component={CommercialSalesMissionRoute}
+      />
+      <Route
+        path="/commercial-proposal/:missionId"
+        component={CommercialProposalPrintRoute}
+      />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
       <Route path="/catalog" component={AdminCatalog} />
       <Route path="/pricing" component={AdminCatalog} />

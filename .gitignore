@@ -113,3 +113,5 @@ temp/
 # Webdev artifacts (checkpoint zips, migrations, etc.)
 .webdev/
 .vercel
+test-results
+playwright-report

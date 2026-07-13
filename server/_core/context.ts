@@ -1,7 +1,6 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
 import type { VendorSession } from "./vendorAuth";
-import type { TenantId } from "@shared/tenantConfig";
 import { resolveTenantIdFromHeaders } from "@shared/tenantConfig";
 import { sdk } from "./sdk";
 import { parseVendorCookie, verifyVendorSession } from "./vendorAuth";
@@ -11,7 +10,7 @@ export type TrpcContext = {
   res: CreateExpressContextOptions["res"];
   user: User | null;
   vendorSession: VendorSession | null;
-  tenantId: TenantId;
+  tenantId: string;
 };
 
 const warnedHosts = new Set<string>();
@@ -40,15 +39,26 @@ export async function createContext(
     const unknownHost = tenantResolution.host || "(missing-host)";
     if (!warnedHosts.has(unknownHost)) {
       warnedHosts.add(unknownHost);
-      console.warn(`[TenantResolver] Unknown host "${unknownHost}", falling back to default.`);
+      console.warn(
+        `[TenantResolver] Unknown host "${unknownHost}", falling back to default.`
+      );
     }
   }
+
+  const authenticatedTenantId = user?.tenantId?.trim();
+  const tenantId = authenticatedTenantId
+    ? authenticatedTenantId
+    : user?.openId.startsWith("dayforge:")
+      ? "__invalid_saas_session__"
+      : tenantResolution.tenantId;
 
   return {
     req: opts.req,
     res: opts.res,
     user,
     vendorSession,
-    tenantId: tenantResolution.tenantId,
+    // An authenticated user's persisted tenant always wins over untrusted Host
+    // headers. Membership-aware tRPC procedures perform the second check.
+    tenantId,
   };
 }

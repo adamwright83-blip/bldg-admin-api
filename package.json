@@ -13,6 +13,11 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:dayforge:release": "vitest run server/dayforgeRelease server/territory server/commercialMissions server/commercialProposals server/commercialPipeline server/dayforgeEvents server/mysqlErrors.test.ts shared/dayforgeEvents.test.ts",
+    "test:dayforge:release:integration": "vitest run --config vitest.integration.config.ts server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts",
+    "test:dayforge:release:e2e": "playwright test --config playwright.dayforge.config.ts",
+    "check:dayforge:release": "tsc --project tsconfig.dayforge-release.json",
+    "db:dayforge:release": "tsx server/dayforgeRelease/applyReleaseMigrations.ts",
     "export:customers": "tsx scripts/export-customer-identities.ts",
     "backfill:order-buildings": "tsx scripts/backfill-order-buildings.ts",
     "sync:cleancloud-csv-to-sheet": "tsx scripts/sync-cleancloud-csv-to-sheet.ts",
@@ -21,7 +26,12 @@
     "seed:catalog": "tsx scripts/seed-catalog-from-dc-items.ts",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "db:procurement:migrate": "tsx scripts/procurement-migrate.ts migrate",
-    "db:procurement:status": "tsx scripts/procurement-migrate.ts status"
+    "db:procurement:status": "tsx scripts/procurement-migrate.ts status",
+    "dayforge:demo:setup": "tsx scripts/dayforge-demo-setup.ts",
+    "dayforge:demo:reset": "tsx scripts/dayforge-demo-reset.ts",
+    "dayforge:demo:verify": "tsx scripts/dayforge-demo-verify.ts",
+    "dayforge:migrations:verify": "tsx scripts/dayforge-migrations-verify.ts",
+    "dayforge:demo": "tsx scripts/dayforge-demo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
@@ -103,6 +113,7 @@
   },
   "devDependencies": {
     "@builder.io/vite-plugin-jsx-loc": "^0.1.1",
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/typography": "^0.5.15",
     "@tailwindcss/vite": "^4.1.3",
     "@types/bcryptjs": "^3.0.0",

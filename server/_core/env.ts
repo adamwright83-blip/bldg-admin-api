@@ -43,4 +43,8 @@ export const ENV = {
    */
   revenueReminderOutboundConfigured:
     process.env.REVENUE_REMINDER_OUTBOUND_CONFIGURED === "true",
+  /** Boss-demo operational layer: resettable, isolated demo tenant. Off by default. */
+  dayforgeDemoEnabled: process.env.DAYFORGE_DEMO_ENABLED === "true",
+  dayforgeDemoTenantSlug:
+    process.env.DAYFORGE_DEMO_TENANT_SLUG?.trim() || "sunset-laundry-demo",
 };

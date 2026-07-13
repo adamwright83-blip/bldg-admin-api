@@ -32,6 +32,8 @@ import { registerPaymentReconciliationRoutes } from "../paymentReconciliationRou
 import { registerMarketplacePaymentInternalRoutes } from "../marketplacePayments/marketplacePaymentInternalRoute";
 import { registerMarketplacePaymentReadRoutes } from "../marketplacePayments/marketplacePaymentReadRoute";
 import { registerMarketplaceStripeWebhookRoutes } from "../marketplacePayments/marketplaceStripeWebhookRoute";
+import { registerDayforgeBillingWebhookRoute } from "../saas/saasBillingWebhookRoute";
+import { registerDayforgeSaasAuthRoute } from "../saas/saasAuthRoute";
 import { registerMarketplacePaymentDryRunRoutes } from "../marketplacePayments/marketplacePaymentDryRunRoute";
 import { registerLaundryFarmSheetSyncRoutes } from "../laundryFarmSheetSyncRoute";
 import { registerResidentProposalReadRoutes, registerResidentProposalConsentRoute } from "../procurement/residentProposalReadApi";
@@ -43,12 +45,19 @@ import {
   lookupVerifiedResidentCardByPhone,
   verifyStripePaymentMethodOwnership,
 } from "../residentPaymentMethods";
+import {
+  configuredTrustProxy,
+  dayforgeSecurityHeaders,
+  resolveTrustedClientIp,
+} from "../dayforgeSecurity/dayforgeSecurity";
+import { registerDayforgeRetentionRoute } from "../dayforgeRetention/retentionRoute";
 
 const warnedUnknownTenantHosts = new Set<string>();
 const vendorOnboardingRateLimit = new Map<string, { count: number; resetAt: number }>();
+const authLoginFailures = new Map<string, { count: number; resetAt: number }>();
 
 function rateLimitKey(req: express.Request, email?: string) {
-  const ip = req.ip || req.socket.remoteAddress || "unknown-ip";
+  const ip = resolveTrustedClientIp(req);
   return `${ip}:${email?.toLowerCase().trim() || "unknown-email"}`;
 }
 
@@ -61,6 +70,42 @@ function isVendorOnboardingRateLimited(req: express.Request, email?: string, now
   }
   existing.count += 1;
   return existing.count > 5;
+}
+
+function authLoginKey(req: express.Request, role: "admin" | "driver") {
+  const ip = resolveTrustedClientIp(req);
+  return `${ip}:${role}`;
+}
+
+function isAuthLoginRateLimited(req: express.Request, role: "admin" | "driver", now = Date.now()) {
+  const key = authLoginKey(req, role);
+  const existing = authLoginFailures.get(key);
+  if (!existing || existing.resetAt <= now) {
+    authLoginFailures.delete(key);
+    return false;
+  }
+  return existing.count >= 10;
+}
+
+function recordAuthLoginFailure(req: express.Request, role: "admin" | "driver", now = Date.now()) {
+  const key = authLoginKey(req, role);
+  const existing = authLoginFailures.get(key);
+  if (!existing || existing.resetAt <= now) {
+    authLoginFailures.set(key, { count: 1, resetAt: now + 15 * 60 * 1000 });
+    return;
+  }
+  existing.count += 1;
+}
+
+function clearAuthLoginFailures(req: express.Request, role: "admin" | "driver") {
+  authLoginFailures.delete(authLoginKey(req, role));
+}
+
+function secretsMatch(candidate: unknown, expected: string): boolean {
+  if (typeof candidate !== "string") return false;
+  const candidateDigest = crypto.createHash("sha256").update(candidate).digest();
+  const expectedDigest = crypto.createHash("sha256").update(expected).digest();
+  return crypto.timingSafeEqual(candidateDigest, expectedDigest);
 }
 
 function hasValidAppSharedSecret(req: express.Request): boolean {
@@ -96,6 +141,8 @@ async function startServer() {
   validateStripeEnv();
 
   const app = express();
+  app.set("trust proxy", configuredTrustProxy());
+  app.use(dayforgeSecurityHeaders());
   const server = createServer(app);
 
   console.log("[Boot] v9 — REST endpoint for leads with robust error handling");
@@ -249,6 +296,7 @@ async function startServer() {
   registerMarketplacePaymentInternalRoutes(app);
   registerMarketplacePaymentReadRoutes(app);
   registerMarketplaceStripeWebhookRoutes(app);
+  registerDayforgeBillingWebhookRoute(app);
   registerMarketplacePaymentDryRunRoutes(app);
   registerAgentMailVendorReplyWebhookRoutes(app);
   registerLaundryFarmSheetSyncRoutes(app);
@@ -258,6 +306,8 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  registerDayforgeRetentionRoute(app);
+  registerDayforgeSaasAuthRoute(app);
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
 
@@ -340,28 +390,48 @@ async function startServer() {
   });
 
   // Direct password login — bypasses OAuth portal entirely.
-  // Set ADMIN_PASSWORD in Railway env. Falls back to APP_SHARED_API_SECRET.
+  // Production driver and admin credentials are distinct. Development may
+  // fall back to the existing admin/shared secret to preserve local workflows.
   app.post("/api/auth/login", async (req, res) => {
-    const { password } = req.body || {};
+    const { password, role: requestedRole } = req.body || {};
+    const role = requestedRole === "driver" ? "driver" : "admin";
     const validPassword =
-      process.env.ADMIN_PASSWORD || process.env.APP_SHARED_API_SECRET || "";
+      role === "driver"
+        ? process.env.DRIVER_PASSWORD ||
+          (process.env.NODE_ENV === "production"
+            ? ""
+            : process.env.ADMIN_PASSWORD ||
+              process.env.APP_SHARED_API_SECRET ||
+              "")
+        : process.env.ADMIN_PASSWORD || process.env.APP_SHARED_API_SECRET || "";
 
-    if (!validPassword) {
-      return res.status(503).json({ error: "ADMIN_PASSWORD not configured on server" });
+    if (isAuthLoginRateLimited(req, role)) {
+      return res.status(429).json({ error: "Too many login attempts. Try again later." });
     }
-    if (!password || password !== validPassword) {
+    if (!validPassword) {
+      return res.status(503).json({
+        error: role === "driver" ? "DRIVER_PASSWORD not configured on server" : "ADMIN_PASSWORD not configured on server",
+      });
+    }
+    if (!secretsMatch(password, validPassword)) {
+      recordAuthLoginFailure(req, role);
       return res.status(401).json({ error: "Invalid password" });
     }
+    clearAuthLoginFailures(req, role);
 
     try {
-      const ownerOpenId = process.env.OWNER_OPEN_ID || "admin-owner";
+      const ownerOpenId = role === "driver"
+        ? process.env.DRIVER_OPEN_ID || "driver-primary"
+        : process.env.OWNER_OPEN_ID || "admin-owner";
+      const displayName = role === "driver" ? "Driver" : "Admin";
 
       // DB upsert is best-effort — schema mismatch or missing DB must not block login.
       try {
         await upsertUser({
           openId: ownerOpenId,
-          name: "Admin",
+          name: displayName,
           loginMethod: "password",
+          role,
           lastSignedIn: new Date(),
         });
       } catch (dbErr) {
@@ -369,7 +439,8 @@ async function startServer() {
       }
 
       const sessionToken = await sdk.createSessionToken(ownerOpenId, {
-        name: "Admin",
+        name: displayName,
+        role,
         expiresInMs: ONE_YEAR_MS,
       });
 

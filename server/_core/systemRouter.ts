@@ -1,8 +1,24 @@
 import { z } from "zod";
 import { notifyOwner } from "./notification";
 import { adminProcedure, publicProcedure, router } from "./trpc";
+import { commercialMissionRouter } from "../commercialMissions/commercialMissionRouter";
+import { territoryRouter } from "../territory/territoryRouter";
+import { publicTerritoryRouter } from "../territory/publicPreviewRouter";
+import { commercialProposalRouter } from "../commercialProposals/commercialProposalRouter";
+import { churnRadarRouter } from "../churnRadar/churnRadarRouter";
+import { commercialPipelineRouter } from "../commercialPipeline/commercialPipelineRouter";
+import { saasRouter } from "../saas/saasRouter";
+import { dayforgeDemoRouter } from "../dayforgeDemo/demoTenantRouter";
 
 export const systemRouter = router({
+  commercialMission: commercialMissionRouter,
+  commercialProposal: commercialProposalRouter,
+  churnRadar: churnRadarRouter,
+  commercialPipeline: commercialPipelineRouter,
+  territory: territoryRouter,
+  publicTerritory: publicTerritoryRouter,
+  saas: saasRouter,
+  dayforgeDemo: dayforgeDemoRouter,
   health: publicProcedure
     .input(
       z.object({
