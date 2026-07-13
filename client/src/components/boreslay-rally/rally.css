@@ -16,6 +16,22 @@
   padding: clamp(8px, 1.5vw, 22px);
 }
 
+.rally-commercial-mission {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.25rem 1rem;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(255, 130, 0, 0.65);
+  background: linear-gradient(90deg, #07131e, #17200d);
+  color: #f7f1df;
+}
+
+.rally-commercial-mission span,
+.rally-commercial-mission b { color: #ff8a00; }
+.rally-commercial-mission small { grid-column: 2 / 4; color: #cbd4da; }
+.rally-mission-error { padding: 0.65rem 1rem; background: #651b13; color: white; font-weight: 800; }
+
 .rally-stage {
   position: relative;
   width: 100%;
