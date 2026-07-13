@@ -22,7 +22,7 @@ export function LoginForm({ role = "admin", onSuccess }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password, role }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -60,9 +60,7 @@ export function LoginForm({ role = "admin", onSuccess }: Props) {
             required
             className="w-full border border-black/20 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-black/30"
           />
-          {error && (
-            <p className="text-xs text-red-600 text-center">{error}</p>
-          )}
+          {error && <p className="text-xs text-red-600 text-center">{error}</p>}
           <button
             type="submit"
             disabled={loading || !password}

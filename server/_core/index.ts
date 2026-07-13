@@ -46,6 +46,7 @@ import {
 
 const warnedUnknownTenantHosts = new Set<string>();
 const vendorOnboardingRateLimit = new Map<string, { count: number; resetAt: number }>();
+const authLoginFailures = new Map<string, { count: number; resetAt: number }>();
 
 function rateLimitKey(req: express.Request, email?: string) {
   const ip = req.ip || req.socket.remoteAddress || "unknown-ip";
@@ -61,6 +62,42 @@ function isVendorOnboardingRateLimited(req: express.Request, email?: string, now
   }
   existing.count += 1;
   return existing.count > 5;
+}
+
+function authLoginKey(req: express.Request, role: "admin" | "driver") {
+  const ip = req.ip || req.socket.remoteAddress || "unknown-ip";
+  return `${ip}:${role}`;
+}
+
+function isAuthLoginRateLimited(req: express.Request, role: "admin" | "driver", now = Date.now()) {
+  const key = authLoginKey(req, role);
+  const existing = authLoginFailures.get(key);
+  if (!existing || existing.resetAt <= now) {
+    authLoginFailures.delete(key);
+    return false;
+  }
+  return existing.count >= 10;
+}
+
+function recordAuthLoginFailure(req: express.Request, role: "admin" | "driver", now = Date.now()) {
+  const key = authLoginKey(req, role);
+  const existing = authLoginFailures.get(key);
+  if (!existing || existing.resetAt <= now) {
+    authLoginFailures.set(key, { count: 1, resetAt: now + 15 * 60 * 1000 });
+    return;
+  }
+  existing.count += 1;
+}
+
+function clearAuthLoginFailures(req: express.Request, role: "admin" | "driver") {
+  authLoginFailures.delete(authLoginKey(req, role));
+}
+
+function secretsMatch(candidate: unknown, expected: string): boolean {
+  if (typeof candidate !== "string") return false;
+  const candidateDigest = crypto.createHash("sha256").update(candidate).digest();
+  const expectedDigest = crypto.createHash("sha256").update(expected).digest();
+  return crypto.timingSafeEqual(candidateDigest, expectedDigest);
 }
 
 function hasValidAppSharedSecret(req: express.Request): boolean {
@@ -340,28 +377,48 @@ async function startServer() {
   });
 
   // Direct password login — bypasses OAuth portal entirely.
-  // Set ADMIN_PASSWORD in Railway env. Falls back to APP_SHARED_API_SECRET.
+  // Production driver and admin credentials are distinct. Development may
+  // fall back to the existing admin/shared secret to preserve local workflows.
   app.post("/api/auth/login", async (req, res) => {
-    const { password } = req.body || {};
+    const { password, role: requestedRole } = req.body || {};
+    const role = requestedRole === "driver" ? "driver" : "admin";
     const validPassword =
-      process.env.ADMIN_PASSWORD || process.env.APP_SHARED_API_SECRET || "";
+      role === "driver"
+        ? process.env.DRIVER_PASSWORD ||
+          (process.env.NODE_ENV === "production"
+            ? ""
+            : process.env.ADMIN_PASSWORD ||
+              process.env.APP_SHARED_API_SECRET ||
+              "")
+        : process.env.ADMIN_PASSWORD || process.env.APP_SHARED_API_SECRET || "";
 
-    if (!validPassword) {
-      return res.status(503).json({ error: "ADMIN_PASSWORD not configured on server" });
+    if (isAuthLoginRateLimited(req, role)) {
+      return res.status(429).json({ error: "Too many login attempts. Try again later." });
     }
-    if (!password || password !== validPassword) {
+    if (!validPassword) {
+      return res.status(503).json({
+        error: role === "driver" ? "DRIVER_PASSWORD not configured on server" : "ADMIN_PASSWORD not configured on server",
+      });
+    }
+    if (!secretsMatch(password, validPassword)) {
+      recordAuthLoginFailure(req, role);
       return res.status(401).json({ error: "Invalid password" });
     }
+    clearAuthLoginFailures(req, role);
 
     try {
-      const ownerOpenId = process.env.OWNER_OPEN_ID || "admin-owner";
+      const ownerOpenId = role === "driver"
+        ? process.env.DRIVER_OPEN_ID || "driver-primary"
+        : process.env.OWNER_OPEN_ID || "admin-owner";
+      const displayName = role === "driver" ? "Driver" : "Admin";
 
       // DB upsert is best-effort — schema mismatch or missing DB must not block login.
       try {
         await upsertUser({
           openId: ownerOpenId,
-          name: "Admin",
+          name: displayName,
           loginMethod: "password",
+          role,
           lastSignedIn: new Date(),
         });
       } catch (dbErr) {
@@ -369,7 +426,8 @@ async function startServer() {
       }
 
       const sessionToken = await sdk.createSessionToken(ownerOpenId, {
-        name: "Admin",
+        name: displayName,
+        role,
         expiresInMs: ONE_YEAR_MS,
       });
 

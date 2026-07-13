@@ -22,6 +22,7 @@ export type SessionPayload = {
   openId: string;
   appId: string;
   name: string;
+  role: "admin" | "driver" | "user";
 };
 
 const EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
@@ -166,13 +167,18 @@ class SDKServer {
    */
   async createSessionToken(
     openId: string,
-    options: { expiresInMs?: number; name?: string } = {}
+    options: {
+      expiresInMs?: number;
+      name?: string;
+      role?: "admin" | "driver" | "user";
+    } = {}
   ): Promise<string> {
     return this.signSession(
       {
         openId,
         appId: ENV.appId || "bldg-admin",
         name: options.name || "admin",
+        role: options.role ?? "user",
       },
       options
     );
@@ -191,6 +197,7 @@ class SDKServer {
       openId: payload.openId,
       appId: payload.appId,
       name: payload.name,
+      role: payload.role,
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setExpirationTime(expirationSeconds)
@@ -199,7 +206,12 @@ class SDKServer {
 
   async verifySession(
     cookieValue: string | undefined | null
-  ): Promise<{ openId: string; appId: string; name: string } | null> {
+  ): Promise<{
+    openId: string;
+    appId: string;
+    name: string;
+    role: "admin" | "driver" | "user";
+  } | null> {
     if (!cookieValue) {
       console.warn("[Auth] Missing session cookie");
       return null;
@@ -210,7 +222,7 @@ class SDKServer {
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],
       });
-      const { openId, appId, name } = payload as Record<string, unknown>;
+      const { openId, appId, name, role } = payload as Record<string, unknown>;
 
       if (
         !isNonEmptyString(openId) ||
@@ -225,6 +237,7 @@ class SDKServer {
         openId,
         appId,
         name,
+        role: role === "admin" || role === "driver" ? role : "user",
       };
     } catch (error) {
       console.warn("[Auth] Session verification failed", String(error));
@@ -271,9 +284,12 @@ class SDKServer {
     // Try DB lookup but don't let schema issues or missing rows block auth.
     let user: User | null = null;
     try {
-      user = await db.getUserByOpenId(sessionUserId);
+      user = (await db.getUserByOpenId(sessionUserId)) ?? null;
     } catch (dbErr) {
-      console.warn("[Auth] getUserByOpenId failed (non-fatal):", (dbErr as Error).message);
+      console.warn(
+        "[Auth] getUserByOpenId failed (non-fatal):",
+        (dbErr as Error).message
+      );
     }
 
     // Best-effort: update lastSignedIn without blocking auth.
@@ -283,13 +299,16 @@ class SDKServer {
       } catch {
         // non-fatal
       }
-      return user;
+      return session.role === "driver" ? { ...user, role: "driver" } : user;
     }
 
     // No DB record — return a synthetic user built from the JWT payload.
     // This allows password-login admins to function even when the users
     // table schema doesn't match the Drizzle model.
-    console.warn("[Auth] User not in DB — returning synthetic user for openId:", sessionUserId);
+    console.warn(
+      "[Auth] User not in DB — returning synthetic user for openId:",
+      sessionUserId
+    );
     return {
       id: 0,
       tenantId: null,
@@ -297,7 +316,7 @@ class SDKServer {
       name: session.name || "Admin",
       email: null,
       loginMethod: "password",
-      role: "admin",
+      role: session.role,
       createdAt: signedInAt,
       updatedAt: signedInAt,
       lastSignedIn: signedInAt,

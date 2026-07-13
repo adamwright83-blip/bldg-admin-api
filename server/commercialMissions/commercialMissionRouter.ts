@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { COMMERCIAL_MISSION_STATUSES } from "@shared/commercialMission";
+import { FIELD_OUTCOME_REASONS } from "@shared/commercialMissionField";
 import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
 import {
   assertDriverCanReadMission,
@@ -19,6 +20,18 @@ import {
   getCommercialMissionGameState,
   startCommercialMissionGame,
 } from "./commercialMissionGameService";
+import {
+  arriveCommercialMissionField,
+  consumeCommercialMissionPhoneHandoff,
+  createCommercialMissionPhoneHandoff,
+  departCommercialMissionField,
+  getCommercialMissionFieldState,
+  recordCommercialMissionVisitOutcome,
+  saveCommercialMissionFieldNotes,
+  saveTenantFieldChecklistTemplates,
+  startCommercialMissionFieldPreparation,
+  updateCommercialMissionFieldChecklist,
+} from "./commercialMissionFieldService";
 
 const accountSchema = z.object({
   name: z.string().trim().min(1).max(255),
@@ -222,4 +235,344 @@ export const commercialMissionRouter = router({
       }
       return completeCommercialMissionGame({ ...input, tenantId: ctx.tenantId, playerId: ctx.user.openId });
     }),
+
+  fieldState: protectedProcedure
+    .input(z.object({ missionId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission) return notFound();
+      try {
+        assertDriverCanReadMission({
+          mission,
+          userId: ctx.user.openId,
+          isAdmin: ctx.user.role === "admin",
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: (error as Error).message,
+        });
+      }
+      return getCommercialMissionFieldState({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+    }),
+
+  fieldStartPreparation: protectedProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        expectedMissionVersion: z.number().int().positive(),
+        requestId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission) return notFound();
+      try {
+        assertDriverCanReadMission({
+          mission,
+          userId: ctx.user.openId,
+          isAdmin: ctx.user.role === "admin",
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: (error as Error).message,
+        });
+      }
+      return startCommercialMissionFieldPreparation({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      });
+    }),
+
+  fieldChecklist: protectedProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        expectedFieldVersion: z.number().int().positive(),
+        itemKey: z.string().trim().min(1).max(64),
+        status: z.enum(["pending", "completed", "skipped"]),
+        requestId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission) return notFound();
+      try {
+        assertDriverCanReadMission({
+          mission,
+          userId: ctx.user.openId,
+          isAdmin: ctx.user.role === "admin",
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: (error as Error).message,
+        });
+      }
+      return updateCommercialMissionFieldChecklist({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      });
+    }),
+
+  fieldDepart: protectedProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        expectedMissionVersion: z.number().int().positive(),
+        expectedFieldVersion: z.number().int().positive(),
+        requestId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission) return notFound();
+      try {
+        assertDriverCanReadMission({
+          mission,
+          userId: ctx.user.openId,
+          isAdmin: ctx.user.role === "admin",
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: (error as Error).message,
+        });
+      }
+      return departCommercialMissionField({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      });
+    }),
+
+  fieldArrive: protectedProcedure
+    .input(
+      z
+        .object({
+          missionId: z.number().int().positive(),
+          expectedMissionVersion: z.number().int().positive(),
+          expectedFieldVersion: z.number().int().positive(),
+          requestId: z.string().uuid(),
+          checkInMethod: z.enum(["manual", "location"]),
+          latitude: z.number().min(-90).max(90).optional(),
+          longitude: z.number().min(-180).max(180).optional(),
+          locationAccuracyMeters: z
+            .number()
+            .int()
+            .nonnegative()
+            .max(100_000)
+            .optional(),
+        })
+        .superRefine((value, ctx) => {
+          if (
+            value.checkInMethod === "location" &&
+            (value.latitude === undefined || value.longitude === undefined)
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Location check-in requires latitude and longitude",
+            });
+          }
+        })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission) return notFound();
+      try {
+        assertDriverCanReadMission({
+          mission,
+          userId: ctx.user.openId,
+          isAdmin: ctx.user.role === "admin",
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: (error as Error).message,
+        });
+      }
+      return arriveCommercialMissionField({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      });
+    }),
+
+  fieldSaveNotes: protectedProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        expectedFieldVersion: z.number().int().positive(),
+        notes: z.string().trim().max(20_000),
+        requestId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission) return notFound();
+      try {
+        assertDriverCanReadMission({
+          mission,
+          userId: ctx.user.openId,
+          isAdmin: ctx.user.role === "admin",
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: (error as Error).message,
+        });
+      }
+      return saveCommercialMissionFieldNotes({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      });
+    }),
+
+  fieldOutcome: protectedProcedure
+    .input(
+      z
+        .object({
+          missionId: z.number().int().positive(),
+          expectedMissionVersion: z.number().int().positive(),
+          expectedFieldVersion: z.number().int().positive(),
+          requestId: z.string().uuid(),
+          outcome: z.enum(["follow_up", "won", "lost"]),
+          notes: z.string().trim().min(1).max(20_000),
+          followUpAt: z.coerce.date().optional(),
+          decisionMakerStatus: z.enum(["met", "unavailable", "not_recorded"]),
+          collateralDelivered: z.boolean(),
+          quoteRequested: z.boolean(),
+          pilotRequested: z.boolean(),
+          followUpRequested: z.boolean(),
+          reason: z.enum(FIELD_OUTCOME_REASONS).optional(),
+        })
+        .superRefine((value, ctx) => {
+          if (value.outcome === "follow_up" && !value.followUpAt) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Follow-up outcomes require a follow-up date",
+            });
+          }
+          if (
+            value.outcome === "follow_up" &&
+            value.followUpAt &&
+            value.followUpAt.getTime() <= Date.now()
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Follow-up date must be in the future",
+            });
+          }
+          if (value.outcome === "lost" && !value.reason) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Lost outcomes require a reason",
+            });
+          }
+        })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission) return notFound();
+      try {
+        assertDriverCanReadMission({
+          mission,
+          userId: ctx.user.openId,
+          isAdmin: ctx.user.role === "admin",
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: (error as Error).message,
+        });
+      }
+      return recordCommercialMissionVisitOutcome({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      });
+    }),
+
+  createPhoneHandoff: adminProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        requestId: z.string().uuid(),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      createCommercialMissionPhoneHandoff({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      })
+    ),
+
+  consumePhoneHandoff: protectedProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        token: z.string().min(32).max(512),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      consumeCommercialMissionPhoneHandoff({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      })
+    ),
+
+  saveFieldChecklistTemplates: adminProcedure
+    .input(
+      z.object({
+        items: z
+          .array(
+            z.object({
+              itemKey: z.string().trim().min(1).max(64),
+              label: z.string().trim().min(1).max(255),
+              detail: z.string().trim().min(1).max(2000),
+              required: z.boolean(),
+              position: z.number().int().nonnegative().max(1000),
+              active: z.boolean(),
+            })
+          )
+          .min(1)
+          .max(50),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      saveTenantFieldChecklistTemplates({
+        tenantId: ctx.tenantId,
+        items: input.items,
+      })
+    ),
 });
