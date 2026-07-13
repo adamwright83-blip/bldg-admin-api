@@ -8,6 +8,7 @@ import { commercialProposalRouter } from "../commercialProposals/commercialPropo
 import { churnRadarRouter } from "../churnRadar/churnRadarRouter";
 import { commercialPipelineRouter } from "../commercialPipeline/commercialPipelineRouter";
 import { saasRouter } from "../saas/saasRouter";
+import { dayforgeDemoRouter } from "../dayforgeDemo/demoTenantRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
@@ -17,6 +18,7 @@ export const systemRouter = router({
   territory: territoryRouter,
   publicTerritory: publicTerritoryRouter,
   saas: saasRouter,
+  dayforgeDemo: dayforgeDemoRouter,
   health: publicProcedure
     .input(
       z.object({

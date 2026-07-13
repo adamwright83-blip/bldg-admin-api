@@ -26,7 +26,11 @@
     "seed:catalog": "tsx scripts/seed-catalog-from-dc-items.ts",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "db:procurement:migrate": "tsx scripts/procurement-migrate.ts migrate",
-    "db:procurement:status": "tsx scripts/procurement-migrate.ts status"
+    "db:procurement:status": "tsx scripts/procurement-migrate.ts status",
+    "dayforge:demo:setup": "tsx scripts/dayforge-demo-setup.ts",
+    "dayforge:demo:reset": "tsx scripts/dayforge-demo-reset.ts",
+    "dayforge:demo:verify": "tsx scripts/dayforge-demo-verify.ts",
+    "dayforge:migrations:verify": "tsx scripts/dayforge-migrations-verify.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
