@@ -48,10 +48,19 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
-// Use VITE_API_URL when set (Vercel deploy pointing to Railway backend),
-// otherwise fall back to same-origin (Railway serving everything directly).
-const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
-const TRPC_BASE_URL = `${API_BASE}/api/trpc`;
+function apiBase(): string {
+  if (
+    typeof window !== "undefined" &&
+    window.location.hostname.toLowerCase() === "admin.bldg.chat"
+  ) {
+    return "";
+  }
+  return import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
+}
+
+// admin.bldg.chat uses the same-origin Vercel /api proxy so login cookies and
+// browser requests stay first-party. Other deployments may use VITE_API_URL.
+const TRPC_BASE_URL = `${apiBase()}/api/trpc`;
 
 if (import.meta.env.DEV) {
   console.log("[tRPC] baseUrl →", TRPC_BASE_URL);
