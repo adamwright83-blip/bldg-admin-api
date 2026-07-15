@@ -133,4 +133,23 @@ describe("DayForge flagship contract", () => {
     expect(component).toContain("BORESLAY");
     expect(component).not.toContain("BOORSLAY");
   });
+
+  it("ships the new conversion experience only on mobile", () => {
+    expect(component).toContain('className="ff-desktop"');
+    expect(component).toContain('className="ff-mobile"');
+    expect(component).toContain(
+      "Your next laundry account is probably on this street."
+    );
+    expect(component).toContain("SCAN MY TERRITORY");
+    expect(component).toContain("FROM EMPTY MILES TO PAYING STOPS");
+    expect(component).toContain("BUILT FOR PEOPLE WHO STILL DO THE ROUTE");
+  });
+
+  it("keeps mobile CTA analytics on the existing source contract", () => {
+    expect(component).toContain('hero: "hero" as CtaSource');
+    expect(component).toContain('pitch: "mission" as CtaSource');
+    expect(component).toContain('pricing: "pricing" as CtaSource');
+    expect(component).toContain('final: "final" as CtaSource');
+    expect(component).toContain("trackCtaClick(source)");
+  });
 });

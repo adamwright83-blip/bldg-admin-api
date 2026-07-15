@@ -9,18 +9,23 @@ import {
   Activity,
   ArrowRight,
   ArrowUpRight,
+  Building2,
   Check,
   ChevronDown,
   CircleDollarSign,
+  Crosshair,
   Database,
   Gauge,
   Layers3,
+  LockKeyhole,
   Mail,
   MapPin,
+  MessageSquareText,
   Navigation,
   PackageCheck,
   Printer,
   Route,
+  ScanLine,
   Send,
   ShieldCheck,
   Store,
@@ -662,6 +667,141 @@ function SchedulerDialog({ open, onClose, returnFocusRef }: { open: boolean; onC
   );
 }
 
+const MOBILE_CTA_SOURCES = {
+  hero: "hero" as CtaSource,
+  pitch: "mission" as CtaSource,
+  pricing: "pricing" as CtaSource,
+  final: "final" as CtaSource,
+};
+
+function MobileBrand() {
+  return <a className="dfm-brand" href="#mobile-top" aria-label="DayForge home"><span><Zap /></span><b>DAYFORGE</b></a>;
+}
+
+function MobileCta({ source, onOpen, children }: {
+  source: CtaSource;
+  onOpen: (trigger: HTMLButtonElement) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      className="dfm-cta"
+      type="button"
+      data-cta-source={`mobile-${source}`}
+      onClick={event => {
+        trackCtaClick(source);
+        onOpen(event.currentTarget);
+      }}
+    >
+      <span>{children}</span><ArrowRight />
+    </button>
+  );
+}
+
+function MobileLanding({ onOpen }: { onOpen: (trigger: HTMLButtonElement) => void }) {
+  const faqItems = [
+    ["How does DayForge find opportunities?", "It combines local territory signals with the services, routes, and capacity you tell us about."],
+    ["Is my territory really private?", "Yes. Your territory view and opportunity work stay private to your account."],
+    ["How do I get the information?", "DayForge puts the account, decision-maker, pitch, and next step into one field-ready mission."],
+    ["Do you guarantee results?", "No. DayForge helps you choose and prepare for better opportunities; you stay in control of every visit."],
+    ["Can I cancel anytime?", "Yes. There is no setup fee and no long-term contract."],
+  ];
+
+  return (
+    <div className="ff-mobile" id="mobile-top">
+      <header className="dfm-header">
+        <MobileBrand />
+        <span><i /> Live in your territory</span>
+      </header>
+
+      <main>
+        <section className="dfm-hero">
+          <div className="dfm-contours" aria-hidden="true" />
+          <span className="dfm-kicker">FOR LAUNDROMAT &amp; FLUFF-AND-FOLD OWNERS</span>
+          <h1>Your next laundry account is probably on this street.</h1>
+          <p>DayForge scans your area for commercial laundry opportunities so you can stop driving past money.</p>
+          <MobileCta source={MOBILE_CTA_SOURCES.hero} onOpen={onOpen}>SCAN MY TERRITORY</MobileCta>
+          <small><LockKeyhole /> Private territory <i /> No credit card</small>
+
+          <div className="dfm-road" aria-hidden="true">
+            <span className="dfm-van"><Store /></span>
+            <i className="dfm-route-line" />
+            <span className="dfm-radar"><Crosshair /></span>
+          </div>
+        </section>
+
+        <section className="dfm-opportunity" aria-label="Nearby account opportunity">
+          <div className="dfm-map">
+            <span>PINE ST</span><span>OAK AVE</span><span>MAPLE DR</span>
+            <i className="dfm-map-route" />
+            <b><Navigation /></b>
+          </div>
+          <article>
+            <header><Building2 /><span><small>ACCOUNT DETECTED</small><b>Westview Property Management</b></span></header>
+            <em><Navigation /> 0.2 MI AWAY</em>
+            <div><span><Building2 /><b>15</b><small>BUILDINGS</small></span><span><strong>$24,800</strong><small>EST. / YEAR</small></span></div>
+            <footer><span><b>ASK FOR DANA</b><small>OPERATIONS</small></span><ArrowRight /></footer>
+          </article>
+        </section>
+
+        <section className="dfm-flow">
+          <span className="dfm-section-label">FROM EMPTY MILES TO PAYING STOPS</span>
+          <div>
+            <article><ScanLine /><b>WE SPOT<br />THE FIT</b></article>
+            <i><ArrowRight /></i>
+            <article><MessageSquareText /><b>WE BUILD<br />THE PITCH</b></article>
+            <i><ArrowRight /></i>
+            <article><Navigation /><b>YOU WALK<br />IN READY</b></article>
+          </div>
+        </section>
+
+        <section className="dfm-pitch">
+          <div><span>YOUR OPENING LINE</span><blockquote>“Hi Dana, I help properties in your area handle laundry for their residents. I can pick up, wash, fold, and deliver on a schedule that works for you.”</blockquote></div>
+          <MobileCta source={MOBILE_CTA_SOURCES.pitch} onOpen={onOpen}><Send /> SEND TO MY PHONE</MobileCta>
+        </section>
+
+        <section className="dfm-boreslay">
+          <img src={victoryAccount} alt="BORESLAY Mission 042: a dragon turns the Westview account into a playable field mission" />
+          <div className="dfm-boreslay-shade" />
+          <div className="dfm-boreslay-copy">
+            <span>MISSION 042</span>
+            <h2>BORESLAY</h2>
+            <b>WESTVIEW PROPERTY MANAGEMENT</b>
+            <small>15 BUILDINGS · 0.2 MI AWAY</small>
+            <strong><i>TARGET VALUE</i>$24,800 <small>/ YEAR</small></strong>
+            <p>Defeat the Drain. Claim the route.<br />Build the laundry empire.</p>
+          </div>
+        </section>
+
+        <section className="dfm-operator">
+          <div><img src={OWNER_FIELD_VISIT} alt="A laundromat operator on a commercial laundry route" /></div>
+          <article><span>BUILT FOR PEOPLE WHO STILL DO THE ROUTE</span><p>You know this business because you&apos;re out there every day. DayForge uses your open route capacity to find real accounts worth your time.</p><Zap /></article>
+        </section>
+
+        <section className="dfm-price" id="mobile-pricing">
+          <header><span><Zap /></span><div><small>DAYFORGE OPERATOR</small><b>$199 <i>/ MONTH</i></b><p>One location · One private territory</p></div></header>
+          <ul>{["Private territory scan", "Real account opportunities", "Pitch builder & scripts", "Route-fit recommendations", "Cancel anytime"].map(item => <li key={item}><Check />{item}</li>)}</ul>
+          <MobileCta source={MOBILE_CTA_SOURCES.pricing} onOpen={onOpen}>MAP MY TERRITORY</MobileCta>
+        </section>
+
+        <section className="dfm-faq" id="mobile-faq">
+          {faqItems.map(([question, answer]) => <details key={question}><summary><span><Target />{question}</span><ChevronDown /></summary><p>{answer}</p></details>)}
+        </section>
+
+        <section className="dfm-final">
+          <Gauge />
+          <h2>THE NEXT ACCOUNT IS <span>ALREADY OUT THERE.</span></h2>
+          <MobileCta source={MOBILE_CTA_SOURCES.final} onOpen={onOpen}>SCAN MY TERRITORY</MobileCta>
+          <small><LockKeyhole /> Private territory <i /> No credit card</small>
+        </section>
+      </main>
+
+      <footer className="dfm-footer"><MobileBrand /><span>Find it. Pitch it. Win it.</span></footer>
+    </div>
+  );
+}
+
+
 function updateMetadata() {
   const previousTitle = document.title;
   const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
@@ -718,6 +858,7 @@ export default function DayforgeFlagship() {
 
   return (
     <div className={`ff-page${posterMode ? " is-poster" : ""}`} id="top">
+      <div className="ff-desktop">
       <a className="ff-skip" href="#ff-main">Skip to content</a>
       <header className="ff-header">
         <DayforgeMark />
@@ -767,6 +908,9 @@ export default function DayforgeFlagship() {
           <TerritoryCta source="sticky" onOpen={openScheduler} tone="ivory" />
         </aside>
       ) : null}
+      </div>
+
+      <MobileLanding onOpen={openScheduler} />
 
       <SchedulerDialog open={schedulerOpen} onClose={() => setSchedulerOpen(false)} returnFocusRef={lastCtaRef} />
     </div>
