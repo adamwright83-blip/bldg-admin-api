@@ -6,12 +6,18 @@ import {
   ChevronDown,
   Clock3,
   Copy,
+  Crosshair,
   ExternalLink,
+  Gauge,
   LockKeyhole,
   Mail,
   MapPin,
+  MessageSquareText,
+  Navigation,
   Radar,
   Route,
+  ScanLine,
+  Send,
   Sparkles,
   Store,
   Target,
@@ -106,12 +112,143 @@ function SchedulerDialog({ open, onClose, returnFocusRef }: { open: boolean; onC
   return <dialog className="df-dialog" ref={dialogRef} onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}><div><button className="df-dialog-close" aria-label="Close scheduler" onClick={onClose}><X /></button><span className="df-kicker">15-MINUTE LIVE DEMO</span><h2>Let&apos;s map the commercial accounts around your store.</h2><p>Pick a time that works. We&apos;ll map your territory live on the call.</p>{SCHEDULER_URL ? <section><iframe src={SCHEDULER_URL} title="Schedule your DayForge territory mapping demo" /><a href={SCHEDULER_URL} target="_blank" rel="noreferrer">Open scheduler <ExternalLink /></a></section> : <section className="df-dialog-fallback"><MapPin /><b>The live calendar is being connected.</b><p>Email Adam and we&apos;ll map your territory together.</p><a href={`mailto:${FALLBACK_EMAIL}?subject=Map%20my%20DayForge%20territory`}><Mail /> EMAIL {FALLBACK_EMAIL}</a></section>}</div></dialog>;
 }
 
+const MOBILE_CTA_SOURCES = {
+  hero: "hero" as CtaSource,
+  pitch: "mission" as CtaSource,
+  pricing: "pricing" as CtaSource,
+  final: "final" as CtaSource,
+};
+
+function MobileCta({ source, onOpen, children }: {
+  source: CtaSource;
+  onOpen: (trigger: HTMLButtonElement) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      className="dfm-cta"
+      type="button"
+      data-cta-source={`mobile-${source}`}
+      onClick={event => {
+        trackCtaClick(source);
+        onOpen(event.currentTarget);
+      }}
+    >
+      <span>{children}</span><ArrowRight />
+    </button>
+  );
+}
+
+function MobileLanding({ onOpen }: { onOpen: (trigger: HTMLButtonElement) => void }) {
+  const faqItems = [
+    ["How does DayForge find opportunities?", "It combines local territory signals with the services, routes, and capacity you tell us about."],
+    ["Is my territory really private?", "Yes. Your territory view and opportunity work stay private to your account."],
+    ["How do I get the information?", "DayForge puts the account, decision-maker, pitch, and next step into one field-ready mission."],
+    ["Do you guarantee results?", "No. DayForge helps you choose and prepare for better opportunities; you stay in control of every visit."],
+    ["Can I cancel anytime?", "Yes. There is no setup fee and no long-term contract."],
+  ];
+
+  return (
+    <div className="df-mobile" id="mobile-top">
+      <header className="dfm-header">
+        <Brand />
+        <span><i /> Live in your territory</span>
+      </header>
+
+      <main>
+        <section className="dfm-hero">
+          <div className="dfm-contours" aria-hidden="true" />
+          <span className="dfm-kicker">FOR LAUNDROMAT &amp; FLUFF-AND-FOLD OWNERS</span>
+          <h1>Your next laundry account is probably on this street.</h1>
+          <p>DayForge scans your area for commercial laundry opportunities so you can stop driving past money.</p>
+          <MobileCta source={MOBILE_CTA_SOURCES.hero} onOpen={onOpen}>SCAN MY TERRITORY</MobileCta>
+          <small><LockKeyhole /> Private territory <i /> No credit card</small>
+
+          <div className="dfm-road" aria-hidden="true">
+            <span className="dfm-van"><Store /></span>
+            <i className="dfm-route-line" />
+            <span className="dfm-radar"><Crosshair /></span>
+          </div>
+        </section>
+
+        <section className="dfm-opportunity" aria-label="Nearby account opportunity">
+          <div className="dfm-map">
+            <span>PINE ST</span><span>OAK AVE</span><span>MAPLE DR</span>
+            <i className="dfm-map-route" />
+            <b><Navigation /></b>
+          </div>
+          <article>
+            <header><Building2 /><span><small>ACCOUNT DETECTED</small><b>Westview Property Management</b></span></header>
+            <em><Navigation /> 0.2 MI AWAY</em>
+            <div><span><Building2 /><b>15</b><small>BUILDINGS</small></span><span><strong>$24,800</strong><small>EST. / YEAR</small></span></div>
+            <footer><span><b>ASK FOR DANA</b><small>OPERATIONS</small></span><ArrowRight /></footer>
+          </article>
+        </section>
+
+        <section className="dfm-flow">
+          <span className="dfm-section-label">FROM EMPTY MILES TO PAYING STOPS</span>
+          <div>
+            <article><ScanLine /><b>WE SPOT<br />THE FIT</b></article>
+            <i><ArrowRight /></i>
+            <article><MessageSquareText /><b>WE BUILD<br />THE PITCH</b></article>
+            <i><ArrowRight /></i>
+            <article><Navigation /><b>YOU WALK<br />IN READY</b></article>
+          </div>
+        </section>
+
+        <section className="dfm-pitch">
+          <div><span>YOUR OPENING LINE</span><blockquote>“Hi Dana, I help properties in your area handle laundry for their residents. I can pick up, wash, fold, and deliver on a schedule that works for you.”</blockquote></div>
+          <MobileCta source={MOBILE_CTA_SOURCES.pitch} onOpen={onOpen}><Send /> SEND TO MY PHONE</MobileCta>
+        </section>
+
+        <section className="dfm-boreslay">
+          <img src={missionArt} alt="BORESLAY Mission 042: a dragon turns the Westview account into a playable field mission" />
+          <div className="dfm-boreslay-shade" />
+          <div className="dfm-boreslay-copy">
+            <span>MISSION 042</span>
+            <h2>BORESLAY</h2>
+            <b>WESTVIEW PROPERTY MANAGEMENT</b>
+            <small>15 BUILDINGS · 0.2 MI AWAY</small>
+            <strong><i>TARGET VALUE</i>$24,800 <small>/ YEAR</small></strong>
+            <p>Defeat the Drain. Claim the route.<br />Build the laundry empire.</p>
+          </div>
+        </section>
+
+        <section className="dfm-operator">
+          <div><img src={fieldVisit} alt="A laundromat operator on a commercial laundry route" /></div>
+          <article><span>BUILT FOR PEOPLE WHO STILL DO THE ROUTE</span><p>You know this business because you&apos;re out there every day. DayForge uses your open route capacity to find real accounts worth your time.</p><Zap /></article>
+        </section>
+
+        <section className="dfm-price" id="mobile-pricing">
+          <header><span><Zap /></span><div><small>DAYFORGE OPERATOR</small><b>$199 <i>/ MONTH</i></b><p>One location · One private territory</p></div></header>
+          <ul>{["Private territory scan", "Real account opportunities", "Pitch builder & scripts", "Route-fit recommendations", "Cancel anytime"].map(item => <li key={item}><Check />{item}</li>)}</ul>
+          <MobileCta source={MOBILE_CTA_SOURCES.pricing} onOpen={onOpen}>MAP MY TERRITORY</MobileCta>
+        </section>
+
+        <section className="dfm-faq" id="mobile-faq">
+          {faqItems.map(([question, answer]) => <details key={question}><summary><span><Target />{question}</span><ChevronDown /></summary><p>{answer}</p></details>)}
+        </section>
+
+        <section className="dfm-final">
+          <Gauge />
+          <h2>THE NEXT ACCOUNT IS <span>ALREADY OUT THERE.</span></h2>
+          <MobileCta source={MOBILE_CTA_SOURCES.final} onOpen={onOpen}>SCAN MY TERRITORY</MobileCta>
+          <small><LockKeyhole /> Private territory <i /> No credit card</small>
+        </section>
+      </main>
+
+      <footer className="dfm-footer"><Brand /><span>Find it. Pitch it. Win it.</span></footer>
+    </div>
+  );
+}
+
 export default function DayforgeFlagship() {
   const [open, setOpen] = useState(false);
   const lastCtaRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { void getFlagshipAnalytics(); }, []);
   const openScheduler = (trigger: HTMLButtonElement) => { lastCtaRef.current = trigger; setOpen(true); };
   return <div className="df-page" id="top">
+    <div className="df-desktop">
     <a href="#main" className="df-skip">Skip to content</a>
     <header className="df-header"><Brand /><nav><a href="#product">Product</a><a href="#how">How It Works</a><a href="#boreslay">Boreslay</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="#about">About</a></nav><Cta source="sticky" onOpen={openScheduler} /></header>
     <main id="main">
@@ -124,6 +261,8 @@ export default function DayforgeFlagship() {
       <section className="df-bottom" id="pricing"><article className="df-testimonial" id="about"><span>REAL RESULTS. REAL LAUNDRIES.</span><div><img src={fieldVisit} alt="Laundromat operator" /><p>“DayForge shows us who&apos;s ready. We walk in knowing why now, who to ask for and what to say. We&apos;ve landed more commercial accounts in the last 90 days than the previous two years combined.”<b>— Mike Valencia<br />West Central Laundry<br />Los Angeles, CA</b><em>★★★★★</em></p></div></article><article className="df-compare"><div><b>THE DAYFORGE WAY</b>{["Real-time local laundry signals","Territory-based account targeting","Game-driven follow-through","Laundry-focused talk tracks","More conversations that close","A system that learns from every mission"].map(x=><span key={x}><Check />{x}</span>)}</div><div><b>THE OLD WAY</b>{["Cold calling & bought lists","No local context","Dashboards nobody uses","Generic pitches","Opportunities slip through the cracks","Silence"].map(x=><span key={x}><X />{x}</span>)}</div></article><article className="df-cost"><h3>What did the account you drove past today cost you?</h3><p>You will never see that number. DayForge makes sure you don&apos;t have to keep wondering.</p><Cta source="pricing" onOpen={openScheduler} /></article><article className="df-price"><span>DAYFORGE OPERATOR</span><p>Everything you need to run and grow your fluff-and-fold laundry.</p><strong>$199<small>/month</small></strong>{["See the signals, POS, orders, routes, capacity","Grow the laundry: missions, pitches, proposals","Churn radar & win-back tools","CRM integrations & reporting","Cancel anytime. No setup fee. No contracts."].map(x=><i key={x}><Check />{x}</i>)}</article><article className="df-faq" id="faq"><span>FAQ</span>{["Where does the data come from?","Is my territory private?","Do I need a sales team?","Will this work for my store size?","What is Boreslay?"].map(q=><details key={q}><summary>{q}<ChevronDown /></summary><p>DayForge combines your operating signals with local territory intelligence, then keeps you in control of every action.</p></details>)}</article><article className="df-final"><h3>Stop driving past the next account you could win.</h3><Cta source="final" onOpen={openScheduler} /><p><LockKeyhole /> Secure &amp; private<br />No credit card required</p></article></section>
     </main>
     <footer className="df-footer"><Brand /><nav><a href="#product">Product</a><a href="#how">How It Works</a><a href="#boreslay">Boreslay</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="#about">About</a><a href={`mailto:${FALLBACK_EMAIL}`}>Contact</a></nav><span>Privacy&nbsp;&nbsp;&nbsp; Terms&nbsp;&nbsp;&nbsp; © 2026 DayForge. All rights reserved.</span></footer>
+    </div>
+    <MobileLanding onOpen={openScheduler} />
     <SchedulerDialog open={open} onClose={() => setOpen(false)} returnFocusRef={lastCtaRef} />
   </div>;
 }

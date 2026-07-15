@@ -115,4 +115,24 @@ describe("DayForge flagship contract", () => {
     expect(component).toContain("BORESLAY");
     expect(component).not.toContain("BOORSLAY");
   });
+
+  it("ships an independent mobile conversion experience without replacing desktop", () => {
+    expect(component).toContain('className="df-desktop"');
+    expect(component).toContain('className="df-mobile"');
+    expect(component).toContain(
+      "Your next laundry account is probably on this street."
+    );
+    expect(component).toContain("SCAN MY TERRITORY");
+    expect(component).toContain("FROM EMPTY MILES TO PAYING STOPS");
+    expect(component).toContain("BUILT FOR PEOPLE WHO STILL DO THE ROUTE");
+    expect(component).toContain("THE NEXT ACCOUNT IS");
+  });
+
+  it("keeps mobile CTA analytics on the existing source contract", () => {
+    expect(component).toContain('hero: "hero" as CtaSource');
+    expect(component).toContain('pitch: "mission" as CtaSource');
+    expect(component).toContain('pricing: "pricing" as CtaSource');
+    expect(component).toContain('final: "final" as CtaSource');
+    expect(component).toContain("trackCtaClick(source)");
+  });
 });
