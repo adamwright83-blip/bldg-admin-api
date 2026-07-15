@@ -1146,6 +1146,7 @@ export async function createVendor(data: {
   email?: string | null;
   country?: string | null;
   platformFeePercent?: number | null;
+  isActive?: boolean;
 }): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -1154,7 +1155,7 @@ export async function createVendor(data: {
     name: data.name,
     email: data.email ?? null,
     country: data.country ?? "US",
-    isActive: true,
+    isActive: data.isActive ?? false,
     platformFeePercent: data.platformFeePercent != null
       ? data.platformFeePercent.toString()
       : null,
@@ -1306,7 +1307,13 @@ export async function updateVendorConnectAccount(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(vendors).set({ stripeConnectAccountId }).where(eq(vendors.id, id));
+  await db.update(vendors).set({
+    stripeConnectAccountId,
+    isActive: false,
+    chargesEnabled: false,
+    payoutsEnabled: false,
+    detailsSubmitted: false,
+  }).where(eq(vendors.id, id));
 }
 
 /**
@@ -1323,6 +1330,7 @@ export async function replaceVendorConnectAccount(
 
   await db.update(vendors).set({
     stripeConnectAccountId: newStripeConnectAccountId,
+    isActive: false,
     chargesEnabled: false,
     payoutsEnabled: false,
     detailsSubmitted: false,

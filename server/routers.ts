@@ -3042,6 +3042,23 @@ export const appRouter = router({
                 "No active fulfillment vendor is assigned. Customer was not charged.",
             });
           }
+          if (!vendor.isActive) {
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message: `${vendor.name} is not activated for payments. Customer was not charged.`,
+            });
+          }
+          const paymentRoute = (await listVendorCoverage(vendor.id)).find(
+            route => route.isActive &&
+              route.buildingSlug === order.buildingSlug &&
+              route.serviceType === order.serviceType
+          );
+          if (!paymentRoute) {
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message: `${vendor.name} is not assigned to this building and service. Customer was not charged.`,
+            });
+          }
           if (!order.vendorId) {
             await updateOrderVendor(input.orderId, vendor.id);
           }
@@ -3137,7 +3154,7 @@ export const appRouter = router({
             vendorPayoutCents,
             stripeConnectedAccountIdSnapshot: vendorAccountId,
             vendorNameSnapshot: vendor.name,
-            routingPrioritySnapshot: null,
+            routingPrioritySnapshot: paymentRoute.priority,
           });
 
           await ensurePickupCompletedOperationsEventForOrder(input.orderId, {
@@ -3817,6 +3834,7 @@ export const appRouter = router({
           email: input.email,
           country: input.country,
           platformFeePercent: input.platformFeePercent ?? null,
+          isActive: false,
         });
         return getVendorById(id);
       }),
@@ -3828,6 +3846,30 @@ export const appRouter = router({
     updateVendorActive: protectedProcedure
       .input(z.object({ vendorId: z.number(), isActive: z.boolean() }))
       .mutation(async ({ input }) => {
+        if (input.isActive) {
+          const vendor = await getVendorById(input.vendorId);
+          if (!vendor) throw new TRPCError({ code: "NOT_FOUND", message: "Vendor not found" });
+          if (!vendor.stripeConnectAccountId) {
+            throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Connect Stripe before activating payments." });
+          }
+          const stripe = getStripe();
+          const account = await stripe.accounts.retrieve(vendor.stripeConnectAccountId);
+          await updateVendorConnectStatus(vendor.id, {
+            chargesEnabled: account.charges_enabled,
+            payoutsEnabled: account.payouts_enabled,
+            detailsSubmitted: account.details_submitted,
+            currentlyDue: JSON.stringify(account.requirements?.currently_due ?? []),
+            pastDue: JSON.stringify(account.requirements?.past_due ?? []),
+            disabledReason: account.requirements?.disabled_reason ?? null,
+          });
+          if (!account.charges_enabled || !account.payouts_enabled || !account.details_submitted) {
+            throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Stripe onboarding is not complete. Vendor remains inactive." });
+          }
+          const coverage = (await listVendorCoverage(vendor.id)).filter(row => row.isActive);
+          if (coverage.length === 0) {
+            throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Assign at least one active building/service route before activation." });
+          }
+        }
         await updateVendorIsActive(input.vendorId, input.isActive);
         return { success: true };
       }),
@@ -4068,6 +4110,16 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
+        const conflicts = (await listVendorCoverage()).filter(
+          row => row.isActive && row.vendorId !== input.vendorId &&
+            row.buildingSlug === input.buildingSlug && row.serviceType === input.serviceType
+        );
+        if (input.isActive && conflicts.length > 0) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "That building/service route is already assigned to another active vendor.",
+          });
+        }
         const id = await createVendorCoverage(input);
         return { id };
       }),
@@ -4084,6 +4136,24 @@ export const appRouter = router({
       )
       .mutation(async ({ input }) => {
         const { coverageId, ...data } = input;
+        const route = (await listVendorCoverage()).find(row => row.id === coverageId);
+        if (!route) throw new TRPCError({ code: "NOT_FOUND", message: "Payment route not found" });
+        if (data.isActive === true) {
+          const conflict = (await listVendorCoverage()).find(
+            row => row.id !== coverageId && row.isActive &&
+              row.buildingSlug === route.buildingSlug && row.serviceType === route.serviceType
+          );
+          if (conflict) throw new TRPCError({ code: "CONFLICT", message: "That route is already assigned to another active vendor." });
+        }
+        if (data.isActive === false) {
+          const vendor = await getVendorById(route.vendorId);
+          const otherActiveRoutes = (await listVendorCoverage(route.vendorId)).filter(
+            row => row.id !== coverageId && row.isActive
+          );
+          if (vendor?.isActive && otherActiveRoutes.length === 0) {
+            throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Deactivate the vendor before disabling its final payment route." });
+          }
+        }
         await updateVendorCoverage(coverageId, data);
         return { success: true };
       }),
@@ -4091,6 +4161,15 @@ export const appRouter = router({
     deleteVendorCoverage: protectedProcedure
       .input(z.object({ coverageId: z.number() }))
       .mutation(async ({ input }) => {
+        const route = (await listVendorCoverage()).find(row => row.id === input.coverageId);
+        if (!route) throw new TRPCError({ code: "NOT_FOUND", message: "Payment route not found" });
+        const vendor = await getVendorById(route.vendorId);
+        const otherActiveRoutes = (await listVendorCoverage(route.vendorId)).filter(
+          row => row.id !== input.coverageId && row.isActive
+        );
+        if (vendor?.isActive && route.isActive && otherActiveRoutes.length === 0) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Deactivate the vendor before removing its final payment route." });
+        }
         await deleteVendorCoverage(input.coverageId);
         return { success: true };
       }),

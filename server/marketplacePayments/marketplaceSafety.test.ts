@@ -24,9 +24,22 @@ describe("Slice 4 production-safety invariants", () => {
     expect(routersSource).toMatch(/await getVendorForOrder\(order\.buildingSlug, order\.serviceType\)/);
     expect(routersSource).toMatch(/stripe\.accounts\.retrieve\(\s*vendorAccountId\s*\)/);
     expect(routersSource).toMatch(/!connectedAccount\.charges_enabled\s*\|\|\s*!connectedAccount\.payouts_enabled/);
+    expect(routersSource).toMatch(/route\.buildingSlug === order\.buildingSlug/);
+    expect(routersSource).toMatch(/route\.serviceType === order\.serviceType/);
+    expect(routersSource).toContain("is not activated for payments. Customer was not charged.");
     expect(routersSource).toMatch(/transfer_data:\s*{\s*destination:\s*vendorAccountId!\s*}/);
     expect(routersSource).toMatch(/application_fee_amount:\s*platformFeeCents/);
     expect(routersSource).not.toContain("[ChargeCard] No payout routing applied");
+  });
+
+  it("requires Stripe readiness and service coverage before vendor activation", () => {
+    const routersSource = read("server/routers.ts");
+    const dbSource = read("server/db.ts");
+    expect(routersSource).toContain("Assign at least one active building/service route before activation.");
+    expect(routersSource).toContain("Stripe onboarding is not complete. Vendor remains inactive.");
+    expect(routersSource).toContain("That building/service route is already assigned to another active vendor.");
+    expect(dbSource).toMatch(/isActive:\s*data\.isActive \?\? false/);
+    expect(dbSource).toMatch(/stripeConnectAccountId,\s*isActive:\s*false/);
   });
 
   it("does not alter the orders or vendors Drizzle schema", () => {

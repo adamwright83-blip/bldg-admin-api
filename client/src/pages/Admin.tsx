@@ -4350,6 +4350,9 @@ function VendorsTab() {
     trpc.admin.createConnectOnboardingLink.useMutation();
   const statusMutation = trpc.admin.getConnectAccountStatus.useMutation();
   const replaceAccountMutation = trpc.admin.replaceConnectAccount.useMutation();
+  const coverageQuery = trpc.admin.listVendorCoverage.useQuery({});
+  const createCoverageMutation = trpc.admin.createVendorCoverage.useMutation();
+  const deleteCoverageMutation = trpc.admin.deleteVendorCoverage.useMutation();
 
   const [newVendor, setNewVendor] = useState({
     name: "",
@@ -4394,6 +4397,9 @@ function VendorsTab() {
       number,
       { oldAccountId: string | null; newAccountId: string; onboardingUrl: string }
     >
+  >({});
+  const [coverageDrafts, setCoverageDrafts] = useState<
+    Record<number, { buildingSlug: string; serviceType: "wash_fold" | "dry_cleaning" }>
   >({});
 
   const handleCreateVendor = async () => {
@@ -4449,8 +4455,44 @@ function VendorsTab() {
   };
 
   const handleToggleActive = async (vendorId: number, isActive: boolean) => {
-    await updateActiveMutation.mutateAsync({ vendorId, isActive });
-    vendorsQuery.refetch();
+    try {
+      await updateActiveMutation.mutateAsync({ vendorId, isActive });
+      await Promise.all([vendorsQuery.refetch(), coverageQuery.refetch()]);
+      toast.success(isActive ? "Vendor activated for payments." : "Vendor deactivated.");
+    } catch (error: any) {
+      toast.error(error?.message || "Vendor activation failed.");
+    }
+  };
+
+  const handleAddCoverage = async (vendorId: number) => {
+    const draft = coverageDrafts[vendorId] ?? {
+      buildingSlug: SUPPORTED_BUILDINGS[0].value,
+      serviceType: "wash_fold" as const,
+    };
+    try {
+      await createCoverageMutation.mutateAsync({
+        vendorId,
+        buildingSlug: draft.buildingSlug,
+        serviceType: draft.serviceType,
+        priority: 10,
+        isActive: true,
+        isDefault: false,
+      });
+      await coverageQuery.refetch();
+      toast.success("Payment route assigned.");
+    } catch (error: any) {
+      toast.error(error?.message || "Could not assign payment route.");
+    }
+  };
+
+  const handleDeleteCoverage = async (coverageId: number) => {
+    try {
+      await deleteCoverageMutation.mutateAsync({ coverageId });
+      await coverageQuery.refetch();
+      toast.success("Payment route removed.");
+    } catch (error: any) {
+      toast.error(error?.message || "Could not remove payment route.");
+    }
   };
 
   const handleUpdatePlatformFee = async (vendorId: number) => {
@@ -4641,6 +4683,20 @@ function VendorsTab() {
               !Number.isFinite(parsedPlatformFee) ||
               parsedPlatformFee < 0 ||
               parsedPlatformFee > 100;
+            const vendorCoverage = (coverageQuery.data ?? []).filter(
+              row => row.vendorId === vendor.id && row.isActive
+            );
+            const activationBlockers = [
+              !vendor.stripeConnectAccountId ? "Connect Stripe" : null,
+              !chargesEnabled ? "Enable charges" : null,
+              !payoutsEnabled ? "Enable payouts" : null,
+              !detailsSubmitted ? "Complete onboarding" : null,
+              vendorCoverage.length === 0 ? "Assign a building/service route" : null,
+            ].filter(Boolean) as string[];
+            const coverageDraft = coverageDrafts[vendor.id] ?? {
+              buildingSlug: SUPPORTED_BUILDINGS[0].value,
+              serviceType: "wash_fold" as const,
+            };
 
             return (
               <div key={vendor.id} className="border border-black/10 p-4">
@@ -4729,6 +4785,81 @@ function VendorsTab() {
                       </span>
                     )}
                   </div>
+                </div>
+
+                {/* Payment activation and routing */}
+                <div className="mb-3 border border-black/10 p-3 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium text-black/70">Payment activation</p>
+                    <span className={vendor.isActive ? "text-green-700" : "text-amber-700"}>
+                      {vendor.isActive ? "ACTIVE" : "BLOCKED"}
+                    </span>
+                  </div>
+                  {activationBlockers.length > 0 ? (
+                    <p className="mt-1 text-amber-700">
+                      Blockers: {activationBlockers.join(" · ")}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-green-700">
+                      Stripe ready and payment routing assigned.
+                    </p>
+                  )}
+
+                  <div className="mt-3 space-y-1">
+                    {vendorCoverage.map(route => (
+                      <div key={route.id} className="flex items-center justify-between border border-black/10 px-2 py-1.5">
+                        <span>
+                          {SUPPORTED_BUILDINGS.find(b => b.value === route.buildingSlug)?.label ?? route.buildingSlug}
+                          {" · "}{route.serviceType === "wash_fold" ? "Wash & Fold" : "Dry Cleaning"}
+                        </span>
+                        <button
+                          type="button"
+                          className="text-red-700 underline"
+                          onClick={() => handleDeleteCoverage(route.id)}
+                          disabled={deleteCoverageMutation.isPending}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                    <select
+                      value={coverageDraft.buildingSlug}
+                      onChange={e => setCoverageDrafts(prev => ({
+                        ...prev,
+                        [vendor.id]: { ...coverageDraft, buildingSlug: e.target.value },
+                      }))}
+                      className="border border-black/20 bg-white px-2 py-1.5"
+                    >
+                      {SUPPORTED_BUILDINGS.map(building => (
+                        <option key={building.value} value={building.value}>{building.label}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={coverageDraft.serviceType}
+                      onChange={e => setCoverageDrafts(prev => ({
+                        ...prev,
+                        [vendor.id]: { ...coverageDraft, serviceType: e.target.value as "wash_fold" | "dry_cleaning" },
+                      }))}
+                      className="border border-black/20 bg-white px-2 py-1.5"
+                    >
+                      <option value="wash_fold">Wash & Fold</option>
+                      <option value="dry_cleaning">Dry Cleaning</option>
+                    </select>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleAddCoverage(vendor.id)}
+                      disabled={createCoverageMutation.isPending}
+                    >
+                      Assign route
+                    </Button>
+                  </div>
+                  <p className="mt-2 text-[11px] text-black/40">
+                    Activation re-checks Stripe live and is refused until at least one route exists.
+                  </p>
                 </div>
 
                 {/* Vendor portal: slug, brand, logo, password */}
