@@ -1,0 +1,639 @@
+name: Apply outside payment feature
+
+on:
+  push:
+    branches:
+      - codex/record-outside-payment
+    paths:
+      - .github/workflows/apply-outside-payment.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/record-outside-payment
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Apply focused code changes
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace_once(path_str: str, old: str, new: str) -> None:
+              path = Path(path_str)
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one anchor in {path_str}, found {count}: {old[:120]!r}")
+              path.write_text(text.replace(old, new, 1))
+
+          admin_path = "client/src/pages/Admin.tsx"
+          routers_path = "server/routers.ts"
+
+          replace_once(
+              admin_path,
+              '''  const saveIntake = trpc.admin.saveIntake.useMutation();
+          const chargeCard = trpc.admin.chargeCard.useMutation();
+          const generatePortalToken = trpc.orders.generatePortalToken.useMutation();''',
+              '''  const saveIntake = trpc.admin.saveIntake.useMutation();
+          const chargeCard = trpc.admin.chargeCard.useMutation();
+          const recordOutsidePayment = trpc.admin.recordOutsidePayment.useMutation();
+          const generatePortalToken = trpc.orders.generatePortalToken.useMutation();''',
+          )
+
+          replace_once(
+              admin_path,
+              '''  const [chargeResult, setChargeResult] = useState<{
+            success: boolean;
+            error?: string;
+            isFirstPaidOrder?: boolean;
+            receiptUrl?: string;
+            portalWelcomeUrl?: string;
+          } | null>(null);''',
+              '''  const [chargeResult, setChargeResult] = useState<{
+            success: boolean;
+            error?: string;
+            isFirstPaidOrder?: boolean;
+            receiptUrl?: string;
+            portalWelcomeUrl?: string;
+            paymentLabel?: string;
+            outside?: boolean;
+          } | null>(null);
+          const [outsidePaymentOpen, setOutsidePaymentOpen] = useState(false);
+          const [outsidePaymentMethod, setOutsidePaymentMethod] = useState<
+            "zelle" | "cash" | "check" | "other"
+          >("zelle");
+          const [outsidePaymentAmount, setOutsidePaymentAmount] = useState("");
+          const [outsidePaymentDate, setOutsidePaymentDate] = useState(() => {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          });
+          const [outsidePaymentNote, setOutsidePaymentNote] = useState("");
+          const [vendorPayoutRecorded, setVendorPayoutRecorded] = useState(false);
+          const [vendorPayoutMethod, setVendorPayoutMethod] = useState<
+            "zelle" | "cash" | "check" | "other"
+          >("zelle");
+          const [vendorPayoutAmount, setVendorPayoutAmount] = useState("");
+          const [vendorPayoutDate, setVendorPayoutDate] = useState(() => {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          });
+          const [vendorPayoutNote, setVendorPayoutNote] = useState("");''',
+          )
+
+          replace_once(
+              admin_path,
+              '''  if (isLoading || !order)
+            return (
+              <Loader2 className="animate-spin w-6 h-6 text-black/30 mx-auto mt-10" />
+            );''',
+              '''  const handleOutsidePayment = async () => {
+            if (!order) return;
+            const amountCents = Math.round(Number.parseFloat(outsidePaymentAmount) * 100);
+            const vendorAmountCents = vendorPayoutRecorded
+              ? Math.round(Number.parseFloat(vendorPayoutAmount) * 100)
+              : null;
+
+            if (!Number.isInteger(amountCents) || amountCents < 1) {
+              toast.error("Enter a valid amount received.");
+              return;
+            }
+            if (!outsidePaymentDate) {
+              toast.error("Choose the date the customer paid.");
+              return;
+            }
+            if (
+              vendorPayoutRecorded &&
+              (!Number.isInteger(vendorAmountCents) ||
+                (vendorAmountCents ?? 0) < 1 ||
+                (vendorAmountCents ?? 0) > amountCents)
+            ) {
+              toast.error("Vendor payout must be greater than $0 and no more than the customer payment.");
+              return;
+            }
+            if (vendorPayoutRecorded && !vendorPayoutDate) {
+              toast.error("Choose the date the vendor was paid.");
+              return;
+            }
+
+            const upchargesJson = {
+              ...buildSelectedWashFoldUpcharges(selectedUpcharges),
+              ...buildSelectedWashFoldFlatRates(flatRateQtys),
+            };
+            const drycleanItemsJson = buildDrycleanLineItems(
+              catalogRows,
+              dcQtys,
+              order.drycleanItemsJson as
+                | Record<string, DryCleanEntry>
+                | null
+                | undefined
+            );
+
+            try {
+              await saveIntake.mutateAsync({
+                orderId: order.id,
+                weightLbs: isWF ? effectiveWeightLbs : undefined,
+                subtotal: centsToDollars(totals.subtotalCents),
+                discountPercent: discountPercent || "0",
+                total: centsToDollars(amountCents),
+                upchargesJson: isWF ? upchargesJson : undefined,
+                drycleanItemsJson: !isWF ? drycleanItemsJson : undefined,
+              });
+
+              const result = await recordOutsidePayment.mutateAsync({
+                orderId: order.id,
+                amountCents,
+                method: outsidePaymentMethod,
+                receivedAt: outsidePaymentDate,
+                note: outsidePaymentNote.trim() || undefined,
+                vendorPayout: vendorPayoutRecorded
+                  ? {
+                      method: vendorPayoutMethod,
+                      amountCents: vendorAmountCents!,
+                      paidAt: vendorPayoutDate,
+                      note: vendorPayoutNote.trim() || undefined,
+                    }
+                  : undefined,
+              });
+
+              let portalWelcomeUrl: string | undefined;
+              if (result.isFirstPaidOrder) {
+                try {
+                  const generated = await generatePortalToken.mutateAsync({
+                    orderId: order.id,
+                  });
+                  portalWelcomeUrl = generated.portalWelcomeUrl;
+                } catch (err) {
+                  console.error("Failed to generate portal welcome link:", err);
+                  toast.error(
+                    "Payment was recorded, but the portal enrollment link could not be created."
+                  );
+                }
+              }
+
+              const methodLabel =
+                outsidePaymentMethod === "zelle"
+                  ? "Zelle"
+                  : outsidePaymentMethod === "cash"
+                    ? "Cash"
+                    : outsidePaymentMethod === "check"
+                      ? "Check"
+                      : "Other";
+              setOutsidePaymentOpen(false);
+              setChargeResult({
+                success: true,
+                isFirstPaidOrder: result.isFirstPaidOrder,
+                portalWelcomeUrl,
+                paymentLabel: methodLabel,
+                outside: true,
+              });
+            } catch (error: any) {
+              toast.error(error?.message || "Outside payment could not be recorded.");
+            }
+          };
+
+          if (isLoading || !order)
+            return (
+              <Loader2 className="animate-spin w-6 h-6 text-black/30 mx-auto mt-10" />
+            );''',
+          )
+
+          replace_once(
+              admin_path,
+              '''          <p className="text-xl font-semibold mb-1">Charged successfully.</p>
+                    <p className="text-black/50 text-sm">
+                      ${centsToDollars(totals.totalCents)} — {order.firstName}{" "}
+                      {order.lastName}
+                    </p>''',
+              '''          <p className="text-xl font-semibold mb-1">
+                      {chargeResult.outside ? "Outside payment recorded." : "Charged successfully."}
+                    </p>
+                    <p className="text-black/50 text-sm">
+                      ${centsToDollars(totals.totalCents)} — {order.firstName}{" "}
+                      {order.lastName}
+                      {chargeResult.paymentLabel ? ` · ${chargeResult.paymentLabel}` : ""}
+                    </p>''',
+          )
+
+          replace_once(
+              admin_path,
+              '''      <Button
+                className="bg-black text-white hover:bg-black/90 w-full"
+                onClick={handleCharge}
+                disabled={
+                  totals.totalCents < 50 || chargeCard.isPending || saveIntake.isPending
+                }
+              >
+                {chargeCard.isPending || saveIntake.isPending ? (
+                  <Loader2 className="animate-spin w-4 h-4 mr-2" />
+                ) : null}
+                {chargeResult && !chargeResult.success ? "Retry Card" : "Charge Card"} —
+                ${centsToDollars(totals.totalCents)}
+              </Button>''',
+              '''      <div className="space-y-2">
+                <Button
+                  className="bg-black text-white hover:bg-black/90 w-full"
+                  onClick={handleCharge}
+                  disabled={
+                    totals.totalCents < 50 ||
+                    chargeCard.isPending ||
+                    saveIntake.isPending ||
+                    recordOutsidePayment.isPending
+                  }
+                >
+                  {chargeCard.isPending || saveIntake.isPending ? (
+                    <Loader2 className="animate-spin w-4 h-4 mr-2" />
+                  ) : null}
+                  {chargeResult && !chargeResult.success ? "Retry Card" : "Charge Card"} —
+                  ${centsToDollars(totals.totalCents)}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-black text-black"
+                  disabled={
+                    totals.totalCents < 1 ||
+                    chargeCard.isPending ||
+                    saveIntake.isPending ||
+                    recordOutsidePayment.isPending
+                  }
+                  onClick={() => {
+                    const total = centsToDollars(totals.totalCents);
+                    setOutsidePaymentAmount(total);
+                    setVendorPayoutAmount(total);
+                    setOutsidePaymentOpen(true);
+                  }}
+                >
+                  Record Outside Payment
+                </Button>
+              </div>
+
+              {outsidePaymentOpen ? (
+                <div
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                  onClick={() => {
+                    if (!recordOutsidePayment.isPending) setOutsidePaymentOpen(false);
+                  }}
+                >
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="outside-payment-title"
+                    className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl"
+                    onClick={event => event.stopPropagation()}
+                  >
+                    <div className="mb-4">
+                      <h3 id="outside-payment-title" className="text-lg font-semibold">
+                        Record Outside Payment
+                      </h3>
+                      <p className="mt-1 text-sm text-black/55">
+                        Marks this order paid without charging the saved card.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="text-xs font-medium uppercase tracking-wider text-black/55">
+                        Customer paid by
+                        <select
+                          value={outsidePaymentMethod}
+                          onChange={event =>
+                            setOutsidePaymentMethod(
+                              event.target.value as "zelle" | "cash" | "check" | "other"
+                            )
+                          }
+                          className="mt-1 h-10 w-full rounded-md border border-black/20 bg-white px-3 text-sm normal-case tracking-normal text-black"
+                        >
+                          <option value="zelle">Zelle</option>
+                          <option value="cash">Cash</option>
+                          <option value="check">Check</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </label>
+                      <label className="text-xs font-medium uppercase tracking-wider text-black/55">
+                        Amount received
+                        <Input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={outsidePaymentAmount}
+                          onChange={event => setOutsidePaymentAmount(event.target.value)}
+                          className="mt-1 bg-white border-black/20 normal-case tracking-normal text-black"
+                        />
+                      </label>
+                      <label className="text-xs font-medium uppercase tracking-wider text-black/55">
+                        Date received
+                        <Input
+                          type="date"
+                          value={outsidePaymentDate}
+                          onChange={event => setOutsidePaymentDate(event.target.value)}
+                          className="mt-1 bg-white border-black/20 normal-case tracking-normal text-black"
+                        />
+                      </label>
+                      <label className="text-xs font-medium uppercase tracking-wider text-black/55 sm:col-span-2">
+                        Customer payment note (optional)
+                        <Input
+                          value={outsidePaymentNote}
+                          onChange={event => setOutsidePaymentNote(event.target.value)}
+                          placeholder="Example: Sarah paid Adam by Zelle"
+                          className="mt-1 bg-white border-black/20 normal-case tracking-normal text-black"
+                        />
+                      </label>
+                    </div>
+
+                    <label className="mt-5 flex items-start gap-3 rounded-md border border-black/15 p-3 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={vendorPayoutRecorded}
+                        onChange={event => setVendorPayoutRecorded(event.target.checked)}
+                        className="mt-0.5 h-4 w-4"
+                      />
+                      <span>
+                        <strong className="block">I already paid the fulfillment vendor</strong>
+                        <span className="text-black/55">
+                          Record this separately from the customer payment.
+                        </span>
+                      </span>
+                    </label>
+
+                    {vendorPayoutRecorded ? (
+                      <div className="mt-4 rounded-md border border-black/10 bg-black/[0.02] p-4">
+                        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-black/55">
+                          Vendor payout
+                        </p>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <label className="text-xs font-medium uppercase tracking-wider text-black/55">
+                            Paid vendor by
+                            <select
+                              value={vendorPayoutMethod}
+                              onChange={event =>
+                                setVendorPayoutMethod(
+                                  event.target.value as "zelle" | "cash" | "check" | "other"
+                                )
+                              }
+                              className="mt-1 h-10 w-full rounded-md border border-black/20 bg-white px-3 text-sm normal-case tracking-normal text-black"
+                            >
+                              <option value="zelle">Zelle</option>
+                              <option value="cash">Cash</option>
+                              <option value="check">Check</option>
+                              <option value="other">Other</option>
+                            </select>
+                          </label>
+                          <label className="text-xs font-medium uppercase tracking-wider text-black/55">
+                            Amount sent
+                            <Input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              value={vendorPayoutAmount}
+                              onChange={event => setVendorPayoutAmount(event.target.value)}
+                              className="mt-1 bg-white border-black/20 normal-case tracking-normal text-black"
+                            />
+                          </label>
+                          <label className="text-xs font-medium uppercase tracking-wider text-black/55">
+                            Date sent
+                            <Input
+                              type="date"
+                              value={vendorPayoutDate}
+                              onChange={event => setVendorPayoutDate(event.target.value)}
+                              className="mt-1 bg-white border-black/20 normal-case tracking-normal text-black"
+                            />
+                          </label>
+                          <label className="text-xs font-medium uppercase tracking-wider text-black/55 sm:col-span-2">
+                            Vendor payout note (optional)
+                            <Input
+                              value={vendorPayoutNote}
+                              onChange={event => setVendorPayoutNote(event.target.value)}
+                              placeholder="Example: Zelled Lugo Holding LLC"
+                              className="mt-1 bg-white border-black/20 normal-case tracking-normal text-black"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-5 flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex-1 border-black/20"
+                        disabled={recordOutsidePayment.isPending}
+                        onClick={() => setOutsidePaymentOpen(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        className="flex-1 bg-black text-white hover:bg-black/90"
+                        disabled={recordOutsidePayment.isPending}
+                        onClick={() => void handleOutsidePayment()}
+                      >
+                        {recordOutsidePayment.isPending ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : null}
+                        Record Paid
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}''',
+          )
+
+          outside_procedure = '''    /** Record a customer payment received outside Stripe, with an optional separate vendor payout. */
+              recordOutsidePayment: adminProcedure
+                .input(
+                  z
+                    .object({
+                      orderId: z.number().int().positive(),
+                      amountCents: z.number().int().min(1),
+                      method: z.enum(["zelle", "cash", "check", "other"]),
+                      receivedAt: z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/),
+                      note: z.string().max(1000).optional(),
+                      vendorPayout: z
+                        .object({
+                          method: z.enum(["zelle", "cash", "check", "other"]),
+                          amountCents: z.number().int().min(1),
+                          paidAt: z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/),
+                          note: z.string().max(1000).optional(),
+                        })
+                        .optional(),
+                    })
+                    .superRefine((input, ctx) => {
+                      if (
+                        input.vendorPayout &&
+                        input.vendorPayout.amountCents > input.amountCents
+                      ) {
+                        ctx.addIssue({
+                          code: z.ZodIssueCode.custom,
+                          path: ["vendorPayout", "amountCents"],
+                          message: "Vendor payout cannot exceed the customer payment.",
+                        });
+                      }
+                    })
+                )
+                .mutation(async ({ ctx, input }) => {
+                  const order = await getOrderById(input.orderId);
+                  if (!order) {
+                    throw new TRPCError({ code: "NOT_FOUND", message: "Order not found" });
+                  }
+                  if (order.paid) {
+                    throw new TRPCError({
+                      code: "BAD_REQUEST",
+                      message: "This order is already marked paid.",
+                    });
+                  }
+
+                  const paidAt = new Date(`${input.receivedAt}T12:00:00.000Z`);
+                  if (Number.isNaN(paidAt.getTime())) {
+                    throw new TRPCError({
+                      code: "BAD_REQUEST",
+                      message: "Invalid customer payment date.",
+                    });
+                  }
+
+                  let vendor = order.vendorId
+                    ? await getVendorById(order.vendorId)
+                    : await getVendorForOrder(order.buildingSlug, order.serviceType);
+                  if (!order.vendorId && vendor) {
+                    await updateOrderVendor(order.id, vendor.id);
+                  }
+                  if (input.vendorPayout && !vendor) {
+                    throw new TRPCError({
+                      code: "PRECONDITION_FAILED",
+                      message: "Assign a fulfillment vendor before recording a vendor payout.",
+                    });
+                  }
+
+                  const priorOrders = await getOrdersByPhoneExact(order.phone);
+                  const isFirstPaidOrder = !priorOrders.some(
+                    candidate => candidate.id !== order.id && !!candidate.paid
+                  );
+                  const vendorPayoutCents = input.vendorPayout?.amountCents ?? null;
+                  const platformFeeCents =
+                    vendorPayoutCents == null
+                      ? null
+                      : input.amountCents - vendorPayoutCents;
+
+                  await updateOrderIntake(order.id, {
+                    paid: true,
+                    paidAt,
+                    total: centsToDollars(input.amountCents),
+                    status: "processing",
+                    isFirstPaidOrder,
+                    platformFeeCents,
+                    vendorPayoutCents,
+                    vendorNameSnapshot: vendor?.name ?? null,
+                  });
+
+                  await ensurePickupCompletedOperationsEventForOrder(order.id, {
+                    actorDisplayName: ctx.user?.name ?? "Admin",
+                    actualEventTimestamp: paidAt,
+                    reason: "outside_payment_recorded",
+                  });
+
+                  try {
+                    await writeOrderToSheet(order, input.amountCents);
+                  } catch (error) {
+                    console.warn("[OutsidePayment] Revenue sheet write failed:", error);
+                  }
+
+                  const methodLabel =
+                    input.method === "zelle"
+                      ? "Zelle"
+                      : input.method === "cash"
+                        ? "Cash"
+                        : input.method === "check"
+                          ? "Check"
+                          : "Other";
+                  try {
+                    const task = await createOpsTask({
+                      tenantId: order.tenantId ?? ctx.tenantId ?? "default",
+                      lane: "lane_3",
+                      level: "3",
+                      taskType: "unpaid_order",
+                      title: `Recorded ${methodLabel} payment for order #${order.id}`,
+                      description: `${order.firstName} ${order.lastName} paid $${centsToDollars(input.amountCents)} via ${methodLabel}.`,
+                      source: "manual",
+                      priority: "normal",
+                      revenueAtRiskCents: input.amountCents,
+                      orderId: order.id,
+                      customerId: order.bldgUserId ?? null,
+                      metadataJson: {
+                        paymentSource: "outside_stripe",
+                        customerPaymentMethod: input.method,
+                        customerPaymentReceivedAt: input.receivedAt,
+                        customerPaymentNote: input.note?.trim() || null,
+                        vendorId: vendor?.id ?? null,
+                        vendorName: vendor?.name ?? null,
+                        vendorPayoutMethod: input.vendorPayout?.method ?? null,
+                        vendorPayoutAmountCents,
+                        vendorPayoutPaidAt: input.vendorPayout?.paidAt ?? null,
+                        vendorPayoutNote: input.vendorPayout?.note?.trim() || null,
+                      },
+                    });
+                    await completeOpsTask({
+                      tenantId: order.tenantId ?? ctx.tenantId ?? "default",
+                      taskId: task.id,
+                      outcome: input.vendorPayout
+                        ? `Customer payment and ${vendor?.name ?? "vendor"} payout recorded.`
+                        : "Customer outside payment recorded; vendor payout not recorded.",
+                      revenueRecoveredCents: input.amountCents,
+                      completedBy:
+                        ctx.user?.id != null ? String(ctx.user.id) : "admin_outside_payment",
+                    });
+                  } catch (error) {
+                    console.warn("[OutsidePayment] Audit task write failed:", error);
+                  }
+
+                  return {
+                    success: true as const,
+                    isFirstPaidOrder,
+                    vendorName: vendor?.name ?? null,
+                    vendorPayoutRecorded: !!input.vendorPayout,
+                  };
+                }),
+
+          '''
+
+          replace_once(
+              routers_path,
+              '''    /** Charge card off-session */
+              chargeCard: protectedProcedure''',
+              outside_procedure + '''    /** Charge card off-session */
+              chargeCard: protectedProcedure''',
+          )
+          PY
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Validate diff
+        run: git diff --check
+
+      - name: Commit implementation and remove one-time workflow
+        shell: bash
+        run: |
+          rm .github/workflows/apply-outside-payment.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/Admin.tsx server/routers.ts .github/workflows/apply-outside-payment.yml
+          git commit -m "Add outside payment recording to intake"
+          git push origin HEAD:codex/record-outside-payment
