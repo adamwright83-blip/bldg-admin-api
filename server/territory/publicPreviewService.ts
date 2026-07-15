@@ -101,7 +101,9 @@ export interface PublicPreviewRepository {
     failureCode: string;
     event: PublicPreviewEvent;
   }): Promise<void>;
-  listOpportunities(scanSessionId: string): Promise<RankedTerritoryOpportunity[]>;
+  listOpportunities(
+    scanSessionId: string
+  ): Promise<RankedTerritoryOpportunity[]>;
   getScanCenter(scanSessionId: string): Promise<GeoPoint | null>;
   getOpportunity(input: {
     scanSessionId: string;
@@ -162,11 +164,7 @@ export class PublicPreviewRateLimitError extends Error {
 
 export class PublicPreviewAccessError extends Error {
   constructor(
-    readonly code:
-      | "NOT_FOUND"
-      | "EXPIRED"
-      | "INVALID_STATE"
-      | "OTHER_TENANT",
+    readonly code: "NOT_FOUND" | "EXPIRED" | "INVALID_STATE" | "OTHER_TENANT",
     message: string
   ) {
     super(message);
@@ -193,7 +191,10 @@ function safeFailureCode(error: unknown): string {
 }
 
 function sourcePlacement(attribution?: PublicPreviewAttribution): string {
-  return (attribution?.placement ?? attribution?.source ?? "direct").slice(0, 96);
+  return (attribution?.placement ?? attribution?.source ?? "direct").slice(
+    0,
+    96
+  );
 }
 
 function scoreBand(opportunity: RankedTerritoryOpportunity): string {
@@ -366,6 +367,15 @@ export function createPublicPreviewService(
         return { sessionId: input.sessionId, status: "completed" as const };
       } catch (error) {
         const failureCode = safeFailureCode(error);
+        console.error("[TerritoryPreview] scan failed", {
+          sessionId: input.sessionId,
+          providerName: dependencies.provider.name,
+          failureCode,
+          error:
+            error instanceof Error
+              ? { name: error.name, message: error.message }
+              : { name: "UnknownError", message: "Unknown provider failure" },
+        });
         await dependencies.repository.failSession({
           sessionId: input.sessionId,
           providerName: dependencies.provider.name,
