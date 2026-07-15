@@ -757,7 +757,7 @@ body { background: #07111f; }
 /* Dedicated mobile conversion experience. The desktop tree above is unchanged. */
 .ff-mobile{display:none}
 
-@media (max-width:900px){
+@media (max-width:900px), (max-device-width:900px) and (hover:none){
   .ff-desktop{display:none}
   .ff-mobile{--dfm-charcoal:#111512;--dfm-orange:#f4510b;--dfm-lime:#c7ff16;--dfm-cream:#f7f2e9;display:block;overflow:hidden;color:var(--dfm-charcoal);background:var(--dfm-cream);font-family:Inter,Arial,sans-serif}
   .ff-mobile :where(h1,h2,p,blockquote){margin:0}
@@ -806,6 +806,17 @@ body { background: #07111f; }
   .dfm-faq{padding:0 14px 18px}.dfm-faq details{border-bottom:1px solid #d5cec4;background:#fff}.dfm-faq details:first-child{border-radius:10px 10px 0 0}.dfm-faq details:last-child{border-radius:0 0 10px 10px}.dfm-faq summary{min-height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 13px;list-style:none;font-size:10px;font-weight:700}.dfm-faq summary span{display:flex;align-items:center;gap:9px}.dfm-faq summary svg{width:15px}.dfm-faq details>p{padding:0 37px 13px 37px;color:#666b66;font-size:10px;line-height:1.4}
   .dfm-final{position:relative;overflow:hidden;padding:34px 18px 22px;color:#fff;background:#151a17;text-align:center}.dfm-final>svg{position:absolute;right:-10px;top:25px;width:95px;height:95px;color:var(--dfm-lime);opacity:.28}.dfm-final h2{position:relative;max-width:340px;margin:auto;font:800 37px/.9 'Barlow Condensed';text-transform:uppercase}.dfm-final h2 span{color:var(--dfm-orange)}.dfm-final .dfm-cta{position:relative;max-width:295px;margin:20px auto 0}.dfm-final>small{color:#d5d8d5}
   .dfm-footer{height:57px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;color:#fff;background:#0c100e}.dfm-footer .dfm-brand{color:#fff;font-size:14px}.dfm-footer .dfm-brand>span{width:24px;height:25px}.dfm-footer>span{color:#89908a;font-size:9px}
+}
+
+/* Some Android in-app browsers request a desktop-sized layout viewport even
+   on a phone. Keep the dedicated mobile composition and scale its physical
+   device width back up to fill that forced viewport. */
+@media (min-width:901px) and (max-device-width:900px) and (hover:none){
+  .ff-mobile{
+    width:var(--dfm-device-width,390px);
+    transform:scale(var(--dfm-force-scale,2.5));
+    transform-origin:top left;
+  }
 }
 
 @media (max-width:390px){

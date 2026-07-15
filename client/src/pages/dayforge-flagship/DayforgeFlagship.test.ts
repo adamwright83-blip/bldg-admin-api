@@ -6,6 +6,10 @@ const component = readFileSync(
   path.resolve(import.meta.dirname, "DayforgeFlagship.tsx"),
   "utf8"
 );
+const styles = readFileSync(
+  path.resolve(import.meta.dirname, "dayforge-flagship.css"),
+  "utf8"
+);
 const analytics = readFileSync(
   path.resolve(import.meta.dirname, "analytics.ts"),
   "utf8"
@@ -151,5 +155,12 @@ describe("DayForge flagship contract", () => {
     expect(component).toContain('pricing: "pricing" as CtaSource');
     expect(component).toContain('final: "final" as CtaSource');
     expect(component).toContain("trackCtaClick(source)");
+  });
+
+  it("keeps the mobile experience active in phone browsers using a desktop viewport", () => {
+    expect(styles).toContain("(max-device-width:900px) and (hover:none)");
+    expect(styles).toContain("transform:scale(var(--dfm-force-scale,2.5))");
+    expect(component).toContain('page.style.setProperty("--dfm-device-width"');
+    expect(component).toContain('page.style.setProperty("--dfm-force-scale"');
   });
 });

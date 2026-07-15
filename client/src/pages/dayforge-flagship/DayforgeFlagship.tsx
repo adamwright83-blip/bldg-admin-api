@@ -817,6 +817,7 @@ function updateMetadata() {
 export default function DayforgeFlagship() {
   const [schedulerOpen, setSchedulerOpen] = useState(false);
   const [showSticky, setShowSticky] = useState(false);
+  const pageRef = useRef<HTMLDivElement>(null);
   const missionEndRef = useRef<HTMLDivElement>(null);
   const founderRef = useRef<HTMLDivElement>(null);
   const faqRef = useRef<HTMLElement>(null);
@@ -825,6 +826,19 @@ export default function DayforgeFlagship() {
 
   useEffect(() => updateMetadata(), []);
   useEffect(() => { void getFlagshipAnalytics(); }, []);
+
+  useEffect(() => {
+    const syncForcedMobileViewport = () => {
+      const page = pageRef.current;
+      if (!page) return;
+      const deviceWidth = Math.max(1, window.screen.width);
+      page.style.setProperty("--dfm-device-width", `${deviceWidth}px`);
+      page.style.setProperty("--dfm-force-scale", String(window.innerWidth / deviceWidth));
+    };
+    syncForcedMobileViewport();
+    addEventListener("resize", syncForcedMobileViewport);
+    return () => removeEventListener("resize", syncForcedMobileViewport);
+  }, []);
 
   useEffect(() => {
     let frame = 0;
@@ -857,7 +871,7 @@ export default function DayforgeFlagship() {
   };
 
   return (
-    <div className={`ff-page${posterMode ? " is-poster" : ""}`} id="top">
+    <div ref={pageRef} className={`ff-page${posterMode ? " is-poster" : ""}`} id="top">
       <div className="ff-desktop">
       <a className="ff-skip" href="#ff-main">Skip to content</a>
       <header className="ff-header">
