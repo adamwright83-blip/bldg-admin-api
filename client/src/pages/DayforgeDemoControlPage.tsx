@@ -1,31 +1,35 @@
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 import {
-  Activity,
   AlertTriangle,
   ArrowRight,
   Building2,
+  Camera,
   Check,
   CheckCircle2,
   ChevronRight,
   CircleDollarSign,
   Clock3,
+  Compass,
+  Crosshair,
   ExternalLink,
   FileText,
   Gamepad2,
-  Gauge,
   Loader2,
   LockKeyhole,
+  Mail,
   Map,
+  Minus,
   Navigation,
   Phone,
+  Plus,
   Radar,
   RefreshCw,
   Route,
   ShieldCheck,
-  Sparkles,
   Target,
   Trophy,
   UserRound,
+  WalletCards,
   Zap,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -38,13 +42,9 @@ import "./dayforge-demo-control.css";
 const DEMO_MODE_ENABLED =
   String(import.meta.env.VITE_DAYFORGE_DEMO_MODE ?? "").toLowerCase() ===
   "true";
-
 const TERRITORY_MAP_ASSET =
-  "/assets/dayforge-final/july-demo-territory-map.svg";
+  "/assets/dayforge-final/july-demo-territory-night.png";
 
-const PROVIDER_ORDER = ["google", "stripe", "email", "sms", "print"] as const;
-
-type ProviderKey = (typeof PROVIDER_ORDER)[number];
 type ProviderMode =
   | "LIVE"
   | "TEST"
@@ -52,6 +52,7 @@ type ProviderMode =
   | "NOT_CONFIGURED"
   | "BROWSER_PDF_FALLBACK"
   | "CONNECTED";
+type ProviderKey = "google" | "stripe" | "email" | "sms" | "print";
 
 type DayforgeDemoStatus = {
   demoEnabled?: boolean;
@@ -78,129 +79,9 @@ type DayforgeDemoStatus = {
 
 type IconType = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 
-type JourneyStep = {
-  label: string;
-  eyebrow: string;
-  href: (missionId: string | null) => string | null;
-  icon: IconType;
-};
-
-const PROVIDER_META: Record<
-  ProviderKey,
-  { label: string; note: string; icon: IconType }
-> = {
-  google: {
-    label: "Territory data",
-    note: "Google Maps + Places",
-    icon: Map,
-  },
-  stripe: {
-    label: "Billing",
-    note: "Stripe subscriptions",
-    icon: CircleDollarSign,
-  },
-  email: {
-    label: "Email",
-    note: "Transactional delivery",
-    icon: FileText,
-  },
-  sms: {
-    label: "SMS",
-    note: "Twilio outreach",
-    icon: Phone,
-  },
-  print: {
-    label: "Proposal output",
-    note: "Print / PDF",
-    icon: FileText,
-  },
-};
-
-const JOURNEY_STEPS: JourneyStep[] = [
-  {
-    label: "Territory intelligence",
-    eyebrow: "Find",
-    href: () => "/territory-preview",
-    icon: Radar,
-  },
-  {
-    label: "Persisted mission",
-    eyebrow: "Lock",
-    href: () => "/commercial-missions",
-    icon: Target,
-  },
-  {
-    label: "BORESLAY Rally",
-    eyebrow: "Commit",
-    href: missionId =>
-      missionId ? `/boreslay-rally?missionId=${missionId}` : "/boreslay-rally",
-    icon: Gamepad2,
-  },
-  {
-    label: "Phone unlock",
-    eyebrow: "Move",
-    href: () => "/commercial-missions",
-    icon: Phone,
-  },
-  {
-    label: "Field execution",
-    eyebrow: "Act",
-    href: missionId =>
-      missionId ? `/driver/sales-mission/${missionId}` : null,
-    icon: Navigation,
-  },
-  {
-    label: "Revenue attribution",
-    eyebrow: "Prove",
-    href: () => "/commercial-pipeline",
-    icon: Trophy,
-  },
-];
-
-const PRESENTER_CHECKLIST: Array<{
-  label: string;
-  href: (missionId: string | null) => string | null;
-}> = [
-  { label: "Open the DayForge landing page", href: () => "/dayforge" },
-  { label: "Map the laundromat territory", href: () => "/territory-preview" },
-  { label: "Show ranked nearby accounts", href: () => "/territory-preview" },
-  { label: "Open canonical MISSION 042", href: () => "/commercial-missions" },
-  {
-    label: "Play the real BORESLAY mission",
-    href: missionId =>
-      missionId ? `/boreslay-rally?missionId=${missionId}` : "/boreslay-rally",
-  },
-  { label: "Show the one-time phone unlock", href: () => "/commercial-missions" },
-  {
-    label: "Open DayForge Field",
-    href: missionId =>
-      missionId ? `/driver/sales-mission/${missionId}` : null,
-  },
-  {
-    label: "Complete preparation and route steps",
-    href: missionId =>
-      missionId ? `/driver/sales-mission/${missionId}` : null,
-  },
-  {
-    label: "Review the approved proposal",
-    href: missionId =>
-      missionId ? `/commercial-proposal/${missionId}` : null,
-  },
-  {
-    label: "Record the real-world visit",
-    href: missionId =>
-      missionId ? `/driver/sales-mission/${missionId}` : null,
-  },
-  { label: "Move the account to won", href: () => "/commercial-missions" },
-  { label: "Attribute the first paid order", href: () => "/commercial-pipeline" },
-  { label: "Show realized revenue", href: () => "/commercial-pipeline" },
-  { label: "Show the complete event timeline", href: () => "/commercial-missions" },
-  { label: "Open the Churn Radar recovery mission", href: () => "/churn-radar" },
-];
-
-const STATUS_STAGE: Record<string, number> = {
+const STAGE_INDEX: Record<string, number> = {
   candidate: 0,
-  selected: 0,
+  selected: 1,
   game_ready: 1,
   game_active: 2,
   game_completed: 2,
@@ -214,6 +95,159 @@ const STATUS_STAGE: Record<string, number> = {
   lost: 5,
 };
 
+const CONTROL_STEPS: Array<{
+  label: string;
+  short: string;
+  icon: IconType;
+  href: (missionId: string | null) => string | null;
+}> = [
+  {
+    label: "Scan territory",
+    short: "1",
+    icon: Radar,
+    href: () => "/territory-preview",
+  },
+  {
+    label: "Lock target",
+    short: "2",
+    icon: Target,
+    href: () => "/commercial-missions",
+  },
+  {
+    label: "Enter BORESLAY",
+    short: "3",
+    icon: Gamepad2,
+    href: missionId =>
+      missionId ? `/boreslay-rally?missionId=${missionId}` : "/boreslay-rally",
+  },
+  {
+    label: "Mission to phone",
+    short: "4",
+    icon: Phone,
+    href: () => "/commercial-missions",
+  },
+  {
+    label: "Field visit",
+    short: "5",
+    icon: Navigation,
+    href: missionId =>
+      missionId ? `/driver/sales-mission/${missionId}` : null,
+  },
+  {
+    label: "Win account",
+    short: "6",
+    icon: Trophy,
+    href: () => "/commercial-missions",
+  },
+  {
+    label: "Record revenue",
+    short: "7",
+    icon: CircleDollarSign,
+    href: () => "/commercial-pipeline",
+  },
+];
+
+const PROVIDERS: Array<{
+  key?: ProviderKey;
+  label: string;
+  note: string;
+  icon: IconType;
+  fallback: ProviderMode | "SOMETIMES" | "NOT_CONNECTED";
+}> = [
+  {
+    key: "google",
+    label: "Territory data",
+    note: "Real world · Fresh",
+    icon: Map,
+    fallback: "NOT_CONFIGURED",
+  },
+  {
+    key: "stripe",
+    label: "Billing",
+    note: "Stripe",
+    icon: WalletCards,
+    fallback: "NOT_CONFIGURED",
+  },
+  {
+    key: "email",
+    label: "Email",
+    note: "Transactional delivery",
+    icon: Mail,
+    fallback: "NOT_CONFIGURED",
+  },
+  {
+    key: "sms",
+    label: "SMS",
+    note: "Twilio",
+    icon: Phone,
+    fallback: "NOT_CONFIGURED",
+  },
+  {
+    key: "print",
+    label: "Proposal output",
+    note: "Print / PDF",
+    icon: FileText,
+    fallback: "BROWSER_PDF_FALLBACK",
+  },
+  {
+    label: "Photos",
+    note: "Field capture",
+    icon: Camera,
+    fallback: "SOMETIMES",
+  },
+  {
+    label: "Accounting export",
+    note: "QuickBooks",
+    icon: CircleDollarSign,
+    fallback: "NOT_CONNECTED",
+  },
+];
+
+const DEMO_TIMELINE = [
+  {
+    time: "10:31 AM",
+    label: "Mission 042 created",
+    note: "Territory radar scan",
+    icon: Target,
+  },
+  {
+    time: "10:32 AM",
+    label: "Westview Property Management locked as target",
+    note: "",
+    icon: Building2,
+  },
+  {
+    time: "10:33 AM",
+    label: "Mission sent to phone",
+    note: "BORESLAY rally armed",
+    icon: Phone,
+  },
+  {
+    time: "10:42 AM",
+    label: "Visit recorded in field",
+    note: "Photo + notes captured",
+    icon: Camera,
+  },
+  {
+    time: "11:07 AM",
+    label: "Proposal sent",
+    note: "Dana R. opened",
+    icon: Navigation,
+  },
+  {
+    time: "11:27 AM",
+    label: "Account won",
+    note: "$24,800 annual potential",
+    icon: Trophy,
+  },
+  {
+    time: "11:31 AM",
+    label: "Revenue recorded",
+    note: "$1,240 booked to July",
+    icon: CircleDollarSign,
+  },
+] as const;
+
 function formatMoney(cents?: number | null) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -222,7 +256,7 @@ function formatMoney(cents?: number | null) {
   }).format((cents ?? 2_480_000) / 100);
 }
 
-function humanize(value?: string | null, fallback = "Not started") {
+function humanize(value?: string | null, fallback = "Candidate") {
   if (!value) return fallback;
   return value
     .replaceAll("_", " ")
@@ -244,26 +278,36 @@ function ProviderRail({
         <ShieldCheck aria-hidden />
       </div>
       <div className="ddc-provider-list">
-        {PROVIDER_ORDER.map(key => {
-          const meta = PROVIDER_META[key];
-          const Icon = meta.icon;
-          const mode = status?.[key] ?? "NOT_CONFIGURED";
+        {PROVIDERS.map(provider => {
+          const Icon = provider.icon;
+          const mode = provider.key
+            ? (status?.[provider.key] ?? provider.fallback)
+            : provider.fallback;
+          const label =
+            mode === "BROWSER_PDF_FALLBACK"
+              ? "SOMETIMES"
+              : mode === "NOT_CONFIGURED"
+                ? "NOT CONNECTED"
+                : mode.replaceAll("_", " ");
           return (
-            <div className="ddc-provider-row" key={key}>
-              <div className="ddc-provider-icon">
+            <div className="ddc-provider-row" key={provider.label}>
+              <span className="ddc-provider-icon">
                 <Icon aria-hidden />
-              </div>
-              <div>
-                <strong>{meta.label}</strong>
-                <small>{meta.note}</small>
-              </div>
+              </span>
+              <span className="ddc-provider-copy">
+                <strong>{provider.label}</strong>
+                <small>{provider.note}</small>
+              </span>
               <span className={`ddc-provider-mode ddc-mode-${mode}`}>
-                {mode.replaceAll("_", " ")}
+                {label}
               </span>
             </div>
           );
         })}
       </div>
+      <a className="ddc-provider-matrix" href="/settings/integrations">
+        View full provider matrix
+      </a>
     </aside>
   );
 }
@@ -299,12 +343,6 @@ export default function DayforgeDemoControlPage() {
               refetch: () => Promise<unknown>;
             };
           };
-          reset: {
-            useMutation: () => {
-              mutateAsync: (input?: unknown) => Promise<unknown>;
-              isPending: boolean;
-            };
-          };
         };
       };
     }
@@ -331,40 +369,38 @@ export default function DayforgeDemoControlPage() {
   const status = statusQuery.data;
   const missionId = status?.mission?.id ?? null;
   const publicMissionCode = status?.mission?.name ?? "MISSION 042";
-  const accountName = status?.mission?.accountName ?? "Westview Property Management";
+  const accountName =
+    status?.mission?.accountName ?? "Westview Property Management";
   const decisionMaker = status?.mission?.decisionMakerName ?? "Dana R.";
   const annualValue = formatMoney(status?.mission?.estimatedAnnualValueCents);
-  const missionStatus = status?.mission?.status ?? status?.pipelineStage ?? "game_ready";
+  const missionStatus =
+    status?.mission?.status ?? status?.pipelineStage ?? "game_ready";
   const activeStage = useMemo(() => {
-    if (status?.revenueState === "attributed") return 5;
-    return STATUS_STAGE[missionStatus] ?? 1;
+    if (status?.revenueState === "attributed") return 6;
+    return STAGE_INDEX[missionStatus] ?? 1;
   }, [missionStatus, status?.revenueState]);
+  const realizedRevenue = status?.revenueState === "attributed";
 
   if (!DEMO_MODE_ENABLED) {
     return (
       <main className="ddc-disabled-page">
         <div>
           <h1>Demo mode is off</h1>
-          <p>
-            Set VITE_DAYFORGE_DEMO_MODE=true to reach this page. It is never
-            available in a normal production deploy.
-          </p>
+          <p>Set VITE_DAYFORGE_DEMO_MODE=true to reach this page.</p>
         </div>
       </main>
     );
   }
-
-  if (authLoading) {
+  if (authLoading)
     return (
       <main className="ddc-root ddc-center">
         <Loader2 className="ddc-spin" />
       </main>
     );
-  }
-
-  if (!isAuthenticated) {
-    return <LoginForm role="admin" onSuccess={() => window.location.reload()} />;
-  }
+  if (!isAuthenticated)
+    return (
+      <LoginForm role="admin" onSuccess={() => window.location.reload()} />
+    );
 
   const handleReset = async () => {
     setActionError(null);
@@ -379,19 +415,8 @@ export default function DayforgeDemoControlPage() {
     }
   };
 
-  const gateHealthy = status?.releaseGateHealthy;
-  const gateLabel =
-    gateHealthy === true
-      ? "Release gate healthy"
-      : gateHealthy === false
-        ? "Release gate needs attention"
-        : "Release gate awaiting provider configuration";
-
   return (
     <main className="ddc-root">
-      <div className="ddc-ambient ddc-ambient-one" aria-hidden />
-      <div className="ddc-ambient ddc-ambient-two" aria-hidden />
-
       <header className="ddc-commandbar">
         <Link href="/dayforge" className="ddc-brand" aria-label="DayForge home">
           <span className="ddc-brand-mark">D</span>
@@ -401,10 +426,8 @@ export default function DayforgeDemoControlPage() {
           </span>
         </Link>
         <div className="ddc-commandbar-center">
-          <span className="ddc-live-dot" />
-          <span>Isolated demo tenant</span>
-          <span className="ddc-command-divider" />
-          <span>Safe to reset</span>
+          <span className="ddc-live-dot" /> ISOLATED DEMO TENANT <i /> SAFE TO
+          RESET
         </div>
         <div className="ddc-commandbar-actions">
           <span className="ddc-mode-badge">DEMO MODE</span>
@@ -417,377 +440,373 @@ export default function DayforgeDemoControlPage() {
       <div className="ddc-shell">
         {(statusQuery.error || actionError || notice) && (
           <div className="ddc-alert-stack" aria-live="polite">
-            {statusQuery.error ? (
-              <div className="ddc-alert is-error" role="alert">
+            {statusQuery.error && (
+              <div className="ddc-alert is-error">
                 <AlertTriangle aria-hidden />
                 Could not load demo status: {statusQuery.error.message}
               </div>
-            ) : null}
-            {actionError ? (
-              <div className="ddc-alert is-error" role="alert">
-                <AlertTriangle aria-hidden /> {actionError}
+            )}
+            {actionError && (
+              <div className="ddc-alert is-error">
+                <AlertTriangle aria-hidden />
+                {actionError}
               </div>
-            ) : null}
-            {notice ? (
-              <div className="ddc-alert is-success" role="status">
-                <CheckCircle2 aria-hidden /> {notice}
+            )}
+            {notice && (
+              <div className="ddc-alert is-success">
+                <CheckCircle2 aria-hidden />
+                {notice}
               </div>
-            ) : null}
+            )}
           </div>
         )}
 
         <section className="ddc-hero" aria-labelledby="ddc-title">
-          <div className="ddc-hero-copy">
+          <article className="ddc-mission-panel">
             <span className="ddc-eyebrow">
-              <Sparkles aria-hidden /> CANONICAL REVENUE MISSION
+              <Zap aria-hidden /> CANONICAL REVENUE MISSION
             </span>
-            <div className="ddc-mission-code-row">
-              <h1 id="ddc-title">{publicMissionCode}</h1>
-              <span>STABLE PUBLIC CODE</span>
-            </div>
-            <p className="ddc-hero-deck">
-              Watch one nearby business move from territory intelligence to a
-              real field visit—and keep the same mission identity the whole way.
+            <h1 id="ddc-title">
+              {publicMissionCode.split(" ")[0]}
+              <br />
+              {publicMissionCode.split(" ").slice(1).join(" ")}
+            </h1>
+            <span className="ddc-stable-code">STABLE PUBLIC CODE</span>
+            <p className="ddc-mission-deck">
+              <b>Find. Prove. Win.</b>
+              <br />
+              One nearby business. One real visit.
+              <br />
+              One recorded result.
             </p>
 
             <div className="ddc-account-dossier">
-              <div className="ddc-account-icon">
-                <Building2 aria-hidden />
-              </div>
-              <div className="ddc-account-name">
-                <small>TOP-RANKED COMMERCIAL ACCOUNT</small>
-                <strong>{accountName}</strong>
-                <span>15 buildings · Property management</span>
-              </div>
-              <div className="ddc-account-value">
-                <small>POTENTIAL ANNUAL VALUE</small>
-                <strong>{annualValue}</strong>
-                <span>High-confidence opportunity</span>
-              </div>
-            </div>
-
-            <div className="ddc-person-row">
-              <div>
-                <UserRound aria-hidden />
+              <small>TOP OPPORTUNITY</small>
+              <div className="ddc-account-main">
+                <span className="ddc-account-icon">
+                  <Building2 aria-hidden />
+                </span>
                 <span>
-                  <small>DECISION-MAKER</small>
+                  <strong>{accountName}</strong>
+                  <small>15 buildings · 0.2 miles</small>
+                </span>
+                <span className="ddc-account-value">
+                  <strong>{annualValue}</strong>
+                  <small>Potential value</small>
+                </span>
+              </div>
+              <div className="ddc-confidence">
+                <Compass aria-hidden /> High confidence opportunity
+              </div>
+              <div className="ddc-person-row">
+                <span>
+                  <UserRound aria-hidden />
+                  <small>DECISION MAKER</small>
                   <strong>{decisionMaker}</strong>
                   <em>Operations Manager</em>
                 </span>
-              </div>
-              <div>
-                <Route aria-hidden />
                 <span>
+                  <Route aria-hidden />
                   <small>ROUTE FIT</small>
                   <strong>0.2 miles</strong>
-                  <em>From the active route</em>
+                  <em>From current location</em>
                 </span>
               </div>
             </div>
 
-            <div className="ddc-hero-actions">
-              <a className="ddc-primary-action" href="/territory-preview">
-                <Radar aria-hidden /> Open territory intelligence
-                <ArrowRight aria-hidden />
-              </a>
-              <a
-                className="ddc-secondary-action"
-                href={
-                  missionId
-                    ? `/boreslay-rally?missionId=${missionId}`
-                    : "/boreslay-rally"
-                }
-              >
-                <Gamepad2 aria-hidden /> Play BORESLAY
-              </a>
-            </div>
-
+            <a className="ddc-primary-action" href="/territory-preview">
+              <Crosshair aria-hidden /> Scan territory
+            </a>
+            <a
+              className="ddc-secondary-action"
+              href={
+                missionId
+                  ? `/boreslay-rally?missionId=${missionId}`
+                  : "/boreslay-rally"
+              }
+            >
+              <Gamepad2 aria-hidden /> Open BORESLAY
+            </a>
             <div className="ddc-continuity-strip">
               <LockKeyhole aria-hidden />
               <span>
-                <b>Mission continuity locked.</b> Internal mission ID {missionId ?? "—"}
-                may change after reset. The public code never does.
+                <b>Mission continuity locked.</b>
+                <br />
+                Internal mission ID may change after reset.
+                <br />
+                The public code never does.
               </span>
             </div>
-          </div>
+          </article>
 
-          <div className="ddc-map-stage">
-            <div className="ddc-map-frame">
-              <img
-                src={TERRITORY_MAP_ASSET}
-                alt="DayForge territory map highlighting Westview Property Management near the active laundry route"
-              />
-              <div className="ddc-map-ribbon">
-                <span className="ddc-map-radar-dot" />
-                Radar found the account before you drove past it.
-              </div>
-              <div className="ddc-map-legend">
-                <span><i className="is-green" /> Best-fit opportunity</span>
-                <span><i className="is-orange" /> Nearby prospects</span>
-                <span><i className="is-route" /> Active route</span>
-              </div>
+          <article className="ddc-map-frame">
+            <div className="ddc-map-toolbar">
+              <span className="ddc-radar-pulse" /> Radar live: scanning 0.5 mi
+              radius…
             </div>
-          </div>
+            <div className="ddc-map-legend">
+              <span>
+                <i className="best" />
+                Best fit
+              </span>
+              <span>
+                <i className="good" />
+                Good
+              </span>
+              <span>
+                <i className="watch" />
+                Watch
+              </span>
+              <span>
+                <i className="poor" />
+                Not a fit
+              </span>
+            </div>
+            <img
+              src={TERRITORY_MAP_ASSET}
+              alt="Dark territory map highlighting Westview Property Management"
+            />
+            <span className="ddc-map-radar" aria-hidden>
+              <i />
+              <i />
+              <i />
+              <Building2 />
+            </span>
+            <span className="ddc-map-route" aria-hidden />
+            <span className="ddc-pin pin-62">62</span>
+            <span className="ddc-pin pin-48">48</span>
+            <span className="ddc-pin pin-18">18</span>
+            <span className="ddc-pin pin-72">72</span>
+            <span className="ddc-pin pin-38">38</span>
+            <span className="ddc-pin pin-26">26</span>
+            <span className="ddc-you-pin">
+              <Navigation aria-hidden />
+            </span>
+            <div className="ddc-map-account-card">
+              <strong>{accountName}</strong>
+              <span>15 buildings · 0.2 mi</span>
+              <small>Potential value</small>
+              <b>{annualValue}</b>
+            </div>
+            <div className="ddc-map-controls">
+              <button aria-label="Reset map bearing">
+                <Compass />
+              </button>
+              <button aria-label="Zoom in">
+                <Plus />
+              </button>
+              <button aria-label="Zoom out">
+                <Minus />
+              </button>
+            </div>
+            <div className="ddc-map-footer">
+              <span>
+                <small>YOU ARE HERE</small>
+                <strong>Los Angeles, CA</strong>
+              </span>
+              <span>
+                <small>BEST NEXT STEP</small>
+                <strong>Visit {accountName}</strong>
+              </span>
+              <a
+                href="/territory-preview"
+                aria-label="Open territory intelligence"
+              >
+                <ArrowRight />
+              </a>
+            </div>
+          </article>
 
           <ProviderRail status={status?.providerStatus} />
         </section>
 
-        <section className="ddc-journey-rail" aria-label="DayForge mission journey">
-          <div className="ddc-journey-line" aria-hidden>
-            <span style={{ width: `${(activeStage / (JOURNEY_STEPS.length - 1)) * 100}%` }} />
-          </div>
-          {JOURNEY_STEPS.map((step, index) => {
-            const Icon = step.icon;
-            const href = step.href(missionId);
-            const state = index < activeStage ? "is-complete" : index === activeStage ? "is-active" : "is-upcoming";
-            const content = (
-              <>
-                <span className="ddc-journey-icon"><Icon aria-hidden /></span>
-                <small>{step.eyebrow}</small>
-                <strong>{step.label}</strong>
-                {index < activeStage ? <Check className="ddc-journey-check" aria-hidden /> : null}
-              </>
-            );
-            return href ? (
-              <a className={`ddc-journey-step ${state}`} href={href} key={step.label}>
-                {content}
-              </a>
-            ) : (
-              <div className={`ddc-journey-step ${state}`} key={step.label}>
-                {content}
-              </div>
-            );
-          })}
-        </section>
-
-        <section className="ddc-showcase-grid">
-          <article className="ddc-showcase-card ddc-battle-card">
+        <section className="ddc-story-grid">
+          <article className="ddc-battle-card">
             <div className="ddc-card-kicker">
               <Zap aria-hidden /> BORESLAY / ACTION ENGINE
             </div>
             <div className="ddc-battle-image">
-              <img src={rallyScreenshot} alt="The real BORESLAY Rally game" />
+              <img
+                src={rallyScreenshot}
+                alt="BORESLAY Spark versus Clockhead mission"
+              />
+              <div className="ddc-battle-hud">
+                <span>SPARK&nbsp; ❤️❤️❤️❤️</span>
+                <b>⚡⚡⚡⚡ CLOCKHEAD</b>
+              </div>
               <div className="ddc-battle-overlay">
                 <span>{publicMissionCode}</span>
-                <strong>Beat hesitation before the visit.</strong>
-                <p>
-                  Spark vs. Clockhead turns the account into a commitment you can
-                  act on now—not another dashboard card you ignore.
-                </p>
-                <a href={missionId ? `/boreslay-rally?missionId=${missionId}` : "/boreslay-rally"}>
-                  Enter the battle <ArrowRight aria-hidden />
-                </a>
-              </div>
-            </div>
-          </article>
-
-          <article className="ddc-showcase-card ddc-phone-card">
-            <div className="ddc-card-kicker">
-              <Phone aria-hidden /> DAYFORGE FIELD
-            </div>
-            <div className="ddc-phone-layout">
-              <div className="ddc-phone-shell" aria-label="Mission 042 phone preview">
-                <div className="ddc-phone-speaker" />
-                <div className="ddc-phone-screen">
-                  <div className="ddc-phone-topline">
-                    <span>9:41</span>
-                    <span>MISSION LIVE</span>
-                  </div>
-                  <small>{publicMissionCode}</small>
-                  <h3>{accountName}</h3>
-                  <strong>{annualValue}</strong>
-                  <div className="ddc-phone-divider" />
-                  <ul>
-                    <li><Check aria-hidden /> Pick up approved proposal</li>
-                    <li><Check aria-hidden /> Ask for {decisionMaker}</li>
-                    <li><Check aria-hidden /> Lead with centralized laundry</li>
-                    <li><Check aria-hidden /> Record the real outcome</li>
-                  </ul>
-                  <a href={missionId ? `/driver/sales-mission/${missionId}` : "/commercial-missions"}>
-                    Start field mission
+                <strong>
+                  Beat hesitation before
+                  <br />
+                  the visit.
+                </strong>
+                <p>Lock the target. Land the visit. Win the account.</p>
+                <div>
+                  <a
+                    href={
+                      missionId
+                        ? `/boreslay-rally?missionId=${missionId}`
+                        : "/boreslay-rally"
+                    }
+                  >
+                    Enter the battle <ChevronRight />
+                  </a>
+                  <a className="how" href="/boreslay-rally">
+                    How to play
                   </a>
                 </div>
               </div>
-              <div className="ddc-phone-copy">
-                <span>THE MISSION LEAVES THE SCREEN</span>
-                <h2>From “I should go” to “I’m on the way.”</h2>
-                <p>
-                  The phone carries the same account, value, decision-maker,
-                  proposal, and mission code into the real-world visit.
-                </p>
-                <dl>
-                  <div><dt>Assignment</dt><dd>{status?.fieldAssignment ?? "Demo Driver"}</dd></div>
-                  <div><dt>Proposal</dt><dd>{humanize(status?.proposalStatus, "Ready to generate")}</dd></div>
-                  <div><dt>Mission state</dt><dd>{humanize(missionStatus)}</dd></div>
-                </dl>
-              </div>
             </div>
           </article>
 
-          <article className="ddc-showcase-card ddc-proof-card">
+          <article className="ddc-phone-card">
             <div className="ddc-card-kicker">
-              <Gauge aria-hidden /> BUSINESS PROOF
+              <Phone aria-hidden /> MISSION ESCAPES TO PHONE
             </div>
-            <h2>Make the business result impossible to fake.</h2>
-            <div className="ddc-proof-stack">
-              <div>
-                <span>Potential contract value</span>
-                <strong>{annualValue}</strong>
-                <small>Estimated from the ranked opportunity</small>
+            <div className="ddc-phone-shell">
+              <span className="ddc-phone-notch" />
+              <div className="ddc-phone-time">
+                10:31<small>Tuesday, July 15</small>
               </div>
-              <div>
-                <span>Pipeline state</span>
-                <strong>{humanize(status?.pipelineStage, "Mission created")}</strong>
-                <small>Updated by real mission events</small>
+              <div className="ddc-phone-notice">
+                <span className="ddc-mini-brand">D</span>
+                <small>
+                  DAYFORGE <em>now</em>
+                </small>
+                <strong>
+                  {publicMissionCode}
+                  <br />
+                  Visit {accountName}
+                </strong>
               </div>
-              <div>
-                <span>Realized revenue</span>
-                <strong>{status?.revenueState === "attributed" ? "Attributed" : "$0 until paid"}</strong>
-                <small>No invented revenue before a paid order</small>
-              </div>
+              <span className="ddc-phone-slide">Slide to open mission</span>
             </div>
-            <a className="ddc-proof-link" href="/commercial-pipeline">
-              Open the revenue pipeline <ExternalLink aria-hidden />
-            </a>
           </article>
-        </section>
 
-        <section className="ddc-operations-grid">
-          <article className="ddc-operations-card ddc-presenter-card">
-            <div className="ddc-section-heading">
-              <div>
-                <span>PRESENTER PATH</span>
-                <h2>Tell the whole story in fifteen clean moves.</h2>
-              </div>
-              <div className="ddc-progress-chip">
-                <Activity aria-hidden /> {humanize(missionStatus)}
-              </div>
+          <article className="ddc-timeline-card">
+            <div className="ddc-card-kicker">
+              <Clock3 aria-hidden /> LIVE AUDIT TRAIL
             </div>
-            <ol className="ddc-presenter-list">
-              {PRESENTER_CHECKLIST.map((step, index) => {
-                const href = step.href(missionId);
+            <ol className="ddc-timeline">
+              {DEMO_TIMELINE.map((item, index) => {
+                const Icon = item.icon;
+                const complete = index <= activeStage;
                 return (
-                  <li key={step.label}>
-                    <span className="ddc-presenter-index">{String(index + 1).padStart(2, "0")}</span>
-                    <span>{step.label}</span>
-                    {href ? (
-                      <a href={href} target="_blank" rel="noreferrer">
-                        Open <ChevronRight aria-hidden />
-                      </a>
-                    ) : (
-                      <em>Needs mission</em>
-                    )}
+                  <li
+                    className={complete ? "is-complete" : ""}
+                    key={item.label}
+                  >
+                    <span className="ddc-timeline-icon">
+                      <Icon />
+                    </span>
+                    <i />
+                    <div>
+                      <time>{item.time}</time>
+                      <strong>{item.label}</strong>
+                      {item.note && <small>{item.note}</small>}
+                    </div>
                   </li>
                 );
               })}
             </ol>
           </article>
 
-          <aside className="ddc-side-stack">
-            <article className="ddc-operations-card ddc-continuity-card">
-              <div className="ddc-section-heading compact">
-                <div>
-                  <span>MISSION CONTINUITY</span>
-                  <h2>One public story. One real database identity.</h2>
-                </div>
-                <LockKeyhole aria-hidden />
-              </div>
-              <div className="ddc-continuity-grid">
-                <div>
-                  <small>PUBLIC CODE</small>
-                  <strong>{publicMissionCode}</strong>
-                  <span>Stable across resets</span>
-                </div>
-                <div>
-                  <small>INTERNAL ID</small>
-                  <strong>{missionId ?? "—"}</strong>
-                  <span>Database identity only</span>
-                </div>
-                <div>
-                  <small>ACCOUNT</small>
-                  <strong>{accountName}</strong>
-                  <span>Same on every surface</span>
-                </div>
-                <div>
-                  <small>TENANT</small>
-                  <strong>{status?.tenantSlug ?? "sunset-laundry-demo"}</strong>
-                  <span>Isolated demo data</span>
-                </div>
-              </div>
-            </article>
-
-            <article className="ddc-operations-card ddc-events-card">
-              <div className="ddc-section-heading compact">
-                <div>
-                  <span>LIVE AUDIT TRAIL</span>
-                  <h2>Every handoff leaves evidence.</h2>
-                </div>
-                <Clock3 aria-hidden />
-              </div>
-              {statusQuery.isLoading ? (
-                <div className="ddc-loading-row"><Loader2 className="ddc-spin" /> Loading mission events…</div>
-              ) : status?.recentEvents?.length ? (
-                <ul className="ddc-events">
-                  {status.recentEvents.slice(0, 8).map(event => (
-                    <li key={event.id}>
-                      <span className="ddc-event-dot" />
-                      <div>
-                        <strong>{event.label}</strong>
-                        <time>{new Date(event.occurredAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="ddc-empty">Reset the demo, then launch Mission 042 to populate the timeline.</p>
-              )}
-            </article>
-
-            <article className="ddc-operations-card ddc-reset-card">
+          <article className="ddc-proof-card">
+            <div className="ddc-card-kicker">
+              <CircleDollarSign aria-hidden /> BUSINESS PROOF
+            </div>
+            <h2>
+              Real business result.
+              <br />
+              Impossible to fake.
+            </h2>
+            <div className="ddc-proof-stack">
               <div>
-                <span>RESETTABLE, ISOLATED, SAFE</span>
-                <h2>Start fresh without touching production tenants.</h2>
-                <p>
-                  Reset creates a new internal mission ID and restores the same
-                  public MISSION 042 story.
-                </p>
+                <small>POTENTIAL CONTRACT VALUE</small>
+                <strong>{annualValue}</strong>
+                <span>Estimated from 15 buildings</span>
               </div>
-              <div className="ddc-reset-actions">
-                {!confirmingReset ? (
-                  <button type="button" onClick={() => setConfirmingReset(true)}>
-                    <RefreshCw aria-hidden /> Reset July demo
-                  </button>
-                ) : (
-                  <div className="ddc-reset-confirm">
-                    <strong>Reset the isolated demo tenant?</strong>
-                    <div>
-                      <button
-                        type="button"
-                        className="is-confirm"
-                        disabled={resetMutation.isPending}
-                        onClick={() => void handleReset()}
-                      >
-                        {resetMutation.isPending ? <Loader2 className="ddc-spin" /> : <RefreshCw aria-hidden />}
-                        Confirm reset
-                      </button>
-                      <button
-                        type="button"
-                        className="is-cancel"
-                        disabled={resetMutation.isPending}
-                        onClick={() => setConfirmingReset(false)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
+              <div>
+                <small>PIPELINE STAGE</small>
+                <strong>{humanize(status?.pipelineStage, "Customer")}</strong>
+                <span>{humanize(status?.proposalStatus, "Proposal sent")}</span>
               </div>
-              <div className={`ddc-release-gate ${gateHealthy === true ? "is-healthy" : gateHealthy === false ? "is-warning" : "is-neutral"}`}>
-                <ShieldCheck aria-hidden /> {gateLabel}
+              <div>
+                <small>REALIZED REVENUE</small>
+                <strong>{realizedRevenue ? "$1,240" : "$0 until paid"}</strong>
+                {realizedRevenue && <b>RECORDED</b>}
+                <span>
+                  {realizedRevenue
+                    ? "First month services"
+                    : "Awaiting a paid order"}
+                </span>
               </div>
-            </article>
-          </aside>
+            </div>
+            <a href="/commercial-pipeline">
+              Open revenue pipeline <ExternalLink />
+            </a>
+          </article>
         </section>
+
+        <nav className="ddc-presenter-controls" aria-label="Presenter controls">
+          <span className="ddc-controls-label">PRESENTER CONTROLS</span>
+          <div className="ddc-control-flow">
+            {CONTROL_STEPS.map((step, index) => {
+              const href = step.href(missionId);
+              const state =
+                index < activeStage
+                  ? "is-complete"
+                  : index === activeStage
+                    ? "is-active"
+                    : "";
+              const content = (
+                <>
+                  <span className="ddc-control-number">
+                    {index === 0 ? <step.icon /> : step.short}
+                  </span>
+                  <span>{step.label}</span>
+                  {index < CONTROL_STEPS.length - 1 && (
+                    <ArrowRight className="ddc-flow-arrow" />
+                  )}
+                </>
+              );
+              return href ? (
+                <a className={state} href={href} key={step.label}>
+                  {content}
+                </a>
+              ) : (
+                <span className={state} key={step.label}>
+                  {content}
+                </span>
+              );
+            })}
+          </div>
+          {!confirmingReset ? (
+            <button
+              className="ddc-reset-button"
+              type="button"
+              onClick={() => setConfirmingReset(true)}
+            >
+              <RefreshCw /> Reset July demo
+            </button>
+          ) : (
+            <div className="ddc-reset-confirm">
+              <button
+                disabled={resetMutation.isPending}
+                onClick={() => void handleReset()}
+              >
+                {resetMutation.isPending ? (
+                  <Loader2 className="ddc-spin" />
+                ) : (
+                  <Check />
+                )}{" "}
+                Confirm
+              </button>
+              <button onClick={() => setConfirmingReset(false)}>Cancel</button>
+            </div>
+          )}
+        </nav>
       </div>
     </main>
   );
