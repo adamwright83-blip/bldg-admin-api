@@ -89,7 +89,8 @@ export default function DigitalReceiptPage() {
 
   /** Customer’s original order placement time (`orders.createdAt`), not charge time. */
   const orderPlaced = order.createdAt ? new Date(order.createdAt) : new Date();
-  const paidAt = order.paid && order.updatedAt ? new Date(order.updatedAt) : null;
+  const paidAt = order.paid && order.paidAt ? new Date(order.paidAt) : null;
+  const paymentLabel = order.paymentSource === "outside" ? paymentMethodLabel(order.paymentMethod) : "Card";
   const dueStr =
     order.deliveryDate
       ? (() => {
@@ -153,9 +154,7 @@ export default function DigitalReceiptPage() {
             </p>
             <p className="mt-1">
               <span className="text-black/50">Payment: </span>
-              {paidAt
-                ? `${formatReceiptDate(paidAt)}, Card`
-                : "Pending"}
+              {paidAt ? `${formatReceiptDate(paidAt)}, Paid via ${paymentLabel}` : "Pending"}
             </p>
           </div>
         </div>
@@ -230,4 +229,9 @@ export default function DigitalReceiptPage() {
       </div>
     </div>
   );
+}
+
+function paymentMethodLabel(method: string | null | undefined): string {
+  if (!method) return "outside payment";
+  return method === "ach" ? "ACH" : method.charAt(0).toUpperCase() + method.slice(1);
 }

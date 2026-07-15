@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users,
   orders, InsertOrder, Order, operationsEvents,
+  customerPayments, vendorPayments, paymentAuditEvents,
   vendors, InsertVendor, Vendor,
   vendorUsers, InsertVendorUser, VendorUser,
   vendorServiceCoverage, InsertVendorServiceCoverage, VendorServiceCoverage,
@@ -989,6 +990,30 @@ export async function updateOrderIntake(
   }
 
   await db.update(orders).set(patch).where(eq(orders.id, orderId));
+}
+
+export type OutsidePaymentInput = { orderId: number; customerMethod: "zelle" | "cash" | "check" | "other"; customerAmountCents: number; customerReceivedAt: Date; customerReferenceNote?: string; recordedBy: string; vendorPayment?: { vendorId: number; method: "zelle" | "cash" | "check" | "ach" | "other"; amountCents: number; paidAt: Date; referenceNote?: string } };
+
+/** Atomically records outside customer/vendor payment truth. No provider code is reachable here. */
+export async function recordOutsidePayment(input: OutsidePaymentInput) {
+  const db = await getDb(); if (!db) throw new Error("Database not available");
+  return db.transaction(async tx => {
+    const [order] = await tx.select().from(orders).where(eq(orders.id, input.orderId)).limit(1).for("update");
+    if (!order) throw new Error("Order not found");
+    if (order.paid) throw new Error("Order is already paid; a second payment cannot be recorded.");
+    if (input.vendorPayment && order.vendorId !== input.vendorPayment.vendorId) throw new Error("Vendor payment must match the vendor assigned to the order.");
+    const customerInsert = await tx.insert(customerPayments).values({ orderId: order.id, source: "outside", method: input.customerMethod, amountCents: input.customerAmountCents, receivedAt: input.customerReceivedAt, referenceNote: input.customerReferenceNote?.trim() || null, recordedBy: input.recordedBy });
+    const customerPaymentId = Number(customerInsert[0].insertId);
+    await tx.insert(paymentAuditEvents).values({ orderId: order.id, eventType: "outside_customer_payment_recorded", customerPaymentId, actorId: input.recordedBy, detailsJson: { method: input.customerMethod, amountCents: input.customerAmountCents } });
+    let vendorPaymentId: number | null = null;
+    if (input.vendorPayment) {
+      const vendorInsert = await tx.insert(vendorPayments).values({ orderId: order.id, vendorId: input.vendorPayment.vendorId, source: "outside", method: input.vendorPayment.method, amountCents: input.vendorPayment.amountCents, paidAt: input.vendorPayment.paidAt, referenceNote: input.vendorPayment.referenceNote?.trim() || null, recordedBy: input.recordedBy });
+      vendorPaymentId = Number(vendorInsert[0].insertId);
+      await tx.insert(paymentAuditEvents).values({ orderId: order.id, eventType: "outside_vendor_payment_recorded", vendorPaymentId, actorId: input.recordedBy, detailsJson: { vendorId: input.vendorPayment.vendorId, method: input.vendorPayment.method, amountCents: input.vendorPayment.amountCents } });
+    }
+    await tx.update(orders).set({ paid: true, paidAt: input.customerReceivedAt, total: (input.customerAmountCents / 100).toFixed(2), status: "processing", paymentSource: "outside", paymentMethod: input.customerMethod, stripePaymentIntentId: null }).where(eq(orders.id, order.id));
+    return { order, customerPaymentId, vendorPaymentId };
+  });
 }
 
 export async function searchCustomerByPhone(

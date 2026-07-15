@@ -97,6 +97,8 @@ export const orders = mysqlTable("orders", {
   paid: boolean("paid").default(false).notNull(),
   /** Set when payment succeeds (Stripe PI time on charge); used for "Collected today" — not `updatedAt`. */
   paidAt: timestamp("paidAt"),
+  paymentSource: mysqlEnum("paymentSource", ["stripe", "outside"]),
+  paymentMethod: varchar("paymentMethod", { length: 32 }),
 
   /* First-paid portal enrollment */
   isFirstPaidOrder: boolean("isFirstPaidOrder").default(false).notNull(),
@@ -130,6 +132,32 @@ export const orders = mysqlTable("orders", {
 
 export type Order = typeof orders.$inferSelect;
 export type InsertOrder = typeof orders.$inferInsert;
+
+export const customerPayments = mysqlTable("customer_payments", {
+  id: int("id").autoincrement().primaryKey(), orderId: int("orderId").notNull(),
+  source: mysqlEnum("source", ["stripe", "outside"]).notNull(),
+  method: mysqlEnum("method", ["zelle", "cash", "check", "other"]).notNull(),
+  amountCents: int("amountCents").notNull(), receivedAt: timestamp("receivedAt").notNull(),
+  referenceNote: text("referenceNote"), recordedBy: varchar("recordedBy", { length: 128 }).notNull(),
+  recordedAt: timestamp("recordedAt").defaultNow().notNull(),
+}, table => ({ orderUnique: uniqueIndex("uq_customer_payments_order").on(table.orderId) }));
+
+export const vendorPayments = mysqlTable("vendor_payments", {
+  id: int("id").autoincrement().primaryKey(), orderId: int("orderId").notNull(), vendorId: int("vendorId").notNull(),
+  source: mysqlEnum("source", ["stripe", "outside"]).notNull(),
+  method: mysqlEnum("method", ["zelle", "cash", "check", "ach", "other"]).notNull(),
+  amountCents: int("amountCents").notNull(), paidAt: timestamp("paidAt").notNull(),
+  referenceNote: text("referenceNote"), recordedBy: varchar("recordedBy", { length: 128 }).notNull(),
+  recordedAt: timestamp("recordedAt").defaultNow().notNull(),
+}, table => ({ orderUnique: uniqueIndex("uq_vendor_payments_order").on(table.orderId) }));
+
+export const paymentAuditEvents = mysqlTable("payment_audit_events", {
+  id: int("id").autoincrement().primaryKey(), orderId: int("orderId").notNull(),
+  eventType: mysqlEnum("eventType", ["outside_customer_payment_recorded", "outside_vendor_payment_recorded"]).notNull(),
+  customerPaymentId: int("customerPaymentId"), vendorPaymentId: int("vendorPaymentId"),
+  actorId: varchar("actorId", { length: 128 }).notNull(), detailsJson: json("detailsJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => ({ eventUnique: uniqueIndex("uq_payment_audit_order_event").on(table.orderId, table.eventType) }));
 
 export const operationsEvents = mysqlTable(
   "operations_events",

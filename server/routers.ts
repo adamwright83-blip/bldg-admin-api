@@ -88,6 +88,7 @@ import {
   bulkApplyCatalogImport,
   getCatalogItemBySlugForTenant,
   resolveActiveCatalogItemBySlugOrName,
+  recordOutsidePayment,
 } from "./db";
 import {
   normalizeCatalogCategory,
@@ -678,6 +679,7 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const order = await getOrderById(input.orderId);
         if (!order) throw new Error("Order not found");
+        if (order.paid) throw new Error("Paid orders cannot be changed through intake.");
 
         return { portalWelcomeUrl: await createPortalWelcomeUrl(order) };
       }),
@@ -2966,6 +2968,26 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    /** Record customer and optional vendor payment outside Stripe. */
+    recordOutsidePayment: protectedProcedure
+      .input(z.object({
+        orderId: z.number().int().positive(), customerMethod: z.enum(["zelle", "cash", "check", "other"]),
+        customerAmountCents: z.number().int().positive(), customerReceivedAt: z.coerce.date(), customerReferenceNote: z.string().max(1000).optional(),
+        vendorPayment: z.object({ vendorId: z.number().int().positive(), method: z.enum(["zelle", "cash", "check", "ach", "other"]), amountCents: z.number().int().positive(), paidAt: z.coerce.date(), referenceNote: z.string().max(1000).optional() }).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const recordedBy = String(ctx.user?.id ?? ctx.user?.email ?? "admin");
+        try {
+          const result = await recordOutsidePayment({ ...input, recordedBy });
+          try { await writeOrderToSheet(result.order, input.customerAmountCents); }
+          catch (err) { console.warn("[Sheets] Outside-payment revenue write failed:", err); }
+          const vendor = input.vendorPayment ? await getVendorById(input.vendorPayment.vendorId) : null;
+          return { success: true as const, amountCents: input.customerAmountCents, method: input.customerMethod, vendorPayment: input.vendorPayment ? { vendorName: vendor?.name ?? "Assigned vendor", method: input.vendorPayment.method, amountCents: input.vendorPayment.amountCents } : null };
+        } catch (err) {
+          throw new TRPCError({ code: String((err as Error).message).includes("already paid") ? "CONFLICT" : "BAD_REQUEST", message: (err as Error).message });
+        }
+      }),
+
     /** Charge card off-session */
     chargeCard: protectedProcedure
       .input(
@@ -3034,7 +3056,7 @@ export const appRouter = router({
           // Stripe rather than trusting the cached vendor flags.
           const vendor = order.vendorId
             ? await getVendorById(order.vendorId)
-            : await getVendorForOrder(order.buildingSlug, order.serviceType);
+            : order.buildingSlug ? await getVendorForOrder(order.buildingSlug, order.serviceType) : null;
           if (!vendor) {
             throw new TRPCError({
               code: "PRECONDITION_FAILED",
@@ -3146,6 +3168,8 @@ export const appRouter = router({
           await updateOrderIntake(input.orderId, {
             paid: true,
             paidAt,
+            paymentSource: "stripe",
+            paymentMethod: "card",
             stripePaymentIntentId: paymentIntent.id,
             total: centsToDollars(input.amountCents),
             status: "processing",

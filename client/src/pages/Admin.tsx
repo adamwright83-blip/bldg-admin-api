@@ -2479,6 +2479,8 @@ function IntakeDetail({
   });
   const saveIntake = trpc.admin.saveIntake.useMutation();
   const chargeCard = trpc.admin.chargeCard.useMutation();
+  const recordOutsidePayment = trpc.admin.recordOutsidePayment.useMutation();
+  const vendorsQuery = trpc.admin.listVendors.useQuery();
   const generatePortalToken = trpc.orders.generatePortalToken.useMutation();
 
   const catalogQuery = trpc.admin.catalog.list.useQuery(
@@ -2517,11 +2519,26 @@ function IntakeDetail({
   const [discountPercent, setDiscountPercent] = useState("0");
   const [chargeResult, setChargeResult] = useState<{
     success: boolean;
+    kind?: "card" | "outside";
     error?: string;
     isFirstPaidOrder?: boolean;
     receiptUrl?: string;
     portalWelcomeUrl?: string;
+    method?: string;
+    vendorPayment?: { vendorName: string; method: string } | null;
   } | null>(null);
+  const today = new Date().toLocaleDateString("en-CA");
+  const [outsideOpen, setOutsideOpen] = useState(false);
+  const [outsideMethod, setOutsideMethod] = useState<"zelle" | "cash" | "check" | "other">("zelle");
+  const [outsideAmount, setOutsideAmount] = useState("");
+  const [outsideDate, setOutsideDate] = useState(today);
+  const [outsideNote, setOutsideNote] = useState("");
+  const [vendorPaid, setVendorPaid] = useState(false);
+  const [vendorMethod, setVendorMethod] = useState<"zelle" | "cash" | "check" | "ach" | "other">("zelle");
+  const [vendorAmount, setVendorAmount] = useState("");
+  const [vendorDate, setVendorDate] = useState(today);
+  const [vendorNote, setVendorNote] = useState("");
+  const [outsideConfirmed, setOutsideConfirmed] = useState(false);
 
   const hydratedOrderId = useRef<number | null>(null);
   useEffect(() => {
@@ -2649,6 +2666,21 @@ function IntakeDetail({
     });
   };
 
+  const handleOutsidePayment = async () => {
+    if (!order || !outsideConfirmed) return;
+    const customerAmountCents = Math.round(Number(outsideAmount) * 100);
+    const vendorAmountCents = Math.round(Number(vendorAmount) * 100);
+    if (customerAmountCents <= 0 || (vendorPaid && (!order.vendorId || vendorAmountCents <= 0))) {
+      setChargeResult({ success: false, error: "Enter valid customer and vendor payment details." });
+      return;
+    }
+    try {
+      await saveIntake.mutateAsync({ orderId: order.id, weightLbs: isWF ? effectiveWeightLbs : undefined, subtotal: centsToDollars(totals.subtotalCents), discountPercent: discountPercent || "0", total: centsToDollars(customerAmountCents), upchargesJson: isWF ? { ...buildSelectedWashFoldUpcharges(selectedUpcharges), ...buildSelectedWashFoldFlatRates(flatRateQtys) } : undefined, drycleanItemsJson: !isWF ? buildDrycleanLineItems(catalogRows, dcQtys, order.drycleanItemsJson as Record<string, DryCleanEntry> | null | undefined) : undefined });
+      const result = await recordOutsidePayment.mutateAsync({ orderId: order.id, customerMethod: outsideMethod, customerAmountCents, customerReceivedAt: new Date(`${outsideDate}T12:00:00`), customerReferenceNote: outsideNote || undefined, vendorPayment: vendorPaid ? { vendorId: order.vendorId!, method: vendorMethod, amountCents: vendorAmountCents, paidAt: new Date(`${vendorDate}T12:00:00`), referenceNote: vendorNote || undefined } : undefined });
+      setChargeResult({ success: true, kind: "outside", method: result.method, vendorPayment: result.vendorPayment });
+    } catch (err) { setChargeResult({ success: false, error: err instanceof Error ? err.message : "Could not record payment." }); }
+  };
+
   if (isLoading || !order)
     return (
       <Loader2 className="animate-spin w-6 h-6 text-black/30 mx-auto mt-10" />
@@ -2660,11 +2692,12 @@ function IntakeDetail({
       <div className="max-w-xl">
         <div className="text-center py-12">
           <Check className="w-16 h-16 mx-auto mb-4 text-black" />
-          <p className="text-xl font-semibold mb-1">Charged successfully.</p>
+          <p className="text-xl font-semibold mb-1">{chargeResult.kind === "outside" ? `PAID — $${outsideAmount}` : "Charged successfully."}</p>
           <p className="text-black/50 text-sm">
             ${centsToDollars(totals.totalCents)} — {order.firstName}{" "}
             {order.lastName}
           </p>
+          {chargeResult.kind === "outside" && <div className="mt-3 text-sm text-black/70"><p>Method: {paymentMethodLabel(chargeResult.method)}</p>{chargeResult.vendorPayment && <p>Vendor payout: Paid to {chargeResult.vendorPayment.vendorName} via {paymentMethodLabel(chargeResult.vendorPayment.method)}</p>}</div>}
 
           <a
             href={`/receipt/${order.id}`}
@@ -2851,8 +2884,23 @@ function IntakeDetail({
         {chargeResult && !chargeResult.success ? "Retry Card" : "Charge Card"} —
         ${centsToDollars(totals.totalCents)}
       </Button>
+      <Button variant="outline" className="mt-3 w-full border-black text-black" disabled={order.paid} onClick={() => { setOutsideAmount(centsToDollars(totals.totalCents)); setVendorAmount(centsToDollars(totals.totalCents)); setOutsideOpen(v => !v); }}>Record Outside Payment</Button>
+      {outsideOpen && <div className="mt-4 space-y-4 rounded-md border border-black/20 p-4">
+        <h3 className="text-sm font-semibold">CUSTOMER PAYMENT</h3>
+        <p className="text-sm font-medium text-amber-800">This marks the order paid without charging the customer’s card.</p>
+        <PaymentFields method={outsideMethod} setMethod={v => setOutsideMethod(v as typeof outsideMethod)} amount={outsideAmount} setAmount={setOutsideAmount} date={outsideDate} setDate={setOutsideDate} note={outsideNote} setNote={setOutsideNote} methods={["zelle", "cash", "check", "other"]} />
+        <label className="flex gap-2 text-sm"><input type="checkbox" checked={vendorPaid} onChange={e => setVendorPaid(e.target.checked)} /> Vendor already paid</label>
+        {vendorPaid && <div className="space-y-3 border-t pt-4"><h3 className="text-sm font-semibold">VENDOR PAYMENT</h3><p className="text-sm">Vendor: {(vendorsQuery.data ?? []).find(v => v.id === order.vendorId)?.name ?? "No vendor assigned"}</p><PaymentFields method={vendorMethod} setMethod={v => setVendorMethod(v as typeof vendorMethod)} amount={vendorAmount} setAmount={setVendorAmount} date={vendorDate} setDate={setVendorDate} note={vendorNote} setNote={setVendorNote} methods={["zelle", "cash", "check", "ach", "other"]} /></div>}
+        <label className="flex items-start gap-2 text-sm font-medium"><input type="checkbox" checked={outsideConfirmed} onChange={e => setOutsideConfirmed(e.target.checked)} /> I confirm these payment details are accurate and no card should be charged.</label>
+        <Button className="w-full bg-black text-white" disabled={!outsideConfirmed || recordOutsidePayment.isPending || saveIntake.isPending} onClick={handleOutsidePayment}>{recordOutsidePayment.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirm and Mark Paid</Button>
+      </div>}
     </div>
   );
+}
+
+function paymentMethodLabel(method?: string) { return method === "ach" ? "ACH" : method ? method[0].toUpperCase() + method.slice(1) : "Outside payment"; }
+function PaymentFields({ method, setMethod, amount, setAmount, date, setDate, note, setNote, methods }: { method: string; setMethod: (v: string) => void; amount: string; setAmount: (v: string) => void; date: string; setDate: (v: string) => void; note: string; setNote: (v: string) => void; methods: string[] }) {
+  return <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs">Payment method<select className="mt-1 h-10 w-full border bg-white px-3" value={method} onChange={e => setMethod(e.target.value)}>{methods.map(v => <option key={v} value={v}>{paymentMethodLabel(v)}</option>)}</select></label><label className="text-xs">Amount<Input className="mt-1" type="number" min="0.01" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} /></label><label className="text-xs">Date<Input className="mt-1" type="date" value={date} onChange={e => setDate(e.target.value)} /></label><label className="text-xs">Reference or note (optional)<Input className="mt-1" value={note} onChange={e => setNote(e.target.value)} /></label></div>;
 }
 
 /* ===== WASH & FOLD INTAKE ===== */
