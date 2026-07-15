@@ -74,13 +74,10 @@ describe("DayForge flagship contract", () => {
     expect(analytics).toContain("autocapture: false");
   });
 
-  it("keeps verified pricing, founding terms, and the sole ROI footnote", () => {
+  it("keeps reference pricing and low-friction terms", () => {
     expect(component).toContain("$199");
-    expect(component).toContain("$149/month");
-    expect(component).toContain("locked for 12 months");
-    expect(component).toContain("Cancel anytime, no long contracts");
-    expect(component.match(/Illustrative revenue estimate, not profit or a guarantee\. Costs and results vary\./g)).toHaveLength(1);
-    expect(content).toContain("Onboarding included");
+    expect(component).toContain("Cancel anytime. No setup fee. No contracts.");
+    expect(component).toContain("No credit card required");
   });
 
   it("preserves all eight FAQs and the print-at-cost limitation", () => {
@@ -95,34 +92,19 @@ describe("DayForge flagship contract", () => {
       "Stop driving past businesses that could be paying you."
     );
     expect(component).toContain(
-      "How does a business on your street become your customer?"
+      "How does a business near you become your fluff-and-fold customer?"
     );
-    expect(component).toContain("Dashboards get ignored. Games get played.");
-    expect(component).toContain("MEET BORESLAY");
-    expect(component).toContain("DayForge runs your fluff-and-fold operation");
-    expect(component).toContain("First, DayForge learns how your store actually runs.");
-    expect(component).toContain("FROM YOUR OPERATION");
-    expect(component).toContain("FROM YOUR TERRITORY");
-    expect(component).toMatch(/our\s+game for slaying business boredom/);
-    expect(component).toContain("The gamified cure for the boring gap");
-    expect(component).toContain("Two founder lives. One operating system.");
-    expect(component).toContain("$1.6 million in revenue in under 11 months");
+    expect(component).toContain("Dashboards get ignored.");
+    expect(component).toContain("Games get played.");
+    expect(component).toContain("BORESLAY");
+    expect(component).toContain("DayForge turns the streets around your store");
+    expect(component).toContain("It notices when good customers go quiet, too.");
+    expect(component).toContain("INTELLIGENCE ENGINE");
+    expect(component).toContain("FAQ");
     expect(component).toContain(
-      "It notices when good customers disappear, too."
+      "Stop driving past the next account you could win."
     );
-    expect(component).toContain("One account can pay for years of DayForge.");
-    expect(component).toContain("Fair questions.");
-    expect(component).toContain(
-      "Stop passing the next account you could win."
-    );
-    expect(component).toContain("Defeat the Drain and win the contract.");
-    expect(component).toContain("One closed account ≈ 10+ years of DayForge");
-    // Big honest type only — the illustrative math must not become a calculator.
-    expect(component).not.toContain('type="range"');
-    expect(component).not.toContain('loading="lazy"');
-    expect(component.indexOf("function BoreslayBridge")).toBeLessThan(
-      component.indexOf("src={bossTheDrain}")
-    );
+    expect(component).toContain("MISSION 042");
   });
 
   it("uses only independent flagship concept assets", () => {

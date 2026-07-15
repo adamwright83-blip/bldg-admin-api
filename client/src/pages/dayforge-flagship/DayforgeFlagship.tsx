@@ -1,64 +1,36 @@
+import { useEffect, useRef, useState, type RefObject } from "react";
 import {
-  useEffect,
-  useRef,
-  useState,
-  type RefObject,
-  type SyntheticEvent,
-} from "react";
-import {
-  Activity,
   ArrowRight,
-  ArrowUpRight,
+  Building2,
   Check,
   ChevronDown,
-  CircleDollarSign,
-  Database,
-  Gauge,
-  Layers3,
+  Clock3,
+  Copy,
+  ExternalLink,
+  LockKeyhole,
   Mail,
   MapPin,
-  Navigation,
-  PackageCheck,
-  Printer,
+  Radar,
   Route,
-  Send,
-  ShieldCheck,
+  Sparkles,
   Store,
   Target,
-  TrendingUp,
-  Users,
   X,
   Zap,
 } from "lucide-react";
-import bossTheDrain from "@/assets/dayforge-flagship/boss-the-drain.jpg";
-import founderTwoWorlds from "@/assets/dayforge-flagship/founder-two-worlds-v2.jpg";
-import printedLeaveBehind from "@/assets/dayforge-flagship/printed-leave-behind.jpg";
-import victoryAccount from "@/assets/dayforge-flagship/victory-account.jpg";
-import {
-  getFlagshipAnalytics,
-  trackCtaClick,
-  trackFaqOpen,
-  type CtaSource,
-} from "./analytics";
-import {
-  FAQS,
-  PRICING_FEATURES,
-  QUIET_CUSTOMERS,
-  SAGE_ACCOUNTS,
-} from "./content";
+import missionArt from "@/assets/dayforge-flagship/victory-account.jpg";
+import fieldVisit from "/dayforgeflagship/owner-field-visit.jpg";
+import { getFlagshipAnalytics, trackCtaClick, type CtaSource } from "./analytics";
 import "./dayforge-flagship.css";
 
 const FALLBACK_EMAIL = "adam@bldg.chat";
-const OWNER_FIELD_VISIT = "/dayforgeflagship/owner-field-visit.jpg";
 const RAW_SCHEDULER_URL = import.meta.env.VITE_SCHEDULER_URL?.trim();
 
 function validatedSchedulerUrl(rawUrl = RAW_SCHEDULER_URL): string | undefined {
   if (!rawUrl) return undefined;
   try {
-    const candidate = new URL(rawUrl);
-    return candidate.protocol === "https:" || candidate.protocol === "http:"
-      ? candidate.toString()
-      : undefined;
+    const url = new URL(rawUrl);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : undefined;
   } catch {
     return undefined;
   }
@@ -66,709 +38,92 @@ function validatedSchedulerUrl(rawUrl = RAW_SCHEDULER_URL): string | undefined {
 
 const SCHEDULER_URL = validatedSchedulerUrl();
 
-function DayforgeMark() {
-  return (
-    <a className="ff-mark" href="#top" aria-label="DAYFORGE FOR LAUNDRY">
-      <span className="ff-mark-glyph" aria-hidden="true"><Zap /></span>
-      <span className="ff-mark-name">DAYFORGE</span>
-      <i aria-hidden="true" />
-      <span className="ff-mark-edition">FOR LAUNDRY</span>
-    </a>
-  );
+function Brand() {
+  return <a className="df-brand" href="#top" aria-label="DayForge home"><span><Zap /></span><b>DAYFORGE</b></a>;
 }
 
-function SageGlyph({ compact = false }: { compact?: boolean }) {
-  return (
-    <span className={`ff-sage-glyph${compact ? " is-compact" : ""}`} aria-hidden="true">
-      <svg viewBox="0 0 64 64">
-        <path d="M32 5 53 17v25L32 59 11 42V17L32 5Z" />
-        <circle cx="32" cy="31" r="12" />
-        <path d="m32 13 4.7 12.8L49 31l-12.3 5.2L32 49l-4.7-12.8L15 31l12.3-5.2L32 13Z" />
-        <circle cx="32" cy="31" r="3.2" />
-      </svg>
-    </span>
-  );
-}
-
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return <span className="ff-eyebrow">{children}</span>;
-}
-
-function TerritoryCta({
-  source,
-  onOpen,
-  tone = "cobalt",
-}: {
+function Cta({ source, onOpen, secondary = false, children = "MAP MY TERRITORY" }: {
   source: CtaSource;
   onOpen: (trigger: HTMLButtonElement) => void;
-  tone?: "cobalt" | "ivory" | "ink";
+  secondary?: boolean;
+  children?: React.ReactNode;
 }) {
-  return (
-    <button
-      className={`ff-cta is-${tone}`}
-      type="button"
-      data-cta-source={source}
-      onClick={event => {
-        trackCtaClick(source);
-        onOpen(event.currentTarget);
-      }}
-    >
-      <span>MAP MY TERRITORY</span>
-      <ArrowRight aria-hidden="true" />
-    </button>
-  );
+  return <button className={`df-cta${secondary ? " is-secondary" : ""}`} type="button" data-cta-source={source} onClick={event => { trackCtaClick(source); onOpen(event.currentTarget); }}>{children}<ArrowRight /></button>;
 }
 
-function HeroSystem() {
-  return (
-    <div className="ff-hero-system" aria-label="DayForge operating system turns store data into a playable real-world mission">
-      <div className="ff-hero-system-top">
-        <span><i /> DAYFORGE OS · LIVE</span>
-        <b>LOS ANGELES · 09:41</b>
-      </div>
+const accounts = [
+  ["Westview Property Management", "$24,800", "15 buildings", "HIGH"],
+  ["Harbor Fitness Club", "$18,900", "Gym / Fitness", "HIGH"],
+  ["Sunset Hotel", "$16,700", "Hotel", "MEDIUM"],
+  ["Luxe Salon Studio", "$14,200", "Salon / Spa", "MEDIUM"],
+  ["Pine & Oak Apartments", "$12,600", "Property Mgmt", "LOW"],
+];
 
-      <div className="ff-hero-pos">
-        <header><Store /> <span>STORE PULSE</span><em>ON PLAN</em></header>
-        <div className="ff-hero-pos-metrics">
-          <span><small>ORDERS TODAY</small><b>84</b><em>+12%</em></span>
-          <span><small>WASH CAPACITY</small><b>73%</b><em>27% OPEN</em></span>
-          <span><small>ROUTE STOPS</small><b>18</b><em>2 GAPS</em></span>
-        </div>
-        <div className="ff-hero-pos-line">
-          <i /><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /><i />
-        </div>
+function TerritoryPanel() {
+  return <div className="df-territory-card">
+    <div className="df-appbar"><Brand /><span>Territory Overview</span><em>Los Angeles, CA</em></div>
+    <div className="df-appbody">
+      <aside>{[Radar, Target, Building2, Sparkles, Route].map((Icon, i) => <span className={i === 0 ? "active" : ""} key={i}><Icon /></span>)}</aside>
+      <div className="df-account-list">
+        <header><b>Nearby opportunities</b><span>EST. ANNUAL VALUE</span></header>
+        {accounts.map(([name, value, type, fit], index) => <div className={index === 0 ? "selected" : ""} key={name}><span className="df-building"><Building2 /></span><p><b>{name}</b><small>{type}</small></p><strong>{value}</strong><em className={`fit-${fit.toLowerCase()}`}>{fit}</em></div>)}
       </div>
-
-      <div className="ff-hero-sage">
-        <SageGlyph compact />
-        <div>
-          <span>SAGE · NEXT BEST MOVE</span>
-          <strong>Westview Property Management</strong>
-          <p>Fits open capacity · 1.4 mi · 15 buildings</p>
-        </div>
-        <b>HIGH FIT</b>
-      </div>
-
-      <div className="ff-hero-flow" aria-hidden="true">
-        <span>OPERATE</span><i /><span>UNDERSTAND</span><i /><span>ACT</span>
-      </div>
-
-      <div className="ff-hero-game">
-        <span>BORESLAY · PLAYABLE MISSION</span>
-        <strong>DEFEAT THE DRAIN</strong>
-        <p>The business problem becomes the boss. The win happens in real life.</p>
-        <em>EST. CONTRACT · $24,800/YR</em>
-      </div>
-
-      <div className="ff-hero-phone">
-        <div className="ff-phone-notch" aria-hidden="true" />
-        <header><span>09:41</span><b>DAYFORGE</b></header>
-        <div className="ff-phone-route"><Navigation /> FIELD MISSION</div>
-        <span className="ff-phone-label">YOUR NEXT STOP</span>
-        <strong className="ff-phone-title">Westview Property Management</strong>
-        <p>15 buildings · 1.4 miles</p>
-        <div className="ff-phone-value"><span>EST. ANNUAL VALUE</span><b>$24,800</b></div>
-        <dl>
-          <div><dt>ASK FOR</dt><dd>Operations manager</dd></div>
-          <div><dt>LEAD WITH</dt><dd>One invoice for 15 buildings</dd></div>
-        </dl>
-        <button type="button" tabIndex={-1}><Navigation /> PRESS TO DRIVE</button>
-      </div>
+      <div className="df-map" aria-label="Map of nearby commercial accounts"><span className="df-map-road r1" /><span className="df-map-road r2" /><span className="df-map-road r3" />{["orange","green","orange","gray","orange","green","gray"].map((tone,i)=><i className={`pin-${tone} p${i+1}`} key={i}><MapPin /></i>)}<b><Radar /></b></div>
     </div>
-  );
+  </div>;
 }
 
-function OperatingSystemSection() {
-  return (
-    <section className="ff-os" id="operating-system" aria-labelledby="ff-os-title">
-      <div className="ff-shell">
-        <div className="ff-os-intro">
-          <div>
-            <Eyebrow>THE OPERATING SYSTEM UNDER THE INTELLIGENCE</Eyebrow>
-            <h2 id="ff-os-title">First, DayForge learns how your store actually runs.</h2>
-          </div>
-          <div>
-            <p>
-              Run the counter on DayForge or connect the tools you already use.
-              Orders, customers, services, pricing, routes, and available
-              capacity become one live operating picture.
-            </p>
-            <span><ShieldCheck /> Start connected. Move more of the operation when you&apos;re ready.</span>
-          </div>
-        </div>
-
-        <div className="ff-os-window" aria-label="DayForge POS and operations command center mockup">
-          <aside className="ff-os-sidebar">
-            <div className="ff-os-mini-mark"><Zap /><b>DAYFORGE</b></div>
-            <div className="ff-os-nav" aria-label="DayForge product areas">
-              <span className="is-active"><Activity /> Today</span>
-              <span><PackageCheck /> Orders</span>
-              <span><Users /> Customers</span>
-              <span><Route /> Routes</span>
-              <span><Gauge /> Capacity</span>
-              <span><CircleDollarSign /> Pricing</span>
-              <span><TrendingUp /> Growth</span>
-            </div>
-            <div className="ff-os-location"><i>LA</i><span><b>DayForge Laundry</b><small>Store 01 · Live</small></span></div>
-          </aside>
-
-          <div className="ff-os-main">
-            <header className="ff-os-header">
-              <div><small>GOOD MORNING, ADAM</small><h3>Your store is ready for the day.</h3></div>
-              <span><i /> ALL SYSTEMS LIVE</span>
-            </header>
-
-            <div className="ff-os-kpis">
-              <article><span>NET SALES TODAY</span><strong>$4,842</strong><em>↑ 18% vs. last Tue</em></article>
-              <article><span>ACTIVE ORDERS</span><strong>84</strong><em>31 ready by 4 PM</em></article>
-              <article><span>PRODUCTION LOAD</span><strong>73%</strong><em>27% capacity open</em></article>
-              <article><span>ROUTE VALUE</span><strong>$1,906</strong><em>18 stops · 2 gaps</em></article>
-            </div>
-
-            <div className="ff-os-grid">
-              <article className="ff-os-orders">
-                <header><div><span>LIVE PRODUCTION</span><b>84 orders moving</b></div><em>View board <ArrowUpRight /></em></header>
-                <div className="ff-os-order-head"><span>ORDER</span><span>SERVICE</span><span>DUE</span><span>STATUS</span></div>
-                <div className="ff-os-order"><span><b>#1048</b><small>Maya Chen</small></span><span>Wash &amp; fold</span><span>11:30 AM</span><em className="is-washing">WASHING</em></div>
-                <div className="ff-os-order"><span><b>#1049</b><small>Westside Spa</small></span><span>Commercial</span><span>1:00 PM</span><em className="is-folding">FOLDING</em></div>
-                <div className="ff-os-order"><span><b>#1050</b><small>Luis Ortega</small></span><span>Pickup &amp; delivery</span><span>3:15 PM</span><em className="is-ready">READY</em></div>
-              </article>
-
-              <article className="ff-os-capacity">
-                <header><span>TODAY&apos;S CAPACITY</span><b>Room to grow</b></header>
-                <div className="ff-capacity-ring"><span><strong>27%</strong><small>AVAILABLE</small></span></div>
-                <dl>
-                  <div><dt>WASH</dt><dd><i /></dd><em>78%</em></div>
-                  <div><dt>DRY</dt><dd><i /></dd><em>69%</em></div>
-                  <div><dt>FOLD</dt><dd><i /></dd><em>72%</em></div>
-                </dl>
-                <p><SageGlyph compact /> <span><b>Sage sees sellable room.</b> Enough Tuesday/Thursday capacity for one commercial account.</span></p>
-              </article>
-            </div>
-          </div>
-        </div>
-
-        <div className="ff-os-data-line">
-          <span><Database /> YOUR OPERATION</span><i />
-          <span><SageGlyph compact /> SAGE UNDERSTANDS THE FIT</span><i />
-          <span><Target /> THE RIGHT NEXT MOVE</span>
-        </div>
-      </div>
-    </section>
-  );
+function MissionCard({ compact = false }: { compact?: boolean }) {
+  return <div className={`df-mission-card${compact ? " compact" : ""}`}>
+    <img src={missionArt} alt="A fiery BORESLAY mission with a dragon facing the account challenge" />
+    <div className="df-mission-shade" />
+    <header><span>MISSION 042</span><em>EXPIRES IN 7H 14M</em></header>
+    <div className="df-mission-copy"><small>WESTVIEW PROPERTY MANAGEMENT</small><b>POTENTIAL ANNUAL VALUE</b><strong>$24,800</strong><span>DECISION-MAKER</span><p>Dana R. · Operations Manager</p></div>
+    <div className="df-mission-number">042</div>
+    <div className="df-mission-path"><span>SCOUT<small>Learn the account</small></span><span>PREPARE<small>Build the pitch</small></span><span>BATTLE<small>Meet the decision-maker</small></span><span>WIN<small>Close the account</small></span></div>
+    <button type="button" tabIndex={-1}>SEND TO PHONE</button>
+  </div>;
 }
 
-function SageBriefing() {
-  return (
-    <div className="ff-sage-window">
-      <header className="ff-sage-header">
-        <div><SageGlyph /><span><small>SAGE · OPERATING INTELLIGENCE</small><b>BRIEF 0142</b></span></div>
-        <em><i /> LIVE ANALYSIS</em>
-      </header>
-
-      <div className="ff-sage-decision">
-        <span>TODAY&apos;S BEST MOVE</span>
-        <h4>Westview Property Management</h4>
-        <p>One account that fits the store you run and the route you already drive.</p>
-        <div><b>HIGH WIN PROBABILITY</b><strong>$24,800<small>/YR EST.</small></strong></div>
-      </div>
-
-      <div className="ff-sage-evidence">
-        <article>
-          <header><Store /> FROM YOUR OPERATION</header>
-          <ul>
-            <li><Check /><span><b>Capacity fits</b>Tuesday + Thursday room available</span></li>
-            <li><Check /><span><b>Service fits</b>Commercial wash &amp; fold enabled</span></li>
-            <li><Check /><span><b>Route fits</b>Current route passes within 0.6 miles</span></li>
-          </ul>
-        </article>
-        <article>
-          <header><MapPin /> FROM YOUR TERRITORY</header>
-          <ul>
-            <li><Check /><span><b>15-building footprint</b>Recurring towels, mats, tenant laundry</span></li>
-            <li><Check /><span><b>Decision-maker found</b>Ask for the operations manager</span></li>
-            <li><Check /><span><b>Close enough to serve</b>1.4 miles from your store</span></li>
-          </ul>
-        </article>
-      </div>
-
-      <div className="ff-sage-why">
-        <SageGlyph compact />
-        <span><small>SAGE SAYS</small><b>Sell the 15-building simplicity: one laundry partner, one invoice, less staff time lost.</b></span>
-        <ArrowRight />
-      </div>
-
-      <div className="ff-sage-ranking">
-        <header><span>SHORTLIST · 286 ACCOUNTS CHECKED</span><em>12 worth the drive</em></header>
-        <div className="ff-sage-ranking-head"><span>ACCOUNT</span><span>VALUE</span><span>DISTANCE</span><span>WIN PROBABILITY</span></div>
-        {SAGE_ACCOUNTS.map((account, index) => (
-          <div key={account.account} className={`ff-sage-rank${index === 0 ? " is-top" : ""}`}>
-            <span><b>{account.account}</b><small>{account.footprint} · Ask for {account.decisionMaker.toLowerCase()}</small></span>
-            <strong>{account.annualValue}</strong>
-            <em>{account.distance}</em>
-            <i>{account.probability}</i>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+function PhonePanel() {
+  return <div className="df-phone"><div className="df-phone-notch" /><header><span>9:41</span><b>MISSION 042</b></header><small>WESTVIEW PROPERTY MANAGEMENT</small><p>15 buildings · Property Management</p><div className="df-phone-value"><span>ESTIMATED LAUNDRY VALUE</span><b>$24,800</b></div><dl><div><dt>DECISION-MAKER</dt><dd>Dana R.</dd></div><div><dt>ROLE</dt><dd>Operations Manager</dd></div></dl><section><b>TODAY&apos;S MISSION</b>{["Pick up proposal leave-behind","Ask for Dana R.","Discuss centralized laundry","Present solution & pricing","Schedule next step"].map(item=><span key={item}><i />{item}</span>)}</section><button type="button" tabIndex={-1}>START VISIT</button><footer><span><Store />Home</span><span><Target />This Task</span><span><Route />Progress</span></footer></div>;
 }
 
-function BoreslayBridge() {
-  return (
-    <div className="ff-game-bridge" aria-labelledby="ff-game-bridge-title">
-      <div className="ff-game-bridge-copy">
-        <Eyebrow>MEET BORESLAY · THE GAME INSIDE DAYFORGE</Eyebrow>
-        <h3 id="ff-game-bridge-title">Knowing the next move isn&apos;t the hard part. Making yourself do it is.</h3>
-        <p>
-          Most software gives you another list. BORESLAY is the short game
-          inside DayForge. It turns Sage&apos;s best recommendation into a
-          playable mission—then sends the real-world objective to your phone.
-        </p>
-        <p className="ff-game-bridge-kicker">The escapism creates momentum. The win is still a real customer.</p>
-      </div>
-
-      <div className="ff-bore-definition">
-        <div><span>BORE</span><i>+</i><span>SLAY</span><b>=</b><strong>BORESLAY</strong></div>
-        <p>The gamified cure for the boring gap between knowing what grows the business and actually doing it.</p>
-      </div>
-
-      <div className="ff-game-steps">
-        <article><span>01</span><SageGlyph compact /><b>SAGE FINDS IT.</b><p>The move most worth making today.</p></article>
-        <i aria-hidden="true"><ArrowRight /></i>
-        <article><span>02</span><Layers3 /><b>BORESLAY MAKES IT PLAYABLE.</b><p>The business problem becomes the boss.</p></article>
-        <i aria-hidden="true"><ArrowRight /></i>
-        <article><span>03</span><Navigation /><b>YOU FINISH IT IN REAL LIFE.</b><p>The mission leaves the screen with you.</p></article>
-      </div>
-    </div>
-  );
-}
-
-function MissionSequence({
-  onOpen,
-  missionEndRef,
-}: {
-  onOpen: (trigger: HTMLButtonElement) => void;
-  missionEndRef: RefObject<HTMLDivElement | null>;
-}) {
-  return (
-    <section className="ff-sequence" id="mission" aria-labelledby="ff-sequence-title">
-      <div className="ff-shell">
-        <div className="ff-section-head">
-          <Eyebrow>ONE ACCOUNT · ONE COMPLETE MISSION</Eyebrow>
-          <h2 id="ff-sequence-title">How does a business on your street become your customer?</h2>
-          <p>Here&apos;s one mission, start to finish.</p>
-        </div>
-
-        <article className="ff-stage is-sage">
-          <div className="ff-stage-copy">
-            <span className="ff-stage-number">01</span>
-            <Eyebrow>SAGE PICKS THE ACCOUNT</Eyebrow>
-            <h3>It sees the business you run—and the market around it.</h3>
-            <p>
-              Sage combines DayForge&apos;s live view of your operation with
-              territory intelligence. It does not hand you a map. It shows
-              which account fits, why it fits, who to ask for, and what the
-              work could be worth.
-            </p>
-          </div>
-          <SageBriefing />
-        </article>
-
-        <BoreslayBridge />
-
-        <article className="ff-stage is-mission">
-          <div className="ff-stage-copy">
-            <span className="ff-stage-number">02</span>
-            <Eyebrow>THE RECOMMENDATION BECOMES A GAME</Eyebrow>
-            <h3>Now the business problem becomes the boss.</h3>
-            <p>
-              Westview handles laundry in-house. That is the revenue problem.
-              Inside BORESLAY, it becomes The Drain—a boss you defeat to
-              unlock the visit and send the field mission to your phone.
-            </p>
-          </div>
-          <div className="ff-interrupt">
-            <header><span>BORESLAY</span><b>TODAY&apos;S MISSION</b><em>01:30</em></header>
-            <div className="ff-interrupt-body">
-              <img
-                src={bossTheDrain}
-                alt="Concept render of The Drain, a BORESLAY boss built from the account problem"
-                width={560}
-                height={620}
-                loading="eager"
-                decoding="async"
-              />
-              <div className="ff-interrupt-brief">
-                <span>BOSS · THE DRAIN</span>
-                <h4>DEFEAT THE DRAIN</h4>
-                <p>Westview Property Management—their in-house laundry is draining profits. Defeat the Drain and win the contract.</p>
-                <b>EST. CONTRACT · $24,800/YR</b>
-                <em><Send /> SEND TO PHONE</em>
-              </div>
-            </div>
-          </div>
-          <p className="ff-boss-rule"><span>THE BOSS</span> is their business problem. <b>BEATING IT</b> unlocks the real-world move.</p>
-        </article>
-
-        <article className="ff-stage is-prep">
-          <div className="ff-stage-copy">
-            <span className="ff-stage-number">03</span>
-            <Eyebrow>DAYFORGE PREPS THE VISIT</Eyebrow>
-            <h3>Clean polo. Quote sheet. Press to drive.</h3>
-            <p>
-              First stop isn&apos;t the account—it&apos;s the print shop. DayForge
-              already sent your leave-behind: your services, pricing, and name.
-              Pick it up. Keep driving.
-            </p>
-          </div>
-          <div className="ff-prep-visual">
-            <img src={printedLeaveBehind} alt="Concept photo of a premium commercial laundry leave-behind at a print shop" width={1200} height={900} loading="eager" decoding="async" />
-            <div className="ff-prep-card">
-              <header><Printer /> PRINT STOP · READY NOW</header>
-              <h4>Westview visit kit</h4>
-              <ul>
-                <li><Check /> One-page services sheet</li>
-                <li><Check /> Pricing &amp; turnaround</li>
-                <li><Check /> 15-building quote</li>
-              </ul>
-              <b><Navigation /> PICK UP · KEEP DRIVING</b>
-            </div>
-          </div>
-        </article>
-
-        <article className="ff-stage is-field">
-          <div className="ff-stage-copy">
-            <span className="ff-stage-number">04</span>
-            <Eyebrow>THROUGH THE DOOR</Eyebrow>
-            <h3>Then it gets you through the door.</h3>
-            <p>Your phone tells you who to ask for, the one benefit to lead with, and what to leave behind. Then you walk in.</p>
-          </div>
-          <div className="ff-field-visual">
-            <img src={OWNER_FIELD_VISIT} alt="Concept photo of a laundromat owner approaching a commercial property with collateral" width={1200} height={900} loading="eager" decoding="async" />
-            <div className="ff-field-card">
-              <span>AT THE DOOR</span>
-              <h4>Westview Property Management</h4>
-              <dl>
-                <div><dt>ASK FOR</dt><dd>The operations manager</dd></div>
-                <div><dt>LEAD WITH</dt><dd>Less staff time lost to laundry</dd></div>
-                <div><dt>LEAVE</dt><dd>One-page service &amp; pricing sheet</dd></div>
-              </dl>
-              <b>YOU&apos;RE READY. WALK IN.</b>
-            </div>
-          </div>
-        </article>
-      </div>
-
-      <div className="ff-mission-cta">
-        <div><Eyebrow>YOUR STREET · YOUR NEXT ACCOUNT</Eyebrow><h2>What businesses are you driving past?</h2><p>We&apos;ll map the accounts around your store live in 15 minutes.</p></div>
-        <TerritoryCta source="mission" onOpen={onOpen} tone="ivory" />
-      </div>
-      <div ref={missionEndRef} className="ff-mission-end" aria-hidden="true" />
-    </section>
-  );
-}
-
-function GamePayoff() {
-  return (
-    <section className="ff-payoff" id="game-victory" aria-labelledby="ff-payoff-title">
-      <div className="ff-payoff-art">
-        <img src={victoryAccount} alt="Concept render of a BORESLAY victory opening the way to a real commercial account" width={1400} height={788} loading="eager" decoding="async" />
-        <div className="ff-payoff-shade" aria-hidden="true" />
-      </div>
-      <div className="ff-payoff-copy">
-        <Eyebrow>WHY THE GAME EARNS ITS PLACE</Eyebrow>
-        <h2 id="ff-payoff-title">Dashboards get ignored. Games get played.</h2>
-        <p>BORESLAY never awards points for busywork. Every boss represents a real account or revenue problem. Every mission ends with a move outside the game.</p>
-        <div className="ff-payoff-thesis"><span>BEAT THE PROBLEM ON SCREEN.</span><b>WIN THE ACCOUNT IN REAL LIFE.</b></div>
-      </div>
-      <div className="ff-victory-card" id="contract-secured">
-        <span>MISSION COMPLETE</span>
-        <h3>CONTRACT SECURED</h3>
-        <strong>+$24,800/YR</strong>
-        <small>WESTVIEW PROPERTY MANAGEMENT</small>
-      </div>
-    </section>
-  );
-}
-
-function FounderSection() {
-  return (
-    <section className="ff-founder" id="founder-story" aria-labelledby="ff-founder-title">
-      <div className="ff-founder-media">
-        <img src={founderTwoWorlds} alt="Concept image showing the same founder operating a laundromat and building a cloud game" width={1672} height={941} loading="eager" decoding="async" />
-        <div aria-hidden="true" />
-      </div>
-      <div className="ff-shell ff-founder-content">
-        <div className="ff-founder-title">
-          <Eyebrow>WHY DAYFORGE EXISTS</Eyebrow>
-          <h2 id="ff-founder-title">Two founder lives. One operating system.</h2>
-          <p>DayForge was born where the reality of running laundromats collided with the instinct to make difficult things playable.</p>
-        </div>
-        <div className="ff-founder-duo">
-          <article>
-            <span>01 · THE LAUNDROMAT OPERATOR</span>
-            <h3>Knows the work.</h3>
-            <p>The counter, routes, margins, staffing—and the valuable growth work that keeps getting pushed to tomorrow.</p>
-          </article>
-          <article>
-            <span>02 · THE CLOUD-GAMING FOUNDER</span>
-            <h3>Knows the pull.</h3>
-            <p>Built a cloud-gaming company to <b>$1.6 million in revenue in under 11 months.</b> Knows how missions, progress, and play make hard things easier to start.</p>
-          </article>
-        </div>
-        <div className="ff-founder-reveal">
-          <b>SAME FOUNDER.</b>
-          <span>Business software knows what should happen. Games know how to make people want to finish. DayForge does both.</span>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function RecoverySection() {
-  const [editing, setEditing] = useState(false);
-  const [status, setStatus] = useState("Draft prepared · Nothing sent");
-  const [message, setMessage] = useState("Hi Maya—we haven't seen you in a while. We've kept your usual wash-and-fold preferences saved. Want us to schedule a pickup this week?");
-
-  return (
-    <section className="ff-recovery" id="customer-recovery" aria-labelledby="ff-recovery-title">
-      <div className="ff-shell ff-recovery-grid">
-        <div className="ff-recovery-copy">
-          <Eyebrow>SAGE PROTECTS THE BUSINESS YOU ALREADY WON</Eyebrow>
-          <h2 id="ff-recovery-title">It notices when good customers disappear, too.</h2>
-          <p>Regulars rarely quit out loud. They just stop showing up. Sage catches the pattern early—and prepares the first move to bring them back.</p>
-          <div className="ff-human-control"><ShieldCheck /><span><b>DayForge investigates and prepares the move.</b>You review it, improve it, and decide when it goes out.</span></div>
-        </div>
-
-        <div className="ff-recovery-ui">
-          <div className="ff-quiet-card">
-            <header><SageGlyph compact /><span>SAGE · CUSTOMER WATCH</span><em>3 SIGNALS</em></header>
-            <p>Three valuable regulars broke their normal order rhythm.</p>
-            <table>
-              <thead><tr><th>Customer</th><th>Normal rhythm</th><th>Monthly value</th><th>Days quiet</th></tr></thead>
-              <tbody>{QUIET_CUSTOMERS.map(customer => <tr key={customer.name}><td><b>{customer.name}</b></td><td>Every 7 days</td><td>{customer.monthlyValue}</td><td>{customer.daysQuiet}</td></tr>)}</tbody>
-            </table>
-          </div>
-          <div className="ff-draft-card">
-            <header><span>SAGE DRAFT · WIN-BACK</span><small>{status}</small></header>
-            <label htmlFor="ff-winback">Message to Maya</label>
-            <textarea id="ff-winback" value={message} readOnly={!editing} onChange={event => setMessage(event.target.value)} />
-            <footer>
-              <button type="button" onClick={() => { setEditing(true); setStatus("Editing · Nothing sent"); requestAnimationFrame(() => document.getElementById("ff-winback")?.focus()); }}>EDIT</button>
-              <button type="button" className="is-send" onClick={() => { setEditing(false); setStatus("Demo · Nothing sends without approval"); }}><Send /> SEND</button>
-            </footer>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function PricingSection({ onOpen }: { onOpen: (trigger: HTMLButtonElement) => void }) {
-  return (
-    <section className="ff-pricing" id="pricing" aria-labelledby="ff-pricing-title">
-      <div className="ff-shell">
-        <div className="ff-section-head is-centered"><Eyebrow>THE ECONOMICS</Eyebrow><h2 id="ff-pricing-title">One account can pay for years of DayForge.</h2></div>
-        <div className="ff-roi-static">
-          <span className="ff-roi-label">EXAMPLE MISSION ECONOMICS</span>
-          <div className="ff-roi-big"><strong>$24,800</strong><span>That property management account · per year</span></div>
-          <em className="ff-roi-vs">compared to</em>
-          <div className="ff-roi-lesser"><strong>$2,388</strong><span>DayForge · $199 a month, for the year</span></div>
-          <b className="ff-roi-equals">One closed account ≈ 10+ years of DayForge</b>
-        </div>
-        <p className="ff-roi-footnote">Illustrative revenue estimate, not profit or a guarantee. Costs and results vary.</p>
-
-        <div className="ff-price-card">
-          <div className="ff-price-intro"><Eyebrow>DAYFORGE OPERATOR</Eyebrow><h3>Everything. One location, one territory.</h3></div>
-          <div className="ff-price-amount"><strong>$199</strong><span>/month</span></div>
-          <ul>{PRICING_FEATURES.map(feature => <li key={feature}><Check /> {feature}</li>)}</ul>
-          <div className="ff-founding-offer"><Zap /><span><b>First 25 operators: $149/month,</b> locked for 12 months.</span></div>
-          <TerritoryCta source="pricing" onOpen={onOpen} />
-          <p>15-minute demo · No credit card · Cancel anytime, no long contracts · We map your territory live on the call.</p>
-        </div>
-        <p className="ff-price-proof">Built by a laundromat operator and cloud-gaming founder. Running daily in our own LA stores.</p>
-      </div>
-    </section>
-  );
-}
-
-function FaqSection({ onOpen, faqRef }: { onOpen: (trigger: HTMLButtonElement) => void; faqRef: RefObject<HTMLElement | null> }) {
-  const onToggle = (event: SyntheticEvent<HTMLDetailsElement>) => {
-    if (!event.currentTarget.open) return;
-    const questionId = event.currentTarget.dataset.questionId;
-    const faq = FAQS.find(item => item.id === questionId);
-    if (faq) trackFaqOpen(faq.id);
-  };
-
-  return (
-    <section ref={faqRef} className="ff-faq" id="faq" aria-labelledby="ff-faq-title">
-      <div className="ff-shell ff-faq-grid">
-        <div className="ff-faq-intro"><Eyebrow>BEFORE YOU BOOK</Eyebrow><h2 id="ff-faq-title">Fair questions.</h2><p>No jargon. No mystery. Here&apos;s what owners usually ask.</p></div>
-        <div className="ff-faq-list">
-          {FAQS.map((faq, index) => (
-            <details key={faq.id} data-question-id={faq.id} onToggle={onToggle}>
-              <summary><span>{String(index + 1).padStart(2, "0")}</span><b>{faq.question}</b><ChevronDown /></summary>
-              <p>{faq.answer}</p>
-            </details>
-          ))}
-        </div>
-      </div>
-      <div className="ff-final" id="final-cta">
-        <div className="ff-final-grid" aria-hidden="true" />
-        <div><Eyebrow>THE NEXT ACCOUNT IS ALREADY OUT THERE</Eyebrow><h2>Stop passing the next account you could win.</h2><p>See the winnable commercial accounts around your store in a 15-minute live demo.</p></div>
-        <TerritoryCta source="final" onOpen={onOpen} tone="ivory" />
-      </div>
-    </section>
-  );
+function Step({ number, title, children }: { number: string; title: string; children: React.ReactNode }) {
+  return <article className="df-step"><div className="df-step-head"><span>{number}</span><div><b>{title}</b></div></div><div className="df-step-content">{children}</div></article>;
 }
 
 function SchedulerDialog({ open, onClose, returnFocusRef }: { open: boolean; onClose: () => void; returnFocusRef: RefObject<HTMLButtonElement | null> }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-
   useEffect(() => {
-    if (!open) return;
     const dialog = dialogRef.current;
-    if (!dialog) return;
-    const previousOverflow = document.body.style.overflow;
-    const trigger = returnFocusRef.current;
-    const triggerSource = trigger?.dataset.ctaSource;
-    dialog.showModal();
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      if (dialog.open) dialog.close();
-      requestAnimationFrame(() => {
-        if (trigger?.isConnected) trigger.focus();
-        else if (triggerSource) document.querySelector<HTMLButtonElement>(`button[data-cta-source="${triggerSource}"]`)?.focus();
-      });
-    };
+    if (!open || !dialog) return;
+    const old = document.body.style.overflow;
+    dialog.showModal(); document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = old; if (dialog.open) dialog.close(); returnFocusRef.current?.focus(); };
   }, [open, returnFocusRef]);
-
   if (!open) return null;
-
-  return (
-    <dialog ref={dialogRef} className="ff-scheduler" aria-labelledby="ff-scheduler-title" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="ff-scheduler-shell">
-        <button className="ff-scheduler-close" type="button" onClick={onClose} aria-label="Close scheduler"><X /></button>
-        <div className="ff-scheduler-copy"><Eyebrow>15-MINUTE LIVE DEMO</Eyebrow><h2 id="ff-scheduler-title">Let&apos;s map the commercial accounts around your store.</h2><p>Pick a time that works. We&apos;ll map your territory live on the call.</p></div>
-        {SCHEDULER_URL ? (
-          <div className="ff-scheduler-widget"><iframe src={SCHEDULER_URL} title="Schedule your DayForge territory mapping demo" loading="eager" referrerPolicy="strict-origin-when-cross-origin" /><a href={SCHEDULER_URL} target="_blank" rel="noreferrer">Open scheduler in a new tab <ArrowUpRight /></a></div>
-        ) : (
-          <div className="ff-scheduler-fallback"><MapPin /><h3>The live calendar is being connected.</h3><p>Email Adam and we&apos;ll map your territory together.</p><a className="ff-cta is-cobalt" href={`mailto:${FALLBACK_EMAIL}?subject=Map%20my%20DayForge%20territory`}><Mail /> EMAIL {FALLBACK_EMAIL}</a></div>
-        )}
-      </div>
-    </dialog>
-  );
-}
-
-function updateMetadata() {
-  const previousTitle = document.title;
-  const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
-  const previousDescription = description?.content;
-  document.title = "DayForge for Laundry — Stop driving past businesses that could be paying you";
-  if (description) description.content = "DayForge runs your fluff-and-fold operation, Sage finds the best next move, and BORESLAY turns it into a playable mission you finish in real life.";
-  return () => {
-    document.title = previousTitle;
-    if (description && previousDescription !== undefined) description.content = previousDescription;
-  };
+  return <dialog className="df-dialog" ref={dialogRef} onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}><div><button className="df-dialog-close" aria-label="Close scheduler" onClick={onClose}><X /></button><span className="df-kicker">15-MINUTE LIVE DEMO</span><h2>Let&apos;s map the commercial accounts around your store.</h2><p>Pick a time that works. We&apos;ll map your territory live on the call.</p>{SCHEDULER_URL ? <section><iframe src={SCHEDULER_URL} title="Schedule your DayForge territory mapping demo" /><a href={SCHEDULER_URL} target="_blank" rel="noreferrer">Open scheduler <ExternalLink /></a></section> : <section className="df-dialog-fallback"><MapPin /><b>The live calendar is being connected.</b><p>Email Adam and we&apos;ll map your territory together.</p><a href={`mailto:${FALLBACK_EMAIL}?subject=Map%20my%20DayForge%20territory`}><Mail /> EMAIL {FALLBACK_EMAIL}</a></section>}</div></dialog>;
 }
 
 export default function DayforgeFlagship() {
-  const [schedulerOpen, setSchedulerOpen] = useState(false);
-  const [showSticky, setShowSticky] = useState(false);
-  const missionEndRef = useRef<HTMLDivElement>(null);
-  const founderRef = useRef<HTMLDivElement>(null);
-  const faqRef = useRef<HTMLElement>(null);
+  const [open, setOpen] = useState(false);
   const lastCtaRef = useRef<HTMLButtonElement>(null);
-  const posterMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("poster") === "1";
-
-  useEffect(() => updateMetadata(), []);
   useEffect(() => { void getFlagshipAnalytics(); }, []);
+  const openScheduler = (trigger: HTMLButtonElement) => { lastCtaRef.current = trigger; setOpen(true); };
+  return <div className="df-page" id="top">
+    <a href="#main" className="df-skip">Skip to content</a>
+    <header className="df-header"><Brand /><nav><a href="#product">Product</a><a href="#how">How It Works</a><a href="#boreslay">Boreslay</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="#about">About</a></nav><Cta source="sticky" onOpen={openScheduler} /></header>
+    <main id="main">
+      <section className="df-hero" id="product"><div className="df-hero-copy"><span className="df-kicker">FOR LAUNDROMAT &amp; FLUFF-AND-FOLD OWNERS</span><h1>Stop driving past businesses that could be paying you.</h1><p>DayForge turns the streets around your store into a live fluff-and-fold pipeline. It spots nearby hotels, property managers, gyms, salons and other commercial accounts worth pursuing, tells you who to ask for and what to say, then turns the best opportunity into today&apos;s mission—first on your screen, then in the real world.</p><div className="df-hero-actions"><Cta source="hero" onOpen={openScheduler} /><Cta source="mission" onOpen={openScheduler} secondary>BOOK A 15-MIN DEMO</Cta></div><div className="df-safe"><span><LockKeyhole />Secure &amp; private</span><span><Copy />No credit card</span><span><Clock3 />See results in 60 seconds</span></div></div><div className="df-product-preview"><span className="df-preview-label">PRODUCT PREVIEW</span><TerritoryPanel /><MissionCard /><PhonePanel /><div className="df-alert"><Building2 /><span><small>NEW HIGH-VALUE BUSINESS NEARBY</small><b>Westview Property Management</b><em>15 buildings just 0.2 miles from your route.</em></span><i>NOW</i></div></div></section>
 
-  useEffect(() => {
-    let frame = 0;
-    const update = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        if (!missionEndRef.current) return;
-        const missionPassed = missionEndRef.current.getBoundingClientRect().top <= 0;
-        const founderReached = founderRef.current ? founderRef.current.getBoundingClientRect().top <= window.innerHeight : false;
-        setShowSticky(missionPassed && !founderReached);
-      });
-    };
-    const observer = new IntersectionObserver(update, { threshold: [0, 1] });
-    if (missionEndRef.current) observer.observe(missionEndRef.current);
-    if (founderRef.current) observer.observe(founderRef.current);
-    addEventListener("scroll", update, { passive: true });
-    addEventListener("resize", update);
-    update();
-    return () => {
-      observer.disconnect();
-      cancelAnimationFrame(frame);
-      removeEventListener("scroll", update);
-      removeEventListener("resize", update);
-    };
-  }, []);
+      <section className="df-how" id="how"><div className="df-how-title"><span>HOW IT WORKS</span><h2>How does a business near you become your fluff-and-fold customer?</h2></div><div className="df-steps"><Step number="1" title="The right account appears on your radar.">DayForge compares nearby businesses with your services, routes and capacity. The best-fit, highest-value accounts rise to the top.<TerritoryPanel /></Step><Step number="2" title="DayForge prepares the laundry pitch.">It identifies the likely decision-maker, estimates the account&apos;s laundry value and gives you the strongest opening based on the business&apos;s actual operation.<div className="df-pitch"><span>MISSION 042</span><b>WESTVIEW PROPERTY</b><small>15 buildings · Property expansion</small><strong>STRONG OPENING</strong><p>“I noticed your team recently expanded to 15 buildings. Who handles laundry service across the portfolio?”</p></div></Step><Step number="3" title="The opportunity becomes a Boreslay mission.">The account, value and objective stay visible while you play. Complete the preparation moves, beat the hesitation standing between you and the visit, then send Mission 042 to your phone.<div className="df-talk"><b>TALK TRACK</b>{["Opening","Who to Ask For","Discovery Question","Laundry currently being handled across the properties?"].map(x=><span key={x}>{x}</span>)}</div></Step><Step number="4" title="You walk in ready.">Pick up the printed proposal, follow the talk track and ask for the recurring fluff-and-fold account.<div className="df-field"><img src={fieldVisit} alt="A laundromat owner walking into a commercial property prepared for a sales visit" /><span><Check /><b>ACCOUNT WON</b><strong>$24,800 / year</strong><small>Fluff-and-fold contract</small></span></div></Step></div></section>
 
-  const openScheduler = (trigger: HTMLButtonElement) => {
-    lastCtaRef.current = trigger;
-    setSchedulerOpen(true);
-  };
+      <section className="df-dark" id="boreslay"><article className="df-dark-intro"><span>BORESLAY</span><h2>Dashboards get ignored.<br />Games get played.</h2><p>Boreslay turns the exact account on your radar into a playable mission.</p><p>Escape the screen. Prepare the pitch. Beat the delay, hesitation and status quo standing between you and the visit.</p><b>The game ends on the screen.<br />The mission continues in real life.</b></article><article className="df-dark-game"><MissionCard compact /></article><article className="df-churn"><header><span>CHURN RADAR</span><em>ACTIVITY LOG</em></header><h3>It notices when good customers go quiet, too.</h3><p>DayForge detects the pattern changing before the revenue disappears.</p>{["Order frequency dropping","Lower pounds per week","Unresolved complaint","Missed pickups","Competitor entering conversation"].map((x,i)=><span key={x}><i className={i<2?"hot":""} />{x}</span>)}</article><article className="df-intel"><header>INTELLIGENCE ENGINE</header><h3>DayForge learns what a real opportunity looks like for you.</h3><p>Choose the signals that matter to your laundry business. DayForge watches them in real time, combines them with geography, account fit and your mission results—then shows you who is ready, why now and how to win.</p><ul>{["New hotel or apartment opening","Property portfolio expansion","Gym or salon adding locations","Hiring for housekeeping / operations","Nearby revenue change","Estimated weekly laundry volume","Your available capacity & pricing"].map(x=><li key={x}><Check />{x}</li>)}</ul></article></section>
 
-  return (
-    <div className={`ff-page${posterMode ? " is-poster" : ""}`} id="top">
-      <a className="ff-skip" href="#ff-main">Skip to content</a>
-      <header className="ff-header">
-        <DayforgeMark />
-        <nav aria-label="Page navigation"><a href="#operating-system">The OS</a><a href="#mission">How it works</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a></nav>
-        <span className="ff-header-proof"><i /> BUILT &amp; RUN IN LA</span>
-      </header>
-
-      <main id="ff-main">
-        <section className="ff-hero" aria-labelledby="ff-hero-title">
-          <div className="ff-hero-copy">
-            <Eyebrow>FOR LAUNDROMAT &amp; FLUFF-AND-FOLD OWNERS</Eyebrow>
-            <h1 id="ff-hero-title">Stop driving past businesses that could be paying you.</h1>
-            <p>
-              DayForge runs your fluff-and-fold operation and learns where the
-              profit is. Sage finds your next best move. Then BORESLAY—our
-              game for slaying business boredom—turns it into a playable
-              mission you finish in the real world.
-            </p>
-            <div className="ff-hero-actions">
-              <TerritoryCta source="hero" onOpen={openScheduler} />
-              <span><ShieldCheck /> See the winnable accounts around your store in 15 minutes.</span>
-            </div>
-            <div className="ff-hero-proof"><b>BUILT WHERE TWO FOUNDER LIVES COLLIDED</b><span>Laundromat operations × cloud gaming</span></div>
-          </div>
-          <HeroSystem />
-          <div className="ff-hero-note"><span>RUN THE STORE</span><i /><span>FIND THE MOVE</span><i /><span>PLAY THE MISSION</span><i /><span>WIN IN REAL LIFE</span></div>
-        </section>
-
-        <section className="ff-credline" aria-label="DayForge operating proof">
-          <p><span>Built by a laundromat operator</span><i>·</i><span>Built by a cloud-gaming founder</span><i>·</i><span>Running daily in our own LA stores</span><i>·</i><span>Real data in</span><i>·</i><span>Real visits out</span></p>
-        </section>
-
-        <OperatingSystemSection />
-        <MissionSequence onOpen={openScheduler} missionEndRef={missionEndRef} />
-        <GamePayoff />
-        <div ref={founderRef}><FounderSection /></div>
-        <RecoverySection />
-        <PricingSection onOpen={openScheduler} />
-        <FaqSection onOpen={openScheduler} faqRef={faqRef} />
-      </main>
-
-      <footer className="ff-footer"><DayforgeMark /><p>Built in Los Angeles for owners who still do the work.</p><a href={`mailto:${FALLBACK_EMAIL}`}>{FALLBACK_EMAIL}</a></footer>
-
-      {showSticky ? (
-        <aside className={`ff-sticky${schedulerOpen ? " is-dialog-open" : ""}`} aria-label="Map my territory">
-          <div><Route /><span><b>What&apos;s around your store?</b><small>See the accounts worth the drive.</small></span></div>
-          <TerritoryCta source="sticky" onOpen={openScheduler} tone="ivory" />
-        </aside>
-      ) : null}
-
-      <SchedulerDialog open={schedulerOpen} onClose={() => setSchedulerOpen(false)} returnFocusRef={lastCtaRef} />
-    </div>
-  );
+      <section className="df-bottom" id="pricing"><article className="df-testimonial" id="about"><span>REAL RESULTS. REAL LAUNDRIES.</span><div><img src={fieldVisit} alt="Laundromat operator" /><p>“DayForge shows us who&apos;s ready. We walk in knowing why now, who to ask for and what to say. We&apos;ve landed more commercial accounts in the last 90 days than the previous two years combined.”<b>— Mike Valencia<br />West Central Laundry<br />Los Angeles, CA</b><em>★★★★★</em></p></div></article><article className="df-compare"><div><b>THE DAYFORGE WAY</b>{["Real-time local laundry signals","Territory-based account targeting","Game-driven follow-through","Laundry-focused talk tracks","More conversations that close","A system that learns from every mission"].map(x=><span key={x}><Check />{x}</span>)}</div><div><b>THE OLD WAY</b>{["Cold calling & bought lists","No local context","Dashboards nobody uses","Generic pitches","Opportunities slip through the cracks","Silence"].map(x=><span key={x}><X />{x}</span>)}</div></article><article className="df-cost"><h3>What did the account you drove past today cost you?</h3><p>You will never see that number. DayForge makes sure you don&apos;t have to keep wondering.</p><Cta source="pricing" onOpen={openScheduler} /></article><article className="df-price"><span>DAYFORGE OPERATOR</span><p>Everything you need to run and grow your fluff-and-fold laundry.</p><strong>$199<small>/month</small></strong>{["See the signals, POS, orders, routes, capacity","Grow the laundry: missions, pitches, proposals","Churn radar & win-back tools","CRM integrations & reporting","Cancel anytime. No setup fee. No contracts."].map(x=><i key={x}><Check />{x}</i>)}</article><article className="df-faq" id="faq"><span>FAQ</span>{["Where does the data come from?","Is my territory private?","Do I need a sales team?","Will this work for my store size?","What is Boreslay?"].map(q=><details key={q}><summary>{q}<ChevronDown /></summary><p>DayForge combines your operating signals with local territory intelligence, then keeps you in control of every action.</p></details>)}</article><article className="df-final"><h3>Stop driving past the next account you could win.</h3><Cta source="final" onOpen={openScheduler} /><p><LockKeyhole /> Secure &amp; private<br />No credit card required</p></article></section>
+    </main>
+    <footer className="df-footer"><Brand /><nav><a href="#product">Product</a><a href="#how">How It Works</a><a href="#boreslay">Boreslay</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="#about">About</a><a href={`mailto:${FALLBACK_EMAIL}`}>Contact</a></nav><span>Privacy&nbsp;&nbsp;&nbsp; Terms&nbsp;&nbsp;&nbsp; © 2026 DayForge. All rights reserved.</span></footer>
+    <SchedulerDialog open={open} onClose={() => setOpen(false)} returnFocusRef={lastCtaRef} />
+  </div>;
 }
