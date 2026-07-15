@@ -163,4 +163,13 @@ describe("DayForge flagship contract", () => {
     expect(component).toContain('page.style.setProperty("--dfm-device-width"');
     expect(component).toContain('page.style.setProperty("--dfm-force-scale"');
   });
+
+  it("explains the game before introducing the Boreslay mission art", () => {
+    expect(component).toContain("SELLING LAUNDRY SERVICE IS BORING.");
+    expect(component).toContain("SO WE TURNED IT INTO A GAME.");
+    expect(component).toContain("finds real nearby properties worth pursuing");
+    expect(component.indexOf('className="dfm-boreslay-intro"')).toBeLessThan(
+      component.indexOf('className="dfm-boreslay"')
+    );
+  });
 });

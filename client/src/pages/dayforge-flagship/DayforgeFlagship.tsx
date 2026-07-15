@@ -760,12 +760,17 @@ function MobileLanding({ onOpen }: { onOpen: (trigger: HTMLButtonElement) => voi
           <MobileCta source={MOBILE_CTA_SOURCES.pitch} onOpen={onOpen}><Send /> SEND TO MY PHONE</MobileCta>
         </section>
 
+        <section className="dfm-boreslay-intro">
+          <h2>SELLING LAUNDRY SERVICE IS BORING.<br /><span>SO WE TURNED IT INTO A GAME.</span></h2>
+          <p><b>Boreslay</b> finds real nearby properties worth pursuing, then turns the work of landing each account into missions you can actually play.</p>
+        </section>
+
         <section className="dfm-boreslay">
           <img src={victoryAccount} alt="BORESLAY Mission 042: a dragon turns the Westview account into a playable field mission" />
           <div className="dfm-boreslay-shade" />
           <div className="dfm-boreslay-copy">
             <span>MISSION 042</span>
-            <h2>BORESLAY</h2>
+            <h2>Boreslay</h2>
             <b>WESTVIEW PROPERTY MANAGEMENT</b>
             <small>15 BUILDINGS · 0.2 MI AWAY</small>
             <strong><i>TARGET VALUE</i>$24,800 <small>/ YEAR</small></strong>
