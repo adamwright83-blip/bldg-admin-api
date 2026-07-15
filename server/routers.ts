@@ -3028,16 +3028,59 @@ export const appRouter = router({
         }
 
         try {
-          // Resolve vendor for payout routing
+          // Laundry payments must never silently fall back to a platform-only
+          // charge. Resolve the vendor again at charge time for older orders
+          // that predate vendor assignment, then verify Connect readiness from
+          // Stripe rather than trusting the cached vendor flags.
           const vendor = order.vendorId
             ? await getVendorById(order.vendorId)
-            : null;
-          const vendorAccountId =
-            vendor?.stripeConnectAccountId ??
-            process.env.STRIPE_CONNECT_VENDOR_ACCOUNT_ID ??
-            null;
-          const payoutReady =
-            !!vendorAccountId && vendor?.payoutsEnabled === true;
+            : await getVendorForOrder(order.buildingSlug, order.serviceType);
+          if (!vendor) {
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message:
+                "No active fulfillment vendor is assigned. Customer was not charged.",
+            });
+          }
+          if (!order.vendorId) {
+            await updateOrderVendor(input.orderId, vendor.id);
+          }
+
+          const vendorAccountId = vendor.stripeConnectAccountId;
+          if (!vendorAccountId) {
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message:
+                `${vendor.name} has no Stripe connected account. Customer was not charged.`,
+            });
+          }
+
+          const connectedAccount = await stripe.accounts.retrieve(
+            vendorAccountId
+          );
+          await updateVendorConnectStatus(vendor.id, {
+            chargesEnabled: connectedAccount.charges_enabled,
+            payoutsEnabled: connectedAccount.payouts_enabled,
+            detailsSubmitted: connectedAccount.details_submitted,
+            currentlyDue: JSON.stringify(
+              connectedAccount.requirements?.currently_due ?? []
+            ),
+            pastDue: JSON.stringify(
+              connectedAccount.requirements?.past_due ?? []
+            ),
+            disabledReason:
+              connectedAccount.requirements?.disabled_reason ?? null,
+          });
+          if (
+            !connectedAccount.charges_enabled ||
+            !connectedAccount.payouts_enabled
+          ) {
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message:
+                `${vendor.name} is not ready to receive Stripe payouts. Customer was not charged.`,
+            });
+          }
 
           let paymentIntent;
           let platformFeeCents: number | null = null;
@@ -3050,7 +3093,7 @@ export const appRouter = router({
             source: "admin_chargeCard",
           };
 
-          if (payoutReady) {
+          {
             const feePercent =
               vendor?.platformFeePercent != null
                 ? parseFloat(vendor.platformFeePercent as string)
@@ -3080,19 +3123,6 @@ export const appRouter = router({
             console.log(
               `[ChargeCard] Vendor payout: $${(vendorPayoutCents / 100).toFixed(2)}  Platform fee: $${(platformFeeCents / 100).toFixed(2)} (${feePercent}%)`
             );
-          } else {
-            paymentIntent = await stripe.paymentIntents.create({
-              customer: customerId,
-              payment_method: paymentMethodId,
-              amount: input.amountCents,
-              currency: "usd",
-              confirm: true,
-              off_session: true,
-              metadata: stripeMetadata,
-            });
-            console.log(
-              `[ChargeCard] No payout routing applied for order #${input.orderId}`
-            );
           }
 
           const paidAt = new Date(paymentIntent.created * 1000);
@@ -3103,15 +3133,11 @@ export const appRouter = router({
             total: centsToDollars(input.amountCents),
             status: "processing",
             isFirstPaidOrder: !hasPaidBefore,
-            ...(payoutReady
-              ? {
-                  platformFeeCents,
-                  vendorPayoutCents,
-                  stripeConnectedAccountIdSnapshot: vendorAccountId,
-                  vendorNameSnapshot: vendor?.name ?? null,
-                  routingPrioritySnapshot: null,
-                }
-              : {}),
+            platformFeeCents,
+            vendorPayoutCents,
+            stripeConnectedAccountIdSnapshot: vendorAccountId,
+            vendorNameSnapshot: vendor.name,
+            routingPrioritySnapshot: null,
           });
 
           await ensurePickupCompletedOperationsEventForOrder(input.orderId, {

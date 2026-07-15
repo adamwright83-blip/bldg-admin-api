@@ -18,9 +18,15 @@ describe("Slice 4 production-safety invariants", () => {
 
   it("does not modify the legacy chargeCard / orders / Stripe destination-charge flow", () => {
     const routersSource = read("server/routers.ts");
-    // chargeCard's destination-charge call shape is untouched: transfer_data + application_fee_amount.
+    // Every laundry charge resolves a vendor, checks the connected account
+    // live, and uses a destination charge. There must be no silent
+    // platform-only fallback when routing is unavailable.
+    expect(routersSource).toMatch(/await getVendorForOrder\(order\.buildingSlug, order\.serviceType\)/);
+    expect(routersSource).toMatch(/stripe\.accounts\.retrieve\(\s*vendorAccountId\s*\)/);
+    expect(routersSource).toMatch(/!connectedAccount\.charges_enabled\s*\|\|\s*!connectedAccount\.payouts_enabled/);
     expect(routersSource).toMatch(/transfer_data:\s*{\s*destination:\s*vendorAccountId!\s*}/);
     expect(routersSource).toMatch(/application_fee_amount:\s*platformFeeCents/);
+    expect(routersSource).not.toContain("[ChargeCard] No payout routing applied");
   });
 
   it("does not alter the orders or vendors Drizzle schema", () => {
