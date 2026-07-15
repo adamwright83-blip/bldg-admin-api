@@ -59,12 +59,14 @@ describe("DayForge flagship contract", () => {
     expect(component).not.toContain("WATCH THE TOUR");
   });
 
-  it("opens the scheduler directly with a safe email fallback", () => {
-    expect(component).toContain("VITE_SCHEDULER_URL");
-    expect(component).toContain("Let&apos;s map the commercial accounts around your store.");
-    expect(component).toContain("Schedule your DayForge territory mapping demo");
+  it("opens a one-step territory email capture with a safe fallback", () => {
+    expect(component).toContain("/api/leads/submit");
+    expect(component).toContain('source: "dayforge_flagship_territory_popup"');
+    expect(component).toContain("Where should we send your territory map?");
+    expect(component).toContain('type="email"');
+    expect(component).toContain("No spam. No shared lists. Just your territory.");
     expect(component).toContain("adam@bldg.chat");
-    expect(component).not.toContain("contact form");
+    expect(component).not.toContain("VITE_SCHEDULER_URL");
   });
 
   it("keeps PostHog silent without a key and preserves event contracts", () => {

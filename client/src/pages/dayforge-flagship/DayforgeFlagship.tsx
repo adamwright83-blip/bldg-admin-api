@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type FormEvent,
   type RefObject,
   type SyntheticEvent,
 } from "react";
@@ -54,22 +55,8 @@ import {
 import "./dayforge-flagship.css";
 
 const FALLBACK_EMAIL = "adam@bldg.chat";
+const API_BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 const OWNER_FIELD_VISIT = "/dayforgeflagship/owner-field-visit.jpg";
-const RAW_SCHEDULER_URL = import.meta.env.VITE_SCHEDULER_URL?.trim();
-
-function validatedSchedulerUrl(rawUrl = RAW_SCHEDULER_URL): string | undefined {
-  if (!rawUrl) return undefined;
-  try {
-    const candidate = new URL(rawUrl);
-    return candidate.protocol === "https:" || candidate.protocol === "http:"
-      ? candidate.toString()
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-const SCHEDULER_URL = validatedSchedulerUrl();
 
 function DayforgeMark() {
   return (
@@ -630,6 +617,9 @@ function FaqSection({ onOpen, faqRef }: { onOpen: (trigger: HTMLButtonElement) =
 
 function SchedulerDialog({ open, onClose, returnFocusRef }: { open: boolean; onClose: () => void; returnFocusRef: RefObject<HTMLButtonElement | null> }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
 
   useEffect(() => {
     if (!open) return;
@@ -640,6 +630,7 @@ function SchedulerDialog({ open, onClose, returnFocusRef }: { open: boolean; onC
     const triggerSource = trigger?.dataset.ctaSource;
     dialog.showModal();
     document.body.style.overflow = "hidden";
+    requestAnimationFrame(() => emailRef.current?.focus());
     return () => {
       document.body.style.overflow = previousOverflow;
       if (dialog.open) dialog.close();
@@ -652,16 +643,53 @@ function SchedulerDialog({ open, onClose, returnFocusRef }: { open: boolean; onC
 
   if (!open) return null;
 
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (status === "submitting") return;
+    setStatus("submitting");
+    try {
+      const response = await fetch(`${API_BASE}/api/leads/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "DayForge territory request",
+          building_name: "Laundry owner or operator",
+          role: "Laundry owner or operator",
+          email: email.trim(),
+          number_of_units: "Laundry business",
+          source: "dayforge_flagship_territory_popup",
+          source_url: window.location.href,
+          notes: "Requested a private DayForge territory scan from the flagship landing page.",
+        }),
+      });
+      if (!response.ok) throw new Error(`Lead submission failed (${response.status})`);
+      setStatus("success");
+    } catch (error) {
+      console.error("[DayForge flagship] territory request failed", error);
+      setStatus("error");
+    }
+  };
+
   return (
     <dialog ref={dialogRef} className="ff-scheduler" aria-labelledby="ff-scheduler-title" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
       <div className="ff-scheduler-shell">
         <button className="ff-scheduler-close" type="button" onClick={onClose} aria-label="Close scheduler"><X /></button>
-        <div className="ff-scheduler-copy"><Eyebrow>15-MINUTE LIVE DEMO</Eyebrow><h2 id="ff-scheduler-title">Let&apos;s map the commercial accounts around your store.</h2><p>Pick a time that works. We&apos;ll map your territory live on the call.</p></div>
-        {SCHEDULER_URL ? (
-          <div className="ff-scheduler-widget"><iframe src={SCHEDULER_URL} title="Schedule your DayForge territory mapping demo" loading="eager" referrerPolicy="strict-origin-when-cross-origin" /><a href={SCHEDULER_URL} target="_blank" rel="noreferrer">Open scheduler in a new tab <ArrowUpRight /></a></div>
-        ) : (
-          <div className="ff-scheduler-fallback"><MapPin /><h3>The live calendar is being connected.</h3><p>Email Adam and we&apos;ll map your territory together.</p><a className="ff-cta is-cobalt" href={`mailto:${FALLBACK_EMAIL}?subject=Map%20my%20DayForge%20territory`}><Mail /> EMAIL {FALLBACK_EMAIL}</a></div>
-        )}
+        <div className="ff-scheduler-copy"><span className="ff-scheduler-signal"><i /> PRIVATE TERRITORY SCAN</span><h2 id="ff-scheduler-title">Let&apos;s find the accounts hiding on your route.</h2><p>Drop your email. We&apos;ll map the commercial laundry opportunities around your store and show you what&apos;s worth the drive.</p><div className="ff-scheduler-proof"><span><Check /> No credit card</span><span><Check /> Your territory stays private</span></div></div>
+        <div className="ff-scheduler-capture">
+          {status === "success" ? (
+            <div className="ff-scheduler-success" aria-live="polite"><span><MapPin /></span><small>REQUEST RECEIVED</small><h3>Your territory is officially on our radar.</h3><p>Watch your inbox. We&apos;ll reach out to map the best nearby accounts with you.</p><button type="button" onClick={onClose}>BACK TO DAYFORGE <ArrowRight /></button></div>
+          ) : (
+            <form onSubmit={submit}>
+              <span className="ff-scheduler-step">STEP 1 OF 1</span>
+              <h3>Where should we send your territory map?</h3>
+              <label htmlFor="ff-territory-email">YOUR BEST EMAIL</label>
+              <div className="ff-scheduler-email"><Mail /><input ref={emailRef} id="ff-territory-email" name="email" type="email" inputMode="email" autoComplete="email" placeholder="you@yourlaundromat.com" value={email} onChange={event => { setEmail(event.target.value); if (status === "error") setStatus("idle"); }} required /></div>
+              {status === "error" && <p className="ff-scheduler-error" role="alert">That didn&apos;t go through. Try again or email <a href={`mailto:${FALLBACK_EMAIL}`}>{FALLBACK_EMAIL}</a>.</p>}
+              <button className="ff-scheduler-submit" type="submit" disabled={status === "submitting"}><span>{status === "submitting" ? "SCANNING…" : "SCAN MY TERRITORY"}</span><ArrowRight /></button>
+              <small className="ff-scheduler-privacy"><LockKeyhole /> No spam. No shared lists. Just your territory.</small>
+            </form>
+          )}
+        </div>
       </div>
     </dialog>
   );
