@@ -19,42 +19,68 @@ const vercelConfig = fs.readFileSync(
   "utf8"
 );
 
-describe("DayForge arcade landing contract", () => {
-  it("keeps /dayforge routed through the application and Vercel", () => {
+describe("DayForge responsive arcade landing contract", () => {
+  it("keeps /dayforge routed through the app and Vercel", () => {
     expect(appSource.match(/<Route path="\/dayforge"/g)).toHaveLength(2);
     expect(vercelConfig).toContain('"source": "/dayforge"');
   });
 
-  it("uses the exact 941 by 1672 campaign master", () => {
-    expect(pageSource).toContain("dayforge-arcade-landing.png");
-    expect(pageSource).toContain("width={941}");
-    expect(pageSource).toContain("height={1672}");
-    expect(cssSource).toContain("aspect-ratio: 941 / 1672");
+  it("uses native responsive sections instead of rendering the concept poster", () => {
+    expect(pageSource).not.toContain('className="dfa-artwork"');
+    expect(pageSource).toContain("<GameplaySection />");
+    expect(pageSource).toContain("<HowSection />");
+    expect(pageSource).toContain("<DashboardSection />");
+    expect(pageSource).toContain("<IntelligenceSection />");
+    expect(pageSource).toContain("<CastSection />");
+    expect(pageSource).toContain("<FounderSection />");
+    expect(pageSource).toContain("<PricingSection />");
+    expect(pageSource).toContain("<FaqSection />");
+    expect(cssSource).toContain("--dfa2-shell: 1440px");
+    expect(cssSource).toContain("min-height: calc(100vh - 78px)");
   });
 
-  it("preserves the exact headline, supporting copy, and offer", () => {
-    expect(pageSource).toContain(
-      "Stop driving past businesses that could be paying you."
-    );
-    expect(pageSource).toContain(
-      "DayForge turns nearby laundry opportunities into playable missions—and"
-    );
-    expect(pageSource).toContain("Dashboards get ignored. Games get played.");
-    expect(pageSource).toContain("$149/month");
-    expect(pageSource).toContain("Stop hoping. Start hunting.");
+  it("makes the real BORESLAY game the hero centerpiece", () => {
+    expect(pageSource).toContain("src={GAME_PATH}");
+    expect(pageSource).toContain('title="Play BORESLAY Arcade Duel"');
+    expect(pageSource).toContain("PRESS START");
+    expect(pageSource).toContain("REAL GAME · LIVE MISSION");
+    expect(pageSource).toContain("p5-final-browser-proof.png");
+    expect(pageSource).toContain("p3-browser-proof.png");
+    expect(pageSource).toContain("concept-v2-showpiece.png");
   });
 
-  it("keeps every major CTA actionable", () => {
-    expect(pageSource.match(/href="\/boreslay-rally"/g)).toHaveLength(3);
-    expect(pageSource.match(/href="\/territory-preview"/g)).toHaveLength(5);
-    expect(pageSource).toContain('trackArcadeEvent("cta_click", source)');
+  it("preserves the locked product, game, character, move, and offer copy", () => {
+    for (const copy of [
+      "Stop driving past businesses that could be paying you.",
+      "DayForge turns nearby laundry opportunities into playable",
+      "BORESLAY",
+      "STRIKE",
+      "BANK SHOT",
+      "BUTT BASH",
+      "Cash",
+      "Rook",
+      "Clockhead",
+      "Dashboards get ignored.",
+      "Every mission makes the next mission smarter.",
+      "$149",
+      "Stop hoping.",
+    ])
+      expect(pageSource).toContain(copy);
+  });
+
+  it("keeps the primary conversion paths, address form, and FAQ functional", () => {
+    expect(pageSource).toContain("href={GAME_PATH}");
+    expect(pageSource).toContain("territoryUrl(");
+    expect(pageSource).toContain("onSubmit={submitAddress}");
     expect(pageSource).toContain('aria-label="Primary navigation"');
+    expect(pageSource).toContain("<details");
+    expect(pageSource).toContain('trackArcadeEvent("cta_click"');
   });
 
-  it("includes accessible copy, focus states, and reduced-motion handling", () => {
-    expect(pageSource).toContain('className="dfa-copy"');
-    expect(pageSource).toContain('className="dfa-skip"');
-    expect(pageSource).toContain("<details>");
+  it("includes laptop, tablet, mobile, focus, and reduced-motion rules", () => {
+    expect(cssSource).toContain("@media (max-width: 1240px)");
+    expect(cssSource).toContain("@media (max-width: 1020px)");
+    expect(cssSource).toContain("@media (max-width: 700px)");
     expect(cssSource).toContain(":focus-visible");
     expect(cssSource).toContain("@media (prefers-reduced-motion: reduce)");
   });
