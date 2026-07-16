@@ -42,7 +42,7 @@ describe("DayForge final landing contract", () => {
     expect(appSource).toContain('"/landingfinal"');
     expect(
       appSource.match(
-        /<Route path="\/landingfinal" component=\{DayforgeLandingRoute\} \/>/g
+        /<Route path="\/landingfinal" component=\{LandingFinalRoute\} \/>/g
       )
     ).toHaveLength(2);
     expect(vercelConfig).toContain('"source": "/landingfinal"');

@@ -1,3139 +1,1534 @@
-/* ============================================================
-   DayForge for Laundry — /landingfinal
-   Light page · dark game band · ember-orange CTAs only.
-   Mobile-first: every block is designed at 380px, then widened.
-   ============================================================ */
+@import url("https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap");
 
-.lf-root {
-  --lf-paper: #f7f1e6;
-  --lf-paper-2: #efe5d2;
-  --lf-ink: #241c11;
-  --lf-ink-soft: #6b6050;
-  --lf-line: rgba(36, 28, 17, 0.14);
-  --lf-ember: #e8590c;
-  --lf-ember-deep: #c2410c;
-  --lf-gold: #d9a441;
-  --lf-night: #14102a;
-  --lf-night-2: #1e1738;
-  --lf-night-line: rgba(233, 216, 166, 0.22);
-  --lf-parchment: #f3e6c8;
-  --lf-good: #157347;
-  --lf-good-bg: #d9f0e2;
-  --lf-sage: #0e6b4f;
-  --lf-sage-bg: #e3f2ea;
-  --lf-mid: #9a6700;
-  --lf-mid-bg: #fdf0c9;
-  --lf-ui-ink: #14202e;
-  --lf-ui-soft: #5b6b7c;
-  --lf-ui-line: #dde5ec;
-  --lf-display: "Barlow Condensed", "Arial Narrow", sans-serif;
-  --lf-body: "DM Sans", "Helvetica Neue", sans-serif;
-  --lf-serif: "Fraunces", Georgia, serif;
-  --lf-mono: "JetBrains Mono", monospace;
-
-  font-family: var(--lf-body);
-  background: var(--lf-paper);
-  color: var(--lf-ink);
-  line-height: 1.55;
-  overflow-x: clip;
-  scroll-behavior: smooth;
+:root {
+  --navy: #06121f;
+  --ink: #101820;
+  --cream: #f7f1e7;
+  --paper: #fffaf1;
+  --orange: #ef5b0c;
+  --orange2: #ff7417;
+  --green: #499b2c;
+  --line: #cfc8bb;
 }
-
-.lf-root *,
-.lf-root *::before,
-.lf-root *::after {
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  background: var(--cream);
+}
+.df-page,
+.df-page *,
+.df-page *::before,
+.df-page *::after {
   box-sizing: border-box;
 }
-
-.lf-root img {
-  max-width: 100%;
-  display: block;
-}
-
-.lf-root h1,
-.lf-root h2,
-.lf-root h3 {
-  font-family: var(--lf-display);
-  line-height: 1.02;
-  text-transform: uppercase;
-  letter-spacing: 0.01em;
-  margin: 0;
-  text-wrap: balance;
-}
-
-.lf-root p {
-  margin: 0;
-}
-
-.lf-skip {
-  position: absolute;
-  left: -9999px;
-  top: 0;
-  background: var(--lf-ink);
-  color: #fff;
-  padding: 10px 16px;
-  z-index: 200;
-}
-
-.lf-skip:focus {
-  left: 12px;
-  top: 12px;
-}
-
-.lf-wrap {
-  width: min(1120px, 100% - 40px);
-  margin-inline: auto;
-}
-
-/* ---------- eyebrow / buttons ---------- */
-
-.lf-eyebrow {
-  display: inline-block;
-  font-family: var(--lf-display);
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--lf-ember-deep);
-}
-
-.lf-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  font-family: var(--lf-display);
-  font-weight: 800;
-  font-size: 20px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #fff;
-  background: linear-gradient(180deg, #f0680f, var(--lf-ember-deep));
-  border: 0;
-  border-radius: 12px;
-  padding: 16px 26px;
-  cursor: pointer;
-  box-shadow:
-    0 2px 0 rgba(120, 45, 5, 0.55),
-    0 10px 26px rgba(232, 89, 12, 0.32);
-  transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease;
-}
-
-.lf-btn:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    0 3px 0 rgba(120, 45, 5, 0.55),
-    0 14px 30px rgba(232, 89, 12, 0.38);
-}
-
-.lf-btn:active {
-  transform: translateY(1px);
-  box-shadow: 0 1px 0 rgba(120, 45, 5, 0.55);
-}
-
-.lf-btn svg {
-  width: 20px;
-  height: 20px;
-}
-
-.lf-root .lf-btn-note {
+.df-page {
+  min-width: 320px;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--cream);
+  font-family: Inter, Arial, sans-serif;
   font-size: 14px;
-  color: var(--lf-ink-soft);
-  margin-top: 10px;
+  line-height: 1.35;
 }
-
-/* ---------- top bar ---------- */
-
-.lf-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 0 10px;
+.df-page :where(h1, h2, h3, p, dl, dd, ul) {
+  margin: 0;
 }
-
-.lf-mark {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  font-family: var(--lf-display);
-  font-weight: 800;
-  font-size: 22px;
-  letter-spacing: 0.16em;
-  color: var(--lf-ink);
+.df-page button,
+.df-page a {
+  font: inherit;
+}
+.df-page a {
+  color: inherit;
   text-decoration: none;
 }
-
-.lf-mark-glyph {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: var(--lf-ink);
-  color: var(--lf-gold);
+.df-page button {
+  cursor: pointer;
 }
-
-.lf-mark-glyph svg {
-  width: 17px;
-  height: 17px;
+.df-page img {
+  display: block;
+  max-width: 100%;
 }
-
-.lf-topbar-tag {
-  font-family: var(--lf-display);
-  font-weight: 600;
-  font-size: 13px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--lf-ink-soft);
-  display: none;
+.df-page :focus-visible {
+  outline: 3px solid #ffb36e;
+  outline-offset: 3px;
 }
-
-@media (min-width: 760px) {
-  .lf-topbar-tag {
-    display: block;
-  }
+.df-skip {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 1000;
+  transform: translateY(-200%);
+  padding: 10px 14px;
+  background: #fff;
 }
-
-/* ============================================================
-   SECTION 1 — HERO
-   ============================================================ */
-
-.lf-hero {
-  padding: 26px 0 54px;
+.df-skip:focus {
+  transform: none;
 }
-
-.lf-hero-grid {
-  display: grid;
-  gap: 34px;
-}
-
-.lf-hero h1 {
-  font-size: clamp(42px, 11vw, 74px);
-  font-weight: 800;
-  margin: 14px 0 16px;
-}
-
-.lf-hero-sub {
-  font-size: 17px;
-  color: #43392a;
-  max-width: 54ch;
-}
-
-.lf-hero-cta {
-  margin-top: 26px;
-}
-
-/* Reserved slot: the 90-second tour button drops in here when the
-   video exists. Keep as a flex row so a secondary button can join. */
-.lf-hero-actions {
+.df-brand {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 14px;
-}
-
-.lf-root .lf-proofline {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-top: 22px;
-  font-size: 14.5px;
-  font-weight: 600;
-  color: #43392a;
-}
-
-.lf-proofline svg {
-  width: 17px;
-  height: 17px;
-  color: var(--lf-ember-deep);
-  flex-shrink: 0;
-}
-
-/* --- hero visual: mobile chain (380px-first) --- */
-
-.lf-hero-chain {
-  display: grid;
-  gap: 0;
-  justify-items: center;
-}
-
-.lf-chain-step {
-  width: 100%;
-  display: grid;
-  gap: 8px;
-  justify-items: center;
-}
-
-.lf-chain-label {
-  font-family: var(--lf-display);
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--lf-ink-soft);
-}
-
-.lf-chain-arrow {
-  display: flex;
-  justify-content: center;
-  padding: 10px 0;
-  color: var(--lf-ember-deep);
-}
-
-.lf-chain-arrow svg {
-  width: 22px;
-  height: 22px;
-}
-
-.lf-chain-game {
-  width: min(320px, 100%);
-}
-
-.lf-chain-photo {
-  width: min(250px, 78%);
-}
-
-/* --- hero visual: desktop museum diorama --- */
-
-.lf-hero-diorama {
-  display: none;
-}
-
-@media (min-width: 980px) {
-  .lf-hero-grid {
-    grid-template-columns: minmax(400px, 46fr) 54fr;
-    align-items: center;
-    gap: 44px;
-  }
-
-  .lf-hero-chain {
-    display: none;
-  }
-
-  .lf-hero h1 {
-    font-size: clamp(44px, 4.9vw, 64px);
-  }
-
-  /* Grid collage: no panel may cover another panel's UI. */
-  .lf-hero-diorama {
-    display: grid;
-    grid-template-columns: minmax(236px, 260px) 1fr;
-    grid-template-areas:
-      "phone sage"
-      "phone game"
-      "phone photo";
-    gap: 44px 26px;
-    align-items: start;
-    padding-top: 28px;
-  }
-
-  .lf-exhibit {
-    position: relative;
-    border-radius: 16px;
-  }
-
-  .lf-exhibit-caption {
-    position: absolute;
-    top: -26px;
-    left: 4px;
-    font-family: var(--lf-display);
-    font-weight: 700;
-    font-size: 12.5px;
-    letter-spacing: 0.24em;
-    text-transform: uppercase;
-    color: var(--lf-ink-soft);
-    white-space: nowrap;
-  }
-
-  .lf-exhibit-sage {
-    grid-area: sage;
-    width: 100%;
-    transform: rotate(0.8deg);
-  }
-
-  .lf-exhibit-sage .lf-sage-table td,
-  .lf-exhibit-sage .lf-sage-table th {
-    padding: 7px 8px;
-  }
-
-  .lf-exhibit-sage .lf-sage-table th {
-    white-space: normal;
-  }
-
-  .lf-exhibit-game {
-    grid-area: game;
-    width: 100%;
-    transform: rotate(-0.8deg);
-  }
-
-  .lf-exhibit-phone {
-    grid-area: phone;
-    width: 100%;
-    align-self: center;
-  }
-
-  .lf-exhibit-phone .lf-phone {
-    width: 100%;
-  }
-
-  .lf-exhibit-photo {
-    grid-area: photo;
-    width: min(250px, 88%);
-    transform: rotate(0.8deg);
-  }
-
-  .lf-diorama-flow {
-    display: none;
-  }
-}
-
-/* shared "exhibit" card chrome */
-
-.lf-shot {
-  border-radius: 16px;
-  box-shadow:
-    0 3px 8px rgba(36, 28, 17, 0.12),
-    0 22px 48px rgba(36, 28, 17, 0.22);
-}
-
-/* ============================================================
-   SECTION 2 — CREDIBILITY BAND
-   ============================================================ */
-
-.lf-credband {
-  background: var(--lf-ink);
-  color: var(--lf-parchment);
-  padding: 20px 0;
-}
-
-.lf-credband-line {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  column-gap: 14px;
-  row-gap: 6px;
-  font-family: var(--lf-display);
-  font-weight: 600;
-  font-size: 14px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  text-align: center;
-}
-
-.lf-credband-line i {
-  font-style: normal;
-  color: var(--lf-gold);
-}
-
-/* ============================================================
-   SECTION 3 — THE MISSION
-   ============================================================ */
-
-.lf-mission {
-  padding: 64px 0 0;
-}
-
-.lf-section-head {
-  max-width: 720px;
-  margin-bottom: 8px;
-}
-
-.lf-section-head h2 {
-  font-size: clamp(34px, 7.4vw, 56px);
-  font-weight: 800;
-  margin: 12px 0 12px;
-}
-
-.lf-section-head .lf-lede {
-  font-size: 18px;
-  font-family: var(--lf-serif);
-  font-style: italic;
-  color: #554834;
-}
-
-.lf-chapter {
-  display: grid;
-  gap: 26px;
-  padding: 40px 0;
-  border-bottom: 1px dashed var(--lf-line);
-}
-
-/* Grid items default to min-width auto; tables inside would otherwise
-   force the track past the container at narrow widths. */
-.lf-ch-copy,
-.lf-ch-visual {
-  min-width: 0;
-}
-
-.lf-chapter:last-of-type {
-  border-bottom: 0;
-}
-
-.lf-ch-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-family: var(--lf-display);
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--lf-ember-deep);
-}
-
-.lf-ch-kicker b {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--lf-ember-deep);
-  color: #fff;
-  font-size: 14px;
-}
-
-.lf-chapter h3 {
-  font-size: clamp(26px, 6vw, 38px);
-  font-weight: 800;
-  margin: 10px 0 12px;
-}
-
-.lf-chapter .lf-ch-copy p {
-  color: #43392a;
-  font-size: 16.5px;
-  max-width: 52ch;
-}
-
-.lf-chapter .lf-ch-copy p + p {
-  margin-top: 12px;
-}
-
-.lf-ch-copy strong {
-  color: var(--lf-ink);
-}
-
-@media (min-width: 900px) {
-  .lf-chapter {
-    grid-template-columns: 5fr 7fr;
-    align-items: center;
-    gap: 48px;
-    padding: 56px 0;
-  }
-
-  .lf-chapter.is-flip {
-    grid-template-columns: 7fr 5fr;
-  }
-
-  .lf-chapter.is-flip .lf-ch-copy {
-    order: 2;
-  }
-
-  .lf-chapter.is-flip .lf-ch-visual {
-    order: 1;
-  }
-}
-
-/* callout chips over screenshots */
-
-.lf-callouts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.lf-callout {
-  display: inline-flex;
   align-items: center;
   gap: 7px;
-  background: #fff;
-  border: 1.5px solid var(--lf-ember-deep);
-  color: var(--lf-ember-deep);
-  border-radius: 999px;
-  padding: 6px 13px;
-  font-weight: 700;
-  font-size: 13.5px;
-  box-shadow: 0 4px 12px rgba(36, 28, 17, 0.12);
+  color: #fff;
+  font-size: 21px;
+  letter-spacing: 0.035em;
 }
-
-.lf-callout svg {
-  width: 14px;
-  height: 14px;
+.df-brand > span {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  color: var(--orange);
+  border: 3px solid var(--orange);
+  border-left-color: transparent;
+  border-radius: 5px 14px 14px 5px;
 }
-
-/* ---------- Sage desktop window mockup ---------- */
-
-.lf-sage-window {
-  background: #fff;
-  border-radius: 14px;
-  border: 1px solid var(--lf-ui-line);
-  overflow: hidden;
-  font-family: var(--lf-body);
-  color: var(--lf-ui-ink);
+.df-brand svg {
+  width: 15px;
+  fill: currentColor;
 }
-
-.lf-sage-titlebar {
+.df-header {
+  height: 46px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: #f4f7fa;
-  border-bottom: 1px solid var(--lf-ui-line);
+  justify-content: space-between;
+  padding: 0 max(18px, calc((100vw - 1470px) / 2));
+  color: #fff;
+  background: var(--navy);
+  border-bottom: 1px solid #263340;
 }
-
-.lf-sage-dots {
+.df-header nav {
   display: flex;
+  align-items: center;
+  gap: 42px;
+  font-size: 12px;
+}
+.df-header nav a:hover {
+  color: #ffab66;
+}
+.df-cta {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 18px;
+  color: #fff;
+  border: 0;
+  border-radius: 4px;
+  background: linear-gradient(#f8791c, #e65105);
+  box-shadow: 0 2px 0 #a73800;
+  font:
+    800 12px/1 Inter,
+    sans-serif;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+}
+.df-cta svg {
+  width: 15px;
+}
+.df-cta.is-secondary {
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid #77808a;
+  box-shadow: none;
+}
+.df-hero {
+  min-height: 348px;
+  display: grid;
+  grid-template-columns: 31% 69%;
+  gap: 10px;
+  padding: 17px max(30px, calc((100vw - 1440px) / 2)) 14px;
+  background:
+    radial-gradient(circle at 30% 20%, #fffdf8, transparent 45%), var(--cream);
+  border-bottom: 1px solid var(--line);
+}
+.df-kicker {
+  color: #ad4a14;
+  font:
+    800 11px/1.2 "Barlow Condensed",
+    sans-serif;
+  letter-spacing: 0.04em;
+}
+.df-hero-copy {
+  padding-top: 1px;
+}
+.df-hero h1 {
+  max-width: 440px;
+  margin: 11px 0 12px;
+  font:
+    800 clamp(42px, 3.6vw, 58px) / 0.93 "Barlow Condensed",
+    sans-serif;
+  letter-spacing: -0.025em;
+}
+.df-hero-copy > p {
+  max-width: 460px;
+  font-size: 13.5px;
+  line-height: 1.38;
+}
+.df-hero-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 17px;
+}
+.df-safe {
+  display: flex;
+  gap: 18px;
+  margin-top: 15px;
+  font-size: 9px;
+}
+.df-safe span {
+  display: flex;
+  align-items: center;
   gap: 5px;
 }
-
-.lf-sage-dots i {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #d3dce4;
-}
-
-.lf-sage-titlebar b {
-  min-width: 0;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--lf-ui-soft);
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.lf-sage-summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  font-size: 12.5px;
-  color: var(--lf-ui-soft);
-  border-bottom: 1px solid var(--lf-ui-line);
-}
-
-.lf-sage-summary b {
-  color: var(--lf-ui-ink);
-}
-
-.lf-sage-summary svg {
+.df-safe svg {
   width: 14px;
-  height: 14px;
-  color: #7c62c9;
-  flex-shrink: 0;
 }
-
-.lf-sage-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12.5px;
-}
-
-.lf-sage-table th {
-  text-align: left;
-  font-weight: 600;
-  font-size: 10.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--lf-ui-soft);
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--lf-ui-line);
-  white-space: nowrap;
-}
-
-.lf-sage-table td {
-  padding: 9px 10px;
-  border-bottom: 1px solid #edf2f6;
-  vertical-align: middle;
-}
-
-.lf-sage-table td b {
-  display: block;
-  font-weight: 700;
-  font-size: 13px;
-}
-
-.lf-sage-table td small {
-  color: var(--lf-ui-soft);
-  font-size: 11.5px;
-}
-
-.lf-sage-table .lf-row-hot {
-  background: #fff7ef;
-  box-shadow: inset 3px 0 0 var(--lf-ember);
-}
-
-.lf-sage-table .lf-row-dim td {
-  color: var(--lf-ui-soft);
-  font-size: 12px;
-  padding: 10px;
-}
-
-.lf-num {
-  font-family: var(--lf-mono);
-  font-weight: 600;
-  font-size: 12.5px;
-  white-space: nowrap;
-}
-
-.lf-chip {
-  display: inline-block;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  border-radius: 999px;
-  padding: 3px 9px;
-  white-space: nowrap;
-}
-
-.lf-chip-high {
-  background: var(--lf-good-bg);
-  color: var(--lf-good);
-}
-
-.lf-chip-med {
-  background: var(--lf-mid-bg);
-  color: var(--lf-mid);
-}
-
-/* Keep the full table (Win Probability included) inside 380px. */
-@media (max-width: 560px) {
-  .lf-sage-table th {
-    white-space: normal;
-    padding: 7px 7px;
-  }
-
-  .lf-sage-table td {
-    padding: 8px 7px;
-  }
-
-  .lf-sage-table td b {
-    font-size: 12.5px;
-  }
-
-  .lf-num {
-    font-size: 12px;
-  }
-
-  .lf-sage-summary {
-    font-size: 12px;
-  }
-}
-
-/* ---------- game concept scene ---------- */
-
-.lf-scene {
+.df-product-preview {
   position: relative;
-  aspect-ratio: 16 / 10.2;
-  border-radius: 16px;
-  overflow: hidden;
-  background: var(--lf-night);
-  isolation: isolate;
+  display: grid;
+  grid-template-columns: 52% 34% 12%;
+  gap: 9px;
+  align-items: end;
+  padding: 23px 0 0 12px;
 }
-
-.lf-scene-bg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  z-index: 0;
-}
-
-.lf-scene::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background: linear-gradient(
-    180deg,
-    rgba(10, 8, 24, 0.42),
-    rgba(10, 8, 24, 0.05) 34%,
-    rgba(10, 8, 24, 0.12) 70%,
-    rgba(10, 8, 24, 0.5)
-  );
-}
-
-.lf-scene-hud {
+.df-preview-label {
   position: absolute;
   top: 0;
-  left: 0;
-  right: 0;
-  z-index: 3;
+  left: 7%;
+  font: 700 9px Inter;
+}
+.df-preview-label::before,
+.df-preview-label::after {
+  content: "↝";
+  position: absolute;
+  top: -3px;
+  font-size: 24px;
+  font-weight: 400;
+}
+.df-preview-label::before {
+  right: 110%;
+  transform: scaleX(-1);
+}
+.df-preview-label::after {
+  left: 110%;
+}
+.df-territory-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 7px solid #17191b;
+  border-bottom-width: 13px;
+  border-radius: 10px 10px 5px 5px;
+  background: #fff;
+  box-shadow: 0 10px 12px #0004;
+}
+.df-product-preview > .df-territory-card {
+  transform: perspective(900px) rotateY(2deg);
+  transform-origin: right bottom;
+}
+.df-appbar {
+  height: 29px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 14px;
+  padding: 0 8px;
+  border-bottom: 1px solid #d4d8dc;
+  font-size: 7px;
 }
-
-.lf-hud-title {
-  font-family: var(--lf-display);
-  font-weight: 800;
-  font-size: 13px;
-  letter-spacing: 0.22em;
-  color: var(--lf-parchment);
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+.df-appbar .df-brand {
+  font-size: 8px;
+  color: #1c2936;
 }
-
-.lf-hud-meter {
-  flex: 1;
-  max-width: 42%;
-  height: 9px;
-  border-radius: 999px;
-  border: 1px solid rgba(217, 164, 65, 0.7);
-  background: rgba(10, 8, 24, 0.65);
-  overflow: hidden;
-}
-
-.lf-hud-meter i {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #f59f0b, #e8590c);
-}
-
-.lf-hud-timer {
-  font-family: var(--lf-mono);
-  font-weight: 700;
-  font-size: 12px;
-  color: var(--lf-parchment);
-  background: rgba(10, 8, 24, 0.65);
-  border: 1px solid rgba(217, 164, 65, 0.7);
-  border-radius: 8px;
-  padding: 3px 8px;
-}
-
-.lf-scene-dragon {
-  position: absolute;
-  z-index: 2;
-  left: 9%;
-  bottom: 30%;
-  width: 33%;
-  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55));
-}
-
-.lf-scene-boss {
-  position: absolute;
-  z-index: 2;
-  right: 12%;
-  bottom: 31%;
-  width: 20%;
-  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55));
-}
-
-.lf-scene.is-victory .lf-scene-dragon {
-  width: 34%;
-  left: 12%;
-  bottom: 22%;
-}
-
-.lf-scene.is-victory .lf-scene-boss {
-  transform: rotate(-74deg);
-  transform-origin: 40% 80%;
-  filter: grayscale(0.7) brightness(0.75)
-    drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
-  opacity: 0.85;
-  width: 20%;
-  right: 14%;
-  bottom: 16%;
-}
-
-/* mission-interrupt plaque */
-
-.lf-plaque {
-  position: absolute;
-  z-index: 4;
-  left: 50%;
-  bottom: 7%;
-  transform: translateX(-50%);
-  width: min(88%, 460px);
-  background: linear-gradient(180deg, rgba(26, 18, 8, 0.94), rgba(14, 10, 5, 0.94));
-  border: 2px solid var(--lf-gold);
-  border-radius: 12px;
-  box-shadow:
-    0 0 0 3px rgba(20, 12, 4, 0.9),
-    0 14px 30px rgba(0, 0, 0, 0.55);
-  padding: 12px 14px;
-  text-align: center;
-  color: var(--lf-parchment);
-}
-
-.lf-plaque-kicker {
-  font-family: var(--lf-display);
-  font-weight: 800;
-  font-size: 12.5px;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: var(--lf-gold);
-}
-
-.lf-plaque-title {
-  font-family: var(--lf-display);
-  font-weight: 800;
-  font-size: clamp(17px, 2.4vw, 22px);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  margin: 3px 0 5px;
-  color: #ffd98a;
-  text-shadow: 0 0 18px rgba(232, 89, 12, 0.55);
-}
-
-.lf-plaque-body {
-  font-size: 12.8px;
-  line-height: 1.45;
-  color: #efe3c2;
-}
-
-.lf-plaque-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  margin-top: 9px;
-  font-family: var(--lf-display);
-  font-weight: 800;
-  font-size: 13px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #1a1208;
-  background: linear-gradient(180deg, #ffd98a, var(--lf-gold));
-  border-radius: 8px;
-  padding: 7px 13px;
-}
-
-.lf-plaque-cta svg {
+.df-appbar .df-brand > span {
   width: 14px;
   height: 14px;
+  border-width: 2px;
 }
-
-/* victory banner */
-
-.lf-victory-banner {
-  position: absolute;
-  z-index: 4;
-  left: 50%;
-  top: 16%;
-  transform: translateX(-50%);
-  text-align: center;
-  width: 94%;
+.df-appbar .df-brand svg {
+  width: 8px;
 }
-
-.lf-victory-word {
-  font-family: var(--lf-display);
-  font-weight: 800;
-  font-size: clamp(44px, 7vw, 84px);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  line-height: 1;
-  background: linear-gradient(180deg, #ffe9b0 18%, #ffb44d 55%, #e8590c);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  filter: drop-shadow(0 4px 0 rgba(60, 20, 0, 0.85))
-    drop-shadow(0 10px 26px rgba(232, 89, 12, 0.5));
+.df-appbar em {
+  margin-left: auto;
+  color: #77808a;
+  font-size: 6px;
 }
-
-.lf-victory-plaque {
-  display: inline-block;
-  margin-top: 10px;
-  background: linear-gradient(180deg, rgba(26, 18, 8, 0.94), rgba(14, 10, 5, 0.94));
-  border: 2px solid var(--lf-gold);
-  border-radius: 10px;
-  padding: 8px 18px;
-  font-family: var(--lf-display);
-  font-weight: 700;
-  font-size: clamp(14px, 2vw, 19px);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #ffd98a;
+.df-appbody {
+  height: 211px;
+  display: grid;
+  grid-template-columns: 30px 54% 1fr;
 }
-
-.lf-victory-plaque b {
-  color: #7ee2a8;
+.df-appbody > aside {
+  display: grid;
+  align-content: start;
+  gap: 11px;
+  padding: 11px 6px;
+  color: #87909a;
+  background: #102030;
 }
-
-/* ability chips (bottom-right, matches game HUD language) */
-
-.lf-scene-abilities {
-  position: absolute;
-  z-index: 3;
-  right: 8px;
-  bottom: 8px;
-  display: flex;
-  gap: 6px;
+.df-appbody > aside span {
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
 }
-
-.lf-ability {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  font-family: var(--lf-display);
-  font-weight: 700;
-  font-size: 8.5px;
-  letter-spacing: 0.14em;
-  color: var(--lf-parchment);
+.df-appbody > aside span.active {
+  color: #fff;
+  background: var(--orange);
 }
-
-.lf-ability i {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 2px solid var(--lf-gold);
-  background: radial-gradient(circle at 32% 28%, #3a2c58, #171128);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.lf-ability svg {
+.df-appbody > aside svg {
   width: 12px;
-  height: 12px;
-  color: #ffb44d;
 }
-
-.lf-scene.is-compact .lf-scene-abilities,
-.lf-scene.is-compact .lf-hud-meter {
-  display: none;
+.df-account-list {
+  min-width: 0;
+  padding: 7px;
 }
-
-/* Compact scenes (hero exhibits) always use the tall stage + small plaque
-   so the duel stays visible above the mission dialog. */
-.lf-scene.is-compact {
-  aspect-ratio: 20 / 17;
-}
-
-.lf-scene.is-compact .lf-scene-dragon {
-  left: 4%;
-  bottom: 38%;
-  width: 42%;
-}
-
-.lf-scene.is-compact .lf-scene-boss {
-  right: 5%;
-  bottom: 39%;
-  width: 26%;
-}
-
-.lf-scene.is-compact .lf-plaque {
-  bottom: 4%;
-  padding: 9px 11px;
-}
-
-.lf-scene.is-compact .lf-plaque-kicker {
-  font-size: 10.5px;
-}
-
-.lf-scene.is-compact .lf-plaque-title {
-  font-size: 16px;
-}
-
-.lf-scene.is-compact .lf-plaque-body {
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.lf-scene.is-compact .lf-plaque-cta {
-  margin-top: 6px;
-  font-size: 10.5px;
-  padding: 4px 9px;
-}
-
-/* Narrow screens: taller stage + compact plaque so the duel stays visible. */
-@media (max-width: 700px) {
-  .lf-scene {
-    aspect-ratio: 20 / 17;
-  }
-
-  .lf-scene-dragon {
-    left: 4%;
-    bottom: 38%;
-    width: 42%;
-  }
-
-  .lf-scene-boss {
-    right: 5%;
-    bottom: 39%;
-    width: 26%;
-  }
-
-  .lf-plaque {
-    bottom: 4%;
-    padding: 9px 11px;
-  }
-
-  .lf-plaque-kicker {
-    font-size: 10.5px;
-  }
-
-  .lf-plaque-title {
-    font-size: 16px;
-  }
-
-  .lf-plaque-body {
-    font-size: 11.5px;
-    line-height: 1.4;
-  }
-
-  .lf-plaque-cta {
-    margin-top: 7px;
-    font-size: 11px;
-    padding: 5px 10px;
-  }
-
-  .lf-scene.is-victory .lf-scene-dragon {
-    left: 8%;
-    bottom: 18%;
-    width: 40%;
-  }
-
-  .lf-scene.is-victory .lf-scene-boss {
-    right: 8%;
-    bottom: 14%;
-    width: 24%;
-  }
-
-  .lf-victory-banner {
-    top: 12%;
-  }
-
-  .lf-scene-abilities {
-    display: none;
-  }
-}
-
-/* ---------- phone mockups ---------- */
-
-.lf-phone {
-  width: min(300px, 100%);
-  margin-inline: auto;
-  background: #10131c;
-  border-radius: 40px;
-  padding: 12px;
-  box-shadow:
-    0 3px 8px rgba(36, 28, 17, 0.16),
-    0 24px 52px rgba(36, 28, 17, 0.3);
-}
-
-.lf-phone-screen {
-  background: #f5f7fa;
-  border-radius: 30px;
-  overflow: hidden;
-  font-family: var(--lf-body);
-  color: var(--lf-ui-ink);
-  min-height: 480px;
-  display: flex;
-  flex-direction: column;
-}
-
-.lf-phone-status {
+.df-account-list header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 10px 18px 4px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--lf-ui-ink);
+  font-size: 6px;
+  color: #7b838b;
 }
-
-.lf-phone-status i {
+.df-account-list > div {
+  min-height: 35px;
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: 4px;
+  align-items: center;
+  padding: 4px;
+  border-bottom: 1px solid #e4e5e5;
+}
+.df-account-list > div.selected {
+  border: 1px solid #7cbd82;
+  border-radius: 4px;
+  background: #f0f8ed;
+}
+.df-building {
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  color: #d16623;
+  border-radius: 50%;
+  background: #f8ead7;
+}
+.df-building svg {
+  width: 13px;
+}
+.df-account-list p {
+  min-width: 0;
+}
+.df-account-list p b,
+.df-account-list p small {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.df-account-list p b {
+  font-size: 6.5px;
+}
+.df-account-list p small {
+  color: #6d747c;
+  font-size: 5.5px;
+}
+.df-account-list strong {
+  font-size: 7px;
+}
+.df-account-list em {
+  grid-column: 3;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 4.5px;
   font-style: normal;
-  letter-spacing: 0.08em;
 }
-
-.lf-phone-app {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px 10px;
-  border-bottom: 1px solid var(--lf-ui-line);
+.fit-high {
+  color: #6a3800;
+  background: #f5c56a;
 }
-
-.lf-phone-app b {
-  font-family: var(--lf-display);
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  font-size: 14px;
+.fit-medium {
+  color: #8b5700;
+  background: #f8df98;
 }
-
-.lf-phone-app small {
-  margin-left: auto;
-  font-size: 10.5px;
-  font-weight: 700;
-  color: var(--lf-ember-deep);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+.fit-low {
+  color: #27743c;
+  background: #cbe7c7;
 }
-
-.lf-phone-glyph {
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  background: var(--lf-ink);
-  color: var(--lf-gold);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.df-map {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(38deg, transparent 45%, #d5d7d2 46% 48%, transparent 49%),
+    linear-gradient(102deg, transparent 37%, #d5d7d2 38% 41%, transparent 42%),
+    #ecece7;
 }
-
-.lf-phone-glyph svg {
+.df-map::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(#fff8 1px, transparent 1px),
+    linear-gradient(90deg, #fff8 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.df-map i {
+  position: absolute;
   width: 13px;
   height: 13px;
-}
-
-.lf-phone-body {
-  padding: 14px 16px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  flex: 1;
-}
-
-.lf-phone-kicker {
-  font-family: var(--lf-display);
-  font-weight: 700;
-  font-size: 11.5px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--lf-ui-soft);
-}
-
-.lf-mission-card {
-  background: #fff;
-  border: 1px solid var(--lf-ui-line);
-  border-radius: 14px;
-  padding: 13px 14px;
   display: grid;
-  gap: 7px;
-}
-
-.lf-mission-card h4 {
-  margin: 0;
-  font-size: 16.5px;
-  font-weight: 700;
-  line-height: 1.2;
-  font-family: var(--lf-body);
-}
-
-.lf-mission-card small {
-  color: var(--lf-ui-soft);
-  font-size: 12px;
-}
-
-.lf-mission-value {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.lf-mission-value b {
-  font-family: var(--lf-mono);
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--lf-ui-ink);
-}
-
-.lf-mission-value span {
-  font-size: 11px;
-  color: var(--lf-ui-soft);
-}
-
-.lf-mission-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  color: var(--lf-ui-ink);
-}
-
-.lf-mission-row svg {
-  width: 14px;
-  height: 14px;
-  color: var(--lf-ui-soft);
-  flex-shrink: 0;
-}
-
-.lf-phone-drive {
-  margin-top: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: linear-gradient(180deg, #f0680f, var(--lf-ember-deep));
+  place-items: center;
+  border-radius: 50%;
   color: #fff;
-  font-family: var(--lf-display);
-  font-weight: 800;
-  font-size: 16px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  border-radius: 13px;
-  padding: 14px;
 }
-
-.lf-phone-drive svg {
-  width: 16px;
-  height: 16px;
+.df-map i svg {
+  width: 8px;
+  fill: currentColor;
 }
-
-.lf-phone-drive.is-gold {
-  background: linear-gradient(180deg, #ffd98a, var(--lf-gold));
-  color: #1a1208;
+.pin-orange {
+  background: #f26b1d;
 }
-
-.lf-check-list {
+.pin-green {
+  background: #419143;
+}
+.pin-gray {
+  background: #68747d;
+}
+.df-map .p1 {
+  top: 24%;
+  left: 24%;
+}
+.df-map .p2 {
+  top: 16%;
+  left: 58%;
+}
+.df-map .p3 {
+  top: 48%;
+  left: 69%;
+}
+.df-map .p4 {
+  top: 65%;
+  left: 32%;
+}
+.df-map .p5 {
+  top: 75%;
+  left: 72%;
+}
+.df-map .p6 {
+  top: 52%;
+  left: 14%;
+}
+.df-map .p7 {
+  top: 34%;
+  left: 43%;
+}
+.df-map > b {
+  position: absolute;
+  top: 49%;
+  left: 47%;
+  width: 31px;
+  height: 31px;
   display: grid;
-  gap: 8px;
+  place-items: center;
+  color: #257e3e;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #a8db96;
+  box-shadow: 0 0 0 9px #75b86255;
 }
-
-.lf-check-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: #fff;
-  border: 1px solid var(--lf-ui-line);
-  border-radius: 12px;
-  padding: 10px 12px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.lf-check-item svg {
+.df-map > b svg {
   width: 16px;
-  height: 16px;
-  color: var(--lf-good);
-  flex-shrink: 0;
 }
-
-.lf-check-item small {
-  display: block;
-  font-weight: 400;
-  font-size: 11.5px;
-  color: var(--lf-ui-soft);
-}
-
-.lf-stop-map {
+.df-mission-card {
   position: relative;
-  background: #e4ecdf;
-  border: 1px solid var(--lf-ui-line);
-  border-radius: 12px;
-  height: 96px;
+  height: 244px;
   overflow: hidden;
+  color: #fff;
+  border: 6px solid #13181d;
+  border-radius: 8px;
+  background: #101821;
+  box-shadow: 0 10px 12px #0004;
 }
-
-.lf-stop-map svg {
+.df-mission-card > img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-}
-
-.lf-stop-card {
-  background: #fff;
-  border: 1px solid var(--lf-ui-line);
-  border-radius: 12px;
-  padding: 11px 12px;
-  display: grid;
-  gap: 4px;
-}
-
-.lf-stop-card b {
-  font-size: 13.5px;
-}
-
-.lf-stop-card small {
-  font-size: 12px;
-  color: var(--lf-ui-soft);
-  line-height: 1.45;
-}
-
-.lf-stop-tag {
-  display: inline-block;
-  width: fit-content;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--lf-ember-deep);
-  background: #fdeadc;
-  border-radius: 999px;
-  padding: 3px 9px;
-}
-
-/* chapter 3: phones side by side + collateral inset */
-
-.lf-ch3-visual {
-  position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 18px;
-}
-
-.lf-ch3-visual .lf-phone {
-  width: min(258px, 100%);
-}
-
-.lf-collateral {
-  transform: rotate(-3deg);
-  width: min(240px, 88%);
-  background: #fffdf8;
-  border: 1px solid #e6dcc6;
-  border-radius: 6px;
-  box-shadow:
-    0 2px 5px rgba(36, 28, 17, 0.14),
-    0 16px 34px rgba(36, 28, 17, 0.24);
-  padding: 16px 16px 14px;
-  font-family: var(--lf-body);
-  color: var(--lf-ui-ink);
-}
-
-.lf-collateral-head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-family: var(--lf-display);
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  font-size: 13px;
-  color: var(--lf-ink);
-}
-
-.lf-collateral-head i {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  background: var(--lf-ink);
-  color: var(--lf-gold);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.lf-collateral-head svg {
-  width: 11px;
-  height: 11px;
-}
-
-.lf-collateral h5 {
-  margin: 8px 0 2px;
-  font-size: 14.5px;
-  line-height: 1.25;
-  font-weight: 700;
-  font-family: var(--lf-body);
-}
-
-.lf-collateral small {
-  font-size: 10.5px;
-  color: var(--lf-ui-soft);
-  display: block;
-}
-
-.lf-collateral ul {
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 4px;
-}
-
-.lf-collateral li {
-  font-size: 10.5px;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.lf-collateral li::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--lf-ember);
-  flex-shrink: 0;
-}
-
-.lf-collateral-foot {
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px dashed #e6dcc6;
-  font-size: 10px;
-  color: var(--lf-ui-soft);
-  display: flex;
-  justify-content: space-between;
-}
-
-.lf-photo-tag {
-  position: absolute;
-  z-index: 3;
-  left: 12px;
-  bottom: 12px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #fff;
-  background: rgba(20, 14, 6, 0.72);
-  border-radius: 999px;
-  padding: 5px 12px;
-  backdrop-filter: blur(3px);
-}
-
-/* chapter 4: the major photo */
-
-.lf-photo-major {
-  position: relative;
-  border-radius: 18px;
-  overflow: hidden;
-  aspect-ratio: 4 / 3;
-}
-
-.lf-photo-major img {
-  width: 100%;
-  height: 100%;
   object-fit: cover;
 }
-
-.lf-photo-inset {
+.df-mission-shade {
   position: absolute;
-  right: 14px;
-  bottom: 14px;
-  z-index: 2;
-  width: min(190px, 52%);
-  background: #fff;
-  border-radius: 14px;
-  box-shadow: 0 14px 30px rgba(20, 14, 6, 0.4);
-  padding: 12px 13px;
-  display: grid;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--lf-ui-ink);
+  inset: 0;
+  background: linear-gradient(#09111b99, #08101dbb 65%, #08101b);
 }
-
-.lf-photo-inset b {
-  font-size: 12.5px;
+.df-mission-card > header {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+  font-size: 5px;
 }
-
-.lf-photo-inset span {
-  color: var(--lf-ui-soft);
-  font-size: 11.5px;
-  line-height: 1.4;
-}
-
-.lf-photo-inset em {
+.df-mission-card > header em {
+  color: #f5bc4d;
   font-style: normal;
-  font-weight: 700;
-  color: var(--lf-ember-deep);
 }
-
-/* ---------- mid-page CTA band ---------- */
-
-.lf-midcta {
-  margin-top: 26px;
-  background: var(--lf-ember-deep);
-  background: linear-gradient(120deg, #d64a08, #a63a0a);
-  color: #fff;
-  padding: 52px 0;
+.df-mission-copy {
+  position: relative;
   text-align: center;
 }
-
-.lf-midcta h2 {
-  font-size: clamp(32px, 7vw, 52px);
-  font-weight: 800;
+.df-mission-copy small,
+.df-mission-copy b,
+.df-mission-copy span,
+.df-mission-copy p {
+  display: block;
 }
-
-.lf-midcta .lf-btn {
-  margin-top: 22px;
-  background: #fff;
-  color: var(--lf-ember-deep);
-  box-shadow:
-    0 2px 0 rgba(60, 20, 0, 0.4),
-    0 12px 26px rgba(40, 12, 0, 0.35);
+.df-mission-copy small {
+  font-size: 6px;
 }
-
-.lf-midcta .lf-btn-note {
-  color: rgba(255, 240, 228, 0.92);
+.df-mission-copy b,
+.df-mission-copy span {
+  margin-top: 5px;
+  color: #edc473;
+  font-size: 5px;
 }
-
-/* ============================================================
-   SECTION 4 — WHY IT'S A GAME (dark band)
-   ============================================================ */
-
-.lf-game {
-  background:
-    radial-gradient(1200px 500px at 78% -10%, rgba(84, 56, 150, 0.4), transparent 60%),
-    var(--lf-night);
-  color: var(--lf-parchment);
-  padding: 72px 0 76px;
+.df-mission-copy strong {
+  font-size: 14px;
 }
-
-.lf-game-grid {
+.df-mission-copy p {
+  font-size: 6px;
+}
+.df-mission-number {
+  position: relative;
+  width: 42px;
+  height: 42px;
   display: grid;
-  gap: 36px;
+  place-items: center;
+  margin: 7px auto;
+  color: #f7b747;
+  border: 2px solid #a86820;
+  border-radius: 50%;
+  font: 800 15px Georgia;
 }
-
-.lf-game-grid > div {
-  min-width: 0;
+.df-mission-path {
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  bottom: 35px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+  padding: 5px;
+  border: 1px solid #684d25;
+  border-radius: 5px;
+  background: #07111dd9;
+  text-align: center;
 }
-
-@media (min-width: 960px) {
-  .lf-game-grid {
-    grid-template-columns: 5fr 7fr;
-    align-items: center;
-    gap: 52px;
-  }
+.df-mission-path span {
+  color: #f6b84a;
+  font-size: 5px;
 }
-
-.lf-game .lf-eyebrow {
-  color: var(--lf-gold);
+.df-mission-path small {
+  display: block;
+  color: #b8c0c9;
+  font-size: 3.5px;
 }
-
-.lf-game h2 {
-  font-size: clamp(34px, 7.4vw, 56px);
+.df-mission-card > button {
+  position: absolute;
+  bottom: 7px;
+  left: 25%;
+  width: 50%;
+  height: 22px;
+  color: #fff;
+  border: 0;
+  border-radius: 3px;
+  background: var(--orange);
+  font-size: 6px;
   font-weight: 800;
-  margin: 12px 0 16px;
-  color: #fff6df;
 }
-
-.lf-game p {
-  color: #d8cdb2;
-  font-size: 16.5px;
-  max-width: 52ch;
+.df-phone {
+  position: relative;
+  height: 255px;
+  padding: 20px 9px 6px;
+  border: 6px solid #111820;
+  border-radius: 24px;
+  color: #19212a;
+  background: #fbf9f1;
+  box-shadow: 0 10px 12px #0004;
+  font-size: 5px;
 }
-
-.lf-game p + p {
-  margin-top: 12px;
+.df-phone-notch {
+  position: absolute;
+  top: -1px;
+  left: 28%;
+  width: 44%;
+  height: 10px;
+  border-radius: 0 0 7px 7px;
+  background: #111820;
 }
-
-.lf-name-reveal {
-  margin-top: 22px;
-  border: 1px solid var(--lf-night-line);
-  border-radius: 14px;
-  padding: 16px 18px;
-  background: rgba(255, 255, 255, 0.04);
+.df-phone > header {
+  display: flex;
+  justify-content: space-between;
+  color: #735d44;
 }
-
-.lf-name-reveal b {
-  font-family: var(--lf-display);
+.df-phone > small {
+  display: block;
+  margin-top: 14px;
+  color: #e45a0a;
   font-weight: 800;
-  font-size: 21px;
-  letter-spacing: 0.16em;
-  color: #ffd98a;
 }
-
-.lf-name-reveal p {
-  font-size: 14.5px;
+.df-phone > p {
+  font-size: 4.5px;
+}
+.df-phone-value {
+  margin-top: 7px;
+  padding: 6px;
+  border-bottom: 1px solid #ded9cf;
+}
+.df-phone-value span {
+  display: block;
+}
+.df-phone-value b {
+  font-size: 14px;
+}
+.df-phone dl {
+  display: flex;
+  gap: 6px;
   margin-top: 4px;
 }
-
-.lf-game .lf-shot {
-  box-shadow:
-    0 0 0 1px rgba(217, 164, 65, 0.35),
-    0 26px 60px rgba(0, 0, 0, 0.6);
+.df-phone dt {
+  color: #8c8c84;
 }
-
-/* ============================================================
-   SECTION 5 — IT WATCHES THE BUSINESS
-   ============================================================ */
-
-.lf-watch {
-  padding: 68px 0;
-}
-
-.lf-watch-head {
-  max-width: 640px;
-  margin-bottom: 34px;
-}
-
-.lf-watch-head h2 {
-  font-size: clamp(30px, 6.4vw, 46px);
-  font-weight: 800;
-  margin: 10px 0 12px;
-}
-
-.lf-watch-head p {
-  color: #43392a;
-  font-size: 16.5px;
-}
-
-.lf-watch-grid {
-  display: grid;
-  gap: 22px;
-}
-
-.lf-watch-grid > div {
-  min-width: 0;
-}
-
-@media (min-width: 900px) {
-  .lf-watch-grid {
-    grid-template-columns: 1fr 1fr;
-    gap: 30px;
-    align-items: start;
-  }
-}
-
-.lf-quiet-card,
-.lf-draft-card {
-  background: #fff;
-  border: 1px solid var(--lf-ui-line);
-  border-radius: 14px;
-  overflow: hidden;
-  color: var(--lf-ui-ink);
-}
-
-.lf-card-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 12px 15px;
-  border-bottom: 1px solid var(--lf-ui-line);
-  font-size: 13px;
+.df-phone dd {
+  font-size: 6px;
   font-weight: 700;
 }
-
-.lf-card-head svg {
-  width: 15px;
-  height: 15px;
-  color: var(--lf-ember-deep);
-}
-
-.lf-quiet-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.lf-quiet-table th {
-  text-align: left;
-  font-size: 10.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--lf-ui-soft);
-  padding: 9px 14px;
-  border-bottom: 1px solid var(--lf-ui-line);
-}
-
-.lf-quiet-table td {
-  padding: 11px 14px;
-  border-bottom: 1px solid #edf2f6;
-}
-
-.lf-quiet-table tr:last-child td {
-  border-bottom: 0;
-}
-
-.lf-quiet-days {
-  font-weight: 700;
-  color: #b02a37;
-}
-
-.lf-watch-note {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 12px 14px 14px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--lf-ember-deep);
-  background: #fdeadc;
-  border-radius: 999px;
-  padding: 6px 13px;
-}
-
-.lf-watch-note svg {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
-.lf-draft-msg {
-  margin: 14px;
-  background: #f5f7fa;
-  border: 1px solid var(--lf-ui-line);
-  border-radius: 12px;
-  padding: 13px 14px;
-  font-size: 13.5px;
-  line-height: 1.55;
-}
-
-.lf-draft-msg small {
-  display: block;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--lf-ui-soft);
-  margin-bottom: 7px;
-}
-
-.lf-draft-actions {
-  display: flex;
-  gap: 10px;
-  padding: 0 14px 14px;
-}
-
-.lf-draft-btn {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border-radius: 10px;
-  padding: 10px;
-  font-size: 13px;
-  font-weight: 700;
-  border: 1.5px solid var(--lf-ui-line);
-  background: #fff;
-  color: var(--lf-ui-ink);
-}
-
-.lf-draft-btn.is-send {
-  background: var(--lf-ui-ink);
-  border-color: var(--lf-ui-ink);
-  color: #fff;
-}
-
-.lf-draft-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
-.lf-root .lf-watch-caption {
-  margin-top: 10px;
-  font-size: 14.5px;
-  color: #43392a;
-}
-
-.lf-watch-caption strong {
-  color: var(--lf-ink);
-}
-
-/* ============================================================
-   SECTION 6 — ROI + PRICING
-   ============================================================ */
-
-.lf-roi {
-  background: var(--lf-paper-2);
-  padding: 68px 0 76px;
-}
-
-.lf-roi-head {
-  text-align: center;
-  max-width: 700px;
-  margin: 0 auto 30px;
-}
-
-.lf-roi-head h2 {
-  font-size: clamp(32px, 7vw, 54px);
-  font-weight: 800;
-  margin: 12px 0 0;
-}
-
-.lf-roi-label {
-  display: block;
-  text-align: center;
-  font-family: var(--lf-display);
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: 0.26em;
-  text-transform: uppercase;
-  color: var(--lf-ink-soft);
-  margin-bottom: 18px;
-}
-
-.lf-roi-math {
-  display: grid;
-  justify-items: center;
-  gap: 6px;
-  text-align: center;
-  margin-bottom: 10px;
-}
-
-.lf-roi-big {
-  font-family: var(--lf-display);
-  font-weight: 800;
-  font-size: clamp(64px, 15vw, 128px);
-  line-height: 0.95;
-  color: var(--lf-ink);
-  letter-spacing: 0.01em;
-}
-
-.lf-roi-big small {
-  display: block;
-  font-family: var(--lf-body);
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: 0.02em;
-  color: var(--lf-ink-soft);
-  margin-top: 8px;
-  text-transform: none;
-}
-
-.lf-roi-vs {
-  font-family: var(--lf-serif);
-  font-style: italic;
-  font-size: 19px;
-  color: var(--lf-ink-soft);
-  padding: 8px 0;
-}
-
-.lf-roi-small {
-  font-family: var(--lf-display);
-  font-weight: 700;
-  font-size: clamp(34px, 7vw, 54px);
-  color: var(--lf-ink);
-}
-
-.lf-roi-small small {
-  display: block;
-  font-family: var(--lf-body);
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--lf-ink-soft);
-  margin-top: 6px;
-  text-transform: none;
-  letter-spacing: 0.02em;
-}
-
-.lf-roi-equals {
-  margin-top: 16px;
-  font-family: var(--lf-display);
-  font-weight: 700;
-  font-size: clamp(20px, 4vw, 28px);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--lf-ember-deep);
-}
-
-.lf-root .lf-roi-footnote {
-  text-align: center;
-  font-size: 12px;
-  color: var(--lf-ink-soft);
-  max-width: 460px;
-  margin: 14px auto 0;
-}
-
-/* plan card */
-
-.lf-plan {
-  width: min(460px, 100%);
-  margin: 40px auto 0;
-  background: #fff;
-  border: 1px solid var(--lf-line);
-  border-radius: 20px;
-  box-shadow: 0 24px 54px rgba(36, 28, 17, 0.16);
-  overflow: hidden;
-}
-
-.lf-plan-head {
-  padding: 24px 26px 18px;
-  border-bottom: 1px solid var(--lf-line);
-}
-
-.lf-plan-head b {
-  font-family: var(--lf-display);
-  font-weight: 800;
-  font-size: 20px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.lf-plan-price {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.lf-plan-price strong {
-  font-family: var(--lf-display);
-  font-weight: 800;
-  font-size: 52px;
-  line-height: 1;
-}
-
-.lf-plan-price span {
-  color: var(--lf-ink-soft);
-  font-size: 15px;
-}
-
-.lf-plan-head small {
-  display: block;
-  margin-top: 6px;
-  color: var(--lf-ink-soft);
-  font-size: 14px;
-}
-
-.lf-plan-list {
-  list-style: none;
-  margin: 0;
-  padding: 18px 26px 6px;
-  display: grid;
-  gap: 10px;
-}
-
-.lf-plan-list li {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  font-size: 15px;
-}
-
-.lf-plan-list svg {
-  width: 17px;
-  height: 17px;
-  color: var(--lf-good);
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.lf-founding {
-  margin: 16px 26px 0;
-  background: #fdf3e3;
-  border: 1.5px dashed var(--lf-gold);
-  border-radius: 12px;
-  padding: 12px 15px;
-  font-size: 14.5px;
-}
-
-.lf-founding b {
-  color: var(--lf-ember-deep);
-}
-
-.lf-plan-cta {
-  padding: 20px 26px 24px;
-  display: grid;
-  gap: 10px;
-}
-
-.lf-plan-cta .lf-btn {
-  width: 100%;
-}
-
-.lf-plan-cta small {
-  text-align: center;
-  font-size: 12.5px;
-  color: var(--lf-ink-soft);
-  line-height: 1.5;
-}
-
-.lf-root .lf-roi-proof {
-  text-align: center;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--lf-ink-soft);
-  margin-top: 18px;
-}
-
-/* ============================================================
-   SECTION 7 — FAQ + FINAL CTA
-   ============================================================ */
-
-.lf-faq {
-  padding: 68px 0 76px;
-}
-
-.lf-faq h2 {
-  font-size: clamp(32px, 7vw, 50px);
-  font-weight: 800;
-  margin-bottom: 26px;
-}
-
-.lf-faq-list {
-  max-width: 760px;
-  display: grid;
-  gap: 0;
-  border-top: 1px solid var(--lf-line);
-}
-
-.lf-faq-item {
-  border-bottom: 1px solid var(--lf-line);
-}
-
-.lf-faq-q {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  text-align: left;
-  background: none;
-  border: 0;
-  cursor: pointer;
-  padding: 18px 2px;
-  font-family: var(--lf-body);
-  font-size: 16.5px;
-  font-weight: 700;
-  color: var(--lf-ink);
-}
-
-.lf-faq-q svg {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  color: var(--lf-ember-deep);
-  transition: transform 0.18s ease;
-}
-
-.lf-faq-item.is-open .lf-faq-q svg {
-  transform: rotate(45deg);
-}
-
-.lf-faq-a {
-  display: none;
-  padding: 0 2px 20px;
-  color: #43392a;
-  font-size: 15.5px;
-  max-width: 62ch;
-}
-
-.lf-faq-item.is-open .lf-faq-a {
-  display: block;
-}
-
-/* final band */
-
-.lf-finalband {
-  position: relative;
-  background:
-    radial-gradient(900px 420px at 20% 120%, rgba(255, 180, 77, 0.28), transparent 60%),
-    linear-gradient(120deg, #e8590c, #b23c07 70%);
-  color: #fff;
-  text-align: center;
-  padding: 78px 0 84px;
-  overflow: hidden;
-}
-
-.lf-finalband::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  opacity: 0.14;
-  background-image:
-    radial-gradient(circle at 22% 30%, #fff 2.5px, transparent 3px),
-    radial-gradient(circle at 66% 62%, #fff 2.5px, transparent 3px),
-    radial-gradient(circle at 84% 24%, #fff 2.5px, transparent 3px),
-    radial-gradient(circle at 42% 76%, #fff 2.5px, transparent 3px),
-    linear-gradient(#fff 1px, transparent 1px),
-    linear-gradient(90deg, #fff 1px, transparent 1px);
-  background-size:
-    100% 100%,
-    100% 100%,
-    100% 100%,
-    100% 100%,
-    90px 90px,
-    90px 90px;
-}
-
-.lf-finalband > .lf-wrap {
-  position: relative;
-}
-
-.lf-finalband h2 {
-  font-size: clamp(36px, 8.6vw, 64px);
-  font-weight: 800;
-  max-width: 15ch;
-  margin-inline: auto;
-}
-
-.lf-finalband .lf-btn {
-  margin-top: 26px;
-  background: #fff;
-  color: var(--lf-ember-deep);
-  box-shadow:
-    0 2px 0 rgba(60, 20, 0, 0.4),
-    0 12px 28px rgba(40, 12, 0, 0.4);
-}
-
-.lf-finalband .lf-btn-note {
-  color: rgba(255, 240, 228, 0.92);
-}
-
-/* ---------- footer ---------- */
-
-.lf-footer {
-  background: var(--lf-ink);
-  color: #cfc4ab;
-  padding: 34px 0 42px;
-}
-
-.lf-footer-inner {
-  display: grid;
-  gap: 12px;
-  justify-items: start;
-  font-size: 14px;
-}
-
-.lf-footer .lf-mark {
-  color: var(--lf-parchment);
-}
-
-.lf-footer a {
-  color: var(--lf-gold);
-}
-
-/* ---------- sticky CTA bar ---------- */
-
-.lf-sticky {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 60;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  background: rgba(24, 18, 10, 0.96);
-  backdrop-filter: blur(6px);
-  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-  transform: translateY(110%);
-  transition: transform 0.25s ease;
-}
-
-.lf-sticky.is-visible {
-  transform: translateY(0);
-}
-
-.lf-sticky span {
-  display: none;
-  color: var(--lf-parchment);
-  font-size: 14.5px;
-  font-weight: 600;
-}
-
-@media (min-width: 700px) {
-  .lf-sticky span {
-    display: block;
-  }
-}
-
-.lf-sticky .lf-btn {
-  font-size: 17px;
-  padding: 11px 20px;
-  border-radius: 10px;
-}
-
-/* ---------- scheduler modal ---------- */
-
-.lf-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  background: rgba(20, 14, 6, 0.66);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 0;
-}
-
-@media (min-width: 700px) {
-  .lf-modal-backdrop {
-    align-items: center;
-    padding: 24px;
-  }
-}
-
-.lf-modal {
-  position: relative;
-  width: 100%;
-  max-width: 760px;
-  max-height: 92dvh;
-  background: var(--lf-paper);
-  border-radius: 18px 18px 0 0;
-  padding: 26px 22px 22px;
-  display: flex;
-  flex-direction: column;
-  overflow: auto;
-}
-
-@media (min-width: 700px) {
-  .lf-modal {
-    border-radius: 18px;
-    padding: 30px;
-  }
-}
-
-.lf-modal h2 {
-  font-size: clamp(26px, 6vw, 36px);
-  font-weight: 800;
-  padding-right: 44px;
-}
-
-.lf-root .lf-modal-sub {
-  margin-top: 8px;
-  color: var(--lf-ink-soft);
-  font-size: 15px;
-}
-
-.lf-modal-close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  border: 1px solid var(--lf-line);
-  background: #fff;
-  color: var(--lf-ink);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.lf-modal-close svg {
-  width: 18px;
-  height: 18px;
-}
-
-.lf-modal-frame {
-  margin-top: 18px;
-  border: 1px solid var(--lf-line);
-  border-radius: 14px;
-  overflow: hidden;
-  background: #fff;
-  height: min(620px, 62dvh);
-}
-
-.lf-modal-frame iframe {
-  width: 100%;
-  height: 100%;
-  border: 0;
-}
-
-.lf-modal-fallback {
-  margin-top: 18px;
-  border: 1.5px dashed var(--lf-line);
-  border-radius: 14px;
-  padding: 26px 22px;
-  text-align: center;
-  display: grid;
-  gap: 10px;
-  justify-items: center;
-}
-
-.lf-modal-fallback p {
-  color: var(--lf-ink-soft);
-  font-size: 15px;
-  max-width: 42ch;
-}
-
-.lf-modal-fallback a {
-  color: var(--lf-ember-deep);
-  font-weight: 700;
-}
-
-/* ---------- misc ---------- */
-
-.lf-root :focus-visible {
-  outline: 3px solid var(--lf-ember);
-  outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lf-root,
-  .lf-root * {
-    scroll-behavior: auto;
-    transition: none !important;
-  }
-}
-
-/* ============================================================
-   v2 additions: Sage identity, BORESLAY bridge, collateral photo,
-   operating-system section, founder story
-   ============================================================ */
-
-.lf-sage-glyph {
-  display: inline-flex;
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  color: var(--lf-sage);
-}
-
-.lf-sage-glyph svg {
-  width: 100%;
-  height: 100%;
-}
-
-.lf-sage-glyph.is-compact {
-  width: 18px;
-  height: 18px;
-}
-
-.lf-sage-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--lf-ui-line);
-  background: linear-gradient(90deg, #f0f9f4, #fff);
-}
-
-.lf-sage-head span {
-  display: grid;
-  line-height: 1.25;
-  min-width: 0;
-}
-
-.lf-sage-head small {
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--lf-sage);
-}
-
-.lf-sage-head b {
-  font-size: 13px;
-  color: var(--lf-ui-ink);
-}
-
-.lf-sage-head em {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-style: normal;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--lf-sage);
-  white-space: nowrap;
-}
-
-.lf-sage-head em i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--lf-sage);
-}
-
-.lf-sage-evidence {
-  display: grid;
-  border-bottom: 1px solid var(--lf-ui-line);
-}
-
-.lf-sage-evidence article {
-  padding: 10px 14px 12px;
-}
-
-.lf-sage-evidence article + article {
-  border-top: 1px solid var(--lf-ui-line);
-}
-
-@media (min-width: 700px) {
-  .lf-sage-evidence {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .lf-sage-evidence article + article {
-    border-top: 0;
-    border-left: 1px solid var(--lf-ui-line);
-  }
-}
-
-.lf-sage-evidence header {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--lf-ui-soft);
-}
-
-.lf-sage-evidence header svg {
-  width: 13px;
-  height: 13px;
-  color: var(--lf-sage);
-}
-
-.lf-sage-evidence ul {
-  list-style: none;
-  margin: 7px 0 0;
-  padding: 0;
+.df-phone section {
   display: grid;
   gap: 4px;
+  margin-top: 7px;
+  padding: 6px;
+  border-radius: 5px;
+  background: #fff;
 }
-
-.lf-sage-evidence li {
-  position: relative;
-  padding-left: 16px;
-  font-size: 12px;
-  color: var(--lf-ui-ink);
+.df-phone section > b {
+  font-size: 6px;
 }
-
-.lf-sage-evidence li::before {
-  content: "✓";
-  position: absolute;
-  left: 0;
-  color: var(--lf-sage);
-  font-weight: 700;
-  font-size: 11px;
-}
-
-.lf-sage-says {
+.df-phone section span {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 11px 14px;
-  background: #f0f9f4;
-  border-top: 1px solid var(--lf-ui-line);
+  gap: 3px;
 }
-
-.lf-sage-says span {
-  display: grid;
-  min-width: 0;
+.df-phone section i {
+  width: 4px;
+  height: 4px;
+  border: 1px solid #777;
+  border-radius: 50%;
 }
-
-.lf-sage-says small {
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--lf-sage);
-}
-
-.lf-sage-says b {
-  font-size: 12.5px;
-  color: var(--lf-ui-ink);
-}
-
-/* ---- BORESLAY bridge (definition before the art) ---- */
-
-.lf-bridge {
-  margin-bottom: 14px;
-  background: #fff;
-  border: 1px solid var(--lf-line);
-  border-left: 4px solid var(--lf-gold);
-  border-radius: 12px;
-  padding: 14px 16px;
-  box-shadow: 0 8px 22px rgba(36, 28, 17, 0.1);
-}
-
-.lf-bridge-eq {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-family: var(--lf-display);
-  font-weight: 800;
-  letter-spacing: 0.1em;
-}
-
-.lf-bridge-eq span {
-  font-size: 15px;
-  color: var(--lf-ink-soft);
-}
-
-.lf-bridge-eq i,
-.lf-bridge-eq b {
-  font-style: normal;
-  color: var(--lf-gold);
-  font-size: 15px;
-}
-
-.lf-bridge-eq strong {
-  font-size: 19px;
-  color: var(--lf-ink);
-  letter-spacing: 0.14em;
-}
-
-.lf-root .lf-bridge p {
-  margin-top: 6px;
-  font-size: 13.5px;
-  color: #43392a;
-}
-
-/* ---- collateral photo (chapter 3) ---- */
-
-.lf-collateral-photo {
-  position: relative;
-  width: min(320px, 100%);
-  border-radius: 16px;
-  overflow: hidden;
-}
-
-.lf-collateral-photo img {
+.df-phone > button {
   width: 100%;
-  height: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-}
-
-.lf-kit-chip {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  background: #fff;
-  border-radius: 999px;
-  padding: 7px 12px;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--lf-ui-ink);
-  box-shadow: 0 8px 20px rgba(20, 14, 6, 0.35);
-}
-
-.lf-kit-chip svg {
-  width: 13px;
-  height: 13px;
-  color: var(--lf-ember-deep);
-}
-
-/* ---- operating-system section ---- */
-
-.lf-os {
-  padding: 68px 0;
-}
-
-.lf-os-head {
-  display: grid;
-  gap: 18px;
-  margin-bottom: 30px;
-}
-
-@media (min-width: 900px) {
-  .lf-os-head {
-    grid-template-columns: 1.1fr 1fr;
-    align-items: end;
-    gap: 48px;
-  }
-}
-
-.lf-os-head h2 {
-  font-size: clamp(30px, 6.4vw, 46px);
+  height: 20px;
+  margin-top: 5px;
+  color: #fff;
+  border: 0;
+  border-radius: 3px;
+  background: var(--orange);
+  font-size: 6px;
   font-weight: 800;
-  margin-top: 10px;
 }
-
-.lf-root .lf-os-head p {
-  color: #43392a;
-  font-size: 16px;
-  max-width: 52ch;
+.df-phone footer {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 4px;
 }
-
-.lf-os-note {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--lf-sage);
-  background: var(--lf-sage-bg);
-  border-radius: 999px;
-  padding: 7px 14px;
-}
-
-.lf-os-note svg {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-}
-
-.lf-os-window {
+.df-phone footer span {
   display: grid;
-  background: #fff;
-  border: 1px solid var(--lf-ui-line);
-  border-radius: 18px;
-  overflow: hidden;
-  color: var(--lf-ui-ink);
+  place-items: center;
 }
-
-@media (min-width: 860px) {
-  .lf-os-window {
-    grid-template-columns: 200px 1fr;
-  }
+.df-phone footer svg {
+  width: 8px;
 }
-
-.lf-os-side {
+.df-alert {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 31%;
+  width: 245px;
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  gap: 7px;
+  align-items: center;
+  padding: 7px;
+  color: #fff;
+  border: 1px solid #9e8348;
+  border-radius: 6px;
+  background: #15241fdd;
+  box-shadow: 0 7px 18px #0007;
+}
+.df-alert > svg {
+  padding: 5px;
+  color: #e69342;
+  border-radius: 50%;
+  background: #4a5d4e;
+}
+.df-alert small,
+.df-alert b,
+.df-alert em {
+  display: block;
+}
+.df-alert small {
+  color: #c8d98a;
+  font-size: 6px;
+}
+.df-alert b {
+  font-size: 7px;
+}
+.df-alert em {
+  font-size: 5px;
+  font-style: normal;
+}
+.df-alert > i {
+  font-size: 5px;
+  font-style: normal;
+}
+.df-how {
+  display: grid;
+  grid-template-columns: 15% 85%;
+  padding: 15px max(30px, calc((100vw - 1440px) / 2));
+  border-bottom: 1px solid var(--line);
+}
+.df-how-title {
+  padding-right: 18px;
+}
+.df-how-title > span {
+  font-size: 8px;
+  font-weight: 800;
+}
+.df-how-title h2 {
+  margin-top: 8px;
+  font: 800 23px/0.98 "Barlow Condensed";
+}
+.df-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+.df-step {
+  min-width: 0;
+  padding: 0 11px;
+  border-left: 1px solid #d4cdc2;
+}
+.df-step-head {
+  min-height: 74px;
+  display: grid;
+  grid-template-columns: 27px 1fr;
+  gap: 7px;
+}
+.df-step-head > span {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  border-radius: 50%;
+  background: var(--orange);
+  font-weight: 800;
+}
+.df-step-head b {
+  font-size: 9px;
+}
+.df-step-head p {
+  margin-top: 4px;
+  font-size: 6.5px;
+  line-height: 1.4;
+}
+.df-step .df-territory-card {
+  border-width: 3px;
+  border-bottom-width: 5px;
+}
+.df-step .df-appbar {
   display: none;
 }
-
-@media (min-width: 860px) {
-  .lf-os-side {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-    padding: 18px 14px;
-    background: var(--lf-ui-ink);
-    color: #c8d4e2;
-  }
+.df-step .df-appbody {
+  height: 112px;
+  grid-template-columns: 0 65% 35%;
 }
-
-.lf-os-mark {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--lf-display);
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  font-size: 15px;
-  color: #fff;
+.df-step .df-appbody aside {
+  display: none;
 }
-
-.lf-os-mark svg {
-  width: 15px;
-  height: 15px;
-  color: var(--lf-gold);
+.df-step .df-account-list {
+  padding: 3px;
 }
-
-.lf-os-side nav {
-  display: grid;
-  gap: 2px;
+.df-step .df-account-list > div {
+  min-height: 23px;
 }
-
-.lf-os-side nav b {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  font-size: 12.5px;
-  font-weight: 600;
+.df-step .df-account-list > div:nth-of-type(n + 4) {
+  display: none;
 }
-
-.lf-os-side nav b svg {
+.df-step .df-account-list header {
+  display: none;
+}
+.df-step .df-building {
   width: 14px;
   height: 14px;
-  opacity: 0.75;
 }
-
-.lf-os-side nav b.is-active {
-  background: rgba(255, 255, 255, 0.12);
+.df-step .df-building svg {
+  width: 9px;
+}
+.df-pitch,
+.df-talk {
+  min-height: 112px;
+  padding: 11px;
   color: #fff;
+  border-radius: 5px;
+  background: #132131;
 }
-
-.lf-os-loc {
-  margin-top: auto;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
-}
-
-.lf-os-loc i {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--lf-gold);
-  color: var(--lf-ui-ink);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-style: normal;
-  font-weight: 800;
-  font-size: 11px;
-}
-
-.lf-os-loc b {
+.df-pitch > span,
+.df-pitch > small,
+.df-pitch > strong {
   display: block;
-  font-size: 12px;
-  color: #fff;
 }
-
-.lf-os-loc small {
-  font-size: 10.5px;
-  color: #93a4b9;
+.df-pitch > span {
+  color: #efb354;
+  font-size: 6px;
 }
-
-.lf-os-main {
-  padding: 16px 16px 18px;
+.df-pitch > b {
+  display: block;
+  margin-top: 3px;
+  font-size: 9px;
+}
+.df-pitch > small {
+  font-size: 5px;
+}
+.df-pitch > strong {
+  margin-top: 10px;
+  color: #ff933f;
+  font-size: 6px;
+}
+.df-pitch > p {
+  margin-top: 4px;
+  font-size: 7px;
+}
+.df-talk {
+  color: #1a2128;
+  border: 1px solid #adb1b5;
+  background: #fff;
+}
+.df-talk > b {
+  display: block;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #ccc;
+}
+.df-talk span {
+  display: block;
+  padding: 5px;
+  border-bottom: 1px solid #ddd;
+  font-size: 6px;
+}
+.df-field {
+  position: relative;
+  height: 112px;
+  overflow: hidden;
+  border-radius: 5px;
+}
+.df-field img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.df-field > span {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
   display: grid;
-  gap: 14px;
-  background: #f5f7fa;
-  min-width: 0;
+  grid-template-columns: 20px 1fr;
+  padding: 5px;
+  color: #fff;
+  border: 2px solid #9ac25a;
+  border-radius: 4px;
+  background: #426b22e8;
 }
-
-.lf-os-main > header {
+.df-field > span svg {
+  grid-row: 1/4;
+  width: 16px;
+}
+.df-field > span b,
+.df-field > span strong,
+.df-field > span small {
+  grid-column: 2;
+}
+.df-field > span b {
+  font-size: 5px;
+}
+.df-field > span strong {
+  font-size: 9px;
+}
+.df-field > span small {
+  font-size: 4px;
+}
+.df-dark {
+  display: grid;
+  grid-template-columns: 16% 24% 28% 32%;
+  gap: 1px;
+  padding: 10px max(12px, calc((100vw - 1500px) / 2));
+  color: #e9edf1;
+  background: #06131e;
+}
+.df-dark > article {
+  min-height: 190px;
+  padding: 14px;
+  border: 1px solid #4b5a63;
+  border-radius: 7px;
+  background: linear-gradient(145deg, #11212d, #08141e);
+}
+.df-dark-intro > span,
+.df-churn header span,
+.df-intel > header {
+  color: var(--orange);
+  font-size: 7px;
+  font-weight: 800;
+}
+.df-dark-intro h2,
+.df-churn h3,
+.df-intel h3 {
+  margin-top: 4px;
+  font: 800 20px/1 "Barlow Condensed";
+}
+.df-dark-intro p,
+.df-churn p,
+.df-intel p {
+  margin-top: 8px;
+  color: #b7c0c7;
+  font-size: 7px;
+}
+.df-dark-intro b {
+  display: block;
+  margin-top: 11px;
+  color: #fff;
+  font: 700 10px/1.2 "Barlow Condensed";
+  font-style: italic;
+}
+.df-dark-game {
+  padding: 0 !important;
+}
+.df-dark-game .df-mission-card {
+  height: 100%;
+  border: 0;
+  box-shadow: none;
+}
+.df-dark-game .df-mission-copy {
+  display: none;
+}
+.df-churn header {
+  display: flex;
+  justify-content: space-between;
+}
+.df-churn header em {
+  font-size: 6px;
+  font-style: normal;
+}
+.df-churn > span {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 6px;
+  margin-top: 7px;
+  font-size: 6px;
 }
-
-.lf-os-main > header small {
+.df-churn > span i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #65727c;
+}
+.df-churn > span i.hot {
+  background: var(--orange);
+}
+.df-intel {
+  display: grid;
+  grid-template-columns: 1fr 115px;
+  grid-template-rows: auto auto auto 1fr;
+  column-gap: 12px;
+}
+.df-intel > header,
+.df-intel h3,
+.df-intel p {
+  grid-column: 1;
+}
+.df-intel ul {
+  grid-column: 1;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.df-intel li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 5.5px;
+}
+.df-intel li svg {
+  width: 8px;
+  color: #58ba59;
+}
+.df-intel::after {
+  content: "128\A nearby accounts\A\A842\A signals detected\A\A56%\A fit score\A\A$486,720\A territory impact";
+  white-space: pre-line;
+  grid-column: 2;
+  grid-row: 1/5;
+  padding: 12px;
+  color: #d9e2e8;
+  border-radius: 4px;
+  background:
+    radial-gradient(
+      circle at 55% 44%,
+      #ff7b1c 0 3px,
+      #ffb36e55 4px 18px,
+      transparent 19px
+    ),
+    linear-gradient(45deg, transparent 48%, #ffffff18 49% 51%, transparent 52%),
+    #13232e;
+  font: 700 7px/1.45 Inter;
+}
+.df-bottom {
+  display: grid;
+  grid-template-columns: 18% 23% 16% 17% 14% 12%;
+  gap: 6px;
+  padding: 7px 12px;
+  background: var(--cream);
+}
+.df-bottom > article {
+  min-height: 137px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fffdf8;
+}
+.df-bottom > article > span {
+  font-size: 6px;
+  font-weight: 800;
+}
+.df-testimonial {
+  color: #fff !important;
+  background: #112330 !important;
+}
+.df-testimonial > span {
+  color: #f7974c;
+}
+.df-testimonial > div {
+  display: grid;
+  grid-template-columns: 65px 1fr;
+  gap: 8px;
+  margin-top: 6px;
+}
+.df-testimonial img {
+  width: 65px;
+  height: 94px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+.df-testimonial p {
+  font-size: 5.5px;
+}
+.df-testimonial b,
+.df-testimonial em {
   display: block;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--lf-ui-soft);
+  margin-top: 5px;
 }
-
-.lf-os-main > header b {
-  font-size: 16px;
-}
-
-.lf-os-main > header em {
+.df-testimonial em {
+  color: #f2b23f;
   font-style: normal;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--lf-sage);
-  background: var(--lf-sage-bg);
-  padding: 5px 10px;
-  border-radius: 999px;
-  white-space: nowrap;
 }
-
-.lf-os-kpis {
+.df-compare {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
-
-@media (min-width: 700px) {
-  .lf-os-kpis {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-.lf-os-kpis article {
-  background: #fff;
-  border: 1px solid var(--lf-ui-line);
-  border-radius: 12px;
-  padding: 10px 12px;
+.df-compare > div {
   display: grid;
-  gap: 2px;
+  align-content: start;
 }
-
-.lf-os-kpis span {
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--lf-ui-soft);
-}
-
-.lf-os-kpis b {
-  font-family: var(--lf-mono);
-  font-size: 20px;
-}
-
-.lf-os-kpis em {
-  font-style: normal;
-  font-size: 10.5px;
-  color: var(--lf-sage);
-  font-weight: 600;
-}
-
-.lf-os-panels {
-  display: grid;
-  gap: 8px;
-}
-
-@media (min-width: 860px) {
-  .lf-os-panels {
-    grid-template-columns: 1.5fr 1fr;
-  }
-}
-
-.lf-os-panels article {
-  background: #fff;
-  border: 1px solid var(--lf-ui-line);
-  border-radius: 12px;
-  padding: 12px;
-  min-width: 0;
-}
-
-.lf-os-panels article > header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.lf-os-panels article > header b {
-  font-size: 13px;
-}
-
-.lf-os-panels article > header span {
-  font-size: 10.5px;
-  color: var(--lf-ui-soft);
-}
-
-.lf-os-row {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr 0.8fr 0.8fr;
-  gap: 6px;
-  align-items: center;
-  padding: 7px 4px;
-  border-top: 1px solid #edf2f6;
-  font-size: 11.5px;
-}
-
-.lf-os-row.is-head {
-  border-top: 0;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--lf-ui-soft);
-}
-
-.lf-os-row span b {
-  font-family: var(--lf-mono);
-  font-size: 11px;
-}
-
-.lf-os-row i {
-  font-style: normal;
-  justify-self: start;
-  font-size: 8.5px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  border-radius: 999px;
-  padding: 3px 8px;
-}
-
-.lf-os-row i.is-wash {
-  background: #e0edff;
-  color: #1552b8;
-}
-
-.lf-os-row i.is-fold {
-  background: var(--lf-mid-bg);
-  color: var(--lf-mid);
-}
-
-.lf-os-row i.is-ready {
-  background: var(--lf-good-bg);
-  color: var(--lf-good);
-}
-
-.lf-os-ring {
-  width: 110px;
-  height: 110px;
-  margin: 6px auto;
-  border-radius: 50%;
-  background: conic-gradient(var(--lf-sage) 0 27%, #e4eaf0 27% 100%);
-  display: grid;
-  place-content: center;
+.df-compare b {
   text-align: center;
-  position: relative;
+  font-size: 6px;
 }
-
-.lf-os-ring::before {
-  content: "";
-  position: absolute;
-  inset: 12px;
-  border-radius: 50%;
-  background: #fff;
+.df-compare span {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 5px;
+  font-size: 5px;
 }
-
-.lf-os-ring b,
-.lf-os-ring small {
-  position: relative;
+.df-compare svg {
+  width: 8px;
+  color: #46a156;
 }
-
-.lf-os-ring b {
-  font-family: var(--lf-mono);
+.df-compare > div:last-child svg {
+  color: #df5345;
+}
+.df-cost {
+  text-align: center;
+  background: #fff2d9 !important;
+}
+.df-cost h3 {
+  font: 800 18px/1 "Barlow Condensed";
+}
+.df-cost p {
+  margin: 6px 0 8px;
+  font-size: 6px;
+}
+.df-cost .df-cta {
+  min-height: 25px;
+  padding: 6px 10px;
+  font-size: 7px;
+}
+.df-price > span {
+  color: #559332;
+}
+.df-price > p {
+  margin-top: 4px;
+  font-size: 6px;
+}
+.df-price > strong {
+  display: block;
+  margin: 4px 0;
   font-size: 22px;
 }
-
-.lf-os-ring small {
-  font-size: 9.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--lf-ui-soft);
+.df-price > strong small {
+  font-size: 7px;
 }
-
-.lf-os-says {
+.df-price > i {
   display: flex;
-  gap: 9px;
-  align-items: flex-start;
-  margin-top: 8px;
-  background: #f0f9f4;
-  border-radius: 10px;
-  padding: 9px 11px;
-  font-size: 11.5px;
-}
-
-.lf-os-says b {
-  display: block;
-}
-
-/* ---- founder story (dark band) ---- */
-
-.lf-founder {
-  padding: 70px 0;
-  background:
-    radial-gradient(900px 420px at 85% -10%, rgba(84, 56, 150, 0.35), transparent 60%),
-    var(--lf-night);
-  color: var(--lf-parchment);
-}
-
-.lf-founder-grid {
-  display: grid;
-  gap: 30px;
-}
-
-@media (min-width: 960px) {
-  .lf-founder-grid {
-    grid-template-columns: 1.05fr 1fr;
-    align-items: center;
-    gap: 52px;
-  }
-}
-
-.lf-founder-media img {
-  border-radius: 18px;
-  width: 100%;
-}
-
-.lf-founder .lf-eyebrow {
-  color: var(--lf-gold);
-}
-
-.lf-founder h2 {
-  font-size: clamp(30px, 6.6vw, 48px);
-  font-weight: 800;
-  color: #fff6df;
-  margin: 10px 0 18px;
-}
-
-.lf-founder-duo {
-  display: grid;
-  gap: 12px;
-}
-
-@media (min-width: 640px) {
-  .lf-founder-duo {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.lf-founder-duo article {
-  border: 1px solid var(--lf-night-line);
-  border-radius: 14px;
-  padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.lf-founder-duo span {
-  font-family: var(--lf-display);
-  font-weight: 700;
-  font-size: 11.5px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--lf-gold);
-}
-
-.lf-founder-duo b {
-  display: block;
-  font-family: var(--lf-display);
-  font-weight: 800;
-  text-transform: uppercase;
-  font-size: 20px;
-  margin: 6px 0;
-  color: #fff6df;
-}
-
-.lf-root .lf-founder-duo p {
-  font-size: 13.5px;
-  color: #d8cdb2;
-}
-
-.lf-founder-duo strong {
-  color: #ffd98a;
-}
-
-.lf-root .lf-founder-reveal {
-  margin-top: 16px;
-  font-size: 15px;
-  color: #d8cdb2;
-  max-width: 56ch;
-}
-
-.lf-founder-reveal b {
-  color: #ffd98a;
-  font-family: var(--lf-display);
-  letter-spacing: 0.08em;
-  font-size: 17px;
-  margin-right: 6px;
-}
-
-/* ---- v3: support line, OS run/grow strip, plan-card groups ---- */
-
-.lf-root .lf-support-line {
-  margin-top: 12px;
-  font-size: 13.5px;
-  color: var(--lf-ink-soft);
-  max-width: 52ch;
-}
-
-.lf-os-groups {
-  display: grid;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-@media (min-width: 760px) {
-  .lf-os-groups {
-    grid-template-columns: 1fr 1fr;
-    gap: 14px;
-  }
-}
-
-.lf-os-groups article {
-  display: grid;
   gap: 4px;
-  padding: 13px 16px;
+  margin-top: 3px;
+  font-size: 4.8px;
+  font-style: normal;
+}
+.df-price > i svg {
+  width: 7px;
+  color: #50a54b;
+}
+.df-faq details {
+  border-bottom: 1px solid #d9d4ca;
+}
+.df-faq summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  font-size: 5.5px;
+  list-style: none;
+}
+.df-faq summary svg {
+  width: 8px;
+}
+.df-faq details p {
+  padding-bottom: 5px;
+  font-size: 5px;
+}
+.df-final {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #fff;
+  background: linear-gradient(145deg, #dd4b0c, #ed6417) !important;
+}
+.df-final h3 {
+  font: 800 18px/1 "Barlow Condensed";
+}
+.df-final .df-cta {
+  margin-top: 9px;
+  color: #cf4d0c;
   background: #fff;
-  border: 1px solid var(--lf-line);
-  border-left: 4px solid var(--lf-gold);
-  border-radius: 12px;
+  box-shadow: none;
 }
-
-.lf-os-groups article:last-child {
-  border-left-color: var(--lf-ember);
+.df-final p {
+  margin-top: 8px;
+  font-size: 6px;
 }
-
-.lf-os-groups b {
-  font-family: var(--lf-display);
-  font-weight: 800;
-  font-size: 15px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+.df-final p svg {
+  width: 9px;
+  vertical-align: middle;
 }
-
-.lf-os-groups span {
+.df-footer {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 10%;
+  padding: 0 20px;
+  color: #fff;
+  background: var(--navy);
+}
+.df-footer .df-brand {
   font-size: 13px;
-  color: var(--lf-ink-soft);
+}
+.df-footer .df-brand > span {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+.df-footer .df-brand svg {
+  width: 10px;
+}
+.df-footer nav {
+  display: flex;
+  gap: 40px;
+  font-size: 7px;
+}
+.df-footer > span {
+  margin-left: auto;
+  color: #98a3ad;
+  font-size: 6px;
+}
+.df-dialog {
+  width: min(920px, calc(100% - 28px));
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+}
+.df-dialog::backdrop {
+  background: #06121ed9;
+  backdrop-filter: blur(5px);
+}
+.df-dialog > div {
+  position: relative;
+  padding: 30px;
+  background: var(--cream);
+  border-radius: 14px;
+}
+.df-dialog-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+}
+.df-dialog-close svg {
+  width: 18px;
+}
+.df-dialog h2 {
+  max-width: 650px;
+  margin-top: 10px;
+  font: 800 42px/1 "Barlow Condensed";
+}
+.df-dialog > div > p {
+  margin-top: 8px;
+}
+.df-dialog section {
+  margin-top: 20px;
+}
+.df-dialog iframe {
+  width: 100%;
+  height: 520px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.df-dialog section > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+}
+.df-dialog section > a svg {
+  width: 15px;
+}
+.df-dialog-fallback {
+  display: grid;
+  justify-items: center;
+  padding: 40px;
+  border: 1px solid var(--line);
+  background: #fff;
+  text-align: center;
+}
+.df-dialog-fallback > svg {
+  width: 36px;
+  color: var(--orange);
+}
+.df-dialog-fallback > b {
+  margin-top: 10px;
+}
+.df-dialog-fallback > a {
+  padding: 12px 16px;
+  color: #fff;
+  border-radius: 4px;
+  background: var(--orange);
 }
 
-.lf-plan-group {
-  display: block;
-  padding: 16px 26px 0;
-  font-family: var(--lf-display);
-  font-weight: 800;
-  font-size: 13px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--lf-ember-deep);
+@media (max-width: 900px) {
+  .df-header {
+    height: 58px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 0 16px;
+  }
+  .df-header nav {
+    display: none;
+  }
+  .df-header > .df-cta {
+    min-height: 34px;
+    padding: 8px 12px;
+    font-size: 9px;
+  }
+  .df-hero {
+    display: block;
+    padding: 34px 18px 28px;
+  }
+  .df-hero h1 {
+    font-size: 54px;
+  }
+  .df-hero-copy > p {
+    font-size: 15px;
+  }
+  .df-hero-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .df-hero-actions .df-cta {
+    white-space: normal;
+  }
+  .df-safe {
+    justify-content: space-between;
+    gap: 5px;
+  }
+  .df-product-preview {
+    grid-template-columns: 1fr;
+    margin-top: 30px;
+    padding: 28px 0 0;
+  }
+  .df-preview-label {
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .df-product-preview > .df-territory-card {
+    transform: none;
+  }
+  .df-appbody {
+    height: 240px;
+  }
+  .df-product-preview > .df-mission-card {
+    height: 330px;
+  }
+  .df-product-preview > .df-phone {
+    width: 210px;
+    height: 400px;
+    justify-self: center;
+    font-size: 8px;
+    padding: 30px 14px 10px;
+  }
+  .df-phone > small {
+    font-size: 9px;
+  }
+  .df-phone > p {
+    font-size: 7px;
+  }
+  .df-phone-value b {
+    font-size: 22px;
+  }
+  .df-phone dd,
+  .df-phone section > b {
+    font-size: 9px;
+  }
+  .df-phone section span {
+    font-size: 8px;
+  }
+  .df-phone > button {
+    height: 32px;
+    font-size: 9px;
+  }
+  .df-alert {
+    top: 0;
+    left: 50%;
+    width: min(300px, 90%);
+    transform: translateX(-50%);
+  }
+  .df-how {
+    display: block;
+    padding: 30px 18px;
+  }
+  .df-how-title h2 {
+    font-size: 36px;
+  }
+  .df-steps {
+    grid-template-columns: 1fr;
+    gap: 26px;
+    margin-top: 24px;
+  }
+  .df-step {
+    padding: 0;
+    border: 0;
+  }
+  .df-step-head {
+    min-height: auto;
+    margin-bottom: 12px;
+  }
+  .df-step-head b {
+    font-size: 15px;
+  }
+  .df-step-head p {
+    font-size: 12px;
+  }
+  .df-step .df-appbody,
+  .df-pitch,
+  .df-talk,
+  .df-field {
+    min-height: 180px;
+    height: 180px;
+  }
+  .df-dark {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+  .df-dark > article {
+    min-height: 240px;
+  }
+  .df-dark-intro h2,
+  .df-churn h3,
+  .df-intel h3 {
+    font-size: 32px;
+  }
+  .df-dark-intro p,
+  .df-churn p,
+  .df-intel p {
+    font-size: 12px;
+  }
+  .df-dark-intro b {
+    font-size: 16px;
+  }
+  .df-dark-game {
+    height: 360px;
+  }
+  .df-churn > span {
+    font-size: 11px;
+  }
+  .df-intel {
+    grid-template-columns: 1fr 120px;
+  }
+  .df-intel li {
+    font-size: 9px;
+  }
+  .df-bottom {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+  .df-bottom > article {
+    min-height: 190px;
+  }
+  .df-testimonial > div {
+    grid-template-columns: 110px 1fr;
+  }
+  .df-testimonial img {
+    width: 110px;
+    height: 145px;
+  }
+  .df-testimonial p {
+    font-size: 9px;
+  }
+  .df-compare b,
+  .df-bottom > article > span {
+    font-size: 10px;
+  }
+  .df-compare span {
+    font-size: 9px;
+  }
+  .df-cost h3,
+  .df-final h3 {
+    font-size: 28px;
+  }
+  .df-cost p,
+  .df-price > p,
+  .df-final p {
+    font-size: 10px;
+  }
+  .df-price > i {
+    font-size: 8px;
+  }
+  .df-faq summary {
+    font-size: 10px;
+  }
+  .df-faq details p {
+    font-size: 9px;
+  }
+  .df-footer {
+    height: auto;
+    display: grid;
+    justify-items: center;
+    gap: 18px;
+    padding: 25px 18px;
+  }
+  .df-footer nav {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 15px 25px;
+    font-size: 9px;
+  }
+  .df-footer > span {
+    margin: 0;
+    font-size: 8px;
+  }
+  .df-dialog > div {
+    padding: 24px 18px;
+  }
+  .df-dialog h2 {
+    font-size: 34px;
+  }
+  .df-dialog iframe {
+    height: 65vh;
+  }
 }
-
-.lf-plan-group + .lf-plan-list {
-  padding-top: 10px;
+@media (max-width: 420px) {
+  .df-brand {
+    font-size: 17px;
+  }
+  .df-header > .df-cta {
+    padding: 8px 9px;
+  }
+  .df-header > .df-cta svg {
+    display: none;
+  }
+  .df-hero h1 {
+    font-size: 47px;
+  }
+  .df-hero-actions {
+    grid-template-columns: 1fr;
+  }
+  .df-safe {
+    font-size: 7px;
+  }
+  .df-appbody {
+    grid-template-columns: 25px 58% 1fr;
+    height: 205px;
+  }
+  .df-product-preview > .df-mission-card {
+    height: 280px;
+  }
+  .df-intel {
+    grid-template-columns: 1fr 95px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .df-page * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
+.df-step-content {
+  font-size: 6.5px;
+  line-height: 1.4;
+}
+.df-step-content > .df-territory-card,
+.df-step-content > .df-pitch,
+.df-step-content > .df-talk,
+.df-step-content > .df-field {
+  margin-top: 8px;
+}
+@media (max-width: 900px) {
+  .df-step-content {
+    font-size: 12px;
+  }
 }

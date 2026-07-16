@@ -14,6 +14,10 @@ const landing = readFileSync(
   new URL("./LandingFinal.tsx", import.meta.url),
   "utf8"
 );
+const landingAnalytics = readFileSync(
+  new URL("./dayforge-flagship/analytics.ts", import.meta.url),
+  "utf8"
+);
 
 describe("DayForge public territory preview UI contract", () => {
   it("uses the resumable server session for every preview action", () => {
@@ -62,9 +66,9 @@ describe("DayForge public territory preview UI contract", () => {
     expect(landing).toContain(
       'destination.searchParams.set("placement", source)'
     );
-    expect(landing).toContain("autocapture: false");
-    expect(landing).toContain("disable_session_recording: true");
-    expect(landing).toContain('person_profiles: "never"');
+    expect(landingAnalytics).toContain("autocapture: false");
+    expect(landingAnalytics).toContain("disable_session_recording: true");
+    expect(landingAnalytics).toContain('person_profiles: "never"');
   });
 
   it("includes responsive, focus-visible, and reduced-motion behavior", () => {
