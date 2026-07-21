@@ -225,7 +225,7 @@ export default function OperationsEventsPage() {
   const [businessUnit, setBusinessUnit] = useState<BusinessUnitFilter>("all");
   const [building, setBuilding] = useState<BuildingFilter>("all");
   const [eventType, setEventType] = useState<EventTypeFilter>("all");
-  const [sortKey, setSortKey] = useState<HistorySortKey>("event");
+  const [sortKey, setSortKey] = useState<HistorySortKey>("placed");
   const [sortDirection, setSortDirection] =
     useState<HistorySortDirection>("desc");
   const [customerSearch, setCustomerSearch] = useState("");
@@ -284,7 +284,7 @@ export default function OperationsEventsPage() {
     setBusinessUnit("all");
     setBuilding("all");
     setEventType("all");
-    setSortKey("event");
+    setSortKey("placed");
     setSortDirection("desc");
     setCustomerSearch("");
     setPage(1);
