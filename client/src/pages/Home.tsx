@@ -362,10 +362,10 @@ export default function Home() {
                 <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,247,245,0.68)_0%,rgba(255,247,245,0.34)_22%,rgba(255,247,245,0.08)_46%,rgba(255,247,245,0.08)_60%,rgba(255,247,245,0.32)_80%,rgba(255,247,245,0.62)_100%)]" />
               </div>
 
-              <div data-hero-grid className="relative grid gap-5 p-4 sm:p-5 lg:min-h-[676px] lg:grid-cols-[34fr_38fr_28fr] lg:items-start lg:gap-5 lg:p-7">
+              <div data-hero-grid className="relative grid gap-5 p-4 sm:p-5 lg:min-h-[676px] lg:grid-cols-[minmax(360px,420px)_minmax(90px,1fr)_minmax(560px,650px)] lg:items-start lg:gap-5 lg:p-7">
                 <div
                   data-hero-left
-                  className="lb-hero-copy flex rounded-[28px] border bg-[linear-gradient(155deg,#fffdfb_0%,#fff3f7_100%)] shadow-[0_16px_28px_rgba(136,73,104,0.14)] lg:h-[556px]"
+                  className="lb-hero-copy flex rounded-[28px] border bg-[linear-gradient(155deg,#fffdfb_0%,#fff3f7_100%)] shadow-[0_16px_28px_rgba(136,73,104,0.14)] lg:min-h-[590px]"
                   style={{ borderColor: C.border }}
                 >
                   <div className="flex h-full w-full flex-col px-6 pb-6 pt-7 lg:px-[28px] lg:pb-[26px] lg:pt-[30px]">
@@ -390,12 +390,12 @@ export default function Home() {
                       Concierge laundry &amp; dry cleaning for Beverly Hills and Century City residences.
                     </p>
 
-                    <div className="mb-7 flex items-center gap-2 lg:flex-nowrap">
+                    <div className="mb-7 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
                       <button
                         data-hero-primary-cta
                         type="button"
                         onClick={openBooking}
-                        className="inline-flex h-[62px] w-[220px] min-w-[220px] items-center justify-center gap-2 rounded-full px-7 text-[19px] font-semibold text-white shadow-[0_16px_30px_rgba(178,31,97,0.38)] transition-all hover:-translate-y-0.5"
+                        className="inline-flex h-[62px] w-full min-w-0 items-center justify-center gap-2 rounded-full px-5 text-[17px] font-semibold text-white shadow-[0_16px_30px_rgba(178,31,97,0.38)] transition-all hover:-translate-y-0.5 xl:text-[18px]"
                         style={{ background: `linear-gradient(135deg, ${C.pink} 0%, ${C.pinkDeep} 100%)` }}
                       >
                         Schedule Pickup
@@ -404,7 +404,7 @@ export default function Home() {
 
                       <a
                         href="#pricing-menu"
-                        className="inline-flex h-[50px] items-center gap-1 rounded-full border px-3.5 text-[13px] font-medium transition-colors hover:bg-[#fff2f8]"
+                        className="inline-flex h-[50px] shrink-0 items-center gap-1 rounded-full border bg-white/80 px-4 text-[13px] font-semibold transition-colors hover:bg-[#fff2f8]"
                         style={{ borderColor: C.border, color: "#734f5e" }}
                       >
                         View pricing
@@ -432,7 +432,7 @@ export default function Home() {
 
                 <div data-hero-center className="hidden lg:block" aria-hidden />
 
-                <div data-hero-right className="hidden lg:block lg:h-[556px]" id="booking" ref={bookingRef}>
+                <div data-hero-right className="hidden lg:block lg:h-[590px]" id="booking" ref={bookingRef}>
                   <SchedulePickupRail className="h-full rounded-[28px] border-[#e9d8e0] bg-[linear-gradient(180deg,#fffaf8_0%,#fff5f8_100%)] shadow-[0_16px_30px_rgba(136,73,104,0.14)] [&>div:nth-child(1)]:px-6 [&>div:nth-child(1)]:pb-5 [&>div:nth-child(1)]:pt-[26px] [&>div:nth-child(2)]:overflow-y-auto [&>div:nth-child(2)]:px-6 [&>div:nth-child(2)]:pb-4 [&>div:nth-child(2)]:pt-5 [&>div:nth-child(3)]:px-6 [&>div:nth-child(3)]:pb-4 [&>div:nth-child(3)]:pt-3" />
                 </div>
 
