@@ -1009,6 +1009,159 @@ function DriverReceiptDock({
   );
 }
 
+function MobileCommandCenter({
+  orders,
+  selectedDate,
+  onSelectedDateChange,
+  pickupCount,
+  deliveryCount,
+  onSelectOrder,
+  onOrderCreated,
+  isLoading,
+}: Props) {
+  const [quickOrderOpen, setQuickOrderOpen] = React.useState(false);
+
+  return (
+    <div className="min-h-[100svh] bg-[#f7f9fb] text-[#111827] md:hidden">
+      <header className="sticky top-0 z-30 border-b border-[#dce3ea] bg-white/95 px-5 pb-4 pt-[calc(env(safe-area-inset-top)+16px)] backdrop-blur">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[13px] font-extrabold uppercase tracking-[0.14em] text-[#087552]">
+              Laundry Butler Driver
+            </p>
+            <h1 className="mt-1 text-[28px] font-extrabold leading-none tracking-[-0.03em]">
+              Today&apos;s Route
+            </h1>
+          </div>
+          <div className="rounded-full border border-[#cbd5df] bg-[#f7f9fb] px-3 py-2 text-[14px] font-bold text-[#52606d]">
+            {orders.length} stops
+          </div>
+        </div>
+      </header>
+
+      <main className="px-4 pb-[260px] pt-4">
+        <section className="rounded-[22px] border border-[#dce3ea] bg-white p-4 shadow-[0_5px_18px_rgba(15,23,42,0.06)]">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => onSelectedDateChange(addDays(selectedDate, -1))}
+              className="flex h-12 w-12 items-center justify-center rounded-[14px] border border-[#cbd5df] bg-white text-[#344054] active:bg-[#eef2f6]"
+              aria-label="Previous day"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelectedDateChange(localYmd())}
+              className="min-h-12 flex-1 rounded-[14px] border-2 border-[#111827] bg-[#e8fff6] px-3 text-center"
+            >
+              <span className="block text-[12px] font-extrabold uppercase tracking-[0.12em] text-[#087552]">
+                {selectedDate === localYmd() ? "Today" : "Route date"}
+              </span>
+              <span className="mt-0.5 block text-[18px] font-extrabold text-[#111827]">
+                {formatSelectedDate(selectedDate)}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelectedDateChange(addDays(selectedDate, 1))}
+              className="flex h-12 w-12 items-center justify-center rounded-[14px] border border-[#cbd5df] bg-white text-[#344054] active:bg-[#eef2f6]"
+              aria-label="Next day"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-[14px] bg-[#eaf2ff] px-4 py-3">
+              <p className="text-[12px] font-bold uppercase tracking-[0.1em] text-[#315ea8]">Pickups</p>
+              <p className="mt-1 text-[26px] font-black leading-none text-[#174ea6]">{pickupCount}</p>
+            </div>
+            <div className="rounded-[14px] bg-[#fff4df] px-4 py-3">
+              <p className="text-[12px] font-bold uppercase tracking-[0.1em] text-[#8a5200]">Deliveries</p>
+              <p className="mt-1 text-[26px] font-black leading-none text-[#8a5200]">{deliveryCount}</p>
+            </div>
+          </div>
+        </section>
+
+        <div className="mb-3 mt-6 flex items-end justify-between gap-3 px-1">
+          <div>
+            <p className="text-[13px] font-extrabold uppercase tracking-[0.12em] text-[#667085]">Route stops</p>
+            <p className="mt-1 text-[18px] font-bold text-[#111827]">Pickup and delivery queue</p>
+          </div>
+          <span className="text-[14px] font-semibold text-[#667085]">{orders.length} total</span>
+        </div>
+
+        {isLoading ? (
+          <div className="rounded-[20px] border border-[#dce3ea] bg-white p-8 text-center text-[16px] font-semibold text-[#667085]">
+            Loading route…
+          </div>
+        ) : orders.length === 0 ? (
+          <div className="rounded-[20px] border border-[#dce3ea] bg-white p-8 text-center shadow-sm">
+            <CheckCircle2 className="mx-auto h-9 w-9 text-[#087552]" />
+            <p className="mt-3 text-[20px] font-extrabold">Route is clear</p>
+            <p className="mt-1 text-[15px] text-[#667085]">No pickups or deliveries for this date.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {orders.map(order => (
+              <button
+                key={order.id}
+                type="button"
+                onClick={() => onSelectOrder(order)}
+                className="w-full rounded-[20px] border border-[#dce3ea] bg-white p-4 text-left shadow-[0_5px_16px_rgba(15,23,42,0.06)] transition active:scale-[0.99] active:bg-[#f8fafc]"
+              >
+                <div className="flex items-start gap-3">
+                  <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-[18px] font-black ${
+                    order.type === "PICKUP"
+                      ? "bg-[#dceaff] text-[#185abc]"
+                      : "bg-[#fff0cf] text-[#8a5200]"
+                  }`}>
+                    {order.type === "PICKUP" ? "P" : "D"}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-start justify-between gap-3">
+                      <span className="text-[20px] font-extrabold leading-tight text-[#111827]">
+                        #{order.id} · {order.customerName}
+                      </span>
+                      <span className="shrink-0 text-[16px] font-bold text-[#52606d]">{order.timeWindow}</span>
+                    </span>
+                    <span className="mt-1 block text-[16px] leading-snug text-[#667085]">
+                      {order.address}{order.unit ? ` · Unit ${order.unit}` : ""}
+                    </span>
+                    <span className="mt-3 flex items-center justify-between border-t border-[#edf0f3] pt-3">
+                      <span className="text-[13px] font-extrabold uppercase tracking-[0.08em] text-[#087552]">
+                        {order.type === "PICKUP" ? "Pickup" : "Delivery"} · {order.items} {order.items === 1 ? "bag" : "bags"}
+                      </span>
+                      <ChevronRight className="h-6 w-6 text-[#667085]" />
+                    </span>
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </main>
+
+      <button
+        type="button"
+        onClick={() => setQuickOrderOpen(true)}
+        className="fixed bottom-[calc(env(safe-area-inset-bottom)+176px)] right-5 z-50 flex h-16 w-16 items-center justify-center rounded-full border-2 border-[#111827] bg-[#20e3a2] text-[#07110d] shadow-[0_6px_0_#111827,0_14px_28px_rgba(17,24,39,0.2)] active:translate-y-1 active:shadow-[0_2px_0_#111827]"
+        aria-label="Create new order"
+      >
+        <Plus className="h-8 w-8" strokeWidth={2.5} />
+      </button>
+
+      <QuickNewOrderSheet
+        open={quickOrderOpen}
+        onOpenChange={setQuickOrderOpen}
+        onOrderCreated={onOrderCreated}
+      />
+      <DriverReceiptDock onOrderCreated={onOrderCreated} />
+    </div>
+  );
+}
+
 export default function CommandCenter({
   orders,
   state,
@@ -1047,11 +1200,23 @@ export default function CommandCenter({
   }
 
   return (
+    <>
+      <MobileCommandCenter
+        orders={orders}
+        state={state}
+        selectedDate={selectedDate}
+        onSelectedDateChange={onSelectedDateChange}
+        pickupCount={pickupCount}
+        deliveryCount={deliveryCount}
+        onSelectOrder={handleSelect}
+        onOrderCreated={onOrderCreated}
+        isLoading={isLoading}
+      />
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="min-h-screen bg-void relative overflow-hidden"
+      className="hidden min-h-screen bg-void relative overflow-hidden md:block"
     >
       <div className="heartbeat-bar w-full" />
 
@@ -1290,5 +1455,6 @@ export default function CommandCenter({
       />
       <DriverReceiptDock onOrderCreated={onOrderCreated} />
     </motion.div>
+    </>
   );
 }

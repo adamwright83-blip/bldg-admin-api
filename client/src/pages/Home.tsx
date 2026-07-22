@@ -274,7 +274,7 @@ export default function Home() {
             </span>
           </a>
 
-          <nav className="hidden items-center gap-7 text-[14px] font-medium lg:flex" style={{ color: C.textMuted }}>
+          <nav className="hidden items-center gap-7 text-[14px] font-medium xl:flex" style={{ color: C.textMuted }}>
             <a href="#services" className="transition-colors hover:text-[#432432]">Services</a>
             <a href="#how-it-works" className="transition-colors hover:text-[#432432]">How It Works</a>
             <a href="#concierge" className="transition-colors hover:text-[#432432]">Our Standards</a>
@@ -295,7 +295,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border lg:hidden"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border xl:hidden"
               style={{ borderColor: C.border, color: C.textMuted }}
               aria-label="Toggle menu"
             >
@@ -305,7 +305,7 @@ export default function Home() {
         </div>
 
         {menuOpen ? (
-          <div className="border-t px-4 py-3 lg:hidden" style={{ borderColor: C.border, background: C.surface }}>
+          <div className="border-t px-4 py-3 xl:hidden" style={{ borderColor: C.border, background: C.surface }}>
             <nav className="flex flex-col gap-1.5 text-[14px] font-medium">
               {["services", "how-it-works", "concierge", "pricing-menu", "about"].map((id) => (
                 <a

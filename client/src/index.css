@@ -4434,7 +4434,44 @@ button.ops-kpi-card:hover {
 
 @media (min-width: 1024px) and (max-width: 1240px) {
   .lb-butler-home [data-hero-grid] {
-    grid-template-columns: minmax(350px, 390px) minmax(28px, 1fr) minmax(520px, 580px) !important;
+    grid-template-columns: minmax(320px, 350px) minmax(0, 1fr) !important;
+    gap: 18px !important;
   }
-  .lb-butler-home [data-hero-right] { min-width: 520px; }
+  .lb-butler-home [data-hero-center] { display: none !important; }
+  .lb-butler-home [data-hero-left] {
+    min-width: 0;
+  }
+  .lb-butler-home [data-hero-right] {
+    display: block !important;
+    min-width: 0;
+  }
+  .lb-butler-home [data-hero-title] {
+    max-width: 100%;
+    font-size: clamp(43px, 4.4vw, 52px) !important;
+  }
+  .lb-butler-home [data-hero-title] + p {
+    margin-top: 16px;
+    margin-bottom: 18px;
+    font-size: 16px;
+  }
+  .lb-butler-home [data-hero-primary-cta] {
+    height: 54px;
+    padding-inline: 14px;
+    font-size: 15px;
+  }
+  .lb-butler-home [data-hero-primary-cta] + a {
+    height: 46px;
+    padding-inline: 12px;
+    font-size: 12px;
+  }
+  .lb-butler-home [data-hero-trust] {
+    gap: 6px;
+  }
+  .lb-butler-home [data-hero-trust] > div {
+    min-height: 78px;
+    padding: 10px 8px;
+  }
+  .lb-butler-home [data-hero-trust] span {
+    font-size: 11px;
+  }
 }
