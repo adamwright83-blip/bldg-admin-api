@@ -7,7 +7,7 @@
 
 /* Laundry Butler mobile fallback. max-device-width also protects the layout
    when a mobile browser has been switched into a desktop-sized CSS viewport. */
-@media (max-width: 767px), (max-device-width: 767px) and (hover: none) {
+@media (max-width: 767px), (max-device-width: 767px) {
   .lb-butler-home {
     padding-bottom: 0;
     background: #fff8f7 !important;
@@ -4352,6 +4352,17 @@ button.ops-kpi-card:hover {
     transparent 100%
   );
   animation: driver-pulse-neon 1.5s ease-in-out infinite;
+}
+
+/* Route shell selection must also honor physical mobile devices. Some mobile
+ * browsers can request a desktop-sized CSS viewport, which previously caused
+ * the desktop command center to be scaled down into an unreadable thumbnail. */
+.driver-mobile-command { display: none; }
+.driver-desktop-command { display: block; }
+
+@media (max-width: 767px), (max-device-width: 767px) {
+  .driver-mobile-command { display: block !important; }
+  .driver-desktop-command { display: none !important; }
 }
 
 /* Pitch-ready driver UI: high-contrast daylight operations theme.
