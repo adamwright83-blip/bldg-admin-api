@@ -275,7 +275,12 @@ function Router() {
   const { tenant } = useTenant();
   const isBoreslayHost =
     hostname === "boreslay.com" || hostname === "www.boreslay.com";
-  const isAdminHost = hostname === "admin.bldg.chat";
+  // api.bldg.chat is the real, working backend for this app (Railway); the
+  // admin.bldg.chat frontend has historically had no backend wired to it.
+  // Both hosts must render the admin shell so DayForge/commercial-mission
+  // routes are reachable wherever this app is actually being used.
+  const isAdminHost =
+    hostname === "admin.bldg.chat" || hostname === "api.bldg.chat";
   const isLocalAdminPath =
     (hostname === "localhost" || hostname === "127.0.0.1") &&
     LOCAL_ADMIN_PATHS.has(window.location.pathname);
