@@ -17,7 +17,7 @@
 | 2 — DayForge Today and walk-in | Complete | Tenant-scoped mobile action queue, missing-next-action invariant, canonical walk-in transaction, follow-up completion/rescheduling, and cross-surface entry points implemented. |
 | 3 — auth and preview continuation | Complete | Canonical validated destination resolver, preview/onboarding/Stripe continuity, demo isolation, security tests, and plain-English behavior report shipped. |
 | 4 — canonical driver, BORESLAY, IRL mission, coaching | In progress | Canonical target/dispatch, six-level IRL plan, proof/review, timer/Maps, live coaching, and field presentation implemented; objective browser/visual artifact gate remains. |
-| 5 — campaign and automatic attribution | Not started | Current manual order-ID attribution re-verified. |
+| 5 — campaign and automatic attribution | Complete | Opaque campaign links, public-order propagation, explicit/recurring attribution, pending/review states, paid/net truth, reversals, manual recovery, tests, and behavior report shipped. |
 | 6 — proof dashboard | Not started | — |
 | 7 — third-party tenant completion | Not started | — |
 | 8 — full release, browser, and visual gates | Not started | Baseline results below. |
@@ -108,6 +108,15 @@ Authenticated destinations resolve in this intentional order:
 - Wardrobe proof is uploaded to private server storage, enters manual review, retains rejected attempts, and unlocks progression only through durable review truth.
 - Rook coaching invokes the existing server-side Anthropic adapter with structured output, timeout, model environment configuration, cache/context hash, claim grounding, prompt-injection instructions, and a truthful deterministic fallback.
 - Distinct scene treatments and dominant CTAs are implemented for wardrobe, print payload, mints, coaching, hotel approach, and debrief. Screenshot/render inspection is intentionally still open and will be closed in the visual gate.
+
+## Phase 5 implementation evidence
+
+- Authorized mission users can create, copy, inspect, and revoke high-entropy campaign links; only token hashes are stored.
+- Public pickup forms preserve a campaign token through canonical order creation. The server validates tenant, token state, customer identity, and property before persisting acquisition.
+- Explicit order campaign wins order-specific credit; original first touch remains immutable. Same-identity/same-property unsourced orders can inherit recurring credit without an invented expiration window.
+- Generic, unpaid, pending-pre-win, ambiguous, conflicting, cancelled, fully refunded, and unsupported partial-refund cases do not overstate realized revenue.
+- Existing `commercial_order_attributions` remains the realized-revenue ledger and the manual order-ID path remains the recovery tool. Reversals create durable correction history and never alter customer charges.
+- Shipped rules and realistic before/after scenarios are documented in `docs/dayforge-attribution-behavior.md`.
 
 ## Files changed through Phase 1
 

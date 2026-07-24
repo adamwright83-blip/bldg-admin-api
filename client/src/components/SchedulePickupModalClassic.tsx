@@ -670,6 +670,7 @@ export default function SchedulePickupModal({
         address: formData.address,
         unit: formData.unit || undefined,
         specialInstructions: formData.specialInstructions || undefined,
+        campaignToken: new URLSearchParams(window.location.search).get("dfCampaign") ?? undefined,
         firstName: formData.firstName,
         lastName: formData.lastName,
         phone: formData.phone,

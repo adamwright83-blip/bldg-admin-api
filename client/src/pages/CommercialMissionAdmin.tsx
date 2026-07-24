@@ -48,6 +48,12 @@ export default function CommercialMissionAdmin() {
     { enabled: isAuthenticated && selectedId !== null, retry: false },
   );
   const reviewProof = trpc.system.commercialMission.reviewProof.useMutation();
+  const campaigns = trpc.system.commercialCampaign.list.useQuery(
+    { missionId: selectedId ?? 1 }, { enabled: isAuthenticated && selectedId !== null, retry: false },
+  );
+  const createCampaign = trpc.system.commercialCampaign.create.useMutation();
+  const revokeCampaign = trpc.system.commercialCampaign.revoke.useMutation();
+  const [campaignUrl, setCampaignUrl] = useState<string | null>(null);
 
   if (authLoading) {
     return <main className="min-h-screen bg-slate-950 text-white grid place-items-center">Loading DayForge missions…</main>;
@@ -216,6 +222,15 @@ export default function CommercialMissionAdmin() {
                       <small className="font-black uppercase tracking-wider text-amber-300">Proof awaiting review</small>
                       {proofs.data.filter(proof => proof.reviewStatus === "pending").map(proof => <div key={proof.id} className="rounded-lg bg-black/20 p-3"><p className="text-xs">Step {proof.missionStepId} · attempt {proof.attemptNumber} · {Math.round(proof.sizeBytes / 1024)} KB</p><div className="mt-2 grid grid-cols-2 gap-2"><button type="button" onClick={async () => { await reviewProof.mutateAsync({ proofId: proof.id, requestId: crypto.randomUUID(), decision: "approve", note: "Approved against the configured reference." }); await Promise.all([proofs.refetch(), list.refetch()]); }} className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black">APPROVE</button><button type="button" onClick={async () => { const note = window.prompt("What must be corrected?"); if (!note) return; await reviewProof.mutateAsync({ proofId: proof.id, requestId: crypto.randomUUID(), decision: "reject", note }); await Promise.all([proofs.refetch(), list.refetch()]); }} className="rounded-lg bg-red-500 px-3 py-2 text-xs font-black">REJECT</button></div></div>)}
                     </div> : null}
+                    <div className="grid gap-2 rounded-xl border border-sky-400/30 bg-sky-400/5 p-3 text-left">
+                      <small className="font-black uppercase tracking-wider text-sky-300">Campaign + revenue attribution</small>
+                      <button type="button" disabled={createCampaign.isPending || !selected.assignedTo} onClick={async () => {
+                        const result = await createCampaign.mutateAsync({ accountId: selected.account.accountId, missionId: selected.id, campaignName: `${selected.account.name} field leave-behind`, placement: "hotel_leave_behind", collateralVersion: proposal.data ? `proposal-v${proposal.data.version}` : "field-v1", salespersonId: selected.assignedTo!, requestId: crypto.randomUUID() });
+                        setCampaignUrl(result.publicUrl); await campaigns.refetch();
+                      }} className="rounded-lg bg-sky-500 px-3 py-3 text-xs font-black text-white disabled:opacity-40">CREATE OPAQUE CAMPAIGN LINK</button>
+                      {campaignUrl ? <div className="rounded-lg bg-black/25 p-2"><input readOnly value={campaignUrl} className="w-full bg-transparent text-xs" /><button type="button" onClick={() => navigator.clipboard.writeText(campaignUrl)} className="mt-2 text-xs font-black text-sky-300">COPY LINK</button></div> : null}
+                      {campaigns.data?.map(link => <div key={link.id} className="flex items-center justify-between rounded-lg bg-black/20 p-2 text-xs"><span><b>{link.campaignName}</b><br />{link.status} · {link.orderCount} orders</span>{link.status === "active" ? <button type="button" onClick={async () => { await revokeCampaign.mutateAsync({ linkId: link.id }); await campaigns.refetch(); }} className="font-bold text-red-300">REVOKE</button> : null}</div>)}
+                    </div>
                     {["phone_ready", "preparing", "en_route", "arrived"].includes(selected.status) ? (
                       <button
                         type="button"

@@ -7,6 +7,7 @@ import {
 import { COOKIE_NAME, VENDOR_COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
+import { attributeOrderFromCampaign, reverseCommercialOrderAttribution } from "./commercialCampaigns/commercialAttributionService";
 import { requestJobCardRouter } from "./procurement/requestJobCardRouter";
 import { vendorProposalReviewRouter } from "./procurement/vendorProposalReviewRouter";
 import { firstRealProposalBootstrapRouter } from "./procurement/firstRealProposalBootstrapRouter";
@@ -524,6 +525,7 @@ export const appRouter = router({
           lastName: z.string().min(1),
           phone: z.string().min(1),
           email: z.string().optional(),
+          campaignToken: z.string().trim().min(20).max(512).optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -549,6 +551,14 @@ export const appRouter = router({
           status: "new",
         });
 
+        await attributeOrderFromCampaign({
+          tenantId: ctx.tenantId,
+          orderId,
+          campaignToken: input.campaignToken ?? null,
+          requestId: crypto.randomUUID(),
+          actorId: "public-order",
+        });
+
         return { orderId };
       }),
 
@@ -562,7 +572,7 @@ export const appRouter = router({
           phone: z.string(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const order = await getOrderById(input.orderId);
         if (!order || !submittedIdentityMatchesOrder(order, input)) {
           throw new TRPCError({
@@ -3157,6 +3167,13 @@ export const appRouter = router({
             routingPrioritySnapshot: paymentRoute.priority,
           });
 
+          await attributeOrderFromCampaign({
+            tenantId: order.tenantId ?? "default",
+            orderId: input.orderId,
+            requestId: crypto.randomUUID(),
+            actorId: "payment-success",
+          });
+
           await ensurePickupCompletedOperationsEventForOrder(input.orderId, {
             actorDisplayName: "Admin charge",
             actualEventTimestamp: paidAt,
@@ -3467,7 +3484,12 @@ export const appRouter = router({
     /** Delete order */
     deleteOrder: protectedProcedure
       .input(z.object({ orderId: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        const order = await getOrderById(input.orderId);
+        if (order) await reverseCommercialOrderAttribution({
+          tenantId: order.tenantId ?? "default", orderId: input.orderId,
+          actorId: ctx.user.openId, requestId: crypto.randomUUID(), reason: "Order deleted by an authorized operator",
+        });
         await deleteOrder(input.orderId);
         return { success: true };
       }),
