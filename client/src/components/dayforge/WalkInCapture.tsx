@@ -2,6 +2,19 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
+const relationshipTypes = [
+  "unknown",
+  "concierge",
+  "front_desk",
+  "gatekeeper",
+  "decision_maker",
+  "champion",
+] as const;
+
+function relationshipType(value: FormDataEntryValue | null) {
+  return relationshipTypes.find(type => type === value) ?? "unknown";
+}
+
 function tomorrowMorning() {
   const value = new Date();
   value.setDate(value.getDate() + 1);
@@ -30,7 +43,7 @@ export function WalkInCapture(props: { open: boolean; onClose: () => void }) {
           contactTitle: String(data.get("contactTitle") || "") || null,
           contactEmail: String(data.get("contactEmail") || "") || null,
           contactPhone: String(data.get("contactPhone") || "") || null,
-          relationshipType: String(data.get("relationshipType") || "unknown") as "unknown",
+          relationshipType: relationshipType(data.get("relationshipType")),
           conversationNotes: String(data.get("conversationNotes")),
           visitResult: "follow_up",
           nextAction: String(data.get("nextAction")),
