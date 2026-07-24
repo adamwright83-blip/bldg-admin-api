@@ -2,6 +2,14 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "dayforge-visual-check",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "scripts/dev-with-release-env.sh"
+      ],
+      "port": 3000
+    },
+    {
       "name": "pnl-preview",
       "runtimeExecutable": "npx",
       "runtimeArgs": [

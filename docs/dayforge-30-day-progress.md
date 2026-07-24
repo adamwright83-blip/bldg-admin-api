@@ -162,6 +162,27 @@ The environment contains values for `DATABASE_URL`, Stripe, Anthropic, and Twili
 - Optional Twilio sandbox/live-send confirmation when configured.
 - Subjective art-direction review after objective screenshot and interaction gates pass.
 
+## Handoff verification pass — 2026-07-24 (Claude Code, continuing from Codex)
+
+Codex ran out of budget after the phase 0–7 commits above, with phase 8 (full release/browser/visual gates) not started. This pass picked up from that point: stood up a disposable local MySQL 8 container, re-ran every gate Codex had listed as blocked or pending, and did a live browser walkthrough rather than trusting source review alone.
+
+**Gates re-run and confirmed, all against a live database this time (not just the focused suite):**
+- `pnpm db:dayforge:release` — all 46 migrations, including `0045`, applied cleanly to a fresh database.
+- `pnpm test:dayforge:release:integration` — passes.
+- `pnpm test:dayforge:release:e2e` — all 8 Playwright checks pass (desktop + mobile), including the 2 persistence-dependent checks Codex could not run. The real blocker was two missing env vars (`DAYFORGE_PUBLIC_PREVIEW_TOKEN_SECRET`, `DAYFORGE_PUBLIC_PREVIEW_FINGERPRINT_SECRET`, both ≥32 chars) — Codex's environment lacked these in addition to the reported `ECONNREFUSED` on MySQL.
+- `pnpm test:dayforge:release` (151 tests), `pnpm run check:dayforge:release`, `pnpm build` — all still pass after the fix below.
+- Repo-wide `pnpm run check` and `pnpm test` — re-verified Codex's claim line-by-line: every repo-wide typecheck error and all 5 failing repo-wide tests were cross-referenced against `git diff fc6d70c HEAD --name-only` and confirmed to sit outside every file V3 touched (except one untouched line in `server/routers.ts`, confirmed unchanged from baseline). Claim holds.
+- Auth (`docs/dayforge-auth-behavior.md`) and attribution (`docs/dayforge-attribution-behavior.md`) behavior docs were read in full and cross-checked against the actual implementation (`shared/dayforgeContinuation.ts`, `server/commercialCampaigns/commercialAttributionService.ts`) rather than trusted as written. Both match their documented behavior — the destination-priority resolver and the paid/cancelled/refund revenue-realization logic are real, not aspirational.
+
+**Critical bug found and fixed via live browser testing (not caught by any existing gate):**
+Logging a real walk-in through the UI created the mission correctly, but silently never created the follow-up, never transitioned mission status to `follow_up`, and never updated the pipeline stage — the exact "no silent dead leads" invariant this feature exists to guarantee was being violated on every single submission. Root cause: `commercialWalkInMissionInput` passes the frontend's `idempotencyKey` (`walk-in:<requestId>`) straight through to `createCommercialMission`, which persists that literal string as its own `mission_created` event's idempotency key. `logCommercialWalkIn`'s own dedup guard then checked for an existing event using that *same* string, always found the `mission_created` row that had just been written moments earlier, and returned early — skipping the status update, pipeline update, and follow-up insert on every call, not just retries. This was invisible to Codex's own gates because the only existing test (`commercialWalkInService.test.ts`) exercises the pure input-mapping function, never the transaction itself.
+
+Fix: `server/commercialMissions/commercialWalkInService.ts` now uses a distinct `walk-in-transition:<requestId>` idempotency key for the status-transition dedup check and event, separate from the `walk-in:<requestId>` key used by mission creation. Verified via direct MySQL inspection before and after (mission status/version, pipeline stage/`nextFollowUpAt`, and a real `commercial_follow_ups` row) and confirmed live in the browser — the mission now correctly shows under "Upcoming" on `/dayforge-today` with a working Complete/Reschedule follow-up, instead of "Missing next action."
+
+Added `server/commercialMissions/commercialWalkInService.integration.test.ts` (2 tests, MySQL-gated like the existing release integration test) asserting the mission status, pipeline stage, and follow-up row directly — this specific class of "transaction silently no-ops" bug cannot recur undetected now.
+
+**Confirmed gap — not fixed in this pass:** the BORESLAY "Save Your Own Ass" re-skin (goal-art swap, title change) described in the accepted plan (P0.4.6 / master-prompt section 4P) was not implemented. `/boreslay-rally` still renders the original "EXCUSE RALLY" game unchanged. This matches the ledger's own phase 4 status ("In progress... objective browser/visual artifact gate remains") — it was not silently dropped, just genuinely not done. This is an art/asset-creation task distinct from the backend bug above and was intentionally not attempted in this pass rather than rushed.
+
 ## Deviations and blockers
 
 - The requested “pre-auth working-state commit” is represented by the existing clean rollback SHA `fc6d70c`; no empty commit will be created.

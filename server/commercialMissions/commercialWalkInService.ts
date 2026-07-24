@@ -102,9 +102,10 @@ export async function logCommercialWalkIn(input: CommercialWalkInInput) {
     )).limit(1).for("update");
     const pipeline = pipelines[0];
     if (!pipeline) throw new Error("Commercial pipeline was not created");
+    const transitionIdempotencyKey = `walk-in-transition:${input.requestId}`;
     const existing = await tx.select({ id: commercialMissionEvents.id }).from(commercialMissionEvents).where(and(
       eq(commercialMissionEvents.tenantId, input.tenantId),
-      eq(commercialMissionEvents.idempotencyKey, `walk-in:${input.requestId}`)
+      eq(commercialMissionEvents.idempotencyKey, transitionIdempotencyKey)
     )).limit(1);
     if (existing[0]) return;
     const targetStatus = input.visitResult === "won" ? "won" : input.visitResult === "lost" ? "lost" : "follow_up";
@@ -122,7 +123,7 @@ export async function logCommercialWalkIn(input: CommercialWalkInInput) {
     await tx.insert(commercialMissionEvents).values({
       tenantId: input.tenantId, missionId: mission.id, eventName: "unplanned_walk_in",
       fromStatus: mission.status, toStatus: targetStatus, actorType: "operator",
-      actorId: input.actorId, idempotencyKey: `walk-in:${input.requestId}`,
+      actorId: input.actorId, idempotencyKey: transitionIdempotencyKey,
       metadataJson: {
         source: "unplanned_walk_in", conversationNotes: input.conversationNotes,
         visitResult: input.visitResult, nextAction: input.nextAction,
