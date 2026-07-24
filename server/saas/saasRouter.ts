@@ -102,6 +102,27 @@ function publicError(error: unknown): never {
 }
 
 export const saasRouter = router({
+  providerStatus: dayforgeTenantMemberProcedure.query(() => ({
+    territory: {
+      provider: "google_places",
+      status: process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY ? "configured" as const : "not_configured" as const,
+    },
+    billing: {
+      provider: "stripe",
+      status: process.env.DAYFORGE_BILLING_STRIPE_SECRET_KEY ? "configured" as const : "not_configured" as const,
+      mode: process.env.DAYFORGE_BILLING_STRIPE_SECRET_KEY?.startsWith("sk_live_") ? "live" as const : process.env.DAYFORGE_BILLING_STRIPE_SECRET_KEY ? "test" as const : "none" as const,
+    },
+    sms: {
+      provider: "twilio",
+      status: process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && (process.env.TWILIO_FROM_NUMBER || process.env.TWILIO_PHONE_NUMBER) ? "configured" as const : "not_configured" as const,
+    },
+    email: {
+      provider: "agentmail",
+      status: process.env.AGENTMAIL_API_KEY || process.env.AGENTMAIL_VENDOR_INBOX_ID ? "configured" as const : "not_configured" as const,
+    },
+    printFulfillment: { provider: "manual", status: "manual_fulfillment" as const, connected: false },
+    imports: { provider: "cleancloud_csv", status: "file_import_available" as const, connected: false },
+  })),
   plans: publicProcedure.query(() => listPublicSaasPlans()),
 
   start: publicProcedure

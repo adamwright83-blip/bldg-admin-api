@@ -14,6 +14,7 @@ export default function DayforgeTodayPage() {
   const { loading, isAuthenticated } = useAuth();
   const [walkInOpen, setWalkInOpen] = useState(() => new URLSearchParams(location.search).get("walkIn") === "1");
   const queue = trpc.system.dayforgeToday.list.useQuery(undefined, { enabled: isAuthenticated });
+  const tenant = trpc.system.saas.me.useQuery(undefined, { enabled: isAuthenticated, retry: false });
   const completeFollowUp = trpc.system.dayforgeToday.completeFollowUp.useMutation();
   const rescheduleFollowUp = trpc.system.dayforgeToday.rescheduleFollowUp.useMutation();
   const groups = useMemo(() => ({
@@ -28,7 +29,7 @@ export default function DayforgeTodayPage() {
     <main className="min-h-screen bg-[#07111f] text-slate-100 pb-28">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-[#07111f]/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
-          <div><p className="text-xs font-black tracking-[.2em] text-orange-400">DAYFORGE</p><h1 className="text-2xl font-black">What creates revenue next?</h1></div>
+          <div><p className="text-xs font-black tracking-[.2em] text-orange-400">{tenant.data?.configuration?.tenant.brandName ?? "DAYFORGE"}</p><h1 className="text-2xl font-black">What creates revenue next?</h1></div>
           <Link href="/commercial-missions" className="rounded-xl border border-white/15 px-3 py-2 text-sm">Missions</Link>
         </div>
       </header>

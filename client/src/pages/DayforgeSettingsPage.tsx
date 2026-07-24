@@ -6,6 +6,7 @@ export default function DayforgeSettingsPage() {
   const utils = trpc.useUtils();
   const me = trpc.system.saas.me.useQuery();
   const membershipRole = me.data?.membership.role;
+  const providers = trpc.system.saas.providerStatus.useQuery();
   const canAdmin = membershipRole === "owner" || membershipRole === "admin";
   const canOperate = canAdmin || membershipRole === "operator";
   const members = trpc.system.saas.members.useQuery(undefined, {
@@ -69,6 +70,20 @@ export default function DayforgeSettingsPage() {
         </p>
 
         <div className="df-onboarding__settings">
+          <section>
+            <h2>Provider truth</h2>
+            <ul className="df-onboarding__members">
+              {providers.data ? [
+                ["Territory · Google Places", providers.data.territory.status],
+                [`Billing · Stripe (${providers.data.billing.mode})`, providers.data.billing.status],
+                ["SMS · Twilio", providers.data.sms.status],
+                ["Email · AgentMail", providers.data.email.status],
+                ["Print fulfillment", providers.data.printFulfillment.status],
+                ["CleanCloud", providers.data.imports.status],
+              ].map(([label, status]) => <li key={label}><span>{label}</span><strong className={status === "configured" ? "text-emerald-600" : "text-amber-700"}>{status.replaceAll("_", " ")}</strong></li>) : <li><span>Loading provider truth…</span></li>}
+            </ul>
+            <p>Manual/staged providers are never presented as connected APIs.</p>
+          </section>
           <section>
             <h2>Subscription</h2>
             <p>{me.data.billing?.planName ?? "Legacy first-party tenant"}</p>

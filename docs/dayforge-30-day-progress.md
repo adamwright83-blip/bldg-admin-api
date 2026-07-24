@@ -19,7 +19,7 @@
 | 4 — canonical driver, BORESLAY, IRL mission, coaching | In progress | Canonical target/dispatch, six-level IRL plan, proof/review, timer/Maps, live coaching, and field presentation implemented; objective browser/visual artifact gate remains. |
 | 5 — campaign and automatic attribution | Complete | Opaque campaign links, public-order propagation, explicit/recurring attribution, pending/review states, paid/net truth, reversals, manual recovery, tests, and behavior report shipped. |
 | 6 — proof dashboard | Complete | Date-filtered activity/conversion/money/product proof, paid-only revenue splits and groupings, truthful empty states, and mission drill-down shipped. |
-| 7 — third-party tenant completion | Not started | — |
+| 7 — third-party tenant completion | Complete | Today default, tenant role enforcement, truthful provider status, billing/invites/import compatibility, and no-evidence import exclusion verified. |
 | 8 — full release, browser, and visual gates | Not started | Baseline results below. |
 
 ## Verified existing architecture
@@ -124,6 +124,13 @@ Authenticated destinations resolve in this intentional order:
 - Realized revenue is summed only from active paid attribution rows. Estimated pipeline is displayed separately and explicitly labeled as not revenue.
 - Revenue is grouped by property, campaign, placement, and salesperson in the service response, and every mission summary links back to canonical mission/pipeline identifiers.
 - Empty ranges render truthful zeros and no-revenue copy rather than demo values.
+
+## Phase 7 implementation evidence
+
+- Activated owners follow the canonical auth contract to `/dayforge-today`; branding, billing, invites, roles, and CleanCloud import remain available in tenant settings.
+- Existing role procedures enforce owner/admin configuration and review, operator mission/follow-up work, and field-only assigned mission actions under tenant scope.
+- Settings now show Google territory, Stripe mode, Twilio, email, manual print, and CleanCloud import truth directly from server configuration without fake green states.
+- Imported history remains generic unless a real campaign/first-touch evidence path matches; import alone never creates attribution.
 
 ## Files changed through Phase 1
 
