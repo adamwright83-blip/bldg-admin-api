@@ -756,6 +756,48 @@ export async function completeCommercialFollowUp(input: {
   return detail;
 }
 
+export async function rescheduleCommercialFollowUp(input: {
+  tenantId: string;
+  pipelineId: number;
+  followUpId: string;
+  actorId: string;
+  requestId: string;
+  dueAt: Date;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.transaction(async tx => {
+    const pipeline = await readPipelineWith(tx, input);
+    if (!pipeline) throw new Error("Commercial pipeline record not found");
+    const existing = await tx.select({ id: commercialPipelineEvents.id }).from(commercialPipelineEvents).where(and(
+      eq(commercialPipelineEvents.tenantId, input.tenantId),
+      eq(commercialPipelineEvents.idempotencyKey, `pipeline-follow-up-rescheduled:${input.requestId}`)
+    )).limit(1);
+    if (existing[0]) return;
+    const result = await tx.update(commercialFollowUps).set({ dueAt: input.dueAt }).where(and(
+      eq(commercialFollowUps.tenantId, input.tenantId),
+      eq(commercialFollowUps.pipelineId, input.pipelineId),
+      eq(commercialFollowUps.id, input.followUpId),
+      eq(commercialFollowUps.status, "open")
+    ));
+    if (affectedRows(result) !== 1) throw new Error("Open follow-up not found");
+    await tx.update(commercialPipelineRecords).set({ nextFollowUpAt: input.dueAt }).where(and(
+      eq(commercialPipelineRecords.tenantId, input.tenantId),
+      eq(commercialPipelineRecords.id, input.pipelineId)
+    ));
+    await tx.insert(commercialPipelineEvents).values({
+      tenantId: input.tenantId, pipelineId: input.pipelineId, missionId: pipeline.missionId,
+      fromStage: pipeline.stage, toStage: pipeline.stage, actorType: "operator",
+      actorId: input.actorId, idempotencyKey: `pipeline-follow-up-rescheduled:${input.requestId}`,
+      correlationId: input.requestId,
+      metadataJson: { followUpId: input.followUpId, dueAt: input.dueAt.toISOString() },
+    });
+  });
+  const detail = await getCommercialPipelineDetail(input);
+  if (!detail) throw new Error("Commercial pipeline record not found");
+  return detail;
+}
+
 export async function approveCommercialAgreement(input: {
   tenantId: string;
   pipelineId: number;

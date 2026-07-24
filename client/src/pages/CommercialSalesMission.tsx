@@ -285,6 +285,7 @@ export default function CommercialSalesMission() {
 
   return (
     <main className="csm-root">
+      <a href="/dayforge-today?walkIn=1" className="fixed bottom-4 right-4 z-50 rounded-xl bg-orange-500 px-4 py-3 text-xs font-black text-white shadow-xl">LOG A WALK-IN</a>
       <div className="csm-phone-shell">
         <div className="csm-statusbar" aria-hidden="true">
           <span>DAYFORGE FIELD</span>

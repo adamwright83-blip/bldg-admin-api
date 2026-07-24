@@ -58,6 +58,7 @@ export default function CommercialMissionAdmin() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link href="/dayforge-today?walkIn=1" className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-black text-white">LOG A WALK-IN</Link>
             <Link href="/commercial-pipeline" className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 px-3 py-2 text-sm text-sky-200 hover:bg-sky-400/10">
               <TrendingUp className="h-4 w-4" /> Revenue Pipeline
             </Link>

@@ -44,6 +44,7 @@ import {
   startCommercialMissionFieldPreparation,
   updateCommercialMissionFieldChecklist,
 } from "./commercialMissionFieldService";
+import { logCommercialWalkIn } from "./commercialWalkInService";
 
 function httpUrl(maxLength: number) {
   return z
@@ -168,6 +169,38 @@ function notFound(): never {
 }
 
 export const commercialMissionRouter = router({
+  logWalkIn: dayforgeMissionFieldProcedure
+    .input(z.object({
+      idempotencyKey: z.string().trim().min(8).max(191),
+      requestId: z.string().uuid(),
+      businessName: z.string().trim().min(1).max(255),
+      businessType: z.string().trim().min(1).max(96),
+      address: z.string().trim().min(1).max(512),
+      website: httpUrl(512).nullable().optional(),
+      contactName: z.string().trim().max(255).nullable().optional(),
+      contactTitle: z.string().trim().max(255).nullable().optional(),
+      contactEmail: z.string().trim().email().max(320).nullable().optional(),
+      contactPhone: z.string().trim().min(7).max(64).nullable().optional(),
+      relationshipType: z.enum(COMMERCIAL_CONTACT_RELATIONSHIP_TYPES).nullable().optional(),
+      conversationNotes: z.string().trim().min(1).max(4000),
+      visitResult: z.enum(["follow_up", "won", "lost", "no_contact"]),
+      nextAction: z.string().trim().min(1).max(2000),
+      followUpAt: z.coerce.date().nullable().optional(),
+      assignedTo: z.string().trim().max(128).nullable().optional(),
+      estimatedAnnualValueCents: z.number().int().positive().nullable().optional(),
+      estimateConfidence: z.enum(["low", "medium", "high"]).optional(),
+      campaign: z.string().trim().max(128).nullable().optional(),
+      placement: z.string().trim().max(128).nullable().optional(),
+      collateralDelivered: z.boolean().optional(),
+      quoteRequested: z.boolean().optional(),
+      pilotRequested: z.boolean().optional(),
+    }))
+    .mutation(({ ctx, input }) => logCommercialWalkIn({
+      ...input,
+      tenantId: ctx.tenantId,
+      actorId: ctx.user.openId,
+      assignedTo: input.assignedTo ?? ctx.user.openId,
+    })),
   timeline: dayforgeTenantAdminProcedure
     .input(
       z

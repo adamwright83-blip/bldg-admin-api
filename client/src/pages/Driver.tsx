@@ -80,6 +80,7 @@ export default function Driver() {
 
   return (
     <>
+      <a href="/dayforge-today?walkIn=1" className="fixed bottom-5 right-5 z-50 rounded-2xl bg-orange-500 px-5 py-4 text-sm font-black text-white shadow-2xl">LOG A WALK-IN</a>
       {/* Drop-everything resident message alarm — flashing red, top of the driver screen. */}
       <ResidentFollowupAlert />
       <DriverPrepMechanic

@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | 0 — baseline, route map, safety net | Complete | Route/provider/payment/storage audits recorded; baseline release tests and build pass, with unrelated repository failures isolated below. |
 | 1 — shared contracts and data foundation | Complete | Migration `0045`, shared contracts, canonical contact/mission persistence, dispatch, proof, coaching, campaign-link foundation, and 81 focused tests pass. |
-| 2 — DayForge Today and walk-in | Not started | — |
+| 2 — DayForge Today and walk-in | Complete | Tenant-scoped mobile action queue, missing-next-action invariant, canonical walk-in transaction, follow-up completion/rescheduling, and cross-surface entry points implemented. |
 | 3 — auth and preview continuation | Not started | Current login fallback to `/julydemo` re-verified. |
 | 4 — canonical driver, BORESLAY, IRL mission, coaching | Not started | Existing canonical handoff and Rally/driver assets re-verified. |
 | 5 — campaign and automatic attribution | Not started | Current manual order-ID attribution re-verified. |
@@ -81,6 +81,15 @@ Authenticated destinations resolve in this intentional order:
 - SMS is opt-in per dispatch and requires the secure handoff; durable in-app dispatch works without Twilio. Provider-not-configured is stored truthfully.
 - Proof records are server-backed, authorization-scoped, MIME/size limited, reviewable, retryable after rejection, and coupled to recoverable object-deletion lifecycle records. The retention policy is 90 days.
 - Coaching stores schema-validated concise output, source claims, evidence references, prompt/model metadata, stable context hashes, fallback state, and no hidden reasoning. Account content is treated as untrusted context.
+
+## Phase 2 implementation evidence
+
+- `/dayforge-today` is a production tenant surface, not a demo controller. It orders overdue follow-ups, unopened field dispatches, today/upcoming work, and explicit missing-next-action exceptions without claiming unknown distance.
+- Rows expose ordinary browser `tel:`, `sms:`, `mailto:`, and Google Maps actions plus mission opening, completion, and one-tap rescheduling.
+- `LOG A WALK-IN` is available from Today, Commercial Missions, the driver app, and the active commercial field mission.
+- Walk-in capture preserves the full contact, records operator evidence, creates the canonical account/location/opportunity/task/mission/pipeline graph, records an explicit audited unplanned-game bypass, and creates the requested follow-up. Retries reuse the mission idempotency key and the walk-in request ID.
+- Existing non-terminal leads are not silently rewritten to satisfy the invariant; missing work is surfaced as an exception.
+- Focused queue and walk-in tests pass. Production build and the DayForge release type gate pass; the live MySQL transaction gate remains environment-dependent as recorded below.
 
 ## Files changed through Phase 1
 
