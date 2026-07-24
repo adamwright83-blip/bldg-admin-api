@@ -399,6 +399,7 @@ export async function readCommercialMissionWith(
     stepRows.map(step => {
       const irl = irlByStepId.get(step.id);
       return {
+        id: step.id,
         key: step.stepKey,
         label: step.label,
         detail: step.detail,

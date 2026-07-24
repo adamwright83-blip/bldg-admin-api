@@ -151,6 +151,7 @@ export type CommercialMissionFulfillmentMode =
   | "manual_fulfillment";
 
 export type CommercialMissionStep = {
+  id?: number;
   key: string;
   label: string;
   detail: string;

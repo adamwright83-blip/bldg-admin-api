@@ -31,6 +31,9 @@ export default function Driver() {
     dateField: "deliveryDate",
   });
   const updateStatus = trpc.admin.updateStatus.useMutation();
+  const dispatches = trpc.system.commercialMission.myDispatches.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 15_000 });
+  const openDispatch = trpc.system.commercialMission.openDispatch.useMutation();
+  const activeDispatch = dispatches.data?.find(item => item.channel === "in_app" && ["queued", "sent"].includes(item.status));
 
   async function invalidateLiveStatuses() {
     await Promise.all([
@@ -83,6 +86,14 @@ export default function Driver() {
       <a href="/dayforge-today?walkIn=1" className="fixed bottom-5 right-5 z-50 rounded-2xl bg-orange-500 px-5 py-4 text-sm font-black text-white shadow-2xl">LOG A WALK-IN</a>
       {/* Drop-everything resident message alarm — flashing red, top of the driver screen. */}
       <ResidentFollowupAlert />
+      {activeDispatch ? <button type="button" onClick={async () => {
+        await openDispatch.mutateAsync({ dispatchId: activeDispatch.id });
+        window.location.assign(activeDispatch.destinationPath);
+      }} className="fixed inset-x-3 top-3 z-[60] rounded-2xl border-2 border-orange-300 bg-orange-500 p-5 text-left text-white shadow-2xl motion-safe:animate-pulse">
+        <small className="font-black tracking-[.2em]">IRL MISSION · {new Date(activeDispatch.queuedAt).toLocaleTimeString()}</small>
+        <strong className="mt-1 block text-xl">MISSION #{activeDispatch.missionId} READY</strong>
+        <span className="mt-2 block text-sm font-black">TAP TO BEGIN →</span>
+      </button> : null}
       <DriverPrepMechanic
         pickups={pickupQuery.data}
         deliveries={deliveryQuery.data?.filter((order) => order.paid)}

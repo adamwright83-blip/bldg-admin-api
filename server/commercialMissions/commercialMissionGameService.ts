@@ -17,6 +17,7 @@ import {
   readCommercialMissionWith,
   transitionCommercialMissionWith,
 } from "./commercialMissionStore";
+import { dispatchCommercialMission } from "./commercialMissionDispatchService";
 
 function attemptView(row: typeof commercialMissionGameAttempts.$inferSelect) {
   return {
@@ -330,5 +331,17 @@ export async function completeCommercialMissionGame(input: {
   if (!state?.qualifyingResult || !state.reward || !state.phoneRoute) {
     throw new Error("Qualifying game result did not produce one reward and one phone unlock");
   }
-  return state;
+  const mission = await getCommercialMission({ tenantId: input.tenantId, missionId: input.missionId });
+  if (mission?.assignedTo && mission.steps.some(step => step.type !== "generic")) {
+    const dispatch = await dispatchCommercialMission({
+      tenantId: input.tenantId,
+      missionId: input.missionId,
+      actorId: input.playerId,
+      requestId: input.gameAttemptId,
+      dispatchPolicy: "on_game_complete",
+      includeSms: false,
+    });
+    return { ...state, dispatch };
+  }
+  return { ...state, dispatch: null };
 }

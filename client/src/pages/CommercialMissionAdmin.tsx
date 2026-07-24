@@ -27,6 +27,10 @@ export default function CommercialMissionAdmin() {
   const createHandoff = trpc.system.commercialMission.createPhoneHandoff.useMutation();
   const generateProposal = trpc.system.commercialProposal.generate.useMutation();
   const approveProposal = trpc.system.commercialProposal.approve.useMutation();
+  const createIrlPlan = trpc.system.commercialMission.createLuxuryHotelIrlPlan.useMutation();
+  const dispatchIrl = trpc.system.commercialMission.dispatchIrl.useMutation();
+  const [printShop, setPrintShop] = useState({ name: "", address: "" });
+  const [mintStop, setMintStop] = useState({ name: "", address: "" });
   useEffect(() => {
     if (selectedId === null && list.data?.[0]) setSelectedId(list.data[0].id);
   }, [list.data, selectedId]);
@@ -39,6 +43,11 @@ export default function CommercialMissionAdmin() {
     { missionId: selectedId ?? 1 },
     { enabled: isAuthenticated && selectedId !== null, retry: false },
   );
+  const proofs = trpc.system.commercialMission.proofs.useQuery(
+    { missionId: selectedId ?? 1 },
+    { enabled: isAuthenticated && selectedId !== null, retry: false },
+  );
+  const reviewProof = trpc.system.commercialMission.reviewProof.useMutation();
 
   if (authLoading) {
     return <main className="min-h-screen bg-slate-950 text-white grid place-items-center">Loading DayForge missions…</main>;
@@ -188,6 +197,25 @@ export default function CommercialMissionAdmin() {
                       ) : null}
                       {proposalMessage ? <small role="status" className="text-slate-400">{proposalMessage}</small> : null}
                     </div>
+                    <div className="grid gap-2 rounded-xl border border-orange-400/30 bg-orange-400/5 p-3 text-left">
+                      <small className="font-bold uppercase tracking-wider text-orange-300">IRL mission plan</small>
+                      <input value={printShop.name} onChange={event => setPrintShop(value => ({ ...value, name: event.target.value }))} placeholder="Print shop name" className="rounded-lg border border-white/15 bg-slate-950 px-3 py-2 text-xs" />
+                      <input value={printShop.address} onChange={event => setPrintShop(value => ({ ...value, address: event.target.value }))} placeholder="Print shop address" className="rounded-lg border border-white/15 bg-slate-950 px-3 py-2 text-xs" />
+                      <input value={mintStop.name} onChange={event => setMintStop(value => ({ ...value, name: event.target.value }))} placeholder="Convenience store name" className="rounded-lg border border-white/15 bg-slate-950 px-3 py-2 text-xs" />
+                      <input value={mintStop.address} onChange={event => setMintStop(value => ({ ...value, address: event.target.value }))} placeholder="Convenience store address" className="rounded-lg border border-white/15 bg-slate-950 px-3 py-2 text-xs" />
+                      <button type="button" disabled={createIrlPlan.isPending || !printShop.name || !printShop.address || !mintStop.name || !mintStop.address} onClick={async () => {
+                        await createIrlPlan.mutateAsync({ missionId: selected.id, requestId: crypto.randomUUID(), printShopName: printShop.name, printShopAddress: printShop.address, convenienceStoreName: mintStop.name, convenienceStoreAddress: mintStop.address, hotelName: selected.account.name, hotelAddress: selected.account.address, printFulfillmentMode: "manual_fulfillment", printCreditDisplayCopy: "$100 complimentary print credit" });
+                        await list.refetch();
+                      }} className="rounded-lg border border-orange-400/40 px-3 py-2 text-xs font-black text-orange-200 disabled:opacity-40">CREATE LUXURY HOTEL RUN V1</button>
+                      <button type="button" disabled={dispatchIrl.isPending || !selected.assignedTo || !selected.steps.some(step => step.type !== "generic")} onClick={async () => {
+                        await dispatchIrl.mutateAsync({ missionId: selected.id, requestId: crypto.randomUUID(), dispatchPolicy: "manual", includeSms: false });
+                      }} className="rounded-lg bg-orange-500 px-3 py-3 text-xs font-black text-white disabled:opacity-40">DISPATCH IRL MISSION</button>
+                      <small className="text-slate-500">In-app delivery always works. SMS is not claimed unless a validated SMS handoff/provider exists.</small>
+                    </div>
+                    {proofs.data?.some(proof => proof.reviewStatus === "pending") ? <div className="grid gap-2 rounded-xl border border-amber-400/30 bg-amber-400/5 p-3 text-left">
+                      <small className="font-black uppercase tracking-wider text-amber-300">Proof awaiting review</small>
+                      {proofs.data.filter(proof => proof.reviewStatus === "pending").map(proof => <div key={proof.id} className="rounded-lg bg-black/20 p-3"><p className="text-xs">Step {proof.missionStepId} · attempt {proof.attemptNumber} · {Math.round(proof.sizeBytes / 1024)} KB</p><div className="mt-2 grid grid-cols-2 gap-2"><button type="button" onClick={async () => { await reviewProof.mutateAsync({ proofId: proof.id, requestId: crypto.randomUUID(), decision: "approve", note: "Approved against the configured reference." }); await Promise.all([proofs.refetch(), list.refetch()]); }} className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black">APPROVE</button><button type="button" onClick={async () => { const note = window.prompt("What must be corrected?"); if (!note) return; await reviewProof.mutateAsync({ proofId: proof.id, requestId: crypto.randomUUID(), decision: "reject", note }); await Promise.all([proofs.refetch(), list.refetch()]); }} className="rounded-lg bg-red-500 px-3 py-2 text-xs font-black">REJECT</button></div></div>)}
+                    </div> : null}
                     {["phone_ready", "preparing", "en_route", "arrived"].includes(selected.status) ? (
                       <button
                         type="button"

@@ -603,3 +603,15 @@ export async function openCommercialMissionDispatch(
     new Date()
   );
 }
+
+export async function listCommercialMissionDispatches(input: {
+  tenantId: string; assignedTo?: string; missionId?: number;
+}): Promise<CommercialMissionDispatchView[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const conditions = [eq(commercialMissionDispatches.tenantId, input.tenantId)];
+  if (input.assignedTo) conditions.push(eq(commercialMissionDispatches.assignedTo, input.assignedTo));
+  if (input.missionId) conditions.push(eq(commercialMissionDispatches.missionId, input.missionId));
+  const rows = await db.select().from(commercialMissionDispatches).where(and(...conditions)).orderBy(asc(commercialMissionDispatches.createdAt));
+  return rows.map(dispatchView);
+}

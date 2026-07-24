@@ -45,6 +45,10 @@ import {
   updateCommercialMissionFieldChecklist,
 } from "./commercialMissionFieldService";
 import { logCommercialWalkIn } from "./commercialWalkInService";
+import { advanceCommercialMissionIrlStep, applyLuxuryHotelIrlPlan } from "./commercialMissionIrlPlanService";
+import { dispatchCommercialMission, listCommercialMissionDispatches, openCommercialMissionDispatch } from "./commercialMissionDispatchService";
+import { listCommercialMissionProofs, reviewCommercialMissionProof, submitCommercialMissionProof } from "./commercialMissionProofService";
+import { generateDayforgeMissionCoaching, getActiveDayforgeCoachingArtifact } from "../dayforgeCoaching/dayforgeCoachingRuntime";
 
 function httpUrl(maxLength: number) {
   return z
@@ -169,6 +173,64 @@ function notFound(): never {
 }
 
 export const commercialMissionRouter = router({
+  createLuxuryHotelIrlPlan: dayforgeMissionOperatorProcedure.input(z.object({
+    missionId: z.number().int().positive(), requestId: z.string().uuid(),
+    referenceImageUrl: httpUrl(2048).nullable().optional(), trainingVideoUrl: httpUrl(2048).nullable().optional(),
+    printShopName: z.string().trim().min(1).max(255), printShopAddress: z.string().trim().min(1).max(512),
+    convenienceStoreName: z.string().trim().min(1).max(255), convenienceStoreAddress: z.string().trim().min(1).max(512),
+    hotelName: z.string().trim().max(255).nullable().optional(), hotelAddress: z.string().trim().max(512).nullable().optional(),
+    printFulfillmentMode: z.enum(["staged_demo", "manual_fulfillment"]),
+    printCreditDisplayCopy: z.string().trim().max(255).nullable().optional(),
+  })).mutation(({ ctx, input }) => applyLuxuryHotelIrlPlan({ ...input, tenantId: ctx.tenantId, actorId: ctx.user.openId })),
+  advanceIrlStep: dayforgeMissionFieldProcedure.input(z.object({
+    missionId: z.number().int().positive(), stepKey: z.string().trim().min(1).max(64),
+    requestId: z.string().uuid(), action: z.enum(["start", "complete"]),
+  })).mutation(async ({ ctx, input }) => {
+    const mission = await getCommercialMission({ tenantId: ctx.tenantId, missionId: input.missionId });
+    if (!mission) return notFound();
+    assertDriverCanReadMission({ mission, userId: ctx.user.openId, isAdmin: ctx.dayforgeMembership.role !== "field" });
+    return advanceCommercialMissionIrlStep({ ...input, tenantId: ctx.tenantId, actorId: ctx.user.openId });
+  }),
+  submitProof: dayforgeMissionFieldProcedure.input(z.object({
+    missionId: z.number().int().positive(), missionStepId: z.number().int().positive(),
+    requestId: z.string().uuid(), mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]),
+    dataBase64: z.string().min(4).max(14_000_000),
+  })).mutation(({ ctx, input }) => submitCommercialMissionProof({
+    tenantId: ctx.tenantId, missionId: input.missionId, missionStepId: input.missionStepId,
+    actorId: ctx.user.openId, actorRole: ctx.dayforgeMembership.role,
+    requestId: input.requestId, mimeType: input.mimeType,
+    data: Buffer.from(input.dataBase64, "base64"),
+  })),
+  proofs: dayforgeMissionFieldProcedure.input(z.object({ missionId: z.number().int().positive() })).query(({ ctx, input }) =>
+    listCommercialMissionProofs({ ...input, tenantId: ctx.tenantId, actorId: ctx.user.openId, actorRole: ctx.dayforgeMembership.role })
+  ),
+  reviewProof: dayforgeTenantAdminProcedure.input(z.object({
+    proofId: z.string().uuid(), requestId: z.string().uuid(), decision: z.enum(["approve", "reject", "override"]),
+    note: z.string().trim().max(2000).nullable().optional(),
+  })).mutation(({ ctx, input }) => reviewCommercialMissionProof({
+    ...input, tenantId: ctx.tenantId, actorId: ctx.user.openId, actorRole: ctx.dayforgeMembership.role,
+  })),
+  coaching: dayforgeMissionFieldProcedure.input(z.object({ missionId: z.number().int().positive(), stepId: z.number().int().positive().nullable() })).query(({ ctx, input }) =>
+    getActiveDayforgeCoachingArtifact({ ...input, tenantId: ctx.tenantId, missionStepId: input.stepId })
+  ),
+  generateCoaching: dayforgeMissionFieldProcedure.input(z.object({
+    missionId: z.number().int().positive(), stepId: z.number().int().positive().nullable(), requestId: z.string().uuid(), refresh: z.boolean().optional(),
+  })).mutation(({ ctx, input }) => generateDayforgeMissionCoaching({ ...input, tenantId: ctx.tenantId, actorId: ctx.user.openId })),
+  dispatchIrl: dayforgeMissionOperatorProcedure.input(z.object({
+    missionId: z.number().int().positive(), requestId: z.string().uuid(),
+    handoffId: z.string().uuid().nullable().optional(), includeSms: z.boolean().optional(),
+    dispatchPolicy: z.enum(["manual", "on_game_complete"]).default("manual"),
+  })).mutation(async ({ ctx, input }) => {
+    const mission = await getCommercialMission({ tenantId: ctx.tenantId, missionId: input.missionId });
+    if (!mission?.steps.some(step => step.type !== "generic")) throw new Error("Create an IRL step plan before dispatch");
+    return dispatchCommercialMission({ ...input, tenantId: ctx.tenantId, actorId: ctx.user.openId });
+  }),
+  myDispatches: dayforgeMissionFieldProcedure.query(({ ctx }) => listCommercialMissionDispatches({
+    tenantId: ctx.tenantId, assignedTo: ctx.dayforgeMembership.role === "field" ? ctx.user.openId : undefined,
+  })),
+  openDispatch: dayforgeMissionFieldProcedure.input(z.object({ dispatchId: z.string().uuid() })).mutation(({ ctx, input }) =>
+    openCommercialMissionDispatch({ ...input, tenantId: ctx.tenantId, actorId: ctx.user.openId })
+  ),
   logWalkIn: dayforgeMissionFieldProcedure
     .input(z.object({
       idempotencyKey: z.string().trim().min(8).max(191),

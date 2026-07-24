@@ -103,6 +103,8 @@ export default function CommercialSalesMission() {
     trpc.system.commercialMission.fieldOutcome.useMutation();
   const handoffMutation =
     trpc.system.commercialMission.consumePhoneHandoff.useMutation();
+  const irlStepMutation = trpc.system.commercialMission.advanceIrlStep.useMutation();
+  const proofMutation = trpc.system.commercialMission.submitProof.useMutation();
   const [notes, setNotes] = useState("");
   const [decisionMakerStatus, setDecisionMakerStatus] = useState<
     "met" | "unavailable" | "not_recorded"
@@ -118,6 +120,12 @@ export default function CommercialSalesMission() {
 
   const state = stateQuery.data;
   const mission = state?.mission;
+  const activeIrlStep = mission?.steps.find(step => ["ready", "active", "awaiting_review", "rejected"].includes(step.status) && step.type !== "generic");
+  const coaching = trpc.system.commercialMission.coaching.useQuery(
+    { missionId: validMissionId ? missionId : 1, stepId: activeIrlStep?.type === "sales_training" ? activeIrlStep.id ?? null : null },
+    { enabled: Boolean(isAuthenticated && validMissionId && activeIrlStep?.type === "sales_training"), retry: false },
+  );
+  const generateCoaching = trpc.system.commercialMission.generateCoaching.useMutation();
   useEffect(() => {
     if (state?.field) setNotes(state.field.notes);
   }, [state?.field?.notes]);
@@ -310,6 +318,20 @@ export default function CommercialSalesMission() {
         ) : null}
 
         <section className="csm-screen">
+          {activeIrlStep ? <article className={`mb-5 overflow-hidden rounded-3xl border border-orange-300/30 p-5 text-white shadow-2xl ${activeIrlStep.type === "wardrobe_review" ? "bg-gradient-to-br from-fuchsia-950 via-slate-950 to-orange-950" : activeIrlStep.type === "collateral_pickup" ? "bg-gradient-to-br from-orange-950 via-slate-950 to-amber-950" : activeIrlStep.type === "purchase_stop" ? "bg-gradient-to-br from-emerald-950 via-slate-950 to-cyan-950" : activeIrlStep.type === "sales_training" ? "bg-gradient-to-br from-indigo-950 via-slate-950 to-purple-950" : activeIrlStep.type === "field_visit" ? "bg-gradient-to-br from-sky-950 via-slate-950 to-amber-950" : "bg-gradient-to-br from-slate-900 to-orange-950"}`}>
+            <div className="flex items-center justify-between"><small className="font-black tracking-[.18em] text-orange-300">CURRENT LEVEL · {activeIrlStep.position + 1}/{mission.steps.filter(step => step.type !== "generic").length}</small><span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase">{activeIrlStep.status.replaceAll("_", " ")}</span></div>
+            <h2 className="mt-4 text-3xl font-black">{activeIrlStep.label}</h2>
+            <p className="mt-2 text-sm text-white/75">{activeIrlStep.instructionText ?? activeIrlStep.detail}</p>
+            {activeIrlStep.destinationName ? <div className="mt-4 rounded-2xl bg-black/30 p-4"><small className="font-bold text-white/50">DESTINATION</small><b className="block text-lg">{activeIrlStep.destinationName}</b><span className="text-sm text-white/70">{activeIrlStep.destinationAddress}</span></div> : null}
+            {activeIrlStep.type === "sales_training" ? coaching.data?.structuredOutput ? <div className="mt-4 space-y-3 rounded-2xl bg-black/35 p-4"><div><small className="font-black text-orange-300">ASK FOR · TYPICAL ROLE</small><b className="block text-2xl">{coaching.data.structuredOutput.recommendedRole}</b></div><div><small className="font-black text-sky-300">FIRST MOVE</small><p>{coaching.data.structuredOutput.firstNavigationPoint}</p></div><div><small className="font-black text-sky-300">FALLBACK</small><p>{coaching.data.structuredOutput.fallbackNavigationPoint}</p></div><blockquote className="border-l-4 border-orange-400 pl-3 text-lg font-bold">“{coaching.data.structuredOutput.openingLine}”</blockquote><div className="flex flex-wrap gap-2">{coaching.data.structuredOutput.claims.map((claim, index) => <span key={`${claim.key}-${index}`} className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold">{claim.provenance === "general_industry_guidance" ? "TYPICAL ROLE" : claim.provenance.replaceAll("_", " ").toUpperCase()}</span>)}</div><p className="text-xs text-white/55">{coaching.data.generationStatus === "fallback" ? "Provider unavailable — tested deterministic fallback." : `${coaching.data.provider} · ${coaching.data.modelId}`}</p></div> : <button type="button" disabled={generateCoaching.isPending || !activeIrlStep.id} onClick={async () => { if (!activeIrlStep.id) return; await generateCoaching.mutateAsync({ missionId: mission.id, stepId: activeIrlStep.id, requestId: crypto.randomUUID() }); await coaching.refetch(); }} className="mt-4 w-full rounded-2xl border border-indigo-300/40 px-4 py-4 font-black">{generateCoaching.isPending ? "ROOK IS MAPPING THE ROOM…" : "GENERATE LIVE ROOK COACHING"}</button> : null}
+            {activeIrlStep.deadlineAt ? <p className="mt-4 text-lg font-black">COUNTDOWN ENDS {new Date(activeIrlStep.deadlineAt).toLocaleTimeString()} · TIME'S UP NEVER BLOCKS COMPLETION</p> : null}
+            {activeIrlStep.mapsUrl ? <a href={activeIrlStep.mapsUrl} target="_blank" rel="noreferrer" className="mt-4 block rounded-2xl border border-white/25 px-5 py-4 text-center font-black">OPEN GOOGLE MAPS — PARK BEFORE RETURNING</a> : null}
+            {activeIrlStep.status === "awaiting_review" ? <p className="mt-4 rounded-2xl bg-amber-400/15 p-4 font-bold text-amber-200">AWAITING MANUAL REVIEW. Your submitted proof remains server-backed.</p> : activeIrlStep.status === "rejected" ? <label className="mt-4 block rounded-2xl bg-red-400/15 p-4 font-bold text-red-200">REJECTED: {activeIrlStep.rejectionReason ?? "Review the instructions and retry."}<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" className="mt-3 block w-full text-xs" onChange={async event => { const file = event.target.files?.[0]; if (!file || !activeIrlStep.id) return; const bytes = new Uint8Array(await file.arrayBuffer()); let binary = ""; for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index]); await proofMutation.mutateAsync({ missionId: mission.id, missionStepId: activeIrlStep.id, requestId: crypto.randomUUID(), mimeType: file.type as "image/jpeg", dataBase64: btoa(binary) }); await stateQuery.refetch(); }} /></label> : activeIrlStep.proofRequirement === "photo" && activeIrlStep.status === "active" ? <label className="mt-5 block min-h-16 cursor-pointer rounded-2xl bg-orange-500 px-5 py-5 text-center text-lg font-black">CAPTURE + SUBMIT PROOF<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" className="sr-only" onChange={async event => { const file = event.target.files?.[0]; if (!file || !activeIrlStep.id) return; const bytes = new Uint8Array(await file.arrayBuffer()); let binary = ""; for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index]); await proofMutation.mutateAsync({ missionId: mission.id, missionStepId: activeIrlStep.id, requestId: crypto.randomUUID(), mimeType: file.type as "image/jpeg", dataBase64: btoa(binary) }); await stateQuery.refetch(); }} /></label> : <button type="button" disabled={irlStepMutation.isPending} onClick={async () => {
+              await irlStepMutation.mutateAsync({ missionId: mission.id, stepKey: activeIrlStep.key, requestId: crypto.randomUUID(), action: activeIrlStep.status === "ready" ? "start" : "complete" });
+              await stateQuery.refetch();
+            }} className="mt-5 min-h-16 w-full rounded-2xl bg-orange-500 px-5 text-lg font-black">{activeIrlStep.status === "ready" ? "REVEAL OBJECTIVE" : activeIrlStep.proofRequirement === "photo" ? "SUBMIT FOR REVIEW" : "COMPLETE + UNLOCK NEXT"}</button>}
+            {activeIrlStep.type === "field_visit" ? <p className="mt-3 text-center text-xs font-bold text-white/60">No app interaction is required while driving. Continue only when parked.</p> : null}
+          </article> : null}
           {mission.status === "phone_ready" ? (
             <>
               <SectionHeader

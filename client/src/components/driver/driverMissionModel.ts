@@ -40,7 +40,8 @@ type ResidentialTargetCandidate = {
   intel: string;
 };
 
-const TARGET_CANDIDATES: ResidentialTargetCandidate[] = [
+/** Explicit legacy demo fixture only. Production targeting never reads this list. */
+const DEMO_TARGET_CANDIDATES: ResidentialTargetCandidate[] = [
   {
     id: "figueroa-950",
     label: "950 S Figueroa Residential Cluster",
@@ -233,10 +234,10 @@ function resolveFallbackTarget(
 ): MissionTarget {
   return {
     kind: "fallback",
-    label: `Fallback Sector ${missionNumber}-${payloadIndex}`,
+    label: "No verified sales stop available nearby",
     address: null,
     mapsUrl: null,
-    intel: "MANUAL TARGETING REQUIRED // NON-SERVICED CLUSTER NOT RESOLVED",
+    intel: "OPEN AN ASSIGNED CANONICAL COMMERCIAL MISSION OR LOG A WALK-IN",
     customerName: null,
     buildingName: null,
     orderId: null,
@@ -250,48 +251,10 @@ export function deriveMissionTarget(
   missionNumber: number,
   payloadIndex: number
 ): MissionTarget {
-  const resolutionStop = deriveResolutionStop(stops, resolvedOrderIds);
-  const anchorZone = inferTargetZone(resolutionStop?.address ?? stops[0]?.address ?? null);
-
-  const servicedClusterKeys = new Set<string>();
-  for (const stop of stops) {
-    servicedClusterKeys.add(clusterKeyFromAddress(stop.address));
-    if (stop.buildingSlug && BLOCKED_BUILDING_SLUGS.has(stop.buildingSlug)) {
-      servicedClusterKeys.add(stop.buildingSlug);
-    }
-  }
-
-  const filteredCandidates = TARGET_CANDIDATES.filter((candidate) => {
-    if (isBlockedServicedAddress(candidate.address)) return false;
-    const clusterKey = clusterKeyFromAddress(candidate.address);
-    if (servicedClusterKeys.has(clusterKey)) return false;
-    return true;
-  });
-
-  const zoneMatchedCandidates = filteredCandidates.filter((candidate) =>
-    candidate.zones.includes(anchorZone)
-  );
-  const candidatePool =
-    zoneMatchedCandidates.length > 0 ? zoneMatchedCandidates : filteredCandidates;
-
-  if (!candidatePool.length) {
-    return resolveFallbackTarget(missionNumber, payloadIndex);
-  }
-
-  const index = (missionNumber + payloadIndex - 2) % candidatePool.length;
-  const candidate = candidatePool[index];
-
-  return {
-    kind: "real",
-    label: candidate.label,
-    address: candidate.address,
-    mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(candidate.address)}`,
-    intel: resolutionStop
-      ? `${candidate.intel} // NEAR ACTIVE STOP ${resolutionStop.dateLabel}`
-      : candidate.intel,
-    customerName: null,
-    buildingName: candidate.label,
-    orderId: null,
-    nextStatus: null,
-  };
+  void stops;
+  void resolvedOrderIds;
+  // Canonical commercial missions arrive through the durable dispatch query on
+  // the driver surface. Laundry stops and demo fixtures are never promoted into
+  // production sales targets.
+  return resolveFallbackTarget(missionNumber, payloadIndex);
 }

@@ -16,7 +16,7 @@
 | 1 — shared contracts and data foundation | Complete | Migration `0045`, shared contracts, canonical contact/mission persistence, dispatch, proof, coaching, campaign-link foundation, and 81 focused tests pass. |
 | 2 — DayForge Today and walk-in | Complete | Tenant-scoped mobile action queue, missing-next-action invariant, canonical walk-in transaction, follow-up completion/rescheduling, and cross-surface entry points implemented. |
 | 3 — auth and preview continuation | Complete | Canonical validated destination resolver, preview/onboarding/Stripe continuity, demo isolation, security tests, and plain-English behavior report shipped. |
-| 4 — canonical driver, BORESLAY, IRL mission, coaching | Not started | Existing canonical handoff and Rally/driver assets re-verified. |
+| 4 — canonical driver, BORESLAY, IRL mission, coaching | In progress | Canonical target/dispatch, six-level IRL plan, proof/review, timer/Maps, live coaching, and field presentation implemented; objective browser/visual artifact gate remains. |
 | 5 — campaign and automatic attribution | Not started | Current manual order-ID attribution re-verified. |
 | 6 — proof dashboard | Not started | — |
 | 7 — third-party tenant completion | Not started | — |
@@ -98,6 +98,16 @@ Authenticated destinations resolve in this intentional order:
 - External, protocol-relative, script/data, encoded-separator, control-character, secret-bearing, looping, and demo return paths fail closed.
 - Tenant state and active membership are checked server-side before session issuance; redirect context cannot choose a tenant or grant a role.
 - Shipped behavior, exclusions, scenarios, and rollback are documented in `docs/dayforge-auth-behavior.md`.
+
+## Phase 4 implementation evidence (core)
+
+- The first-party driver no longer promotes hardcoded buildings into production sales targets. Canonical assigned dispatches are polled from the server; without one the UI says no verified stop is available.
+- Owners can compose `Luxury Hotel Acquisition Run v1` on the canonical mission using explicitly entered print-shop and convenience-store stops plus the canonical hotel destination. Print fulfillment is stored as staged/manual, with no provider/payment claim.
+- In-app dispatch is durable, assignment-bound, idempotent, and visibly openable in the driver app. BORESLAY completion creates it only after the qualifying server result and phone-ready transition.
+- The field UI reveals one server-backed level at a time, persists start/deadline timestamps, keeps expiration non-blocking, uses ordinary Maps links, and warns the operator to park before interaction.
+- Wardrobe proof is uploaded to private server storage, enters manual review, retains rejected attempts, and unlocks progression only through durable review truth.
+- Rook coaching invokes the existing server-side Anthropic adapter with structured output, timeout, model environment configuration, cache/context hash, claim grounding, prompt-injection instructions, and a truthful deterministic fallback.
+- Distinct scene treatments and dominant CTAs are implemented for wardrobe, print payload, mints, coaching, hotel approach, and debrief. Screenshot/render inspection is intentionally still open and will be closed in the visual gate.
 
 ## Files changed through Phase 1
 
