@@ -18,7 +18,7 @@
 | 3 — auth and preview continuation | Complete | Canonical validated destination resolver, preview/onboarding/Stripe continuity, demo isolation, security tests, and plain-English behavior report shipped. |
 | 4 — canonical driver, BORESLAY, IRL mission, coaching | In progress | Canonical target/dispatch, six-level IRL plan, proof/review, timer/Maps, live coaching, and field presentation implemented; objective browser/visual artifact gate remains. |
 | 5 — campaign and automatic attribution | Complete | Opaque campaign links, public-order propagation, explicit/recurring attribution, pending/review states, paid/net truth, reversals, manual recovery, tests, and behavior report shipped. |
-| 6 — proof dashboard | Not started | — |
+| 6 — proof dashboard | Complete | Date-filtered activity/conversion/money/product proof, paid-only revenue splits and groupings, truthful empty states, and mission drill-down shipped. |
 | 7 — third-party tenant completion | Not started | — |
 | 8 — full release, browser, and visual gates | Not started | Baseline results below. |
 
@@ -117,6 +117,13 @@ Authenticated destinations resolve in this intentional order:
 - Generic, unpaid, pending-pre-win, ambiguous, conflicting, cancelled, fully refunded, and unsupported partial-refund cases do not overstate realized revenue.
 - Existing `commercial_order_attributions` remains the realized-revenue ledger and the manual order-ID path remains the recovery tool. Reversals create durable correction history and never alter customer charges.
 - Shipped rules and realistic before/after scenarios are documented in `docs/dayforge-attribution-behavior.md`.
+
+## Phase 6 implementation evidence
+
+- `/dayforge-proof` provides a configurable 30-day default window and tenant-scoped activity, conversion, attributed paid revenue, recurring/first-order, next-action, and dispatch-open proof.
+- Realized revenue is summed only from active paid attribution rows. Estimated pipeline is displayed separately and explicitly labeled as not revenue.
+- Revenue is grouped by property, campaign, placement, and salesperson in the service response, and every mission summary links back to canonical mission/pipeline identifiers.
+- Empty ranges render truthful zeros and no-revenue copy rather than demo values.
 
 ## Files changed through Phase 1
 

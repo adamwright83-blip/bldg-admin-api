@@ -41,6 +41,7 @@ const DayforgeOnboardingPage = lazy(
 );
 const DayforgeLoginPage = lazy(() => import("./pages/DayforgeLoginPage"));
 const DayforgeTodayPage = lazy(() => import("./pages/DayforgeTodayPage"));
+const DayforgeProofPage = lazy(() => import("./pages/DayforgeProofPage"));
 const DayforgeSettingsPage = lazy(() => import("./pages/DayforgeSettingsPage"));
 const DayforgeInvitePage = lazy(() => import("./pages/DayforgeInvitePage"));
 const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
@@ -152,6 +153,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/dayforge-onboarding",
   "/dayforge-login",
   "/dayforge-today",
+  "/dayforge-proof",
   "/dayforge-settings",
   "/dayforge-invite",
   "/billing",
@@ -180,6 +182,7 @@ function AdminHostRouter() {
           <DayforgeTodayPage />
         </Suspense>
       </Route>
+      <Route path="/dayforge-proof"><Suspense fallback={<PublicLandingFallback />}><DayforgeProofPage /></Suspense></Route>
       <Route path="/dayforge-invite">
         <Suspense fallback={<PublicLandingFallback />}>
           <DayforgeInvitePage />

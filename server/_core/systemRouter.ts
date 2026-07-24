@@ -11,6 +11,7 @@ import { saasRouter } from "../saas/saasRouter";
 import { dayforgeDemoRouter } from "../dayforgeDemo/demoTenantRouter";
 import { dayforgeTodayRouter } from "../dayforgeToday/dayforgeTodayRouter";
 import { commercialCampaignRouter } from "../commercialCampaigns/commercialCampaignRouter";
+import { dayforgeProofRouter } from "../dayforgeProof/dayforgeProofRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
@@ -23,6 +24,7 @@ export const systemRouter = router({
   dayforgeDemo: dayforgeDemoRouter,
   dayforgeToday: dayforgeTodayRouter,
   commercialCampaign: commercialCampaignRouter,
+  dayforgeProof: dayforgeProofRouter,
   health: publicProcedure
     .input(
       z.object({
