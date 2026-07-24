@@ -205,7 +205,11 @@ export default function OperatorReflection() {
                   data.attention.map((task: any) => (
                     <article key={task.id} className="rounded-md border border-[#eadfce] p-4">
                       <p className="text-sm font-medium">{task.title}</p>
-                      <p className="mt-2 text-xs text-[#6f6254]">{laneShort(task.lane)} · {money(task.revenueAtRiskCents)} at risk</p>
+                      <p className="mt-2 text-xs text-[#6f6254]">
+                        {laneShort(task.lane)} · {task.metadataJson?.revenueEstimateStatus === "unavailable"
+                          ? "Estimate unavailable — needs qualification"
+                          : `${money(task.revenueAtRiskCents)} at risk`}
+                      </p>
                     </article>
                   ))
                 ) : (

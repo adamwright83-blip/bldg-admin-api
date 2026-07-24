@@ -59,19 +59,69 @@ export function commercialAccountIdentityKey(input: {
 
 export function commercialLocationIdentityKey(input: {
   address: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
 }): string {
-  return sha(
-    `${normalized(input.address)}:${input.latitude.toFixed(5)}:${input.longitude.toFixed(5)}`
-  );
+  return sha(`address:${normalized(input.address)}`);
+}
+
+export function normalizeCommercialContactEmail(
+  value: string | null | undefined
+): string | null {
+  const normalizedEmail = normalized(value);
+  return normalizedEmail || null;
+}
+
+export function normalizeCommercialContactPhone(
+  value: string | null | undefined
+): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const international = raw.startsWith("+")
+    ? `+${raw.slice(1).replace(/\D/g, "")}`
+    : raw.startsWith("00")
+      ? `+${raw.slice(2).replace(/\D/g, "")}`
+      : raw.replace(/\D/g, "");
+  return international === "+" || international.length < 7
+    ? null
+    : international;
+}
+
+export function commercialContactIdentityCandidates(input: {
+  name?: string | null;
+  title?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  fallbackIdentity?: string | null;
+}): string[] {
+  const email = normalizeCommercialContactEmail(input.email);
+  const phone = normalizeCommercialContactPhone(input.phone);
+  const name = normalized(input.name);
+  const title = normalized(input.title);
+  const candidates: string[] = [];
+  if (email) candidates.push(sha(`email:${email}`));
+  if (phone) candidates.push(sha(`phone:${phone}`));
+  if (name) candidates.push(sha(`name-title:${name}:${title}`));
+  if (input.fallbackIdentity) {
+    candidates.push(sha(`unnamed:${normalized(input.fallbackIdentity)}`));
+  }
+  return Array.from(new Set(candidates));
 }
 
 export function commercialContactIdentityKey(input: {
-  name: string | null;
-  title: string | null;
+  name?: string | null;
+  title?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  fallbackIdentity?: string | null;
 }): string {
-  return sha(`${normalized(input.name)}:${normalized(input.title)}`);
+  const key = commercialContactIdentityCandidates(input)[0];
+  if (!key) {
+    throw new Error(
+      "Commercial contact identity requires email, phone, name/title, or an idempotent fallback identity"
+    );
+  }
+  return key;
 }
 
 function pipelineEventKey(kind: string, correlationId: string): string {
@@ -85,7 +135,7 @@ export async function createCommercialPipelineForMissionWith(
     accountId: number;
     opportunityId: number;
     missionId: number;
-    estimatedContractValueCents: number;
+    estimatedContractValueCents: number | null;
     actor: PipelineActor;
     correlationId: string;
   }
@@ -231,12 +281,16 @@ async function convertWonAccountWith(
     | CommercialLaundryProposalSnapshot
     | undefined;
   const pricePerPoundCents = snapshot?.pricing.pricePerPoundCents ?? null;
+  const estimatedAnnualValueCents =
+    input.mission.opportunity.estimatedAnnualValueCents;
   const expectedWeeklyPounds =
-    pricePerPoundCents && pricePerPoundCents > 0
+    pricePerPoundCents &&
+    pricePerPoundCents > 0 &&
+    estimatedAnnualValueCents !== null
       ? Math.max(
           1,
           Math.round(
-            input.mission.opportunity.estimatedAnnualValueCents /
+            estimatedAnnualValueCents /
               pricePerPoundCents /
               52
           )

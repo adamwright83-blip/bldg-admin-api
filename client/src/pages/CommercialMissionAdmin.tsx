@@ -5,7 +5,8 @@ import { LoginForm } from "@/components/LoginForm";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 
-function money(cents: number): string {
+function money(cents: number | null): string {
+  if (cents === null) return "Estimate unavailable — needs qualification";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",

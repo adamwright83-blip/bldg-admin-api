@@ -1,6 +1,12 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { COMMERCIAL_MISSION_STATUSES } from "@shared/commercialMission";
+import {
+  COMMERCIAL_CONTACT_PREFERRED_CHANNELS,
+  COMMERCIAL_CONTACT_RELATIONSHIP_TYPES,
+  COMMERCIAL_CONTACT_SOURCES,
+  COMMERCIAL_MISSION_STATUSES,
+  COMMERCIAL_MISSION_STEP_TYPES,
+} from "@shared/commercialMission";
 import { FIELD_OUTCOME_REASONS } from "@shared/commercialMissionField";
 import {
   dayforgeMissionFieldProcedure,
@@ -39,27 +45,59 @@ import {
   updateCommercialMissionFieldChecklist,
 } from "./commercialMissionFieldService";
 
-const accountSchema = z.object({
+function httpUrl(maxLength: number) {
+  return z
+    .string()
+    .trim()
+    .url()
+    .max(maxLength)
+    .refine(value => {
+      const protocol = new URL(value).protocol;
+      return protocol === "https:" || protocol === "http:";
+    }, "Only HTTP(S) URLs are allowed");
+}
+
+export const commercialMissionAccountInputSchema = z.object({
+  providerName: z.string().trim().min(1).max(64).nullable().optional(),
+  providerAccountId: z.string().trim().min(1).max(191).nullable().optional(),
   name: z.string().trim().min(1).max(255),
   accountType: z.string().trim().min(1).max(96),
+  website: httpUrl(512).nullable().optional(),
   address: z.string().trim().min(1).max(512),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
+  latitude: z.number().min(-90).max(90).nullable(),
+  longitude: z.number().min(-180).max(180).nullable(),
   locationCount: z.number().int().positive(),
   decisionMaker: z.object({
     name: z.string().trim().min(1).max(255).nullable(),
     title: z.string().trim().min(1).max(255).nullable(),
-  }),
+    email: z.string().trim().email().max(320).nullable().optional(),
+    phone: z.string().trim().min(7).max(64).nullable().optional(),
+    relationshipType: z.enum(COMMERCIAL_CONTACT_RELATIONSHIP_TYPES).nullable().optional(),
+    preferredChannel: z.enum(COMMERCIAL_CONTACT_PREFERRED_CHANNELS).nullable().optional(),
+    source: z.enum(COMMERCIAL_CONTACT_SOURCES).nullable().optional(),
+    sourceUrl: httpUrl(1024).nullable().optional(),
+    sourcedAt: z.string().datetime().nullable().optional(),
+    notes: z.string().trim().max(4000).nullable().optional(),
+  }).strict(),
+}).strict().superRefine((account, ctx) => {
+  if ((account.latitude === null) !== (account.longitude === null)) {
+    ctx.addIssue({
+      code: "custom",
+      path: [account.latitude === null ? "latitude" : "longitude"],
+      message: "Latitude and longitude must both be supplied or both be unknown",
+    });
+  }
 });
 
-const opportunitySchema = z.object({
-  estimatedAnnualValueCents: z.number().int().nonnegative(),
+export const commercialMissionOpportunityInputSchema = z.object({
+  estimatedAnnualValueCents: z.number().int().nonnegative().nullable(),
   estimateConfidence: z.enum(["low", "medium", "high"]),
   score: z.number().int().min(0).max(100),
   primarySignal: z.string().trim().min(1).max(2000),
   reasons: z.array(z.string().trim().min(1).max(1000)).max(25),
   risks: z.array(z.string().trim().min(1).max(1000)).max(25),
-});
+  evidence: z.array(z.record(z.string(), z.unknown())).max(50).optional(),
+}).strict();
 
 const briefSchema = z.object({
   laundryOpportunity: z.string().trim().min(1).max(4000),
@@ -69,13 +107,58 @@ const briefSchema = z.object({
   objections: z.array(z.string().trim().min(1).max(1000)).max(25),
 });
 
-const stepSchema = z.object({
+export const commercialMissionStepInputSchema = z.object({
   key: z.string().trim().min(1).max(64),
   label: z.string().trim().min(1).max(255),
   detail: z.string().trim().min(1).max(4000),
-  status: z.enum(["locked", "ready", "active", "completed", "skipped"]),
+  type: z.enum(COMMERCIAL_MISSION_STEP_TYPES).optional(),
+  status: z.enum(["locked", "ready", "active", "skipped", "cancelled"]),
   position: z.number().int().nonnegative(),
-});
+  instructionText: z.string().trim().max(4000).nullable().optional(),
+  revealPolicy: z.enum(["sequential", "immediate", "admin_only"]).optional(),
+  destinationName: z.string().trim().max(255).nullable().optional(),
+  destinationAddress: z.string().trim().max(512).nullable().optional(),
+  destinationLatitude: z.number().min(-90).max(90).nullable().optional(),
+  destinationLongitude: z.number().min(-180).max(180).nullable().optional(),
+  mapsUrl: httpUrl(2048).nullable().optional(),
+  countdownDurationSeconds: z.number().int().min(0).max(86_400).nullable().optional(),
+  proofRequirement: z.enum(["none", "confirmation", "photo", "photo_optional"]).optional(),
+  referenceImageUrl: httpUrl(2048).nullable().optional(),
+  instructionVideoUrl: httpUrl(2048).nullable().optional(),
+  fulfillmentMode: z.enum([
+    "not_applicable",
+    "live_provider",
+    "staged_demo",
+    "manual_fulfillment",
+  ]).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+}).strict();
+
+export const commercialMissionStepsInputSchema = z
+  .array(commercialMissionStepInputSchema)
+  .max(50)
+  .superRefine((steps, ctx) => {
+    const keys = new Set<string>();
+    const positions = new Set<number>();
+    steps.forEach((step, index) => {
+      if (keys.has(step.key)) {
+        ctx.addIssue({
+          code: "custom",
+          path: [index, "key"],
+          message: "Mission step keys must be unique",
+        });
+      }
+      if (positions.has(step.position)) {
+        ctx.addIssue({
+          code: "custom",
+          path: [index, "position"],
+          message: "Mission step positions must be unique",
+        });
+      }
+      keys.add(step.key);
+      positions.add(step.position);
+    });
+  });
 
 function notFound(): never {
   throw new TRPCError({
@@ -119,10 +202,10 @@ export const commercialMissionRouter = router({
     .input(
       z.object({
         assignedTo: z.string().trim().min(1).max(128).nullable().optional(),
-        account: accountSchema,
-        opportunity: opportunitySchema,
+        account: commercialMissionAccountInputSchema,
+        opportunity: commercialMissionOpportunityInputSchema,
         brief: briefSchema,
-        steps: z.array(stepSchema).max(50),
+        steps: commercialMissionStepsInputSchema,
         idempotencyKey: z.string().trim().min(8).max(191),
       })
     )

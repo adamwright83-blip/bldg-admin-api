@@ -556,7 +556,11 @@ export function RallyDemo() {
               <>
                 <span>{commercialMission.code}</span>
                 <strong>{commercialMission.account.name}</strong>
-                <b>${Math.round(commercialMission.opportunity.estimatedAnnualValueCents / 100).toLocaleString()} POTENTIAL ANNUAL VALUE</b>
+                <b>
+                  {commercialMission.opportunity.estimatedAnnualValueCents === null
+                    ? "ESTIMATE UNAVAILABLE · NEEDS QUALIFICATION"
+                    : `$${Math.round(commercialMission.opportunity.estimatedAnnualValueCents / 100).toLocaleString()} POTENTIAL ANNUAL VALUE`}
+                </b>
                 <small>
                   {commercialMission.account.decisionMaker.name
                     ? `${commercialMission.account.decisionMaker.name} · ${commercialMission.account.decisionMaker.title ?? "Decision-maker"}`

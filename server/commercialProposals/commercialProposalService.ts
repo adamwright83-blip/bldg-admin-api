@@ -38,7 +38,8 @@ function contentHash(snapshot: CommercialLaundryProposalSnapshot): string {
   return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
 }
 
-function estimatedValueBand(cents: number): string {
+function estimatedValueBand(cents: number | null): string {
+  if (cents === null) return "unknown";
   if (cents < 5_000_00) return "under_5k";
   if (cents < 15_000_00) return "5k_to_15k";
   if (cents < 30_000_00) return "15k_to_30k";

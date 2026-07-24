@@ -67,10 +67,10 @@ describe("DayForge commercial pipeline production contract", () => {
       "commercialAccountIdentityKey(input.account)"
     );
     expect(missionStore).toContain(
-      "commercialLocationIdentityKey(input.account)"
+      "commercialLocationIdentityKey(input)"
     );
     expect(missionStore).toContain(
-      "commercialContactIdentityKey(input.account.decisionMaker)"
+      "commercialContactIdentityKey({"
     );
     expect(missionStore).toContain("identityKey,");
     expect(missionStore).toContain("createCommercialPipelineForMissionWith(tx");

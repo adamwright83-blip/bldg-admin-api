@@ -5,6 +5,7 @@ import {
   commercialAccountLocations,
   commercialAccounts,
   commercialMissionEvents,
+  commercialMissionIrlStepDetails,
   commercialMissions,
   commercialMissionSteps,
   commercialOpportunities,
@@ -29,6 +30,8 @@ import {
   commercialContactIdentityKey,
   commercialLocationIdentityKey,
   createCommercialPipelineForMissionWith,
+  normalizeCommercialContactEmail,
+  normalizeCommercialContactPhone,
   syncCommercialPipelineForMissionTransitionWith,
 } from "../commercialPipeline/commercialPipelineCore";
 import {
@@ -100,7 +103,8 @@ function sourceForMissionLifecycle(eventName: string): string {
   return "commercial_mission";
 }
 
-function estimatedValueBand(cents: number): string {
+function estimatedValueBand(cents: number | null): string {
+  if (cents === null) return "unknown";
   if (cents < 5_000_00) return "under_5k";
   if (cents < 15_000_00) return "5k_to_15k";
   if (cents < 30_000_00) return "15k_to_30k";
@@ -204,6 +208,168 @@ export type CommercialMissionTransaction = Parameters<
   Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]
 >[0];
 
+function contactDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function normalizedContactText(value: string | null | undefined): string | null {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  return normalized || null;
+}
+
+function contactMatchRank(
+  existing: typeof commercialAccountContacts.$inferSelect,
+  incoming: CommercialMissionAccountSnapshot["decisionMaker"],
+): number | null {
+  const incomingEmail = normalizeCommercialContactEmail(incoming.email);
+  const existingEmail = normalizeCommercialContactEmail(existing.email);
+  if (incomingEmail && existingEmail && incomingEmail === existingEmail) return 0;
+
+  const incomingPhone = normalizeCommercialContactPhone(incoming.phone);
+  const existingPhone = normalizeCommercialContactPhone(existing.phone);
+  if (incomingPhone && existingPhone && incomingPhone === existingPhone) return 1;
+
+  const incomingName = normalizedContactText(incoming.name);
+  const existingName = normalizedContactText(existing.name);
+  const incomingTitle = normalizedContactText(incoming.title);
+  const existingTitle = normalizedContactText(existing.title);
+  if (
+    !incomingName ||
+    incomingName !== existingName ||
+    incomingTitle !== existingTitle
+  ) {
+    return null;
+  }
+
+  const conflictingEmail = Boolean(
+    incomingEmail && existingEmail && incomingEmail !== existingEmail,
+  );
+  const conflictingPhone = Boolean(
+    incomingPhone && existingPhone && incomingPhone !== existingPhone,
+  );
+  return conflictingEmail || conflictingPhone ? null : 2;
+}
+
+async function upsertCommercialAccountLocationWith(
+  tx: CommercialMissionTransaction,
+  input: {
+    tenantId: string;
+    accountId: number;
+    address: string;
+    latitude: number | null;
+    longitude: number | null;
+  },
+): Promise<void> {
+  const locations = await tx
+    .select()
+    .from(commercialAccountLocations)
+    .where(and(
+      eq(commercialAccountLocations.tenantId, input.tenantId),
+      eq(commercialAccountLocations.accountId, input.accountId),
+    ))
+    .for("update");
+  const normalizedAddress = normalizedContactText(input.address);
+  const existing = locations.find(
+    location => normalizedContactText(location.address) === normalizedAddress,
+  );
+  const values = {
+    label: "Primary",
+    address: input.address,
+    latitude: input.latitude === null ? null : String(input.latitude),
+    longitude: input.longitude === null ? null : String(input.longitude),
+    isPrimary: true,
+  };
+  if (existing) {
+    await tx
+      .update(commercialAccountLocations)
+      .set(values)
+      .where(and(
+        eq(commercialAccountLocations.tenantId, input.tenantId),
+        eq(commercialAccountLocations.id, existing.id),
+      ));
+    return;
+  }
+  await tx.insert(commercialAccountLocations).values({
+    tenantId: input.tenantId,
+    accountId: input.accountId,
+    locationKey: commercialLocationIdentityKey(input),
+    ...values,
+  });
+}
+
+function rootStepStatus(
+  status: CommercialMissionStep["status"],
+): "locked" | "ready" | "active" | "completed" | "skipped" {
+  if (status === "awaiting_review" || status === "rejected") return "active";
+  if (status === "cancelled") return "skipped";
+  return status;
+}
+
+async function upsertCommercialAccountContactWith(
+  tx: CommercialMissionTransaction,
+  input: {
+    tenantId: string;
+    accountId: number;
+    contact: CommercialMissionAccountSnapshot["decisionMaker"];
+    fallbackIdentity: string;
+  },
+): Promise<void> {
+  const contactKey = commercialContactIdentityKey({
+    ...input.contact,
+    fallbackIdentity: input.fallbackIdentity,
+  });
+  const existingRows = await tx
+    .select()
+    .from(commercialAccountContacts)
+    .where(and(
+      eq(commercialAccountContacts.tenantId, input.tenantId),
+      eq(commercialAccountContacts.accountId, input.accountId),
+    ))
+    .for("update");
+  const existing = existingRows
+    .map(row => ({ row, rank: contactMatchRank(row, input.contact) }))
+    .filter(
+      (match): match is { row: typeof commercialAccountContacts.$inferSelect; rank: number } =>
+        match.rank !== null,
+    )
+    .sort((left, right) => left.rank - right.rank)[0]?.row;
+  const values = {
+    contactKey,
+    name: input.contact.name?.trim() || existing?.name || null,
+    title: input.contact.title?.trim() || existing?.title || null,
+    email: input.contact.email?.trim().toLowerCase() || existing?.email || null,
+    phone: input.contact.phone?.trim() || existing?.phone || null,
+    relationshipType:
+      input.contact.relationshipType ?? existing?.relationshipType ?? "unknown" as const,
+    preferredChannel:
+      input.contact.preferredChannel ?? existing?.preferredChannel ?? "unknown" as const,
+    source: input.contact.source ?? existing?.source ?? "unknown",
+    sourceUrl: input.contact.sourceUrl?.trim() || existing?.sourceUrl || null,
+    sourcedAt: contactDate(input.contact.sourcedAt) ?? existing?.sourcedAt ?? null,
+    notes: input.contact.notes?.trim() || existing?.notes || null,
+  };
+  if (existing) {
+    await tx
+      .update(commercialAccountContacts)
+      .set(values)
+      .where(and(
+        eq(commercialAccountContacts.tenantId, input.tenantId),
+        eq(commercialAccountContacts.id, existing.id),
+      ));
+    return;
+  }
+  await tx.insert(commercialAccountContacts).values({
+    tenantId: input.tenantId,
+    accountId: input.accountId,
+    ...values,
+  });
+}
+
 export async function readCommercialMissionWith(
   query: Pick<NonNullable<Awaited<ReturnType<typeof getDb>>>, "select">,
   input: { tenantId: string; missionId: number },
@@ -220,15 +386,53 @@ export async function readCommercialMissionWith(
     .from(commercialMissionSteps)
     .where(and(eq(commercialMissionSteps.tenantId, input.tenantId), eq(commercialMissionSteps.missionId, input.missionId)))
     .orderBy(commercialMissionSteps.position);
+  const irlRows = await query
+    .select()
+    .from(commercialMissionIrlStepDetails)
+    .where(and(
+      eq(commercialMissionIrlStepDetails.tenantId, input.tenantId),
+      eq(commercialMissionIrlStepDetails.missionId, input.missionId),
+    ));
+  const irlByStepId = new Map(irlRows.map(detail => [detail.missionStepId, detail]));
   return decodeMission(
     row,
-    stepRows.map(step => ({
-      key: step.stepKey,
-      label: step.label,
-      detail: step.detail,
-      status: step.status,
-      position: step.position,
-    })),
+    stepRows.map(step => {
+      const irl = irlByStepId.get(step.id);
+      return {
+        key: step.stepKey,
+        label: step.label,
+        detail: step.detail,
+        type: irl?.stepType ?? "generic",
+        status: irl?.status ?? step.status,
+        position: step.position,
+        instructionText: irl?.instructionText ?? null,
+        revealPolicy: irl?.revealPolicy ?? "sequential",
+        destinationName: irl?.destinationName ?? null,
+        destinationAddress: irl?.destinationAddress ?? null,
+        destinationLatitude: irl?.destinationLatitude === null || irl?.destinationLatitude === undefined
+          ? null
+          : Number(irl.destinationLatitude),
+        destinationLongitude: irl?.destinationLongitude === null || irl?.destinationLongitude === undefined
+          ? null
+          : Number(irl.destinationLongitude),
+        mapsUrl: irl?.mapsUrl ?? null,
+        countdownDurationSeconds: irl?.countdownDurationSeconds ?? null,
+        startedAt: asDate(irl?.startedAt ?? null),
+        deadlineAt: asDate(irl?.deadlineAt ?? null),
+        completedAt: asDate(step.completedAt),
+        proofRequirement: irl?.proofRequirement ?? "none",
+        referenceImageUrl: irl?.referenceImageUrl ?? null,
+        instructionVideoUrl: irl?.instructionVideoUrl ?? null,
+        pinnedCoachingArtifactId: irl?.pinnedCoachingArtifactId ?? null,
+        verificationState: irl?.verificationState ?? "not_required",
+        proofAssetId: irl?.proofAssetId ?? null,
+        reviewedBy: irl?.reviewedBy ?? null,
+        reviewedAt: asDate(irl?.reviewedAt ?? null),
+        rejectionReason: irl?.rejectionReason ?? null,
+        fulfillmentMode: irl?.fulfillmentMode ?? "not_applicable",
+        metadata: (irl?.metadataJson as Record<string, unknown> | null) ?? {},
+      };
+    }),
   );
 }
 
@@ -272,12 +476,14 @@ export async function createCommercialMission(input: {
         accountType: input.account.accountType,
         providerName: input.account.providerName ?? null,
         providerAccountId: input.account.providerAccountId ?? null,
+        website: input.account.website ?? null,
       }).onDuplicateKeyUpdate({ set: {
         identityKey,
         name: input.account.name,
         accountType: input.account.accountType,
         providerName: input.account.providerName ?? null,
         providerAccountId: input.account.providerAccountId ?? null,
+        website: input.account.website ?? null,
       }});
       const accountRows = await tx.select({ id: commercialAccounts.id }).from(commercialAccounts).where(and(
         eq(commercialAccounts.tenantId, input.tenantId),
@@ -285,32 +491,20 @@ export async function createCommercialMission(input: {
       )).limit(1).for("update");
       const accountId = accountRows[0]?.id;
       if (!accountId) throw new Error("Commercial account identity was not persisted");
-      await tx.insert(commercialAccountLocations).values({
+      await upsertCommercialAccountLocationWith(tx, {
         tenantId: input.tenantId,
         accountId,
-        locationKey: commercialLocationIdentityKey(input.account),
-        label: "Primary",
         address: input.account.address,
-        latitude: String(input.account.latitude),
-        longitude: String(input.account.longitude),
-        isPrimary: true,
-      }).onDuplicateKeyUpdate({ set: {
-        address: input.account.address,
-        latitude: String(input.account.latitude),
-        longitude: String(input.account.longitude),
-        isPrimary: true,
-      }});
-      if (input.account.decisionMaker.name || input.account.decisionMaker.title) {
-        await tx.insert(commercialAccountContacts).values({
+        latitude: input.account.latitude,
+        longitude: input.account.longitude,
+      });
+      if (Object.values(input.account.decisionMaker).some(value => value !== null && value !== undefined && value !== "")) {
+        await upsertCommercialAccountContactWith(tx, {
           tenantId: input.tenantId,
           accountId,
-          contactKey: commercialContactIdentityKey(input.account.decisionMaker),
-          name: input.account.decisionMaker.name,
-          title: input.account.decisionMaker.title,
-        }).onDuplicateKeyUpdate({ set: {
-          name: input.account.decisionMaker.name,
-          title: input.account.decisionMaker.title,
-        }});
+          contact: input.account.decisionMaker,
+          fallbackIdentity: `${input.idempotencyKey}:primary-contact`,
+        });
       }
       const opportunityInsert = await tx.insert(commercialOpportunities).values({
         tenantId: input.tenantId,
@@ -322,7 +516,7 @@ export async function createCommercialMission(input: {
         primarySignal: input.opportunity.primarySignal,
         reasonsJson: input.opportunity.reasons,
         risksJson: input.opportunity.risks,
-        evidenceJson: [],
+        evidenceJson: input.opportunity.evidence ?? [],
       });
       const opportunityId = Number(opportunityInsert[0].insertId);
       const accountSnapshot: CommercialMissionAccountSnapshot = { ...input.account, accountId };
@@ -343,8 +537,15 @@ export async function createCommercialMission(input: {
         assignedTo: input.assignedTo ?? null,
         status: "open",
         priority: input.opportunity.estimateConfidence === "high" ? "high" : "normal",
-        revenueAtRiskCents: input.opportunity.estimatedAnnualValueCents,
+        revenueAtRiskCents: input.opportunity.estimatedAnnualValueCents ?? 0,
         revenueRecoveredCents: 0,
+        metadataJson: {
+          commercialOpportunityId: opportunityId,
+          revenueEstimateStatus:
+            input.opportunity.estimatedAnnualValueCents === null
+              ? "unavailable"
+              : "estimated",
+        },
       });
       const opsTaskId = Number(taskInsert[0].insertId);
       const temporaryCode = `PENDING-${crypto.randomUUID().slice(0, 12)}`;
@@ -386,9 +587,58 @@ export async function createCommercialMission(input: {
             stepKey: step.key,
             label: step.label,
             detail: step.detail,
-            status: step.status,
+            status: rootStepStatus(step.status),
             position: step.position,
+            completedAt: step.completedAt ? new Date(step.completedAt) : null,
           })),
+        );
+        const persistedSteps = await tx
+          .select({ id: commercialMissionSteps.id, stepKey: commercialMissionSteps.stepKey })
+          .from(commercialMissionSteps)
+          .where(and(
+            eq(commercialMissionSteps.tenantId, input.tenantId),
+            eq(commercialMissionSteps.missionId, missionId),
+          ));
+        const stepIdByKey = new Map(persistedSteps.map(step => [step.stepKey, step.id]));
+        await tx.insert(commercialMissionIrlStepDetails).values(
+          input.steps.map(step => {
+            const missionStepId = stepIdByKey.get(step.key);
+            if (!missionStepId) {
+              throw new Error(`Commercial mission step ${step.key} was not persisted`);
+            }
+            return {
+              tenantId: input.tenantId,
+              missionId,
+              missionStepId,
+              stepType: step.type ?? "generic",
+              status: step.status,
+              instructionText: step.instructionText ?? null,
+              revealPolicy: step.revealPolicy ?? "sequential",
+              destinationName: step.destinationName ?? null,
+              destinationAddress: step.destinationAddress ?? null,
+              destinationLatitude: step.destinationLatitude === null || step.destinationLatitude === undefined
+                ? null
+                : String(step.destinationLatitude),
+              destinationLongitude: step.destinationLongitude === null || step.destinationLongitude === undefined
+                ? null
+                : String(step.destinationLongitude),
+              mapsUrl: step.mapsUrl ?? null,
+              countdownDurationSeconds: step.countdownDurationSeconds ?? null,
+              startedAt: step.startedAt ? new Date(step.startedAt) : null,
+              deadlineAt: step.deadlineAt ? new Date(step.deadlineAt) : null,
+              proofRequirement: step.proofRequirement ?? "none",
+              referenceImageUrl: step.referenceImageUrl ?? null,
+              instructionVideoUrl: step.instructionVideoUrl ?? null,
+              pinnedCoachingArtifactId: step.pinnedCoachingArtifactId ?? null,
+              verificationState: step.verificationState ?? "not_required",
+              proofAssetId: step.proofAssetId ?? null,
+              reviewedBy: step.reviewedBy ?? null,
+              reviewedAt: step.reviewedAt ? new Date(step.reviewedAt) : null,
+              rejectionReason: step.rejectionReason ?? null,
+              fulfillmentMode: step.fulfillmentMode ?? "not_applicable",
+              metadataJson: step.metadata ?? {},
+            };
+          }),
         );
       }
 

@@ -45,7 +45,7 @@ export type CommercialLaundryProposalSnapshot = {
   pricing: {
     pricePerPoundCents: number;
     minimumOrderCents: number | null;
-    estimatedAnnualValueCents: number;
+    estimatedAnnualValueCents: number | null;
     estimateConfidence: "low" | "medium" | "high";
   };
   store: CommercialProposalProfile;
@@ -107,7 +107,8 @@ export function buildCommercialLaundryProposal(input: {
   };
 }
 
-export function formatProposalMoney(cents: number): string {
+export function formatProposalMoney(cents: number | null): string {
+  if (cents === null) return "Not yet estimated";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",

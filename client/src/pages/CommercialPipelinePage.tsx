@@ -110,9 +110,19 @@ export default function CommercialPipelinePage() {
       weighted: records
         .filter(item => item.stage !== "lost")
         .reduce(
-          (sum, item) => sum + item.values.estimatedContractValueCents,
+          (sum, item) => sum + (item.values.estimatedContractValueCents ?? 0),
           0
         ),
+      knownEstimateCount: records.filter(
+        item =>
+          item.stage !== "lost" &&
+          item.values.estimatedContractValueCents !== null,
+      ).length,
+      unknownEstimateCount: records.filter(
+        item =>
+          item.stage !== "lost" &&
+          item.values.estimatedContractValueCents === null,
+      ).length,
       won: records.filter(item => item.stage === "won").length,
       realized: records.reduce(
         (sum, item) => sum + item.values.realizedRevenueCents,
@@ -225,8 +235,16 @@ export default function CommercialPipelinePage() {
           <article>
             <Sparkles />
             <span>ESTIMATED PIPELINE</span>
-            <b>{money(metrics.weighted)}</b>
-            <small>Planning estimates, not revenue</small>
+            <b>
+              {metrics.knownEstimateCount > 0
+                ? money(metrics.weighted)
+                : "Estimate unavailable"}
+            </b>
+            <small>
+              {metrics.unknownEstimateCount > 0
+                ? `Known planning estimates only · ${metrics.unknownEstimateCount} account${metrics.unknownEstimateCount === 1 ? "" : "s"} need qualification`
+                : "Planning estimates, not revenue"}
+            </small>
           </article>
           <article className="is-won">
             <Trophy />

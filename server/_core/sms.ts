@@ -2,7 +2,8 @@ import twilio from "twilio";
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
-const fromPhone = process.env.TWILIO_PHONE_NUMBER;
+const fromPhone =
+  process.env.TWILIO_FROM_NUMBER ?? process.env.TWILIO_PHONE_NUMBER;
 
 if (!accountSid || !authToken || !fromPhone) {
   console.warn("[SMS] Twilio credentials not configured");
@@ -33,10 +34,13 @@ export async function sendSMS(to: string, message: string): Promise<boolean> {
       to: normalizedPhone,
     });
 
-    console.log(`[SMS] Sent to ${normalizedPhone}: ${message.substring(0, 50)}...`);
+    console.info("[SMS] Twilio accepted a message");
     return true;
   } catch (err) {
-    console.error("[SMS] Failed to send:", err);
+    console.error(
+      "[SMS] Twilio rejected a message",
+      err instanceof Error ? { errorName: err.name } : { errorName: "unknown" },
+    );
     return false;
   }
 }

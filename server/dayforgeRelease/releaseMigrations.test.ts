@@ -17,6 +17,7 @@ describe("DayForge release migration runner", () => {
     expect(filenames).toContain(
       "0044_dayforge_release_order_compatibility.sql"
     );
+    expect(filenames).toContain("0045_dayforge_30_day_foundation.sql");
     expect(filenames).toEqual([...filenames].sort((a, b) => a.localeCompare(b)));
     expect(new Set(filenames).size).toBe(filenames.length);
 

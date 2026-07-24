@@ -25,7 +25,8 @@ import {
 } from "@shared/commercialMissionField";
 import "./commercial-sales-mission.css";
 
-function money(cents: number): string {
+function money(cents: number | null): string {
+  if (cents === null) return "Estimate unavailable — needs qualification";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",

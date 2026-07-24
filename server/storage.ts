@@ -1,7 +1,7 @@
 // Preconfigured storage helpers for Manus WebDev templates
 // Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
 
-import { ENV } from './_core/env';
+import { ENV } from "./_core/env";
 
 type StorageConfig = { baseUrl: string; apiKey: string };
 
@@ -20,6 +20,12 @@ function getStorageConfig(): StorageConfig {
 
 function buildUploadUrl(baseUrl: string, relKey: string): URL {
   const url = new URL("v1/storage/upload", ensureTrailingSlash(baseUrl));
+  url.searchParams.set("path", normalizeKey(relKey));
+  return url;
+}
+
+function buildDeleteUrl(baseUrl: string, relKey: string): URL {
+  const url = new URL("v1/storage/delete", ensureTrailingSlash(baseUrl));
   url.searchParams.set("path", normalizeKey(relKey));
   return url;
 }
@@ -92,11 +98,35 @@ export async function storagePut(
   return { key, url };
 }
 
-export async function storageGet(relKey: string): Promise<{ key: string; url: string; }> {
+export async function storageGet(
+  relKey: string
+): Promise<{ key: string; url: string }> {
   const { baseUrl, apiKey } = getStorageConfig();
   const key = normalizeKey(relKey);
   return {
     key,
     url: await buildDownloadUrl(baseUrl, key, apiKey),
   };
+}
+
+/**
+ * Deletes a private object through the same authenticated storage proxy used
+ * for upload/download. Any non-2xx response fails closed so retention never
+ * removes the authoritative database row unless object deletion succeeded.
+ */
+export async function storageDelete(relKey: string): Promise<{ key: string }> {
+  const { baseUrl, apiKey } = getStorageConfig();
+  const key = normalizeKey(relKey);
+  if (!key) throw new Error("Storage deletion requires a non-empty object key");
+  const response = await fetch(buildDeleteUrl(baseUrl, key), {
+    method: "DELETE",
+    headers: buildAuthHeaders(apiKey),
+  });
+  if (!response.ok) {
+    const message = await response.text().catch(() => response.statusText);
+    throw new Error(
+      `Storage deletion failed (${response.status} ${response.statusText}): ${message}`
+    );
+  }
+  return { key };
 }

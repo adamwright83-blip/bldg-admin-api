@@ -17,27 +17,82 @@ export const COMMERCIAL_MISSION_STATUSES = [
 export type CommercialMissionStatus = (typeof COMMERCIAL_MISSION_STATUSES)[number];
 export type CommercialMissionConfidence = "low" | "medium" | "high";
 
+export const COMMERCIAL_CONTACT_RELATIONSHIP_TYPES = [
+  "decision_maker",
+  "gatekeeper",
+  "champion",
+  "concierge",
+  "front_desk",
+  "security",
+  "operations",
+  "other",
+  "unknown",
+] as const;
+
+export type CommercialContactRelationshipType =
+  (typeof COMMERCIAL_CONTACT_RELATIONSHIP_TYPES)[number];
+
+export const COMMERCIAL_CONTACT_PREFERRED_CHANNELS = [
+  "email",
+  "sms",
+  "phone",
+  "unknown",
+] as const;
+
+export type CommercialContactPreferredChannel =
+  (typeof COMMERCIAL_CONTACT_PREFERRED_CHANNELS)[number];
+
+export const COMMERCIAL_CONTACT_SOURCES = [
+  "provider_sourced",
+  "operator_observation",
+  "crm_history",
+  "public_website",
+  "public_territory_preview",
+  "unplanned_walk_in",
+  "field_visit",
+  "imported",
+  "unknown",
+] as const;
+
+export type CommercialContactSource =
+  (typeof COMMERCIAL_CONTACT_SOURCES)[number];
+
+export type CommercialMissionContactSnapshot = {
+  name: string | null;
+  title: string | null;
+  email?: string | null;
+  phone?: string | null;
+  relationshipType?: CommercialContactRelationshipType | null;
+  preferredChannel?: CommercialContactPreferredChannel | null;
+  source?: CommercialContactSource | null;
+  sourceUrl?: string | null;
+  sourcedAt?: string | null;
+  notes?: string | null;
+};
+
 export type CommercialMissionAccountSnapshot = {
   accountId: number;
   providerName?: string | null;
   providerAccountId?: string | null;
   name: string;
   accountType: string;
+  website?: string | null;
   address: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
   locationCount: number;
-  decisionMaker: { name: string | null; title: string | null };
+  decisionMaker: CommercialMissionContactSnapshot;
 };
 
 export type CommercialMissionOpportunitySnapshot = {
   opportunityId: number | null;
-  estimatedAnnualValueCents: number;
+  estimatedAnnualValueCents: number | null;
   estimateConfidence: CommercialMissionConfidence;
   score: number;
   primarySignal: string;
   reasons: string[];
   risks: string[];
+  evidence?: Array<Record<string, unknown>>;
 };
 
 export type CommercialMissionBrief = {
@@ -48,12 +103,82 @@ export type CommercialMissionBrief = {
   objections: string[];
 };
 
+export const COMMERCIAL_MISSION_STEP_TYPES = [
+  "generic",
+  "wardrobe_review",
+  "route_stop",
+  "collateral_pickup",
+  "purchase_stop",
+  "sales_training",
+  "field_visit",
+  "debrief",
+] as const;
+
+export type CommercialMissionStepType =
+  (typeof COMMERCIAL_MISSION_STEP_TYPES)[number];
+
+export const COMMERCIAL_MISSION_STEP_STATUSES = [
+  "locked",
+  "ready",
+  "active",
+  "awaiting_review",
+  "rejected",
+  "completed",
+  "skipped",
+  "cancelled",
+] as const;
+
+export type CommercialMissionStepStatus =
+  (typeof COMMERCIAL_MISSION_STEP_STATUSES)[number];
+
+export type CommercialMissionProofRequirement =
+  | "none"
+  | "confirmation"
+  | "photo"
+  | "photo_optional";
+
+export type CommercialMissionVerificationState =
+  | "not_required"
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "overridden";
+
+export type CommercialMissionFulfillmentMode =
+  | "not_applicable"
+  | "live_provider"
+  | "staged_demo"
+  | "manual_fulfillment";
+
 export type CommercialMissionStep = {
   key: string;
   label: string;
   detail: string;
-  status: "locked" | "ready" | "active" | "completed" | "skipped";
+  type?: CommercialMissionStepType;
+  status: CommercialMissionStepStatus;
   position: number;
+  instructionText?: string | null;
+  revealPolicy?: "sequential" | "immediate" | "admin_only";
+  destinationName?: string | null;
+  destinationAddress?: string | null;
+  destinationLatitude?: number | null;
+  destinationLongitude?: number | null;
+  mapsUrl?: string | null;
+  countdownDurationSeconds?: number | null;
+  startedAt?: string | null;
+  deadlineAt?: string | null;
+  completedAt?: string | null;
+  proofRequirement?: CommercialMissionProofRequirement;
+  referenceImageUrl?: string | null;
+  instructionVideoUrl?: string | null;
+  pinnedCoachingArtifactId?: string | null;
+  verificationState?: CommercialMissionVerificationState;
+  proofAssetId?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  rejectionReason?: string | null;
+  fulfillmentMode?: CommercialMissionFulfillmentMode;
+  metadata?: Record<string, unknown>;
 };
 
 export type CommercialMission = {
@@ -78,7 +203,7 @@ export type CommercialMissionContinuitySurface = {
   missionId: number;
   code: string;
   accountName: string;
-  estimatedAnnualValueCents: number;
+  estimatedAnnualValueCents: number | null;
   decisionMakerName: string | null;
   decisionMakerTitle: string | null;
 };

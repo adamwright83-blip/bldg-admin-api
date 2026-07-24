@@ -1,5 +1,51 @@
 import type { CommercialMissionStatus } from "./commercialMission";
 
+export const COMMERCIAL_ATTRIBUTION_CONFIDENCE = ["high", "medium", "low"] as const;
+export type CommercialAttributionConfidence =
+  (typeof COMMERCIAL_ATTRIBUTION_CONFIDENCE)[number];
+
+export const COMMERCIAL_ACQUISITION_SOURCE_TYPES = [
+  "explicit_campaign",
+  "inherited_first_touch",
+  "trusted_property",
+  "manual",
+] as const;
+export type CommercialAcquisitionSourceType =
+  (typeof COMMERCIAL_ACQUISITION_SOURCE_TYPES)[number];
+
+export const COMMERCIAL_ACQUISITION_REVIEW_STATES = [
+  "pending",
+  "attributed",
+  "review_required",
+  "excluded",
+  "reversed",
+] as const;
+export type CommercialAcquisitionReviewState =
+  (typeof COMMERCIAL_ACQUISITION_REVIEW_STATES)[number];
+
+export type CommercialCampaignContext = {
+  campaignLinkId: string;
+  accountId: number;
+  missionId: number;
+  pipelineId: number | null;
+  campaignName: string;
+  placement: string;
+  collateralVersion: string;
+  salespersonId: string;
+  referringContactId: number | null;
+  buildingSlug: string | null;
+  offerKey: string | null;
+};
+
+export type CommercialOrderAcquisitionDecision = {
+  sourceType: CommercialAcquisitionSourceType | null;
+  confidence: CommercialAttributionConfidence | null;
+  reviewState: CommercialAcquisitionReviewState;
+  reason: string;
+  campaign: CommercialCampaignContext | null;
+  firstTouchSourceId: string | null;
+};
+
 export const COMMERCIAL_PIPELINE_STAGES = [
   "discovered",
   "qualified",

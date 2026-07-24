@@ -1,5 +1,5 @@
 /**
- * Verifies that drizzle migrations 0035-0044 have been applied by
+ * Verifies that drizzle migrations 0035-0045 have been applied by
  * introspecting information_schema for the tables/columns each migration
  * is expected to have created. Exits nonzero if anything required is missing.
  *
@@ -16,6 +16,14 @@ type RequiredTable = {
   columns: string[];
 };
 
+type RequiredColumnRule = {
+  migration: string;
+  table: string;
+  column: string;
+  nullable?: boolean;
+  maximumLength?: number;
+};
+
 const REQUIRED: RequiredTable[] = [
   { migration: "0035_commercial_mission_spine", table: "commercial_missions", columns: ["id", "tenantId", "status", "code"] },
   { migration: "0035_commercial_mission_spine", table: "commercial_accounts", columns: ["id", "tenantId", "identityKey"] },
@@ -28,6 +36,33 @@ const REQUIRED: RequiredTable[] = [
   { migration: "0042_dayforge_saas_onboarding_billing", table: "dayforge_saas_tenants", columns: ["id", "slug", "status"] },
   { migration: "0043_dayforge_analytics_release", table: "dayforge_audit_events", columns: ["id", "tenantId", "eventName"] },
   { migration: "0044_dayforge_release_order_compatibility", table: "orders", columns: ["residentClientRequestId"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_account_contacts", columns: ["relationshipType", "preferredChannel", "source", "notes"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_account_locations", columns: ["latitude", "longitude"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_opportunities", columns: ["estimatedAnnualValueCents"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_pipeline_records", columns: ["estimatedContractValueCents"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_mission_irl_step_details", columns: ["missionStepId", "stepType", "status", "revealPolicy", "deadlineAt", "proofRequirement", "referenceImageUrl", "instructionVideoUrl", "pinnedCoachingArtifactId", "verificationState", "proofAssetId", "reviewedBy", "reviewedAt", "rejectionReason", "fulfillmentMode", "metadataJson"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_mission_dispatches", columns: ["missionId", "assignedTo", "handoffId", "dispatchPolicy", "channel", "status", "destinationPath", "queuedAt", "sentAt", "failedAt", "openedAt", "providerMessageId", "failureReason", "requestId", "createdBy"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "dayforge_evidence_uploads", columns: ["missionId", "missionStepId", "submitterId", "storageKey", "contentHash", "mimeType", "sizeBytes", "attemptNumber", "reviewStatus", "reviewerId", "reviewedAt", "reviewNote", "rejectionReason", "previousProofId", "requestId", "purgeAfter"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "dayforge_evidence_object_deletions", columns: ["evidenceUploadId", "storageKey", "storageKeyHash", "reason", "status", "attemptCount", "leaseId", "lastAttemptAt", "nextAttemptAt", "deletedAt", "lastErrorCode", "lastErrorMessage", "requestId"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_mission_coaching_artifacts", columns: ["missionId", "missionStepId", "scopeKey", "accountId", "generationStatus", "provider", "modelId", "promptVersion", "contextHash", "cacheKey", "requestId", "version", "structuredOutputJson", "evidenceReferencesJson", "claimsJson", "failureCode", "fallbackCode", "requestedBy", "generationLeaseUntil", "generationAttemptCount", "supersededAt", "active"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_campaign_links", columns: ["accountId", "missionId", "pipelineId", "campaignName", "placement", "collateralVersion", "salespersonId", "referringContactId", "tokenHash", "status", "expiresAt", "revokedAt", "requestId", "createdBy"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_customer_acquisition_sources", columns: ["customerIdentityKey", "serviceLocationKey", "campaignLinkId", "accountId", "missionId", "sourceType", "firstTouchAt", "status", "requestId"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_order_acquisition_attributions", columns: ["orderId", "firstTouchSourceId", "orderCampaignLinkId", "accountId", "missionId", "customerIdentityKey", "serviceLocationKey", "sourceType", "confidence", "attributionReason", "firstTouchAt", "conversionAt", "reviewState", "requestId"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_attribution_corrections", columns: ["acquisitionAttributionId", "orderId", "previousStateJson", "correctedStateJson", "reason", "correctedBy", "requestId"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "order_payment_projections", columns: ["orderId", "provider", "providerPaymentId", "currency", "state", "capturedCents", "refundedCents", "netPaidCents", "paidAt", "lastReconciledAt", "version"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "order_payment_events", columns: ["orderId", "provider", "providerEventId", "eventType", "currency", "capturedCents", "refundedCents", "netPaidCents", "payloadDigest", "occurredAt", "requestId"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_order_attributions", columns: ["acquisitionAttributionId", "status", "currency", "capturedCents", "refundedCents", "netPaidCents", "financialReviewReason", "lastReconciledAt"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "dayforge_auth_continuations", columns: ["tokenHash", "previewSessionId", "previewCandidateKey", "phoneHandoffId", "returnTo", "onboardingSessionId", "status", "expiresAt", "consumedAt", "consumedBy", "requestId"] },
+  { migration: "0045_dayforge_30_day_foundation", table: "dayforge_saas_onboarding_sessions", columns: ["authContinuationId"] },
+];
+
+const COLUMN_RULES: RequiredColumnRule[] = [
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_account_locations", column: "latitude", nullable: true },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_account_locations", column: "longitude", nullable: true },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_opportunities", column: "estimatedAnnualValueCents", nullable: true },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_pipeline_records", column: "estimatedContractValueCents", nullable: true },
+  { migration: "0045_dayforge_30_day_foundation", table: "commercial_customer_acquisition_sources", column: "campaignLinkId", nullable: true, maximumLength: 36 },
+  { migration: "0045_dayforge_30_day_foundation", table: "dayforge_auth_continuations", column: "previewSessionId", nullable: true, maximumLength: 64 },
 ];
 
 function rowsFrom(result: unknown): readonly Record<string, unknown>[] {
@@ -85,6 +120,38 @@ async function main() {
     }
 
     console.log(`  [PASS] ${requirement.migration}: '${requirement.table}' present with required columns`);
+  }
+
+  for (const rule of COLUMN_RULES) {
+    const result = await db.execute(sql`
+      SELECT is_nullable AS isNullable,
+             character_maximum_length AS maximumLength
+        FROM information_schema.columns
+       WHERE table_schema = DATABASE()
+         AND table_name = ${rule.table}
+         AND column_name = ${rule.column}
+       LIMIT 1
+    `);
+    const row = rowsFrom(result)[0];
+    const nullable = String(row?.isNullable ?? "").toUpperCase() === "YES";
+    const maximumLength =
+      row?.maximumLength === null || row?.maximumLength === undefined
+        ? null
+        : Number(row.maximumLength);
+    const nullableMatches =
+      rule.nullable === undefined || nullable === rule.nullable;
+    const lengthMatches =
+      rule.maximumLength === undefined || maximumLength === rule.maximumLength;
+    if (!row || !nullableMatches || !lengthMatches) {
+      console.log(
+        `  [FAIL] ${rule.migration}: '${rule.table}.${rule.column}' has incompatible nullability or length`,
+      );
+      ok = false;
+      continue;
+    }
+    console.log(
+      `  [PASS] ${rule.migration}: '${rule.table}.${rule.column}' has compatible nullability and length`,
+    );
   }
 
   console.log("");
