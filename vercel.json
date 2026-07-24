@@ -35,6 +35,8 @@
     { "source": "/dayforge-login", "destination": "/index.html" },
     { "source": "/dayforge-settings", "destination": "/index.html" },
     { "source": "/dayforge-invite", "destination": "/index.html" },
+    { "source": "/dayforge-today", "destination": "/index.html" },
+    { "source": "/dayforge-proof", "destination": "/index.html" },
     { "source": "/billing", "destination": "/index.html" },
     { "source": "/julydemo", "destination": "/index.html" },
     { "source": "/dayforge-demo", "destination": "/index.html" },
