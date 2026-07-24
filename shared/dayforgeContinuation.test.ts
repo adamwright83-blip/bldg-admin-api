@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   defaultDayforgeDestination,
+  resolveDayforgeAuthenticatedDestination,
   validateInternalReturnTo,
 } from "./dayforgeContinuation";
 
@@ -52,5 +53,22 @@ describe("DayForge internal continuation validation", () => {
       destination: "/dayforge-today",
       destinationKind: "dayforge_today",
     });
+  });
+
+  it("resolves handoff, preview, internal return, then Today in security order", () => {
+    expect(resolveDayforgeAuthenticatedDestination({
+      missionHandoffPath: "/driver/sales-mission/42?view=brief",
+      previewSessionId: "12345678-1234-4123-8123-123456789012",
+      returnTo: "/commercial-pipeline",
+    }).destinationKind).toBe("secure_mission_handoff");
+    expect(resolveDayforgeAuthenticatedDestination({
+      previewSessionId: "12345678-1234-4123-8123-123456789012",
+      returnTo: "/commercial-pipeline",
+    })).toEqual({
+      destination: "/territory-preview?resume=12345678-1234-4123-8123-123456789012",
+      destinationKind: "preview_continuation",
+    });
+    expect(resolveDayforgeAuthenticatedDestination({ returnTo: "/commercial-pipeline" }).destination).toBe("/commercial-pipeline");
+    expect(resolveDayforgeAuthenticatedDestination({ returnTo: "https://evil.example" }).destination).toBe("/dayforge-today");
   });
 });

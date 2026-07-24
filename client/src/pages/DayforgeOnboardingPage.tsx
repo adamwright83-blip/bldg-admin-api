@@ -1,9 +1,20 @@
 import { trpc } from "@/lib/trpc";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import "./dayforge-onboarding.css";
+import { validateInternalReturnTo } from "@shared/dayforgeContinuation";
 
 type OnboardingCredentials = { sessionId: string; resumeToken: string };
 const SESSION_KEY = "dayforge_onboarding_credentials";
+const CONTINUATION_KEY = "dayforge_onboarding_continuation";
+
+function readContinuation() {
+  const query = new URLSearchParams(window.location.search);
+  const preview = query.get("preview") ?? sessionStorage.getItem(`${CONTINUATION_KEY}:preview`);
+  const returnTo = validateInternalReturnTo(query.get("returnTo") ?? sessionStorage.getItem(`${CONTINUATION_KEY}:returnTo`));
+  if (preview && /^[a-f0-9-]{16,64}$/i.test(preview)) sessionStorage.setItem(`${CONTINUATION_KEY}:preview`, preview);
+  if (returnTo) sessionStorage.setItem(`${CONTINUATION_KEY}:returnTo`, returnTo);
+  return { preview: preview && /^[a-f0-9-]{16,64}$/i.test(preview) ? preview : null, returnTo };
+}
 
 function readCredentials(): OnboardingCredentials | null {
   try {
@@ -21,6 +32,7 @@ function requestId(): string {
 }
 
 export default function DayforgeOnboardingPage() {
+  const continuation = useMemo(readContinuation, []);
   const [credentials, setCredentials] = useState<OnboardingCredentials | null>(
     () => readCredentials()
   );
@@ -186,7 +198,12 @@ export default function DayforgeOnboardingPage() {
         password: ownerPassword,
       });
       sessionStorage.removeItem(SESSION_KEY);
-      window.location.assign("/dayforge-login");
+      const query = new URLSearchParams();
+      if (continuation.preview) query.set("preview", continuation.preview);
+      if (continuation.returnTo) query.set("returnTo", continuation.returnTo);
+      sessionStorage.removeItem(`${CONTINUATION_KEY}:preview`);
+      sessionStorage.removeItem(`${CONTINUATION_KEY}:returnTo`);
+      window.location.assign(`/dayforge-login${query.size ? `?${query}` : ""}`);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Could not activate owner"

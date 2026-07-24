@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import "./dayforge-onboarding.css";
+import { resolveDayforgeAuthenticatedDestination } from "@shared/dayforgeContinuation";
 
 function dayforgeApiBase(): string {
   if (
@@ -12,6 +13,7 @@ function dayforgeApiBase(): string {
 }
 
 export default function DayforgeLoginPage() {
+  const continuation = new URLSearchParams(window.location.search);
   const [slug, setSlug] = useState(
     import.meta.env.VITE_DAYFORGE_DEMO_MODE === "true"
       ? "sunset-laundry-demo"
@@ -39,7 +41,12 @@ export default function DayforgeLoginPage() {
       });
       const body = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(body.error || "Sign in failed");
-      window.location.assign("/julydemo");
+      const destination = resolveDayforgeAuthenticatedDestination({
+        missionHandoffPath: continuation.get("missionHandoff"),
+        previewSessionId: continuation.get("preview"),
+        returnTo: continuation.get("returnTo"),
+      });
+      window.location.assign(destination.destination);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Sign in failed");
     } finally {

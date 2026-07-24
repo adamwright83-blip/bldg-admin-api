@@ -15,7 +15,7 @@
 | 0 — baseline, route map, safety net | Complete | Route/provider/payment/storage audits recorded; baseline release tests and build pass, with unrelated repository failures isolated below. |
 | 1 — shared contracts and data foundation | Complete | Migration `0045`, shared contracts, canonical contact/mission persistence, dispatch, proof, coaching, campaign-link foundation, and 81 focused tests pass. |
 | 2 — DayForge Today and walk-in | Complete | Tenant-scoped mobile action queue, missing-next-action invariant, canonical walk-in transaction, follow-up completion/rescheduling, and cross-surface entry points implemented. |
-| 3 — auth and preview continuation | Not started | Current login fallback to `/julydemo` re-verified. |
+| 3 — auth and preview continuation | Complete | Canonical validated destination resolver, preview/onboarding/Stripe continuity, demo isolation, security tests, and plain-English behavior report shipped. |
 | 4 — canonical driver, BORESLAY, IRL mission, coaching | Not started | Existing canonical handoff and Rally/driver assets re-verified. |
 | 5 — campaign and automatic attribution | Not started | Current manual order-ID attribution re-verified. |
 | 6 — proof dashboard | Not started | — |
@@ -90,6 +90,14 @@ Authenticated destinations resolve in this intentional order:
 - Walk-in capture preserves the full contact, records operator evidence, creates the canonical account/location/opportunity/task/mission/pipeline graph, records an explicit audited unplanned-game bypass, and creates the requested follow-up. Retries reuse the mission idempotency key and the walk-in request ID.
 - Existing non-terminal leads are not silently rewritten to satisfy the invariant; missing work is surfaced as an exception.
 - Focused queue and walk-in tests pass. Production build and the DayForge release type gate pass; the live MySQL transaction gate remains environment-dependent as recorded below.
+
+## Phase 3 implementation evidence
+
+- Successful login now resolves secure mission continuation, preview continuation, validated internal return, then `/dayforge-today`; it never defaults to `/julydemo`.
+- Preview identity and selection survive login or onboarding without placing the preview bearer token in a URL. Validated context survives Stripe return and owner activation in the originating browser session.
+- External, protocol-relative, script/data, encoded-separator, control-character, secret-bearing, looping, and demo return paths fail closed.
+- Tenant state and active membership are checked server-side before session issuance; redirect context cannot choose a tenant or grant a role.
+- Shipped behavior, exclusions, scenarios, and rollback are documented in `docs/dayforge-auth-behavior.md`.
 
 ## Files changed through Phase 1
 

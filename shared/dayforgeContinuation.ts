@@ -95,3 +95,23 @@ export function defaultDayforgeDestination(): DayforgeAuthenticatedDestination {
     destinationKind: "dayforge_today",
   };
 }
+
+export function resolveDayforgeAuthenticatedDestination(input: {
+  missionHandoffPath?: unknown;
+  previewSessionId?: unknown;
+  returnTo?: unknown;
+}): DayforgeAuthenticatedDestination {
+  const handoff = validateInternalReturnTo(input.missionHandoffPath);
+  if (handoff?.startsWith("/driver/sales-mission/")) {
+    return { destination: handoff, destinationKind: "secure_mission_handoff" };
+  }
+  if (typeof input.previewSessionId === "string" && /^[a-f0-9-]{16,64}$/i.test(input.previewSessionId)) {
+    return {
+      destination: `/territory-preview?resume=${encodeURIComponent(input.previewSessionId)}`,
+      destinationKind: "preview_continuation",
+    };
+  }
+  const returnTo = validateInternalReturnTo(input.returnTo);
+  if (returnTo) return { destination: returnTo, destinationKind: "internal_return_to" };
+  return defaultDayforgeDestination();
+}

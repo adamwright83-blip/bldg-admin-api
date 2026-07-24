@@ -379,7 +379,7 @@ function SampleMission({
   onConvert: () => void;
 }) {
   const details = sampleMissionDetails(mission, opportunity);
-  const onboardingUrl = `/dayforge-onboarding?preview=${encodeURIComponent(previewSessionId)}`;
+  const onboardingUrl = `/dayforge-onboarding?preview=${encodeURIComponent(previewSessionId)}&returnTo=${encodeURIComponent("/dayforge-today")}`;
   const demoUrl =
     SCHEDULER_URL ?? "mailto:adam@bldg.chat?subject=Map%20my%20territory";
 
