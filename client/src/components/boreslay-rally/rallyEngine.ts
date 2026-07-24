@@ -1910,21 +1910,17 @@ export class RallyEngine {
 
   private updateButtTargets(dt: number) {
     const { width, height } = RALLY_CONFIG.arena;
-    const { radius, offset, wallInset, springStiffness, springDamping } =
+    const { radius, wallInset, springStiffness, springDamping } =
       RALLY_CONFIG.buttTarget;
+    // Head Ball 2-style fixed goals: each side's target is anchored to its
+    // own wall, independent of the fighter's position, so a player cannot
+    // make their own goal harder to hit by running away from it. Only the
+    // small spring "wobble" (already clamped to +/-8px) still reacts live,
+    // for visual liveliness without reintroducing the exploit.
     const update = (side: RallySide) => {
-      const fighter = side === "spark" ? this.state.spark : this.state.clockhead;
       const target = this.state.buttTargets[side];
-      const desiredX = clamp(
-        fighter.x - fighter.facing.x * offset,
-        wallInset + radius,
-        width - wallInset - radius
-      );
-      const desiredY = clamp(
-        fighter.y - fighter.facing.y * offset,
-        wallInset + radius,
-        height - wallInset - radius
-      );
+      const desiredX = side === "spark" ? wallInset + radius : width - wallInset - radius;
+      const desiredY = height / 2;
       target.wobble.vx += (desiredX - target.x) * springStiffness * dt;
       target.wobble.vy += (desiredY - target.y) * springStiffness * dt;
       const damping = Math.exp(-springDamping * dt);

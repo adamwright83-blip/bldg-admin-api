@@ -76,7 +76,10 @@ describe("butt-hybrid scoring", () => {
     expect(bank.state.sparkScore).toBe(2);
   });
 
-  it("seals both legacy gate openings in butt-hybrid mode", () => {
+  it("scores through an undefended wall goal, exactly like Head Ball 2", () => {
+    // Each side's goal is now fixed to its own wall (not tracking the
+    // fighter), so an unblocked shot into that fixed position is a real
+    // score even when the defending fighter is elsewhere on the field.
     const engine = playing();
     Object.assign(engine.state.excuse, {
       inPlay: true,
@@ -89,12 +92,29 @@ describe("butt-hybrid scoring", () => {
       lastTouchAt: -Infinity,
     });
     engine.advanceFixedSteps(1);
-    expect(engine.state.ceremony).toBeNull();
-    expect(engine.state.excuse.vx).toBeGreaterThan(0);
-    expect(engine.state.excuse.bankState).toBe(true);
+    expect(engine.state.ceremony?.snapshot).toMatchObject({
+      mode: "buttHybrid",
+      scorer: "clockhead",
+      victim: "spark",
+    });
   });
 
-  it("turns Clockhead's target toward play for 350ms after a swat", () => {
+  it("keeps each side's goal fixed to its own wall regardless of fighter position or facing", () => {
+    const engine = playing();
+    const { wallInset, radius } = RALLY_CONFIG.buttTarget;
+    engine.state.clockhead.x = 700;
+    engine.state.clockhead.facing = { x: -1, y: 0 };
+    engine.state.spark.x = 900;
+    engine.state.spark.facing = { x: 1, y: 0 };
+    engine.advanceFixedSteps(1);
+    expect(engine.state.buttTargets.spark.x).toBeCloseTo(wallInset + radius, 0);
+    expect(engine.state.buttTargets.clockhead.x).toBeCloseTo(
+      RALLY_CONFIG.arena.width - wallInset - radius,
+      0
+    );
+  });
+
+  it("still exposes Clockhead's goal for 350ms after a swat", () => {
     const engine = playing();
     Object.assign(engine.state.excuse, {
       inPlay: true,
@@ -114,7 +134,6 @@ describe("butt-hybrid scoring", () => {
       5
     );
     expect(engine.state.clockhead.facing.x).toBe(1);
-    expect(engine.state.buttTargets.clockhead.x).toBeLessThan(engine.state.clockhead.x);
   });
 
   it("ends regulation on a leader and enters sudden death on a tie", () => {
