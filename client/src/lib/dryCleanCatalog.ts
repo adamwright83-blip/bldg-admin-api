@@ -19,9 +19,9 @@ const STANDARD_DRY_CLEAN_CATALOG: DryCleanCatalogRow[] = DC_ITEMS.map(item => ({
 }));
 
 /**
- * Keep counter intake operational even when a tenant's catalog was not seeded.
- * Tenant catalog pricing remains authoritative whenever at least one applicable
- * row exists; the standard menu is only the empty/error-state safety net.
+ * Keep the complete standard counter menu available for every tenant. Custom
+ * tenant rows override matching standard slugs and are appended when they are
+ * new garment types, so adding one custom SKU can never hide every other item.
  */
 export function resolveDryCleanCatalogRows(
   rows: CatalogRow[] | undefined
@@ -38,5 +38,13 @@ export function resolveDryCleanCatalogRows(
       standardPriceCents,
     }));
 
-  return tenantRows.length > 0 ? tenantRows : STANDARD_DRY_CLEAN_CATALOG;
+  const tenantBySlug = new Map(tenantRows.map(row => [row.slug, row]));
+  const standardSlugs = new Set(STANDARD_DRY_CLEAN_CATALOG.map(row => row.slug));
+
+  return [
+    ...STANDARD_DRY_CLEAN_CATALOG.map(
+      standardRow => tenantBySlug.get(standardRow.slug) ?? standardRow
+    ),
+    ...tenantRows.filter(row => !standardSlugs.has(row.slug)),
+  ];
 }
