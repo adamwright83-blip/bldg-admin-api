@@ -46,13 +46,16 @@ import {
   WF_FLAT_RATE_TEXTILES,
   WF_RATE_PER_LB_CENTS,
   WF_MINIMUM_SUBTOTAL_CENTS,
-  DC_ITEMS,
   calcWashFoldTotal,
   calcDryCleanTotal,
   centsToDollars,
   type UpchargeEntry,
   type DryCleanEntry,
 } from "@shared/pricing";
+import {
+  resolveDryCleanCatalogRows,
+  type DryCleanCatalogRow,
+} from "@/lib/dryCleanCatalog";
 import type { Order } from "@shared/types";
 import {
   ADMIN_WORKSPACE_TABS as TABS,
@@ -591,13 +594,6 @@ export default function Admin() {
 /* ===== NEW ORDER TAB ===== */
 type ServiceType = "wash_fold" | "dry_cleaning";
 
-type DryCleanCatalogRow = {
-  slug: string;
-  name: string;
-  category: string;
-  standardPriceCents: number;
-};
-
 type CheckoutResult =
   | {
       kind: "paid";
@@ -614,39 +610,6 @@ function parseDiscountPercent(value: string): number {
   const n = parseFloat(value);
   if (!Number.isFinite(n)) return 0;
   return Math.min(100, Math.max(0, n));
-}
-
-function toDryCleanCatalogRows(
-  rows:
-    | Array<{
-        slug: string;
-        name: string;
-        category: string;
-        serviceType?: string | null;
-        standardPriceCents: number;
-      }>
-    | undefined
-): DryCleanCatalogRow[] {
-  return (rows ?? [])
-    .filter(row => {
-      const st = row.serviceType ?? "dry_clean";
-      return st === "dry_clean" || st === "alteration";
-    })
-    .map(row => ({
-      slug: row.slug,
-      name: row.name,
-      category: row.category,
-      standardPriceCents: row.standardPriceCents,
-    }));
-}
-
-function legacyDryCleanCatalogRows(): DryCleanCatalogRow[] {
-  return DC_ITEMS.map(item => ({
-    slug: item.id,
-    name: item.label,
-    category: item.category,
-    standardPriceCents: item.priceCents,
-  }));
 }
 
 function openCatalogPricing() {
@@ -976,11 +939,7 @@ function NewOrderTab({
   );
 
   const catalogRows = useMemo(() => {
-    const rows = toDryCleanCatalogRows(catalogQuery.data);
-    if (rows.length === 0 && import.meta.env.DEV) {
-      return legacyDryCleanCatalogRows();
-    }
-    return rows;
+    return resolveDryCleanCatalogRows(catalogQuery.data);
   }, [catalogQuery.data]);
 
   const currentInputWeight = (() => {
@@ -2486,11 +2445,7 @@ function IntakeDetail({
     { enabled: !!order && order.serviceType === "dry_cleaning" }
   );
   const catalogRows = useMemo(() => {
-    const rows = toDryCleanCatalogRows(catalogQuery.data);
-    if (rows.length === 0 && import.meta.env.DEV) {
-      return legacyDryCleanCatalogRows();
-    }
-    return rows;
+    return resolveDryCleanCatalogRows(catalogQuery.data);
   }, [catalogQuery.data]);
 
   // Wash & fold state
