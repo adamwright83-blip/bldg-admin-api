@@ -441,12 +441,20 @@ export default function AdminHostApp() {
               {activeWorkspace === "held_corporate" ? (
                 <span className="ml-auto" />
               ) : (
-                <Link
-                  href="/new-order"
-                  className="ml-auto shrink-0 rounded-md bg-black px-3 py-1.5 text-[12.5px] font-bold text-white transition-colors hover:bg-black/80"
-                >
-                  + Order
-                </Link>
+                <div className="ml-auto flex shrink-0 items-center gap-2">
+                  <Link
+                    href="/catalog?new=1"
+                    className="shrink-0 rounded-md border border-black/20 bg-white px-3 py-1.5 text-[12.5px] font-bold text-black transition-colors hover:border-black/40 hover:bg-black/5"
+                  >
+                    New SKU
+                  </Link>
+                  <Link
+                    href="/new-order"
+                    className="shrink-0 rounded-md bg-black px-3 py-1.5 text-[12.5px] font-bold text-white transition-colors hover:bg-black/80"
+                  >
+                    + Order
+                  </Link>
+                </div>
               )}
               <span className="hidden text-xs text-black/40 sm:inline">{user?.name || "Admin"}</span>
             </header>

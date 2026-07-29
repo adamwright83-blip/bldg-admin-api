@@ -102,6 +102,10 @@ describe("AdminHostApp -- red diving-board workspace switch", () => {
 });
 
 describe("AdminHostApp -- far-right CTA by workspace", () => {
+  it("puts a direct New SKU action immediately before + Order", () => {
+    expect(source).toMatch(/href="\/catalog\?new=1"[\s\S]*?New SKU[\s\S]*?href="\/new-order"[\s\S]*?\+ Order/);
+  });
+
   it("shows the Laundry Butler + Order CTA only when not in HELD Corporate", () => {
     expect(source).toMatch(/activeWorkspace === "held_corporate" \? \(/);
     expect(source).toMatch(/\+ Order/);

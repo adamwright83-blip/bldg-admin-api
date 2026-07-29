@@ -337,6 +337,12 @@ export default function AdminCatalog() {
   const [editing, setEditing] = useState<CatalogRow | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<CatalogRow | null>(null);
 
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("new") !== "1") return;
+    setEditing(null);
+    setDrawerOpen(true);
+  }, []);
+
   const utils = trpc.useUtils();
   const listQuery = trpc.admin.catalog.list.useQuery(
     { includeArchived: false },
