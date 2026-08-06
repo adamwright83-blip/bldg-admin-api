@@ -21,6 +21,7 @@ import {
   readCommercialMissionWith,
   transitionCommercialMissionWith,
 } from "./commercialMissionStore";
+import { awardDriverSalesPoints } from "./driverSalesMotivationService";
 
 function affectedRows(result: unknown): number {
   return Number(
@@ -690,6 +691,25 @@ export async function recordCommercialMissionVisitOutcome(input: {
   }
   const state = await getCommercialMissionFieldState(input);
   if (!state?.visitOutcome) throw new Error("Visit outcome was not persisted");
+  const outcomePoints = input.outcome === "won" ? 100 : input.outcome === "follow_up" ? 22 : 0;
+  const proofPoints =
+    (input.decisionMakerStatus === "met" ? 10 : 0) +
+    (input.quoteRequested ? 25 : 0) +
+    (input.pilotRequested ? 25 : 0);
+  await awardDriverSalesPoints({
+    tenantId: input.tenantId,
+    driverId: input.actorId,
+    missionId: input.missionId,
+    eventType: input.outcome === "won" ? "deal_closed" : "in_person_visit",
+    points: 10 + outcomePoints + proofPoints,
+    dedupeKey: `score:field-outcome:${input.requestId}`,
+    metadata: {
+      outcome: input.outcome,
+      decisionMakerStatus: input.decisionMakerStatus,
+      quoteRequested: input.quoteRequested,
+      pilotRequested: input.pilotRequested,
+    },
+  });
   return state;
 }
 

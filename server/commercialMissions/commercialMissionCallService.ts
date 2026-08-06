@@ -2,6 +2,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { commercialMissionEvents } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { getCommercialMission } from "./commercialMissionStore";
+import { awardDriverSalesPoints } from "./driverSalesMotivationService";
 
 export const COMMERCIAL_MISSION_CALL_OUTCOMES = [
   "no_answer",
@@ -107,5 +108,20 @@ export async function recordCommercialMissionCallAttempt(input: {
   if (!persisted || persisted.missionId !== input.missionId) {
     throw new Error("Cold-call request ID is already bound to another mission");
   }
+  const attempts = await listCommercialMissionCallAttempts({ tenantId: input.tenantId, missionId: input.missionId });
+  const activityPoints = attempts.length <= 1 ? 4 : attempts.length === 2 ? 2 : 1;
+  const outcomeBonus: Partial<Record<CommercialMissionCallOutcome, number>> = {
+    spoke: 6,
+    visit_booked: 18,
+  };
+  await awardDriverSalesPoints({
+    tenantId: input.tenantId,
+    driverId: input.actorId,
+    missionId: input.missionId,
+    eventType: "cold_call_completed",
+    points: activityPoints + (outcomeBonus[input.outcome] ?? 0),
+    dedupeKey: `score:cold-call:${input.requestId}`,
+    metadata: { outcome: input.outcome },
+  });
   return callAttemptView(persisted);
 }

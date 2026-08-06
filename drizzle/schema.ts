@@ -1949,6 +1949,66 @@ export const commercialMissionCoachingArtifacts = mysqlTable(
   })
 );
 
+export const driverSalesScoreEvents = mysqlTable(
+  "driver_sales_score_events",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    driverId: varchar("driverId", { length: 128 }).notNull(),
+    missionId: int("missionId"),
+    eventType: varchar("eventType", { length: 64 }).notNull(),
+    points: int("points").notNull(),
+    dedupeKey: varchar("dedupeKey", { length: 191 }).notNull(),
+    metadataJson: json("metadataJson"),
+    occurredAt: timestamp("occurredAt").defaultNow().notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantDedupeUnique: uniqueIndex("uq_driver_sales_score_tenant_dedupe").on(table.tenantId, table.dedupeKey),
+    tenantDriverOccurredIdx: index("idx_driver_sales_score_tenant_driver_occurred").on(table.tenantId, table.driverId, table.occurredAt),
+  })
+);
+
+export const driverSalesJournals = mysqlTable(
+  "driver_sales_journals",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    driverId: varchar("driverId", { length: 128 }).notNull(),
+    journalDate: varchar("journalDate", { length: 10 }).notNull(),
+    audioStorageKey: varchar("audioStorageKey", { length: 512 }),
+    audioMimeType: varchar("audioMimeType", { length: 96 }),
+    transcript: text("transcript").notNull(),
+    insightsJson: json("insightsJson").notNull(),
+    processingStatus: mysqlEnum("processingStatus", ["processed", "fallback"]).notNull(),
+    journalPoints: int("journalPoints").notNull().default(0),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantDriverDateUnique: uniqueIndex("uq_driver_sales_journal_tenant_driver_date").on(table.tenantId, table.driverId, table.journalDate),
+    tenantCreatedIdx: index("idx_driver_sales_journal_tenant_created").on(table.tenantId, table.createdAt),
+  })
+);
+
+export const driverSalesPlaybookSources = mysqlTable(
+  "driver_sales_playbook_sources",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    name: varchar("name", { length: 191 }).notNull(),
+    sourceType: mysqlEnum("sourceType", ["foundation", "instagram", "document", "video", "other"]).notNull(),
+    sourceUrl: varchar("sourceUrl", { length: 1024 }),
+    attribution: varchar("attribution", { length: 512 }),
+    content: text("content").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdBy: varchar("createdBy", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({ tenantActiveIdx: index("idx_driver_sales_playbook_tenant_active").on(table.tenantId, table.active) })
+);
+
 export const tenantCommercialProposalProfiles = mysqlTable(
   "tenant_commercial_proposal_profiles",
   {

@@ -13,6 +13,7 @@ import {
   generateCommercialProposal,
   getCommercialProposalProfile,
 } from "../commercialProposals/commercialProposalService";
+import { selectMissionDiamond } from "./driverSalesMotivationService";
 
 export const DRIVER_MISSION_TYPES = ["cold_call", "in_person"] as const;
 export type DriverMissionType = (typeof DRIVER_MISSION_TYPES)[number];
@@ -122,6 +123,11 @@ export async function buildDriverMissions(input: {
   const selected = eligible.slice(0, input.count);
   for (let index = 0; index < selected.length; index += 1) {
     const opportunity = selected[index]!;
+    const diamond = await selectMissionDiamond({
+      tenantId: input.tenantId,
+      driverId: input.driverId,
+      accountType: opportunity.account.accountType,
+    });
     const mission = await createCommercialMission({
       tenantId: input.tenantId,
       assignedTo: input.driverId,
@@ -161,6 +167,11 @@ export async function buildDriverMissions(input: {
             venueType: input.venueType,
             builtBy: input.driverId,
             requestId: input.requestId,
+          },
+          {
+            source: "driver_sales_diamond",
+            ...diamond,
+            selectedAt: new Date().toISOString(),
           },
         ],
       },

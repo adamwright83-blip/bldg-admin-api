@@ -64,6 +64,12 @@ import {
   DRIVER_MISSION_VENUES,
   listDriverBuiltMissions,
 } from "./commercialMissionBuilderService";
+import {
+  getDriverSalesMeter,
+  getTenantSalesMomentum,
+  listDriverSalesJournals,
+  saveDriverSalesJournal,
+} from "./driverSalesMotivationService";
 
 function httpUrl(maxLength: number) {
   return z
@@ -188,6 +194,27 @@ function notFound(): never {
 }
 
 export const commercialMissionRouter = router({
+  mySalesMeter: dayforgeMissionFieldProcedure.query(({ ctx }) =>
+    getDriverSalesMeter({ tenantId: ctx.tenantId, driverId: ctx.user.openId })
+  ),
+  mySalesJournals: dayforgeMissionFieldProcedure.query(({ ctx }) =>
+    listDriverSalesJournals({ tenantId: ctx.tenantId, driverId: ctx.user.openId, limit: 14 })
+  ),
+  saveSalesJournal: dayforgeMissionFieldProcedure
+    .input(z.object({
+      journalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      audioDataUrl: z.string().max(16_500_000).optional(),
+      transcript: z.string().trim().max(20_000).optional(),
+    }).refine(value => Boolean(value.audioDataUrl || value.transcript), "A recording or transcript is required"))
+    .mutation(({ ctx, input }) => saveDriverSalesJournal({
+      ...input, tenantId: ctx.tenantId, driverId: ctx.user.openId,
+    })),
+  salesJournalsAdmin: dayforgeTenantAdminProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(100).default(30) }))
+    .query(({ ctx, input }) => listDriverSalesJournals({ tenantId: ctx.tenantId, limit: input.limit, includeAudio: true })),
+  salesMomentumAdmin: dayforgeTenantAdminProcedure.query(({ ctx }) =>
+    getTenantSalesMomentum({ tenantId: ctx.tenantId })
+  ),
   myBuiltMissions: dayforgeMissionFieldProcedure.query(({ ctx }) =>
     listDriverBuiltMissions({ tenantId: ctx.tenantId, driverId: ctx.user.openId })
   ),

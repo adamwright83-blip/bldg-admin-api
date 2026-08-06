@@ -20,6 +20,12 @@ export default function CommercialMissionAdmin() {
     { limit: 100 },
     { enabled: isAuthenticated },
   );
+  const salesJournals = trpc.system.commercialMission.salesJournalsAdmin.useQuery(
+    { limit: 12 }, { enabled: isAuthenticated },
+  );
+  const salesMomentum = trpc.system.commercialMission.salesMomentumAdmin.useQuery(
+    undefined, { enabled: isAuthenticated },
+  );
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [handoffMessage, setHandoffMessage] = useState<string | null>(null);
   const [handoffUrl, setHandoffUrl] = useState<string | null>(null);
@@ -103,6 +109,20 @@ export default function CommercialMissionAdmin() {
             </Link>
           </div>
         </header>
+
+        <section className="mb-6 rounded-2xl border border-fuchsia-300/20 bg-gradient-to-br from-violet-950/70 to-slate-900 p-5">
+          <div className="flex items-center justify-between gap-4"><div><span className="text-xs font-black uppercase tracking-[.2em] text-fuchsia-300">Sales coaching memory</span><h2 className="mt-1 text-xl font-black">Driver journals</h2></div><span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black">{salesJournals.data?.length ?? 0}</span></div>
+          {salesJournals.isLoading ? <p className="mt-4 text-sm text-white/45">Loading journals…</p> : null}
+          {salesJournals.error ? <p className="mt-4 text-sm text-red-300">{salesJournals.error.message}</p> : null}
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            {salesJournals.data?.slice(0, 6).map(journal => {
+              const insights = journal.insightsJson as { objections?: Array<{ objection: string }>; wins?: string[] };
+              return <article key={journal.id} className="rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex justify-between gap-3 text-xs font-bold text-white/45"><span>{journal.driverId}</span><time>{journal.journalDate}</time></div>{journal.audioUrl ? <audio controls preload="none" className="mt-3 h-9 w-full" src={journal.audioUrl} /> : null}<p className="mt-3 line-clamp-3 text-sm leading-relaxed text-white/75">{journal.transcript}</p><div className="mt-3 flex gap-2"><span className="rounded-full bg-fuchsia-400/10 px-2 py-1 text-[10px] font-black text-fuchsia-200">{insights.objections?.length ?? 0} OBJECTIONS</span><span className="rounded-full bg-emerald-400/10 px-2 py-1 text-[10px] font-black text-emerald-200">{insights.wins?.length ?? 0} WINS</span></div></article>;
+            })}
+            {!salesJournals.isLoading && salesJournals.data?.length === 0 ? <p className="text-sm text-white/45">No driver has unloaded a sales day yet.</p> : null}
+          </div>
+          {salesMomentum.data?.length ? <div className="mt-5 border-t border-white/10 pt-4"><p className="text-xs font-black uppercase tracking-[.18em] text-white/45">30-day Sucker → Hustler progress</p><div className="mt-3 grid gap-3 md:grid-cols-2">{salesMomentum.data.map(driver => <div key={driver.driverId} className="rounded-xl bg-black/25 p-3"><div className="flex justify-between text-xs font-bold"><span>{driver.driverId}</span><span>{driver.points} momentum</span></div><div className="mt-2 h-3 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-400 to-amber-300" style={{ width: `${Math.round(driver.progress * 100)}%` }} /></div></div>)}</div></div> : null}
+        </section>
 
         <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
           <section className="rounded-2xl border border-white/10 bg-slate-900 p-3">

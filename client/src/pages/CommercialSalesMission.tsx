@@ -134,6 +134,9 @@ export default function CommercialSalesMission() {
   const builderMetadata = mission?.opportunity.evidence?.find(
     item => item.source === "driver_mission_builder"
   );
+  const diamond = mission?.opportunity.evidence?.find(
+    item => item.source === "driver_sales_diamond"
+  ) as Record<string, unknown> | undefined;
   const callRequired = builderMetadata?.missionType !== "in_person";
   const activeIrlStep = mission?.steps.find(step => ["ready", "active", "awaiting_review", "rejected"].includes(step.status) && step.type !== "generic");
   const coaching = trpc.system.commercialMission.coaching.useQuery(
@@ -367,6 +370,15 @@ export default function CommercialSalesMission() {
                   <small>EST. ANNUAL VALUE</small>
                 </strong>
               </article>
+              {diamond ? (
+                <article className="mb-5 overflow-hidden rounded-3xl border border-fuchsia-300/40 bg-gradient-to-br from-violet-950 via-slate-950 to-fuchsia-950 p-5 text-white shadow-[0_18px_50px_rgba(168,85,247,.28)]">
+                  <div className="flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-fuchsia-300 text-violet-950"><Sparkles className="h-6 w-6" /></span><div><small className="font-black uppercase tracking-[.2em] text-fuchsia-200">Your diamond</small><h3 className="text-2xl font-black">{String(diamond.title ?? "Field advantage")}</h3></div></div>
+                  <p className="mt-4 text-base font-bold text-white/75">{String(diamond.cue ?? "")}</p>
+                  <blockquote className="mt-4 border-l-4 border-fuchsia-300 pl-4 text-lg font-black leading-relaxed">“{String(diamond.response ?? "") }”</blockquote>
+                  <p className="mt-4 rounded-2xl bg-white/[.07] p-4 text-sm font-semibold text-white/75">Then ask: {String(diamond.followUp ?? "")}</p>
+                  <p className="mt-3 text-xs font-bold uppercase tracking-[.12em] text-white/40">{String(diamond.sourceLabel ?? "Laundry Butler playbook")}</p>
+                </article>
+              ) : null}
               <div className="csm-facts">
                 <article>
                   <UserRound />

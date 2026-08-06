@@ -42,6 +42,7 @@ import TerritoryLeaderboard from "./TerritoryLeaderboard";
 import { QuickNewOrderSheet } from "./QuickNewOrderSheet";
 import { compressImageForMissionPreview } from "./driverMissionStorage";
 import { BuildMissionSheet } from "./BuildMissionSheet";
+import { SalesJournalSheet, SalesMomentumMeter } from "./SalesMomentum";
 
 const HERO_CITYSCAPE =
   "https://d2xsxph8kpxj0f.cloudfront.net/310519663281332025/bVTWnxw2cr9EUVzVBCF5PW/hero-cityscape-ibzWyN4yDNboMUDQd8P4Lh.webp";
@@ -1026,11 +1027,13 @@ function MobileCommandCenter({
 }: Props) {
   const [quickOrderOpen, setQuickOrderOpen] = React.useState(false);
   const [buildMissionOpen, setBuildMissionOpen] = React.useState(false);
+  const [journalOpen, setJournalOpen] = React.useState(false);
   const totalStops = orders.length + salesMissions.length;
   const searchNear = orders[0]?.address || "Los Angeles, CA";
 
   return (
     <div className="driver-mobile-command min-h-[100svh] bg-[#f8fafc] text-[#111827]">
+      <SalesMomentumMeter />
       <header className="sticky top-0 z-30 border-b border-[#d7dee6] bg-white/95 px-[clamp(20px,3.5vw,42px)] pb-[clamp(18px,2.4vw,30px)] pt-[calc(env(safe-area-inset-top)+clamp(18px,2.4vw,30px))] backdrop-blur">
         <div className="text-center">
           <p className="text-[clamp(14px,1.8vw,19px)] font-extrabold uppercase tracking-[0.16em] text-[#087552]">
@@ -1043,7 +1046,7 @@ function MobileCommandCenter({
         </div>
       </header>
 
-      <main className="pb-[clamp(200px,25vw,258px)]">
+      <main className="pb-[clamp(268px,34vw,330px)]">
         <section className="border-b border-[#e3e8ee] bg-white px-[clamp(16px,3vw,34px)] py-[clamp(16px,2.6vw,28px)]">
           <div className="flex items-center justify-between gap-3">
             <button
@@ -1136,6 +1139,7 @@ function MobileCommandCenter({
             </div>
             {salesMissions.map(mission => {
               const builder = mission.opportunity.evidence?.find(item => item.source === "driver_mission_builder");
+              const diamond = mission.opportunity.evidence?.find(item => item.source === "driver_sales_diamond");
               const coldCall = builder?.missionType === "cold_call";
               const Icon = coldCall ? PhoneCall : Building2;
               const href = ["game_ready", "game_active"].includes(mission.status)
@@ -1162,6 +1166,7 @@ function MobileCommandCenter({
                     <span className="mt-1.5 block text-[clamp(13px,1.8vw,18px)] font-black uppercase tracking-[.1em] text-violet-700">
                       {["game_ready", "game_active"].includes(mission.status) ? "Play to unlock" : "Mission ready"}
                     </span>
+                    {diamond ? <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-fuchsia-100 px-2.5 py-1 text-[clamp(12px,1.6vw,16px)] font-black text-fuchsia-800"><Sparkles className="h-4 w-4 fill-fuchsia-300" /> Diamond loaded</span> : null}
                   </span>
                   <ChevronRight className="mt-8 h-[clamp(25px,3.3vw,33px)] w-[clamp(25px,3.3vw,33px)] shrink-0 text-violet-500" />
                 </a>
@@ -1190,9 +1195,16 @@ function MobileCommandCenter({
           <button
             type="button"
             onClick={onLogWalkIn}
-            className="col-span-2 flex min-h-[clamp(52px,7vw,70px)] items-center justify-center rounded-[14px] border-2 border-orange-300 bg-orange-50 px-5 text-[clamp(15px,2vw,21px)] font-black text-orange-900 active:bg-orange-100"
+            className="flex min-h-[clamp(52px,7vw,70px)] items-center justify-center rounded-[14px] border-2 border-orange-300 bg-orange-50 px-4 text-center text-[clamp(14px,1.8vw,19px)] font-black leading-tight text-orange-900 active:bg-orange-100"
           >
-            Already stopped somewhere? Log a walk-in
+            Log a walk-in
+          </button>
+          <button
+            type="button"
+            onClick={() => setJournalOpen(true)}
+            className="flex min-h-[clamp(52px,7vw,70px)] items-center justify-center gap-2 rounded-[14px] border-2 border-fuchsia-300 bg-fuchsia-50 px-4 text-[clamp(14px,1.8vw,19px)] font-black text-fuchsia-900 active:bg-fuchsia-100"
+          >
+            <Mic className="h-5 w-5" /> Unload the day
           </button>
         </div>
       </div>
@@ -1207,6 +1219,7 @@ function MobileCommandCenter({
         onOpenChange={setBuildMissionOpen}
         searchNear={searchNear}
       />
+      <SalesJournalSheet open={journalOpen} onOpenChange={setJournalOpen} />
     </div>
   );
 }
