@@ -1028,11 +1028,36 @@ function MobileCommandCenter({
   const [quickOrderOpen, setQuickOrderOpen] = React.useState(false);
   const [buildMissionOpen, setBuildMissionOpen] = React.useState(false);
   const [journalOpen, setJournalOpen] = React.useState(false);
+  const [deviceScale, setDeviceScale] = React.useState(1);
   const totalStops = orders.length + salesMissions.length;
   const searchNear = orders[0]?.address || "Los Angeles, CA";
 
+  React.useEffect(() => {
+    const syncDeviceScale = () => {
+      const physicalWidth = Math.max(1, window.screen.width);
+      const forcedDesktopScale = window.innerWidth / physicalWidth;
+      setDeviceScale(forcedDesktopScale > 1.15 ? forcedDesktopScale : 1);
+    };
+    syncDeviceScale();
+    window.addEventListener("resize", syncDeviceScale);
+    return () => window.removeEventListener("resize", syncDeviceScale);
+  }, []);
+
   return (
-    <div className="driver-mobile-command min-h-[100svh] bg-[#f8fafc] text-[#111827]">
+    <div
+      className="driver-mobile-command min-h-[100svh] bg-[#f8fafc] text-[#111827]"
+      style={{
+        "--driver-action-height": `${96 * deviceScale}px`,
+        "--driver-action-gap": `${12 * deviceScale}px`,
+        "--driver-action-padding": `${16 * deviceScale}px`,
+        "--driver-action-radius": `${20 * deviceScale}px`,
+        "--driver-action-font": `${18 * deviceScale}px`,
+        "--driver-action-icon": `${30 * deviceScale}px`,
+        "--driver-dock-padding-y": `${14 * deviceScale}px`,
+        "--driver-dock-padding-x": `${16 * deviceScale}px`,
+        "--driver-main-dock-space": `${236 * deviceScale}px`,
+      } as React.CSSProperties}
+    >
       <SalesMomentumMeter />
       <header className="sticky top-0 z-30 border-b border-[#d7dee6] bg-white/95 px-[clamp(20px,3.5vw,42px)] pb-[clamp(18px,2.4vw,30px)] pt-[calc(env(safe-area-inset-top)+clamp(18px,2.4vw,30px))] backdrop-blur">
         <div className="text-center">
@@ -1046,7 +1071,7 @@ function MobileCommandCenter({
         </div>
       </header>
 
-      <main className="pb-[clamp(268px,34vw,330px)]">
+      <main className="driver-mobile-main">
         <section className="border-b border-[#e3e8ee] bg-white px-[clamp(16px,3vw,34px)] py-[clamp(16px,2.6vw,28px)]">
           <div className="flex items-center justify-between gap-3">
             <button
@@ -1176,38 +1201,38 @@ function MobileCommandCenter({
         ) : null}
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#d3dce5] bg-white/98 px-[clamp(16px,3vw,34px)] pb-[calc(env(safe-area-inset-bottom)+clamp(12px,2vw,22px))] pt-[clamp(12px,2vw,22px)] shadow-[0_-10px_30px_rgba(15,23,42,0.10)]">
+      <div className="driver-action-dock fixed inset-x-0 bottom-0 z-50 border-t border-[#d3dce5] bg-white/98 shadow-[0_-10px_30px_rgba(15,23,42,0.10)]">
         <div
-          className="mx-auto grid w-full grid-cols-2 gap-[clamp(10px,1.8vw,18px)]"
+          className="driver-action-grid mx-auto grid w-full grid-cols-2"
           aria-label="Driver actions"
         >
           <button
             type="button"
             onClick={() => setBuildMissionOpen(true)}
-            className="flex min-h-[clamp(78px,10vw,104px)] items-center justify-center gap-3 rounded-[18px] bg-violet-700 px-4 text-center text-[clamp(16px,2.3vw,24px)] font-black leading-tight text-white shadow-[0_8px_20px_rgba(109,40,217,0.28)] active:scale-[0.98]"
+            className="driver-action-tile flex items-center justify-center bg-violet-700 text-center font-black leading-tight text-white shadow-[0_8px_20px_rgba(109,40,217,0.28)] active:scale-[0.98]"
           >
-            <Building2 className="h-[clamp(25px,3.2vw,32px)] w-[clamp(25px,3.2vw,32px)] shrink-0" strokeWidth={2.5} /> Build mission
+            <Building2 className="shrink-0" strokeWidth={2.5} /> Build mission
           </button>
           <button
             type="button"
             onClick={() => setQuickOrderOpen(true)}
-            className="flex min-h-[clamp(78px,10vw,104px)] items-center justify-center gap-3 rounded-[18px] bg-[#2468ed] px-4 text-center text-[clamp(16px,2.3vw,24px)] font-black leading-tight text-white shadow-[0_8px_20px_rgba(36,104,237,0.28)] active:scale-[0.98]"
+            className="driver-action-tile flex items-center justify-center bg-[#2468ed] text-center font-black leading-tight text-white shadow-[0_8px_20px_rgba(36,104,237,0.28)] active:scale-[0.98]"
           >
-            <Plus className="h-[clamp(25px,3.2vw,32px)] w-[clamp(25px,3.2vw,32px)] shrink-0" strokeWidth={2.5} /> New order
+            <Plus className="shrink-0" strokeWidth={2.5} /> New order
           </button>
           <button
             type="button"
             onClick={onLogWalkIn}
-            className="flex min-h-[clamp(78px,10vw,104px)] items-center justify-center gap-3 rounded-[18px] bg-orange-600 px-4 text-center text-[clamp(16px,2.3vw,24px)] font-black leading-tight text-white shadow-[0_8px_20px_rgba(234,88,12,0.26)] active:scale-[0.98] active:bg-orange-700"
+            className="driver-action-tile flex items-center justify-center bg-orange-600 text-center font-black leading-tight text-white shadow-[0_8px_20px_rgba(234,88,12,0.26)] active:scale-[0.98] active:bg-orange-700"
           >
-            <MapPin className="h-[clamp(25px,3.2vw,32px)] w-[clamp(25px,3.2vw,32px)] shrink-0" strokeWidth={2.5} /> Log a walk-in
+            <MapPin className="shrink-0" strokeWidth={2.5} /> Log a walk-in
           </button>
           <button
             type="button"
             onClick={() => setJournalOpen(true)}
-            className="flex min-h-[clamp(78px,10vw,104px)] items-center justify-center gap-3 rounded-[18px] bg-fuchsia-700 px-4 text-center text-[clamp(16px,2.3vw,24px)] font-black leading-tight text-white shadow-[0_8px_20px_rgba(162,28,175,0.26)] active:scale-[0.98] active:bg-fuchsia-800"
+            className="driver-action-tile flex items-center justify-center bg-fuchsia-700 text-center font-black leading-tight text-white shadow-[0_8px_20px_rgba(162,28,175,0.26)] active:scale-[0.98] active:bg-fuchsia-800"
           >
-            <Mic className="h-[clamp(25px,3.2vw,32px)] w-[clamp(25px,3.2vw,32px)] shrink-0" strokeWidth={2.5} /> Unload the day
+            <Mic className="shrink-0" strokeWidth={2.5} /> Unload the day
           </button>
         </div>
       </div>

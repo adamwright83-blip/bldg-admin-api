@@ -4429,6 +4429,37 @@ button.ops-kpi-card:hover {
   .driver-game input,
   .driver-game select,
   .driver-game textarea { min-height: 48px; font-size: 16px !important; }
+
+  /* Some iOS/Android browsers request a desktop-width layout viewport and
+   * then shrink it to the physical phone. Counter that scale for the fixed
+   * action dock so its four primary actions remain genuinely thumb-sized. */
+  .driver-mobile-main {
+    padding-bottom: var(--driver-main-dock-space, 236px);
+  }
+
+  .driver-action-dock {
+    padding:
+      var(--driver-dock-padding-y, 14px)
+      var(--driver-dock-padding-x, 16px)
+      calc(env(safe-area-inset-bottom) + var(--driver-dock-padding-y, 14px));
+  }
+
+  .driver-action-grid {
+    gap: var(--driver-action-gap, 12px);
+  }
+
+  .driver-game .driver-action-tile {
+    min-height: var(--driver-action-height, 96px) !important;
+    gap: var(--driver-action-gap, 12px);
+    padding: var(--driver-action-padding, 16px);
+    border-radius: var(--driver-action-radius, 20px);
+    font-size: var(--driver-action-font, 18px) !important;
+  }
+
+  .driver-action-tile svg {
+    width: var(--driver-action-icon, 30px);
+    height: var(--driver-action-icon, 30px);
+  }
 }
 
 /* Desktop hero is a separate composition from the single-column mobile
