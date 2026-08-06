@@ -1031,25 +1031,25 @@ function MobileCommandCenter({
 
   return (
     <div className="driver-mobile-command min-h-[100svh] bg-[#f8fafc] text-[#111827]">
-      <header className="sticky top-0 z-30 border-b border-[#e3e8ee] bg-white/95 px-5 pb-4 pt-[calc(env(safe-area-inset-top)+16px)] backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-[#d7dee6] bg-white/95 px-[clamp(20px,3.5vw,42px)] pb-[clamp(18px,2.4vw,30px)] pt-[calc(env(safe-area-inset-top)+clamp(18px,2.4vw,30px))] backdrop-blur">
         <div className="text-center">
-          <p className="text-[12px] font-extrabold uppercase tracking-[0.16em] text-[#087552]">
+          <p className="text-[clamp(14px,1.8vw,19px)] font-extrabold uppercase tracking-[0.16em] text-[#087552]">
             Laundry Butler
           </p>
-          <h1 className="mt-1 text-[25px] font-extrabold tracking-[-0.02em]">Today&apos;s Route</h1>
-          <p className="mt-1 text-[15px] font-medium text-[#667085]">
+          <h1 className="mt-1 text-[clamp(30px,4.4vw,46px)] font-extrabold tracking-[-0.03em]">Today&apos;s Route</h1>
+          <p className="mt-1 text-[clamp(17px,2.3vw,24px)] font-semibold text-[#667085]">
             {totalStops} {totalStops === 1 ? "stop" : "stops"}
           </p>
         </div>
       </header>
 
-      <main className="pb-[184px]">
-        <section className="border-b border-[#e3e8ee] bg-white px-4 py-4">
+      <main className="pb-[clamp(200px,25vw,258px)]">
+        <section className="border-b border-[#e3e8ee] bg-white px-[clamp(16px,3vw,34px)] py-[clamp(16px,2.6vw,28px)]">
           <div className="flex items-center justify-between gap-3">
             <button
               type="button"
               onClick={() => onSelectedDateChange(addDays(selectedDate, -1))}
-              className="flex h-12 w-12 items-center justify-center rounded-[14px] border border-[#d7dee6] bg-white text-[#344054] active:bg-[#eef2f6]"
+              className="flex h-[clamp(52px,7vw,72px)] w-[clamp(52px,7vw,72px)] items-center justify-center rounded-[16px] border border-[#cbd5df] bg-white text-[#344054] active:bg-[#eef2f6]"
               aria-label="Previous day"
             >
               <ChevronLeft className="h-6 w-6" />
@@ -1057,19 +1057,19 @@ function MobileCommandCenter({
             <button
               type="button"
               onClick={() => onSelectedDateChange(localYmd())}
-              className="min-h-12 flex-1 rounded-[14px] border border-[#d7dee6] bg-[#f8fafc] px-3 text-center"
+              className="min-h-[clamp(52px,7vw,72px)] flex-1 rounded-[16px] border border-[#cbd5df] bg-[#f8fafc] px-4 text-center"
             >
-              <span className="block text-[18px] font-extrabold text-[#111827]">
+              <span className="block text-[clamp(19px,2.8vw,29px)] font-extrabold text-[#111827]">
                 {formatSelectedDate(selectedDate)}
               </span>
               {selectedDate !== localYmd() ? (
-                <span className="mt-0.5 block text-[12px] font-bold text-[#087552]">Tap to return to today</span>
+                <span className="mt-0.5 block text-[clamp(13px,1.7vw,18px)] font-bold text-[#087552]">Tap to return to today</span>
               ) : null}
             </button>
             <button
               type="button"
               onClick={() => onSelectedDateChange(addDays(selectedDate, 1))}
-              className="flex h-12 w-12 items-center justify-center rounded-[14px] border border-[#d7dee6] bg-white text-[#344054] active:bg-[#eef2f6]"
+              className="flex h-[clamp(52px,7vw,72px)] w-[clamp(52px,7vw,72px)] items-center justify-center rounded-[16px] border border-[#cbd5df] bg-white text-[#344054] active:bg-[#eef2f6]"
               aria-label="Next day"
             >
               <ChevronRight className="h-6 w-6" />
@@ -1082,10 +1082,10 @@ function MobileCommandCenter({
             Loading route…
           </div>
         ) : totalStops === 0 ? (
-          <div className="mx-4 mt-6 rounded-[18px] border border-[#dfe5eb] bg-white px-6 py-10 text-center shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
-            <CheckCircle2 className="mx-auto h-11 w-11 text-[#6f8f7d]" />
-            <p className="mt-4 text-[22px] font-extrabold">No stops scheduled</p>
-            <p className="mx-auto mt-2 max-w-[290px] text-[16px] leading-relaxed text-[#667085]">
+          <div className="mx-[clamp(16px,3vw,34px)] mt-[clamp(22px,3vw,34px)] rounded-[22px] border border-[#d7dee6] bg-white px-[clamp(24px,5vw,56px)] py-[clamp(40px,6vw,64px)] text-center shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
+            <CheckCircle2 className="mx-auto h-[clamp(48px,6vw,64px)] w-[clamp(48px,6vw,64px)] text-[#5f806e]" />
+            <p className="mt-5 text-[clamp(25px,3.5vw,36px)] font-extrabold">No stops scheduled</p>
+            <p className="mx-auto mt-3 max-w-[560px] text-[clamp(17px,2.3vw,24px)] leading-relaxed text-[#667085]">
               Your route is clear. Create a pickup or log an unscheduled visit below.
             </p>
           </div>
@@ -1096,10 +1096,10 @@ function MobileCommandCenter({
                 key={order.id}
                 type="button"
                 onClick={() => onSelectOrder(order)}
-                className="w-full border-t border-[#e3e8ee] bg-white px-4 py-5 text-left active:bg-[#f3f6f8]"
+                className="w-full border-t border-[#e3e8ee] bg-white px-[clamp(16px,3vw,34px)] py-[clamp(20px,3vw,30px)] text-left active:bg-[#f3f6f8]"
               >
-                <div className="flex items-start gap-3">
-                  <span className={`flex h-13 w-13 shrink-0 items-center justify-center rounded-full text-[19px] font-black ${
+                <div className="flex items-start gap-[clamp(14px,2.4vw,26px)]">
+                  <span className={`flex h-[clamp(54px,7vw,70px)] w-[clamp(54px,7vw,70px)] shrink-0 items-center justify-center rounded-full text-[clamp(20px,2.7vw,27px)] font-black ${
                     order.type === "PICKUP"
                       ? "bg-[#dceaff] text-[#185abc]"
                       : "bg-[#e8f4ed] text-[#1f694b]"
@@ -1108,17 +1108,17 @@ function MobileCommandCenter({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-start justify-between gap-3">
-                      <span className="text-[19px] font-extrabold leading-tight text-[#111827]">
+                      <span className="text-[clamp(20px,2.8vw,28px)] font-extrabold leading-tight text-[#111827]">
                         #{order.id}
                       </span>
-                      <span className="shrink-0 text-[16px] font-semibold text-[#667085]">{order.timeWindow}</span>
+                      <span className="shrink-0 text-[clamp(16px,2.2vw,22px)] font-semibold text-[#667085]">{order.timeWindow}</span>
                     </span>
-                    <span className="mt-0.5 block text-[18px] font-semibold leading-tight text-[#344054]">{order.customerName}</span>
-                    <span className="mt-1 block truncate text-[16px] leading-snug text-[#667085]">
+                    <span className="mt-1 block text-[clamp(19px,2.6vw,26px)] font-semibold leading-tight text-[#344054]">{order.customerName}</span>
+                    <span className="mt-1.5 block truncate text-[clamp(16px,2.2vw,22px)] leading-snug text-[#667085]">
                       {order.address}{order.unit ? ` · Unit ${order.unit}` : ""}
                     </span>
                   </span>
-                  <ChevronRight className="mt-4 h-6 w-6 shrink-0 text-[#667085]" />
+                  <ChevronRight className="mt-4 h-[clamp(25px,3.3vw,33px)] w-[clamp(25px,3.3vw,33px)] shrink-0 text-[#667085]" />
                 </div>
               </button>
             ))}
@@ -1127,12 +1127,12 @@ function MobileCommandCenter({
 
         {salesMissions.length ? (
           <section className="border-b border-violet-200 bg-violet-50">
-            <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center justify-between px-[clamp(16px,3vw,34px)] py-[clamp(14px,2.4vw,24px)]">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[.18em] text-violet-700">Sales missions</p>
-                <p className="mt-0.5 text-[14px] font-semibold text-violet-950/60">Different route. Same credit.</p>
+                <p className="text-[clamp(13px,1.8vw,18px)] font-black uppercase tracking-[.18em] text-violet-700">Sales missions</p>
+                <p className="mt-1 text-[clamp(15px,2.1vw,21px)] font-semibold text-violet-950/65">Different route. Same credit.</p>
               </div>
-              <span className="rounded-full bg-violet-700 px-3 py-1 text-[12px] font-black text-white">{salesMissions.length}</span>
+              <span className="rounded-full bg-violet-700 px-[clamp(12px,2vw,20px)] py-[clamp(6px,1vw,10px)] text-[clamp(13px,1.8vw,18px)] font-black text-white">{salesMissions.length}</span>
             </div>
             {salesMissions.map(mission => {
               const builder = mission.opportunity.evidence?.find(item => item.source === "driver_mission_builder");
@@ -1145,25 +1145,25 @@ function MobileCommandCenter({
                 <a
                   key={mission.id}
                   href={href}
-                  className="flex min-h-[104px] items-start gap-3 border-t border-violet-200 bg-white px-4 py-4 text-left active:bg-violet-50"
+                  className="flex min-h-[clamp(118px,17vw,166px)] items-start gap-[clamp(14px,2.4vw,26px)] border-t border-violet-200 bg-white px-[clamp(16px,3vw,34px)] py-[clamp(18px,3vw,30px)] text-left active:bg-violet-50"
                 >
-                  <span className="flex h-13 w-13 shrink-0 items-center justify-center rounded-full bg-violet-700 text-white shadow-[0_7px_18px_rgba(109,40,217,.24)]">
-                    <Icon className="h-6 w-6" strokeWidth={2.5} />
+                  <span className="flex h-[clamp(56px,7.5vw,74px)] w-[clamp(56px,7.5vw,74px)] shrink-0 items-center justify-center rounded-full bg-violet-700 text-white shadow-[0_7px_18px_rgba(109,40,217,.24)]">
+                    <Icon className="h-[clamp(27px,3.7vw,37px)] w-[clamp(27px,3.7vw,37px)]" strokeWidth={2.5} />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className="rounded-full bg-violet-100 px-2 py-1 text-[10px] font-black uppercase tracking-[.12em] text-violet-800">
+                      <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[clamp(12px,1.6vw,16px)] font-black uppercase tracking-[.12em] text-violet-800">
                         {coldCall ? "Cold call" : "In person"}
                       </span>
-                      <span className="text-[12px] font-bold text-violet-700">{mission.code}</span>
+                      <span className="text-[clamp(13px,1.8vw,18px)] font-bold text-violet-700">{mission.code}</span>
                     </span>
-                    <strong className="mt-1.5 block text-[18px] font-extrabold leading-tight text-[#111827]">{mission.account.name}</strong>
-                    <span className="mt-1 block truncate text-[15px] text-[#667085]">{mission.account.address}</span>
-                    <span className="mt-1 block text-[12px] font-black uppercase tracking-[.1em] text-violet-700">
+                    <strong className="mt-2 block text-[clamp(20px,2.8vw,28px)] font-extrabold leading-tight text-[#111827]">{mission.account.name}</strong>
+                    <span className="mt-1 block truncate text-[clamp(16px,2.2vw,22px)] text-[#667085]">{mission.account.address}</span>
+                    <span className="mt-1.5 block text-[clamp(13px,1.8vw,18px)] font-black uppercase tracking-[.1em] text-violet-700">
                       {["game_ready", "game_active"].includes(mission.status) ? "Play to unlock" : "Mission ready"}
                     </span>
                   </span>
-                  <ChevronRight className="mt-8 h-6 w-6 shrink-0 text-violet-500" />
+                  <ChevronRight className="mt-8 h-[clamp(25px,3.3vw,33px)] w-[clamp(25px,3.3vw,33px)] shrink-0 text-violet-500" />
                 </a>
               );
             })}
@@ -1171,26 +1171,26 @@ function MobileCommandCenter({
         ) : null}
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#dce3ea] bg-white/98 px-4 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-2.5 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
-        <div className="mx-auto grid w-full max-w-[520px] grid-cols-2 gap-2">
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#d3dce5] bg-white/98 px-[clamp(16px,3vw,34px)] pb-[calc(env(safe-area-inset-bottom)+clamp(12px,2vw,22px))] pt-[clamp(12px,2vw,22px)] shadow-[0_-10px_30px_rgba(15,23,42,0.10)]">
+        <div className="mx-auto grid w-full grid-cols-2 gap-[clamp(10px,1.8vw,18px)]">
           <button
             type="button"
             onClick={() => setBuildMissionOpen(true)}
-            className="flex min-h-16 items-center justify-center gap-2 rounded-[14px] bg-violet-700 px-4 text-[16px] font-black text-white shadow-[0_8px_18px_rgba(109,40,217,0.25)] active:scale-[0.98]"
+            className="flex min-h-[clamp(68px,9vw,92px)] items-center justify-center gap-3 rounded-[16px] bg-violet-700 px-4 text-[clamp(17px,2.3vw,24px)] font-black text-white shadow-[0_8px_20px_rgba(109,40,217,0.28)] active:scale-[0.98]"
           >
-            <Building2 className="h-5 w-5" /> Build mission
+            <Building2 className="h-[clamp(22px,3vw,30px)] w-[clamp(22px,3vw,30px)]" /> Build mission
           </button>
           <button
             type="button"
             onClick={() => setQuickOrderOpen(true)}
-            className="flex min-h-16 items-center justify-center gap-2 rounded-[14px] bg-[#2468ed] px-4 text-[16px] font-black text-white shadow-[0_8px_18px_rgba(36,104,237,0.28)] active:scale-[0.98]"
+            className="flex min-h-[clamp(68px,9vw,92px)] items-center justify-center gap-3 rounded-[16px] bg-[#2468ed] px-4 text-[clamp(17px,2.3vw,24px)] font-black text-white shadow-[0_8px_20px_rgba(36,104,237,0.28)] active:scale-[0.98]"
           >
-            <Plus className="h-6 w-6" strokeWidth={2.5} /> New order
+            <Plus className="h-[clamp(24px,3.2vw,32px)] w-[clamp(24px,3.2vw,32px)]" strokeWidth={2.5} /> New order
           </button>
           <button
             type="button"
             onClick={onLogWalkIn}
-            className="col-span-2 flex min-h-11 items-center justify-center rounded-[12px] border border-orange-300 bg-orange-50 px-4 text-[14px] font-black text-orange-800 active:bg-orange-100"
+            className="col-span-2 flex min-h-[clamp(52px,7vw,70px)] items-center justify-center rounded-[14px] border-2 border-orange-300 bg-orange-50 px-5 text-[clamp(15px,2vw,21px)] font-black text-orange-900 active:bg-orange-100"
           >
             Already stopped somewhere? Log a walk-in
           </button>

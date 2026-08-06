@@ -4417,7 +4417,7 @@ button.ops-kpi-card:hover {
 }
 
 /* Raise the prototype's micro-copy to a practical mobile floor. */
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-device-width: 767px) {
   .driver-game [class*="text-[7px]"],
   .driver-game [class*="text-[8px]"],
   .driver-game [class*="text-[9px]"] { font-size: 12px !important; line-height: 1.25 !important; }

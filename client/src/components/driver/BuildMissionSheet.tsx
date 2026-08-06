@@ -89,20 +89,20 @@ export function BuildMissionSheet({
             role="dialog"
             aria-modal="true"
             aria-labelledby="build-mission-title"
-            className="w-full overflow-hidden rounded-[24px] border border-violet-200/40 bg-[#111827] text-white shadow-[0_28px_80px_rgba(15,23,42,.48)] sm:max-w-lg"
+            className="w-full max-w-[860px] max-h-[calc(100svh-24px)] overflow-y-auto rounded-[26px] border border-violet-200/40 bg-[#111827] text-white shadow-[0_28px_80px_rgba(15,23,42,.58)]"
             initial={{ y: 36, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 36, opacity: 0 }}
           >
-            <div className="flex items-start justify-between border-b border-white/10 px-5 py-5">
+            <div className="flex items-start justify-between border-b border-white/10 px-[clamp(22px,4vw,42px)] py-[clamp(22px,3.5vw,36px)]">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[.2em] text-violet-300">
+                <p className="text-[clamp(13px,1.8vw,18px)] font-black uppercase tracking-[.2em] text-violet-300">
                   Sales mode
                 </p>
-                <h2 id="build-mission-title" className="mt-1 text-[28px] font-black leading-none">
+                <h2 id="build-mission-title" className="mt-1 text-[clamp(32px,4.6vw,46px)] font-black leading-none tracking-[-.02em]">
                   {missionType ? "Pick a venue" : "Build a mission"}
                 </h2>
-                <p className="mt-2 text-[14px] text-white/55">
+                <p className="mt-3 text-[clamp(15px,2.1vw,21px)] font-medium text-white/60">
                   Searching near {searchNear}
                 </p>
               </div>
@@ -110,14 +110,14 @@ export function BuildMissionSheet({
                 type="button"
                 onClick={close}
                 disabled={build.isPending}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20 disabled:opacity-50"
+                className="flex h-[clamp(48px,6.5vw,66px)] w-[clamp(48px,6.5vw,66px)] shrink-0 items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20 disabled:opacity-50"
                 aria-label="Close mission builder"
               >
-                <X className="h-5 w-5" />
+                <X className="h-[clamp(22px,3vw,30px)] w-[clamp(22px,3vw,30px)]" />
               </button>
             </div>
 
-            <div className="p-4 pb-[calc(env(safe-area-inset-bottom)+18px)]">
+            <div className="p-[clamp(16px,3vw,30px)] pb-[calc(env(safe-area-inset-bottom)+clamp(20px,3vw,30px))]">
               {build.isPending ? (
                 <div className="flex min-h-[300px] flex-col items-center justify-center text-center">
                   <Loader2 className="h-10 w-10 animate-spin text-violet-300" />
@@ -131,30 +131,30 @@ export function BuildMissionSheet({
                   <button
                     type="button"
                     onClick={() => setMissionType("cold_call")}
-                    className="flex min-h-[104px] items-center gap-4 rounded-[18px] border border-fuchsia-300/35 bg-fuchsia-400/10 p-4 text-left active:bg-fuchsia-400/20"
+                    className="flex min-h-[clamp(112px,15vw,148px)] items-center gap-[clamp(16px,2.5vw,26px)] rounded-[20px] border border-fuchsia-300/35 bg-fuchsia-400/10 p-[clamp(18px,3vw,30px)] text-left active:bg-fuchsia-400/20"
                   >
-                    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] bg-fuchsia-300 text-[#30103d]">
-                      <PhoneCall className="h-7 w-7" />
+                    <span className="flex h-[clamp(60px,8vw,80px)] w-[clamp(60px,8vw,80px)] shrink-0 items-center justify-center rounded-[18px] bg-fuchsia-300 text-[#30103d]">
+                      <PhoneCall className="h-[clamp(30px,4vw,40px)] w-[clamp(30px,4vw,40px)]" />
                     </span>
                     <span>
-                      <strong className="block text-[20px] font-black">Cold-call mission</strong>
-                      <span className="mt-1 block text-[14px] leading-snug text-white/60">Only venues with a public phone number</span>
+                      <strong className="block text-[clamp(22px,3vw,31px)] font-black">Cold-call mission</strong>
+                      <span className="mt-1 block text-[clamp(15px,2.1vw,21px)] leading-snug text-white/65">Only venues with a public phone number</span>
                     </span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setMissionType("in_person")}
-                    className="flex min-h-[104px] items-center gap-4 rounded-[18px] border border-violet-300/35 bg-violet-400/10 p-4 text-left active:bg-violet-400/20"
+                    className="flex min-h-[clamp(112px,15vw,148px)] items-center gap-[clamp(16px,2.5vw,26px)] rounded-[20px] border border-violet-300/35 bg-violet-400/10 p-[clamp(18px,3vw,30px)] text-left active:bg-violet-400/20"
                   >
-                    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] bg-violet-300 text-[#21133d]">
-                      <Store className="h-7 w-7" />
+                    <span className="flex h-[clamp(60px,8vw,80px)] w-[clamp(60px,8vw,80px)] shrink-0 items-center justify-center rounded-[18px] bg-violet-300 text-[#21133d]">
+                      <Store className="h-[clamp(30px,4vw,40px)] w-[clamp(30px,4vw,40px)]" />
                     </span>
                     <span>
-                      <strong className="block text-[20px] font-black">In-person mission</strong>
-                      <span className="mt-1 block text-[14px] leading-snug text-white/60">Sales stops placed alongside today’s route</span>
+                      <strong className="block text-[clamp(22px,3vw,31px)] font-black">In-person mission</strong>
+                      <span className="mt-1 block text-[clamp(15px,2.1vw,21px)] leading-snug text-white/65">Sales stops placed alongside today’s route</span>
                     </span>
                   </button>
-                  <p className="px-2 pt-1 text-center text-[13px] font-semibold text-white/45">
+                  <p className="px-2 pt-2 text-center text-[clamp(14px,1.9vw,19px)] font-semibold text-white/50">
                     Nothing is called or messaged automatically.
                   </p>
                 </div>
@@ -167,14 +167,14 @@ export function BuildMissionSheet({
                         key={venue.value}
                         type="button"
                         onClick={() => void chooseVenue(venue.value)}
-                        className="flex min-h-[82px] items-center gap-4 rounded-[16px] border border-white/10 bg-white/[.055] p-3.5 text-left active:border-violet-300/50 active:bg-violet-400/15"
+                        className="flex min-h-[clamp(96px,12vw,120px)] items-center gap-[clamp(16px,2.5vw,26px)] rounded-[18px] border border-white/10 bg-white/[.065] p-[clamp(16px,2.5vw,24px)] text-left active:border-violet-300/50 active:bg-violet-400/15"
                       >
-                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-violet-300/15 text-violet-200">
-                          <Icon className="h-6 w-6" />
+                        <span className="flex h-[clamp(54px,7vw,70px)] w-[clamp(54px,7vw,70px)] shrink-0 items-center justify-center rounded-[16px] bg-violet-300/15 text-violet-200">
+                          <Icon className="h-[clamp(27px,3.5vw,35px)] w-[clamp(27px,3.5vw,35px)]" />
                         </span>
                         <span className="min-w-0 flex-1">
-                          <strong className="block text-[17px] font-black">{venue.title}</strong>
-                          <span className="mt-0.5 block text-[13px] leading-snug text-white/50">{venue.detail}</span>
+                          <strong className="block text-[clamp(20px,2.8vw,28px)] font-black">{venue.title}</strong>
+                          <span className="mt-1 block text-[clamp(14px,2vw,20px)] leading-snug text-white/60">{venue.detail}</span>
                         </span>
                       </button>
                     );
@@ -182,7 +182,7 @@ export function BuildMissionSheet({
                   <button
                     type="button"
                     onClick={() => setMissionType(null)}
-                    className="mt-1 min-h-12 rounded-[14px] border border-white/10 text-[14px] font-black text-white/65"
+                    className="mt-1 min-h-[clamp(56px,7vw,70px)] rounded-[14px] border border-white/15 text-[clamp(16px,2.2vw,22px)] font-black text-white/75"
                   >
                     Back
                   </button>
