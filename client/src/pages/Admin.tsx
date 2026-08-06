@@ -674,6 +674,9 @@ function NewOrderTab({
   phoneSeed: string | null;
   onConsumePhoneSeed: () => void;
 }) {
+  const [mobileStep, setMobileStep] = useState<
+    "customer" | "order" | "payment"
+  >("customer");
   const [phone, setPhone] = useState("");
   const [form, setForm] = useState({
     firstName: "",
@@ -810,6 +813,7 @@ function NewOrderTab({
     setFlatRateQtys({});
     setDcQtys({});
     setDiscountPercent("0");
+    setMobileStep("customer");
     setForm({
       firstName: "",
       lastName: "",
@@ -1134,6 +1138,9 @@ function NewOrderTab({
     !hasPricedItems ||
     checkoutTotals.totalCents < 50;
   const hasSavedCard = Boolean(stripeCustomerId || stripePaymentMethodId);
+  const mobileCustomerReady = Boolean(
+    phone.trim() && form.firstName.trim() && form.address.trim()
+  );
   const checkoutBusy =
     createOrder.isPending ||
     saveIntake.isPending ||
@@ -1191,7 +1198,11 @@ function NewOrderTab({
       </div>
 
       <div className="grid min-h-[680px] gap-4 xl:grid-cols-[270px_minmax(0,1fr)_360px]">
-        <section className="border border-black/10 bg-[#FBFAF6] p-3">
+        <section
+          className={`${
+            mobileStep === "customer" ? "order-2 block" : "hidden"
+          } border border-black/10 bg-[#FBFAF6] p-3 xl:order-none xl:block`}
+        >
           <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">
             Services
           </div>
@@ -1285,9 +1296,24 @@ function NewOrderTab({
                 ))}
             </select>
           </div>
+
+          <div className="sticky bottom-0 -mx-3 -mb-3 mt-5 border-t border-black/10 bg-white p-3 xl:hidden">
+            <Button
+              type="button"
+              className="h-12 w-full bg-red-600 text-sm font-bold uppercase tracking-[0.12em] text-white hover:bg-red-700 disabled:opacity-40"
+              disabled={!mobileCustomerReady}
+              onClick={() => setMobileStep("order")}
+            >
+              Continue
+            </Button>
+          </div>
         </section>
 
-        <section className="border border-black/10 bg-white p-4">
+        <section
+          className={`${
+            mobileStep === "order" ? "order-1 block" : "hidden"
+          } border border-black/10 bg-white p-4 xl:order-none xl:block`}
+        >
           <div className="mb-4 flex items-center justify-between border-b border-black/10 pb-3">
             <div>
               <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/45">
@@ -1511,10 +1537,38 @@ function NewOrderTab({
               </div>
             </div>
           </div>
+
+          <div className="sticky bottom-0 -mx-4 -mb-4 mt-5 flex items-center gap-3 border-t border-black/10 bg-white p-3 xl:hidden">
+            <button
+              type="button"
+              className="h-12 shrink-0 border border-black/15 px-4 text-xs font-semibold uppercase tracking-[0.1em] text-black"
+              onClick={() => setMobileStep("customer")}
+            >
+              Back
+            </button>
+            <Button
+              type="button"
+              className="h-12 flex-1 bg-red-600 text-sm font-bold uppercase tracking-[0.12em] text-white hover:bg-red-700 disabled:opacity-40"
+              disabled={!hasPricedItems}
+              onClick={() => setMobileStep("payment")}
+            >
+              Review order
+            </Button>
+          </div>
         </section>
 
-        <aside className="flex flex-col border border-black/10 bg-[#FBFAF6]">
-          <div className="border-b border-black/10 p-4">
+        <aside
+          className={`${
+            mobileStep === "customer" || mobileStep === "payment"
+              ? "order-1 flex"
+              : "hidden"
+          } flex-col border border-black/10 bg-[#FBFAF6] xl:order-none xl:flex`}
+        >
+          <div
+            className={`${
+              mobileStep === "customer" ? "block" : "hidden"
+            } border-b border-black/10 p-4 xl:block`}
+          >
             <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">
               Customer
             </div>
@@ -1733,7 +1787,11 @@ function NewOrderTab({
             </label>
           </div>
 
-          <div className="flex-1 p-4">
+          <div
+            className={`${
+              mobileStep === "payment" ? "block" : "hidden"
+            } flex-1 p-4 xl:block`}
+          >
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/50">
                 POS summary
@@ -1776,7 +1834,11 @@ function NewOrderTab({
             </div>
           </div>
 
-          <div className="border-t border-black/10 bg-white p-4">
+          <div
+            className={`${
+              mobileStep === "payment" ? "block" : "hidden"
+            } sticky bottom-0 border-t border-black/10 bg-white p-4 xl:static xl:block`}
+          >
             <div className="mb-3 flex items-center justify-between text-sm">
               <span className="text-black/50">
                 {hasSavedCard
@@ -1797,6 +1859,13 @@ function NewOrderTab({
               ) : null}
               Create & Charge
             </Button>
+            <button
+              type="button"
+              className="mt-2 h-10 w-full border border-black/15 text-xs font-semibold uppercase tracking-[0.1em] text-black xl:hidden"
+              onClick={() => setMobileStep("order")}
+            >
+              Back to order
+            </button>
             {checkoutResult ? (
               <Button
                 variant="outline"
