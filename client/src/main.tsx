@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import { canRedirectToLoginUrl, getLoginUrl } from "./const";
+import { apiBase } from "./lib/apiBase";
 import "./index.css";
 
 const queryClient = new QueryClient();
@@ -47,16 +48,6 @@ queryClient.getMutationCache().subscribe(event => {
     console.error("[API Mutation Error]", error);
   }
 });
-
-function apiBase(): string {
-  if (
-    typeof window !== "undefined" &&
-    window.location.hostname.toLowerCase() === "admin.bldg.chat"
-  ) {
-    return "";
-  }
-  return import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
-}
 
 // admin.bldg.chat uses the same-origin Vercel /api proxy so login cookies and
 // browser requests stay first-party. Other deployments may use VITE_API_URL.

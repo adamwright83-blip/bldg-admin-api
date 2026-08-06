@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { apiBase } from "@/lib/apiBase";
 
 type Props = {
   role?: "admin" | "driver";
@@ -17,8 +18,7 @@ export function LoginForm({ role = "admin", onSuccess }: Props) {
     setError(null);
     setLoading(true);
     try {
-      const apiBase = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
-      const res = await fetch(`${apiBase}/api/auth/login`, {
+      const res = await fetch(`${apiBase()}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
