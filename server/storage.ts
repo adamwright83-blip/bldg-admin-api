@@ -2,20 +2,91 @@
 // Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
 
 import { ENV } from "./_core/env";
+import { eq, sql } from "drizzle-orm";
+import { privateStorageObjects } from "../drizzle/schema";
+import { getDb } from "./db";
 
 type StorageConfig = { baseUrl: string; apiKey: string };
 
-function getStorageConfig(): StorageConfig {
+function getStorageConfig(): StorageConfig | null {
   const baseUrl = ENV.forgeApiUrl;
   const apiKey = ENV.forgeApiKey;
 
-  if (!baseUrl || !apiKey) {
-    throw new Error(
-      "Storage proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
-    );
+  if (!baseUrl || !apiKey) return null;
+  try {
+    const parsed = new URL(baseUrl);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+  } catch {
+    return null;
   }
 
   return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
+}
+
+let privateStorageReady: Promise<void> | null = null;
+
+async function ensurePrivateStorageTable(): Promise<void> {
+  if (privateStorageReady) return privateStorageReady;
+  privateStorageReady = (async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available for private storage");
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS private_storage_objects (
+        storageKey varchar(512) NOT NULL,
+        contentType varchar(191) NOT NULL,
+        data longblob NOT NULL,
+        createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        CONSTRAINT private_storage_objects_storageKey PRIMARY KEY (storageKey)
+      )
+    `));
+  })().catch(error => {
+    privateStorageReady = null;
+    throw error;
+  });
+  return privateStorageReady;
+}
+
+async function databaseStoragePut(
+  key: string,
+  data: Buffer | Uint8Array | string,
+  contentType: string
+): Promise<{ key: string; url: string }> {
+  await ensurePrivateStorageTable();
+  const db = await getDb();
+  if (!db) throw new Error("Database not available for private storage");
+  const bytes = typeof data === "string" ? Buffer.from(data) : Buffer.from(data);
+  await db
+    .insert(privateStorageObjects)
+    .values({ storageKey: key, contentType, data: bytes })
+    .onDuplicateKeyUpdate({ set: { contentType, data: bytes } });
+  return { key, url: `private-db://${encodeURIComponent(key)}` };
+}
+
+async function databaseStorageGet(key: string): Promise<{ key: string; url: string }> {
+  await ensurePrivateStorageTable();
+  const db = await getDb();
+  if (!db) throw new Error("Database not available for private storage");
+  const [object] = await db
+    .select()
+    .from(privateStorageObjects)
+    .where(eq(privateStorageObjects.storageKey, key))
+    .limit(1);
+  if (!object) throw new Error("Private storage object not found");
+  return {
+    key,
+    url: `data:${object.contentType};base64,${Buffer.from(object.data).toString("base64")}`,
+  };
+}
+
+async function databaseStorageDelete(key: string): Promise<{ key: string }> {
+  await ensurePrivateStorageTable();
+  const db = await getDb();
+  if (!db) throw new Error("Database not available for private storage");
+  await db
+    .delete(privateStorageObjects)
+    .where(eq(privateStorageObjects.storageKey, key));
+  return { key };
 }
 
 function buildUploadUrl(baseUrl: string, relKey: string): URL {
@@ -78,8 +149,10 @@ export async function storagePut(
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
-  const { baseUrl, apiKey } = getStorageConfig();
   const key = normalizeKey(relKey);
+  const config = getStorageConfig();
+  if (!config) return databaseStoragePut(key, data, contentType);
+  const { baseUrl, apiKey } = config;
   const uploadUrl = buildUploadUrl(baseUrl, key);
   const formData = toFormData(data, contentType, key.split("/").pop() ?? key);
   const response = await fetch(uploadUrl, {
@@ -101,8 +174,10 @@ export async function storagePut(
 export async function storageGet(
   relKey: string
 ): Promise<{ key: string; url: string }> {
-  const { baseUrl, apiKey } = getStorageConfig();
   const key = normalizeKey(relKey);
+  const config = getStorageConfig();
+  if (!config) return databaseStorageGet(key);
+  const { baseUrl, apiKey } = config;
   return {
     key,
     url: await buildDownloadUrl(baseUrl, key, apiKey),
@@ -115,9 +190,11 @@ export async function storageGet(
  * removes the authoritative database row unless object deletion succeeded.
  */
 export async function storageDelete(relKey: string): Promise<{ key: string }> {
-  const { baseUrl, apiKey } = getStorageConfig();
   const key = normalizeKey(relKey);
   if (!key) throw new Error("Storage deletion requires a non-empty object key");
+  const config = getStorageConfig();
+  if (!config) return databaseStorageDelete(key);
+  const { baseUrl, apiKey } = config;
   const response = await fetch(buildDeleteUrl(baseUrl, key), {
     method: "DELETE",
     headers: buildAuthHeaders(apiKey),

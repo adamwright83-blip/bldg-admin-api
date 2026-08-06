@@ -1,5 +1,6 @@
 import {
   boolean,
+  customType,
   decimal,
   index,
   int,
@@ -11,6 +12,12 @@ import {
   uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
+
+const longblob = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "longblob";
+  },
+});
 
 /**
  * Core user table backing auth flow.
@@ -32,6 +39,15 @@ export const users = mysqlTable("users", {
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+
+/** Durable private-object fallback for deployments without a valid storage proxy. */
+export const privateStorageObjects = mysqlTable("private_storage_objects", {
+  storageKey: varchar("storageKey", { length: 512 }).primaryKey(),
+  contentType: varchar("contentType", { length: 191 }).notNull(),
+  data: longblob("data").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
 
 /**
  * Pickup orders table — shared between customer-facing site and admin/driver views.
