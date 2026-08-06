@@ -11,6 +11,7 @@ import {
   LocateFixed,
   MapPin,
   Navigation,
+  PhoneCall,
   ShieldCheck,
   Sparkles,
   UserRound,
@@ -105,6 +106,16 @@ export default function CommercialSalesMission() {
     trpc.system.commercialMission.consumePhoneHandoff.useMutation();
   const irlStepMutation = trpc.system.commercialMission.advanceIrlStep.useMutation();
   const proofMutation = trpc.system.commercialMission.submitProof.useMutation();
+  const callAttempts = trpc.system.commercialMission.callAttempts.useQuery(
+    { missionId: validMissionId ? missionId : 1 },
+    { enabled: isAuthenticated && validMissionId, retry: false }
+  );
+  const callAttemptMutation =
+    trpc.system.commercialMission.logCallAttempt.useMutation();
+  const [callOutcome, setCallOutcome] = useState<
+    "no_answer" | "left_voicemail" | "spoke" | "visit_booked" | "not_a_fit" | "contact_unavailable"
+  >("no_answer");
+  const [callNotes, setCallNotes] = useState("");
   const [notes, setNotes] = useState("");
   const [decisionMakerStatus, setDecisionMakerStatus] = useState<
     "met" | "unavailable" | "not_recorded"
@@ -186,7 +197,8 @@ export default function CommercialSalesMission() {
     departMutation.isPending ||
     arriveMutation.isPending ||
     notesMutation.isPending ||
-    outcomeMutation.isPending;
+    outcomeMutation.isPending ||
+    callAttemptMutation.isPending;
   const stageIndex = mission
     ? ((
         {
@@ -388,8 +400,53 @@ export default function CommercialSalesMission() {
                   </span>
                 </article>
               </div>
+              <article className="mb-5 rounded-3xl border border-sky-300/25 bg-sky-950/60 p-5 text-white">
+                <div className="flex items-start gap-3">
+                  <PhoneCall className="mt-1 h-6 w-6 shrink-0 text-sky-300" />
+                  <div>
+                    <small className="font-black tracking-[.16em] text-sky-300">COLD-CALL CHECKPOINT</small>
+                    <h2 className="mt-1 text-2xl font-black">Call before you travel.</h2>
+                    <p className="mt-1 text-sm text-white/65">The app never dials automatically. Place the call yourself, then record only what actually happened.</p>
+                  </div>
+                </div>
+                {mission.account.decisionMaker.phone ? (
+                  <a className="mt-4 block min-h-14 rounded-2xl border border-sky-300/40 px-5 py-4 text-center font-black" href={`tel:${mission.account.decisionMaker.phone}`}>
+                    CALL {mission.account.decisionMaker.name ?? "PROPERTY CONTACT"}
+                  </a>
+                ) : (
+                  <p className="mt-4 rounded-2xl bg-white/10 p-4 text-sm font-bold">No verified phone number is attached. Research it separately, or log “contact unavailable.”</p>
+                )}
+                <label className="mt-4 block text-sm font-bold">Call outcome
+                  <select value={callOutcome} onChange={event => setCallOutcome(event.target.value as typeof callOutcome)} className="mt-2 w-full rounded-xl border border-white/15 bg-slate-950 px-4 py-3">
+                    <option value="no_answer">No answer</option>
+                    <option value="left_voicemail">Left voicemail</option>
+                    <option value="spoke">Spoke with contact</option>
+                    <option value="visit_booked">Visit booked</option>
+                    <option value="not_a_fit">Not a fit</option>
+                    <option value="contact_unavailable">Contact unavailable</option>
+                  </select>
+                </label>
+                <label className="mt-4 block text-sm font-bold">Call notes
+                  <textarea value={callNotes} onChange={event => setCallNotes(event.target.value)} rows={3} placeholder="Record what happened—never invent an answer." className="mt-2 w-full rounded-xl border border-white/15 bg-slate-950 px-4 py-3" />
+                </label>
+                <button type="button" disabled={callAttemptMutation.isPending || !callNotes.trim()} onClick={async () => {
+                  setActionError(null);
+                  try {
+                    await callAttemptMutation.mutateAsync({ missionId, requestId: requestId(), outcome: callOutcome, notes: callNotes });
+                    setCallNotes("");
+                    await callAttempts.refetch();
+                  } catch (error) {
+                    setActionError(error instanceof Error ? error.message : "The call attempt could not be saved.");
+                  }
+                }} className="mt-4 min-h-14 w-full rounded-2xl bg-sky-500 px-5 font-black disabled:opacity-40">
+                  {callAttemptMutation.isPending ? "SAVING CALL…" : "LOG CALL ATTEMPT"}
+                </button>
+                {callAttempts.data?.length ? (
+                  <p role="status" className="mt-3 text-sm font-bold text-emerald-300">{callAttempts.data.length} call attempt{callAttempts.data.length === 1 ? "" : "s"} saved · latest: {callAttempts.data.at(-1)!.outcome.replaceAll("_", " ")}</p>
+                ) : null}
+              </article>
               <ActionButton
-                disabled={busy}
+                disabled={busy || !callAttempts.data?.length}
                 onClick={() =>
                   void mutate(
                     () =>
@@ -404,6 +461,7 @@ export default function CommercialSalesMission() {
               >
                 Start mission preparation <ArrowRight />
               </ActionButton>
+              {!callAttempts.data?.length ? <p className="csm-privacy">Log the cold-call checkpoint before starting the in-person mission.</p> : null}
             </>
           ) : null}
 

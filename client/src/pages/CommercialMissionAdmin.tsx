@@ -29,12 +29,27 @@ export default function CommercialMissionAdmin() {
   const approveProposal = trpc.system.commercialProposal.approve.useMutation();
   const createIrlPlan = trpc.system.commercialMission.createLuxuryHotelIrlPlan.useMutation();
   const dispatchIrl = trpc.system.commercialMission.dispatchIrl.useMutation();
+  const fieldAssignees = trpc.system.commercialMission.fieldAssignees.useQuery(
+    undefined,
+    { enabled: isAuthenticated }
+  );
+  const activateForField =
+    trpc.system.commercialMission.activateForField.useMutation();
+  const [selectedAssignee, setSelectedAssignee] = useState("");
+  const [activationMessage, setActivationMessage] = useState<string | null>(null);
   const [printShop, setPrintShop] = useState({ name: "", address: "" });
   const [mintStop, setMintStop] = useState({ name: "", address: "" });
   useEffect(() => {
     if (selectedId === null && list.data?.[0]) setSelectedId(list.data[0].id);
   }, [list.data, selectedId]);
   const selected = list.data?.find(mission => mission.id === selectedId) ?? null;
+  useEffect(() => {
+    if (selected?.assignedTo) {
+      setSelectedAssignee(selected.assignedTo);
+      return;
+    }
+    if (fieldAssignees.data?.[0]) setSelectedAssignee(fieldAssignees.data[0].openId);
+  }, [fieldAssignees.data, selected?.assignedTo, selected?.id]);
   const timeline = trpc.system.commercialMission.timeline.useQuery(
     { missionId: selectedId ?? 0 },
     { enabled: isAuthenticated && selectedId !== null, retry: false },
@@ -143,6 +158,25 @@ export default function CommercialMissionAdmin() {
                     <div className="rounded-xl bg-emerald-400/10 px-4 py-3">
                       <small className="block text-[10px] font-bold uppercase tracking-wider text-emerald-300">Potential annual value</small>
                       <b className="text-xl text-emerald-200">{money(selected.opportunity.estimatedAnnualValueCents)}</b>
+                    </div>
+                    <div className="grid gap-2 rounded-xl border border-orange-400/25 bg-orange-400/5 p-3 text-left">
+                      <small className="font-bold uppercase tracking-wider text-orange-300">Field assignment</small>
+                      <select value={selectedAssignee} onChange={event => setSelectedAssignee(event.target.value)} className="rounded-lg border border-white/15 bg-slate-950 px-3 py-2 text-sm">
+                        <option value="">Select active driver</option>
+                        {fieldAssignees.data?.map(assignee => <option key={assignee.openId} value={assignee.openId}>{assignee.name} · {assignee.openId}</option>)}
+                      </select>
+                      {fieldAssignees.error ? <span className="text-xs text-red-300">{fieldAssignees.error.message}</span> : null}
+                      {["candidate", "selected", "game_ready"].includes(selected.status) ? <button type="button" disabled={!selectedAssignee || activateForField.isPending} onClick={async () => {
+                        setActivationMessage(null);
+                        try {
+                          const activated = await activateForField.mutateAsync({ missionId: selected.id, expectedVersion: selected.version, assignedTo: selectedAssignee, requestId: crypto.randomUUID() });
+                          setActivationMessage(`${activated.code} assigned and ${activated.status.replaceAll("_", " ")}.`);
+                          await list.refetch();
+                        } catch (error) {
+                          setActivationMessage(error instanceof Error ? error.message : "Could not activate mission");
+                        }
+                      }} className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-black text-white disabled:opacity-40">{activateForField.isPending ? "ACTIVATING…" : selected.status === "game_ready" ? "UPDATE ASSIGNEE" : "ASSIGN + UNLOCK GAME"}</button> : <span className="text-xs text-slate-400">Assigned to {selected.assignedTo ?? "nobody"}</span>}
+                      {activationMessage ? <span role="status" className="text-xs text-slate-300">{activationMessage}</span> : null}
                     </div>
                     <div className="grid gap-2 rounded-xl border border-white/10 bg-black/20 p-3 text-left">
                       <small className="font-bold uppercase tracking-wider text-slate-500">Collateral</small>

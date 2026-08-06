@@ -49,6 +49,15 @@ import { advanceCommercialMissionIrlStep, applyLuxuryHotelIrlPlan } from "./comm
 import { dispatchCommercialMission, listCommercialMissionDispatches, openCommercialMissionDispatch } from "./commercialMissionDispatchService";
 import { listCommercialMissionProofs, reviewCommercialMissionProof, submitCommercialMissionProof } from "./commercialMissionProofService";
 import { generateDayforgeMissionCoaching, getActiveDayforgeCoachingArtifact } from "../dayforgeCoaching/dayforgeCoachingRuntime";
+import {
+  COMMERCIAL_MISSION_CALL_OUTCOMES,
+  listCommercialMissionCallAttempts,
+  recordCommercialMissionCallAttempt,
+} from "./commercialMissionCallService";
+import {
+  activateCommercialMissionForField,
+  listCommercialMissionFieldAssignees,
+} from "./commercialMissionActivationService";
 
 function httpUrl(maxLength: number) {
   return z
@@ -173,6 +182,65 @@ function notFound(): never {
 }
 
 export const commercialMissionRouter = router({
+  fieldAssignees: dayforgeMissionOperatorProcedure.query(({ ctx }) =>
+    listCommercialMissionFieldAssignees(ctx.tenantId)
+  ),
+  activateForField: dayforgeMissionOperatorProcedure
+    .input(z.object({
+      missionId: z.number().int().positive(),
+      expectedVersion: z.number().int().positive(),
+      assignedTo: z.string().trim().min(1).max(128),
+      requestId: z.string().uuid(),
+    }))
+    .mutation(({ ctx, input }) =>
+      activateCommercialMissionForField({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      })
+    ),
+  callAttempts: dayforgeMissionFieldProcedure
+    .input(z.object({ missionId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission) return notFound();
+      assertDriverCanReadMission({
+        mission,
+        userId: ctx.user.openId,
+        isAdmin: ctx.dayforgeMembership.role !== "field",
+      });
+      return listCommercialMissionCallAttempts({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+    }),
+  logCallAttempt: dayforgeMissionFieldProcedure
+    .input(z.object({
+      missionId: z.number().int().positive(),
+      requestId: z.string().uuid(),
+      outcome: z.enum(COMMERCIAL_MISSION_CALL_OUTCOMES),
+      notes: z.string().trim().min(1).max(2_000),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission) return notFound();
+      assertDriverCanReadMission({
+        mission,
+        userId: ctx.user.openId,
+        isAdmin: ctx.dayforgeMembership.role !== "field",
+      });
+      return recordCommercialMissionCallAttempt({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      });
+    }),
   createLuxuryHotelIrlPlan: dayforgeMissionOperatorProcedure.input(z.object({
     missionId: z.number().int().positive(), requestId: z.string().uuid(),
     referenceImageUrl: httpUrl(2048).nullable().optional(), trainingVideoUrl: httpUrl(2048).nullable().optional(),
