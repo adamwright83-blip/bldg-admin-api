@@ -62,6 +62,49 @@ const [adminUser, driverUser] = await Promise.all([
 ]);
 if (!adminUser || !driverUser) throw new Error("Production sessions are not authenticated");
 
+if (process.env.COMMERCIAL_MISSION_E2E_INSPECT_CONFIG === "1") {
+  const [profile, tenant] = await Promise.all([
+    admin.system.commercialProposal.profile.query(),
+    admin.system.saas.me.query(),
+  ]);
+  console.log(JSON.stringify({ profile, tenantConfiguration: tenant.configuration }, null, 2));
+  process.exit(0);
+}
+
+if (process.env.COMMERCIAL_MISSION_E2E_CLEANUP === "1") {
+  const missions = await admin.system.commercialMission.list.query({ limit: 250 });
+  const synthetic = missions.filter(item =>
+    item.account.name.startsWith("CODEX PROPERTY MISSION E2E ")
+  );
+  const closed: Array<{ missionId: number; from: string; to: string }> = [];
+  for (const item of synthetic) {
+    let mission = item;
+    if (mission.status === "won" || mission.status === "lost") continue;
+    if (mission.status === "game_completed") {
+      mission = await admin.system.commercialMission.transition.mutate({
+        missionId: mission.id,
+        expectedVersion: mission.version,
+        toStatus: "phone_ready",
+        idempotencyKey: `production-cleanup-unlock:${mission.id}`,
+        metadata: { reason: "Synthetic production verification cleanup" },
+      });
+    }
+    const from = mission.status;
+    mission = await admin.system.commercialMission.transition.mutate({
+      missionId: mission.id,
+      expectedVersion: mission.version,
+      toStatus: "lost",
+      idempotencyKey: `production-cleanup-lost:${mission.id}`,
+      metadata: {
+        reason: "Synthetic production verification ended; no prospect was contacted.",
+      },
+    });
+    closed.push({ missionId: mission.id, from, to: mission.status });
+  }
+  console.log(JSON.stringify({ syntheticCount: synthetic.length, closed }, null, 2));
+  process.exit(0);
+}
+
 const runId = randomUUID();
 const mission = await admin.system.commercialMission.create.mutate({
   assignedTo: null,
@@ -224,8 +267,28 @@ for (;;) {
   });
 }
 
-const profile = await admin.system.commercialProposal.profile.query();
-if (!profile) throw new Error("Commercial proposal profile is not configured");
+const existingProfile = await admin.system.commercialProposal.profile.query();
+const profile = existingProfile ?? await admin.system.commercialProposal.saveProfile.mutate({
+  storeName: "Laundry Butler",
+  operatorName: "Adam Wright",
+  phone: "(323) 807-4661",
+  email: "support@laundrybutler.com",
+  website: "https://laundrybutler.com",
+  address: "Los Angeles, CA",
+  logoUrl: "https://files.manuscdn.com/user_upload_by_module/session_file/310419663029845795/WZKCbJMLcYxTxbBz.png",
+  commercialPricePerPoundCents: 225,
+  minimumOrderCents: null,
+  turnaroundLabel: "Turnaround confirmed for each account",
+  pickupScheduleLabel: "Scheduled pickup and delivery",
+  serviceAreaLabel: "Greater Los Angeles",
+  insuranceLabel: null,
+  services: [
+    "Commercial wash, dry, and fold",
+    "Scheduled pickup and delivery",
+    "Towels, mats, staff items, and approved tenant laundry",
+    "Account-level order history and consolidated billing",
+  ],
+});
 const proposal = await admin.system.commercialProposal.generate.mutate({
   missionId: mission.id,
   requestId: randomUUID(),
@@ -283,7 +346,7 @@ let pipeline = (await admin.system.commercialPipeline.list.query()).find(
 );
 if (!pipeline) throw new Error("Mission pipeline projection is missing");
 let detail = await admin.system.commercialPipeline.detail.query({ pipelineId: pipeline.id });
-let followUp = detail?.followUps.find(item => item.status === "pending");
+let followUp = detail?.followUps.find(item => item.status === "open");
 if (!followUp) {
   detail = await admin.system.commercialPipeline.scheduleFollowUp.mutate({
     pipelineId: pipeline.id,
@@ -291,7 +354,7 @@ if (!followUp) {
     note: "Synthetic verification follow-up",
     requestId: randomUUID(),
   });
-  followUp = detail.followUps.find(item => item.status === "pending");
+  followUp = detail.followUps.find(item => item.status === "open");
 }
 if (!followUp) throw new Error("Follow-up was not persisted");
 detail = await admin.system.commercialPipeline.completeFollowUp.mutate({
