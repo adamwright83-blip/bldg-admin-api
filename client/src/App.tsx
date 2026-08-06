@@ -323,6 +323,11 @@ function Router() {
           <DayforgeInvitePage />
         </Suspense>
       </Route>
+      <Route path="/dayforge-today">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeTodayPage />
+        </Suspense>
+      </Route>
       <Route path="/dayforge-settings">
         <Suspense fallback={<PublicLandingFallback />}>
           <DayforgeSettingsPage />

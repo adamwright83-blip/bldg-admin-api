@@ -23,7 +23,11 @@ function tomorrowMorning() {
   return local.toISOString().slice(0, 16);
 }
 
-export function WalkInCapture(props: { open: boolean; onClose: () => void }) {
+export function WalkInCapture(props: {
+  open: boolean;
+  onClose: () => void;
+  onSaved?: (result: { missionId: number; missionCode: string }) => void;
+}) {
   const mutation = trpc.system.commercialMission.logWalkIn.useMutation();
   const [followUpAt, setFollowUpAt] = useState(tomorrowMorning);
   if (!props.open) return null;
@@ -52,6 +56,10 @@ export function WalkInCapture(props: { open: boolean; onClose: () => void }) {
           quoteRequested: data.get("quoteRequested") === "on",
           pilotRequested: data.get("pilotRequested") === "on",
         });
+        if (props.onSaved) {
+          props.onSaved(result);
+          return;
+        }
         window.location.assign(`/commercial-missions?mission=${result.missionId}`);
       }}>
         <header className="mb-5 flex items-start justify-between"><div><p className="text-xs font-black tracking-[.2em] text-orange-400">UNDER 45 SECONDS</p><h2 className="text-2xl font-black">Log a walk-in</h2><p className="text-sm text-slate-400">Save the conversation. DayForge will remember the next move.</p></div><button type="button" aria-label="Close" onClick={props.onClose} className="rounded-xl border border-white/15 p-3"><X /></button></header>

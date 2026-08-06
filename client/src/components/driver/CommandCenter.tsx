@@ -52,6 +52,7 @@ interface Props {
   deliveryCount: number;
   onSelectOrder: (order: GameOrder) => void;
   onOrderCreated?: () => Promise<void> | void;
+  onLogWalkIn: () => void;
   isLoading?: boolean;
 }
 
@@ -1015,6 +1016,7 @@ function MobileCommandCenter({
   onSelectedDateChange,
   onSelectOrder,
   onOrderCreated,
+  onLogWalkIn,
   isLoading,
 }: Props) {
   const [quickOrderOpen, setQuickOrderOpen] = React.useState(false);
@@ -1033,7 +1035,7 @@ function MobileCommandCenter({
         </div>
       </header>
 
-      <main className="pb-[120px]">
+      <main className="pb-[132px]">
         <section className="border-b border-[#e3e8ee] bg-white px-4 py-4">
           <div className="flex items-center justify-between gap-3">
             <button
@@ -1072,10 +1074,12 @@ function MobileCommandCenter({
             Loading route…
           </div>
         ) : orders.length === 0 ? (
-          <div className="px-6 py-16 text-center">
-            <CheckCircle2 className="mx-auto h-10 w-10 text-[#8da095]" />
-            <p className="mt-4 text-[20px] font-extrabold">No stops scheduled</p>
-            <p className="mt-1 text-[16px] text-[#667085]">Your route is clear for this date.</p>
+          <div className="mx-4 mt-6 rounded-[18px] border border-[#dfe5eb] bg-white px-6 py-10 text-center shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+            <CheckCircle2 className="mx-auto h-11 w-11 text-[#6f8f7d]" />
+            <p className="mt-4 text-[22px] font-extrabold">No stops scheduled</p>
+            <p className="mx-auto mt-2 max-w-[290px] text-[16px] leading-relaxed text-[#667085]">
+              Your route is clear. Create a pickup or log an unscheduled visit below.
+            </p>
           </div>
         ) : (
           <div className="border-b border-[#e3e8ee] bg-white">
@@ -1114,14 +1118,25 @@ function MobileCommandCenter({
         )}
       </main>
 
-      <button
-        type="button"
-        onClick={() => setQuickOrderOpen(true)}
-        className="fixed bottom-[calc(env(safe-area-inset-bottom)+20px)] right-5 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-[#2468ed] text-white shadow-[0_10px_24px_rgba(36,104,237,0.32)] active:scale-95"
-        aria-label="Create new order"
-      >
-        <Plus className="h-8 w-8" strokeWidth={2.5} />
-      </button>
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#dce3ea] bg-white/98 px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
+        <div className="mx-auto flex w-full max-w-[520px] gap-3">
+          <button
+            type="button"
+            onClick={onLogWalkIn}
+            className="flex min-h-16 flex-1 items-center justify-center rounded-[14px] bg-orange-500 px-5 text-[16px] font-black text-white shadow-[0_8px_18px_rgba(249,115,22,0.24)] active:scale-[0.98]"
+          >
+            Log a walk-in
+          </button>
+          <button
+            type="button"
+            onClick={() => setQuickOrderOpen(true)}
+            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[14px] bg-[#2468ed] text-white shadow-[0_8px_18px_rgba(36,104,237,0.28)] active:scale-95"
+            aria-label="Create new order"
+          >
+            <Plus className="h-8 w-8" strokeWidth={2.5} />
+          </button>
+        </div>
+      </div>
 
       <QuickNewOrderSheet
         open={quickOrderOpen}
@@ -1141,6 +1156,7 @@ export default function CommandCenter({
   deliveryCount,
   onSelectOrder,
   onOrderCreated,
+  onLogWalkIn,
   isLoading,
 }: Props) {
   const leaderboard = useLeaderboardToggle();
@@ -1180,6 +1196,7 @@ export default function CommandCenter({
         deliveryCount={deliveryCount}
         onSelectOrder={handleSelect}
         onOrderCreated={onOrderCreated}
+        onLogWalkIn={onLogWalkIn}
         isLoading={isLoading}
       />
     <motion.div

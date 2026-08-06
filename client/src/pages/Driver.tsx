@@ -6,6 +6,7 @@ import { DriverPrepMechanic } from "@/components/driver/DriverPrepMechanic";
 import { ResidentFollowupAlert } from "@/components/admin/ResidentFollowupAlert";
 import { useState } from "react";
 import { toast } from "sonner";
+import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
 
 function getLocalYmd(date = new Date()): string {
   return [
@@ -19,6 +20,7 @@ export default function Driver() {
   const { loading: authLoading, isAuthenticated } = useAuth();
   const utils = trpc.useUtils();
   const [selectedDate, setSelectedDate] = useState(() => getLocalYmd());
+  const [walkInOpen, setWalkInOpen] = useState(false);
 
   const pickupQuery = trpc.admin.listByDate.useQuery({
     date: selectedDate,
@@ -83,7 +85,6 @@ export default function Driver() {
 
   return (
     <>
-      <a href="/dayforge-today?walkIn=1" className="fixed bottom-5 right-5 z-50 rounded-2xl bg-orange-500 px-5 py-4 text-sm font-black text-white shadow-2xl">LOG A WALK-IN</a>
       {/* Drop-everything resident message alarm — flashing red, top of the driver screen. */}
       <ResidentFollowupAlert />
       {activeDispatch ? <button type="button" onClick={async () => {
@@ -106,6 +107,15 @@ export default function Driver() {
         }
         onOrderCreated={handleOrderCreated}
         onResolveOrder={handleResolveOrder}
+        onLogWalkIn={() => setWalkInOpen(true)}
+      />
+      <WalkInCapture
+        open={walkInOpen}
+        onClose={() => setWalkInOpen(false)}
+        onSaved={result => {
+          setWalkInOpen(false);
+          toast.success(`Walk-in ${result.missionCode} saved. Follow-up scheduled.`);
+        }}
       />
     </>
   );

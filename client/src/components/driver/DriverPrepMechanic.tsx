@@ -48,6 +48,7 @@ type Props = {
   onSelectedDateChange: (date: string) => void;
   isLoading?: boolean;
   onOrderCreated?: () => Promise<void> | void;
+  onLogWalkIn: () => void;
   onResolveOrder: (
     orderId: number,
     nextStatus: "collected" | "delivered"
@@ -194,6 +195,7 @@ export function DriverPrepMechanic({
   onSelectedDateChange,
   isLoading,
   onOrderCreated,
+  onLogWalkIn,
   onResolveOrder,
 }: Props) {
   const [state, dispatch] = useReducer(
@@ -437,6 +439,7 @@ export function DriverPrepMechanic({
         isLoading: Boolean(isLoading),
         handleSelectOrder,
         onOrderCreated,
+        onLogWalkIn,
         handleBackToCommand,
         handleStartVerification,
         handleSkipGamesToCommand,
@@ -492,6 +495,7 @@ type RenderArgs = {
   isLoading: boolean;
   handleSelectOrder: (order: GameOrder) => void;
   onOrderCreated?: () => Promise<void> | void;
+  onLogWalkIn: () => void;
   handleBackToCommand: () => void;
   handleStartVerification: () => void;
   handleSkipGamesToCommand: () => void;
@@ -520,6 +524,7 @@ function renderPhase(phase: DriverPrepPhase, args: RenderArgs) {
           deliveryCount={args.deliveryCount}
           onSelectOrder={args.handleSelectOrder}
           onOrderCreated={args.onOrderCreated}
+          onLogWalkIn={args.onLogWalkIn}
           isLoading={args.isLoading}
         />
       );
@@ -535,6 +540,7 @@ function renderPhase(phase: DriverPrepPhase, args: RenderArgs) {
             deliveryCount={args.deliveryCount}
             onSelectOrder={args.handleSelectOrder}
             onOrderCreated={args.onOrderCreated}
+            onLogWalkIn={args.onLogWalkIn}
             isLoading={args.isLoading}
           />
         );
