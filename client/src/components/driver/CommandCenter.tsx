@@ -1177,34 +1177,37 @@ function MobileCommandCenter({
       </main>
 
       <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#d3dce5] bg-white/98 px-[clamp(16px,3vw,34px)] pb-[calc(env(safe-area-inset-bottom)+clamp(12px,2vw,22px))] pt-[clamp(12px,2vw,22px)] shadow-[0_-10px_30px_rgba(15,23,42,0.10)]">
-        <div className="mx-auto grid w-full grid-cols-2 gap-[clamp(10px,1.8vw,18px)]">
+        <div
+          className="mx-auto grid w-full grid-cols-2 gap-[clamp(10px,1.8vw,18px)]"
+          aria-label="Driver actions"
+        >
           <button
             type="button"
             onClick={() => setBuildMissionOpen(true)}
-            className="flex min-h-[clamp(68px,9vw,92px)] items-center justify-center gap-3 rounded-[16px] bg-violet-700 px-4 text-[clamp(17px,2.3vw,24px)] font-black text-white shadow-[0_8px_20px_rgba(109,40,217,0.28)] active:scale-[0.98]"
+            className="flex min-h-[clamp(78px,10vw,104px)] items-center justify-center gap-3 rounded-[18px] bg-violet-700 px-4 text-center text-[clamp(16px,2.3vw,24px)] font-black leading-tight text-white shadow-[0_8px_20px_rgba(109,40,217,0.28)] active:scale-[0.98]"
           >
-            <Building2 className="h-[clamp(22px,3vw,30px)] w-[clamp(22px,3vw,30px)]" /> Build mission
+            <Building2 className="h-[clamp(25px,3.2vw,32px)] w-[clamp(25px,3.2vw,32px)] shrink-0" strokeWidth={2.5} /> Build mission
           </button>
           <button
             type="button"
             onClick={() => setQuickOrderOpen(true)}
-            className="flex min-h-[clamp(68px,9vw,92px)] items-center justify-center gap-3 rounded-[16px] bg-[#2468ed] px-4 text-[clamp(17px,2.3vw,24px)] font-black text-white shadow-[0_8px_20px_rgba(36,104,237,0.28)] active:scale-[0.98]"
+            className="flex min-h-[clamp(78px,10vw,104px)] items-center justify-center gap-3 rounded-[18px] bg-[#2468ed] px-4 text-center text-[clamp(16px,2.3vw,24px)] font-black leading-tight text-white shadow-[0_8px_20px_rgba(36,104,237,0.28)] active:scale-[0.98]"
           >
-            <Plus className="h-[clamp(24px,3.2vw,32px)] w-[clamp(24px,3.2vw,32px)]" strokeWidth={2.5} /> New order
+            <Plus className="h-[clamp(25px,3.2vw,32px)] w-[clamp(25px,3.2vw,32px)] shrink-0" strokeWidth={2.5} /> New order
           </button>
           <button
             type="button"
             onClick={onLogWalkIn}
-            className="flex min-h-[clamp(52px,7vw,70px)] items-center justify-center rounded-[14px] border-2 border-orange-300 bg-orange-50 px-4 text-center text-[clamp(14px,1.8vw,19px)] font-black leading-tight text-orange-900 active:bg-orange-100"
+            className="flex min-h-[clamp(78px,10vw,104px)] items-center justify-center gap-3 rounded-[18px] bg-orange-600 px-4 text-center text-[clamp(16px,2.3vw,24px)] font-black leading-tight text-white shadow-[0_8px_20px_rgba(234,88,12,0.26)] active:scale-[0.98] active:bg-orange-700"
           >
-            Log a walk-in
+            <MapPin className="h-[clamp(25px,3.2vw,32px)] w-[clamp(25px,3.2vw,32px)] shrink-0" strokeWidth={2.5} /> Log a walk-in
           </button>
           <button
             type="button"
             onClick={() => setJournalOpen(true)}
-            className="flex min-h-[clamp(52px,7vw,70px)] items-center justify-center gap-2 rounded-[14px] border-2 border-fuchsia-300 bg-fuchsia-50 px-4 text-[clamp(14px,1.8vw,19px)] font-black text-fuchsia-900 active:bg-fuchsia-100"
+            className="flex min-h-[clamp(78px,10vw,104px)] items-center justify-center gap-3 rounded-[18px] bg-fuchsia-700 px-4 text-center text-[clamp(16px,2.3vw,24px)] font-black leading-tight text-white shadow-[0_8px_20px_rgba(162,28,175,0.26)] active:scale-[0.98] active:bg-fuchsia-800"
           >
-            <Mic className="h-5 w-5" /> Unload the day
+            <Mic className="h-[clamp(25px,3.2vw,32px)] w-[clamp(25px,3.2vw,32px)] shrink-0" strokeWidth={2.5} /> Unload the day
           </button>
         </div>
       </div>
