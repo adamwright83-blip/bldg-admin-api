@@ -23,6 +23,7 @@ import {
   CheckCircle2,
   Loader2,
   Mic,
+  PhoneCall,
   ReceiptText,
   Scissors,
   Search,
@@ -34,11 +35,13 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { trpc } from "@/lib/trpc";
 import { centsToDollars } from "@shared/pricing";
 import type { GameOrder, GameStateSnapshot } from "./driverGameTypes";
+import type { CommercialMission } from "@shared/commercialMission";
 import { sounds } from "./driverSounds";
 import { haptics } from "./driverHaptics";
 import TerritoryLeaderboard from "./TerritoryLeaderboard";
 import { QuickNewOrderSheet } from "./QuickNewOrderSheet";
 import { compressImageForMissionPreview } from "./driverMissionStorage";
+import { BuildMissionSheet } from "./BuildMissionSheet";
 
 const HERO_CITYSCAPE =
   "https://d2xsxph8kpxj0f.cloudfront.net/310519663281332025/bVTWnxw2cr9EUVzVBCF5PW/hero-cityscape-ibzWyN4yDNboMUDQd8P4Lh.webp";
@@ -50,6 +53,7 @@ interface Props {
   onSelectedDateChange: (date: string) => void;
   pickupCount: number;
   deliveryCount: number;
+  salesMissions: CommercialMission[];
   onSelectOrder: (order: GameOrder) => void;
   onOrderCreated?: () => Promise<void> | void;
   onLogWalkIn: () => void;
@@ -1012,6 +1016,7 @@ function DriverReceiptDock({
 
 function MobileCommandCenter({
   orders,
+  salesMissions,
   selectedDate,
   onSelectedDateChange,
   onSelectOrder,
@@ -1020,6 +1025,9 @@ function MobileCommandCenter({
   isLoading,
 }: Props) {
   const [quickOrderOpen, setQuickOrderOpen] = React.useState(false);
+  const [buildMissionOpen, setBuildMissionOpen] = React.useState(false);
+  const totalStops = orders.length + salesMissions.length;
+  const searchNear = orders[0]?.address || "Los Angeles, CA";
 
   return (
     <div className="driver-mobile-command min-h-[100svh] bg-[#f8fafc] text-[#111827]">
@@ -1030,12 +1038,12 @@ function MobileCommandCenter({
           </p>
           <h1 className="mt-1 text-[25px] font-extrabold tracking-[-0.02em]">Today&apos;s Route</h1>
           <p className="mt-1 text-[15px] font-medium text-[#667085]">
-            {orders.length} {orders.length === 1 ? "stop" : "stops"}
+            {totalStops} {totalStops === 1 ? "stop" : "stops"}
           </p>
         </div>
       </header>
 
-      <main className="pb-[132px]">
+      <main className="pb-[184px]">
         <section className="border-b border-[#e3e8ee] bg-white px-4 py-4">
           <div className="flex items-center justify-between gap-3">
             <button
@@ -1073,7 +1081,7 @@ function MobileCommandCenter({
           <div className="p-10 text-center text-[16px] font-semibold text-[#667085]">
             Loading route…
           </div>
-        ) : orders.length === 0 ? (
+        ) : totalStops === 0 ? (
           <div className="mx-4 mt-6 rounded-[18px] border border-[#dfe5eb] bg-white px-6 py-10 text-center shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
             <CheckCircle2 className="mx-auto h-11 w-11 text-[#6f8f7d]" />
             <p className="mt-4 text-[22px] font-extrabold">No stops scheduled</p>
@@ -1116,24 +1124,75 @@ function MobileCommandCenter({
             ))}
           </div>
         )}
+
+        {salesMissions.length ? (
+          <section className="border-b border-violet-200 bg-violet-50">
+            <div className="flex items-center justify-between px-4 py-3">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[.18em] text-violet-700">Sales missions</p>
+                <p className="mt-0.5 text-[14px] font-semibold text-violet-950/60">Different route. Same credit.</p>
+              </div>
+              <span className="rounded-full bg-violet-700 px-3 py-1 text-[12px] font-black text-white">{salesMissions.length}</span>
+            </div>
+            {salesMissions.map(mission => {
+              const builder = mission.opportunity.evidence?.find(item => item.source === "driver_mission_builder");
+              const coldCall = builder?.missionType === "cold_call";
+              const Icon = coldCall ? PhoneCall : Building2;
+              const href = ["game_ready", "game_active"].includes(mission.status)
+                ? `/boreslay-rally?missionId=${mission.id}`
+                : `/driver/sales-mission/${mission.id}`;
+              return (
+                <a
+                  key={mission.id}
+                  href={href}
+                  className="flex min-h-[104px] items-start gap-3 border-t border-violet-200 bg-white px-4 py-4 text-left active:bg-violet-50"
+                >
+                  <span className="flex h-13 w-13 shrink-0 items-center justify-center rounded-full bg-violet-700 text-white shadow-[0_7px_18px_rgba(109,40,217,.24)]">
+                    <Icon className="h-6 w-6" strokeWidth={2.5} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="rounded-full bg-violet-100 px-2 py-1 text-[10px] font-black uppercase tracking-[.12em] text-violet-800">
+                        {coldCall ? "Cold call" : "In person"}
+                      </span>
+                      <span className="text-[12px] font-bold text-violet-700">{mission.code}</span>
+                    </span>
+                    <strong className="mt-1.5 block text-[18px] font-extrabold leading-tight text-[#111827]">{mission.account.name}</strong>
+                    <span className="mt-1 block truncate text-[15px] text-[#667085]">{mission.account.address}</span>
+                    <span className="mt-1 block text-[12px] font-black uppercase tracking-[.1em] text-violet-700">
+                      {["game_ready", "game_active"].includes(mission.status) ? "Play to unlock" : "Mission ready"}
+                    </span>
+                  </span>
+                  <ChevronRight className="mt-8 h-6 w-6 shrink-0 text-violet-500" />
+                </a>
+              );
+            })}
+          </section>
+        ) : null}
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#dce3ea] bg-white/98 px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
-        <div className="mx-auto flex w-full max-w-[520px] gap-3">
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#dce3ea] bg-white/98 px-4 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-2.5 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
+        <div className="mx-auto grid w-full max-w-[520px] grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={onLogWalkIn}
-            className="flex min-h-16 flex-1 items-center justify-center rounded-[14px] bg-orange-500 px-5 text-[16px] font-black text-white shadow-[0_8px_18px_rgba(249,115,22,0.24)] active:scale-[0.98]"
+            onClick={() => setBuildMissionOpen(true)}
+            className="flex min-h-16 items-center justify-center gap-2 rounded-[14px] bg-violet-700 px-4 text-[16px] font-black text-white shadow-[0_8px_18px_rgba(109,40,217,0.25)] active:scale-[0.98]"
           >
-            Log a walk-in
+            <Building2 className="h-5 w-5" /> Build mission
           </button>
           <button
             type="button"
             onClick={() => setQuickOrderOpen(true)}
-            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[14px] bg-[#2468ed] text-white shadow-[0_8px_18px_rgba(36,104,237,0.28)] active:scale-95"
-            aria-label="Create new order"
+            className="flex min-h-16 items-center justify-center gap-2 rounded-[14px] bg-[#2468ed] px-4 text-[16px] font-black text-white shadow-[0_8px_18px_rgba(36,104,237,0.28)] active:scale-[0.98]"
           >
-            <Plus className="h-8 w-8" strokeWidth={2.5} />
+            <Plus className="h-6 w-6" strokeWidth={2.5} /> New order
+          </button>
+          <button
+            type="button"
+            onClick={onLogWalkIn}
+            className="col-span-2 flex min-h-11 items-center justify-center rounded-[12px] border border-orange-300 bg-orange-50 px-4 text-[14px] font-black text-orange-800 active:bg-orange-100"
+          >
+            Already stopped somewhere? Log a walk-in
           </button>
         </div>
       </div>
@@ -1142,6 +1201,11 @@ function MobileCommandCenter({
         open={quickOrderOpen}
         onOpenChange={setQuickOrderOpen}
         onOrderCreated={onOrderCreated}
+      />
+      <BuildMissionSheet
+        open={buildMissionOpen}
+        onOpenChange={setBuildMissionOpen}
+        searchNear={searchNear}
       />
     </div>
   );
@@ -1154,6 +1218,7 @@ export default function CommandCenter({
   onSelectedDateChange,
   pickupCount,
   deliveryCount,
+  salesMissions,
   onSelectOrder,
   onOrderCreated,
   onLogWalkIn,
@@ -1194,6 +1259,7 @@ export default function CommandCenter({
         onSelectedDateChange={onSelectedDateChange}
         pickupCount={pickupCount}
         deliveryCount={deliveryCount}
+        salesMissions={salesMissions}
         onSelectOrder={handleSelect}
         onOrderCreated={onOrderCreated}
         onLogWalkIn={onLogWalkIn}

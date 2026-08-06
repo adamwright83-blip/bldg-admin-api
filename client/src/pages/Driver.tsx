@@ -34,6 +34,10 @@ export default function Driver() {
   });
   const updateStatus = trpc.admin.updateStatus.useMutation();
   const dispatches = trpc.system.commercialMission.myDispatches.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 15_000 });
+  const builtMissions = trpc.system.commercialMission.myBuiltMissions.useQuery(undefined, {
+    enabled: isAuthenticated,
+    refetchInterval: 15_000,
+  });
   const openDispatch = trpc.system.commercialMission.openDispatch.useMutation();
   const activeDispatch = dispatches.data?.find(item => item.channel === "in_app" && ["queued", "sent"].includes(item.status));
 
@@ -98,6 +102,7 @@ export default function Driver() {
       <DriverPrepMechanic
         pickups={pickupQuery.data}
         deliveries={deliveryQuery.data?.filter((order) => order.paid)}
+        salesMissions={builtMissions.data}
         selectedDate={selectedDate}
         onSelectedDateChange={setSelectedDate}
         isLoading={

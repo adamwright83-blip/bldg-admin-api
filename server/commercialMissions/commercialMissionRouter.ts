@@ -58,6 +58,12 @@ import {
   activateCommercialMissionForField,
   listCommercialMissionFieldAssignees,
 } from "./commercialMissionActivationService";
+import {
+  buildDriverMissions,
+  DRIVER_MISSION_TYPES,
+  DRIVER_MISSION_VENUES,
+  listDriverBuiltMissions,
+} from "./commercialMissionBuilderService";
 
 function httpUrl(maxLength: number) {
   return z
@@ -182,6 +188,24 @@ function notFound(): never {
 }
 
 export const commercialMissionRouter = router({
+  myBuiltMissions: dayforgeMissionFieldProcedure.query(({ ctx }) =>
+    listDriverBuiltMissions({ tenantId: ctx.tenantId, driverId: ctx.user.openId })
+  ),
+  buildForDriver: dayforgeMissionFieldProcedure
+    .input(z.object({
+      missionType: z.enum(DRIVER_MISSION_TYPES),
+      venueType: z.enum(DRIVER_MISSION_VENUES),
+      searchNear: z.string().trim().min(5).max(512),
+      requestId: z.string().uuid(),
+      count: z.number().int().min(1).max(5).default(3),
+    }))
+    .mutation(({ ctx, input }) =>
+      buildDriverMissions({
+        ...input,
+        tenantId: ctx.tenantId,
+        driverId: ctx.user.openId,
+      })
+    ),
   fieldAssignees: dayforgeMissionOperatorProcedure.query(({ ctx }) =>
     listCommercialMissionFieldAssignees(ctx.tenantId)
   ),

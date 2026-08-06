@@ -33,10 +33,11 @@ describe("commercial mission call and activation contract", () => {
     expect(routerSource).toContain("assertDriverCanReadMission");
   });
 
-  it("never auto-dials and gates field preparation on a saved attempt", () => {
+  it("never auto-dials and gates call missions on a saved attempt", () => {
     expect(fieldSource).toContain("The app never dials automatically.");
     expect(fieldSource).toContain("href={`tel:${mission.account.decisionMaker.phone}`}");
-    expect(fieldSource).toContain("disabled={busy || !callAttempts.data?.length}");
+    expect(fieldSource).toContain("disabled={busy || (callRequired && !callAttempts.data?.length)}");
+    expect(fieldSource).toContain('builderMetadata?.missionType !== "in_person"');
   });
 
   it("activates only an active field user and advances to game ready", () => {

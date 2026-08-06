@@ -107,10 +107,11 @@ export async function discoverLaundryTerritory(input: {
   addressOrBusiness: string;
   provider: TerritoryBusinessProvider;
   operator: LaundryTerritoryOperatorContext;
+  categories?: string[];
   limit?: number;
 }): Promise<TerritoryDiscoveryResult> {
   const center = await input.provider.geocode(input.addressOrBusiness);
-  const candidates = await input.provider.searchBusinesses({ center, radiusMiles: input.operator.serviceRadiusMiles, categories: TERRITORY_SEARCH_CATEGORIES, limit: Math.max(20, input.limit ?? 20) });
+  const candidates = await input.provider.searchBusinesses({ center, radiusMiles: input.operator.serviceRadiusMiles, categories: input.categories?.length ? input.categories : TERRITORY_SEARCH_CATEGORIES, limit: Math.max(20, input.limit ?? 20) });
   const deduped = dedupeTerritoryCandidates(candidates);
   const opportunities = deduped.map(candidate => {
     const type = prospectType(candidate.categories);

@@ -131,6 +131,10 @@ export default function CommercialSalesMission() {
 
   const state = stateQuery.data;
   const mission = state?.mission;
+  const builderMetadata = mission?.opportunity.evidence?.find(
+    item => item.source === "driver_mission_builder"
+  );
+  const callRequired = builderMetadata?.missionType !== "in_person";
   const activeIrlStep = mission?.steps.find(step => ["ready", "active", "awaiting_review", "rejected"].includes(step.status) && step.type !== "generic");
   const coaching = trpc.system.commercialMission.coaching.useQuery(
     { missionId: validMissionId ? missionId : 1, stepId: activeIrlStep?.type === "sales_training" ? activeIrlStep.id ?? null : null },
@@ -400,7 +404,7 @@ export default function CommercialSalesMission() {
                   </span>
                 </article>
               </div>
-              <article className="mb-5 rounded-3xl border border-sky-300/25 bg-sky-950/60 p-5 text-white">
+              {callRequired ? <article className="mb-5 rounded-3xl border border-sky-300/25 bg-sky-950/60 p-5 text-white">
                 <div className="flex items-start gap-3">
                   <PhoneCall className="mt-1 h-6 w-6 shrink-0 text-sky-300" />
                   <div>
@@ -444,9 +448,15 @@ export default function CommercialSalesMission() {
                 {callAttempts.data?.length ? (
                   <p role="status" className="mt-3 text-sm font-bold text-emerald-300">{callAttempts.data.length} call attempt{callAttempts.data.length === 1 ? "" : "s"} saved · latest: {callAttempts.data.at(-1)!.outcome.replaceAll("_", " ")}</p>
                 ) : null}
-              </article>
+              </article> : (
+                <article className="mb-5 rounded-3xl border border-violet-300/25 bg-violet-950/60 p-5 text-white">
+                  <small className="font-black tracking-[.16em] text-violet-300">IN-PERSON SALES STOP</small>
+                  <h2 className="mt-1 text-2xl font-black">Prepare, then visit when parked.</h2>
+                  <p className="mt-2 text-sm text-white/65">This mission was intentionally built for an in-person introduction, so no cold-call checkpoint is required.</p>
+                </article>
+              )}
               <ActionButton
-                disabled={busy || !callAttempts.data?.length}
+                disabled={busy || (callRequired && !callAttempts.data?.length)}
                 onClick={() =>
                   void mutate(
                     () =>
@@ -461,7 +471,7 @@ export default function CommercialSalesMission() {
               >
                 Start mission preparation <ArrowRight />
               </ActionButton>
-              {!callAttempts.data?.length ? <p className="csm-privacy">Log the cold-call checkpoint before starting the in-person mission.</p> : null}
+              {callRequired && !callAttempts.data?.length ? <p className="csm-privacy">Log the cold-call checkpoint before starting mission preparation.</p> : null}
             </>
           ) : null}
 

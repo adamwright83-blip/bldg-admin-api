@@ -8,6 +8,7 @@ import {
   Home,
 } from "lucide-react";
 import type { Order } from "@shared/types";
+import type { CommercialMission } from "@shared/commercialMission";
 import { matchBuilding } from "@shared/buildings";
 import {
   driverPrepReducer,
@@ -44,6 +45,7 @@ import MissionDebrief from "./MissionDebrief";
 type Props = {
   pickups?: Order[];
   deliveries?: Order[];
+  salesMissions?: CommercialMission[];
   selectedDate: string;
   onSelectedDateChange: (date: string) => void;
   isLoading?: boolean;
@@ -191,6 +193,7 @@ function pickCurrentOrder(
 export function DriverPrepMechanic({
   pickups,
   deliveries,
+  salesMissions,
   selectedDate,
   onSelectedDateChange,
   isLoading,
@@ -433,6 +436,7 @@ export function DriverPrepMechanic({
         onSelectedDateChange,
         pickupCount: pickups?.length ?? 0,
         deliveryCount: deliveries?.length ?? 0,
+        salesMissions: salesMissions ?? [],
         selectedOrder,
         missionTarget,
         scansCompleted,
@@ -489,6 +493,7 @@ type RenderArgs = {
   onSelectedDateChange: (date: string) => void;
   pickupCount: number;
   deliveryCount: number;
+  salesMissions: CommercialMission[];
   selectedOrder: GameOrder | null;
   missionTarget: GameMissionTarget;
   scansCompleted: number;
@@ -522,6 +527,7 @@ function renderPhase(phase: DriverPrepPhase, args: RenderArgs) {
           onSelectedDateChange={args.onSelectedDateChange}
           pickupCount={args.pickupCount}
           deliveryCount={args.deliveryCount}
+          salesMissions={args.salesMissions}
           onSelectOrder={args.handleSelectOrder}
           onOrderCreated={args.onOrderCreated}
           onLogWalkIn={args.onLogWalkIn}
@@ -538,6 +544,7 @@ function renderPhase(phase: DriverPrepPhase, args: RenderArgs) {
             onSelectedDateChange={args.onSelectedDateChange}
             pickupCount={args.pickupCount}
             deliveryCount={args.deliveryCount}
+            salesMissions={args.salesMissions}
             onSelectOrder={args.handleSelectOrder}
             onOrderCreated={args.onOrderCreated}
             onLogWalkIn={args.onLogWalkIn}
