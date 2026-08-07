@@ -182,7 +182,11 @@ export const voiceWalkInRouter = router({
 
   calendarComplete: dayforgeMissionFieldProcedure
     .input(z.object({ code: z.string().min(1).max(4096), state: z.string().min(1).max(8192) }))
-    .mutation(({ input }) => completeGoogleCalendarConnection(input)),
+    .mutation(({ ctx, input }) => completeGoogleCalendarConnection({
+      ...input,
+      expectedTenantId: ctx.tenantId,
+      expectedUserId: ctx.user.openId,
+    })),
 
   parse: dayforgeMissionFieldProcedure
     .input(z.object({
