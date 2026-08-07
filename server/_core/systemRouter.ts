@@ -2,6 +2,7 @@ import { z } from "zod";
 import { notifyOwner } from "./notification";
 import { adminProcedure, publicProcedure, router } from "./trpc";
 import { commercialMissionRouter } from "../commercialMissions/commercialMissionRouter";
+import { voiceWalkInRouter } from "../commercialMissions/voiceWalkInRouter";
 import { territoryRouter } from "../territory/territoryRouter";
 import { publicTerritoryRouter } from "../territory/publicPreviewRouter";
 import { commercialProposalRouter } from "../commercialProposals/commercialProposalRouter";
@@ -15,6 +16,7 @@ import { dayforgeProofRouter } from "../dayforgeProof/dayforgeProofRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
+  voiceWalkIn: voiceWalkInRouter,
   commercialProposal: commercialProposalRouter,
   churnRadar: churnRadarRouter,
   commercialPipeline: commercialPipelineRouter,
