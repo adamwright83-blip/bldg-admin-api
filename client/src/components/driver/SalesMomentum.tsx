@@ -5,22 +5,27 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
 export function SalesMomentumMeter() {
-  const meter = trpc.system.commercialMission.mySalesMeter.useQuery(undefined, { refetchInterval: 30_000 });
+  const meter = trpc.system.adaptiveSalesMeter.myMeter.useQuery(undefined, { refetchInterval: 15_000 });
   const progress = Math.round((meter.data?.progress ?? 0) * 100);
   return (
     <section aria-label="30-day sales momentum" className="border-b border-violet-200 bg-gradient-to-r from-slate-950 via-violet-950 to-fuchsia-950 px-[clamp(16px,3vw,34px)] py-[clamp(14px,2.3vw,22px)] text-white">
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <span className="text-[11px] font-black uppercase tracking-[.18em] text-fuchsia-200">{meter.data?.levelLabel ?? "LEVEL 1 · BUILD THE MUSCLE"}</span>
+        <span className="text-[11px] font-bold text-white/45">{meter.data?.points ?? 0}/{meter.data?.maxPoints ?? 120}</span>
+      </div>
       <div className="mb-2 flex items-end justify-between gap-3">
         <strong className="text-[clamp(14px,1.9vw,19px)] font-black uppercase tracking-[.16em]">Sucker</strong>
-        <span className="text-[clamp(12px,1.7vw,17px)] font-bold text-white/60">{meter.data?.points ?? 0} momentum · 30 days</span>
+        <span className="text-[clamp(12px,1.7vw,17px)] font-bold text-white/60">{progress}% · 30 days</span>
         <strong className="text-[clamp(14px,1.9vw,19px)] font-black uppercase tracking-[.16em] text-fuchsia-200">Hustler</strong>
       </div>
       <div className="relative h-5 rounded-full border border-white/20 bg-white/10 p-1 shadow-inner">
         <div className="h-full rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-400 to-amber-300 transition-[width] duration-700" style={{ width: `${Math.max(2, progress)}%` }} />
         {[0, 25, 50, 75, 100].map(stage => <span key={stage} aria-hidden="true" className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/70 bg-slate-950" style={{ left: `${stage}%` }} />)}
-        <motion.span aria-hidden="true" className="absolute top-1/2 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-fuchsia-500 shadow-[0_0_22px_rgba(232,121,249,.85)]" animate={{ left: `${progress}%` }}>
+        <motion.span aria-hidden="true" className="absolute top-1/2 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-fuchsia-500 shadow-[0_0_22px_rgba(232,121,249,.85)]" animate={{ left: `${progress}%` }} transition={{ type: "spring", stiffness: 120, damping: 18 }}>
           <Diamond className="h-3.5 w-3.5 fill-white" />
         </motion.span>
       </div>
+      {meter.data?.nextLevelHint ? <p className="mt-2 text-[11px] font-semibold leading-snug text-white/45">{meter.data.nextLevelHint}</p> : null}
     </section>
   );
 }
@@ -82,7 +87,7 @@ export function SalesJournalSheet({ open, onOpenChange }: { open: boolean; onOpe
       const journalDate = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
       const result = await save.mutateAsync({ journalDate, audioDataUrl: audioDataUrl ?? undefined, transcript: transcript.trim() || undefined });
       await Promise.all([
-        utils.system.commercialMission.mySalesMeter.invalidate(),
+        utils.system.adaptiveSalesMeter.myMeter.invalidate(),
         utils.system.commercialMission.mySalesJournals.invalidate(),
       ]);
       toast.success(result.points ? `Journal absorbed · +${result.points} momentum` : "Journal absorbed into future missions");
