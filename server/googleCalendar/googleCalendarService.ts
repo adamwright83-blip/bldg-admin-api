@@ -177,7 +177,12 @@ export async function createGoogleCalendarConnectUrl(input: { tenantId: string; 
   };
 }
 
-export async function completeGoogleCalendarConnection(input: { code: string; state: string }) {
+export async function completeGoogleCalendarConnection(input: {
+  code: string;
+  state: string;
+  expectedTenantId: string;
+  expectedUserId: string;
+}) {
   const verified = await jwtVerify(input.state, stateSecret());
   const payload = verified.payload as {
     tenantId?: string;
@@ -187,6 +192,9 @@ export async function completeGoogleCalendarConnection(input: { code: string; st
   };
   if (payload.purpose !== "google_calendar_connect" || !payload.tenantId || !payload.userId) {
     throw new Error("Google Calendar OAuth state is invalid");
+  }
+  if (payload.tenantId !== input.expectedTenantId || payload.userId !== input.expectedUserId) {
+    throw new Error("Google Calendar OAuth user does not match the active session");
   }
   if (payload.redirectUri !== calendarConfig().redirectUri) {
     throw new Error("Google Calendar OAuth redirect mismatch");
@@ -232,7 +240,7 @@ async function authorizedCalendar(input: { tenantId: string; userId: string }) {
   client.setCredentials({
     refresh_token: refreshToken || undefined,
     access_token: accessToken || undefined,
-    expiry_date: row.expiryDate || undefined,
+    expiry_date: row.expiryDate ? Number(row.expiryDate) : undefined,
   });
   client.on("tokens", async tokens => {
     try {
