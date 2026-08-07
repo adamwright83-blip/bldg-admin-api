@@ -1,5 +1,5 @@
-import { and, eq, gte } from "drizzle-orm";
-import { commercialMissionEvents, driverSalesScoreEvents } from "../../drizzle/schema";
+import { and, eq, gte, or } from "drizzle-orm";
+import { commercialMissionEvents, commercialMissions, driverSalesScoreEvents } from "../../drizzle/schema";
 import { getDb } from "../db";
 
 export const ADAPTIVE_SALES_WINDOW_DAYS = 30;
@@ -54,6 +54,14 @@ export function salesLevelFromRecentWins(wins: number): SalesLevel {
   return 1;
 }
 
+export function ownsSalesMissionEvent(input: {
+  driverId: string;
+  actorId?: string | null;
+  assignedTo?: string | null;
+}) {
+  return input.actorId === input.driverId || input.assignedTo === input.driverId;
+}
+
 function truthy(value: unknown) {
   return value === true || value === 1 || value === "1" || value === "true";
 }
@@ -75,7 +83,6 @@ export function scoreWalkInForLevel(metadata: WalkInMetadata | null | undefined,
   const won = visitResult === "won";
 
   if (level === 1) {
-    // Level 1 is deliberately generous. The behavior being trained is doing real selling.
     return Math.min(48,
       20 +
       (hasFollowUp ? 5 : 0) +
@@ -136,12 +143,23 @@ export async function getAdaptiveDriverSalesMeter(input: { tenantId: string; dri
       eventName: commercialMissionEvents.eventName,
       toStatus: commercialMissionEvents.toStatus,
       metadataJson: commercialMissionEvents.metadataJson,
+      actorId: commercialMissionEvents.actorId,
+      assignedTo: commercialMissions.assignedTo,
       createdAt: commercialMissionEvents.createdAt,
-    }).from(commercialMissionEvents).where(and(
-      eq(commercialMissionEvents.tenantId, input.tenantId),
-      eq(commercialMissionEvents.actorId, input.driverId),
-      gte(commercialMissionEvents.createdAt, since),
-    )),
+    })
+      .from(commercialMissionEvents)
+      .innerJoin(commercialMissions, and(
+        eq(commercialMissions.tenantId, commercialMissionEvents.tenantId),
+        eq(commercialMissions.id, commercialMissionEvents.missionId),
+      ))
+      .where(and(
+        eq(commercialMissionEvents.tenantId, input.tenantId),
+        gte(commercialMissionEvents.createdAt, since),
+        or(
+          eq(commercialMissionEvents.actorId, input.driverId),
+          eq(commercialMissions.assignedTo, input.driverId),
+        ),
+      )),
     db.select({
       points: driverSalesScoreEvents.points,
       eventType: driverSalesScoreEvents.eventType,
@@ -152,8 +170,14 @@ export async function getAdaptiveDriverSalesMeter(input: { tenantId: string; dri
     )),
   ]);
 
+  const ownedMissionEvents = missionEvents.filter(event => ownsSalesMissionEvent({
+    driverId: input.driverId,
+    actorId: event.actorId,
+    assignedTo: event.assignedTo,
+  }));
+
   const wonMissionIds = new Set(
-    missionEvents
+    ownedMissionEvents
       .filter(event => event.toStatus === "won")
       .map(event => event.missionId)
   );
@@ -161,11 +185,10 @@ export async function getAdaptiveDriverSalesMeter(input: { tenantId: string; dri
   const level = salesLevelFromRecentWins(wins);
   const config = LEVELS[level];
 
-  const walkInPoints = missionEvents
+  const walkInPoints = ownedMissionEvents
     .filter(event => event.eventName === "unplanned_walk_in")
     .reduce((sum, event) => sum + scoreWalkInForLevel(event.metadataJson as WalkInMetadata | null, level), 0);
 
-  // Journals/comebacks remain useful, but they become supporting behavior as ability rises.
   const supportingPointsRaw = scoreEvents.reduce((sum, event) => sum + Number(event.points || 0), 0);
   const supportingPoints = Math.round(supportingPointsRaw * config.basicActivityMultiplier);
   const winBonus = wins * ({ 1: 0, 2: 18, 3: 24, 4: 30 } as const)[level];
