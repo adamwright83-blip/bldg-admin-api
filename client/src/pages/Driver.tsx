@@ -143,6 +143,7 @@ export default function Driver() {
         onClose={() => setWalkInOpen(false)}
         onSaved={result => {
           setWalkInOpen(false);
+          void utils.system.adaptiveSalesMeter.myMeter.invalidate();
           const calendarText = result.calendar?.status === "created" || result.calendar?.status === "already_exists"
             ? " Google Calendar reminder added."
             : "";
