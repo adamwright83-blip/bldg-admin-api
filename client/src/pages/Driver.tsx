@@ -4,7 +4,7 @@ import { LoginForm } from "@/components/LoginForm";
 import { Loader2 } from "lucide-react";
 import { DriverPrepMechanic } from "@/components/driver/DriverPrepMechanic";
 import { ResidentFollowupAlert } from "@/components/admin/ResidentFollowupAlert";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
 
@@ -21,6 +21,30 @@ export default function Driver() {
   const utils = trpc.useUtils();
   const [selectedDate, setSelectedDate] = useState(() => getLocalYmd());
   const [walkInOpen, setWalkInOpen] = useState(false);
+  const completeCalendar = trpc.system.voiceWalkIn.calendarComplete.useMutation();
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const state = params.get("state");
+    const oauthError = params.get("error");
+    if (oauthError) {
+      toast.error(`Google Calendar connection was not completed: ${oauthError}`);
+      window.history.replaceState({}, "", window.location.pathname);
+      return;
+    }
+    if (!code || !state) return;
+    void completeCalendar.mutateAsync({ code, state }).then(async result => {
+      window.history.replaceState({}, "", window.location.pathname);
+      await utils.system.voiceWalkIn.calendarStatus.invalidate();
+      toast.success(result.connectedEmail ? `Google Calendar connected: ${result.connectedEmail}` : "Google Calendar connected.");
+      setWalkInOpen(true);
+    }).catch(error => {
+      window.history.replaceState({}, "", window.location.pathname);
+      toast.error(error instanceof Error ? error.message : "Could not finish Google Calendar connection.");
+    });
+  }, [isAuthenticated]);
 
   const pickupQuery = trpc.admin.listByDate.useQuery({
     date: selectedDate,
@@ -119,7 +143,10 @@ export default function Driver() {
         onClose={() => setWalkInOpen(false)}
         onSaved={result => {
           setWalkInOpen(false);
-          toast.success(`Walk-in ${result.missionCode} saved. Follow-up scheduled.`);
+          const calendarText = result.calendar?.status === "created" || result.calendar?.status === "already_exists"
+            ? " Google Calendar reminder added."
+            : "";
+          toast.success(`Walk-in ${result.missionCode} saved.${calendarText}`);
         }}
       />
     </>
