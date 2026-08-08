@@ -1,6 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bell, Check, DoorOpen, Flame, LockKeyhole, Map, Menu, Mic, PackagePlus, PhoneCall, X } from "lucide-react";
+import {
+  Bell,
+  Check,
+  ChevronRight,
+  DoorOpen,
+  Flame,
+  Map,
+  Menu,
+  Mic,
+  PackagePlus,
+  PhoneCall,
+  X,
+} from "lucide-react";
 import type { Order } from "@shared/types";
+import type { CommercialMission } from "@shared/commercialMission";
 import world from "@/assets/goldline/goldline-world.png";
 import vorgan from "@/assets/goldline/vorgan.png";
 import objects from "@/assets/goldline/action-objects.png";
@@ -11,24 +24,36 @@ const objectives = ["Confirm Summit Capital meeting", "Send Evergreen audit pack
 const actions = ["BUILD MISSION", "NEW ORDER", "LOG A WALK-IN", "UNLOAD THE DAY"];
 const weekdays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
-type Panel = "objectives" | "calls" | "menu" | "route" | "build" | "order" | "walkin" | "unload";
+type Panel = "objectives" | "calls" | "menu" | "route" | "vorgan" | "build" | "order" | "walkin" | "unload";
 type RouteStop = {
   key: string;
-  orderId: number;
+  orderId?: number;
+  missionId?: number;
   name: string;
   time: string;
-  type: "PICKUP" | "DROPOFF";
-  tone: "gold" | "cyan";
+  type: "PICKUP" | "DROPOFF" | "SALES CALL";
+  tone: "gold" | "cyan" | "violet";
   address: string;
+  valueLabel?: string;
+  sortKey: string;
 };
 
 type GoldlineHomeProps = {
   pickups?: Order[];
   deliveries?: Order[];
+  salesMissions?: CommercialMission[];
   selectedDate: string;
   onSelectedDateChange: (date: string) => void;
   isLoading?: boolean;
 };
+
+function getLocalYmd(date = new Date()): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
 
 function dateFromYmd(value: string): Date {
   const [year, month, day] = value.split("-").map(Number);
@@ -52,41 +77,83 @@ function orderName(order: Order): string {
   return fullName || order.address || `ORDER #${order.id}`;
 }
 
-function toRouteStop(order: Order, type: RouteStop["type"]): RouteStop {
+function toRouteStop(order: Order, type: "PICKUP" | "DROPOFF"): RouteStop {
   const isPickup = type === "PICKUP";
+  const time = (isPickup ? order.pickupTimeWindow : order.deliveryTimeWindow) || "TIME TBD";
   return {
     key: `${type}-${order.id}`,
     orderId: order.id,
     name: orderName(order),
-    time: (isPickup ? order.pickupTimeWindow : order.deliveryTimeWindow) || "TIME TBD",
+    time,
     type,
     tone: isPickup ? "gold" : "cyan",
     address: order.address || "",
+    sortKey: time,
+  };
+}
+
+function moneyLabel(cents: number | null | undefined): string | undefined {
+  if (!cents || cents <= 0) return undefined;
+  return `${new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(cents / 100)}/YR`;
+}
+
+function missionTimeLabel(mission: CommercialMission): { label: string; sortKey: string } {
+  const deadline = mission.steps.find(step => step.deadlineAt)?.deadlineAt ?? mission.expiresAt;
+  if (!deadline) return { label: "TODAY", sortKey: "23:59" };
+  const date = new Date(deadline);
+  if (Number.isNaN(date.getTime())) return { label: "TODAY", sortKey: "23:59" };
+  const label = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const sortKey = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  return { label, sortKey };
+}
+
+function toSalesStop(mission: CommercialMission): RouteStop {
+  const when = missionTimeLabel(mission);
+  return {
+    key: `SALES-${mission.id}`,
+    missionId: mission.id,
+    name: mission.account.name || mission.code,
+    time: when.label,
+    type: "SALES CALL",
+    tone: "violet",
+    address: mission.account.address || "",
+    valueLabel: moneyLabel(mission.opportunity.estimatedAnnualValueCents),
+    sortKey: when.sortKey,
   };
 }
 
 export default function GoldlineHome({
   pickups,
   deliveries,
+  salesMissions,
   selectedDate,
   onSelectedDateChange,
   isLoading = false,
 }: GoldlineHomeProps) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [toast, setToast] = useState("");
+  const [selectedStop, setSelectedStop] = useState<RouteStop | null>(null);
 
   const routeStops = useMemo(() => {
-    const combined = [
+    const orderStops = [
       ...(pickups ?? []).map(order => toRouteStop(order, "PICKUP")),
       ...(deliveries ?? []).map(order => toRouteStop(order, "DROPOFF")),
     ];
-    return combined.sort((a, b) => a.time.localeCompare(b.time));
-  }, [pickups, deliveries]);
+    const salesStops = selectedDate === getLocalYmd()
+      ? (salesMissions ?? []).map(toSalesStop)
+      : [];
+    return [...orderStops, ...salesStops].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  }, [pickups, deliveries, salesMissions, selectedDate]);
 
   const visibleStops = routeStops.slice(0, 4);
   const hiddenStopCount = Math.max(0, routeStops.length - visibleStops.length);
   const pickupCount = routeStops.filter(stop => stop.type === "PICKUP").length;
   const dropoffCount = routeStops.filter(stop => stop.type === "DROPOFF").length;
+  const salesCount = routeStops.filter(stop => stop.type === "SALES CALL").length;
   const activeWeekday = weekdayLabel(selectedDate);
 
   useEffect(() => {
@@ -110,6 +177,11 @@ export default function GoldlineHome({
     setPanel(panels[label]);
   }
 
+  function openRoute(stop?: RouteStop) {
+    setSelectedStop(stop ?? null);
+    setPanel("route");
+  }
+
   function complete(message: string) {
     setPanel(null);
     setToast(message);
@@ -120,6 +192,9 @@ export default function GoldlineHome({
       <section className="goldline" aria-label="Goldline daily adventure map">
         <img className="goldline-world" src={world} alt="Sunlit canyon city crossed by a turquoise route river" />
         <div className="goldline-sunwash" aria-hidden="true" />
+        <div className="goldline-ambient" aria-hidden="true">
+          <i className="ambient-1" /><i className="ambient-2" /><i className="ambient-3" /><i className="ambient-4" /><i className="ambient-5" />
+        </div>
 
         <header className="goldline-topbar">
           <button className="round-button" onClick={() => setPanel("menu")} aria-label="Open menu"><Menu /></button>
@@ -136,35 +211,55 @@ export default function GoldlineHome({
           <button className="round-button has-alert" onClick={() => setPanel("objectives")} aria-label="Open objectives"><Bell /></button>
         </header>
 
+        <button className="route-summary" onClick={() => openRoute()} aria-label="Open today's route">
+          <b>TODAY’S ROUTE</b>
+          <span>
+            <strong className="summary-pickup">{pickupCount}</strong> PICKUPS
+            <i>·</i>
+            <strong className="summary-dropoff">{dropoffCount}</strong> DROPOFFS
+            {salesCount > 0 && <><i>·</i><strong className="summary-sales">{salesCount}</strong> SALES</>}
+          </span>
+        </button>
+
         <section className="hustle" aria-label="Sucker to Hustler progress: 87 percent, on fire">
           <div className="hustle-labels"><span>SUCKER</span><b>87%</b><span>HUSTLER</span></div>
           <div className="hustle-track"><i /></div>
           <em>ON FIRE <Flame /></em>
         </section>
 
-        <button className="vorgan-card" onClick={() => setToast("Vorgan: Deals in Doubt. Feeds on Excuses.")}>
+        <button className="vorgan-card" onClick={() => setPanel("vorgan")} aria-label="Open Vorgan rival status">
           <img src={vorgan} alt="Vorgan in an ivory suit" />
-          <span><b>VORGAN</b><small>Deals in Doubt.<br />Feeds on Excuses.</small></span>
+          <span className="vorgan-copy">
+            <b>VORGAN</b>
+            <em>RIVAL IN PLAY</em>
+            <small>Track him. Beat him.</small>
+          </span>
+          <ChevronRight className="vorgan-chevron" aria-hidden="true" />
         </button>
 
-        <button className="vault-label" onClick={() => setPanel("route")}>
-          <LockKeyhole /><span><b>TODAY’S ROUTE</b><small>{pickupCount} PICKUPS · {dropoffCount} DROPOFFS</small></span><strong>{routeStops.length}</strong>
-        </button>
+        <div className="route-energy-nodes" aria-hidden="true">
+          {visibleStops.map((stop, index) => <i key={stop.key} className={`energy-node energy-${index + 1} is-${stop.tone}`} />)}
+        </div>
 
         <div className="route-stops">
           {visibleStops.map((stop, index) => (
             <button
               key={stop.key}
               className={`route-stop stop-${index + 1} is-${stop.tone}`}
-              onClick={() => setToast(`${stop.type}: ${stop.name} · ${stop.time}`)}
+              onClick={() => openRoute(stop)}
             >
-              <span>{index + 1}</span><b>{stop.name}</b><small>{stop.type} · {stop.time}</small>
+              <span className="route-stop-number">{index + 1}</span>
+              <span className="route-stop-copy">
+                <small className="route-stop-type">{stop.type}</small>
+                <b>{stop.name}</b>
+                <em>{stop.time}{stop.valueLabel ? ` · ${stop.valueLabel}` : ""}</em>
+              </span>
             </button>
           ))}
         </div>
 
         {!isLoading && routeStops.length === 0 && (
-          <button className="route-empty" onClick={() => setPanel("route")}>
+          <button className="route-empty" onClick={() => openRoute()}>
             <b>NO PICKUPS OR DROPOFFS</b>
             <small>{formatDateLabel(selectedDate)}</small>
           </button>
@@ -173,8 +268,8 @@ export default function GoldlineHome({
         {isLoading && <div className="route-loading">LOADING TODAY’S ROUTE…</div>}
 
         {hiddenStopCount > 0 && (
-          <button className="route-overflow" onClick={() => setPanel("route")}>
-            +{hiddenStopCount} MORE {hiddenStopCount === 1 ? "STOP" : "STOPS"}
+          <button className="route-overflow" onClick={() => openRoute()}>
+            +{hiddenStopCount} MORE {hiddenStopCount === 1 ? "STOP" : "STOPS"} <ChevronRight />
           </button>
         )}
 
@@ -197,10 +292,39 @@ export default function GoldlineHome({
           <div className="drawer-backdrop" onClick={() => setPanel(null)}>
             <section className="goldline-drawer" onClick={event => event.stopPropagation()}>
               <button className="drawer-close" onClick={() => setPanel(null)} aria-label="Close"><X /></button>
-              {panel === "route" && <><p className="drawer-kicker">{formatDateLabel(selectedDate)}</p><h2>Today’s route</h2><div className="route-counts"><b>{pickupCount} PICKUPS</b><b>{dropoffCount} DROPOFFS</b></div>{routeStops.length ? <ul>{routeStops.map((stop, index) => <li key={stop.key} className={`route-list-item is-${stop.tone}`}><span>{index + 1}</span><div><b>{stop.name}</b><small>{stop.type} · {stop.time}{stop.address ? ` · ${stop.address}` : ""}</small></div></li>)}</ul> : <p className="route-drawer-empty">No pickups or dropoffs scheduled for this date.</p>}</>}
+
+              {panel === "vorgan" && <>
+                <p className="drawer-kicker danger">TODAY’S RIVAL</p>
+                <div className="vorgan-drawer-hero">
+                  <img src={vorgan} alt="Vorgan" />
+                  <div><h2>Vorgan</h2><b>RIVAL IN PLAY</b></div>
+                </div>
+                <p className="vorgan-drawer-copy">Deals in Doubt. Feeds on Excuses. Track him. Beat him. Earn the Goldline.</p>
+                <div className="rival-readout">
+                  <span><b>{routeStops.length}</b><small>Route stops</small></span>
+                  <span><b>87%</b><small>Hustle</small></span>
+                </div>
+                <button className="drawer-primary" onClick={() => complete("Vorgan tracked — back to the Goldline")}>BACK TO THE GOLDLINE</button>
+              </>}
+
+              {panel === "route" && <>
+                <p className="drawer-kicker">{formatDateLabel(selectedDate)}</p>
+                <h2>Today’s route</h2>
+                <div className="route-counts">
+                  <b>{pickupCount} PICKUPS</b><b>{dropoffCount} DROPOFFS</b>{salesCount > 0 && <b>{salesCount} SALES</b>}
+                </div>
+                {selectedStop && <div className={`route-focus-card is-${selectedStop.tone}`}>
+                  <small>{selectedStop.type}</small>
+                  <b>{selectedStop.name}</b>
+                  <strong>{selectedStop.time}{selectedStop.valueLabel ? ` · ${selectedStop.valueLabel}` : ""}</strong>
+                  {selectedStop.address && <span>{selectedStop.address}</span>}
+                </div>}
+                {routeStops.length ? <ul>{routeStops.map((stop, index) => <li key={stop.key} className={`route-list-item is-${stop.tone}`} onClick={() => setSelectedStop(stop)}><span>{index + 1}</span><div><b>{stop.name}</b><small>{stop.type} · {stop.time}{stop.valueLabel ? ` · ${stop.valueLabel}` : ""}{stop.address ? ` · ${stop.address}` : ""}</small></div></li>)}</ul> : <p className="route-drawer-empty">No pickups or dropoffs scheduled for this date.</p>}
+              </>}
+
               {panel === "objectives" && <><p className="drawer-kicker">TODAY’S QUEST LOG</p><h2>Follow-up objectives</h2><ul>{objectives.map((item, index) => <li key={item}><span>{index + 1}</span>{item}</li>)}</ul></>}
               {panel === "calls" && <><p className="drawer-kicker blue">SIDE ENCOUNTER</p><h2>20 min cold call burst</h2><ul>{calls.map(item => <li key={item}><span><PhoneCall /></span>{item}</li>)}</ul><button className="start-calling" onClick={() => act("START CALLING")}>START CALLING</button></>}
-              {panel === "menu" && <><p className="drawer-kicker">GOLDLINE</p><h2>Choose your path</h2><ul><li onClick={() => setPanel("route")}><span><Check /></span>Today’s route · {routeStops.length} stops</li><li><span>{pickupCount}</span>Pickups</li><li><span>{dropoffCount}</span>Dropoffs</li><li><span>87</span>Hustle score</li></ul></>}
+              {panel === "menu" && <><p className="drawer-kicker">GOLDLINE</p><h2>Choose your path</h2><ul><li onClick={() => openRoute()}><span><Check /></span>Today’s route · {routeStops.length} stops</li><li><span>{pickupCount}</span>Pickups</li><li><span>{dropoffCount}</span>Dropoffs</li>{salesCount > 0 && <li><span>{salesCount}</span>Sales calls</li>}<li><span>87</span>Hustle score</li></ul></>}
               {panel === "build" && <><p className="drawer-kicker">MISSION BUILDER</p><h2>Build today’s mission</h2><div className="mission-preview"><Map /><div><b>{routeStops.length} stops</b><small>{routeStops.length ? routeStops.map(stop => stop.name).join(" → ") : "No route stops scheduled yet"}</small></div></div><label className="goldline-field">Mission focus<select defaultValue="revenue"><option value="revenue">Highest revenue first</option><option value="route">Fastest route</option><option value="balanced">Balanced day</option></select></label><button className="drawer-primary" onClick={() => complete("Mission built — route ready")}>BUILD MY MISSION</button></>}
               {panel === "order" && <><p className="drawer-kicker">QUICK CAPTURE</p><h2>New order</h2><label className="goldline-field">Customer<input placeholder="Customer or business name" /></label><div className="field-grid"><label className="goldline-field">Service<select><option>Pickup & delivery</option><option>Wash & fold</option><option>Dry cleaning</option></select></label><label className="goldline-field">Due<input type="time" defaultValue="17:00" /></label></div><button className="drawer-primary" onClick={() => complete("New order saved")}>CREATE ORDER <PackagePlus /></button></>}
               {panel === "walkin" && <><p className="drawer-kicker">FIELD INTEL</p><h2>Log a walk-in</h2><label className="goldline-field">Business<input placeholder="Where did you stop?" /></label><label className="goldline-field">What happened?<textarea placeholder="Contact, interest, objection, next step…" /></label><button className="drawer-primary" onClick={() => complete("Walk-in logged — momentum added")}>LOG WALK-IN <DoorOpen /></button></>}
