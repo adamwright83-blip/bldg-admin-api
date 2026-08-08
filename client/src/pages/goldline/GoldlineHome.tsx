@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, Check, Flame, LockKeyhole, Menu, PhoneCall, X } from "lucide-react";
+import { Bell, Check, DoorOpen, Flame, LockKeyhole, Map, Menu, Mic, PackagePlus, PhoneCall, X } from "lucide-react";
 import world from "@/assets/goldline/goldline-world.png";
 import vorgan from "@/assets/goldline/vorgan.png";
 import objects from "@/assets/goldline/action-objects.png";
@@ -15,9 +15,10 @@ const stops = [
 const calls = ["Glacier Tech", "Northpoint Media", "Apex Solutions", "Ironclad Supply", "Summit Wireless"];
 const objectives = ["Confirm Summit Capital meeting", "Send Evergreen audit packet", "Follow up on Glacier Tech", "Check in with Brightline foreman", "End the day at The Vault"];
 const actions = ["BUILD MISSION", "NEW ORDER", "LOG A WALK-IN", "UNLOAD THE DAY"];
+type Panel = "objectives" | "calls" | "menu" | "build" | "order" | "walkin" | "unload";
 
 export default function GoldlineHome() {
-  const [panel, setPanel] = useState<"objectives" | "calls" | "menu" | null>(null);
+  const [panel, setPanel] = useState<Panel | null>(null);
   const [toast, setToast] = useState("");
 
   useEffect(() => {
@@ -27,8 +28,23 @@ export default function GoldlineHome() {
   }, [toast]);
 
   function act(label: string) {
-    setToast(label === "START CALLING" ? "Cold-call burst armed — 20:00" : `${label} opened`);
+    if (label === "START CALLING") {
+      setToast("Cold-call burst armed — 20:00");
+      setPanel(null);
+      return;
+    }
+    const panels: Record<string, Panel> = {
+      "BUILD MISSION": "build",
+      "NEW ORDER": "order",
+      "LOG A WALK-IN": "walkin",
+      "UNLOAD THE DAY": "unload",
+    };
+    setPanel(panels[label]);
+  }
+
+  function complete(message: string) {
     setPanel(null);
+    setToast(message);
   }
 
   return (
@@ -91,6 +107,10 @@ export default function GoldlineHome() {
               {panel === "objectives" && <><p className="drawer-kicker">TODAY’S QUEST LOG</p><h2>Follow-up objectives</h2><ul>{objectives.map((item, index) => <li key={item}><span>{index + 1}</span>{item}</li>)}</ul></>}
               {panel === "calls" && <><p className="drawer-kicker blue">SIDE ENCOUNTER</p><h2>20 min cold call burst</h2><ul>{calls.map(item => <li key={item}><span><PhoneCall /></span>{item}</li>)}</ul><button className="start-calling" onClick={() => act("START CALLING")}>START CALLING</button></>}
               {panel === "menu" && <><p className="drawer-kicker">GOLDLINE</p><h2>Choose your path</h2><ul><li><span><Check /></span>Today’s route</li><li><span>4</span>Active stops</li><li><span>87</span>Hustle score</li></ul></>}
+              {panel === "build" && <><p className="drawer-kicker">MISSION BUILDER</p><h2>Build today’s mission</h2><div className="mission-preview"><Map /><div><b>4 stops · 18.6 miles</b><small>Brightline → Evergreen → Pinnacle → Summit</small></div></div><label className="goldline-field">Mission focus<select defaultValue="revenue"><option value="revenue">Highest revenue first</option><option value="route">Fastest route</option><option value="balanced">Balanced day</option></select></label><button className="drawer-primary" onClick={() => complete("Mission built — route ready")}>BUILD MY MISSION</button></>}
+              {panel === "order" && <><p className="drawer-kicker">QUICK CAPTURE</p><h2>New order</h2><label className="goldline-field">Customer<input placeholder="Customer or business name" /></label><div className="field-grid"><label className="goldline-field">Service<select><option>Pickup & delivery</option><option>Wash & fold</option><option>Dry cleaning</option></select></label><label className="goldline-field">Due<input type="time" defaultValue="17:00" /></label></div><button className="drawer-primary" onClick={() => complete("New order saved")}>CREATE ORDER <PackagePlus /></button></>}
+              {panel === "walkin" && <><p className="drawer-kicker">FIELD INTEL</p><h2>Log a walk-in</h2><label className="goldline-field">Business<input placeholder="Where did you stop?" /></label><label className="goldline-field">What happened?<textarea placeholder="Contact, interest, objection, next step…" /></label><button className="drawer-primary" onClick={() => complete("Walk-in logged — momentum added")}>LOG WALK-IN <DoorOpen /></button></>}
+              {panel === "unload" && <><p className="drawer-kicker">END-OF-DAY DEBRIEF</p><h2>Unload the day</h2><button className="voice-capture" onClick={() => setToast("Voice capture ready — start talking")}><Mic /><span><b>HOLD TO RECORD</b><small>Wins, objections, promises, follow-ups</small></span></button><label className="goldline-field">Or type a quick debrief<textarea placeholder="What did today teach you?" /></label><button className="drawer-primary" onClick={() => complete("Day unloaded — intelligence saved")}>SAVE DEBRIEF</button></>}
             </section>
           </div>
         )}
