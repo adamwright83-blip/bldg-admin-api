@@ -1,0 +1,64 @@
+/* Goldline is used on a phone while the driver is moving between stops.
+   Route information must remain readable at a glance; never regress these
+   labels to decorative micro-type. */
+.goldline .route-stop {
+  width: clamp(154px, 42vw, 176px);
+  min-width: 154px;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 3px 8px;
+  padding: 9px 10px;
+  border-radius: 7px;
+  background: #15110df2;
+  box-shadow: 0 5px 14px #000b, 0 0 0 1px #0004 inset;
+  backdrop-filter: blur(5px);
+}
+
+.goldline .route-stop > span {
+  width: 26px;
+  height: 26px;
+  font: 800 11px/1 Cinzel, serif;
+}
+
+.goldline .route-stop > b {
+  overflow: hidden;
+  font: 800 12px/1.12 Cinzel, serif;
+  letter-spacing: .01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px #000;
+}
+
+.goldline .route-stop > small {
+  overflow: hidden;
+  color: #fff9e8;
+  font: 800 10px/1.15 Inter, sans-serif;
+  letter-spacing: .015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px #000;
+}
+
+/* The primary driver controls were also being rendered as 6px labels. */
+.goldline .action-bar span {
+  min-height: 20px;
+  font: 800 8px/1.1 Cinzel, serif;
+}
+
+@media (max-width: 370px) {
+  .goldline .route-stop {
+    width: 154px;
+    min-width: 154px;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 3px 7px;
+    padding: 8px 9px;
+  }
+
+  .goldline .route-stop > span {
+    width: 24px;
+    height: 24px;
+    font-size: 10px;
+  }
+
+  .goldline .route-stop > b { font-size: 11px; }
+  .goldline .route-stop > small { font-size: 9px; }
+}
