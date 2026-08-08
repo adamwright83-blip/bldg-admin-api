@@ -1,25 +1,93 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bell, Check, DoorOpen, Flame, LockKeyhole, Map, Menu, Mic, PackagePlus, PhoneCall, X } from "lucide-react";
+import type { Order } from "@shared/types";
 import world from "@/assets/goldline/goldline-world.png";
 import vorgan from "@/assets/goldline/vorgan.png";
 import objects from "@/assets/goldline/action-objects.png";
 import "./goldline-home.css";
 
-const stops = [
-  { id: 1, name: "BRIGHTLINE BUILDERS", time: "9:00–10:00 AM", type: "PICKUP", tone: "gold" },
-  { id: 2, name: "EVERGREEN CPAs", time: "10:30–11:30 AM", type: "DROPOFF", tone: "cyan" },
-  { id: 3, name: "PINNACLE LOGISTICS", time: "1:00–2:00 PM", type: "PICKUP", tone: "gold" },
-  { id: 4, name: "SUMMIT CAPITAL", time: "2:00–3:30 PM", type: "SALES · $2,400/MO", tone: "violet" },
-] as const;
-
 const calls = ["Glacier Tech", "Northpoint Media", "Apex Solutions", "Ironclad Supply", "Summit Wireless"];
 const objectives = ["Confirm Summit Capital meeting", "Send Evergreen audit packet", "Follow up on Glacier Tech", "Check in with Brightline foreman", "End the day at The Vault"];
 const actions = ["BUILD MISSION", "NEW ORDER", "LOG A WALK-IN", "UNLOAD THE DAY"];
-type Panel = "objectives" | "calls" | "menu" | "build" | "order" | "walkin" | "unload";
+const weekdays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
-export default function GoldlineHome() {
+type Panel = "objectives" | "calls" | "menu" | "route" | "build" | "order" | "walkin" | "unload";
+type RouteStop = {
+  key: string;
+  orderId: number;
+  name: string;
+  time: string;
+  type: "PICKUP" | "DROPOFF";
+  tone: "gold" | "cyan";
+  address: string;
+};
+
+type GoldlineHomeProps = {
+  pickups?: Order[];
+  deliveries?: Order[];
+  selectedDate: string;
+  onSelectedDateChange: (date: string) => void;
+  isLoading?: boolean;
+};
+
+function dateFromYmd(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatDateLabel(value: string): string {
+  return dateFromYmd(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).toUpperCase();
+}
+
+function weekdayLabel(value: string): string {
+  return dateFromYmd(value).toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+}
+
+function orderName(order: Order): string {
+  const fullName = `${order.firstName ?? ""} ${order.lastName ?? ""}`.trim();
+  return fullName || order.address || `ORDER #${order.id}`;
+}
+
+function toRouteStop(order: Order, type: RouteStop["type"]): RouteStop {
+  const isPickup = type === "PICKUP";
+  return {
+    key: `${type}-${order.id}`,
+    orderId: order.id,
+    name: orderName(order),
+    time: (isPickup ? order.pickupTimeWindow : order.deliveryTimeWindow) || "TIME TBD",
+    type,
+    tone: isPickup ? "gold" : "cyan",
+    address: order.address || "",
+  };
+}
+
+export default function GoldlineHome({
+  pickups,
+  deliveries,
+  selectedDate,
+  onSelectedDateChange,
+  isLoading = false,
+}: GoldlineHomeProps) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [toast, setToast] = useState("");
+
+  const routeStops = useMemo(() => {
+    const combined = [
+      ...(pickups ?? []).map(order => toRouteStop(order, "PICKUP")),
+      ...(deliveries ?? []).map(order => toRouteStop(order, "DROPOFF")),
+    ];
+    return combined.sort((a, b) => a.time.localeCompare(b.time));
+  }, [pickups, deliveries]);
+
+  const visibleStops = routeStops.slice(0, 4);
+  const hiddenStopCount = Math.max(0, routeStops.length - visibleStops.length);
+  const pickupCount = routeStops.filter(stop => stop.type === "PICKUP").length;
+  const dropoffCount = routeStops.filter(stop => stop.type === "DROPOFF").length;
+  const activeWeekday = weekdayLabel(selectedDate);
 
   useEffect(() => {
     if (!toast) return;
@@ -55,10 +123,16 @@ export default function GoldlineHome() {
 
         <header className="goldline-topbar">
           <button className="round-button" onClick={() => setPanel("menu")} aria-label="Open menu"><Menu /></button>
-          <div className="date-stone">
-            <strong>MAY 23, 2025</strong>
-            <span>{["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map(day => <i className={day === "FRI" ? "active" : ""} key={day}>{day}</i>)}</span>
-          </div>
+          <label className="date-stone" aria-label="Change working date">
+            <strong>{formatDateLabel(selectedDate)}</strong>
+            <span>{weekdays.map(day => <i className={day === activeWeekday ? "active" : ""} key={day}>{day}</i>)}</span>
+            <input
+              className="goldline-date-picker"
+              type="date"
+              value={selectedDate}
+              onChange={event => onSelectedDateChange(event.target.value)}
+            />
+          </label>
           <button className="round-button has-alert" onClick={() => setPanel("objectives")} aria-label="Open objectives"><Bell /></button>
         </header>
 
@@ -73,17 +147,36 @@ export default function GoldlineHome() {
           <span><b>VORGAN</b><small>Deals in Doubt.<br />Feeds on Excuses.</small></span>
         </button>
 
-        <button className="vault-label" onClick={() => setToast("The Vault is sealed — clear 4 stops")}>
-          <LockKeyhole /><span><b>THE VAULT</b><small>SEALED UNTIL ALL STOPS CLEARED</small></span><strong>0/4</strong>
+        <button className="vault-label" onClick={() => setPanel("route")}>
+          <LockKeyhole /><span><b>TODAY’S ROUTE</b><small>{pickupCount} PICKUPS · {dropoffCount} DROPOFFS</small></span><strong>{routeStops.length}</strong>
         </button>
 
         <div className="route-stops">
-          {stops.map(stop => (
-            <button key={stop.id} className={`route-stop stop-${stop.id} is-${stop.tone}`} onClick={() => setToast(`${stop.name} selected`)}>
-              <span>{stop.id}</span><b>{stop.name}</b><small>{stop.time} · {stop.type}</small>
+          {visibleStops.map((stop, index) => (
+            <button
+              key={stop.key}
+              className={`route-stop stop-${index + 1} is-${stop.tone}`}
+              onClick={() => setToast(`${stop.type}: ${stop.name} · ${stop.time}`)}
+            >
+              <span>{index + 1}</span><b>{stop.name}</b><small>{stop.type} · {stop.time}</small>
             </button>
           ))}
         </div>
+
+        {!isLoading && routeStops.length === 0 && (
+          <button className="route-empty" onClick={() => setPanel("route")}>
+            <b>NO PICKUPS OR DROPOFFS</b>
+            <small>{formatDateLabel(selectedDate)}</small>
+          </button>
+        )}
+
+        {isLoading && <div className="route-loading">LOADING TODAY’S ROUTE…</div>}
+
+        {hiddenStopCount > 0 && (
+          <button className="route-overflow" onClick={() => setPanel("route")}>
+            +{hiddenStopCount} MORE {hiddenStopCount === 1 ? "STOP" : "STOPS"}
+          </button>
+        )}
 
         <button className="call-shrine" onClick={() => setPanel("calls")}>
           <PhoneCall /><span><b>20 MIN</b><small>COLD CALL BURST</small></span>
@@ -104,10 +197,11 @@ export default function GoldlineHome() {
           <div className="drawer-backdrop" onClick={() => setPanel(null)}>
             <section className="goldline-drawer" onClick={event => event.stopPropagation()}>
               <button className="drawer-close" onClick={() => setPanel(null)} aria-label="Close"><X /></button>
+              {panel === "route" && <><p className="drawer-kicker">{formatDateLabel(selectedDate)}</p><h2>Today’s route</h2><div className="route-counts"><b>{pickupCount} PICKUPS</b><b>{dropoffCount} DROPOFFS</b></div>{routeStops.length ? <ul>{routeStops.map((stop, index) => <li key={stop.key} className={`route-list-item is-${stop.tone}`}><span>{index + 1}</span><div><b>{stop.name}</b><small>{stop.type} · {stop.time}{stop.address ? ` · ${stop.address}` : ""}</small></div></li>)}</ul> : <p className="route-drawer-empty">No pickups or dropoffs scheduled for this date.</p>}</>}
               {panel === "objectives" && <><p className="drawer-kicker">TODAY’S QUEST LOG</p><h2>Follow-up objectives</h2><ul>{objectives.map((item, index) => <li key={item}><span>{index + 1}</span>{item}</li>)}</ul></>}
               {panel === "calls" && <><p className="drawer-kicker blue">SIDE ENCOUNTER</p><h2>20 min cold call burst</h2><ul>{calls.map(item => <li key={item}><span><PhoneCall /></span>{item}</li>)}</ul><button className="start-calling" onClick={() => act("START CALLING")}>START CALLING</button></>}
-              {panel === "menu" && <><p className="drawer-kicker">GOLDLINE</p><h2>Choose your path</h2><ul><li><span><Check /></span>Today’s route</li><li><span>4</span>Active stops</li><li><span>87</span>Hustle score</li></ul></>}
-              {panel === "build" && <><p className="drawer-kicker">MISSION BUILDER</p><h2>Build today’s mission</h2><div className="mission-preview"><Map /><div><b>4 stops · 18.6 miles</b><small>Brightline → Evergreen → Pinnacle → Summit</small></div></div><label className="goldline-field">Mission focus<select defaultValue="revenue"><option value="revenue">Highest revenue first</option><option value="route">Fastest route</option><option value="balanced">Balanced day</option></select></label><button className="drawer-primary" onClick={() => complete("Mission built — route ready")}>BUILD MY MISSION</button></>}
+              {panel === "menu" && <><p className="drawer-kicker">GOLDLINE</p><h2>Choose your path</h2><ul><li onClick={() => setPanel("route")}><span><Check /></span>Today’s route · {routeStops.length} stops</li><li><span>{pickupCount}</span>Pickups</li><li><span>{dropoffCount}</span>Dropoffs</li><li><span>87</span>Hustle score</li></ul></>}
+              {panel === "build" && <><p className="drawer-kicker">MISSION BUILDER</p><h2>Build today’s mission</h2><div className="mission-preview"><Map /><div><b>{routeStops.length} stops</b><small>{routeStops.length ? routeStops.map(stop => stop.name).join(" → ") : "No route stops scheduled yet"}</small></div></div><label className="goldline-field">Mission focus<select defaultValue="revenue"><option value="revenue">Highest revenue first</option><option value="route">Fastest route</option><option value="balanced">Balanced day</option></select></label><button className="drawer-primary" onClick={() => complete("Mission built — route ready")}>BUILD MY MISSION</button></>}
               {panel === "order" && <><p className="drawer-kicker">QUICK CAPTURE</p><h2>New order</h2><label className="goldline-field">Customer<input placeholder="Customer or business name" /></label><div className="field-grid"><label className="goldline-field">Service<select><option>Pickup & delivery</option><option>Wash & fold</option><option>Dry cleaning</option></select></label><label className="goldline-field">Due<input type="time" defaultValue="17:00" /></label></div><button className="drawer-primary" onClick={() => complete("New order saved")}>CREATE ORDER <PackagePlus /></button></>}
               {panel === "walkin" && <><p className="drawer-kicker">FIELD INTEL</p><h2>Log a walk-in</h2><label className="goldline-field">Business<input placeholder="Where did you stop?" /></label><label className="goldline-field">What happened?<textarea placeholder="Contact, interest, objection, next step…" /></label><button className="drawer-primary" onClick={() => complete("Walk-in logged — momentum added")}>LOG WALK-IN <DoorOpen /></button></>}
               {panel === "unload" && <><p className="drawer-kicker">END-OF-DAY DEBRIEF</p><h2>Unload the day</h2><button className="voice-capture" onClick={() => setToast("Voice capture ready — start talking")}><Mic /><span><b>HOLD TO RECORD</b><small>Wins, objections, promises, follow-ups</small></span></button><label className="goldline-field">Or type a quick debrief<textarea placeholder="What did today teach you?" /></label><button className="drawer-primary" onClick={() => complete("Day unloaded — intelligence saved")}>SAVE DEBRIEF</button></>}
