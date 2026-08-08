@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
 import GoldlineHome from "./goldline/GoldlineHome";
+import "./goldline/goldline-legibility.css";
 
 function getLocalYmd(date = new Date()): string {
   return [
@@ -115,7 +116,15 @@ export default function Driver() {
   // Goldline is the new authenticated driver home. The previous operational
   // experience remains archived under client/src/archive/driver-2026-08-08.
   if (isAuthenticated) {
-    return <GoldlineHome />;
+    return (
+      <GoldlineHome
+        pickups={pickupQuery.data}
+        deliveries={deliveryQuery.data?.filter(order => order.paid)}
+        selectedDate={selectedDate}
+        onSelectedDateChange={setSelectedDate}
+        isLoading={pickupQuery.isLoading || deliveryQuery.isLoading}
+      />
+    );
   }
 
   return (

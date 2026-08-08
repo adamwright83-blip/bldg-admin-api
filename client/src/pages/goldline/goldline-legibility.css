@@ -1,0 +1,188 @@
+/* Goldline is used on a phone while the driver is moving between stops.
+   Route information must remain readable at a glance; never regress these
+   labels to decorative micro-type. */
+.goldline .route-stop {
+  width: clamp(170px, 44vw, 190px);
+  min-width: 170px;
+  min-height: 54px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 4px 9px;
+  padding: 10px 11px;
+  border-radius: 8px;
+  background: #15110df5;
+  box-shadow: 0 6px 16px #000c, 0 0 0 1px #0005 inset;
+  backdrop-filter: blur(6px);
+}
+
+.goldline .route-stop > span {
+  width: 28px;
+  height: 28px;
+  font: 800 12px/1 Cinzel, serif;
+}
+
+.goldline .route-stop > b {
+  overflow: hidden;
+  font: 800 13px/1.12 Cinzel, serif;
+  letter-spacing: .01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px #000;
+}
+
+.goldline .route-stop > small {
+  overflow: hidden;
+  color: #fff9e8;
+  font: 800 11px/1.15 Inter, sans-serif;
+  letter-spacing: .015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px #000;
+}
+
+.goldline .route-stop.is-gold > small { color: #ffe58e; }
+.goldline .route-stop.is-cyan > small { color: #aaf8ff; }
+
+/* Four large map cards is the maximum before the scene becomes cluttered.
+   Additional stops remain one tap away in the full route sheet. */
+.goldline .stop-1 { left: 51%; bottom: 27%; }
+.goldline .stop-2 { left: 8%; bottom: 41%; }
+.goldline .stop-3 { left: 43%; bottom: 55%; }
+.goldline .stop-4 { left: 10%; top: 30%; }
+
+.goldline .date-stone { position: relative; cursor: pointer; }
+.goldline .goldline-date-picker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.goldline .route-empty,
+.goldline .route-loading {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  top: 47%;
+  width: min(82%, 310px);
+  transform: translate(-50%, -50%);
+  padding: 14px 16px;
+  border: 1px solid #e4c77e;
+  border-radius: 10px;
+  color: #fff5d8;
+  text-align: center;
+  background: #17130fed;
+  box-shadow: 0 8px 24px #000a;
+  backdrop-filter: blur(6px);
+}
+
+.goldline .route-empty b {
+  display: block;
+  font: 800 13px/1.15 Cinzel, serif;
+}
+
+.goldline .route-empty small {
+  display: block;
+  margin-top: 5px;
+  color: #e4d6b9;
+  font: 800 10px/1 Inter, sans-serif;
+}
+
+.goldline .route-loading {
+  font: 800 11px/1 Cinzel, serif;
+  letter-spacing: .06em;
+}
+
+.goldline .route-overflow {
+  position: absolute;
+  z-index: 7;
+  right: 8px;
+  top: 46%;
+  min-height: 38px;
+  padding: 9px 11px;
+  border: 1px solid #e6c979;
+  border-radius: 7px;
+  color: #fff3c9;
+  background: #17130ff2;
+  box-shadow: 0 5px 14px #000a;
+  font: 800 10px/1 Cinzel, serif;
+  letter-spacing: .04em;
+}
+
+.goldline .route-counts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: -5px 0 14px;
+}
+
+.goldline .route-counts b {
+  padding: 9px 10px;
+  border: 1px solid #8e73495c;
+  border-radius: 8px;
+  background: #fff7e58f;
+  font: 800 11px/1 Cinzel, serif;
+  text-align: center;
+}
+
+.goldline .goldline-drawer .route-list-item {
+  align-items: flex-start;
+  min-height: 60px;
+  padding: 10px 11px;
+}
+
+.goldline .goldline-drawer .route-list-item > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.goldline .goldline-drawer .route-list-item > div > b {
+  display: block;
+  color: #2c2114;
+  font: 800 14px/1.15 Inter, sans-serif;
+}
+
+.goldline .goldline-drawer .route-list-item > div > small {
+  display: block;
+  margin-top: 5px;
+  color: #67553b;
+  font: 700 11px/1.35 Inter, sans-serif;
+}
+
+.goldline .route-drawer-empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid #8e73494a;
+  border-radius: 8px;
+  background: #fff7e599;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* The primary driver controls were also being rendered as 6px labels. */
+.goldline .action-bar span {
+  min-height: 22px;
+  font: 800 9px/1.1 Cinzel, serif;
+}
+
+@media (max-width: 370px) {
+  .goldline .route-stop {
+    width: 168px;
+    min-width: 168px;
+    min-height: 50px;
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 3px 8px;
+    padding: 9px 10px;
+  }
+
+  .goldline .route-stop > span {
+    width: 26px;
+    height: 26px;
+    font-size: 11px;
+  }
+
+  .goldline .route-stop > b { font-size: 12px; }
+  .goldline .route-stop > small { font-size: 10px; }
+  .goldline .route-overflow { right: 5px; font-size: 9px; }
+}
