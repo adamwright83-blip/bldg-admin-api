@@ -120,9 +120,10 @@ export default function Driver() {
       <GoldlineHome
         pickups={pickupQuery.data}
         deliveries={deliveryQuery.data?.filter(order => order.paid)}
+        salesMissions={builtMissions.data}
         selectedDate={selectedDate}
         onSelectedDateChange={setSelectedDate}
-        isLoading={pickupQuery.isLoading || deliveryQuery.isLoading}
+        isLoading={pickupQuery.isLoading || deliveryQuery.isLoading || builtMissions.isLoading}
       />
     );
   }
