@@ -1,0 +1,198 @@
+/* Mobile reality check: the route screen must visibly feel alive and the primary
+   action strip must never read as cropped by browser chrome. This file loads
+   after the main Goldline styles so it can enforce those two guarantees. */
+
+/* Make the scene motion perceptible. The previous sub-pixel 9s drift was
+   technically animated but visually indistinguishable from a still image. */
+.goldline .goldline-world {
+  transform-origin: 52% 78%;
+  animation: goldline-world-breathe-visible 6.2s ease-in-out infinite alternate !important;
+  will-change: transform, filter;
+}
+
+@keyframes goldline-world-breathe-visible {
+  0% {
+    transform: scale(1.012) translate3d(-1px, 1px, 0);
+    filter: saturate(1.01) brightness(1);
+  }
+  52% {
+    transform: scale(1.021) translate3d(-4px, -3px, 0);
+    filter: saturate(1.055) brightness(1.018);
+  }
+  100% {
+    transform: scale(1.016) translate3d(3px, -1px, 0);
+    filter: saturate(1.025) brightness(1.008);
+  }
+}
+
+/* Foreground parallax duplicates the exact world art and softly masks the
+   explorer/foreground region. That lets her visibly breathe/sway relative to
+   the distant city without replacing the approved artwork. */
+.goldline::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: -2px;
+  pointer-events: none;
+  background: url("../../assets/goldline/goldline-world.png") 50% 50% / cover no-repeat;
+  -webkit-mask-image: radial-gradient(ellipse 24% 45% at 19% 76%, #000 0 58%, rgba(0,0,0,.78) 64%, transparent 75%);
+  mask-image: radial-gradient(ellipse 24% 45% at 19% 76%, #000 0 58%, rgba(0,0,0,.78) 64%, transparent 75%);
+  transform-origin: 18% 94%;
+  animation: goldline-avatar-sway 3.9s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes goldline-avatar-sway {
+  0% { transform: translate3d(-1px, 0, 0) rotate(-.18deg) scale(1.002); }
+  45% { transform: translate3d(1px, -2px, 0) rotate(.13deg) scale(1.005, 1.009); }
+  100% { transform: translate3d(3px, -1px, 0) rotate(.28deg) scale(1.003, 1.006); }
+}
+
+/* A second, tighter duplicate around the ponytail moves at a different rhythm,
+   creating a small hair-drift cue instead of moving the entire character as
+   one rigid cardboard cutout. */
+.goldline .goldline-ambient::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: url("../../assets/goldline/goldline-world.png") 50% 50% / cover no-repeat;
+  -webkit-mask-image: radial-gradient(ellipse 13% 12% at 19% 54%, #000 0 47%, rgba(0,0,0,.72) 57%, transparent 73%);
+  mask-image: radial-gradient(ellipse 13% 12% at 19% 54%, #000 0 47%, rgba(0,0,0,.72) 57%, transparent 73%);
+  transform-origin: 21% 59%;
+  animation: goldline-hair-drift 2.8s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes goldline-hair-drift {
+  0% { transform: translate3d(-2px, 1px, 0) rotate(-.35deg); }
+  52% { transform: translate3d(2px, -1px, 0) rotate(.4deg); }
+  100% { transform: translate3d(4px, 0, 0) rotate(.72deg); }
+}
+
+/* Visible water/route flow. This is intentionally a light shimmer, not a neon
+   replacement for the painted water. */
+.goldline .goldline-ambient::before {
+  content: "";
+  position: absolute;
+  inset: -7% -4%;
+  pointer-events: none;
+  opacity: .42;
+  mix-blend-mode: screen;
+  background:
+    repeating-linear-gradient(
+      178deg,
+      transparent 0 22px,
+      rgba(181, 255, 255, .06) 24px 27px,
+      rgba(103, 247, 255, .34) 29px 32px,
+      transparent 35px 54px
+    );
+  clip-path: polygon(
+    69% 8%, 78% 9%, 70% 21%, 67% 34%, 60% 43%, 55% 52%,
+    50% 61%, 55% 70%, 65% 78%, 62% 88%, 54% 82%, 47% 73%,
+    43% 64%, 47% 54%, 52% 46%, 58% 37%, 61% 25%
+  );
+  filter: blur(1.6px) drop-shadow(0 0 7px rgba(87, 244, 255, .42));
+  animation: goldline-water-flow 2.4s linear infinite;
+  will-change: transform, background-position, opacity;
+}
+
+@keyframes goldline-water-flow {
+  0% { transform: translate3d(0, -10px, 0); background-position: 0 -20px; opacity: .28; }
+  45% { opacity: .48; }
+  100% { transform: translate3d(1px, 13px, 0); background-position: 0 62px; opacity: .34; }
+}
+
+/* Keep ambient motes alive even when the device advertises reduced motion.
+   They are tiny opacity/position cues rather than full-screen camera movement. */
+.goldline .goldline-ambient i,
+.goldline .energy-node {
+  animation-play-state: running !important;
+}
+
+/* The sprite is four square tiles across. The old 58px-tall viewport literally
+   cropped roughly half of each tile. Give every tile a square art viewport and
+   float the entire strip clear of Chrome's bottom toolbar. */
+.goldline .action-bar {
+  left: 7px;
+  right: 7px;
+  bottom: max(24px, calc(env(safe-area-inset-bottom) + 20px));
+  padding: 0;
+  gap: 5px;
+  background: linear-gradient(transparent 0 3%, rgba(9,9,8,.84) 24%, rgba(8,8,7,.97) 100%);
+  filter: drop-shadow(0 8px 16px rgba(0,0,0,.72));
+}
+
+.goldline .action-bar button {
+  min-height: 0;
+  padding: 0 3px 9px;
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.goldline .action-bar i {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  background-size: 400% 100% !important;
+  background-repeat: no-repeat;
+}
+
+.goldline .action-bar span {
+  min-height: 26px;
+  padding: 4px 2px 0;
+  font-size: 10px;
+  line-height: 1.08;
+}
+
+/* Reserve enough visual room above the larger primary-action strip. */
+.goldline .route-overflow { bottom: 18%; }
+.goldline .stop-1 { bottom: 25%; }
+
+@media (max-width: 370px) {
+  .goldline .action-bar { left: 5px; right: 5px; bottom: max(20px, calc(env(safe-area-inset-bottom) + 16px)); gap: 3px; }
+  .goldline .action-bar span { font-size: 8px; min-height: 24px; }
+  .goldline .stop-1 { bottom: 24%; }
+}
+
+@media (max-height: 720px) {
+  .goldline .action-bar {
+    bottom: max(16px, calc(env(safe-area-inset-bottom) + 12px));
+  }
+  .goldline .action-bar i { aspect-ratio: 1 / .82; }
+  .goldline .action-bar span { min-height: 22px; font-size: 8px; }
+  .goldline .route-overflow { bottom: 17%; }
+  .goldline .stop-1 { bottom: 24%; }
+}
+
+/* Honor reduced-motion by reducing camera travel, not by freezing the entire
+   game world. The previous rule made Goldline look broken/static on devices
+   whose OS accessibility setting requested reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .goldline .goldline-world {
+    animation: goldline-world-reduced 9s ease-in-out infinite alternate !important;
+  }
+  .goldline::after { animation: goldline-avatar-reduced 6.5s ease-in-out infinite alternate; }
+  .goldline .goldline-ambient::after { animation: goldline-hair-reduced 5.8s ease-in-out infinite alternate; }
+  .goldline .goldline-ambient::before { animation: goldline-water-reduced 5s linear infinite; opacity: .26; }
+  .goldline .goldline-ambient i { animation: goldline-mote 8s ease-in-out infinite !important; }
+  .goldline .energy-node { animation: route-node-pulse 4.6s ease-out infinite !important; }
+}
+
+@keyframes goldline-world-reduced {
+  from { transform: scale(1.009) translate3d(0, 0, 0); }
+  to { transform: scale(1.012) translate3d(-1px, -1px, 0); }
+}
+@keyframes goldline-avatar-reduced {
+  from { transform: translate3d(0,0,0) scale(1.001); }
+  to { transform: translate3d(1px,-1px,0) scale(1.003); }
+}
+@keyframes goldline-hair-reduced {
+  from { transform: translate3d(-1px,0,0); }
+  to { transform: translate3d(1px,0,0); }
+}
+@keyframes goldline-water-reduced {
+  from { background-position: 0 -10px; }
+  to { background-position: 0 38px; }
+}
