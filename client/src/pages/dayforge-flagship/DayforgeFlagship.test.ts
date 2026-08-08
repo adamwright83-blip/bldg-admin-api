@@ -37,7 +37,7 @@ const vercel = readFileSync(
 
 describe("DayForge flagship contract", () => {
   it("ships as an isolated route and entry", () => {
-    expect(entry).toContain("DayforgeFlagship");
+    expect(entry).toContain("GoldlineHome");
     expect(entry).not.toContain("./App");
     expect(html).toContain('src="/src/dayforgeflagship-main.tsx"');
     expect(vite).toContain("dayforgeflagship: path.resolve(");
