@@ -7,7 +7,6 @@ import { ResidentFollowupAlert } from "@/components/admin/ResidentFollowupAlert"
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
-import GoldlineHome from "./goldline/GoldlineHome";
 
 function getLocalYmd(date = new Date()): string {
   return [
@@ -110,12 +109,6 @@ export default function Driver() {
 
   if (!isAuthenticated) {
     return <LoginForm role="driver" onSuccess={() => window.location.reload()} />;
-  }
-
-  // Goldline is the new authenticated driver home. The previous operational
-  // experience remains archived under client/src/archive/driver-2026-08-08.
-  if (isAuthenticated) {
-    return <GoldlineHome />;
   }
 
   return (
