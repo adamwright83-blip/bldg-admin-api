@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
 import GoldlineHome from "./goldline/GoldlineHome";
+import "./goldline/goldline-legibility.css";
 
 function getLocalYmd(date = new Date()): string {
   return [
