@@ -177,9 +177,21 @@ const LOCAL_ADMIN_PATHS = new Set([
 function AdminHostRouter() {
   return (
     <Switch>
-      <Route path="/product/:rest*"><Suspense fallback={<PublicLandingFallback />}><ProductShell /></Suspense></Route>
-      <Route path="/product"><Suspense fallback={<PublicLandingFallback />}><ProductShell /></Suspense></Route>
-      <Route path="/archive/lara-croft-skin"><Suspense fallback={<PublicLandingFallback />}><ArchivedLaraCroftSkin /></Suspense></Route>
+      <Route path="/product/:rest*">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <ProductShell />
+        </Suspense>
+      </Route>
+      <Route path="/product">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <ProductShell />
+        </Suspense>
+      </Route>
+      <Route path="/archive/lara-croft-skin">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <ArchivedLaraCroftSkin />
+        </Suspense>
+      </Route>
       {/* Public landing pages are also reachable from the admin host for previewing. */}
       <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/dayforge" component={DayforgeLandingRoute} />
@@ -200,7 +212,11 @@ function AdminHostRouter() {
           <DayforgeTodayPage />
         </Suspense>
       </Route>
-      <Route path="/dayforge-proof"><Suspense fallback={<PublicLandingFallback />}><DayforgeProofPage /></Suspense></Route>
+      <Route path="/dayforge-proof">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <DayforgeProofPage />
+        </Suspense>
+      </Route>
       <Route path="/dayforge-invite">
         <Suspense fallback={<PublicLandingFallback />}>
           <DayforgeInvitePage />
@@ -235,6 +251,7 @@ function AdminHostRouter() {
         path="/driver/sales-mission/:missionId"
         component={CommercialSalesMissionRoute}
       />
+      <Route path="/driver" component={Driver} />
       <Route
         path="/commercial-proposal/:missionId"
         component={CommercialProposalPrintRoute}
@@ -322,9 +339,21 @@ function Router() {
 
   return (
     <Switch>
-      <Route path="/product/:rest*"><Suspense fallback={<PublicLandingFallback />}><ProductShell /></Suspense></Route>
-      <Route path="/product"><Suspense fallback={<PublicLandingFallback />}><ProductShell /></Suspense></Route>
-      <Route path="/archive/lara-croft-skin"><Suspense fallback={<PublicLandingFallback />}><ArchivedLaraCroftSkin /></Suspense></Route>
+      <Route path="/product/:rest*">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <ProductShell />
+        </Suspense>
+      </Route>
+      <Route path="/product">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <ProductShell />
+        </Suspense>
+      </Route>
+      <Route path="/archive/lara-croft-skin">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <ArchivedLaraCroftSkin />
+        </Suspense>
+      </Route>
       <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/dayforge" component={DayforgeLandingRoute} />
       <Route path="/landingfinal" component={LandingFinalRoute} />
@@ -364,6 +393,8 @@ function Router() {
         path="/driver/sales-mission/:missionId"
         component={CommercialSalesMissionRoute}
       />
+      <Route path="/driver" component={Driver} />
+      <Route path="/payment-reconciliation" component={AdminHostApp} />
       <Route
         path="/commercial-proposal/:missionId"
         component={CommercialProposalPrintRoute}

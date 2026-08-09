@@ -1,7 +1,9 @@
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
-import ProductShell from "@/product/ProductShell";
-import { Loader2 } from "lucide-react";
+import GoldlineDriverController from "./driver/GoldlineDriverController";
+import "./goldline/goldline-legibility.css";
+import "./goldline/goldline-live-fix.css";
 
 export default function Driver() {
   const { loading: authLoading, isAuthenticated } = useAuth();
@@ -15,8 +17,10 @@ export default function Driver() {
   }
 
   if (!isAuthenticated) {
-    return <LoginForm role="driver" onSuccess={() => window.location.reload()} />;
+    return (
+      <LoginForm role="driver" onSuccess={() => window.location.reload()} />
+    );
   }
 
-  return <ProductShell />;
+  return <GoldlineDriverController />;
 }

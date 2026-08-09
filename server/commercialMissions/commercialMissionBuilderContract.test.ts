@@ -13,12 +13,29 @@ const driver = readFileSync(
   new URL("../../client/src/pages/Driver.tsx", import.meta.url),
   "utf8"
 );
+const driverController = readFileSync(
+  new URL(
+    "../../client/src/pages/driver/GoldlineDriverController.tsx",
+    import.meta.url
+  ),
+  "utf8"
+);
+const goldline = readFileSync(
+  new URL("../../client/src/pages/goldline/GoldlineHome.tsx", import.meta.url),
+  "utf8"
+);
 const commandCenter = readFileSync(
-  new URL("../../client/src/components/driver/CommandCenter.tsx", import.meta.url),
+  new URL(
+    "../../client/src/components/driver/CommandCenter.tsx",
+    import.meta.url
+  ),
   "utf8"
 );
 const builder = readFileSync(
-  new URL("../../client/src/components/driver/BuildMissionSheet.tsx", import.meta.url),
+  new URL(
+    "../../client/src/components/driver/BuildMissionSheet.tsx",
+    import.meta.url
+  ),
   "utf8"
 );
 
@@ -31,7 +48,9 @@ describe("driver mission builder contract", () => {
 
   it("deduplicates active venues and requires public phones for call missions", () => {
     expect(service).toContain("activeProviderIds");
-    expect(service).toContain('input.missionType !== "cold_call" || Boolean(opportunity.account.phone)');
+    expect(service).toContain(
+      'input.missionType !== "cold_call" || Boolean(opportunity.account.phone)'
+    );
     expect(service).toContain("activateCommercialMissionForField");
     expect(service).toContain("generateCommercialProposal");
     expect(service).toContain("approveCommercialProposal");
@@ -39,9 +58,12 @@ describe("driver mission builder contract", () => {
   });
 
   it("keeps mission stops separate from operational order records", () => {
-    expect(driver).toContain('import ProductShell from "@/product/ProductShell"');
-    expect(driver).toContain("return <ProductShell />");
-    expect(driver).not.toContain("salesMissions={builtMissions.data}");
+    expect(driver).toContain("return <GoldlineDriverController />");
+    expect(driverController).toContain("salesMissions={builtMissions.data}");
+    expect(goldline).toContain("function toSalesStop");
+    expect(goldline).toContain("function toRouteStop");
+    expect(goldline).toContain("...(pickups ?? []).map");
+    expect(goldline).toContain("(salesMissions ?? []).map(toSalesStop)");
     expect(commandCenter).toContain("salesMissions.map");
     expect(commandCenter).toContain("orders.map");
     expect(commandCenter).toContain("Sales missions");
