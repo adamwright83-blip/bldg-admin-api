@@ -7,6 +7,7 @@ import {
   MapPin,
   Menu,
   PhoneCall,
+  Radio,
   ShieldAlert,
   X,
 } from "lucide-react";
@@ -24,7 +25,13 @@ import type {
 } from "../../../../server/armory/armoryTypes";
 import type { MissionDiamond } from "../../../../server/commercialMissions/driverSalesMotivationService";
 import type { DayResolution } from "../../../../server/unload/unloadTypes";
+import type {
+  OpenChannelEditableTask,
+  OpenChannelMission,
+  OpenChannelTask,
+} from "../../../../server/openChannel/openChannelTypes";
 import type { GoldlineLocationSnapshot } from "../driver/goldlineDriverModel";
+import { detectOpenChannelGap } from "../driver/goldlineDriverModel";
 import {
   GOLDLINE_ROUTE_ANCHORS,
   goldlineAnchorStyle,
@@ -32,6 +39,7 @@ import {
 import world from "@/assets/goldline/goldline-world.png";
 import vorgan from "@/assets/goldline/vorgan.png";
 import objects from "@/assets/goldline/action-objects.png";
+import OpenChannel, { type OpenChannelGenerateInput } from "./OpenChannel";
 import "./goldline-home.css";
 
 const weekdays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
@@ -43,7 +51,8 @@ type Panel =
   | "route"
   | "vorgan"
   | "build"
-  | "unload";
+  | "unload"
+  | "open-channel";
 
 type RouteStop = {
   key: string;
@@ -51,7 +60,13 @@ type RouteStop = {
   missionId?: number;
   name: string;
   time: string;
-  type: "PICKUP" | "DROPOFF" | "PAYMENT BLOCKED" | "SALES CALL" | "SIDE QUEST";
+  type:
+    | "PICKUP"
+    | "DROPOFF"
+    | "PAYMENT BLOCKED"
+    | "SALES CALL"
+    | "SIDE QUEST"
+    | "OPEN CHANNEL";
   tone: "gold" | "cyan" | "violet";
   address: string;
   valueLabel?: string;
@@ -61,12 +76,14 @@ type RouteStop = {
   resolveStatus?: "collected" | "delivered";
   paymentPath?: string;
   move?: FieldMoveCandidate;
+  openChannelMissionId?: string;
+  openChannelTaskId?: string;
 };
 
 type RouteCompletion = {
   stopKey: string;
   name: string;
-  status: "collected" | "delivered";
+  status: "collected" | "delivered" | "mission_step";
   phase: "confirming" | "advancing";
 };
 
@@ -103,12 +120,16 @@ type GoldlineHomeProps = {
   location: GoldlineLocationSnapshot;
   dayResolution: DayResolution | null;
   activeDispatch?: ActiveDispatch;
+  openChannelMission?: OpenChannelMission | null;
   selectedDate: string;
   onSelectedDateChange: (date: string) => void;
   isLoading?: boolean;
   isResolvingOrder?: boolean;
   isAcceptingMove?: boolean;
   isResolvingDay?: boolean;
+  isGeneratingOpenChannel?: boolean;
+  isApprovingOpenChannel?: boolean;
+  isCompletingOpenChannelTask?: boolean;
   onResolveOrder: (
     orderId: number,
     status: "collected" | "delivered"
@@ -119,6 +140,16 @@ type GoldlineHomeProps = {
   onOpenJournal: () => void;
   onResolveDay: () => Promise<void>;
   onOpenDispatch?: () => Promise<void>;
+  onGenerateOpenChannel: (input: OpenChannelGenerateInput) => Promise<void>;
+  onApproveOpenChannel: (input: {
+    missionId: string;
+    title: string;
+    tasks: OpenChannelEditableTask[];
+  }) => Promise<void>;
+  onCompleteOpenChannelTask: (
+    missionId: string,
+    taskId: string
+  ) => Promise<boolean>;
 };
 
 function getLocalYmd(date = new Date()): string {
@@ -245,6 +276,26 @@ function toMoveStop(move: FieldMoveCandidate): RouteStop {
   };
 }
 
+function toOpenChannelStop(
+  mission: OpenChannelMission,
+  task: OpenChannelTask
+): RouteStop {
+  return {
+    key: `OPEN-CHANNEL-${task.id}`,
+    name: task.title,
+    time: `${task.estimatedMinutes} MIN`,
+    type: "OPEN CHANNEL",
+    tone: "cyan",
+    address: task.detail,
+    sortKey: `20:${String(task.position).padStart(2, "0")}`,
+    navigationUrl: task.navigationQuery
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(task.navigationQuery)}`
+      : undefined,
+    openChannelMissionId: mission.id,
+    openChannelTaskId: task.id,
+  };
+}
+
 function formatMoney(cents: number | null): string {
   if (cents == null) return "Amount unavailable";
   return new Intl.NumberFormat("en-US", {
@@ -268,12 +319,16 @@ export default function GoldlineHome({
   location,
   dayResolution,
   activeDispatch,
+  openChannelMission,
   selectedDate,
   onSelectedDateChange,
   isLoading = false,
   isResolvingOrder = false,
   isAcceptingMove = false,
   isResolvingDay = false,
+  isGeneratingOpenChannel = false,
+  isApprovingOpenChannel = false,
+  isCompletingOpenChannelTask = false,
   onResolveOrder,
   onAcceptMove,
   onOpenWalkIn,
@@ -281,6 +336,9 @@ export default function GoldlineHome({
   onOpenJournal,
   onResolveDay,
   onOpenDispatch,
+  onGenerateOpenChannel,
+  onApproveOpenChannel,
+  onCompleteOpenChannelTask,
 }: GoldlineHomeProps) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [selectedStop, setSelectedStop] = useState<RouteStop | null>(null);
@@ -320,7 +378,18 @@ export default function GoldlineHome({
         .filter(move => !existingMissionIds.has(move.missionId ?? undefined))
         .map(toMoveStop)
     : [];
-  const routeStops = [...orderStops, ...salesStops, ...contextualStops]
+  const openChannelStops =
+    currentDay && openChannelMission?.status === "active"
+      ? openChannelMission.tasks
+          .filter(task => task.status === "pending")
+          .map(task => toOpenChannelStop(openChannelMission, task))
+      : [];
+  const routeStops = [
+    ...orderStops,
+    ...openChannelStops,
+    ...salesStops,
+    ...contextualStops,
+  ]
     .filter(stop => !completedStopKeys.has(stop.key))
     .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 
@@ -336,11 +405,35 @@ export default function GoldlineHome({
   const salesCount = routeStops.filter(stop =>
     ["SALES CALL", "SIDE QUEST"].includes(stop.type)
   ).length;
+  const openChannelCount = routeStops.filter(
+    stop => stop.type === "OPEN CHANNEL"
+  ).length;
   const activeWeekday = weekdayLabel(selectedDate);
   const hustleProgress = meter ? Math.round(meter.progress * 100) : null;
   const activeArchetype = armory?.archetypes
     .slice()
     .sort((left, right) => right.count - left.count)[0];
+  const nextFixedCommitment = today?.nextFixedCommitment;
+  const nextFixedOrderStillPresent = nextFixedCommitment
+    ? orderStops.some(
+        stop =>
+          stop.orderId != null &&
+          String(stop.orderId) === nextFixedCommitment.source.entityId
+      )
+    : false;
+  const effectiveNextCommitmentAt =
+    nextFixedCommitment &&
+    ["pickup", "delivery"].includes(nextFixedCommitment.kind) &&
+    !nextFixedOrderStillPresent
+      ? null
+      : nextFixedCommitment?.scheduledAt;
+  const openChannelGap = detectOpenChannelGap({
+    now: new Date(),
+    selectedDate,
+    nextCommitmentAt: effectiveNextCommitmentAt,
+    fixedStopCount: orderStops.length,
+    hasMission: Boolean(openChannelMission),
+  });
 
   function openRoute(stop?: RouteStop) {
     setSelectedStop(stop ?? null);
@@ -352,8 +445,18 @@ export default function GoldlineHome({
   }
 
   async function resolveSelectedStop(stop: RouteStop) {
-    if (!stop.orderId || !stop.resolveStatus) return;
-    const resolved = await onResolveOrder(stop.orderId, stop.resolveStatus);
+    let resolved = false;
+    let completionStatus: RouteCompletion["status"] | null = null;
+    if (stop.orderId && stop.resolveStatus) {
+      resolved = await onResolveOrder(stop.orderId, stop.resolveStatus);
+      completionStatus = stop.resolveStatus;
+    } else if (stop.openChannelMissionId && stop.openChannelTaskId) {
+      resolved = await onCompleteOpenChannelTask(
+        stop.openChannelMissionId,
+        stop.openChannelTaskId
+      );
+      completionStatus = "mission_step";
+    }
     if (!resolved) return;
     setCompletedStopKeys(current => {
       const next = new Set(current);
@@ -363,7 +466,7 @@ export default function GoldlineHome({
     setRouteCompletion({
       stopKey: stop.key,
       name: stop.name,
-      status: stop.resolveStatus,
+      status: completionStatus!,
       phase: "confirming",
     });
   }
@@ -419,6 +522,27 @@ export default function GoldlineHome({
             <i />
             <i />
           </div>
+        ) : null}
+
+        {currentDay && openChannelGap.available && routeCompletion == null ? (
+          <button
+            type="button"
+            className={`open-channel-signal${openChannelMission?.status === "active" ? " is-active" : ""}`}
+            onClick={() => setPanel("open-channel")}
+            aria-label="Open Channel mission briefing"
+          >
+            <span>
+              <Radio />
+            </span>
+            <b>OPEN CHANNEL</b>
+            <small>
+              {openChannelMission?.status === "active"
+                ? `${openChannelCount} BOARD SPACES ACTIVE`
+                : openChannelMission?.status === "draft"
+                  ? "DRAFT WAITING FOR APPROVAL"
+                  : openChannelGap.label}
+            </small>
+          </button>
         ) : null}
 
         <header className="goldline-topbar">
@@ -492,6 +616,15 @@ export default function GoldlineHome({
               <>
                 <i>·</i>
                 <strong className="summary-sales">{salesCount}</strong> SALES
+              </>
+            ) : null}
+            {openChannelCount > 0 ? (
+              <>
+                <i>·</i>
+                <strong className="summary-channel">
+                  {openChannelCount}
+                </strong>{" "}
+                MISSION
               </>
             ) : null}
           </span>
@@ -632,7 +765,7 @@ export default function GoldlineHome({
           ))}
         </nav>
 
-        {panel ? (
+        {panel && panel !== "open-channel" ? (
           <div className="drawer-backdrop" onClick={() => setPanel(null)}>
             <section
               className="goldline-drawer"
@@ -721,6 +854,9 @@ export default function GoldlineHome({
                     <b>{dropoffCount} DROPOFFS</b>
                     {blockerCount > 0 ? <b>{blockerCount} BLOCKED</b> : null}
                     {salesCount > 0 ? <b>{salesCount} SALES</b> : null}
+                    {openChannelCount > 0 ? (
+                      <b>{openChannelCount} MISSION</b>
+                    ) : null}
                   </div>
                   {routeCompletion?.phase === "confirming" ? (
                     <div
@@ -737,7 +873,9 @@ export default function GoldlineHome({
                       <strong>
                         {routeCompletion.status === "collected"
                           ? "PICKUP SECURED"
-                          : "DELIVERY COMPLETE"}
+                          : routeCompletion.status === "delivered"
+                            ? "DELIVERY COMPLETE"
+                            : "MISSION SPACE CLEARED"}
                       </strong>
                       <em>Goldline advancing…</em>
                     </div>
@@ -766,18 +904,24 @@ export default function GoldlineHome({
                             <MapPin /> NAVIGATE
                           </a>
                         ) : null}
-                        {selectedStop.resolveStatus && selectedStop.orderId ? (
+                        {(selectedStop.resolveStatus && selectedStop.orderId) ||
+                        (selectedStop.openChannelMissionId &&
+                          selectedStop.openChannelTaskId) ? (
                           <button
                             type="button"
-                            disabled={isResolvingOrder}
+                            disabled={
+                              isResolvingOrder || isCompletingOpenChannelTask
+                            }
                             onClick={() =>
                               void resolveSelectedStop(selectedStop)
                             }
                           >
                             <Check />{" "}
-                            {selectedStop.resolveStatus === "collected"
-                              ? "MARK COLLECTED"
-                              : "MARK DELIVERED"}
+                            {selectedStop.openChannelTaskId
+                              ? "COMPLETE BOARD SPACE"
+                              : selectedStop.resolveStatus === "collected"
+                                ? "MARK COLLECTED"
+                                : "MARK DELIVERED"}
                           </button>
                         ) : null}
                         {selectedStop.paymentPath ? (
@@ -1072,6 +1216,16 @@ export default function GoldlineHome({
             </section>
           </div>
         ) : null}
+        <OpenChannel
+          open={panel === "open-channel"}
+          mission={openChannelMission}
+          gap={openChannelGap}
+          isGenerating={isGeneratingOpenChannel}
+          isApproving={isApprovingOpenChannel}
+          onClose={() => setPanel(null)}
+          onGenerate={onGenerateOpenChannel}
+          onApprove={onApproveOpenChannel}
+        />
       </section>
     </main>
   );

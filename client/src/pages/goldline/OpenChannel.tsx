@@ -1,0 +1,573 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  MapPin,
+  Mic,
+  Plus,
+  Radio,
+  Sparkles,
+  Square,
+  Trash2,
+  Volume2,
+  X,
+} from "lucide-react";
+import type {
+  OpenChannelEditableTask,
+  OpenChannelMission,
+  OpenChannelTaskCategory,
+} from "../../../../server/openChannel/openChannelTypes";
+import type { OpenChannelGap } from "../driver/goldlineDriverModel";
+import "./open-channel.css";
+
+export type OpenChannelGenerateInput = {
+  transcript?: string;
+  audioDataUrl?: string;
+  availableMinutes: number | null;
+  nextCommitmentAt: string | null;
+};
+
+type OpenChannelProps = {
+  open: boolean;
+  mission: OpenChannelMission | null | undefined;
+  gap: OpenChannelGap;
+  isGenerating: boolean;
+  isApproving: boolean;
+  onClose: () => void;
+  onGenerate: (input: OpenChannelGenerateInput) => Promise<void>;
+  onApprove: (input: {
+    missionId: string;
+    title: string;
+    tasks: OpenChannelEditableTask[];
+  }) => Promise<void>;
+};
+
+const CATEGORIES: OpenChannelTaskCategory[] = [
+  "food",
+  "sales",
+  "operations",
+  "personal",
+  "finance",
+  "travel",
+  "other",
+];
+
+const LARA_OPENING =
+  "We have an opening in the route. Tell me where you are, how much time we have, what cannot move, and everything competing for your attention. I’ll build the mission; you approve the board.";
+
+type DraftTask = OpenChannelEditableTask & { clientKey: string };
+
+function blobDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("Could not read recording"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function speakAsLara(text: string) {
+  if (!("speechSynthesis" in window) || !text.trim()) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  const voices = window.speechSynthesis.getVoices();
+  utterance.voice =
+    voices.find(
+      voice =>
+        voice.lang.toLowerCase().startsWith("en-gb") &&
+        /female|serena|kate|susan|samantha|victoria|fiona/i.test(voice.name)
+    ) ??
+    voices.find(voice => voice.lang.toLowerCase().startsWith("en-gb")) ??
+    null;
+  utterance.lang = "en-GB";
+  utterance.rate = 0.96;
+  utterance.pitch = 1.02;
+  window.speechSynthesis.speak(utterance);
+}
+
+function emptyTask(): DraftTask {
+  return {
+    clientKey: crypto.randomUUID(),
+    title: "New board step",
+    detail: "Describe exactly what done means.",
+    estimatedMinutes: 20,
+    category: "other",
+    navigationQuery: null,
+  };
+}
+
+export default function OpenChannel({
+  open,
+  mission,
+  gap,
+  isGenerating,
+  isApproving,
+  onClose,
+  onGenerate,
+  onApprove,
+}: OpenChannelProps) {
+  const [transcript, setTranscript] = useState("");
+  const [audioDataUrl, setAudioDataUrl] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [tasks, setTasks] = useState<DraftTask[]>([]);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const announcedRef = useRef(false);
+
+  useEffect(() => {
+    if (!open) {
+      announcedRef.current = false;
+      window.speechSynthesis?.cancel();
+      return;
+    }
+    if (!announcedRef.current) {
+      announcedRef.current = true;
+      speakAsLara(mission?.laraBriefing ?? LARA_OPENING);
+    }
+  }, [mission?.laraBriefing, open]);
+
+  useEffect(() => {
+    if (!mission) return;
+    setTitle(mission.title);
+    setTasks(
+      mission.tasks.map(task => ({
+        clientKey: task.id,
+        title: task.title,
+        detail: task.detail,
+        estimatedMinutes: task.estimatedMinutes,
+        category: task.category,
+        navigationQuery: task.navigationQuery,
+      }))
+    );
+  }, [mission?.id, mission?.status]);
+
+  useEffect(
+    () => () => {
+      recorderRef.current?.stop();
+      streamRef.current?.getTracks().forEach(track => track.stop());
+      window.speechSynthesis?.cancel();
+    },
+    []
+  );
+
+  async function startRecording() {
+    setRecordingError(null);
+    setAudioDataUrl(null);
+    if (!navigator.mediaDevices?.getUserMedia || !("MediaRecorder" in window)) {
+      setRecordingError(
+        "Voice recording is unavailable in this browser. Type the briefing below."
+      );
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      recorderRef.current = recorder;
+      recorder.ondataavailable = event => {
+        if (event.data.size) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+        void blobDataUrl(blob)
+          .then(setAudioDataUrl)
+          .catch(() =>
+            setRecordingError(
+              "The recording could not be prepared. Please type the briefing."
+            )
+          );
+        stream.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+        recorderRef.current = null;
+        setRecording(false);
+      };
+      recorder.start();
+      setRecording(true);
+    } catch (error) {
+      setRecordingError(
+        error instanceof Error
+          ? `Microphone unavailable: ${error.message}`
+          : "Microphone permission was not granted."
+      );
+    }
+  }
+
+  function stopRecording() {
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+  }
+
+  function updateTask(index: number, patch: Partial<OpenChannelEditableTask>) {
+    setTasks(current =>
+      current.map((task, taskIndex) =>
+        taskIndex === index ? { ...task, ...patch } : task
+      )
+    );
+  }
+
+  function moveTask(index: number, direction: -1 | 1) {
+    setTasks(current => {
+      const destination = index + direction;
+      if (destination < 0 || destination >= current.length) return current;
+      const next = [...current];
+      [next[index], next[destination]] = [next[destination], next[index]];
+      return next;
+    });
+  }
+
+  if (!open) return null;
+  const draft = mission?.status === "draft" ? mission : null;
+  const active = mission?.status === "active" ? mission : null;
+  const totalMinutes = tasks.reduce(
+    (sum, task) => sum + task.estimatedMinutes,
+    0
+  );
+
+  return (
+    <div
+      className="open-channel-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Open Channel mission briefing"
+    >
+      <div className="open-channel-scene">
+        <div className="open-channel-scene-art" aria-hidden="true" />
+        <div className="open-channel-scanlines" aria-hidden="true" />
+        <button
+          className="open-channel-close"
+          type="button"
+          onClick={onClose}
+          aria-label="Close Open Channel"
+        >
+          <X />
+        </button>
+
+        <header className="open-channel-header">
+          <span>
+            <Radio />
+          </span>
+          <div>
+            <small>GOLDLINE FIELD COMMS</small>
+            <h2>OPEN CHANNEL</h2>
+          </div>
+          <em>LIVE</em>
+        </header>
+
+        <section className="open-channel-dialogue" aria-live="polite">
+          <small>LARA · FIELD OPERATIVE</small>
+          <p>{mission?.laraBriefing ?? LARA_OPENING}</p>
+          <button
+            type="button"
+            onClick={() => speakAsLara(mission?.laraBriefing ?? LARA_OPENING)}
+          >
+            <Volume2 /> PLAY LARA’S VOICE
+          </button>
+        </section>
+
+        <div className="open-channel-window">
+          <span>{gap.label}</span>
+          <strong>
+            {gap.nextCommitmentAt
+              ? `NEXT FIXED COMMITMENT ${new Date(gap.nextCommitmentAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+              : "NO VERIFIED END TIME — YOUR BRIEFING SETS THE BOUNDARY"}
+          </strong>
+        </div>
+
+        {!mission ? (
+          <section className="open-channel-console">
+            <div className="open-channel-capture">
+              <button
+                type="button"
+                className={
+                  recording ? "is-recording" : audioDataUrl ? "is-ready" : ""
+                }
+                onClick={recording ? stopRecording : startRecording}
+                disabled={isGenerating}
+              >
+                {recording ? <Square /> : audioDataUrl ? <Check /> : <Mic />}
+                <span>
+                  <b>
+                    {recording
+                      ? "STOP BRIEFING"
+                      : audioDataUrl
+                        ? "VOICE BRIEFING CAPTURED"
+                        : "START VOICE BRIEFING"}
+                  </b>
+                  <small>
+                    {recording
+                      ? "Speak freely — constraints, errands, obligations, ideas"
+                      : "Tap once, dump everything, then stop"}
+                  </small>
+                </span>
+              </button>
+              {recordingError ? (
+                <p className="open-channel-error">{recordingError}</p>
+              ) : null}
+            </div>
+            <label className="open-channel-transcript">
+              <span>TYPE, CORRECT, OR ADD CONTEXT</span>
+              <textarea
+                value={transcript}
+                onChange={event => setTranscript(event.target.value)}
+                rows={6}
+                placeholder="It’s Sunday at 11:16. I’m at Lugo’s with three and a half hours…"
+              />
+            </label>
+            <button
+              type="button"
+              className="open-channel-primary"
+              disabled={
+                recording ||
+                isGenerating ||
+                (!audioDataUrl && transcript.trim().length < 20)
+              }
+              onClick={() =>
+                void onGenerate({
+                  transcript: transcript.trim() || undefined,
+                  audioDataUrl: audioDataUrl ?? undefined,
+                  availableMinutes: gap.availableMinutes,
+                  nextCommitmentAt: gap.nextCommitmentAt,
+                })
+              }
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="spin" /> LARA IS BUILDING THE MISSION…
+                </>
+              ) : (
+                <>
+                  <Sparkles /> BUILD DRAFT MISSION
+                </>
+              )}
+            </button>
+          </section>
+        ) : null}
+
+        {draft ? (
+          <section className="open-channel-console is-plan">
+            <div className="open-channel-plan-heading">
+              <div>
+                <small>DRAFT MISSION · REVIEW BEFORE DEPLOYMENT</small>
+                <input
+                  value={title}
+                  onChange={event => setTitle(event.target.value)}
+                  aria-label="Mission title"
+                />
+              </div>
+              <strong>{totalMinutes} MIN</strong>
+            </div>
+            <div className="open-channel-task-editor">
+              {tasks.map((task, index) => (
+                <article key={task.clientKey}>
+                  <span className="open-channel-step-number">{index + 1}</span>
+                  <div>
+                    <input
+                      value={task.title}
+                      onChange={event =>
+                        updateTask(index, { title: event.target.value })
+                      }
+                      aria-label={`Step ${index + 1} title`}
+                    />
+                    <textarea
+                      value={task.detail}
+                      onChange={event =>
+                        updateTask(index, { detail: event.target.value })
+                      }
+                      rows={2}
+                      aria-label={`Step ${index + 1} details`}
+                    />
+                    <div className="open-channel-task-fields">
+                      <label>
+                        <span>MIN</span>
+                        <input
+                          type="number"
+                          min={5}
+                          max={240}
+                          value={task.estimatedMinutes}
+                          onChange={event =>
+                            updateTask(index, {
+                              estimatedMinutes: Math.max(
+                                5,
+                                Number(event.target.value) || 5
+                              ),
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>TYPE</span>
+                        <select
+                          value={task.category}
+                          onChange={event =>
+                            updateTask(index, {
+                              category: event.target
+                                .value as OpenChannelTaskCategory,
+                            })
+                          }
+                        >
+                          {CATEGORIES.map(category => (
+                            <option key={category}>{category}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="is-map">
+                        <span>MAP SEARCH</span>
+                        <input
+                          value={task.navigationQuery ?? ""}
+                          onChange={event =>
+                            updateTask(index, {
+                              navigationQuery: event.target.value || null,
+                            })
+                          }
+                          placeholder="Optional"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  <div className="open-channel-task-controls">
+                    <button
+                      type="button"
+                      onClick={() => moveTask(index, -1)}
+                      disabled={index === 0}
+                      aria-label={`Move step ${index + 1} up`}
+                    >
+                      <ChevronUp />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveTask(index, 1)}
+                      disabled={index === tasks.length - 1}
+                      aria-label={`Move step ${index + 1} down`}
+                    >
+                      <ChevronDown />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTasks(current =>
+                          current.filter((_, taskIndex) => taskIndex !== index)
+                        )
+                      }
+                      disabled={tasks.length === 1}
+                      aria-label={`Remove step ${index + 1}`}
+                    >
+                      <Trash2 />
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="open-channel-add"
+              onClick={() => setTasks(current => [...current, emptyTask()])}
+              disabled={tasks.length >= 10}
+            >
+              <Plus /> ADD BOARD SPACE
+            </button>
+            <button
+              type="button"
+              className="open-channel-primary"
+              disabled={
+                isApproving ||
+                !title.trim() ||
+                tasks.some(task => !task.title.trim() || !task.detail.trim())
+              }
+              onClick={() =>
+                void onApprove({
+                  missionId: draft.id,
+                  title: title.trim(),
+                  tasks: tasks.map(
+                    ({ clientKey: _clientKey, ...task }) => task
+                  ),
+                })
+              }
+            >
+              {isApproving ? (
+                <>
+                  <Loader2 className="spin" /> DEPLOYING MISSION…
+                </>
+              ) : (
+                <>
+                  <Check /> APPROVE &amp; LOAD THE BOARD
+                </>
+              )}
+            </button>
+            <p className="open-channel-source">
+              Generated from your briefing ·{" "}
+              {draft.generationSource === "anthropic_structured"
+                ? "AI structured plan"
+                : "reliable fallback plan"}
+            </p>
+          </section>
+        ) : null}
+
+        {active ? (
+          <section className="open-channel-console is-active">
+            <div className="open-channel-plan-heading">
+              <div>
+                <small>MISSION ACTIVE</small>
+                <h3>{active.title}</h3>
+              </div>
+              <strong>
+                {
+                  active.tasks.filter(task => task.status === "completed")
+                    .length
+                }
+                /{active.tasks.length}
+              </strong>
+            </div>
+            <ol className="open-channel-active-tasks">
+              {active.tasks.map(task => (
+                <li
+                  key={task.id}
+                  className={task.status === "completed" ? "is-complete" : ""}
+                >
+                  <span>
+                    {task.status === "completed" ? (
+                      <Check />
+                    ) : (
+                      task.position + 1
+                    )}
+                  </span>
+                  <div>
+                    <b>{task.title}</b>
+                    <small>
+                      {task.estimatedMinutes} MIN ·{" "}
+                      {task.category.toUpperCase()}
+                    </small>
+                  </div>
+                  {task.navigationQuery ? (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(task.navigationQuery)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Find ${task.title} on map`}
+                    >
+                      <MapPin />
+                    </a>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+            <button
+              type="button"
+              className="open-channel-primary"
+              onClick={onClose}
+            >
+              RETURN TO THE BOARD
+            </button>
+          </section>
+        ) : null}
+      </div>
+    </div>
+  );
+}

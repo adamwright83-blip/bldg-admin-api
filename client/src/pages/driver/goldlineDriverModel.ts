@@ -20,6 +20,13 @@ export type GoldlineLocationSnapshot =
       reason: string;
     };
 
+export type OpenChannelGap = {
+  available: boolean;
+  availableMinutes: number | null;
+  nextCommitmentAt: string | null;
+  label: string;
+};
+
 type GoldlineGeolocation = {
   getCurrentPosition: (
     success: (position: {
@@ -94,4 +101,47 @@ export function nextCommitmentDate(
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isFinite(parsed.getTime()) ? parsed : null;
+}
+
+export function detectOpenChannelGap(input: {
+  now: Date;
+  selectedDate: string;
+  nextCommitmentAt: string | null | undefined;
+  fixedStopCount: number;
+  hasMission: boolean;
+  minimumGapMinutes?: number;
+}): OpenChannelGap {
+  const currentDate = [
+    input.now.getFullYear(),
+    String(input.now.getMonth() + 1).padStart(2, "0"),
+    String(input.now.getDate()).padStart(2, "0"),
+  ].join("-");
+  if (input.selectedDate !== currentDate) {
+    return {
+      available: input.hasMission,
+      availableMinutes: null,
+      nextCommitmentAt: null,
+      label: "OPEN CHANNEL",
+    };
+  }
+  const next = nextCommitmentDate(input.nextCommitmentAt);
+  const futureNext = next && next.getTime() > input.now.getTime() ? next : null;
+  const availableMinutes = futureNext
+    ? Math.max(
+        0,
+        Math.floor((futureNext.getTime() - input.now.getTime()) / 60_000)
+      )
+    : null;
+  const threshold = input.minimumGapMinutes ?? 90;
+  const openEndedGap = !futureNext && input.fixedStopCount === 0;
+  const timedGap = availableMinutes != null && availableMinutes >= threshold;
+  return {
+    available: input.hasMission || openEndedGap || timedGap,
+    availableMinutes,
+    nextCommitmentAt: futureNext?.toISOString() ?? null,
+    label:
+      availableMinutes == null
+        ? "OPEN-ENDED WINDOW"
+        : `${Math.floor(availableMinutes / 60)}H ${availableMinutes % 60}M WINDOW`,
+  };
 }

@@ -23,6 +23,10 @@ const goldlineCss = [
     new URL("../goldline/goldline-live-fix.css", import.meta.url),
     "utf8"
   ),
+  readFileSync(
+    new URL("../goldline/open-channel.css", import.meta.url),
+    "utf8"
+  ),
 ].join("\n");
 const app = readFileSync(new URL("../../App.tsx", import.meta.url), "utf8");
 const mission = readFileSync(
@@ -131,5 +135,20 @@ describe("Goldline canonical driver restoration", () => {
     expect(goldlineCss).toContain("goldline-route-confirm");
     expect(goldlineCss).toContain("goldline-avatar-advance");
     expect(goldlineCss).toContain("goldline-player-advance");
+  });
+
+  it("turns a large verified gap into an editable voice-first Open Channel mission", () => {
+    expect(controller).toContain("system.openChannel.current.useQuery");
+    expect(controller).toContain(
+      "system.openChannel.generateDraft.useMutation"
+    );
+    expect(controller).toContain("system.openChannel.approve.useMutation");
+    expect(controller).toContain("system.openChannel.completeTask.useMutation");
+    expect(goldline).toContain("detectOpenChannelGap");
+    expect(goldline).toContain("open-channel-signal");
+    expect(goldline).toContain("OPEN CHANNEL");
+    expect(goldline).toContain("COMPLETE BOARD SPACE");
+    expect(goldline).toContain("MISSION SPACE CLEARED");
+    expect(goldlineCss).toContain("open-channel-beacon");
   });
 });

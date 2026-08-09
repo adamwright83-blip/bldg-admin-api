@@ -309,7 +309,8 @@ function responseFor(
   input,
   withMoves,
   singlePickupOnly = false,
-  resolvedOrderIds = new Set()
+  resolvedOrderIds = new Set(),
+  openChannelState = { current: null }
 ) {
   if (procedure === "auth.me") {
     return {
@@ -389,6 +390,123 @@ function responseFor(
   }
   if (procedure === "system.voiceWalkIn.calendarStatus")
     return { connected: false };
+  if (procedure === "system.openChannel.current")
+    return openChannelState.current;
+  if (procedure === "system.openChannel.generateDraft") {
+    const taskSeeds = [
+      [
+        "Secure a low-cost meal",
+        "Choose a simple inexpensive grocery-store option.",
+        25,
+        "food",
+        "inexpensive grocery store food near me",
+      ],
+      [
+        "Barbershop outreach 1 of 3",
+        "Bring collateral and record the decision-maker or next step.",
+        20,
+        "sales",
+        "barbershops in Huntington Park CA",
+      ],
+      [
+        "Barbershop outreach 2 of 3",
+        "Bring collateral and record the decision-maker or next step.",
+        20,
+        "sales",
+        "barbershops in Huntington Park CA",
+      ],
+      [
+        "Barbershop outreach 3 of 3",
+        "Bring collateral and record the decision-maker or next step.",
+        20,
+        "sales",
+        "barbershops in Huntington Park CA",
+      ],
+      [
+        "Start personal laundry",
+        "Start the wash-and-dry cycle and set a return timer.",
+        15,
+        "personal",
+        null,
+      ],
+      [
+        "Collect Russell's quarters",
+        "Collect and secure the quarters before reconciliation.",
+        15,
+        "finance",
+        null,
+      ],
+      [
+        "Count and reconcile cash",
+        "Count the cash and record the total for Russell.",
+        20,
+        "finance",
+        null,
+      ],
+    ];
+    openChannelState.current = {
+      id: "00000000-0000-4000-8000-000000000050",
+      businessDate,
+      status: "draft",
+      title: "Use the Sunday gap",
+      laraBriefing:
+        "Channel received. We have time for food, three local shop visits, laundry, and the cash count. Check my order before we deploy.",
+      transcript: input?.transcript ?? "Voice briefing",
+      generationSource: "anthropic_structured",
+      gapStartedAt: new Date().toISOString(),
+      nextCommitmentAt: null,
+      availableMinutes: input?.availableMinutes ?? null,
+      approvedAt: null,
+      completedAt: null,
+      tasks: taskSeeds.map((task, index) => ({
+        id: `00000000-0000-4000-8000-${String(51 + index).padStart(12, "0")}`,
+        position: index,
+        title: task[0],
+        detail: task[1],
+        estimatedMinutes: task[2],
+        category: task[3],
+        navigationQuery: task[4],
+        status: "pending",
+        completedAt: null,
+      })),
+    };
+    return openChannelState.current;
+  }
+  if (procedure === "system.openChannel.approve") {
+    openChannelState.current = {
+      ...openChannelState.current,
+      status: "active",
+      title: input.title,
+      approvedAt: new Date().toISOString(),
+      tasks: input.tasks.map((task, index) => ({
+        ...task,
+        id: `00000000-0000-4000-8000-${String(71 + index).padStart(12, "0")}`,
+        position: index,
+        status: "pending",
+        completedAt: null,
+      })),
+    };
+    return openChannelState.current;
+  }
+  if (procedure === "system.openChannel.completeTask") {
+    const completedAt = new Date().toISOString();
+    const tasks = openChannelState.current.tasks.map(task =>
+      task.id === input.taskId
+        ? { ...task, status: "completed", completedAt }
+        : task
+    );
+    openChannelState.current = {
+      ...openChannelState.current,
+      status: tasks.every(task => task.status === "completed")
+        ? "completed"
+        : "active",
+      completedAt: tasks.every(task => task.status === "completed")
+        ? completedAt
+        : null,
+      tasks,
+    };
+    return openChannelState.current;
+  }
   if (procedure === "system.unload.resolveDay") return dayResolution;
   if (procedure === "admin.updateStatus") return { success: true };
   return {};
@@ -402,6 +520,7 @@ async function installApi(
   singlePickupOnly = false
 ) {
   const resolvedOrderIds = new Set();
+  const openChannelState = { current: null };
   await page.route("**/api/trpc/**", async route => {
     const url = new URL(route.request().url());
     const procedures = decodeURIComponent(
@@ -423,7 +542,8 @@ async function installApi(
               input,
               withMoves,
               singlePickupOnly,
-              resolvedOrderIds
+              resolvedOrderIds,
+              openChannelState
             ),
           },
         },
@@ -578,6 +698,119 @@ const quietState = {
   callShrines: await quietPage.locator(".call-shrine").count(),
   sideQuests: await quietPage.getByText("SIDE QUEST", { exact: true }).count(),
 };
+
+const openChannelContext = await browser.newContext({
+  viewport: { width: 390, height: 844 },
+  geolocation: { latitude: 33.974, longitude: -118.23 },
+  permissions: ["geolocation"],
+});
+const openChannelPage = await openChannelContext.newPage();
+const openChannelErrors = [];
+const openChannelMutations = [];
+openChannelPage.on("pageerror", error => openChannelErrors.push(error.message));
+openChannelPage.on("console", message => {
+  if (message.type() === "error") openChannelErrors.push(message.text());
+});
+await installApi(openChannelPage, false, [], openChannelMutations, true);
+await openChannelPage.goto("http://127.0.0.1:5173/driver", {
+  waitUntil: "networkidle",
+});
+await openChannelPage
+  .getByRole("button", { name: "Open today's route" })
+  .click();
+await openChannelPage
+  .getByText("Riley Resident", { exact: true })
+  .last()
+  .click();
+await openChannelPage.getByText("MARK COLLECTED", { exact: true }).click();
+await openChannelPage.locator(".goldline-progress-trail").waitFor();
+await openChannelPage.locator(".goldline-progress-trail").waitFor({
+  state: "detached",
+  timeout: 5_000,
+});
+await openChannelPage
+  .getByRole("button", { name: "Open Channel mission briefing" })
+  .waitFor();
+const openChannelSignalScreenshot =
+  "/Users/adamwrightpfi/.codex/visualizations/2026/08/09/019fe538-2f7e-72f1-bdc1-0d86e50cfc5c/open-channel-signal.png";
+await openChannelPage.screenshot({
+  path: openChannelSignalScreenshot,
+  fullPage: true,
+});
+await openChannelPage
+  .getByRole("button", { name: "Open Channel mission briefing" })
+  .click();
+await openChannelPage
+  .getByPlaceholder(
+    "It’s Sunday at 11:16. I’m at Lugo’s with three and a half hours…"
+  )
+  .fill(
+    "It is Sunday at 11:16 and I have three and a half hours. I am hungry but should not spend money. I have collateral for three local barbershops in Huntington Park. Then I need to start personal laundry, collect Russell's quarters, and count cash."
+  );
+await openChannelPage
+  .getByRole("button", { name: "BUILD DRAFT MISSION" })
+  .click();
+await openChannelPage.locator('input[aria-label="Mission title"]').waitFor();
+const openChannelDraftScreenshot =
+  "/Users/adamwrightpfi/.codex/visualizations/2026/08/09/019fe538-2f7e-72f1-bdc1-0d86e50cfc5c/open-channel-draft.png";
+await openChannelPage.screenshot({
+  path: openChannelDraftScreenshot,
+  fullPage: true,
+});
+const draftTaskCount = await openChannelPage
+  .locator(".open-channel-task-editor article")
+  .count();
+await openChannelPage
+  .getByRole("button", { name: "APPROVE & LOAD THE BOARD" })
+  .click();
+await openChannelPage.getByText("MISSION ACTIVE", { exact: true }).waitFor();
+await openChannelPage
+  .getByRole("button", { name: "RETURN TO THE BOARD" })
+  .click();
+await openChannelPage
+  .locator(".route-stop", { hasText: "Secure a low-cost meal" })
+  .click();
+await openChannelPage
+  .getByText("COMPLETE BOARD SPACE", { exact: true })
+  .click();
+await openChannelPage
+  .getByText("MISSION SPACE CLEARED", { exact: true })
+  .waitFor();
+const openChannelStepScreenshot =
+  "/Users/adamwrightpfi/.codex/visualizations/2026/08/09/019fe538-2f7e-72f1-bdc1-0d86e50cfc5c/open-channel-step-complete.png";
+await openChannelPage.screenshot({
+  path: openChannelStepScreenshot,
+  fullPage: true,
+});
+const openChannelFlow = {
+  signalScreenshot: openChannelSignalScreenshot,
+  draftScreenshot: openChannelDraftScreenshot,
+  stepScreenshot: openChannelStepScreenshot,
+  draftTaskCount,
+  firstStepRemoved:
+    (await openChannelPage
+      .locator(".route-stop", { hasText: "Secure a low-cost meal" })
+      .count()) === 0,
+  mutations: openChannelMutations.filter(procedure =>
+    procedure.startsWith("system.openChannel")
+  ),
+  errors: openChannelErrors,
+};
+if (
+  draftTaskCount !== 7 ||
+  !openChannelFlow.firstStepRemoved ||
+  JSON.stringify(openChannelFlow.mutations) !==
+    JSON.stringify([
+      "system.openChannel.generateDraft",
+      "system.openChannel.approve",
+      "system.openChannel.completeTask",
+    ]) ||
+  openChannelErrors.length
+) {
+  throw new Error(
+    `Open Channel end-to-end flow failed: ${JSON.stringify(openChannelFlow)}`
+  );
+}
 
 const placementViewports = [
   { width: 390, height: 844 },
@@ -751,6 +984,7 @@ console.log(
       deniedMoveInputs,
       pageErrors,
       quietErrors,
+      openChannelFlow,
       placementChecks,
     },
     null,

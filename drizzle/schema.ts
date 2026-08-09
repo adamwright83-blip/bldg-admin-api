@@ -4544,3 +4544,101 @@ export const employeeOperatingProfileEvents = mysqlTable(
     tenantProfileIdx: index("idx_employee_profile_events_tenant_profile").on(table.tenantId, table.profileId, table.createdAt),
   })
 );
+
+/** Voice-first gap missions created from the Goldline Open Channel briefing. */
+export const openChannelMissions = mysqlTable(
+  "open_channel_missions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    driverId: varchar("driverId", { length: 128 }).notNull(),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    status: mysqlEnum("status", ["draft", "active", "completed", "cancelled"])
+      .notNull()
+      .default("draft"),
+    title: varchar("title", { length: 191 }).notNull(),
+    laraBriefing: text("laraBriefing").notNull(),
+    transcript: text("transcript").notNull(),
+    generationSource: mysqlEnum("generationSource", [
+      "anthropic_structured",
+      "deterministic_fallback",
+    ]).notNull(),
+    gapStartedAt: timestamp("gapStartedAt").notNull(),
+    nextCommitmentAt: timestamp("nextCommitmentAt"),
+    availableMinutes: int("availableMinutes"),
+    currentLocationJson: json("currentLocationJson"),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    approvedAt: timestamp("approvedAt"),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantRequestUnique: uniqueIndex(
+      "uq_open_channel_missions_tenant_request"
+    ).on(table.tenantId, table.requestId),
+    tenantDriverDateStatusIdx: index(
+      "idx_open_channel_missions_tenant_driver_date_status"
+    ).on(table.tenantId, table.driverId, table.businessDate, table.status),
+  })
+);
+
+export const openChannelMissionTasks = mysqlTable(
+  "open_channel_mission_tasks",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    missionId: varchar("missionId", { length: 36 }).notNull(),
+    position: int("position").notNull(),
+    title: varchar("title", { length: 191 }).notNull(),
+    detail: text("detail").notNull(),
+    estimatedMinutes: int("estimatedMinutes").notNull(),
+    category: mysqlEnum("category", [
+      "food",
+      "sales",
+      "operations",
+      "personal",
+      "finance",
+      "travel",
+      "other",
+    ]).notNull(),
+    navigationQuery: varchar("navigationQuery", { length: 512 }),
+    status: mysqlEnum("status", ["pending", "completed"])
+      .notNull()
+      .default("pending"),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    missionPositionUnique: uniqueIndex(
+      "uq_open_channel_tasks_mission_position"
+    ).on(table.missionId, table.position),
+    tenantMissionStatusIdx: index(
+      "idx_open_channel_tasks_tenant_mission_status"
+    ).on(table.tenantId, table.missionId, table.status),
+  })
+);
+
+export const openChannelTaskEvents = mysqlTable(
+  "open_channel_task_events",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    missionId: varchar("missionId", { length: 36 }).notNull(),
+    taskId: varchar("taskId", { length: 36 }).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantRequestUnique: uniqueIndex(
+      "uq_open_channel_task_events_tenant_request"
+    ).on(table.tenantId, table.requestId),
+    tenantMissionIdx: index("idx_open_channel_task_events_tenant_mission").on(
+      table.tenantId,
+      table.missionId,
+      table.createdAt
+    ),
+  })
+);

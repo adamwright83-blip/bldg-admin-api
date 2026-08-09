@@ -23,6 +23,7 @@ import { unloadRouter } from "../unload/unloadRouter";
 import { armoryRouter } from "../armory/armoryRouter";
 import { capabilityRouter } from "../capabilities/capabilityRouter";
 import { teamRouter } from "../team/teamRouter";
+import { openChannelRouter } from "../openChannel/openChannelRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
@@ -47,6 +48,7 @@ export const systemRouter = router({
   armory: armoryRouter,
   capabilities: capabilityRouter,
   team: teamRouter,
+  openChannel: openChannelRouter,
   health: publicProcedure
     .input(
       z.object({

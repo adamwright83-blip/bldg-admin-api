@@ -1,0 +1,616 @@
+.goldline .open-channel-signal {
+  position: absolute;
+  z-index: 14;
+  left: 20%;
+  top: 67%;
+  width: 148px;
+  min-height: 70px;
+  transform: translate(-16%, -50%);
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  padding: 8px 10px 8px 8px;
+  border: 1px solid #85f8ff;
+  border-radius: 8px;
+  color: #dcfdff;
+  background:
+    linear-gradient(100deg, rgba(7, 38, 46, 0.95), rgba(3, 17, 25, 0.85)),
+    repeating-linear-gradient(0deg, transparent 0 3px, #81f8ff18 4px);
+  box-shadow:
+    inset 0 0 18px #3befff2e,
+    0 0 20px #25eaff73,
+    0 7px 18px #000b;
+  text-align: left;
+  animation: open-channel-beacon 1.8s ease-in-out infinite;
+}
+.goldline .open-channel-signal::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border: 1px solid #65f7ff5c;
+  border-radius: 12px;
+  animation: open-channel-ring 1.8s ease-out infinite;
+}
+.goldline .open-channel-signal > span {
+  grid-row: 1 / 3;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #9bf9ff;
+  border-radius: 50%;
+  color: #071c23;
+  background: #8cf7ff;
+  box-shadow: 0 0 15px #55f2ff;
+}
+.goldline .open-channel-signal svg {
+  width: 22px;
+  height: 22px;
+}
+.goldline .open-channel-signal b {
+  font:
+    800 13px/1 Cinzel,
+    serif;
+  letter-spacing: 0.07em;
+}
+.goldline .open-channel-signal small {
+  margin-top: 4px;
+  font:
+    800 8px/1.2 Inter,
+    sans-serif;
+  color: #93f8ff;
+}
+.goldline .open-channel-signal.is-active {
+  border-color: #ffe387;
+  box-shadow:
+    inset 0 0 18px #ffcf3b2e,
+    0 0 20px #ffc43d73,
+    0 7px 18px #000b;
+}
+
+@keyframes open-channel-beacon {
+  0%,
+  100% {
+    filter: brightness(0.92);
+    transform: translate(-16%, -50%) scale(0.98);
+  }
+  50% {
+    filter: brightness(1.16);
+    transform: translate(-16%, -50%) scale(1.025);
+  }
+}
+@keyframes open-channel-ring {
+  0% {
+    opacity: 0.8;
+    transform: scale(0.9);
+  }
+  80%,
+  100% {
+    opacity: 0;
+    transform: scale(1.15);
+  }
+}
+
+.goldline .summary-channel {
+  color: #86f8ff;
+}
+
+.goldline .open-channel-overlay {
+  position: absolute;
+  z-index: 60;
+  inset: 0;
+  overflow: hidden;
+  color: #e8feff;
+  background: #02080d;
+  font-family: Inter, sans-serif;
+}
+.goldline .open-channel-scene {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: max(16px, env(safe-area-inset-top)) 14px
+    max(28px, calc(env(safe-area-inset-bottom) + 22px));
+  background:
+    radial-gradient(circle at 72% 16%, #2deeff1c, transparent 30%),
+    linear-gradient(180deg, #061218 0%, #02090e 52%, #010508 100%);
+}
+.goldline .open-channel-scene-art {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 42%;
+  pointer-events: none;
+  opacity: 0.42;
+  background: url("../../assets/goldline/goldline-world.png") 16% 76% / 150%
+    auto no-repeat;
+  filter: saturate(0.25) sepia(0.2) hue-rotate(135deg) brightness(0.58)
+    contrast(1.25);
+  -webkit-mask-image: linear-gradient(#000 0 55%, transparent 100%);
+  mask-image: linear-gradient(#000 0 55%, transparent 100%);
+}
+.goldline .open-channel-scanlines {
+  position: fixed;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.25;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0 3px,
+    #6ff7ff1a 4px 5px
+  );
+  mix-blend-mode: screen;
+}
+.goldline .open-channel-close {
+  position: absolute;
+  z-index: 8;
+  top: max(12px, env(safe-area-inset-top));
+  right: 12px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #8ef9ff6e;
+  border-radius: 50%;
+  color: #d8fdff;
+  background: #031016e8;
+}
+.goldline .open-channel-close svg {
+  width: 21px;
+}
+.goldline .open-channel-header,
+.goldline .open-channel-dialogue,
+.goldline .open-channel-window,
+.goldline .open-channel-console {
+  position: relative;
+  z-index: 3;
+}
+.goldline .open-channel-header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 52px;
+  padding-right: 48px;
+}
+.goldline .open-channel-header > span {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #85f8ff;
+  border-radius: 8px;
+  color: #08191d;
+  background: #8cf7ff;
+  box-shadow: 0 0 18px #54efff8c;
+}
+.goldline .open-channel-header small,
+.goldline .open-channel-header h2 {
+  display: block;
+  margin: 0;
+}
+.goldline .open-channel-header small {
+  font:
+    800 8px/1 Inter,
+    sans-serif;
+  letter-spacing: 0.17em;
+  color: #86eaf0;
+}
+.goldline .open-channel-header h2 {
+  margin-top: 4px;
+  font:
+    800 24px/1 Cinzel,
+    serif;
+  letter-spacing: 0.05em;
+}
+.goldline .open-channel-header em {
+  margin-left: auto;
+  padding: 5px 7px;
+  border: 1px solid #6affb2;
+  border-radius: 5px;
+  color: #8affbd;
+  background: #07301cbd;
+  font:
+    900 9px/1 Inter,
+    sans-serif;
+  font-style: normal;
+}
+.goldline .open-channel-dialogue {
+  margin: 96px 0 12px 14%;
+  padding: 14px 14px 13px;
+  border: 1px solid #74f5ff9c;
+  border-left: 4px solid #8dfaff;
+  border-radius: 5px;
+  background: linear-gradient(110deg, #05202bdc, #07151ddd);
+  box-shadow:
+    inset 0 0 24px #2ae9ff18,
+    0 0 24px #1bdcf327;
+}
+.goldline .open-channel-dialogue small {
+  font:
+    900 9px/1 Inter,
+    sans-serif;
+  letter-spacing: 0.12em;
+  color: #72edf4;
+}
+.goldline .open-channel-dialogue p {
+  margin: 8px 0 10px;
+  font:
+    700 15px/1.42 Inter,
+    sans-serif;
+  color: #efffff;
+}
+.goldline .open-channel-dialogue button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 1px solid #74f5ff5c;
+  border-radius: 5px;
+  color: #8ef8ff;
+  background: #021017;
+  font:
+    900 9px/1 Inter,
+    sans-serif;
+}
+.goldline .open-channel-dialogue button svg {
+  width: 14px;
+  height: 14px;
+}
+.goldline .open-channel-window {
+  display: grid;
+  gap: 3px;
+  padding: 11px 13px;
+  border: 1px solid #68ecf94d;
+  background: #06151bc7;
+}
+.goldline .open-channel-window span {
+  font:
+    900 13px/1 Inter,
+    sans-serif;
+  color: #8df8ff;
+}
+.goldline .open-channel-window strong {
+  font:
+    800 9px/1.35 Inter,
+    sans-serif;
+  letter-spacing: 0.04em;
+  color: #a6cfd2;
+}
+.goldline .open-channel-console {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid #61eaf45c;
+  background: #031017e8;
+  box-shadow: inset 0 0 34px #17e8ff0f;
+}
+.goldline .open-channel-capture > button {
+  width: 100%;
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 14px;
+  border: 1px solid #73f6ff;
+  border-radius: 7px;
+  color: #efffff;
+  background: linear-gradient(110deg, #06303b, #031820);
+  text-align: left;
+}
+.goldline .open-channel-capture > button > svg {
+  width: 30px;
+  height: 30px;
+  color: #8df8ff;
+}
+.goldline .open-channel-capture b,
+.goldline .open-channel-capture small {
+  display: block;
+}
+.goldline .open-channel-capture b {
+  font:
+    900 14px/1.1 Inter,
+    sans-serif;
+}
+.goldline .open-channel-capture small {
+  margin-top: 5px;
+  font:
+    700 10px/1.3 Inter,
+    sans-serif;
+  color: #94c9cc;
+}
+.goldline .open-channel-capture > button.is-recording {
+  border-color: #ff6d6d;
+  background: #381014;
+  box-shadow: 0 0 20px #ff38384d;
+}
+.goldline .open-channel-capture > button.is-recording svg {
+  color: #ff8a8a;
+  fill: currentColor;
+}
+.goldline .open-channel-capture > button.is-ready {
+  border-color: #71ffac;
+  background: #07301c;
+}
+.goldline .open-channel-capture > button.is-ready svg {
+  color: #7cffb5;
+}
+.goldline .open-channel-error {
+  margin: 8px 0 0;
+  color: #ffadad;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.goldline .open-channel-transcript {
+  display: block;
+  margin-top: 11px;
+}
+.goldline .open-channel-transcript > span {
+  display: block;
+  margin-bottom: 6px;
+  font:
+    900 9px/1 Inter,
+    sans-serif;
+  letter-spacing: 0.12em;
+  color: #77eaf1;
+}
+.goldline .open-channel-transcript textarea,
+.goldline .open-channel-plan-heading input,
+.goldline .open-channel-task-editor input,
+.goldline .open-channel-task-editor textarea,
+.goldline .open-channel-task-editor select {
+  width: 100%;
+  border: 1px solid #62d9e24d;
+  border-radius: 5px;
+  outline: none;
+  color: #efffff;
+  background: #020a0f;
+  font-family: Inter, sans-serif;
+}
+.goldline .open-channel-transcript textarea {
+  min-height: 120px;
+  resize: vertical;
+  padding: 12px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+.goldline .open-channel-primary {
+  width: 100%;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 12px;
+  border: 1px solid #b5fbff;
+  border-radius: 6px;
+  color: #011015;
+  background: linear-gradient(#b9fbff, #58e8f4);
+  box-shadow: 0 0 22px #44e9f65c;
+  font:
+    900 13px/1.1 Inter,
+    sans-serif;
+}
+.goldline .open-channel-primary:disabled {
+  opacity: 0.38;
+  box-shadow: none;
+}
+.goldline .open-channel-primary svg {
+  width: 19px;
+}
+.goldline .spin {
+  animation: open-channel-spin 1s linear infinite;
+}
+@keyframes open-channel-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.goldline .open-channel-plan-heading {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.goldline .open-channel-plan-heading > div {
+  flex: 1;
+  min-width: 0;
+}
+.goldline .open-channel-plan-heading small {
+  display: block;
+  margin-bottom: 6px;
+  font:
+    900 8px/1 Inter,
+    sans-serif;
+  letter-spacing: 0.1em;
+  color: #73e9ef;
+}
+.goldline .open-channel-plan-heading input {
+  padding: 9px 10px;
+  font:
+    900 18px/1.15 Cinzel,
+    serif;
+}
+.goldline .open-channel-plan-heading h3 {
+  margin: 5px 0 0;
+  font:
+    800 22px/1.15 Cinzel,
+    serif;
+}
+.goldline .open-channel-plan-heading > strong {
+  flex: 0 0 auto;
+  padding: 7px 8px;
+  border: 1px solid #83f5ff66;
+  color: #8df8ff;
+  font-size: 12px;
+}
+.goldline .open-channel-task-editor {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+}
+.goldline .open-channel-task-editor article {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px 1fr 29px;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid #5ee5ef4d;
+  background: #07171d;
+}
+.goldline .open-channel-step-number {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #7af3fc;
+  border-radius: 50%;
+  color: #8df8ff;
+  font:
+    900 12px/1 Inter,
+    sans-serif;
+}
+.goldline .open-channel-task-editor input {
+  padding: 8px;
+  font-weight: 800;
+}
+.goldline .open-channel-task-editor textarea {
+  min-height: 54px;
+  margin-top: 6px;
+  padding: 8px;
+  resize: vertical;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #bcdcdf;
+}
+.goldline .open-channel-task-fields {
+  display: grid;
+  grid-template-columns: 58px 90px 1fr;
+  gap: 6px;
+  margin-top: 6px;
+}
+.goldline .open-channel-task-fields label span {
+  display: block;
+  margin-bottom: 3px;
+  font:
+    900 7px/1 Inter,
+    sans-serif;
+  color: #6fcbd1;
+}
+.goldline .open-channel-task-fields input,
+.goldline .open-channel-task-fields select {
+  height: 33px;
+  padding: 4px 6px;
+  font-size: 10px;
+}
+.goldline .open-channel-task-controls {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+}
+.goldline .open-channel-task-controls button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #62d9e24d;
+  color: #91eaf0;
+  background: #020a0f;
+}
+.goldline .open-channel-task-controls button:disabled {
+  opacity: 0.22;
+}
+.goldline .open-channel-task-controls svg {
+  width: 14px;
+}
+.goldline .open-channel-add {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 9px;
+  border: 1px dashed #70e8f06e;
+  color: #8df8ff;
+  background: #04141a;
+  font:
+    900 10px/1 Inter,
+    sans-serif;
+}
+.goldline .open-channel-add svg {
+  width: 16px;
+}
+.goldline .open-channel-source {
+  margin: 9px 0 0;
+  text-align: center;
+  color: #72969a;
+  font-size: 9px;
+}
+.goldline .open-channel-active-tasks {
+  display: grid;
+  gap: 7px;
+  margin: 13px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.goldline .open-channel-active-tasks li {
+  display: grid;
+  grid-template-columns: 32px 1fr 34px;
+  align-items: center;
+  gap: 8px;
+  min-height: 58px;
+  padding: 8px;
+  border: 1px solid #5ceaf55c;
+  background: #07171d;
+}
+.goldline .open-channel-active-tasks li > span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #74f2fb;
+  border-radius: 50%;
+  color: #8df8ff;
+  font-weight: 900;
+}
+.goldline .open-channel-active-tasks li > span svg {
+  width: 16px;
+}
+.goldline .open-channel-active-tasks b,
+.goldline .open-channel-active-tasks small {
+  display: block;
+}
+.goldline .open-channel-active-tasks b {
+  font-size: 13px;
+}
+.goldline .open-channel-active-tasks small {
+  margin-top: 4px;
+  color: #82b7bb;
+  font-size: 9px;
+}
+.goldline .open-channel-active-tasks a {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #69eaf46b;
+  color: #8df8ff;
+}
+.goldline .open-channel-active-tasks a svg {
+  width: 17px;
+}
+.goldline .open-channel-active-tasks li.is-complete {
+  opacity: 0.47;
+  border-color: #70ff9c52;
+}
+
+@media (max-height: 720px) {
+  .goldline .open-channel-dialogue {
+    margin-top: 62px;
+  }
+  .goldline .open-channel-signal {
+    top: 63%;
+    transform: translate(-16%, -50%) scale(0.92);
+  }
+}

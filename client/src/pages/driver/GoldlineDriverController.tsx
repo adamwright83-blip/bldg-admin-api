@@ -7,6 +7,8 @@ import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
 import GoldlineHome from "../goldline/GoldlineHome";
 import type { FieldMoveCandidate } from "../../../../server/field/types";
 import type { DayResolution } from "../../../../server/unload/unloadTypes";
+import type { OpenChannelEditableTask } from "../../../../server/openChannel/openChannelTypes";
+import type { OpenChannelGenerateInput } from "../goldline/OpenChannel";
 import {
   canCompleteDelivery,
   nextCommitmentDate,
@@ -69,6 +71,13 @@ export default function GoldlineDriverController() {
     refetchInterval: 15_000,
   });
   const armory = trpc.system.armory.get.useQuery({});
+  const openChannelInput = { businessDate: selectedDate };
+  const openChannel = trpc.system.openChannel.current.useQuery(
+    openChannelInput,
+    {
+      refetchInterval: 30_000,
+    }
+  );
 
   const moveInput = useMemo(
     () => ({
@@ -91,6 +100,11 @@ export default function GoldlineDriverController() {
   const resolveDay = trpc.system.unload.resolveDay.useMutation();
   const completeCalendar =
     trpc.system.voiceWalkIn.calendarComplete.useMutation();
+  const generateOpenChannel =
+    trpc.system.openChannel.generateDraft.useMutation();
+  const approveOpenChannel = trpc.system.openChannel.approve.useMutation();
+  const completeOpenChannelTask =
+    trpc.system.openChannel.completeTask.useMutation();
 
   const activeDispatch = dispatches.data?.find(
     item =>
@@ -255,6 +269,83 @@ export default function GoldlineDriverController() {
     await invalidateDriverTruth();
   }
 
+  async function handleGenerateOpenChannel(input: OpenChannelGenerateInput) {
+    try {
+      const result = await generateOpenChannel.mutateAsync({
+        businessDate: selectedDate,
+        requestId: crypto.randomUUID(),
+        now: new Date(),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        nextCommitmentAt: nextCommitmentDate(input.nextCommitmentAt),
+        availableMinutes: input.availableMinutes,
+        currentLocation:
+          location.status === "available" ? location.coordinates : null,
+        transcript: input.transcript,
+        audioDataUrl: input.audioDataUrl,
+      });
+      utils.system.openChannel.current.setData(openChannelInput, result);
+      toast.success(
+        "Open Channel draft received. Review it before deployment."
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Open Channel could not build the mission."
+      );
+    }
+  }
+
+  async function handleApproveOpenChannel(input: {
+    missionId: string;
+    title: string;
+    tasks: OpenChannelEditableTask[];
+  }) {
+    try {
+      const result = await approveOpenChannel.mutateAsync(input);
+      utils.system.openChannel.current.setData(openChannelInput, result);
+      toast.success(
+        `${result.tasks.length} mission spaces loaded onto Goldline.`
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Open Channel mission could not be approved."
+      );
+    }
+  }
+
+  async function handleCompleteOpenChannelTask(
+    missionId: string,
+    taskId: string
+  ): Promise<boolean> {
+    try {
+      const result = await completeOpenChannelTask.mutateAsync({
+        missionId,
+        taskId,
+        requestId: crypto.randomUUID(),
+      });
+      utils.system.openChannel.current.setData(
+        openChannelInput,
+        result.status === "completed" ? null : result
+      );
+      toast.success(
+        result.status === "completed"
+          ? "Open Channel mission complete."
+          : "Mission space complete."
+      );
+      return true;
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not complete this mission space."
+      );
+      return false;
+    }
+  }
+
   const currentDayProjection =
     fieldToday.data?.businessDate === selectedDate
       ? fieldToday.data
@@ -273,6 +364,7 @@ export default function GoldlineDriverController() {
         location={location}
         dayResolution={dayResolution}
         activeDispatch={activeDispatch}
+        openChannelMission={openChannel.data}
         selectedDate={selectedDate}
         onSelectedDateChange={setSelectedDate}
         isLoading={
@@ -281,6 +373,9 @@ export default function GoldlineDriverController() {
         isResolvingOrder={updateStatus.isPending}
         isAcceptingMove={acceptMove.isPending}
         isResolvingDay={resolveDay.isPending}
+        isGeneratingOpenChannel={generateOpenChannel.isPending}
+        isApprovingOpenChannel={approveOpenChannel.isPending}
+        isCompletingOpenChannelTask={completeOpenChannelTask.isPending}
         onResolveOrder={handleResolveOrder}
         onAcceptMove={handleAcceptMove}
         onOpenWalkIn={() => setWalkInOpen(true)}
@@ -288,6 +383,9 @@ export default function GoldlineDriverController() {
         onOpenJournal={() => setJournalOpen(true)}
         onResolveDay={handleResolveDay}
         onOpenDispatch={activeDispatch ? handleOpenDispatch : undefined}
+        onGenerateOpenChannel={handleGenerateOpenChannel}
+        onApproveOpenChannel={handleApproveOpenChannel}
+        onCompleteOpenChannelTask={handleCompleteOpenChannelTask}
       />
       <QuickNewOrderSheet
         open={newOrderOpen}
