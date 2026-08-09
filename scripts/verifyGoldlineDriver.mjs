@@ -811,6 +811,18 @@ await openChannelPage.screenshot({
   path: openChannelStepScreenshot,
   fullPage: true,
 });
+await openChannelPage.locator(".drawer-backdrop").waitFor({
+  state: "hidden",
+  timeout: 5_000,
+});
+await openChannelPage.locator(".goldline-progress-trail").waitFor();
+await openChannelPage.locator(".goldline-progress-trail").waitFor({
+  state: "detached",
+  timeout: 5_000,
+});
+await openChannelPage
+  .getByRole("img", { name: "Lara is on board space 2" })
+  .waitFor();
 const openChannelFlow = {
   signalScreenshot: openChannelSignalScreenshot,
   draftScreenshot: openChannelDraftScreenshot,

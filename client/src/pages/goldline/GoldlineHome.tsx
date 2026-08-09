@@ -37,7 +37,8 @@ import {
   GOLDLINE_ROUTE_ANCHORS,
   goldlineAnchorStyle,
 } from "./goldlineRouteAnchors";
-import world from "@/assets/goldline/goldline-world.png";
+import world from "@/assets/goldline/generated/goldline-world-empty.png";
+import laraSprite from "@/assets/goldline/generated/goldline-lara-sprite.png";
 import vorgan from "@/assets/goldline/vorgan.png";
 import objects from "@/assets/goldline/action-objects.png";
 import OpenChannel, { type OpenChannelGenerateInput } from "./OpenChannel";
@@ -352,16 +353,24 @@ export default function GoldlineHome({
     useState<RouteCompletion | null>(null);
   const avatarSpace = goldlineProgress?.avatarSpace ?? 0;
   const avatarBoardPositions = [
-    { left: "47%", top: "59%" },
-    { left: "56%", top: "51%" },
-    { left: "64%", top: "43%" },
-    { left: "76%", top: "36%" },
-    { left: "70%", top: "27%" },
-    { left: "58%", top: "19%" },
+    { left: "19%", bottom: "4%", height: "47%" },
+    { left: "45%", bottom: "39%", height: "20%" },
+    { left: "41%", bottom: "53%", height: "17%" },
+    { left: "64%", bottom: "58%", height: "15%" },
+    { left: "76%", bottom: "67%", height: "13%" },
+    { left: "70%", bottom: "76%", height: "11%" },
+    { left: "58%", bottom: "84%", height: "9%" },
   ];
+  const displayedAvatarSpace =
+    routeCompletion?.phase === "confirming"
+      ? Math.max(0, avatarSpace - 1)
+      : avatarSpace;
   const avatarBoardPosition =
     avatarBoardPositions[
-      Math.min(Math.max(avatarSpace - 1, 0), avatarBoardPositions.length - 1)
+      Math.min(
+        Math.max(displayedAvatarSpace, 0),
+        avatarBoardPositions.length - 1
+      )
     ];
 
   const recommendedMoves = moves?.recommendedMoves ?? [];
@@ -518,6 +527,13 @@ export default function GoldlineHome({
             src={world}
             alt="Sunlit canyon city crossed by a turquoise route river"
           />
+          <img
+            className={`goldline-lara-piece${routeCompletion?.phase === "advancing" ? " is-advancing" : ""}`}
+            src={laraSprite}
+            style={avatarBoardPosition}
+            data-board-space={displayedAvatarSpace}
+            alt={`Lara is on board space ${displayedAvatarSpace}`}
+          />
         </div>
         <div className="goldline-sunwash" aria-hidden="true" />
         <div className="goldline-ambient" aria-hidden="true">
@@ -527,19 +543,6 @@ export default function GoldlineHome({
           <i className="ambient-4" />
           <i className="ambient-5" />
         </div>
-
-        {currentDay && avatarSpace > 0 ? (
-          <div
-            className="goldline-player-token"
-            style={avatarBoardPosition}
-            role="img"
-            aria-label={`Lara is on board space ${avatarSpace}`}
-          >
-            <span aria-hidden="true" />
-            <b>LARA</b>
-            <small>SPACE {avatarSpace}</small>
-          </div>
-        ) : null}
 
         {routeCompletion?.phase === "advancing" ? (
           <div
@@ -741,7 +744,7 @@ export default function GoldlineHome({
           </div>
         </div>
 
-        {!isLoading && routeStops.length === 0 ? (
+        {!isLoading && routeStops.length === 0 && avatarSpace === 0 ? (
           <button className="route-empty" onClick={() => openRoute()}>
             <b>NO SOURCED ROUTE STOPS</b>
             <small>{formatDateLabel(selectedDate)}</small>

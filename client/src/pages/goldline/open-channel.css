@@ -124,8 +124,8 @@
   height: 42%;
   pointer-events: none;
   opacity: 0.42;
-  background: url("../../assets/goldline/goldline-world.png") 16% 76% / 150%
-    auto no-repeat;
+  background: url("../../assets/goldline/generated/goldline-world-empty.png")
+    16% 76% / 150% auto no-repeat;
   filter: saturate(0.25) sepia(0.2) hue-rotate(135deg) brightness(0.58)
     contrast(1.25);
   -webkit-mask-image: linear-gradient(#000 0 55%, transparent 100%);
