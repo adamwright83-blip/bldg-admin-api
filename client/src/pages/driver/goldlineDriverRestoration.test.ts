@@ -135,6 +135,11 @@ describe("Goldline canonical driver restoration", () => {
     expect(goldlineCss).toContain("goldline-route-confirm");
     expect(goldlineCss).toContain("goldline-avatar-advance");
     expect(goldlineCss).toContain("goldline-player-advance");
+    expect(controller).toContain("system.openChannel.progress.useQuery");
+    expect(controller).toContain("advanceCachedProgress");
+    expect(goldline).toContain("goldline-player-token");
+    expect(goldline).toContain("Lara is on board space");
+    expect(goldlineCss).toContain("durable game-board position");
   });
 
   it("turns a large verified gap into an editable voice-first Open Channel mission", () => {
@@ -144,6 +149,7 @@ describe("Goldline canonical driver restoration", () => {
     );
     expect(controller).toContain("system.openChannel.approve.useMutation");
     expect(controller).toContain("system.openChannel.completeTask.useMutation");
+    expect(controller).toContain("goldlineProgress.refetch()");
     expect(goldline).toContain("detectOpenChannelGap");
     expect(goldline).toContain("open-channel-signal");
     expect(goldline).toContain("OPEN CHANNEL");

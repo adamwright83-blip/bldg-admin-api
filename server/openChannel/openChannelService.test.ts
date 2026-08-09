@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { deterministicOpenChannelPlan } from "./openChannelService";
+import {
+  decodeOpenChannelAudio,
+  deterministicOpenChannelPlan,
+} from "./openChannelService";
 
 describe("Open Channel deterministic mission planner", () => {
   it("turns the operator's Sunday gap briefing into individual board spaces", () => {
@@ -30,5 +33,30 @@ describe("Open Channel deterministic mission planner", () => {
     expect(plan.tasks).toHaveLength(1);
     expect(plan.tasks[0].navigationQuery).toBeNull();
     expect(JSON.stringify(plan)).not.toMatch(/\b(?:am|pm)\b/i);
+  });
+});
+
+describe("decodeOpenChannelAudio", () => {
+  it("accepts Android codec-qualified WebM audio data URLs", () => {
+    const recording = decodeOpenChannelAudio(
+      "data:audio/webm;codecs=opus;base64,SGVsbG8="
+    );
+
+    expect(recording.mimeType).toBe("audio/webm");
+    expect(recording.data.toString("utf8")).toBe("Hello");
+  });
+
+  it("accepts Android WebM containers reported as video", () => {
+    const recording = decodeOpenChannelAudio(
+      "data:video/webm;codecs=opus;base64,SGVsbG8="
+    );
+
+    expect(recording.mimeType).toBe("video/webm");
+  });
+
+  it("rejects non-recording data URLs", () => {
+    expect(() =>
+      decodeOpenChannelAudio("data:image/png;base64,SGVsbG8=")
+    ).toThrow("Audio recording format is invalid");
   });
 });

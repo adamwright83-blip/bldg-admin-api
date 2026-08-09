@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { fromZonedTime } from "date-fns-tz";
 import { z } from "zod";
 import {
   openChannelMissionTasks,
   openChannelMissions,
   openChannelTaskEvents,
+  operationsEvents,
+  orders,
 } from "../../drizzle/schema";
 import { ENV } from "../_core/env";
 import { invokeLLM, type InvokeResult } from "../_core/llm";
@@ -15,9 +18,20 @@ import { storageDelete, storageGet, storagePut } from "../storage";
 import {
   OPEN_CHANNEL_TASK_CATEGORIES,
   type OpenChannelEditableTask,
+  type GoldlineProgress,
   type OpenChannelMission,
   type OpenChannelTaskCategory,
 } from "./openChannelTypes";
+
+function rangeForBusinessDate(businessDate: string, timeZone: string) {
+  const start = fromZonedTime(`${businessDate}T00:00:00`, timeZone);
+  const [year, month, day] = businessDate.split("-").map(Number);
+  const nextLabel = new Date(Date.UTC(year!, month! - 1, day! + 1))
+    .toISOString()
+    .slice(0, 10);
+  const next = fromZonedTime(`${nextLabel}T00:00:00`, timeZone);
+  return { start, next };
+}
 
 const planSchema = z.object({
   title: z.string().trim().min(1).max(120),
@@ -125,16 +139,35 @@ function resultText(result: InvokeResult): string {
   return typeof value === "string" ? value : "";
 }
 
-function decodeAudio(dataUrl: string): { mimeType: string; data: Buffer } {
-  const match = dataUrl.match(
-    /^data:(audio\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/
-  );
+export function decodeOpenChannelAudio(dataUrl: string): {
+  mimeType: string;
+  data: Buffer;
+} {
+  const match = dataUrl.match(/^data:([^;,]+)((?:;[^,]*)*);base64,([\s\S]+)$/i);
   if (!match) throw new Error("Audio recording format is invalid");
-  const data = Buffer.from(match[2], "base64");
+  const mimeType = match[1].toLowerCase();
+  const isSupportedRecording =
+    mimeType.startsWith("audio/") ||
+    [
+      "video/webm",
+      "video/mp4",
+      "application/ogg",
+      "application/octet-stream",
+    ].includes(mimeType);
+  if (!isSupportedRecording) {
+    throw new Error("Audio recording format is invalid");
+  }
+  const data = Buffer.from(match[3], "base64");
   if (!data.length || data.length > 12 * 1024 * 1024) {
     throw new Error("Audio recording must be between 1 byte and 12 MB");
   }
-  return { mimeType: match[1], data };
+  return { mimeType, data };
+}
+
+function audioFileExtension(mimeType: string): string {
+  if (mimeType.includes("mp4") || mimeType.includes("m4a")) return "m4a";
+  if (mimeType.includes("ogg")) return "ogg";
+  return "webm";
 }
 
 async function briefingTranscript(input: {
@@ -145,8 +178,8 @@ async function briefingTranscript(input: {
 }): Promise<string> {
   let transcript = input.transcript?.trim() ?? "";
   if (input.audioDataUrl) {
-    const audio = decodeAudio(input.audioDataUrl);
-    const key = `open-channel/${input.tenantId}/${input.driverId}/${randomUUID()}.webm`;
+    const audio = decodeOpenChannelAudio(input.audioDataUrl);
+    const key = `open-channel/${input.tenantId}/${input.driverId}/${randomUUID()}.${audioFileExtension(audio.mimeType)}`;
     await storagePut(key, audio.data, audio.mimeType);
     const transcription = await (async () => {
       try {
@@ -418,6 +451,109 @@ export async function getCurrentOpenChannelMission(input: {
   return mission
     ? missionProjection({ tenantId: input.tenantId, missionId: mission.id })
     : null;
+}
+
+export async function getGoldlineProgress(input: {
+  tenantId: string;
+  driverId: string;
+  businessDate: string;
+  timeZone: string;
+}): Promise<GoldlineProgress> {
+  await ensureOpenChannelTables();
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { start, next } = rangeForBusinessDate(
+    input.businessDate,
+    input.timeZone
+  );
+
+  const [eventRows, scheduledPickups, scheduledDeliveries, missionSteps] =
+    await Promise.all([
+      db
+        .select({
+          id: operationsEvents.id,
+          orderId: operationsEvents.orderId,
+          sourceEventType: operationsEvents.sourceEventType,
+        })
+        .from(operationsEvents)
+        .where(
+          and(
+            eq(operationsEvents.tenantId, input.tenantId),
+            eq(operationsEvents.eventStatus, "completed"),
+            gte(operationsEvents.actualEventTimestamp, start),
+            lt(operationsEvents.actualEventTimestamp, next)
+          )
+        ),
+      db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.tenantId, input.tenantId),
+            eq(orders.pickupDate, input.businessDate),
+            inArray(orders.status, [
+              "collected",
+              "processing",
+              "ready",
+              "delivered",
+            ])
+          )
+        ),
+      db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.tenantId, input.tenantId),
+            eq(orders.deliveryDate, input.businessDate),
+            eq(orders.status, "delivered")
+          )
+        ),
+      db
+        .select({ id: openChannelMissionTasks.id })
+        .from(openChannelMissionTasks)
+        .innerJoin(
+          openChannelMissions,
+          and(
+            eq(openChannelMissions.id, openChannelMissionTasks.missionId),
+            eq(openChannelMissions.tenantId, openChannelMissionTasks.tenantId)
+          )
+        )
+        .where(
+          and(
+            eq(openChannelMissionTasks.tenantId, input.tenantId),
+            eq(openChannelMissionTasks.status, "completed"),
+            eq(openChannelMissions.driverId, input.driverId),
+            eq(openChannelMissions.businessDate, input.businessDate)
+          )
+        ),
+    ]);
+
+  const pickupKeys = new Set<string>();
+  const deliveryKeys = new Set<string>();
+  for (const event of eventRows) {
+    const key =
+      event.orderId == null ? `event:${event.id}` : `order:${event.orderId}`;
+    if (event.sourceEventType === "pickup_completed") pickupKeys.add(key);
+    else deliveryKeys.add(key);
+  }
+  for (const order of scheduledPickups) pickupKeys.add(`order:${order.id}`);
+  for (const order of scheduledDeliveries)
+    deliveryKeys.add(`order:${order.id}`);
+
+  const completedPickupCount = pickupKeys.size;
+  const completedDeliveryCount = deliveryKeys.size;
+  const completedMissionStepCount = missionSteps.length;
+  const completedRouteActions =
+    completedPickupCount + completedDeliveryCount + completedMissionStepCount;
+  return {
+    businessDate: input.businessDate,
+    completedPickupCount,
+    completedDeliveryCount,
+    completedMissionStepCount,
+    completedRouteActions,
+    avatarSpace: completedRouteActions,
+  };
 }
 
 export async function generateOpenChannelDraft(input: {

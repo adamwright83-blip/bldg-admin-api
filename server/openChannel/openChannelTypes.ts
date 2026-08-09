@@ -43,3 +43,12 @@ export type OpenChannelEditableTask = Pick<
   OpenChannelTask,
   "title" | "detail" | "estimatedMinutes" | "category" | "navigationQuery"
 >;
+
+export type GoldlineProgress = {
+  businessDate: string;
+  completedPickupCount: number;
+  completedDeliveryCount: number;
+  completedMissionStepCount: number;
+  completedRouteActions: number;
+  avatarSpace: number;
+};

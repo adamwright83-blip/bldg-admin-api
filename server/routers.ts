@@ -2763,11 +2763,16 @@ export const appRouter = router({
             return { success: true, alreadyCompleted: true };
           }
 
-          await updateOrderStatus(input.orderId, "collected", {
-            source: "driver_app_bldg",
-            actorUserId: ctx.user?.id ?? null,
-            actorDisplayName: ctx.user?.name ?? ctx.user?.email ?? null,
-          });
+          await ensurePickupCompletedOperationsEventForOrder(
+            input.orderId,
+            {
+              source: "driver_app_bldg",
+              actorUserId: ctx.user?.id ?? null,
+              actorDisplayName: ctx.user?.name ?? ctx.user?.email ?? null,
+              actualEventTimestamp: new Date(),
+              reason: "driver_pickup_completed",
+            }
+          );
 
           recordWarActionSafe({
             tenantId: ctx.tenantId ?? "default",

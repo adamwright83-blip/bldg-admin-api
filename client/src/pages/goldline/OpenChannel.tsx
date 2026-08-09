@@ -69,6 +69,16 @@ function blobDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+function preferredRecorderMimeType(): string | undefined {
+  if (typeof MediaRecorder.isTypeSupported !== "function") return undefined;
+  return [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/ogg;codecs=opus",
+  ].find(mimeType => MediaRecorder.isTypeSupported(mimeType));
+}
+
 function speakAsLara(text: string) {
   if (!("speechSynthesis" in window) || !text.trim()) return;
   window.speechSynthesis.cancel();
@@ -169,14 +179,21 @@ export default function OpenChannel({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       chunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
+      const preferredMimeType = preferredRecorderMimeType();
+      const recorder = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
       recorderRef.current = recorder;
       recorder.ondataavailable = event => {
         if (event.data.size) chunksRef.current.push(event.data);
       };
       recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, {
-          type: recorder.mimeType || "audio/webm",
+          type:
+            recorder.mimeType ||
+            preferredMimeType ||
+            chunksRef.current[0]?.type ||
+            "audio/webm",
         });
         void blobDataUrl(blob)
           .then(setAudioDataUrl)

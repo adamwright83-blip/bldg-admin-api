@@ -4,6 +4,7 @@ import {
   approveOpenChannelMission,
   completeOpenChannelTask,
   generateOpenChannelDraft,
+  getGoldlineProgress,
   getCurrentOpenChannelMission,
 } from "./openChannelService";
 import { OPEN_CHANNEL_TASK_CATEGORIES } from "./openChannelTypes";
@@ -18,6 +19,20 @@ const editableTask = z.object({
 });
 
 export const openChannelRouter = router({
+  progress: dayforgeTenantMemberProcedure
+    .input(
+      z.object({
+        businessDate,
+        timeZone: z.string().trim().min(1).max(80),
+      })
+    )
+    .query(({ ctx, input }) =>
+      getGoldlineProgress({
+        ...input,
+        tenantId: ctx.tenantId,
+        driverId: ctx.user.openId,
+      })
+    ),
   current: dayforgeTenantMemberProcedure
     .input(z.object({ businessDate }))
     .query(({ ctx, input }) =>

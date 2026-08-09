@@ -789,6 +789,8 @@ export async function updateOrderStatus(
 export async function ensurePickupCompletedOperationsEventForOrder(
   orderId: number,
   input: {
+    source?: OperationsEventActorContext["source"];
+    actorUserId?: string | number | null;
     actorDisplayName?: string | null;
     actualEventTimestamp?: Date;
     reason?: string;
@@ -811,7 +813,8 @@ export async function ensurePickupCompletedOperationsEventForOrder(
     const event = buildPickupCompletedOperationsEventForOrder({
       order,
       actor: {
-        source: "system_backfill",
+        source: input.source ?? "system_backfill",
+        actorUserId: input.actorUserId,
         actorDisplayName: input.actorDisplayName ?? "Admin charge",
         actualEventTimestamp: input.actualEventTimestamp,
       },

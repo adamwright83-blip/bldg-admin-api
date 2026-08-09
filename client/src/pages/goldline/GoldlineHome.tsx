@@ -26,6 +26,7 @@ import type {
 import type { MissionDiamond } from "../../../../server/commercialMissions/driverSalesMotivationService";
 import type { DayResolution } from "../../../../server/unload/unloadTypes";
 import type {
+  GoldlineProgress,
   OpenChannelEditableTask,
   OpenChannelMission,
   OpenChannelTask,
@@ -121,6 +122,7 @@ type GoldlineHomeProps = {
   dayResolution: DayResolution | null;
   activeDispatch?: ActiveDispatch;
   openChannelMission?: OpenChannelMission | null;
+  goldlineProgress?: GoldlineProgress;
   selectedDate: string;
   onSelectedDateChange: (date: string) => void;
   isLoading?: boolean;
@@ -320,6 +322,7 @@ export default function GoldlineHome({
   dayResolution,
   activeDispatch,
   openChannelMission,
+  goldlineProgress,
   selectedDate,
   onSelectedDateChange,
   isLoading = false,
@@ -347,6 +350,19 @@ export default function GoldlineHome({
   );
   const [routeCompletion, setRouteCompletion] =
     useState<RouteCompletion | null>(null);
+  const avatarSpace = goldlineProgress?.avatarSpace ?? 0;
+  const avatarBoardPositions = [
+    { left: "47%", top: "59%" },
+    { left: "56%", top: "51%" },
+    { left: "64%", top: "43%" },
+    { left: "76%", top: "36%" },
+    { left: "70%", top: "27%" },
+    { left: "58%", top: "19%" },
+  ];
+  const avatarBoardPosition =
+    avatarBoardPositions[
+      Math.min(Math.max(avatarSpace - 1, 0), avatarBoardPositions.length - 1)
+    ];
 
   const recommendedMoves = moves?.recommendedMoves ?? [];
   const callMoves = recommendedMoves.filter(
@@ -511,6 +527,19 @@ export default function GoldlineHome({
           <i className="ambient-4" />
           <i className="ambient-5" />
         </div>
+
+        {currentDay && avatarSpace > 0 ? (
+          <div
+            className="goldline-player-token"
+            style={avatarBoardPosition}
+            role="img"
+            aria-label={`Lara is on board space ${avatarSpace}`}
+          >
+            <span aria-hidden="true" />
+            <b>LARA</b>
+            <small>SPACE {avatarSpace}</small>
+          </div>
+        ) : null}
 
         {routeCompletion?.phase === "advancing" ? (
           <div

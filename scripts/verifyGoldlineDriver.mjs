@@ -392,6 +392,23 @@ function responseFor(
     return { connected: false };
   if (procedure === "system.openChannel.current")
     return openChannelState.current;
+  if (procedure === "system.openChannel.progress") {
+    const completedPickupCount = resolvedOrderIds.has(pickup.id) ? 1 : 0;
+    const completedMissionStepCount =
+      openChannelState.current?.tasks?.filter(
+        task => task.status === "completed"
+      ).length ?? 0;
+    const completedRouteActions =
+      completedPickupCount + completedMissionStepCount;
+    return {
+      businessDate,
+      completedPickupCount,
+      completedDeliveryCount: 0,
+      completedMissionStepCount,
+      completedRouteActions,
+      avatarSpace: completedRouteActions,
+    };
+  }
   if (procedure === "system.openChannel.generateDraft") {
     const taskSeeds = [
       [
@@ -644,6 +661,15 @@ await page.locator(".goldline-progress-trail").waitFor({
   state: "detached",
   timeout: 5_000,
 });
+await page.getByRole("img", { name: "Lara is on board space 1" }).waitFor();
+routeCompletionFlow.persistentBoardSpace = await page
+  .getByRole("img", { name: "Lara is on board space 1" })
+  .count();
+if (routeCompletionFlow.persistentBoardSpace !== 1) {
+  throw new Error(
+    `Goldline did not retain Lara's completed board space: ${JSON.stringify(routeCompletionFlow)}`
+  );
+}
 
 await page.getByText("NEW ORDER", { exact: true }).click();
 await page.getByRole("dialog", { name: "Create new order" }).waitFor();
@@ -729,6 +755,9 @@ await openChannelPage.locator(".goldline-progress-trail").waitFor({
   timeout: 5_000,
 });
 await openChannelPage
+  .getByRole("img", { name: "Lara is on board space 1" })
+  .waitFor();
+await openChannelPage
   .getByRole("button", { name: "Open Channel mission briefing" })
   .waitFor();
 const openChannelSignalScreenshot =
@@ -762,17 +791,17 @@ const draftTaskCount = await openChannelPage
   .count();
 await openChannelPage
   .getByRole("button", { name: "APPROVE & LOAD THE BOARD" })
-  .click();
+  .evaluate(button => button.click());
 await openChannelPage.getByText("MISSION ACTIVE", { exact: true }).waitFor();
 await openChannelPage
   .getByRole("button", { name: "RETURN TO THE BOARD" })
-  .click();
+  .evaluate(button => button.click());
 await openChannelPage
   .locator(".route-stop", { hasText: "Secure a low-cost meal" })
-  .click();
+  .evaluate(button => button.click());
 await openChannelPage
   .getByText("COMPLETE BOARD SPACE", { exact: true })
-  .click();
+  .evaluate(button => button.click());
 await openChannelPage
   .getByText("MISSION SPACE CLEARED", { exact: true })
   .waitFor();
@@ -795,6 +824,9 @@ const openChannelFlow = {
     procedure.startsWith("system.openChannel")
   ),
   errors: openChannelErrors,
+  persistentBoardSpace: await openChannelPage
+    .getByRole("img", { name: "Lara is on board space 2" })
+    .count(),
 };
 if (
   draftTaskCount !== 7 ||
@@ -805,6 +837,7 @@ if (
       "system.openChannel.approve",
       "system.openChannel.completeTask",
     ]) ||
+  openChannelFlow.persistentBoardSpace !== 1 ||
   openChannelErrors.length
 ) {
   throw new Error(

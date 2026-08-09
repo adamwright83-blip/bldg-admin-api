@@ -7,7 +7,10 @@ import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
 import GoldlineHome from "../goldline/GoldlineHome";
 import type { FieldMoveCandidate } from "../../../../server/field/types";
 import type { DayResolution } from "../../../../server/unload/unloadTypes";
-import type { OpenChannelEditableTask } from "../../../../server/openChannel/openChannelTypes";
+import type {
+  GoldlineProgress,
+  OpenChannelEditableTask,
+} from "../../../../server/openChannel/openChannelTypes";
 import type { OpenChannelGenerateInput } from "../goldline/OpenChannel";
 import {
   canCompleteDelivery,
@@ -72,12 +75,38 @@ export default function GoldlineDriverController() {
   });
   const armory = trpc.system.armory.get.useQuery({});
   const openChannelInput = { businessDate: selectedDate };
+  const progressInput = {
+    businessDate: selectedDate,
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
   const openChannel = trpc.system.openChannel.current.useQuery(
     openChannelInput,
     {
       refetchInterval: 30_000,
     }
   );
+  const goldlineProgress = trpc.system.openChannel.progress.useQuery(
+    progressInput,
+    { refetchInterval: 30_000 }
+  );
+
+  function advanceCachedProgress(kind: "pickup" | "delivery" | "mission") {
+    utils.system.openChannel.progress.setData(progressInput, current => {
+      if (!current) return current;
+      const next: GoldlineProgress = {
+        ...current,
+        completedPickupCount:
+          current.completedPickupCount + (kind === "pickup" ? 1 : 0),
+        completedDeliveryCount:
+          current.completedDeliveryCount + (kind === "delivery" ? 1 : 0),
+        completedMissionStepCount:
+          current.completedMissionStepCount + (kind === "mission" ? 1 : 0),
+        completedRouteActions: current.completedRouteActions + 1,
+        avatarSpace: current.avatarSpace + 1,
+      };
+      return next;
+    });
+  }
 
   const moveInput = useMemo(
     () => ({
@@ -166,6 +195,7 @@ export default function GoldlineDriverController() {
       moves.refetch(),
       builtMissions.refetch(),
       dispatches.refetch(),
+      goldlineProgress.refetch(),
       utils.admin.listByStatus.invalidate({ status: "new" }),
       utils.admin.listByStatus.invalidate({ status: "collected" }),
       utils.admin.listByStatus.invalidate({ status: "ready" }),
@@ -190,6 +220,7 @@ export default function GoldlineDriverController() {
     }
     try {
       await updateStatus.mutateAsync({ orderId, status });
+      advanceCachedProgress(status === "collected" ? "pickup" : "delivery");
       utils.admin.listByDate.setData(
         status === "collected" ? pickupQueryInput : deliveryQueryInput,
         rows => rows?.filter(order => order.id !== orderId)
@@ -326,6 +357,8 @@ export default function GoldlineDriverController() {
         taskId,
         requestId: crypto.randomUUID(),
       });
+      advanceCachedProgress("mission");
+      void goldlineProgress.refetch();
       utils.system.openChannel.current.setData(
         openChannelInput,
         result.status === "completed" ? null : result
@@ -365,6 +398,7 @@ export default function GoldlineDriverController() {
         dayResolution={dayResolution}
         activeDispatch={activeDispatch}
         openChannelMission={openChannel.data}
+        goldlineProgress={goldlineProgress.data}
         selectedDate={selectedDate}
         onSelectedDateChange={setSelectedDate}
         isLoading={
