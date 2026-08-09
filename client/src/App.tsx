@@ -48,6 +48,10 @@ const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
 const DayforgeDemoControlPage = lazy(
   () => import("./pages/DayforgeDemoControlPage")
 );
+const ProductShell = lazy(() => import("./product/ProductShell"));
+const ArchivedLaraCroftSkin = lazy(
+  () => import("./archive/lara-croft-tombraider-skin/ArchivedLaraCroftSkin")
+);
 
 function PublicLandingFallback() {
   return <div style={{ minHeight: "100vh", background: "#F6F1E8" }} />;
@@ -157,11 +161,25 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/dayforge-settings",
   "/dayforge-invite",
   "/billing",
+  "/product",
+  "/product/field",
+  "/product/hq",
+  "/product/customers",
+  "/product/grow",
+  "/product/money",
+  "/product/capabilities",
+  "/product/hunt",
+  "/product/unload",
+  "/product/team",
+  "/archive/lara-croft-skin",
 ]);
 
 function AdminHostRouter() {
   return (
     <Switch>
+      <Route path="/product/:rest*"><Suspense fallback={<PublicLandingFallback />}><ProductShell /></Suspense></Route>
+      <Route path="/product"><Suspense fallback={<PublicLandingFallback />}><ProductShell /></Suspense></Route>
+      <Route path="/archive/lara-croft-skin"><Suspense fallback={<PublicLandingFallback />}><ArchivedLaraCroftSkin /></Suspense></Route>
       {/* Public landing pages are also reachable from the admin host for previewing. */}
       <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/dayforge" component={DayforgeLandingRoute} />
@@ -304,6 +322,9 @@ function Router() {
 
   return (
     <Switch>
+      <Route path="/product/:rest*"><Suspense fallback={<PublicLandingFallback />}><ProductShell /></Suspense></Route>
+      <Route path="/product"><Suspense fallback={<PublicLandingFallback />}><ProductShell /></Suspense></Route>
+      <Route path="/archive/lara-croft-skin"><Suspense fallback={<PublicLandingFallback />}><ArchivedLaraCroftSkin /></Suspense></Route>
       <Route path="/boreslay" component={BoreslayLandingRoute} />
       <Route path="/dayforge" component={DayforgeLandingRoute} />
       <Route path="/landingfinal" component={LandingFinalRoute} />

@@ -9,6 +9,10 @@ const driverSource = readFileSync(
   new URL("../../../pages/Driver.tsx", import.meta.url),
   "utf8"
 );
+const fieldHomeSource = readFileSync(
+  new URL("../../../product/FieldHome.tsx", import.meta.url),
+  "utf8"
+);
 const walkInSource = readFileSync(
   new URL("../../dayforge/WalkInCapture.tsx", import.meta.url),
   "utf8"
@@ -36,10 +40,13 @@ describe("driver mobile actions", () => {
     expect(commandCenterSource).toContain('<Mic className="shrink-0"');
   });
 
-  it("does not redirect the driver into the admin mission route after save", () => {
-    expect(driverSource).toContain("onSaved={result =>");
-    expect(driverSource).toContain("Follow-up scheduled.");
-    expect(walkInSource).toContain("if (props.onSaved)");
-    expect(walkInSource).toContain("props.onSaved(result)");
+  it("routes the active driver through contractor FIELD without an admin mission redirect", () => {
+    expect(driverSource).toContain("return <ProductShell />");
+    expect(fieldHomeSource).toContain('href="/product/hunt"');
+    expect(fieldHomeSource).toContain('href="/product/unload"');
+    expect(fieldHomeSource).toContain('href="/new-order"');
+    expect(fieldHomeSource).not.toContain('/commercial-missions');
+    expect(walkInSource).toContain("props.onSaved?.(result)");
+    expect(walkInSource).toContain("if (!props.onSaved) window.location.assign");
   });
 });

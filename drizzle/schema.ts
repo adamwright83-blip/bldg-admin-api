@@ -4463,3 +4463,84 @@ export const commandSkyWins = mysqlTable(
 );
 
 export type CommandSkyWin = typeof commandSkyWins.$inferSelect;
+
+/** Cross-domain GROW decisions. Source entities remain authoritative. */
+export const businessGameMoveDecisions = mysqlTable(
+  "business_game_move_decisions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    moveId: varchar("moveId", { length: 191 }).notNull(),
+    sourceType: varchar("sourceType", { length: 64 }).notNull(),
+    sourceId: varchar("sourceId", { length: 191 }).notNull(),
+    decision: mysqlEnum("decision", ["accepted", "dismissed", "completed"]).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    metadataJson: json("metadataJson"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantRequestUnique: uniqueIndex("uq_business_move_decisions_tenant_request").on(table.tenantId, table.requestId),
+    tenantMoveIdx: index("idx_business_move_decisions_tenant_move").on(table.tenantId, table.moveId, table.createdAt),
+  })
+);
+
+/** Immutable, idempotent daily resolution snapshots. */
+export const businessDayResolutions = mysqlTable(
+  "business_day_resolutions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    sourceThrough: timestamp("sourceThrough").notNull(),
+    contentHash: varchar("contentHash", { length: 64 }).notNull(),
+    resolutionJson: json("resolutionJson").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantDateActorUnique: uniqueIndex("uq_business_day_resolutions_tenant_date_actor").on(table.tenantId, table.businessDate, table.actorId),
+    tenantRequestUnique: uniqueIndex("uq_business_day_resolutions_tenant_request").on(table.tenantId, table.requestId),
+  })
+);
+
+/** Optional operating detail attached to a real active tenant membership. */
+export const employeeOperatingProfiles = mysqlTable(
+  "employee_operating_profiles",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    userOpenId: varchar("userOpenId", { length: 64 }).notNull(),
+    displayName: varchar("displayName", { length: 255 }).notNull(),
+    employmentStatus: mysqlEnum("employmentStatus", ["active", "leave", "ended"]).notNull().default("active"),
+    skillsJson: json("skillsJson").notNull(),
+    weeklyCapacityUnits: int("weeklyCapacityUnits"),
+    createdBy: varchar("createdBy", { length: 128 }).notNull(),
+    updatedBy: varchar("updatedBy", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantUserUnique: uniqueIndex("uq_employee_operating_profiles_tenant_user").on(table.tenantId, table.userOpenId),
+    tenantStatusIdx: index("idx_employee_operating_profiles_tenant_status").on(table.tenantId, table.employmentStatus),
+  })
+);
+
+export const employeeOperatingProfileEvents = mysqlTable(
+  "employee_operating_profile_events",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    profileId: varchar("profileId", { length: 36 }).notNull(),
+    eventType: varchar("eventType", { length: 64 }).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    metadataJson: json("metadataJson"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantRequestUnique: uniqueIndex("uq_employee_profile_events_tenant_request").on(table.tenantId, table.requestId),
+    tenantProfileIdx: index("idx_employee_profile_events_tenant_profile").on(table.tenantId, table.profileId, table.createdAt),
+  })
+);

@@ -39,7 +39,9 @@ describe("driver mission builder contract", () => {
   });
 
   it("keeps mission stops separate from operational order records", () => {
-    expect(driver).toContain("salesMissions={builtMissions.data}");
+    expect(driver).toContain('import ProductShell from "@/product/ProductShell"');
+    expect(driver).toContain("return <ProductShell />");
+    expect(driver).not.toContain("salesMissions={builtMissions.data}");
     expect(commandCenter).toContain("salesMissions.map");
     expect(commandCenter).toContain("orders.map");
     expect(commandCenter).toContain("Sales missions");

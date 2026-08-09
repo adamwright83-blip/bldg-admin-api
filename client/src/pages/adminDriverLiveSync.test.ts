@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-describe("admin driver to live sync", () => {
-  it("driver pickup/dropoff mutations invalidate the Live status lanes", () => {
+describe("admin operations to live sync", () => {
+  it("keeps pickup/dropoff invalidation in the operational admin surface", () => {
     const adminSource = readFileSync(new URL("./Admin.tsx", import.meta.url), "utf8");
     const driverSource = readFileSync(new URL("./Driver.tsx", import.meta.url), "utf8");
     const source = `${adminSource}\n${driverSource}`;
@@ -14,6 +14,8 @@ describe("admin driver to live sync", () => {
     expect(source).toContain('utils.admin.listByStatus.invalidate({ status: "delivered" })');
     expect(source).toContain("await Promise.all([refetchPickups(), invalidateLiveStatuses()])");
     expect(source).toContain("await Promise.all([refetchDeliveries(), invalidateLiveStatuses()])");
-    expect(driverSource).toContain("await Promise.all([pickupQuery.refetch(), deliveryQuery.refetch(), invalidateLiveStatuses()])");
+    expect(driverSource).toContain('import ProductShell from "@/product/ProductShell"');
+    expect(driverSource).toContain("return <ProductShell />");
+    expect(driverSource).not.toContain("updateStatus.useMutation");
   });
 });
