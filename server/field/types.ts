@@ -1,0 +1,73 @@
+import type { DataQuality, ProvenancedValue, VerificationClass } from "../../shared/businessGame";
+
+export type FieldTodayItemKind =
+  | "job"
+  | "pickup"
+  | "delivery"
+  | "follow_up"
+  | "commercial_visit"
+  | "commercial_call"
+  | "mission_dispatch"
+  | "customer_recovery"
+  | "payment_blocker"
+  | "route_exception"
+  | "contextual_move";
+
+export type FieldTodayItem = {
+  id: string;
+  kind: FieldTodayItemKind;
+  source: { entityType: string; entityId: string; sourceReference: string };
+  scheduledAt: string | null;
+  urgency: "blocked" | "overdue" | "urgent" | "scheduled" | "flexible" | "upcoming";
+  title: string;
+  subtitle: string;
+  status: string;
+  destination: { address: string; latitude: number | null; longitude: number | null } | null;
+  customer: { name: string; phone: string | null; email: string | null } | null;
+  money: ProvenancedValue<number> | null;
+  verificationClass: VerificationClass;
+  actions: Array<{ type: string; label: string; href: string | null; mutation: string | null }>;
+};
+
+export type FieldTodayProjection = {
+  generatedAt: string;
+  businessDate: string;
+  currentUserId: string;
+  timeline: FieldTodayItem[];
+  nextFixedCommitment: FieldTodayItem | null;
+  blockers: FieldTodayItem[];
+  dataQuality: DataQuality;
+};
+
+export type FieldMoveType = "commercial_follow_up" | "customer_recovery_call" | "nearby_commercial_visit" | "commercial_call";
+
+export type FieldMoveCandidate = {
+  id: string;
+  moveType: FieldMoveType;
+  title: string;
+  target: { entityType: string; entityId: string; name: string };
+  expectedDurationMinutes: number;
+  travelMinutes: number | null;
+  expectedValue: ProvenancedValue<{ lowCents: number; highCents: number }>;
+  confidence: "high" | "medium" | "low" | "unknown";
+  relevance: string;
+  evidence: string[];
+  expiresAt: string | null;
+  contactAllowed: boolean;
+  withinServiceRadius: boolean | null;
+  missionId: number | null;
+  missionVersion: number | null;
+  destinationPath: string;
+};
+
+export type FieldMovesResult = {
+  generatedAt: string;
+  recommendedMoves: FieldMoveCandidate[];
+  reason: "MOVES_AVAILABLE" | "NO_WORTHWHILE_MOVE" | "ROUTE_TOO_TIGHT" | "NO_ELIGIBLE_TARGET" | "CAPACITY_FULL" | "DATA_INSUFFICIENT";
+  constraints: {
+    availableMinutes: number | null;
+    capacityFull: boolean;
+    currentLocationAvailable: boolean;
+  };
+  dataQuality: DataQuality;
+};

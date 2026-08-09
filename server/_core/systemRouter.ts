@@ -14,6 +14,15 @@ import { dayforgeDemoRouter } from "../dayforgeDemo/demoTenantRouter";
 import { dayforgeTodayRouter } from "../dayforgeToday/dayforgeTodayRouter";
 import { commercialCampaignRouter } from "../commercialCampaigns/commercialCampaignRouter";
 import { dayforgeProofRouter } from "../dayforgeProof/dayforgeProofRouter";
+import { customerAssetRouter } from "../customerAssets/customerAssetRouter";
+import { fieldRouter } from "../field/fieldRouter";
+import { businessWorldRouter } from "../businessWorld/businessWorldRouter";
+import { growRouter } from "../grow/growRouter";
+import { moneyRouter } from "../money/moneyRouter";
+import { unloadRouter } from "../unload/unloadRouter";
+import { armoryRouter } from "../armory/armoryRouter";
+import { capabilityRouter } from "../capabilities/capabilityRouter";
+import { teamRouter } from "../team/teamRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
@@ -29,6 +38,15 @@ export const systemRouter = router({
   dayforgeToday: dayforgeTodayRouter,
   commercialCampaign: commercialCampaignRouter,
   dayforgeProof: dayforgeProofRouter,
+  customerAssets: customerAssetRouter,
+  field: fieldRouter,
+  businessWorld: businessWorldRouter,
+  grow: growRouter,
+  money: moneyRouter,
+  unload: unloadRouter,
+  armory: armoryRouter,
+  capabilities: capabilityRouter,
+  team: teamRouter,
   health: publicProcedure
     .input(
       z.object({

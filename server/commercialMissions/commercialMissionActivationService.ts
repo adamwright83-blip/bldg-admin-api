@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   commercialMissionEvents,
   commercialMissions,
@@ -30,7 +30,7 @@ export async function listCommercialMissionFieldAssignees(
       .where(
         and(
           eq(dayforgeSaasMemberships.tenantId, tenantId),
-          eq(dayforgeSaasMemberships.role, "field"),
+          inArray(dayforgeSaasMemberships.role, ["owner", "admin", "operator", "field"]),
           eq(dayforgeSaasMemberships.active, true)
         )
       ),
