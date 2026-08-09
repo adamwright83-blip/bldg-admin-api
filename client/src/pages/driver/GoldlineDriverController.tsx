@@ -42,16 +42,18 @@ export default function GoldlineDriverController() {
     useState<GoldlineLocationSnapshot>(REQUESTING_LOCATION);
   const oauthHandled = useRef(false);
 
-  const pickups = trpc.admin.listByDate.useQuery({
+  const pickupQueryInput = {
     date: selectedDate,
-    status: "new",
-    dateField: "pickupDate",
-  });
-  const deliveries = trpc.admin.listByDate.useQuery({
+    status: "new" as const,
+    dateField: "pickupDate" as const,
+  };
+  const deliveryQueryInput = {
     date: selectedDate,
-    status: "ready",
-    dateField: "deliveryDate",
-  });
+    status: "ready" as const,
+    dateField: "deliveryDate" as const,
+  };
+  const pickups = trpc.admin.listByDate.useQuery(pickupQueryInput);
+  const deliveries = trpc.admin.listByDate.useQuery(deliveryQueryInput);
   const fieldToday = trpc.system.field.today.useQuery(undefined, {
     refetchInterval: 30_000,
   });
@@ -162,28 +164,36 @@ export default function GoldlineDriverController() {
   async function handleResolveOrder(
     orderId: number,
     status: "collected" | "delivered"
-  ) {
+  ): Promise<boolean> {
     if (status === "delivered") {
       const order = deliveries.data?.find(row => row.id === orderId);
       if (!order || !canCompleteDelivery(order)) {
         toast.error(
           "Payment must be resolved before this delivery can finish."
         );
-        return;
+        return false;
       }
     }
     try {
       await updateStatus.mutateAsync({ orderId, status });
-      await invalidateDriverTruth();
+      utils.admin.listByDate.setData(
+        status === "collected" ? pickupQueryInput : deliveryQueryInput,
+        rows => rows?.filter(order => order.id !== orderId)
+      );
+      void invalidateDriverTruth().catch(error => {
+        console.warn("[Goldline] Background route refresh failed", error);
+      });
       toast.success(
         status === "collected"
           ? "Pickup collected."
           : "Paid delivery completed."
       );
+      return true;
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not update the order."
       );
+      return false;
     }
   }
 

@@ -66,6 +66,97 @@
   }
 }
 
+/* A confirmed route action turns the foreground explorer into a short-lived
+   board-piece advance without changing the approved painted world. */
+.goldline.is-route-progressing::after {
+  animation: goldline-avatar-advance 1.3s cubic-bezier(0.22, 0.84, 0.3, 1) both !important;
+  filter: drop-shadow(0 0 14px rgba(255, 211, 91, 0.92));
+}
+
+@keyframes goldline-avatar-advance {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1.003);
+  }
+  22% {
+    opacity: 1;
+    transform: translate3d(8px, -10px, 0) scale(1.016);
+  }
+  72% {
+    opacity: 0.96;
+    transform: translate3d(38px, -46px, 0) scale(0.99);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(64px, -78px, 0) scale(0.94);
+  }
+}
+
+.goldline .goldline-progress-trail {
+  position: absolute;
+  z-index: 9;
+  top: 72%;
+  left: 18%;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #fff3b0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    #fff9c6 0 18%,
+    #ffc52d 19% 46%,
+    #8c4e08 48% 100%
+  );
+  box-shadow:
+    0 0 0 7px #ffc83c4d,
+    0 0 28px #ffc52d;
+  animation: goldline-player-advance 1.3s cubic-bezier(0.22, 0.84, 0.3, 1) both;
+}
+.goldline .goldline-progress-trail i {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff8c9;
+  box-shadow: 0 0 10px #ffd34f;
+}
+.goldline .goldline-progress-trail i:nth-child(1) {
+  left: -13px;
+  top: 21px;
+}
+.goldline .goldline-progress-trail i:nth-child(2) {
+  left: -27px;
+  top: 30px;
+  opacity: 0.72;
+}
+.goldline .goldline-progress-trail i:nth-child(3) {
+  left: -40px;
+  top: 38px;
+  opacity: 0.45;
+}
+
+@keyframes goldline-player-advance {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.65);
+  }
+  14% {
+    opacity: 1;
+    transform: translate3d(12px, -5px, 0) scale(1.1);
+  }
+  72% {
+    opacity: 1;
+    transform: translate3d(42vw, -4vh, 0) scale(0.92);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(50vw, -7vh, 0) scale(0.7);
+  }
+}
+
 /* A second, tighter duplicate around the ponytail moves at a different rhythm,
    creating a small hair-drift cue instead of moving the entire character as
    one rigid cardboard cutout. */

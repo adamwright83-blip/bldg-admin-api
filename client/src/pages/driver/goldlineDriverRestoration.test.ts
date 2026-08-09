@@ -117,4 +117,19 @@ describe("Goldline canonical driver restoration", () => {
     expect(goldlineCss).toContain("--goldline-anchor-y");
     expect(goldlineCss).not.toMatch(/\.goldline \.stop-[1-4]/);
   });
+
+  it("turns a successful route mutation into visible Goldline progression", () => {
+    expect(controller).toContain("utils.admin.listByDate.setData");
+    expect(controller).toContain("rows?.filter(order => order.id !== orderId)");
+    expect(controller).toContain("return true");
+    expect(goldline).toContain("ROUTE ACTION COMPLETE");
+    expect(goldline).toContain("PICKUP SECURED");
+    expect(goldline).toContain('phase: "confirming"');
+    expect(goldline).toContain('phase: "advancing"');
+    expect(goldline).toContain("completedStopKeys.has(stop.key)");
+    expect(goldline).toContain("is-route-progressing");
+    expect(goldlineCss).toContain("goldline-route-confirm");
+    expect(goldlineCss).toContain("goldline-avatar-advance");
+    expect(goldlineCss).toContain("goldline-player-advance");
+  });
 });

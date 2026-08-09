@@ -63,6 +63,13 @@ type RouteStop = {
   move?: FieldMoveCandidate;
 };
 
+type RouteCompletion = {
+  stopKey: string;
+  name: string;
+  status: "collected" | "delivered";
+  phase: "confirming" | "advancing";
+};
+
 type AdaptiveMeter = {
   points: number;
   maxPoints: number;
@@ -105,7 +112,7 @@ type GoldlineHomeProps = {
   onResolveOrder: (
     orderId: number,
     status: "collected" | "delivered"
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   onAcceptMove: (move: FieldMoveCandidate) => Promise<void>;
   onOpenWalkIn: () => void;
   onOpenNewOrder: () => void;
@@ -277,6 +284,11 @@ export default function GoldlineHome({
 }: GoldlineHomeProps) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [selectedStop, setSelectedStop] = useState<RouteStop | null>(null);
+  const [completedStopKeys, setCompletedStopKeys] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [routeCompletion, setRouteCompletion] =
+    useState<RouteCompletion | null>(null);
 
   const recommendedMoves = moves?.recommendedMoves ?? [];
   const callMoves = recommendedMoves.filter(
@@ -308,9 +320,9 @@ export default function GoldlineHome({
         .filter(move => !existingMissionIds.has(move.missionId ?? undefined))
         .map(toMoveStop)
     : [];
-  const routeStops = [...orderStops, ...salesStops, ...contextualStops].sort(
-    (a, b) => a.sortKey.localeCompare(b.sortKey)
-  );
+  const routeStops = [...orderStops, ...salesStops, ...contextualStops]
+    .filter(stop => !completedStopKeys.has(stop.key))
+    .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 
   const visibleStops = routeStops.slice(0, 4);
   const hiddenStopCount = Math.max(0, routeStops.length - visibleStops.length);
@@ -339,6 +351,31 @@ export default function GoldlineHome({
     if (path) window.location.assign(path);
   }
 
+  async function resolveSelectedStop(stop: RouteStop) {
+    if (!stop.orderId || !stop.resolveStatus) return;
+    const resolved = await onResolveOrder(stop.orderId, stop.resolveStatus);
+    if (!resolved) return;
+    setCompletedStopKeys(current => {
+      const next = new Set(current);
+      next.add(stop.key);
+      return next;
+    });
+    setRouteCompletion({
+      stopKey: stop.key,
+      name: stop.name,
+      status: stop.resolveStatus,
+      phase: "confirming",
+    });
+  }
+
+  function beginLaraAdvance() {
+    setPanel(null);
+    setSelectedStop(null);
+    setRouteCompletion(current =>
+      current ? { ...current, phase: "advancing" } : null
+    );
+  }
+
   const actionItems = [
     { label: "BUILD MISSION", action: () => setPanel("build") },
     { label: "NEW ORDER", action: onOpenNewOrder },
@@ -348,7 +385,14 @@ export default function GoldlineHome({
 
   return (
     <main className="goldline-shell">
-      <section className="goldline" aria-label="Goldline daily adventure map">
+      <section
+        className={
+          routeCompletion?.phase === "advancing"
+            ? "goldline is-route-progressing"
+            : "goldline"
+        }
+        aria-label="Goldline daily adventure map"
+      >
         <div className="goldline-world-layer">
           <img
             className="goldline-world"
@@ -364,6 +408,18 @@ export default function GoldlineHome({
           <i className="ambient-4" />
           <i className="ambient-5" />
         </div>
+
+        {routeCompletion?.phase === "advancing" ? (
+          <div
+            className="goldline-progress-trail"
+            aria-hidden="true"
+            onAnimationEnd={() => setRouteCompletion(null)}
+          >
+            <i />
+            <i />
+            <i />
+          </div>
+        ) : null}
 
         <header className="goldline-topbar">
           <button
@@ -666,7 +722,26 @@ export default function GoldlineHome({
                     {blockerCount > 0 ? <b>{blockerCount} BLOCKED</b> : null}
                     {salesCount > 0 ? <b>{salesCount} SALES</b> : null}
                   </div>
-                  {selectedStop ? (
+                  {routeCompletion?.phase === "confirming" ? (
+                    <div
+                      className="goldline-route-completion"
+                      role="status"
+                      aria-live="polite"
+                      onAnimationEnd={beginLaraAdvance}
+                    >
+                      <span>
+                        <Check />
+                      </span>
+                      <small>ROUTE ACTION COMPLETE</small>
+                      <b>{routeCompletion.name}</b>
+                      <strong>
+                        {routeCompletion.status === "collected"
+                          ? "PICKUP SECURED"
+                          : "DELIVERY COMPLETE"}
+                      </strong>
+                      <em>Goldline advancing…</em>
+                    </div>
+                  ) : selectedStop ? (
                     <div
                       className={`route-focus-card is-${selectedStop.tone}${selectedStop.type === "PAYMENT BLOCKED" ? " is-blocked" : ""}`}
                     >
@@ -696,10 +771,7 @@ export default function GoldlineHome({
                             type="button"
                             disabled={isResolvingOrder}
                             onClick={() =>
-                              void onResolveOrder(
-                                selectedStop.orderId!,
-                                selectedStop.resolveStatus!
-                              )
+                              void resolveSelectedStop(selectedStop)
                             }
                           >
                             <Check />{" "}
@@ -743,7 +815,8 @@ export default function GoldlineHome({
                       </div>
                     </div>
                   ) : null}
-                  {routeStops.length ? (
+                  {routeCompletion?.phase ===
+                  "confirming" ? null : routeStops.length ? (
                     <ul>
                       {routeStops.map((stop, index) => (
                         <li
@@ -769,7 +842,8 @@ export default function GoldlineHome({
                       fabricated.
                     </p>
                   )}
-                  {today?.nextFixedCommitment ? (
+                  {routeCompletion?.phase !== "confirming" &&
+                  today?.nextFixedCommitment ? (
                     <section className="goldline-intel-card">
                       <small>NEXT FIXED COMMITMENT · VERIFIED</small>
                       <h3>{today.nextFixedCommitment.title}</h3>

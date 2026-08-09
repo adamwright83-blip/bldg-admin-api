@@ -294,7 +294,23 @@ function inputAt(url, index) {
   }
 }
 
-function responseFor(procedure, input, withMoves, singlePickupOnly = false) {
+function inputForRequest(request, url, index) {
+  if (request.method() === "GET") return inputAt(url, index);
+  try {
+    const parsed = request.postDataJSON();
+    return parsed?.[String(index)]?.json ?? parsed?.json;
+  } catch {
+    return undefined;
+  }
+}
+
+function responseFor(
+  procedure,
+  input,
+  withMoves,
+  singlePickupOnly = false,
+  resolvedOrderIds = new Set()
+) {
   if (procedure === "auth.me") {
     return {
       id: 1,
@@ -306,10 +322,14 @@ function responseFor(procedure, input, withMoves, singlePickupOnly = false) {
   }
   if (procedure === "admin.listByDate") {
     if (singlePickupOnly)
-      return input?.dateField === "deliveryDate" ? [] : [pickup];
-    return input?.dateField === "deliveryDate"
-      ? [paidDelivery, blockedDelivery]
-      : [pickup];
+      return input?.dateField === "deliveryDate"
+        ? []
+        : [pickup].filter(order => !resolvedOrderIds.has(order.id));
+    const orders =
+      input?.dateField === "deliveryDate"
+        ? [paidDelivery, blockedDelivery]
+        : [pickup];
+    return orders.filter(order => !resolvedOrderIds.has(order.id));
   }
   if (procedure === "system.field.today") return fieldToday;
   if (procedure === "system.field.moves")
@@ -381,20 +401,30 @@ async function installApi(
   observedMutations,
   singlePickupOnly = false
 ) {
+  const resolvedOrderIds = new Set();
   await page.route("**/api/trpc/**", async route => {
     const url = new URL(route.request().url());
     const procedures = decodeURIComponent(
       url.pathname.split("/api/trpc/")[1] ?? ""
     ).split(",");
     const payload = procedures.map((procedure, index) => {
-      const input = inputAt(url, index);
+      const input = inputForRequest(route.request(), url, index);
       if (procedure === "system.field.moves") observedMoveInputs.push(input);
-      if (route.request().method() === "POST")
+      if (route.request().method() === "POST") {
         observedMutations.push(procedure);
+        if (procedure === "admin.updateStatus" && input?.orderId)
+          resolvedOrderIds.add(input.orderId);
+      }
       return {
         result: {
           data: {
-            json: responseFor(procedure, input, withMoves, singlePickupOnly),
+            json: responseFor(
+              procedure,
+              input,
+              withMoves,
+              singlePickupOnly,
+              resolvedOrderIds
+            ),
           },
         },
       };
@@ -447,7 +477,53 @@ await page.getByRole("button", { name: "Close" }).click();
 await page.getByRole("button", { name: "Open today's route" }).click();
 await page.getByText("Riley Resident", { exact: true }).last().click();
 await page.getByText("MARK COLLECTED", { exact: true }).click();
-await page.getByRole("button", { name: "Close" }).click();
+await page.locator(".goldline-route-completion").waitFor();
+await page.waitForTimeout(280);
+const confirmationScreenshot =
+  "/Users/adamwrightpfi/.codex/visualizations/2026/08/09/019fe538-2f7e-72f1-bdc1-0d86e50cfc5c/goldline-pickup-confirmed.png";
+await page.screenshot({ path: confirmationScreenshot, fullPage: true });
+const greenConfirmation = {
+  checkmark: await page.locator(".goldline-route-completion svg").count(),
+  pickupSecured: await page
+    .getByText("PICKUP SECURED", { exact: true })
+    .count(),
+};
+await page.locator(".drawer-backdrop").waitFor({
+  state: "hidden",
+  timeout: 5_000,
+});
+const routeCompletionFlow = {
+  confirmationScreenshot,
+  greenConfirmation,
+  drawerClosed: (await page.locator(".drawer-backdrop").count()) === 0,
+  pickupCardRemoved:
+    (await page
+      .locator(".route-stop", { hasText: "Riley Resident" })
+      .count()) === 0,
+  laraAdvancing: await page.locator(".is-route-progressing").count(),
+  progressionTrail: await page.locator(".goldline-progress-trail").count(),
+};
+if (
+  routeCompletionFlow.greenConfirmation.checkmark !== 1 ||
+  routeCompletionFlow.greenConfirmation.pickupSecured !== 1 ||
+  !routeCompletionFlow.drawerClosed ||
+  !routeCompletionFlow.pickupCardRemoved ||
+  routeCompletionFlow.laraAdvancing !== 1 ||
+  routeCompletionFlow.progressionTrail !== 1
+) {
+  throw new Error(
+    `Goldline pickup completion sequence failed: ${JSON.stringify(routeCompletionFlow)}`
+  );
+}
+const progressionScreenshot =
+  "/Users/adamwrightpfi/.codex/visualizations/2026/08/09/019fe538-2f7e-72f1-bdc1-0d86e50cfc5c/goldline-lara-advancing.png";
+await page.waitForTimeout(450);
+await page.screenshot({ path: progressionScreenshot, fullPage: true });
+routeCompletionFlow.progressionScreenshot = progressionScreenshot;
+await page.locator(".goldline-progress-trail").waitFor({
+  state: "detached",
+  timeout: 5_000,
+});
 
 await page.getByText("NEW ORDER", { exact: true }).click();
 await page.getByRole("dialog", { name: "Create new order" }).waitFor();
@@ -670,6 +746,7 @@ console.log(
       actionBarVisible,
       observedMoveInputs,
       observedMutations,
+      routeCompletionFlow,
       quietState,
       deniedMoveInputs,
       pageErrors,

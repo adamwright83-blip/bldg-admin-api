@@ -723,6 +723,96 @@ body,
 .goldline .route-focus-card.is-violet {
   border-color: #8751a5;
 }
+.goldline .goldline-route-completion {
+  min-height: 250px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 24px 18px;
+  border: 2px solid #2b9d48;
+  border-radius: 14px;
+  color: #17351f;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 24%, #dfffea, transparent 38%),
+    linear-gradient(145deg, #f7fff8, #cce9cf);
+  box-shadow:
+    inset 0 0 0 3px #ffffffb8,
+    0 10px 28px #12391e42,
+    0 0 24px #43da6f70;
+  animation: goldline-route-confirm 1.15s ease both;
+}
+.goldline .goldline-route-completion > span {
+  width: 88px;
+  height: 88px;
+  display: grid;
+  place-items: center;
+  border: 3px solid #e9ffef;
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(145deg, #45d86b, #168437);
+  box-shadow:
+    inset 0 0 0 3px #0c6e2b,
+    0 0 0 8px #50df7550,
+    0 0 32px #21c752a8;
+}
+.goldline .goldline-route-completion svg {
+  width: 52px;
+  height: 52px;
+  stroke-width: 4;
+}
+.goldline .goldline-route-completion > small {
+  margin-top: 8px;
+  color: #26743b;
+  font:
+    800 11px/1 Inter,
+    sans-serif;
+  letter-spacing: 0.12em;
+}
+.goldline .goldline-route-completion > b {
+  color: #17351f;
+  font:
+    800 24px/1.08 Cinzel,
+    serif;
+}
+.goldline .goldline-route-completion > strong {
+  color: #117c31;
+  font:
+    800 15px/1 Cinzel,
+    serif;
+  letter-spacing: 0.07em;
+}
+.goldline .goldline-route-completion > em {
+  color: #3f6548;
+  font:
+    800 11px/1 Inter,
+    sans-serif;
+  font-style: normal;
+}
+@keyframes goldline-route-confirm {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+    filter: brightness(1.35);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1.035);
+  }
+  34% {
+    transform: scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(0.985);
+  }
+}
 .goldline .goldline-drawer .route-list-item {
   align-items: flex-start;
   min-height: 62px;
