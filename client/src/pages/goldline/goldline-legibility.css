@@ -1,7 +1,11 @@
 /* Goldline is a real driver surface first and a game HUD second.
    Keep route data readable in sunlight and keep every primary control inside
    the browser's smallest usable viewport. */
-html, body, #root { height: 100%; }
+html,
+body,
+#root {
+  height: 100%;
+}
 .goldline-shell {
   min-height: 100svh;
   height: 100svh;
@@ -13,16 +17,26 @@ html, body, #root { height: 100%; }
   max-height: none;
 }
 
-/* Give the world just enough motion to stop reading as a dead poster. */
-.goldline .goldline-world {
+/* Move the artwork and semantic route layer together so labels stay attached. */
+.goldline .goldline-world-layer,
+.goldline .goldline-route-layer {
   transform-origin: 50% 72%;
   animation: goldline-world-life 9s ease-in-out infinite alternate;
   will-change: transform, filter;
 }
 @keyframes goldline-world-life {
-  0% { transform: scale(1.004) translate3d(0, 0, 0); filter: saturate(1) brightness(1); }
-  55% { transform: scale(1.008) translate3d(-.6px, -1.2px, 0); filter: saturate(1.025) brightness(1.012); }
-  100% { transform: scale(1.006) translate3d(.8px, -.4px, 0); filter: saturate(1.01) brightness(1.006); }
+  0% {
+    transform: translate(-50%, -50%) scale(1.004) translate3d(0, 0, 0);
+    filter: saturate(1) brightness(1);
+  }
+  55% {
+    transform: translate(-50%, -50%) scale(1.008) translate3d(-0.6px, -1.2px, 0);
+    filter: saturate(1.025) brightness(1.012);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.006) translate3d(0.8px, -0.4px, 0);
+    filter: saturate(1.01) brightness(1.006);
+  }
 }
 .goldline .goldline-ambient {
   position: absolute;
@@ -37,19 +51,50 @@ html, body, #root { height: 100%; }
   height: 4px;
   border-radius: 50%;
   background: #fff4bf;
-  box-shadow: 0 0 8px #fff4bf, 0 0 14px #5ff4ff88;
-  opacity: .45;
+  box-shadow:
+    0 0 8px #fff4bf,
+    0 0 14px #5ff4ff88;
+  opacity: 0.45;
   animation: goldline-mote 5.5s ease-in-out infinite;
 }
-.goldline .ambient-1 { left: 64%; top: 29%; animation-delay: -.6s; }
-.goldline .ambient-2 { left: 78%; top: 42%; animation-delay: -2.8s; }
-.goldline .ambient-3 { left: 53%; top: 59%; animation-delay: -1.4s; }
-.goldline .ambient-4 { left: 69%; top: 69%; animation-delay: -4.1s; }
-.goldline .ambient-5 { left: 39%; top: 47%; animation-delay: -3.2s; }
+.goldline .ambient-1 {
+  left: 64%;
+  top: 29%;
+  animation-delay: -0.6s;
+}
+.goldline .ambient-2 {
+  left: 78%;
+  top: 42%;
+  animation-delay: -2.8s;
+}
+.goldline .ambient-3 {
+  left: 53%;
+  top: 59%;
+  animation-delay: -1.4s;
+}
+.goldline .ambient-4 {
+  left: 69%;
+  top: 69%;
+  animation-delay: -4.1s;
+}
+.goldline .ambient-5 {
+  left: 39%;
+  top: 47%;
+  animation-delay: -3.2s;
+}
 @keyframes goldline-mote {
-  0%, 100% { transform: translate3d(0, 8px, 0) scale(.7); opacity: .18; }
-  45% { opacity: .78; }
-  70% { transform: translate3d(7px, -14px, 0) scale(1.15); opacity: .55; }
+  0%,
+  100% {
+    transform: translate3d(0, 8px, 0) scale(0.7);
+    opacity: 0.18;
+  }
+  45% {
+    opacity: 0.78;
+  }
+  70% {
+    transform: translate3d(7px, -14px, 0) scale(1.15);
+    opacity: 0.55;
+  }
 }
 
 /* Top chrome remains compact, but never microscopic. */
@@ -57,26 +102,34 @@ html, body, #root { height: 100%; }
   top: max(8px, env(safe-area-inset-top));
   left: 9px;
   right: 9px;
-  grid-template-columns: 42px 1fr 42px;
+  grid-template-columns: 46px 1fr 46px;
   gap: 8px;
 }
 .goldline .round-button {
-  width: 42px;
-  height: 42px;
+  width: 46px;
+  height: 46px;
 }
-.goldline .round-button svg { width: 20px; height: 20px; }
-.goldline .date-stone { position: relative; cursor: pointer; }
+.goldline .round-button svg {
+  width: 22px;
+  height: 22px;
+}
+.goldline .date-stone {
+  position: relative;
+  cursor: pointer;
+}
 .goldline .date-stone strong {
-  padding: 8px 8px 7px;
-  font-size: 13px;
+  padding: 10px 8px 9px;
+  font-size: 17px;
   line-height: 1;
 }
 .goldline .date-stone span {
-  margin-top: 5px;
-  font-size: 8px;
-  letter-spacing: .025em;
+  margin-top: 6px;
+  font-size: 10px;
+  letter-spacing: 0.025em;
 }
-.goldline .date-stone i { padding: 4px 3px; }
+.goldline .date-stone i {
+  padding: 5px 3px;
+}
 .goldline .goldline-date-picker {
   position: absolute;
   inset: 0;
@@ -90,58 +143,89 @@ html, body, #root { height: 100%; }
 .goldline .route-summary {
   position: absolute;
   z-index: 12;
-  top: max(62px, calc(env(safe-area-inset-top) + 60px));
+  top: max(72px, calc(env(safe-area-inset-top) + 70px));
   left: 50%;
-  width: min(286px, 70vw);
-  min-height: 62px;
+  width: min(324px, 80vw);
+  min-height: 72px;
   transform: translateX(-50%);
-  padding: 8px 12px 9px;
+  padding: 10px 14px 11px;
   border: 1px solid #f0ca70;
   border-radius: 8px;
   color: #fff7df;
   background: linear-gradient(180deg, #201c17f7, #0f1112f4);
-  box-shadow: 0 7px 20px #000a, inset 0 0 0 2px #6c512b80, 0 0 18px #f7c85c28;
+  box-shadow:
+    0 7px 20px #000a,
+    inset 0 0 0 2px #6c512b80,
+    0 0 18px #f7c85c28;
   text-align: center;
 }
 .goldline .route-summary > b {
   display: block;
-  font: 800 13px/1 Cinzel, serif;
-  letter-spacing: .055em;
+  font:
+    800 16px/1 Cinzel,
+    serif;
+  letter-spacing: 0.055em;
 }
 .goldline .route-summary > span {
   display: flex;
   align-items: baseline;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 7px;
-  font: 800 9px/1.15 Inter, sans-serif;
-  letter-spacing: .02em;
+  gap: 5px;
+  margin-top: 9px;
+  font:
+    800 12px/1.15 Inter,
+    sans-serif;
+  letter-spacing: 0.02em;
 }
-.goldline .route-summary > span strong { font-size: 15px; line-height: 1; }
-.goldline .route-summary > span i { color: #8b7653; font-style: normal; margin: 0 2px; }
-.goldline .summary-pickup { color: #ffd051; }
-.goldline .summary-dropoff { color: #59f3ff; }
-.goldline .summary-sales { color: #d874ff; }
+.goldline .route-summary > span strong {
+  font-size: 19px;
+  line-height: 1;
+}
+.goldline .route-summary > span i {
+  color: #8b7653;
+  font-style: normal;
+  margin: 0 2px;
+}
+.goldline .summary-pickup {
+  color: #ffd051;
+}
+.goldline .summary-dropoff {
+  color: #59f3ff;
+}
+.goldline .summary-sales {
+  color: #d874ff;
+}
 
 .goldline .hustle {
-  top: max(132px, calc(env(safe-area-inset-top) + 130px));
-  left: 106px;
+  top: max(151px, calc(env(safe-area-inset-top) + 149px));
+  left: 112px;
   right: 9px;
   z-index: 11;
 }
 .goldline .hustle-labels {
-  padding: 5px 8px 4px;
-  font-size: 9px;
+  padding: 7px 10px 6px;
+  font-size: 12px;
 }
-.goldline .hustle-labels b { font-size: 10px; padding: 3px 7px; }
-.goldline .hustle-track { height: 9px; }
-.goldline .hustle em { margin-top: 4px; font-size: 9px; }
-.goldline .hustle em svg { width: 10px; height: 10px; }
+.goldline .hustle-labels b {
+  font-size: 13px;
+  padding: 4px 8px;
+}
+.goldline .hustle-track {
+  height: 12px;
+}
+.goldline .hustle em {
+  margin-top: 5px;
+  font-size: 11px;
+}
+.goldline .hustle em svg {
+  width: 10px;
+  height: 10px;
+}
 
 /* Vorgan now looks and behaves like a real interactive rival card. */
 .goldline .vorgan-card {
-  top: max(164px, calc(env(safe-area-inset-top) + 162px));
+  top: max(196px, calc(env(safe-area-inset-top) + 194px));
   left: 8px;
   width: 94px;
   padding: 4px 4px 6px;
@@ -149,11 +233,13 @@ html, body, #root { height: 100%; }
   border-radius: 8px;
   color: #fff3c8;
   background: linear-gradient(180deg, #171411f7, #0c0e10f4);
-  box-shadow: 0 7px 18px #000b, 0 0 18px #dcae4833;
+  box-shadow:
+    0 7px 18px #000b,
+    0 0 18px #dcae4833;
 }
 .goldline .vorgan-card img {
   width: 100%;
-  aspect-ratio: .9;
+  aspect-ratio: 0.9;
   border-radius: 4px;
 }
 .goldline .vorgan-card > .vorgan-copy {
@@ -164,19 +250,25 @@ html, body, #root { height: 100%; }
   border-radius: 0;
   text-align: left;
 }
-.goldline .vorgan-card .vorgan-copy b { font-size: 12px; }
+.goldline .vorgan-card .vorgan-copy b {
+  font-size: 12px;
+}
 .goldline .vorgan-card .vorgan-copy em {
   display: block;
   margin-top: 4px;
   color: #ff705d;
-  font: 800 7px/1 Inter, sans-serif;
+  font:
+    800 7px/1 Inter,
+    sans-serif;
   font-style: normal;
-  letter-spacing: .06em;
+  letter-spacing: 0.06em;
 }
 .goldline .vorgan-card .vorgan-copy small {
   margin-top: 5px;
   color: #ead8b4;
-  font: 700 7px/1.25 Inter, sans-serif;
+  font:
+    700 7px/1.25 Inter,
+    sans-serif;
 }
 .goldline .vorgan-chevron {
   position: absolute;
@@ -186,12 +278,16 @@ html, body, #root { height: 100%; }
   height: 13px;
   color: #f7d786;
 }
-.goldline .vorgan-card:active { transform: scale(.985); }
+.goldline .vorgan-card:active {
+  transform: scale(0.985);
+}
 
 /* Primary route cards: type first, customer second, time third. */
 .goldline .route-stop {
-  width: min(242px, 62vw);
-  min-width: 218px;
+  top: var(--goldline-anchor-y);
+  left: var(--goldline-anchor-x);
+  width: clamp(190px, 52cqw, 220px);
+  min-width: 0;
   min-height: 72px;
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
@@ -200,27 +296,75 @@ html, body, #root { height: 100%; }
   padding: 7px 10px 7px 7px;
   border-width: 1px;
   border-radius: 10px;
-  overflow: hidden;
+  overflow: visible;
   color: #fff;
   text-align: left;
   backdrop-filter: blur(8px);
-  transition: transform .14s ease, filter .14s ease;
+  transition: filter 0.14s ease;
 }
-.goldline .route-stop:active { transform: scale(.985); filter: brightness(1.08); }
+.goldline .route-stop:active {
+  filter: brightness(1.12);
+}
+.goldline .route-stop[data-label-placement="above-right"] {
+  transform: translate(-45%, calc(-100% - 18px));
+}
+.goldline .route-stop[data-label-placement="right"] {
+  transform: translate(18px, -50%);
+}
+.goldline .route-stop[data-label-placement="below"] {
+  transform: translate(-50%, 18px);
+}
+.goldline .route-stop::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  opacity: 0.9;
+  pointer-events: none;
+}
+.goldline .route-stop[data-label-placement="above-right"]::after {
+  left: 45%;
+  bottom: -18px;
+  width: 2px;
+  height: 18px;
+}
+.goldline .route-stop[data-label-placement="right"]::after {
+  top: 50%;
+  left: -18px;
+  width: 18px;
+  height: 2px;
+}
+.goldline .route-stop[data-label-placement="below"]::after {
+  top: -18px;
+  left: 50%;
+  width: 2px;
+  height: 18px;
+}
 .goldline .route-stop.is-gold {
   border-color: #ffd557;
   background: linear-gradient(135deg, #2b1d0cf5, #100e0cf3);
-  box-shadow: 0 8px 22px #000c, inset 0 0 0 1px #8b632a99, 0 0 16px #ffbf2452;
+  box-shadow:
+    0 8px 22px #000c,
+    inset 0 0 0 1px #8b632a99,
+    0 0 16px #ffbf2452;
 }
 .goldline .route-stop.is-cyan {
   border-color: #5ff5ff;
   background: linear-gradient(135deg, #063c45f7, #07181df4);
-  box-shadow: 0 8px 22px #000c, inset 0 0 0 1px #1aa3b799, 0 0 18px #29e7ff52;
+  box-shadow:
+    0 8px 22px #000c,
+    inset 0 0 0 1px #1aa3b799,
+    0 0 18px #29e7ff52;
 }
 .goldline .route-stop.is-violet {
   border-color: #d478ff;
   background: linear-gradient(135deg, #351046f7, #16091df4);
-  box-shadow: 0 8px 22px #000c, inset 0 0 0 1px #8f36b899, 0 0 20px #bb38ff66;
+  box-shadow:
+    0 8px 22px #000c,
+    inset 0 0 0 1px #8f36b899,
+    0 0 20px #bb38ff66;
 }
 .goldline .route-stop > .route-stop-number {
   grid-row: auto;
@@ -231,23 +375,31 @@ html, body, #root { height: 100%; }
   display: grid;
   place-items: center;
   border-radius: 7px;
-  font: 800 24px/1 Cinzel, serif;
+  font:
+    800 24px/1 Cinzel,
+    serif;
   text-shadow: 0 2px 4px #0008;
 }
 .goldline .route-stop.is-gold > .route-stop-number {
   color: #2a1800;
   background: linear-gradient(#ffd766, #c98a17);
-  box-shadow: inset 0 0 0 1px #fff1a0aa, 0 0 12px #ffbd2e88;
+  box-shadow:
+    inset 0 0 0 1px #fff1a0aa,
+    0 0 12px #ffbd2e88;
 }
 .goldline .route-stop.is-cyan > .route-stop-number {
   color: #00232a;
   background: linear-gradient(#75f7ff, #0bbacb);
-  box-shadow: inset 0 0 0 1px #d5fdffaa, 0 0 12px #2defff88;
+  box-shadow:
+    inset 0 0 0 1px #d5fdffaa,
+    0 0 12px #2defff88;
 }
 .goldline .route-stop.is-violet > .route-stop-number {
   color: #fff;
   background: linear-gradient(#c85fff, #7122ad);
-  box-shadow: inset 0 0 0 1px #efc1ffaa, 0 0 14px #bc40ff99;
+  box-shadow:
+    inset 0 0 0 1px #efc1ffaa,
+    0 0 14px #bc40ff99;
 }
 .goldline .route-stop > .route-stop-copy {
   grid-row: auto;
@@ -265,20 +417,30 @@ html, body, #root { height: 100%; }
 .goldline .route-stop .route-stop-type {
   display: block;
   overflow: hidden;
-  font: 800 10px/1 Inter, sans-serif;
-  letter-spacing: .065em;
+  font:
+    800 10px/1 Inter,
+    sans-serif;
+  letter-spacing: 0.065em;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-shadow: 0 1px 3px #000;
 }
-.goldline .route-stop.is-gold .route-stop-type { color: #ffd55d; }
-.goldline .route-stop.is-cyan .route-stop-type { color: #68f6ff; }
-.goldline .route-stop.is-violet .route-stop-type { color: #dd91ff; }
+.goldline .route-stop.is-gold .route-stop-type {
+  color: #ffd55d;
+}
+.goldline .route-stop.is-cyan .route-stop-type {
+  color: #68f6ff;
+}
+.goldline .route-stop.is-violet .route-stop-type {
+  color: #dd91ff;
+}
 .goldline .route-stop .route-stop-copy > b {
   display: block;
   overflow: hidden;
-  font: 800 14px/1.08 Cinzel, serif;
-  letter-spacing: .005em;
+  font:
+    800 14px/1.08 Cinzel,
+    serif;
+  letter-spacing: 0.005em;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-shadow: 0 1px 4px #000;
@@ -287,23 +449,25 @@ html, body, #root { height: 100%; }
   display: block;
   overflow: hidden;
   color: #fff9e8;
-  font: 800 11px/1.1 Inter, sans-serif;
+  font:
+    800 11px/1.1 Inter,
+    sans-serif;
   font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-shadow: 0 1px 3px #000;
 }
-.goldline .route-stop.is-gold .route-stop-copy > em { color: #ffe79d; }
-.goldline .route-stop.is-cyan .route-stop-copy > em { color: #c2fbff; }
-.goldline .route-stop.is-violet .route-stop-copy > em { color: #f0d2ff; }
+.goldline .route-stop.is-gold .route-stop-copy > em {
+  color: #ffe79d;
+}
+.goldline .route-stop.is-cyan .route-stop-copy > em {
+  color: #c2fbff;
+}
+.goldline .route-stop.is-violet .route-stop-copy > em {
+  color: #f0d2ff;
+}
 
-/* Four cards form a readable bottom-to-top quest path. */
-.goldline .stop-1 { left: 18px; right: auto; bottom: 20.5%; }
-.goldline .stop-2 { left: auto; right: 12px; bottom: 34.5%; }
-.goldline .stop-3 { left: 18px; right: auto; bottom: 48.5%; }
-.goldline .stop-4 { left: auto; right: 14px; top: 29%; }
-
-/* Small pulsing route anchors provide life without competing with the cards. */
+/* Nodes and cards read the same semantic art-coordinate custom properties. */
 .goldline .route-energy-nodes {
   position: absolute;
   z-index: 3;
@@ -312,6 +476,8 @@ html, body, #root { height: 100%; }
 }
 .goldline .energy-node {
   position: absolute;
+  top: var(--goldline-anchor-y);
+  left: var(--goldline-anchor-x);
   width: 14px;
   height: 14px;
   border: 2px solid #fff;
@@ -319,17 +485,34 @@ html, body, #root { height: 100%; }
   background: #fff;
   animation: route-node-pulse 2.3s ease-out infinite;
 }
-.goldline .energy-node.is-gold { box-shadow: 0 0 0 5px #ffc83a33, 0 0 18px #ffc83a; }
-.goldline .energy-node.is-cyan { box-shadow: 0 0 0 5px #30efff33, 0 0 18px #30efff; }
-.goldline .energy-node.is-violet { box-shadow: 0 0 0 5px #c853ff33, 0 0 18px #c853ff; }
-.goldline .energy-1 { left: 56%; bottom: 18.7%; }
-.goldline .energy-2 { left: 48%; bottom: 33.2%; animation-delay: -.5s; }
-.goldline .energy-3 { left: 62%; bottom: 47%; animation-delay: -1s; }
-.goldline .energy-4 { left: 53%; top: 37.6%; animation-delay: -1.5s; }
+.goldline .energy-node.is-gold {
+  box-shadow:
+    0 0 0 5px #ffc83a33,
+    0 0 18px #ffc83a;
+}
+.goldline .energy-node.is-cyan {
+  box-shadow:
+    0 0 0 5px #30efff33,
+    0 0 18px #30efff;
+}
+.goldline .energy-node.is-violet {
+  box-shadow:
+    0 0 0 5px #c853ff33,
+    0 0 18px #c853ff;
+}
 @keyframes route-node-pulse {
-  0% { transform: scale(.72); opacity: .65; }
-  48% { transform: scale(1.15); opacity: 1; }
-  100% { transform: scale(.72); opacity: .65; }
+  0% {
+    transform: translate(-50%, -50%) scale(0.72);
+    opacity: 0.65;
+  }
+  48% {
+    transform: translate(-50%, -50%) scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(0.72);
+    opacity: 0.65;
+  }
 }
 
 .goldline .call-shrine {
@@ -341,16 +524,29 @@ html, body, #root { height: 100%; }
   gap: 6px;
   border-radius: 7px;
 }
-.goldline .call-shrine svg { width: 16px; height: 16px; }
-.goldline .call-shrine b { font-size: 9px; }
-.goldline .call-shrine small { margin-top: 2px; font-size: 8px; }
-.goldline .objectives-tab {
-  top: max(171px, calc(env(safe-area-inset-top) + 169px));
-  padding: 8px 7px;
-  font-size: 8px;
-  line-height: 1.25;
+.goldline .call-shrine svg {
+  width: 16px;
+  height: 16px;
 }
-.goldline .objectives-tab span { width: 16px; height: 16px; font-size: 8px; }
+.goldline .call-shrine b {
+  font-size: 9px;
+}
+.goldline .call-shrine small {
+  margin-top: 2px;
+  font-size: 8px;
+}
+.goldline .objectives-tab {
+  top: max(198px, calc(env(safe-area-inset-top) + 196px));
+  min-width: 82px;
+  padding: 11px 9px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+.goldline .objectives-tab span {
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+}
 
 .goldline .route-empty,
 .goldline .route-loading {
@@ -369,9 +565,26 @@ html, body, #root { height: 100%; }
   box-shadow: 0 8px 24px #000b;
   backdrop-filter: blur(7px);
 }
-.goldline .route-empty b { display: block; font: 800 14px/1.15 Cinzel, serif; }
-.goldline .route-empty small { display: block; margin-top: 6px; color: #e4d6b9; font: 800 11px/1 Inter, sans-serif; }
-.goldline .route-loading { font: 800 12px/1 Cinzel, serif; letter-spacing: .06em; }
+.goldline .route-empty b {
+  display: block;
+  font:
+    800 14px/1.15 Cinzel,
+    serif;
+}
+.goldline .route-empty small {
+  display: block;
+  margin-top: 6px;
+  color: #e4d6b9;
+  font:
+    800 11px/1 Inter,
+    sans-serif;
+}
+.goldline .route-loading {
+  font:
+    800 12px/1 Cinzel,
+    serif;
+  letter-spacing: 0.06em;
+}
 .goldline .route-overflow {
   position: absolute;
   z-index: 12;
@@ -390,11 +603,18 @@ html, body, #root { height: 100%; }
   border-radius: 999px;
   color: #fff3c9;
   background: #17130ff5;
-  box-shadow: 0 5px 14px #000a, 0 0 15px #d8aa4633;
-  font: 800 10px/1 Cinzel, serif;
-  letter-spacing: .04em;
+  box-shadow:
+    0 5px 14px #000a,
+    0 0 15px #d8aa4633;
+  font:
+    800 10px/1 Cinzel,
+    serif;
+  letter-spacing: 0.04em;
 }
-.goldline .route-overflow svg { width: 13px; height: 13px; }
+.goldline .route-overflow svg {
+  width: 13px;
+  height: 13px;
+}
 
 /* Bottom actions stay fully above browser chrome and are large enough to tap. */
 .goldline .action-bar {
@@ -409,26 +629,40 @@ html, body, #root { height: 100%; }
   min-height: 88px;
   padding: 0 3px 8px;
   border-radius: 8px;
-  box-shadow: inset 0 0 0 2px #0007, 0 3px 10px #0009;
+  box-shadow:
+    inset 0 0 0 2px #0007,
+    0 3px 10px #0009;
 }
-.goldline .action-bar i { height: 58px; }
+.goldline .action-bar i {
+  height: 58px;
+}
 .goldline .action-bar span {
   min-height: 22px;
   display: grid;
   place-items: center;
   padding: 0 2px;
-  font: 800 9px/1.08 Cinzel, serif;
+  font:
+    800 9px/1.08 Cinzel,
+    serif;
 }
 
 /* Drawers carry the detail so the map can remain glanceable. */
-.goldline .drawer-backdrop { padding: 12px 12px max(12px, env(safe-area-inset-bottom)); }
+.goldline .drawer-backdrop {
+  padding: 12px 12px max(12px, env(safe-area-inset-bottom));
+}
 .goldline .goldline-drawer {
   max-height: 78%;
   padding-bottom: max(26px, calc(20px + env(safe-area-inset-bottom)));
 }
-.goldline .drawer-kicker { font-size: 10px; }
-.goldline .drawer-kicker.danger { color: #9d2a22; }
-.goldline .goldline-drawer h2 { font-size: 25px; }
+.goldline .drawer-kicker {
+  font-size: 10px;
+}
+.goldline .drawer-kicker.danger {
+  color: #9d2a22;
+}
+.goldline .goldline-drawer h2 {
+  font-size: 25px;
+}
 .goldline .goldline-drawer li {
   min-height: 50px;
   font-size: 13px;
@@ -444,7 +678,9 @@ html, body, #root { height: 100%; }
   border: 1px solid #8e73495c;
   border-radius: 8px;
   background: #fff7e58f;
-  font: 800 11px/1 Cinzel, serif;
+  font:
+    800 11px/1 Cinzel,
+    serif;
   text-align: center;
 }
 .goldline .route-focus-card {
@@ -457,21 +693,61 @@ html, body, #root { height: 100%; }
   background: #fff8e8c7;
   box-shadow: 0 6px 18px #5c3b1f22;
 }
-.goldline .route-focus-card > small { font: 800 10px/1 Inter, sans-serif; letter-spacing: .07em; }
-.goldline .route-focus-card > b { color: #241a0f; font: 800 16px/1.12 Cinzel, serif; }
-.goldline .route-focus-card > strong { color: #5f421c; font: 800 13px/1.2 Inter, sans-serif; }
-.goldline .route-focus-card > span { color: #6b5b45; font: 700 12px/1.35 Inter, sans-serif; }
-.goldline .route-focus-card.is-cyan { border-color: #2497a5; }
-.goldline .route-focus-card.is-violet { border-color: #8751a5; }
+.goldline .route-focus-card > small {
+  font:
+    800 10px/1 Inter,
+    sans-serif;
+  letter-spacing: 0.07em;
+}
+.goldline .route-focus-card > b {
+  color: #241a0f;
+  font:
+    800 16px/1.12 Cinzel,
+    serif;
+}
+.goldline .route-focus-card > strong {
+  color: #5f421c;
+  font:
+    800 13px/1.2 Inter,
+    sans-serif;
+}
+.goldline .route-focus-card > span {
+  color: #6b5b45;
+  font:
+    700 12px/1.35 Inter,
+    sans-serif;
+}
+.goldline .route-focus-card.is-cyan {
+  border-color: #2497a5;
+}
+.goldline .route-focus-card.is-violet {
+  border-color: #8751a5;
+}
 .goldline .goldline-drawer .route-list-item {
   align-items: flex-start;
   min-height: 62px;
   padding: 10px 11px;
   cursor: pointer;
 }
-.goldline .goldline-drawer .route-list-item > div { min-width: 0; flex: 1; }
-.goldline .goldline-drawer .route-list-item > div > b { display: block; color: #2c2114; font: 800 14px/1.15 Inter, sans-serif; }
-.goldline .goldline-drawer .route-list-item > div > small { display: block; margin-top: 5px; color: #67553b; font: 700 11px/1.35 Inter, sans-serif; }
+.goldline .goldline-drawer .route-list-item > div {
+  min-width: 0;
+  flex: 1;
+}
+.goldline .goldline-drawer .route-list-item > div > b {
+  display: block;
+  color: #2c2114;
+  font:
+    800 14px/1.15 Inter,
+    sans-serif;
+}
+.goldline .goldline-drawer .route-list-item > div > small {
+  display: block;
+  margin-top: 5px;
+  color: #67553b;
+  font:
+    700 11px/1.35 Inter,
+    sans-serif;
+}
 .goldline .route-drawer-empty {
   margin: 0;
   padding: 14px;
@@ -490,15 +766,29 @@ html, body, #root { height: 100%; }
 }
 .goldline .vorgan-drawer-hero img {
   width: 92px;
-  aspect-ratio: .9;
+  aspect-ratio: 0.9;
   object-fit: cover;
   border: 1px solid #745a34;
   border-radius: 9px;
   box-shadow: 0 5px 16px #56391344;
 }
-.goldline .vorgan-drawer-hero h2 { margin: 0 0 7px; }
-.goldline .vorgan-drawer-hero b { color: #9d2a22; font: 800 10px/1 Inter, sans-serif; letter-spacing: .08em; }
-.goldline .vorgan-drawer-copy { margin: 0 0 14px; color: #51412d; font: 700 14px/1.45 Inter, sans-serif; }
+.goldline .vorgan-drawer-hero h2 {
+  margin: 0 0 7px;
+}
+.goldline .vorgan-drawer-hero b {
+  color: #9d2a22;
+  font:
+    800 10px/1 Inter,
+    sans-serif;
+  letter-spacing: 0.08em;
+}
+.goldline .vorgan-drawer-copy {
+  margin: 0 0 14px;
+  color: #51412d;
+  font:
+    700 14px/1.45 Inter,
+    sans-serif;
+}
 .goldline .rival-readout {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -513,53 +803,136 @@ html, body, #root { height: 100%; }
   background: #fff7e59e;
   text-align: center;
 }
-.goldline .rival-readout b { color: #342310; font: 800 20px/1 Cinzel, serif; }
-.goldline .rival-readout small { color: #6c5940; font: 800 10px/1 Inter, sans-serif; text-transform: uppercase; letter-spacing: .05em; }
+.goldline .rival-readout b {
+  color: #342310;
+  font:
+    800 20px/1 Cinzel,
+    serif;
+}
+.goldline .rival-readout small {
+  color: #6c5940;
+  font:
+    800 10px/1 Inter,
+    sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
 
 @media (max-width: 370px) {
-  .goldline .route-summary { width: 258px; }
-  .goldline .route-summary > span { font-size: 8px; gap: 3px; }
-  .goldline .route-summary > span strong { font-size: 14px; }
-  .goldline .hustle { left: 102px; }
-  .goldline .vorgan-card { width: 88px; }
+  .goldline .route-summary {
+    width: min(306px, 84vw);
+  }
+  .goldline .route-summary > span {
+    font-size: 10px;
+    gap: 4px;
+  }
+  .goldline .route-summary > span strong {
+    font-size: 17px;
+  }
+  .goldline .hustle {
+    left: 104px;
+  }
+  .goldline .vorgan-card {
+    width: 88px;
+  }
   .goldline .route-stop {
-    width: 218px;
-    min-width: 218px;
+    width: clamp(184px, 52cqw, 198px);
+    min-width: 0;
     min-height: 66px;
     grid-template-columns: 38px minmax(0, 1fr);
     gap: 7px;
     padding: 6px 9px 6px 6px;
   }
-  .goldline .route-stop > .route-stop-number { width: 38px; min-height: 52px; font-size: 21px; }
-  .goldline .route-stop .route-stop-type { font-size: 9px; }
-  .goldline .route-stop .route-stop-copy > b { font-size: 12px; }
-  .goldline .route-stop .route-stop-copy > em { font-size: 10px; }
-  .goldline .stop-1, .goldline .stop-3 { left: 10px; }
-  .goldline .stop-2, .goldline .stop-4 { right: 8px; }
-  .goldline .action-bar { left: 5px; right: 5px; gap: 3px; }
-  .goldline .action-bar button { min-height: 82px; }
-  .goldline .action-bar i { height: 53px; }
-  .goldline .action-bar span { font-size: 8px; }
+  .goldline .route-stop > .route-stop-number {
+    width: 38px;
+    min-height: 52px;
+    font-size: 21px;
+  }
+  .goldline .route-stop .route-stop-type {
+    font-size: 9px;
+  }
+  .goldline .route-stop .route-stop-copy > b {
+    font-size: 12px;
+  }
+  .goldline .route-stop .route-stop-copy > em {
+    font-size: 10px;
+  }
+  .goldline .action-bar {
+    left: 5px;
+    right: 5px;
+    gap: 3px;
+  }
+  .goldline .action-bar button {
+    min-height: 82px;
+  }
+  .goldline .action-bar i {
+    height: 53px;
+  }
+  .goldline .action-bar span {
+    font-size: 8px;
+  }
 }
 
 @media (max-height: 720px) {
-  .goldline .route-summary { top: 58px; min-height: 56px; padding: 7px 10px; }
-  .goldline .hustle { top: 119px; }
-  .goldline .vorgan-card { top: 149px; width: 84px; }
-  .goldline .objectives-tab { top: 151px; }
-  .goldline .route-stop { min-height: 64px; }
-  .goldline .route-stop > .route-stop-number { min-height: 50px; }
-  .goldline .stop-4 { top: 28%; }
-  .goldline .stop-3 { bottom: 48%; }
-  .goldline .stop-2 { bottom: 34%; }
-  .goldline .stop-1 { bottom: 20%; }
-  .goldline .action-bar button { min-height: 78px; }
-  .goldline .action-bar i { height: 49px; }
-  .goldline .route-overflow { bottom: 12.5%; }
+  .goldline .route-summary {
+    top: 64px;
+    min-height: 64px;
+    padding: 8px 11px;
+  }
+  .goldline .route-summary > b {
+    font-size: 14px;
+  }
+  .goldline .route-summary > span {
+    margin-top: 7px;
+    font-size: 10px;
+  }
+  .goldline .route-summary > span strong {
+    font-size: 17px;
+  }
+  .goldline .hustle {
+    top: 134px;
+  }
+  .goldline .hustle-labels {
+    padding: 6px 8px 5px;
+    font-size: 10px;
+  }
+  .goldline .hustle-labels b {
+    font-size: 12px;
+  }
+  .goldline .hustle em {
+    font-size: 10px;
+  }
+  .goldline .vorgan-card {
+    top: 178px;
+    width: 84px;
+  }
+  .goldline .objectives-tab {
+    top: 180px;
+    min-width: 76px;
+    font-size: 10px;
+  }
+  .goldline .route-stop {
+    min-height: 64px;
+  }
+  .goldline .route-stop > .route-stop-number {
+    min-height: 50px;
+  }
+  .goldline .action-bar button {
+    min-height: 78px;
+  }
+  .goldline .action-bar i {
+    height: 49px;
+  }
+  .goldline .route-overflow {
+    bottom: 12.5%;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .goldline .goldline-world,
+  .goldline .goldline-world-layer,
+  .goldline .goldline-route-layer,
   .goldline .goldline-ambient i,
-  .goldline .energy-node { animation: none !important; }
+  .goldline .energy-node {
+    animation: none !important;
+  }
 }

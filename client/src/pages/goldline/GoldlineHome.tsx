@@ -25,6 +25,10 @@ import type {
 import type { MissionDiamond } from "../../../../server/commercialMissions/driverSalesMotivationService";
 import type { DayResolution } from "../../../../server/unload/unloadTypes";
 import type { GoldlineLocationSnapshot } from "../driver/goldlineDriverModel";
+import {
+  GOLDLINE_ROUTE_ANCHORS,
+  goldlineAnchorStyle,
+} from "./goldlineRouteAnchors";
 import world from "@/assets/goldline/goldline-world.png";
 import vorgan from "@/assets/goldline/vorgan.png";
 import objects from "@/assets/goldline/action-objects.png";
@@ -345,11 +349,13 @@ export default function GoldlineHome({
   return (
     <main className="goldline-shell">
       <section className="goldline" aria-label="Goldline daily adventure map">
-        <img
-          className="goldline-world"
-          src={world}
-          alt="Sunlit canyon city crossed by a turquoise route river"
-        />
+        <div className="goldline-world-layer">
+          <img
+            className="goldline-world"
+            src={world}
+            alt="Sunlit canyon city crossed by a turquoise route river"
+          />
+        </div>
         <div className="goldline-sunwash" aria-hidden="true" />
         <div className="goldline-ambient" aria-hidden="true">
           <i className="ambient-1" />
@@ -472,33 +478,49 @@ export default function GoldlineHome({
           <ChevronRight className="vorgan-chevron" aria-hidden="true" />
         </button>
 
-        <div className="route-energy-nodes" aria-hidden="true">
-          {visibleStops.map((stop, index) => (
-            <i
-              key={stop.key}
-              className={`energy-node energy-${index + 1} is-${stop.tone}`}
-            />
-          ))}
-        </div>
+        <div className="goldline-route-layer">
+          <div className="route-energy-nodes" aria-hidden="true">
+            {visibleStops.map((stop, index) => {
+              const anchor = GOLDLINE_ROUTE_ANCHORS[index];
+              return (
+                <i
+                  key={stop.key}
+                  className={`energy-node is-${stop.tone}`}
+                  data-route-anchor={anchor.id}
+                  style={{
+                    ...goldlineAnchorStyle(anchor),
+                    animationDelay: `${index * -0.5}s`,
+                  }}
+                />
+              );
+            })}
+          </div>
 
-        <div className="route-stops">
-          {visibleStops.map((stop, index) => (
-            <button
-              key={stop.key}
-              className={`route-stop stop-${index + 1} is-${stop.tone}${stop.type === "PAYMENT BLOCKED" ? " is-blocked" : ""}`}
-              onClick={() => openRoute(stop)}
-            >
-              <span className="route-stop-number">{index + 1}</span>
-              <span className="route-stop-copy">
-                <small className="route-stop-type">{stop.type}</small>
-                <b>{stop.name}</b>
-                <em>
-                  {stop.time}
-                  {stop.valueLabel ? ` · ${stop.valueLabel}` : ""}
-                </em>
-              </span>
-            </button>
-          ))}
+          <div className="route-stops">
+            {visibleStops.map((stop, index) => {
+              const anchor = GOLDLINE_ROUTE_ANCHORS[index];
+              return (
+                <button
+                  key={stop.key}
+                  className={`route-stop is-${stop.tone}${stop.type === "PAYMENT BLOCKED" ? " is-blocked" : ""}`}
+                  data-route-anchor={anchor.id}
+                  data-label-placement={anchor.labelPlacement}
+                  style={goldlineAnchorStyle(anchor)}
+                  onClick={() => openRoute(stop)}
+                >
+                  <span className="route-stop-number">{index + 1}</span>
+                  <span className="route-stop-copy">
+                    <small className="route-stop-type">{stop.type}</small>
+                    <b>{stop.name}</b>
+                    <em>
+                      {stop.time}
+                      {stop.valueLabel ? ` · ${stop.valueLabel}` : ""}
+                    </em>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {!isLoading && routeStops.length === 0 ? (

@@ -16,6 +16,10 @@ const goldlineCss = [
     "utf8"
   ),
   readFileSync(
+    new URL("../goldline/goldline-legibility.css", import.meta.url),
+    "utf8"
+  ),
+  readFileSync(
     new URL("../goldline/goldline-live-fix.css", import.meta.url),
     "utf8"
   ),
@@ -102,5 +106,15 @@ describe("Goldline canonical driver restoration", () => {
     expect(mission).toContain("Back to Goldline");
     expect(driver).not.toContain("/commercial-missions");
     expect(controller).not.toContain("/commercial-missions");
+  });
+
+  it("positions route cards and energy nodes from the same semantic world anchors", () => {
+    expect(goldline).toContain("GOLDLINE_ROUTE_ANCHORS[index]");
+    expect(goldline).not.toContain("stop-${index + 1}");
+    expect(goldline.match(/data-route-anchor=\{anchor\.id\}/g)).toHaveLength(2);
+    expect(goldline.match(/goldlineAnchorStyle\(anchor\)/g)).toHaveLength(2);
+    expect(goldlineCss).toContain("--goldline-anchor-x");
+    expect(goldlineCss).toContain("--goldline-anchor-y");
+    expect(goldlineCss).not.toMatch(/\.goldline \.stop-[1-4]/);
   });
 });

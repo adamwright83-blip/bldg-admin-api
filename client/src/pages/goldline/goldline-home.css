@@ -29,6 +29,7 @@ body {
 }
 .goldline {
   position: relative;
+  container-type: size;
   width: min(100vw, 430px);
   height: 100dvh;
   min-height: 690px;
@@ -41,14 +42,42 @@ body {
   box-shadow: 0 0 70px #000;
   touch-action: manipulation;
 }
-.goldline-world {
+.goldline-world-layer,
+.goldline-route-layer {
   position: absolute;
-  z-index: -3;
-  inset: 0;
+  top: 50%;
+  left: 50%;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: 50% 50%;
+  transform: translate(-50%, -50%);
+}
+.goldline-world-layer {
+  z-index: -3;
+}
+.goldline-route-layer {
+  z-index: 4;
+  pointer-events: none;
+}
+@supports (width: 1cqh) {
+  .goldline-world-layer,
+  .goldline-route-layer {
+    width: max(100cqw, 47.2329cqh);
+    height: auto;
+    aspect-ratio: 862 / 1825;
+  }
+}
+.goldline-world {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.route-stops,
+.route-energy-nodes {
+  position: absolute;
+  inset: 0;
+}
+.route-stops .route-stop {
+  pointer-events: auto;
 }
 .goldline-sunwash {
   position: absolute;
@@ -343,23 +372,6 @@ body {
   background: #a836e7;
   box-shadow: 0 0 10px #c12fff;
 }
-.stop-1 {
-  left: 52%;
-  bottom: 28%;
-}
-.stop-2 {
-  left: 33%;
-  bottom: 42%;
-}
-.stop-3 {
-  left: 33%;
-  bottom: 56%;
-}
-.stop-4 {
-  left: 47%;
-  top: 29%;
-}
-
 .call-shrine {
   position: absolute;
   z-index: 5;
@@ -999,15 +1011,6 @@ body {
 @media (max-height: 750px) {
   .action-bar i {
     height: 45px;
-  }
-  .stop-1 {
-    bottom: 27%;
-  }
-  .stop-2 {
-    bottom: 41%;
-  }
-  .stop-3 {
-    bottom: 55%;
   }
 }
 @media (prefers-reduced-motion: reduce) {

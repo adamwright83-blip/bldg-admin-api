@@ -294,7 +294,7 @@ function inputAt(url, index) {
   }
 }
 
-function responseFor(procedure, input, withMoves) {
+function responseFor(procedure, input, withMoves, singlePickupOnly = false) {
   if (procedure === "auth.me") {
     return {
       id: 1,
@@ -305,15 +305,17 @@ function responseFor(procedure, input, withMoves) {
     };
   }
   if (procedure === "admin.listByDate") {
+    if (singlePickupOnly)
+      return input?.dateField === "deliveryDate" ? [] : [pickup];
     return input?.dateField === "deliveryDate"
       ? [paidDelivery, blockedDelivery]
       : [pickup];
   }
   if (procedure === "system.field.today") return fieldToday;
   if (procedure === "system.field.moves")
-    return withMoves ? movesAvailable : noMoves;
+    return withMoves && !singlePickupOnly ? movesAvailable : noMoves;
   if (procedure === "system.commercialMission.myBuiltMissions")
-    return [builtMission];
+    return singlePickupOnly ? [] : [builtMission];
   if (procedure === "system.commercialMission.myDispatches") return [];
   if (procedure === "system.adaptiveSalesMeter.myMeter") {
     return {
@@ -376,7 +378,8 @@ async function installApi(
   page,
   withMoves,
   observedMoveInputs,
-  observedMutations
+  observedMutations,
+  singlePickupOnly = false
 ) {
   await page.route("**/api/trpc/**", async route => {
     const url = new URL(route.request().url());
@@ -389,7 +392,11 @@ async function installApi(
       if (route.request().method() === "POST")
         observedMutations.push(procedure);
       return {
-        result: { data: { json: responseFor(procedure, input, withMoves) } },
+        result: {
+          data: {
+            json: responseFor(procedure, input, withMoves, singlePickupOnly),
+          },
+        },
       };
     });
     await route.fulfill({
@@ -496,6 +503,161 @@ const quietState = {
   sideQuests: await quietPage.getByText("SIDE QUEST", { exact: true }).count(),
 };
 
+const placementViewports = [
+  { width: 390, height: 844 },
+  { width: 393, height: 852 },
+  { width: 430, height: 932 },
+  { width: 390, height: 700 },
+];
+const placementChecks = [];
+
+for (const viewport of placementViewports) {
+  const placementContext = await browser.newContext({ viewport });
+  const placementPage = await placementContext.newPage();
+  const placementErrors = [];
+  placementPage.on("pageerror", error => placementErrors.push(error.message));
+  placementPage.on("console", message => {
+    if (message.type() === "error") placementErrors.push(message.text());
+  });
+  await installApi(placementPage, false, [], [], true);
+  await placementPage.goto("http://127.0.0.1:5173/driver", {
+    waitUntil: "networkidle",
+  });
+  await placementPage.getByRole("main").waitFor();
+  await placementPage
+    .locator('.route-stop[data-route-anchor="lower-gold-reliquary"]')
+    .waitFor();
+
+  const layout = await placementPage.evaluate(() => {
+    const rect = selector => {
+      const element = document.querySelector(selector);
+      if (!element) return null;
+      const box = element.getBoundingClientRect();
+      return {
+        left: box.left,
+        right: box.right,
+        top: box.top,
+        bottom: box.bottom,
+        width: box.width,
+        height: box.height,
+      };
+    };
+    const overlaps = (left, right) =>
+      Boolean(
+        left &&
+          right &&
+          left.left < right.right &&
+          left.right > right.left &&
+          left.top < right.bottom &&
+          left.bottom > right.top
+      );
+    const fontSize = selector => {
+      const element = document.querySelector(selector);
+      return element
+        ? Number.parseFloat(getComputedStyle(element).fontSize)
+        : 0;
+    };
+
+    const layer = rect(".goldline-route-layer");
+    const card = rect('.route-stop[data-route-anchor="lower-gold-reliquary"]');
+    const node = rect('.energy-node[data-route-anchor="lower-gold-reliquary"]');
+    const laraSafeZone = layer
+      ? {
+          left: layer.left,
+          right: layer.left + layer.width * 0.42,
+          top: layer.top + layer.height * 0.53,
+          bottom: layer.top + layer.height * 0.96,
+        }
+      : null;
+    const hudSelectors = [
+      ".route-summary",
+      ".hustle",
+      ".objectives-tab",
+      ".vorgan-card",
+      ".action-bar",
+    ];
+    const cardStyle = document.querySelector(
+      '.route-stop[data-route-anchor="lower-gold-reliquary"]'
+    );
+    const nodeStyle = document.querySelector(
+      '.energy-node[data-route-anchor="lower-gold-reliquary"]'
+    );
+    const anchorCoordinates = element =>
+      element
+        ? {
+            x: element.style.getPropertyValue("--goldline-anchor-x"),
+            y: element.style.getPropertyValue("--goldline-anchor-y"),
+          }
+        : null;
+    const actionBar = rect(".action-bar");
+
+    return {
+      routeStopCount: document.querySelectorAll(".route-stop").length,
+      card,
+      node,
+      laraSafeZone,
+      overlapsLara: overlaps(card, laraSafeZone),
+      hudCollisions: hudSelectors.filter(selector =>
+        overlaps(card, rect(selector))
+      ),
+      cardAnchor: anchorCoordinates(cardStyle),
+      nodeAnchor: anchorCoordinates(nodeStyle),
+      actionBarVisible: Boolean(
+        actionBar &&
+          actionBar.top >= 0 &&
+          actionBar.bottom <= window.innerHeight
+      ),
+      overflow:
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+      fontSizes: {
+        date: fontSize(".date-stone strong"),
+        routeTitle: fontSize(".route-summary > b"),
+        routeCounts: fontSize(".route-summary > span"),
+        hustle: fontSize(".hustle-labels"),
+        objectives: fontSize(".objectives-tab"),
+      },
+    };
+  });
+
+  const screenshotPath =
+    `/Users/adamwrightpfi/.codex/visualizations/2026/08/09/019fe538-2f7e-72f1-bdc1-0d86e50cfc5c/` +
+    `goldline-anchor-${viewport.width}x${viewport.height}.png`;
+  await placementPage.screenshot({ path: screenshotPath, fullPage: true });
+
+  const failures = [];
+  if (layout.routeStopCount !== 1) failures.push("expected one seeded pickup");
+  if (layout.overlapsLara) failures.push("pickup card overlaps Lara safe zone");
+  if (layout.hudCollisions.length)
+    failures.push(
+      `pickup card collides with ${layout.hudCollisions.join(", ")}`
+    );
+  if (JSON.stringify(layout.cardAnchor) !== JSON.stringify(layout.nodeAnchor))
+    failures.push(
+      "route card and energy node use different anchor coordinates"
+    );
+  if (!layout.actionBarVisible)
+    failures.push("action bar is not fully visible");
+  if (layout.overflow !== 0) failures.push("horizontal overflow detected");
+  if (layout.fontSizes.date < 16) failures.push("date is too small");
+  if (layout.fontSizes.routeTitle < 14)
+    failures.push("route title is too small");
+  if (layout.fontSizes.routeCounts < 10)
+    failures.push("route counts are too small");
+  if (layout.fontSizes.hustle < 10) failures.push("hustle meter is too small");
+  if (layout.fontSizes.objectives < 10)
+    failures.push("follow-up objectives are too small");
+  if (placementErrors.length)
+    failures.push(`browser errors: ${placementErrors.join(" | ")}`);
+  if (failures.length)
+    throw new Error(
+      `${viewport.width}x${viewport.height} Goldline placement failed: ${failures.join("; ")}`
+    );
+
+  placementChecks.push({ viewport, screenshotPath, ...layout });
+  await placementContext.close();
+}
+
 console.log(
   JSON.stringify(
     {
@@ -512,6 +674,7 @@ console.log(
       deniedMoveInputs,
       pageErrors,
       quietErrors,
+      placementChecks,
     },
     null,
     2
