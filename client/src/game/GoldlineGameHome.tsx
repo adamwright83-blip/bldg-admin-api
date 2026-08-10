@@ -18,6 +18,7 @@ import {
   MapPin,
   Menu,
   Phone,
+  Radar,
   Radio,
   Route,
   Shield,
@@ -27,7 +28,15 @@ import {
   Zap,
 } from "lucide-react";
 import type { DriverGameWorldNode } from "../../../shared/driverGameWorld";
-import { coolingLabel } from "../../../shared/driverGameWorld";
+import {
+  coolingLabel,
+  gameWorldControlPercent,
+} from "../../../shared/driverGameWorld";
+import type { ColdCallBatch, ColdCallTarget } from "../../../shared/coldCallBurst";
+import type {
+  CapabilityEvaluation,
+  ScoutReport,
+} from "../../../shared/expansionScout";
 import type { GoldlineHomeProps } from "../pages/goldline/GoldlineHome";
 import GoldlineHome from "../pages/goldline/GoldlineHome";
 import OpenChannel from "../pages/goldline/OpenChannel";
@@ -42,6 +51,7 @@ import {
 } from "./state/EncounterProjection";
 import {
   moneyBandLabel,
+  projectPersistentHistory,
   projectPlayableMissions,
 } from "./state/WorldProjection";
 import type {
@@ -53,12 +63,41 @@ import type {
   PlayableMission,
 } from "./state/GameState";
 import "./goldline-game.css";
+import { ColdCallBurst } from "./encounters/coldCall/ColdCallBurst";
+import { VictoryCeremony } from "./victory/VictoryCeremony";
+import { ScoutCapabilityChamber } from "./capabilities/ScoutCapabilityChamber";
+import { ScoutReportPanel } from "./agents/scout/ScoutReportPanel";
 
 type GoldlineGameHomeProps = GoldlineHomeProps & {
   worldNodes?: DriverGameWorldNode[];
   isLoadingWorld?: boolean;
   isBeginningRekindle?: boolean;
   onBeginRekindle: (missionId: number) => Promise<DriverGameWorldNode>;
+  coldCallBatch?: ColdCallBatch | null;
+  coldCallEligibleCount: number;
+  coldCallEmptyReason?: string | null;
+  isCreatingColdCall?: boolean;
+  onCreateColdCall: () => Promise<ColdCallBatch | null>;
+  onStartColdCall: (target: ColdCallTarget) => Promise<ColdCallBatch>;
+  onCompleteColdCall: (input: {
+    target: ColdCallTarget;
+    outcome:
+      | "no_answer"
+      | "left_voicemail"
+      | "spoke"
+      | "visit_booked"
+      | "not_a_fit"
+      | "contact_unavailable";
+    notes: string;
+  }) => Promise<ColdCallBatch>;
+  onSelectColdCallChain: (target: ColdCallTarget) => Promise<ColdCallBatch>;
+  onBreakColdCallCombo: () => Promise<ColdCallBatch>;
+  scoutCapability?: CapabilityEvaluation | null;
+  isEvaluatingScout?: boolean;
+  onEvaluateScout: () => Promise<void>;
+  scoutReport?: ScoutReport | null;
+  isRunningScout?: boolean;
+  onRunScout: () => Promise<void>;
 };
 
 type UtilityPanel = "menu" | "route" | "objectives" | "open-channel" | null;
@@ -70,14 +109,6 @@ function formatDue(value: string | null) {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-function formatVerifiedMoney(cents: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(cents / 100);
 }
 
 function stateTone(state: PlayableMission["state"]) {
@@ -289,6 +320,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [arcadeResolution, setArcadeResolution] = useState<ArcadeResolution>(null);
   const [view, setView] = useState<GameView>("explore");
+  const [coldCallOpen, setColdCallOpen] = useState(false);
+  const [scoutOpen, setScoutOpen] = useState(false);
+  const [scoutCapabilityOpen, setScoutCapabilityOpen] = useState(false);
 
   const missions = useMemo(
     () =>
@@ -302,12 +336,19 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const prioritized =
     missions.find(mission => mission.state === "recovery_active") ??
     missions.find(mission => mission.state === "contested") ??
-    missions.find(mission => mission.state === "captured") ??
     missions[0] ??
     null;
+  const history = useMemo(
+    () => projectPersistentHistory(props.worldNodes),
+    [props.worldNodes]
+  );
+  const allMissions = useMemo(() => [...missions, ...history], [history, missions]);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const activeMission =
-    missions.find(mission => mission.key === activeKey) ?? prioritized;
+    allMissions.find(mission => mission.key === activeKey) ??
+    prioritized ??
+    history.find(mission => mission.state === "captured") ??
+    null;
   const activeSalesMission = props.salesMissions?.find(
     mission => mission.id === activeMission?.missionId
   );
@@ -431,7 +472,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
 
   if (runtimeFailed) return <GoldlineHome {...props} />;
 
-  const worldLocked = view !== "explore";
+  const worldLocked = view !== "explore" || coldCallOpen || scoutOpen;
   const abilitySize = selectedAbility
     ? weakPointSize(selectedAbility.fit) +
       (branch === "upper" ? 8 : branch === "intel" ? 4 : 0)
@@ -467,6 +508,30 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           onSelect={selectMission}
         />
 
+        {view === "explore" && !coldCallOpen && !scoutOpen ? (
+          <aside className="world-history-ribbon" aria-label="Persistent world history">
+            <span>
+              <small>PERSISTENT WORLD HISTORY</small>
+              <b>WORLD CONTROL {gameWorldControlPercent(props.worldNodes ?? [])}%</b>
+            </span>
+            <div>
+              {history.slice(0, 4).map(mission => (
+                <button
+                  key={mission.key}
+                  className={`is-${mission.state}`}
+                  onClick={() => {
+                    setActiveKey(mission.key);
+                    setView(mission.state === "captured" ? "captured" : "closed");
+                  }}
+                >
+                  {mission.state === "captured" ? "◆" : "×"} {mission.name}
+                </button>
+              ))}
+              {!history.length ? <small>NO RESOLVED TERRITORY YET</small> : null}
+            </div>
+          </aside>
+        ) : null}
+
         {view === "explore" ? (
           <>
             <div className="corridor-status">
@@ -487,6 +552,29 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 <div className="action-awaiting"><Route /><span>MOVE TO NEXT ACTION ZONE</span></div>
               )}
             </div>
+            <button
+              className="cold-call-entry"
+              disabled={!props.coldCallBatch && props.coldCallEligibleCount === 0}
+              onClick={async () => {
+                if (!props.coldCallBatch) {
+                  const created = await props.onCreateColdCall();
+                  if (!created) return;
+                }
+                setColdCallOpen(true);
+              }}
+            >
+              <Radio />
+              <span>
+                <b>COLD CALL BURST</b>
+                <small>
+                  {props.coldCallBatch
+                    ? `${props.coldCallBatch.totalTargets - props.coldCallBatch.completedCount} REAL TARGETS REMAIN`
+                    : props.coldCallEligibleCount
+                      ? `${props.coldCallEligibleCount} REAL TARGETS READY`
+                      : props.coldCallEmptyReason ?? "NO ELIGIBLE TARGETS"}
+                </small>
+              </span>
+            </button>
           </>
         ) : null}
 
@@ -566,20 +654,60 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         ) : null}
 
         {view === "captured" && activeMission ? (
-          <section className="victory-beat" aria-live="polite">
-            <small>VICTORY BEAT 1 · VERIFIED BUSINESS OUTCOME</small>
-            <h1>STRONGHOLD CAPTURED</h1>
-            <h2>{activeMission.name}</h2>
-            <div className="his-flag">HIS</div>
-            {activeMission.verifiedAnnualValueCents != null ? (
-              <strong>{formatVerifiedMoney(activeMission.verifiedAnnualValueCents)}/YEAR SECURED</strong>
-            ) : (
-              <strong>ACCOUNT WON · VALUE NOT VERIFIED</strong>
-            )}
-            <p><Check /> REWARD LANDED · BACKEND VERIFIED</p>
-            <div><span>WAR CHEST</span><span>TERRITORY SECURED</span></div>
-            <button onClick={() => setView("explore")}>LET THE REWARD LAND <ChevronRight /></button>
-          </section>
+          <VictoryCeremony
+            mission={activeMission}
+            onLanded={() => {
+              setView("explore");
+              setScoutCapabilityOpen(true);
+            }}
+          />
+        ) : null}
+
+        {coldCallOpen && props.coldCallBatch ? (
+          <ColdCallBurst
+            batch={props.coldCallBatch}
+            onClose={() => setColdCallOpen(false)}
+            onStart={props.onStartColdCall}
+            onComplete={props.onCompleteColdCall}
+            onSelectChain={props.onSelectColdCallChain}
+            onBreakCombo={props.onBreakColdCallCombo}
+          />
+        ) : null}
+
+        {scoutOpen ? (
+          <ScoutReportPanel
+            report={props.scoutReport ?? null}
+            isRunning={Boolean(props.isRunningScout)}
+            onRun={props.onRunScout}
+            onClose={() => setScoutOpen(false)}
+            onEngageMission={missionId => {
+              const mission = allMissions.find(item => item.missionId === missionId);
+              if (mission) selectMission(mission);
+              setScoutOpen(false);
+            }}
+          />
+        ) : null}
+
+        {view === "explore" && !coldCallOpen && !scoutOpen && scoutCapabilityOpen && history.some(item => item.state === "captured") ? (
+          <ScoutCapabilityChamber
+            evaluation={props.scoutCapability ?? null}
+            isEvaluating={Boolean(props.isEvaluatingScout)}
+            onEvaluate={props.onEvaluateScout}
+            onOpenScout={() => {
+              setScoutCapabilityOpen(false);
+              setScoutOpen(true);
+            }}
+          />
+        ) : null}
+
+        {view === "explore" && !coldCallOpen && !scoutOpen && !scoutCapabilityOpen && props.scoutCapability?.unlocked ? (
+          <button
+            className="scout-entry"
+            onClick={() => setScoutOpen(true)}
+          >
+            <Radar />
+            <span><b>EXPANSION SCOUT</b><small>OPEN SOURCED REPORT</small></span>
+          </button>
         ) : null}
 
         {(view === "rekindle" || view === "recovery_active") && activeMission ? (

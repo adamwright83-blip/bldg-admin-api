@@ -31,7 +31,20 @@ export type DriverGameWorldNode = {
   realizedRevenueCents: number;
   lossReason: string | null;
   version: number;
+  isTodayActive: boolean;
+  isHistorical: boolean;
+  regionKey: string;
+  resolvedAt: string | null;
 };
+
+export function gameWorldControlPercent(nodes: DriverGameWorldNode[]): number {
+  // Game progression only: captured nodes / non-closed pursued nodes.
+  // This deliberately does not represent geographic or commercial market share.
+  const pursued = nodes.filter(node => node.visualState !== "closed");
+  if (!pursued.length) return 0;
+  const captured = pursued.filter(node => node.visualState === "captured").length;
+  return Math.round((captured / pursued.length) * 100);
+}
 
 export function visualStateForBusinessStatus(input: {
   missionStatus: CommercialMissionStatus;

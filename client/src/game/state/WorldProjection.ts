@@ -98,7 +98,41 @@ export function projectPlayableMissions(input: {
       lossReason: null,
     });
   }
-  return projected.slice(0, 3);
+  return projected
+    .filter(mission => !["captured", "closed"].includes(mission.state))
+    .slice(0, 3);
+}
+
+export function projectPersistentHistory(
+  nodes: DriverGameWorldNode[] = []
+): PlayableMission[] {
+  return nodes
+    .filter(node => node.isHistorical)
+    .sort((left, right) =>
+      (right.resolvedAt ?? "").localeCompare(left.resolvedAt ?? "")
+    )
+    .map(node => ({
+      key: `history:${node.missionId}`,
+      missionId: node.missionId,
+      moveId: null,
+      name: node.accountName,
+      address: null,
+      navigationUrl: null,
+      phoneUrl: null,
+      destinationPath: `/driver/sales-mission/${node.missionId}`,
+      state: node.visualState,
+      timeBurdenMinutes: null,
+      travelBurdenMinutes: null,
+      estimatedValueLowCents: null,
+      estimatedValueHighCents: null,
+      confidence: "unknown",
+      expiresAt: null,
+      contestedUntil: node.contestedUntil,
+      verifiedAnnualValueCents: node.verifiedAnnualValueCents,
+      realizedRevenueCents: node.realizedRevenueCents,
+      unlockedPath: node.unlockedPath,
+      lossReason: node.lossReason,
+    }));
 }
 
 export function moneyBandLabel(mission: PlayableMission): string {

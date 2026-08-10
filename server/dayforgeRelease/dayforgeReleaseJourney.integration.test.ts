@@ -13,6 +13,11 @@ import {
   dayforgeAuditEvents,
   dayforgeProductEvents,
   driverGameWorldNodes,
+  driverCapabilityUnlocks,
+  driverColdCallBatches,
+  driverColdCallTargets,
+  driverScoutDiscoveries,
+  driverScoutReports,
   orders,
 } from "../../drizzle/schema";
 import { createCommercialMission } from "../commercialMissions/commercialMissionStore";
@@ -55,13 +60,26 @@ import {
   listDriverGameWorld,
 } from "../driverGameWorld/driverGameWorldService";
 import {
+  completeColdCallTarget,
+  createColdCallBatch,
+  getColdCallBurstState,
+  startColdCallTarget,
+} from "../driverGameWorld/coldCallBurstService";
+import {
+  getLatestScoutReport,
+  runExpansionScout,
+} from "../driverGameWorld/expansionScoutService";
+import { evaluateAndPersistExpansionScout } from "../capabilities/expansionScoutCapability";
+import {
   discoverLaundryTerritory,
   type RankedTerritoryOpportunity,
 } from "../territory/territoryDiscovery";
 import {
   getPersistedTerritoryResult,
   persistTerritoryScan,
+  saveTerritoryOperatorProfile,
 } from "../territory/territoryStore";
+import { listDriverBuiltMissions } from "../commercialMissions/commercialMissionBuilderService";
 import { DeterministicTerritoryProvider } from "../territory/testSupport/deterministicTerritoryProvider";
 import {
   assertNoFabricatedExternalTruth,
@@ -89,7 +107,14 @@ function missionInput(
       latitude: opportunity.account.latitude,
       longitude: opportunity.account.longitude,
       locationCount: opportunity.account.locationCount,
-      decisionMaker: opportunity.account.decisionMaker,
+      decisionMaker: {
+        ...opportunity.account.decisionMaker,
+        phone: opportunity.account.phone,
+        preferredChannel: opportunity.account.phone ? "phone" : "unknown",
+        relationshipType: "unknown",
+        source: "provider_sourced",
+        sourcedAt: new Date().toISOString(),
+      },
     },
     opportunity: {
       estimatedAnnualValueCents: opportunity.score.estimatedAnnualValueCents,
@@ -161,6 +186,19 @@ describe.skipIf(!runDatabaseGate)("DayForge MySQL release journey", () => {
     const driverId = `field-${suffix}`;
     const correlationId = `journey-${suffix}`;
 
+    await saveTerritoryOperatorProfile({
+      tenantId,
+      storeName: "Release Gate Laundry",
+      storeAddress: "100 Release Gate Way, Los Angeles, CA 90012",
+      serviceRadiusMiles: 3,
+      commercialWashFoldEnabled: true,
+      averagePricePerPoundCents: 250,
+      availableWeeklyCapacityPounds: 700,
+      routePoints: [],
+      turnaroundCompatibleByDefault: true,
+      pickupDaysCompatibleByDefault: true,
+    });
+
     const discovery = await discoverLaundryTerritory({
       addressOrBusiness: "Release Gate Laundry",
       provider: new DeterministicTerritoryProvider(),
@@ -192,7 +230,16 @@ describe.skipIf(!runDatabaseGate)("DayForge MySQL release journey", () => {
     if (!selected)
       throw new Error("Fixture territory result was not persisted");
 
-    const create = missionInput(tenantId, driverId, selected);
+    const callReadyFixture = {
+      ...selected,
+      account: {
+        ...selected.account,
+        // NANP 555-0100–0199 is reserved for fictional/test use. The fixture
+        // remains provider-sourced so Cold Call exercises the production gate.
+        phone: "+12025550199",
+      },
+    };
+    const create = missionInput(tenantId, driverId, callReadyFixture);
     const [firstCreate, replayCreate] = await Promise.all([
       createCommercialMission({
         ...create,
@@ -290,6 +337,62 @@ describe.skipIf(!runDatabaseGate)("DayForge MySQL release journey", () => {
     ]);
     expect(gameResults).toHaveLength(1);
     expect(gameRewards).toHaveLength(1);
+
+    const coldCallBatch = await createColdCallBatch({
+      tenantId,
+      actorId: driverId,
+      requestId: randomUUID(),
+    });
+    expect(coldCallBatch?.targets).toHaveLength(1);
+    const coldCallTarget = coldCallBatch?.targets[0];
+    if (!coldCallBatch || !coldCallTarget) {
+      throw new Error("Release fixture cold-call target is missing");
+    }
+    expect(coldCallTarget.phoneNumber).toBe("+12025550199");
+    expect(coldCallTarget.sourceReference).toMatch(
+      /^commercial_account_contacts:/
+    );
+    await startColdCallTarget({
+      tenantId,
+      actorId: driverId,
+      batchId: coldCallBatch.id,
+      targetId: coldCallTarget.id,
+    });
+    const coldCallRequestId = randomUUID();
+    const completedColdCall = await completeColdCallTarget({
+      tenantId,
+      actorId: driverId,
+      batchId: coldCallBatch.id,
+      targetId: coldCallTarget.id,
+      requestId: coldCallRequestId,
+      outcome: "spoke",
+      notes: "Release fixture recorded the actual call outcome.",
+    });
+    expect(completedColdCall?.status).toBe("completed");
+    expect(completedColdCall?.completedCount).toBe(1);
+    const replayedColdCall = await completeColdCallTarget({
+      tenantId,
+      actorId: driverId,
+      batchId: coldCallBatch.id,
+      targetId: coldCallTarget.id,
+      requestId: coldCallRequestId,
+      outcome: "spoke",
+      notes: "Release fixture recorded the actual call outcome.",
+    });
+    expect(replayedColdCall?.completedCount).toBe(1);
+    expect((await getColdCallBurstState({ tenantId, actorId: driverId })).batch?.completedCount).toBe(1);
+    expect(
+      await db
+        .select()
+        .from(driverColdCallBatches)
+        .where(eq(driverColdCallBatches.id, coldCallBatch.id))
+    ).toHaveLength(1);
+    expect(
+      await db
+        .select()
+        .from(driverColdCallTargets)
+        .where(eq(driverColdCallTargets.batchId, coldCallBatch.id))
+    ).toHaveLength(1);
 
     const handoff = await createCommercialMissionPhoneHandoff({
       tenantId,
@@ -546,6 +649,58 @@ describe.skipIf(!runDatabaseGate)("DayForge MySQL release journey", () => {
       evidenceReference: `release-fixture:${suffix}`,
     });
     expect(pipeline.customer?.approvedAnnualValueCents).toBe(2_160_000);
+
+    const firstScoutCapability = await evaluateAndPersistExpansionScout({
+      tenantId,
+      actorId: driverId,
+    });
+    const replayedScoutCapability = await evaluateAndPersistExpansionScout({
+      tenantId,
+      actorId: driverId,
+    });
+    expect(firstScoutCapability.unlocked).toBe(true);
+    expect(replayedScoutCapability.unlockedAt).toBe(firstScoutCapability.unlockedAt);
+    expect(
+      await db
+        .select()
+        .from(driverCapabilityUnlocks)
+        .where(eq(driverCapabilityUnlocks.tenantId, tenantId))
+    ).toHaveLength(1);
+
+    const scoutRequestId = randomUUID();
+    const scoutReport = await runExpansionScout({
+      tenantId,
+      actorId: driverId,
+      requestId: scoutRequestId,
+      provider: new DeterministicTerritoryProvider(),
+    });
+    expect(scoutReport.discoveries.length).toBeGreaterThan(0);
+    const replayedScoutReport = await runExpansionScout({
+      tenantId,
+      actorId: driverId,
+      requestId: scoutRequestId,
+      provider: new DeterministicTerritoryProvider(),
+    });
+    expect(replayedScoutReport.id).toBe(scoutReport.id);
+    expect((await getLatestScoutReport({ tenantId, actorId: driverId }))?.id).toBe(scoutReport.id);
+    const builtScoutMissions = await listDriverBuiltMissions({ tenantId, driverId });
+    expect(
+      scoutReport.discoveries.every(discovery =>
+        builtScoutMissions.some(mission => mission.id === discovery.missionId)
+      )
+    ).toBe(true);
+    expect(
+      await db
+        .select()
+        .from(driverScoutReports)
+        .where(eq(driverScoutReports.tenantId, tenantId))
+    ).toHaveLength(1);
+    expect(
+      await db
+        .select()
+        .from(driverScoutDiscoveries)
+        .where(eq(driverScoutDiscoveries.tenantId, tenantId))
+    ).toHaveLength(scoutReport.discoveries.length);
 
     const capturedWorld = await listDriverGameWorld({
       tenantId,

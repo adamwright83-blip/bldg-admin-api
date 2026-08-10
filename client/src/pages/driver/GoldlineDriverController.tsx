@@ -12,6 +12,8 @@ import type {
   OpenChannelEditableTask,
 } from "../../../../server/openChannel/openChannelTypes";
 import type { OpenChannelGenerateInput } from "../goldline/OpenChannel";
+import type { ColdCallBatch, ColdCallTarget } from "../../../../shared/coldCallBurst";
+import type { CapabilityEvaluation } from "../../../../shared/expansionScout";
 import {
   canCompleteDelivery,
   nextCommitmentDate,
@@ -42,6 +44,8 @@ export default function GoldlineDriverController() {
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [newOrderOpen, setNewOrderOpen] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
+  const [scoutCapability, setScoutCapability] =
+    useState<CapabilityEvaluation | null>(null);
   const [dayResolution, setDayResolution] = useState<DayResolution | null>(
     null
   );
@@ -80,6 +84,15 @@ export default function GoldlineDriverController() {
     undefined,
     { refetchInterval: 15_000, retry: false }
   );
+  const coldCall = trpc.system.driverGameWorld.coldCall.useQuery(undefined, {
+    refetchInterval: 15_000,
+    retry: false,
+  });
+  const scoutReport =
+    trpc.system.driverGameWorld.latestScoutReport.useQuery(undefined, {
+      refetchInterval: 30_000,
+      retry: false,
+    });
   const openChannelInput = { businessDate: selectedDate };
   const progressInput = {
     businessDate: selectedDate,
@@ -142,6 +155,19 @@ export default function GoldlineDriverController() {
     trpc.system.openChannel.completeTask.useMutation();
   const beginRekindle =
     trpc.system.driverGameWorld.beginRekindle.useMutation();
+  const createColdCall =
+    trpc.system.driverGameWorld.createColdCallBatch.useMutation();
+  const startColdCall =
+    trpc.system.driverGameWorld.startColdCallTarget.useMutation();
+  const completeColdCall =
+    trpc.system.driverGameWorld.completeColdCallTarget.useMutation();
+  const selectColdCallChain =
+    trpc.system.driverGameWorld.selectColdCallChainTarget.useMutation();
+  const breakColdCallCombo =
+    trpc.system.driverGameWorld.breakColdCallCombo.useMutation();
+  const evaluateScout =
+    trpc.system.driverGameWorld.scoutCapability.useMutation();
+  const runScout = trpc.system.driverGameWorld.runScout.useMutation();
 
   const activeDispatch = dispatches.data?.find(
     item =>
@@ -211,6 +237,8 @@ export default function GoldlineDriverController() {
       utils.admin.dashboardSummary.invalidate(),
       utils.system.businessWorld.get.invalidate(),
       utils.system.driverGameWorld.current.invalidate(),
+      utils.system.driverGameWorld.coldCall.invalidate(),
+      utils.system.driverGameWorld.latestScoutReport.invalidate(),
     ]);
   }
 
@@ -408,6 +436,116 @@ export default function GoldlineDriverController() {
     }
   }
 
+  function cacheColdCallBatch(batch: ColdCallBatch | null) {
+    utils.system.driverGameWorld.coldCall.setData(undefined, current => ({
+      batch,
+      eligibleCount: current?.eligibleCount ?? 0,
+      emptyReason: current?.emptyReason ?? null,
+    }));
+  }
+
+  async function handleCreateColdCall() {
+    const batch = await createColdCall.mutateAsync({
+      requestId: crypto.randomUUID(),
+    });
+    cacheColdCallBatch(batch);
+    if (!batch) toast.info(coldCall.data?.emptyReason ?? "No eligible call targets.");
+    return batch;
+  }
+
+  async function handleStartColdCall(target: ColdCallTarget) {
+    const batch = coldCall.data?.batch;
+    if (!batch) throw new Error("Cold-call batch is unavailable");
+    const next = await startColdCall.mutateAsync({
+      batchId: batch.id,
+      targetId: target.id,
+    });
+    if (!next) throw new Error("Cold-call batch is unavailable");
+    cacheColdCallBatch(next);
+    return next;
+  }
+
+  async function handleCompleteColdCall(input: {
+    target: ColdCallTarget;
+    outcome:
+      | "no_answer"
+      | "left_voicemail"
+      | "spoke"
+      | "visit_booked"
+      | "not_a_fit"
+      | "contact_unavailable";
+    notes: string;
+  }) {
+    const batch = coldCall.data?.batch;
+    if (!batch) throw new Error("Cold-call batch is unavailable");
+    const next = await completeColdCall.mutateAsync({
+      batchId: batch.id,
+      targetId: input.target.id,
+      requestId: crypto.randomUUID(),
+      outcome: input.outcome,
+      notes: input.notes,
+    });
+    if (!next) throw new Error("Cold-call batch is unavailable");
+    cacheColdCallBatch(next);
+    await Promise.all([
+      builtMissions.refetch(),
+      utils.system.commercialMission.callAttempts.invalidate({
+        missionId: input.target.missionId,
+      }),
+    ]);
+    return next;
+  }
+
+  async function handleSelectColdCallChain(target: ColdCallTarget) {
+    const batch = coldCall.data?.batch;
+    if (!batch) throw new Error("Cold-call batch is unavailable");
+    const next = await selectColdCallChain.mutateAsync({
+      batchId: batch.id,
+      targetId: target.id,
+    });
+    if (!next) throw new Error("Cold-call batch is unavailable");
+    cacheColdCallBatch(next);
+    return next;
+  }
+
+  async function handleBreakColdCallCombo() {
+    const batch = coldCall.data?.batch;
+    if (!batch) throw new Error("Cold-call batch is unavailable");
+    const next = await breakColdCallCombo.mutateAsync({ batchId: batch.id });
+    if (!next) throw new Error("Cold-call batch is unavailable");
+    cacheColdCallBatch(next);
+    return next;
+  }
+
+  async function handleEvaluateScout() {
+    const evaluation = await evaluateScout.mutateAsync();
+    setScoutCapability(evaluation);
+    if (evaluation.unlocked) toast.success("Expansion Scout capability unlocked from verified business evidence.");
+  }
+
+  async function handleRunScout() {
+    const report = await runScout.mutateAsync({ requestId: crypto.randomUUID() });
+    utils.system.driverGameWorld.latestScoutReport.setData(undefined, report);
+    await Promise.all([
+      builtMissions.refetch(),
+      moves.refetch(),
+      driverGameWorld.refetch(),
+    ]);
+    toast.success(
+      report.discoveries.length
+        ? `${report.discoveries.length} sourced missions discovered.`
+        : "Scout completed truthfully with 0 new opportunities."
+    );
+  }
+
+  useEffect(() => {
+    if (!driverGameWorld.data?.some(node => node.visualState === "captured")) return;
+    if (scoutCapability !== null || evaluateScout.isPending) return;
+    void handleEvaluateScout().catch(error => {
+      console.warn("[Goldline] Scout capability evaluation failed", error);
+    });
+  }, [driverGameWorld.data, evaluateScout.isPending, scoutCapability]);
+
   const currentDayProjection =
     fieldToday.data?.businessDate === selectedDate
       ? fieldToday.data
@@ -457,6 +595,21 @@ export default function GoldlineDriverController() {
           isLoadingWorld={driverGameWorld.isLoading}
           isBeginningRekindle={beginRekindle.isPending}
           onBeginRekindle={handleBeginRekindle}
+          coldCallBatch={coldCall.data?.batch}
+          coldCallEligibleCount={coldCall.data?.eligibleCount ?? 0}
+          coldCallEmptyReason={coldCall.data?.emptyReason}
+          isCreatingColdCall={createColdCall.isPending}
+          onCreateColdCall={handleCreateColdCall}
+          onStartColdCall={handleStartColdCall}
+          onCompleteColdCall={handleCompleteColdCall}
+          onSelectColdCallChain={handleSelectColdCallChain}
+          onBreakColdCallCombo={handleBreakColdCallCombo}
+          scoutCapability={scoutCapability}
+          isEvaluatingScout={evaluateScout.isPending}
+          onEvaluateScout={handleEvaluateScout}
+          scoutReport={scoutReport.data}
+          isRunningScout={runScout.isPending}
+          onRunScout={handleRunScout}
         />
       </Suspense>
       <QuickNewOrderSheet

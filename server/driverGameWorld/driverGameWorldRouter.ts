@@ -4,6 +4,28 @@ import {
   beginDriverRekindle,
   listDriverGameWorld,
 } from "./driverGameWorldService";
+import {
+  breakColdCallCombo,
+  completeColdCallTarget,
+  createColdCallBatch,
+  getColdCallBurstState,
+  selectColdCallChainTarget,
+  startColdCallTarget,
+} from "./coldCallBurstService";
+import { COMMERCIAL_MISSION_CALL_OUTCOMES } from "../commercialMissions/commercialMissionCallService";
+import { evaluateAndPersistExpansionScout } from "../capabilities/expansionScoutCapability";
+import {
+  getLatestScoutReport,
+  runExpansionScout,
+} from "./expansionScoutService";
+import { GooglePlacesTerritoryProvider } from "../territory/googlePlacesTerritoryProvider";
+
+function scoutProvider() {
+  const key =
+    process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY ?? "";
+  if (!key) throw new Error("Google Places is not configured for Expansion Scout");
+  return new GooglePlacesTerritoryProvider(key);
+}
 
 export const driverGameWorldRouter = router({
   current: dayforgeMissionFieldProcedure.query(({ ctx }) =>
@@ -24,6 +46,97 @@ export const driverGameWorldRouter = router({
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
         missionId: input.missionId,
+      })
+    ),
+  coldCall: dayforgeMissionFieldProcedure.query(({ ctx }) =>
+    getColdCallBurstState({
+      tenantId: ctx.tenantId,
+      actorId: ctx.user.openId,
+    })
+  ),
+  createColdCallBatch: dayforgeMissionFieldProcedure
+    .input(z.object({ requestId: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      createColdCallBatch({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        requestId: input.requestId,
+      })
+    ),
+  startColdCallTarget: dayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        batchId: z.string().uuid(),
+        targetId: z.string().uuid(),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      startColdCallTarget({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      })
+    ),
+  completeColdCallTarget: dayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        batchId: z.string().uuid(),
+        targetId: z.string().uuid(),
+        requestId: z.string().uuid(),
+        outcome: z.enum(COMMERCIAL_MISSION_CALL_OUTCOMES),
+        notes: z.string().trim().min(1).max(2_000),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      completeColdCallTarget({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      })
+    ),
+  selectColdCallChainTarget: dayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        batchId: z.string().uuid(),
+        targetId: z.string().uuid(),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      selectColdCallChainTarget({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      })
+    ),
+  breakColdCallCombo: dayforgeMissionFieldProcedure
+    .input(z.object({ batchId: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      breakColdCallCombo({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      })
+    ),
+  scoutCapability: dayforgeMissionFieldProcedure.mutation(({ ctx }) =>
+    evaluateAndPersistExpansionScout({
+      tenantId: ctx.tenantId,
+      actorId: ctx.user.openId,
+    })
+  ),
+  latestScoutReport: dayforgeMissionFieldProcedure.query(({ ctx }) =>
+    getLatestScoutReport({
+      tenantId: ctx.tenantId,
+      actorId: ctx.user.openId,
+    })
+  ),
+  runScout: dayforgeMissionFieldProcedure
+    .input(z.object({ requestId: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      runExpansionScout({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        requestId: input.requestId,
+        provider: scoutProvider(),
       })
     ),
 });

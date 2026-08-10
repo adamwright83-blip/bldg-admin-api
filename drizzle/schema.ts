@@ -4539,6 +4539,155 @@ export const driverGameWorldNodes = mysqlTable(
   })
 );
 
+export const driverColdCallBatches = mysqlTable(
+  "driver_cold_call_batches",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    status: mysqlEnum("status", ["active", "completed"])
+      .notNull()
+      .default("active"),
+    combo: int("combo").notNull().default(0),
+    completedCount: int("completedCount").notNull().default(0),
+    totalTargets: int("totalTargets").notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    sourceReferencesJson: json("sourceReferencesJson").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    requestUnique: uniqueIndex("uq_driver_cold_call_batch_request").on(
+      table.tenantId,
+      table.actorId,
+      table.requestId
+    ),
+    activeIdx: index("idx_driver_cold_call_batch_active").on(
+      table.tenantId,
+      table.actorId,
+      table.status,
+      table.updatedAt
+    ),
+  })
+);
+
+export const driverColdCallTargets = mysqlTable(
+  "driver_cold_call_targets",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    batchId: varchar("batchId", { length: 36 }).notNull(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    missionId: int("missionId").notNull(),
+    accountId: int("accountId").notNull(),
+    position: int("position").notNull(),
+    status: mysqlEnum("status", ["pending", "selected", "live", "completed"])
+      .notNull()
+      .default("pending"),
+    sourceReference: varchar("sourceReference", { length: 512 }).notNull(),
+    callAttemptEventId: int("callAttemptEventId"),
+    outcome: varchar("outcome", { length: 64 }),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    missionUnique: uniqueIndex("uq_driver_cold_call_batch_mission").on(
+      table.batchId,
+      table.missionId
+    ),
+    progressIdx: index("idx_driver_cold_call_target_progress").on(
+      table.tenantId,
+      table.actorId,
+      table.batchId,
+      table.status,
+      table.position
+    ),
+  })
+);
+
+export const driverCapabilityUnlocks = mysqlTable(
+  "driver_capability_unlocks",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    scopeId: varchar("scopeId", { length: 128 })
+      .notNull()
+      .default("tenant_business"),
+    capabilityId: varchar("capabilityId", { length: 96 }).notNull(),
+    unlockedByActorId: varchar("unlockedByActorId", { length: 128 }).notNull(),
+    unlockedAt: timestamp("unlockedAt").defaultNow().notNull(),
+    sourceReferencesJson: json("sourceReferencesJson").notNull(),
+    evidenceSummaryJson: json("evidenceSummaryJson").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    scopeUnique: uniqueIndex("uq_driver_capability_scope").on(
+      table.tenantId,
+      table.scopeId,
+      table.capabilityId
+    ),
+  })
+);
+
+export const driverScoutReports = mysqlTable(
+  "driver_scout_reports",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    capabilityUnlockId: varchar("capabilityUnlockId", { length: 36 }).notNull(),
+    sourceScanId: varchar("sourceScanId", { length: 64 }),
+    criteriaJson: json("criteriaJson").notNull(),
+    sourceReferencesJson: json("sourceReferencesJson").notNull(),
+    discoveryCount: int("discoveryCount").notNull().default(0),
+    generatedAt: timestamp("generatedAt").defaultNow().notNull(),
+  },
+  table => ({
+    requestUnique: uniqueIndex("uq_driver_scout_report_request").on(
+      table.tenantId,
+      table.actorId,
+      table.requestId
+    ),
+    actorIdx: index("idx_driver_scout_reports_actor").on(
+      table.tenantId,
+      table.actorId,
+      table.generatedAt
+    ),
+  })
+);
+
+export const driverScoutDiscoveries = mysqlTable(
+  "driver_scout_discoveries",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    reportId: varchar("reportId", { length: 36 }).notNull(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    candidateKey: varchar("candidateKey", { length: 191 }).notNull(),
+    providerName: varchar("providerName", { length: 64 }).notNull(),
+    providerAccountId: varchar("providerAccountId", { length: 191 }).notNull(),
+    sourceReference: varchar("sourceReference", { length: 512 }).notNull(),
+    missionId: int("missionId").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    candidateUnique: uniqueIndex("uq_driver_scout_candidate").on(
+      table.tenantId,
+      table.candidateKey
+    ),
+    missionUnique: uniqueIndex("uq_driver_scout_mission").on(
+      table.tenantId,
+      table.missionId
+    ),
+    reportIdx: index("idx_driver_scout_report_discovery").on(
+      table.reportId,
+      table.createdAt
+    ),
+  })
+);
+
 /** Immutable, idempotent daily resolution snapshots. */
 export const businessDayResolutions = mysqlTable(
   "business_day_resolutions",

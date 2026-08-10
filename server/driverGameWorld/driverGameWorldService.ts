@@ -51,6 +51,7 @@ export async function listDriverGameWorld(input: {
     .select({
       missionId: commercialMissions.id,
       missionStatus: commercialMissions.status,
+      missionCompletedAt: commercialMissions.completedAt,
       accountId: commercialAccounts.id,
       accountName: commercialAccounts.name,
       locationId: commercialAccountLocations.id,
@@ -65,6 +66,7 @@ export async function listDriverGameWorld(input: {
       savedUnlockedPath: driverGameWorldNodes.unlockedPath,
       savedDiscoveryState: driverGameWorldNodes.discoveryState,
       savedVersion: driverGameWorldNodes.version,
+      savedResolvedAt: driverGameWorldNodes.lastResolvedAt,
     })
     .from(commercialMissions)
     .innerJoin(
@@ -156,6 +158,13 @@ export async function listDriverGameWorld(input: {
       realizedRevenueCents: row.realizedRevenueCents ?? 0,
       lossReason: row.lossReason ?? null,
       version: row.savedVersion ?? 0,
+      isTodayActive: !["won", "lost"].includes(row.missionStatus),
+      isHistorical: ["won", "lost"].includes(row.missionStatus),
+      regionKey:
+        row.savedWorldAnchor ??
+        (row.locationId ? `location_${row.locationId}` : "fortress_gate"),
+      resolvedAt:
+        (row.savedResolvedAt ?? row.missionCompletedAt)?.toISOString() ?? null,
     });
   }
   return Array.from(byMission.values());
@@ -214,5 +223,9 @@ export async function beginDriverRekindle(input: {
     unlockedPath: "gold_recovery_path",
     discoveryState: "engaged",
     version: node.version + 1,
+    isTodayActive: true,
+    isHistorical: false,
+    regionKey: "gold_side_entrance",
+    resolvedAt: resolvedAt.toISOString(),
   };
 }
