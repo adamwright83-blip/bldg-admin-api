@@ -9,9 +9,19 @@ const viewportWidth = Number(process.env.GOLDLINE_VERIFY_WIDTH ?? 390);
 const viewportHeight = Number(process.env.GOLDLINE_VERIFY_HEIGHT ?? 844);
 const viewportTag = `${viewportWidth}x${viewportHeight}`;
 const missionStatus =
-  mode === "contested" ? "follow_up" : mode === "captured" ? "won" : "game_ready";
+  mode === "contested"
+    ? "follow_up"
+    : mode === "captured" || mode === "scout"
+      ? "won"
+      : mode === "coldcall"
+        ? "phone_ready"
+        : "game_ready";
 const visualState =
-  mode === "contested" ? "contested" : mode === "captured" ? "captured" : "available";
+  mode === "contested"
+    ? "contested"
+    : mode === "captured" || mode === "scout"
+      ? "captured"
+      : "available";
 let projectedVisualState = visualState;
 const dueAt = new Date(Date.now() + 48 * 60 * 60_000).toISOString();
 
@@ -61,6 +71,61 @@ const mission = {
   completedAt: null,
 };
 
+let coldCallBatch =
+  mode === "coldcall"
+    ? {
+        id: "10000000-0000-4000-8000-000000000001",
+        createdAt: new Date().toISOString(),
+        sourceReferences: [
+          "commercial_account_contacts:501",
+          "commercial_account_contacts:502",
+        ],
+        status: "active",
+        combo: 0,
+        completedCount: 0,
+        totalTargets: 2,
+        targets: [
+          {
+            id: "10000000-0000-4000-8000-000000000011",
+            entityId: "501",
+            missionId: 901,
+            companyName: "The Maybourne Beverly Hills",
+            phoneNumber: "+12025550101",
+            eligibility: "eligible",
+            reason: "Assigned call-ready mission with a sourced permitted phone contact",
+            sourceReference: "commercial_account_contacts:501",
+            coaching: {
+              openingLine: "Who owns the recurring laundry program?",
+              provenance: "commercial_missions:901:missionBriefJson.openingLine",
+            },
+            status: "selected",
+            position: 0,
+            outcome: null,
+          },
+          {
+            id: "10000000-0000-4000-8000-000000000012",
+            entityId: "502",
+            missionId: 902,
+            companyName: "Beverly Wilshire, A Four Seasons Hotel",
+            phoneNumber: "+12025550102",
+            eligibility: "eligible",
+            reason: "Assigned call-ready mission with a sourced permitted phone contact",
+            sourceReference: "commercial_account_contacts:502",
+            coaching: {
+              openingLine: "Who owns the recurring laundry program?",
+              provenance: "commercial_missions:902:missionBriefJson.openingLine",
+            },
+            status: "pending",
+            position: 1,
+            outcome: null,
+          },
+        ],
+      }
+    : null;
+
+let scoutReport = null;
+let scoutMissions = [];
+
 function requestInput(request, url, index) {
   try {
     const parsed =
@@ -73,7 +138,7 @@ function requestInput(request, url, index) {
   }
 }
 
-function responseFor(procedure) {
+function responseFor(procedure, input) {
   if (procedure === "auth.me") {
     return {
       id: 1,
@@ -125,6 +190,32 @@ function responseFor(procedure) {
           missionVersion: 3,
           destinationPath: "/driver/sales-mission/901",
         },
+        ...scoutMissions.map(scoutMission => ({
+          id: `mission:${scoutMission.id}:visit`,
+          moveType: "nearby_commercial_visit",
+          title: `Visit ${scoutMission.account.name}`,
+          target: {
+            entityType: "commercial_account",
+            entityId: String(scoutMission.account.accountId),
+            name: scoutMission.account.name,
+          },
+          expectedDurationMinutes: 25,
+          travelMinutes: 7,
+          expectedValue: {
+            value: { lowCents: 800000, highCents: 1600000 },
+            provenance: "estimated",
+            sourceReference: `territory_scan_results:browser-verification:${scoutMission.id}`,
+          },
+          confidence: "high",
+          relevance: "Real Scout verification fixture",
+          evidence: ["Persisted territory scan result"],
+          expiresAt: null,
+          contactAllowed: true,
+          withinServiceRadius: true,
+          missionId: scoutMission.id,
+          missionVersion: scoutMission.version,
+          destinationPath: `/driver/sales-mission/${scoutMission.id}`,
+        })),
       ],
       reason: "MOVES_AVAILABLE",
       constraints: {
@@ -139,7 +230,7 @@ function responseFor(procedure) {
       },
     };
   }
-  if (procedure === "system.commercialMission.myBuiltMissions") return [mission];
+  if (procedure === "system.commercialMission.myBuiltMissions") return [mission, ...scoutMissions];
   if (procedure === "system.commercialMission.myDispatches") return [];
   if (procedure === "system.driverGameWorld.current") {
     return [
@@ -166,7 +257,33 @@ function responseFor(procedure) {
         realizedRevenueCents: 0,
         lossReason: null,
         version: 1,
+        isTodayActive: !["won", "lost"].includes(missionStatus),
+        isHistorical: ["won", "lost"].includes(missionStatus),
+        regionKey: "fortress_gate",
+        resolvedAt: mode === "captured" || mode === "scout" ? new Date().toISOString() : null,
       },
+      ...scoutMissions.map(scoutMission => ({
+        missionId: scoutMission.id,
+        entityType: "commercial_mission",
+        entityId: String(scoutMission.id),
+        accountId: scoutMission.account.accountId,
+        accountName: scoutMission.account.name,
+        locationId: 602,
+        missionStatus: scoutMission.status,
+        visualState: "available",
+        worldAnchor: "scout_region_hotel",
+        unlockedPath: "scout_gold_path",
+        discoveryState: "discovered",
+        contestedUntil: null,
+        verifiedAnnualValueCents: null,
+        realizedRevenueCents: 0,
+        lossReason: null,
+        version: 1,
+        isTodayActive: true,
+        isHistorical: false,
+        regionKey: "scout_region_hotel",
+        resolvedAt: null,
+      })),
     ];
   }
   if (procedure === "system.adaptiveSalesMeter.myMeter") {
@@ -247,6 +364,97 @@ function responseFor(procedure) {
       version: 2,
     };
   }
+  if (procedure === "system.driverGameWorld.coldCall") {
+    return {
+      batch: coldCallBatch,
+      eligibleCount: coldCallBatch ? 2 : 0,
+      emptyReason: coldCallBatch
+        ? null
+        : "No assigned call-ready missions have a sourced, permitted phone contact",
+    };
+  }
+  if (procedure === "system.driverGameWorld.createColdCallBatch") return coldCallBatch;
+  if (procedure === "system.driverGameWorld.startColdCallTarget") {
+    const target = coldCallBatch?.targets.find(item => item.id === input?.targetId);
+    if (target) target.status = "live";
+    return coldCallBatch;
+  }
+  if (procedure === "system.driverGameWorld.completeColdCallTarget") {
+    const target = coldCallBatch?.targets.find(item => item.id === input?.targetId);
+    if (target && coldCallBatch) {
+      target.status = "completed";
+      target.outcome = input?.outcome ?? "spoke";
+      coldCallBatch.completedCount += 1;
+      if (coldCallBatch.completedCount === coldCallBatch.totalTargets) {
+        coldCallBatch.status = "completed";
+      }
+    }
+    return coldCallBatch;
+  }
+  if (procedure === "system.driverGameWorld.selectColdCallChainTarget") {
+    const target = coldCallBatch?.targets.find(item => item.id === input?.targetId);
+    if (target && coldCallBatch) {
+      target.status = "selected";
+      coldCallBatch.combo = 2;
+    }
+    return coldCallBatch;
+  }
+  if (procedure === "system.driverGameWorld.breakColdCallCombo") {
+    if (coldCallBatch) coldCallBatch.combo = 0;
+    return coldCallBatch;
+  }
+  if (procedure === "system.driverGameWorld.scoutCapability") {
+    return {
+      capabilityId: "EXPANSION_SCOUT",
+      eligible: mode === "captured" || mode === "scout",
+      unlocked: mode === "captured" || mode === "scout",
+      reasons: ["Verified win contains enough archetype, location, and service evidence for sourced lookalikes"],
+      sourceReferences: ["commercial_missions:901", "territory_operator_profiles:browser-verification"],
+      evidenceSummary: { verifiedWin: true, accountArchetype: "hotel", hasSourcedLocation: true },
+      unlockedAt: new Date().toISOString(),
+    };
+  }
+  if (procedure === "system.driverGameWorld.latestScoutReport") return scoutReport;
+  if (procedure === "system.driverGameWorld.runScout") {
+    const discoveredMission = {
+      ...mission,
+      id: 902,
+      code: "VERIFY-902",
+      status: "candidate",
+      version: 1,
+      account: {
+        ...mission.account,
+        accountId: 502,
+        name: "Beverly Wilshire, A Four Seasons Hotel",
+        address: "9500 Wilshire Blvd, Beverly Hills, CA 90212",
+      },
+      opportunity: {
+        ...mission.opportunity,
+        opportunityId: 302,
+        score: 86,
+        primarySignal: "Persisted browser verification territory result",
+      },
+    };
+    scoutMissions = [discoveredMission];
+    scoutReport = {
+      id: "20000000-0000-4000-8000-000000000001",
+      generatedAt: new Date().toISOString(),
+      sourceReferences: ["territory_scan_sessions:browser-verification"],
+      criteria: { archetype: "hotel", area: mission.account.address, radiusMiles: 3 },
+      discoveries: [
+        {
+          entityId: "502",
+          missionId: 902,
+          companyName: discoveredMission.account.name,
+          address: discoveredMission.account.address,
+          matchScore: 86,
+          evidence: ["Persisted territory scan result"],
+          sourceReference: "territory_scan_results:browser-verification:902",
+        },
+      ],
+    };
+    return scoutReport;
+  }
   return {};
 }
 
@@ -269,8 +477,8 @@ await page.route("**/api/trpc/**", async route => {
     url.pathname.split("/api/trpc/")[1] ?? ""
   ).split(",");
   const payload = procedures.map((procedure, index) => {
-    requestInput(route.request(), url, index);
-    return { result: { data: { json: responseFor(procedure) } } };
+    const input = requestInput(route.request(), url, index);
+    return { result: { data: { json: responseFor(procedure, input) } } };
   });
   await route.fulfill({
     status: 200,
@@ -302,6 +510,83 @@ await page.screenshot({
   path: `${outputDir}/goldline-${mode}-${viewportTag}.png`,
   fullPage: true,
 });
+
+if (mode === "coldcall") {
+  await page.getByRole("button", { name: /COLD CALL BURST/i }).click();
+  await page.getByRole("region", { name: "Cold Call Burst" }).waitFor();
+  await page.getByText("COMBO ×0", { exact: true }).waitFor();
+  await page.getByText("CALLS 2/2 LEFT", { exact: true }).waitFor();
+  await page.getByText(/missionBriefJson\.openingLine/).waitFor();
+  await page.getByRole("button", { name: /CALL REAL NUMBER/i }).click();
+  await page.getByText("LIVE CALL · NO GAME TIMER", { exact: true }).waitFor();
+  if (await page.locator(".cold-call-chain-window").count()) {
+    throw new Error("Chain timer appeared during a live conversation");
+  }
+  await page.getByRole("button", { name: /CALL ENDED/i }).click();
+  await page.locator(".cold-call-outcome select").selectOption("spoke");
+  await page.locator(".cold-call-outcome textarea").fill("Reached the real front desk and logged the actual outcome.");
+  await page.getByRole("button", { name: /SAVE OUTCOME/i }).click();
+  await page.getByText("CHAIN TARGET", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /Beverly Wilshire/i }).click();
+  await page.getByText("COMBO ×2", { exact: true }).waitFor();
+  await page.screenshot({
+    path: `${outputDir}/goldline-cold-call-chain-${viewportTag}.png`,
+    fullPage: true,
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.locator("canvas.goldline-game-canvas").waitFor({ state: "visible" });
+  await page.getByRole("button", { name: /COLD CALL BURST/i }).click();
+  await page.getByText("LOGGED 1/2", { exact: true }).waitFor();
+  await page.getByText("Beverly Wilshire, A Four Seasons Hotel", { exact: true }).waitFor();
+  if (errors.length) throw new Error(`Browser errors: ${errors.join(" | ")}`);
+  console.log(
+    JSON.stringify({
+      pageLoaded: true,
+      viewport: viewportTag,
+      coldCallTargets: 2,
+      realPhoneAction: true,
+      liveConversationTimerAbsent: true,
+      outcomeSavedBeforeChain: true,
+      physicalChainSelection: true,
+      comboAfterChain: 2,
+      reloadPreservedCompletedCall: true,
+      browserErrors: errors,
+      screenshot: `${outputDir}/goldline-cold-call-chain-${viewportTag}.png`,
+    })
+  );
+  await browser.close();
+  process.exit(0);
+}
+
+if (mode === "scout") {
+  await page.getByText("STRONGHOLD CAPTURED", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /LET THE REWARD LAND/i }).click();
+  await page.getByText("EXPANSION SCOUT", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /ENTER SCOUT CHAMBER/i }).click();
+  await page.getByRole("button", { name: /RUN SOURCED SCOUT/i }).click();
+  await page.getByText("1 NEW MISSIONS DISCOVERED", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /Engage Beverly Wilshire/i }).click();
+  await page.getByRole("button", { name: /Select Beverly Wilshire/i }).waitFor();
+  await page.screenshot({
+    path: `${outputDir}/goldline-captured-scout-loop-${viewportTag}.png`,
+    fullPage: true,
+  });
+  if (errors.length) throw new Error(`Browser errors: ${errors.join(" | ")}`);
+  console.log(
+    JSON.stringify({
+      pageLoaded: true,
+      viewport: viewportTag,
+      verifiedWinCeremony: true,
+      scoutCapabilityUnlockedFromBusinessEvidence: true,
+      sourcedScoutReportCount: 1,
+      scoutMissionAppearsInFork: true,
+      browserErrors: errors,
+      screenshot: `${outputDir}/goldline-captured-scout-loop-${viewportTag}.png`,
+    })
+  );
+  await browser.close();
+  process.exit(0);
+}
 
 if (mode === "contested") {
   await page.getByText("GOLD RECOVERY PATH UNLOCKED", { exact: true }).waitFor();

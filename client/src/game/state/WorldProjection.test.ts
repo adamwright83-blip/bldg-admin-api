@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   coolingLabel,
+  gameWorldControlPercent,
   visualStateForBusinessStatus,
 } from "../../../../shared/driverGameWorld";
 import { equipAnchorAbilities } from "./EncounterProjection";
+import { projectPersistentHistory } from "./WorldProjection";
 
 describe("driver game truth projection", () => {
   it("maps authoritative outcomes without letting arcade state create a win", () => {
@@ -62,5 +64,26 @@ describe("driver game truth projection", () => {
       provenance: "foundation",
       sourceReference: "armory:foundation:anchor:no-risk-trial",
     });
+  });
+});
+
+describe("persistent world history", () => {
+  it("keeps resolved history separate and labels game progression as world control", () => {
+    const nodes = [
+      {
+        missionId: 10,
+        accountName: "Verified historical account",
+        visualState: "captured",
+        isHistorical: true,
+        resolvedAt: "2026-07-01T10:00:00.000Z",
+        verifiedAnnualValueCents: 2_160_000,
+        realizedRevenueCents: 0,
+        contestedUntil: null,
+        unlockedPath: null,
+        lossReason: null,
+      },
+    ] as never;
+    expect(projectPersistentHistory(nodes)).toHaveLength(1);
+    expect(gameWorldControlPercent(nodes)).toBe(100);
   });
 });
