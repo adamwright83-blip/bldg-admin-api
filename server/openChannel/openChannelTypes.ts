@@ -28,7 +28,7 @@ export type OpenChannelMission = {
   businessDate: string;
   status: "draft" | "active" | "completed";
   title: string;
-  laraBriefing: string;
+  operatorBriefing: string;
   transcript: string;
   generationSource: "anthropic_structured" | "deterministic_fallback";
   gapStartedAt: string;

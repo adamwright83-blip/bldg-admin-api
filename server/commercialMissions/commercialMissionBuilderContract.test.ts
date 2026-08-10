@@ -59,7 +59,7 @@ describe("driver mission builder contract", () => {
 
   it("keeps mission stops separate from operational order records", () => {
     expect(driver).toContain("return <GoldlineDriverController />");
-    expect(driverController).toContain("salesMissions={builtMissions.data}");
+    expect(driverController).toContain("salesMissions: builtMissions.data");
     expect(goldline).toContain("function toSalesStop");
     expect(goldline).toContain("function toRouteStop");
     expect(goldline).toContain("...(pickups ?? []).map");

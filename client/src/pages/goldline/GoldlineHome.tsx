@@ -38,7 +38,7 @@ import {
   goldlineAnchorStyle,
 } from "./goldlineRouteAnchors";
 import world from "@/assets/goldline/generated/goldline-world-empty.png";
-import laraSprite from "@/assets/goldline/generated/goldline-lara-sprite.png";
+import operatorSprite from "@/assets/goldline/generated/trailblazer-operator.png";
 import vorgan from "@/assets/goldline/vorgan.png";
 import objects from "@/assets/goldline/action-objects.png";
 import OpenChannel, { type OpenChannelGenerateInput } from "./OpenChannel";
@@ -111,7 +111,7 @@ type ActiveDispatch = {
   destinationPath: string;
 };
 
-type GoldlineHomeProps = {
+export type GoldlineHomeProps = {
   pickups?: Order[];
   deliveries?: Order[];
   salesMissions?: CommercialMission[];
@@ -496,7 +496,7 @@ export default function GoldlineHome({
     });
   }
 
-  function beginLaraAdvance() {
+  function beginOperatorAdvance() {
     setPanel(null);
     setSelectedStop(null);
     setRouteCompletion(current =>
@@ -528,11 +528,11 @@ export default function GoldlineHome({
             alt="Sunlit canyon city crossed by a turquoise route river"
           />
           <img
-            className={`goldline-lara-piece${routeCompletion?.phase === "advancing" ? " is-advancing" : ""}`}
-            src={laraSprite}
+            className={`goldline-operator-piece${routeCompletion?.phase === "advancing" ? " is-advancing" : ""}`}
+            src={operatorSprite}
             style={avatarBoardPosition}
             data-board-space={displayedAvatarSpace}
-            alt={`Lara is on board space ${displayedAvatarSpace}`}
+            alt={`Trailblazer Operator is on board space ${displayedAvatarSpace}`}
           />
         </div>
         <div className="goldline-sunwash" aria-hidden="true" />
@@ -895,7 +895,7 @@ export default function GoldlineHome({
                       className="goldline-route-completion"
                       role="status"
                       aria-live="polite"
-                      onAnimationEnd={beginLaraAdvance}
+                      onAnimationEnd={beginOperatorAdvance}
                     >
                       <span>
                         <Check />

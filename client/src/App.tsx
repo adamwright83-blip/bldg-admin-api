@@ -49,9 +49,6 @@ const DayforgeDemoControlPage = lazy(
   () => import("./pages/DayforgeDemoControlPage")
 );
 const ProductShell = lazy(() => import("./product/ProductShell"));
-const ArchivedLaraCroftSkin = lazy(
-  () => import("./archive/lara-croft-tombraider-skin/ArchivedLaraCroftSkin")
-);
 
 function PublicLandingFallback() {
   return <div style={{ minHeight: "100vh", background: "#F6F1E8" }} />;
@@ -171,7 +168,6 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/product/hunt",
   "/product/unload",
   "/product/team",
-  "/archive/lara-croft-skin",
 ]);
 
 function AdminHostRouter() {
@@ -185,11 +181,6 @@ function AdminHostRouter() {
       <Route path="/product">
         <Suspense fallback={<PublicLandingFallback />}>
           <ProductShell />
-        </Suspense>
-      </Route>
-      <Route path="/archive/lara-croft-skin">
-        <Suspense fallback={<PublicLandingFallback />}>
-          <ArchivedLaraCroftSkin />
         </Suspense>
       </Route>
       {/* Public landing pages are also reachable from the admin host for previewing. */}
@@ -347,11 +338,6 @@ function Router() {
       <Route path="/product">
         <Suspense fallback={<PublicLandingFallback />}>
           <ProductShell />
-        </Suspense>
-      </Route>
-      <Route path="/archive/lara-croft-skin">
-        <Suspense fallback={<PublicLandingFallback />}>
-          <ArchivedLaraCroftSkin />
         </Suspense>
       </Route>
       <Route path="/boreslay" component={BoreslayLandingRoute} />

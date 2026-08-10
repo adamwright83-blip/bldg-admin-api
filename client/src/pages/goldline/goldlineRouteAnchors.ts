@@ -11,7 +11,7 @@ export type GoldlineRouteAnchor = {
 
 /**
  * Coordinates use the native 862 x 1825 Goldline artwork, not the viewport.
- * The order follows the river away from Lara toward the upper city.
+ * The order follows the river away from the Operator toward the upper city.
  */
 export const GOLDLINE_ROUTE_ANCHORS = [
   {
@@ -40,8 +40,8 @@ export const GOLDLINE_ROUTE_ANCHORS = [
   },
 ] as const satisfies readonly GoldlineRouteAnchor[];
 
-/** Lara occupies the lower-left foreground of the approved world artwork. */
-export const LARA_EXCLUSION_REGION = {
+/** The Operator occupies the lower-left foreground of the approved world. */
+export const OPERATOR_EXCLUSION_REGION = {
   xMinPercent: 0,
   xMaxPercent: 42,
   yMinPercent: 53,
@@ -50,7 +50,7 @@ export const LARA_EXCLUSION_REGION = {
 
 export function anchorIsInsideRegion(
   anchor: GoldlineRouteAnchor,
-  region: typeof LARA_EXCLUSION_REGION
+  region: typeof OPERATOR_EXCLUSION_REGION
 ): boolean {
   return (
     anchor.xPercent >= region.xMinPercent &&
