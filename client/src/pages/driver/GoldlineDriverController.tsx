@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { QuickNewOrderSheet } from "@/components/driver/QuickNewOrderSheet";
@@ -33,6 +33,8 @@ const REQUESTING_LOCATION: GoldlineLocationSnapshot = {
   accuracyMeters: null,
   reason: null,
 };
+
+const GoldlineGameHome = lazy(() => import("../../game/GoldlineGameHome"));
 
 export default function GoldlineDriverController() {
   const utils = trpc.useUtils();
@@ -74,6 +76,10 @@ export default function GoldlineDriverController() {
     refetchInterval: 15_000,
   });
   const armory = trpc.system.armory.get.useQuery({});
+  const driverGameWorld = trpc.system.driverGameWorld.current.useQuery(
+    undefined,
+    { refetchInterval: 15_000, retry: false }
+  );
   const openChannelInput = { businessDate: selectedDate };
   const progressInput = {
     businessDate: selectedDate,
@@ -134,6 +140,8 @@ export default function GoldlineDriverController() {
   const approveOpenChannel = trpc.system.openChannel.approve.useMutation();
   const completeOpenChannelTask =
     trpc.system.openChannel.completeTask.useMutation();
+  const beginRekindle =
+    trpc.system.driverGameWorld.beginRekindle.useMutation();
 
   const activeDispatch = dispatches.data?.find(
     item =>
@@ -202,6 +210,7 @@ export default function GoldlineDriverController() {
       utils.admin.listByStatus.invalidate({ status: "delivered" }),
       utils.admin.dashboardSummary.invalidate(),
       utils.system.businessWorld.get.invalidate(),
+      utils.system.driverGameWorld.current.invalidate(),
     ]);
   }
 
@@ -379,48 +388,77 @@ export default function GoldlineDriverController() {
     }
   }
 
+  async function handleBeginRekindle(missionId: number) {
+    try {
+      const node = await beginRekindle.mutateAsync({
+        missionId,
+        requestId: crypto.randomUUID(),
+      });
+      utils.system.driverGameWorld.current.setData(undefined, current => {
+        const others = (current ?? []).filter(item => item.missionId !== missionId);
+        return [...others, node];
+      });
+      toast.success("Recovery path active. Real follow-up actions are inside the quest.");
+      return node;
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not begin Rekindle."
+      );
+      throw error;
+    }
+  }
+
   const currentDayProjection =
     fieldToday.data?.businessDate === selectedDate
       ? fieldToday.data
       : undefined;
 
+  const gameHomeProps = {
+    pickups: pickups.data,
+    deliveries: deliveries.data,
+    salesMissions: builtMissions.data,
+    today: currentDayProjection,
+    moves: moves.data,
+    meter: meter.data,
+    armory: armory.data,
+    location,
+    dayResolution,
+    activeDispatch,
+    openChannelMission: openChannel.data,
+    goldlineProgress: goldlineProgress.data,
+    selectedDate,
+    onSelectedDateChange: setSelectedDate,
+    isLoading:
+      pickups.isLoading || deliveries.isLoading || builtMissions.isLoading,
+    isResolvingOrder: updateStatus.isPending,
+    isAcceptingMove: acceptMove.isPending,
+    isResolvingDay: resolveDay.isPending,
+    isGeneratingOpenChannel: generateOpenChannel.isPending,
+    isApprovingOpenChannel: approveOpenChannel.isPending,
+    isCompletingOpenChannelTask: completeOpenChannelTask.isPending,
+    onResolveOrder: handleResolveOrder,
+    onAcceptMove: handleAcceptMove,
+    onOpenWalkIn: () => setWalkInOpen(true),
+    onOpenNewOrder: () => setNewOrderOpen(true),
+    onOpenJournal: () => setJournalOpen(true),
+    onResolveDay: handleResolveDay,
+    onOpenDispatch: activeDispatch ? handleOpenDispatch : undefined,
+    onGenerateOpenChannel: handleGenerateOpenChannel,
+    onApproveOpenChannel: handleApproveOpenChannel,
+    onCompleteOpenChannelTask: handleCompleteOpenChannelTask,
+  };
+
   return (
     <>
-      <GoldlineHome
-        pickups={pickups.data}
-        deliveries={deliveries.data}
-        salesMissions={builtMissions.data}
-        today={currentDayProjection}
-        moves={moves.data}
-        meter={meter.data}
-        armory={armory.data}
-        location={location}
-        dayResolution={dayResolution}
-        activeDispatch={activeDispatch}
-        openChannelMission={openChannel.data}
-        goldlineProgress={goldlineProgress.data}
-        selectedDate={selectedDate}
-        onSelectedDateChange={setSelectedDate}
-        isLoading={
-          pickups.isLoading || deliveries.isLoading || builtMissions.isLoading
-        }
-        isResolvingOrder={updateStatus.isPending}
-        isAcceptingMove={acceptMove.isPending}
-        isResolvingDay={resolveDay.isPending}
-        isGeneratingOpenChannel={generateOpenChannel.isPending}
-        isApprovingOpenChannel={approveOpenChannel.isPending}
-        isCompletingOpenChannelTask={completeOpenChannelTask.isPending}
-        onResolveOrder={handleResolveOrder}
-        onAcceptMove={handleAcceptMove}
-        onOpenWalkIn={() => setWalkInOpen(true)}
-        onOpenNewOrder={() => setNewOrderOpen(true)}
-        onOpenJournal={() => setJournalOpen(true)}
-        onResolveDay={handleResolveDay}
-        onOpenDispatch={activeDispatch ? handleOpenDispatch : undefined}
-        onGenerateOpenChannel={handleGenerateOpenChannel}
-        onApproveOpenChannel={handleApproveOpenChannel}
-        onCompleteOpenChannelTask={handleCompleteOpenChannelTask}
-      />
+      <Suspense fallback={<GoldlineHome {...gameHomeProps} />}>
+        <GoldlineGameHome
+          {...gameHomeProps}
+          worldNodes={driverGameWorld.data}
+          isLoadingWorld={driverGameWorld.isLoading}
+          isBeginningRekindle={beginRekindle.isPending}
+          onBeginRekindle={handleBeginRekindle}
+        />
+      </Suspense>
       <QuickNewOrderSheet
         open={newOrderOpen}
         onOpenChange={setNewOrderOpen}
@@ -438,6 +476,7 @@ export default function GoldlineDriverController() {
             utils.system.armory.get.invalidate(),
             utils.system.commercialMission.myBuiltMissions.invalidate(),
             utils.system.commercialMission.myDispatches.invalidate(),
+            utils.system.driverGameWorld.current.invalidate(),
           ]);
           const calendarText =
             result.calendar?.status === "created" ||

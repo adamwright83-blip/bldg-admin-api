@@ -24,6 +24,7 @@ import { armoryRouter } from "../armory/armoryRouter";
 import { capabilityRouter } from "../capabilities/capabilityRouter";
 import { teamRouter } from "../team/teamRouter";
 import { openChannelRouter } from "../openChannel/openChannelRouter";
+import { driverGameWorldRouter } from "../driverGameWorld/driverGameWorldRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
@@ -49,6 +50,7 @@ export const systemRouter = router({
   capabilities: capabilityRouter,
   team: teamRouter,
   openChannel: openChannelRouter,
+  driverGameWorld: driverGameWorldRouter,
   health: publicProcedure
     .input(
       z.object({

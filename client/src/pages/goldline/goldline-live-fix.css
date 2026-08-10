@@ -26,9 +26,9 @@
   }
 }
 
-/* Lara is now a real movable sprite over an empty world—not a duplicate baked
+/* The Operator is a real movable sprite over an empty world—not a duplicate baked
    into the background. Her saved work count selects a permanent board space. */
-.goldline .goldline-lara-piece {
+.goldline .goldline-operator-piece {
   position: absolute;
   z-index: 2;
   width: auto;
@@ -61,7 +61,7 @@
 
 /* A confirmed route action turns the foreground explorer into a short-lived
    board-piece advance without changing the approved painted world. */
-.goldline .goldline-lara-piece.is-advancing {
+.goldline .goldline-operator-piece.is-advancing {
   animation: goldline-avatar-advance 1.3s cubic-bezier(0.22, 0.84, 0.3, 1)
     both !important;
   filter: drop-shadow(0 0 14px rgba(255, 211, 91, 0.92));
@@ -289,7 +289,7 @@
   .goldline .goldline-route-layer {
     animation: goldline-world-reduced 9s ease-in-out infinite alternate !important;
   }
-  .goldline .goldline-lara-piece {
+  .goldline .goldline-operator-piece {
     animation: goldline-avatar-reduced 6.5s ease-in-out infinite alternate;
   }
   .goldline .goldline-ambient::before {

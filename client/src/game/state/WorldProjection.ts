@@ -1,0 +1,118 @@
+import type { CommercialMission } from "../../../../shared/commercialMission";
+import type { DriverGameWorldNode } from "../../../../shared/driverGameWorld";
+import { visualStateForBusinessStatus } from "../../../../shared/driverGameWorld";
+import type {
+  FieldMoveCandidate,
+  FieldMovesResult,
+} from "../../../../server/field/types";
+import type { PlayableMission } from "./GameState";
+
+function mapsUrl(address: string | null | undefined) {
+  return address
+    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
+    : null;
+}
+
+function phoneUrl(mission: CommercialMission) {
+  const phone = mission.account.decisionMaker.phone?.trim();
+  return phone ? `tel:${phone}` : null;
+}
+
+function moveForMission(
+  moves: FieldMoveCandidate[],
+  missionId: number
+): FieldMoveCandidate | undefined {
+  return moves.find(move => move.missionId === missionId);
+}
+
+export function projectPlayableMissions(input: {
+  missions?: CommercialMission[];
+  moves?: FieldMovesResult;
+  worldNodes?: DriverGameWorldNode[];
+}): PlayableMission[] {
+  const missions = input.missions ?? [];
+  const moves = input.moves?.recommendedMoves ?? [];
+  const nodeByMission = new Map(
+    (input.worldNodes ?? []).map(node => [node.missionId, node])
+  );
+  const projected: PlayableMission[] = missions.map(mission => {
+    const move = moveForMission(moves, mission.id);
+    const node = nodeByMission.get(mission.id);
+    const low = move?.expectedValue.value?.lowCents ?? null;
+    const high =
+      move?.expectedValue.value?.highCents ??
+      mission.opportunity.estimatedAnnualValueCents ??
+      null;
+    return {
+      key: `mission:${mission.id}`,
+      missionId: mission.id,
+      moveId: move?.id ?? null,
+      name: mission.account.name,
+      address: mission.account.address || null,
+      navigationUrl: mapsUrl(mission.account.address),
+      phoneUrl: phoneUrl(mission),
+      destinationPath: `/driver/sales-mission/${mission.id}`,
+      state: visualStateForBusinessStatus({
+        missionStatus: mission.status,
+        savedVisualState: node?.visualState,
+      }),
+      timeBurdenMinutes: move?.expectedDurationMinutes ?? null,
+      travelBurdenMinutes: move?.travelMinutes ?? null,
+      estimatedValueLowCents: low,
+      estimatedValueHighCents: high,
+      confidence: move?.confidence ?? mission.opportunity.estimateConfidence,
+      expiresAt: move?.expiresAt ?? mission.expiresAt,
+      contestedUntil: node?.contestedUntil ?? null,
+      verifiedAnnualValueCents:
+        mission.status === "won"
+          ? (node?.verifiedAnnualValueCents ?? null)
+          : null,
+      realizedRevenueCents: node?.realizedRevenueCents ?? 0,
+      unlockedPath: node?.unlockedPath ?? null,
+      lossReason: node?.lossReason ?? null,
+    } satisfies PlayableMission;
+  });
+  const knownMissionIds = new Set(missions.map(mission => mission.id));
+  for (const move of moves) {
+    if (move.missionId && knownMissionIds.has(move.missionId)) continue;
+    projected.push({
+      key: `move:${move.id}`,
+      missionId: move.missionId,
+      moveId: move.id,
+      name: move.target.name,
+      address: null,
+      navigationUrl: null,
+      phoneUrl: null,
+      destinationPath: move.destinationPath,
+      state: "available",
+      timeBurdenMinutes: move.expectedDurationMinutes,
+      travelBurdenMinutes: move.travelMinutes,
+      estimatedValueLowCents: move.expectedValue.value?.lowCents ?? null,
+      estimatedValueHighCents: move.expectedValue.value?.highCents ?? null,
+      confidence: move.confidence,
+      expiresAt: move.expiresAt,
+      contestedUntil: null,
+      verifiedAnnualValueCents: null,
+      realizedRevenueCents: 0,
+      unlockedPath: null,
+      lossReason: null,
+    });
+  }
+  return projected.slice(0, 3);
+}
+
+export function moneyBandLabel(mission: PlayableMission): string {
+  const format = (cents: number) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(cents / 100);
+  if (mission.estimatedValueLowCents && mission.estimatedValueHighCents) {
+    return `${format(mission.estimatedValueLowCents)}–${format(mission.estimatedValueHighCents)}/YR EST.`;
+  }
+  if (mission.estimatedValueHighCents) {
+    return `${format(mission.estimatedValueHighCents)}/YR EST.`;
+  }
+  return "VALUE NOT SOURCED";
+}

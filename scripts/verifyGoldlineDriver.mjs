@@ -466,7 +466,7 @@ function responseFor(
       businessDate,
       status: "draft",
       title: "Use the Sunday gap",
-      laraBriefing:
+      operatorBriefing:
         "Channel received. We have time for food, three local shop visits, laundry, and the cash count. Check my order before we deploy.",
       transcript: input?.transcript ?? "Voice briefing",
       generationSource: "anthropic_structured",
@@ -637,7 +637,7 @@ const routeCompletionFlow = {
     (await page
       .locator(".route-stop", { hasText: "Riley Resident" })
       .count()) === 0,
-  laraAdvancing: await page.locator(".is-route-progressing").count(),
+  operatorAdvancing: await page.locator(".is-route-progressing").count(),
   progressionTrail: await page.locator(".goldline-progress-trail").count(),
 };
 if (
@@ -645,7 +645,7 @@ if (
   routeCompletionFlow.greenConfirmation.pickupSecured !== 1 ||
   !routeCompletionFlow.drawerClosed ||
   !routeCompletionFlow.pickupCardRemoved ||
-  routeCompletionFlow.laraAdvancing !== 1 ||
+  routeCompletionFlow.operatorAdvancing !== 1 ||
   routeCompletionFlow.progressionTrail !== 1
 ) {
   throw new Error(
@@ -653,7 +653,7 @@ if (
   );
 }
 const progressionScreenshot =
-  "/Users/adamwrightpfi/.codex/visualizations/2026/08/09/019fe538-2f7e-72f1-bdc1-0d86e50cfc5c/goldline-lara-advancing.png";
+  "/Users/adamwrightpfi/.codex/visualizations/2026/08/09/019fe538-2f7e-72f1-bdc1-0d86e50cfc5c/goldline-operator-advancing.png";
 await page.waitForTimeout(450);
 await page.screenshot({ path: progressionScreenshot, fullPage: true });
 routeCompletionFlow.progressionScreenshot = progressionScreenshot;
@@ -661,13 +661,13 @@ await page.locator(".goldline-progress-trail").waitFor({
   state: "detached",
   timeout: 5_000,
 });
-await page.getByRole("img", { name: "Lara is on board space 1" }).waitFor();
+await page.getByRole("img", { name: "Trailblazer Operator is on board space 1" }).waitFor();
 routeCompletionFlow.persistentBoardSpace = await page
-  .getByRole("img", { name: "Lara is on board space 1" })
+  .getByRole("img", { name: "Trailblazer Operator is on board space 1" })
   .count();
 if (routeCompletionFlow.persistentBoardSpace !== 1) {
   throw new Error(
-    `Goldline did not retain Lara's completed board space: ${JSON.stringify(routeCompletionFlow)}`
+    `Goldline did not retain the Operator's completed board space: ${JSON.stringify(routeCompletionFlow)}`
   );
 }
 
@@ -755,7 +755,7 @@ await openChannelPage.locator(".goldline-progress-trail").waitFor({
   timeout: 5_000,
 });
 await openChannelPage
-  .getByRole("img", { name: "Lara is on board space 1" })
+  .getByRole("img", { name: "Trailblazer Operator is on board space 1" })
   .waitFor();
 await openChannelPage
   .getByRole("button", { name: "Open Channel mission briefing" })
@@ -821,7 +821,7 @@ await openChannelPage.locator(".goldline-progress-trail").waitFor({
   timeout: 5_000,
 });
 await openChannelPage
-  .getByRole("img", { name: "Lara is on board space 2" })
+  .getByRole("img", { name: "Trailblazer Operator is on board space 2" })
   .waitFor();
 const openChannelFlow = {
   signalScreenshot: openChannelSignalScreenshot,
@@ -837,7 +837,7 @@ const openChannelFlow = {
   ),
   errors: openChannelErrors,
   persistentBoardSpace: await openChannelPage
-    .getByRole("img", { name: "Lara is on board space 2" })
+    .getByRole("img", { name: "Trailblazer Operator is on board space 2" })
     .count(),
 };
 if (
@@ -915,7 +915,7 @@ for (const viewport of placementViewports) {
     const layer = rect(".goldline-route-layer");
     const card = rect('.route-stop[data-route-anchor="lower-gold-reliquary"]');
     const node = rect('.energy-node[data-route-anchor="lower-gold-reliquary"]');
-    const laraSafeZone = layer
+    const operatorSafeZone = layer
       ? {
           left: layer.left,
           right: layer.left + layer.width * 0.42,
@@ -949,8 +949,8 @@ for (const viewport of placementViewports) {
       routeStopCount: document.querySelectorAll(".route-stop").length,
       card,
       node,
-      laraSafeZone,
-      overlapsLara: overlaps(card, laraSafeZone),
+      operatorSafeZone,
+      overlapsOperator: overlaps(card, operatorSafeZone),
       hudCollisions: hudSelectors.filter(selector =>
         overlaps(card, rect(selector))
       ),
@@ -981,7 +981,7 @@ for (const viewport of placementViewports) {
 
   const failures = [];
   if (layout.routeStopCount !== 1) failures.push("expected one seeded pickup");
-  if (layout.overlapsLara) failures.push("pickup card overlaps Lara safe zone");
+  if (layout.overlapsOperator) failures.push("pickup card overlaps Operator safe zone");
   if (layout.hudCollisions.length)
     failures.push(
       `pickup card collides with ${layout.hudCollisions.join(", ")}`

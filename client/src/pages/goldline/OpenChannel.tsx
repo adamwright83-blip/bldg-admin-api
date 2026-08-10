@@ -54,7 +54,7 @@ const CATEGORIES: OpenChannelTaskCategory[] = [
   "other",
 ];
 
-const LARA_OPENING =
+const OPERATOR_OPENING =
   "We have an opening in the route. Tell me where you are, how much time we have, what cannot move, and everything competing for your attention. I’ll build the mission; you approve the board.";
 
 type DraftTask = OpenChannelEditableTask & { clientKey: string };
@@ -79,7 +79,7 @@ function preferredRecorderMimeType(): string | undefined {
   ].find(mimeType => MediaRecorder.isTypeSupported(mimeType));
 }
 
-function speakAsLara(text: string) {
+function speakAsOperator(text: string) {
   if (!("speechSynthesis" in window) || !text.trim()) return;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
@@ -138,9 +138,9 @@ export default function OpenChannel({
     }
     if (!announcedRef.current) {
       announcedRef.current = true;
-      speakAsLara(mission?.laraBriefing ?? LARA_OPENING);
+      speakAsOperator(mission?.operatorBriefing ?? OPERATOR_OPENING);
     }
-  }, [mission?.laraBriefing, open]);
+  }, [mission?.operatorBriefing, open]);
 
   useEffect(() => {
     if (!mission) return;
@@ -279,13 +279,17 @@ export default function OpenChannel({
         </header>
 
         <section className="open-channel-dialogue" aria-live="polite">
-          <small>LARA · FIELD OPERATIVE</small>
-          <p>{mission?.laraBriefing ?? LARA_OPENING}</p>
+          <small>TRAILBLAZER · FIELD OPERATOR</small>
+          <p>{mission?.operatorBriefing ?? OPERATOR_OPENING}</p>
           <button
             type="button"
-            onClick={() => speakAsLara(mission?.laraBriefing ?? LARA_OPENING)}
+            onClick={() =>
+              speakAsOperator(
+                mission?.operatorBriefing ?? OPERATOR_OPENING
+              )
+            }
           >
-            <Volume2 /> PLAY LARA’S VOICE
+            <Volume2 /> PLAY OPERATOR VOICE
           </button>
         </section>
 
@@ -357,7 +361,7 @@ export default function OpenChannel({
             >
               {isGenerating ? (
                 <>
-                  <Loader2 className="spin" /> LARA IS BUILDING THE MISSION…
+                  <Loader2 className="spin" /> OPERATOR IS BUILDING THE MISSION…
                 </>
               ) : (
                 <>

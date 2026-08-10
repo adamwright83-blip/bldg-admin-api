@@ -3,7 +3,7 @@ import {
   anchorIsInsideRegion,
   GOLDLINE_ROUTE_ANCHORS,
   goldlineAnchorStyle,
-  LARA_EXCLUSION_REGION,
+  OPERATOR_EXCLUSION_REGION,
 } from "./goldlineRouteAnchors";
 
 describe("Goldline semantic route anchors", () => {
@@ -17,9 +17,9 @@ describe("Goldline semantic route anchors", () => {
     ]);
   });
 
-  it("keeps the first destination anchor outside Lara's exclusion region", () => {
+  it("keeps the first destination anchor outside the Operator exclusion region", () => {
     expect(
-      anchorIsInsideRegion(GOLDLINE_ROUTE_ANCHORS[0], LARA_EXCLUSION_REGION)
+      anchorIsInsideRegion(GOLDLINE_ROUTE_ANCHORS[0], OPERATOR_EXCLUSION_REGION)
     ).toBe(false);
     expect(GOLDLINE_ROUTE_ANCHORS[0].labelPlacement).toBe("above-right");
   });

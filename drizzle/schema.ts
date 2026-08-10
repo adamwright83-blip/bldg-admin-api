@@ -4485,6 +4485,60 @@ export const businessGameMoveDecisions = mysqlTable(
   })
 );
 
+/**
+ * Compact durable visual projection for the playable driver world. Business
+ * tables remain authoritative for mission status, money, and follow-up dates.
+ */
+export const driverGameWorldNodes = mysqlTable(
+  "driver_game_world_nodes",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    missionId: int("missionId").notNull(),
+    entityType: varchar("entityType", { length: 64 })
+      .notNull()
+      .default("commercial_mission"),
+    entityId: varchar("entityId", { length: 191 }).notNull(),
+    locationId: int("locationId"),
+    visualState: mysqlEnum("visualState", [
+      "available",
+      "approaching",
+      "active",
+      "captured",
+      "contested",
+      "recovery_available",
+      "recovery_active",
+      "watching",
+      "closed",
+    ]).notNull(),
+    worldAnchor: varchar("worldAnchor", { length: 64 })
+      .notNull()
+      .default("fortress_gate"),
+    unlockedPath: varchar("unlockedPath", { length: 64 }),
+    discoveryState: mysqlEnum("discoveryState", [
+      "hidden",
+      "discovered",
+      "engaged",
+    ])
+      .notNull()
+      .default("discovered"),
+    lastResolvedAt: timestamp("lastResolvedAt"),
+    metadataJson: json("metadataJson"),
+    version: int("version").notNull().default(1),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    tenantActorMissionUnique: uniqueIndex(
+      "uq_driver_game_world_actor_mission"
+    ).on(table.tenantId, table.actorId, table.missionId),
+    tenantActorStateIdx: index(
+      "idx_driver_game_world_tenant_actor_state"
+    ).on(table.tenantId, table.actorId, table.visualState, table.updatedAt),
+  })
+);
+
 /** Immutable, idempotent daily resolution snapshots. */
 export const businessDayResolutions = mysqlTable(
   "business_day_resolutions",
@@ -4557,7 +4611,7 @@ export const openChannelMissions = mysqlTable(
       .notNull()
       .default("draft"),
     title: varchar("title", { length: 191 }).notNull(),
-    laraBriefing: text("laraBriefing").notNull(),
+    operatorBriefing: text("operatorBriefing").notNull(),
     transcript: text("transcript").notNull(),
     generationSource: mysqlEnum("generationSource", [
       "anthropic_structured",

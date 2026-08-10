@@ -137,11 +137,11 @@ describe("Goldline canonical driver restoration", () => {
     expect(goldlineCss).toContain("goldline-player-advance");
     expect(controller).toContain("system.openChannel.progress.useQuery");
     expect(controller).toContain("advanceCachedProgress");
-    expect(goldline).toContain("goldline-lara-piece");
-    expect(goldline).toContain("Lara is on board space");
+    expect(goldline).toContain("goldline-operator-piece");
+    expect(goldline).toContain("Trailblazer Operator is on board space");
     expect(goldlineCss).toContain("real movable sprite over an empty world");
     expect(goldline).toContain("goldline-world-empty.png");
-    expect(goldline).toContain("goldline-lara-sprite.png");
+    expect(goldline).toContain("trailblazer-operator.png");
   });
 
   it("turns a large verified gap into an editable voice-first Open Channel mission", () => {

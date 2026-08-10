@@ -23,7 +23,37 @@ export async function getArmory(input: { tenantId: string; userId: string; accou
     db.select().from(commercialMissionCoachingArtifacts).where(and(eq(commercialMissionCoachingArtifacts.tenantId, input.tenantId), eq(commercialMissionCoachingArtifacts.active, true))).orderBy(desc(commercialMissionCoachingArtifacts.createdAt)).limit(20),
     selectMissionDiamond({ tenantId: input.tenantId, driverId: input.userId, accountType: input.accountType ?? "service business" }),
   ]);
-  const items: ArmoryItem[] = [];
+  const items: ArmoryItem[] = [
+    {
+      id: "foundation:fast-response",
+      title: "FAST RESPONSE",
+      cue: "Incumbent provider is already in place",
+      response:
+        "Totally fair — most properties already have a company. The difference is response time.",
+      outcome: "guidance",
+      provenance: "foundation",
+      sourceReference: "armory:foundation:anchor:fast-response",
+    },
+    {
+      id: "foundation:no-risk-trial",
+      title: "NO-RISK TRIAL",
+      cue: "Switching feels risky",
+      response:
+        "Try us on one run. If we don't outperform, don't switch.",
+      outcome: "guidance",
+      provenance: "foundation",
+      sourceReference: "armory:foundation:anchor:no-risk-trial",
+    },
+    {
+      id: "foundation:social-proof",
+      title: "SOCIAL PROOF",
+      cue: "The prospect needs relevant proof",
+      response: "We already handle buildings like yours nearby.",
+      outcome: "guidance",
+      provenance: "foundation",
+      sourceReference: "armory:foundation:anchor:social-proof",
+    },
+  ];
   const occurrences = new Map<ObjectionArchetype, Array<{ text: string; sourceReference: string }>>();
   for (const journal of journals) {
     const insights = journal.insightsJson as SalesJournalInsights;
