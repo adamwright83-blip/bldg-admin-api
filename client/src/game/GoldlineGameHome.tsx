@@ -57,6 +57,7 @@ import {
   projectPlayableMissions,
 } from "./state/WorldProjection";
 import { landmarkForMission } from "../../../shared/worldSemantics";
+import { networkStatusLabel, useNetworkStatus } from "./session/useNetworkStatus";
 import type {
   ArcadeResolution,
   CorridorAction,
@@ -361,6 +362,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [coldCallOpen, setColdCallOpen] = useState(false);
   const [scoutOpen, setScoutOpen] = useState(false);
   const [scoutCapabilityOpen, setScoutCapabilityOpen] = useState(false);
+  const networkStatus = useNetworkStatus();
   const [encounterArchetype, setEncounterArchetype] =
     useState<ObjectionArchetype>("ANCHOR");
   const [encounterChannel, setEncounterChannel] =
@@ -589,6 +591,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           <div className="game-loading"><Loader2 /> LOADING PLAYABLE WORLD…</div>
         ) : null}
         <div className="game-atmosphere" aria-hidden="true" />
+        {networkStatus === "offline" ? (
+          <div className="network-status-banner" role="status">
+            {networkStatusLabel(networkStatus)}
+          </div>
+        ) : null}
 
         <header className="game-topbar">
           <button onClick={() => setUtilityPanel("menu")} aria-label="Open field utilities"><Menu /></button>

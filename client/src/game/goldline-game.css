@@ -1364,3 +1364,20 @@
 .landmark-closed { box-shadow: inset 0 0 0 2px rgba(140, 150, 160, 0.4); opacity: 0.75; }
 .landmark-comms { box-shadow: inset 0 0 0 2px rgba(90, 230, 220, 0.55); }
 .landmark-scout { box-shadow: inset 0 0 0 2px rgba(200, 160, 255, 0.55); }
+
+/* Slice 16 — truthful network status. Never claims a business result. */
+.network-status-banner {
+  position: absolute;
+  top: env(safe-area-inset-top, 0px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  margin-top: 6px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: rgba(20, 12, 4, 0.85);
+  border: 1px solid rgba(255, 190, 90, 0.5);
+  color: #ffd479;
+  font: 900 10px "Barlow Condensed";
+  letter-spacing: 0.1em;
+}

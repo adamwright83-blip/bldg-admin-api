@@ -54,6 +54,13 @@ export class GoldlineGame {
     if (this.hidden) this.app?.ticker.stop();
     else this.app?.ticker.start();
   };
+  // pagehide fires reliably on mobile app-switch/tab-discard paths that do
+  // not always precede a visibilitychange event; stopping the ticker here is
+  // defense-in-depth, never a replacement for the visibilitychange listener.
+  private pageHideHandler = () => {
+    this.hidden = true;
+    this.app?.ticker.stop();
+  };
 
   constructor(
     private readonly host: HTMLDivElement,
@@ -92,6 +99,7 @@ export class GoldlineGame {
 
       app.ticker.add(ticker => this.update(ticker.deltaMS / 1000, background));
       document.addEventListener("visibilitychange", this.visibilityHandler);
+      window.addEventListener("pagehide", this.pageHideHandler);
       this.renderWorldState();
       return true;
     } catch (error) {
@@ -321,6 +329,7 @@ export class GoldlineGame {
 
   destroy() {
     document.removeEventListener("visibilitychange", this.visibilityHandler);
+    window.removeEventListener("pagehide", this.pageHideHandler);
     this.app?.destroy(true, { children: true });
     this.app = null;
     this.host.replaceChildren();
