@@ -322,9 +322,15 @@ export class GoldlineGame {
   }
 
   setWorldState(state: WorldMissionState) {
+    const previous = this.worldState;
     this.worldState = state;
     if (state === "recovery_active") this.camera.focusRecoveryPath();
     else this.camera.focusMainGate();
+    // REKINDLE: a real, authoritative transition into an active recovery —
+    // the world briefly acknowledges it. Never fires from arcade state.
+    if (state === "recovery_active" && previous !== "recovery_active") {
+      this.camera.impulse(-8);
+    }
     this.renderWorldState();
   }
 
@@ -593,9 +599,11 @@ export class GoldlineGame {
     this.strongholdSprite.width =
       this.strongholdSprite.height *
       (this.strongholdSprite.texture.width / this.strongholdSprite.texture.height);
-    // Dim toward closed, keep bright otherwise — bright tropical direction
-    // preserved, never a dark villain-fortress treatment.
-    this.strongholdSprite.alpha = this.worldState === "closed" ? 0.5 : 0.92;
+    // Dim toward closed, settle brighter on a verified capture, otherwise
+    // the steady baseline — bright tropical direction preserved throughout,
+    // never a dark villain-fortress treatment.
+    this.strongholdSprite.alpha =
+      this.worldState === "closed" ? 0.5 : this.worldState === "captured" ? 1 : 0.92;
   }
 
   /**
@@ -739,8 +747,13 @@ export class GoldlineGame {
       }
       this.corridor.stroke({ width: strokeWidth, color, alpha });
     };
-    drawRoute(14, 0xf4bd48, 0.15);
-    drawRoute(3, 0xffdf77, 0.86);
+    // The main route dims once a recovery branch is the legitimate path —
+    // it does not disappear (the account isn't closed), but visual priority
+    // shifts to the recovery path drawn below.
+    const mainRouteDim =
+      this.worldState === "contested" || this.worldState === "recovery_active" ? 0.4 : 1;
+    drawRoute(14, 0xf4bd48, 0.15 * mainRouteDim);
+    drawRoute(3, 0xffdf77, 0.86 * mainRouteDim);
 
     this.fortress.clear();
     const gateX = width * 0.37;
