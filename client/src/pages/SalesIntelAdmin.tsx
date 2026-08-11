@@ -285,11 +285,41 @@ function SourceRegistryPanel() {
                   {source.status === "active" ? "DISABLE" : "RE-ENABLE"}
                 </Button>
               </div>
+              <SourceRecentContent sourceId={source.id} />
             </article>
           ))}
         </div>
       ) : null}
     </section>
+  );
+}
+
+/** Source health observability (Slice 50): what has this source actually produced recently? */
+function SourceRecentContent(props: { sourceId: string }) {
+  const [open, setOpen] = useState(false);
+  const recent = trpc.system.salesIntel.sourceRegistry.recentArtifacts.useQuery(
+    { id: props.sourceId },
+    { enabled: open }
+  );
+  return (
+    <div className="sales-intel-recent-content">
+      <button className="sales-intel-recent-toggle" onClick={() => setOpen(!open)}>
+        {open ? "HIDE RECENT CONTENT" : "SHOW RECENT CONTENT"}
+      </button>
+      {open ? (
+        recent.data?.length ? (
+          <ul>
+            {recent.data.map(artifact => (
+              <li key={artifact.id}>
+                <small>{artifact.status.toUpperCase()}</small> {artifact.title ?? artifact.canonicalUrl ?? "Untitled"}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="sales-intel-hint">Nothing discovered from this source yet.</p>
+        )
+      ) : null}
+    </div>
   );
 }
 
