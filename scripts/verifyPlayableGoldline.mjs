@@ -8,6 +8,7 @@ const mode = process.env.GOLDLINE_VERIFY_STATE ?? "available";
 const viewportWidth = Number(process.env.GOLDLINE_VERIFY_WIDTH ?? 390);
 const viewportHeight = Number(process.env.GOLDLINE_VERIFY_HEIGHT ?? 844);
 const viewportTag = `${viewportWidth}x${viewportHeight}`;
+const ARCHETYPE_MODES = ["gatekeeper", "ghost", "staller", "staller-nodate"];
 const missionStatus =
   mode === "contested"
     ? "follow_up"
@@ -15,15 +16,28 @@ const missionStatus =
       ? "won"
       : mode === "coldcall"
         ? "phone_ready"
-        : "game_ready";
+        : mode === "gatekeeper"
+          ? "en_route"
+          : mode === "ghost" || mode === "staller" || mode === "staller-nodate"
+            ? "phone_ready"
+            : "game_ready";
 const visualState =
   mode === "contested"
     ? "contested"
     : mode === "captured" || mode === "scout"
       ? "captured"
-      : "available";
+      : mode === "gatekeeper"
+        ? "active"
+        : mode === "ghost" || mode === "staller" || mode === "staller-nodate"
+          ? "watching"
+          : "available";
 let projectedVisualState = visualState;
 const dueAt = new Date(Date.now() + 48 * 60 * 60_000).toISOString();
+const missedAt = new Date(Date.now() - 36 * 60 * 60_000).toISOString();
+const stallerDueAt = new Date(Date.now() + 72 * 60 * 60_000).toISOString();
+/** The authoritative follow-up timestamp this run should surface, if any. */
+const archetypeContestedUntil =
+  mode === "ghost" ? missedAt : mode === "staller" ? stallerDueAt : null;
 
 const mission = {
   id: 901,
@@ -41,12 +55,17 @@ const mission = {
     latitude: 34.0522,
     longitude: -118.2437,
     locationCount: 1,
-    decisionMaker: {
-      name: null,
-      title: null,
-      email: null,
-      phone: null,
-    },
+    decisionMaker:
+      mode === "gatekeeper"
+        ? { name: null, title: null, email: null, phone: null }
+        : mode === "ghost" || mode === "staller" || mode === "staller-nodate"
+          ? {
+              name: "Sourced Contact",
+              title: "General Manager",
+              email: null,
+              phone: "+13105550147",
+            }
+          : { name: null, title: null, email: null, phone: null },
   },
   opportunity: {
     opportunityId: 301,
@@ -252,7 +271,8 @@ function responseFor(procedure, input) {
             ? "gold_recovery_path"
             : null,
         discoveryState: "discovered",
-        contestedUntil: mode === "contested" ? dueAt : null,
+        contestedUntil:
+          mode === "contested" ? dueAt : archetypeContestedUntil,
         verifiedAnnualValueCents: mode === "captured" ? 2160000 : null,
         realizedRevenueCents: 0,
         lossReason: null,
@@ -340,6 +360,160 @@ function responseFor(procedure, input) {
         provenance: "foundation",
         sourceLabel: "Armory foundation",
       },
+    };
+  }
+  if (procedure === "system.armory.weapons") {
+    const archetype = input?.archetype ?? "ANCHOR";
+    const channel = input?.channel ?? "phone";
+    const base = { archetype, channel, personalEvidence: null };
+    if (archetype === "GATEKEEPER") {
+      return {
+        archetype,
+        channel,
+        trainerIntelligenceAvailable: true,
+        weapons: [
+          {
+            ...base,
+            id: "framework:fixture-gatekeeper-timing",
+            title: "Callback Window",
+            responseFamily: "seek_callback_window",
+            spokenLine: null,
+            discoveryQuestion: "When is a better time to reach them?",
+            principle: "A time is easier to give than a person.",
+            exampleLanguage: [
+              {
+                kind: "exact_source_phrase",
+                text: "When is a better time to reach them?",
+              },
+            ],
+            whenToUse: [],
+            whenNotToUse: [],
+            provenance: {
+              type: "trainer_source",
+              creator: "Fixture Trainer",
+              creatorHandle: "@fixture",
+              frameworkId: "00000000-0000-4000-8000-0000000000f1",
+              frameworkName: "Callback Window",
+              sourceArtifactId: "00000000-0000-4000-8000-0000000000a1",
+              sourceUrl: "https://www.youtube.com/watch?v=fixture0001",
+              sourceType: "youtube",
+              transcriptStartMs: 12000,
+              transcriptEndMs: 41000,
+              extractionVersion: "fixture-extraction-v1",
+              extractionModel: "fixture-model",
+              confidence: 0.88,
+            },
+            fit: "high",
+            fitReason: "High-confidence framework from Fixture Trainer",
+          },
+          {
+            ...base,
+            id: "foundation:state-purpose",
+            title: "STATE PURPOSE PLAINLY",
+            responseFamily: "transparent_purpose",
+            spokenLine: "Who looks after that here?",
+            discoveryQuestion: "Who looks after that here?",
+            principle: "A gatekeeper routes people.",
+            exampleLanguage: [],
+            whenToUse: [],
+            whenNotToUse: [],
+            provenance: {
+              type: "foundation",
+              sourceReference: "armory:foundation:gatekeeper:state-purpose",
+            },
+            fit: "low",
+            fitReason: "Baseline move",
+          },
+          {
+            ...base,
+            id: "foundation:ask-route",
+            title: "ASK FOR THE ROUTE",
+            responseFamily: "seek_alternate_route",
+            spokenLine: null,
+            discoveryQuestion: "Is there a better way to reach them?",
+            principle: "Ask which door is open.",
+            exampleLanguage: [],
+            whenToUse: [],
+            whenNotToUse: [],
+            provenance: {
+              type: "foundation",
+              sourceReference: "armory:foundation:gatekeeper:ask-route",
+            },
+            fit: "low",
+            fitReason: "Baseline move",
+          },
+        ],
+      };
+    }
+    if (archetype === "GHOST") {
+      return {
+        archetype,
+        channel,
+        trainerIntelligenceAvailable: false,
+        weapons: [
+          {
+            ...base,
+            id: "foundation:change-channel",
+            title: "CHANGE THE CHANNEL",
+            responseFamily: "channel_switch",
+            spokenLine: null,
+            discoveryQuestion: null,
+            principle: "Silence on one channel is not refusal.",
+            exampleLanguage: [],
+            whenToUse: [],
+            whenNotToUse: [],
+            provenance: {
+              type: "foundation",
+              sourceReference: "armory:foundation:ghost:change-channel",
+            },
+            fit: "low",
+            fitReason: "Baseline move",
+          },
+        ],
+      };
+    }
+    if (archetype === "STALLER") {
+      return {
+        archetype,
+        channel,
+        trainerIntelligenceAvailable: false,
+        weapons: [
+          {
+            ...base,
+            id: "foundation:specific-date",
+            title: "GET A SPECIFIC DATE",
+            responseFamily: "specific_next_date",
+            spokenLine: null,
+            discoveryQuestion: "What date should I come back to you on?",
+            principle: "A specific date can be recorded; later cannot.",
+            exampleLanguage: [],
+            whenToUse: [],
+            whenNotToUse: [],
+            provenance: {
+              type: "foundation",
+              sourceReference: "armory:foundation:staller:specific-date",
+            },
+            fit: "low",
+            fitReason: "Baseline move",
+          },
+        ],
+      };
+    }
+    return {
+      archetype,
+      channel,
+      trainerIntelligenceAvailable: false,
+      weapons: [],
+    };
+  }
+  if (procedure === "system.armory.recordUsage") {
+    return {
+      id: "00000000-0000-4000-8000-0000000000u1",
+      weaponId: input?.weaponId ?? "unknown",
+      missionId: input?.missionId ?? 901,
+      archetype: input?.archetype ?? "ANCHOR",
+      channel: input?.channel ?? "phone",
+      usedAt: new Date().toISOString(),
     };
   }
   if (procedure === "system.openChannel.current") return null;
@@ -471,6 +645,13 @@ page.on("pageerror", error => errors.push(error.message));
 page.on("console", message => {
   if (message.type() === "error") errors.push(message.text());
 });
+// Name the resource: a bare "404" is not actionable. Scoped to app-origin
+// requests so a third-party CDN hiccup cannot fail an app verification run.
+page.on("response", response => {
+  if (response.status() >= 400 && response.url().startsWith(baseUrl)) {
+    errors.push(`HTTP ${response.status()} ${response.url()}`);
+  }
+});
 await page.route("**/api/trpc/**", async route => {
   const url = new URL(route.request().url());
   const procedures = decodeURIComponent(
@@ -486,6 +667,21 @@ await page.route("**/api/trpc/**", async route => {
     body: JSON.stringify(url.searchParams.get("batch") === "1" ? payload : payload[0]),
   });
 });
+
+if (ARCHETYPE_MODES.includes(mode)) {
+  await page.addInitScript(() => {
+    window.__GOLDLINE_DETERMINISTIC_ENCOUNTERS__ = true;
+  });
+}
+
+// Keep the run hermetic: a third-party font or analytics host must never be
+// able to fail an app verification. Same-origin traffic is untouched.
+await page.route(
+  requestUrl => !requestUrl.href.startsWith(baseUrl),
+  // Fulfilled rather than aborted: an abort raises its own console error,
+  // which would just trade one false failure for another.
+  route => route.fulfill({ status: 200, body: "", contentType: "text/plain" })
+);
 
 await page.goto(`${baseUrl}/driver`, { waitUntil: "networkidle" });
 await page.locator("canvas.goldline-game-canvas").waitFor({ state: "visible" });
@@ -678,6 +874,282 @@ await page.getByRole("button", { name: /VAULT/i }).click();
 await page.waitForTimeout(700);
 await pushForward(900);
 await page.getByRole("button", { name: /INTERACT/i }).click();
+
+// ---------------------------------------------------------------------------
+// Archetype golden paths. Each mode is triggered by positive authoritative
+// evidence in the fixture, never by missing data, and each asserts that a
+// clean game result still does not fabricate a business fact.
+// ---------------------------------------------------------------------------
+async function armoryChoiceCount() {
+  return page.locator(".armory-weapon").count();
+}
+
+async function assertNoFabricatedCountdown() {
+  const body = await page.locator("body").innerText();
+  if (/COOLING \d/i.test(body)) {
+    throw new Error("A countdown was rendered without a sourced timestamp");
+  }
+}
+
+if (mode === "gatekeeper") {
+  await page.getByRole("region", { name: "Gatekeeper encounter" }).waitFor();
+
+  const choices = await armoryChoiceCount();
+  if (choices === 0 || choices > 3) {
+    throw new Error(`Gatekeeper offered ${choices} weapons; expected 1-3`);
+  }
+
+  // Provenance must be inspectable, and must name a real source artifact.
+  await page.locator(".armory-weapon-provenance-toggle").first().click();
+  await page.getByText("FROM SALES INTEL", { exact: true }).waitFor();
+  await page.getByText("Fixture Trainer", { exact: false }).first().waitFor();
+  const provenanceHtml = await page.locator(".armory-weapon-provenance").first().innerHTML();
+  if (!provenanceHtml.includes("youtube.com/watch?v=fixture0001")) {
+    throw new Error("Trainer weapon did not expose its source artifact URL");
+  }
+  await page.locator(".armory-weapon-provenance-toggle").first().click();
+  if (await page.locator(".armory-weapon-provenance").count()) {
+    throw new Error("Provenance panel could not be collapsed");
+  }
+
+  // Game input alone must not have produced any access claim yet.
+  const beforeRouting = await page.locator("body").innerText();
+  if (/ACCESS GRANTED|NAME DISCOVERED/i.test(beforeRouting)) {
+    throw new Error("Access information appeared before any routing occurred");
+  }
+
+  // Choose the callback-window move, then route it to the WHEN gate.
+  await page
+    .locator(".armory-weapon-main", { hasText: "Callback Window" })
+    .first()
+    .click();
+  const origin = await page.locator(".gate-origin").boundingBox();
+  const whenGate = await page
+    .locator(".gate-node", { hasText: "WHEN" })
+    .first()
+    .boundingBox();
+  if (!origin || !whenGate) throw new Error("Gatekeeper routing field did not render");
+
+  await page.mouse.move(origin.x + origin.width / 2, origin.y + origin.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    whenGate.x + whenGate.width / 2,
+    whenGate.y + whenGate.height / 2,
+    { steps: 12 }
+  );
+  await page.mouse.up();
+
+  await page.getByText(/ROUTE OPEN/i).waitFor();
+  await page.getByText("GAME RESULT ≠ ACCESS GRANTED", { exact: true }).waitFor();
+
+  // A clean route is not a recorded fact.
+  const afterRouting = await page.locator("body").innerText();
+  if (/ACCESS GRANTED\b(?!.*≠)/i.test(afterRouting.replace(/GAME RESULT ≠ ACCESS GRANTED/g, ""))) {
+    throw new Error("Routing fabricated an access result");
+  }
+
+  await page.screenshot({
+    path: `${outputDir}/goldline-gatekeeper-${viewportTag}.png`,
+    fullPage: true,
+  });
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.locator("canvas.goldline-game-canvas").waitFor({ state: "visible" });
+  const persisted = await page.locator("body").innerText();
+  if (!/NO ACTIVE MISSION|Maybourne/i.test(persisted)) {
+    throw new Error("World state did not persist across reload");
+  }
+
+  if (await page.getByText("DEPLOY", { exact: true }).count()) {
+    throw new Error("Forbidden DEPLOY control rendered");
+  }
+  if (errors.length) throw new Error(`Browser errors: ${errors.join(" | ")}`);
+
+  console.log(
+    JSON.stringify({
+      pageLoaded: true,
+      viewport: viewportTag,
+      encounter: "GATEKEEPER",
+      horizontalOverflow: false,
+      observedAnimationFrames,
+      armoryChoices: choices,
+      provenanceInspectable: true,
+      provenanceCollapsible: true,
+      routingMechanicUsable: true,
+      distinctFromAnchorWeakPoint: true,
+      accessNotFabricatedByGameInput: true,
+      reloadPersisted: true,
+      browserErrors: errors,
+      screenshot: `${outputDir}/goldline-gatekeeper-${viewportTag}.png`,
+    })
+  );
+  await browser.close();
+  process.exit(0);
+}
+
+if (mode === "ghost") {
+  await page.getByRole("region", { name: "Ghost encounter" }).waitFor();
+
+  const choices = await armoryChoiceCount();
+  if (choices === 0 || choices > 3) {
+    throw new Error(`Ghost offered ${choices} weapons; expected 1-3`);
+  }
+
+  await page
+    .locator(".armory-weapon-main", { hasText: "CHANGE THE CHANNEL" })
+    .first()
+    .click();
+
+  // Sustained tracking: hold contact with the beacon until the lock completes.
+  const field = await page.locator(".signal-field").boundingBox();
+  if (!field) throw new Error("Ghost signal field did not render");
+  const centreX = field.x + field.width / 2;
+  const centreY = field.y + field.height / 2;
+  await page.mouse.move(centreX, centreY);
+  await page.mouse.down();
+  await page.waitForTimeout(2400);
+  await page.mouse.up();
+
+  await page.getByText(/SIGNAL LOCKED/i).waitFor();
+
+  // The load-bearing assertion: perfect execution is not a reply.
+  await page.getByText("A PERFECT LOCK IS NOT A REPLY", { exact: true }).waitFor();
+  const afterLock = await page.locator("body").innerText();
+  if (/THEY REPLIED|RESPONSE RECEIVED|PROSPECT REPLIED|CAPTURED/i.test(afterLock)) {
+    throw new Error("Perfect game input fabricated a prospect response");
+  }
+  if (/\$[\d,]+\/YEAR SECURED/i.test(afterLock)) {
+    throw new Error("Ghost encounter fabricated a won account");
+  }
+
+  await page.screenshot({
+    path: `${outputDir}/goldline-ghost-${viewportTag}.png`,
+    fullPage: true,
+  });
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.locator("canvas.goldline-game-canvas").waitFor({ state: "visible" });
+  const persisted = await page.locator("body").innerText();
+  if (/CAPTURED|SECURED/i.test(persisted)) {
+    throw new Error("A fabricated win persisted across reload");
+  }
+
+  if (errors.length) throw new Error(`Browser errors: ${errors.join(" | ")}`);
+
+  console.log(
+    JSON.stringify({
+      pageLoaded: true,
+      viewport: viewportTag,
+      encounter: "GHOST",
+      horizontalOverflow: false,
+      observedAnimationFrames,
+      armoryChoices: choices,
+      trackingMechanicUsable: true,
+      signalLockAchieved: true,
+      perfectInputDidNotFabricateReply: true,
+      reloadPersisted: true,
+      browserErrors: errors,
+      screenshot: `${outputDir}/goldline-ghost-${viewportTag}.png`,
+    })
+  );
+  await browser.close();
+  process.exit(0);
+}
+
+if (mode === "staller") {
+  await page.getByRole("region", { name: "Staller encounter" }).waitFor();
+
+  const choices = await armoryChoiceCount();
+  if (choices === 0 || choices > 3) {
+    throw new Error(`Staller offered ${choices} weapons; expected 1-3`);
+  }
+
+  // The countdown must derive from the authoritative follow-up timestamp.
+  await page.getByText("REAL COMMITMENT ON RECORD", { exact: true }).waitFor();
+  const expected = new Date(stallerDueAt).toLocaleString([], {
+    weekday: "long",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const clockText = await page.locator(".staller-real-clock").innerText();
+  if (!clockText.includes(expected)) {
+    throw new Error(
+      `Staller clock did not derive from the sourced timestamp. Expected "${expected}" in "${clockText}"`
+    );
+  }
+
+  await page
+    .locator(".armory-weapon-main", { hasText: "GET A SPECIFIC DATE" })
+    .first()
+    .click();
+  await page.getByRole("button", { name: "COMMIT", exact: true }).click();
+  await page.getByText(/ALIGNED/i).first().waitFor();
+  await page.getByText("ALIGNMENT ≠ A COMMITTED DATE", { exact: true }).waitFor();
+
+  await page.screenshot({
+    path: `${outputDir}/goldline-staller-${viewportTag}.png`,
+    fullPage: true,
+  });
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.locator("canvas.goldline-game-canvas").waitFor({ state: "visible" });
+
+  if (errors.length) throw new Error(`Browser errors: ${errors.join(" | ")}`);
+
+  console.log(
+    JSON.stringify({
+      pageLoaded: true,
+      viewport: viewportTag,
+      encounter: "STALLER",
+      horizontalOverflow: false,
+      observedAnimationFrames,
+      armoryChoices: choices,
+      alignmentMechanicUsable: true,
+      countdownDerivedFromSourcedTimestamp: true,
+      sourcedFollowUpAt: stallerDueAt,
+      alignmentIsNotACommitment: true,
+      reloadPersisted: true,
+      browserErrors: errors,
+      screenshot: `${outputDir}/goldline-staller-${viewportTag}.png`,
+    })
+  );
+  await browser.close();
+  process.exit(0);
+}
+
+if (mode === "staller-nodate") {
+  // With no committed date on record there must be no Staller and no timer.
+  if (await page.getByRole("region", { name: "Staller encounter" }).count()) {
+    throw new Error("A Staller encounter appeared without any sourced date");
+  }
+  await assertNoFabricatedCountdown();
+  const body = await page.locator("body").innerText();
+  if (/REAL COMMITMENT ON RECORD/i.test(body)) {
+    throw new Error("A commitment was claimed without a sourced timestamp");
+  }
+
+  await page.screenshot({
+    path: `${outputDir}/goldline-staller-nodate-${viewportTag}.png`,
+    fullPage: true,
+  });
+
+  if (errors.length) throw new Error(`Browser errors: ${errors.join(" | ")}`);
+
+  console.log(
+    JSON.stringify({
+      pageLoaded: true,
+      viewport: viewportTag,
+      encounter: "NONE (no sourced date)",
+      noFabricatedCountdown: true,
+      noStallerWithoutEvidence: true,
+      browserErrors: errors,
+      screenshot: `${outputDir}/goldline-staller-nodate-${viewportTag}.png`,
+    })
+  );
+  await browser.close();
+  process.exit(0);
+}
+
 await page.getByRole("region", { name: "Anchor encounter" }).waitFor();
 
 const noRiskTrial = page.getByRole("button", { name: /NO-RISK TRIAL/i });

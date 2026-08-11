@@ -4845,3 +4845,272 @@ export const openChannelTaskEvents = mysqlTable(
     ),
   })
 );
+
+/**
+ * Slice 13 — Armory Evolution.
+ *
+ * `sales_intel_*` is global trainer intelligence, shared across tenants.
+ * `armory_weapon_*` is personal evidence and is always tenant + actor scoped.
+ * The two layers are never merged and never overwrite one another.
+ */
+const longtext = customType<{ data: string; driverData: string }>({
+  dataType() {
+    return "longtext";
+  },
+});
+
+/** Immutable record of where sales intelligence came from. Never rewritten. */
+export const salesIntelSourceArtifacts = mysqlTable(
+  "sales_intel_source_artifacts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    sourceType: mysqlEnum("sourceType", [
+      "manual_url",
+      "instagram",
+      "youtube",
+      "podcast",
+      "uploaded_transcript",
+      "test_fixture",
+      "other",
+    ]).notNull(),
+    sourceUrl: varchar("sourceUrl", { length: 1024 }),
+    canonicalUrl: varchar("canonicalUrl", { length: 1024 }),
+    externalContentId: varchar("externalContentId", { length: 191 }),
+    creatorName: varchar("creatorName", { length: 191 }),
+    creatorHandle: varchar("creatorHandle", { length: 191 }),
+    publishedAt: timestamp("publishedAt"),
+    title: varchar("title", { length: 512 }),
+    contentHash: varchar("contentHash", { length: 64 }).notNull(),
+    status: mysqlEnum("status", [
+      "received",
+      "awaiting_content",
+      "processing",
+      "analyzed",
+      "extracted",
+      "failed",
+    ])
+      .notNull()
+      .default("received"),
+    failureCode: varchar("failureCode", { length: 96 }),
+    failureMessage: varchar("failureMessage", { length: 512 }),
+    failureRetryable: boolean("failureRetryable").notNull().default(false),
+    attemptCount: int("attemptCount").notNull().default(0),
+    lastAttemptAt: timestamp("lastAttemptAt"),
+    metadataJson: json("metadataJson").notNull(),
+    ingestedBy: varchar("ingestedBy", { length: 128 }).notNull(),
+    ingestedAt: timestamp("ingestedAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    contentUnique: uniqueIndex("uq_sales_intel_source_content").on(
+      table.contentHash
+    ),
+    statusIdx: index("idx_sales_intel_source_status").on(
+      table.status,
+      table.ingestedAt
+    ),
+    externalIdx: index("idx_sales_intel_source_external").on(
+      table.sourceType,
+      table.externalContentId
+    ),
+  })
+);
+
+/** Transcript or model-derived video analysis, versioned per source. */
+export const salesIntelTranscripts = mysqlTable(
+  "sales_intel_transcripts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    sourceArtifactId: varchar("sourceArtifactId", { length: 36 }).notNull(),
+    contentKind: mysqlEnum("contentKind", [
+      "supplied_transcript",
+      "video_understanding",
+      "audio_transcription",
+      "caption_only",
+    ])
+      .notNull()
+      .default("supplied_transcript"),
+    text: longtext("text").notNull(),
+    segmentsJson: json("segmentsJson").notNull(),
+    provider: varchar("provider", { length: 96 }),
+    model: varchar("model", { length: 96 }),
+    analysisVersion: varchar("analysisVersion", { length: 96 }),
+    version: int("version").notNull().default(1),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    versionUnique: uniqueIndex("uq_sales_intel_transcript_version").on(
+      table.sourceArtifactId,
+      table.version
+    ),
+    sourceIdx: index("idx_sales_intel_transcript_source").on(
+      table.sourceArtifactId,
+      table.createdAt
+    ),
+  })
+);
+
+/** Normalized trainer teaching. Contradictory trainers stay contradictory. */
+export const salesIntelFrameworks = mysqlTable(
+  "sales_intel_frameworks",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    sourceArtifactId: varchar("sourceArtifactId", { length: 36 }).notNull(),
+    transcriptId: varchar("transcriptId", { length: 36 }),
+    frameworkKey: varchar("frameworkKey", { length: 64 }).notNull(),
+    creatorName: varchar("creatorName", { length: 191 }).notNull(),
+    creatorHandle: varchar("creatorHandle", { length: 191 }),
+    archetype: mysqlEnum("archetype", [
+      "ANCHOR",
+      "GATEKEEPER",
+      "GHOST",
+      "STALLER",
+    ]).notNull(),
+    channel: mysqlEnum("channel", [
+      "phone",
+      "in_person",
+      "follow_up",
+      "proposal",
+    ]).notNull(),
+    exactObjection: varchar("exactObjection", { length: 1000 }).notNull(),
+    diagnosis: text("diagnosis"),
+    frameworkName: varchar("frameworkName", { length: 191 }).notNull(),
+    principle: text("principle").notNull(),
+    responseFamily: varchar("responseFamily", { length: 191 }).notNull(),
+    discoveryQuestionsJson: json("discoveryQuestionsJson").notNull(),
+    exampleLanguageJson: json("exampleLanguageJson").notNull(),
+    whenToUseJson: json("whenToUseJson").notNull(),
+    whenNotToUseJson: json("whenNotToUseJson").notNull(),
+    followUpMovesJson: json("followUpMovesJson").notNull(),
+    badResponsesJson: json("badResponsesJson").notNull(),
+    confidence: decimal("confidence", { precision: 4, scale: 3 }),
+    extractionVersion: varchar("extractionVersion", { length: 96 }).notNull(),
+    extractionProvider: varchar("extractionProvider", { length: 96 }),
+    extractionModel: varchar("extractionModel", { length: 96 }),
+    promptVersion: varchar("promptVersion", { length: 96 }),
+    transcriptStartMs: int("transcriptStartMs"),
+    transcriptEndMs: int("transcriptEndMs"),
+    reviewState: mysqlEnum("reviewState", [
+      "review_required",
+      "accepted",
+      "rejected",
+    ])
+      .notNull()
+      .default("review_required"),
+    reviewedBy: varchar("reviewedBy", { length: 128 }),
+    reviewedAt: timestamp("reviewedAt"),
+    version: int("version").notNull().default(1),
+    active: boolean("active").notNull().default(true),
+    supersededAt: timestamp("supersededAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    versionUnique: uniqueIndex("uq_sales_intel_framework_version").on(
+      table.frameworkKey,
+      table.version
+    ),
+    lookupIdx: index("idx_sales_intel_framework_lookup").on(
+      table.archetype,
+      table.channel,
+      table.reviewState,
+      table.active
+    ),
+    sourceIdx: index("idx_sales_intel_framework_source").on(
+      table.sourceArtifactId,
+      table.createdAt
+    ),
+  })
+);
+
+/** Layer B: what happened when THIS player used a weapon. Tenant scoped. */
+export const armoryWeaponUsages = mysqlTable(
+  "armory_weapon_usages",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    missionId: int("missionId").notNull(),
+    weaponId: varchar("weaponId", { length: 191 }).notNull(),
+    frameworkId: varchar("frameworkId", { length: 36 }),
+    archetype: mysqlEnum("archetype", [
+      "ANCHOR",
+      "GATEKEEPER",
+      "GHOST",
+      "STALLER",
+    ]).notNull(),
+    channel: mysqlEnum("channel", [
+      "phone",
+      "in_person",
+      "follow_up",
+      "proposal",
+    ]).notNull(),
+    provenanceKind: mysqlEnum("provenanceKind", [
+      "trainer_source",
+      "personal_evidence",
+      "foundation",
+    ]).notNull(),
+    requestId: varchar("requestId", { length: 36 }).notNull(),
+    usedAt: timestamp("usedAt").defaultNow().notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    requestUnique: uniqueIndex("uq_armory_weapon_usage_request").on(
+      table.tenantId,
+      table.requestId
+    ),
+    weaponIdx: index("idx_armory_weapon_usage_weapon").on(
+      table.tenantId,
+      table.actorId,
+      table.weaponId,
+      table.usedAt
+    ),
+    missionIdx: index("idx_armory_weapon_usage_mission").on(
+      table.tenantId,
+      table.missionId,
+      table.usedAt
+    ),
+  })
+);
+
+/**
+ * Outcomes observed after a weapon was used. Append-only, and deliberately an
+ * association rather than an attribution — a later win is evidence, not proof
+ * that the weapon caused it.
+ */
+export const armoryWeaponOutcomes = mysqlTable(
+  "armory_weapon_outcomes",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    usageId: varchar("usageId", { length: 36 }).notNull(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    missionId: int("missionId").notNull(),
+    weaponId: varchar("weaponId", { length: 191 }).notNull(),
+    outcomeKind: mysqlEnum("outcomeKind", [
+      "follow_up_created",
+      "call_logged",
+      "visit_completed",
+      "account_won",
+      "account_lost",
+      "access_recorded",
+      "no_change",
+    ]).notNull(),
+    outcomeReference: varchar("outcomeReference", { length: 191 }).notNull(),
+    observedAt: timestamp("observedAt").defaultNow().notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    outcomeUnique: uniqueIndex("uq_armory_weapon_outcome").on(
+      table.tenantId,
+      table.usageId,
+      table.outcomeKind,
+      table.outcomeReference
+    ),
+    weaponIdx: index("idx_armory_weapon_outcome_weapon").on(
+      table.tenantId,
+      table.actorId,
+      table.weaponId,
+      table.observedAt
+    ),
+  })
+);

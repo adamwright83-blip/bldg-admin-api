@@ -1,0 +1,199 @@
+/**
+ * Video understanding port.
+ *
+ * The repository's existing LLM abstraction (`server/_core/llm.ts`) is
+ * Anthropic-only and structurally cannot accept video, so Sales Intel defines
+ * a narrow port instead of widening that abstraction. Extraction still runs on
+ * the existing `invokeLLM` path — this port only produces the transcript /
+ * analysis that extraction consumes.
+ *
+ * When no provider is configured the port reports `provider_unavailable`. The
+ * caller preserves the source artifact and moves it to `awaiting_content`.
+ * A missing credential must never become an invented transcript.
+ */
+import type { SalesIntelTranscriptSegment } from "../../shared/salesIntel";
+
+export type VideoUnderstandingRequest = {
+  canonicalUrl: string;
+  externalContentId: string | null;
+};
+
+export type VideoUnderstandingResult = {
+  text: string;
+  segments: SalesIntelTranscriptSegment[];
+  provider: string;
+  model: string;
+  analysisVersion: string;
+};
+
+export class VideoUnderstandingUnavailableError extends Error {
+  readonly code = "provider_unavailable";
+  readonly retryable = true;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "VideoUnderstandingUnavailableError";
+  }
+}
+
+export class VideoUnderstandingFailedError extends Error {
+  readonly code: string;
+  readonly retryable: boolean;
+
+  constructor(message: string, code = "analysis_failed", retryable = true) {
+    super(message);
+    this.name = "VideoUnderstandingFailedError";
+    this.code = code;
+    this.retryable = retryable;
+  }
+}
+
+export interface VideoUnderstandingProvider {
+  readonly key: string;
+  readonly configured: boolean;
+  analyze(
+    request: VideoUnderstandingRequest
+  ): Promise<VideoUnderstandingResult>;
+}
+
+/** Used when no credential exists. Always refuses; never fabricates. */
+export class UnconfiguredVideoUnderstandingProvider
+  implements VideoUnderstandingProvider
+{
+  readonly key = "unconfigured";
+  readonly configured = false;
+
+  async analyze(): Promise<VideoUnderstandingResult> {
+    throw new VideoUnderstandingUnavailableError(
+      "No video-understanding provider is configured. Supply a transcript for this source instead."
+    );
+  }
+}
+
+export const VIDEO_ANALYSIS_VERSION = "sales-intel-video-analysis-v1";
+
+const ANALYSIS_INSTRUCTION = [
+  "Transcribe the spoken sales instruction in this video as faithfully as possible.",
+  "Return only what is actually said. Do not summarize, embellish, or invent claims.",
+  "Preserve the speaker's own wording, including objection phrasing and example language.",
+  "If the video contains no sales instruction, say exactly: NO_SALES_INSTRUCTION",
+].join(" ");
+
+/**
+ * Gemini video understanding over a public YouTube URL.
+ *
+ * Implemented with `fetch` against the Generative Language REST API so no new
+ * npm dependency or overlapping AI abstraction is introduced. Enabled only
+ * when `GEMINI_API_KEY` is present.
+ */
+export class GeminiVideoUnderstandingProvider
+  implements VideoUnderstandingProvider
+{
+  readonly key = "gemini";
+
+  constructor(
+    private readonly apiKey: string,
+    private readonly model = process.env.GEMINI_VIDEO_MODEL?.trim() ||
+      "gemini-2.0-flash",
+    private readonly fetchImpl: typeof fetch = fetch,
+    private readonly timeoutMs = 60_000
+  ) {}
+
+  get configured(): boolean {
+    return this.apiKey.trim().length > 0;
+  }
+
+  async analyze(
+    request: VideoUnderstandingRequest
+  ): Promise<VideoUnderstandingResult> {
+    if (!this.configured) {
+      throw new VideoUnderstandingUnavailableError(
+        "GEMINI_API_KEY is not configured; YouTube video understanding is unavailable."
+      );
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    let response: Response;
+    try {
+      response = await this.fetchImpl(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+          this.model
+        )}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-goog-api-key": this.apiKey,
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: ANALYSIS_INSTRUCTION },
+                  { file_data: { file_uri: request.canonicalUrl } },
+                ],
+              },
+            ],
+            generationConfig: { temperature: 0 },
+          }),
+        }
+      );
+    } catch (error) {
+      throw new VideoUnderstandingFailedError(
+        error instanceof Error && error.name === "AbortError"
+          ? "Video analysis timed out"
+          : "Video analysis request failed",
+        "transport_error",
+        true
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (!response.ok) {
+      // 4xx generally means this video cannot be analyzed at all; 5xx is worth a retry.
+      const retryable = response.status >= 500 || response.status === 429;
+      throw new VideoUnderstandingFailedError(
+        `Video analysis provider returned ${response.status}`,
+        `provider_http_${response.status}`,
+        retryable
+      );
+    }
+
+    const payload = (await response.json()) as {
+      candidates?: Array<{
+        content?: { parts?: Array<{ text?: string }> };
+      }>;
+    };
+    const text = (payload.candidates?.[0]?.content?.parts ?? [])
+      .map(part => part.text ?? "")
+      .join("")
+      .trim();
+
+    if (!text || text === "NO_SALES_INSTRUCTION") {
+      throw new VideoUnderstandingFailedError(
+        "The provider returned no usable sales instruction for this video",
+        "empty_analysis",
+        false
+      );
+    }
+
+    return {
+      text,
+      segments: [],
+      provider: this.key,
+      model: this.model,
+      analysisVersion: VIDEO_ANALYSIS_VERSION,
+    };
+  }
+}
+
+export function resolveVideoUnderstandingProvider(
+  apiKey = process.env.GEMINI_API_KEY ?? ""
+): VideoUnderstandingProvider {
+  return apiKey.trim()
+    ? new GeminiVideoUnderstandingProvider(apiKey)
+    : new UnconfiguredVideoUnderstandingProvider();
+}

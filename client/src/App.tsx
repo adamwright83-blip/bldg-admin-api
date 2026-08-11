@@ -23,6 +23,7 @@ const TerritoryPreview = lazy(() => import("./pages/TerritoryPreview"));
 const CommercialMissionAdmin = lazy(
   () => import("./pages/CommercialMissionAdmin")
 );
+const SalesIntelAdmin = lazy(() => import("./pages/SalesIntelAdmin"));
 const CommercialSalesMission = lazy(
   () => import("./pages/CommercialSalesMission")
 );
@@ -141,6 +142,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/vendors",
   "/level4",
   "/commercial-missions",
+  "/sales-intel",
   "/commercial-proposal-settings",
   "/churn-radar",
   "/commercial-pipeline",
@@ -226,6 +228,11 @@ function AdminHostRouter() {
       <Route path="/commercial-missions">
         <Suspense fallback={<PublicLandingFallback />}>
           <CommercialMissionAdmin />
+        </Suspense>
+      </Route>
+      <Route path="/sales-intel">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <SalesIntelAdmin />
         </Suspense>
       </Route>
       <Route path="/julydemo">
