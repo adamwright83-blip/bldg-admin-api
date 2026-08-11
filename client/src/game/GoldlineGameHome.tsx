@@ -56,8 +56,14 @@ import {
   projectPersistentHistory,
   projectPlayableMissions,
 } from "./state/WorldProjection";
+import { selectMissionDirector } from "./state/MissionDirector";
 import { landmarkForMission } from "../../../shared/worldSemantics";
 import { networkStatusLabel, useNetworkStatus } from "./session/useNetworkStatus";
+import { loadCheckpoint, saveCheckpoint } from "./session/checkpointStorage";
+import { registerGoldlineServiceWorker } from "./pwa/registerServiceWorker";
+import { installPwaHeadTags } from "./pwa/installPwaHead";
+import { isIOS, isStandalone } from "./pwa/pwaEnvironment";
+import { hasInstallPrompt, subscribeInstallPrompt, triggerInstallPrompt } from "./pwa/installPrompt";
 import { getGoldlineSessionId } from "./analytics/goldlineSession";
 import type { GoldlineEventEmitter } from "./analytics/emitGoldlineEvent";
 import { getAudioManager } from "./audio/AudioManager";
@@ -75,6 +81,11 @@ import { ColdCallBurst } from "./encounters/coldCall/ColdCallBurst";
 import { VictoryCeremony } from "./victory/VictoryCeremony";
 import { ScoutCapabilityChamber } from "./capabilities/ScoutCapabilityChamber";
 import { ScoutReportPanel } from "./agents/scout/ScoutReportPanel";
+import {
+  hasOnboardingMilestone,
+  markOnboardingMilestone,
+  type OnboardingMilestone,
+} from "./onboarding/onboardingProgress";
 import {
   archetypeForMission,
   channelForMission,
@@ -146,6 +157,9 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
 
 type UtilityPanel = "menu" | "route" | "objectives" | "open-channel" | null;
 
+/** Matches corridor_01/manifest.json's `id` — the only corridor that exists. */
+const CORRIDOR_ID = "corridor_01";
+
 function formatDue(value: string | null) {
   if (!value) return "Awaiting a sourced follow-up time";
   return new Date(value).toLocaleString([], {
@@ -171,6 +185,9 @@ function branchCopy(branch: CorridorBranch) {
 function Joystick(props: {
   disabled: boolean;
   onInput: (x: number, y: number) => void;
+  /** Shown only until the player's first real movement, then never again this device. */
+  showMovementHint?: boolean;
+  onFirstMove?: () => void;
 }) {
   const baseRef = useRef<HTMLDivElement>(null);
   const pointerRef = useRef<number | null>(null);
@@ -189,6 +206,7 @@ function Joystick(props: {
     }
     setKnob({ x, y });
     props.onInput(x, y);
+    if (length > 0.15) props.onFirstMove?.();
   }
 
   function release(event?: ReactPointerEvent<HTMLDivElement>) {
@@ -224,6 +242,7 @@ function Joystick(props: {
         }}
       />
       <span>MOVE</span>
+      {props.showMovementHint ? <em className="joystick-hint" aria-hidden="true" /> : null}
     </div>
   );
 }
@@ -303,9 +322,9 @@ function MissionFork(props: {
         {props.missions.map((mission, index) => (
           <button
             key={mission.key}
-            className={`is-${stateTone(mission.state)} ${landmarkForMission({ visualState: mission.state }).cssClass}${mission.key === props.activeKey ? " is-active" : ""}`}
+            className={`is-${stateTone(mission.state)} ${landmarkForMission({ visualState: mission.state }).cssClass}${mission.key === props.activeKey ? " is-active" : ""}${index === 0 ? " is-primary" : ""}`}
             onClick={() => props.onSelect(mission)}
-            aria-label={`Select ${mission.name} — ${landmarkForMission({ visualState: mission.state }).label}`}
+            aria-label={`Select ${mission.name} — ${landmarkForMission({ visualState: mission.state }).label}${index === 0 ? " — primary" : ""}`}
           >
             {index + 1}
           </button>
@@ -371,6 +390,23 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const sessionIdRef = useRef(getGoldlineSessionId());
   const sessionStartRef = useRef(performance.now());
   const emit = props.onEmitEvent;
+  const [movementLearned, setMovementLearned] = useState(() =>
+    hasOnboardingMilestone("movement")
+  );
+  const [onboardingToast, setOnboardingToast] = useState<string | null>(null);
+  const onboardingToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showOnboardingToast = useRef((message: string) => {
+    setOnboardingToast(message);
+    if (onboardingToastTimer.current) clearTimeout(onboardingToastTimer.current);
+    onboardingToastTimer.current = setTimeout(() => setOnboardingToast(null), 1800);
+  }).current;
+  useEffect(() => () => {
+    if (onboardingToastTimer.current) clearTimeout(onboardingToastTimer.current);
+  }, []);
+  const completeMilestone = useRef((milestone: OnboardingMilestone) => {
+    markOnboardingMilestone(milestone);
+    if (milestone === "movement") setMovementLearned(true);
+  }).current;
 
   useEffect(() => {
     emit?.({
@@ -401,6 +437,17 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
+
+  const [canShowInstallPrompt, setCanShowInstallPrompt] = useState(hasInstallPrompt);
+  useEffect(() => {
+    const removeHeadTags = installPwaHeadTags();
+    registerGoldlineServiceWorker();
+    const unsubscribe = subscribeInstallPrompt(() => setCanShowInstallPrompt(hasInstallPrompt()));
+    return () => {
+      removeHeadTags();
+      unsubscribe();
+    };
+  }, []);
   const [encounterArchetype, setEncounterArchetype] =
     useState<ObjectionArchetype>("ANCHOR");
   const [encounterChannel, setEncounterChannel] =
@@ -409,7 +456,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [isLoadingWeapons, setIsLoadingWeapons] = useState(false);
   const [trainerIntelAvailable, setTrainerIntelAvailable] = useState(false);
 
-  const missions = useMemo(
+  const unranked = useMemo(
     () =>
       projectPlayableMissions({
         missions: props.salesMissions,
@@ -418,11 +465,23 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       }),
     [props.moves, props.salesMissions, props.worldNodes]
   );
-  const prioritized =
-    missions.find(mission => mission.state === "recovery_active") ??
-    missions.find(mission => mission.state === "contested") ??
-    missions[0] ??
-    null;
+  // Mission Director selects and paces which real missions get spotlighted —
+  // primary first, up to 2 secondary — from real evidence only. `missions`
+  // stays the same shape/order contract the rest of this component already
+  // expects (MissionFork's first icon is now provably the real primary).
+  const missionDirector = useMemo(
+    () => selectMissionDirector(unranked, new Date()),
+    [unranked]
+  );
+  const missions = useMemo(() => {
+    if (!missionDirector.primary) return unranked;
+    const rankedKeys = new Set(
+      [missionDirector.primary, ...missionDirector.secondary].map(m => m.key)
+    );
+    const rest = unranked.filter(m => !rankedKeys.has(m.key));
+    return [missionDirector.primary, ...missionDirector.secondary, ...rest];
+  }, [missionDirector, unranked]);
+  const prioritized = missionDirector.primary;
   const history = useMemo(
     () => projectPersistentHistory(props.worldNodes),
     [props.worldNodes]
@@ -492,6 +551,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           missionId: activeMissionRef.current?.missionId ?? null,
           properties: { sessionId: sessionIdRef.current },
         });
+        const milestone: OnboardingMilestone =
+          action === "JUMP" ? "jump" : action === "CLIMB" ? "climb" : "vault";
+        if (!hasOnboardingMilestone(milestone)) {
+          completeMilestone(milestone);
+          showOnboardingToast(`${action} LEARNED`);
+        }
       },
       onQualityChange: (tier, avgFrameMs) => {
         emit?.({
@@ -505,8 +570,21 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           },
         });
       },
+      onCheckpointSafe: (progress, lateral, branch) => {
+        saveCheckpoint({
+          corridorId: CORRIDOR_ID,
+          progress,
+          lateral,
+          branch,
+          savedAt: new Date().toISOString(),
+        });
+      },
     });
     runtimeRef.current = game;
+    // Position only — authoritative business/world state is always
+    // reconciled fresh from live props (see the activeMission effect below),
+    // never restored from this checkpoint.
+    const checkpoint = loadCheckpoint(CORRIDOR_ID);
     void game
       .start({
         worldUrl,
@@ -518,6 +596,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         portalUrl: "/assets/goldline/corridor_01/portal_coldcall.webp",
         strongholdUrl: "/assets/goldline/corridor_01/stronghold.webp",
         characterBasePath: "/assets/goldline/characters/trailblazer",
+        initialProgress: checkpoint?.progress,
+        initialLateral: checkpoint?.lateral,
+        initialBranch: checkpoint?.branch,
       })
       .then(started => {
       if (started) setRuntimeReady(true);
@@ -563,9 +644,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             activeMission.verifiedAnnualValueCents != null ? "verified" : "unverified",
         },
       });
-    } else if (activeMission.state === "contested") setView("rekindle");
-    else if (activeMission.state === "recovery_active") setView("recovery_active");
-    else if (activeMission.state === "closed") setView("closed");
+      completeMilestone("first_business_resolution");
+    } else if (activeMission.state === "contested") {
+      setView("rekindle");
+      completeMilestone("first_business_resolution");
+    } else if (activeMission.state === "recovery_active") setView("recovery_active");
+    else if (activeMission.state === "closed") {
+      setView("closed");
+      completeMilestone("first_business_resolution");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMission?.key, activeMission?.state]);
 
@@ -624,6 +711,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       missionId: activeMission.missionId,
       properties: { sessionId: sessionIdRef.current, missionState: activeMission.state, archetype },
     });
+    completeMilestone("first_mission_engaged");
     setEncounterArchetype(archetype);
     setEncounterChannel(channel);
     setShield(3);
@@ -683,6 +771,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       missionId: activeMission?.missionId ?? null,
       properties: { sessionId: sessionIdRef.current, provenanceKind: weapon.provenance.type },
     });
+    completeMilestone("first_armory_choice");
     if (!props.onRecordWeaponUsage || !activeMission?.missionId) return;
     void props
       .onRecordWeaponUsage({
@@ -892,7 +981,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             {branch === "intel" && progress > 0.38 ? (
               <div className="intel-pickup"><Sparkles /> ENCOUNTER PREP REVEALED</div>
             ) : null}
-            <Joystick disabled={false} onInput={(x, y) => runtimeRef.current?.setInput(x, y)} />
+            {onboardingToast ? (
+              <div className="onboarding-toast" role="status">{onboardingToast}</div>
+            ) : null}
+            <Joystick
+              disabled={false}
+              onInput={(x, y) => runtimeRef.current?.setInput(x, y)}
+              showMovementHint={!movementLearned}
+              onFirstMove={() => completeMilestone("movement")}
+            />
             <div className="context-actions">
               {action ? (
                 <button className={`is-${action.toLowerCase()}`} onClick={performAction}>
@@ -1203,6 +1300,20 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                       SOUND {audioMuted ? "OFF" : "ON"}
                     </button>
                   </div>
+                  {!isStandalone() && hasOnboardingMilestone("first_mission_engaged") ? (
+                    canShowInstallPrompt ? (
+                      <button
+                        className="pwa-install-cta"
+                        onClick={() => void triggerInstallPrompt().then(() => setCanShowInstallPrompt(hasInstallPrompt()))}
+                      >
+                        INSTALL GOLDLINE
+                      </button>
+                    ) : isIOS() ? (
+                      <p className="pwa-install-hint">
+                        Add Goldline to your Home Screen: tap Share, then "Add to Home Screen".
+                      </p>
+                    ) : null
+                  ) : null}
                   {props.activeDispatch && props.onOpenDispatch ? (
                     <button className="live-dispatch-button" onClick={() => void props.onOpenDispatch?.()}>LIVE MISSION #{props.activeDispatch.missionId} <ChevronRight /></button>
                   ) : null}

@@ -5,6 +5,7 @@ import type {
   FieldMoveCandidate,
   FieldMovesResult,
 } from "../../../../server/field/types";
+import { dedupeByEntityIdentity } from "../../../../shared/missionSource";
 import type { PlayableMission } from "./GameState";
 
 function mapsUrl(address: string | null | undefined) {
@@ -72,9 +73,7 @@ export function projectPlayableMissions(input: {
       lossReason: node?.lossReason ?? null,
     } satisfies PlayableMission;
   });
-  const knownMissionIds = new Set(missions.map(mission => mission.id));
   for (const move of moves) {
-    if (move.missionId && knownMissionIds.has(move.missionId)) continue;
     projected.push({
       key: `move:${move.id}`,
       missionId: move.missionId,
@@ -98,7 +97,18 @@ export function projectPlayableMissions(input: {
       lossReason: null,
     });
   }
-  return projected
+  // A real business entity may be produced by more than one source (e.g. a
+  // FIELD move already tracking an account Scout also discovered) — dedupe
+  // by the missionId every source ultimately converges on so one entity
+  // never yields two world nodes. Entries with a materialized `missionId`
+  // (already a real commercialMissions row) always win over a bare move
+  // candidate that merely references the same id.
+  const deduped = dedupeByEntityIdentity(
+    projected,
+    entry => (entry.missionId != null ? `mission:${entry.missionId}` : entry.key),
+    entry => (entry.key.startsWith("mission:") ? 0 : 1)
+  );
+  return deduped
     .filter(mission => !["captured", "closed"].includes(mission.state))
     .slice(0, 3);
 }

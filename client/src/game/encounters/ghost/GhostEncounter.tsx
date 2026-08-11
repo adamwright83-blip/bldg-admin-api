@@ -201,7 +201,7 @@ export function GhostEncounter(props: EncounterProps) {
         selectedId={selected?.id ?? null}
         disabled={resolved}
         onSelect={weapon => {
-          if (resolved) return;
+          if (resolved || weapon.id === selected?.id) return;
           setSelected(weapon);
           setFeedback(null);
           props.onSelectWeapon(weapon);

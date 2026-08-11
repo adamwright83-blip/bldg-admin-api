@@ -382,6 +382,7 @@
 .mission-empty-chip svg { width: 15px; color: var(--cyan); }
 .mission-fork-icons { display: flex; gap: 5px; }
 .mission-fork-icons button {
+  position: relative;
   width: 31px;
   height: 31px;
   border: 1px solid currentColor;
@@ -395,6 +396,15 @@
 .mission-fork-icons button.is-amber { color: var(--amber); }
 .mission-fork-icons button.is-muted { color: #819099; }
 .mission-fork-icons button.is-active { background: currentColor; color: #041015; box-shadow: 0 0 18px #62f2ffaa; }
+.mission-fork-icons button.is-primary { border-color: currentColor; border-width: 2px; }
+.mission-fork-icons button.is-primary::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 1px solid currentColor;
+  opacity: 0.55;
+}
 .mission-fork-list {
   width: min(360px, calc(100vw - 16px));
   max-height: min(31dvh, 258px);
@@ -468,6 +478,30 @@
 }
 .intel-pickup svg { width: 13px; }
 
+.onboarding-toast {
+  position: absolute;
+  z-index: 21;
+  top: 42%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border: 1px solid #9feff390;
+  color: #eafeff;
+  background: #0a1c22d8;
+  box-shadow: 0 0 22px #6eefff30;
+  font: 800 10px "Barlow Condensed";
+  letter-spacing: .14em;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: onboarding-toast-fade 1.8s ease-out forwards;
+}
+@keyframes onboarding-toast-fade {
+  0% { opacity: 0; transform: translate(-50%, 6px); }
+  15% { opacity: 1; transform: translate(-50%, 0); }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 .game-joystick {
   position: absolute;
   z-index: 20;
@@ -499,6 +533,20 @@
   box-shadow: 0 0 16px #5cecf0, inset 0 -6px 12px #092b34;
 }
 .game-joystick span { position: absolute; bottom: 12px; z-index: 3; color: #d5fcff; font: 800 9px "Barlow Condensed"; letter-spacing: .12em; }
+.joystick-hint {
+  position: absolute;
+  inset: -8px;
+  z-index: 1;
+  border-radius: 50%;
+  border: 2px solid #9feff3;
+  pointer-events: none;
+  animation: joystick-hint-pulse 1.6s ease-out infinite;
+}
+@keyframes joystick-hint-pulse {
+  0% { transform: scale(0.94); opacity: 0.85; }
+  70% { transform: scale(1.14); opacity: 0; }
+  100% { transform: scale(1.14); opacity: 0; }
+}
 
 .context-actions {
   position: absolute;
@@ -777,6 +825,8 @@
 .live-dispatch-button svg { width: 15px; }
 .game-date-field { display: grid; gap: 6px; margin-top: 12px; color: #88dce3; font: 800 8px Inter; letter-spacing: .1em; }
 .game-date-field input { min-height: 45px; padding: 8px 10px; border: 1px solid #5e8992; border-radius: 5px; color: white; color-scheme: dark; background: #0b1a21; }
+.pwa-install-cta { width: 100%; min-height: 46px; margin-top: 9px; border: 1px solid var(--gold); color: var(--gold); background: #241c0d; font: 900 11px "Barlow Condensed"; letter-spacing: .08em; }
+.pwa-install-hint { margin-top: 9px; padding: 9px 10px; border: 1px solid #5c929f70; border-radius: 5px; color: #b7ccd1; font: 600 10px/1.4 Inter; }
 .live-route-list,
 .objective-panel-list { display: grid; gap: 7px; }
 .live-route-list article { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 9px; border: 1px solid #5e7c864f; background: #0d1c23; }
