@@ -158,11 +158,13 @@ export function GatekeeperEncounter(props: EncounterProps) {
             </div>
           ))}
         </div>
-        <p className="gate-hint">
-          {selected
-            ? "DRAG THE SIGNAL FROM YOU TO THE GATE THIS MOVE OPENS"
-            : "CHOOSE A MOVE FIRST"}
-        </p>
+        {resolved ? null : (
+          <p className="gate-hint">
+            {selected
+              ? "DRAG THE SIGNAL FROM YOU TO THE GATE THIS MOVE OPENS"
+              : "CHOOSE A MOVE FIRST"}
+          </p>
+        )}
         {feedback ? (
           <div className="encounter-feedback">{feedback}</div>
         ) : null}

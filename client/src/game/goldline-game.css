@@ -885,6 +885,9 @@
 
 .gate-field {
   position: relative;
+  /* A drag surface must not select its own labels mid-gesture. */
+  user-select: none;
+  -webkit-user-select: none;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -960,6 +963,8 @@
 
 .signal-field {
   position: relative;
+  user-select: none;
+  -webkit-user-select: none;
   height: 190px;
   border-radius: 14px;
   border: 1px solid rgba(160, 140, 255, 0.24);
@@ -993,7 +998,7 @@
   position: absolute;
   left: 12px;
   right: 12px;
-  bottom: 34px;
+  bottom: 42px;
   height: 6px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.1);
@@ -1036,6 +1041,8 @@
 
 .alignment-track {
   position: relative;
+  user-select: none;
+  -webkit-user-select: none;
   height: 40px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.06);
@@ -1299,4 +1306,42 @@
   .signal-field {
     height: 150px;
   }
+}
+
+/* ------------------------------------------------------------------
+   The Run-1 `.business-resolution-gate` and `.encounter-feedback`
+   rules are absolutely positioned for the Anchor's fixed overlay.
+   The Slice-13 encounters are flow-layout panels, so inside `.encounter`
+   both return to normal flow and stop covering the mechanic behind them.
+   `.anchor-encounter` does not match `.encounter`, so Run-1 is untouched.
+   ------------------------------------------------------------------ */
+
+.encounter .encounter-feedback {
+  position: static;
+  transform: none;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-align: left;
+  color: #081015;
+  background: var(--cyan);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: none;
+  font: 900 12px "Barlow Condensed";
+  letter-spacing: 0.06em;
+}
+
+.encounter .business-resolution-gate {
+  position: static;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  z-index: auto;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.encounter .business-resolution-gate small {
+  font-size: 10px;
+  line-height: 1.4;
 }

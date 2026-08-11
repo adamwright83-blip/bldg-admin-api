@@ -7,6 +7,10 @@ import {
   type ArmoryWeapon,
   type EncounterProps,
 } from "../EncounterTypes";
+import {
+  DETERMINISTIC_ALIGNMENT,
+  deterministicEncounters,
+} from "../deterministicMode";
 
 const WINDOW_HALF_WIDTH = 9;
 
@@ -46,8 +50,17 @@ export function StallerEncounter(props: EncounterProps) {
       }
       last = now;
       // Marker sweeps; the window drifts, so the timing is never memorised.
-      const marker = ((now / 12) % 200 > 100 ? 200 - ((now / 12) % 200) : (now / 12) % 100);
-      const centre = 50 + Math.sin(now / 1_700) * 26;
+      // The harness pins both so alignment can be asserted deterministically —
+      // the tolerance check and every truth guard still run for real.
+      const pinned = deterministicEncounters();
+      const marker = pinned
+        ? DETERMINISTIC_ALIGNMENT
+        : (now / 12) % 200 > 100
+          ? 200 - ((now / 12) % 200)
+          : (now / 12) % 100;
+      const centre = pinned
+        ? DETERMINISTIC_ALIGNMENT
+        : 50 + Math.sin(now / 1_700) * 26;
       markerRef.current = marker;
       centreRef.current = centre;
       setMarkerPosition(marker);
@@ -124,11 +137,13 @@ export function StallerEncounter(props: EncounterProps) {
         >
           COMMIT
         </button>
-        <p className="alignment-hint">
-          {armed
-            ? "COMMIT WHEN THE MARKER SITS INSIDE THE WINDOW"
-            : "CHOOSE A MOVE FIRST"}
-        </p>
+        {resolved ? null : (
+          <p className="alignment-hint">
+            {armed
+              ? "COMMIT WHEN THE MARKER SITS INSIDE THE WINDOW"
+              : "CHOOSE A MOVE FIRST"}
+          </p>
+        )}
         {feedback ? <div className="encounter-feedback">{feedback}</div> : null}
       </div>
 

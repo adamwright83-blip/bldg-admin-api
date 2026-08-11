@@ -12,6 +12,10 @@ import {
   type ArmoryWeapon,
   type EncounterProps,
 } from "../EncounterTypes";
+import {
+  DETERMINISTIC_BEACON,
+  deterministicEncounters,
+} from "../deterministicMode";
 
 const LOCK_REQUIRED_MS = 1_600;
 const SIGNAL_LIFETIME_MS = 9_000;
@@ -59,10 +63,16 @@ export function GhostEncounter(props: EncounterProps) {
       const delta = now - last;
       last = now;
 
-      setBeacon(current => ({
-        x: 50 + Math.sin(now / 900) * 30,
-        y: 50 + Math.cos(now / 1_300) * 26,
-      }));
+      // Motion is the mechanic; the harness pins it so the hold can be
+      // asserted without the assertion becoming timing-dependent.
+      setBeacon(
+        deterministicEncounters()
+          ? DETERMINISTIC_BEACON
+          : {
+              x: 50 + Math.sin(now / 900) * 30,
+              y: 50 + Math.cos(now / 1_300) * 26,
+            }
+      );
 
       if (tracking.current) {
         setLockMs(value => {
@@ -169,11 +179,13 @@ export function GhostEncounter(props: EncounterProps) {
               : `HOLD THE SIGNAL · ${(remainingMs / 1000).toFixed(1)}s`}
           </b>
         </div>
-        <p className="signal-hint">
-          {armed
-            ? "KEEP CONTACT WITH THE BEACON UNTIL THE LOCK COMPLETES"
-            : "CHOOSE A RE-CONTACT MOVE FIRST"}
-        </p>
+        {resolved ? null : (
+          <p className="signal-hint">
+            {armed
+              ? "KEEP CONTACT WITH THE BEACON UNTIL THE LOCK COMPLETES"
+              : "CHOOSE A RE-CONTACT MOVE FIRST"}
+          </p>
+        )}
         {feedback ? <div className="encounter-feedback">{feedback}</div> : null}
       </div>
 
