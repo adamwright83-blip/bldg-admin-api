@@ -32,3 +32,12 @@ export function salesIntelFrameworkKey(input: {
 }): string {
   return digest(salesIntelFrameworkIdentityParts(input));
 }
+
+/**
+ * A varchar(1024) unique index on the raw URL exceeds InnoDB's 3072-byte
+ * max key length under utf8mb4 — dedup for the source registry (Slice 37)
+ * is enforced on this fixed-width hash instead.
+ */
+export function salesIntelSourceRegistryUrlHash(canonicalSourceUrl: string): string {
+  return digest([canonicalSourceUrl]);
+}

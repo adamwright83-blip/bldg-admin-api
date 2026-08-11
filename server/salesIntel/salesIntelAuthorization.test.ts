@@ -21,11 +21,16 @@ const trpcSource = readFileSync(
   "utf8"
 );
 
-/** Every `name: <procedure>` binding declared in a router module. */
+/**
+ * Every `name: <procedure>` binding declared in a router module, at the
+ * top level or nested one level inside a sub-router (e.g.
+ * `sourceRegistry: router({ create: adminProcedure... })`) — the admin/
+ * driver boundary must hold at both nesting levels.
+ */
 function declaredProcedures(source: string): string[] {
-  return [...source.matchAll(/^\s{2}(?:\/\*\*[\s\S]*?\*\/\s*)?([a-zA-Z]+):\s*([a-zA-Z]+Procedure)/gm)].map(
-    match => `${match[1]}:${match[2]}`
-  );
+  return [
+    ...source.matchAll(/^\s{2,4}(?:\/\*\*[\s\S]*?\*\/\s*)?([a-zA-Z]+):\s*([a-zA-Z]+Procedure)/gm),
+  ].map(match => `${match[1]}:${match[2]}`);
 }
 
 describe("Sales Intel administration is admin-only", () => {
@@ -48,6 +53,13 @@ describe("Sales Intel administration is admin-only", () => {
       "source",
       "adapters",
       "frameworkVersions",
+      "list",
+      "create",
+      "setStatus",
+      "recentArtifacts",
+      "checkNow",
+      "checkAllEnabled",
+      "reviewQueue",
     ]) {
       expect(salesIntelRouterSource).toMatch(
         new RegExp(`${name}:\\s*adminProcedure`)

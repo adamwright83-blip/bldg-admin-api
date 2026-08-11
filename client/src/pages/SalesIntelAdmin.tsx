@@ -6,6 +6,7 @@ import {
   FileText,
   Loader2,
   Plus,
+  Radar,
   RefreshCw,
   X,
 } from "lucide-react";
@@ -18,6 +19,19 @@ import {
   classifySalesIntelInput,
   type SalesIntelSourceArtifact,
 } from "@shared/salesIntel";
+import {
+  SALES_INTEL_ACQUISITION_MODES,
+  SALES_INTEL_SOURCE_PLATFORMS,
+  SALES_INTEL_SOURCE_REGISTRY_TYPES,
+  VALID_ACQUISITION_MODES_BY_TYPE,
+  type SalesIntelAcquisitionMode,
+  type SalesIntelSourcePlatform,
+  type SalesIntelSourceRegistryType,
+} from "@shared/salesIntelSourceRegistry";
+import {
+  describeFrameworkQuality,
+  type FrameworkQualitySignals,
+} from "@shared/salesIntelQuality";
 
 /**
  * Internal Sales Intel ingestion.
@@ -66,6 +80,296 @@ function inputHint(raw: string): string | null {
     return `Instagram Reel ${identity.externalContentId} — saved as a source; a transcript is required to extract it.`;
   }
   return "Will be saved as a source URL; a transcript is required to extract it.";
+}
+
+/**
+ * The curated creator/channel watch list — distinct from the ingested-
+ * artifact list below. Disabling a source stops future monitoring; it
+ * never deletes the artifacts/frameworks that source already produced.
+ */
+function SourceRegistryPanel() {
+  const utils = trpc.useUtils();
+  const [open, setOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [creatorName, setCreatorName] = useState("");
+  const [platform, setPlatform] = useState<SalesIntelSourcePlatform>("youtube");
+  const [sourceType, setSourceType] = useState<SalesIntelSourceRegistryType>(
+    "youtube_channel"
+  );
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [externalChannelId, setExternalChannelId] = useState("");
+  const [acquisitionMode, setAcquisitionMode] = useState<SalesIntelAcquisitionMode>(
+    "AUTO_YOUTUBE"
+  );
+
+  const registry = trpc.system.salesIntel.sourceRegistry.list.useQuery(
+    undefined,
+    { enabled: open }
+  );
+  const create = trpc.system.salesIntel.sourceRegistry.create.useMutation();
+  const setStatus = trpc.system.salesIntel.sourceRegistry.setStatus.useMutation();
+  const checkNow = trpc.system.salesIntel.sourceRegistry.checkNow.useMutation();
+
+  async function refresh() {
+    await utils.system.salesIntel.sourceRegistry.list.invalidate();
+  }
+
+  function selectSourceType(next: SalesIntelSourceRegistryType) {
+    setSourceType(next);
+    const allowed = VALID_ACQUISITION_MODES_BY_TYPE[next];
+    if (!allowed.includes(acquisitionMode)) setAcquisitionMode(allowed[0]);
+  }
+
+  async function handleCreate() {
+    if (!creatorName.trim() || !sourceUrl.trim()) return;
+    try {
+      await create.mutateAsync({
+        creatorName: creatorName.trim(),
+        platform,
+        sourceType,
+        sourceUrl: sourceUrl.trim(),
+        externalChannelId: externalChannelId.trim() || null,
+        acquisitionMode,
+      });
+      toast.success("Source added to the registry.");
+      setCreatorName("");
+      setSourceUrl("");
+      setExternalChannelId("");
+      setFormOpen(false);
+      await refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not add that source"
+      );
+    }
+  }
+
+  return (
+    <section className="sales-intel-registry">
+      <button
+        className="sales-intel-registry-toggle"
+        onClick={() => setOpen(!open)}
+      >
+        <Radar className="h-4 w-4" /> SOURCE REGISTRY {open ? "▲" : "▼"}
+      </button>
+      {open ? (
+        <div className="sales-intel-registry-body">
+          <p className="sales-intel-hint">
+            Curated creators/channels to monitor. Disabling a source stops
+            future checks — it never deletes what it already produced.
+          </p>
+          <Button variant="secondary" onClick={() => setFormOpen(!formOpen)}>
+            <Plus className="mr-1 h-4 w-4" /> ADD SOURCE
+          </Button>
+
+          {formOpen ? (
+            <div className="sales-intel-registry-form">
+              <label>CREATOR NAME</label>
+              <Input value={creatorName} onChange={e => setCreatorName(e.target.value)} />
+              <label>PLATFORM</label>
+              <select
+                value={platform}
+                onChange={e => setPlatform(e.target.value as SalesIntelSourcePlatform)}
+              >
+                {SALES_INTEL_SOURCE_PLATFORMS.map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+              <label>SOURCE TYPE</label>
+              <select
+                value={sourceType}
+                onChange={e => selectSourceType(e.target.value as SalesIntelSourceRegistryType)}
+              >
+                {SALES_INTEL_SOURCE_REGISTRY_TYPES.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              <label>SOURCE URL</label>
+              <Input
+                value={sourceUrl}
+                placeholder="https://www.youtube.com/channel/UC..."
+                onChange={e => setSourceUrl(e.target.value)}
+              />
+              <label>CHANNEL ID (optional — required for automatic monitoring)</label>
+              <Input
+                value={externalChannelId}
+                placeholder="UC..."
+                onChange={e => setExternalChannelId(e.target.value)}
+              />
+              <label>ACQUISITION MODE</label>
+              <select
+                value={acquisitionMode}
+                onChange={e => setAcquisitionMode(e.target.value as SalesIntelAcquisitionMode)}
+              >
+                {VALID_ACQUISITION_MODES_BY_TYPE[sourceType].map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+              <Button
+                onClick={handleCreate}
+                disabled={!creatorName.trim() || !sourceUrl.trim() || create.isPending}
+              >
+                {create.isPending ? "ADDING…" : "ADD"}
+              </Button>
+            </div>
+          ) : null}
+
+          {registry.isLoading ? (
+            <p className="sales-intel-empty">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading registry…
+            </p>
+          ) : null}
+          {!registry.isLoading && !registry.data?.length ? (
+            <p className="sales-intel-empty">
+              No sources registered yet. Add a real, curated creator/channel
+              to begin monitoring — nothing is pre-populated.
+            </p>
+          ) : null}
+
+          {registry.data?.map(source => (
+            <article key={source.id} className="sales-intel-registry-entry">
+              <div className="sales-intel-source-head">
+                <span>
+                  <b>{source.creatorName}</b>
+                  <small>
+                    {source.sourceType} · {source.acquisitionMode}
+                    {source.lastCheckedAt
+                      ? ` · last checked ${new Date(source.lastCheckedAt).toLocaleString()}`
+                      : " · never checked"}
+                  </small>
+                </span>
+                <span className={`sales-intel-pill is-${source.status === "active" ? "ok" : "wait"}`}>
+                  {source.status.toUpperCase()}
+                </span>
+              </div>
+              <a
+                className="sales-intel-source-url"
+                href={source.canonicalSourceUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {source.canonicalSourceUrl}
+              </a>
+              <div className="sales-intel-source-actions">
+                {source.sourceType === "youtube_channel" ||
+                source.sourceType === "youtube_playlist" ? (
+                  <Button
+                    variant="secondary"
+                    disabled={checkNow.isPending}
+                    onClick={async () => {
+                      try {
+                        const result = await checkNow.mutateAsync({ id: source.id });
+                        toast[result.status === "ok" ? "success" : "error"](result.message);
+                        await refresh();
+                      } catch (error) {
+                        toast.error(
+                          error instanceof Error ? error.message : "Check failed"
+                        );
+                      }
+                    }}
+                  >
+                    <RefreshCw className="mr-1 h-4 w-4" /> CHECK NOW
+                  </Button>
+                ) : null}
+                <Button
+                  variant="secondary"
+                  disabled={setStatus.isPending}
+                  onClick={async () => {
+                    await setStatus.mutateAsync({
+                      id: source.id,
+                      status: source.status === "active" ? "disabled" : "active",
+                    });
+                    await refresh();
+                  }}
+                >
+                  {source.status === "active" ? "DISABLE" : "RE-ENABLE"}
+                </Button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * Every framework a human hasn't decided on yet, with explainable quality
+ * signals — never an opaque "AI score". Accept/reject here never touches
+ * the source's original transcript or another framework's history.
+ */
+function ReviewQueuePanel() {
+  const utils = trpc.useUtils();
+  const [open, setOpen] = useState(false);
+  const queue = trpc.system.salesIntel.reviewQueue.useQuery(undefined, {
+    enabled: open,
+  });
+  const review = trpc.system.salesIntel.review.useMutation();
+
+  async function decide(frameworkId: string, reviewState: "accepted" | "rejected") {
+    try {
+      await review.mutateAsync({ frameworkId, reviewState });
+      toast.success(reviewState === "accepted" ? "Accepted into the Armory." : "Rejected.");
+      await utils.system.salesIntel.reviewQueue.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Review action failed");
+    }
+  }
+
+  return (
+    <section className="sales-intel-review-queue">
+      <button className="sales-intel-registry-toggle" onClick={() => setOpen(!open)}>
+        <CheckCircle2 className="h-4 w-4" /> REVIEW QUEUE {open ? "▲" : "▼"}
+      </button>
+      {open ? (
+        <div className="sales-intel-registry-body">
+          {queue.isLoading ? (
+            <p className="sales-intel-empty">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading review queue…
+            </p>
+          ) : null}
+          {!queue.isLoading && !queue.data?.length ? (
+            <p className="sales-intel-empty">
+              Nothing awaiting review. High-confidence extractions are
+              accepted automatically; everything else lands here.
+            </p>
+          ) : null}
+          {queue.data?.map(entry => (
+            <article key={entry.framework.id} className="sales-intel-registry-entry">
+              <div className="sales-intel-source-head">
+                <span>
+                  <b>{entry.framework.frameworkName}</b>
+                  <small>
+                    {entry.framework.creatorName} · {entry.framework.archetype} ·{" "}
+                    {entry.framework.channel}
+                  </small>
+                </span>
+              </div>
+              <p className="sales-intel-hint">"{entry.framework.exactObjection}"</p>
+              <p className="sales-intel-hint">
+                {describeFrameworkQuality(entry.quality as FrameworkQualitySignals)}
+              </p>
+              <div className="sales-intel-source-actions">
+                <Button
+                  disabled={review.isPending}
+                  onClick={() => decide(entry.framework.id, "accepted")}
+                >
+                  ACCEPT
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={review.isPending}
+                  onClick={() => decide(entry.framework.id, "rejected")}
+                >
+                  REJECT
+                </Button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
 }
 
 export default function SalesIntelAdmin() {
@@ -142,6 +446,9 @@ export default function SalesIntelAdmin() {
           <Plus className="mr-1 h-4 w-4" /> ADD SALES INTEL
         </Button>
       </header>
+
+      <SourceRegistryPanel />
+      <ReviewQueuePanel />
 
       {composerOpen ? (
         <section className="sales-intel-composer">

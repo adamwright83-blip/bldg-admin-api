@@ -26,10 +26,30 @@ import {
   listFrameworksForSource,
   listFrameworkVersions,
   listSourceArtifacts,
+  listSourceArtifactsForRegistry,
   listTranscripts,
   setFrameworkReviewState,
 } from "./salesIntelStore";
 import { createSalesIntelAdapterRegistry } from "./sourceAdapters";
+import {
+  salesIntelSourceRegistryCreateSchema,
+  SALES_INTEL_SOURCE_REGISTRY_STATUSES,
+} from "../../shared/salesIntelSourceRegistry";
+import {
+  ingestSalesIntelSourceRegistration,
+  SalesIntelSourceRegistryError,
+} from "./salesIntelSourceRegistryService";
+import {
+  getSalesIntelSource,
+  listEnabledYouTubeSources,
+  listSalesIntelSources,
+  setSalesIntelSourceStatus,
+} from "./salesIntelSourceRegistryStore";
+import {
+  checkAllEnabledYouTubeSources,
+  checkYouTubeSourceForNewContent,
+} from "./youtubeMonitoring";
+import { getFrameworkReviewQueue } from "./salesIntelReviewQueue";
 
 const segmentSchema = z.object({
   startMs: z.number().int().min(0),
@@ -123,6 +143,9 @@ export const salesIntelRouter = router({
     .input(z.object({ frameworkKey: z.string().trim().min(1).max(64) }))
     .query(({ input }) => listFrameworkVersions(input.frameworkKey)),
 
+  /** Every framework awaiting a human decision, with explainable quality signals. */
+  reviewQueue: adminProcedure.query(() => getFrameworkReviewQueue()),
+
   review: adminProcedure
     .input(
       z.object({
@@ -147,4 +170,69 @@ export const salesIntelRouter = router({
         actorId: ctx.user.openId,
       })
     ),
+
+  /**
+   * The curated creator/channel watch list (Slice 37) — distinct from
+   * `sources`/`source` above, which list individual ingested artifacts.
+   */
+  sourceRegistry: router({
+    list: adminProcedure
+      .input(
+        z
+          .object({ status: z.enum(SALES_INTEL_SOURCE_REGISTRY_STATUSES).optional() })
+          .optional()
+      )
+      .query(({ input }) => listSalesIntelSources(input)),
+
+    create: adminProcedure
+      .input(salesIntelSourceRegistryCreateSchema)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await ingestSalesIntelSourceRegistration({
+            ...input,
+            createdBy: ctx.user.openId,
+          });
+        } catch (error) {
+          if (error instanceof SalesIntelSourceRegistryError) {
+            throw new Error(error.message);
+          }
+          throw error;
+        }
+      }),
+
+    setStatus: adminProcedure
+      .input(
+        z.object({
+          id: z.string().uuid(),
+          status: z.enum(SALES_INTEL_SOURCE_REGISTRY_STATUSES),
+        })
+      )
+      .mutation(({ input }) => setSalesIntelSourceStatus(input)),
+
+    recentArtifacts: adminProcedure
+      .input(z.object({ id: z.string().uuid() }))
+      .query(({ input }) => listSourceArtifactsForRegistry(input.id)),
+
+    /** Manual "CHECK FOR NEW CONTENT" for one source — idempotent, safe to re-run. */
+    checkNow: adminProcedure
+      .input(z.object({ id: z.string().uuid() }))
+      .mutation(async ({ input }) => {
+        const source = await getSalesIntelSource(input.id);
+        if (!source) throw new Error("Sales Intel source not found");
+        return checkYouTubeSourceForNewContent(source);
+      }),
+
+    /**
+     * Entry point for periodic monitoring. No new always-on worker process
+     * is introduced by this run — a real external scheduler (e.g. a
+     * timed GitHub Action or Railway cron) calls this exact admin-
+     * authenticated mutation on a sane cadence (hourly/daily, never
+     * per-minute). This mutation itself is what makes that safe to wire up
+     * later without further engineering.
+     */
+    checkAllEnabled: adminProcedure.mutation(async () => {
+      const sources = await listEnabledYouTubeSources();
+      return checkAllEnabledYouTubeSources(sources);
+    }),
+  }),
 });

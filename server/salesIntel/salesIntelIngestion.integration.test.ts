@@ -491,6 +491,131 @@ describe.skipIf(!runDatabaseGate)("Sales Intel ingestion journey", () => {
     expect(result.artifact.status).toBe("analyzed");
     expect(result.frameworks).toHaveLength(0);
   });
+
+  describe("conflict preservation (Slice 40)", () => {
+    it("keeps two creators' conflicting strategies both driver-visible — never averaged into one", async () => {
+      const channel = "phone" as const;
+      const trainerA = await ingestSalesIntelSource(
+        {
+          input: uniqueTranscript("conflict-trainer-a"),
+          creatorName: `Trainer Never-Discount ${randomUUID()}`,
+          actorId: "admin-openid",
+        },
+        {
+          extractor: stubExtractor({
+            confidence: 0.9,
+            channel,
+            frameworkName: "Hold firm on price",
+            objection: `Can you do a discount ${randomUUID()}`,
+          }),
+        }
+      );
+      await track(trainerA.artifact.id);
+
+      const trainerB = await ingestSalesIntelSource(
+        {
+          input: uniqueTranscript("conflict-trainer-b"),
+          creatorName: `Trainer Conditional-Discount ${randomUUID()}`,
+          actorId: "admin-openid",
+        },
+        {
+          extractor: stubExtractor({
+            confidence: 0.9,
+            channel,
+            frameworkName: "Offer a small conditional discount",
+            objection: `Can you do a discount ${randomUUID()}`,
+          }),
+        }
+      );
+      await track(trainerB.artifact.id);
+
+      expect(trainerA.outcome).toBe("extracted");
+      expect(trainerB.outcome).toBe("extracted");
+
+      const visible = await queryDriverVisibleFrameworks({
+        archetype: "ANCHOR",
+        channel,
+        limit: 200,
+      });
+      const names = visible.map(f => f.frameworkName);
+      // Both real, opposing teachings are present — neither was dropped,
+      // merged, or rewritten into a single "sometimes discount" consensus.
+      expect(names).toContain("Hold firm on price");
+      expect(names).toContain("Offer a small conditional discount");
+      // They remain traceable to their own distinct source artifacts.
+      const holdFirm = visible.find(f => f.frameworkName === "Hold firm on price");
+      const conditional = visible.find(
+        f => f.frameworkName === "Offer a small conditional discount"
+      );
+      expect(holdFirm?.sourceArtifactId).not.toBe(conditional?.sourceArtifactId);
+      expect(holdFirm?.creatorName).not.toBe(conditional?.creatorName);
+    });
+
+    it("distinguishes an exact source quote from a model paraphrase and never mislabels one as the other", async () => {
+      const result = await ingestSalesIntelSource(
+        {
+          input: uniqueTranscript("quote-vs-paraphrase"),
+          creatorName: "Supplied Trainer",
+          actorId: "admin-openid",
+        },
+        {
+          extractor: {
+            key: "quote-stub",
+            async extract(request: ExtractionRequest): Promise<ExtractionResult> {
+              return {
+                provider: "quote-stub",
+                model: "stub-model-1",
+                promptVersion: "stub-prompt-v1",
+                extractionVersion: "stub-extraction-v1",
+                frameworks: [
+                  {
+                    archetype: "ANCHOR",
+                    channel: "phone",
+                    exactObjection: `We already have a company ${randomUUID()}`,
+                    diagnosis: null,
+                    frameworkName: "Quote vs paraphrase check",
+                    principle: `Derived from: ${request.transcriptText.slice(0, 20)}`,
+                    responseFamily: "isolate_constraint",
+                    discoveryQuestions: [],
+                    exampleLanguage: [],
+                    exampleLanguagePhrases: [
+                      {
+                        kind: "exact_source_phrase",
+                        text: "What would have to be true for you to switch?",
+                      },
+                      {
+                        kind: "paraphrased_principle",
+                        text: "Ask what conditions would justify switching.",
+                      },
+                    ],
+                    whenToUse: [],
+                    whenNotToUse: [],
+                    followUpMoves: [],
+                    badResponses: [],
+                    confidence: 0.9,
+                    transcriptStartMs: 1000,
+                    transcriptEndMs: 4000,
+                  },
+                ],
+              };
+            },
+          },
+        }
+      );
+      await track(result.artifact.id);
+
+      expect(result.outcome).toBe("extracted");
+      const framework = result.frameworks[0];
+      const quote = framework.exampleLanguage.find(p => p.kind === "exact_source_phrase");
+      const paraphrase = framework.exampleLanguage.find(
+        p => p.kind === "paraphrased_principle"
+      );
+      expect(quote?.text).toBe("What would have to be true for you to switch?");
+      expect(paraphrase?.text).toBe("Ask what conditions would justify switching.");
+      // Never the same phrase promoted/demoted across kinds.
+      expect(quote?.text).not.toBe(paraphrase?.text);
+    });
+  });
 });
 
 /** Reads back the framework key for a source's first framework. */
