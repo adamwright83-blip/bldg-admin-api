@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { createGoldlineEventEmitter } from "../../game/analytics/emitGoldlineEvent";
 import { QuickNewOrderSheet } from "@/components/driver/QuickNewOrderSheet";
 import { SalesJournalSheet } from "@/components/driver/SalesMomentum";
 import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
@@ -169,6 +170,14 @@ export default function GoldlineDriverController() {
     trpc.system.driverGameWorld.scoutCapability.useMutation();
   const runScout = trpc.system.driverGameWorld.runScout.useMutation();
   const recordWeaponUsage = trpc.system.armory.recordUsage.useMutation();
+  const recordGoldlineEvent = trpc.system.goldlineEvents.record.useMutation();
+  const emitGoldlineEvent = useMemo(
+    () => createGoldlineEventEmitter(input => recordGoldlineEvent.mutateAsync(input)),
+    // recordGoldlineEvent.mutateAsync identity is stable across renders for a
+    // given mutation hook instance; this only needs to be built once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   const activeDispatch = dispatches.data?.find(
     item =>
@@ -613,6 +622,7 @@ export default function GoldlineDriverController() {
           onRunScout={handleRunScout}
           onRequestWeapons={input => utils.system.armory.weapons.fetch(input)}
           onRecordWeaponUsage={input => recordWeaponUsage.mutateAsync(input)}
+          onEmitEvent={emitGoldlineEvent}
         />
       </Suspense>
       <QuickNewOrderSheet
