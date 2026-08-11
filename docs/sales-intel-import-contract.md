@@ -116,3 +116,52 @@ review state.
 Personal evidence — how often *this* player used a weapon and what was observed
 afterwards — is stored separately, scoped to tenant and actor, and is never
 merged into the trainer's teaching.
+
+## Source registry (Slice 37)
+
+`sales_intel_sources` is a curated, admin-managed watch list of creators/
+channels — distinct from `sales_intel_source_artifacts` above, which is one
+row per individual piece of ingested content. A registry entry describes
+*where to look*; an artifact is *one thing that was actually found*.
+Disabling a registry source stops future monitoring checks — it never
+deletes the artifacts/frameworks that source already produced. See
+`shared/salesIntelSourceRegistry.ts` for the full type contract and
+`server/salesIntel/salesIntelSourceRegistryService.ts` for the acquisition-
+mode/source-type pairing enforcement (e.g. an `instagram_profile_reference`
+can never claim `AUTO_YOUTUBE`).
+
+## YouTube monitoring (Slice 38)
+
+`server/salesIntel/youtubeMonitoring.ts` discovers new videos for enabled
+`youtube_channel`/`youtube_playlist` sources via YouTube's own public
+per-channel RSS feed (`https://www.youtube.com/feeds/videos.xml?channel_id=`)
+— an official, structured, public feed, not scraped rendered HTML, and it
+needs no API key. Every discovered video is handed to the same
+`ingestSalesIntelSource` pipeline a manual paste uses, so the existing
+content-hash dedup guarantees monitoring the same channel twice never
+creates duplicate artifacts. There is no new always-on worker process:
+`system.salesIntel.sourceRegistry.checkAllEnabled` is the single entry
+point both the admin's manual "CHECK NOW" action and a real external
+scheduler (a timed GitHub Action or Railway cron calling this admin-
+authenticated mutation on an hourly/daily cadence) would use.
+
+## Fast manual-ingestion lane and Web Share Target (Slice 39)
+
+The single-field `ADD SALES INTEL` composer (paste a URL or transcript,
+optional creator name, one `ANALYZE` button) already is the fast lane —
+it was not expanded into a longer form, per the standing rule to avoid
+friction here.
+
+**Web Share Target was evaluated and deliberately not implemented this
+run.** This host serves several unrelated products from one origin, and
+the Goldline PWA manifest (`client/public/goldline.webmanifest`) is
+intentionally scoped to `/driver` only so it never claims installability
+for admin surfaces. Adding a share target for Sales Intel admin would
+require a second, separately-scoped manifest plus a POST-based
+share-receiving route with its own admin-auth handling for an
+unauthenticated share intent — real added surface area for a workflow
+(an admin curating sources) that is realistically desktop-first today.
+Documenting this now rather than forcing a half-built share target: if
+mobile-admin sourcing becomes a real workflow, the manifest/share_target
+addition is straightforward to build on top of the registry and fast-lane
+paste flow that already exist.
