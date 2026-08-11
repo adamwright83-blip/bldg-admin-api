@@ -465,7 +465,19 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       },
     });
     runtimeRef.current = game;
-    void game.start({ worldUrl, operatorUrl }).then(started => {
+    void game
+      .start({
+        worldUrl,
+        operatorUrl,
+        midUrl: "/assets/goldline/corridor_01/mid.webp",
+        farUrl: "/assets/goldline/corridor_01/far.webp",
+        foregroundUrl: "/assets/goldline/corridor_01/foreground.webp",
+        effectsUrl: "/assets/goldline/corridor_01/effects.webp",
+        portalUrl: "/assets/goldline/corridor_01/portal_coldcall.webp",
+        strongholdUrl: "/assets/goldline/corridor_01/stronghold.webp",
+        characterBasePath: "/assets/goldline/characters/trailblazer",
+      })
+      .then(started => {
       if (started) setRuntimeReady(true);
     });
     return () => {

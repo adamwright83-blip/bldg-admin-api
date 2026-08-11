@@ -1,64 +1,63 @@
 # Corridor 01 — asset contract
 
-The one-corridor visual evolution architecture expects the following file set.
-This document is the source of truth for what exists today versus what is
-still required to reach the approved north-star reference.
+Updated: the final-art handoff pass. Six assets from a supplied 8-image art
+pack now populate every previously-empty layer except L0's true sky-only
+separation (see below). Originals kept locally at `_originals/` (~15MB, not
+committed — see repo `.gitignore`); this directory ships only the compressed
+WebP exports actually used at runtime.
 
-| File | Layer | Purpose | Status |
+| File | Layer | Role | Status |
 |---|---|---|---|
-| `far.webp` | L0 | Sky / distant coastline / mountains, parallax 0.05–0.15 | **MISSING** |
-| `mid.webp` | L1 | Main ruins / bridges / near waterfalls, parallax 0.3–0.6 | Substituted — see below |
-| `near.webp` | L1/L2 backdrop detail | Closer structural detail behind the traversal plane | **MISSING** |
-| `foreground.webp` | L3 | Leaves / pillars / arch edges authored to occlude the character in ≥2 zones | **MISSING** |
-| `waterfall_01.webm` | L1, video texture | Looping muted waterfall detail | **MISSING** |
-| `fog.webp` | L4 | Mist/haze plate for the effects layer | **MISSING** |
-| `occlusion.json` | L3 | Authored occlusion zones (world-space rect + z-order) | Present — `occlusion.json`, describes zones derived from the existing fortress geometry only |
-| `traversal.json` | L2 | Interaction anchors (portals, gates) with position + radii | Present — `traversal.json` |
-| `landmarks.json` | L2 | Semantic landmark placement metadata | **MISSING** — semantic landmark mapping exists in code (`shared/worldSemantics.ts`) but is not yet expressed as placed world objects |
+| `far.webp` | L0 | Distant aerial coastline/citadel — provides atmospheric depth behind the mid plate | **Present** (from the supplied art pack) |
+| `mid.webp` | L1 | The playable corridor — stairs, gold-inlaid path, waterfall, Stronghold/Comms visible in the distance | **Present**, replaces the Run-1 flat placeholder |
+| `foreground.webp` | L3 | Jungle vines/pillars/leaf frame — real occlusion, not decoration | **Present**, positioned at both authored `occlusion.json` zones |
+| `effects.webp` | L4 | God-ray + waterfall mist plate | **Present**, replaces the vector-drawn ray |
+| `portal_coldcall.webp` | L2 (portal) | The Cold Call/Comms portal object | **Present**, replaces the drawn glow-only fallback when loaded |
+| `stronghold.webp` | L2 (landmark) | Purple Stronghold structure | **Present**, layered behind the state-colored vector gate frame |
+| `occlusion.json` | L3 | Authored occlusion zones (2, flanking the gate) | Present |
+| `traversal.json` | L2 | Interaction anchors (Cold Call portal, Stronghold gate) with `labelRadius`/`interactionRadius` | Present |
+| `waterfall_01.webm` | — | Animated waterfall video | **Still missing** — no video asset was supplied. `effects.webp`'s static mist plate stands in; the video-texture lifecycle utility (`VideoTexture.ts`) remains ready, unattached. |
+| `landmarks.json` | L2 | Explicit placed-landmark metadata | **Still missing** — semantic landmark *mapping* exists in code (`shared/worldSemantics.ts`) and drives CSS treatment on mission-fork icons, but is not yet a placed-object list for this specific corridor's art. |
 
-## What is actually running today
+## What changed from the engineering-only pass (PR #34)
 
-Two pieces of **real, approved production art** exist and are reused as-is:
+`far`/`mid` are two **separate** supplied images (an aerial coastal view and a
+ground-level corridor), not one flat plate split in two — genuine parallax
+depth now exists between them, at the documented L0 factor (0.1, within the
+0.05–0.15 range).
 
-- `client/src/assets/goldline/generated/goldline-world-empty.png` (862×1825) — a
-  single flat plate, but a genuinely rich one: it already paints in a lit
-  purple platform/figure, a blue chained-archway structure, cascading gold
-  water, turquoise pools, and white-stone architecture consistent with the
-  north-star reference. It is mounted whole as the **L1 (mid)** layer. Because
-  it is one flat plate rather than separated layers, there is no independent
-  sky/far plane to parallax against it (L0 does not exist as art — the
-  engineering container for it is wired and inert), and no way to place a
-  drawn UI element over it without it reading as a placeholder against
-  professional-quality painted detail. This is why the in-world portal
-  indicator was deliberately reduced to a soft light glow rather than a drawn
-  card/icon — the painted art itself already carries the "portal" read.
-- `client/src/assets/goldline/generated/trailblazer-operator.png` (1024×1536) —
-  the character sprite. No sprite sheet, no Spine rig.
+The in-world portal indicator, previously a restrained glow-only fallback
+(because no portal art existed and a drawn card looked like a debug
+placeholder), now renders the actual supplied portal sprite when the texture
+loads, sized and faded by proximity. The glow-only path is kept as a runtime
+fallback if a texture fails to load — never a drawn card, per the original
+finding that it read as a placeholder.
 
-**No new art was generated for this pass.** This environment has no
-image/video generation capability, and fabricating placeholder gradients or
-stock-photo ruins to stand in for the north-star concept art is explicitly
-against the brief. Where the architecture needs a visual it does not have, it
-is either left absent (L0, L3 foreground, L4 fog plate, the waterfall video)
-or built from vector primitives that are honestly part of the existing
-approved style (the fortress/gate graphic, the gold route, a single restrained
-god-ray).
+The Stronghold gets real art, layered **behind** the pre-existing vector gate
+frame. The vector was not removed: its state-driven color (purple/gold/orange/
+grey for available/captured/contested/closed) is a load-bearing business-truth
+signal a static image cannot reproduce, so it now renders as a thin accent
+frame around the art rather than a filled box.
 
-## Exact assets still required to close the Visual Gate
+Foreground occlusion is now real, not just a proven mechanism: the supplied
+jungle/pillar art is placed at both authored zones and toggles visible as the
+player's world position enters them, so the avatar genuinely passes behind
+painted foliage/stonework at two points in the corridor.
 
-1. `far.webp` — a distant sky/coastline/mountain plate, separated from the
-   midground so true parallax depth reads.
-2. `foreground.webp` (+ authored alpha) — pillars/leaves/arch edges positioned
-   to occlude the character at at least two points in the corridor.
-3. `waterfall_01.webm` — a short, muted, looping waterfall detail clip.
-4. `fog.webp` — a soft haze/mist plate for the L4 effects layer.
-5. Ideally, a proper layered re-composition of the corridor matching the
-   supplied north-star reference (bright sunlit white stone, turquoise water,
-   gold embedded path, purple Stronghold, teal Comms portal) — the current
-   single background is serviceable but was not authored with layer
-   separation in mind, so parallax against it reads as one flat plate moving,
-   not real depth.
+Character rendering swaps texture by `AvatarState` using cropped frames from
+the supplied action sheet — see
+`client/public/assets/goldline/characters/trailblazer/README.md` for exactly
+which states are true frame animation versus a single held pose.
 
-Until those exist, the Visual Gate is **BLOCKED — FINAL ART REQUIRED**, even
-though the underlying engineering (layers, parallax, occlusion zones,
-proximity portals, animation states, contact shadow) is real and tested.
+## What is still honestly missing
+
+1. **Animated waterfall.** `effects.webp` is a static mist/god-ray plate; no
+   `.webm` was supplied.
+2. **Placed landmark metadata** (`landmarks.json`) — the semantic *mapping*
+   exists, but nothing yet places discrete landmark objects into this
+   specific corridor's layered scene beyond the Stronghold/Comms portal pair
+   already wired.
+3. **Gold-route/painted-path alignment** is close but not pixel-tuned — the
+   vector bezier route was authored against the old flat placeholder, not
+   this specific `mid.webp`, so it visually approximates the staircase's
+   painted gold inlay rather than tracing it exactly.
