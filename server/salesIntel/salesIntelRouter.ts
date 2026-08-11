@@ -23,6 +23,7 @@ import {
 import { importSalesIntelCorpus } from "./salesIntelImport";
 import {
   getSourceArtifact,
+  listAllAcceptedFrameworks,
   listFrameworksForSource,
   listFrameworkVersions,
   listSourceArtifacts,
@@ -30,6 +31,7 @@ import {
   listTranscripts,
   setFrameworkReviewState,
 } from "./salesIntelStore";
+import { computeSalesIntelCoverage } from "../../shared/salesIntelCoverage";
 import { createSalesIntelAdapterRegistry } from "./sourceAdapters";
 import {
   salesIntelSourceRegistryCreateSchema,
@@ -149,6 +151,12 @@ export const salesIntelRouter = router({
 
   /** Every framework awaiting a human decision, with explainable quality signals. */
   reviewQueue: adminProcedure.query(() => getFrameworkReviewQueue()),
+
+  /** What the accepted corpus actually covers — counts and gaps, never an invented percentage. */
+  coverage: adminProcedure.query(async () => {
+    const frameworks = await listAllAcceptedFrameworks();
+    return computeSalesIntelCoverage(frameworks);
+  }),
 
   review: adminProcedure
     .input(

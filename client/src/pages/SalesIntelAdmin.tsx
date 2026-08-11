@@ -399,6 +399,68 @@ function SourceImportPanel() {
 }
 
 /**
+ * Coverage intelligence (Slice 49) — what the accepted corpus actually
+ * covers, as counts and factual gaps only. No invented "97% coverage"
+ * score anywhere here.
+ */
+function CoveragePanel() {
+  const [open, setOpen] = useState(false);
+  const coverage = trpc.system.salesIntel.coverage.useQuery(undefined, { enabled: open });
+
+  return (
+    <section className="sales-intel-coverage">
+      <button className="sales-intel-registry-toggle" onClick={() => setOpen(!open)}>
+        CORPUS COVERAGE {open ? "▲" : "▼"}
+      </button>
+      {open && coverage.data ? (
+        <div className="sales-intel-registry-body">
+          <p className="sales-intel-hint">
+            {coverage.data.totalAcceptedFrameworks} accepted framework
+            {coverage.data.totalAcceptedFrameworks === 1 ? "" : "s"} total.
+          </p>
+          <b>BY ARCHETYPE</b>
+          <ul className="sales-intel-coverage-list">
+            {coverage.data.byArchetype.map(a => (
+              <li key={a.archetype} className={a.armoryReady ? "is-ready" : "is-gap"}>
+                {a.archetype}: {a.count} {a.armoryReady ? "" : "(no Armory coverage yet)"}
+              </li>
+            ))}
+          </ul>
+          <b>BY CHANNEL</b>
+          <ul className="sales-intel-coverage-list">
+            {coverage.data.byChannel.map(c => (
+              <li key={c.channel}>{c.channel}: {c.count}</li>
+            ))}
+          </ul>
+          {coverage.data.byCreator.length ? (
+            <>
+              <b>BY CREATOR</b>
+              <ul className="sales-intel-coverage-list">
+                {coverage.data.byCreator.map(c => (
+                  <li key={c.creator}>{c.creator}: {c.count}</li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          {coverage.data.conflicts.length ? (
+            <>
+              <b>PRESERVED DISAGREEMENT</b>
+              <ul className="sales-intel-coverage-list">
+                {coverage.data.conflicts.map((c, i) => (
+                  <li key={i}>
+                    {c.archetype} · {c.channel}: {c.responseFamilies.map(rf => `${rf.responseFamily} (${rf.creators.join(", ")})`).join(" vs. ")}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/**
  * Every framework a human hasn't decided on yet, with explainable quality
  * signals — never an opaque "AI score". Accept/reject here never touches
  * the source's original transcript or another framework's history.
@@ -555,6 +617,7 @@ export default function SalesIntelAdmin() {
       <SourceRegistryPanel />
       <SourceImportPanel />
       <ReviewQueuePanel />
+      <CoveragePanel />
 
       {composerOpen ? (
         <section className="sales-intel-composer">
