@@ -25,6 +25,7 @@ import type {
 } from "../state/GameState";
 import type { WorldMissionState } from "../../../../shared/driverGameWorld";
 import { CameraController } from "./CameraController";
+import { branchPaceFor, stepVelocity, targetSpeedForMagnitude } from "./movementFeel";
 
 type GoldlineGameCallbacks = {
   onActionAvailable: (action: CorridorAction | null, label: string | null) => void;
@@ -100,9 +101,6 @@ function poseForState(state: AvatarState, runFrame: number): string {
   }
 }
 
-/** Acceleration/deceleration rates for locomotion — not a linear 1:1 with input. */
-const ACCEL_UNITS_PER_SECOND = 2.6;
-const DECEL_UNITS_PER_SECOND = 4.2;
 
 export class GoldlineGame {
   private app: Application | null = null;
@@ -128,12 +126,14 @@ export class GoldlineGame {
   private foregroundOccluders: Sprite[] = [];
   private poseTextures = new Map<string, Texture>();
   private currentPoseKey = "idle";
+  private lastAvatarStateForImpulse: AvatarState = "idle";
   private runFrameTimer = 0;
   private particles = new Container();
   private input = { x: 0, y: 0 };
   private progress = 0.06;
   private lateral = 0;
   private velocity = 0; // eased locomotion speed, not applied 1:1 from input
+  private lastDirectionSign = 0;
   private completedTriggers = new Set<string>();
   private availableAction: CorridorAction | null = null;
   private availableLabel: string | null = null;
@@ -345,17 +345,24 @@ export class GoldlineGame {
     const magnitude = Math.hypot(this.input.x, this.input.y);
     this.avatarState.setLocomotion(magnitude);
     if (!this.actionUntil && this.avatarState.state !== "encounter_locked") {
-      const branchPace =
-        this.branch === "safe" ? 0.82 : this.branch === "upper" ? 1.08 : 1;
-      const targetSpeed = (magnitude > 0.62 ? 0.13 : magnitude > 0.08 ? 0.075 : 0) * branchPace;
-      const rampRate = targetSpeed > this.velocity ? ACCEL_UNITS_PER_SECOND : DECEL_UNITS_PER_SECOND;
-      const maxStep = rampRate * deltaSeconds * 0.13;
-      this.velocity +=
-        Math.sign(targetSpeed - this.velocity) * Math.min(maxStep, Math.abs(targetSpeed - this.velocity));
-
+      const branchPace = branchPaceFor(this.branch);
+      const targetSpeed = targetSpeedForMagnitude(magnitude, branchPace);
       const forward = Math.max(0, -this.input.y);
       const backward = Math.max(0, this.input.y);
       const directional = forward > 0 ? 1 : backward > 0 ? -0.65 : 0;
+      const directionSign = Math.sign(directional);
+      const isReversing =
+        directionSign !== 0 &&
+        this.lastDirectionSign !== 0 &&
+        directionSign !== this.lastDirectionSign;
+      if (directionSign !== 0) this.lastDirectionSign = directionSign;
+      this.velocity = stepVelocity({
+        currentVelocity: this.velocity,
+        targetSpeed,
+        deltaSeconds,
+        isReversing,
+      });
+
       const next = this.progress + this.velocity * directional * deltaSeconds;
       const ceiling = trigger ? trigger.at : 0.82;
       this.progress = Math.max(0.035, Math.min(blocked ? ceiling : 0.82, next));
@@ -436,8 +443,16 @@ export class GoldlineGame {
   }
 
   private updateAvatarPose(now: number, magnitude: number) {
-    if (this.poseTextures.size === 0 || !this.avatar) return;
     const state = this.avatarState.state;
+    // A brief, one-shot camera acknowledgement on takeoff and landing — never
+    // a shake loop, decays to zero on its own (see CameraController.impulse).
+    if (state !== this.lastAvatarStateForImpulse) {
+      if (state === "jump_start") this.camera.impulse(-3);
+      if (state === "land") this.camera.impulse(4);
+      this.lastAvatarStateForImpulse = state;
+    }
+
+    if (this.poseTextures.size === 0 || !this.avatar) return;
     if (state === "run" || state === "walk") {
       this.runFrameTimer += (state === "run" ? 11 : 6) * (magnitude > 0 ? 1 : 0);
     }
