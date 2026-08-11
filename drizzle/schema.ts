@@ -4864,6 +4864,8 @@ export const salesIntelSourceArtifacts = mysqlTable(
   "sales_intel_source_artifacts",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
+    /** Nullable — only set when this artifact came from a registered/monitored source (Slice 37/38). */
+    sourceRegistryId: varchar("sourceRegistryId", { length: 36 }),
     sourceType: mysqlEnum("sourceType", [
       "manual_url",
       "instagram",
@@ -4912,6 +4914,56 @@ export const salesIntelSourceArtifacts = mysqlTable(
     externalIdx: index("idx_sales_intel_source_external").on(
       table.sourceType,
       table.externalContentId
+    ),
+    registryIdx: index("idx_sales_intel_source_registry").on(
+      table.sourceRegistryId
+    ),
+  })
+);
+
+/**
+ * Curated, admin-managed watch list of creators/channels (Slice 37) —
+ * distinct from `salesIntelSourceArtifacts`, which is one row per
+ * individual piece of ingested content. Global, like the rest of
+ * sales_intel_* — not tenant scoped.
+ */
+export const salesIntelSources = mysqlTable(
+  "sales_intel_sources",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    creatorName: varchar("creatorName", { length: 191 }).notNull(),
+    creatorHandle: varchar("creatorHandle", { length: 191 }),
+    platform: mysqlEnum("platform", ["youtube", "instagram", "manual"]).notNull(),
+    sourceType: mysqlEnum("sourceType", [
+      "youtube_channel",
+      "youtube_playlist",
+      "youtube_video",
+      "instagram_profile_reference",
+      "manual_source",
+    ]).notNull(),
+    canonicalSourceUrl: varchar("canonicalSourceUrl", { length: 1024 }).notNull(),
+    externalChannelId: varchar("externalChannelId", { length: 191 }),
+    acquisitionMode: mysqlEnum("acquisitionMode", [
+      "AUTO_YOUTUBE",
+      "MANUAL_TRANSCRIPT",
+      "MANUAL_MEDIA",
+      "URL_REFERENCE_ONLY",
+      "PROVIDER_ANALYSIS",
+    ]).notNull(),
+    status: mysqlEnum("status", ["active", "disabled"]).notNull().default("active"),
+    notes: varchar("notes", { length: 2048 }),
+    lastCheckedAt: timestamp("lastCheckedAt"),
+    createdBy: varchar("createdBy", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    canonicalUrlUnique: uniqueIndex("uq_sales_intel_source_canonical_url").on(
+      table.canonicalSourceUrl
+    ),
+    statusIdx: index("idx_sales_intel_source_registry_status").on(
+      table.status,
+      table.platform
     ),
   })
 );

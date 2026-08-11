@@ -238,6 +238,32 @@ export async function setSourceStatus(input: {
     .where(eq(salesIntelSourceArtifacts.id, input.id));
 }
 
+/** Links a newly-created artifact back to the registry source that discovered it (Slice 37/38). */
+export async function setSourceArtifactRegistry(input: {
+  id: string;
+  sourceRegistryId: string;
+}): Promise<void> {
+  const database = await db();
+  await database
+    .update(salesIntelSourceArtifacts)
+    .set({ sourceRegistryId: input.sourceRegistryId })
+    .where(eq(salesIntelSourceArtifacts.id, input.id));
+}
+
+export async function listSourceArtifactsForRegistry(
+  sourceRegistryId: string,
+  limit = 20
+): Promise<SalesIntelSourceArtifact[]> {
+  const database = await db();
+  const rows = await database
+    .select()
+    .from(salesIntelSourceArtifacts)
+    .where(eq(salesIntelSourceArtifacts.sourceRegistryId, sourceRegistryId))
+    .orderBy(desc(salesIntelSourceArtifacts.ingestedAt))
+    .limit(limit);
+  return rows.map(artifactView);
+}
+
 export async function listSourceArtifacts(
   limit = 50
 ): Promise<SalesIntelSourceArtifact[]> {
