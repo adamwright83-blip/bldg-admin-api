@@ -392,6 +392,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [audioMuted, setAudioMuted] = useState(() => getAudioManager().isMuted);
+  const [coldCallPortalState, setColdCallPortalState] = useState<"hidden" | "label" | "engage">("hidden");
 
   useEffect(() => {
     const audio = getAudioManager();
@@ -459,6 +460,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       onProgress: setProgress,
       onInteract: () => handleInteractRef.current(),
       onError: () => setRuntimeFailed(true),
+      onPortalProximity: (anchorId, state) => {
+        if (anchorId === "cold_call_portal") setColdCallPortalState(state);
+      },
     });
     runtimeRef.current = game;
     void game.start({ worldUrl, operatorUrl }).then(started => {
@@ -670,7 +674,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       <section className={`playable-goldline is-${view}`} aria-label="Goldline playable field world">
         <div ref={hostRef} className="goldline-canvas-host" />
         {!runtimeReady ? (
-          <div className="game-loading"><Loader2 /> LOADING PLAYABLE WORLD…</div>
+          <div className="game-loading"><Loader2 /> ENTERING TERRITORY · SYNCING FIELD…</div>
         ) : null}
         <div className="game-atmosphere" aria-hidden="true" />
         {networkStatus === "offline" ? (
@@ -742,7 +746,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               )}
             </div>
             <button
-              className="cold-call-entry"
+              className={`cold-call-entry is-portal-${coldCallPortalState}`}
               disabled={!props.coldCallBatch && props.coldCallEligibleCount === 0}
               onClick={async () => {
                 if (!props.coldCallBatch) {

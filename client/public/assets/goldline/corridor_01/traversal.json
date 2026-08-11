@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "anchors": [
+    {
+      "id": "cold_call_portal",
+      "type": "comms_portal",
+      "position": { "progress": 0.52, "lateral": 0.3 },
+      "labelRadius": 0.22,
+      "interactionRadius": 0.09,
+      "missionBinding": "cold_call_burst"
+    },
+    {
+      "id": "stronghold_gate",
+      "type": "stronghold",
+      "position": { "progress": 0.79, "lateral": 0 },
+      "labelRadius": 0.18,
+      "interactionRadius": 0.06,
+      "missionBinding": "active_mission_encounter"
+    }
+  ]
+}

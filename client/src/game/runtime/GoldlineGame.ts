@@ -11,6 +11,13 @@ import {
   branchForLateralPosition,
   pendingTrigger,
 } from "../world/RouteCorridor";
+import {
+  anchorDistance,
+  loadCorridorAnchors,
+  pointInZone,
+  type CorridorAnchor,
+  type OcclusionZone,
+} from "../world/corridorAnchors";
 import type {
   CorridorAction,
   CorridorBranch,
@@ -24,22 +31,46 @@ type GoldlineGameCallbacks = {
   onProgress: (progress: number) => void;
   onInteract: () => void;
   onError: (error: Error) => void;
+  /** Fires as the player approaches/leaves a world portal (e.g. Cold Call). */
+  onPortalProximity?: (
+    anchorId: string,
+    state: "hidden" | "label" | "engage"
+  ) => void;
 };
 
-type GameAssets = { worldUrl: string; operatorUrl: string };
+type GameAssets = { worldUrl: string; operatorUrl: string; anchorsBasePath?: string };
+
+/** Acceleration/deceleration rates for locomotion — not a linear 1:1 with input. */
+const ACCEL_UNITS_PER_SECOND = 2.6;
+const DECEL_UNITS_PER_SECOND = 4.2;
 
 export class GoldlineGame {
   private app: Application | null = null;
   private world = new Container();
+
+  // L0-L4 layer containers. L0/L3/L4 art is intentionally absent — see
+  // client/public/assets/goldline/corridor_01/README.md for exactly what is
+  // still required. The containers are real and parallax-driven regardless,
+  // so dropping in art later requires no further engineering.
+  private layerFar = new Container(); // L0 — no art yet
+  private layerMid = new Container(); // L1 — existing approved background
+  private layerTraversal = new Container(); // L2 — route, portals, avatar
+  private layerForeground = new Container(); // L3 — occlusion, empty until foreground.webp exists
+  private layerEffects = new Container(); // L4 — one restrained god-ray, gold motes
+
   private camera = new CameraController(this.world);
   private avatar: Sprite | null = null;
+  private avatarShadow = new Graphics();
   private corridor = new Graphics();
   private fortress = new Graphics();
   private recoveryPath = new Graphics();
+  private portals = new Container();
+  private godRay = new Graphics();
   private particles = new Container();
   private input = { x: 0, y: 0 };
   private progress = 0.06;
   private lateral = 0;
+  private velocity = 0; // eased locomotion speed, not applied 1:1 from input
   private completedTriggers = new Set<string>();
   private availableAction: CorridorAction | null = null;
   private availableLabel: string | null = null;
@@ -48,6 +79,9 @@ export class GoldlineGame {
   private actionUntil = 0;
   private lastReportedProgress = -1;
   private worldState: WorldMissionState = "available";
+  private anchors: CorridorAnchor[] = [];
+  private occlusionZones: OcclusionZone[] = [];
+  private portalProximityState = new Map<string, "hidden" | "label" | "engage">();
   private hidden = false;
   private visibilityHandler = () => {
     this.hidden = document.hidden;
@@ -89,18 +123,43 @@ export class GoldlineGame {
       ]);
       const background = new Sprite(worldTexture);
       background.label = "approved-world-art";
-      this.world.addChild(background);
-      this.world.addChild(this.corridor, this.recoveryPath, this.fortress);
+      this.layerMid.addChild(background);
+
+      this.layerTraversal.addChild(
+        this.corridor,
+        this.recoveryPath,
+        this.fortress,
+        this.portals
+      );
       this.avatar = new Sprite(operatorTexture);
       this.avatar.anchor.set(0.5, 1);
       this.avatar.label = "trailblazer-operator";
-      this.world.addChild(this.avatar, this.particles);
+      this.layerTraversal.addChild(this.avatarShadow, this.avatar, this.particles);
+
+      this.layerEffects.addChild(this.godRay);
+
+      // z-order: far behind mid behind traversal behind foreground behind effects.
+      this.world.addChild(
+        this.layerFar,
+        this.layerMid,
+        this.layerTraversal,
+        this.layerForeground,
+        this.layerEffects
+      );
       app.stage.addChild(this.world);
 
       app.ticker.add(ticker => this.update(ticker.deltaMS / 1000, background));
       document.addEventListener("visibilitychange", this.visibilityHandler);
       window.addEventListener("pagehide", this.pageHideHandler);
       this.renderWorldState();
+
+      void loadCorridorAnchors(
+        assets.anchorsBasePath ?? "/assets/goldline/corridor_01"
+      ).then(result => {
+        this.anchors = result.anchors;
+        this.occlusionZones = result.zones;
+      });
+
       return true;
     } catch (error) {
       this.callbacks.onError(
@@ -130,8 +189,9 @@ export class GoldlineGame {
       return true;
     }
     this.completedTriggers.add(trigger.id);
-    this.avatarState.beginAction(action);
-    this.actionUntil = performance.now() + 620;
+    const now = performance.now();
+    this.avatarState.beginAction(action, now);
+    this.actionUntil = now + this.avatarState.actionDurationMs(action);
     this.progress = Math.min(0.78, trigger.at + 0.075);
     this.spawnTrail(action === "VAULT" ? 0xffc34e : 0x5feaff);
     return true;
@@ -153,8 +213,10 @@ export class GoldlineGame {
     background.x = (width - background.width) / 2;
     background.y = (height - background.height) / 2;
     this.drawWorld(width, height);
+    this.drawGodRay(width, height);
 
     const now = performance.now();
+    this.avatarState.tick(now);
     if (this.actionUntil && now >= this.actionUntil) {
       this.actionUntil = 0;
       this.avatarState.release();
@@ -164,12 +226,21 @@ export class GoldlineGame {
     const magnitude = Math.hypot(this.input.x, this.input.y);
     this.avatarState.setLocomotion(magnitude);
     if (!this.actionUntil && this.avatarState.state !== "encounter_locked") {
-      const forward = Math.max(0, -this.input.y);
-      const backward = Math.max(0, this.input.y);
+      // Eased acceleration/deceleration: velocity ramps toward the target
+      // speed rather than snapping to it, so starting/stopping reads as
+      // weighted movement instead of an instant on/off toggle.
       const branchPace =
         this.branch === "safe" ? 0.82 : this.branch === "upper" ? 1.08 : 1;
-      const speed = (magnitude > 0.62 ? 0.13 : 0.075) * branchPace;
-      const next = this.progress + (forward - backward * 0.65) * speed * deltaSeconds;
+      const targetSpeed = (magnitude > 0.62 ? 0.13 : magnitude > 0.08 ? 0.075 : 0) * branchPace;
+      const rampRate = targetSpeed > this.velocity ? ACCEL_UNITS_PER_SECOND : DECEL_UNITS_PER_SECOND;
+      const maxStep = rampRate * deltaSeconds * 0.13;
+      this.velocity +=
+        Math.sign(targetSpeed - this.velocity) * Math.min(maxStep, Math.abs(targetSpeed - this.velocity));
+
+      const forward = Math.max(0, -this.input.y);
+      const backward = Math.max(0, this.input.y);
+      const directional = forward > 0 ? 1 : backward > 0 ? -0.65 : 0;
+      const next = this.progress + this.velocity * directional * deltaSeconds;
       const ceiling = trigger ? trigger.at : 0.82;
       this.progress = Math.max(0.035, Math.min(blocked ? ceiling : 0.82, next));
       this.lateral = Math.max(
@@ -183,19 +254,31 @@ export class GoldlineGame {
       this.branch = nextBranch;
       this.callbacks.onBranchChange(nextBranch);
     }
+
     const avatarX = width * (0.5 + this.lateral * 0.22);
-    const avatarY = height * (0.88 - this.progress * 0.61);
+    const groundY = height * (0.88 - this.progress * 0.61);
     const baseHeight = Math.max(134, Math.min(232, height * (0.25 - this.progress * 0.08)));
+    const jumpFactor = this.avatarState.jumpHeightFactor(now);
+    const jumpLift = jumpFactor * baseHeight * 0.42;
+
     this.avatar.height = baseHeight;
     this.avatar.width = Math.abs(this.avatar.height * (1024 / 1536));
     this.avatar.scale.x = Math.abs(this.avatar.scale.x) * (this.input.x < -0.05 ? -1 : 1);
     this.avatar.x = avatarX;
     this.avatar.y =
-      avatarY +
-      (this.avatarState.state === "run" ? Math.sin(now / 72) * 3 : 0) -
-      (this.actionUntil ? Math.sin(((this.actionUntil - now) / 620) * Math.PI) * 24 : 0);
+      groundY -
+      jumpLift +
+      (this.avatarState.state === "run" ? Math.sin(now / 72) * 3 : 0);
     this.avatar.rotation = this.input.x * 0.035;
     this.avatar.alpha = this.avatarState.state === "encounter_locked" ? 0.72 : 1;
+
+    // Contact shadow stays on the ground plane regardless of jump height —
+    // that separation from the airborne sprite is what sells the jump, not
+    // any deformation of the character itself.
+    this.drawContactShadow(avatarX, groundY, baseHeight, jumpFactor);
+    this.applyOcclusion(avatarX, groundY);
+    this.updatePortals(width, height);
+    this.updateCameraLookahead();
 
     const current = pendingTrigger(this.progress, this.completedTriggers);
     const action = current && this.progress >= current.at - 0.04 ? current.action : null;
@@ -211,6 +294,102 @@ export class GoldlineGame {
       this.callbacks.onProgress(this.progress);
     }
     this.camera.update(deltaSeconds);
+  }
+
+  /** L3 occlusion mechanism: swap the fortress silhouette above the avatar
+   * when the avatar's world position enters an authored zone. Real z-order
+   * behavior today; final depth still needs the missing foreground art —
+   * see corridor_01/README.md. */
+  private applyOcclusion(_avatarX: number, _groundY: number) {
+    const inZone = this.occlusionZones.some(zone =>
+      pointInZone(zone, this.progress, this.lateral)
+    );
+    if (!this.avatar) return;
+    // fortress sits later in layerTraversal's child order than the avatar by
+    // default (avatar added after corridor/fortress/portals); when occluded,
+    // move the avatar behind the fortress graphic instead.
+    const fortressIndex = this.layerTraversal.getChildIndex(this.fortress);
+    const avatarIndex = this.layerTraversal.getChildIndex(this.avatar);
+    if (inZone && avatarIndex > fortressIndex) {
+      this.layerTraversal.setChildIndex(this.avatar, fortressIndex);
+      this.layerTraversal.setChildIndex(this.avatarShadow, fortressIndex);
+    } else if (!inZone && avatarIndex < this.layerTraversal.children.length - 1) {
+      this.layerTraversal.setChildIndex(this.avatar, this.layerTraversal.children.length - 1);
+      this.layerTraversal.setChildIndex(
+        this.avatarShadow,
+        Math.max(0, this.layerTraversal.children.length - 2)
+      );
+    }
+  }
+
+  private drawContactShadow(
+    avatarX: number,
+    groundY: number,
+    baseHeight: number,
+    jumpFactor: number
+  ) {
+    this.avatarShadow.clear();
+    const width = baseHeight * 0.42 * (1 - jumpFactor * 0.35);
+    const alpha = 0.32 * (1 - jumpFactor * 0.55);
+    this.avatarShadow
+      .ellipse(avatarX, groundY + 2, width, width * 0.28)
+      .fill({ color: 0x02060a, alpha });
+  }
+
+  private updatePortals(width: number, height: number) {
+    this.portals.removeChildren();
+    for (const anchor of this.anchors) {
+      const distance = anchorDistance(anchor, this.progress, this.lateral);
+      const state: "hidden" | "label" | "engage" =
+        distance <= anchor.interactionRadius
+          ? "engage"
+          : distance <= anchor.labelRadius
+            ? "label"
+            : "hidden";
+      const previous = this.portalProximityState.get(anchor.id);
+      if (previous !== state) {
+        this.portalProximityState.set(anchor.id, state);
+        this.callbacks.onPortalProximity?.(anchor.id, state);
+      }
+      if (state === "hidden") continue;
+
+      const px = width * (0.5 + anchor.position.lateral * 0.22);
+      const py = height * (0.88 - anchor.position.progress * 0.61) - baseHeightAt(height, anchor.position.progress);
+      const dominance = 1 - Math.min(1, distance / anchor.labelRadius);
+      const color = anchor.type === "comms_portal" ? 0x36e8e7 : 0x8b5fe0;
+      // A soft glow only — the approved background art already paints in
+      // portal-like structures (a lit platform, a chained archway). A drawn
+      // card/icon on top of that reads as a debug placeholder, not a portal.
+      // See corridor_01/README.md: true bespoke portal geometry is still an
+      // art requirement, not something a Graphics primitive should fake.
+      const portal = new Graphics();
+      const radius = 34 + dominance * 22;
+      portal.circle(px, py, radius).fill({ color, alpha: 0.05 + dominance * 0.1 });
+      portal.circle(px, py, radius * 0.45).fill({ color, alpha: 0.08 + dominance * 0.14 });
+      this.portals.addChild(portal);
+    }
+  }
+
+  private updateCameraLookahead() {
+    const upcoming = this.anchors
+      .map(anchor => ({ anchor, distance: anchorDistance(anchor, this.progress, this.lateral) }))
+      .filter(entry => entry.anchor.position.progress >= this.progress)
+      .sort((a, b) => a.distance - b.distance)[0];
+    if (!upcoming) {
+      this.camera.clearLookahead();
+      return;
+    }
+    const proximity = 1 - Math.min(1, upcoming.distance / 0.3);
+    this.camera.setLookahead(upcoming.anchor.position.lateral, proximity);
+  }
+
+  private drawGodRay(width: number, height: number) {
+    // One restrained god ray — the brief is explicit that one good effect
+    // beats ten cheap ones. No fog/sparkle layer exists yet (L4 art missing).
+    this.godRay.clear();
+    this.godRay
+      .poly([width * 0.42, 0, width * 0.62, 0, width * 0.5, height * 0.55])
+      .fill({ color: 0xfff3c4, alpha: 0.05 });
   }
 
   private drawWorld(width: number, height: number) {
@@ -275,8 +454,10 @@ export class GoldlineGame {
       this.worldState === "contested" ||
       this.worldState === "recovery_active"
     ) {
+      // Diversion: the recovery path forks visibly away from the main gold
+      // route rather than simply appearing as a second unrelated line.
       this.recoveryPath
-        .moveTo(width * 0.2, height * 0.64)
+        .moveTo(width * 0.32, height * 0.62)
         .bezierCurveTo(
           width * 0.06,
           height * 0.52,
@@ -287,7 +468,7 @@ export class GoldlineGame {
         )
         .stroke({ width: 18, color: 0xffb83e, alpha: 0.14 });
       this.recoveryPath
-        .moveTo(width * 0.2, height * 0.64)
+        .moveTo(width * 0.32, height * 0.62)
         .bezierCurveTo(
           width * 0.06,
           height * 0.52,
@@ -297,6 +478,9 @@ export class GoldlineGame {
           height * 0.22
         )
         .stroke({ width: 3, color: 0xffd875, alpha: 0.95 });
+      this.recoveryPath
+        .circle(width * 0.32, height * 0.62, 5)
+        .fill({ color: 0xffe6a8, alpha: 0.9 });
     }
   }
 
@@ -334,4 +518,8 @@ export class GoldlineGame {
     this.app = null;
     this.host.replaceChildren();
   }
+}
+
+function baseHeightAt(viewportHeight: number, progress: number): number {
+  return Math.max(134, Math.min(232, viewportHeight * (0.25 - progress * 0.08)));
 }

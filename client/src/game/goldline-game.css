@@ -1381,3 +1381,23 @@
   font: 900 10px "Barlow Condensed";
   letter-spacing: 0.1em;
 }
+
+/* ------------------------------------------------------------------
+   Corridor visual evolution — Cold Call portal proximity.
+   The button itself stays present and clickable at every distance (no
+   regression to the tested entry point); proximity only changes how
+   prominent it reads, mirroring the in-world portal's own dominance.
+   ------------------------------------------------------------------ */
+.cold-call-entry.is-portal-hidden {
+  opacity: 0.55;
+  transform: translateX(-50%) scale(0.94);
+}
+.cold-call-entry.is-portal-label {
+  opacity: 0.85;
+  transform: translateX(-50%) scale(0.98);
+}
+.cold-call-entry.is-portal-engage {
+  opacity: 1;
+  transform: translateX(-50%) scale(1.03);
+  box-shadow: 0 0 32px rgba(31, 229, 226, 0.45);
+}

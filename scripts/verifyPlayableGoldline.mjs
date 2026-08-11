@@ -1150,6 +1150,33 @@ if (mode === "staller-nodate") {
   process.exit(0);
 }
 
+if (mode === "leak-check") {
+  // Real mount/destroy lifecycle risk: reload the same tab five times and
+  // confirm each boot is clean, with no accumulating console errors from a
+  // double-registered ticker, texture, or listener.
+  for (let cycle = 1; cycle <= 5; cycle += 1) {
+    await page.reload({ waitUntil: "networkidle" });
+    await page.locator("canvas.goldline-game-canvas").waitFor({ state: "visible" });
+    await page.waitForTimeout(300);
+  }
+  if (errors.length) throw new Error(`Browser errors after 5 reload cycles: ${errors.join(" | ")}`);
+  const overflowAfterCycles = await page.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth
+  );
+  if (overflowAfterCycles) throw new Error("Horizontal overflow appeared after repeated mount cycles");
+  console.log(
+    JSON.stringify({
+      pageLoaded: true,
+      viewport: viewportTag,
+      reloadCycles: 5,
+      browserErrorsAfterCycles: errors.length,
+      horizontalOverflowAfterCycles: false,
+    })
+  );
+  await browser.close();
+  process.exit(0);
+}
+
 await page.getByRole("region", { name: "Anchor encounter" }).waitFor();
 
 const noRiskTrial = page.getByRole("button", { name: /NO-RISK TRIAL/i });
