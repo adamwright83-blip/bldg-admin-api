@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { CalendarClock, ChevronRight, X } from "lucide-react";
 import { ArmoryLoadout } from "../ArmoryLoadout";
+import { getAudioManager } from "../../audio/AudioManager";
+import { arcadeFeedback, missFeedback } from "../../audio/haptics";
 import {
   ARCHETYPE_COPY,
   CHANNEL_LABEL,
@@ -77,6 +79,8 @@ export function StallerEncounter(props: EncounterProps) {
     if (offset <= WINDOW_HALF_WIDTH) {
       setResolved(true);
       setFeedback("ALIGNED — THE DELAY OPENED UP");
+      getAudioManager().play("mechanism_align");
+      arcadeFeedback();
       props.onResolved({
         performance: "clean",
         feedback: "Timing aligned with the window",
@@ -88,6 +92,7 @@ export function StallerEncounter(props: EncounterProps) {
     if (remaining <= 0) {
       setResolved(true);
       setFeedback("MECHANISM HELD — THE DELAY DID NOT MOVE");
+      missFeedback();
       props.onResolved({
         performance: "missed",
         feedback: "Never aligned with the window",

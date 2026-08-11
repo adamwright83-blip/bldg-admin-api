@@ -1,6 +1,8 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronRight, DoorClosed, Route, X } from "lucide-react";
 import { ArmoryLoadout } from "../ArmoryLoadout";
+import { getAudioManager } from "../../audio/AudioManager";
+import { arcadeFeedback, missFeedback } from "../../audio/haptics";
 import {
   ARCHETYPE_COPY,
   CHANNEL_LABEL,
@@ -89,6 +91,7 @@ export function GatekeeperEncounter(props: EncounterProps) {
       setRoutedGate(null);
       setFeedback("SIGNAL LOST — THE CHECKPOINT HELD");
       setResolved(true);
+      missFeedback();
       props.onResolved({
         performance: "missed",
         feedback: "Signal did not reach a gate",
@@ -100,6 +103,8 @@ export function GatekeeperEncounter(props: EncounterProps) {
     setResolved(true);
     if (landed === targetGate) {
       setFeedback(`ROUTE OPEN · ${GATES.find(g => g.key === landed)!.label}`);
+      getAudioManager().play("gate_unlock");
+      arcadeFeedback();
       props.onResolved({
         performance: "clean",
         feedback: `Routed cleanly to ${landed}`,

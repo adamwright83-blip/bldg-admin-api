@@ -42,6 +42,38 @@ export const DAYFORGE_PRODUCT_EVENT_NAMES = [
   "win_back_sent",
   "customer_returned",
   "recovered_revenue_realized",
+
+  // --- Goldline gameplay events (Slice 19) ---
+  // These answer one question: does playing Goldline correlate with more
+  // real business-growth behavior? They are deliberately coarse — no
+  // conversation content, no transcript text, no contact details. Business
+  // outcomes (account_won, follow_up_created, etc. above) remain the
+  // authoritative record; these events describe game session behavior only.
+  "goldline_session_started",
+  "goldline_session_ended",
+  "mission_seen",
+  "mission_approached",
+  "mission_engaged",
+  "traversal_jump",
+  "traversal_climb",
+  "traversal_vault",
+  "anchor_encounter_started",
+  "gatekeeper_encounter_started",
+  "ghost_encounter_started",
+  "staller_encounter_started",
+  "encounter_resolved",
+  "armory_weapon_viewed",
+  "armory_weapon_selected",
+  "armory_weapon_used",
+  "mutation_created",
+  "mutation_followed",
+  "cold_call_batch_started",
+  "cold_call_outcome_saved",
+  "cold_call_chain_continued",
+  "scout_run_started",
+  "scout_discovery_created",
+  "scout_mission_created",
+  "verified_capture",
 ] as const;
 
 export type DayforgeProductEventName =
@@ -211,6 +243,37 @@ export interface DayforgeProductEventPropertyMap {
     revenueBand: string;
     attributionConfidence: string;
   };
+
+  // --- Goldline gameplay properties ---
+  goldline_session_started: { sessionId: string; entryPoint: string };
+  goldline_session_ended: { sessionId: string; durationMs: number };
+  mission_seen: { sessionId: string; missionState: string };
+  mission_approached: { sessionId: string; missionState: string };
+  mission_engaged: { sessionId: string; missionState: string; archetype: string };
+  traversal_jump: { sessionId: string };
+  traversal_climb: { sessionId: string };
+  traversal_vault: { sessionId: string };
+  anchor_encounter_started: { sessionId: string; channel: string };
+  gatekeeper_encounter_started: { sessionId: string; channel: string };
+  ghost_encounter_started: { sessionId: string; channel: string };
+  staller_encounter_started: { sessionId: string; channel: string };
+  encounter_resolved: {
+    sessionId: string;
+    archetype: string;
+    performance: string;
+  };
+  armory_weapon_viewed: { sessionId: string; provenanceKind: string };
+  armory_weapon_selected: { sessionId: string; provenanceKind: string };
+  armory_weapon_used: { sessionId: string; provenanceKind: string };
+  mutation_created: { sessionId: string; mutationType: string };
+  mutation_followed: { sessionId: string; mutationType: string };
+  cold_call_batch_started: { sessionId: string; targetCount: number };
+  cold_call_outcome_saved: { sessionId: string; outcome: string };
+  cold_call_chain_continued: { sessionId: string; combo: number };
+  scout_run_started: { sessionId: string };
+  scout_discovery_created: { sessionId: string; discoveryCount: number };
+  scout_mission_created: { sessionId: string };
+  verified_capture: { sessionId: string; estimatedValueBand: string };
 }
 
 export type DayforgeProductEventProperties<
@@ -268,6 +331,32 @@ export const DAYFORGE_PRODUCT_EVENT_PROPERTY_KEYS = {
   win_back_sent: ["channel", "deliveryStatus"],
   customer_returned: ["daysSincePreviousOrder", "attributionConfidence"],
   recovered_revenue_realized: ["revenueBand", "attributionConfidence"],
+
+  goldline_session_started: ["sessionId", "entryPoint"],
+  goldline_session_ended: ["sessionId", "durationMs"],
+  mission_seen: ["sessionId", "missionState"],
+  mission_approached: ["sessionId", "missionState"],
+  mission_engaged: ["sessionId", "missionState", "archetype"],
+  traversal_jump: ["sessionId"],
+  traversal_climb: ["sessionId"],
+  traversal_vault: ["sessionId"],
+  anchor_encounter_started: ["sessionId", "channel"],
+  gatekeeper_encounter_started: ["sessionId", "channel"],
+  ghost_encounter_started: ["sessionId", "channel"],
+  staller_encounter_started: ["sessionId", "channel"],
+  encounter_resolved: ["sessionId", "archetype", "performance"],
+  armory_weapon_viewed: ["sessionId", "provenanceKind"],
+  armory_weapon_selected: ["sessionId", "provenanceKind"],
+  armory_weapon_used: ["sessionId", "provenanceKind"],
+  mutation_created: ["sessionId", "mutationType"],
+  mutation_followed: ["sessionId", "mutationType"],
+  cold_call_batch_started: ["sessionId", "targetCount"],
+  cold_call_outcome_saved: ["sessionId", "outcome"],
+  cold_call_chain_continued: ["sessionId", "combo"],
+  scout_run_started: ["sessionId"],
+  scout_discovery_created: ["sessionId", "discoveryCount"],
+  scout_mission_created: ["sessionId"],
+  verified_capture: ["sessionId", "estimatedValueBand"],
 } as const satisfies {
   [Name in DayforgeProductEventName]: readonly (keyof DayforgeProductEventPropertyMap[Name])[];
 };
@@ -342,6 +431,50 @@ export function assertDayforgeProductEventProperties<
       )}`
     );
   }
+}
+
+/**
+ * The subset of DayforgeProductEventName a Goldline gameplay client may
+ * submit through the client-facing event endpoint. Deliberately a strict
+ * whitelist, not "every product event name" — business-critical events
+ * (account_won, revenue_realized, etc.) are only ever written by trusted
+ * server-side domain code as a side effect of a real mutation, never
+ * accepted directly from a client payload.
+ */
+export const GOLDLINE_CLIENT_EVENT_NAMES = [
+  "goldline_session_started",
+  "goldline_session_ended",
+  "mission_seen",
+  "mission_approached",
+  "mission_engaged",
+  "traversal_jump",
+  "traversal_climb",
+  "traversal_vault",
+  "anchor_encounter_started",
+  "gatekeeper_encounter_started",
+  "ghost_encounter_started",
+  "staller_encounter_started",
+  "encounter_resolved",
+  "armory_weapon_viewed",
+  "armory_weapon_selected",
+  "armory_weapon_used",
+  "mutation_created",
+  "mutation_followed",
+  "cold_call_batch_started",
+  "cold_call_outcome_saved",
+  "cold_call_chain_continued",
+  "scout_run_started",
+  "scout_discovery_created",
+  "scout_mission_created",
+  "verified_capture",
+] as const satisfies readonly DayforgeProductEventName[];
+
+export type GoldlineClientEventName = (typeof GOLDLINE_CLIENT_EVENT_NAMES)[number];
+
+export function isGoldlineClientEventName(
+  value: string
+): value is GoldlineClientEventName {
+  return (GOLDLINE_CLIENT_EVENT_NAMES as readonly string[]).includes(value);
 }
 
 export function isDayforgeProductEventName(

@@ -9,12 +9,16 @@ import {
 
 describe("DayForge product event contract", () => {
   it("keeps every locked funnel event in the typed catalog", () => {
-    expect(DAYFORGE_PRODUCT_EVENT_NAMES).toHaveLength(36);
+    // 36 original DayForge funnel events + 25 Goldline gameplay events
+    // added in the Slices 14-20 accelerated run (Slice 19).
+    expect(DAYFORGE_PRODUCT_EVENT_NAMES).toHaveLength(61);
     expect(DAYFORGE_PRODUCT_EVENT_NAMES).toContain("territory_scan_started");
     expect(DAYFORGE_PRODUCT_EVENT_NAMES).toContain("mission_game_completed");
     expect(DAYFORGE_PRODUCT_EVENT_NAMES).toContain(
       "recovered_revenue_realized"
     );
+    expect(DAYFORGE_PRODUCT_EVENT_NAMES).toContain("goldline_session_started");
+    expect(DAYFORGE_PRODUCT_EVENT_NAMES).toContain("verified_capture");
     expect(Object.keys(DAYFORGE_PRODUCT_EVENT_PROPERTY_KEYS).sort()).toEqual(
       [...DAYFORGE_PRODUCT_EVENT_NAMES].sort()
     );

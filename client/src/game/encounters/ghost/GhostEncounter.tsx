@@ -6,6 +6,8 @@ import {
 } from "react";
 import { ChevronRight, Radio, X } from "lucide-react";
 import { ArmoryLoadout } from "../ArmoryLoadout";
+import { getAudioManager } from "../../audio/AudioManager";
+import { arcadeFeedback, missFeedback } from "../../audio/haptics";
 import {
   ARCHETYPE_COPY,
   CHANNEL_LABEL,
@@ -82,6 +84,8 @@ export function GhostEncounter(props: EncounterProps) {
             queueMicrotask(() => {
               setResolved(true);
               setFeedback("SIGNAL LOCKED — CONTACT ROUTE HELD");
+              getAudioManager().play("signal_lock");
+              arcadeFeedback();
               onResolvedRef.current({
                 performance: "clean",
                 feedback: "Signal tracked and locked",
@@ -99,6 +103,7 @@ export function GhostEncounter(props: EncounterProps) {
           queueMicrotask(() => {
             setResolved(true);
             setFeedback("SIGNAL FADED — THE TRAIL WENT COLD");
+            missFeedback();
             onResolvedRef.current({
               performance: "missed",
               feedback: "Signal faded before lock",

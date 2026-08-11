@@ -31,6 +31,7 @@
     "dayforge:demo:reset": "tsx scripts/dayforge-demo-reset.ts",
     "dayforge:demo:verify": "tsx scripts/dayforge-demo-verify.ts",
     "dayforge:migrations:verify": "tsx scripts/dayforge-migrations-verify.ts",
+    "goldline:bundle:budget": "node scripts/checkGoldlineBundleBudget.mjs",
     "dayforge:demo": "tsx scripts/dayforge-demo.ts"
   },
   "dependencies": {

@@ -56,6 +56,12 @@ import {
   projectPersistentHistory,
   projectPlayableMissions,
 } from "./state/WorldProjection";
+import { landmarkForMission } from "../../../shared/worldSemantics";
+import { networkStatusLabel, useNetworkStatus } from "./session/useNetworkStatus";
+import { getGoldlineSessionId } from "./analytics/goldlineSession";
+import type { GoldlineEventEmitter } from "./analytics/emitGoldlineEvent";
+import { getAudioManager } from "./audio/AudioManager";
+import { arcadeFeedback, missFeedback } from "./audio/haptics";
 import type {
   ArcadeResolution,
   CorridorAction,
@@ -118,6 +124,7 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
   scoutReport?: ScoutReport | null;
   isRunningScout?: boolean;
   onRunScout: () => Promise<void>;
+  onEmitEvent?: GoldlineEventEmitter;
   onRequestWeapons?: (input: {
     archetype: ObjectionArchetype;
     channel: SalesIntelChannel;
@@ -296,9 +303,9 @@ function MissionFork(props: {
         {props.missions.map((mission, index) => (
           <button
             key={mission.key}
-            className={`is-${stateTone(mission.state)}${mission.key === props.activeKey ? " is-active" : ""}`}
+            className={`is-${stateTone(mission.state)} ${landmarkForMission({ visualState: mission.state }).cssClass}${mission.key === props.activeKey ? " is-active" : ""}`}
             onClick={() => props.onSelect(mission)}
-            aria-label={`Select ${mission.name}`}
+            aria-label={`Select ${mission.name} — ${landmarkForMission({ visualState: mission.state }).label}`}
           >
             {index + 1}
           </button>
@@ -360,6 +367,39 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [coldCallOpen, setColdCallOpen] = useState(false);
   const [scoutOpen, setScoutOpen] = useState(false);
   const [scoutCapabilityOpen, setScoutCapabilityOpen] = useState(false);
+  const networkStatus = useNetworkStatus();
+  const sessionIdRef = useRef(getGoldlineSessionId());
+  const sessionStartRef = useRef(performance.now());
+  const emit = props.onEmitEvent;
+
+  useEffect(() => {
+    emit?.({
+      eventName: "goldline_session_started",
+      sessionId: sessionIdRef.current,
+      properties: { sessionId: sessionIdRef.current, entryPoint: "goldline_home" },
+    });
+    return () => {
+      emit?.({
+        eventName: "goldline_session_ended",
+        sessionId: sessionIdRef.current,
+        properties: {
+          sessionId: sessionIdRef.current,
+          durationMs: Math.round(performance.now() - sessionStartRef.current),
+        },
+      });
+    };
+    // Fires once per mount/unmount; emit is expected stable from the caller.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [audioMuted, setAudioMuted] = useState(() => getAudioManager().isMuted);
+
+  useEffect(() => {
+    const audio = getAudioManager();
+    audio.primeOnGesture();
+    const handleVisibility = () => audio.setBackgrounded(document.hidden);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
   const [encounterArchetype, setEncounterArchetype] =
     useState<ObjectionArchetype>("ANCHOR");
   const [encounterChannel, setEncounterChannel] =
@@ -433,10 +473,24 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   useEffect(() => {
     if (!activeMission) return;
     runtimeRef.current?.setWorldState(activeMission.state);
-    if (activeMission.state === "captured") setView("captured");
-    else if (activeMission.state === "contested") setView("rekindle");
+    if (activeMission.state === "captured") {
+      setView("captured");
+      // Fires only from real mission state, never from arcade performance —
+      // the same authoritative signal that gates VictoryCeremony itself.
+      emit?.({
+        eventName: "verified_capture",
+        sessionId: sessionIdRef.current,
+        missionId: activeMission.missionId,
+        properties: {
+          sessionId: sessionIdRef.current,
+          estimatedValueBand:
+            activeMission.verifiedAnnualValueCents != null ? "verified" : "unverified",
+        },
+      });
+    } else if (activeMission.state === "contested") setView("rekindle");
     else if (activeMission.state === "recovery_active") setView("recovery_active");
     else if (activeMission.state === "closed") setView("closed");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMission?.key, activeMission?.state]);
 
   const handleInteractRef = useRef(() => {});
@@ -487,10 +541,28 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         .finally(() => setIsLoadingWeapons(false));
     }
     setView("encounter");
+    const startedEventByArchetype = {
+      ANCHOR: "anchor_encounter_started",
+      GATEKEEPER: "gatekeeper_encounter_started",
+      GHOST: "ghost_encounter_started",
+      STALLER: "staller_encounter_started",
+    } as const;
+    emit?.({
+      eventName: startedEventByArchetype[archetype],
+      sessionId: sessionIdRef.current,
+      missionId: activeMission.missionId,
+      properties: { sessionId: sessionIdRef.current, channel },
+    });
   };
 
   /** Records a real selection so personal evidence can accumulate. */
   function handleWeaponSelected(weapon: ArmoryWeapon) {
+    emit?.({
+      eventName: "armory_weapon_selected",
+      sessionId: sessionIdRef.current,
+      missionId: activeMission?.missionId ?? null,
+      properties: { sessionId: sessionIdRef.current, provenanceKind: weapon.provenance.type },
+    });
     if (!props.onRecordWeaponUsage || !activeMission?.missionId) return;
     void props
       .onRecordWeaponUsage({
@@ -514,6 +586,16 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     setFeedback(resolution.feedback);
     setArcadeResolution(resolution.performance === "clean" ? "breached" : "miss");
     setView("awaiting_business_result");
+    emit?.({
+      eventName: "encounter_resolved",
+      sessionId: sessionIdRef.current,
+      missionId: activeMission?.missionId ?? null,
+      properties: {
+        sessionId: sessionIdRef.current,
+        archetype: encounterArchetype,
+        performance: resolution.performance,
+      },
+    });
   }
 
   function performAction() {
@@ -553,6 +635,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     if (!deliberateInput) {
       setArcadeResolution("miss");
       setFeedback("MISS — SIGNAL SKIPPED THE WEAK POINT");
+      missFeedback();
       setView("awaiting_business_result");
       return;
     }
@@ -561,6 +644,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     setShield(nextShield);
     setArcadeResolution(nextShield === 0 ? "breached" : "hit");
     setFeedback(nextShield === 0 ? "BREACH — ARCADE OPENING CREATED" : `HIT — SHIELD ${nextShield}/3`);
+    getAudioManager().play("weak_point_hit");
+    arcadeFeedback();
     if (nextShield === 0) {
       setView("awaiting_business_result");
     } else {
@@ -588,6 +673,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           <div className="game-loading"><Loader2 /> LOADING PLAYABLE WORLD…</div>
         ) : null}
         <div className="game-atmosphere" aria-hidden="true" />
+        {networkStatus === "offline" ? (
+          <div className="network-status-banner" role="status">
+            {networkStatusLabel(networkStatus)}
+          </div>
+        ) : null}
 
         <header className="game-topbar">
           <button onClick={() => setUtilityPanel("menu")} aria-label="Open field utilities"><Menu /></button>
@@ -611,7 +701,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           <aside className="world-history-ribbon" aria-label="Persistent world history">
             <span>
               <small>PERSISTENT WORLD HISTORY</small>
-              <b>WORLD CONTROL {gameWorldControlPercent(props.worldNodes ?? [])}%</b>
+              <b title="Game progression only — not market share or ownership">WORLD CONTROL {gameWorldControlPercent(props.worldNodes ?? [])}%</b>
             </span>
             <div>
               {history.slice(0, 4).map(mission => (
@@ -934,6 +1024,16 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                     <button onClick={() => setUtilityPanel("route")}>LIVE ROUTE</button>
                     <button onClick={() => setUtilityPanel("open-channel")}>OPEN CHANNEL</button>
                     <button onClick={() => void props.onResolveDay()} disabled={props.isResolvingDay}>UNLOAD DAY</button>
+                    <button
+                      onClick={() => {
+                        const audio = getAudioManager();
+                        const next = !audio.isMuted;
+                        audio.setMuted(next);
+                        setAudioMuted(next);
+                      }}
+                    >
+                      SOUND {audioMuted ? "OFF" : "ON"}
+                    </button>
                   </div>
                   {props.activeDispatch && props.onOpenDispatch ? (
                     <button className="live-dispatch-button" onClick={() => void props.onOpenDispatch?.()}>LIVE MISSION #{props.activeDispatch.missionId} <ChevronRight /></button>
