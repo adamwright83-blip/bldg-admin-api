@@ -3,9 +3,18 @@
 
   <head>
     <meta charset="UTF-8" />
+    <!--
+      maximum-scale=1 removed: combined with async React hydration, it is a
+      known trigger for Android Chrome computing its initial layout against
+      the wrong (legacy "ideal viewport") width before the constraint fully
+      applies — the exact failure class behind the Goldline miniature-game
+      regression on real Android devices. viewport-fit=cover keeps safe-area
+      insets (env(safe-area-inset-*), already used throughout the game CSS)
+      working correctly, including in the installed PWA.
+    -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+      content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light" />
     <title>Laundry Butler</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />

@@ -632,10 +632,35 @@ function responseFor(procedure, input) {
   return {};
 }
 
+// Real Android Chrome applies the mobile viewport algorithm (meta viewport
+// interpretation, layout-viewport-vs-visual-viewport handling) that desktop
+// Chromium resized to a small window does NOT — a context without isMobile/
+// hasTouch/a mobile user agent is not a faithful phone emulation, only a
+// small desktop window. GOLDLINE_VERIFY_DEVICE=pixel switches to a real
+// Android Chrome device profile; unset preserves the original desktop-window
+// behavior for the existing non-Android matrix.
+const ANDROID_DEVICE_PROFILES = {
+  // deviceScaleFactor/isMobile/hasTouch/userAgent only — viewport dimensions
+  // still come from GOLDLINE_VERIFY_WIDTH/HEIGHT so this profile can be
+  // combined with any CSS width in the Android size-class matrix (360, 393,
+  // 412, 430...), not just one fixed Pixel resolution.
+  pixel: {
+    deviceScaleFactor: 2.625,
+    isMobile: true,
+    hasTouch: true,
+    userAgent:
+      "Mozilla/5.0 (Linux; Android 14; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+  },
+};
+const androidDevice = ANDROID_DEVICE_PROFILES[process.env.GOLDLINE_VERIFY_DEVICE ?? ""];
+
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
   viewport: { width: viewportWidth, height: viewportHeight },
-  deviceScaleFactor: 2,
+  deviceScaleFactor: androidDevice?.deviceScaleFactor ?? 2,
+  isMobile: androidDevice?.isMobile ?? false,
+  hasTouch: androidDevice?.hasTouch ?? false,
+  ...(androidDevice?.userAgent ? { userAgent: androidDevice.userAgent } : {}),
   geolocation: { latitude: 34.0522, longitude: -118.2437 },
   permissions: ["geolocation"],
 });
@@ -706,6 +731,72 @@ await page.screenshot({
   path: `${outputDir}/goldline-${mode}-${viewportTag}.png`,
   fullPage: true,
 });
+
+if (mode === "viewport-metrics") {
+  // Hard layout invariant: on a true mobile viewport the game must fill it,
+  // not render as a miniature rectangle inside a huge dark margin. Measures
+  // the actual visual viewport against the game shell/canvas bounding rects
+  // — a regression that shrinks the game to ~40-50% width can never pass this.
+  const metrics = await page.evaluate(() => {
+    const rect = el => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { width: r.width, height: r.height, top: r.top, left: r.left };
+    };
+    const shell = document.querySelector(".playable-goldline-shell");
+    const game = document.querySelector(".playable-goldline");
+    const canvas = document.querySelector("canvas.goldline-game-canvas");
+    return {
+      visualViewport: window.visualViewport
+        ? { width: window.visualViewport.width, height: window.visualViewport.height }
+        : null,
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      devicePixelRatio: window.devicePixelRatio,
+      shellRect: rect(shell),
+      gameRect: rect(game),
+      canvasCssRect: rect(canvas),
+      canvasBacking: canvas ? { width: canvas.width, height: canvas.height } : null,
+    };
+  });
+  const visualWidth = metrics.visualViewport?.width ?? metrics.innerWidth;
+  const visualHeight = metrics.visualViewport?.height ?? metrics.innerHeight;
+  const gameWidth = metrics.gameRect?.width ?? 0;
+  const gameHeight = metrics.gameRect?.height ?? 0;
+  const widthRatio = gameWidth / visualWidth;
+  const heightRatio = gameHeight / visualHeight;
+  // A game rendering at ~40-50% width must NEVER pass this assertion.
+  if (widthRatio < 0.92) {
+    throw new Error(
+      `Goldline game width is only ${(widthRatio * 100).toFixed(1)}% of the visual viewport width (${gameWidth}px of ${visualWidth}px) — the miniature-game regression is present.`
+    );
+  }
+  if (heightRatio < 0.7) {
+    throw new Error(
+      `Goldline game height is only ${(heightRatio * 100).toFixed(1)}% of the visual viewport height (${gameHeight}px of ${visualHeight}px).`
+    );
+  }
+  if (errors.length) throw new Error(`Browser errors: ${errors.join(" | ")}`);
+  console.log(
+    JSON.stringify({
+      pageLoaded: true,
+      viewport: viewportTag,
+      device: process.env.GOLDLINE_VERIFY_DEVICE ?? "desktop-window",
+      visualViewport: { width: visualWidth, height: visualHeight },
+      gameRect: metrics.gameRect,
+      shellRect: metrics.shellRect,
+      canvasCssRect: metrics.canvasCssRect,
+      canvasBacking: metrics.canvasBacking,
+      devicePixelRatio: metrics.devicePixelRatio,
+      widthRatio: Number(widthRatio.toFixed(3)),
+      heightRatio: Number(heightRatio.toFixed(3)),
+      browserErrors: errors,
+      screenshot: `${outputDir}/goldline-${mode}-${viewportTag}.png`,
+    })
+  );
+  await browser.close();
+  process.exit(0);
+}
 
 if (mode === "coldcall") {
   await page.getByRole("button", { name: /COLD CALL BURST/i }).click();
