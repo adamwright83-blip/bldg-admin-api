@@ -76,6 +76,11 @@ import { VictoryCeremony } from "./victory/VictoryCeremony";
 import { ScoutCapabilityChamber } from "./capabilities/ScoutCapabilityChamber";
 import { ScoutReportPanel } from "./agents/scout/ScoutReportPanel";
 import {
+  hasOnboardingMilestone,
+  markOnboardingMilestone,
+  type OnboardingMilestone,
+} from "./onboarding/onboardingProgress";
+import {
   archetypeForMission,
   channelForMission,
   type ArmoryWeapon,
@@ -171,6 +176,9 @@ function branchCopy(branch: CorridorBranch) {
 function Joystick(props: {
   disabled: boolean;
   onInput: (x: number, y: number) => void;
+  /** Shown only until the player's first real movement, then never again this device. */
+  showMovementHint?: boolean;
+  onFirstMove?: () => void;
 }) {
   const baseRef = useRef<HTMLDivElement>(null);
   const pointerRef = useRef<number | null>(null);
@@ -189,6 +197,7 @@ function Joystick(props: {
     }
     setKnob({ x, y });
     props.onInput(x, y);
+    if (length > 0.15) props.onFirstMove?.();
   }
 
   function release(event?: ReactPointerEvent<HTMLDivElement>) {
@@ -224,6 +233,7 @@ function Joystick(props: {
         }}
       />
       <span>MOVE</span>
+      {props.showMovementHint ? <em className="joystick-hint" aria-hidden="true" /> : null}
     </div>
   );
 }
@@ -371,6 +381,23 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const sessionIdRef = useRef(getGoldlineSessionId());
   const sessionStartRef = useRef(performance.now());
   const emit = props.onEmitEvent;
+  const [movementLearned, setMovementLearned] = useState(() =>
+    hasOnboardingMilestone("movement")
+  );
+  const [onboardingToast, setOnboardingToast] = useState<string | null>(null);
+  const onboardingToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showOnboardingToast = useRef((message: string) => {
+    setOnboardingToast(message);
+    if (onboardingToastTimer.current) clearTimeout(onboardingToastTimer.current);
+    onboardingToastTimer.current = setTimeout(() => setOnboardingToast(null), 1800);
+  }).current;
+  useEffect(() => () => {
+    if (onboardingToastTimer.current) clearTimeout(onboardingToastTimer.current);
+  }, []);
+  const completeMilestone = useRef((milestone: OnboardingMilestone) => {
+    markOnboardingMilestone(milestone);
+    if (milestone === "movement") setMovementLearned(true);
+  }).current;
 
   useEffect(() => {
     emit?.({
@@ -492,6 +519,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           missionId: activeMissionRef.current?.missionId ?? null,
           properties: { sessionId: sessionIdRef.current },
         });
+        const milestone: OnboardingMilestone =
+          action === "JUMP" ? "jump" : action === "CLIMB" ? "climb" : "vault";
+        if (!hasOnboardingMilestone(milestone)) {
+          completeMilestone(milestone);
+          showOnboardingToast(`${action} LEARNED`);
+        }
       },
       onQualityChange: (tier, avgFrameMs) => {
         emit?.({
@@ -563,9 +596,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             activeMission.verifiedAnnualValueCents != null ? "verified" : "unverified",
         },
       });
-    } else if (activeMission.state === "contested") setView("rekindle");
-    else if (activeMission.state === "recovery_active") setView("recovery_active");
-    else if (activeMission.state === "closed") setView("closed");
+      completeMilestone("first_business_resolution");
+    } else if (activeMission.state === "contested") {
+      setView("rekindle");
+      completeMilestone("first_business_resolution");
+    } else if (activeMission.state === "recovery_active") setView("recovery_active");
+    else if (activeMission.state === "closed") {
+      setView("closed");
+      completeMilestone("first_business_resolution");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMission?.key, activeMission?.state]);
 
@@ -624,6 +663,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       missionId: activeMission.missionId,
       properties: { sessionId: sessionIdRef.current, missionState: activeMission.state, archetype },
     });
+    completeMilestone("first_mission_engaged");
     setEncounterArchetype(archetype);
     setEncounterChannel(channel);
     setShield(3);
@@ -683,6 +723,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       missionId: activeMission?.missionId ?? null,
       properties: { sessionId: sessionIdRef.current, provenanceKind: weapon.provenance.type },
     });
+    completeMilestone("first_armory_choice");
     if (!props.onRecordWeaponUsage || !activeMission?.missionId) return;
     void props
       .onRecordWeaponUsage({
@@ -892,7 +933,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             {branch === "intel" && progress > 0.38 ? (
               <div className="intel-pickup"><Sparkles /> ENCOUNTER PREP REVEALED</div>
             ) : null}
-            <Joystick disabled={false} onInput={(x, y) => runtimeRef.current?.setInput(x, y)} />
+            {onboardingToast ? (
+              <div className="onboarding-toast" role="status">{onboardingToast}</div>
+            ) : null}
+            <Joystick
+              disabled={false}
+              onInput={(x, y) => runtimeRef.current?.setInput(x, y)}
+              showMovementHint={!movementLearned}
+              onFirstMove={() => completeMilestone("movement")}
+            />
             <div className="context-actions">
               {action ? (
                 <button className={`is-${action.toLowerCase()}`} onClick={performAction}>
