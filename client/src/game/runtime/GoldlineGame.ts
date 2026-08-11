@@ -26,6 +26,7 @@ import type {
 import type { WorldMissionState } from "../../../../shared/driverGameWorld";
 import { CameraController } from "./CameraController";
 import { branchPaceFor, stepVelocity, targetSpeedForMagnitude } from "./movementFeel";
+import { lateralForProgress, loadGoldRoute, type GoldRoutePoint } from "../world/goldRoute";
 
 type GoldlineGameCallbacks = {
   onActionAvailable: (action: CorridorAction | null, label: string | null) => void;
@@ -146,6 +147,7 @@ export class GoldlineGame {
   private lastReportedProgress = -1;
   private worldState: WorldMissionState = "available";
   private anchors: CorridorAnchor[] = [];
+  private goldRoutePoints: GoldRoutePoint[] = [];
   private occlusionZones: OcclusionZone[] = [];
   private portalProximityState = new Map<string, "hidden" | "label" | "engage">();
   private hidden = false;
@@ -292,11 +294,13 @@ export class GoldlineGame {
       window.addEventListener("pagehide", this.pageHideHandler);
       this.renderWorldState();
 
-      void loadCorridorAnchors(
-        assets.anchorsBasePath ?? "/assets/goldline/corridor_01"
-      ).then(result => {
+      const anchorsBasePath = assets.anchorsBasePath ?? "/assets/goldline/corridor_01";
+      void loadCorridorAnchors(anchorsBasePath).then(result => {
         this.anchors = result.anchors;
         this.occlusionZones = result.zones;
+      });
+      void loadGoldRoute(anchorsBasePath).then(points => {
+        this.goldRoutePoints = points;
       });
 
       return true;
@@ -389,7 +393,11 @@ export class GoldlineGame {
       this.callbacks.onBranchChange(nextBranch);
     }
 
-    const avatarX = width * (0.5 + this.lateral * 0.22);
+    // Authored route centerline (traced from mid.webp's painted gold inlay)
+    // replaces the constant 0.5 — the player's free joystick deviation is
+    // still added on top, exactly as it was against the old fixed center.
+    const routeCenter = lateralForProgress(this.goldRoutePoints, this.progress);
+    const avatarX = width * (routeCenter + this.lateral * 0.22);
     const groundY = height * (0.88 - this.progress * 0.61);
     const baseHeight = Math.max(134, Math.min(232, height * (0.25 - this.progress * 0.08)));
     const jumpFactor = this.avatarState.jumpHeightFactor(now);
@@ -638,28 +646,29 @@ export class GoldlineGame {
 
   private drawWorld(width: number, height: number) {
     this.corridor.clear();
-    this.corridor
-      .moveTo(width * 0.32, height * 0.91)
-      .bezierCurveTo(
-        width * 0.72,
-        height * 0.72,
-        width * 0.33,
-        height * 0.49,
-        width * 0.52,
-        height * 0.25
-      )
-      .stroke({ width: 14, color: 0xf4bd48, alpha: 0.15 });
-    this.corridor
-      .moveTo(width * 0.32, height * 0.91)
-      .bezierCurveTo(
-        width * 0.72,
-        height * 0.72,
-        width * 0.33,
-        height * 0.49,
-        width * 0.52,
-        height * 0.25
-      )
-      .stroke({ width: 3, color: 0xffdf77, alpha: 0.86 });
+    // Authored route: sampled from the same lateralForProgress the avatar
+    // itself walks on, so the drawn line and the character's actual path
+    // are the same curve by construction — never two independently-tuned
+    // lines that can drift apart. Falls back to the prior generic bezier
+    // shape when the route JSON hasn't loaded yet (lateralForProgress
+    // returns 0.5 with no authored points).
+    const SAMPLES = 24;
+    const routeScreenPoint = (t: number) => {
+      const p = 0.02 + t * 0.8; // matches the playable progress range
+      const lateral = lateralForProgress(this.goldRoutePoints, p);
+      return { x: width * lateral, y: height * (0.88 - p * 0.61) };
+    };
+    const drawRoute = (strokeWidth: number, color: number, alpha: number) => {
+      const start = routeScreenPoint(0);
+      this.corridor.moveTo(start.x, start.y);
+      for (let i = 1; i <= SAMPLES; i += 1) {
+        const point = routeScreenPoint(i / SAMPLES);
+        this.corridor.lineTo(point.x, point.y);
+      }
+      this.corridor.stroke({ width: strokeWidth, color, alpha });
+    };
+    drawRoute(14, 0xf4bd48, 0.15);
+    drawRoute(3, 0xffdf77, 0.86);
 
     this.fortress.clear();
     const gateX = width * 0.37;
