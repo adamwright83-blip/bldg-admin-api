@@ -46,6 +46,8 @@ type GoldlineGameCallbacks = {
   onTraversalAction?: (action: "JUMP" | "CLIMB" | "VAULT") => void;
   /** Fires only when measured rolling frame time crosses a real degrade/recover threshold. */
   onQualityChange?: (tier: QualityTier, avgFrameMs: number) => void;
+  /** Fires (throttled, ~1/s) only while the avatar is idle/walk/run — a genuinely safe resume point. */
+  onCheckpointSafe?: (progress: number, lateral: number, branch: CorridorBranch) => void;
 };
 
 /**
@@ -65,6 +67,14 @@ type GameAssets = {
   portalUrl?: string;
   strongholdUrl?: string;
   characterBasePath?: string;
+  /**
+   * Restores a previously-saved safe checkpoint (see checkpointStorage.ts).
+   * Only position/branch are restorable — avatar animation state always
+   * starts fresh at "idle" regardless, so a restore can never resume mid-jump.
+   */
+  initialProgress?: number;
+  initialLateral?: number;
+  initialBranch?: CorridorBranch;
 };
 
 const CHARACTER_POSE_FILES: Record<string, string> = {
@@ -161,6 +171,7 @@ export class GoldlineGame {
   private portalProximityState = new Map<string, "hidden" | "label" | "engage">();
   private qualityMonitor = new AdaptiveQualityMonitor();
   private qualityTier: QualityTier = "premium";
+  private lastCheckpointReportAt = 0;
   private hidden = false;
   private visibilityHandler = () => {
     this.hidden = document.hidden;
@@ -179,6 +190,13 @@ export class GoldlineGame {
 
   async start(assets: GameAssets) {
     try {
+      if (assets.initialProgress != null) {
+        this.progress = Math.min(0.78, Math.max(0.02, assets.initialProgress));
+      }
+      if (assets.initialLateral != null) {
+        this.lateral = Math.min(0.72, Math.max(-0.72, assets.initialLateral));
+      }
+      if (assets.initialBranch != null) this.branch = assets.initialBranch;
       const app = new Application();
       await app.init({
         resizeTo: this.host,
@@ -477,7 +495,23 @@ export class GoldlineGame {
       this.lastReportedProgress = reportedProgress;
       this.callbacks.onProgress(this.progress);
     }
+    this.reportCheckpointIfSafe();
     this.camera.update(deltaSeconds);
+  }
+
+  /**
+   * Only ever reports position while the avatar is idle/walking/running —
+   * never mid-jump, mid-vault, mid-climb, or encounter-locked — so a
+   * restored session can never resume inside an unresolved animation.
+   * Throttled to roughly once per second to avoid write-spamming storage.
+   */
+  private reportCheckpointIfSafe() {
+    const safeStates: AvatarState[] = ["idle", "walk", "run"];
+    if (!safeStates.includes(this.avatarState.state)) return;
+    const now = performance.now();
+    if (now - this.lastCheckpointReportAt < 1000) return;
+    this.lastCheckpointReportAt = now;
+    this.callbacks.onCheckpointSafe?.(this.progress, this.lateral, this.branch);
   }
 
   private fitCover(sprite: Sprite, width: number, height: number) {

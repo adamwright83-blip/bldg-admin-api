@@ -59,6 +59,7 @@ import {
 import { selectMissionDirector } from "./state/MissionDirector";
 import { landmarkForMission } from "../../../shared/worldSemantics";
 import { networkStatusLabel, useNetworkStatus } from "./session/useNetworkStatus";
+import { loadCheckpoint, saveCheckpoint } from "./session/checkpointStorage";
 import { getGoldlineSessionId } from "./analytics/goldlineSession";
 import type { GoldlineEventEmitter } from "./analytics/emitGoldlineEvent";
 import { getAudioManager } from "./audio/AudioManager";
@@ -151,6 +152,9 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
 };
 
 type UtilityPanel = "menu" | "route" | "objectives" | "open-channel" | null;
+
+/** Matches corridor_01/manifest.json's `id` — the only corridor that exists. */
+const CORRIDOR_ID = "corridor_01";
 
 function formatDue(value: string | null) {
   if (!value) return "Awaiting a sourced follow-up time";
@@ -551,8 +555,21 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           },
         });
       },
+      onCheckpointSafe: (progress, lateral, branch) => {
+        saveCheckpoint({
+          corridorId: CORRIDOR_ID,
+          progress,
+          lateral,
+          branch,
+          savedAt: new Date().toISOString(),
+        });
+      },
     });
     runtimeRef.current = game;
+    // Position only — authoritative business/world state is always
+    // reconciled fresh from live props (see the activeMission effect below),
+    // never restored from this checkpoint.
+    const checkpoint = loadCheckpoint(CORRIDOR_ID);
     void game
       .start({
         worldUrl,
@@ -564,6 +581,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         portalUrl: "/assets/goldline/corridor_01/portal_coldcall.webp",
         strongholdUrl: "/assets/goldline/corridor_01/stronghold.webp",
         characterBasePath: "/assets/goldline/characters/trailblazer",
+        initialProgress: checkpoint?.progress,
+        initialLateral: checkpoint?.lateral,
+        initialBranch: checkpoint?.branch,
       })
       .then(started => {
       if (started) setRuntimeReady(true);
