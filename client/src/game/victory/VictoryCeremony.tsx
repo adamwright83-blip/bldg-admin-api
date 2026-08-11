@@ -1,5 +1,8 @@
+import { useEffect } from "react";
 import { Check, ChevronRight, Flag, Sparkles } from "lucide-react";
 import type { PlayableMission } from "../state/GameState";
+import { getAudioManager } from "../audio/AudioManager";
+import { businessVictoryFeedback } from "../audio/haptics";
 
 function money(cents: number) {
   return new Intl.NumberFormat("en-US", {
@@ -13,6 +16,13 @@ export function VictoryCeremony(props: {
   mission: PlayableMission;
   onLanded: () => void;
 }) {
+  // This component only mounts for a genuinely verified capture — the
+  // stronger, distinct victory pattern is reserved exactly for that.
+  useEffect(() => {
+    getAudioManager().play("victory_flag");
+    businessVictoryFeedback();
+  }, []);
+
   return (
     <section className="victory-ceremony" aria-live="polite">
       <div className="victory-particles" aria-hidden="true">

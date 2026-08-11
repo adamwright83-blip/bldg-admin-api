@@ -58,6 +58,8 @@ import {
 } from "./state/WorldProjection";
 import { landmarkForMission } from "../../../shared/worldSemantics";
 import { networkStatusLabel, useNetworkStatus } from "./session/useNetworkStatus";
+import { getAudioManager } from "./audio/AudioManager";
+import { arcadeFeedback, missFeedback } from "./audio/haptics";
 import type {
   ArcadeResolution,
   CorridorAction,
@@ -363,6 +365,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [scoutOpen, setScoutOpen] = useState(false);
   const [scoutCapabilityOpen, setScoutCapabilityOpen] = useState(false);
   const networkStatus = useNetworkStatus();
+  const [audioMuted, setAudioMuted] = useState(() => getAudioManager().isMuted);
+
+  useEffect(() => {
+    const audio = getAudioManager();
+    audio.primeOnGesture();
+    const handleVisibility = () => audio.setBackgrounded(document.hidden);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
   const [encounterArchetype, setEncounterArchetype] =
     useState<ObjectionArchetype>("ANCHOR");
   const [encounterChannel, setEncounterChannel] =
@@ -556,6 +567,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     if (!deliberateInput) {
       setArcadeResolution("miss");
       setFeedback("MISS — SIGNAL SKIPPED THE WEAK POINT");
+      missFeedback();
       setView("awaiting_business_result");
       return;
     }
@@ -564,6 +576,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     setShield(nextShield);
     setArcadeResolution(nextShield === 0 ? "breached" : "hit");
     setFeedback(nextShield === 0 ? "BREACH — ARCADE OPENING CREATED" : `HIT — SHIELD ${nextShield}/3`);
+    getAudioManager().play("weak_point_hit");
+    arcadeFeedback();
     if (nextShield === 0) {
       setView("awaiting_business_result");
     } else {
@@ -942,6 +956,16 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                     <button onClick={() => setUtilityPanel("route")}>LIVE ROUTE</button>
                     <button onClick={() => setUtilityPanel("open-channel")}>OPEN CHANNEL</button>
                     <button onClick={() => void props.onResolveDay()} disabled={props.isResolvingDay}>UNLOAD DAY</button>
+                    <button
+                      onClick={() => {
+                        const audio = getAudioManager();
+                        const next = !audio.isMuted;
+                        audio.setMuted(next);
+                        setAudioMuted(next);
+                      }}
+                    >
+                      SOUND {audioMuted ? "OFF" : "ON"}
+                    </button>
                   </div>
                   {props.activeDispatch && props.onOpenDispatch ? (
                     <button className="live-dispatch-button" onClick={() => void props.onOpenDispatch?.()}>LIVE MISSION #{props.activeDispatch.missionId} <ChevronRight /></button>
