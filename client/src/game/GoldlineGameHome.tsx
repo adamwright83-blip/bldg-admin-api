@@ -477,8 +477,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           missionId: activeMission.missionId,
         })
         .then(result => {
-          setContextWeapons(result.weapons);
-          setTrainerIntelAvailable(result.trainerIntelligenceAvailable);
+          // Defensive: never hand the loadout a malformed payload.
+          setContextWeapons(Array.isArray(result?.weapons) ? result.weapons : []);
+          setTrainerIntelAvailable(
+            Boolean(result?.trainerIntelligenceAvailable)
+          );
         })
         .catch(() => setContextWeapons([]))
         .finally(() => setIsLoadingWeapons(false));

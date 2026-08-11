@@ -51,10 +51,16 @@ export function channelForMission(mission: PlayableMission): SalesIntelChannel {
 }
 
 /**
- * Chooses which objection this encounter presents, from real world state.
- * A mission with a follow-up that has gone quiet is a GHOST; one with a future
- * commitment is a STALLER; one blocked before a decision-maker is a
- * GATEKEEPER; incumbent resistance stays the ANCHOR.
+ * Chooses which objection this encounter presents, from real world state only.
+ *
+ * Each non-default archetype requires positive evidence. In particular, a
+ * missing decision-maker phone number is NOT evidence of a gatekeeper — it is
+ * just missing data. A gatekeeper is inferred only when the account is already
+ * being actively worked and we still have no decision-maker contact, which is
+ * a real "we tried and are still blocked" signal.
+ *
+ * Absent any such evidence the encounter stays the ANCHOR, which is also the
+ * Run-1 behaviour.
  */
 export function archetypeForMission(input: {
   mission: PlayableMission;
@@ -64,20 +70,21 @@ export function archetypeForMission(input: {
   const { mission } = input;
   const now = input.now ?? new Date();
 
-  if (!input.hasDecisionMakerContact && mission.state !== "contested") {
-    return "GATEKEEPER";
-  }
-
+  // A real committed date: ahead of us is a delay, already missed is silence.
   if (mission.contestedUntil) {
     const due = new Date(mission.contestedUntil);
     if (Number.isFinite(due.getTime())) {
-      // A commitment still ahead of us is a delay; one already missed is silence.
       return due.getTime() > now.getTime() ? "STALLER" : "GHOST";
     }
   }
 
   if (mission.state === "contested" || mission.state === "recovery_active") {
     return "GHOST";
+  }
+
+  // Actively engaged and still no route to whoever decides.
+  if (mission.state === "active" && !input.hasDecisionMakerContact) {
+    return "GATEKEEPER";
   }
 
   return "ANCHOR";
