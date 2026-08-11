@@ -382,6 +382,7 @@
 .mission-empty-chip svg { width: 15px; color: var(--cyan); }
 .mission-fork-icons { display: flex; gap: 5px; }
 .mission-fork-icons button {
+  position: relative;
   width: 31px;
   height: 31px;
   border: 1px solid currentColor;
@@ -395,6 +396,15 @@
 .mission-fork-icons button.is-amber { color: var(--amber); }
 .mission-fork-icons button.is-muted { color: #819099; }
 .mission-fork-icons button.is-active { background: currentColor; color: #041015; box-shadow: 0 0 18px #62f2ffaa; }
+.mission-fork-icons button.is-primary { border-color: currentColor; border-width: 2px; }
+.mission-fork-icons button.is-primary::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 1px solid currentColor;
+  opacity: 0.55;
+}
 .mission-fork-list {
   width: min(360px, calc(100vw - 16px));
   max-height: min(31dvh, 258px);

@@ -56,6 +56,7 @@ import {
   projectPersistentHistory,
   projectPlayableMissions,
 } from "./state/WorldProjection";
+import { selectMissionDirector } from "./state/MissionDirector";
 import { landmarkForMission } from "../../../shared/worldSemantics";
 import { networkStatusLabel, useNetworkStatus } from "./session/useNetworkStatus";
 import { getGoldlineSessionId } from "./analytics/goldlineSession";
@@ -313,9 +314,9 @@ function MissionFork(props: {
         {props.missions.map((mission, index) => (
           <button
             key={mission.key}
-            className={`is-${stateTone(mission.state)} ${landmarkForMission({ visualState: mission.state }).cssClass}${mission.key === props.activeKey ? " is-active" : ""}`}
+            className={`is-${stateTone(mission.state)} ${landmarkForMission({ visualState: mission.state }).cssClass}${mission.key === props.activeKey ? " is-active" : ""}${index === 0 ? " is-primary" : ""}`}
             onClick={() => props.onSelect(mission)}
-            aria-label={`Select ${mission.name} — ${landmarkForMission({ visualState: mission.state }).label}`}
+            aria-label={`Select ${mission.name} — ${landmarkForMission({ visualState: mission.state }).label}${index === 0 ? " — primary" : ""}`}
           >
             {index + 1}
           </button>
@@ -436,7 +437,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [isLoadingWeapons, setIsLoadingWeapons] = useState(false);
   const [trainerIntelAvailable, setTrainerIntelAvailable] = useState(false);
 
-  const missions = useMemo(
+  const unranked = useMemo(
     () =>
       projectPlayableMissions({
         missions: props.salesMissions,
@@ -445,11 +446,23 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       }),
     [props.moves, props.salesMissions, props.worldNodes]
   );
-  const prioritized =
-    missions.find(mission => mission.state === "recovery_active") ??
-    missions.find(mission => mission.state === "contested") ??
-    missions[0] ??
-    null;
+  // Mission Director selects and paces which real missions get spotlighted —
+  // primary first, up to 2 secondary — from real evidence only. `missions`
+  // stays the same shape/order contract the rest of this component already
+  // expects (MissionFork's first icon is now provably the real primary).
+  const missionDirector = useMemo(
+    () => selectMissionDirector(unranked, new Date()),
+    [unranked]
+  );
+  const missions = useMemo(() => {
+    if (!missionDirector.primary) return unranked;
+    const rankedKeys = new Set(
+      [missionDirector.primary, ...missionDirector.secondary].map(m => m.key)
+    );
+    const rest = unranked.filter(m => !rankedKeys.has(m.key));
+    return [missionDirector.primary, ...missionDirector.secondary, ...rest];
+  }, [missionDirector, unranked]);
+  const prioritized = missionDirector.primary;
   const history = useMemo(
     () => projectPersistentHistory(props.worldNodes),
     [props.worldNodes]
