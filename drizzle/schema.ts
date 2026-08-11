@@ -4942,6 +4942,7 @@ export const salesIntelSources = mysqlTable(
       "manual_source",
     ]).notNull(),
     canonicalSourceUrl: varchar("canonicalSourceUrl", { length: 1024 }).notNull(),
+    canonicalSourceUrlHash: varchar("canonicalSourceUrlHash", { length: 64 }).notNull(),
     externalChannelId: varchar("externalChannelId", { length: 191 }),
     acquisitionMode: mysqlEnum("acquisitionMode", [
       "AUTO_YOUTUBE",
@@ -4958,9 +4959,9 @@ export const salesIntelSources = mysqlTable(
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => ({
-    canonicalUrlUnique: uniqueIndex("uq_sales_intel_source_canonical_url").on(
-      table.canonicalSourceUrl
-    ),
+    canonicalUrlHashUnique: uniqueIndex(
+      "uq_sales_intel_source_canonical_url_hash"
+    ).on(table.canonicalSourceUrlHash),
     statusIdx: index("idx_sales_intel_source_registry_status").on(
       table.status,
       table.platform

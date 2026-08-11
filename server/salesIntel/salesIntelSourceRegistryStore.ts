@@ -14,6 +14,7 @@ import type {
   SalesIntelSourceRegistryType,
 } from "../../shared/salesIntelSourceRegistry";
 import { getDb } from "../db";
+import { salesIntelSourceRegistryUrlHash } from "./salesIntelIdentity";
 
 async function db() {
   const database = await getDb();
@@ -49,7 +50,12 @@ export async function findSalesIntelSourceByCanonicalUrl(
   const rows = await database
     .select()
     .from(salesIntelSources)
-    .where(eq(salesIntelSources.canonicalSourceUrl, canonicalSourceUrl))
+    .where(
+      eq(
+        salesIntelSources.canonicalSourceUrlHash,
+        salesIntelSourceRegistryUrlHash(canonicalSourceUrl)
+      )
+    )
     .limit(1);
   return rows[0] ? sourceView(rows[0]) : null;
 }
@@ -74,6 +80,7 @@ export async function createSalesIntelSource(input: {
     platform: input.platform,
     sourceType: input.sourceType,
     canonicalSourceUrl: input.canonicalSourceUrl,
+    canonicalSourceUrlHash: salesIntelSourceRegistryUrlHash(input.canonicalSourceUrl),
     externalChannelId: input.externalChannelId,
     acquisitionMode: input.acquisitionMode,
     notes: input.notes,

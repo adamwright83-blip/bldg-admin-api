@@ -19,6 +19,11 @@ CREATE TABLE IF NOT EXISTS `sales_intel_sources` (
   `platform` enum('youtube','instagram','manual') NOT NULL,
   `sourceType` enum('youtube_channel','youtube_playlist','youtube_video','instagram_profile_reference','manual_source') NOT NULL,
   `canonicalSourceUrl` varchar(1024) NOT NULL,
+  -- sha256(canonicalSourceUrl), same pattern as
+  -- sales_intel_source_artifacts.contentHash: a varchar(1024) unique index
+  -- exceeds InnoDB's 3072-byte max key length under utf8mb4, so dedup is
+  -- enforced on this fixed-width hash instead of the raw URL.
+  `canonicalSourceUrlHash` varchar(64) NOT NULL,
   `externalChannelId` varchar(191) NULL,
   `acquisitionMode` enum('AUTO_YOUTUBE','MANUAL_TRANSCRIPT','MANUAL_MEDIA','URL_REFERENCE_ONLY','PROVIDER_ANALYSIS') NOT NULL,
   `status` enum('active','disabled') NOT NULL DEFAULT 'active',
@@ -28,7 +33,7 @@ CREATE TABLE IF NOT EXISTS `sales_intel_sources` (
   `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT `sales_intel_sources_id` PRIMARY KEY (`id`),
-  CONSTRAINT `uq_sales_intel_source_canonical_url` UNIQUE (`canonicalSourceUrl`),
+  CONSTRAINT `uq_sales_intel_source_canonical_url_hash` UNIQUE (`canonicalSourceUrlHash`),
   INDEX `idx_sales_intel_source_registry_status` (`status`,`platform`)
 );
 
