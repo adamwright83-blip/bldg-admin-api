@@ -115,6 +115,9 @@ export class GoldlineGame {
 
   private camera = new CameraController(this.world);
   private avatar: Sprite | null = null;
+  /** Holds the outgoing pose during a crossfade so state changes don't pop. */
+  private avatarCrossfade: Sprite | null = null;
+  private crossfadeStartedAt = 0;
   private avatarShadow = new Graphics();
   private corridor = new Graphics();
   private fortress = new Graphics();
@@ -240,7 +243,15 @@ export class GoldlineGame {
       this.avatar = new Sprite(characterTexture);
       this.avatar.anchor.set(0.5, 1);
       this.avatar.label = "trailblazer-operator";
-      this.layerTraversal.addChild(this.avatarShadow, this.avatar, this.particles);
+      this.avatarCrossfade = new Sprite(characterTexture);
+      this.avatarCrossfade.anchor.set(0.5, 1);
+      this.avatarCrossfade.visible = false;
+      this.layerTraversal.addChild(
+        this.avatarShadow,
+        this.avatarCrossfade,
+        this.avatar,
+        this.particles
+      );
 
       // L3 foreground occlusion sprites, placed at the two authored zones
       // from occlusion.json once anchors load. Created lazily below.
@@ -398,6 +409,7 @@ export class GoldlineGame {
     this.avatar.rotation = this.input.x * 0.035;
     this.avatar.alpha = this.avatarState.state === "encounter_locked" ? 0.72 : 1;
 
+    this.syncCrossfadeTransform();
     this.drawContactShadow(avatarX, groundY, baseHeight, jumpFactor);
     this.applyOcclusion(avatarX, groundY, width, height);
     this.updateStronghold(width, height);
@@ -461,10 +473,40 @@ export class GoldlineGame {
     if (key !== this.currentPoseKey) {
       const texture = this.poseTextures.get(key);
       if (texture) {
+        // Run-cycle frame steps (run_01 -> run_02 -> ...) are deliberately
+        // NOT crossfaded — that is the animation, and blending consecutive
+        // frames would read as motion blur rather than a run. Every other
+        // state change (idle<->run, run->jump_start, jump_air->land,
+        // climb_a<->climb_b, ...) gets a brief crossfade so it never pops.
+        const isRunFrameStep = key.startsWith("run_0") && this.currentPoseKey.startsWith("run_0");
+        if (!isRunFrameStep && this.avatarCrossfade) {
+          this.avatarCrossfade.texture = this.avatar.texture;
+          this.avatarCrossfade.visible = true;
+          this.avatarCrossfade.alpha = 1;
+          this.crossfadeStartedAt = now;
+        }
         this.avatar.texture = texture;
         this.currentPoseKey = key;
       }
     }
+
+    if (this.avatarCrossfade?.visible) {
+      const CROSSFADE_MS = 90;
+      const elapsed = now - this.crossfadeStartedAt;
+      this.avatarCrossfade.alpha = Math.max(0, 1 - elapsed / CROSSFADE_MS);
+      if (elapsed >= CROSSFADE_MS) this.avatarCrossfade.visible = false;
+    }
+  }
+
+  /** Keeps the crossfade ghost sprite pinned to the live avatar's transform. */
+  private syncCrossfadeTransform() {
+    if (!this.avatar || !this.avatarCrossfade?.visible) return;
+    this.avatarCrossfade.x = this.avatar.x;
+    this.avatarCrossfade.y = this.avatar.y;
+    this.avatarCrossfade.height = Math.abs(this.avatar.height);
+    this.avatarCrossfade.width = Math.abs(this.avatar.width);
+    this.avatarCrossfade.scale.x = Math.abs(this.avatarCrossfade.scale.x) * Math.sign(this.avatar.scale.x || 1);
+    this.avatarCrossfade.rotation = this.avatar.rotation;
   }
 
   private applyOcclusion(avatarX: number, groundY: number, width: number, height: number) {

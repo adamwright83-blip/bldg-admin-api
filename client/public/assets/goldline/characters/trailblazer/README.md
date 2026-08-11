@@ -40,3 +40,20 @@ the action-sheet frames (different generation passes) — visible as a slight
 tonal shift when the character transitions from idle to a movement pose. Not
 corrected in this pass; flagged as a known weakness in the Visual Gate report
 rather than papered over.
+
+## Transitions and preload (Slice 22)
+
+State-to-state pose swaps (idle↔run, run→jump_start, jump_air→land,
+climb_a↔climb_b, ...) now cross-fade over 90ms via a ghost sprite holding the
+outgoing texture, so a state change never pops. Run-cycle frame steps
+(run_01→run_02→...) are deliberately excluded from the crossfade — that
+stepping *is* the animation, and blending consecutive run frames would read
+as motion blur rather than a run.
+
+All 12 pose textures are preloaded together in `GoldlineGame.start()` rather
+than lazily loaded per imminent state. This is a deliberate deviation from
+"preload only what's imminent": every pose file is 9-32KB (≈174KB total),
+small enough that preloading all of them costs nothing meaningful, and lazy
+mid-jump loading would risk the texture not being ready exactly when a jump
+begins — visibly worse than the current small fixed cost paid once at
+corridor load.
