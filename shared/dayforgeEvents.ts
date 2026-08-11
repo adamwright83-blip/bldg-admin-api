@@ -74,6 +74,7 @@ export const DAYFORGE_PRODUCT_EVENT_NAMES = [
   "scout_discovery_created",
   "scout_mission_created",
   "verified_capture",
+  "visual_quality_adjusted",
 ] as const;
 
 export type DayforgeProductEventName =
@@ -274,6 +275,16 @@ export interface DayforgeProductEventPropertyMap {
   scout_discovery_created: { sessionId: string; discoveryCount: number };
   scout_mission_created: { sessionId: string };
   verified_capture: { sessionId: string; estimatedValueBand: string };
+  /**
+   * Fired only when AdaptiveQualityMonitor's own measured rolling-average
+   * frame time crosses a degrade/recover threshold — avgFrameMs is real
+   * ticker deltaMS, never a synthesized or assumed FPS value.
+   */
+  visual_quality_adjusted: {
+    sessionId: string;
+    tier: string;
+    avgFrameMs: number;
+  };
 }
 
 export type DayforgeProductEventProperties<
@@ -357,6 +368,7 @@ export const DAYFORGE_PRODUCT_EVENT_PROPERTY_KEYS = {
   scout_discovery_created: ["sessionId", "discoveryCount"],
   scout_mission_created: ["sessionId"],
   verified_capture: ["sessionId", "estimatedValueBand"],
+  visual_quality_adjusted: ["sessionId", "tier", "avgFrameMs"],
 } as const satisfies {
   [Name in DayforgeProductEventName]: readonly (keyof DayforgeProductEventPropertyMap[Name])[];
 };
@@ -467,6 +479,7 @@ export const GOLDLINE_CLIENT_EVENT_NAMES = [
   "scout_discovery_created",
   "scout_mission_created",
   "verified_capture",
+  "visual_quality_adjusted",
 ] as const satisfies readonly DayforgeProductEventName[];
 
 export type GoldlineClientEventName = (typeof GOLDLINE_CLIENT_EVENT_NAMES)[number];

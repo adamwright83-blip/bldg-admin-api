@@ -27,6 +27,7 @@ import type { WorldMissionState } from "../../../../shared/driverGameWorld";
 import { CameraController } from "./CameraController";
 import { branchPaceFor, stepVelocity, targetSpeedForMagnitude } from "./movementFeel";
 import { lateralForProgress, loadGoldRoute, type GoldRoutePoint } from "../world/goldRoute";
+import { AdaptiveQualityMonitor, type QualityTier } from "./adaptiveQuality";
 
 export type LandmarkArchetype = "ANCHOR" | "GATEKEEPER" | "GHOST" | "STALLER";
 
@@ -41,6 +42,10 @@ type GoldlineGameCallbacks = {
     anchorId: string,
     state: "hidden" | "label" | "engage"
   ) => void;
+  /** Fires once per successfully triggered traversal move — analytics only, never gameplay-authoritative. */
+  onTraversalAction?: (action: "JUMP" | "CLIMB" | "VAULT") => void;
+  /** Fires only when measured rolling frame time crosses a real degrade/recover threshold. */
+  onQualityChange?: (tier: QualityTier, avgFrameMs: number) => void;
 };
 
 /**
@@ -154,6 +159,8 @@ export class GoldlineGame {
   private landmark = new Graphics();
   private occlusionZones: OcclusionZone[] = [];
   private portalProximityState = new Map<string, "hidden" | "label" | "engage">();
+  private qualityMonitor = new AdaptiveQualityMonitor();
+  private qualityTier: QualityTier = "premium";
   private hidden = false;
   private visibilityHandler = () => {
     this.hidden = document.hidden;
@@ -294,7 +301,15 @@ export class GoldlineGame {
       );
       app.stage.addChild(this.world);
 
-      app.ticker.add(ticker => this.update(ticker.deltaMS / 1000, background));
+      app.ticker.add(ticker => {
+        const changedTier = this.qualityMonitor.sample(ticker.deltaMS);
+        if (changedTier) {
+          this.qualityTier = changedTier;
+          this.applyQualityTier();
+          this.callbacks.onQualityChange?.(changedTier, this.qualityMonitor.averageFrameMs());
+        }
+        this.update(ticker.deltaMS / 1000, background);
+      });
       document.addEventListener("visibilitychange", this.visibilityHandler);
       window.addEventListener("pagehide", this.pageHideHandler);
       this.renderWorldState();
@@ -357,6 +372,9 @@ export class GoldlineGame {
     this.actionUntil = now + this.avatarState.actionDurationMs(action);
     this.progress = Math.min(0.78, trigger.at + 0.075);
     this.spawnTrail(action === "VAULT" ? 0xffc34e : 0x5feaff);
+    if (action === "JUMP" || action === "CLIMB" || action === "VAULT") {
+      this.callbacks.onTraversalAction?.(action);
+    }
     return true;
   }
 
@@ -829,9 +847,20 @@ export class GoldlineGame {
     }
   }
 
+  /**
+   * Reduced tier turns off the ambient effects layer and thins particle
+   * trails — cheap wins that don't touch character/world readability, per
+   * the Visual Quality Gate (character/contact/scale must stay coherent
+   * even when degraded). Never fakes a higher tier than measured.
+   */
+  private applyQualityTier() {
+    if (this.effectsSprite) this.effectsSprite.visible = this.qualityTier === "premium";
+  }
+
   private spawnTrail(color: number) {
     if (!this.avatar) return;
-    for (let index = 0; index < 8; index += 1) {
+    const particleCount = this.qualityTier === "premium" ? 8 : 3;
+    for (let index = 0; index < particleCount; index += 1) {
       const particle = new Graphics()
         .circle(0, 0, 2 + Math.random() * 4)
         .fill({ color, alpha: 0.85 });

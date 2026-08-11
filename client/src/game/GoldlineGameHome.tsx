@@ -441,6 +441,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     () => equipAnchorAbilities(props.armory?.items ?? []),
     [props.armory?.items]
   );
+  const activeMissionRef = useRef(activeMission);
+  activeMissionRef.current = activeMission;
+  const seenMissionKeysRef = useRef(new Set<string>());
+  const prevActionRef = useRef<CorridorAction | null>(null);
+  const seenScoutDiscoveryIdsRef = useRef(new Set<string>());
   const openChannelGap = detectOpenChannelGap({
     now: new Date(),
     selectedDate: props.selectedDate,
@@ -455,6 +460,21 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       onActionAvailable: (next, label) => {
         setAction(next);
         setActionLabel(label);
+        // A player only becomes able to INTERACT once real proximity to the
+        // mission's gate trigger is reached — the same signal that already
+        // gates the action button, not a fabricated distance check.
+        if (next === "INTERACT" && prevActionRef.current !== "INTERACT") {
+          const mission = activeMissionRef.current;
+          if (mission) {
+            emit?.({
+              eventName: "mission_approached",
+              sessionId: sessionIdRef.current,
+              missionId: mission.missionId,
+              properties: { sessionId: sessionIdRef.current, missionState: mission.state },
+            });
+          }
+        }
+        prevActionRef.current = next;
       },
       onBranchChange: setBranch,
       onProgress: setProgress,
@@ -462,6 +482,28 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       onError: () => setRuntimeFailed(true),
       onPortalProximity: (anchorId, state) => {
         if (anchorId === "cold_call_portal") setColdCallPortalState(state);
+      },
+      onTraversalAction: action => {
+        const eventName =
+          action === "JUMP" ? "traversal_jump" : action === "CLIMB" ? "traversal_climb" : "traversal_vault";
+        emit?.({
+          eventName,
+          sessionId: sessionIdRef.current,
+          missionId: activeMissionRef.current?.missionId ?? null,
+          properties: { sessionId: sessionIdRef.current },
+        });
+      },
+      onQualityChange: (tier, avgFrameMs) => {
+        emit?.({
+          eventName: "visual_quality_adjusted",
+          sessionId: sessionIdRef.current,
+          missionId: null,
+          properties: {
+            sessionId: sessionIdRef.current,
+            tier,
+            avgFrameMs: Math.round(avgFrameMs * 100) / 100,
+          },
+        });
       },
     });
     runtimeRef.current = game;
@@ -488,6 +530,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
 
   useEffect(() => {
     if (!activeMission) return;
+    if (!seenMissionKeysRef.current.has(activeMission.key)) {
+      seenMissionKeysRef.current.add(activeMission.key);
+      emit?.({
+        eventName: "mission_seen",
+        sessionId: sessionIdRef.current,
+        missionId: activeMission.missionId,
+        properties: { sessionId: sessionIdRef.current, missionState: activeMission.state },
+      });
+    }
     runtimeRef.current?.setWorldState(activeMission.state);
     // The landmark shape/color at the gate is set from the same archetype
     // signal the encounter itself will use, so the player can read what
@@ -518,6 +569,35 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMission?.key, activeMission?.state]);
 
+  useEffect(() => {
+    const discoveries = props.scoutReport?.discoveries ?? [];
+    const newDiscoveries = discoveries.filter(
+      discovery => !seenScoutDiscoveryIdsRef.current.has(discovery.entityId)
+    );
+    if (newDiscoveries.length === 0) return;
+    for (const discovery of newDiscoveries) {
+      seenScoutDiscoveryIdsRef.current.add(discovery.entityId);
+    }
+    emit?.({
+      eventName: "scout_discovery_created",
+      sessionId: sessionIdRef.current,
+      missionId: null,
+      properties: { sessionId: sessionIdRef.current, discoveryCount: newDiscoveries.length },
+    });
+    // Each discovery row is 1:1 with a real backend-created mission
+    // (expansionScoutService persists discovery + mission together), so this
+    // fires once per real mission that appeared, not a fabricated count.
+    for (const discovery of newDiscoveries) {
+      emit?.({
+        eventName: "scout_mission_created",
+        sessionId: sessionIdRef.current,
+        missionId: discovery.missionId,
+        properties: { sessionId: sessionIdRef.current },
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.scoutReport]);
+
   const handleInteractRef = useRef(() => {});
   handleInteractRef.current = () => {
     if (!activeMission) return;
@@ -538,6 +618,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       hasDecisionMakerContact: Boolean(activeMission.phoneUrl),
     });
     const channel = channelForMission(activeMission);
+    emit?.({
+      eventName: "mission_engaged",
+      sessionId: sessionIdRef.current,
+      missionId: activeMission.missionId,
+      properties: { sessionId: sessionIdRef.current, missionState: activeMission.state, archetype },
+    });
     setEncounterArchetype(archetype);
     setEncounterChannel(channel);
     setShield(3);
@@ -557,10 +643,19 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         })
         .then(result => {
           // Defensive: never hand the loadout a malformed payload.
-          setContextWeapons(Array.isArray(result?.weapons) ? result.weapons : []);
+          const weapons = Array.isArray(result?.weapons) ? result.weapons : [];
+          setContextWeapons(weapons);
           setTrainerIntelAvailable(
             Boolean(result?.trainerIntelligenceAvailable)
           );
+          for (const weapon of weapons) {
+            emit?.({
+              eventName: "armory_weapon_viewed",
+              sessionId: sessionIdRef.current,
+              missionId: activeMission.missionId,
+              properties: { sessionId: sessionIdRef.current, provenanceKind: weapon.provenance.type },
+            });
+          }
         })
         .catch(() => setContextWeapons([]))
         .finally(() => setIsLoadingWeapons(false));
@@ -602,9 +697,51 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         provenanceKind: weapon.provenance.type,
         requestId: crypto.randomUUID(),
       })
+      .then(() => {
+        // Fired only once the evidence record actually persisted — this is
+        // "used", distinct from armory_weapon_selected above.
+        emit?.({
+          eventName: "armory_weapon_used",
+          sessionId: sessionIdRef.current,
+          missionId: activeMission.missionId,
+          properties: { sessionId: sessionIdRef.current, provenanceKind: weapon.provenance.type },
+        });
+      })
       .catch(() => {
         // Evidence recording must never block the encounter.
       });
+  }
+
+  function handleColdCallComplete(input: Parameters<GoldlineGameHomeProps["onCompleteColdCall"]>[0]) {
+    emit?.({
+      eventName: "cold_call_outcome_saved",
+      sessionId: sessionIdRef.current,
+      missionId: null,
+      properties: { sessionId: sessionIdRef.current, outcome: input.outcome },
+    });
+    return props.onCompleteColdCall(input);
+  }
+
+  function handleColdCallSelectChain(target: ColdCallTarget) {
+    return props.onSelectColdCallChain(target).then(batch => {
+      emit?.({
+        eventName: "cold_call_chain_continued",
+        sessionId: sessionIdRef.current,
+        missionId: null,
+        properties: { sessionId: sessionIdRef.current, combo: batch.combo },
+      });
+      return batch;
+    });
+  }
+
+  function handleRunScout() {
+    emit?.({
+      eventName: "scout_run_started",
+      sessionId: sessionIdRef.current,
+      missionId: null,
+      properties: { sessionId: sessionIdRef.current },
+    });
+    return props.onRunScout();
   }
 
   function handleEncounterResolved(resolution: EncounterResolution) {
@@ -773,6 +910,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 if (!props.coldCallBatch) {
                   const created = await props.onCreateColdCall();
                   if (!created) return;
+                  emit?.({
+                    eventName: "cold_call_batch_started",
+                    sessionId: sessionIdRef.current,
+                    missionId: null,
+                    properties: { sessionId: sessionIdRef.current, targetCount: created.totalTargets },
+                  });
                 }
                 setColdCallOpen(true);
               }}
@@ -919,8 +1062,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             batch={props.coldCallBatch}
             onClose={() => setColdCallOpen(false)}
             onStart={props.onStartColdCall}
-            onComplete={props.onCompleteColdCall}
-            onSelectChain={props.onSelectColdCallChain}
+            onComplete={handleColdCallComplete}
+            onSelectChain={handleColdCallSelectChain}
             onBreakCombo={props.onBreakColdCallCombo}
           />
         ) : null}
@@ -929,7 +1072,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           <ScoutReportPanel
             report={props.scoutReport ?? null}
             isRunning={Boolean(props.isRunningScout)}
-            onRun={props.onRunScout}
+            onRun={handleRunScout}
             onClose={() => setScoutOpen(false)}
             onEngageMission={missionId => {
               const mission = allMissions.find(item => item.missionId === missionId);
