@@ -23,6 +23,7 @@ import {
 import { importSalesIntelCorpus } from "./salesIntelImport";
 import {
   getSourceArtifact,
+  listAllAcceptedFrameworks,
   listFrameworksForSource,
   listFrameworkVersions,
   listSourceArtifacts,
@@ -30,6 +31,7 @@ import {
   listTranscripts,
   setFrameworkReviewState,
 } from "./salesIntelStore";
+import { computeSalesIntelCoverage } from "../../shared/salesIntelCoverage";
 import { createSalesIntelAdapterRegistry } from "./sourceAdapters";
 import {
   salesIntelSourceRegistryCreateSchema,
@@ -50,6 +52,10 @@ import {
   checkYouTubeSourceForNewContent,
 } from "./youtubeMonitoring";
 import { getFrameworkReviewQueue } from "./salesIntelReviewQueue";
+import {
+  applySalesIntelSourceImport,
+  previewSalesIntelSourceImport,
+} from "./salesIntelSourceImportService";
 
 const segmentSchema = z.object({
   startMs: z.number().int().min(0),
@@ -146,6 +152,12 @@ export const salesIntelRouter = router({
   /** Every framework awaiting a human decision, with explainable quality signals. */
   reviewQueue: adminProcedure.query(() => getFrameworkReviewQueue()),
 
+  /** What the accepted corpus actually covers — counts and gaps, never an invented percentage. */
+  coverage: adminProcedure.query(async () => {
+    const frameworks = await listAllAcceptedFrameworks();
+    return computeSalesIntelCoverage(frameworks);
+  }),
+
   review: adminProcedure
     .input(
       z.object({
@@ -234,5 +246,17 @@ export const salesIntelRouter = router({
       const sources = await listEnabledYouTubeSources();
       return checkAllEnabledYouTubeSources(sources);
     }),
+
+    /** PREVIEW / DRY RUN — classifies every entry, mutates nothing. */
+    previewImport: adminProcedure
+      .input(z.object({ entries: z.array(z.unknown()).min(1).max(50) }))
+      .mutation(({ input }) => previewSalesIntelSourceImport(input.entries)),
+
+    /** Idempotent: only "new"-classified entries are actually inserted. */
+    applyImport: adminProcedure
+      .input(z.object({ entries: z.array(z.unknown()).min(1).max(50) }))
+      .mutation(({ ctx, input }) =>
+        applySalesIntelSourceImport({ rawEntries: input.entries, createdBy: ctx.user.openId })
+      ),
   }),
 });

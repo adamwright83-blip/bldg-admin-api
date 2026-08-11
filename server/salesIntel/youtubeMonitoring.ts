@@ -13,7 +13,8 @@
  * discovery, not a second ingestion path.
  */
 import { ingestSalesIntelSource } from "./salesIntelService";
-import { setSourceArtifactRegistry } from "./salesIntelStore";
+import { findSourceArtifactByHash, setSourceArtifactRegistry } from "./salesIntelStore";
+import { salesIntelContentHash } from "./salesIntelIdentity";
 import { touchSalesIntelSourceLastChecked } from "./salesIntelSourceRegistryStore";
 import type { SalesIntelSourceRegistryEntry } from "../../shared/salesIntelSourceRegistry";
 
@@ -119,6 +120,26 @@ export async function checkYouTubeSourceForNewContent(
 
   for (const candidate of candidates) {
     try {
+      // ingestSalesIntelSource only reports outcome:"duplicate_source" once
+      // a source has reached "extracted" — a video sitting at
+      // "awaiting_content" (the common case with no video-understanding
+      // provider configured) is silently re-deduped by upsertSourceArtifact
+      // without ever surfacing as a duplicate in the returned outcome. This
+      // pre-check gives monitoring an accurate signal regardless of
+      // extraction state, using the identical hash the ingestion pipeline
+      // itself computes.
+      const alreadyKnown = await findSourceArtifactByHash(
+        salesIntelContentHash({
+          sourceType: "youtube",
+          canonicalUrl: candidate.canonicalUrl,
+          externalContentId: candidate.externalContentId,
+          transcriptText: null,
+        })
+      );
+      if (alreadyKnown) {
+        duplicates += 1;
+        continue;
+      }
       const result = await ingestSalesIntelSource({
         input: candidate.canonicalUrl,
         creatorName: source.creatorName,
@@ -128,18 +149,14 @@ export async function checkYouTubeSourceForNewContent(
         transcriptText: null,
         actorId: "system:youtube-monitor",
       });
-      if (result.outcome === "duplicate_source") {
-        duplicates += 1;
-      } else {
-        ingested += 1;
-        await setSourceArtifactRegistry({
-          id: result.artifact.id,
-          sourceRegistryId: source.id,
-        }).catch(() => {
-          // Linking back to the registry is a convenience, not the
-          // authoritative record — never fail the ingestion over it.
-        });
-      }
+      ingested += 1;
+      await setSourceArtifactRegistry({
+        id: result.artifact.id,
+        sourceRegistryId: source.id,
+      }).catch(() => {
+        // Linking back to the registry is a convenience, not the
+        // authoritative record — never fail the ingestion over it.
+      });
     } catch {
       // One bad video must not stop the rest of the channel's candidates.
       failed += 1;

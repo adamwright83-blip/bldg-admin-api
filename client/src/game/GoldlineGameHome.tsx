@@ -60,6 +60,7 @@ import { selectMissionDirector } from "./state/MissionDirector";
 import { landmarkForMission } from "../../../shared/worldSemantics";
 import { networkStatusLabel, useNetworkStatus } from "./session/useNetworkStatus";
 import { loadCheckpoint, saveCheckpoint } from "./session/checkpointStorage";
+import { useVisualViewportSize } from "./session/useVisualViewportSize";
 import { registerGoldlineServiceWorker } from "./pwa/registerServiceWorker";
 import { installPwaHeadTags } from "./pwa/installPwaHead";
 import { isIOS, isStandalone } from "./pwa/pwaEnvironment";
@@ -366,6 +367,7 @@ function MissionFork(props: {
 
 export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const [shellEl, setShellEl] = useState<HTMLElement | null>(null);
   const runtimeRef = useRef<GoldlineGame | null>(null);
   const weakPointRef = useRef<HTMLButtonElement>(null);
   const gestureStart = useRef<{ x: number; y: number; at: number } | null>(null);
@@ -916,8 +918,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const utilityNavigate = activeMission?.navigationUrl ?? null;
   const utilityCall = activeMission?.phoneUrl ?? null;
 
+  useVisualViewportSize(shellEl);
+
   return (
-    <main className="playable-goldline-shell">
+    <main className="playable-goldline-shell" ref={setShellEl}>
       <section className={`playable-goldline is-${view}`} aria-label="Goldline playable field world">
         <div ref={hostRef} className="goldline-canvas-host" />
         {!runtimeReady ? (

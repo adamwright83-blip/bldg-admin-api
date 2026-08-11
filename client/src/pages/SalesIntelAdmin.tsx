@@ -285,8 +285,205 @@ function SourceRegistryPanel() {
                   {source.status === "active" ? "DISABLE" : "RE-ENABLE"}
                 </Button>
               </div>
+              <SourceRecentContent sourceId={source.id} />
             </article>
           ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** Source health observability (Slice 50): what has this source actually produced recently? */
+function SourceRecentContent(props: { sourceId: string }) {
+  const [open, setOpen] = useState(false);
+  const recent = trpc.system.salesIntel.sourceRegistry.recentArtifacts.useQuery(
+    { id: props.sourceId },
+    { enabled: open }
+  );
+  return (
+    <div className="sales-intel-recent-content">
+      <button className="sales-intel-recent-toggle" onClick={() => setOpen(!open)}>
+        {open ? "HIDE RECENT CONTENT" : "SHOW RECENT CONTENT"}
+      </button>
+      {open ? (
+        recent.data?.length ? (
+          <ul>
+            {recent.data.map(artifact => (
+              <li key={artifact.id}>
+                <small>{artifact.status.toUpperCase()}</small> {artifact.title ?? artifact.canonicalUrl ?? "Untitled"}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="sales-intel-hint">Nothing discovered from this source yet.</p>
+        )
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Bulk import for a verified-source manifest (Slice 46). Paste a JSON array
+ * of manifest entries; PREVIEW classifies every entry (new / already
+ * registered / duplicate within this paste / invalid / unsupported) without
+ * touching the database, then APPLY inserts only the "new" ones — running
+ * the same manifest twice never creates a duplicate registry record.
+ */
+function SourceImportPanel() {
+  const utils = trpc.useUtils();
+  const [open, setOpen] = useState(false);
+  const [raw, setRaw] = useState("");
+  const [preview, setPreview] = useState<
+    Array<{
+      index: number;
+      classification: string;
+      reason: string;
+      entry: { creatorName: string } | null;
+    }>
+  >([]);
+  const previewMutation = trpc.system.salesIntel.sourceRegistry.previewImport.useMutation();
+  const applyMutation = trpc.system.salesIntel.sourceRegistry.applyImport.useMutation();
+
+  function parseEntries(): unknown[] | null {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function handlePreview() {
+    const entries = parseEntries();
+    if (!entries) {
+      toast.error("Paste a JSON array of manifest entries.");
+      return;
+    }
+    try {
+      const result = await previewMutation.mutateAsync({ entries });
+      setPreview(result);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Preview failed");
+    }
+  }
+
+  async function handleApply() {
+    const entries = parseEntries();
+    if (!entries) return;
+    try {
+      const result = await applyMutation.mutateAsync({ entries });
+      toast.success(`Imported ${result.imported.length} source(s); skipped ${result.skipped.length}.`);
+      setPreview([]);
+      setRaw("");
+      await utils.system.salesIntel.sourceRegistry.list.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Import failed");
+    }
+  }
+
+  const newCount = preview.filter(p => p.classification === "new").length;
+
+  return (
+    <section className="sales-intel-import">
+      <button className="sales-intel-registry-toggle" onClick={() => setOpen(!open)}>
+        IMPORT VERIFIED SOURCES {open ? "▲" : "▼"}
+      </button>
+      {open ? (
+        <div className="sales-intel-registry-body">
+          <p className="sales-intel-hint">
+            Paste a JSON array of verified source entries (creatorName,
+            platform, canonicalSourceUrl, sourceType, acquisitionMode,
+            verifiedAt, verificationMethod). Preview before applying — only
+            real, verified, canonicalizable entries are ever imported.
+          </p>
+          <Textarea
+            rows={8}
+            value={raw}
+            placeholder='[{"creatorName": "...", "platform": "youtube", "canonicalSourceUrl": "https://www.youtube.com/channel/UC...", "sourceType": "youtube_channel", "acquisitionMode": "AUTO_YOUTUBE", "verifiedAt": "2026-08-11T00:00:00.000Z", "verificationMethod": "manual URL check"}]'
+            onChange={e => setRaw(e.target.value)}
+          />
+          <Button variant="secondary" onClick={handlePreview} disabled={previewMutation.isPending}>
+            {previewMutation.isPending ? "PREVIEWING…" : "PREVIEW / DRY RUN"}
+          </Button>
+          {preview.length ? (
+            <>
+              <ul className="sales-intel-import-preview">
+                {preview.map(item => (
+                  <li key={item.index} className={`is-${item.classification}`}>
+                    <b>{item.entry?.creatorName ?? `entry ${item.index}`}</b>
+                    <span>{item.classification.replaceAll("_", " ").toUpperCase()}</span>
+                    <small>{item.reason}</small>
+                  </li>
+                ))}
+              </ul>
+              <Button onClick={handleApply} disabled={!newCount || applyMutation.isPending}>
+                {applyMutation.isPending ? "IMPORTING…" : `IMPORT ${newCount} NEW SOURCE${newCount === 1 ? "" : "S"}`}
+              </Button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * Coverage intelligence (Slice 49) — what the accepted corpus actually
+ * covers, as counts and factual gaps only. No invented "97% coverage"
+ * score anywhere here.
+ */
+function CoveragePanel() {
+  const [open, setOpen] = useState(false);
+  const coverage = trpc.system.salesIntel.coverage.useQuery(undefined, { enabled: open });
+
+  return (
+    <section className="sales-intel-coverage">
+      <button className="sales-intel-registry-toggle" onClick={() => setOpen(!open)}>
+        CORPUS COVERAGE {open ? "▲" : "▼"}
+      </button>
+      {open && coverage.data ? (
+        <div className="sales-intel-registry-body">
+          <p className="sales-intel-hint">
+            {coverage.data.totalAcceptedFrameworks} accepted framework
+            {coverage.data.totalAcceptedFrameworks === 1 ? "" : "s"} total.
+          </p>
+          <b>BY ARCHETYPE</b>
+          <ul className="sales-intel-coverage-list">
+            {coverage.data.byArchetype.map(a => (
+              <li key={a.archetype} className={a.armoryReady ? "is-ready" : "is-gap"}>
+                {a.archetype}: {a.count} {a.armoryReady ? "" : "(no Armory coverage yet)"}
+              </li>
+            ))}
+          </ul>
+          <b>BY CHANNEL</b>
+          <ul className="sales-intel-coverage-list">
+            {coverage.data.byChannel.map(c => (
+              <li key={c.channel}>{c.channel}: {c.count}</li>
+            ))}
+          </ul>
+          {coverage.data.byCreator.length ? (
+            <>
+              <b>BY CREATOR</b>
+              <ul className="sales-intel-coverage-list">
+                {coverage.data.byCreator.map(c => (
+                  <li key={c.creator}>{c.creator}: {c.count}</li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          {coverage.data.conflicts.length ? (
+            <>
+              <b>PRESERVED DISAGREEMENT</b>
+              <ul className="sales-intel-coverage-list">
+                {coverage.data.conflicts.map((c, i) => (
+                  <li key={i}>
+                    {c.archetype} · {c.channel}: {c.responseFamilies.map(rf => `${rf.responseFamily} (${rf.creators.join(", ")})`).join(" vs. ")}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -346,8 +543,28 @@ function ReviewQueuePanel() {
                 </span>
               </div>
               <p className="sales-intel-hint">"{entry.framework.exactObjection}"</p>
+              {entry.source.title || entry.source.canonicalUrl ? (
+                <p className="sales-intel-hint">
+                  {entry.source.title ?? "Source"}
+                  {entry.source.publishedAt
+                    ? ` · ${new Date(entry.source.publishedAt).toLocaleDateString()}`
+                    : ""}
+                  {entry.source.canonicalUrl ? (
+                    <>
+                      {" "}
+                      ·{" "}
+                      <a href={entry.source.canonicalUrl} target="_blank" rel="noreferrer">
+                        open source
+                      </a>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
               <p className="sales-intel-hint">
                 {describeFrameworkQuality(entry.quality as FrameworkQualitySignals)}
+                {entry.quality.independentSourceSupportCount > 0
+                  ? " · related to another accepted framework"
+                  : ""}
               </p>
               <div className="sales-intel-source-actions">
                 <Button
@@ -448,7 +665,9 @@ export default function SalesIntelAdmin() {
       </header>
 
       <SourceRegistryPanel />
+      <SourceImportPanel />
       <ReviewQueuePanel />
+      <CoveragePanel />
 
       {composerOpen ? (
         <section className="sales-intel-composer">

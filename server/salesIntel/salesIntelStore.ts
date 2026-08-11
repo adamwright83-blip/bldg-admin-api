@@ -563,6 +563,27 @@ export async function queryDriverVisibleFrameworks(input: {
   return rows.map(row => frameworkView(row.framework));
 }
 
+/** Every accepted, active, driver-eligible framework — the corpus coverage intelligence input (Slice 49). */
+export async function listAllAcceptedFrameworks(): Promise<SalesIntelFramework[]> {
+  const database = await db();
+  const rows = await database
+    .select({ framework: salesIntelFrameworks })
+    .from(salesIntelFrameworks)
+    .innerJoin(
+      salesIntelSourceArtifacts,
+      eq(salesIntelSourceArtifacts.id, salesIntelFrameworks.sourceArtifactId)
+    )
+    .where(
+      and(
+        eq(salesIntelFrameworks.reviewState, "accepted"),
+        eq(salesIntelFrameworks.active, true),
+        eq(salesIntelSourceArtifacts.status, "extracted")
+      )
+    )
+    .orderBy(desc(salesIntelFrameworks.createdAt));
+  return rows.map(row => frameworkView(row.framework));
+}
+
 export async function setFrameworkReviewState(input: {
   frameworkId: string;
   reviewState: SalesIntelReviewState;
