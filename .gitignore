@@ -115,3 +115,8 @@ temp/
 .vercel
 test-results
 playwright-report
+
+# Large source renders for Goldline corridor art. WebP exports are committed;
+# originals are kept locally only (~20MB) so repo history doesn't carry them.
+client/public/assets/goldline/corridor_01/_originals/
+client/public/assets/goldline/characters/trailblazer/_originals/
