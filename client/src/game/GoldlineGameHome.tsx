@@ -489,6 +489,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   useEffect(() => {
     if (!activeMission) return;
     runtimeRef.current?.setWorldState(activeMission.state);
+    // The landmark shape/color at the gate is set from the same archetype
+    // signal the encounter itself will use, so the player can read what
+    // they're approaching from the world before ever opening it.
+    runtimeRef.current?.setLandmarkArchetype(
+      archetypeForMission({
+        mission: activeMission,
+        hasDecisionMakerContact: Boolean(activeMission.phoneUrl),
+      })
+    );
     if (activeMission.state === "captured") {
       setView("captured");
       // Fires only from real mission state, never from arcade performance —

@@ -28,6 +28,8 @@ import { CameraController } from "./CameraController";
 import { branchPaceFor, stepVelocity, targetSpeedForMagnitude } from "./movementFeel";
 import { lateralForProgress, loadGoldRoute, type GoldRoutePoint } from "../world/goldRoute";
 
+export type LandmarkArchetype = "ANCHOR" | "GATEKEEPER" | "GHOST" | "STALLER";
+
 type GoldlineGameCallbacks = {
   onActionAvailable: (action: CorridorAction | null, label: string | null) => void;
   onBranchChange: (branch: CorridorBranch) => void;
@@ -148,6 +150,8 @@ export class GoldlineGame {
   private worldState: WorldMissionState = "available";
   private anchors: CorridorAnchor[] = [];
   private goldRoutePoints: GoldRoutePoint[] = [];
+  private landmarkArchetype: LandmarkArchetype | null = null;
+  private landmark = new Graphics();
   private occlusionZones: OcclusionZone[] = [];
   private portalProximityState = new Map<string, "hidden" | "label" | "engage">();
   private hidden = false;
@@ -227,6 +231,7 @@ export class GoldlineGame {
         this.corridor,
         this.recoveryPath,
         this.fortress,
+        this.landmark,
         this.portals
       );
 
@@ -323,6 +328,15 @@ export class GoldlineGame {
     this.renderWorldState();
   }
 
+  /**
+   * Sets which archetype-specific landmark shape renders at the gate. Null
+   * (no legitimate mission approached yet) draws nothing — never a fake
+   * destination. See drawLandmark() for the shape/color per archetype.
+   */
+  setLandmarkArchetype(archetype: LandmarkArchetype | null) {
+    this.landmarkArchetype = archetype;
+  }
+
   performAction(action: CorridorAction) {
     const trigger = pendingTrigger(this.progress, this.completedTriggers);
     if (!trigger || trigger.action !== action) return false;
@@ -350,6 +364,7 @@ export class GoldlineGame {
     this.drawWorld(width, height);
 
     const now = performance.now();
+    this.drawLandmark(width, height, now);
     this.avatarState.tick(now);
     if (this.actionUntil && now >= this.actionUntil) {
       this.actionUntil = 0;
@@ -581,6 +596,63 @@ export class GoldlineGame {
     // Dim toward closed, keep bright otherwise — bright tropical direction
     // preserved, never a dark villain-fortress treatment.
     this.strongholdSprite.alpha = this.worldState === "closed" ? 0.5 : 0.92;
+  }
+
+  /**
+   * Archetype-specific landmark shape, placed beside the gate so it never
+   * competes with the Stronghold art. ANCHOR keeps its existing Stronghold
+   * treatment untouched (already the biggest/heaviest/purple landmark) — this
+   * only draws the three archetypes that previously had no physical world
+   * representation at all. Vector-only, deliberately restrained: shape,
+   * color, and motion are the read, not a label.
+   */
+  private drawLandmark(width: number, height: number, now: number) {
+    this.landmark.clear();
+    if (!this.landmarkArchetype || this.landmarkArchetype === "ANCHOR") return;
+    if (this.worldState === "captured" || this.worldState === "closed") return;
+
+    const x = width * 0.2;
+    const y = height * 0.14;
+
+    if (this.landmarkArchetype === "GATEKEEPER") {
+      // Checkpoint: a barrier bar across a narrow gate — the read is ACCESS,
+      // not a villain. No portrayal of a person.
+      this.landmark
+        .roundRect(x - 34, y - 6, 68, 12, 4)
+        .fill({ color: 0x0c1c26, alpha: 0.75 })
+        .stroke({ color: 0x78c8ff, width: 2, alpha: 0.85 });
+      this.landmark.circle(x - 34, y, 4).fill({ color: 0x78c8ff, alpha: 0.9 });
+      this.landmark.circle(x + 34, y, 4).fill({ color: 0x78c8ff, alpha: 0.9 });
+      return;
+    }
+
+    if (this.landmarkArchetype === "GHOST") {
+      // Signal beacon: a slow breathing pulse — reads as "trying to reach
+      // someone", never as "they replied".
+      const pulse = 0.5 + Math.sin(now / 900) * 0.5;
+      const radius = 10 + pulse * 6;
+      this.landmark.circle(x, y, radius + 8).fill({ color: 0xa082ff, alpha: 0.06 + pulse * 0.08 });
+      this.landmark.circle(x, y, radius).stroke({ color: 0xcbb8ff, width: 2, alpha: 0.4 + pulse * 0.4 });
+      this.landmark.circle(x, y, 4).fill({ color: 0xe6dcff, alpha: 0.7 + pulse * 0.3 });
+      return;
+    }
+
+    if (this.landmarkArchetype === "STALLER") {
+      // Frozen mechanism: a clockwork ring that ticks in small discrete
+      // steps rather than spinning freely — "delayed", not "broken".
+      const tickAngle = Math.floor(now / 700) * (Math.PI / 6);
+      this.landmark.circle(x, y, 16).stroke({ color: 0xffc46b, width: 2, alpha: 0.55 });
+      for (let i = 0; i < 6; i += 1) {
+        const angle = tickAngle + (i * Math.PI) / 3;
+        const gx = x + Math.cos(angle) * 16;
+        const gy = y + Math.sin(angle) * 16;
+        this.landmark.circle(gx, gy, 2).fill({ color: 0xffd68f, alpha: 0.8 });
+      }
+      this.landmark
+        .moveTo(x, y)
+        .lineTo(x + Math.cos(tickAngle) * 11, y + Math.sin(tickAngle) * 11)
+        .stroke({ color: 0xffe6b8, width: 2, alpha: 0.9 });
+    }
   }
 
   private updatePortals(width: number, height: number) {
