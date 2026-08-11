@@ -168,6 +168,7 @@ export default function GoldlineDriverController() {
   const evaluateScout =
     trpc.system.driverGameWorld.scoutCapability.useMutation();
   const runScout = trpc.system.driverGameWorld.runScout.useMutation();
+  const recordWeaponUsage = trpc.system.armory.recordUsage.useMutation();
 
   const activeDispatch = dispatches.data?.find(
     item =>
@@ -610,6 +611,8 @@ export default function GoldlineDriverController() {
           scoutReport={scoutReport.data}
           isRunningScout={runScout.isPending}
           onRunScout={handleRunScout}
+          onRequestWeapons={input => utils.system.armory.weapons.fetch(input)}
+          onRecordWeaponUsage={input => recordWeaponUsage.mutateAsync(input)}
         />
       </Suspense>
       <QuickNewOrderSheet

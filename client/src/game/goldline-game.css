@@ -809,3 +809,494 @@
   .anchor-weak-point { animation-duration: 5s, 2s; }
   .game-loading svg { animation: none; }
 }
+
+/* ------------------------------------------------------------------
+   Slice 13 — Armory Evolution encounters.
+   The world stays primary: every encounter is an overlay panel that
+   leaves the canvas visible behind it, sits inside the safe area, and
+   scrolls internally rather than pushing the page.
+   ------------------------------------------------------------------ */
+
+.encounter {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 72svh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(6, 10, 18, 0.82), rgba(4, 7, 13, 0.97));
+  border-top: 1px solid rgba(120, 200, 255, 0.28);
+  backdrop-filter: blur(8px);
+}
+
+.encounter > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.encounter > header small {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: #7fd4ff;
+}
+
+.encounter > header b {
+  display: block;
+  font-size: 15px;
+  line-height: 1.25;
+  color: #f2f7ff;
+}
+
+.encounter > header em {
+  display: block;
+  font-size: 11px;
+  font-style: normal;
+  color: #9fb3c8;
+}
+
+.encounter-close {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: #cfe3f5;
+}
+
+.encounter-feedback {
+  margin-top: 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #ffd479;
+}
+
+/* ---- Gatekeeper: routing ---- */
+
+.gate-field {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(120, 200, 255, 0.2);
+  background: rgba(10, 18, 30, 0.6);
+  touch-action: none;
+}
+
+.gate-field.is-armed {
+  border-color: rgba(120, 220, 255, 0.55);
+}
+
+.gate-origin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: #8fd2ff;
+}
+
+.gate-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.gate-node {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 8px;
+  min-height: 76px;
+  border-radius: 12px;
+  border: 1px dashed rgba(140, 190, 230, 0.35);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.gate-node b {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #eaf4ff;
+}
+
+.gate-node small {
+  font-size: 10px;
+  line-height: 1.3;
+  color: #93a9bd;
+}
+
+.gate-node.is-routed {
+  border-style: solid;
+  border-color: #7fe3a1;
+  background: rgba(60, 200, 130, 0.12);
+}
+
+.gate-node.is-target {
+  box-shadow: inset 0 0 0 1px rgba(255, 212, 121, 0.5);
+}
+
+.gate-hint,
+.signal-hint,
+.alignment-hint {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: #7f93a8;
+}
+
+/* ---- Ghost: signal tracking ---- */
+
+.signal-field {
+  position: relative;
+  height: 190px;
+  border-radius: 14px;
+  border: 1px solid rgba(160, 140, 255, 0.24);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(120, 90, 220, 0.16), transparent 70%),
+    rgba(10, 12, 26, 0.65);
+  overflow: hidden;
+  touch-action: none;
+}
+
+.ghost-beacon {
+  position: absolute;
+  width: 54px;
+  height: 54px;
+  margin: -27px 0 0 -27px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(190, 170, 255, 0.6);
+  background: rgba(150, 120, 255, 0.16);
+  color: #d9ccff;
+  transition: background 120ms ease;
+}
+
+.ghost-beacon.is-held {
+  background: rgba(150, 120, 255, 0.42);
+  border-color: #cbb8ff;
+}
+
+.signal-lock-meter {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 34px;
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.signal-lock-meter i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #8f7bff, #ccb6ff);
+}
+
+.signal-lock-meter b {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: #cbb8ff;
+}
+
+.signal-field .signal-hint {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+}
+
+/* ---- Staller: timing alignment ---- */
+
+.alignment-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 200, 120, 0.24);
+  background: rgba(24, 18, 8, 0.5);
+}
+
+.alignment-track {
+  position: relative;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.alignment-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 8px;
+  background: rgba(255, 196, 100, 0.26);
+  border: 1px solid rgba(255, 205, 120, 0.6);
+}
+
+.alignment-marker {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 4px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: #ffe6a8;
+}
+
+.alignment-commit {
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 205, 120, 0.5);
+  background: rgba(255, 190, 90, 0.16);
+  color: #ffe6b8;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+}
+
+.alignment-commit:disabled {
+  opacity: 0.45;
+}
+
+.staller-real-clock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.staller-real-clock small {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: #8fa2b6;
+}
+
+.staller-real-clock b {
+  display: block;
+  font-size: 12px;
+  color: #f0f6ff;
+}
+
+/* ---- Shared Armory loadout ---- */
+
+.armory-loadout {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.armory-loadout.is-loading,
+.armory-loadout.is-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 11px;
+  color: #9fb3c8;
+}
+
+.armory-zero-state {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #8fa2b6;
+}
+
+.armory-weapon {
+  position: relative;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.armory-weapon.is-selected {
+  border-color: #7fe3a1;
+  background: rgba(60, 200, 130, 0.12);
+}
+
+.armory-weapon.is-high {
+  box-shadow: inset 3px 0 0 #7fe3a1;
+}
+
+.armory-weapon.is-medium {
+  box-shadow: inset 3px 0 0 #7fd4ff;
+}
+
+.armory-weapon.is-low {
+  box-shadow: inset 3px 0 0 rgba(255, 255, 255, 0.2);
+}
+
+.armory-weapon-main {
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 44px 10px 12px;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: inherit;
+}
+
+.armory-weapon-main small {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8fa2b6;
+}
+
+.armory-weapon-main b {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: #f2f7ff;
+}
+
+.armory-weapon-main span {
+  display: block;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #c3d3e4;
+}
+
+.armory-weapon-main em {
+  display: block;
+  margin-top: 4px;
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: 0.1em;
+  color: #8fd2ff;
+}
+
+.armory-weapon-main em.evidence-insufficient {
+  color: #8fa2b6;
+}
+
+.armory-weapon-provenance-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #cfe3f5;
+}
+
+.armory-weapon-provenance {
+  padding: 10px 12px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  color: #c3d3e4;
+}
+
+.armory-weapon-provenance small {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: #7fd4ff;
+  margin-bottom: 4px;
+}
+
+.armory-weapon-provenance dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 0 0 8px;
+}
+
+.armory-weapon-provenance dt {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: #8fa2b6;
+}
+
+.armory-weapon-provenance dd {
+  margin: 0;
+  font-size: 11px;
+  color: #eaf4ff;
+}
+
+.armory-phrases {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.armory-phrases li {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.armory-phrases li.is-exact_source_phrase {
+  box-shadow: inset 2px 0 0 #ffd479;
+}
+
+.armory-phrases li small {
+  color: #8fa2b6;
+  margin-bottom: 2px;
+}
+
+.armory-personal-evidence {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(120, 200, 255, 0.08);
+}
+
+.armory-personal-evidence p {
+  margin: 0 0 6px;
+}
+
+.armory-personal-evidence ul {
+  margin: 0 0 6px;
+  padding-left: 16px;
+}
+
+.armory-personal-evidence em {
+  font-style: normal;
+  font-size: 10px;
+  color: #8fa2b6;
+}
+
+@media (max-height: 700px) {
+  .encounter {
+    max-height: 78svh;
+  }
+
+  .signal-field {
+    height: 150px;
+  }
+}

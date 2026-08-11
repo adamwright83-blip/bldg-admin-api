@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useEffect,
   useMemo,
   useRef,
@@ -67,6 +69,24 @@ import { ColdCallBurst } from "./encounters/coldCall/ColdCallBurst";
 import { VictoryCeremony } from "./victory/VictoryCeremony";
 import { ScoutCapabilityChamber } from "./capabilities/ScoutCapabilityChamber";
 import { ScoutReportPanel } from "./agents/scout/ScoutReportPanel";
+import {
+  archetypeForMission,
+  channelForMission,
+  type ArmoryWeapon,
+  type EncounterResolution,
+  type ObjectionArchetype,
+  type SalesIntelChannel,
+} from "./encounters/EncounterTypes";
+
+// New objection encounters load only when the player actually reaches one,
+// so the base game runtime stays lean.
+const GatekeeperEncounter = lazy(
+  () => import("./encounters/gatekeeper/GatekeeperEncounter")
+);
+const GhostEncounter = lazy(() => import("./encounters/ghost/GhostEncounter"));
+const StallerEncounter = lazy(
+  () => import("./encounters/staller/StallerEncounter")
+);
 
 type GoldlineGameHomeProps = GoldlineHomeProps & {
   worldNodes?: DriverGameWorldNode[];
@@ -98,6 +118,23 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
   scoutReport?: ScoutReport | null;
   isRunningScout?: boolean;
   onRunScout: () => Promise<void>;
+  onRequestWeapons?: (input: {
+    archetype: ObjectionArchetype;
+    channel: SalesIntelChannel;
+    missionId: number | null;
+  }) => Promise<{
+    weapons: ArmoryWeapon[];
+    trainerIntelligenceAvailable: boolean;
+  }>;
+  onRecordWeaponUsage?: (input: {
+    missionId: number;
+    weaponId: string;
+    frameworkId: string | null;
+    archetype: ObjectionArchetype;
+    channel: SalesIntelChannel;
+    provenanceKind: "trainer_source" | "personal_evidence" | "foundation";
+    requestId: string;
+  }) => Promise<unknown>;
 };
 
 type UtilityPanel = "menu" | "route" | "objectives" | "open-channel" | null;
@@ -323,6 +360,13 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [coldCallOpen, setColdCallOpen] = useState(false);
   const [scoutOpen, setScoutOpen] = useState(false);
   const [scoutCapabilityOpen, setScoutCapabilityOpen] = useState(false);
+  const [encounterArchetype, setEncounterArchetype] =
+    useState<ObjectionArchetype>("ANCHOR");
+  const [encounterChannel, setEncounterChannel] =
+    useState<SalesIntelChannel>("phone");
+  const [contextWeapons, setContextWeapons] = useState<ArmoryWeapon[]>([]);
+  const [isLoadingWeapons, setIsLoadingWeapons] = useState(false);
+  const [trainerIntelAvailable, setTrainerIntelAvailable] = useState(false);
 
   const missions = useMemo(
     () =>
@@ -409,13 +453,65 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       if (move) void props.onAcceptMove(move);
       return;
     }
+    // Which objection this is, and on which channel, comes from real state.
+    const archetype = archetypeForMission({
+      mission: activeMission,
+      hasDecisionMakerContact: Boolean(activeMission.phoneUrl),
+    });
+    const channel = channelForMission(activeMission);
+    setEncounterArchetype(archetype);
+    setEncounterChannel(channel);
     setShield(3);
     setFeedback(null);
     setArcadeResolution(null);
     setSelectedAbility(null);
     setSignalReset(current => current + 1);
+    setContextWeapons([]);
+    setTrainerIntelAvailable(false);
+    if (props.onRequestWeapons) {
+      setIsLoadingWeapons(true);
+      void props
+        .onRequestWeapons({
+          archetype,
+          channel,
+          missionId: activeMission.missionId,
+        })
+        .then(result => {
+          setContextWeapons(result.weapons);
+          setTrainerIntelAvailable(result.trainerIntelligenceAvailable);
+        })
+        .catch(() => setContextWeapons([]))
+        .finally(() => setIsLoadingWeapons(false));
+    }
     setView("encounter");
   };
+
+  /** Records a real selection so personal evidence can accumulate. */
+  function handleWeaponSelected(weapon: ArmoryWeapon) {
+    if (!props.onRecordWeaponUsage || !activeMission?.missionId) return;
+    void props
+      .onRecordWeaponUsage({
+        missionId: activeMission.missionId,
+        weaponId: weapon.id,
+        frameworkId:
+          weapon.provenance.type === "trainer_source"
+            ? weapon.provenance.frameworkId
+            : null,
+        archetype: weapon.archetype,
+        channel: weapon.channel,
+        provenanceKind: weapon.provenance.type,
+        requestId: crypto.randomUUID(),
+      })
+      .catch(() => {
+        // Evidence recording must never block the encounter.
+      });
+  }
+
+  function handleEncounterResolved(resolution: EncounterResolution) {
+    setFeedback(resolution.feedback);
+    setArcadeResolution(resolution.performance === "clean" ? "breached" : "miss");
+    setView("awaiting_business_result");
+  }
 
   function performAction() {
     if (action) runtimeRef.current?.performAction(action);
@@ -578,7 +674,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           </>
         ) : null}
 
-        {(view === "encounter" || view === "awaiting_business_result") && activeMission ? (
+        {(view === "encounter" || view === "awaiting_business_result") &&
+        activeMission &&
+        encounterArchetype === "ANCHOR" ? (
           <section className="anchor-encounter" aria-label="Anchor encounter">
             <header>
               <div>
@@ -651,6 +749,41 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               </div>
             ) : null}
           </section>
+        ) : null}
+
+        {(view === "encounter" || view === "awaiting_business_result") &&
+        activeMission &&
+        encounterArchetype !== "ANCHOR" ? (
+          <Suspense
+            fallback={
+              <div className="game-loading">
+                <Loader2 /> LOADING ENCOUNTER…
+              </div>
+            }
+          >
+            {(() => {
+              const encounterProps = {
+                mission: activeMission,
+                archetype: encounterArchetype,
+                channel: encounterChannel,
+                weapons: contextWeapons,
+                isLoadingWeapons,
+                trainerIntelligenceAvailable: trainerIntelAvailable,
+                onSelectWeapon: handleWeaponSelected,
+                onResolved: handleEncounterResolved,
+                onOpenBusinessAction: () =>
+                  utilityMissionPath && window.location.assign(utilityMissionPath),
+                onClose: () => setView("explore"),
+              };
+              if (encounterArchetype === "GATEKEEPER") {
+                return <GatekeeperEncounter {...encounterProps} />;
+              }
+              if (encounterArchetype === "GHOST") {
+                return <GhostEncounter {...encounterProps} />;
+              }
+              return <StallerEncounter {...encounterProps} />;
+            })()}
+          </Suspense>
         ) : null}
 
         {view === "captured" && activeMission ? (
