@@ -513,8 +513,28 @@ function ReviewQueuePanel() {
                 </span>
               </div>
               <p className="sales-intel-hint">"{entry.framework.exactObjection}"</p>
+              {entry.source.title || entry.source.canonicalUrl ? (
+                <p className="sales-intel-hint">
+                  {entry.source.title ?? "Source"}
+                  {entry.source.publishedAt
+                    ? ` · ${new Date(entry.source.publishedAt).toLocaleDateString()}`
+                    : ""}
+                  {entry.source.canonicalUrl ? (
+                    <>
+                      {" "}
+                      ·{" "}
+                      <a href={entry.source.canonicalUrl} target="_blank" rel="noreferrer">
+                        open source
+                      </a>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
               <p className="sales-intel-hint">
                 {describeFrameworkQuality(entry.quality as FrameworkQualitySignals)}
+                {entry.quality.independentSourceSupportCount > 0
+                  ? " · related to another accepted framework"
+                  : ""}
               </p>
               <div className="sales-intel-source-actions">
                 <Button

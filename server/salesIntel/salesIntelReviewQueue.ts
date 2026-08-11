@@ -9,6 +9,7 @@
 import {
   countIndependentSourceSupport,
   getLatestTranscript,
+  getSourceArtifact,
   listFrameworksPendingReview,
 } from "./salesIntelStore";
 import { sourceCompletenessTier, type FrameworkQualitySignals } from "../../shared/salesIntelQuality";
@@ -17,6 +18,12 @@ import type { SalesIntelFramework } from "../../shared/salesIntel";
 export type FrameworkReviewQueueEntry = {
   framework: SalesIntelFramework;
   quality: FrameworkQualitySignals;
+  /** So the reviewer can always reach the real source — no hidden provenance (Slice 48). */
+  source: {
+    canonicalUrl: string | null;
+    title: string | null;
+    publishedAt: string | null;
+  };
 };
 
 export async function getFrameworkReviewQueue(): Promise<
@@ -25,14 +32,17 @@ export async function getFrameworkReviewQueue(): Promise<
   const pending = await listFrameworksPendingReview();
   const entries: FrameworkReviewQueueEntry[] = [];
   for (const framework of pending) {
-    const transcript = await getLatestTranscript(framework.sourceArtifactId);
-    const independentSourceSupportCount = await countIndependentSourceSupport({
-      frameworkId: framework.id,
-      sourceArtifactId: framework.sourceArtifactId,
-      archetype: framework.archetype,
-      channel: framework.channel,
-      responseFamily: framework.responseFamily,
-    });
+    const [transcript, sourceArtifact, independentSourceSupportCount] = await Promise.all([
+      getLatestTranscript(framework.sourceArtifactId),
+      getSourceArtifact(framework.sourceArtifactId),
+      countIndependentSourceSupport({
+        frameworkId: framework.id,
+        sourceArtifactId: framework.sourceArtifactId,
+        archetype: framework.archetype,
+        channel: framework.channel,
+        responseFamily: framework.responseFamily,
+      }),
+    ]);
     entries.push({
       framework,
       quality: {
@@ -42,6 +52,11 @@ export async function getFrameworkReviewQueue(): Promise<
         ),
         independentSourceSupportCount,
         modelConfidence: framework.confidence,
+      },
+      source: {
+        canonicalUrl: sourceArtifact?.canonicalUrl ?? sourceArtifact?.sourceUrl ?? null,
+        title: sourceArtifact?.title ?? null,
+        publishedAt: sourceArtifact?.publishedAt ?? null,
       },
     });
   }
