@@ -49,6 +49,8 @@ export type ArmoryProvenance =
       extractionVersion: string;
       extractionModel: string | null;
       confidence: number | null;
+      /** Distinct other accepted sources teaching the same response for this archetype/channel — a fact, never a score. */
+      independentSourceSupportCount: number;
     }
   | {
       type: "personal_evidence";

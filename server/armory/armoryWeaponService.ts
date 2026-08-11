@@ -23,7 +23,10 @@ import type {
   SalesIntelFramework,
 } from "../../shared/salesIntel";
 import { getDb } from "../db";
-import { queryDriverVisibleFrameworks } from "../salesIntel/salesIntelStore";
+import {
+  countIndependentSourceSupport,
+  queryDriverVisibleFrameworks,
+} from "../salesIntel/salesIntelStore";
 import { foundationWeaponsFor } from "./armoryFoundation";
 import {
   personalEvidenceConfidence,
@@ -132,6 +135,7 @@ function frameworkToWeapon(input: {
   framework: SalesIntelFramework;
   sourceUrl: string | null;
   sourceType: string;
+  independentSourceSupportCount: number;
 }): ArmoryWeapon {
   const { framework } = input;
   const exact = framework.exampleLanguage.find(
@@ -164,6 +168,7 @@ function frameworkToWeapon(input: {
       extractionVersion: framework.extractionVersion,
       extractionModel: framework.extractionModel,
       confidence: framework.confidence,
+      independentSourceSupportCount: input.independentSourceSupportCount,
     },
     personalEvidence: null,
     fit: "medium",
@@ -193,7 +198,17 @@ function rankScore(weapon: ArmoryWeapon): number {
   return score;
 }
 
-function assignFit(weapon: ArmoryWeapon): ArmoryWeapon {
+/**
+ * A fact about how many other accepted sources independently teach the same
+ * response for this archetype/channel — never an effectiveness claim. Zero is
+ * stated plainly rather than omitted, so silence never implies corroboration.
+ */
+function sourceSupportClause(count: number): string {
+  if (count <= 0) return "";
+  return ` — also taught by ${count} other source${count === 1 ? "" : "s"}`;
+}
+
+export function assignFit(weapon: ArmoryWeapon): ArmoryWeapon {
   const evidence = weapon.personalEvidence;
   if (evidence?.confidence === "strong") {
     return {
@@ -209,14 +224,14 @@ function assignFit(weapon: ArmoryWeapon): ArmoryWeapon {
     return {
       ...weapon,
       fit: "high",
-      fitReason: `High-confidence framework from ${weapon.provenance.creator}`,
+      fitReason: `High-confidence framework from ${weapon.provenance.creator}${sourceSupportClause(weapon.provenance.independentSourceSupportCount)}`,
     };
   }
   if (weapon.provenance.type === "trainer_source") {
     return {
       ...weapon,
       fit: "medium",
-      fitReason: `Framework from ${weapon.provenance.creator} for this objection`,
+      fitReason: `Framework from ${weapon.provenance.creator} for this objection${sourceSupportClause(weapon.provenance.independentSourceSupportCount)}`,
     };
   }
   if (evidence?.confidence === "emerging") {
@@ -286,12 +301,25 @@ export async function listArmoryWeapons(input: {
     }
   }
 
-  const trainerWeapons = frameworks.map(framework => {
+  const supportCounts = await Promise.all(
+    frameworks.map(framework =>
+      countIndependentSourceSupport({
+        frameworkId: framework.id,
+        sourceArtifactId: framework.sourceArtifactId,
+        archetype: framework.archetype,
+        channel: framework.channel,
+        responseFamily: framework.responseFamily,
+      })
+    )
+  );
+
+  const trainerWeapons = frameworks.map((framework, index) => {
     const source = sourceById.get(framework.sourceArtifactId);
     return frameworkToWeapon({
       framework,
       sourceUrl: source?.url ?? null,
       sourceType: source?.type ?? "unknown",
+      independentSourceSupportCount: supportCounts[index],
     });
   });
 
