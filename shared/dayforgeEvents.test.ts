@@ -10,8 +10,9 @@ import {
 describe("DayForge product event contract", () => {
   it("keeps every locked funnel event in the typed catalog", () => {
     // 36 original DayForge funnel events + 25 Goldline gameplay events
-    // added in the Slices 14-20 accelerated run (Slice 19).
-    expect(DAYFORGE_PRODUCT_EVENT_NAMES).toHaveLength(61);
+    // added in the Slices 14-20 accelerated run (Slice 19) + 1 adaptive
+    // visual-quality telemetry event added in Slice 27.
+    expect(DAYFORGE_PRODUCT_EVENT_NAMES).toHaveLength(62);
     expect(DAYFORGE_PRODUCT_EVENT_NAMES).toContain("territory_scan_started");
     expect(DAYFORGE_PRODUCT_EVENT_NAMES).toContain("mission_game_completed");
     expect(DAYFORGE_PRODUCT_EVENT_NAMES).toContain(

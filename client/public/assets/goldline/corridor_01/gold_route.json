@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "note": "Control points authored by scanning mid.webp's actual gold-inlay pixels (R>150, G<R, B<G-10, R-B>60) in horizontal bands and taking each band's gold-pixel centroid. Points below progress~0.65 are directly traced from the art; the last two points (approaching the gate) are extrapolated toward the fortress gate's authored screen position (x=0.525) since the trace loses the path into ambient background gold detail above that point. Coordinates are lateral fraction (0.5 = center, matching the existing avatarX formula's 0..1 space before the *0.22 scale) and progress (0..1 along the corridor).",
+  "points": [
+    { "progress": 0.02, "lateral": 0.541 },
+    { "progress": 0.06, "lateral": 0.494 },
+    { "progress": 0.10, "lateral": 0.437 },
+    { "progress": 0.15, "lateral": 0.393 },
+    { "progress": 0.19, "lateral": 0.353 },
+    { "progress": 0.23, "lateral": 0.409 },
+    { "progress": 0.27, "lateral": 0.430 },
+    { "progress": 0.31, "lateral": 0.528 },
+    { "progress": 0.35, "lateral": 0.541 },
+    { "progress": 0.40, "lateral": 0.551 },
+    { "progress": 0.44, "lateral": 0.619 },
+    { "progress": 0.48, "lateral": 0.662 },
+    { "progress": 0.52, "lateral": 0.647 },
+    { "progress": 0.56, "lateral": 0.584 },
+    { "progress": 0.60, "lateral": 0.573 },
+    { "progress": 0.65, "lateral": 0.545 },
+    { "progress": 0.72, "lateral": 0.53 },
+    { "progress": 0.82, "lateral": 0.525 }
+  ]
+}

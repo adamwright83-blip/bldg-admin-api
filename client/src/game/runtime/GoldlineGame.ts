@@ -25,6 +25,11 @@ import type {
 } from "../state/GameState";
 import type { WorldMissionState } from "../../../../shared/driverGameWorld";
 import { CameraController } from "./CameraController";
+import { branchPaceFor, stepVelocity, targetSpeedForMagnitude } from "./movementFeel";
+import { lateralForProgress, loadGoldRoute, type GoldRoutePoint } from "../world/goldRoute";
+import { AdaptiveQualityMonitor, type QualityTier } from "./adaptiveQuality";
+
+export type LandmarkArchetype = "ANCHOR" | "GATEKEEPER" | "GHOST" | "STALLER";
 
 type GoldlineGameCallbacks = {
   onActionAvailable: (action: CorridorAction | null, label: string | null) => void;
@@ -37,6 +42,10 @@ type GoldlineGameCallbacks = {
     anchorId: string,
     state: "hidden" | "label" | "engage"
   ) => void;
+  /** Fires once per successfully triggered traversal move — analytics only, never gameplay-authoritative. */
+  onTraversalAction?: (action: "JUMP" | "CLIMB" | "VAULT") => void;
+  /** Fires only when measured rolling frame time crosses a real degrade/recover threshold. */
+  onQualityChange?: (tier: QualityTier, avgFrameMs: number) => void;
 };
 
 /**
@@ -100,9 +109,6 @@ function poseForState(state: AvatarState, runFrame: number): string {
   }
 }
 
-/** Acceleration/deceleration rates for locomotion — not a linear 1:1 with input. */
-const ACCEL_UNITS_PER_SECOND = 2.6;
-const DECEL_UNITS_PER_SECOND = 4.2;
 
 export class GoldlineGame {
   private app: Application | null = null;
@@ -117,6 +123,9 @@ export class GoldlineGame {
 
   private camera = new CameraController(this.world);
   private avatar: Sprite | null = null;
+  /** Holds the outgoing pose during a crossfade so state changes don't pop. */
+  private avatarCrossfade: Sprite | null = null;
+  private crossfadeStartedAt = 0;
   private avatarShadow = new Graphics();
   private corridor = new Graphics();
   private fortress = new Graphics();
@@ -128,12 +137,14 @@ export class GoldlineGame {
   private foregroundOccluders: Sprite[] = [];
   private poseTextures = new Map<string, Texture>();
   private currentPoseKey = "idle";
+  private lastAvatarStateForImpulse: AvatarState = "idle";
   private runFrameTimer = 0;
   private particles = new Container();
   private input = { x: 0, y: 0 };
   private progress = 0.06;
   private lateral = 0;
   private velocity = 0; // eased locomotion speed, not applied 1:1 from input
+  private lastDirectionSign = 0;
   private completedTriggers = new Set<string>();
   private availableAction: CorridorAction | null = null;
   private availableLabel: string | null = null;
@@ -143,8 +154,13 @@ export class GoldlineGame {
   private lastReportedProgress = -1;
   private worldState: WorldMissionState = "available";
   private anchors: CorridorAnchor[] = [];
+  private goldRoutePoints: GoldRoutePoint[] = [];
+  private landmarkArchetype: LandmarkArchetype | null = null;
+  private landmark = new Graphics();
   private occlusionZones: OcclusionZone[] = [];
   private portalProximityState = new Map<string, "hidden" | "label" | "engage">();
+  private qualityMonitor = new AdaptiveQualityMonitor();
+  private qualityTier: QualityTier = "premium";
   private hidden = false;
   private visibilityHandler = () => {
     this.hidden = document.hidden;
@@ -222,6 +238,7 @@ export class GoldlineGame {
         this.corridor,
         this.recoveryPath,
         this.fortress,
+        this.landmark,
         this.portals
       );
 
@@ -240,7 +257,15 @@ export class GoldlineGame {
       this.avatar = new Sprite(characterTexture);
       this.avatar.anchor.set(0.5, 1);
       this.avatar.label = "trailblazer-operator";
-      this.layerTraversal.addChild(this.avatarShadow, this.avatar, this.particles);
+      this.avatarCrossfade = new Sprite(characterTexture);
+      this.avatarCrossfade.anchor.set(0.5, 1);
+      this.avatarCrossfade.visible = false;
+      this.layerTraversal.addChild(
+        this.avatarShadow,
+        this.avatarCrossfade,
+        this.avatar,
+        this.particles
+      );
 
       // L3 foreground occlusion sprites, placed at the two authored zones
       // from occlusion.json once anchors load. Created lazily below.
@@ -276,16 +301,26 @@ export class GoldlineGame {
       );
       app.stage.addChild(this.world);
 
-      app.ticker.add(ticker => this.update(ticker.deltaMS / 1000, background));
+      app.ticker.add(ticker => {
+        const changedTier = this.qualityMonitor.sample(ticker.deltaMS);
+        if (changedTier) {
+          this.qualityTier = changedTier;
+          this.applyQualityTier();
+          this.callbacks.onQualityChange?.(changedTier, this.qualityMonitor.averageFrameMs());
+        }
+        this.update(ticker.deltaMS / 1000, background);
+      });
       document.addEventListener("visibilitychange", this.visibilityHandler);
       window.addEventListener("pagehide", this.pageHideHandler);
       this.renderWorldState();
 
-      void loadCorridorAnchors(
-        assets.anchorsBasePath ?? "/assets/goldline/corridor_01"
-      ).then(result => {
+      const anchorsBasePath = assets.anchorsBasePath ?? "/assets/goldline/corridor_01";
+      void loadCorridorAnchors(anchorsBasePath).then(result => {
         this.anchors = result.anchors;
         this.occlusionZones = result.zones;
+      });
+      void loadGoldRoute(anchorsBasePath).then(points => {
+        this.goldRoutePoints = points;
       });
 
       return true;
@@ -302,10 +337,25 @@ export class GoldlineGame {
   }
 
   setWorldState(state: WorldMissionState) {
+    const previous = this.worldState;
     this.worldState = state;
     if (state === "recovery_active") this.camera.focusRecoveryPath();
     else this.camera.focusMainGate();
+    // REKINDLE: a real, authoritative transition into an active recovery —
+    // the world briefly acknowledges it. Never fires from arcade state.
+    if (state === "recovery_active" && previous !== "recovery_active") {
+      this.camera.impulse(-8);
+    }
     this.renderWorldState();
+  }
+
+  /**
+   * Sets which archetype-specific landmark shape renders at the gate. Null
+   * (no legitimate mission approached yet) draws nothing — never a fake
+   * destination. See drawLandmark() for the shape/color per archetype.
+   */
+  setLandmarkArchetype(archetype: LandmarkArchetype | null) {
+    this.landmarkArchetype = archetype;
   }
 
   performAction(action: CorridorAction) {
@@ -322,6 +372,9 @@ export class GoldlineGame {
     this.actionUntil = now + this.avatarState.actionDurationMs(action);
     this.progress = Math.min(0.78, trigger.at + 0.075);
     this.spawnTrail(action === "VAULT" ? 0xffc34e : 0x5feaff);
+    if (action === "JUMP" || action === "CLIMB" || action === "VAULT") {
+      this.callbacks.onTraversalAction?.(action);
+    }
     return true;
   }
 
@@ -335,6 +388,7 @@ export class GoldlineGame {
     this.drawWorld(width, height);
 
     const now = performance.now();
+    this.drawLandmark(width, height, now);
     this.avatarState.tick(now);
     if (this.actionUntil && now >= this.actionUntil) {
       this.actionUntil = 0;
@@ -345,17 +399,24 @@ export class GoldlineGame {
     const magnitude = Math.hypot(this.input.x, this.input.y);
     this.avatarState.setLocomotion(magnitude);
     if (!this.actionUntil && this.avatarState.state !== "encounter_locked") {
-      const branchPace =
-        this.branch === "safe" ? 0.82 : this.branch === "upper" ? 1.08 : 1;
-      const targetSpeed = (magnitude > 0.62 ? 0.13 : magnitude > 0.08 ? 0.075 : 0) * branchPace;
-      const rampRate = targetSpeed > this.velocity ? ACCEL_UNITS_PER_SECOND : DECEL_UNITS_PER_SECOND;
-      const maxStep = rampRate * deltaSeconds * 0.13;
-      this.velocity +=
-        Math.sign(targetSpeed - this.velocity) * Math.min(maxStep, Math.abs(targetSpeed - this.velocity));
-
+      const branchPace = branchPaceFor(this.branch);
+      const targetSpeed = targetSpeedForMagnitude(magnitude, branchPace);
       const forward = Math.max(0, -this.input.y);
       const backward = Math.max(0, this.input.y);
       const directional = forward > 0 ? 1 : backward > 0 ? -0.65 : 0;
+      const directionSign = Math.sign(directional);
+      const isReversing =
+        directionSign !== 0 &&
+        this.lastDirectionSign !== 0 &&
+        directionSign !== this.lastDirectionSign;
+      if (directionSign !== 0) this.lastDirectionSign = directionSign;
+      this.velocity = stepVelocity({
+        currentVelocity: this.velocity,
+        targetSpeed,
+        deltaSeconds,
+        isReversing,
+      });
+
       const next = this.progress + this.velocity * directional * deltaSeconds;
       const ceiling = trigger ? trigger.at : 0.82;
       this.progress = Math.max(0.035, Math.min(blocked ? ceiling : 0.82, next));
@@ -371,7 +432,11 @@ export class GoldlineGame {
       this.callbacks.onBranchChange(nextBranch);
     }
 
-    const avatarX = width * (0.5 + this.lateral * 0.22);
+    // Authored route centerline (traced from mid.webp's painted gold inlay)
+    // replaces the constant 0.5 — the player's free joystick deviation is
+    // still added on top, exactly as it was against the old fixed center.
+    const routeCenter = lateralForProgress(this.goldRoutePoints, this.progress);
+    const avatarX = width * (routeCenter + this.lateral * 0.22);
     const groundY = height * (0.88 - this.progress * 0.61);
     const baseHeight = Math.max(134, Math.min(232, height * (0.25 - this.progress * 0.08)));
     const jumpFactor = this.avatarState.jumpHeightFactor(now);
@@ -391,6 +456,7 @@ export class GoldlineGame {
     this.avatar.rotation = this.input.x * 0.035;
     this.avatar.alpha = this.avatarState.state === "encounter_locked" ? 0.72 : 1;
 
+    this.syncCrossfadeTransform();
     this.drawContactShadow(avatarX, groundY, baseHeight, jumpFactor);
     this.applyOcclusion(avatarX, groundY, width, height);
     this.updateStronghold(width, height);
@@ -436,8 +502,16 @@ export class GoldlineGame {
   }
 
   private updateAvatarPose(now: number, magnitude: number) {
-    if (this.poseTextures.size === 0 || !this.avatar) return;
     const state = this.avatarState.state;
+    // A brief, one-shot camera acknowledgement on takeoff and landing — never
+    // a shake loop, decays to zero on its own (see CameraController.impulse).
+    if (state !== this.lastAvatarStateForImpulse) {
+      if (state === "jump_start") this.camera.impulse(-3);
+      if (state === "land") this.camera.impulse(4);
+      this.lastAvatarStateForImpulse = state;
+    }
+
+    if (this.poseTextures.size === 0 || !this.avatar) return;
     if (state === "run" || state === "walk") {
       this.runFrameTimer += (state === "run" ? 11 : 6) * (magnitude > 0 ? 1 : 0);
     }
@@ -446,10 +520,40 @@ export class GoldlineGame {
     if (key !== this.currentPoseKey) {
       const texture = this.poseTextures.get(key);
       if (texture) {
+        // Run-cycle frame steps (run_01 -> run_02 -> ...) are deliberately
+        // NOT crossfaded — that is the animation, and blending consecutive
+        // frames would read as motion blur rather than a run. Every other
+        // state change (idle<->run, run->jump_start, jump_air->land,
+        // climb_a<->climb_b, ...) gets a brief crossfade so it never pops.
+        const isRunFrameStep = key.startsWith("run_0") && this.currentPoseKey.startsWith("run_0");
+        if (!isRunFrameStep && this.avatarCrossfade) {
+          this.avatarCrossfade.texture = this.avatar.texture;
+          this.avatarCrossfade.visible = true;
+          this.avatarCrossfade.alpha = 1;
+          this.crossfadeStartedAt = now;
+        }
         this.avatar.texture = texture;
         this.currentPoseKey = key;
       }
     }
+
+    if (this.avatarCrossfade?.visible) {
+      const CROSSFADE_MS = 90;
+      const elapsed = now - this.crossfadeStartedAt;
+      this.avatarCrossfade.alpha = Math.max(0, 1 - elapsed / CROSSFADE_MS);
+      if (elapsed >= CROSSFADE_MS) this.avatarCrossfade.visible = false;
+    }
+  }
+
+  /** Keeps the crossfade ghost sprite pinned to the live avatar's transform. */
+  private syncCrossfadeTransform() {
+    if (!this.avatar || !this.avatarCrossfade?.visible) return;
+    this.avatarCrossfade.x = this.avatar.x;
+    this.avatarCrossfade.y = this.avatar.y;
+    this.avatarCrossfade.height = Math.abs(this.avatar.height);
+    this.avatarCrossfade.width = Math.abs(this.avatar.width);
+    this.avatarCrossfade.scale.x = Math.abs(this.avatarCrossfade.scale.x) * Math.sign(this.avatar.scale.x || 1);
+    this.avatarCrossfade.rotation = this.avatar.rotation;
   }
 
   private applyOcclusion(avatarX: number, groundY: number, width: number, height: number) {
@@ -513,9 +617,68 @@ export class GoldlineGame {
     this.strongholdSprite.width =
       this.strongholdSprite.height *
       (this.strongholdSprite.texture.width / this.strongholdSprite.texture.height);
-    // Dim toward closed, keep bright otherwise — bright tropical direction
-    // preserved, never a dark villain-fortress treatment.
-    this.strongholdSprite.alpha = this.worldState === "closed" ? 0.5 : 0.92;
+    // Dim toward closed, settle brighter on a verified capture, otherwise
+    // the steady baseline — bright tropical direction preserved throughout,
+    // never a dark villain-fortress treatment.
+    this.strongholdSprite.alpha =
+      this.worldState === "closed" ? 0.5 : this.worldState === "captured" ? 1 : 0.92;
+  }
+
+  /**
+   * Archetype-specific landmark shape, placed beside the gate so it never
+   * competes with the Stronghold art. ANCHOR keeps its existing Stronghold
+   * treatment untouched (already the biggest/heaviest/purple landmark) — this
+   * only draws the three archetypes that previously had no physical world
+   * representation at all. Vector-only, deliberately restrained: shape,
+   * color, and motion are the read, not a label.
+   */
+  private drawLandmark(width: number, height: number, now: number) {
+    this.landmark.clear();
+    if (!this.landmarkArchetype || this.landmarkArchetype === "ANCHOR") return;
+    if (this.worldState === "captured" || this.worldState === "closed") return;
+
+    const x = width * 0.2;
+    const y = height * 0.14;
+
+    if (this.landmarkArchetype === "GATEKEEPER") {
+      // Checkpoint: a barrier bar across a narrow gate — the read is ACCESS,
+      // not a villain. No portrayal of a person.
+      this.landmark
+        .roundRect(x - 34, y - 6, 68, 12, 4)
+        .fill({ color: 0x0c1c26, alpha: 0.75 })
+        .stroke({ color: 0x78c8ff, width: 2, alpha: 0.85 });
+      this.landmark.circle(x - 34, y, 4).fill({ color: 0x78c8ff, alpha: 0.9 });
+      this.landmark.circle(x + 34, y, 4).fill({ color: 0x78c8ff, alpha: 0.9 });
+      return;
+    }
+
+    if (this.landmarkArchetype === "GHOST") {
+      // Signal beacon: a slow breathing pulse — reads as "trying to reach
+      // someone", never as "they replied".
+      const pulse = 0.5 + Math.sin(now / 900) * 0.5;
+      const radius = 10 + pulse * 6;
+      this.landmark.circle(x, y, radius + 8).fill({ color: 0xa082ff, alpha: 0.06 + pulse * 0.08 });
+      this.landmark.circle(x, y, radius).stroke({ color: 0xcbb8ff, width: 2, alpha: 0.4 + pulse * 0.4 });
+      this.landmark.circle(x, y, 4).fill({ color: 0xe6dcff, alpha: 0.7 + pulse * 0.3 });
+      return;
+    }
+
+    if (this.landmarkArchetype === "STALLER") {
+      // Frozen mechanism: a clockwork ring that ticks in small discrete
+      // steps rather than spinning freely — "delayed", not "broken".
+      const tickAngle = Math.floor(now / 700) * (Math.PI / 6);
+      this.landmark.circle(x, y, 16).stroke({ color: 0xffc46b, width: 2, alpha: 0.55 });
+      for (let i = 0; i < 6; i += 1) {
+        const angle = tickAngle + (i * Math.PI) / 3;
+        const gx = x + Math.cos(angle) * 16;
+        const gy = y + Math.sin(angle) * 16;
+        this.landmark.circle(gx, gy, 2).fill({ color: 0xffd68f, alpha: 0.8 });
+      }
+      this.landmark
+        .moveTo(x, y)
+        .lineTo(x + Math.cos(tickAngle) * 11, y + Math.sin(tickAngle) * 11)
+        .stroke({ color: 0xffe6b8, width: 2, alpha: 0.9 });
+    }
   }
 
   private updatePortals(width: number, height: number) {
@@ -581,28 +744,34 @@ export class GoldlineGame {
 
   private drawWorld(width: number, height: number) {
     this.corridor.clear();
-    this.corridor
-      .moveTo(width * 0.32, height * 0.91)
-      .bezierCurveTo(
-        width * 0.72,
-        height * 0.72,
-        width * 0.33,
-        height * 0.49,
-        width * 0.52,
-        height * 0.25
-      )
-      .stroke({ width: 14, color: 0xf4bd48, alpha: 0.15 });
-    this.corridor
-      .moveTo(width * 0.32, height * 0.91)
-      .bezierCurveTo(
-        width * 0.72,
-        height * 0.72,
-        width * 0.33,
-        height * 0.49,
-        width * 0.52,
-        height * 0.25
-      )
-      .stroke({ width: 3, color: 0xffdf77, alpha: 0.86 });
+    // Authored route: sampled from the same lateralForProgress the avatar
+    // itself walks on, so the drawn line and the character's actual path
+    // are the same curve by construction — never two independently-tuned
+    // lines that can drift apart. Falls back to the prior generic bezier
+    // shape when the route JSON hasn't loaded yet (lateralForProgress
+    // returns 0.5 with no authored points).
+    const SAMPLES = 24;
+    const routeScreenPoint = (t: number) => {
+      const p = 0.02 + t * 0.8; // matches the playable progress range
+      const lateral = lateralForProgress(this.goldRoutePoints, p);
+      return { x: width * lateral, y: height * (0.88 - p * 0.61) };
+    };
+    const drawRoute = (strokeWidth: number, color: number, alpha: number) => {
+      const start = routeScreenPoint(0);
+      this.corridor.moveTo(start.x, start.y);
+      for (let i = 1; i <= SAMPLES; i += 1) {
+        const point = routeScreenPoint(i / SAMPLES);
+        this.corridor.lineTo(point.x, point.y);
+      }
+      this.corridor.stroke({ width: strokeWidth, color, alpha });
+    };
+    // The main route dims once a recovery branch is the legitimate path —
+    // it does not disappear (the account isn't closed), but visual priority
+    // shifts to the recovery path drawn below.
+    const mainRouteDim =
+      this.worldState === "contested" || this.worldState === "recovery_active" ? 0.4 : 1;
+    drawRoute(14, 0xf4bd48, 0.15 * mainRouteDim);
+    drawRoute(3, 0xffdf77, 0.86 * mainRouteDim);
 
     this.fortress.clear();
     const gateX = width * 0.37;
@@ -678,9 +847,20 @@ export class GoldlineGame {
     }
   }
 
+  /**
+   * Reduced tier turns off the ambient effects layer and thins particle
+   * trails — cheap wins that don't touch character/world readability, per
+   * the Visual Quality Gate (character/contact/scale must stay coherent
+   * even when degraded). Never fakes a higher tier than measured.
+   */
+  private applyQualityTier() {
+    if (this.effectsSprite) this.effectsSprite.visible = this.qualityTier === "premium";
+  }
+
   private spawnTrail(color: number) {
     if (!this.avatar) return;
-    for (let index = 0; index < 8; index += 1) {
+    const particleCount = this.qualityTier === "premium" ? 8 : 3;
+    for (let index = 0; index < particleCount; index += 1) {
       const particle = new Graphics()
         .circle(0, 0, 2 + Math.random() * 4)
         .fill({ color, alpha: 0.85 });
