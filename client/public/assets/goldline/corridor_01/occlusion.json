@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "note": "Zones are authored against the existing vector fortress/gate geometry — there is no separated L3 foreground art asset yet, so this proves the occlusion MECHANISM (z-order swap when the avatar's world position enters a zone), not final art-driven depth. See corridor_01/README.md for the missing foreground.webp requirement.",
+  "zones": [
+    {
+      "id": "fortress_gate_pillar_left",
+      "bounds": { "progressMin": 0.74, "progressMax": 0.82, "lateralMin": -0.5, "lateralMax": -0.14 },
+      "occluderZIndex": 5
+    },
+    {
+      "id": "fortress_gate_pillar_right",
+      "bounds": { "progressMin": 0.74, "progressMax": 0.82, "lateralMin": 0.14, "lateralMax": 0.5 },
+      "occluderZIndex": 5
+    }
+  ]
+}
