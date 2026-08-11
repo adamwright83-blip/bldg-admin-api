@@ -50,6 +50,10 @@ import {
   checkYouTubeSourceForNewContent,
 } from "./youtubeMonitoring";
 import { getFrameworkReviewQueue } from "./salesIntelReviewQueue";
+import {
+  applySalesIntelSourceImport,
+  previewSalesIntelSourceImport,
+} from "./salesIntelSourceImportService";
 
 const segmentSchema = z.object({
   startMs: z.number().int().min(0),
@@ -234,5 +238,17 @@ export const salesIntelRouter = router({
       const sources = await listEnabledYouTubeSources();
       return checkAllEnabledYouTubeSources(sources);
     }),
+
+    /** PREVIEW / DRY RUN — classifies every entry, mutates nothing. */
+    previewImport: adminProcedure
+      .input(z.object({ entries: z.array(z.unknown()).min(1).max(50) }))
+      .mutation(({ input }) => previewSalesIntelSourceImport(input.entries)),
+
+    /** Idempotent: only "new"-classified entries are actually inserted. */
+    applyImport: adminProcedure
+      .input(z.object({ entries: z.array(z.unknown()).min(1).max(50) }))
+      .mutation(({ ctx, input }) =>
+        applySalesIntelSourceImport({ rawEntries: input.entries, createdBy: ctx.user.openId })
+      ),
   }),
 });

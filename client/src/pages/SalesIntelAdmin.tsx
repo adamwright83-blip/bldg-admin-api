@@ -294,6 +294,111 @@ function SourceRegistryPanel() {
 }
 
 /**
+ * Bulk import for a verified-source manifest (Slice 46). Paste a JSON array
+ * of manifest entries; PREVIEW classifies every entry (new / already
+ * registered / duplicate within this paste / invalid / unsupported) without
+ * touching the database, then APPLY inserts only the "new" ones — running
+ * the same manifest twice never creates a duplicate registry record.
+ */
+function SourceImportPanel() {
+  const utils = trpc.useUtils();
+  const [open, setOpen] = useState(false);
+  const [raw, setRaw] = useState("");
+  const [preview, setPreview] = useState<
+    Array<{
+      index: number;
+      classification: string;
+      reason: string;
+      entry: { creatorName: string } | null;
+    }>
+  >([]);
+  const previewMutation = trpc.system.salesIntel.sourceRegistry.previewImport.useMutation();
+  const applyMutation = trpc.system.salesIntel.sourceRegistry.applyImport.useMutation();
+
+  function parseEntries(): unknown[] | null {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function handlePreview() {
+    const entries = parseEntries();
+    if (!entries) {
+      toast.error("Paste a JSON array of manifest entries.");
+      return;
+    }
+    try {
+      const result = await previewMutation.mutateAsync({ entries });
+      setPreview(result);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Preview failed");
+    }
+  }
+
+  async function handleApply() {
+    const entries = parseEntries();
+    if (!entries) return;
+    try {
+      const result = await applyMutation.mutateAsync({ entries });
+      toast.success(`Imported ${result.imported.length} source(s); skipped ${result.skipped.length}.`);
+      setPreview([]);
+      setRaw("");
+      await utils.system.salesIntel.sourceRegistry.list.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Import failed");
+    }
+  }
+
+  const newCount = preview.filter(p => p.classification === "new").length;
+
+  return (
+    <section className="sales-intel-import">
+      <button className="sales-intel-registry-toggle" onClick={() => setOpen(!open)}>
+        IMPORT VERIFIED SOURCES {open ? "▲" : "▼"}
+      </button>
+      {open ? (
+        <div className="sales-intel-registry-body">
+          <p className="sales-intel-hint">
+            Paste a JSON array of verified source entries (creatorName,
+            platform, canonicalSourceUrl, sourceType, acquisitionMode,
+            verifiedAt, verificationMethod). Preview before applying — only
+            real, verified, canonicalizable entries are ever imported.
+          </p>
+          <Textarea
+            rows={8}
+            value={raw}
+            placeholder='[{"creatorName": "...", "platform": "youtube", "canonicalSourceUrl": "https://www.youtube.com/channel/UC...", "sourceType": "youtube_channel", "acquisitionMode": "AUTO_YOUTUBE", "verifiedAt": "2026-08-11T00:00:00.000Z", "verificationMethod": "manual URL check"}]'
+            onChange={e => setRaw(e.target.value)}
+          />
+          <Button variant="secondary" onClick={handlePreview} disabled={previewMutation.isPending}>
+            {previewMutation.isPending ? "PREVIEWING…" : "PREVIEW / DRY RUN"}
+          </Button>
+          {preview.length ? (
+            <>
+              <ul className="sales-intel-import-preview">
+                {preview.map(item => (
+                  <li key={item.index} className={`is-${item.classification}`}>
+                    <b>{item.entry?.creatorName ?? `entry ${item.index}`}</b>
+                    <span>{item.classification.replaceAll("_", " ").toUpperCase()}</span>
+                    <small>{item.reason}</small>
+                  </li>
+                ))}
+              </ul>
+              <Button onClick={handleApply} disabled={!newCount || applyMutation.isPending}>
+                {applyMutation.isPending ? "IMPORTING…" : `IMPORT ${newCount} NEW SOURCE${newCount === 1 ? "" : "S"}`}
+              </Button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/**
  * Every framework a human hasn't decided on yet, with explainable quality
  * signals — never an opaque "AI score". Accept/reject here never touches
  * the source's original transcript or another framework's history.
@@ -448,6 +553,7 @@ export default function SalesIntelAdmin() {
       </header>
 
       <SourceRegistryPanel />
+      <SourceImportPanel />
       <ReviewQueuePanel />
 
       {composerOpen ? (
