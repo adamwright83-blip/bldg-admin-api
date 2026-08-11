@@ -1,0 +1,26 @@
+{
+  "id": "corridor_01",
+  "version": 1,
+  "assets": {
+    "far": "far.webp",
+    "mid": "mid.webp",
+    "foreground": "foreground.webp",
+    "effects": "effects.webp",
+    "portal": "portal_coldcall.webp",
+    "stronghold": "stronghold.webp",
+    "waterfallVideo": null
+  },
+  "data": {
+    "traversal": "traversal.json",
+    "occlusion": "occlusion.json",
+    "goldRoute": "gold_route.json"
+  },
+  "parallax": {
+    "far": 0.1,
+    "mid": 0.45
+  },
+  "qualityVariants": [
+    { "id": "premium" },
+    { "id": "reduced" }
+  ]
+}
