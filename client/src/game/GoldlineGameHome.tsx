@@ -56,6 +56,7 @@ import {
   projectPersistentHistory,
   projectPlayableMissions,
 } from "./state/WorldProjection";
+import { landmarkForMission } from "../../../shared/worldSemantics";
 import type {
   ArcadeResolution,
   CorridorAction,
@@ -296,9 +297,9 @@ function MissionFork(props: {
         {props.missions.map((mission, index) => (
           <button
             key={mission.key}
-            className={`is-${stateTone(mission.state)}${mission.key === props.activeKey ? " is-active" : ""}`}
+            className={`is-${stateTone(mission.state)} ${landmarkForMission({ visualState: mission.state }).cssClass}${mission.key === props.activeKey ? " is-active" : ""}`}
             onClick={() => props.onSelect(mission)}
-            aria-label={`Select ${mission.name}`}
+            aria-label={`Select ${mission.name} — ${landmarkForMission({ visualState: mission.state }).label}`}
           >
             {index + 1}
           </button>
@@ -611,7 +612,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           <aside className="world-history-ribbon" aria-label="Persistent world history">
             <span>
               <small>PERSISTENT WORLD HISTORY</small>
-              <b>WORLD CONTROL {gameWorldControlPercent(props.worldNodes ?? [])}%</b>
+              <b title="Game progression only — not market share or ownership">WORLD CONTROL {gameWorldControlPercent(props.worldNodes ?? [])}%</b>
             </span>
             <div>
               {history.slice(0, 4).map(mission => (
