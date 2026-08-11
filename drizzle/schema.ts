@@ -5114,3 +5114,60 @@ export const armoryWeaponOutcomes = mysqlTable(
     ),
   })
 );
+
+/**
+ * Slice 14 — Mission Mutation Library.
+ *
+ * Append-only audit trail of world interpretations derived from
+ * authoritative business evidence. `triggerReference` always points back to
+ * the real evidence; this table never itself declares a business fact.
+ */
+export const missionMutations = mysqlTable(
+  "mission_mutations",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    missionId: int("missionId").notNull(),
+    sourceState: varchar("sourceState", { length: 64 }).notNull(),
+    mutationType: mysqlEnum("mutationType", [
+      "RECOVERY_PATH",
+      "ALT_ROUTE",
+      "WATCH_WINDOW",
+      "NEW_CONTACT_ROUTE",
+      "FOLLOW_UP_ROUTE",
+      "ESCALATION_ROUTE",
+      "SCOUT_BRANCH",
+      "CLOSED_PATH",
+      "CAPTURED_PATH",
+    ]).notNull(),
+    triggerType: mysqlEnum("triggerType", [
+      "follow_up_commitment",
+      "decision_maker_discovered",
+      "pipeline_stage_change",
+      "verified_win",
+      "verified_loss",
+      "scout_discovery",
+      "contact_route_discovered",
+    ]).notNull(),
+    triggerReference: varchar("triggerReference", { length: 255 }).notNull(),
+    worldEffectJson: json("worldEffectJson").notNull(),
+    businessReferencesJson: json("businessReferencesJson").notNull(),
+    metadataJson: json("metadataJson").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    triggerUnique: uniqueIndex("uq_mission_mutation_trigger").on(
+      table.tenantId,
+      table.actorId,
+      table.missionId,
+      table.triggerReference
+    ),
+    lookupIdx: index("idx_mission_mutation_lookup").on(
+      table.tenantId,
+      table.actorId,
+      table.missionId,
+      table.createdAt
+    ),
+  })
+);

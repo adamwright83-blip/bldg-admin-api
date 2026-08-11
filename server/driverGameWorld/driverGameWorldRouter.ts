@@ -5,6 +5,11 @@ import {
   listDriverGameWorld,
 } from "./driverGameWorldService";
 import {
+  evaluateAndPersistMutation,
+  evidenceFromWorldNode,
+  getLatestMutation,
+} from "./missionMutationService";
+import {
   breakColdCallCombo,
   completeColdCallTarget,
   createColdCallBatch,
@@ -34,6 +39,43 @@ export const driverGameWorldRouter = router({
       actorId: ctx.user.openId,
     })
   ),
+  /**
+   * Evaluates the mission mutation library against the same authoritative
+   * evidence the world read path already computes. Idempotent — calling this
+   * repeatedly against unchanged evidence never creates a duplicate mutation
+   * or a different world outcome.
+   */
+  evaluateMutation: dayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        hasDecisionMakerContact: z.boolean(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const world = await listDriverGameWorld({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      });
+      const node = world.find(item => item.missionId === input.missionId);
+      if (!node) throw new Error("Commercial mission not found in this field world");
+      return evaluateAndPersistMutation({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        missionId: input.missionId,
+        evidence: evidenceFromWorldNode(node, input.hasDecisionMakerContact),
+        businessReferences: node.lossReason ? [node.lossReason] : [],
+      });
+    }),
+  latestMutation: dayforgeMissionFieldProcedure
+    .input(z.object({ missionId: z.number().int().positive() }))
+    .query(({ ctx, input }) =>
+      getLatestMutation({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        missionId: input.missionId,
+      })
+    ),
   beginRekindle: dayforgeMissionFieldProcedure
     .input(
       z.object({

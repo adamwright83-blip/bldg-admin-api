@@ -578,6 +578,23 @@ const REQUIRED: RequiredTable[] = [
       "observedAt",
     ],
   },
+  {
+    migration: "0054_mission_mutations",
+    table: "mission_mutations",
+    columns: [
+      "id",
+      "tenantId",
+      "actorId",
+      "missionId",
+      "sourceState",
+      "mutationType",
+      "triggerType",
+      "triggerReference",
+      "worldEffectJson",
+      "businessReferencesJson",
+      "metadataJson",
+    ],
+  },
 ];
 
 const COLUMN_RULES: RequiredColumnRule[] = [
@@ -739,6 +756,13 @@ const INDEX_RULES: RequiredIndexRule[] = [
     table: "armory_weapon_outcomes",
     index: "uq_armory_weapon_outcome",
     columns: ["tenantId", "usageId", "outcomeKind", "outcomeReference"],
+    unique: true,
+  },
+  {
+    migration: "0054_mission_mutations",
+    table: "mission_mutations",
+    index: "uq_mission_mutation_trigger",
+    columns: ["tenantId", "actorId", "missionId", "triggerReference"],
     unique: true,
   },
 ];
