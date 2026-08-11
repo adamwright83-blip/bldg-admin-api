@@ -143,6 +143,7 @@ export class GoldlineGame {
   private portals = new Container();
   private strongholdSprite: Sprite | null = null;
   private effectsSprite: Sprite | null = null;
+  private effectsTargetAlpha = 0.4;
   private farSprite: Sprite | null = null;
   private foregroundOccluders: Sprite[] = [];
   private poseTextures = new Map<string, Texture>();
@@ -402,7 +403,11 @@ export class GoldlineGame {
     const height = this.app.screen.height;
     this.fitCover(background, width, height);
     if (this.farSprite) this.fitCover(this.farSprite, width, height);
-    if (this.effectsSprite) this.fitCover(this.effectsSprite, width, height);
+    if (this.effectsSprite) {
+      this.fitCover(this.effectsSprite, width, height);
+      const alphaEase = Math.min(1, deltaSeconds * 3);
+      this.effectsSprite.alpha += (this.effectsTargetAlpha - this.effectsSprite.alpha) * alphaEase;
+    }
     this.drawWorld(width, height);
 
     const now = performance.now();
@@ -888,7 +893,9 @@ export class GoldlineGame {
    * even when degraded). Never fakes a higher tier than measured.
    */
   private applyQualityTier() {
-    if (this.effectsSprite) this.effectsSprite.visible = this.qualityTier === "premium";
+    // Eased in update(), not an instant visibility flip — reduced quality
+    // should read as an intentional step down, not a pop/glitch.
+    this.effectsTargetAlpha = this.qualityTier === "premium" ? 0.4 : 0;
   }
 
   private spawnTrail(color: number) {
