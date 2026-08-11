@@ -60,6 +60,10 @@ import { selectMissionDirector } from "./state/MissionDirector";
 import { landmarkForMission } from "../../../shared/worldSemantics";
 import { networkStatusLabel, useNetworkStatus } from "./session/useNetworkStatus";
 import { loadCheckpoint, saveCheckpoint } from "./session/checkpointStorage";
+import { registerGoldlineServiceWorker } from "./pwa/registerServiceWorker";
+import { installPwaHeadTags } from "./pwa/installPwaHead";
+import { isIOS, isStandalone } from "./pwa/pwaEnvironment";
+import { hasInstallPrompt, subscribeInstallPrompt, triggerInstallPrompt } from "./pwa/installPrompt";
 import { getGoldlineSessionId } from "./analytics/goldlineSession";
 import type { GoldlineEventEmitter } from "./analytics/emitGoldlineEvent";
 import { getAudioManager } from "./audio/AudioManager";
@@ -432,6 +436,17 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     const handleVisibility = () => audio.setBackgrounded(document.hidden);
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
+
+  const [canShowInstallPrompt, setCanShowInstallPrompt] = useState(hasInstallPrompt);
+  useEffect(() => {
+    const removeHeadTags = installPwaHeadTags();
+    registerGoldlineServiceWorker();
+    const unsubscribe = subscribeInstallPrompt(() => setCanShowInstallPrompt(hasInstallPrompt()));
+    return () => {
+      removeHeadTags();
+      unsubscribe();
+    };
   }, []);
   const [encounterArchetype, setEncounterArchetype] =
     useState<ObjectionArchetype>("ANCHOR");
@@ -1285,6 +1300,20 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                       SOUND {audioMuted ? "OFF" : "ON"}
                     </button>
                   </div>
+                  {!isStandalone() && hasOnboardingMilestone("first_mission_engaged") ? (
+                    canShowInstallPrompt ? (
+                      <button
+                        className="pwa-install-cta"
+                        onClick={() => void triggerInstallPrompt().then(() => setCanShowInstallPrompt(hasInstallPrompt()))}
+                      >
+                        INSTALL GOLDLINE
+                      </button>
+                    ) : isIOS() ? (
+                      <p className="pwa-install-hint">
+                        Add Goldline to your Home Screen: tap Share, then "Add to Home Screen".
+                      </p>
+                    ) : null
+                  ) : null}
                   {props.activeDispatch && props.onOpenDispatch ? (
                     <button className="live-dispatch-button" onClick={() => void props.onOpenDispatch?.()}>LIVE MISSION #{props.activeDispatch.missionId} <ChevronRight /></button>
                   ) : null}

@@ -825,6 +825,8 @@
 .live-dispatch-button svg { width: 15px; }
 .game-date-field { display: grid; gap: 6px; margin-top: 12px; color: #88dce3; font: 800 8px Inter; letter-spacing: .1em; }
 .game-date-field input { min-height: 45px; padding: 8px 10px; border: 1px solid #5e8992; border-radius: 5px; color: white; color-scheme: dark; background: #0b1a21; }
+.pwa-install-cta { width: 100%; min-height: 46px; margin-top: 9px; border: 1px solid var(--gold); color: var(--gold); background: #241c0d; font: 900 11px "Barlow Condensed"; letter-spacing: .08em; }
+.pwa-install-hint { margin-top: 9px; padding: 9px 10px; border: 1px solid #5c929f70; border-radius: 5px; color: #b7ccd1; font: 600 10px/1.4 Inter; }
 .live-route-list,
 .objective-panel-list { display: grid; gap: 7px; }
 .live-route-list article { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 9px; border: 1px solid #5e7c864f; background: #0d1c23; }
