@@ -469,6 +469,45 @@ export async function getFramework(
   return row ? frameworkView(row) : null;
 }
 
+/** Every framework awaiting a human decision — the admin review queue (Slice 41). */
+export async function listFrameworksPendingReview(): Promise<SalesIntelFramework[]> {
+  const database = await db();
+  const rows = await database
+    .select()
+    .from(salesIntelFrameworks)
+    .where(eq(salesIntelFrameworks.reviewState, "review_required"))
+    .orderBy(desc(salesIntelFrameworks.createdAt));
+  return rows.map(frameworkView);
+}
+
+/**
+ * Count of OTHER distinct source artifacts teaching a framework with the
+ * same responseFamily for the same archetype+channel — a real, computed
+ * "independent source support" signal (Slice 41), never a causal or
+ * effectiveness claim.
+ */
+export async function countIndependentSourceSupport(input: {
+  frameworkId: string;
+  sourceArtifactId: string;
+  archetype: ObjectionArchetype;
+  channel: SalesIntelChannel;
+  responseFamily: string;
+}): Promise<number> {
+  const database = await db();
+  const rows = await database
+    .selectDistinct({ sourceArtifactId: salesIntelFrameworks.sourceArtifactId })
+    .from(salesIntelFrameworks)
+    .where(
+      and(
+        eq(salesIntelFrameworks.archetype, input.archetype),
+        eq(salesIntelFrameworks.channel, input.channel),
+        eq(salesIntelFrameworks.responseFamily, input.responseFamily),
+        eq(salesIntelFrameworks.active, true)
+      )
+    );
+  return rows.filter(row => row.sourceArtifactId !== input.sourceArtifactId).length;
+}
+
 /**
  * The driver-visible query. Only active, accepted frameworks whose source
  * actually reached `extracted` are eligible — nothing awaiting content,

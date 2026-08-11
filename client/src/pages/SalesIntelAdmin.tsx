@@ -28,6 +28,10 @@ import {
   type SalesIntelSourcePlatform,
   type SalesIntelSourceRegistryType,
 } from "@shared/salesIntelSourceRegistry";
+import {
+  describeFrameworkQuality,
+  type FrameworkQualitySignals,
+} from "@shared/salesIntelQuality";
 
 /**
  * Internal Sales Intel ingestion.
@@ -289,6 +293,85 @@ function SourceRegistryPanel() {
   );
 }
 
+/**
+ * Every framework a human hasn't decided on yet, with explainable quality
+ * signals — never an opaque "AI score". Accept/reject here never touches
+ * the source's original transcript or another framework's history.
+ */
+function ReviewQueuePanel() {
+  const utils = trpc.useUtils();
+  const [open, setOpen] = useState(false);
+  const queue = trpc.system.salesIntel.reviewQueue.useQuery(undefined, {
+    enabled: open,
+  });
+  const review = trpc.system.salesIntel.review.useMutation();
+
+  async function decide(frameworkId: string, reviewState: "accepted" | "rejected") {
+    try {
+      await review.mutateAsync({ frameworkId, reviewState });
+      toast.success(reviewState === "accepted" ? "Accepted into the Armory." : "Rejected.");
+      await utils.system.salesIntel.reviewQueue.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Review action failed");
+    }
+  }
+
+  return (
+    <section className="sales-intel-review-queue">
+      <button className="sales-intel-registry-toggle" onClick={() => setOpen(!open)}>
+        <CheckCircle2 className="h-4 w-4" /> REVIEW QUEUE {open ? "▲" : "▼"}
+      </button>
+      {open ? (
+        <div className="sales-intel-registry-body">
+          {queue.isLoading ? (
+            <p className="sales-intel-empty">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading review queue…
+            </p>
+          ) : null}
+          {!queue.isLoading && !queue.data?.length ? (
+            <p className="sales-intel-empty">
+              Nothing awaiting review. High-confidence extractions are
+              accepted automatically; everything else lands here.
+            </p>
+          ) : null}
+          {queue.data?.map(entry => (
+            <article key={entry.framework.id} className="sales-intel-registry-entry">
+              <div className="sales-intel-source-head">
+                <span>
+                  <b>{entry.framework.frameworkName}</b>
+                  <small>
+                    {entry.framework.creatorName} · {entry.framework.archetype} ·{" "}
+                    {entry.framework.channel}
+                  </small>
+                </span>
+              </div>
+              <p className="sales-intel-hint">"{entry.framework.exactObjection}"</p>
+              <p className="sales-intel-hint">
+                {describeFrameworkQuality(entry.quality as FrameworkQualitySignals)}
+              </p>
+              <div className="sales-intel-source-actions">
+                <Button
+                  disabled={review.isPending}
+                  onClick={() => decide(entry.framework.id, "accepted")}
+                >
+                  ACCEPT
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={review.isPending}
+                  onClick={() => decide(entry.framework.id, "rejected")}
+                >
+                  REJECT
+                </Button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export default function SalesIntelAdmin() {
   const utils = trpc.useUtils();
   const [composerOpen, setComposerOpen] = useState(false);
@@ -365,6 +448,7 @@ export default function SalesIntelAdmin() {
       </header>
 
       <SourceRegistryPanel />
+      <ReviewQueuePanel />
 
       {composerOpen ? (
         <section className="sales-intel-composer">

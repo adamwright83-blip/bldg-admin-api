@@ -49,6 +49,7 @@ import {
   checkAllEnabledYouTubeSources,
   checkYouTubeSourceForNewContent,
 } from "./youtubeMonitoring";
+import { getFrameworkReviewQueue } from "./salesIntelReviewQueue";
 
 const segmentSchema = z.object({
   startMs: z.number().int().min(0),
@@ -141,6 +142,9 @@ export const salesIntelRouter = router({
   frameworkVersions: adminProcedure
     .input(z.object({ frameworkKey: z.string().trim().min(1).max(64) }))
     .query(({ input }) => listFrameworkVersions(input.frameworkKey)),
+
+  /** Every framework awaiting a human decision, with explainable quality signals. */
+  reviewQueue: adminProcedure.query(() => getFrameworkReviewQueue()),
 
   review: adminProcedure
     .input(
