@@ -74,6 +74,9 @@ export function ArmoryLoadout(props: {
               </small>
               <b>{weapon.title}</b>
               <span>{line}</span>
+              {weapon.fitReason ? (
+                <i className="armory-weapon-why">{weapon.fitReason}</i>
+              ) : null}
               {weapon.personalEvidence ? (
                 <em className={`evidence-${weapon.personalEvidence.confidence}`}>
                   YOUR EVIDENCE · {weapon.personalEvidence.uses} use

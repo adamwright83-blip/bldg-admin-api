@@ -28,6 +28,7 @@ import {
   getCommercialMissionByIdempotencyKey,
   transitionCommercialMission,
 } from "../commercialMissions/commercialMissionStore";
+import { associateArmoryOutcome } from "../armory/armoryEvidenceService";
 import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
 
 type Transaction = Parameters<
@@ -613,6 +614,25 @@ export async function resolveCommercialPipelineMission(input: {
       requestId: input.requestId,
     },
   });
+  // Reconciles Armory weapon-usage evidence with the real business result —
+  // never on arcade performance, only once authoritative mission state has
+  // actually changed. Scoped to the driver who actually worked the mission
+  // (mission.assignedTo), not the operator resolving the pipeline — usage
+  // evidence lives under the driver's own actorId. Idempotent on (tenantId,
+  // usageId, outcomeKind, outcomeReference), so a replayed resolution never
+  // inflates evidence.
+  if ((input.action === "won" || input.action === "lost") && mission.assignedTo) {
+    await associateArmoryOutcome({
+      tenantId: input.tenantId,
+      actorId: mission.assignedTo,
+      missionId: mission.id,
+      outcomeKind: input.action === "won" ? "account_won" : "account_lost",
+      outcomeReference: idempotencyKey,
+    }).catch(() => {
+      // Evidence reconciliation must never block the authoritative business
+      // transition that already succeeded above.
+    });
+  }
   const detail = await getCommercialPipelineDetail(input);
   if (!detail) throw new Error("Commercial pipeline record not found");
   return detail;
@@ -674,6 +694,20 @@ export async function scheduleCommercialFollowUp(input: {
   const detail = await getCommercialPipelineDetail(input);
   if (!detail?.followUps.some(item => item.requestId === input.requestId))
     throw new Error("Commercial follow-up was not persisted for this request");
+  // A real follow-up is itself an outcome worth reconciling against weapon
+  // usage — see the note in resolveCommercialPipelineMission. Scoped to the
+  // driver who actually worked the mission.
+  if (detail.mission.assignedTo) {
+    await associateArmoryOutcome({
+      tenantId: input.tenantId,
+      actorId: detail.mission.assignedTo,
+      missionId: detail.mission.id,
+      outcomeKind: "follow_up_created",
+      outcomeReference: `pipeline-follow-up:${input.requestId}`,
+    }).catch(() => {
+      // Evidence reconciliation must never block the follow-up that already succeeded above.
+    });
+  }
   return detail;
 }
 
