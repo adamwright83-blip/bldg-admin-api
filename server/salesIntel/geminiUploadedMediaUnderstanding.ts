@@ -124,7 +124,10 @@ export class GeminiUploadedMediaUnderstandingProvider {
     try {
       mediaResponse = await this.fetchImpl(request.mediaUrl, {
         signal: mediaController.signal,
-        redirect: "follow",
+        // The resolver only hands us a URL on its own trusted origin. Do not
+        // follow a later redirect to an arbitrary host; a 3xx is treated as a
+        // failed tunnel instead of widening this into an SSRF fetch primitive.
+        redirect: "manual",
       });
     } catch (error) {
       const timedOut = error instanceof Error && error.name === "AbortError";
