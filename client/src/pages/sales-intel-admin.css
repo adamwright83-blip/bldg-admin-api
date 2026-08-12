@@ -1,0 +1,84 @@
+/**
+ * Scoped to .sales-intel-admin only — never a bare `body`/`:root` selector.
+ * (See client/src/pages/goldline/goldline-home.css history: an unscoped
+ * `body { background: #080b10 }` there leaked into this exact page because
+ * it's reached via an eager, non-lazy import chain from App.tsx. Never
+ * repeat that pattern here.)
+ *
+ * Colors below are chosen to clear WCAG AA (>=4.5:1) against their actual
+ * background, verified with the standard relative-luminance formula:
+ *   --si-muted   (#6d6d66) on cream (#f7f6f1)  -> 4.82:1
+ *   --si-muted   (#6d6d66) on card  (#fffdf9)  -> 5.10:1
+ * `text-muted-foreground` (the site's default #7a7a72) only reaches 4.00:1
+ * on this page's cream background, so it is not used here for body copy.
+ */
+.sales-intel-admin {
+  --si-muted: #6d6d66;
+}
+
+.sales-intel-admin .si-hint {
+  color: var(--si-muted);
+}
+
+.sales-intel-admin .si-code {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.sales-intel-admin .si-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 9999px;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Each pair verified >= 4.5:1 against its own badge background. */
+.sales-intel-admin .si-badge.is-new {
+  background: #e2f3e7;
+  color: #1a5c3c;
+}
+.sales-intel-admin .si-badge.is-already_exists {
+  background: #e4edf1;
+  color: #14507e;
+}
+.sales-intel-admin .si-badge.is-canonical_duplicate {
+  background: #f9edda;
+  color: #8a5a10;
+}
+.sales-intel-admin .si-badge.is-invalid {
+  background: #f9e8e4;
+  color: #8f2f2f;
+}
+.sales-intel-admin .si-badge.is-unsupported {
+  background: #ecebe6;
+  color: #4a4a45;
+}
+.sales-intel-admin .si-badge.is-ok {
+  background: #e2f3e7;
+  color: #1a5c3c;
+}
+.sales-intel-admin .si-badge.is-wait {
+  background: #f9edda;
+  color: #8a5a10;
+}
+.sales-intel-admin .si-badge.is-bad {
+  background: #f9e8e4;
+  color: #8f2f2f;
+}
+.sales-intel-admin .si-badge.is-quote {
+  background: #e4edf1;
+  color: #14507e;
+}
+.sales-intel-admin .si-badge.is-paraphrase {
+  background: #ecebe6;
+  color: #4a4a45;
+}
