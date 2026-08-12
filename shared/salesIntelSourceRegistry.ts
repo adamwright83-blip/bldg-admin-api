@@ -73,7 +73,7 @@ export const VALID_ACQUISITION_MODES_BY_TYPE: Record<
   manual_source: ["MANUAL_TRANSCRIPT", "MANUAL_MEDIA"],
 };
 
-const YOUTUBE_CHANNEL_ID = /^UC[A-Za-z0-9_-]{22}$/;
+export const YOUTUBE_CHANNEL_ID = /^UC[A-Za-z0-9_-]{22}$/;
 
 export type CanonicalYouTubeChannel = {
   canonicalUrl: string;
@@ -139,4 +139,20 @@ export const salesIntelSourceRegistryCreateSchema = z.object({
 });
 export type SalesIntelSourceRegistryCreateInput = z.infer<
   typeof salesIntelSourceRegistryCreateSchema
+>;
+
+/**
+ * Backfills the stable channel id onto an existing registry row once it's
+ * been verified against the approved source URL — a source's identity and
+ * provenance never change, only this one previously-null field.
+ */
+export const salesIntelSourceRegistrySetChannelIdSchema = z.object({
+  id: z.string().uuid(),
+  externalChannelId: z
+    .string()
+    .trim()
+    .regex(YOUTUBE_CHANNEL_ID, "Must be a real YouTube channel id (UC... form)"),
+});
+export type SalesIntelSourceRegistrySetChannelIdInput = z.infer<
+  typeof salesIntelSourceRegistrySetChannelIdSchema
 >;

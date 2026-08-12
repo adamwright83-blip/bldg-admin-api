@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   canonicalizeYouTubeChannelUrl,
   salesIntelSourceRegistryCreateSchema,
+  salesIntelSourceRegistrySetChannelIdSchema,
   VALID_ACQUISITION_MODES_BY_TYPE,
+  YOUTUBE_CHANNEL_ID,
 } from "./salesIntelSourceRegistry";
 
 describe("canonicalizeYouTubeChannelUrl", () => {
@@ -82,5 +84,46 @@ describe("salesIntelSourceRegistryCreateSchema", () => {
       acquisitionMode: "AUTO_YOUTUBE",
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("salesIntelSourceRegistrySetChannelIdSchema", () => {
+  const validId = "UC" + "a".repeat(22);
+
+  it("accepts a real UC... id paired with a registry uuid", () => {
+    const result = salesIntelSourceRegistrySetChannelIdSchema.safeParse({
+      id: "8b6f1e0a-6b0a-4b7a-9b9d-000000000000",
+      externalChannelId: validId,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an @handle instead of the stable channel id", () => {
+    const result = salesIntelSourceRegistrySetChannelIdSchema.safeParse({
+      id: "8b6f1e0a-6b0a-4b7a-9b9d-000000000000",
+      externalChannelId: "@AlexHormozi",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a plausible-looking but malformed id", () => {
+    const result = salesIntelSourceRegistrySetChannelIdSchema.safeParse({
+      id: "8b6f1e0a-6b0a-4b7a-9b9d-000000000000",
+      externalChannelId: "UC-too-short",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a non-uuid registry id", () => {
+    const result = salesIntelSourceRegistrySetChannelIdSchema.safeParse({
+      id: "not-a-uuid",
+      externalChannelId: validId,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("exposes the same YOUTUBE_CHANNEL_ID pattern the schema validates against", () => {
+    expect(YOUTUBE_CHANNEL_ID.test(validId)).toBe(true);
+    expect(YOUTUBE_CHANNEL_ID.test("@AlexHormozi")).toBe(false);
   });
 });

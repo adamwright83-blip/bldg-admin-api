@@ -133,6 +133,28 @@ export async function setSalesIntelSourceStatus(input: {
   return updated;
 }
 
+/**
+ * Backfills a verified stable channel id onto an existing registry row.
+ * Only this one field changes — creator identity, source URL, acquisition
+ * mode, and createdBy provenance are untouched, and the row is never
+ * replaced. Idempotent: setting the same id twice is a no-op update.
+ */
+export async function setSalesIntelSourceExternalChannelId(input: {
+  id: string;
+  externalChannelId: string;
+}): Promise<SalesIntelSourceRegistryEntry> {
+  const database = await db();
+  const existing = await getSalesIntelSource(input.id);
+  if (!existing) throw new Error("Sales Intel source not found");
+  await database
+    .update(salesIntelSources)
+    .set({ externalChannelId: input.externalChannelId })
+    .where(eq(salesIntelSources.id, input.id));
+  const updated = await getSalesIntelSource(input.id);
+  if (!updated) throw new Error("Sales Intel source not found");
+  return updated;
+}
+
 export async function touchSalesIntelSourceLastChecked(id: string): Promise<void> {
   const database = await db();
   await database
