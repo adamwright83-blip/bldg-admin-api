@@ -5075,6 +5075,91 @@ export const salesIntelFrameworks = mysqlTable(
   })
 );
 
+/**
+ * General sales teaching — broader than `sales_intel_frameworks`, which
+ * only represents objection-handling frameworks (mandatory archetype +
+ * channel + exact objection). A teaching never requires those — category
+ * and a source-faithful principle are the only mandatory content fields.
+ * When a teaching's own source evidence genuinely supports an
+ * objection-handling reading, that reading is persisted as its own,
+ * independently-reviewed `sales_intel_frameworks` row through the existing
+ * pipeline — never implied by this row's own acceptance.
+ */
+export const salesIntelTeachings = mysqlTable(
+  "sales_intel_teachings",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    sourceArtifactId: varchar("sourceArtifactId", { length: 36 }).notNull(),
+    transcriptId: varchar("transcriptId", { length: 36 }).notNull(),
+    teachingKey: varchar("teachingKey", { length: 64 }).notNull(),
+    creatorName: varchar("creatorName", { length: 191 }).notNull(),
+    creatorHandle: varchar("creatorHandle", { length: 191 }),
+    category: mysqlEnum("category", [
+      "prospecting",
+      "opening",
+      "positioning",
+      "rapport",
+      "discovery",
+      "qualification",
+      "questioning",
+      "value",
+      "pricing",
+      "objection_prevention",
+      "objection_handling",
+      "negotiation",
+      "closing",
+      "follow_up",
+      "re_engagement",
+      "sales_process",
+      "sales_psychology",
+      "other",
+    ]).notNull(),
+    title: varchar("title", { length: 191 }).notNull(),
+    principle: text("principle").notNull(),
+    whenToUseJson: json("whenToUseJson").notNull(),
+    whenNotToUseJson: json("whenNotToUseJson").notNull(),
+    exampleLanguageJson: json("exampleLanguageJson").notNull(),
+    confidence: decimal("confidence", { precision: 4, scale: 3 }),
+    extractionVersion: varchar("extractionVersion", { length: 96 }).notNull(),
+    extractionProvider: varchar("extractionProvider", { length: 96 }),
+    extractionModel: varchar("extractionModel", { length: 96 }),
+    promptVersion: varchar("promptVersion", { length: 96 }),
+    transcriptStartMs: int("transcriptStartMs"),
+    transcriptEndMs: int("transcriptEndMs"),
+    reviewState: mysqlEnum("reviewState", [
+      "review_required",
+      "accepted",
+      "rejected",
+    ])
+      .notNull()
+      .default("review_required"),
+    reviewedBy: varchar("reviewedBy", { length: 128 }),
+    reviewedAt: timestamp("reviewedAt"),
+    version: int("version").notNull().default(1),
+    active: boolean("active").notNull().default(true),
+    supersededAt: timestamp("supersededAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    versionUnique: uniqueIndex("uq_sales_intel_teaching_version").on(
+      table.teachingKey,
+      table.version
+    ),
+    sourceIdx: index("idx_sales_intel_teaching_source").on(
+      table.sourceArtifactId,
+      table.createdAt
+    ),
+    transcriptIdx: index("idx_sales_intel_teaching_transcript").on(
+      table.transcriptId
+    ),
+    lookupIdx: index("idx_sales_intel_teaching_lookup").on(
+      table.category,
+      table.reviewState,
+      table.active
+    ),
+  })
+);
+
 /** Layer B: what happened when THIS player used a weapon. Tenant scoped. */
 export const armoryWeaponUsages = mysqlTable(
   "armory_weapon_usages",

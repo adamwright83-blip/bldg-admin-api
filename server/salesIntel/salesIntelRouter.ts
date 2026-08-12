@@ -58,6 +58,14 @@ import {
   applySalesIntelSourceImport,
   previewSalesIntelSourceImport,
 } from "./salesIntelSourceImportService";
+import { getTeachingReviewQueue } from "./salesIntelTeachingReviewQueue";
+import {
+  listAllAcceptedTeachings,
+  listTeachingsForSource,
+  setTeachingReviewState,
+} from "./salesIntelTeachingStore";
+import { computeSalesIntelTeachingCoverage } from "../../shared/salesIntelTeachingCoverage";
+import { reextractGeneralTeachingsFromTranscripts } from "./salesIntelTeachingReExtraction";
 
 const segmentSchema = z.object({
   startMs: z.number().int().min(0),
@@ -174,6 +182,56 @@ export const salesIntelRouter = router({
         reviewedBy: ctx.user.openId,
       })
     ),
+
+  /**
+   * General sales teaching — broader than objection frameworks above.
+   * Distinct review/coverage/reextraction surface, same admin-only gate.
+   */
+  teachings: router({
+    /** Every teaching awaiting a human decision, with real source evidence. */
+    reviewQueue: adminProcedure.query(() => getTeachingReviewQueue()),
+
+    review: adminProcedure
+      .input(
+        z.object({
+          teachingId: z.string().uuid(),
+          reviewState: z.enum(SALES_INTEL_REVIEW_STATES),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        setTeachingReviewState({
+          teachingId: input.teachingId,
+          reviewState: input.reviewState,
+          reviewedBy: ctx.user.openId,
+        })
+      ),
+
+    /** What the accepted teaching corpus covers by category/creator/source — counts only. */
+    coverage: adminProcedure.query(async () => {
+      const teachings = await listAllAcceptedTeachings();
+      return computeSalesIntelTeachingCoverage(teachings);
+    }),
+
+    forSource: adminProcedure
+      .input(z.object({ sourceArtifactId: z.string().uuid() }))
+      .query(({ input }) => listTeachingsForSource(input.sourceArtifactId)),
+
+    /**
+     * Re-extracts general teachings from a source's EXISTING transcripts —
+     * never fetches content, never calls a video provider. Safe to run
+     * from the admin UI for any source that already has persisted
+     * transcripts (e.g. Shelby Sapp's long-form video, already processed
+     * through Gemini in a prior run).
+     */
+    reextractFromExistingTranscripts: adminProcedure
+      .input(z.object({ sourceArtifactId: z.string().uuid() }))
+      .mutation(({ ctx, input }) =>
+        reextractGeneralTeachingsFromTranscripts({
+          sourceArtifactId: input.sourceArtifactId,
+          actorId: ctx.user.openId,
+        })
+      ),
+  }),
 
   /** Bulk import for the sourced researcher corpus. */
   importCorpus: adminProcedure

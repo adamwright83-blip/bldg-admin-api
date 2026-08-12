@@ -938,10 +938,233 @@ function ReviewQueuePanel({
   );
 }
 
+/**
+ * General sales teaching corpus — broader than the objection-framework view
+ * above. A teaching never needs an objection or archetype to exist here;
+ * an optional Goldline objection mapping is shown separately when present.
+ */
+function TeachingReviewQueuePanel({
+  open,
+  onToggle,
+}: {
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const utils = trpc.useUtils();
+  const queue = trpc.system.salesIntel.teachings.reviewQueue.useQuery(undefined, {
+    enabled: open,
+  });
+  const review = trpc.system.salesIntel.teachings.review.useMutation();
+
+  async function decide(teachingId: string, reviewState: "accepted" | "rejected") {
+    try {
+      await review.mutateAsync({ teachingId, reviewState });
+      toast.success(reviewState === "accepted" ? "Accepted into the teaching corpus." : "Rejected.");
+      await utils.system.salesIntel.teachings.reviewQueue.invalidate();
+      await utils.system.salesIntel.teachings.coverage.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Review action failed");
+    }
+  }
+
+  return (
+    <SectionCard
+      icon={<CheckCircle2 className="h-4 w-4" />}
+      title="F. GENERAL TEACHING REVIEW QUEUE"
+      description="Every broad trainer teaching awaiting a human accept/reject decision — objection-shape not required."
+      badge={
+        queue.data?.length ? (
+          <span className="si-hint text-xs font-semibold">
+            {queue.data.length} pending
+          </span>
+        ) : null
+      }
+      open={open}
+      onToggle={onToggle}
+    >
+      {queue.isLoading ? (
+        <p className="si-hint flex items-center gap-2 text-sm">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading teaching review queue…
+        </p>
+      ) : null}
+      {!queue.isLoading && !queue.data?.length ? (
+        <EmptyState
+          title="NO TEACHINGS AWAITING REVIEW"
+          body="Run &ldquo;RE-EXTRACT TEACHINGS&rdquo; on a source with a persisted transcript to populate this queue."
+        />
+      ) : null}
+      <div className="flex flex-col gap-3">
+        {queue.data?.map(entry => (
+          <article
+            key={entry.teaching.id}
+            className="rounded-lg border border-border bg-background p-4"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-foreground">
+                  {entry.teaching.title}
+                </span>
+                <span className="si-hint block text-xs">
+                  {entry.teaching.creatorName} · {entry.teaching.category}
+                </span>
+              </span>
+              <Badge tone={entry.hasExactQuote ? "quote" : "paraphrase"}>
+                {entry.hasExactQuote ? "EXACT QUOTE" : "PARAPHRASE"}
+              </Badge>
+            </div>
+            <p className="mt-2 text-sm text-foreground">{entry.teaching.principle}</p>
+            {entry.teaching.exampleLanguage.length ? (
+              <ul className="si-hint mt-2 flex flex-col gap-1 text-sm italic">
+                {entry.teaching.exampleLanguage.map((phrase, i) => (
+                  <li key={i}>"{phrase.text}"</li>
+                ))}
+              </ul>
+            ) : null}
+            {entry.source.title || entry.source.canonicalUrl ? (
+              <p className="si-hint mt-1 text-sm">
+                {entry.source.title ?? "Source"}
+                {entry.source.publishedAt
+                  ? ` · ${new Date(entry.source.publishedAt).toLocaleDateString()}`
+                  : ""}
+                {entry.source.canonicalUrl ? (
+                  <>
+                    {" "}
+                    ·{" "}
+                    <a
+                      className="text-primary underline underline-offset-2"
+                      href={entry.source.canonicalUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      open source
+                    </a>
+                  </>
+                ) : null}
+                {entry.teaching.transcriptStartMs != null ? (
+                  <> · segment starts {Math.floor(entry.teaching.transcriptStartMs / 1000)}s</>
+                ) : null}
+              </p>
+            ) : null}
+            {entry.teaching.confidence != null ? (
+              <p className="si-hint mt-1 text-sm">
+                Confidence: {entry.teaching.confidence.toFixed(2)}
+              </p>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                disabled={review.isPending}
+                onClick={() => decide(entry.teaching.id, "accepted")}
+              >
+                ACCEPT
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={review.isPending}
+                onClick={() => decide(entry.teaching.id, "rejected")}
+              >
+                REJECT
+              </Button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
+/**
+ * Real counts of the accepted teaching corpus by category/creator/source —
+ * sibling to CoveragePanel's objection-framework view. Never an invented
+ * completeness score.
+ */
+function TeachingCoveragePanel({
+  open,
+  onToggle,
+}: {
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const coverage = trpc.system.salesIntel.teachings.coverage.useQuery(undefined, {
+    enabled: open,
+  });
+  const isEmpty = open && coverage.data && coverage.data.totalAcceptedTeachings === 0;
+
+  return (
+    <SectionCard
+      title="G. GENERAL TEACHING COVERAGE"
+      description="What the accepted general teaching corpus covers today — real counts only."
+      open={open}
+      onToggle={onToggle}
+    >
+      {!coverage.data ? (
+        <p className="si-hint flex items-center gap-2 text-sm">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading coverage…
+        </p>
+      ) : null}
+      {isEmpty ? (
+        <EmptyState
+          title="TEACHING CORPUS EMPTY"
+          body="Accepted teachings will appear here after review."
+        />
+      ) : null}
+      {coverage.data && !isEmpty ? (
+        <>
+          <p className="si-hint text-sm">
+            {coverage.data.totalAcceptedTeachings} accepted teaching
+            {coverage.data.totalAcceptedTeachings === 1 ? "" : "s"} total.
+          </p>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-foreground/70">
+              By category
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {coverage.data.byCategory
+                .filter(c => c.count > 0)
+                .map(c => (
+                  <div
+                    key={c.category}
+                    className="rounded-lg border border-border bg-background p-3 text-center"
+                  >
+                    <p className="text-xs font-bold tracking-wide text-foreground">
+                      {c.category}
+                    </p>
+                    <p className="mt-1 text-xl font-bold text-foreground">{c.count}</p>
+                  </div>
+                ))}
+            </div>
+          </div>
+          {coverage.data.byCreator.length ? (
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-foreground/70">
+                By creator
+              </p>
+              <ul className="si-hint mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                {coverage.data.byCreator.map(c => (
+                  <li key={c.creator}>
+                    <span className="text-foreground">{c.creator}</span>: {c.count}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </SectionCard>
+  );
+}
+
 export default function SalesIntelAdmin() {
   const utils = trpc.useUtils();
   const [openPanel, setOpenPanel] = useState<
-    "registry" | "import" | "review" | "coverage" | null
+    | "registry"
+    | "import"
+    | "review"
+    | "coverage"
+    | "teachingReview"
+    | "teachingCoverage"
+    | null
   >(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [sourceInput, setSourceInput] = useState("");
@@ -960,8 +1183,18 @@ export default function SalesIntelAdmin() {
   const ingest = trpc.system.salesIntel.ingest.useMutation();
   const attach = trpc.system.salesIntel.attachContent.useMutation();
   const reextract = trpc.system.salesIntel.reextract.useMutation();
+  const reextractTeachings =
+    trpc.system.salesIntel.teachings.reextractFromExistingTranscripts.useMutation();
 
-  function togglePanel(panel: "registry" | "import" | "review" | "coverage") {
+  function togglePanel(
+    panel:
+      | "registry"
+      | "import"
+      | "review"
+      | "coverage"
+      | "teachingReview"
+      | "teachingCoverage"
+  ) {
     setOpenPanel(current => (current === panel ? null : panel));
   }
 
@@ -1048,6 +1281,14 @@ export default function SalesIntelAdmin() {
           <CoveragePanel
             open={openPanel === "coverage"}
             onToggle={() => togglePanel("coverage")}
+          />
+          <TeachingReviewQueuePanel
+            open={openPanel === "teachingReview"}
+            onToggle={() => togglePanel("teachingReview")}
+          />
+          <TeachingCoveragePanel
+            open={openPanel === "teachingCoverage"}
+            onToggle={() => togglePanel("teachingCoverage")}
           />
         </div>
 
@@ -1208,6 +1449,36 @@ export default function SalesIntelAdmin() {
                     }}
                   >
                     <RefreshCw className="mr-1 h-3.5 w-3.5" /> RE-EXTRACT
+                  </Button>
+                ) : null}
+                {source.status === "extracted" || source.status === "analyzed" ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={reextractTeachings.isPending}
+                    onClick={async () => {
+                      try {
+                        const result = await reextractTeachings.mutateAsync({
+                          sourceArtifactId: source.id,
+                        });
+                        toast.success(
+                          `Teachings: ${result.totalTeachingsCreated} created, ` +
+                            `${result.totalObjectionMappingsCreated} objection mapping` +
+                            `${result.totalObjectionMappingsCreated === 1 ? "" : "s"}.`
+                        );
+                        await refresh();
+                        await utils.system.salesIntel.teachings.reviewQueue.invalidate();
+                        await utils.system.salesIntel.teachings.coverage.invalidate();
+                      } catch (error) {
+                        toast.error(
+                          error instanceof Error
+                            ? error.message
+                            : "Teaching re-extraction failed"
+                        );
+                      }
+                    }}
+                  >
+                    <RefreshCw className="mr-1 h-3.5 w-3.5" /> RE-EXTRACT TEACHINGS
                   </Button>
                 ) : null}
               </div>
