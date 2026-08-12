@@ -323,6 +323,13 @@ export default function AdminHostApp() {
           >
             🛡 Churn Radar
           </Link>
+          <Link
+            href="/sales-intel"
+            className="block rounded-md px-3 py-2 text-sm font-semibold text-black/70 transition-colors hover:bg-black/5 hover:text-black"
+            onClick={() => setMobileNavOpen(false)}
+          >
+            🧠 Sales Intel
+          </Link>
 
           <div className="mt-auto flex flex-col gap-2">
             {/* Red diving board — the deliberate, can't-miss jump between
