@@ -35,6 +35,7 @@ import { computeSalesIntelCoverage } from "../../shared/salesIntelCoverage";
 import { createSalesIntelAdapterRegistry } from "./sourceAdapters";
 import {
   salesIntelSourceRegistryCreateSchema,
+  salesIntelSourceRegistrySetChannelIdSchema,
   SALES_INTEL_SOURCE_REGISTRY_STATUSES,
 } from "../../shared/salesIntelSourceRegistry";
 import {
@@ -45,6 +46,7 @@ import {
   getSalesIntelSource,
   listEnabledYouTubeSources,
   listSalesIntelSources,
+  setSalesIntelSourceExternalChannelId,
   setSalesIntelSourceStatus,
 } from "./salesIntelSourceRegistryStore";
 import {
@@ -220,6 +222,16 @@ export const salesIntelRouter = router({
         })
       )
       .mutation(({ input }) => setSalesIntelSourceStatus(input)),
+
+    /**
+     * Backfills a verified stable channel id onto an existing registry
+     * row — for a source that was registered by @handle URL (which never
+     * carries the stable id) before its UC... id was resolved. Never
+     * creates a new row, never touches creator/URL/provenance.
+     */
+    setExternalChannelId: adminProcedure
+      .input(salesIntelSourceRegistrySetChannelIdSchema)
+      .mutation(({ input }) => setSalesIntelSourceExternalChannelId(input)),
 
     recentArtifacts: adminProcedure
       .input(z.object({ id: z.string().uuid() }))

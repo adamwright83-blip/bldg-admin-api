@@ -56,6 +56,7 @@ describe("Sales Intel administration is admin-only", () => {
       "list",
       "create",
       "setStatus",
+      "setExternalChannelId",
       "recentArtifacts",
       "checkNow",
       "checkAllEnabled",

@@ -27,6 +27,7 @@ import {
   SALES_INTEL_SOURCE_PLATFORMS,
   SALES_INTEL_SOURCE_REGISTRY_TYPES,
   VALID_ACQUISITION_MODES_BY_TYPE,
+  YOUTUBE_CHANNEL_ID,
   type SalesIntelAcquisitionMode,
   type SalesIntelSourcePlatform,
   type SalesIntelSourceRegistryType,
@@ -426,11 +427,74 @@ function SourceRegistryPanel({
                 {source.status === "active" ? "DISABLE" : "RE-ENABLE"}
               </Button>
             </div>
+            {(source.sourceType === "youtube_channel" ||
+              source.sourceType === "youtube_playlist") &&
+            !source.externalChannelId ? (
+              <SetChannelIdControl sourceId={source.id} onSaved={refresh} />
+            ) : null}
             <SourceRecentContent sourceId={source.id} />
           </article>
         ))}
       </div>
     </SectionCard>
+  );
+}
+
+/**
+ * A channel/playlist registered by @handle URL never carries the stable
+ * channel id (only the /channel/UC... URL form does) — automatic
+ * monitoring can't run without it. This backfills that one field once the
+ * id has been verified against the approved channel URL elsewhere.
+ */
+function SetChannelIdControl(props: { sourceId: string; onSaved: () => void }) {
+  const [value, setValue] = useState("");
+  const setChannelId = trpc.system.salesIntel.sourceRegistry.setExternalChannelId.useMutation();
+  const trimmed = value.trim();
+  const isValid = YOUTUBE_CHANNEL_ID.test(trimmed);
+
+  async function handleSave() {
+    if (!isValid) return;
+    try {
+      await setChannelId.mutateAsync({ id: props.sourceId, externalChannelId: trimmed });
+      toast.success("Channel ID saved — automatic monitoring can now run.");
+      setValue("");
+      props.onSaved();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save that channel ID");
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-md border border-border bg-muted/50 p-3">
+      <p className="text-xs font-bold uppercase tracking-wider text-destructive">
+        No channel ID — automatic monitoring cannot run
+      </p>
+      <p className="si-hint mt-1 text-sm">
+        This source was registered by @handle URL, which doesn't carry the
+        stable channel id. Paste the verified UC... id from the channel's
+        canonical URL to enable CHECK NOW / automatic discovery.
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Input
+          value={value}
+          placeholder="UC..."
+          className="w-64"
+          onChange={e => setValue(e.target.value)}
+        />
+        <Button
+          size="sm"
+          disabled={!isValid || setChannelId.isPending}
+          onClick={handleSave}
+        >
+          {setChannelId.isPending ? "SAVING…" : "SAVE CHANNEL ID"}
+        </Button>
+      </div>
+      {value.trim() && !isValid ? (
+        <p className="si-hint mt-1 text-xs">
+          Must be the real UC... id (24 characters), not the @handle.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -888,6 +952,11 @@ export default function SalesIntelAdmin() {
   const [supplied, setSupplied] = useState("");
 
   const sources = trpc.system.salesIntel.sources.useQuery({ limit: 50 });
+  // Always-on (not gated on the registry panel being expanded) so the
+  // "ingested content" empty state below can honestly say how many
+  // registry sources are already registered, instead of implying import
+  // failed when it succeeded and simply hasn't produced content yet.
+  const registryForCount = trpc.system.salesIntel.sourceRegistry.list.useQuery(undefined);
   const ingest = trpc.system.salesIntel.ingest.useMutation();
   const attach = trpc.system.salesIntel.attachContent.useMutation();
   const reextract = trpc.system.salesIntel.reextract.useMutation();
@@ -1055,8 +1124,14 @@ export default function SalesIntelAdmin() {
           ) : null}
           {!sources.isLoading && !sources.data?.length ? (
             <EmptyState
-              title="NO SOURCES YET"
-              body="The corpus is empty — nothing is shown to drivers that has not been ingested here."
+              title="NO INGESTED CONTENT YET"
+              body={
+                registryForCount.data?.length
+                  ? `${registryForCount.data.length} registry source${registryForCount.data.length === 1 ? "" : "s"} ${
+                      registryForCount.data.length === 1 ? "is" : "are"
+                    } ready for acquisition. Individual videos/transcripts will appear here after discovery or analysis.`
+                  : "The corpus is empty — nothing is shown to drivers that has not been ingested here."
+              }
             />
           ) : null}
 
