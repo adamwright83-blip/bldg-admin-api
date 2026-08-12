@@ -389,3 +389,92 @@ describe("GeminiVideoUnderstandingProvider surfaces the real Gemini error body",
     expect(loggedText).not.toContain(SECRET_KEY);
   });
 });
+
+describe("GeminiVideoUnderstandingProvider long-form clip / low-resolution request shape", () => {
+  function capturingFetch(): { fetchImpl: typeof fetch; getBody: () => any } {
+    let capturedBody: any;
+    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      capturedBody = JSON.parse(init!.body as string);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => okBody,
+      };
+    }) as unknown as typeof fetch;
+    return { fetchImpl, getBody: () => capturedBody };
+  }
+
+  it("omits video_metadata and mediaResolution entirely for a whole-video request (unchanged prior behavior)", async () => {
+    const { fetchImpl, getBody } = capturingFetch();
+    const provider = new GeminiVideoUnderstandingProvider(SECRET_KEY, "gemini-3.6-flash", fetchImpl);
+    await provider.analyze({ canonicalUrl: "https://www.youtube.com/watch?v=x", externalContentId: "x" });
+    const body = getBody();
+    expect(body.contents[0].parts[1].file_data).toEqual({ file_uri: "https://www.youtube.com/watch?v=x" });
+    expect(body.contents[0].parts[1].video_metadata).toBeUndefined();
+    expect(body.generationConfig.mediaResolution).toBeUndefined();
+  });
+
+  it("serializes clip start/end as snake_case video_metadata with Gemini's Ns offset format, sibling to file_data", async () => {
+    const { fetchImpl, getBody } = capturingFetch();
+    const provider = new GeminiVideoUnderstandingProvider(SECRET_KEY, "gemini-3.6-flash", fetchImpl);
+    await provider.analyze({
+      canonicalUrl: "https://www.youtube.com/watch?v=U2w7SQ7NEUQ",
+      externalContentId: "U2w7SQ7NEUQ",
+      clip: { startOffsetSeconds: 900, endOffsetSeconds: 1800 },
+    });
+    const body = getBody();
+    const filePart = body.contents[0].parts[1];
+    expect(filePart.file_data).toEqual({ file_uri: "https://www.youtube.com/watch?v=U2w7SQ7NEUQ" });
+    expect(filePart.video_metadata).toEqual({ start_offset: "900s", end_offset: "1800s" });
+    // Never camelCase for this Part-level field.
+    expect(filePart.videoMetadata).toBeUndefined();
+    expect(filePart.startOffset).toBeUndefined();
+  });
+
+  it("serializes mediaResolution as camelCase on generationConfig with the full MEDIA_RESOLUTION_LOW enum value", async () => {
+    const { fetchImpl, getBody } = capturingFetch();
+    const provider = new GeminiVideoUnderstandingProvider(SECRET_KEY, "gemini-3.6-flash", fetchImpl);
+    await provider.analyze({
+      canonicalUrl: "https://www.youtube.com/watch?v=x",
+      externalContentId: "x",
+      mediaResolution: "low",
+    });
+    const body = getBody();
+    expect(body.generationConfig.mediaResolution).toBe("MEDIA_RESOLUTION_LOW");
+    // Never the bare enum label or snake_case for this GenerationConfig-level field.
+    expect(body.generationConfig.media_resolution).toBeUndefined();
+  });
+
+  it("tells Gemini the clip is relative and part of a longer video, and to give clip-relative timestamps", async () => {
+    const { fetchImpl, getBody } = capturingFetch();
+    const provider = new GeminiVideoUnderstandingProvider(SECRET_KEY, "gemini-3.6-flash", fetchImpl);
+    await provider.analyze({
+      canonicalUrl: "https://www.youtube.com/watch?v=x",
+      externalContentId: "x",
+      clip: { startOffsetSeconds: 0, endOffsetSeconds: 900 },
+    });
+    const body = getBody();
+    const promptText = body.contents[0].parts[0].text as string;
+    expect(promptText).toMatch(/one clipped segment/i);
+    expect(promptText).toMatch(/relative to the start of this clip/i);
+    expect(promptText).toMatch(/NO_SALES_INSTRUCTION/);
+    expect(promptText).toMatch(/invent claims/i);
+  });
+
+  it("both clip and low resolution can be requested together", async () => {
+    const { fetchImpl, getBody } = capturingFetch();
+    const provider = new GeminiVideoUnderstandingProvider(SECRET_KEY, "gemini-3.6-flash", fetchImpl);
+    await provider.analyze({
+      canonicalUrl: "https://www.youtube.com/watch?v=x",
+      externalContentId: "x",
+      clip: { startOffsetSeconds: 5400, endOffsetSeconds: 6300 },
+      mediaResolution: "low",
+    });
+    const body = getBody();
+    expect(body.contents[0].parts[1].video_metadata).toEqual({
+      start_offset: "5400s",
+      end_offset: "6300s",
+    });
+    expect(body.generationConfig.mediaResolution).toBe("MEDIA_RESOLUTION_LOW");
+  });
+});

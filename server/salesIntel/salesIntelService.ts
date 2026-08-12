@@ -266,13 +266,24 @@ export async function reextractSalesIntelSource(
   });
 }
 
-async function runExtraction(input: {
+export type ExtractAndPersistResult =
+  | { ok: true; frameworks: SalesIntelFramework[] }
+  | { ok: false; code: string; message: string; retryable: boolean };
+
+/**
+ * The extraction-and-persist core, with no source-status side effects —
+ * callers that process a source in one shot (`runExtraction` below) set
+ * status once around this; callers processing a source across many
+ * transcripts (long-form video segmentation) call this once per segment
+ * transcript and decide status themselves after all segments finish, so
+ * the source never reports "extracted" while segments are still pending.
+ */
+export async function extractAndPersistFrameworks(input: {
   artifact: SalesIntelSourceArtifact;
   transcript: SalesIntelTranscript;
-  actorId: string;
   creatorNameOverride: string | null;
   extractor?: SalesIntelExtractor;
-}): Promise<SalesIntelIngestionResult> {
+}): Promise<ExtractAndPersistResult> {
   const extractor = input.extractor ?? resolveSalesIntelExtractor();
   const creatorName =
     input.creatorNameOverride?.trim() ||
@@ -299,25 +310,11 @@ async function runExtraction(input: {
       error instanceof ExtractionValidationError
         ? error.code
         : "extraction_failed";
-    await setSourceStatus({
-      id: input.artifact.id,
-      status: "failed",
-      failureCode: code,
-      failureMessage: error instanceof Error ? error.message : "Extraction failed",
-      failureRetryable: retryable,
-      countAttempt: true,
-    });
-    const refreshed =
-      (await getSourceArtifact(input.artifact.id)) ?? input.artifact;
     return {
-      artifact: refreshed,
-      transcript: input.transcript,
-      frameworks: [],
-      outcome: "failed",
-      message:
-        error instanceof Error
-          ? error.message
-          : "Extraction failed for this source.",
+      ok: false,
+      code,
+      message: error instanceof Error ? error.message : "Extraction failed",
+      retryable,
     };
   }
 
@@ -364,6 +361,40 @@ async function runExtraction(input: {
       })
     );
   }
+
+  return { ok: true, frameworks: persisted };
+}
+
+async function runExtraction(input: {
+  artifact: SalesIntelSourceArtifact;
+  transcript: SalesIntelTranscript;
+  actorId: string;
+  creatorNameOverride: string | null;
+  extractor?: SalesIntelExtractor;
+}): Promise<SalesIntelIngestionResult> {
+  const result = await extractAndPersistFrameworks(input);
+
+  if (!result.ok) {
+    await setSourceStatus({
+      id: input.artifact.id,
+      status: "failed",
+      failureCode: result.code,
+      failureMessage: result.message,
+      failureRetryable: result.retryable,
+      countAttempt: true,
+    });
+    const refreshed =
+      (await getSourceArtifact(input.artifact.id)) ?? input.artifact;
+    return {
+      artifact: refreshed,
+      transcript: input.transcript,
+      frameworks: [],
+      outcome: "failed",
+      message: result.message,
+    };
+  }
+
+  const persisted = result.frameworks;
 
   // A transcript that teaches nothing is a truthful outcome, not a failure —
   // but it must not leave the source claiming extracted intelligence.
