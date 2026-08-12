@@ -1,0 +1,67 @@
+name: Bootstrap Pixel Goldline gate v2
+on:
+  push:
+    branches: [feature/goldline-growth-loop-hardening]
+    paths: [.github/workflows/bootstrap-pixel-gate-v2.yml]
+permissions:
+  contents: write
+jobs:
+  pixel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.0
+        env: { MYSQL_ROOT_PASSWORD: root, MYSQL_DATABASE: pixel_gate }
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      CI: "true"
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/pixel_gate
+      DAYFORGE_RELEASE_DB: "1"
+      APP_SHARED_API_SECRET: pixel-app-secret-000000000000000000
+      JWT_SECRET: pixel-jwt-secret-000000000000000000
+      STRIPE_SECRET_KEY: pixel-placeholder-not-used
+      DRIVER_PASSWORD: pixel-driver-pass
+      DRIVER_OPEN_ID: pixel-driver
+    steps:
+      - uses: actions/checkout@v7
+        with: { ref: feature/goldline-growth-loop-hardening }
+      - uses: pnpm/action-setup@v6
+        with: { version: 10.4.1 }
+      - uses: actions/setup-node@v6
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Add real mobile viewport override and browser proof
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p=Path('client/src/game/GoldlineGameHome.tsx'); s=p.read_text()
+          s=s.replace('<main className="playable-goldline-shell" ref={setShellEl}>','<main className="playable-goldline-shell" ref={setShellEl} data-testid="goldline-shell">',1)
+          s=s.replace('<section className={`playable-goldline is-${view}`} aria-label="Goldline playable field world">','<section className={`playable-goldline is-${view}`} aria-label="Goldline playable field world" data-testid="goldline-world">',1)
+          s=s.replace('className={`game-joystick${props.disabled ? " is-disabled" : ""}`}','className={`game-joystick${props.disabled ? " is-disabled" : ""}`}\n      data-testid="goldline-joystick"',1)
+          p.write_text(s)
+          css=Path('client/src/game/goldline-game.css'); c=css.read_text()
+          marker='''/* Run-2: one dominant Cold Call meter; live conversation has no game timer. */'''
+          mobile='''/* A real touch device must own its visual viewport in both orientations.\n   The desktop presentation intentionally caps the inner game at 430px, but\n   applying that cap to a Pixel in landscape recreates the tiny-centered-game\n   failure. Coarse/hoverless input is the device signal; viewport width is not. */\n@media (pointer: coarse), (hover: none) {\n  .playable-goldline-shell {\n    position: fixed;\n    inset: 0;\n    width: var(--goldline-vvw);\n    height: var(--goldline-vvh);\n    min-height: 0;\n    place-items: stretch;\n  }\n  .playable-goldline {\n    width: var(--goldline-vvw);\n    height: var(--goldline-vvh);\n    min-height: 0;\n    max-height: none;\n    border-radius: 0;\n  }\n}\n\n'''
+          if marker not in c: raise SystemExit('css marker missing')
+          css.write_text(c.replace(marker,mobile+marker,1))
+          Path('playwright.goldline.config.ts').write_text('''import { defineConfig } from "@playwright/test";\nconst baseURL="http://127.0.0.1:4174";\nexport default defineConfig({testDir:"./e2e/goldline",fullyParallel:false,workers:1,retries:0,reporter:"list",use:{baseURL,viewport:{width:412,height:923},isMobile:true,hasTouch:true,deviceScaleFactor:2.625,trace:"retain-on-failure",screenshot:"only-on-failure"},webServer:{command:"NODE_ENV=ci PORT=4174 node dist/index.js",url:`${baseURL}/driver`,reuseExistingServer:false,timeout:120000,env:{...process.env,NODE_ENV:"ci",PORT:"4174"}}});\n''')
+          Path('e2e/goldline').mkdir(parents=True,exist_ok=True)
+          Path('e2e/goldline/pixel9Layout.spec.ts').write_text('''import {test,expect} from "@playwright/test";const P={width:412,height:923},L={width:923,height:412};async function login(page:any){const r=await page.request.post("/api/auth/login",{data:{password:"pixel-driver-pass",role:"driver"}});expect(r.ok()).toBeTruthy();await page.goto("/driver");await expect(page.getByTestId("goldline-shell")).toBeVisible({timeout:30000})}async function check(page:any,size:{width:number;height:number}){await page.setViewportSize(size);await page.waitForTimeout(300);const [s,w,j]=await Promise.all([page.getByTestId("goldline-shell").boundingBox(),page.getByTestId("goldline-world").boundingBox(),page.getByTestId("goldline-joystick").boundingBox()]);expect(s).not.toBeNull();expect(w).not.toBeNull();expect(j).not.toBeNull();expect(s!.width).toBeGreaterThanOrEqual(size.width*.94);expect(s!.height).toBeGreaterThanOrEqual(size.height*.90);expect(w!.width).toBeGreaterThanOrEqual(size.width*.94);expect(w!.height).toBeGreaterThanOrEqual(size.height*.90);expect(j!.width).toBeGreaterThanOrEqual(44);expect(j!.height).toBeGreaterThanOrEqual(44);expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(2)}test("Pixel 9 Pro remains full viewport across portrait/landscape/portrait",async({page})=>{await login(page);await check(page,P);await check(page,L);await check(page,P)});\n''')
+          PY
+      - run: pnpm db:dayforge:release
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright test --config playwright.goldline.config.ts
+      - run: node scripts/checkGoldlineBundleBudget.mjs
+      - run: git diff --check
+      - name: Commit Pixel fix and permanent proof
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/game/GoldlineGameHome.tsx client/src/game/goldline-game.css playwright.goldline.config.ts e2e/goldline/pixel9Layout.spec.ts
+          git commit -m "goldline: prevent Pixel viewport collapse in both orientations"
+          git push origin HEAD:feature/goldline-growth-loop-hardening
