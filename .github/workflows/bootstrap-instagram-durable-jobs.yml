@@ -1,0 +1,82 @@
+name: Bootstrap Instagram durable jobs
+on:
+  push:
+    branches: [feature/goldline-instagram-durable-jobs]
+    paths: [.github/workflows/bootstrap-instagram-durable-jobs.yml]
+permissions:
+  contents: write
+jobs:
+  durable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.0
+        env: { MYSQL_ROOT_PASSWORD: root, MYSQL_DATABASE: durable_jobs }
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      CI: "true"
+      NODE_ENV: test
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/durable_jobs
+      DAYFORGE_RELEASE_DB: "1"
+      APP_SHARED_API_SECRET: durable-app-secret-000000000000000000
+      JWT_SECRET: durable-jwt-secret-000000000000000000
+      STRIPE_SECRET_KEY: durable-placeholder-not-used
+      SALES_INTEL_JOB_RUNNER_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with: { ref: feature/goldline-instagram-durable-jobs }
+      - uses: pnpm/action-setup@v6
+        with: { version: 10.4.1 }
+      - uses: actions/setup-node@v6
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Replace process-local scheduling with durable queue
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          def r(path,old,new):
+            p=Path(path); s=p.read_text()
+            if s.count(old)!=1: raise SystemExit(f"anchor {path} count={s.count(old)}")
+            p.write_text(s.replace(old,new,1))
+
+          p=Path('server/salesIntel/instagramCaptureService.ts'); s=p.read_text()
+          s=s.replace('const activeProcesses = new Set<string>();\n','import { enqueueInstagramCaptureJob } from "./instagramCaptureJobStore";\n',1)
+          old='''export function scheduleInstagramSalesIntelProcessing(input: {\n  sourceArtifactId: string;\n  actorId: string;\n}): boolean {\n  if (activeProcesses.has(input.sourceArtifactId)) return false;\n  activeProcesses.add(input.sourceArtifactId);\n  setTimeout(() => {\n    void processInstagramSalesIntelCapture(input)\n      .catch(error => {\n        console.error("[Sales Intel] background Instagram capture failed", {\n          sourceArtifactId: input.sourceArtifactId,\n          message: error instanceof Error ? error.message.slice(0, 300) : "unknown error",\n        });\n      })\n      .finally(() => activeProcesses.delete(input.sourceArtifactId));\n  }, 0);\n  return true;\n}\n'''
+          new='''export async function scheduleInstagramSalesIntelProcessing(input: {\n  sourceArtifactId: string;\n  actorId: string;\n}): Promise<boolean> {\n  const { scheduled } = await enqueueInstagramCaptureJob(input);\n  if (scheduled) {\n    void import("./instagramCaptureJobRunner")\n      .then(({ kickInstagramCaptureJobRunner }) => kickInstagramCaptureJobRunner())\n      .catch(error => console.warn("[Sales Intel] durable Instagram worker wake failed", error));\n  }\n  return scheduled;\n}\n'''
+          if s.count(old)!=1: raise SystemExit('schedule anchor missing')
+          s=s.replace(old,new,1)
+          s=s.replace('''  const processingScheduled = scheduleInstagramSalesIntelProcessing({\n    sourceArtifactId: artifact.id,\n    actorId: input.actorId,\n  });''','''  const processingScheduled = await scheduleInstagramSalesIntelProcessing({\n    sourceArtifactId: artifact.id,\n    actorId: input.actorId,\n  });''',1)
+          p.write_text(s)
+
+          p=Path('server/salesIntel/salesIntelCaptureRouter.ts'); s=p.read_text()
+          s=s.replace('''      const scheduled = scheduleInstagramSalesIntelProcessing({\n        sourceArtifactId: input.sourceArtifactId,\n        actorId: ctx.user.openId,\n      });''','''      const scheduled = await scheduleInstagramSalesIntelProcessing({\n        sourceArtifactId: input.sourceArtifactId,\n        actorId: ctx.user.openId,\n      });''',1)
+          p.write_text(s)
+
+          p=Path('server/_core/index.ts'); s=p.read_text()
+          anchor='''  server.listen(port, () => {\n    console.log(`Server running on http://localhost:${port}/`);\n  });\n'''
+          replacement='''  server.listen(port, () => {\n    console.log(`Server running on http://localhost:${port}/`);\n    void import("../salesIntel/instagramCaptureJobRunner")\n      .then(({ startInstagramCaptureJobRunner }) => startInstagramCaptureJobRunner())\n      .catch(error => console.warn("[Sales Intel] durable Instagram job runner did not start", error));\n  });\n'''
+          if s.count(anchor)!=1: raise SystemExit('server listen anchor missing')
+          p.write_text(s.replace(anchor,replacement,1))
+
+          p=Path('server/salesIntel/instagramCaptureJobStore.ts'); s=p.read_text()
+          s=s.replace('import mysql, { type RowDataPacket } from "mysql2/promise";','import mysql, { type ResultSetHeader, type RowDataPacket } from "mysql2/promise";')
+          s=s.replace('db.execute<mysql.ResultSetHeader>','db.execute<ResultSetHeader>')
+          p.write_text(s)
+          PY
+      - run: pnpm db:dayforge:release
+      - run: pnpm vitest run server/salesIntel/instagramCaptureService.test.ts server/salesIntel/instagramMediaResolver.test.ts server/salesIntel/geminiUploadedMediaUnderstanding.test.ts server/salesIntel/salesIntelCaptureAuthorization.test.ts
+      - run: pnpm vitest run --config vitest.integration.config.ts server/salesIntel/instagramCaptureJobStore.integration.test.ts server/salesIntel/salesIntelTeachingReExtraction.integration.test.ts
+      - run: pnpm build
+      - run: node scripts/checkGoldlineBundleBudget.mjs
+      - run: git diff --check
+      - name: Commit durable queue wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/salesIntel/instagramCaptureService.ts server/salesIntel/salesIntelCaptureRouter.ts server/_core/index.ts server/salesIntel/instagramCaptureJobStore.ts
+          git commit -m "salesIntel: make Instagram capture processing durable"
+          git push origin HEAD:feature/goldline-instagram-durable-jobs
