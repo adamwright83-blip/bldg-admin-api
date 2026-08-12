@@ -25,6 +25,19 @@ function jsonFetch(status: number, body: unknown): typeof fetch {
     ok: status >= 200 && status < 300,
     status,
     json: async () => body,
+    text: async () => JSON.stringify(body),
+  })) as unknown as typeof fetch;
+}
+
+/** Simulates a non-JSON (e.g. HTML) error body from an upstream proxy or outage page. */
+function textFetch(status: number, rawText: string): typeof fetch {
+  return vi.fn(async () => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => {
+      throw new Error("not json");
+    },
+    text: async () => rawText,
   })) as unknown as typeof fetch;
 }
 
@@ -248,6 +261,131 @@ describe("GeminiVideoUnderstandingProvider HTTP status handling (unchanged by th
       .analyze({ canonicalUrl: "https://www.youtube.com/watch?v=x", externalContentId: "x" })
       .catch(() => {});
     const loggedText = JSON.stringify(consoleErrorSpy.mock.calls);
+    expect(loggedText).not.toContain(SECRET_KEY);
+  });
+});
+
+describe("GeminiVideoUnderstandingProvider surfaces the real Gemini error body", () => {
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("surfaces Google's real status and message for a 400 INVALID_ARGUMENT", async () => {
+    const provider = new GeminiVideoUnderstandingProvider(
+      SECRET_KEY,
+      "gemini-3.6-flash",
+      jsonFetch(400, {
+        error: {
+          code: 400,
+          message: "Request contains an invalid argument.",
+          status: "INVALID_ARGUMENT",
+        },
+      })
+    );
+    await expect(
+      provider.analyze({ canonicalUrl: "https://www.youtube.com/watch?v=x", externalContentId: "x" })
+    ).rejects.toMatchObject({
+      code: "provider_http_400",
+      retryable: false,
+      message: "Gemini video analysis failed (400 INVALID_ARGUMENT): Request contains an invalid argument.",
+    });
+  });
+
+  it("surfaces a 400 FAILED_PRECONDITION distinctly from INVALID_ARGUMENT", async () => {
+    const provider = new GeminiVideoUnderstandingProvider(
+      SECRET_KEY,
+      "gemini-3.6-flash",
+      jsonFetch(400, {
+        error: {
+          code: 400,
+          message: "The video is not accessible from this request context.",
+          status: "FAILED_PRECONDITION",
+        },
+      })
+    );
+    await expect(
+      provider.analyze({ canonicalUrl: "https://www.youtube.com/watch?v=x", externalContentId: "x" })
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("FAILED_PRECONDITION"),
+    });
+  });
+
+  it("includes structured details when Google's error body has them, without crashing", async () => {
+    const provider = new GeminiVideoUnderstandingProvider(
+      SECRET_KEY,
+      "gemini-3.6-flash",
+      jsonFetch(400, {
+        error: {
+          code: 400,
+          message: "Invalid value for field.",
+          status: "INVALID_ARGUMENT",
+          details: [{ "@type": "type.googleapis.com/google.rpc.BadRequest", fieldViolations: [] }],
+        },
+      })
+    );
+    await expect(
+      provider.analyze({ canonicalUrl: "https://www.youtube.com/watch?v=x", externalContentId: "x" })
+    ).rejects.toMatchObject({ code: "provider_http_400" });
+  });
+
+  it("falls back to a sanitized text slice when the error body isn't JSON", async () => {
+    const provider = new GeminiVideoUnderstandingProvider(
+      SECRET_KEY,
+      "gemini-3.6-flash",
+      textFetch(400, "<html><body>Bad Request</body></html>")
+    );
+    await expect(
+      provider.analyze({ canonicalUrl: "https://www.youtube.com/watch?v=x", externalContentId: "x" })
+    ).rejects.toMatchObject({
+      code: "provider_http_400",
+      message: expect.stringContaining("Bad Request"),
+    });
+  });
+
+  it("truncates an oversized provider message rather than surfacing it unbounded", async () => {
+    const hugeMessage = "x".repeat(5_000);
+    const provider = new GeminiVideoUnderstandingProvider(
+      SECRET_KEY,
+      "gemini-3.6-flash",
+      jsonFetch(400, { error: { message: hugeMessage, status: "INVALID_ARGUMENT" } })
+    );
+    let caught: Error | undefined;
+    try {
+      await provider.analyze({ canonicalUrl: "https://www.youtube.com/watch?v=x", externalContentId: "x" });
+    } catch (error) {
+      caught = error as Error;
+    }
+    expect(caught).toBeDefined();
+    expect(caught!.message.length).toBeLessThan(400);
+  });
+
+  it("falls back to the generic message when Google's body has neither status nor message", async () => {
+    const provider = new GeminiVideoUnderstandingProvider(
+      SECRET_KEY,
+      "gemini-3.6-flash",
+      jsonFetch(400, {})
+    );
+    await expect(
+      provider.analyze({ canonicalUrl: "https://www.youtube.com/watch?v=x", externalContentId: "x" })
+    ).rejects.toMatchObject({ message: "Video analysis provider returned 400" });
+  });
+
+  it("logs the real Gemini status/message for observability, still never the key", async () => {
+    const provider = new GeminiVideoUnderstandingProvider(
+      SECRET_KEY,
+      "gemini-3.6-flash",
+      jsonFetch(400, { error: { message: "bad video", status: "INVALID_ARGUMENT" } })
+    );
+    await provider
+      .analyze({ canonicalUrl: "https://www.youtube.com/watch?v=x", externalContentId: "x" })
+      .catch(() => {});
+    const loggedText = JSON.stringify(consoleErrorSpy.mock.calls);
+    expect(loggedText).toContain("INVALID_ARGUMENT");
+    expect(loggedText).toContain("bad video");
     expect(loggedText).not.toContain(SECRET_KEY);
   });
 });
