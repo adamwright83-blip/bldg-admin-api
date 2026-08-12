@@ -89,7 +89,11 @@ function Badge({
 function StatusPill({ status }: { status: string }) {
   const copy = STATUS_COPY[status] ?? { label: status, tone: "wait" as const };
   const Icon =
-    copy.tone === "ok" ? CheckCircle2 : copy.tone === "bad" ? AlertTriangle : Clock;
+    copy.tone === "ok"
+      ? CheckCircle2
+      : copy.tone === "bad"
+        ? AlertTriangle
+        : Clock;
   return (
     <Badge tone={copy.tone}>
       <Icon className="h-3 w-3" />
@@ -157,7 +161,11 @@ function SectionCard({
           </span>
         </div>
         <span className="mt-0.5 shrink-0 text-foreground/50">
-          {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          {open ? (
+            <ChevronUp className="h-4 w-4" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
         </span>
       </button>
       {open ? (
@@ -213,21 +221,20 @@ function SourceRegistryPanel({
   const [formOpen, setFormOpen] = useState(false);
   const [creatorName, setCreatorName] = useState("");
   const [platform, setPlatform] = useState<SalesIntelSourcePlatform>("youtube");
-  const [sourceType, setSourceType] = useState<SalesIntelSourceRegistryType>(
-    "youtube_channel"
-  );
+  const [sourceType, setSourceType] =
+    useState<SalesIntelSourceRegistryType>("youtube_channel");
   const [sourceUrl, setSourceUrl] = useState("");
   const [externalChannelId, setExternalChannelId] = useState("");
-  const [acquisitionMode, setAcquisitionMode] = useState<SalesIntelAcquisitionMode>(
-    "AUTO_YOUTUBE"
-  );
+  const [acquisitionMode, setAcquisitionMode] =
+    useState<SalesIntelAcquisitionMode>("AUTO_YOUTUBE");
 
   const registry = trpc.system.salesIntel.sourceRegistry.list.useQuery(
     undefined,
     { enabled: open }
   );
   const create = trpc.system.salesIntel.sourceRegistry.create.useMutation();
-  const setStatus = trpc.system.salesIntel.sourceRegistry.setStatus.useMutation();
+  const setStatus =
+    trpc.system.salesIntel.sourceRegistry.setStatus.useMutation();
   const checkNow = trpc.system.salesIntel.sourceRegistry.checkNow.useMutation();
 
   async function refresh() {
@@ -290,25 +297,36 @@ function SourceRegistryPanel({
       {formOpen ? (
         <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 p-4">
           <FieldLabel>Creator name</FieldLabel>
-          <Input value={creatorName} onChange={e => setCreatorName(e.target.value)} />
+          <Input
+            value={creatorName}
+            onChange={e => setCreatorName(e.target.value)}
+          />
           <FieldLabel>Platform</FieldLabel>
           <select
             className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
             value={platform}
-            onChange={e => setPlatform(e.target.value as SalesIntelSourcePlatform)}
+            onChange={e =>
+              setPlatform(e.target.value as SalesIntelSourcePlatform)
+            }
           >
             {SALES_INTEL_SOURCE_PLATFORMS.map(p => (
-              <option key={p} value={p}>{p}</option>
+              <option key={p} value={p}>
+                {p}
+              </option>
             ))}
           </select>
           <FieldLabel>Source type</FieldLabel>
           <select
             className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
             value={sourceType}
-            onChange={e => selectSourceType(e.target.value as SalesIntelSourceRegistryType)}
+            onChange={e =>
+              selectSourceType(e.target.value as SalesIntelSourceRegistryType)
+            }
           >
             {SALES_INTEL_SOURCE_REGISTRY_TYPES.map(t => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t} value={t}>
+                {t}
+              </option>
             ))}
           </select>
           <FieldLabel>Source URL</FieldLabel>
@@ -317,7 +335,9 @@ function SourceRegistryPanel({
             placeholder="https://www.youtube.com/channel/UC..."
             onChange={e => setSourceUrl(e.target.value)}
           />
-          <FieldLabel>Channel ID (optional — required for automatic monitoring)</FieldLabel>
+          <FieldLabel>
+            Channel ID (optional — required for automatic monitoring)
+          </FieldLabel>
           <Input
             value={externalChannelId}
             placeholder="UC..."
@@ -327,16 +347,22 @@ function SourceRegistryPanel({
           <select
             className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
             value={acquisitionMode}
-            onChange={e => setAcquisitionMode(e.target.value as SalesIntelAcquisitionMode)}
+            onChange={e =>
+              setAcquisitionMode(e.target.value as SalesIntelAcquisitionMode)
+            }
           >
             {VALID_ACQUISITION_MODES_BY_TYPE[sourceType].map(m => (
-              <option key={m} value={m}>{m}</option>
+              <option key={m} value={m}>
+                {m}
+              </option>
             ))}
           </select>
           <Button
             className="w-fit"
             onClick={handleCreate}
-            disabled={!creatorName.trim() || !sourceUrl.trim() || create.isPending}
+            disabled={
+              !creatorName.trim() || !sourceUrl.trim() || create.isPending
+            }
           >
             {create.isPending ? "ADDING…" : "ADD"}
           </Button>
@@ -372,7 +398,8 @@ function SourceRegistryPanel({
                   {source.creatorName}
                 </span>
                 <span className="si-hint block text-xs">
-                  {source.platform} · {source.sourceType} · {source.acquisitionMode}
+                  {source.platform} · {source.sourceType} ·{" "}
+                  {source.acquisitionMode}
                   {source.lastCheckedAt
                     ? ` · last checked ${new Date(source.lastCheckedAt).toLocaleString()}`
                     : " · never checked"}
@@ -399,8 +426,12 @@ function SourceRegistryPanel({
                   disabled={checkNow.isPending}
                   onClick={async () => {
                     try {
-                      const result = await checkNow.mutateAsync({ id: source.id });
-                      toast[result.status === "ok" ? "success" : "error"](result.message);
+                      const result = await checkNow.mutateAsync({
+                        id: source.id,
+                      });
+                      toast[result.status === "ok" ? "success" : "error"](
+                        result.message
+                      );
                       await refresh();
                     } catch (error) {
                       toast.error(
@@ -448,19 +479,27 @@ function SourceRegistryPanel({
  */
 function SetChannelIdControl(props: { sourceId: string; onSaved: () => void }) {
   const [value, setValue] = useState("");
-  const setChannelId = trpc.system.salesIntel.sourceRegistry.setExternalChannelId.useMutation();
+  const setChannelId =
+    trpc.system.salesIntel.sourceRegistry.setExternalChannelId.useMutation();
   const trimmed = value.trim();
   const isValid = YOUTUBE_CHANNEL_ID.test(trimmed);
 
   async function handleSave() {
     if (!isValid) return;
     try {
-      await setChannelId.mutateAsync({ id: props.sourceId, externalChannelId: trimmed });
+      await setChannelId.mutateAsync({
+        id: props.sourceId,
+        externalChannelId: trimmed,
+      });
       toast.success("Channel ID saved — automatic monitoring can now run.");
       setValue("");
       props.onSaved();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not save that channel ID");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not save that channel ID"
+      );
     }
   }
 
@@ -527,7 +566,9 @@ function SourceRecentContent(props: { sourceId: string }) {
             ))}
           </ul>
         ) : (
-          <p className="si-hint mt-2 text-sm">Nothing discovered from this source yet.</p>
+          <p className="si-hint mt-2 text-sm">
+            Nothing discovered from this source yet.
+          </p>
         )
       ) : null}
     </div>
@@ -558,8 +599,10 @@ function SourceImportPanel({
       entry: { creatorName: string } | null;
     }>
   >([]);
-  const previewMutation = trpc.system.salesIntel.sourceRegistry.previewImport.useMutation();
-  const applyMutation = trpc.system.salesIntel.sourceRegistry.applyImport.useMutation();
+  const previewMutation =
+    trpc.system.salesIntel.sourceRegistry.previewImport.useMutation();
+  const applyMutation =
+    trpc.system.salesIntel.sourceRegistry.applyImport.useMutation();
 
   function parseEntries(): unknown[] | null {
     try {
@@ -573,7 +616,9 @@ function SourceImportPanel({
   async function handlePreview() {
     const entries = parseEntries();
     if (!entries) {
-      toast.error("Paste a JSON array of manifest entries — see the format above.");
+      toast.error(
+        "Paste a JSON array of manifest entries — see the format above."
+      );
       return;
     }
     try {
@@ -603,12 +648,18 @@ function SourceImportPanel({
 
   const newCount = preview.filter(p => p.classification === "new").length;
   const grouped = preview.length
-    ? (["new", "already_exists", "canonical_duplicate", "invalid", "unsupported"] as const).map(
-        classification => ({
-          classification,
-          items: preview.filter(p => p.classification === classification),
-        })
-      )
+    ? (
+        [
+          "new",
+          "already_exists",
+          "canonical_duplicate",
+          "invalid",
+          "unsupported",
+        ] as const
+      ).map(classification => ({
+        classification,
+        items: preview.filter(p => p.classification === classification),
+      }))
     : [];
 
   return (
@@ -639,10 +690,26 @@ function SourceImportPanel({
       </div>
 
       <ol className="flex flex-col gap-1 text-sm text-foreground">
-        <li><b>STEP 1</b> <span className="si-hint">— Paste your manifest below</span></li>
-        <li><b>STEP 2</b> <span className="si-hint">— Click PREVIEW / DRY RUN</span></li>
-        <li><b>STEP 3</b> <span className="si-hint">— Review the classification for every entry</span></li>
-        <li><b>STEP 4</b> <span className="si-hint">— Click APPLY to import only the NEW entries</span></li>
+        <li>
+          <b>STEP 1</b>{" "}
+          <span className="si-hint">— Paste your manifest below</span>
+        </li>
+        <li>
+          <b>STEP 2</b>{" "}
+          <span className="si-hint">— Click PREVIEW / DRY RUN</span>
+        </li>
+        <li>
+          <b>STEP 3</b>{" "}
+          <span className="si-hint">
+            — Review the classification for every entry
+          </span>
+        </li>
+        <li>
+          <b>STEP 4</b>{" "}
+          <span className="si-hint">
+            — Click APPLY to import only the NEW entries
+          </span>
+        </li>
       </ol>
 
       <Textarea
@@ -658,7 +725,9 @@ function SourceImportPanel({
         onClick={handlePreview}
         disabled={previewMutation.isPending}
       >
-        {previewMutation.isPending ? "PREVIEWING…" : "STEP 2 — PREVIEW / DRY RUN"}
+        {previewMutation.isPending
+          ? "PREVIEWING…"
+          : "STEP 2 — PREVIEW / DRY RUN"}
       </Button>
 
       {preview.length ? (
@@ -667,7 +736,8 @@ function SourceImportPanel({
             group.items.length ? (
               <div key={group.classification}>
                 <Badge tone={group.classification}>
-                  {group.classification.replaceAll("_", " ")} · {group.items.length}
+                  {group.classification.replaceAll("_", " ")} ·{" "}
+                  {group.items.length}
                 </Badge>
                 <ul className="mt-2 flex flex-col gap-1">
                   {group.items.map(item => (
@@ -707,8 +777,11 @@ function CoveragePanel({
   open: boolean;
   onToggle: () => void;
 }) {
-  const coverage = trpc.system.salesIntel.coverage.useQuery(undefined, { enabled: open });
-  const isEmpty = open && coverage.data && coverage.data.totalAcceptedFrameworks === 0;
+  const coverage = trpc.system.salesIntel.coverage.useQuery(undefined, {
+    enabled: open,
+  });
+  const isEmpty =
+    open && coverage.data && coverage.data.totalAcceptedFrameworks === 0;
 
   return (
     <SectionCard
@@ -747,7 +820,9 @@ function CoveragePanel({
                   <p className="text-xs font-bold tracking-wide text-foreground">
                     {a.archetype}
                   </p>
-                  <p className="mt-1 text-xl font-bold text-foreground">{a.count}</p>
+                  <p className="mt-1 text-xl font-bold text-foreground">
+                    {a.count}
+                  </p>
                   <p className="si-hint text-[11px]">
                     {a.armoryReady ? "Armory ready" : "No coverage yet"}
                   </p>
@@ -762,7 +837,8 @@ function CoveragePanel({
             <ul className="si-hint mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm">
               {coverage.data.byChannel.map(c => (
                 <li key={c.channel}>
-                  <span className="text-foreground">{c.channel}</span>: {c.count}
+                  <span className="text-foreground">{c.channel}</span>:{" "}
+                  {c.count}
                 </li>
               ))}
             </ul>
@@ -775,7 +851,8 @@ function CoveragePanel({
               <ul className="si-hint mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm">
                 {coverage.data.byCreator.map(c => (
                   <li key={c.creator}>
-                    <span className="text-foreground">{c.creator}</span>: {c.count}
+                    <span className="text-foreground">{c.creator}</span>:{" "}
+                    {c.count}
                   </li>
                 ))}
               </ul>
@@ -789,9 +866,14 @@ function CoveragePanel({
               <ul className="si-hint mt-1 flex flex-col gap-1 text-sm">
                 {coverage.data.conflicts.map((c, i) => (
                   <li key={i}>
-                    <span className="text-foreground">{c.archetype} · {c.channel}</span>:{" "}
+                    <span className="text-foreground">
+                      {c.archetype} · {c.channel}
+                    </span>
+                    :{" "}
                     {c.responseFamilies
-                      .map(rf => `${rf.responseFamily} (${rf.creators.join(", ")})`)
+                      .map(
+                        rf => `${rf.responseFamily} (${rf.creators.join(", ")})`
+                      )
                       .join(" vs. ")}
                   </li>
                 ))}
@@ -822,13 +904,20 @@ function ReviewQueuePanel({
   });
   const review = trpc.system.salesIntel.review.useMutation();
 
-  async function decide(frameworkId: string, reviewState: "accepted" | "rejected") {
+  async function decide(
+    frameworkId: string,
+    reviewState: "accepted" | "rejected"
+  ) {
     try {
       await review.mutateAsync({ frameworkId, reviewState });
-      toast.success(reviewState === "accepted" ? "Accepted into the Armory." : "Rejected.");
+      toast.success(
+        reviewState === "accepted" ? "Accepted into the Armory." : "Rejected."
+      );
       await utils.system.salesIntel.reviewQueue.invalidate();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Review action failed");
+      toast.error(
+        error instanceof Error ? error.message : "Review action failed"
+      );
     }
   }
 
@@ -874,8 +963,8 @@ function ReviewQueuePanel({
                     {entry.framework.frameworkName}
                   </span>
                   <span className="si-hint block text-xs">
-                    {entry.framework.creatorName} · {entry.framework.archetype} ·{" "}
-                    {entry.framework.channel}
+                    {entry.framework.creatorName} · {entry.framework.archetype}{" "}
+                    · {entry.framework.channel}
                   </span>
                 </span>
                 <Badge tone={hasExactQuote ? "quote" : "paraphrase"}>
@@ -908,7 +997,9 @@ function ReviewQueuePanel({
                 </p>
               ) : null}
               <p className="si-hint mt-1 text-sm">
-                {describeFrameworkQuality(entry.quality as FrameworkQualitySignals)}
+                {describeFrameworkQuality(
+                  entry.quality as FrameworkQualitySignals
+                )}
                 {entry.quality.independentSourceSupportCount > 0
                   ? " · related to another accepted framework"
                   : ""}
@@ -951,19 +1042,31 @@ function TeachingReviewQueuePanel({
   onToggle: () => void;
 }) {
   const utils = trpc.useUtils();
-  const queue = trpc.system.salesIntel.teachings.reviewQueue.useQuery(undefined, {
-    enabled: open,
-  });
+  const queue = trpc.system.salesIntel.teachings.reviewQueue.useQuery(
+    undefined,
+    {
+      enabled: open,
+    }
+  );
   const review = trpc.system.salesIntel.teachings.review.useMutation();
 
-  async function decide(teachingId: string, reviewState: "accepted" | "rejected") {
+  async function decide(
+    teachingId: string,
+    reviewState: "accepted" | "rejected"
+  ) {
     try {
       await review.mutateAsync({ teachingId, reviewState });
-      toast.success(reviewState === "accepted" ? "Accepted into the teaching corpus." : "Rejected.");
+      toast.success(
+        reviewState === "accepted"
+          ? "Accepted into the teaching corpus."
+          : "Rejected."
+      );
       await utils.system.salesIntel.teachings.reviewQueue.invalidate();
       await utils.system.salesIntel.teachings.coverage.invalidate();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Review action failed");
+      toast.error(
+        error instanceof Error ? error.message : "Review action failed"
+      );
     }
   }
 
@@ -984,7 +1087,8 @@ function TeachingReviewQueuePanel({
     >
       {queue.isLoading ? (
         <p className="si-hint flex items-center gap-2 text-sm">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading teaching review queue…
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading teaching review
+          queue…
         </p>
       ) : null}
       {!queue.isLoading && !queue.data?.length ? (
@@ -1012,10 +1116,41 @@ function TeachingReviewQueuePanel({
                 {entry.hasExactQuote ? "EXACT QUOTE" : "PARAPHRASE"}
               </Badge>
             </div>
-            <p className="mt-2 text-sm text-foreground">{entry.teaching.principle}</p>
-            {entry.teaching.exampleLanguage.length ? (<ul className="si-hint mt-2 flex flex-col gap-2 text-sm">{entry.teaching.exampleLanguage.map((phrase,i)=><li key={i} className="flex flex-wrap items-start gap-2"><Badge tone={phrase.kind === "exact_source_phrase" ? "quote" : "paraphrase"}>{phrase.kind === "exact_source_phrase" ? "EXACT SOURCE" : "PARAPHRASE"}</Badge><span className="italic">"{phrase.text}"</span></li>)}</ul>) : null}
-            {entry.teaching.whenToUse.length ? <p className="si-hint mt-2 text-sm"><b className="text-foreground">WHEN TO USE:</b> {entry.teaching.whenToUse.join(" · ")}</p> : null}
-            {entry.teaching.whenNotToUse.length ? <p className="si-hint mt-1 text-sm"><b className="text-foreground">WHEN NOT TO USE:</b> {entry.teaching.whenNotToUse.join(" · ")}</p> : null}
+            <p className="mt-2 text-sm text-foreground">
+              {entry.teaching.principle}
+            </p>
+            {entry.teaching.exampleLanguage.length ? (
+              <ul className="si-hint mt-2 flex flex-col gap-2 text-sm">
+                {entry.teaching.exampleLanguage.map((phrase, i) => (
+                  <li key={i} className="flex flex-wrap items-start gap-2">
+                    <Badge
+                      tone={
+                        phrase.kind === "exact_source_phrase"
+                          ? "quote"
+                          : "paraphrase"
+                      }
+                    >
+                      {phrase.kind === "exact_source_phrase"
+                        ? "EXACT SOURCE"
+                        : "PARAPHRASE"}
+                    </Badge>
+                    <span className="italic">"{phrase.text}"</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {entry.teaching.whenToUse.length ? (
+              <p className="si-hint mt-2 text-sm">
+                <b className="text-foreground">WHEN TO USE:</b>{" "}
+                {entry.teaching.whenToUse.join(" · ")}
+              </p>
+            ) : null}
+            {entry.teaching.whenNotToUse.length ? (
+              <p className="si-hint mt-1 text-sm">
+                <b className="text-foreground">WHEN NOT TO USE:</b>{" "}
+                {entry.teaching.whenNotToUse.join(" · ")}
+              </p>
+            ) : null}
             {entry.source.title || entry.source.canonicalUrl ? (
               <p className="si-hint mt-1 text-sm">
                 {entry.source.title ?? "Source"}
@@ -1036,15 +1171,30 @@ function TeachingReviewQueuePanel({
                     </a>
                   </>
                 ) : null}
-                {entry.teaching.transcriptStartMs != null ? <> · evidence {Math.floor(entry.teaching.transcriptStartMs / 1000)}s{entry.teaching.transcriptEndMs != null ? `–${Math.floor(entry.teaching.transcriptEndMs / 1000)}s` : ""}</> : null}
+                {entry.teaching.transcriptStartMs != null ? (
+                  <>
+                    {" "}
+                    · evidence{" "}
+                    {Math.floor(entry.teaching.transcriptStartMs / 1000)}s
+                    {entry.teaching.transcriptEndMs != null
+                      ? `–${Math.floor(entry.teaching.transcriptEndMs / 1000)}s`
+                      : ""}
+                  </>
+                ) : null}
               </p>
             ) : null}
             {entry.teaching.confidence != null ? (
               <p className="si-hint mt-1 text-sm">
-                Model extraction confidence: {entry.teaching.confidence.toFixed(2)}
+                Model extraction confidence:{" "}
+                {entry.teaching.confidence.toFixed(2)}
               </p>
             ) : null}
-            <p className="si-hint mt-2 text-xs">Accepting this teaching approves source doctrine only. It does not create personal outcome evidence or accept any derived objection mapping; mappings remain independently reviewed in C. REVIEW QUEUE.</p>
+            <p className="si-hint mt-2 text-xs">
+              Accepting this teaching approves source doctrine only. It does not
+              create personal outcome evidence or accept any derived objection
+              mapping; mappings remain independently reviewed in C. REVIEW
+              QUEUE.
+            </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
                 size="sm"
@@ -1081,10 +1231,14 @@ function TeachingCoveragePanel({
   open: boolean;
   onToggle: () => void;
 }) {
-  const coverage = trpc.system.salesIntel.teachings.coverage.useQuery(undefined, {
-    enabled: open,
-  });
-  const isEmpty = open && coverage.data && coverage.data.totalAcceptedTeachings === 0;
+  const coverage = trpc.system.salesIntel.teachings.coverage.useQuery(
+    undefined,
+    {
+      enabled: open,
+    }
+  );
+  const isEmpty =
+    open && coverage.data && coverage.data.totalAcceptedTeachings === 0;
 
   return (
     <SectionCard
@@ -1125,7 +1279,9 @@ function TeachingCoveragePanel({
                     <p className="text-xs font-bold tracking-wide text-foreground">
                       {c.category}
                     </p>
-                    <p className="mt-1 text-xl font-bold text-foreground">{c.count}</p>
+                    <p className="mt-1 text-xl font-bold text-foreground">
+                      {c.count}
+                    </p>
                   </div>
                 ))}
             </div>
@@ -1138,7 +1294,8 @@ function TeachingCoveragePanel({
               <ul className="si-hint mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm">
                 {coverage.data.byCreator.map(c => (
                   <li key={c.creator}>
-                    <span className="text-foreground">{c.creator}</span>: {c.count}
+                    <span className="text-foreground">{c.creator}</span>:{" "}
+                    {c.count}
                   </li>
                 ))}
               </ul>
@@ -1174,7 +1331,8 @@ export default function SalesIntelAdmin() {
   // "ingested content" empty state below can honestly say how many
   // registry sources are already registered, instead of implying import
   // failed when it succeeded and simply hasn't produced content yet.
-  const registryForCount = trpc.system.salesIntel.sourceRegistry.list.useQuery(undefined);
+  const registryForCount =
+    trpc.system.salesIntel.sourceRegistry.list.useQuery(undefined);
   const ingest = trpc.system.salesIntel.ingest.useMutation();
   const attach = trpc.system.salesIntel.attachContent.useMutation();
   const reextract = trpc.system.salesIntel.reextract.useMutation();
@@ -1250,11 +1408,14 @@ export default function SalesIntelAdmin() {
             <p className="si-hint mt-2 max-w-2xl text-sm">
               Sourced trainer material becomes Armory intelligence. Import
               sources, analyze content, review frameworks, and track corpus
-              coverage. Accepted frameworks reach the driver game
-              automatically — there is no separate publish step.
+              coverage. Accepted frameworks reach the driver game automatically
+              — there is no separate publish step.
             </p>
           </div>
-          <Button className="w-fit shrink-0" onClick={() => setComposerOpen(true)}>
+          <Button
+            className="w-fit shrink-0"
+            onClick={() => setComposerOpen(true)}
+          >
             <Plus className="mr-1 h-4 w-4" /> E. ADD SINGLE SOURCE / TRANSCRIPT
           </Button>
         </header>
@@ -1422,7 +1583,8 @@ export default function SalesIntelAdmin() {
                     <FileText className="mr-1 h-3.5 w-3.5" /> ADD TRANSCRIPT
                   </Button>
                 ) : null}
-                {source.status === "extracted" || source.status === "analyzed" ? (
+                {source.status === "extracted" ||
+                source.status === "analyzed" ? (
                   <Button
                     variant="secondary"
                     size="sm"
@@ -1446,7 +1608,8 @@ export default function SalesIntelAdmin() {
                     <RefreshCw className="mr-1 h-3.5 w-3.5" /> RE-EXTRACT
                   </Button>
                 ) : null}
-                {source.status === "extracted" || source.status === "analyzed" ? (
+                {source.status === "extracted" ||
+                source.status === "analyzed" ? (
                   <Button
                     variant="secondary"
                     size="sm"
@@ -1473,7 +1636,8 @@ export default function SalesIntelAdmin() {
                       }
                     }}
                   >
-                    <RefreshCw className="mr-1 h-3.5 w-3.5" /> RE-EXTRACT TEACHINGS
+                    <RefreshCw className="mr-1 h-3.5 w-3.5" /> RE-EXTRACT
+                    TEACHINGS
                   </Button>
                 ) : null}
               </div>
@@ -1520,7 +1684,8 @@ export default function SalesIntelAdmin() {
               >
                 {attach.isPending ? (
                   <>
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" /> EXTRACTING…
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />{" "}
+                    EXTRACTING…
                   </>
                 ) : (
                   "EXTRACT"

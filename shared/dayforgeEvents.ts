@@ -251,7 +251,11 @@ export interface DayforgeProductEventPropertyMap {
   goldline_session_ended: { sessionId: string; durationMs: number };
   mission_seen: { sessionId: string; missionState: string };
   mission_approached: { sessionId: string; missionState: string };
-  mission_engaged: { sessionId: string; missionState: string; archetype: string };
+  mission_engaged: {
+    sessionId: string;
+    missionState: string;
+    archetype: string;
+  };
   traversal_jump: { sessionId: string };
   traversal_climb: { sessionId: string };
   traversal_vault: { sessionId: string };
@@ -486,7 +490,8 @@ export const GOLDLINE_CLIENT_EVENT_NAMES = [
   "visual_quality_adjusted",
 ] as const satisfies readonly DayforgeProductEventName[];
 
-export type GoldlineClientEventName = (typeof GOLDLINE_CLIENT_EVENT_NAMES)[number];
+export type GoldlineClientEventName =
+  (typeof GOLDLINE_CLIENT_EVENT_NAMES)[number];
 
 export function isGoldlineClientEventName(
   value: string
