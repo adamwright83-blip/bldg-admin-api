@@ -1,0 +1,165 @@
+name: Bootstrap Goldline growth loop
+
+on:
+  push:
+    branches:
+      - feature/goldline-growth-loop-hardening
+    paths:
+      - .github/workflows/bootstrap-growth-loop.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build-slices:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: growth_loop
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      CI: "true"
+      NODE_ENV: test
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/growth_loop
+      DAYFORGE_RELEASE_DB: "1"
+      APP_SHARED_API_SECRET: growth-loop-app-secret-000000000000000000
+      JWT_SECRET: growth-loop-jwt-secret-000000000000000000
+      STRIPE_SECRET_KEY: growth-loop-placeholder-not-used
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/goldline-growth-loop-hardening
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Apply slices 1, 3 and 5 plus regression contracts
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected patch anchor not found: {path}: {old[:100]!r}")
+              if text.count(old) != 1:
+                  raise SystemExit(f"patch anchor not unique: {path}: {text.count(old)}")
+              p.write_text(text.replace(old, new, 1))
+
+          # Slice 1: analytics contract adds a truthful individual-target-start event.
+          p = Path('shared/dayforgeEvents.ts')
+          s = p.read_text()
+          s = s.replace('  "cold_call_batch_started",\n  "cold_call_outcome_saved",', '  "cold_call_batch_started",\n  "cold_call_target_started",\n  "cold_call_outcome_saved",')
+          s = s.replace('  cold_call_batch_started: { sessionId: string; targetCount: number };\n  cold_call_outcome_saved:', '  cold_call_batch_started: { sessionId: string; targetCount: number };\n  cold_call_target_started: { sessionId: string };\n  cold_call_outcome_saved:')
+          s = s.replace('  cold_call_batch_started: ["sessionId", "targetCount"],\n  cold_call_outcome_saved:', '  cold_call_batch_started: ["sessionId", "targetCount"],\n  cold_call_target_started: ["sessionId"],\n  cold_call_outcome_saved:')
+          # The event list string occurs once in the client whitelist after the property map was already replaced.
+          marker = '  "cold_call_batch_started",\n  "cold_call_outcome_saved",\n  "cold_call_chain_continued",\n  "scout_run_started",'
+          if marker in s:
+              s = s.replace(marker, '  "cold_call_batch_started",\n  "cold_call_target_started",\n  "cold_call_outcome_saved",\n  "cold_call_chain_continued",\n  "scout_run_started",', 1)
+          p.write_text(s)
+
+          replace_once(
+              'client/src/game/GoldlineGameHome.tsx',
+              '''  function handleColdCallComplete(input: Parameters<GoldlineGameHomeProps["onCompleteColdCall"]>[0]) {\n    emit?.({\n      eventName: "cold_call_outcome_saved",\n      sessionId: sessionIdRef.current,\n      missionId: null,\n      properties: { sessionId: sessionIdRef.current, outcome: input.outcome },\n    });\n    return props.onCompleteColdCall(input);\n  }\n''',
+              '''  function handleColdCallStart(target: ColdCallTarget) {\n    // A target only counts as started after the authoritative backend accepts\n    // the start mutation. Contact details never enter analytics.\n    return props.onStartColdCall(target).then(batch => {\n      emit?.({\n        eventName: "cold_call_target_started",\n        sessionId: sessionIdRef.current,\n        missionId: target.missionId,\n        properties: { sessionId: sessionIdRef.current },\n      });\n      return batch;\n    });\n  }\n\n  function handleColdCallComplete(input: Parameters<GoldlineGameHomeProps["onCompleteColdCall"]>[0]) {\n    // Outcome analytics must trail persistence; a rejected/failed mutation is\n    // not a real saved business action.\n    return props.onCompleteColdCall(input).then(batch => {\n      emit?.({\n        eventName: "cold_call_outcome_saved",\n        sessionId: sessionIdRef.current,\n        missionId: input.target.missionId,\n        properties: { sessionId: sessionIdRef.current, outcome: input.outcome },\n      });\n      return batch;\n    });\n  }\n'''
+          )
+          replace_once('client/src/game/GoldlineGameHome.tsx', '            onStart={props.onStartColdCall}\n', '            onStart={handleColdCallStart}\n')
+
+          Path('server/dayforgeEvents/goldlineEffectivenessQueries.ts').write_text('''/** Goldline behavior + trusted business outcome observations. */\nimport { and, eq, gte, sql } from "drizzle-orm";\nimport { dayforgeProductEvents } from "../../drizzle/schema";\nimport { getDb } from "../db";\n\nexport type GoldlineEffectivenessSummary = {\n  windowDays: number;\n  play: {\n    sessionsStarted: number;\n    missionsApproached: number;\n    missionsEngaged: number;\n    encountersResolved: number;\n  };\n  businessAction: {\n    weaponsSelected: number;\n    weaponsUsed: number;\n    coldCallTargetsStarted: number;\n    coldCallOutcomesSaved: number;\n  };\n  trustedBusinessOutcome: {\n    visitsCompleted: number;\n    followUpsCreated: number;\n    accountsWon: number;\n    accountsLost: number;\n  };\n  missionProgression: { mutationsCreated: number; verifiedCaptures: number };\n  recovery: { mutationsFollowed: number };\n  scoutExpansion: { runsStarted: number; discoveriesCreated: number; missionsCreated: number };\n};\n\nasync function countEvent(input: { tenantId: string; eventName: string; since: Date }): Promise<number> {\n  const db = await getDb();\n  if (!db) throw new Error("Database not available");\n  const [row] = await db.select({ count: sql<number>`COUNT(*)` }).from(dayforgeProductEvents).where(and(\n    eq(dayforgeProductEvents.tenantId, input.tenantId),\n    eq(dayforgeProductEvents.eventName, input.eventName),\n    gte(dayforgeProductEvents.occurredAt, input.since)\n  ));\n  return Number(row?.count ?? 0);\n}\n\nexport async function getGoldlineEffectivenessSummary(input: { tenantId: string; windowDays?: number }): Promise<GoldlineEffectivenessSummary> {\n  const windowDays = input.windowDays ?? 30;\n  const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);\n  const count = (eventName: string) => countEvent({ tenantId: input.tenantId, eventName, since });\n  const [sessionsStarted, missionsApproached, missionsEngaged, encountersResolved, weaponsSelected, weaponsUsed, coldCallTargetsStarted, coldCallOutcomesSaved, visitsCompleted, followUpsCreated, accountsWon, accountsLost, mutationsCreated, verifiedCaptures, mutationsFollowed, runsStarted, discoveriesCreated, missionsCreated] = await Promise.all([\n    count("goldline_session_started"), count("mission_approached"), count("mission_engaged"), count("encounter_resolved"),\n    count("armory_weapon_selected"), count("armory_weapon_used"), count("cold_call_target_started"), count("cold_call_outcome_saved"),\n    // These four are trusted server-side domain events, never client Goldline events.\n    count("visit_completed"), count("follow_up_created"), count("account_won"), count("account_lost"),\n    count("mutation_created"), count("verified_capture"), count("mutation_followed"),\n    count("scout_run_started"), count("scout_discovery_created"), count("scout_mission_created"),\n  ]);\n  return {\n    windowDays,\n    play: { sessionsStarted, missionsApproached, missionsEngaged, encountersResolved },\n    businessAction: { weaponsSelected, weaponsUsed, coldCallTargetsStarted, coldCallOutcomesSaved },\n    trustedBusinessOutcome: { visitsCompleted, followUpsCreated, accountsWon, accountsLost },\n    missionProgression: { mutationsCreated, verifiedCaptures },\n    recovery: { mutationsFollowed },\n    scoutExpansion: { runsStarted, discoveriesCreated, missionsCreated },\n  };\n}\n''')
+
+          Path('client/src/pages/GoldlineEffectivenessAdmin.tsx').write_text('''import { Loader2 } from "lucide-react";\nimport { trpc } from "@/lib/trpc";\n\nfunction StatRow(props: { label: string; value: number }) {\n  return <div className="effectiveness-stat-row"><span>{props.label}</span><b>{props.value}</b></div>;\n}\nfunction Block(props: { title: string; children: React.ReactNode }) {\n  return <article className="sales-intel-source"><div className="sales-intel-source-head"><span><b>{props.title}</b></span></div>{props.children}</article>;\n}\n\nexport default function GoldlineEffectivenessAdmin() {\n  const summary = trpc.system.goldlineEvents.effectivenessSummary.useQuery({});\n  return (\n    <main className="sales-intel-admin">\n      <header><div><small>INTERNAL · GOLDLINE EFFECTIVENESS</small><h1>Play and business behavior</h1><p>Observed counts over the last {summary.data?.windowDays ?? 30} days. Game behavior and trusted business outcomes are shown separately. These are associations, not a causal lift or ROI claim.</p></div></header>\n      {summary.isLoading ? <p className="sales-intel-empty"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p> : null}\n      {summary.data ? <section className="sales-intel-sources">\n        <Block title="PLAY"><StatRow label="Sessions started" value={summary.data.play.sessionsStarted} /><StatRow label="Missions approached" value={summary.data.play.missionsApproached} /><StatRow label="Missions engaged" value={summary.data.play.missionsEngaged} /><StatRow label="Encounters resolved" value={summary.data.play.encountersResolved} /></Block>\n        <Block title="BUSINESS ACTION"><StatRow label="Armory weapons selected" value={summary.data.businessAction.weaponsSelected} /><StatRow label="Armory usage persisted" value={summary.data.businessAction.weaponsUsed} /><StatRow label="Cold-call targets started" value={summary.data.businessAction.coldCallTargetsStarted} /><StatRow label="Cold-call outcomes persisted" value={summary.data.businessAction.coldCallOutcomesSaved} /></Block>\n        <Block title="TRUSTED BUSINESS OUTCOME"><StatRow label="Visits completed" value={summary.data.trustedBusinessOutcome.visitsCompleted} /><StatRow label="Follow-ups created" value={summary.data.trustedBusinessOutcome.followUpsCreated} /><StatRow label="Accounts won" value={summary.data.trustedBusinessOutcome.accountsWon} /><StatRow label="Accounts lost" value={summary.data.trustedBusinessOutcome.accountsLost} /></Block>\n        <Block title="MISSION PROGRESSION"><StatRow label="World mutations created" value={summary.data.missionProgression.mutationsCreated} /><StatRow label="Verified captures" value={summary.data.missionProgression.verifiedCaptures} /></Block>\n        <Block title="RECOVERY"><StatRow label="Recovery paths followed" value={summary.data.recovery.mutationsFollowed} /></Block>\n        <Block title="SCOUT / EXPANSION"><StatRow label="Scout runs started" value={summary.data.scoutExpansion.runsStarted} /><StatRow label="Discoveries created" value={summary.data.scoutExpansion.discoveriesCreated} /><StatRow label="Missions created from Scout" value={summary.data.scoutExpansion.missionsCreated} /></Block>\n      </section> : null}\n    </main>\n  );\n}\n''')
+
+          # Slice 3: source-support/diversity must use the exact same accepted doctrine boundary as driver-visible trainer frameworks.
+          replace_once(
+              'server/salesIntel/salesIntelStore.ts',
+              '''  const rows = await database\n    .selectDistinct({ sourceArtifactId: salesIntelFrameworks.sourceArtifactId })\n    .from(salesIntelFrameworks)\n    .where(\n      and(\n        eq(salesIntelFrameworks.archetype, input.archetype),\n        eq(salesIntelFrameworks.channel, input.channel),\n        eq(salesIntelFrameworks.responseFamily, input.responseFamily),\n        eq(salesIntelFrameworks.active, true)\n      )\n    );\n  return rows.filter(row => row.sourceArtifactId !== input.sourceArtifactId).length;\n''',
+              '''  const rows = await database\n    .selectDistinct({ sourceArtifactId: salesIntelFrameworks.sourceArtifactId })\n    .from(salesIntelFrameworks)\n    .innerJoin(\n      salesIntelSourceArtifacts,\n      eq(salesIntelSourceArtifacts.id, salesIntelFrameworks.sourceArtifactId)\n    )\n    .where(\n      and(\n        eq(salesIntelFrameworks.archetype, input.archetype),\n        eq(salesIntelFrameworks.channel, input.channel),\n        eq(salesIntelFrameworks.responseFamily, input.responseFamily),\n        eq(salesIntelFrameworks.reviewState, "accepted"),\n        eq(salesIntelFrameworks.active, true),\n        eq(salesIntelSourceArtifacts.status, "extracted"),\n        inArray(salesIntelSourceArtifacts.sourceType, [\n          "manual_url",\n          "instagram",\n          "youtube",\n          "podcast",\n          "uploaded_transcript",\n          "other",\n        ])\n      )\n    );\n  return rows.filter(row => row.sourceArtifactId !== input.sourceArtifactId).length;\n'''
+          )
+
+          # Slice 5: truthful review copy + evidence granularity.
+          replace_once(
+              'client/src/pages/SalesIntelAdmin.tsx',
+              '          body="High-confidence extractions are accepted automatically; everything else lands here."\n',
+              '          body="Extracted trainer frameworks stay here until a human accepts or rejects them."\n'
+          )
+          replace_once(
+              'client/src/pages/SalesIntelAdmin.tsx',
+              '''            {entry.teaching.exampleLanguage.length ? (\n              <ul className="si-hint mt-2 flex flex-col gap-1 text-sm italic">\n                {entry.teaching.exampleLanguage.map((phrase, i) => (\n                  <li key={i}>"{phrase.text}"</li>\n                ))}\n              </ul>\n            ) : null}\n''',
+              '''            {entry.teaching.exampleLanguage.length ? (\n              <ul className="si-hint mt-2 flex flex-col gap-2 text-sm">\n                {entry.teaching.exampleLanguage.map((phrase, i) => (\n                  <li key={i} className="flex flex-wrap items-start gap-2">\n                    <Badge tone={phrase.kind === "exact_source_phrase" ? "quote" : "paraphrase"}>\n                      {phrase.kind === "exact_source_phrase" ? "EXACT SOURCE" : "PARAPHRASE"}\n                    </Badge>\n                    <span className="italic">"{phrase.text}"</span>\n                  </li>\n                ))}\n              </ul>\n            ) : null}\n            {entry.teaching.whenToUse.length ? (\n              <p className="si-hint mt-2 text-sm"><b className="text-foreground">WHEN TO USE:</b> {entry.teaching.whenToUse.join(" · ")}</p>\n            ) : null}\n            {entry.teaching.whenNotToUse.length ? (\n              <p className="si-hint mt-1 text-sm"><b className="text-foreground">WHEN NOT TO USE:</b> {entry.teaching.whenNotToUse.join(" · ")}</p>\n            ) : null}\n'''
+          )
+          replace_once(
+              'client/src/pages/SalesIntelAdmin.tsx',
+              '''                {entry.teaching.transcriptStartMs != null ? (\n                  <> · segment starts {Math.floor(entry.teaching.transcriptStartMs / 1000)}s</>\n                ) : null}\n''',
+              '''                {entry.teaching.transcriptStartMs != null ? (\n                  <> · evidence {Math.floor(entry.teaching.transcriptStartMs / 1000)}s{entry.teaching.transcriptEndMs != null ? `–${Math.floor(entry.teaching.transcriptEndMs / 1000)}s` : ""}</>\n                ) : null}\n'''
+          )
+          replace_once(
+              'client/src/pages/SalesIntelAdmin.tsx',
+              '''              <p className="si-hint mt-1 text-sm">\n                Confidence: {entry.teaching.confidence.toFixed(2)}\n              </p>\n''',
+              '''              <p className="si-hint mt-1 text-sm">\n                Model extraction confidence: {entry.teaching.confidence.toFixed(2)}\n              </p>\n'''
+          )
+          replace_once(
+              'client/src/pages/SalesIntelAdmin.tsx',
+              '''            <div className="mt-3 flex flex-wrap gap-2">\n              <Button\n                size="sm"\n                disabled={review.isPending}\n                onClick={() => decide(entry.teaching.id, "accepted")}\n''',
+              '''            <p className="si-hint mt-2 text-xs">Accepting this teaching approves source doctrine only. It does not create personal outcome evidence or accept any derived objection mapping; mappings remain independently reviewed in C. REVIEW QUEUE.</p>\n            <div className="mt-3 flex flex-wrap gap-2">\n              <Button\n                size="sm"\n                disabled={review.isPending}\n                onClick={() => decide(entry.teaching.id, "accepted")}\n'''
+          )
+
+          Path('shared/goldlineAnalyticsClosure.test.ts').write_text('''import { describe, expect, it } from "vitest";\nimport { GOLDLINE_CLIENT_EVENT_NAMES, sanitizeDayforgeProductEventProperties } from "./dayforgeEvents";\n\ndescribe("Goldline analytics closure", () => {\n  it("allows a privacy-safe target-start event", () => {\n    expect(GOLDLINE_CLIENT_EVENT_NAMES).toContain("cold_call_target_started");\n    expect(sanitizeDayforgeProductEventProperties("cold_call_target_started", { sessionId: "session", phone: "secret" })).toEqual({ sessionId: "session" });\n  });\n  it("does not let the client fabricate trusted business outcomes", () => {\n    expect(GOLDLINE_CLIENT_EVENT_NAMES).not.toContain("account_won");\n    expect(GOLDLINE_CLIENT_EVENT_NAMES).not.toContain("visit_completed");\n    expect(GOLDLINE_CLIENT_EVENT_NAMES).not.toContain("follow_up_created");\n  });\n});\n''')
+
+          Path('client/src/pages/SalesIntelAdmin.review-contract.test.ts').write_text('''import { readFileSync } from "node:fs";\nimport { describe, expect, it } from "vitest";\nconst source = readFileSync(new URL("./SalesIntelAdmin.tsx", import.meta.url), "utf8");\ndescribe("Sales Intel human review UX", () => {\n  it("does not claim high-confidence trainer material auto-accepts", () => {\n    expect(source).not.toContain("High-confidence extractions are accepted automatically");\n    expect(source).toContain("stay here until a human accepts or rejects");\n  });\n  it("labels phrase provenance, evidence range, confidence semantics, and doctrine boundary", () => {\n    expect(source).toContain("EXACT SOURCE");\n    expect(source).toContain("PARAPHRASE");\n    expect(source).toContain("WHEN TO USE:");\n    expect(source).toContain("WHEN NOT TO USE:");\n    expect(source).toContain("Model extraction confidence");\n    expect(source).toContain("does not create personal outcome evidence");\n    expect(source).toContain("mappings remain independently reviewed");\n  });\n});\n''')
+
+          Path('server/salesIntel/armoryDoctrineGate.integration.test.ts').write_text('''import { randomUUID } from "node:crypto";\nimport { inArray } from "drizzle-orm";\nimport { afterAll, describe, expect, it } from "vitest";\nimport { salesIntelFrameworks, salesIntelSourceArtifacts } from "../../drizzle/schema";\nimport { getDb } from "../db";\nimport { countIndependentSourceSupport, persistFrameworkVersion, upsertSourceArtifact } from "./salesIntelStore";\n\nconst run = process.env.DAYFORGE_RELEASE_DB === "1" && Boolean(process.env.DATABASE_URL);\nconst artifactIds: string[] = [];\nasync function source(status: "extracted" | "analyzed" = "extracted") {\n  const token = randomUUID();\n  const { artifact } = await upsertSourceArtifact({ contentHash: `doctrine-${token}`, sourceType: "youtube", sourceUrl: `https://youtube.test/${token}`, canonicalUrl: `https://youtube.test/${token}`, externalContentId: token, creatorName: `Creator ${token}`, creatorHandle: null, publishedAt: null, title: "Doctrine fixture", metadata: {}, ingestedBy: "test", status });\n  artifactIds.push(artifact.id);\n  return artifact;\n}\nasync function framework(sourceArtifactId: string, reviewState: "accepted" | "review_required" | "rejected", active = true) {\n  const row = await persistFrameworkVersion({ frameworkKey: randomUUID().replaceAll("-", ""), sourceArtifactId, transcriptId: null, creatorName: "Creator", creatorHandle: null, archetype: "ANCHOR", channel: "phone", exactObjection: "fixture", diagnosis: null, frameworkName: "Fixture", principle: "fixture", responseFamily: "isolate_constraint", discoveryQuestions: [], exampleLanguage: [], whenToUse: [], whenNotToUse: [], followUpMoves: [], badResponses: [], confidence: 0.9, extractionVersion: "fixture-v1", extractionProvider: "fixture", extractionModel: "fixture", promptVersion: "fixture", transcriptStartMs: null, transcriptEndMs: null, reviewState });\n  if (!active) { const db = await getDb(); if (!db) throw new Error("db"); await db.update(salesIntelFrameworks).set({ active: false }).where(inArray(salesIntelFrameworks.id, [row.id])); }\n  return row;\n}\n\ndescribe.skipIf(!run)("Armory doctrine support gate", () => {\n  afterAll(async () => { const db = await getDb(); if (!db || !artifactIds.length) return; await db.delete(salesIntelFrameworks).where(inArray(salesIntelFrameworks.sourceArtifactId, artifactIds)); await db.delete(salesIntelSourceArtifacts).where(inArray(salesIntelSourceArtifacts.id, artifactIds)); });\n  it("counts only independent accepted active frameworks from extracted real sources", async () => {\n    const primary = await source();\n    const accepted = await source(); await framework(accepted.id, "accepted");\n    const pending = await source(); await framework(pending.id, "review_required");\n    const rejected = await source(); await framework(rejected.id, "rejected");\n    const notExtracted = await source("analyzed"); await framework(notExtracted.id, "accepted");\n    const inactive = await source(); await framework(inactive.id, "accepted", false);\n    await framework(primary.id, "accepted"); // same source must never self-support\n    const support = await countIndependentSourceSupport({ frameworkId: "unused", sourceArtifactId: primary.id, archetype: "ANCHOR", channel: "phone", responseFamily: "isolate_constraint" });\n    expect(support).toBe(1);\n  });\n});\n''')
+
+          # Persistent PR gate. Pixel browser proof will be added as Slice 2 in the same branch next.
+          Path('.github/workflows/goldline-growth-loop.yml').write_text('''name: Goldline growth-loop gates\n\non:\n  pull_request:\n    paths:\n      - "client/src/game/**"\n      - "client/src/pages/GoldlineEffectivenessAdmin.tsx"\n      - "client/src/pages/SalesIntelAdmin*"\n      - "server/dayforgeEvents/**"\n      - "server/salesIntel/**"\n      - "shared/dayforgeEvents.ts"\n      - "shared/goldlineAnalyticsClosure.test.ts"\n      - ".github/workflows/goldline-growth-loop.yml"\n\npermissions:\n  contents: read\n\njobs:\n  contracts:\n    runs-on: ubuntu-latest\n    timeout-minutes: 25\n    services:\n      mysql:\n        image: mysql:8.0\n        env: { MYSQL_ROOT_PASSWORD: root, MYSQL_DATABASE: growth_loop }\n        ports: ["3306:3306"]\n        options: >-\n          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"\n          --health-interval=5s --health-timeout=5s --health-retries=20\n    env:\n      CI: "true"\n      NODE_ENV: test\n      DATABASE_URL: mysql://root:root@127.0.0.1:3306/growth_loop\n      DAYFORGE_RELEASE_DB: "1"\n      APP_SHARED_API_SECRET: growth-loop-app-secret-000000000000000000\n      JWT_SECRET: growth-loop-jwt-secret-000000000000000000\n      STRIPE_SECRET_KEY: growth-loop-placeholder-not-used\n    steps:\n      - uses: actions/checkout@v7\n      - uses: pnpm/action-setup@v6\n        with: { version: 10.4.1 }\n      - uses: actions/setup-node@v6\n        with: { node-version: 22, cache: pnpm }\n      - run: pnpm install --frozen-lockfile\n      - run: pnpm vitest run shared/goldlineAnalyticsClosure.test.ts client/src/pages/SalesIntelAdmin.review-contract.test.ts\n      - run: pnpm db:dayforge:release\n      - run: pnpm vitest run --config vitest.integration.config.ts server/salesIntel/armoryDoctrineGate.integration.test.ts\n      - run: pnpm build\n      - run: node scripts/checkGoldlineBundleBudget.mjs\n''')
+          PY
+
+      - name: Focused unit contracts
+        run: pnpm vitest run shared/goldlineAnalyticsClosure.test.ts client/src/pages/SalesIntelAdmin.review-contract.test.ts
+
+      - name: Apply migrations to disposable MySQL
+        run: pnpm db:dayforge:release
+
+      - name: Doctrine DB integration
+        run: pnpm vitest run --config vitest.integration.config.ts server/salesIntel/armoryDoctrineGate.integration.test.ts
+
+      - name: Build
+        run: pnpm build
+
+      - name: Bundle budget
+        run: node scripts/checkGoldlineBundleBudget.mjs
+
+      - run: git diff --check
+
+      - name: Commit generated slices
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shared/dayforgeEvents.ts shared/goldlineAnalyticsClosure.test.ts \
+            client/src/game/GoldlineGameHome.tsx client/src/pages/GoldlineEffectivenessAdmin.tsx \
+            client/src/pages/SalesIntelAdmin.tsx client/src/pages/SalesIntelAdmin.review-contract.test.ts \
+            server/dayforgeEvents/goldlineEffectivenessQueries.ts server/salesIntel/salesIntelStore.ts \
+            server/salesIntel/armoryDoctrineGate.integration.test.ts .github/workflows/goldline-growth-loop.yml
+          git commit -m "goldline: close analytics doctrine and review gates"
+          git push origin HEAD:feature/goldline-growth-loop-hardening
