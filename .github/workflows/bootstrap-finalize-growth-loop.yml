@@ -1,4 +1,4 @@
-name: Bootstrap finalize Goldline growth loop v2
+name: Bootstrap finalize Goldline growth loop v3
 on:
   push:
     branches: [feature/goldline-growth-loop-hardening]
