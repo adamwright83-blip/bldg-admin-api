@@ -12,10 +12,28 @@
  * A missing credential must never become an invented transcript.
  */
 import type { SalesIntelTranscriptSegment } from "../../shared/salesIntel";
+import { toGeminiOffset } from "../../shared/salesIntelLongFormVideo";
 
 export type VideoUnderstandingRequest = {
   canonicalUrl: string;
   externalContentId: string | null;
+  /**
+   * Restricts analysis to a time range within the video — the mechanism
+   * long-form segmentation uses to process a video in bounded chunks
+   * instead of one monolithic request. Omitted entirely analyzes the
+   * whole video, unchanged from prior behavior.
+   */
+  clip?: {
+    startOffsetSeconds: number;
+    endOffsetSeconds: number;
+  };
+  /**
+   * "low" trades fine visual detail for a much smaller token footprint —
+   * appropriate for spoken sales instruction, where the audio track and
+   * coarse visual context carry the signal, not frame-level detail. Omitted
+   * uses the provider's default resolution, unchanged from prior behavior.
+   */
+  mediaResolution?: "low";
 };
 
 export type VideoUnderstandingResult = {
@@ -137,12 +155,27 @@ async function parseGeminiErrorBody(response: Response): Promise<GeminiErrorBody
   }
 }
 
-const ANALYSIS_INSTRUCTION = [
-  "Transcribe the spoken sales instruction in this video as faithfully as possible.",
-  "Return only what is actually said. Do not summarize, embellish, or invent claims.",
-  "Preserve the speaker's own wording, including objection phrasing and example language.",
-  "If the video contains no sales instruction, say exactly: NO_SALES_INSTRUCTION",
-].join(" ");
+/**
+ * When `clip` is set, this is one segment of a longer video (long-form
+ * segmentation), so the instruction additionally asks Gemini to keep
+ * timestamps relative to the clip itself — the caller converts those to
+ * absolute video time, since Gemini only sees the clipped range.
+ */
+function buildAnalysisInstruction(clip?: { startOffsetSeconds: number; endOffsetSeconds: number }): string {
+  const parts = [
+    "Transcribe the spoken sales instruction in this video as faithfully as possible.",
+    "Return only what is actually said. Do not summarize, embellish, or invent claims. Do not fill gaps.",
+    "Preserve the speaker's own wording, including objection phrasing and example language, and clearly distinguish direct quotation from your own paraphrase.",
+  ];
+  if (clip) {
+    parts.push(
+      "This is one clipped segment of a longer video, not the whole video — do not assume it is complete or self-contained.",
+      "Give timestamps relative to the start of this clip (i.e. 00:00 is the first moment you can see/hear in this request), not the original video."
+    );
+  }
+  parts.push("If this clip contains no sales instruction, say exactly: NO_SALES_INSTRUCTION");
+  return parts.join(" ");
+}
 
 /**
  * Gemini video understanding over a public YouTube URL.
@@ -197,12 +230,34 @@ export class GeminiVideoUnderstandingProvider
             contents: [
               {
                 parts: [
-                  { text: ANALYSIS_INSTRUCTION },
-                  { file_data: { file_uri: request.canonicalUrl } },
+                  { text: buildAnalysisInstruction(request.clip) },
+                  {
+                    file_data: { file_uri: request.canonicalUrl },
+                    // REST field name confirmed against current official docs
+                    // (ai.google.dev/gemini-api/docs/generate-content/video-understanding):
+                    // video_metadata is snake_case, a sibling of file_data within
+                    // the same Part — not nested inside it, not camelCase.
+                    ...(request.clip
+                      ? {
+                          video_metadata: {
+                            start_offset: toGeminiOffset(request.clip.startOffsetSeconds),
+                            end_offset: toGeminiOffset(request.clip.endOffsetSeconds),
+                          },
+                        }
+                      : {}),
+                  },
                 ],
               },
             ],
-            generationConfig: { temperature: 0 },
+            generationConfig: {
+              temperature: 0,
+              // mediaResolution is camelCase on GenerationConfig (unlike the
+              // snake_case Part-level fields above) — confirmed against the
+              // same current official API reference.
+              ...(request.mediaResolution === "low"
+                ? { mediaResolution: "MEDIA_RESOLUTION_LOW" }
+                : {}),
+            },
           }),
         }
       );
