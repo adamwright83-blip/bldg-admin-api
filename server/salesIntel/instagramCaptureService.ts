@@ -11,7 +11,10 @@ import {
   upsertSourceArtifact,
 } from "./salesIntelStore";
 import { listTeachingsForSource } from "./salesIntelTeachingStore";
-import { reextractGeneralTeachingsFromTranscripts } from "./salesIntelTeachingReExtraction";
+import {
+  reextractGeneralTeachingsFromTranscripts,
+  type TranscriptExtractionStatus,
+} from "./salesIntelTeachingReExtraction";
 import {
   InstagramMediaResolveFailedError,
   InstagramMediaResolverUnavailableError,
@@ -96,6 +99,35 @@ export function scheduleInstagramSalesIntelProcessing(input: {
   return true;
 }
 
+const EXTRACTION_FAILURE_STATUSES = new Set<TranscriptExtractionStatus>([
+  "provider_unavailable",
+  "invalid_output",
+  "failed",
+]);
+
+async function extractTeachingsAndRecordOutcome(input: {
+  sourceArtifactId: string;
+  actorId: string;
+}): Promise<void> {
+  const result = await reextractGeneralTeachingsFromTranscripts(input);
+  const extractionFailure = result.transcriptResults.find(row =>
+    EXTRACTION_FAILURE_STATUSES.has(row.status)
+  );
+  if (!extractionFailure) return;
+
+  const retryable = extractionFailure.status !== "invalid_output";
+  await setSourceStatus({
+    id: input.sourceArtifactId,
+    status: "failed",
+    failureCode: `teaching_extraction_${extractionFailure.status}`,
+    failureMessage:
+      extractionFailure.errorMessage ??
+      `General teaching extraction failed: ${extractionFailure.status}`,
+    failureRetryable: retryable,
+    countAttempt: true,
+  });
+}
+
 export async function processInstagramSalesIntelCapture(
   input: {
     sourceArtifactId: string;
@@ -115,7 +147,7 @@ export async function processInstagramSalesIntelCapture(
   // General teaching extraction is itself version-idempotent per transcript.
   const existingTranscript = await getLatestTranscript(artifact.id);
   if (existingTranscript) {
-    await reextractGeneralTeachingsFromTranscripts({
+    await extractTeachingsAndRecordOutcome({
       sourceArtifactId: artifact.id,
       actorId: input.actorId,
     });
@@ -196,7 +228,7 @@ export async function processInstagramSalesIntelCapture(
     // The broad teaching extractor added in PR #46 is the canonical path for
     // short-form captures. Optional objection mappings are created only when
     // the source evidence genuinely supports them.
-    await reextractGeneralTeachingsFromTranscripts({
+    await extractTeachingsAndRecordOutcome({
       sourceArtifactId: artifact.id,
       actorId: input.actorId,
     });
