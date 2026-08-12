@@ -803,14 +803,18 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       });
   }
 
-  function handleColdCallComplete(input: Parameters<GoldlineGameHomeProps["onCompleteColdCall"]>[0]) {
-    emit?.({
-      eventName: "cold_call_outcome_saved",
-      sessionId: sessionIdRef.current,
-      missionId: null,
-      properties: { sessionId: sessionIdRef.current, outcome: input.outcome },
+  function handleColdCallStart(target: ColdCallTarget) {
+    return props.onStartColdCall(target).then(batch => {
+      emit?.({ eventName: "cold_call_target_started", sessionId: sessionIdRef.current, missionId: target.missionId, properties: { sessionId: sessionIdRef.current } });
+      return batch;
     });
-    return props.onCompleteColdCall(input);
+  }
+
+  function handleColdCallComplete(input: Parameters<GoldlineGameHomeProps["onCompleteColdCall"]>[0]) {
+    return props.onCompleteColdCall(input).then(batch => {
+      emit?.({ eventName: "cold_call_outcome_saved", sessionId: sessionIdRef.current, missionId: input.target.missionId, properties: { sessionId: sessionIdRef.current, outcome: input.outcome } });
+      return batch;
+    });
   }
 
   function handleColdCallSelectChain(target: ColdCallTarget) {
@@ -1162,7 +1166,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           <ColdCallBurst
             batch={props.coldCallBatch}
             onClose={() => setColdCallOpen(false)}
-            onStart={props.onStartColdCall}
+            onStart={handleColdCallStart}
             onComplete={handleColdCallComplete}
             onSelectChain={handleColdCallSelectChain}
             onBreakCombo={props.onBreakColdCallCombo}

@@ -497,14 +497,8 @@ export async function countIndependentSourceSupport(input: {
   const rows = await database
     .selectDistinct({ sourceArtifactId: salesIntelFrameworks.sourceArtifactId })
     .from(salesIntelFrameworks)
-    .where(
-      and(
-        eq(salesIntelFrameworks.archetype, input.archetype),
-        eq(salesIntelFrameworks.channel, input.channel),
-        eq(salesIntelFrameworks.responseFamily, input.responseFamily),
-        eq(salesIntelFrameworks.active, true)
-      )
-    );
+    .innerJoin(salesIntelSourceArtifacts, eq(salesIntelSourceArtifacts.id, salesIntelFrameworks.sourceArtifactId))
+    .where(and(eq(salesIntelFrameworks.archetype,input.archetype),eq(salesIntelFrameworks.channel,input.channel),eq(salesIntelFrameworks.responseFamily,input.responseFamily),eq(salesIntelFrameworks.reviewState,"accepted"),eq(salesIntelFrameworks.active,true),eq(salesIntelSourceArtifacts.status,"extracted"),inArray(salesIntelSourceArtifacts.sourceType,["manual_url","instagram","youtube","podcast","uploaded_transcript","other"])));
   return rows.filter(row => row.sourceArtifactId !== input.sourceArtifactId).length;
 }
 

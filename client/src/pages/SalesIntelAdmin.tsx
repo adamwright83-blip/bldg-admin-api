@@ -855,7 +855,7 @@ function ReviewQueuePanel({
       {!queue.isLoading && !queue.data?.length ? (
         <EmptyState
           title="NO FRAMEWORKS AWAITING REVIEW"
-          body="High-confidence extractions are accepted automatically; everything else lands here."
+          body="Extracted trainer frameworks stay here until a human accepts or rejects them."
         />
       ) : null}
       <div className="flex flex-col gap-3">
@@ -1013,13 +1013,9 @@ function TeachingReviewQueuePanel({
               </Badge>
             </div>
             <p className="mt-2 text-sm text-foreground">{entry.teaching.principle}</p>
-            {entry.teaching.exampleLanguage.length ? (
-              <ul className="si-hint mt-2 flex flex-col gap-1 text-sm italic">
-                {entry.teaching.exampleLanguage.map((phrase, i) => (
-                  <li key={i}>"{phrase.text}"</li>
-                ))}
-              </ul>
-            ) : null}
+            {entry.teaching.exampleLanguage.length ? (<ul className="si-hint mt-2 flex flex-col gap-2 text-sm">{entry.teaching.exampleLanguage.map((phrase,i)=><li key={i} className="flex flex-wrap items-start gap-2"><Badge tone={phrase.kind === "exact_source_phrase" ? "quote" : "paraphrase"}>{phrase.kind === "exact_source_phrase" ? "EXACT SOURCE" : "PARAPHRASE"}</Badge><span className="italic">"{phrase.text}"</span></li>)}</ul>) : null}
+            {entry.teaching.whenToUse.length ? <p className="si-hint mt-2 text-sm"><b className="text-foreground">WHEN TO USE:</b> {entry.teaching.whenToUse.join(" · ")}</p> : null}
+            {entry.teaching.whenNotToUse.length ? <p className="si-hint mt-1 text-sm"><b className="text-foreground">WHEN NOT TO USE:</b> {entry.teaching.whenNotToUse.join(" · ")}</p> : null}
             {entry.source.title || entry.source.canonicalUrl ? (
               <p className="si-hint mt-1 text-sm">
                 {entry.source.title ?? "Source"}
@@ -1040,16 +1036,15 @@ function TeachingReviewQueuePanel({
                     </a>
                   </>
                 ) : null}
-                {entry.teaching.transcriptStartMs != null ? (
-                  <> · segment starts {Math.floor(entry.teaching.transcriptStartMs / 1000)}s</>
-                ) : null}
+                {entry.teaching.transcriptStartMs != null ? <> · evidence {Math.floor(entry.teaching.transcriptStartMs / 1000)}s{entry.teaching.transcriptEndMs != null ? `–${Math.floor(entry.teaching.transcriptEndMs / 1000)}s` : ""}</> : null}
               </p>
             ) : null}
             {entry.teaching.confidence != null ? (
               <p className="si-hint mt-1 text-sm">
-                Confidence: {entry.teaching.confidence.toFixed(2)}
+                Model extraction confidence: {entry.teaching.confidence.toFixed(2)}
               </p>
             ) : null}
+            <p className="si-hint mt-2 text-xs">Accepting this teaching approves source doctrine only. It does not create personal outcome evidence or accept any derived objection mapping; mappings remain independently reviewed in C. REVIEW QUEUE.</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
                 size="sm"
