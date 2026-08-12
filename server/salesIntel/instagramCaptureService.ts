@@ -27,7 +27,7 @@ import {
   VideoUnderstandingUnavailableError,
 } from "./videoUnderstanding";
 
-const activeProcesses = new Set<string>();
+import { enqueueInstagramCaptureJob } from "./instagramCaptureJobStore";
 
 export type InstagramCaptureReceipt = {
   artifactId: string;
@@ -80,23 +80,17 @@ export async function captureInstagramSalesIntelReference(input: {
   });
 }
 
-export function scheduleInstagramSalesIntelProcessing(input: {
+export async function scheduleInstagramSalesIntelProcessing(input: {
   sourceArtifactId: string;
   actorId: string;
-}): boolean {
-  if (activeProcesses.has(input.sourceArtifactId)) return false;
-  activeProcesses.add(input.sourceArtifactId);
-  setTimeout(() => {
-    void processInstagramSalesIntelCapture(input)
-      .catch(error => {
-        console.error("[Sales Intel] background Instagram capture failed", {
-          sourceArtifactId: input.sourceArtifactId,
-          message: error instanceof Error ? error.message.slice(0, 300) : "unknown error",
-        });
-      })
-      .finally(() => activeProcesses.delete(input.sourceArtifactId));
-  }, 0);
-  return true;
+}): Promise<boolean> {
+  const { scheduled } = await enqueueInstagramCaptureJob(input);
+  if (scheduled) {
+    void import("./instagramCaptureJobRunner")
+      .then(({ kickInstagramCaptureJobRunner }) => kickInstagramCaptureJobRunner())
+      .catch(error => console.warn("[Sales Intel] durable Instagram worker wake failed", error));
+  }
+  return scheduled;
 }
 
 const EXTRACTION_FAILURE_STATUSES = new Set<TranscriptExtractionStatus>([
@@ -311,7 +305,7 @@ export async function captureInstagramSalesIntel(input: {
   actorId: string;
 }): Promise<InstagramCaptureReceipt> {
   const { artifact, created } = await captureInstagramSalesIntelReference(input);
-  const processingScheduled = scheduleInstagramSalesIntelProcessing({
+  const processingScheduled = await scheduleInstagramSalesIntelProcessing({
     sourceArtifactId: artifact.id,
     actorId: input.actorId,
   });

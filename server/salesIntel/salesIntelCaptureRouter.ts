@@ -47,7 +47,7 @@ export const salesIntelCaptureRouter = router({
     .input(z.object({ sourceArtifactId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       await assertInstagramCaptureExists(input.sourceArtifactId);
-      const scheduled = scheduleInstagramSalesIntelProcessing({
+      const scheduled = await scheduleInstagramSalesIntelProcessing({
         sourceArtifactId: input.sourceArtifactId,
         actorId: ctx.user.openId,
       });

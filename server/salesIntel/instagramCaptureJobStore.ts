@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import mysql, { type RowDataPacket } from "mysql2/promise";
+import mysql, { type ResultSetHeader, type RowDataPacket } from "mysql2/promise";
 
 export const INSTAGRAM_CAPTURE_PIPELINE_VERSION = "instagram-media-to-teachings-v1";
 const JOB_TYPE = "instagram_media_to_teachings" as const;
@@ -160,7 +160,7 @@ export async function claimNextInstagramCaptureJob(input: {
 export async function completeInstagramCaptureJob(input: { id: string; workerId: string }): Promise<boolean> {
   const db = await connection();
   try {
-    const [result] = await db.execute<mysql.ResultSetHeader>(
+    const [result] = await db.execute<ResultSetHeader>(
       `UPDATE sales_intel_ingestion_jobs
        SET state='completed', completedAt=CURRENT_TIMESTAMP, leaseOwner=NULL, leaseExpiresAt=NULL,
            failureCode=NULL, failureMessage=NULL

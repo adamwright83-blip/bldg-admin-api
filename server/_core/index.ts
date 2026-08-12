@@ -777,6 +777,9 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    void import("../salesIntel/instagramCaptureJobRunner")
+      .then(({ startInstagramCaptureJobRunner }) => startInstagramCaptureJobRunner())
+      .catch(error => console.warn("[Sales Intel] durable Instagram job runner did not start", error));
   });
 }
 
