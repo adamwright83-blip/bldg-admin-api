@@ -139,6 +139,7 @@ describe.skipIf(!runDatabaseGate)("general teaching re-extraction from existing 
     const rows = await db.select().from(salesIntelTeachings).where(eq(salesIntelTeachings.sourceArtifactId, artifactId));
     expect(rows).toHaveLength(1);
     expect(rows[0].category).toBe("discovery");
+    expect(rows[0].reviewState).toBe("review_required");
     // No archetype/channel/exactObjection columns exist on this table at all —
     // the schema itself makes "no objection required" structurally true.
     expect(rows[0]).not.toHaveProperty("archetype");
@@ -183,7 +184,7 @@ describe.skipIf(!runDatabaseGate)("general teaching re-extraction from existing 
       .where(eq(salesIntelFrameworks.sourceArtifactId, artifactId));
     expect(frameworkRows).toHaveLength(1);
     expect(frameworkRows[0].archetype).toBe("ANCHOR");
-    expect(frameworkRows[0].reviewState).toBe("accepted"); // confidence 0.9 clears the existing auto-accept bar
+    expect(frameworkRows[0].reviewState).toBe("review_required");
 
     // The teaching and the derived framework are independently reviewable —
     // rejecting the teaching does not touch the framework's own review state.
@@ -200,7 +201,7 @@ describe.skipIf(!runDatabaseGate)("general teaching re-extraction from existing 
       .select()
       .from(salesIntelFrameworks)
       .where(eq(salesIntelFrameworks.id, frameworkRows[0].id));
-    expect(frameworkAfter[0].reviewState).toBe("accepted"); // unchanged
+    expect(frameworkAfter[0].reviewState).toBe("review_required"); // unchanged
   });
 
   it("a transcript that genuinely teaches nothing returns zero teachings, not an error", async () => {
@@ -319,7 +320,7 @@ describe.skipIf(!runDatabaseGate)("general teaching re-extraction from existing 
     await reextractGeneralTeachingsFromTranscripts({
       sourceArtifactId: artifactId,
       actorId: "test-admin",
-      extractor: fixedExtractor(() => [teaching({ confidence: 0.2 })]), // below the auto-accept bar -> review_required
+      extractor: fixedExtractor(() => [teaching({ confidence: 0.9 })]), // even high confidence remains review_required
     });
     const pending = await listTeachingsPendingReview();
     const ours = pending.find(t => t.sourceArtifactId === artifactId);
