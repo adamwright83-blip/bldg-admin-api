@@ -1,8 +1,5 @@
 @import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@500;600;700;800&display=swap");
 
-:root {
-  color-scheme: dark;
-}
 * {
   box-sizing: border-box;
 }
@@ -15,10 +12,13 @@ body,
 button {
   font: inherit;
 }
-body {
-  background: #080b10;
-}
 
+/* Scoped to this page's own shell only — this stylesheet is reached via an
+   eager (non-lazy) import chain (App -> Driver -> GoldlineDriverController
+   -> GoldlineHome), so anything set on bare `body`/`:root` here previously
+   leaked into every other route's global styles, including /sales-intel,
+   producing near-invisible dark-on-dark text on pages that never opted
+   into a dark theme. */
 .goldline-shell {
   width: 100%;
   min-height: 100dvh;
@@ -26,6 +26,7 @@ body {
   place-items: center;
   overflow: hidden;
   background: radial-gradient(circle at 50% 20%, #303841, #090c11 68%);
+  color-scheme: dark;
 }
 .goldline {
   position: relative;
