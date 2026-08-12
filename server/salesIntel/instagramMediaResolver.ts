@@ -25,7 +25,11 @@ export class InstagramMediaResolveFailedError extends Error {
   readonly code: string;
   readonly retryable: boolean;
 
-  constructor(message: string, code = "instagram_media_resolve_failed", retryable = true) {
+  constructor(
+    message: string,
+    code = "instagram_media_resolve_failed",
+    retryable = true
+  ) {
     super(message);
     this.name = "InstagramMediaResolveFailedError";
     this.code = code;
@@ -39,21 +43,17 @@ export interface InstagramMediaResolver {
   resolve(reelUrl: string): Promise<ResolvedInstagramMedia>;
 }
 
-type CobaltResponse =
-  | { status: "tunnel" | "redirect"; url: string; filename?: string }
-  | {
-      status: "picker";
-      picker?: Array<{ type?: string; url?: string; thumb?: string }>;
-    }
-  | {
-      status: "local-processing";
-      type?: string;
-      service?: string;
-      tunnel?: string[];
-      output?: { type?: string; filename?: string };
-    }
-  | { status: "error"; error?: { code?: string; context?: unknown } }
-  | { status?: string; [key: string]: unknown };
+export type CobaltResponse = {
+  status?: string;
+  url?: string;
+  filename?: string;
+  picker?: Array<{ type?: string; url?: string; thumb?: string }>;
+  type?: string;
+  service?: string;
+  tunnel?: string[];
+  output?: { type?: string; filename?: string };
+  error?: { code?: string; context?: unknown };
+};
 
 function normalizeCobaltBaseUrl(raw: string): URL {
   const url = new URL(raw.trim());
@@ -84,6 +84,13 @@ export function parseCobaltInstagramResponse(
   baseUrl: URL
 ): Pick<ResolvedInstagramMedia, "mediaUrl" | "filename" | "mimeType"> {
   if (body.status === "tunnel") {
+    if (!body.url) {
+      throw new InstagramMediaResolveFailedError(
+        "The media resolver returned a tunnel response without a URL.",
+        "instagram_media_bad_response",
+        true
+      );
+    }
     return {
       mediaUrl: cobaltTunnelUrl(body.url, baseUrl),
       filename: body.filename ?? null,
@@ -208,7 +215,9 @@ export class CobaltInstagramMediaResolver implements InstagramMediaResolver {
         timedOut
           ? `Instagram media resolver timed out after ${this.timeoutMs}ms`
           : "Instagram media resolver request failed",
-        timedOut ? "instagram_media_resolver_timeout" : "instagram_media_resolver_transport",
+        timedOut
+          ? "instagram_media_resolver_timeout"
+          : "instagram_media_resolver_transport",
         true
       );
     } finally {
