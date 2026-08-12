@@ -72,6 +72,31 @@ export class UnconfiguredVideoUnderstandingProvider
 
 export const VIDEO_ANALYSIS_VERSION = "sales-intel-video-analysis-v1";
 
+const GEMINI_VIDEO_TIMEOUT_MIN_MS = 60_000;
+const GEMINI_VIDEO_TIMEOUT_MAX_MS = 600_000;
+const GEMINI_VIDEO_TIMEOUT_DEFAULT_MS = 240_000;
+
+/**
+ * Video understanding genuinely takes minutes, not seconds — a bare 60s
+ * client deadline was killing every real request before Gemini could
+ * finish, and surfacing as an opaque "timed out" that looked identical to
+ * a real provider rejection. Configurable via `GEMINI_VIDEO_TIMEOUT_MS`,
+ * clamped to a sane range so a malformed or missing value can never leave
+ * the request effectively un-bounded or right back at the old 60s cliff.
+ */
+export function resolveGeminiVideoTimeoutMs(
+  raw = process.env.GEMINI_VIDEO_TIMEOUT_MS
+): number {
+  const trimmed = raw?.trim();
+  if (!trimmed) return GEMINI_VIDEO_TIMEOUT_DEFAULT_MS;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed <= 0) return GEMINI_VIDEO_TIMEOUT_DEFAULT_MS;
+  return Math.min(
+    GEMINI_VIDEO_TIMEOUT_MAX_MS,
+    Math.max(GEMINI_VIDEO_TIMEOUT_MIN_MS, Math.round(parsed))
+  );
+}
+
 const ANALYSIS_INSTRUCTION = [
   "Transcribe the spoken sales instruction in this video as faithfully as possible.",
   "Return only what is actually said. Do not summarize, embellish, or invent claims.",
@@ -96,7 +121,7 @@ export class GeminiVideoUnderstandingProvider
     private readonly model = process.env.GEMINI_VIDEO_MODEL?.trim() ||
       "gemini-2.0-flash",
     private readonly fetchImpl: typeof fetch = fetch,
-    private readonly timeoutMs = 60_000
+    private readonly timeoutMs = resolveGeminiVideoTimeoutMs()
   ) {}
 
   get configured(): boolean {
@@ -112,6 +137,7 @@ export class GeminiVideoUnderstandingProvider
       );
     }
 
+    const startedAt = Date.now();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     let response: Response;
@@ -141,11 +167,20 @@ export class GeminiVideoUnderstandingProvider
         }
       );
     } catch (error) {
+      const elapsedMs = Date.now() - startedAt;
+      const timedOut = error instanceof Error && error.name === "AbortError";
+      // Never log the API key or request headers — provider/model/timing only.
+      console.error("[Sales Intel] Gemini video analysis transport error", {
+        provider: this.key,
+        model: this.model,
+        elapsedMs,
+        timedOut,
+      });
       throw new VideoUnderstandingFailedError(
-        error instanceof Error && error.name === "AbortError"
-          ? "Video analysis timed out"
+        timedOut
+          ? `Video analysis timed out after ${this.timeoutMs}ms`
           : "Video analysis request failed",
-        "transport_error",
+        timedOut ? "video_analysis_timeout" : "transport_error",
         true
       );
     } finally {
@@ -153,8 +188,14 @@ export class GeminiVideoUnderstandingProvider
     }
 
     if (!response.ok) {
-      // 4xx generally means this video cannot be analyzed at all; 5xx is worth a retry.
+      // 4xx generally means this video cannot be analyzed at all; 5xx/429 is worth a retry.
       const retryable = response.status >= 500 || response.status === 429;
+      console.error("[Sales Intel] Gemini video analysis HTTP error", {
+        provider: this.key,
+        model: this.model,
+        elapsedMs: Date.now() - startedAt,
+        status: response.status,
+      });
       throw new VideoUnderstandingFailedError(
         `Video analysis provider returned ${response.status}`,
         `provider_http_${response.status}`,
