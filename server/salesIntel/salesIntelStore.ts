@@ -182,7 +182,8 @@ export async function upsertSourceArtifact(
     ingestedBy: input.ingestedBy,
   });
   const created = await getSourceArtifact(id);
-  if (!created) throw new Error("Sales Intel source artifact failed to persist");
+  if (!created)
+    throw new Error("Sales Intel source artifact failed to persist");
   return { artifact: created, created: true };
 }
 
@@ -288,7 +289,8 @@ export async function appendTranscript(input: {
 }): Promise<SalesIntelTranscript> {
   const database = await db();
   const existing = await listTranscripts(input.sourceArtifactId);
-  const version = existing.reduce((max, row) => Math.max(max, row.version), 0) + 1;
+  const version =
+    existing.reduce((max, row) => Math.max(max, row.version), 0) + 1;
   const id = randomUUID();
   await database.insert(salesIntelTranscripts).values({
     id,
@@ -436,7 +438,8 @@ export async function listFrameworksForSource(
   const conditions = [
     eq(salesIntelFrameworks.sourceArtifactId, sourceArtifactId),
   ];
-  if (options.activeOnly) conditions.push(eq(salesIntelFrameworks.active, true));
+  if (options.activeOnly)
+    conditions.push(eq(salesIntelFrameworks.active, true));
   const rows = await database
     .select()
     .from(salesIntelFrameworks)
@@ -470,7 +473,9 @@ export async function getFramework(
 }
 
 /** Every framework awaiting a human decision — the admin review queue (Slice 41). */
-export async function listFrameworksPendingReview(): Promise<SalesIntelFramework[]> {
+export async function listFrameworksPendingReview(): Promise<
+  SalesIntelFramework[]
+> {
   const database = await db();
   const rows = await database
     .select()
@@ -497,15 +502,30 @@ export async function countIndependentSourceSupport(input: {
   const rows = await database
     .selectDistinct({ sourceArtifactId: salesIntelFrameworks.sourceArtifactId })
     .from(salesIntelFrameworks)
+    .innerJoin(
+      salesIntelSourceArtifacts,
+      eq(salesIntelSourceArtifacts.id, salesIntelFrameworks.sourceArtifactId)
+    )
     .where(
       and(
         eq(salesIntelFrameworks.archetype, input.archetype),
         eq(salesIntelFrameworks.channel, input.channel),
         eq(salesIntelFrameworks.responseFamily, input.responseFamily),
-        eq(salesIntelFrameworks.active, true)
+        eq(salesIntelFrameworks.reviewState, "accepted"),
+        eq(salesIntelFrameworks.active, true),
+        eq(salesIntelSourceArtifacts.status, "extracted"),
+        inArray(salesIntelSourceArtifacts.sourceType, [
+          "manual_url",
+          "instagram",
+          "youtube",
+          "podcast",
+          "uploaded_transcript",
+          "other",
+        ])
       )
     );
-  return rows.filter(row => row.sourceArtifactId !== input.sourceArtifactId).length;
+  return rows.filter(row => row.sourceArtifactId !== input.sourceArtifactId)
+    .length;
 }
 
 /**
@@ -520,25 +540,25 @@ export async function queryDriverVisibleFrameworks(input: {
   includeSyntheticFixtures?: boolean;
 }): Promise<SalesIntelFramework[]> {
   const database = await db();
-  const allowedSourceTypes: SalesIntelSourceType[] = input
-    .includeSyntheticFixtures
-    ? [
-        "manual_url",
-        "instagram",
-        "youtube",
-        "podcast",
-        "uploaded_transcript",
-        "other",
-        "test_fixture",
-      ]
-    : [
-        "manual_url",
-        "instagram",
-        "youtube",
-        "podcast",
-        "uploaded_transcript",
-        "other",
-      ];
+  const allowedSourceTypes: SalesIntelSourceType[] =
+    input.includeSyntheticFixtures
+      ? [
+          "manual_url",
+          "instagram",
+          "youtube",
+          "podcast",
+          "uploaded_transcript",
+          "other",
+          "test_fixture",
+        ]
+      : [
+          "manual_url",
+          "instagram",
+          "youtube",
+          "podcast",
+          "uploaded_transcript",
+          "other",
+        ];
 
   const rows = await database
     .select({ framework: salesIntelFrameworks })
@@ -564,7 +584,9 @@ export async function queryDriverVisibleFrameworks(input: {
 }
 
 /** Every accepted, active, driver-eligible framework — the corpus coverage intelligence input (Slice 49). */
-export async function listAllAcceptedFrameworks(): Promise<SalesIntelFramework[]> {
+export async function listAllAcceptedFrameworks(): Promise<
+  SalesIntelFramework[]
+> {
   const database = await db();
   const rows = await database
     .select({ framework: salesIntelFrameworks })

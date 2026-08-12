@@ -1,48 +1,39 @@
-/**
- * Goldline effectiveness — the compact admin view answering one question:
- * does playing Goldline correlate with more real business-growth behavior?
- *
- * Reuses `dayforge_product_events` directly rather than building a second
- * analytics store. All counts are within-tenant, coarse, and phrased as
- * observation ("during sessions") — never as a causal or percentage claim.
- * There is no experimental control group here, so nothing stronger than
- * "observed" or "associated" language is used anywhere this feeds the UI.
- */
 import { and, eq, gte, sql } from "drizzle-orm";
 import { dayforgeProductEvents } from "../../drizzle/schema";
 import { getDb } from "../db";
-
 export type GoldlineEffectivenessSummary = {
   windowDays: number;
   play: {
     sessionsStarted: number;
+    missionsApproached: number;
     missionsEngaged: number;
     encountersResolved: number;
   };
   businessAction: {
     weaponsSelected: number;
+    weaponsUsed: number;
+    coldCallTargetsStarted: number;
     coldCallOutcomesSaved: number;
+  };
+  trustedBusinessOutcome: {
+    visitsCompleted: number;
     followUpsCreated: number;
+    accountsWon: number;
+    accountsLost: number;
   };
-  missionProgression: {
-    mutationsCreated: number;
-    verifiedCaptures: number;
-  };
-  recovery: {
-    mutationsFollowed: number;
-  };
+  missionProgression: { mutationsCreated: number; verifiedCaptures: number };
+  recovery: { mutationsFollowed: number };
   scoutExpansion: {
     runsStarted: number;
     discoveriesCreated: number;
     missionsCreated: number;
   };
 };
-
-async function countEvent(input: {
+async function countEvent(i: {
   tenantId: string;
   eventName: string;
   since: Date;
-}): Promise<number> {
+}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [row] = await db
@@ -50,30 +41,34 @@ async function countEvent(input: {
     .from(dayforgeProductEvents)
     .where(
       and(
-        eq(dayforgeProductEvents.tenantId, input.tenantId),
-        eq(dayforgeProductEvents.eventName, input.eventName),
-        gte(dayforgeProductEvents.occurredAt, input.since)
+        eq(dayforgeProductEvents.tenantId, i.tenantId),
+        eq(dayforgeProductEvents.eventName, i.eventName),
+        gte(dayforgeProductEvents.occurredAt, i.since)
       )
     );
   return Number(row?.count ?? 0);
 }
-
-export async function getGoldlineEffectivenessSummary(input: {
+export async function getGoldlineEffectivenessSummary(i: {
   tenantId: string;
   windowDays?: number;
 }): Promise<GoldlineEffectivenessSummary> {
-  const windowDays = input.windowDays ?? 30;
-  const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
-  const count = (eventName: string) =>
-    countEvent({ tenantId: input.tenantId, eventName, since });
-
+  const windowDays = i.windowDays ?? 30,
+    since = new Date(Date.now() - windowDays * 86400000),
+    c = (eventName: string) =>
+      countEvent({ tenantId: i.tenantId, eventName, since });
   const [
     sessionsStarted,
+    missionsApproached,
     missionsEngaged,
     encountersResolved,
     weaponsSelected,
+    weaponsUsed,
+    coldCallTargetsStarted,
     coldCallOutcomesSaved,
+    visitsCompleted,
     followUpsCreated,
+    accountsWon,
+    accountsLost,
     mutationsCreated,
     verifiedCaptures,
     mutationsFollowed,
@@ -81,24 +76,45 @@ export async function getGoldlineEffectivenessSummary(input: {
     discoveriesCreated,
     missionsCreated,
   ] = await Promise.all([
-    count("goldline_session_started"),
-    count("mission_engaged"),
-    count("encounter_resolved"),
-    count("armory_weapon_selected"),
-    count("cold_call_outcome_saved"),
-    count("follow_up_created"),
-    count("mutation_created"),
-    count("verified_capture"),
-    count("mutation_followed"),
-    count("scout_run_started"),
-    count("scout_discovery_created"),
-    count("scout_mission_created"),
+    c("goldline_session_started"),
+    c("mission_approached"),
+    c("mission_engaged"),
+    c("encounter_resolved"),
+    c("armory_weapon_selected"),
+    c("armory_weapon_used"),
+    c("cold_call_target_started"),
+    c("cold_call_outcome_saved"),
+    c("visit_completed"),
+    c("follow_up_created"),
+    c("account_won"),
+    c("account_lost"),
+    c("mutation_created"),
+    c("verified_capture"),
+    c("mutation_followed"),
+    c("scout_run_started"),
+    c("scout_discovery_created"),
+    c("scout_mission_created"),
   ]);
-
   return {
     windowDays,
-    play: { sessionsStarted, missionsEngaged, encountersResolved },
-    businessAction: { weaponsSelected, coldCallOutcomesSaved, followUpsCreated },
+    play: {
+      sessionsStarted,
+      missionsApproached,
+      missionsEngaged,
+      encountersResolved,
+    },
+    businessAction: {
+      weaponsSelected,
+      weaponsUsed,
+      coldCallTargetsStarted,
+      coldCallOutcomesSaved,
+    },
+    trustedBusinessOutcome: {
+      visitsCompleted,
+      followUpsCreated,
+      accountsWon,
+      accountsLost,
+    },
     missionProgression: { mutationsCreated, verifiedCaptures },
     recovery: { mutationsFollowed },
     scoutExpansion: { runsStarted, discoveriesCreated, missionsCreated },

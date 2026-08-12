@@ -68,6 +68,7 @@ export const DAYFORGE_PRODUCT_EVENT_NAMES = [
   "mutation_created",
   "mutation_followed",
   "cold_call_batch_started",
+  "cold_call_target_started",
   "cold_call_outcome_saved",
   "cold_call_chain_continued",
   "scout_run_started",
@@ -250,7 +251,11 @@ export interface DayforgeProductEventPropertyMap {
   goldline_session_ended: { sessionId: string; durationMs: number };
   mission_seen: { sessionId: string; missionState: string };
   mission_approached: { sessionId: string; missionState: string };
-  mission_engaged: { sessionId: string; missionState: string; archetype: string };
+  mission_engaged: {
+    sessionId: string;
+    missionState: string;
+    archetype: string;
+  };
   traversal_jump: { sessionId: string };
   traversal_climb: { sessionId: string };
   traversal_vault: { sessionId: string };
@@ -269,6 +274,7 @@ export interface DayforgeProductEventPropertyMap {
   mutation_created: { sessionId: string; mutationType: string };
   mutation_followed: { sessionId: string; mutationType: string };
   cold_call_batch_started: { sessionId: string; targetCount: number };
+  cold_call_target_started: { sessionId: string };
   cold_call_outcome_saved: { sessionId: string; outcome: string };
   cold_call_chain_continued: { sessionId: string; combo: number };
   scout_run_started: { sessionId: string };
@@ -362,6 +368,7 @@ export const DAYFORGE_PRODUCT_EVENT_PROPERTY_KEYS = {
   mutation_created: ["sessionId", "mutationType"],
   mutation_followed: ["sessionId", "mutationType"],
   cold_call_batch_started: ["sessionId", "targetCount"],
+  cold_call_target_started: ["sessionId"],
   cold_call_outcome_saved: ["sessionId", "outcome"],
   cold_call_chain_continued: ["sessionId", "combo"],
   scout_run_started: ["sessionId"],
@@ -473,6 +480,7 @@ export const GOLDLINE_CLIENT_EVENT_NAMES = [
   "mutation_created",
   "mutation_followed",
   "cold_call_batch_started",
+  "cold_call_target_started",
   "cold_call_outcome_saved",
   "cold_call_chain_continued",
   "scout_run_started",
@@ -482,7 +490,8 @@ export const GOLDLINE_CLIENT_EVENT_NAMES = [
   "visual_quality_adjusted",
 ] as const satisfies readonly DayforgeProductEventName[];
 
-export type GoldlineClientEventName = (typeof GOLDLINE_CLIENT_EVENT_NAMES)[number];
+export type GoldlineClientEventName =
+  (typeof GOLDLINE_CLIENT_EVENT_NAMES)[number];
 
 export function isGoldlineClientEventName(
   value: string

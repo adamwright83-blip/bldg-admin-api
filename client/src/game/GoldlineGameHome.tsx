@@ -34,7 +34,10 @@ import {
   coolingLabel,
   gameWorldControlPercent,
 } from "../../../shared/driverGameWorld";
-import type { ColdCallBatch, ColdCallTarget } from "../../../shared/coldCallBurst";
+import type {
+  ColdCallBatch,
+  ColdCallTarget,
+} from "../../../shared/coldCallBurst";
 import type {
   CapabilityEvaluation,
   ScoutReport,
@@ -58,13 +61,20 @@ import {
 } from "./state/WorldProjection";
 import { selectMissionDirector } from "./state/MissionDirector";
 import { landmarkForMission } from "../../../shared/worldSemantics";
-import { networkStatusLabel, useNetworkStatus } from "./session/useNetworkStatus";
+import {
+  networkStatusLabel,
+  useNetworkStatus,
+} from "./session/useNetworkStatus";
 import { loadCheckpoint, saveCheckpoint } from "./session/checkpointStorage";
 import { useVisualViewportSize } from "./session/useVisualViewportSize";
 import { registerGoldlineServiceWorker } from "./pwa/registerServiceWorker";
 import { installPwaHeadTags } from "./pwa/installPwaHead";
 import { isIOS, isStandalone } from "./pwa/pwaEnvironment";
-import { hasInstallPrompt, subscribeInstallPrompt, triggerInstallPrompt } from "./pwa/installPrompt";
+import {
+  hasInstallPrompt,
+  subscribeInstallPrompt,
+  triggerInstallPrompt,
+} from "./pwa/installPrompt";
 import { getGoldlineSessionId } from "./analytics/goldlineSession";
 import type { GoldlineEventEmitter } from "./analytics/emitGoldlineEvent";
 import { getAudioManager } from "./audio/AudioManager";
@@ -223,6 +233,7 @@ function Joystick(props: {
     <div
       ref={baseRef}
       className={`game-joystick${props.disabled ? " is-disabled" : ""}`}
+      data-testid="goldline-joystick"
       aria-label="Move Operator"
       role="application"
       onPointerDown={event => {
@@ -243,7 +254,9 @@ function Joystick(props: {
         }}
       />
       <span>MOVE</span>
-      {props.showMovementHint ? <em className="joystick-hint" aria-hidden="true" /> : null}
+      {props.showMovementHint ? (
+        <em className="joystick-hint" aria-hidden="true" />
+      ) : null}
     </div>
   );
 }
@@ -291,7 +304,10 @@ function SignalWindow(props: {
   }, [props.active, props.resetKey]);
 
   return (
-    <div className="signal-window" aria-label={`${(remaining / 1000).toFixed(1)} seconds remaining`}>
+    <div
+      className="signal-window"
+      aria-label={`${(remaining / 1000).toFixed(1)} seconds remaining`}
+    >
       <span style={{ transform: `scaleX(${remaining / 6200})` }} />
       <b>SIGNAL OVERRIDE {(remaining / 1000).toFixed(1)}s</b>
     </div>
@@ -315,9 +331,15 @@ function MissionFork(props: {
   }
   return (
     <aside className={`mission-fork${props.expanded ? " is-expanded" : ""}`}>
-      <button className="mission-fork-toggle" onClick={props.onToggle} aria-expanded={props.expanded}>
+      <button
+        className="mission-fork-toggle"
+        onClick={props.onToggle}
+        aria-expanded={props.expanded}
+      >
         <Target />
-        <span>{props.expanded ? "COLLAPSE" : `${props.missions.length} OBJECTIVES`}</span>
+        <span>
+          {props.expanded ? "COLLAPSE" : `${props.missions.length} OBJECTIVES`}
+        </span>
       </button>
       <div className="mission-fork-icons">
         {props.missions.map((mission, index) => (
@@ -370,7 +392,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [shellEl, setShellEl] = useState<HTMLElement | null>(null);
   const runtimeRef = useRef<GoldlineGame | null>(null);
   const weakPointRef = useRef<HTMLButtonElement>(null);
-  const gestureStart = useRef<{ x: number; y: number; at: number } | null>(null);
+  const gestureStart = useRef<{ x: number; y: number; at: number } | null>(
+    null
+  );
   const [runtimeFailed, setRuntimeFailed] = useState(false);
   const [runtimeReady, setRuntimeReady] = useState(false);
   const [action, setAction] = useState<CorridorAction | null>(null);
@@ -379,11 +403,13 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [progress, setProgress] = useState(0.06);
   const [objectivesExpanded, setObjectivesExpanded] = useState(false);
   const [utilityPanel, setUtilityPanel] = useState<UtilityPanel>(null);
-  const [selectedAbility, setSelectedAbility] = useState<EquippedAbility | null>(null);
+  const [selectedAbility, setSelectedAbility] =
+    useState<EquippedAbility | null>(null);
   const [signalReset, setSignalReset] = useState(0);
   const [shield, setShield] = useState(3);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [arcadeResolution, setArcadeResolution] = useState<ArcadeResolution>(null);
+  const [arcadeResolution, setArcadeResolution] =
+    useState<ArcadeResolution>(null);
   const [view, setView] = useState<GameView>("explore");
   const [coldCallOpen, setColdCallOpen] = useState(false);
   const [scoutOpen, setScoutOpen] = useState(false);
@@ -396,15 +422,25 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     hasOnboardingMilestone("movement")
   );
   const [onboardingToast, setOnboardingToast] = useState<string | null>(null);
-  const onboardingToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onboardingToastTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const showOnboardingToast = useRef((message: string) => {
     setOnboardingToast(message);
-    if (onboardingToastTimer.current) clearTimeout(onboardingToastTimer.current);
-    onboardingToastTimer.current = setTimeout(() => setOnboardingToast(null), 1800);
+    if (onboardingToastTimer.current)
+      clearTimeout(onboardingToastTimer.current);
+    onboardingToastTimer.current = setTimeout(
+      () => setOnboardingToast(null),
+      1800
+    );
   }).current;
-  useEffect(() => () => {
-    if (onboardingToastTimer.current) clearTimeout(onboardingToastTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (onboardingToastTimer.current)
+        clearTimeout(onboardingToastTimer.current);
+    },
+    []
+  );
   const completeMilestone = useRef((milestone: OnboardingMilestone) => {
     markOnboardingMilestone(milestone);
     if (milestone === "movement") setMovementLearned(true);
@@ -414,7 +450,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     emit?.({
       eventName: "goldline_session_started",
       sessionId: sessionIdRef.current,
-      properties: { sessionId: sessionIdRef.current, entryPoint: "goldline_home" },
+      properties: {
+        sessionId: sessionIdRef.current,
+        entryPoint: "goldline_home",
+      },
     });
     return () => {
       emit?.({
@@ -430,21 +469,27 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [audioMuted, setAudioMuted] = useState(() => getAudioManager().isMuted);
-  const [coldCallPortalState, setColdCallPortalState] = useState<"hidden" | "label" | "engage">("hidden");
+  const [coldCallPortalState, setColdCallPortalState] = useState<
+    "hidden" | "label" | "engage"
+  >("hidden");
 
   useEffect(() => {
     const audio = getAudioManager();
     audio.primeOnGesture();
     const handleVisibility = () => audio.setBackgrounded(document.hidden);
     document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
-  const [canShowInstallPrompt, setCanShowInstallPrompt] = useState(hasInstallPrompt);
+  const [canShowInstallPrompt, setCanShowInstallPrompt] =
+    useState(hasInstallPrompt);
   useEffect(() => {
     const removeHeadTags = installPwaHeadTags();
     registerGoldlineServiceWorker();
-    const unsubscribe = subscribeInstallPrompt(() => setCanShowInstallPrompt(hasInstallPrompt()));
+    const unsubscribe = subscribeInstallPrompt(() =>
+      setCanShowInstallPrompt(hasInstallPrompt())
+    );
     return () => {
       removeHeadTags();
       unsubscribe();
@@ -488,7 +533,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     () => projectPersistentHistory(props.worldNodes),
     [props.worldNodes]
   );
-  const allMissions = useMemo(() => [...missions, ...history], [history, missions]);
+  const allMissions = useMemo(
+    () => [...missions, ...history],
+    [history, missions]
+  );
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const activeMission =
     allMissions.find(mission => mission.key === activeKey) ??
@@ -511,7 +559,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     now: new Date(),
     selectedDate: props.selectedDate,
     nextCommitmentAt: props.today?.nextFixedCommitment?.scheduledAt,
-    fixedStopCount: (props.pickups?.length ?? 0) + (props.deliveries?.length ?? 0),
+    fixedStopCount:
+      (props.pickups?.length ?? 0) + (props.deliveries?.length ?? 0),
     hasMission: Boolean(props.openChannelMission),
   });
 
@@ -531,7 +580,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               eventName: "mission_approached",
               sessionId: sessionIdRef.current,
               missionId: mission.missionId,
-              properties: { sessionId: sessionIdRef.current, missionState: mission.state },
+              properties: {
+                sessionId: sessionIdRef.current,
+                missionState: mission.state,
+              },
             });
           }
         }
@@ -546,7 +598,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       },
       onTraversalAction: action => {
         const eventName =
-          action === "JUMP" ? "traversal_jump" : action === "CLIMB" ? "traversal_climb" : "traversal_vault";
+          action === "JUMP"
+            ? "traversal_jump"
+            : action === "CLIMB"
+              ? "traversal_climb"
+              : "traversal_vault";
         emit?.({
           eventName,
           sessionId: sessionIdRef.current,
@@ -603,8 +659,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         initialBranch: checkpoint?.branch,
       })
       .then(started => {
-      if (started) setRuntimeReady(true);
-    });
+        if (started) setRuntimeReady(true);
+      });
     return () => {
       runtimeRef.current = null;
       game.destroy();
@@ -619,7 +675,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         eventName: "mission_seen",
         sessionId: sessionIdRef.current,
         missionId: activeMission.missionId,
-        properties: { sessionId: sessionIdRef.current, missionState: activeMission.state },
+        properties: {
+          sessionId: sessionIdRef.current,
+          missionState: activeMission.state,
+        },
       });
     }
     runtimeRef.current?.setWorldState(activeMission.state);
@@ -643,14 +702,17 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         properties: {
           sessionId: sessionIdRef.current,
           estimatedValueBand:
-            activeMission.verifiedAnnualValueCents != null ? "verified" : "unverified",
+            activeMission.verifiedAnnualValueCents != null
+              ? "verified"
+              : "unverified",
         },
       });
       completeMilestone("first_business_resolution");
     } else if (activeMission.state === "contested") {
       setView("rekindle");
       completeMilestone("first_business_resolution");
-    } else if (activeMission.state === "recovery_active") setView("recovery_active");
+    } else if (activeMission.state === "recovery_active")
+      setView("recovery_active");
     else if (activeMission.state === "closed") {
       setView("closed");
       completeMilestone("first_business_resolution");
@@ -671,7 +733,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       eventName: "scout_discovery_created",
       sessionId: sessionIdRef.current,
       missionId: null,
-      properties: { sessionId: sessionIdRef.current, discoveryCount: newDiscoveries.length },
+      properties: {
+        sessionId: sessionIdRef.current,
+        discoveryCount: newDiscoveries.length,
+      },
     });
     // Each discovery row is 1:1 with a real backend-created mission
     // (expansionScoutService persists discovery + mission together), so this
@@ -692,7 +757,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     if (!activeMission) return;
     if (activeMission.state === "captured") return setView("captured");
     if (activeMission.state === "contested") return setView("rekindle");
-    if (activeMission.state === "recovery_active") return setView("recovery_active");
+    if (activeMission.state === "recovery_active")
+      return setView("recovery_active");
     if (activeMission.state === "closed") return setView("closed");
     if (!activeMission.missionId) {
       const move = props.moves?.recommendedMoves.find(
@@ -711,7 +777,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       eventName: "mission_engaged",
       sessionId: sessionIdRef.current,
       missionId: activeMission.missionId,
-      properties: { sessionId: sessionIdRef.current, missionState: activeMission.state, archetype },
+      properties: {
+        sessionId: sessionIdRef.current,
+        missionState: activeMission.state,
+        archetype,
+      },
     });
     completeMilestone("first_mission_engaged");
     setEncounterArchetype(archetype);
@@ -743,7 +813,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               eventName: "armory_weapon_viewed",
               sessionId: sessionIdRef.current,
               missionId: activeMission.missionId,
-              properties: { sessionId: sessionIdRef.current, provenanceKind: weapon.provenance.type },
+              properties: {
+                sessionId: sessionIdRef.current,
+                provenanceKind: weapon.provenance.type,
+              },
             });
           }
         })
@@ -771,7 +844,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       eventName: "armory_weapon_selected",
       sessionId: sessionIdRef.current,
       missionId: activeMission?.missionId ?? null,
-      properties: { sessionId: sessionIdRef.current, provenanceKind: weapon.provenance.type },
+      properties: {
+        sessionId: sessionIdRef.current,
+        provenanceKind: weapon.provenance.type,
+      },
     });
     completeMilestone("first_armory_choice");
     if (!props.onRecordWeaponUsage || !activeMission?.missionId) return;
@@ -795,7 +871,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           eventName: "armory_weapon_used",
           sessionId: sessionIdRef.current,
           missionId: activeMission.missionId,
-          properties: { sessionId: sessionIdRef.current, provenanceKind: weapon.provenance.type },
+          properties: {
+            sessionId: sessionIdRef.current,
+            provenanceKind: weapon.provenance.type,
+          },
         });
       })
       .catch(() => {
@@ -803,14 +882,30 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       });
   }
 
-  function handleColdCallComplete(input: Parameters<GoldlineGameHomeProps["onCompleteColdCall"]>[0]) {
-    emit?.({
-      eventName: "cold_call_outcome_saved",
-      sessionId: sessionIdRef.current,
-      missionId: null,
-      properties: { sessionId: sessionIdRef.current, outcome: input.outcome },
+  function handleColdCallStart(target: ColdCallTarget) {
+    return props.onStartColdCall(target).then(batch => {
+      emit?.({
+        eventName: "cold_call_target_started",
+        sessionId: sessionIdRef.current,
+        missionId: target.missionId,
+        properties: { sessionId: sessionIdRef.current },
+      });
+      return batch;
     });
-    return props.onCompleteColdCall(input);
+  }
+
+  function handleColdCallComplete(
+    input: Parameters<GoldlineGameHomeProps["onCompleteColdCall"]>[0]
+  ) {
+    return props.onCompleteColdCall(input).then(batch => {
+      emit?.({
+        eventName: "cold_call_outcome_saved",
+        sessionId: sessionIdRef.current,
+        missionId: input.target.missionId,
+        properties: { sessionId: sessionIdRef.current, outcome: input.outcome },
+      });
+      return batch;
+    });
   }
 
   function handleColdCallSelectChain(target: ColdCallTarget) {
@@ -837,7 +932,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
 
   function handleEncounterResolved(resolution: EncounterResolution) {
     setFeedback(resolution.feedback);
-    setArcadeResolution(resolution.performance === "clean" ? "breached" : "miss");
+    setArcadeResolution(
+      resolution.performance === "clean" ? "breached" : "miss"
+    );
     setView("awaiting_business_result");
     emit?.({
       eventName: "encounter_resolved",
@@ -884,7 +981,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       event.clientX - start.x,
       event.clientY - start.y
     );
-    const deliberateInput = inside && (gestureDistance > 18 || performance.now() - start.at < 360);
+    const deliberateInput =
+      inside && (gestureDistance > 18 || performance.now() - start.at < 360);
     if (!deliberateInput) {
       setArcadeResolution("miss");
       setFeedback("MISS — SIGNAL SKIPPED THE WEAK POINT");
@@ -896,7 +994,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     const nextShield = Math.max(0, shield - damage);
     setShield(nextShield);
     setArcadeResolution(nextShield === 0 ? "breached" : "hit");
-    setFeedback(nextShield === 0 ? "BREACH — ARCADE OPENING CREATED" : `HIT — SHIELD ${nextShield}/3`);
+    setFeedback(
+      nextShield === 0
+        ? "BREACH — ARCADE OPENING CREATED"
+        : `HIT — SHIELD ${nextShield}/3`
+    );
     getAudioManager().play("weak_point_hit");
     arcadeFeedback();
     if (nextShield === 0) {
@@ -921,11 +1023,21 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   useVisualViewportSize(shellEl);
 
   return (
-    <main className="playable-goldline-shell" ref={setShellEl}>
-      <section className={`playable-goldline is-${view}`} aria-label="Goldline playable field world">
+    <main
+      className="playable-goldline-shell"
+      ref={setShellEl}
+      data-testid="goldline-shell"
+    >
+      <section
+        className={`playable-goldline is-${view}`}
+        aria-label="Goldline playable field world"
+        data-testid="goldline-world"
+      >
         <div ref={hostRef} className="goldline-canvas-host" />
         {!runtimeReady ? (
-          <div className="game-loading"><Loader2 /> ENTERING TERRITORY · SYNCING FIELD…</div>
+          <div className="game-loading">
+            <Loader2 /> ENTERING TERRITORY · SYNCING FIELD…
+          </div>
         ) : null}
         <div className="game-atmosphere" aria-hidden="true" />
         {networkStatus === "offline" ? (
@@ -935,13 +1047,25 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         ) : null}
 
         <header className="game-topbar">
-          <button onClick={() => setUtilityPanel("menu")} aria-label="Open field utilities"><Menu /></button>
+          <button
+            onClick={() => setUtilityPanel("menu")}
+            aria-label="Open field utilities"
+          >
+            <Menu />
+          </button>
           <div>
-            <span><Radio /> FIELD LINK</span>
+            <span>
+              <Radio /> FIELD LINK
+            </span>
             <b>{activeMission?.name ?? "NO ACTIVE MISSION"}</b>
             <small>STATIONARY PLAY · TEMP • INSIDE GAME LOOP</small>
           </div>
-          <button onClick={() => setUtilityPanel("objectives")} aria-label="Open objectives"><Target /></button>
+          <button
+            onClick={() => setUtilityPanel("objectives")}
+            aria-label="Open objectives"
+          >
+            <Target />
+          </button>
         </header>
 
         <MissionFork
@@ -953,10 +1077,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         />
 
         {view === "explore" && !coldCallOpen && !scoutOpen ? (
-          <aside className="world-history-ribbon" aria-label="Persistent world history">
+          <aside
+            className="world-history-ribbon"
+            aria-label="Persistent world history"
+          >
             <span>
               <small>PERSISTENT WORLD HISTORY</small>
-              <b title="Game progression only — not market share or ownership">WORLD CONTROL {gameWorldControlPercent(props.worldNodes ?? [])}%</b>
+              <b title="Game progression only — not market share or ownership">
+                WORLD CONTROL {gameWorldControlPercent(props.worldNodes ?? [])}%
+              </b>
             </span>
             <div>
               {history.slice(0, 4).map(mission => (
@@ -965,13 +1094,17 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                   className={`is-${mission.state}`}
                   onClick={() => {
                     setActiveKey(mission.key);
-                    setView(mission.state === "captured" ? "captured" : "closed");
+                    setView(
+                      mission.state === "captured" ? "captured" : "closed"
+                    );
                   }}
                 >
                   {mission.state === "captured" ? "◆" : "×"} {mission.name}
                 </button>
               ))}
-              {!history.length ? <small>NO RESOLVED TERRITORY YET</small> : null}
+              {!history.length ? (
+                <small>NO RESOLVED TERRITORY YET</small>
+              ) : null}
             </div>
           </aside>
         ) : null}
@@ -980,13 +1113,19 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           <>
             <div className="corridor-status">
               <span>{branchCopy(branch)}</span>
-              <i><b style={{ width: `${Math.round(progress * 100)}%` }} /></i>
+              <i>
+                <b style={{ width: `${Math.round(progress * 100)}%` }} />
+              </i>
             </div>
             {branch === "intel" && progress > 0.38 ? (
-              <div className="intel-pickup"><Sparkles /> ENCOUNTER PREP REVEALED</div>
+              <div className="intel-pickup">
+                <Sparkles /> ENCOUNTER PREP REVEALED
+              </div>
             ) : null}
             {onboardingToast ? (
-              <div className="onboarding-toast" role="status">{onboardingToast}</div>
+              <div className="onboarding-toast" role="status">
+                {onboardingToast}
+              </div>
             ) : null}
             <Joystick
               disabled={false}
@@ -996,17 +1135,28 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             />
             <div className="context-actions">
               {action ? (
-                <button className={`is-${action.toLowerCase()}`} onClick={performAction}>
+                <button
+                  className={`is-${action.toLowerCase()}`}
+                  onClick={performAction}
+                >
                   <Footprints />
-                  <span><b>{action}</b><small>{actionLabel}</small></span>
+                  <span>
+                    <b>{action}</b>
+                    <small>{actionLabel}</small>
+                  </span>
                 </button>
               ) : (
-                <div className="action-awaiting"><Route /><span>MOVE TO NEXT ACTION ZONE</span></div>
+                <div className="action-awaiting">
+                  <Route />
+                  <span>MOVE TO NEXT ACTION ZONE</span>
+                </div>
               )}
             </div>
             <button
               className={`cold-call-entry is-portal-${coldCallPortalState}`}
-              disabled={!props.coldCallBatch && props.coldCallEligibleCount === 0}
+              disabled={
+                !props.coldCallBatch && props.coldCallEligibleCount === 0
+              }
               onClick={async () => {
                 if (!props.coldCallBatch) {
                   const created = await props.onCreateColdCall();
@@ -1015,7 +1165,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                     eventName: "cold_call_batch_started",
                     sessionId: sessionIdRef.current,
                     missionId: null,
-                    properties: { sessionId: sessionIdRef.current, targetCount: created.totalTargets },
+                    properties: {
+                      sessionId: sessionIdRef.current,
+                      targetCount: created.totalTargets,
+                    },
                   });
                 }
                 setColdCallOpen(true);
@@ -1029,7 +1182,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                     ? `${props.coldCallBatch.totalTargets - props.coldCallBatch.completedCount} REAL TARGETS REMAIN`
                     : props.coldCallEligibleCount
                       ? `${props.coldCallEligibleCount} REAL TARGETS READY`
-                      : props.coldCallEmptyReason ?? "NO ELIGIBLE TARGETS"}
+                      : (props.coldCallEmptyReason ?? "NO ELIGIBLE TARGETS")}
                 </small>
               </span>
             </button>
@@ -1058,13 +1211,24 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               </div>
               <div className="shield-readout">
                 <b>SHIELD {shield}/3</b>
-                <span>{[0, 1, 2].map(index => <Shield key={index} className={index < shield ? "is-live" : ""} />)}</span>
+                <span>
+                  {[0, 1, 2].map(index => (
+                    <Shield
+                      key={index}
+                      className={index < shield ? "is-live" : ""}
+                    />
+                  ))}
+                </span>
               </div>
             </header>
             <div
               className={`anchor-target-field${selectedAbility ? " is-armed" : ""}`}
               onPointerDown={event => {
-                gestureStart.current = { x: event.clientX, y: event.clientY, at: performance.now() };
+                gestureStart.current = {
+                  x: event.clientX,
+                  y: event.clientY,
+                  at: performance.now(),
+                };
                 event.currentTarget.setPointerCapture(event.pointerId);
               }}
               onPointerUp={resolveGesture}
@@ -1075,13 +1239,25 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 style={{ width: abilitySize, height: abilitySize }}
                 aria-label="Weak point — tap or flick selected ability here"
               >
-                <span><Crosshair /></span>
+                <span>
+                  <Crosshair />
+                </span>
               </button>
               <div className="weak-point-copy">
                 <b>WEAK POINT · TAP / FLICK ABILITY</b>
-                <small>{selectedAbility ? `${selectedAbility.fit.toUpperCase()} FIT · ${selectedAbility.fitReason}` : "CHOOSE AN ARMORY ABILITY FIRST"}</small>
+                <small>
+                  {selectedAbility
+                    ? `${selectedAbility.fit.toUpperCase()} FIT · ${selectedAbility.fitReason}`
+                    : "CHOOSE AN ARMORY ABILITY FIRST"}
+                </small>
               </div>
-              {feedback ? <div className={`encounter-feedback is-${arcadeResolution ?? "info"}`}>{feedback}</div> : null}
+              {feedback ? (
+                <div
+                  className={`encounter-feedback is-${arcadeResolution ?? "info"}`}
+                >
+                  {feedback}
+                </div>
+              ) : null}
             </div>
             <div className="ability-loadout" aria-label="Armory abilities">
               {equippedAbilities.map(ability => (
@@ -1095,7 +1271,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                     setSignalReset(current => current + 1);
                   }}
                 >
-                  <small>{ability.fit} fit · {ability.provenance.replaceAll("_", " ")}</small>
+                  <small>
+                    {ability.fit} fit ·{" "}
+                    {ability.provenance.replaceAll("_", " ")}
+                  </small>
                   <b>{ability.title}</b>
                   <span>{ability.response}</span>
                 </button>
@@ -1103,9 +1282,22 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             </div>
             {view === "awaiting_business_result" ? (
               <div className="business-resolution-gate">
-                <b>{arcadeResolution === "breached" ? "ARCADE BREACH ≠ BUSINESS WIN" : "ARCADE MISS · REAL OUTCOME REQUIRED"}</b>
-                <small>Call, visit, or log the sourced result. Goldline will resolve only from backend truth.</small>
-                <button onClick={() => utilityMissionPath && window.location.assign(utilityMissionPath)} disabled={!utilityMissionPath}>
+                <b>
+                  {arcadeResolution === "breached"
+                    ? "ARCADE BREACH ≠ BUSINESS WIN"
+                    : "ARCADE MISS · REAL OUTCOME REQUIRED"}
+                </b>
+                <small>
+                  Call, visit, or log the sourced result. Goldline will resolve
+                  only from backend truth.
+                </small>
+                <button
+                  onClick={() =>
+                    utilityMissionPath &&
+                    window.location.assign(utilityMissionPath)
+                  }
+                  disabled={!utilityMissionPath}
+                >
                   LOG REAL RESULT <ChevronRight />
                 </button>
               </div>
@@ -1134,7 +1326,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 onSelectWeapon: handleWeaponSelected,
                 onResolved: handleEncounterResolved,
                 onOpenBusinessAction: () =>
-                  utilityMissionPath && window.location.assign(utilityMissionPath),
+                  utilityMissionPath &&
+                  window.location.assign(utilityMissionPath),
                 onClose: () => setView("explore"),
               };
               if (encounterArchetype === "GATEKEEPER") {
@@ -1162,7 +1355,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           <ColdCallBurst
             batch={props.coldCallBatch}
             onClose={() => setColdCallOpen(false)}
-            onStart={props.onStartColdCall}
+            onStart={handleColdCallStart}
             onComplete={handleColdCallComplete}
             onSelectChain={handleColdCallSelectChain}
             onBreakCombo={props.onBreakColdCallCombo}
@@ -1176,14 +1369,20 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             onRun={handleRunScout}
             onClose={() => setScoutOpen(false)}
             onEngageMission={missionId => {
-              const mission = allMissions.find(item => item.missionId === missionId);
+              const mission = allMissions.find(
+                item => item.missionId === missionId
+              );
               if (mission) selectMission(mission);
               setScoutOpen(false);
             }}
           />
         ) : null}
 
-        {view === "explore" && !coldCallOpen && !scoutOpen && scoutCapabilityOpen && history.some(item => item.state === "captured") ? (
+        {view === "explore" &&
+        !coldCallOpen &&
+        !scoutOpen &&
+        scoutCapabilityOpen &&
+        history.some(item => item.state === "captured") ? (
           <ScoutCapabilityChamber
             evaluation={props.scoutCapability ?? null}
             isEvaluating={Boolean(props.isEvaluatingScout)}
@@ -1195,24 +1394,41 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           />
         ) : null}
 
-        {view === "explore" && !coldCallOpen && !scoutOpen && !scoutCapabilityOpen && props.scoutCapability?.unlocked ? (
-          <button
-            className="scout-entry"
-            onClick={() => setScoutOpen(true)}
-          >
+        {view === "explore" &&
+        !coldCallOpen &&
+        !scoutOpen &&
+        !scoutCapabilityOpen &&
+        props.scoutCapability?.unlocked ? (
+          <button className="scout-entry" onClick={() => setScoutOpen(true)}>
             <Radar />
-            <span><b>EXPANSION SCOUT</b><small>OPEN SOURCED REPORT</small></span>
+            <span>
+              <b>EXPANSION SCOUT</b>
+              <small>OPEN SOURCED REPORT</small>
+            </span>
           </button>
         ) : null}
 
-        {(view === "rekindle" || view === "recovery_active") && activeMission ? (
-          <section className={`rekindle-hud${view === "recovery_active" ? " is-active" : ""}`} aria-live="polite">
+        {(view === "rekindle" || view === "recovery_active") &&
+        activeMission ? (
+          <section
+            className={`rekindle-hud${view === "recovery_active" ? " is-active" : ""}`}
+            aria-live="polite"
+          >
             <header>
-              <span><b>MISS —</b><strong>ANCHOR HOLDS</strong></span>
-              <span><Zap /> GOLD RECOVERY PATH UNLOCKED</span>
+              <span>
+                <b>MISS —</b>
+                <strong>ANCHOR HOLDS</strong>
+              </span>
+              <span>
+                <Zap /> GOLD RECOVERY PATH UNLOCKED
+              </span>
             </header>
             <div className="rekindle-quest">
-              <small>{view === "recovery_active" ? "RECOVERY ACTIVE" : "REKINDLE · 1 MOVE"}</small>
+              <small>
+                {view === "recovery_active"
+                  ? "RECOVERY ACTIVE"
+                  : "REKINDLE · 1 MOVE"}
+              </small>
               <h2>{activeMission.name}</h2>
               <p>Real follow-up → active recovery quest</p>
               <div className="cooling-rune">
@@ -1221,23 +1437,57 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 <span>{formatDue(activeMission.contestedUntil)}</span>
               </div>
               <ol>
-                <li className={activeSalesMission?.steps.some(step => /packet|collateral|proof/i.test(`${step.label} ${step.detail}`)) ? "is-sourced" : "is-unavailable"}>
+                <li
+                  className={
+                    activeSalesMission?.steps.some(step =>
+                      /packet|collateral|proof/i.test(
+                        `${step.label} ${step.detail}`
+                      )
+                    )
+                      ? "is-sourced"
+                      : "is-unavailable"
+                  }
+                >
                   <FileText /> PREP PACKET
-                  <small>{activeSalesMission?.steps.some(step => /packet|collateral|proof/i.test(`${step.label} ${step.detail}`)) ? "Sourced mission step" : "No packet action in backend"}</small>
+                  <small>
+                    {activeSalesMission?.steps.some(step =>
+                      /packet|collateral|proof/i.test(
+                        `${step.label} ${step.detail}`
+                      )
+                    )
+                      ? "Sourced mission step"
+                      : "No packet action in backend"}
+                  </small>
                 </li>
-                <li className={activeMission.contestedUntil ? "is-sourced" : "is-unavailable"}>
+                <li
+                  className={
+                    activeMission.contestedUntil
+                      ? "is-sourced"
+                      : "is-unavailable"
+                  }
+                >
                   <CalendarClock /> SCHEDULE FOLLOW-UP
                   <small>{formatDue(activeMission.contestedUntil)}</small>
                 </li>
-                <li className={activeMission.phoneUrl ? "is-sourced" : "is-unavailable"}>
+                <li
+                  className={
+                    activeMission.phoneUrl ? "is-sourced" : "is-unavailable"
+                  }
+                >
                   <Phone /> CALL
-                  <small>{activeMission.phoneUrl ? "Sourced decision-maker phone" : "No phone sourced"}</small>
+                  <small>
+                    {activeMission.phoneUrl
+                      ? "Sourced decision-maker phone"
+                      : "No phone sourced"}
+                  </small>
                 </li>
               </ol>
               {view === "rekindle" ? (
                 <button
                   className="begin-rekindle"
-                  disabled={!activeMission.missionId || props.isBeginningRekindle}
+                  disabled={
+                    !activeMission.missionId || props.isBeginningRekindle
+                  }
                   onClick={async () => {
                     if (!activeMission.missionId) return;
                     await props.onBeginRekindle(activeMission.missionId);
@@ -1250,8 +1500,20 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 </button>
               ) : (
                 <div className="recovery-actions">
-                  <button onClick={() => utilityMissionPath && window.location.assign(utilityMissionPath)}><CalendarClock /> OPEN REAL SCHEDULE</button>
-                  <a href={utilityCall ?? undefined} aria-disabled={!utilityCall}><Phone /> CALL WHEN DUE</a>
+                  <button
+                    onClick={() =>
+                      utilityMissionPath &&
+                      window.location.assign(utilityMissionPath)
+                    }
+                  >
+                    <CalendarClock /> OPEN REAL SCHEDULE
+                  </button>
+                  <a
+                    href={utilityCall ?? undefined}
+                    aria-disabled={!utilityCall}
+                  >
+                    <Phone /> CALL WHEN DUE
+                  </a>
                 </div>
               )}
             </div>
@@ -1264,35 +1526,75 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             <small>AUTHORITATIVE CLOSURE</small>
             <h2>{activeMission.name}</h2>
             <strong>CLOSED · NO REKINDLE</strong>
-            <p>{activeMission.lossReason ?? "The business opportunity is closed. No recovery path is fabricated."}</p>
+            <p>
+              {activeMission.lossReason ??
+                "The business opportunity is closed. No recovery path is fabricated."}
+            </p>
             <button onClick={() => setView("explore")}>RETURN TO WORLD</button>
           </section>
         ) : null}
 
         {worldLocked ? null : (
           <nav className="game-utility-bar" aria-label="Business utilities">
-            <a href={utilityNavigate ?? undefined} target="_blank" rel="noreferrer" aria-disabled={!utilityNavigate}><MapPin />Navigate</a>
-            <a href={utilityCall ?? undefined} aria-disabled={!utilityCall}><Phone />Call</a>
-            <button onClick={props.onOpenJournal}><FileText />Mark</button>
-            <button onClick={() => setUtilityPanel("objectives")}><Target />Intel</button>
+            <a
+              href={utilityNavigate ?? undefined}
+              target="_blank"
+              rel="noreferrer"
+              aria-disabled={!utilityNavigate}
+            >
+              <MapPin />
+              Navigate
+            </a>
+            <a href={utilityCall ?? undefined} aria-disabled={!utilityCall}>
+              <Phone />
+              Call
+            </a>
+            <button onClick={props.onOpenJournal}>
+              <FileText />
+              Mark
+            </button>
+            <button onClick={() => setUtilityPanel("objectives")}>
+              <Target />
+              Intel
+            </button>
           </nav>
         )}
 
         {utilityPanel && utilityPanel !== "open-channel" ? (
-          <div className="game-utility-backdrop" onClick={() => setUtilityPanel(null)}>
+          <div
+            className="game-utility-backdrop"
+            onClick={() => setUtilityPanel(null)}
+          >
             <section onClick={event => event.stopPropagation()}>
-              <button className="game-panel-close" onClick={() => setUtilityPanel(null)} aria-label="Close"><X /></button>
+              <button
+                className="game-panel-close"
+                onClick={() => setUtilityPanel(null)}
+                aria-label="Close"
+              >
+                <X />
+              </button>
               {utilityPanel === "menu" ? (
                 <>
                   <small>REAL BUSINESS UTILITIES</small>
                   <h2>Field console</h2>
                   <div className="field-console-grid">
                     <button onClick={props.onOpenNewOrder}>NEW ORDER</button>
-                    <button onClick={props.onOpenWalkIn}>START VISIT / WALK-IN</button>
+                    <button onClick={props.onOpenWalkIn}>
+                      START VISIT / WALK-IN
+                    </button>
                     <button onClick={props.onOpenJournal}>FIELD JOURNAL</button>
-                    <button onClick={() => setUtilityPanel("route")}>LIVE ROUTE</button>
-                    <button onClick={() => setUtilityPanel("open-channel")}>OPEN CHANNEL</button>
-                    <button onClick={() => void props.onResolveDay()} disabled={props.isResolvingDay}>UNLOAD DAY</button>
+                    <button onClick={() => setUtilityPanel("route")}>
+                      LIVE ROUTE
+                    </button>
+                    <button onClick={() => setUtilityPanel("open-channel")}>
+                      OPEN CHANNEL
+                    </button>
+                    <button
+                      onClick={() => void props.onResolveDay()}
+                      disabled={props.isResolvingDay}
+                    >
+                      UNLOAD DAY
+                    </button>
                     <button
                       onClick={() => {
                         const audio = getAudioManager();
@@ -1304,24 +1606,45 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                       SOUND {audioMuted ? "OFF" : "ON"}
                     </button>
                   </div>
-                  {!isStandalone() && hasOnboardingMilestone("first_mission_engaged") ? (
+                  {!isStandalone() &&
+                  hasOnboardingMilestone("first_mission_engaged") ? (
                     canShowInstallPrompt ? (
                       <button
                         className="pwa-install-cta"
-                        onClick={() => void triggerInstallPrompt().then(() => setCanShowInstallPrompt(hasInstallPrompt()))}
+                        onClick={() =>
+                          void triggerInstallPrompt().then(() =>
+                            setCanShowInstallPrompt(hasInstallPrompt())
+                          )
+                        }
                       >
                         INSTALL GOLDLINE
                       </button>
                     ) : isIOS() ? (
                       <p className="pwa-install-hint">
-                        Add Goldline to your Home Screen: tap Share, then "Add to Home Screen".
+                        Add Goldline to your Home Screen: tap Share, then "Add
+                        to Home Screen".
                       </p>
                     ) : null
                   ) : null}
                   {props.activeDispatch && props.onOpenDispatch ? (
-                    <button className="live-dispatch-button" onClick={() => void props.onOpenDispatch?.()}>LIVE MISSION #{props.activeDispatch.missionId} <ChevronRight /></button>
+                    <button
+                      className="live-dispatch-button"
+                      onClick={() => void props.onOpenDispatch?.()}
+                    >
+                      LIVE MISSION #{props.activeDispatch.missionId}{" "}
+                      <ChevronRight />
+                    </button>
                   ) : null}
-                  <label className="game-date-field">WORKING DATE<input type="date" value={props.selectedDate} onChange={event => props.onSelectedDateChange(event.target.value)} /></label>
+                  <label className="game-date-field">
+                    WORKING DATE
+                    <input
+                      type="date"
+                      value={props.selectedDate}
+                      onChange={event =>
+                        props.onSelectedDateChange(event.target.value)
+                      }
+                    />
+                  </label>
                 </>
               ) : null}
               {utilityPanel === "route" ? (
@@ -1329,13 +1652,44 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                   <small>AUTHORITATIVE ROUTE</small>
                   <h2>Pickup & delivery</h2>
                   <div className="live-route-list">
-                    {[...(props.pickups ?? []).map(order => ({ order, status: "collected" as const })), ...(props.deliveries ?? []).map(order => ({ order, status: "delivered" as const }))].map(({ order, status }) => (
+                    {[
+                      ...(props.pickups ?? []).map(order => ({
+                        order,
+                        status: "collected" as const,
+                      })),
+                      ...(props.deliveries ?? []).map(order => ({
+                        order,
+                        status: "delivered" as const,
+                      })),
+                    ].map(({ order, status }) => (
                       <article key={`${status}-${order.id}`}>
-                        <span><b>{`${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() || `Order #${order.id}`}</b><small>{order.address}</small></span>
-                        <button disabled={props.isResolvingOrder || (status === "delivered" && !order.paid)} onClick={() => void props.onResolveOrder(order.id, status)}>{status === "collected" ? "MARK COLLECTED" : order.paid ? "MARK DELIVERED" : "PAYMENT BLOCKED"}</button>
+                        <span>
+                          <b>
+                            {`${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() ||
+                              `Order #${order.id}`}
+                          </b>
+                          <small>{order.address}</small>
+                        </span>
+                        <button
+                          disabled={
+                            props.isResolvingOrder ||
+                            (status === "delivered" && !order.paid)
+                          }
+                          onClick={() =>
+                            void props.onResolveOrder(order.id, status)
+                          }
+                        >
+                          {status === "collected"
+                            ? "MARK COLLECTED"
+                            : order.paid
+                              ? "MARK DELIVERED"
+                              : "PAYMENT BLOCKED"}
+                        </button>
                       </article>
                     ))}
-                    {!props.pickups?.length && !props.deliveries?.length ? <p>No real route work is loaded for this date.</p> : null}
+                    {!props.pickups?.length && !props.deliveries?.length ? (
+                      <p>No real route work is loaded for this date.</p>
+                    ) : null}
                   </div>
                 </>
               ) : null}
@@ -1345,11 +1699,27 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                   <h2>Choose what you pursue</h2>
                   <div className="objective-panel-list">
                     {missions.map(mission => (
-                      <button key={mission.key} onClick={() => { selectMission(mission); setUtilityPanel(null); }}>
-                        <Target /><span><b>{mission.name}</b><small>{moneyBandLabel(mission)} · {mission.timeBurdenMinutes ?? "?"} min · {mission.travelBurdenMinutes ?? "?"} travel</small></span>
+                      <button
+                        key={mission.key}
+                        onClick={() => {
+                          selectMission(mission);
+                          setUtilityPanel(null);
+                        }}
+                      >
+                        <Target />
+                        <span>
+                          <b>{mission.name}</b>
+                          <small>
+                            {moneyBandLabel(mission)} ·{" "}
+                            {mission.timeBurdenMinutes ?? "?"} min ·{" "}
+                            {mission.travelBurdenMinutes ?? "?"} travel
+                          </small>
+                        </span>
                       </button>
                     ))}
-                    {!missions.length ? <p>No missions — Scout needs wins</p> : null}
+                    {!missions.length ? (
+                      <p>No missions — Scout needs wins</p>
+                    ) : null}
                   </div>
                 </>
               ) : null}
