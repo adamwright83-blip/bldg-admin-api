@@ -1,4 +1,4 @@
-name: Bootstrap Pixel Goldline gate v2
+name: Bootstrap Pixel Goldline gate v3
 on:
   push:
     branches: [feature/goldline-growth-loop-hardening]
@@ -34,24 +34,43 @@ jobs:
       - uses: actions/setup-node@v6
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - name: Add real mobile viewport override and browser proof
+      - name: Add touch-capability viewport ownership and browser proof
         run: |
           python3 <<'PY'
           from pathlib import Path
-          p=Path('client/src/game/GoldlineGameHome.tsx'); s=p.read_text()
-          s=s.replace('<main className="playable-goldline-shell" ref={setShellEl}>','<main className="playable-goldline-shell" ref={setShellEl} data-testid="goldline-shell">',1)
-          s=s.replace('<section className={`playable-goldline is-${view}`} aria-label="Goldline playable field world">','<section className={`playable-goldline is-${view}`} aria-label="Goldline playable field world" data-testid="goldline-world">',1)
-          s=s.replace('className={`game-joystick${props.disabled ? " is-disabled" : ""}`}','className={`game-joystick${props.disabled ? " is-disabled" : ""}`}\n      data-testid="goldline-joystick"',1)
+
+          # Mark the actual game surfaces for regression assertions.
+          p = Path('client/src/game/GoldlineGameHome.tsx')
+          s = p.read_text()
+          shell_old = '<main className="playable-goldline-shell" ref={setShellEl}>'
+          shell_new = '<main className="playable-goldline-shell" ref={setShellEl} data-testid="goldline-shell">'
+          world_old = '<section className={`playable-goldline is-${view}`} aria-label="Goldline playable field world">'
+          world_new = '<section className={`playable-goldline is-${view}`} aria-label="Goldline playable field world" data-testid="goldline-world">'
+          joystick_old = 'className={`game-joystick${props.disabled ? " is-disabled" : ""}`}'
+          joystick_new = 'className={`game-joystick${props.disabled ? " is-disabled" : ""}`}\n      data-testid="goldline-joystick"'
+          if shell_old not in s or world_old not in s or joystick_old not in s:
+            raise SystemExit('Goldline test-id insertion marker missing')
+          s = s.replace(shell_old, shell_new, 1).replace(world_old, world_new, 1).replace(joystick_old, joystick_new, 1)
           p.write_text(s)
-          css=Path('client/src/game/goldline-game.css'); c=css.read_text()
-          marker='''/* Run-2: one dominant Cold Call meter; live conversation has no game timer. */'''
-          mobile='''/* A real touch device must own its visual viewport in both orientations.\n   The desktop presentation intentionally caps the inner game at 430px, but\n   applying that cap to a Pixel in landscape recreates the tiny-centered-game\n   failure. Coarse/hoverless input is the device signal; viewport width is not. */\n@media (pointer: coarse), (hover: none) {\n  .playable-goldline-shell {\n    position: fixed;\n    inset: 0;\n    width: var(--goldline-vvw);\n    height: var(--goldline-vvh);\n    min-height: 0;\n    place-items: stretch;\n  }\n  .playable-goldline {\n    width: var(--goldline-vvw);\n    height: var(--goldline-vvh);\n    min-height: 0;\n    max-height: none;\n    border-radius: 0;\n  }\n}\n\n'''
-          if marker not in c: raise SystemExit('css marker missing')
-          css.write_text(c.replace(marker,mobile+marker,1))
-          Path('playwright.goldline.config.ts').write_text('''import { defineConfig } from "@playwright/test";\nconst baseURL="http://127.0.0.1:4174";\nexport default defineConfig({testDir:"./e2e/goldline",fullyParallel:false,workers:1,retries:0,reporter:"list",use:{baseURL,viewport:{width:412,height:923},isMobile:true,hasTouch:true,deviceScaleFactor:2.625,trace:"retain-on-failure",screenshot:"only-on-failure"},webServer:{command:"NODE_ENV=ci PORT=4174 node dist/index.js",url:`${baseURL}/driver`,reuseExistingServer:false,timeout:120000,env:{...process.env,NODE_ENV:"ci",PORT:"4174"}}});\n''')
-          Path('e2e/goldline').mkdir(parents=True,exist_ok=True)
-          Path('e2e/goldline/pixel9Layout.spec.ts').write_text('''import {test,expect} from "@playwright/test";const P={width:412,height:923},L={width:923,height:412};async function login(page:any){const r=await page.request.post("/api/auth/login",{data:{password:"pixel-driver-pass",role:"driver"}});expect(r.ok()).toBeTruthy();await page.goto("/driver");await expect(page.getByTestId("goldline-shell")).toBeVisible({timeout:30000})}async function check(page:any,size:{width:number;height:number}){await page.setViewportSize(size);await page.waitForTimeout(300);const [s,w,j]=await Promise.all([page.getByTestId("goldline-shell").boundingBox(),page.getByTestId("goldline-world").boundingBox(),page.getByTestId("goldline-joystick").boundingBox()]);expect(s).not.toBeNull();expect(w).not.toBeNull();expect(j).not.toBeNull();expect(s!.width).toBeGreaterThanOrEqual(size.width*.94);expect(s!.height).toBeGreaterThanOrEqual(size.height*.90);expect(w!.width).toBeGreaterThanOrEqual(size.width*.94);expect(w!.height).toBeGreaterThanOrEqual(size.height*.90);expect(j!.width).toBeGreaterThanOrEqual(44);expect(j!.height).toBeGreaterThanOrEqual(44);expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(2)}test("Pixel 9 Pro remains full viewport across portrait/landscape/portrait",async({page})=>{await login(page);await check(page,P);await check(page,L);await check(page,P)});\n''')
+
+          # The mobile/standalone distinction must not rely on viewport width.
+          # A Pixel 9 Pro in landscape is wider than the desktop preview cap.
+          Path('client/src/game/session/useVisualViewportSize.ts').write_text('''import { useEffect } from "react";\n\n/**\n * Drives Goldline from the browser's measured visual viewport and marks\n * touch/standalone environments so the real device owns the full viewport.\n * Width alone is deliberately not a mobile signal: a Pixel-class device in\n * landscape can be wider than the desktop phone-preview cap.\n */\nexport function useVisualViewportSize(target: HTMLElement | null): void {\n  useEffect(() => {\n    if (!target || typeof window === "undefined") return;\n\n    const mobileViewport =\n      navigator.maxTouchPoints > 0 ||\n      "ontouchstart" in window ||\n      window.matchMedia("(pointer: coarse)").matches ||\n      window.matchMedia("(hover: none)").matches ||\n      window.matchMedia("(display-mode: standalone)").matches;\n\n    target.dataset.goldlineMobileViewport = mobileViewport ? "true" : "false";\n\n    const apply = () => {\n      const vv = window.visualViewport;\n      const width = vv?.width ?? window.innerWidth;\n      const height = vv?.height ?? window.innerHeight;\n      target.style.setProperty("--goldline-vvw", `${width}px`);\n      target.style.setProperty("--goldline-vvh", `${height}px`);\n    };\n\n    apply();\n    window.addEventListener("resize", apply);\n    window.addEventListener("orientationchange", apply);\n    window.visualViewport?.addEventListener("resize", apply);\n    window.visualViewport?.addEventListener("scroll", apply);\n\n    return () => {\n      window.removeEventListener("resize", apply);\n      window.removeEventListener("orientationchange", apply);\n      window.visualViewport?.removeEventListener("resize", apply);\n      window.visualViewport?.removeEventListener("scroll", apply);\n      delete target.dataset.goldlineMobileViewport;\n    };\n  }, [target]);\n}\n''')
+
+          css = Path('client/src/game/goldline-game.css')
+          c = css.read_text()
+          marker = '/* Run-2: one dominant Cold Call meter; live conversation has no game timer. */'
+          mobile = '''/* Real touch/PWA devices own the full measured visual viewport.\n   Desktop can keep the deliberate 430px phone-preview presentation. The\n   runtime attribute is capability-based, never inferred from width, so a\n   Pixel-class phone does not collapse back to 430px in landscape. */\n.playable-goldline-shell[data-goldline-mobile-viewport="true"] {\n  position: fixed;\n  inset: 0;\n  width: var(--goldline-vvw);\n  height: var(--goldline-vvh);\n  min-height: 0;\n  place-items: stretch;\n}\n\n.playable-goldline-shell[data-goldline-mobile-viewport="true"] .playable-goldline {\n  width: var(--goldline-vvw);\n  height: var(--goldline-vvh);\n  min-height: 0;\n  max-height: none;\n  border-radius: 0;\n}\n\n'''
+          if marker not in c:
+            raise SystemExit('css marker missing')
+          css.write_text(c.replace(marker, mobile + marker, 1))
+
+          Path('playwright.goldline.config.ts').write_text('''import { defineConfig } from "@playwright/test";\n\nconst baseURL = "http://127.0.0.1:4174";\n\nexport default defineConfig({\n  testDir: "./e2e/goldline",\n  fullyParallel: false,\n  workers: 1,\n  retries: 0,\n  reporter: "list",\n  use: {\n    baseURL,\n    viewport: { width: 412, height: 923 },\n    isMobile: true,\n    hasTouch: true,\n    deviceScaleFactor: 2.625,\n    trace: "retain-on-failure",\n    screenshot: "only-on-failure",\n  },\n  webServer: {\n    command: "NODE_ENV=ci PORT=4174 node dist/index.js",\n    url: `${baseURL}/driver`,\n    reuseExistingServer: false,\n    timeout: 120000,\n    env: { ...process.env, NODE_ENV: "ci", PORT: "4174" },\n  },\n});\n''')
+
+          Path('e2e/goldline').mkdir(parents=True, exist_ok=True)
+          Path('e2e/goldline/pixel9Layout.spec.ts').write_text('''import { expect, test, type Page } from "@playwright/test";\n\nconst PORTRAIT = { width: 412, height: 923 };\nconst LANDSCAPE = { width: 923, height: 412 };\nconst KEYBOARD_LIKE = { width: 412, height: 560 };\n\nasync function login(page: Page) {\n  const response = await page.request.post("/api/auth/login", {\n    data: { password: "pixel-driver-pass", role: "driver" },\n  });\n  expect(response.ok()).toBeTruthy();\n  await page.goto("/driver");\n  await expect(page.getByTestId("goldline-shell")).toBeVisible({ timeout: 30_000 });\n  await expect(page.getByTestId("goldline-shell")).toHaveAttribute(\n    "data-goldline-mobile-viewport",\n    "true"\n  );\n}\n\nasync function assertViewportFill(page: Page, size: { width: number; height: number }) {\n  await page.setViewportSize(size);\n  await page.waitForTimeout(350);\n\n  const [shell, world, joystick] = await Promise.all([\n    page.getByTestId("goldline-shell").boundingBox(),\n    page.getByTestId("goldline-world").boundingBox(),\n    page.getByTestId("goldline-joystick").boundingBox(),\n  ]);\n\n  expect(shell).not.toBeNull();\n  expect(world).not.toBeNull();\n  expect(joystick).not.toBeNull();\n  expect(shell!.width).toBeGreaterThanOrEqual(size.width * 0.94);\n  expect(shell!.height).toBeGreaterThanOrEqual(size.height * 0.90);\n  expect(world!.width).toBeGreaterThanOrEqual(size.width * 0.94);\n  expect(world!.height).toBeGreaterThanOrEqual(size.height * 0.90);\n  expect(joystick!.width).toBeGreaterThanOrEqual(48);\n  expect(joystick!.height).toBeGreaterThanOrEqual(48);\n\n  const overflow = await page.evaluate(\n    () => document.documentElement.scrollWidth - document.documentElement.clientWidth\n  );\n  expect(overflow).toBeLessThanOrEqual(2);\n}\n\ntest("Pixel-class viewport survives portrait, landscape, and recovery", async ({ page }) => {\n  await login(page);\n  await assertViewportFill(page, PORTRAIT);\n  await assertViewportFill(page, LANDSCAPE);\n  await assertViewportFill(page, PORTRAIT);\n});\n\ntest("visual viewport shrink and recovery does not leave Goldline collapsed", async ({ page }) => {\n  await login(page);\n  await assertViewportFill(page, PORTRAIT);\n  await assertViewportFill(page, KEYBOARD_LIKE);\n  await assertViewportFill(page, PORTRAIT);\n});\n''')
           PY
+      - run: pnpm exec prettier --write client/src/game/GoldlineGameHome.tsx client/src/game/session/useVisualViewportSize.ts client/src/game/goldline-game.css playwright.goldline.config.ts e2e/goldline/pixel9Layout.spec.ts
       - run: pnpm db:dayforge:release
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
@@ -62,6 +81,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add client/src/game/GoldlineGameHome.tsx client/src/game/goldline-game.css playwright.goldline.config.ts e2e/goldline/pixel9Layout.spec.ts
-          git commit -m "goldline: prevent Pixel viewport collapse in both orientations"
+          git add client/src/game/GoldlineGameHome.tsx client/src/game/session/useVisualViewportSize.ts client/src/game/goldline-game.css playwright.goldline.config.ts e2e/goldline/pixel9Layout.spec.ts
+          git commit -m "goldline: make Pixel viewport ownership capability-driven"
           git push origin HEAD:feature/goldline-growth-loop-hardening
