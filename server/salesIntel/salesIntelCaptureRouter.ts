@@ -7,20 +7,10 @@ import {
 } from "./instagramCaptureService";
 import { getSourceArtifact } from "./salesIntelStore";
 
-async function assertCaptureVisibleToCaller(input: {
-  sourceArtifactId: string;
-  actorId: string;
-  role: string;
-}) {
-  const artifact = await getSourceArtifact(input.sourceArtifactId);
+async function assertInstagramCaptureExists(sourceArtifactId: string) {
+  const artifact = await getSourceArtifact(sourceArtifactId);
   if (!artifact || artifact.sourceType !== "instagram") {
     throw new Error("Instagram Sales Intel source not found");
-  }
-  // Sales Intel is shared platform knowledge, but drivers should not be able
-  // to enumerate arbitrary corpus artifacts through this narrow capture API.
-  // They may poll/retry what they captured themselves; admins may support any.
-  if (input.role !== "admin" && artifact.ingestedBy !== input.actorId) {
-    throw new Error("This capture belongs to a different operator");
   }
   return artifact;
 }
@@ -28,8 +18,13 @@ async function assertCaptureVisibleToCaller(input: {
 /**
  * Narrow driver-facing write surface. This is intentionally separate from the
  * admin-only Sales Intel router: a driver may CAPTURE a public Reel reference
- * and inspect/retry that capture, but cannot list corpus sources, review,
- * accept, reject, import, or otherwise administer Sales Intel.
+ * and inspect/retry that exact capture by its unguessable artifact UUID, but
+ * cannot list corpus sources, review, accept, reject, import, or otherwise
+ * administer Sales Intel.
+ *
+ * The corpus is shared platform knowledge. If another operator already saved
+ * the same Reel, stable shortcode identity returns that existing artifact; the
+ * second operator must still be able to see/retry the receipt they just got.
  */
 export const salesIntelCaptureRouter = router({
   captureInstagram: adminOrDriverProcedure
@@ -43,23 +38,15 @@ export const salesIntelCaptureRouter = router({
 
   status: adminOrDriverProcedure
     .input(z.object({ sourceArtifactId: z.string().uuid() }))
-    .query(async ({ ctx, input }) => {
-      await assertCaptureVisibleToCaller({
-        sourceArtifactId: input.sourceArtifactId,
-        actorId: ctx.user.openId,
-        role: ctx.user.role,
-      });
+    .query(async ({ input }) => {
+      await assertInstagramCaptureExists(input.sourceArtifactId);
       return getInstagramCaptureStatus(input.sourceArtifactId);
     }),
 
   retry: adminOrDriverProcedure
     .input(z.object({ sourceArtifactId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      await assertCaptureVisibleToCaller({
-        sourceArtifactId: input.sourceArtifactId,
-        actorId: ctx.user.openId,
-        role: ctx.user.role,
-      });
+      await assertInstagramCaptureExists(input.sourceArtifactId);
       const scheduled = scheduleInstagramSalesIntelProcessing({
         sourceArtifactId: input.sourceArtifactId,
         actorId: ctx.user.openId,
