@@ -1,0 +1,72 @@
+name: Sales Intel teaching review gate
+
+on:
+  pull_request:
+    paths:
+      - "server/salesIntel/salesIntelTeachingReExtraction.ts"
+      - "server/salesIntel/salesIntelTeachingReExtraction.integration.test.ts"
+      - "server/salesIntel/salesIntelTeachingStore.ts"
+      - "shared/salesIntelTeaching.ts"
+      - "drizzle/**"
+      - ".github/workflows/sales-intel-teaching-review.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sales-intel-teaching-review-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  human-review-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: sales_intel_review
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      CI: "true"
+      NODE_ENV: test
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/sales_intel_review
+      DAYFORGE_RELEASE_DB: "1"
+      APP_SHARED_API_SECRET: sales-intel-review-app-secret-000000000000000000
+      JWT_SECRET: sales-intel-review-jwt-secret-000000000000000000
+      STRIPE_SECRET_KEY: sales-intel-review-placeholder-not-used
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply repository migrations to disposable MySQL
+        run: pnpm db:dayforge:release
+
+      - name: Prove generalized trainer material stays human-gated
+        run: >-
+          pnpm vitest run --config vitest.integration.config.ts
+          server/salesIntel/salesIntelTeachingReExtraction.integration.test.ts
