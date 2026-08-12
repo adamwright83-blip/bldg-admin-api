@@ -3,10 +3,11 @@ import { expect, test, type Page } from "@playwright/test";
 const PORTRAIT = { width: 412, height: 923 };
 const LANDSCAPE = { width: 923, height: 412 };
 const KEYBOARD_LIKE = { width: 412, height: 560 };
+const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
 
 async function login(page: Page) {
   const response = await page.request.post("/api/auth/login", {
-    data: { password: "pixel-driver-pass", role: "driver" },
+    data: { password: DRIVER_PASSWORD, role: "driver" },
   });
   expect(response.ok()).toBeTruthy();
   await page.goto("/driver");
