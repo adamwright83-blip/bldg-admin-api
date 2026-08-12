@@ -26,6 +26,7 @@ import { teamRouter } from "../team/teamRouter";
 import { openChannelRouter } from "../openChannel/openChannelRouter";
 import { driverGameWorldRouter } from "../driverGameWorld/driverGameWorldRouter";
 import { salesIntelRouter } from "../salesIntel/salesIntelRouter";
+import { salesIntelCaptureRouter } from "../salesIntel/salesIntelCaptureRouter";
 import { goldlineEventRouter } from "../dayforgeEvents/goldlineEventRouter";
 
 export const systemRouter = router({
@@ -54,6 +55,7 @@ export const systemRouter = router({
   openChannel: openChannelRouter,
   driverGameWorld: driverGameWorldRouter,
   salesIntel: salesIntelRouter,
+  salesIntelCapture: salesIntelCaptureRouter,
   goldlineEvents: goldlineEventRouter,
   health: publicProcedure
     .input(
