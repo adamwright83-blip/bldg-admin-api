@@ -41,7 +41,12 @@ export function DriverSalesIntelCapture({
     if (!canonical || isBusy) return;
     setReceiptMessage(null);
     try {
-      const result = await capture.mutateAsync({ reelUrl: url.trim() });
+      // Send the canonical /reel/<shortcode>/ URL, not Instagram's tracking or
+      // /share/reel variant. This also prevents a path segment like "share"
+      // from being mis-recorded as a creator handle.
+      const result = await capture.mutateAsync({
+        reelUrl: canonical.canonicalUrl,
+      });
       setArtifactId(result.artifactId);
       setReceiptMessage(result.message);
       // A Web Share Target launch should not remain in browser history with a
