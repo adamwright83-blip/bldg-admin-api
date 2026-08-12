@@ -1,0 +1,86 @@
+name: Goldline mobile regression
+
+on:
+  pull_request:
+    paths:
+      - "client/src/game/**"
+      - "client/public/goldline.webmanifest"
+      - "client/public/goldline-sw.js"
+      - "client/public/assets/goldline/**"
+      - "e2e/goldline/**"
+      - "playwright.goldline.config.ts"
+      - "scripts/checkGoldlineBundleBudget.mjs"
+      - ".github/workflows/goldline-mobile-regression.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goldline-mobile-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pixel-class-layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: goldline_mobile_gate
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      CI: "true"
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/goldline_mobile_gate
+      DAYFORGE_RELEASE_DB: "1"
+      APP_SHARED_API_SECRET: goldline-mobile-app-secret-000000000000000000
+      JWT_SECRET: goldline-mobile-jwt-secret-000000000000000000
+      STRIPE_SECRET_KEY: goldline-mobile-placeholder-not-used
+      DRIVER_PASSWORD: goldline-mobile-driver-pass
+      DRIVER_OPEN_ID: goldline-mobile-driver
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply repository migrations to disposable MySQL
+        run: pnpm db:dayforge:release
+
+      - name: Build production application
+        run: pnpm build
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Prove Pixel-class portrait / landscape / keyboard recovery
+        run: pnpm exec playwright test --config playwright.goldline.config.ts
+
+      - name: Enforce Goldline bundle budget
+        run: node scripts/checkGoldlineBundleBudget.mjs
+
+      - name: Check whitespace errors
+        run: git diff --check
