@@ -68,6 +68,11 @@ type GameAssets = {
   strongholdUrl?: string;
   characterBasePath?: string;
   /**
+   * L0 parallax factor from the corridor manifest. Defaults to corridor_01's
+   * long-standing 0.1 so a caller that supplies no manifest is unchanged.
+   */
+  parallaxFar?: number;
+  /**
    * Restores a previously-saved safe checkpoint (see checkpointStorage.ts).
    * Only position/branch are restorable — avatar animation state always
    * starts fresh at "idle" regardless, so a restore can never resume mid-jump.
@@ -164,6 +169,8 @@ export class GoldlineGame {
   private actionUntil = 0;
   private lastReportedProgress = -1;
   private worldState: WorldMissionState = "available";
+  /** Overridden per corridor from the manifest; corridor_01's authored value. */
+  private parallaxFar = 0.1;
   private anchors: CorridorAnchor[] = [];
   private goldRoutePoints: GoldRoutePoint[] = [];
   private landmarkArchetype: LandmarkArchetype | null = null;
@@ -198,6 +205,7 @@ export class GoldlineGame {
         this.lateral = Math.min(0.72, Math.max(-0.72, assets.initialLateral));
       }
       if (assets.initialBranch != null) this.branch = assets.initialBranch;
+      if (assets.parallaxFar != null) this.parallaxFar = assets.parallaxFar;
       const app = new Application();
       await app.init({
         resizeTo: this.host,
@@ -377,6 +385,41 @@ export class GoldlineGame {
     this.landmarkArchetype = archetype;
   }
 
+  /**
+   * Physical encounter staging: the player does NOT leave the world to open an
+   * encounter. The camera lifts and biases toward the landmark being engaged
+   * so both it and Trailblazer stay visible above the encounter rail, and the
+   * renderer keeps running the whole time.
+   *
+   * Frames the nearest authored anchor when there is one, so the framing is
+   * driven by real corridor data rather than a guessed screen position.
+   */
+  stageEncounter() {
+    const nearest = this.anchors.reduce<CorridorAnchor | null>((closest, anchor) => {
+      if (!closest) return anchor;
+      return anchorDistance(anchor, this.progress, this.lateral) <
+        anchorDistance(closest, this.progress, this.lateral)
+        ? anchor
+        : closest;
+    }, null);
+    this.camera.stageEncounter(nearest?.position.lateral ?? this.lateral);
+  }
+
+  /** Returns the camera to ordinary traversal framing. */
+  exitEncounterStaging() {
+    this.camera.clearEncounterStaging();
+  }
+
+  /** True while the world is held in an encounter frame. */
+  isStagingEncounter(): boolean {
+    return this.camera.isStagingEncounter();
+  }
+
+  /** Mirrors the player's OS reduced-motion preference into camera behaviour. */
+  setReducedMotion(reduced: boolean) {
+    this.camera.setReducedMotion(reduced);
+  }
+
   performAction(action: CorridorAction) {
     const trigger = pendingTrigger(this.progress, this.completedTriggers);
     if (!trigger || trigger.action !== action) return false;
@@ -533,11 +576,15 @@ export class GoldlineGame {
     sprite.y = (height - sprite.height) / 2;
   }
 
-  /** L0 parallax: the far plate drifts a fraction of lateral/progress motion. */
+  /**
+   * L0 parallax: the far plate drifts a fraction of lateral/progress motion.
+   * The factor comes from the corridor's own manifest (`parallax.far`, schema-
+   * clamped to the documented 0.05-0.15 range) so a corridor's depth is
+   * authored content rather than a renderer constant.
+   */
   private updateParallax() {
     if (!this.farSprite) return;
-    const parallaxFactor = 0.1; // within the documented 0.05-0.15 L0 range
-    this.farSprite.x = -this.lateral * 60 * parallaxFactor * 10;
+    this.farSprite.x = -this.lateral * 60 * this.parallaxFar * 10;
   }
 
   private updateAvatarPose(now: number, magnitude: number) {
