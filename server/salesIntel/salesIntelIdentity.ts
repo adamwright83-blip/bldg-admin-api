@@ -6,10 +6,11 @@ import {
   type SalesIntelChannel,
   type SalesIntelSourceType,
 } from "../../shared/salesIntel";
+import { salesIntelTeachingIdentityParts } from "../../shared/salesIntelTeaching";
 
 function digest(parts: string[]): string {
   // Unit separator keeps distinct field boundaries from colliding.
-  return createHash("sha256").update(parts.join("")).digest("hex");
+  return createHash("sha256").update(parts.join("")).digest("hex");
 }
 
 /** Stable content identity used to detect duplicate ingests of one source. */
@@ -31,6 +32,18 @@ export function salesIntelFrameworkKey(input: {
   exactObjection: string;
 }): string {
   return digest(salesIntelFrameworkIdentityParts(input));
+}
+
+/**
+ * Identity of one GENERAL teaching within a source transcript, across
+ * re-extractions of the same segment. Distinct from `salesIntelFrameworkKey`:
+ * a general teaching is anchored to its transcript (the specific segment it
+ * came from) and its category + title, not an objection.
+ */
+export function salesIntelTeachingKey(
+  input: Parameters<typeof salesIntelTeachingIdentityParts>[0]
+): string {
+  return digest(salesIntelTeachingIdentityParts(input));
 }
 
 /**

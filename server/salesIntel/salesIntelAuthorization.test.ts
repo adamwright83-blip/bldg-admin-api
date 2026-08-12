@@ -64,6 +64,8 @@ describe("Sales Intel administration is admin-only", () => {
       "previewImport",
       "applyImport",
       "coverage",
+      "reextractFromExistingTranscripts",
+      "forSource",
     ]) {
       expect(salesIntelRouterSource).toMatch(
         new RegExp(`${name}:\\s*adminProcedure`)
