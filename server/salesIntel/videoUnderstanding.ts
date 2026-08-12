@@ -97,6 +97,46 @@ export function resolveGeminiVideoTimeoutMs(
   );
 }
 
+const PROVIDER_MESSAGE_MAX_LENGTH = 300;
+
+type GeminiErrorBody = {
+  /** Google's machine-readable status, e.g. INVALID_ARGUMENT, FAILED_PRECONDITION. */
+  status: string | null;
+  /** Human-readable message from Google, truncated and never containing our own credentials. */
+  message: string | null;
+};
+
+/**
+ * Reads a non-2xx Gemini response body without ever throwing and without
+ * ever risking exposure of our own request (API key, headers) — only
+ * Google's own error description is extracted, and only up to a bounded
+ * length. A response we can't parse still yields a short, safe fallback
+ * rather than losing the diagnostic entirely.
+ */
+async function parseGeminiErrorBody(response: Response): Promise<GeminiErrorBody> {
+  const raw = await response.text().catch(() => "");
+  if (!raw) return { status: null, message: null };
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      error?: { status?: string; message?: string };
+    };
+    const status = typeof parsed.error?.status === "string" ? parsed.error.status : null;
+    const message =
+      typeof parsed.error?.message === "string"
+        ? parsed.error.message.slice(0, PROVIDER_MESSAGE_MAX_LENGTH)
+        : null;
+    return { status, message };
+  } catch {
+    // Not JSON — fall back to a short sanitized slice of the raw text so
+    // the diagnostic still carries something, never the full body.
+    return {
+      status: null,
+      message: raw.replace(/\s+/g, " ").trim().slice(0, PROVIDER_MESSAGE_MAX_LENGTH) || null,
+    };
+  }
+}
+
 const ANALYSIS_INSTRUCTION = [
   "Transcribe the spoken sales instruction in this video as faithfully as possible.",
   "Return only what is actually said. Do not summarize, embellish, or invent claims.",
@@ -190,14 +230,20 @@ export class GeminiVideoUnderstandingProvider
     if (!response.ok) {
       // 4xx generally means this video cannot be analyzed at all; 5xx/429 is worth a retry.
       const retryable = response.status >= 500 || response.status === 429;
+      const errorBody = await parseGeminiErrorBody(response);
       console.error("[Sales Intel] Gemini video analysis HTTP error", {
         provider: this.key,
         model: this.model,
         elapsedMs: Date.now() - startedAt,
         status: response.status,
+        geminiStatus: errorBody.status,
+        geminiMessage: errorBody.message,
       });
+      const hasDetail = Boolean(errorBody.status || errorBody.message);
       throw new VideoUnderstandingFailedError(
-        `Video analysis provider returned ${response.status}`,
+        hasDetail
+          ? `Gemini video analysis failed (${response.status}${errorBody.status ? ` ${errorBody.status}` : ""}): ${errorBody.message ?? "no further detail from provider"}`
+          : `Video analysis provider returned ${response.status}`,
         `provider_http_${response.status}`,
         retryable
       );
