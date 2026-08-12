@@ -105,6 +105,7 @@ describe("GeminiUploadedMediaUnderstandingProvider", () => {
 
     expect(result.text).toBe("Actual short-form sales teaching.");
     expect(result.model).toBe("gemini-3.6-flash");
+    expect(calls[0]?.init?.redirect).toBe("manual");
     expect(calls[1]?.url).toContain("/upload/v1beta/files");
     expect(calls[2]?.url).toBe("https://upload.example/session/abc");
     expect(calls[3]?.url).toContain("models/gemini-3.6-flash:generateContent");
