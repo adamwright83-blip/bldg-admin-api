@@ -1,11 +1,13 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, type ReactNode } from "react";
 import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { TenantProvider, useTenant } from "./hooks/useTenant";
+import { useAuth } from "./_core/hooks/useAuth";
+import { LoginForm } from "./components/LoginForm";
 import ButlerHome from "./pages/Home";
 import Admin from "./pages/Admin";
 import AdminHostApp from "./pages/AdminHostApp";
@@ -116,6 +118,26 @@ function CommercialProposalPrintRoute() {
       <CommercialProposalPrint />
     </Suspense>
   );
+}
+
+/**
+ * Standalone admin-only pages (outside AdminHostApp's own shell) don't get
+ * its auth gate for free — without this they render straight through and
+ * only fail at the tRPC layer per-query, which is correct server-side but
+ * leaves a signed-out visitor staring at a broken page instead of a login
+ * prompt.
+ */
+function AdminAuthGate({ children }: { children: ReactNode }) {
+  const { loading: authLoading, isAuthenticated } = useAuth();
+  if (authLoading) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#fff" }} />
+    );
+  }
+  if (!isAuthenticated) {
+    return <LoginForm role="admin" onSuccess={() => window.location.reload()} />;
+  }
+  return <>{children}</>;
 }
 
 const LOCAL_ADMIN_PATHS = new Set([
@@ -233,14 +255,18 @@ function AdminHostRouter() {
         </Suspense>
       </Route>
       <Route path="/sales-intel">
-        <Suspense fallback={<PublicLandingFallback />}>
-          <SalesIntelAdmin />
-        </Suspense>
+        <AdminAuthGate>
+          <Suspense fallback={<PublicLandingFallback />}>
+            <SalesIntelAdmin />
+          </Suspense>
+        </AdminAuthGate>
       </Route>
       <Route path="/goldline-effectiveness">
-        <Suspense fallback={<PublicLandingFallback />}>
-          <GoldlineEffectivenessAdmin />
-        </Suspense>
+        <AdminAuthGate>
+          <Suspense fallback={<PublicLandingFallback />}>
+            <GoldlineEffectivenessAdmin />
+          </Suspense>
+        </AdminAuthGate>
       </Route>
       <Route path="/julydemo">
         <Suspense fallback={<PublicLandingFallback />}>
