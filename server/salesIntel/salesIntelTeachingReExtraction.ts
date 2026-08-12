@@ -36,7 +36,6 @@ import {
   persistFrameworkVersion,
   setSourceStatus,
 } from "./salesIntelStore";
-import { reviewStateForExtraction, type SalesIntelSourceType } from "../../shared/salesIntel";
 
 export type TranscriptExtractionStatus =
   | "persisted"
@@ -172,10 +171,10 @@ export async function reextractGeneralTeachingsFromTranscripts(input: {
         // range, never a finer sub-segment guess.
         transcriptStartMs: segment?.startMs ?? null,
         transcriptEndMs: segment?.endMs ?? null,
-        reviewState: reviewStateForExtraction({
-          confidence: teaching.confidence,
-          sourceType: artifact.sourceType as SalesIntelSourceType,
-        }),
+        // External trainer material is always a human-review candidate.
+        // Model confidence is retained as evidence, never used as permission
+        // to publish doctrine directly into the driver-visible corpus.
+        reviewState: "review_required",
       });
       teachingsCreated += 1;
 
@@ -218,10 +217,7 @@ export async function reextractGeneralTeachingsFromTranscripts(input: {
           promptVersion: extraction.promptVersion,
           transcriptStartMs: segment?.startMs ?? null,
           transcriptEndMs: segment?.endMs ?? null,
-          reviewState: reviewStateForExtraction({
-            confidence: teaching.confidence,
-            sourceType: artifact.sourceType as SalesIntelSourceType,
-          }),
+          reviewState: "review_required",
         });
         objectionMappingsCreated += 1;
       }
