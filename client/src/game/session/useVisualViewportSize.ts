@@ -1,27 +1,23 @@
 import { useEffect } from "react";
 
 /**
- * Drives the game shell's size from real measured visual-viewport
- * dimensions instead of trusting the CSS `vw`/`dvh` units directly.
- *
- * Why this exists: `100vw`/`100dvh` are resolved against the browser's own
- * notion of the viewport, which on some real mobile browsers can diverge
- * from the actual visible screen area (the "layout viewport" the browser
- * uses for CSS unit resolution is not always identical to
- * `window.visualViewport`, particularly around meta-viewport edge cases and
- * dynamic browser-chrome resizing). Writing the real measured pixel values
- * onto CSS custom properties makes the shell's size a direct function of
- * what the browser reports as visible, which cannot silently diverge the
- * way a `vw` unit can.
- *
- * Sets `--goldline-vvw` / `--goldline-vvh` (in px) on the given element,
- * updated on load, window resize, visualViewport resize, and orientation
- * change. CSS still keeps a `100vw`/`100dvh` fallback for the instant
- * before this effect runs.
+ * Drives Goldline from the browser's measured visual viewport and marks
+ * touch/standalone environments so the real device owns the full viewport.
+ * Width alone is deliberately not a mobile signal: a Pixel-class device in
+ * landscape can be wider than the desktop phone-preview cap.
  */
 export function useVisualViewportSize(target: HTMLElement | null): void {
   useEffect(() => {
     if (!target || typeof window === "undefined") return;
+
+    const mobileViewport =
+      navigator.maxTouchPoints > 0 ||
+      "ontouchstart" in window ||
+      window.matchMedia("(pointer: coarse)").matches ||
+      window.matchMedia("(hover: none)").matches ||
+      window.matchMedia("(display-mode: standalone)").matches;
+
+    target.dataset.goldlineMobileViewport = mobileViewport ? "true" : "false";
 
     const apply = () => {
       const vv = window.visualViewport;
@@ -42,6 +38,7 @@ export function useVisualViewportSize(target: HTMLElement | null): void {
       window.removeEventListener("orientationchange", apply);
       window.visualViewport?.removeEventListener("resize", apply);
       window.visualViewport?.removeEventListener("scroll", apply);
+      delete target.dataset.goldlineMobileViewport;
     };
   }, [target]);
 }
