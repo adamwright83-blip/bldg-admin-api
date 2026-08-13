@@ -2,33 +2,22 @@
  * Long-horizon resume (Slice 101) — Goldline surviving a return later that
  * day, tomorrow, or next month with no daily reset and no stale fiction.
  *
- * This does not build a new resume mechanism. `useAuthoritativeActionResume`
- * (client/src/game/actions/useAuthoritativeActionResume.ts) already detects
- * "the player came back from an external handoff" and re-triggers a fetch —
- * that hook is the WHEN. This module is the WHAT-TO-DO-WITH-IT: once
- * authoritative reality has been re-read (Today's Route reprojected from
- * fresh server data), `reconcileFictionOnResume` drops every persisted
- * fiction assignment whose real action no longer exists among the live
- * missions. The Fiction Director never resurrects a finished story —
- * reality wins, structurally, because a pruned assignment simply isn't
- * there for `selectFictionForMission` to find on the next visit.
+ * Mission-backed and route-backed actions come from different authoritative
+ * projections. A mission-only reconciliation must not delete a route-backed
+ * fiction assignment just because field-move truth is not present in its
+ * `PlayableMission[]` input.
  */
 import { deriveActionGrammar } from "../../../../shared/actionGrammar";
 import { stableMissionKey } from "../../../../shared/fictionTemplate";
 import { resolveGoldlineAction, type GoldlineActionContext } from "../actions/actionRegistry";
 import {
   fictionAssignmentCount,
+  fictionAssignmentKeysForGrammarKind,
   pruneResolvedFictionAssignments,
 } from "./fictionAssignmentStorage";
 import type { FictionAssignmentIdentity } from "./fictionAssignmentStorage";
 import type { PlayableMission } from "../state/GameState";
 
-/**
- * Stable keys for every mission that is genuinely live right now, given
- * freshly re-read authoritative state. Missions with no resolvable action
- * (captured/closed/read-only) contribute no key — exactly matching what the
- * Fiction Director itself would decline to instantiate for.
- */
 export function liveMissionFictionKeys(
   missions: PlayableMission[],
   now: Date,
@@ -59,13 +48,6 @@ export function liveMissionFictionKeys(
   return keys;
 }
 
-/**
- * Reconciles persisted fiction assignments against freshly re-read reality.
- * Call this once per resume, AFTER the authoritative refetch has completed
- * (i.e. inside `useAuthoritativeActionResume`'s `onResume` callback, once
- * fresh missions are available) — never before, or it would prune against
- * stale data and could drop a genuinely still-live mission's assignment.
- */
 export function reconcileFictionOnResume(input: {
   liveMissions: PlayableMission[];
   now: Date;
@@ -74,11 +56,18 @@ export function reconcileFictionOnResume(input: {
 }): { prunedCount: number } {
   const identity = input.identity ?? null;
   const before = fictionAssignmentCount(identity);
-  const keys = liveMissionFictionKeys(
+  const missionKeys = liveMissionFictionKeys(
     input.liveMissions,
     input.now,
     input.fictionRulesVersion ?? 1
   );
-  const remaining = pruneResolvedFictionAssignments(keys, identity);
+  const routeKeys = fictionAssignmentKeysForGrammarKind(
+    "PLACE_ITEM_AT_LOCATIONS",
+    identity
+  );
+  const remaining = pruneResolvedFictionAssignments(
+    [...missionKeys, ...routeKeys],
+    identity
+  );
   return { prunedCount: Math.max(0, before - remaining.length) };
 }
