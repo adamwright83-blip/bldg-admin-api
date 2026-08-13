@@ -25,6 +25,8 @@
  * reload/resume/registry evolution, per the mission-fiction determinism
  * contract in shared/fictionTemplate.ts.
  */
+import type { ActionGrammarKind } from "../../../../shared/actionGrammar";
+
 export type FictionAssignmentRecord = {
   stableMissionKey: string;
   templateId: string;
@@ -110,6 +112,16 @@ export function fictionAssignmentCount(
   return readAll(identity).length;
 }
 
+/** Returns persisted keys for one grammar kind without exposing mutable records. */
+export function fictionAssignmentKeysForGrammarKind(
+  grammarKind: ActionGrammarKind,
+  identity: FictionAssignmentIdentity = null
+): string[] {
+  return readAll(identity)
+    .map(record => record.stableMissionKey)
+    .filter(key => key.split("::").at(-2) === grammarKind);
+}
+
 /** Returns the persisted assignment for this mission, if one was ever recorded. */
 export function loadFictionAssignment(
   stableMissionKey: string,
@@ -151,10 +163,8 @@ export function clearFictionAssignment(
 }
 
 /**
- * Drops every persisted assignment whose key is not in `stillUnresolvedKeys`.
- * Used on long-horizon resume: reality is re-read first, and any fiction
- * whose real action resolved or vanished while offline is removed — the
- * Fiction Director never resurrects a finished story.
+ * Drops persisted assignments whose keys are not in `stillUnresolvedKeys`.
+ * Callers must only omit keys for truth sources they can actually adjudicate.
  */
 export function pruneResolvedFictionAssignments(
   stillUnresolvedKeys: readonly string[],
