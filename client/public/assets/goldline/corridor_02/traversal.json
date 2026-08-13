@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "note": "Authored traversal contract for corridor_02. These anchors are REAL structural authoring — they define where interaction is possible — and are deliberately independent of final art, which does not exist yet (see manifest.json stage: 'authoring' and README.md). The corridor is not production-playable until art lands and stage becomes 'playable'.",
+  "anchors": [
+    {
+      "id": "approach_gate",
+      "type": "stronghold",
+      "position": { "progress": 0.41, "lateral": -0.22 },
+      "labelRadius": 0.2,
+      "interactionRadius": 0.08,
+      "missionBinding": "active_mission_encounter"
+    },
+    {
+      "id": "stronghold_gate",
+      "type": "stronghold",
+      "position": { "progress": 0.83, "lateral": 0 },
+      "labelRadius": 0.18,
+      "interactionRadius": 0.06,
+      "missionBinding": "active_mission_encounter"
+    }
+  ]
+}

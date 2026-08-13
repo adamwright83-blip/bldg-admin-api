@@ -1,6 +1,7 @@
 {
   "id": "corridor_01",
   "version": 1,
+  "stage": "playable",
   "assets": {
     "far": "far.webp",
     "mid": "mid.webp",
@@ -22,5 +23,26 @@
   "qualityVariants": [
     { "id": "premium" },
     { "id": "reduced" }
-  ]
+  ],
+  "landmarks": [
+    {
+      "id": "cold_call_portal",
+      "archetype": null,
+      "position": { "progress": 0.52, "lateral": 0.3 }
+    },
+    {
+      "id": "stronghold_gate",
+      "archetype": "ANCHOR",
+      "position": { "progress": 0.79, "lateral": 0 }
+    }
+  ],
+  "capabilities": {
+    "coldCallPortal": true,
+    "stronghold": true,
+    "missionSources": ["field", "cold_call", "recovery", "scout"]
+  },
+  "loadPriority": {
+    "critical": ["mid"],
+    "deferred": ["far", "foreground", "effects", "portal", "stronghold"]
+  }
 }

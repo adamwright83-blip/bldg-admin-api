@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "note": "Authored centreline for corridor_02. corridor_01's route was traced from real gold-inlay pixels in its mid plate; corridor_02 has no mid plate yet, so this is an AUTHORED placeholder centreline, not a trace. It must be re-traced from the final art before stage becomes 'playable' — that re-trace is part of the visual pass, not the engineering pass.",
+  "points": [
+    { "progress": 0.0, "lateral": 0.5 },
+    { "progress": 0.2, "lateral": 0.46 },
+    { "progress": 0.41, "lateral": 0.39 },
+    { "progress": 0.6, "lateral": 0.47 },
+    { "progress": 0.83, "lateral": 0.52 },
+    { "progress": 1.0, "lateral": 0.52 }
+  ]
+}

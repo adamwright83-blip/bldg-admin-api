@@ -1,0 +1,48 @@
+{
+  "id": "corridor_02",
+  "version": 1,
+  "stage": "authoring",
+  "assets": {
+    "far": null,
+    "mid": null,
+    "foreground": null,
+    "effects": null,
+    "portal": null,
+    "stronghold": null,
+    "waterfallVideo": null
+  },
+  "data": {
+    "traversal": "traversal.json",
+    "occlusion": "occlusion.json",
+    "goldRoute": "gold_route.json"
+  },
+  "parallax": {
+    "far": 0.08,
+    "mid": 0.4
+  },
+  "qualityVariants": [
+    { "id": "premium" },
+    { "id": "reduced" }
+  ],
+  "landmarks": [
+    {
+      "id": "approach_gate",
+      "archetype": "GATEKEEPER",
+      "position": { "progress": 0.41, "lateral": -0.22 }
+    },
+    {
+      "id": "stronghold_gate",
+      "archetype": "ANCHOR",
+      "position": { "progress": 0.83, "lateral": 0 }
+    }
+  ],
+  "capabilities": {
+    "coldCallPortal": false,
+    "stronghold": false,
+    "missionSources": []
+  },
+  "loadPriority": {
+    "critical": [],
+    "deferred": []
+  }
+}

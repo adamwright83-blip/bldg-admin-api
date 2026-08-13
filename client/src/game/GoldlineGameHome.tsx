@@ -65,7 +65,13 @@ import {
   networkStatusLabel,
   useNetworkStatus,
 } from "./session/useNetworkStatus";
-import { loadCheckpoint, saveCheckpoint } from "./session/checkpointStorage";
+import { loadAnyCheckpoint, saveCheckpoint } from "./session/checkpointStorage";
+import { corridorGameAssets, loadCorridorPack } from "./world/corridorPack";
+import {
+  DEFAULT_CORRIDOR_ID,
+  isPlayableCorridor,
+} from "./world/corridorRegistry";
+import { CorridorTransitionController } from "./runtime/corridorTransition";
 import { useVisualViewportSize } from "./session/useVisualViewportSize";
 import { registerGoldlineServiceWorker } from "./pwa/registerServiceWorker";
 import { installPwaHeadTags } from "./pwa/installPwaHead";
@@ -117,6 +123,13 @@ const StallerEncounter = lazy(
 );
 
 type GoldlineGameHomeProps = GoldlineHomeProps & {
+  /**
+   * Stable id of the signed-in player, used ONLY to scope the local
+   * positional checkpoint so a shared device cannot hand one driver another
+   * driver's position. Null while signed out — that session gets its own
+   * bucket rather than sharing one with a real account.
+   */
+  playerIdentity?: string | null;
   worldNodes?: DriverGameWorldNode[];
   isLoadingWorld?: boolean;
   isBeginningRekindle?: boolean;
@@ -168,8 +181,16 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
 
 type UtilityPanel = "menu" | "route" | "objectives" | "open-channel" | null;
 
-/** Matches corridor_01/manifest.json's `id` — the only corridor that exists. */
-const CORRIDOR_ID = "corridor_01";
+/**
+ * Bundled Run-1 fallback art. NOT corridor content — these ship with the app
+ * so the world can always boot even if a corridor's optional plates fail to
+ * load. Every corridor-specific URL now comes from the corridor's manifest.
+ */
+const RUNTIME_FALLBACKS = {
+  worldUrl,
+  operatorUrl,
+  characterBasePath: "/assets/goldline/characters/trailblazer",
+};
 
 function formatDue(value: string | null) {
   if (!value) return "Awaiting a sourced follow-up time";
@@ -391,6 +412,17 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [shellEl, setShellEl] = useState<HTMLElement | null>(null);
   const runtimeRef = useRef<GoldlineGame | null>(null);
+  /** Serializes corridor travel and rejects stale loads. */
+  const transitionsRef = useRef<CorridorTransitionController | null>(null);
+  /** Which corridor the player is actually standing in right now. */
+  const activeCorridorIdRef = useRef<string>(DEFAULT_CORRIDOR_ID);
+  /**
+   * Read through a ref so the long-lived mount effect always saves against
+   * the current player without re-running (and tearing down the world) when
+   * the identity query resolves.
+   */
+  const playerIdentityRef = useRef<string | null>(props.playerIdentity ?? null);
+  playerIdentityRef.current = props.playerIdentity ?? null;
   const weakPointRef = useRef<HTMLButtonElement>(null);
   const gestureStart = useRef<{ x: number; y: number; at: number } | null>(
     null
@@ -629,40 +661,68 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         });
       },
       onCheckpointSafe: (progress, lateral, branch) => {
-        saveCheckpoint({
-          corridorId: CORRIDOR_ID,
-          progress,
-          lateral,
-          branch,
-          savedAt: new Date().toISOString(),
-        });
+        saveCheckpoint(
+          {
+            // Records WHICH corridor the position belongs to, so resume can
+            // restore into the right world rather than assuming corridor_01.
+            corridorId: activeCorridorIdRef.current,
+            progress,
+            lateral,
+            branch,
+            savedAt: new Date().toISOString(),
+          },
+          playerIdentityRef.current
+        );
       },
     });
     runtimeRef.current = game;
+
+    const transitions = new CorridorTransitionController();
+    transitionsRef.current = transitions;
+
     // Position only — authoritative business/world state is always
     // reconciled fresh from live props (see the activeMission effect below),
     // never restored from this checkpoint.
-    const checkpoint = loadCheckpoint(CORRIDOR_ID);
-    void game
-      .start({
-        worldUrl,
-        operatorUrl,
-        midUrl: "/assets/goldline/corridor_01/mid.webp",
-        farUrl: "/assets/goldline/corridor_01/far.webp",
-        foregroundUrl: "/assets/goldline/corridor_01/foreground.webp",
-        effectsUrl: "/assets/goldline/corridor_01/effects.webp",
-        portalUrl: "/assets/goldline/corridor_01/portal_coldcall.webp",
-        strongholdUrl: "/assets/goldline/corridor_01/stronghold.webp",
-        characterBasePath: "/assets/goldline/characters/trailblazer",
-        initialProgress: checkpoint?.progress,
-        initialLateral: checkpoint?.lateral,
-        initialBranch: checkpoint?.branch,
+    const checkpoint = loadAnyCheckpoint(playerIdentityRef.current);
+    // Cross-corridor resume: trust the checkpoint's corridor only if this
+    // build still considers it playable, so a removed or unfinished corridor
+    // can never strand the player outside the world.
+    const bootCorridorId =
+      checkpoint && isPlayableCorridor(checkpoint.corridorId)
+        ? checkpoint.corridorId
+        : DEFAULT_CORRIDOR_ID;
+    activeCorridorIdRef.current = bootCorridorId;
+    const restorable = checkpoint?.corridorId === bootCorridorId ? checkpoint : null;
+
+    let cancelled = false;
+    // The corridor is addressed by id: no caller here knows a single asset
+    // URL. Everything the renderer needs comes from the validated manifest.
+    void loadCorridorPack(bootCorridorId)
+      .then(pack => {
+        if (cancelled) return false;
+        transitions.adoptActiveCorridor(pack.id);
+        return game.start({
+          ...corridorGameAssets(pack, RUNTIME_FALLBACKS),
+          initialProgress: restorable?.progress,
+          initialLateral: restorable?.lateral,
+          initialBranch: restorable?.branch,
+        });
       })
       .then(started => {
-        if (started) setRuntimeReady(true);
+        if (!cancelled && started) setRuntimeReady(true);
+      })
+      .catch(() => {
+        // A corridor that cannot be trusted must not half-render. The
+        // existing runtime-failure surface already explains this to the
+        // player rather than leaving a blank canvas.
+        if (!cancelled) setRuntimeFailed(true);
       });
+
     return () => {
+      cancelled = true;
       runtimeRef.current = null;
+      transitionsRef.current = null;
+      transitions.dispose();
       game.destroy();
     };
   }, []);
@@ -951,6 +1011,33 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   function performAction() {
     if (action) runtimeRef.current?.performAction(action);
   }
+
+  /**
+   * Physical encounter staging (Slice 59).
+   *
+   * The player never leaves the world to open an encounter: the renderer
+   * keeps running, and the camera lifts/biases toward the landmark so both it
+   * and Trailblazer stay visible above the encounter rail. Driven off `view`
+   * in one place so entering and leaving are always symmetrical — there is no
+   * exit path that can strand the camera in an encounter frame.
+   */
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    if (!runtime) return;
+    const staged = view === "encounter" || view === "awaiting_business_result";
+    if (staged) runtime.stageEncounter();
+    else runtime.exitEncounterStaging();
+  }, [view, runtimeReady]);
+
+  /** Mirrors the OS reduced-motion preference into camera framing. */
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const apply = () => runtimeRef.current?.setReducedMotion(query.matches);
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, [runtimeReady]);
 
   function selectMission(mission: PlayableMission) {
     setActiveKey(mission.key);

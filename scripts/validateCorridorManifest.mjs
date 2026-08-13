@@ -11,7 +11,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseCorridorManifest } from "../shared/corridorManifest.ts";
+import { missingOptionalArt, parseCorridorManifest } from "../shared/corridorManifest.ts";
 
 const corridorId = process.argv[2] ?? "corridor_01";
 const corridorDir = resolve(process.cwd(), "client/public/assets/goldline", corridorId);
@@ -59,6 +59,29 @@ if (result.success) {
   checkFile("data.traversal", manifest.data.traversal);
   checkFile("data.occlusion", manifest.data.occlusion);
   checkFile("data.goldRoute", manifest.data.goldRoute);
+
+  // Stage is the honest headline: "validates" and "is finished" are different
+  // claims, and a corridor must never be mistaken for production-ready just
+  // because its structural data parsed.
+  console.log("");
+  console.log(`  STAGE: ${manifest.stage}`);
+  const missingArt = missingOptionalArt(manifest);
+  if (manifest.stage === "playable") {
+    console.log("  ENGINEERING: complete");
+    console.log(
+      missingArt.length
+        ? `  VISUAL: partial — no art supplied for: ${missingArt.join(", ")}`
+        : "  VISUAL: all declared art present"
+    );
+  } else {
+    console.log("  ENGINEERING: complete (structural data valid)");
+    console.log(
+      `  VISUAL: BLOCKED BY ART — missing: ${missingArt.join(", ") || "none declared"}`
+    );
+    console.log(
+      "  NOTE: this corridor is NOT production-playable; the runtime will refuse to serve it."
+    );
+  }
 }
 
 console.log("");

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "note": "Occlusion zones for corridor_02, authored against the intended layout. Like corridor_01's, these prove the z-order mechanism rather than art-driven depth; final foreground art will refine the bounds.",
+  "zones": [
+    {
+      "id": "approach_gate_pillar",
+      "bounds": { "progressMin": 0.38, "progressMax": 0.45, "lateralMin": -0.5, "lateralMax": -0.16 },
+      "occluderZIndex": 5
+    },
+    {
+      "id": "stronghold_gate_pillar_left",
+      "bounds": { "progressMin": 0.78, "progressMax": 0.86, "lateralMin": -0.5, "lateralMax": -0.14 },
+      "occluderZIndex": 5
+    },
+    {
+      "id": "stronghold_gate_pillar_right",
+      "bounds": { "progressMin": 0.78, "progressMax": 0.86, "lateralMin": 0.14, "lateralMax": 0.5 },
+      "occluderZIndex": 5
+    }
+  ]
+}

@@ -41,6 +41,12 @@ const GoldlineGameHome = lazy(() => import("../../game/GoldlineGameHome"));
 
 export default function GoldlineDriverController() {
   const utils = trpc.useUtils();
+  /**
+   * Scopes the local positional checkpoint to the signed-in player, so a
+   * shared phone cannot hand one driver the previous driver's position in the
+   * world. Carries no business state — see checkpointStorage.ts.
+   */
+  const identity = trpc.auth.me.useQuery();
   const [selectedDate, setSelectedDate] = useState(() => getLocalYmd());
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [newOrderOpen, setNewOrderOpen] = useState(false);
@@ -601,6 +607,7 @@ export default function GoldlineDriverController() {
       <Suspense fallback={<GoldlineHome {...gameHomeProps} />}>
         <GoldlineGameHome
           {...gameHomeProps}
+          playerIdentity={identity.data?.openId ?? null}
           worldNodes={driverGameWorld.data}
           isLoadingWorld={driverGameWorld.isLoading}
           isBeginningRekindle={beginRekindle.isPending}
