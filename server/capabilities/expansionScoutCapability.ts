@@ -1,11 +1,9 @@
-import { randomUUID } from "node:crypto";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import {
   commercialAccountLocations,
   commercialAccounts,
   commercialMissions,
   commercialPipelineRecords,
-  driverCapabilityUnlocks,
   territoryOperatorProfiles,
 } from "../../drizzle/schema";
 import {
@@ -15,10 +13,12 @@ import {
   type ExpansionScoutEvidence,
 } from "../../shared/expansionScout";
 import { getDb } from "../db";
+import { projectGoldlineProgressionForIdentity } from "../driverGameWorld/progressionProjectionService";
 
-export async function getExpansionScoutEvidence(
-  tenantId: string
-): Promise<ExpansionScoutEvidence> {
+export async function getExpansionScoutEvidence(input: {
+  tenantId: string;
+  actorId: string;
+}): Promise<ExpansionScoutEvidence> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [wonRows, profiles] = await Promise.all([
@@ -59,7 +59,8 @@ export async function getExpansionScoutEvidence(
       )
       .where(
         and(
-          eq(commercialMissions.tenantId, tenantId),
+          eq(commercialMissions.tenantId, input.tenantId),
+          eq(commercialMissions.assignedTo, input.actorId),
           eq(commercialMissions.status, "won")
         )
       )
@@ -70,7 +71,7 @@ export async function getExpansionScoutEvidence(
     db
       .select()
       .from(territoryOperatorProfiles)
-      .where(eq(territoryOperatorProfiles.tenantId, tenantId))
+      .where(eq(territoryOperatorProfiles.tenantId, input.tenantId))
       .limit(1),
   ]);
   const won =
@@ -99,77 +100,43 @@ export async function getExpansionScoutEvidence(
             `commercial_pipeline_records:mission:${won.missionId}`,
           ]
         : []),
-      ...(profile ? [`territory_operator_profiles:${tenantId}`] : []),
+      ...(profile ? [`territory_operator_profiles:${input.tenantId}`] : []),
     ],
   };
 }
 
-export async function evaluateAndPersistExpansionScout(input: {
+export async function evaluateExpansionScoutForIdentity(input: {
   tenantId: string;
   actorId: string;
 }): Promise<CapabilityEvaluation> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const [persisted] = await db
-    .select()
-    .from(driverCapabilityUnlocks)
-    .where(
-      and(
-        eq(driverCapabilityUnlocks.tenantId, input.tenantId),
-        eq(driverCapabilityUnlocks.scopeId, "tenant_business"),
-        eq(driverCapabilityUnlocks.capabilityId, EXPANSION_SCOUT)
-      )
-    )
-    .limit(1);
-  if (persisted) {
-    return {
-      capabilityId: EXPANSION_SCOUT,
-      eligible: true,
-      unlocked: true,
-      reasons: [
-        "Expansion Scout is durably unlocked from verified business evidence",
-      ],
-      sourceReferences: persisted.sourceReferencesJson as string[],
-      evidenceSummary: persisted.evidenceSummaryJson as Record<string, unknown>,
-      unlockedAt: persisted.unlockedAt.toISOString(),
-    };
-  }
-  const evaluation = evaluateExpansionScout(
-    await getExpansionScoutEvidence(input.tenantId)
+  const [progression, sourceEvaluation] = await Promise.all([
+    projectGoldlineProgressionForIdentity(input),
+    getExpansionScoutEvidence(input).then(evaluateExpansionScout),
+  ]);
+  const scout = progression.agents.find(agent => agent.agentId === "SCOUT");
+  const capture = progression.unlocks.find(
+    unlock => unlock.ruleId === "FIRST_CAPTURE"
   );
-  if (!evaluation.eligible) {
-    return { ...evaluation, unlocked: false, unlockedAt: null };
-  }
-  const unlockedAt = new Date();
-  await db
-    .insert(driverCapabilityUnlocks)
-    .values({
-      id: randomUUID(),
-      tenantId: input.tenantId,
-      scopeId: "tenant_business",
-      capabilityId: EXPANSION_SCOUT,
-      unlockedByActorId: input.actorId,
-      unlockedAt,
-      sourceReferencesJson: evaluation.sourceReferences,
-      evidenceSummaryJson: evaluation.evidenceSummary,
-    })
-    .onDuplicateKeyUpdate({
-      set: { capabilityId: EXPANSION_SCOUT },
-    });
-  const [unlock] = await db
-    .select()
-    .from(driverCapabilityUnlocks)
-    .where(
-      and(
-        eq(driverCapabilityUnlocks.tenantId, input.tenantId),
-        eq(driverCapabilityUnlocks.scopeId, "tenant_business"),
-        eq(driverCapabilityUnlocks.capabilityId, EXPANSION_SCOUT)
-      )
-    )
-    .limit(1);
+  const unlocked = scout?.eligible ?? false;
   return {
-    ...evaluation,
-    unlocked: true,
-    unlockedAt: (unlock?.unlockedAt ?? unlockedAt).toISOString(),
+    capabilityId: EXPANSION_SCOUT,
+    eligible: unlocked,
+    unlocked,
+    reasons: unlocked
+      ? sourceEvaluation.eligible
+        ? sourceEvaluation.reasons
+        : [
+            "Scout is eligible from FIRST_CAPTURE; current source data yields zero runnable discovery searches",
+            ...sourceEvaluation.reasons,
+          ]
+      : ["FIRST_CAPTURE authoritative evidence is required"],
+    sourceReferences: scout?.evidenceRefs.map(ref => ref.sourceRef) ?? [],
+    evidenceSummary: {
+      ruleId: "FIRST_CAPTURE",
+      ruleVersion: progression.ruleVersion,
+      operationalSourceReady: sourceEvaluation.eligible,
+      ...sourceEvaluation.evidenceSummary,
+    },
+    unlockedAt: capture?.earnedAt ?? null,
   };
 }

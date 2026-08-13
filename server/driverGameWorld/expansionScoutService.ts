@@ -3,7 +3,6 @@ import { and, desc, eq } from "drizzle-orm";
 import {
   commercialAccounts,
   commercialMissions,
-  driverCapabilityUnlocks,
   driverGameWorldNodes,
   driverScoutDiscoveries,
   driverScoutReports,
@@ -12,7 +11,7 @@ import type {
   CommercialMissionAccountSnapshot,
   CommercialMissionOpportunitySnapshot,
 } from "../../shared/commercialMission";
-import { EXPANSION_SCOUT, type ScoutReport } from "../../shared/expansionScout";
+import type { ScoutReport } from "../../shared/expansionScout";
 import { getDb } from "../db";
 import { createCommercialMission } from "../commercialMissions/commercialMissionStore";
 import { getExpansionScoutEvidence } from "../capabilities/expansionScoutCapability";
@@ -24,6 +23,7 @@ import {
   getTerritoryOperatorProfile,
   persistTerritoryScan,
 } from "../territory/territoryStore";
+import { projectGoldlineProgressionForIdentity } from "./progressionProjectionService";
 
 const CATEGORY_BY_ARCHETYPE: Record<string, string[]> = {
   property_management: ["property management company", "apartment complex"],
@@ -128,22 +128,14 @@ export async function runExpansionScout(input: {
     if (!report) throw new Error("Persisted Scout report is unavailable");
     return report;
   }
-  const [unlock] = await db
-    .select()
-    .from(driverCapabilityUnlocks)
-    .where(
-      and(
-        eq(driverCapabilityUnlocks.tenantId, input.tenantId),
-        eq(driverCapabilityUnlocks.scopeId, "tenant_business"),
-        eq(driverCapabilityUnlocks.capabilityId, EXPANSION_SCOUT)
-      )
-    )
-    .limit(1);
-  if (!unlock) throw new Error("Expansion Scout is not unlocked");
-  const [evidence, operator] = await Promise.all([
-    getExpansionScoutEvidence(input.tenantId),
+  const [progression, evidence, operator] = await Promise.all([
+    projectGoldlineProgressionForIdentity(input),
+    getExpansionScoutEvidence(input),
     getTerritoryOperatorProfile(input.tenantId),
   ]);
+  const scout = progression.agents.find(agent => agent.agentId === "SCOUT");
+  if (!scout?.eligible)
+    throw new Error("FIRST_CAPTURE evidence is required for Expansion Scout");
   if (
     !operator ||
     !evidence.accountAddress ||
@@ -193,7 +185,7 @@ export async function runExpansionScout(input: {
     tenantId: input.tenantId,
     actorId: input.actorId,
     requestId: input.requestId,
-    capabilityUnlockId: unlock.id,
+    capabilityUnlockId: `rule:first_capture:v${progression.ruleVersion}`,
     sourceScanId: persistedScan.scanId,
     criteriaJson: {
       archetype: evidence.accountArchetype,

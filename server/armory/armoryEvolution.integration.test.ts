@@ -154,6 +154,38 @@ describe.skipIf(!runDatabaseGate)("Armory Evolution", () => {
     expect(weapon!.personalEvidence).toBeNull();
   });
 
+  it("keeps accepted doctrine out of a live encounter until player branch evidence qualifies", async () => {
+    const tenantId = `t-${randomUUID()}`;
+    tenantIds.push(tenantId);
+    const seeded = await seedFramework({
+      archetype: "GATEKEEPER",
+      channel: "phone",
+      creator: "Supplied Trainer Evidence Gate",
+      frameworkName: `Evidence-gated ${randomUUID().slice(0, 6)}`,
+      objection: `Evidence gate ${randomUUID()}`,
+      responseFamily: "seek_callback_window",
+    });
+
+    const liveEncounter = await listArmoryWeapons({
+      tenantId,
+      actorId: "driver-without-branch-evidence",
+      archetype: "GATEKEEPER",
+      channel: "phone",
+      missionId: 9_999,
+      limit: 6,
+    });
+
+    expect(liveEncounter.weapons.map(weapon => weapon.id)).not.toContain(
+      trainerWeaponId(seeded.frameworks[0]!.id)
+    );
+    expect(liveEncounter.trainerIntelligenceAvailable).toBe(false);
+    expect(
+      liveEncounter.weapons.every(
+        weapon => weapon.provenance.type === "foundation"
+      )
+    ).toBe(true);
+  });
+
   it("returns different weapons for the same archetype on a different channel", async () => {
     const tenantId = `t-${randomUUID()}`;
     tenantIds.push(tenantId);
@@ -306,11 +338,13 @@ describe.skipIf(!runDatabaseGate)("Armory Evolution", () => {
       requestId,
     });
     expect(retry.id).toBe(first.id);
-    expect(await listMissionWeaponUsage({
-      tenantId,
-      actorId: "driver-openid",
-      missionId: 4_101,
-    })).toHaveLength(1);
+    expect(
+      await listMissionWeaponUsage({
+        tenantId,
+        actorId: "driver-openid",
+        missionId: 4_101,
+      })
+    ).toHaveLength(1);
 
     const result = await listArmoryWeapons({
       tenantId,

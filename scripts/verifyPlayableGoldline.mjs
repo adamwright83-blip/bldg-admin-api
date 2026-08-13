@@ -111,11 +111,13 @@ let coldCallBatch =
             companyName: "The Maybourne Beverly Hills",
             phoneNumber: "+12025550101",
             eligibility: "eligible",
-            reason: "Assigned call-ready mission with a sourced permitted phone contact",
+            reason:
+              "Assigned call-ready mission with a sourced permitted phone contact",
             sourceReference: "commercial_account_contacts:501",
             coaching: {
               openingLine: "Who owns the recurring laundry program?",
-              provenance: "commercial_missions:901:missionBriefJson.openingLine",
+              provenance:
+                "commercial_missions:901:missionBriefJson.openingLine",
             },
             status: "selected",
             position: 0,
@@ -128,11 +130,13 @@ let coldCallBatch =
             companyName: "Beverly Wilshire, A Four Seasons Hotel",
             phoneNumber: "+12025550102",
             eligibility: "eligible",
-            reason: "Assigned call-ready mission with a sourced permitted phone contact",
+            reason:
+              "Assigned call-ready mission with a sourced permitted phone contact",
             sourceReference: "commercial_account_contacts:502",
             coaching: {
               openingLine: "Who owns the recurring laundry program?",
-              provenance: "commercial_missions:902:missionBriefJson.openingLine",
+              provenance:
+                "commercial_missions:902:missionBriefJson.openingLine",
             },
             status: "pending",
             position: 1,
@@ -249,7 +253,8 @@ function responseFor(procedure, input) {
       },
     };
   }
-  if (procedure === "system.commercialMission.myBuiltMissions") return [mission, ...scoutMissions];
+  if (procedure === "system.commercialMission.myBuiltMissions")
+    return [mission, ...scoutMissions];
   if (procedure === "system.commercialMission.myDispatches") return [];
   if (procedure === "system.driverGameWorld.current") {
     return [
@@ -271,8 +276,7 @@ function responseFor(procedure, input) {
             ? "gold_recovery_path"
             : null,
         discoveryState: "discovered",
-        contestedUntil:
-          mode === "contested" ? dueAt : archetypeContestedUntil,
+        contestedUntil: mode === "contested" ? dueAt : archetypeContestedUntil,
         verifiedAnnualValueCents: mode === "captured" ? 2160000 : null,
         realizedRevenueCents: 0,
         lossReason: null,
@@ -280,7 +284,10 @@ function responseFor(procedure, input) {
         isTodayActive: !["won", "lost"].includes(missionStatus),
         isHistorical: ["won", "lost"].includes(missionStatus),
         regionKey: "fortress_gate",
-        resolvedAt: mode === "captured" || mode === "scout" ? new Date().toISOString() : null,
+        resolvedAt:
+          mode === "captured" || mode === "scout"
+            ? new Date().toISOString()
+            : null,
       },
       ...scoutMissions.map(scoutMission => ({
         missionId: scoutMission.id,
@@ -538,6 +545,46 @@ function responseFor(procedure, input) {
       version: 2,
     };
   }
+  if (procedure === "system.driverGameWorld.progression") {
+    const eligible = mode === "captured" || mode === "scout";
+    return {
+      ruleVersion: 1,
+      recencyDays: 90,
+      tenantId: "browser-verification-tenant",
+      actorId: "browser-verification-driver",
+      projectedAt: new Date().toISOString(),
+      unlocks: [
+        {
+          ruleId: "FIRST_CAPTURE",
+          ruleVersion: 1,
+          eligible,
+          earnedAt: eligible ? new Date().toISOString() : null,
+          evidenceRefs: eligible
+            ? [
+                {
+                  kind: "commercial_mission",
+                  sourceRef: "commercial_missions:901",
+                  missionId: 901,
+                  observedAt: new Date().toISOString(),
+                },
+              ]
+            : [],
+        },
+      ],
+      agents: [
+        {
+          agentId: "SCOUT",
+          eligible,
+          eligibilityRule: "FIRST_CAPTURE",
+          evidenceRefs: [],
+          capabilities: ["SURFACE_SCOUT_DISCOVERIES"],
+        },
+      ],
+      branches: [],
+      techniques: [],
+      missionCandidates: [],
+    };
+  }
   if (procedure === "system.driverGameWorld.coldCall") {
     return {
       batch: coldCallBatch,
@@ -547,14 +594,19 @@ function responseFor(procedure, input) {
         : "No assigned call-ready missions have a sourced, permitted phone contact",
     };
   }
-  if (procedure === "system.driverGameWorld.createColdCallBatch") return coldCallBatch;
+  if (procedure === "system.driverGameWorld.createColdCallBatch")
+    return coldCallBatch;
   if (procedure === "system.driverGameWorld.startColdCallTarget") {
-    const target = coldCallBatch?.targets.find(item => item.id === input?.targetId);
+    const target = coldCallBatch?.targets.find(
+      item => item.id === input?.targetId
+    );
     if (target) target.status = "live";
     return coldCallBatch;
   }
   if (procedure === "system.driverGameWorld.completeColdCallTarget") {
-    const target = coldCallBatch?.targets.find(item => item.id === input?.targetId);
+    const target = coldCallBatch?.targets.find(
+      item => item.id === input?.targetId
+    );
     if (target && coldCallBatch) {
       target.status = "completed";
       target.outcome = input?.outcome ?? "spoke";
@@ -566,7 +618,9 @@ function responseFor(procedure, input) {
     return coldCallBatch;
   }
   if (procedure === "system.driverGameWorld.selectColdCallChainTarget") {
-    const target = coldCallBatch?.targets.find(item => item.id === input?.targetId);
+    const target = coldCallBatch?.targets.find(
+      item => item.id === input?.targetId
+    );
     if (target && coldCallBatch) {
       target.status = "selected";
       coldCallBatch.combo = 2;
@@ -582,13 +636,23 @@ function responseFor(procedure, input) {
       capabilityId: "EXPANSION_SCOUT",
       eligible: mode === "captured" || mode === "scout",
       unlocked: mode === "captured" || mode === "scout",
-      reasons: ["Verified win contains enough archetype, location, and service evidence for sourced lookalikes"],
-      sourceReferences: ["commercial_missions:901", "territory_operator_profiles:browser-verification"],
-      evidenceSummary: { verifiedWin: true, accountArchetype: "hotel", hasSourcedLocation: true },
+      reasons: [
+        "Verified win contains enough archetype, location, and service evidence for sourced lookalikes",
+      ],
+      sourceReferences: [
+        "commercial_missions:901",
+        "territory_operator_profiles:browser-verification",
+      ],
+      evidenceSummary: {
+        verifiedWin: true,
+        accountArchetype: "hotel",
+        hasSourcedLocation: true,
+      },
       unlockedAt: new Date().toISOString(),
     };
   }
-  if (procedure === "system.driverGameWorld.latestScoutReport") return scoutReport;
+  if (procedure === "system.driverGameWorld.latestScoutReport")
+    return scoutReport;
   if (procedure === "system.driverGameWorld.runScout") {
     const discoveredMission = {
       ...mission,
@@ -614,7 +678,11 @@ function responseFor(procedure, input) {
       id: "20000000-0000-4000-8000-000000000001",
       generatedAt: new Date().toISOString(),
       sourceReferences: ["territory_scan_sessions:browser-verification"],
-      criteria: { archetype: "hotel", area: mission.account.address, radiusMiles: 3 },
+      criteria: {
+        archetype: "hotel",
+        area: mission.account.address,
+        radiusMiles: 3,
+      },
       discoveries: [
         {
           entityId: "502",
@@ -652,7 +720,8 @@ const ANDROID_DEVICE_PROFILES = {
       "Mozilla/5.0 (Linux; Android 14; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
   },
 };
-const androidDevice = ANDROID_DEVICE_PROFILES[process.env.GOLDLINE_VERIFY_DEVICE ?? ""];
+const androidDevice =
+  ANDROID_DEVICE_PROFILES[process.env.GOLDLINE_VERIFY_DEVICE ?? ""];
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
@@ -689,7 +758,9 @@ await page.route("**/api/trpc/**", async route => {
   await route.fulfill({
     status: 200,
     contentType: "application/json",
-    body: JSON.stringify(url.searchParams.get("batch") === "1" ? payload : payload[0]),
+    body: JSON.stringify(
+      url.searchParams.get("batch") === "1" ? payload : payload[0]
+    ),
   });
 });
 
@@ -713,7 +784,8 @@ await page.locator("canvas.goldline-game-canvas").waitFor({ state: "visible" });
 const hasHorizontalOverflow = await page.evaluate(
   () => document.documentElement.scrollWidth > window.innerWidth
 );
-if (hasHorizontalOverflow) throw new Error("Playable world has horizontal overflow");
+if (hasHorizontalOverflow)
+  throw new Error("Playable world has horizontal overflow");
 const observedAnimationFrames = await page.evaluate(
   () =>
     new Promise(resolve => {
@@ -748,7 +820,10 @@ if (mode === "viewport-metrics") {
     const canvas = document.querySelector("canvas.goldline-game-canvas");
     return {
       visualViewport: window.visualViewport
-        ? { width: window.visualViewport.width, height: window.visualViewport.height }
+        ? {
+            width: window.visualViewport.width,
+            height: window.visualViewport.height,
+          }
         : null,
       innerWidth: window.innerWidth,
       innerHeight: window.innerHeight,
@@ -756,7 +831,9 @@ if (mode === "viewport-metrics") {
       shellRect: rect(shell),
       gameRect: rect(game),
       canvasCssRect: rect(canvas),
-      canvasBacking: canvas ? { width: canvas.width, height: canvas.height } : null,
+      canvasBacking: canvas
+        ? { width: canvas.width, height: canvas.height }
+        : null,
     };
   });
   const visualWidth = metrics.visualViewport?.width ?? metrics.innerWidth;
@@ -811,7 +888,9 @@ if (mode === "coldcall") {
   }
   await page.getByRole("button", { name: /CALL ENDED/i }).click();
   await page.locator(".cold-call-outcome select").selectOption("spoke");
-  await page.locator(".cold-call-outcome textarea").fill("Reached the real front desk and logged the actual outcome.");
+  await page
+    .locator(".cold-call-outcome textarea")
+    .fill("Reached the real front desk and logged the actual outcome.");
   await page.getByRole("button", { name: /SAVE OUTCOME/i }).click();
   await page.getByText("CHAIN TARGET", { exact: true }).waitFor();
   await page.getByRole("button", { name: /Beverly Wilshire/i }).click();
@@ -821,10 +900,14 @@ if (mode === "coldcall") {
     fullPage: true,
   });
   await page.reload({ waitUntil: "networkidle" });
-  await page.locator("canvas.goldline-game-canvas").waitFor({ state: "visible" });
+  await page
+    .locator("canvas.goldline-game-canvas")
+    .waitFor({ state: "visible" });
   await page.getByRole("button", { name: /COLD CALL BURST/i }).click();
   await page.getByText("LOGGED 1/2", { exact: true }).waitFor();
-  await page.getByText("Beverly Wilshire, A Four Seasons Hotel", { exact: true }).waitFor();
+  await page
+    .getByText("Beverly Wilshire, A Four Seasons Hotel", { exact: true })
+    .waitFor();
   if (errors.length) throw new Error(`Browser errors: ${errors.join(" | ")}`);
   console.log(
     JSON.stringify({
@@ -853,7 +936,9 @@ if (mode === "scout") {
   await page.getByRole("button", { name: /RUN SOURCED SCOUT/i }).click();
   await page.getByText("1 NEW MISSIONS DISCOVERED", { exact: true }).waitFor();
   await page.getByRole("button", { name: /Engage Beverly Wilshire/i }).click();
-  await page.getByRole("button", { name: /Select Beverly Wilshire/i }).waitFor();
+  await page
+    .getByRole("button", { name: /Select Beverly Wilshire/i })
+    .waitFor();
   await page.screenshot({
     path: `${outputDir}/goldline-captured-scout-loop-${viewportTag}.png`,
     fullPage: true,
@@ -876,7 +961,9 @@ if (mode === "scout") {
 }
 
 if (mode === "contested") {
-  await page.getByText("GOLD RECOVERY PATH UNLOCKED", { exact: true }).waitFor();
+  await page
+    .getByText("GOLD RECOVERY PATH UNLOCKED", { exact: true })
+    .waitFor();
   await page.getByText(/^COOLING /).waitFor();
   await page.getByRole("button", { name: /BEGIN REKINDLE/i }).click();
   await page.getByText("RECOVERY ACTIVE", { exact: true }).waitFor();
@@ -885,7 +972,9 @@ if (mode === "contested") {
     fullPage: true,
   });
   await page.reload({ waitUntil: "networkidle" });
-  await page.locator("canvas.goldline-game-canvas").waitFor({ state: "visible" });
+  await page
+    .locator("canvas.goldline-game-canvas")
+    .waitFor({ state: "visible" });
   await page.getByText("RECOVERY ACTIVE", { exact: true }).waitFor();
   if (errors.length) throw new Error(`Browser errors: ${errors.join(" | ")}`);
   console.log(
@@ -951,7 +1040,9 @@ async function pushForward(milliseconds) {
 
 await pushForward(1700);
 await page.getByRole("button", { name: /JUMP/i }).waitFor();
-const jumpButton = await page.getByRole("button", { name: /JUMP/i }).boundingBox();
+const jumpButton = await page
+  .getByRole("button", { name: /JUMP/i })
+  .boundingBox();
 if (!jumpButton || jumpButton.y + jumpButton.height > viewportHeight) {
   throw new Error("Context action is outside the usable viewport");
 }
@@ -994,7 +1085,10 @@ if (mode === "gatekeeper") {
   await page.locator(".armory-weapon-provenance-toggle").first().click();
   await page.getByText("FROM SALES INTEL", { exact: true }).waitFor();
   await page.getByText("Fixture Trainer", { exact: false }).first().waitFor();
-  const provenanceHtml = await page.locator(".armory-weapon-provenance").first().innerHTML();
+  const provenanceHtml = await page
+    .locator(".armory-weapon-provenance")
+    .first()
+    .innerHTML();
   if (!provenanceHtml.includes("youtube.com/watch?v=fixture0001")) {
     throw new Error("Trainer weapon did not expose its source artifact URL");
   }
@@ -1019,9 +1113,13 @@ if (mode === "gatekeeper") {
     .locator(".gate-node", { hasText: "WHEN" })
     .first()
     .boundingBox();
-  if (!origin || !whenGate) throw new Error("Gatekeeper routing field did not render");
+  if (!origin || !whenGate)
+    throw new Error("Gatekeeper routing field did not render");
 
-  await page.mouse.move(origin.x + origin.width / 2, origin.y + origin.height / 2);
+  await page.mouse.move(
+    origin.x + origin.width / 2,
+    origin.y + origin.height / 2
+  );
   await page.mouse.down();
   await page.mouse.move(
     whenGate.x + whenGate.width / 2,
@@ -1031,11 +1129,17 @@ if (mode === "gatekeeper") {
   await page.mouse.up();
 
   await page.getByText(/ROUTE OPEN/i).waitFor();
-  await page.getByText("GAME RESULT ≠ ACCESS GRANTED", { exact: true }).waitFor();
+  await page
+    .getByText("GAME RESULT ≠ ACCESS GRANTED", { exact: true })
+    .waitFor();
 
   // A clean route is not a recorded fact.
   const afterRouting = await page.locator("body").innerText();
-  if (/ACCESS GRANTED\b(?!.*≠)/i.test(afterRouting.replace(/GAME RESULT ≠ ACCESS GRANTED/g, ""))) {
+  if (
+    /ACCESS GRANTED\b(?!.*≠)/i.test(
+      afterRouting.replace(/GAME RESULT ≠ ACCESS GRANTED/g, "")
+    )
+  ) {
     throw new Error("Routing fabricated an access result");
   }
 
@@ -1045,7 +1149,9 @@ if (mode === "gatekeeper") {
   });
 
   await page.reload({ waitUntil: "networkidle" });
-  await page.locator("canvas.goldline-game-canvas").waitFor({ state: "visible" });
+  await page
+    .locator("canvas.goldline-game-canvas")
+    .waitFor({ state: "visible" });
   const persisted = await page.locator("body").innerText();
   if (!/NO ACTIVE MISSION|Maybourne/i.test(persisted)) {
     throw new Error("World state did not persist across reload");
@@ -1104,9 +1210,13 @@ if (mode === "ghost") {
   await page.getByText(/SIGNAL LOCKED/i).waitFor();
 
   // The load-bearing assertion: perfect execution is not a reply.
-  await page.getByText("A PERFECT LOCK IS NOT A REPLY", { exact: true }).waitFor();
+  await page
+    .getByText("A PERFECT LOCK IS NOT A REPLY", { exact: true })
+    .waitFor();
   const afterLock = await page.locator("body").innerText();
-  if (/THEY REPLIED|RESPONSE RECEIVED|PROSPECT REPLIED|CAPTURED/i.test(afterLock)) {
+  if (
+    /THEY REPLIED|RESPONSE RECEIVED|PROSPECT REPLIED|CAPTURED/i.test(afterLock)
+  ) {
     throw new Error("Perfect game input fabricated a prospect response");
   }
   if (/\$[\d,]+\/YEAR SECURED/i.test(afterLock)) {
@@ -1119,7 +1229,9 @@ if (mode === "ghost") {
   });
 
   await page.reload({ waitUntil: "networkidle" });
-  await page.locator("canvas.goldline-game-canvas").waitFor({ state: "visible" });
+  await page
+    .locator("canvas.goldline-game-canvas")
+    .waitFor({ state: "visible" });
   const persisted = await page.locator("body").innerText();
   if (/CAPTURED|SECURED/i.test(persisted)) {
     throw new Error("A fabricated win persisted across reload");
@@ -1174,8 +1286,13 @@ if (mode === "staller") {
     .first()
     .click();
   await page.getByRole("button", { name: "COMMIT", exact: true }).click();
-  await page.getByText(/ALIGNED/i).first().waitFor();
-  await page.getByText("ALIGNMENT ≠ A COMMITTED DATE", { exact: true }).waitFor();
+  await page
+    .getByText(/ALIGNED/i)
+    .first()
+    .waitFor();
+  await page
+    .getByText("ALIGNMENT ≠ A COMMITTED DATE", { exact: true })
+    .waitFor();
 
   await page.screenshot({
     path: `${outputDir}/goldline-staller-${viewportTag}.png`,
@@ -1183,7 +1300,9 @@ if (mode === "staller") {
   });
 
   await page.reload({ waitUntil: "networkidle" });
-  await page.locator("canvas.goldline-game-canvas").waitFor({ state: "visible" });
+  await page
+    .locator("canvas.goldline-game-canvas")
+    .waitFor({ state: "visible" });
 
   if (errors.length) throw new Error(`Browser errors: ${errors.join(" | ")}`);
 
@@ -1247,14 +1366,20 @@ if (mode === "leak-check") {
   // double-registered ticker, texture, or listener.
   for (let cycle = 1; cycle <= 5; cycle += 1) {
     await page.reload({ waitUntil: "networkidle" });
-    await page.locator("canvas.goldline-game-canvas").waitFor({ state: "visible" });
+    await page
+      .locator("canvas.goldline-game-canvas")
+      .waitFor({ state: "visible" });
     await page.waitForTimeout(300);
   }
-  if (errors.length) throw new Error(`Browser errors after 5 reload cycles: ${errors.join(" | ")}`);
+  if (errors.length)
+    throw new Error(
+      `Browser errors after 5 reload cycles: ${errors.join(" | ")}`
+    );
   const overflowAfterCycles = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth
   );
-  if (overflowAfterCycles) throw new Error("Horizontal overflow appeared after repeated mount cycles");
+  if (overflowAfterCycles)
+    throw new Error("Horizontal overflow appeared after repeated mount cycles");
   console.log(
     JSON.stringify({
       pageLoaded: true,
@@ -1274,17 +1399,25 @@ const noRiskTrial = page.getByRole("button", { name: /NO-RISK TRIAL/i });
 await noRiskTrial.click();
 await page.waitForTimeout(150);
 await page.evaluate(() => {
-  Object.defineProperty(document, "hidden", { configurable: true, value: true });
+  Object.defineProperty(document, "hidden", {
+    configurable: true,
+    value: true,
+  });
   document.dispatchEvent(new Event("visibilitychange"));
 });
 const pausedSignalText = await page.locator(".signal-window b").innerText();
 await page.waitForTimeout(650);
-const stillPausedSignalText = await page.locator(".signal-window b").innerText();
+const stillPausedSignalText = await page
+  .locator(".signal-window b")
+  .innerText();
 if (pausedSignalText !== stillPausedSignalText) {
   throw new Error("Signal Override changed while the app was backgrounded");
 }
 await page.evaluate(() => {
-  Object.defineProperty(document, "hidden", { configurable: true, value: false });
+  Object.defineProperty(document, "hidden", {
+    configurable: true,
+    value: false,
+  });
   document.dispatchEvent(new Event("visibilitychange"));
 });
 await page.waitForTimeout(650);

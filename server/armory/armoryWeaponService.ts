@@ -23,6 +23,7 @@ import type {
   SalesIntelFramework,
 } from "../../shared/salesIntel";
 import { getDb } from "../db";
+import { projectGoldlineProgressionForIdentity } from "../driverGameWorld/progressionProjectionService";
 import {
   countIndependentSourceSupport,
   queryDriverVisibleFrameworks,
@@ -268,11 +269,33 @@ export async function listArmoryWeapons(input: {
   missionId?: number | null;
   limit?: number;
 }): Promise<ArmoryWeaponResult> {
-  const frameworks = await queryDriverVisibleFrameworks({
-    archetype: input.archetype,
-    channel: input.channel,
-    limit: 12,
-  });
+  const [visibleFrameworks, progression] = await Promise.all([
+    queryDriverVisibleFrameworks({
+      archetype: input.archetype,
+      channel: input.channel,
+      limit: 12,
+    }),
+    input.missionId == null
+      ? Promise.resolve(null)
+      : projectGoldlineProgressionForIdentity({
+          tenantId: input.tenantId,
+          actorId: input.actorId,
+        }),
+  ]);
+  const eligibleFrameworkIds = new Set(
+    (progression?.techniques ?? [])
+      .filter(technique => technique.eligible && !technique.reviewOnly)
+      .map(technique => technique.frameworkId)
+  );
+  // Accepted doctrine is necessary but not sufficient. Trainer techniques
+  // enter the live Armory only when this player's real branch evidence makes
+  // that exact framework eligible. Foundation moves always remain available.
+  const frameworks =
+    input.missionId == null
+      ? visibleFrameworks // doctrine/review read; not a playable encounter
+      : visibleFrameworks.filter(framework =>
+          eligibleFrameworkIds.has(framework.id)
+        );
 
   const sourceById = new Map<string, { url: string | null; type: string }>();
   if (frameworks.length) {

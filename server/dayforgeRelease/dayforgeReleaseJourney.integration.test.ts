@@ -69,7 +69,8 @@ import {
   getLatestScoutReport,
   runExpansionScout,
 } from "../driverGameWorld/expansionScoutService";
-import { evaluateAndPersistExpansionScout } from "../capabilities/expansionScoutCapability";
+import { evaluateExpansionScoutForIdentity } from "../capabilities/expansionScoutCapability";
+import { projectGoldlineProgressionForIdentity } from "../driverGameWorld/progressionProjectionService";
 import {
   discoverLaundryTerritory,
   type RankedTerritoryOpportunity,
@@ -380,7 +381,10 @@ describe.skipIf(!runDatabaseGate)("DayForge MySQL release journey", () => {
       notes: "Release fixture recorded the actual call outcome.",
     });
     expect(replayedColdCall?.completedCount).toBe(1);
-    expect((await getColdCallBurstState({ tenantId, actorId: driverId })).batch?.completedCount).toBe(1);
+    expect(
+      (await getColdCallBurstState({ tenantId, actorId: driverId })).batch
+        ?.completedCount
+    ).toBe(1);
     expect(
       await db
         .select()
@@ -650,22 +654,44 @@ describe.skipIf(!runDatabaseGate)("DayForge MySQL release journey", () => {
     });
     expect(pipeline.customer?.approvedAnnualValueCents).toBe(2_160_000);
 
-    const firstScoutCapability = await evaluateAndPersistExpansionScout({
+    const firstScoutCapability = await evaluateExpansionScoutForIdentity({
       tenantId,
       actorId: driverId,
     });
-    const replayedScoutCapability = await evaluateAndPersistExpansionScout({
+    const replayedScoutCapability = await evaluateExpansionScoutForIdentity({
       tenantId,
       actorId: driverId,
     });
     expect(firstScoutCapability.unlocked).toBe(true);
-    expect(replayedScoutCapability.unlockedAt).toBe(firstScoutCapability.unlockedAt);
+    expect(replayedScoutCapability.unlockedAt).toBe(
+      firstScoutCapability.unlockedAt
+    );
+    const rebuiltProgression = await projectGoldlineProgressionForIdentity({
+      tenantId,
+      actorId: driverId,
+    });
+    expect(
+      rebuiltProgression.unlocks.find(rule => rule.ruleId === "FIRST_CAPTURE")
+        ?.eligible
+    ).toBe(true);
+    expect(
+      rebuiltProgression.agents.find(agent => agent.agentId === "SCOUT")
+        ?.eligible
+    ).toBe(true);
+    const isolatedProgression = await projectGoldlineProgressionForIdentity({
+      tenantId,
+      actorId: `${driverId}-other`,
+    });
+    expect(
+      isolatedProgression.unlocks.find(rule => rule.ruleId === "FIRST_CAPTURE")
+        ?.eligible
+    ).toBe(false);
     expect(
       await db
         .select()
         .from(driverCapabilityUnlocks)
         .where(eq(driverCapabilityUnlocks.tenantId, tenantId))
-    ).toHaveLength(1);
+    ).toHaveLength(0);
 
     const scoutRequestId = randomUUID();
     const scoutReport = await runExpansionScout({
@@ -682,8 +708,13 @@ describe.skipIf(!runDatabaseGate)("DayForge MySQL release journey", () => {
       provider: new DeterministicTerritoryProvider(),
     });
     expect(replayedScoutReport.id).toBe(scoutReport.id);
-    expect((await getLatestScoutReport({ tenantId, actorId: driverId }))?.id).toBe(scoutReport.id);
-    const builtScoutMissions = await listDriverBuiltMissions({ tenantId, driverId });
+    expect(
+      (await getLatestScoutReport({ tenantId, actorId: driverId }))?.id
+    ).toBe(scoutReport.id);
+    const builtScoutMissions = await listDriverBuiltMissions({
+      tenantId,
+      driverId,
+    });
     expect(
       scoutReport.discoveries.every(discovery =>
         builtScoutMissions.some(mission => mission.id === discovery.missionId)
