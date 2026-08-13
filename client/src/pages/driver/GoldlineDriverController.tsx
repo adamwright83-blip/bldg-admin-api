@@ -13,8 +13,12 @@ import type {
   OpenChannelEditableTask,
 } from "../../../../server/openChannel/openChannelTypes";
 import type { OpenChannelGenerateInput } from "../goldline/OpenChannel";
-import type { ColdCallBatch, ColdCallTarget } from "../../../../shared/coldCallBurst";
+import type {
+  ColdCallBatch,
+  ColdCallTarget,
+} from "../../../../shared/coldCallBurst";
 import type { CapabilityEvaluation } from "../../../../shared/expansionScout";
+import type { RealActionRequest } from "../../game/encounters/RealActionBridge";
 import {
   canCompleteDelivery,
   nextCommitmentDate,
@@ -95,11 +99,13 @@ export default function GoldlineDriverController() {
     refetchInterval: 15_000,
     retry: false,
   });
-  const scoutReport =
-    trpc.system.driverGameWorld.latestScoutReport.useQuery(undefined, {
+  const scoutReport = trpc.system.driverGameWorld.latestScoutReport.useQuery(
+    undefined,
+    {
       refetchInterval: 30_000,
       retry: false,
-    });
+    }
+  );
   const openChannelInput = { businessDate: selectedDate };
   const progressInput = {
     businessDate: selectedDate,
@@ -160,8 +166,7 @@ export default function GoldlineDriverController() {
   const approveOpenChannel = trpc.system.openChannel.approve.useMutation();
   const completeOpenChannelTask =
     trpc.system.openChannel.completeTask.useMutation();
-  const beginRekindle =
-    trpc.system.driverGameWorld.beginRekindle.useMutation();
+  const beginRekindle = trpc.system.driverGameWorld.beginRekindle.useMutation();
   const createColdCall =
     trpc.system.driverGameWorld.createColdCallBatch.useMutation();
   const startColdCall =
@@ -176,9 +181,14 @@ export default function GoldlineDriverController() {
     trpc.system.driverGameWorld.scoutCapability.useMutation();
   const runScout = trpc.system.driverGameWorld.runScout.useMutation();
   const recordWeaponUsage = trpc.system.armory.recordUsage.useMutation();
+  const logCallAttempt =
+    trpc.system.commercialMission.logCallAttempt.useMutation();
   const recordGoldlineEvent = trpc.system.goldlineEvents.record.useMutation();
   const emitGoldlineEvent = useMemo(
-    () => createGoldlineEventEmitter(input => recordGoldlineEvent.mutateAsync(input)),
+    () =>
+      createGoldlineEventEmitter(input =>
+        recordGoldlineEvent.mutateAsync(input)
+      ),
     // recordGoldlineEvent.mutateAsync identity is stable across renders for a
     // given mutation hook instance; this only needs to be built once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -439,10 +449,14 @@ export default function GoldlineDriverController() {
         requestId: crypto.randomUUID(),
       });
       utils.system.driverGameWorld.current.setData(undefined, current => {
-        const others = (current ?? []).filter(item => item.missionId !== missionId);
+        const others = (current ?? []).filter(
+          item => item.missionId !== missionId
+        );
         return [...others, node];
       });
-      toast.success("Recovery path active. Real follow-up actions are inside the quest.");
+      toast.success(
+        "Recovery path active. Real follow-up actions are inside the quest."
+      );
       return node;
     } catch (error) {
       toast.error(
@@ -465,7 +479,8 @@ export default function GoldlineDriverController() {
       requestId: crypto.randomUUID(),
     });
     cacheColdCallBatch(batch);
-    if (!batch) toast.info(coldCall.data?.emptyReason ?? "No eligible call targets.");
+    if (!batch)
+      toast.info(coldCall.data?.emptyReason ?? "No eligible call targets.");
     return batch;
   }
 
@@ -512,6 +527,29 @@ export default function GoldlineDriverController() {
     return next;
   }
 
+  async function handlePersistEncounterAction(input: RealActionRequest) {
+    if (input.kind !== "CALL_ATTEMPT") {
+      throw new Error(
+        "This real action is not supported by the existing business service."
+      );
+    }
+    await logCallAttempt.mutateAsync({
+      missionId: input.missionId,
+      requestId: input.requestId,
+      outcome: input.outcome,
+      notes: input.notes,
+    });
+    // Persistence completes first. Only then do we refetch every projection
+    // that can change encounter resolution, world mutation, or next mission.
+    await Promise.all([
+      builtMissions.refetch(),
+      driverGameWorld.refetch(),
+      utils.system.commercialMission.callAttempts.invalidate({
+        missionId: input.missionId,
+      }),
+    ]);
+  }
+
   async function handleSelectColdCallChain(target: ColdCallTarget) {
     const batch = coldCall.data?.batch;
     if (!batch) throw new Error("Cold-call batch is unavailable");
@@ -536,11 +574,16 @@ export default function GoldlineDriverController() {
   async function handleEvaluateScout() {
     const evaluation = await evaluateScout.mutateAsync();
     setScoutCapability(evaluation);
-    if (evaluation.unlocked) toast.success("Expansion Scout capability unlocked from verified business evidence.");
+    if (evaluation.unlocked)
+      toast.success(
+        "Expansion Scout capability unlocked from verified business evidence."
+      );
   }
 
   async function handleRunScout() {
-    const report = await runScout.mutateAsync({ requestId: crypto.randomUUID() });
+    const report = await runScout.mutateAsync({
+      requestId: crypto.randomUUID(),
+    });
     utils.system.driverGameWorld.latestScoutReport.setData(undefined, report);
     await Promise.all([
       builtMissions.refetch(),
@@ -555,7 +598,8 @@ export default function GoldlineDriverController() {
   }
 
   useEffect(() => {
-    if (!driverGameWorld.data?.some(node => node.visualState === "captured")) return;
+    if (!driverGameWorld.data?.some(node => node.visualState === "captured"))
+      return;
     if (scoutCapability !== null || evaluateScout.isPending) return;
     void handleEvaluateScout().catch(error => {
       console.warn("[Goldline] Scout capability evaluation failed", error);
@@ -629,6 +673,7 @@ export default function GoldlineDriverController() {
           onRunScout={handleRunScout}
           onRequestWeapons={input => utils.system.armory.weapons.fetch(input)}
           onRecordWeaponUsage={input => recordWeaponUsage.mutateAsync(input)}
+          onPersistEncounterAction={handlePersistEncounterAction}
           onEmitEvent={emitGoldlineEvent}
         />
       </Suspense>
