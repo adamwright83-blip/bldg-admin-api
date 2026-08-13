@@ -48,7 +48,7 @@ describe("encounter lifecycle", () => {
     ).toThrow(/Illegal encounter transition/);
   });
 
-  it("keeps unresolved authoritative outcomes playable as recovery", () => {
+  it("keeps unresolved authoritative outcomes distinct from recovery", () => {
     let state = approaching();
     state = transitionEncounter(state, { type: "PHYSICAL_APPROACH_COMPLETED" });
     state = transitionEncounter(state, {
@@ -64,6 +64,43 @@ describe("encounter lifecycle", () => {
     state = transitionEncounter(state, {
       type: "AUTHORITATIVE_UNRESOLVED",
       revision: "server:3",
+    });
+    expect(state.phase).toBe("UNRESOLVED");
+  });
+
+  it("routes cancellation through the reducer and clears the request id", () => {
+    let state = approaching();
+    state = transitionEncounter(state, { type: "PHYSICAL_APPROACH_COMPLETED" });
+    state = transitionEncounter(state, {
+      type: "STRATEGY_SELECTED",
+      strategyId: "route",
+    });
+    state = transitionEncounter(state, { type: "GAME_CHALLENGE_COMPLETED" });
+    state = transitionEncounter(state, {
+      type: "REAL_ACTION_STARTED",
+      requestId: "stable-id",
+    });
+    state = transitionEncounter(state, { type: "REAL_ACTION_CANCELLED" });
+    expect(state.phase).toBe("ACTION_READY");
+    expect(state.actionRequestId).toBeNull();
+  });
+
+  it("reserves recovery for authoritative recovery evidence", () => {
+    let state = approaching();
+    state = transitionEncounter(state, { type: "PHYSICAL_APPROACH_COMPLETED" });
+    state = transitionEncounter(state, {
+      type: "STRATEGY_SELECTED",
+      strategyId: "route",
+    });
+    state = transitionEncounter(state, { type: "GAME_CHALLENGE_COMPLETED" });
+    state = transitionEncounter(state, {
+      type: "REAL_ACTION_STARTED",
+      requestId: "stable-id",
+    });
+    state = transitionEncounter(state, { type: "REAL_ACTION_PERSISTED" });
+    state = transitionEncounter(state, {
+      type: "AUTHORITATIVE_RECOVERY",
+      revision: "server:recovery",
     });
     expect(state.phase).toBe("RECOVERY");
   });

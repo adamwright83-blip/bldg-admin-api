@@ -1089,11 +1089,23 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   function openRealAction() {
     if (!activeMission?.missionId || encounterRuntime?.phase !== "ACTION_READY")
       return;
-    sendEncounterEvent({
-      type: "REAL_ACTION_STARTED",
-      requestId: crypto.randomUUID(),
-    });
-    setRealActionOpen(true);
+    const affordance = projectMissionAffordance(
+      activeMission,
+      new Date()
+    ).primary;
+    if (affordance === "CALL" && activeMission.phoneUrl) {
+      sendEncounterEvent({
+        type: "REAL_ACTION_STARTED",
+        requestId: crypto.randomUUID(),
+      });
+      setRealActionOpen(true);
+      return;
+    }
+    // Non-call actions retain their established authoritative flow until a
+    // purpose-built in-world bridge exists for that action type.
+    if (utilityMissionPath && affordance) {
+      window.location.assign(utilityMissionPath);
+    }
   }
 
   function performAction() {
@@ -1539,10 +1551,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           </Suspense>
         ) : null}
 
-        {realActionOpen && activeMission?.missionId ? (
+        {realActionOpen &&
+        activeMission?.missionId &&
+        activeMission.phoneUrl &&
+        encounterRuntime?.phase === "ACTION_IN_PROGRESS" &&
+        encounterRuntime.actionRequestId ? (
           <RealActionBridge
             missionName={activeMission.name}
             missionId={activeMission.missionId}
+            requestId={encounterRuntime.actionRequestId}
             phoneUrl={activeMission.phoneUrl}
             onPersist={props.onPersistEncounterAction}
             onPersisted={() => {
@@ -1552,17 +1569,13 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             }}
             onClose={() => {
               setRealActionOpen(false);
-              setEncounterRuntime(current =>
-                current?.phase === "ACTION_IN_PROGRESS"
-                  ? { ...current, phase: "ACTION_READY", actionRequestId: null }
-                  : current
-              );
+              sendEncounterEvent({ type: "REAL_ACTION_CANCELLED" });
             }}
           />
         ) : null}
 
         {view === "awaiting_business_result" &&
-        encounterRuntime?.phase === "RECOVERY" ? (
+        encounterRuntime?.phase === "UNRESOLVED" ? (
           <aside className="authoritative-waiting" role="status">
             <b>ATTEMPT SAVED · BUSINESS STATE UNRESOLVED</b>
             <small>

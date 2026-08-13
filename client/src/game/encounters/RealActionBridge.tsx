@@ -20,6 +20,7 @@ export type RealActionRequest = {
 export function RealActionBridge(props: {
   missionName: string;
   missionId: number;
+  requestId: string;
   phoneUrl: string | null;
   onPersist: (request: RealActionRequest) => Promise<void>;
   onPersisted: (requestId: string) => void;
@@ -32,18 +33,17 @@ export function RealActionBridge(props: {
 
   async function persist() {
     if (!notes.trim() || saving) return;
-    const requestId = crypto.randomUUID();
     setSaving(true);
     setError(null);
     try {
       await props.onPersist({
         missionId: props.missionId,
-        requestId,
+        requestId: props.requestId,
         kind: "CALL_ATTEMPT",
         outcome,
         notes: notes.trim(),
       });
-      props.onPersisted(requestId);
+      props.onPersisted(props.requestId);
     } catch (cause) {
       setError(
         cause instanceof Error

@@ -7,6 +7,7 @@ export const ENCOUNTER_PHASES = [
   "ACTION_READY",
   "ACTION_IN_PROGRESS",
   "AWAITING_OUTCOME",
+  "UNRESOLVED",
   "RESOLVED",
   "RECOVERY",
 ] as const;
@@ -29,6 +30,7 @@ export type EncounterEvent =
   | { type: "STRATEGY_SELECTED"; strategyId: string }
   | { type: "GAME_CHALLENGE_COMPLETED" }
   | { type: "REAL_ACTION_STARTED"; requestId: string }
+  | { type: "REAL_ACTION_CANCELLED" }
   | { type: "REAL_ACTION_PERSISTED" }
   | { type: "AUTHORITATIVE_RESOLVED"; revision: string }
   | { type: "AUTHORITATIVE_RECOVERY"; revision: string }
@@ -40,12 +42,13 @@ const ALLOWED: Record<EncounterPhase, readonly EncounterEvent["type"][]> = {
   STAGED: ["STRATEGY_SELECTED"],
   ARMED: ["STRATEGY_SELECTED", "GAME_CHALLENGE_COMPLETED"],
   ACTION_READY: ["STRATEGY_SELECTED", "REAL_ACTION_STARTED"],
-  ACTION_IN_PROGRESS: ["REAL_ACTION_PERSISTED"],
+  ACTION_IN_PROGRESS: ["REAL_ACTION_PERSISTED", "REAL_ACTION_CANCELLED"],
   AWAITING_OUTCOME: [
     "AUTHORITATIVE_RESOLVED",
     "AUTHORITATIVE_RECOVERY",
     "AUTHORITATIVE_UNRESOLVED",
   ],
+  UNRESOLVED: ["RETRY_AUTHORITATIVE_OUTCOME"],
   RESOLVED: [],
   RECOVERY: ["RETRY_AUTHORITATIVE_OUTCOME"],
 };
@@ -95,6 +98,8 @@ export function transitionEncounter(
       };
     case "REAL_ACTION_PERSISTED":
       return { ...state, phase: "AWAITING_OUTCOME" };
+    case "REAL_ACTION_CANCELLED":
+      return { ...state, phase: "ACTION_READY", actionRequestId: null };
     case "AUTHORITATIVE_RESOLVED":
       return {
         ...state,
@@ -102,10 +107,15 @@ export function transitionEncounter(
         authoritativeRevision: event.revision,
       };
     case "AUTHORITATIVE_RECOVERY":
-    case "AUTHORITATIVE_UNRESOLVED":
       return {
         ...state,
         phase: "RECOVERY",
+        authoritativeRevision: event.revision,
+      };
+    case "AUTHORITATIVE_UNRESOLVED":
+      return {
+        ...state,
+        phase: "UNRESOLVED",
         authoritativeRevision: event.revision,
       };
     case "RETRY_AUTHORITATIVE_OUTCOME":

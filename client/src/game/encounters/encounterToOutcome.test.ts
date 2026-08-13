@@ -100,7 +100,7 @@ describe("deterministic encounter-to-outcome fixture", () => {
         type: "AUTHORITATIVE_UNRESOLVED",
         revision: "server:no-answer:2",
       }).phase
-    ).toBe("RECOVERY");
+    ).toBe("UNRESOLVED");
   });
 
   it("preserves an authoritative win even if game execution was poor", () => {
