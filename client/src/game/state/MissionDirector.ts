@@ -57,21 +57,26 @@ function tieBreakTime(mission: PlayableMission): number {
 }
 
 /**
+ * The full deterministic order — every live mission, not just the top 3
+ * `MissionDirectorSelection` spotlights. Exported so Today's Route (Slice
+ * 95) can present the whole real route without duplicating this ranking
+ * logic; `selectMissionDirector` below is just this function plus a slice.
+ *
  * Pure and deterministic: the same mission list and `now` always produce
  * the same ordering, so a reload never reshuffles the world for no reason.
  */
-export function selectMissionDirector(
+export function rankMissionsForRoute(
   missions: PlayableMission[],
   now: Date,
   progression?: GoldlineProgressionProjection | null
-): MissionDirectorSelection {
+): PlayableMission[] {
   const candidateByMission = new Map(
     (progression?.missionCandidates ?? []).map(candidate => [
       candidate.missionId,
       candidate,
     ])
   );
-  const ranked = [...missions].sort((a, b) => {
+  return [...missions].sort((a, b) => {
     const tierDelta = priorityTier(a, now) - priorityTier(b, now);
     if (tierDelta !== 0) return tierDelta;
     const aTime = tieBreakTime(a);
@@ -85,6 +90,20 @@ export function selectMissionDirector(
     if (candidateDelta !== 0) return candidateDelta;
     return a.key.localeCompare(b.key);
   });
+}
+
+export function selectMissionDirector(
+  missions: PlayableMission[],
+  now: Date,
+  progression?: GoldlineProgressionProjection | null
+): MissionDirectorSelection {
+  const candidateByMission = new Map(
+    (progression?.missionCandidates ?? []).map(candidate => [
+      candidate.missionId,
+      candidate,
+    ])
+  );
+  const ranked = rankMissionsForRoute(missions, now, progression);
   const primary = ranked[0] ?? null;
   const candidate = primary
     ? (candidateByMission.get(primary.missionId ?? -1) ?? null)

@@ -13,8 +13,11 @@ describe("DayForge product event contract", () => {
     // added in the Slices 14-20 accelerated run (Slice 19) + 1 adaptive
     // visual-quality telemetry event added in Slice 27 + 1 real cold-call
     // target-start event added by the growth-loop analytics closure + 3
-    // presentation-only inhabited-world boundary events from Slices 87-94.
-    expect(DAYFORGE_PRODUCT_EVENT_NAMES).toHaveLength(66);
+    // presentation-only inhabited-world boundary events from Slices 87-94
+    // + 9 presentation-only mission-fiction boundary events (Today's
+    // Route/reroute, fiction instantiation/timer/resolution, Stronghold,
+    // long-horizon resume) from Slices 95-102.
+    expect(DAYFORGE_PRODUCT_EVENT_NAMES).toHaveLength(75);
     expect(DAYFORGE_PRODUCT_EVENT_NAMES).toContain("territory_scan_started");
     expect(DAYFORGE_PRODUCT_EVENT_NAMES).toContain("mission_game_completed");
     expect(DAYFORGE_PRODUCT_EVENT_NAMES).toContain(

@@ -128,6 +128,13 @@ import {
   type GoldlineActionKind,
 } from "./actions/actionRegistry";
 import type { GoldlineActionServices } from "./actions/actionServices";
+import { projectTodayRoute } from "./world/todayRoute";
+import { projectChronicle } from "./world/chronicleProjection";
+import { presentAgents, projectStronghold } from "./world/strongholdProjection";
+import { deriveRouteGrammar } from "../../../shared/actionGrammar";
+import { selectFictionForMission } from "./fiction/fictionDirector";
+import { reconcileFictionOnResume } from "./fiction/longHorizonResume";
+import type { FictionMissionInstance } from "./fiction/fictionDirector";
 
 // New objection encounters load only when the player actually reaches one,
 // so the base game runtime stays lean.
@@ -140,6 +147,9 @@ const StallerEncounter = lazy(
 );
 const GoldlineActionSurface = lazy(
   () => import("./actions/GoldlineActionSurface")
+);
+const GoldlineFictionMissionPanel = lazy(
+  () => import("./fiction/FictionMissionPanel")
 );
 
 /**
@@ -212,9 +222,24 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
     requestId: string;
   }) => Promise<unknown>;
   actionServices: GoldlineActionServices;
+  /**
+   * Real evidenced coverage count for the active fiction mission's
+   * underlying route, when a real source exists. Defaults to 0 because this
+   * business domain has no batch/route completion endpoint yet (see
+   * shared/actionGrammar.ts's discrepancy note) — production honestly shows
+   * 0 rather than a fabricated number. Test harnesses may override this to
+   * prove the FictionMissionPanel/two-clock wiring end-to-end.
+   */
+  authoritativeRouteCoverage?: number;
 };
 
-type UtilityPanel = "menu" | "route" | "objectives" | "open-channel" | null;
+type UtilityPanel =
+  | "menu"
+  | "route"
+  | "objectives"
+  | "open-channel"
+  | "stronghold"
+  | null;
 
 /**
  * Bundled Run-1 fallback art. NOT corridor content — these ship with the app
@@ -683,6 +708,122 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         hasDecisionMakerContact: Boolean(activeMission.phoneUrl),
       })
     : null;
+  // Today's Route (Slice 95): the full deterministic real-priority order,
+  // uncapped — MissionDirector above spotlights the top 3 for gameplay, this
+  // is the whole real route for the Stronghold/route-table view. Reprojects
+  // automatically whenever `authoritativeMissionTruth`/`props.progression`
+  // change (Slice 96) — no separate reroute mechanism needed.
+  const liveRouteMissions = useMemo(
+    () =>
+      authoritativeMissionTruth.filter(
+        mission => mission.state !== "captured" && mission.state !== "closed"
+      ),
+    [authoritativeMissionTruth]
+  );
+  const todayRoute = useMemo(
+    () =>
+      projectTodayRoute({
+        missions: liveRouteMissions,
+        now: new Date(),
+        progression: props.progression,
+        scoutCapability: props.scoutCapability,
+        scoutReport: props.scoutReport,
+      }),
+    [liveRouteMissions, props.progression, props.scoutCapability, props.scoutReport]
+  );
+  const chronicle = useMemo(
+    () => projectChronicle(props.worldNodes),
+    [props.worldNodes]
+  );
+  // Slice 95/96: reprojection is just this effect firing again whenever
+  // liveRouteMissions changes referentially — no separate reroute mechanism.
+  // First render reports today_route_projected; every render after that
+  // (a real authoritative change already happened) reports route_reprojected.
+  const hasProjectedRouteRef = useRef(false);
+  useEffect(() => {
+    emit?.({
+      eventName: hasProjectedRouteRef.current
+        ? "route_reprojected"
+        : "today_route_projected",
+      sessionId: sessionIdRef.current,
+      properties: {
+        sessionId: sessionIdRef.current,
+        entryCount: todayRoute.length,
+      },
+    });
+    hasProjectedRouteRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayRoute]);
+  const stronghold = useMemo(
+    () =>
+      projectStronghold({
+        routeTable: todayRoute,
+        agents: presentAgents([...(props.progression?.agents ?? [])]),
+        // Sales Intel Admin data is deliberately adminProcedure-gated and the
+        // driver role must never reach it (see
+        // server/salesIntel/salesIntelAuthorization.test.ts) — Stronghold's
+        // intel panel stays honestly empty rather than crossing that
+        // boundary. shared/salesIntelTeachingCoverage.ts +
+        // world/intelligenceFlywheel.ts are ready to wire a scoped,
+        // driver-safe read endpoint in a future run.
+        intel: null,
+        chronicle,
+      }),
+    [todayRoute, props.progression, chronicle]
+  );
+  // The canonical NEUTRALIZE fixture's real business backing: a genuine
+  // multi-stop route grammar derived from real due nearby-visit field moves.
+  // Null whenever reality has not actually produced one — the Fiction
+  // Director then simply has nothing to instantiate.
+  const routeGrammar = useMemo(
+    () => deriveRouteGrammar(props.moves?.recommendedMoves ?? []),
+    [props.moves?.recommendedMoves]
+  );
+  const fictionMission = useMemo<FictionMissionInstance | null>(() => {
+    if (!routeGrammar) return null;
+    return selectFictionForMission(routeGrammar, {
+      now: new Date(),
+      identity: props.playerIdentity ?? null,
+    });
+  }, [routeGrammar, props.playerIdentity]);
+  const [fictionMissionOpen, setFictionMissionOpen] = useState(false);
+  const seenFictionKeysRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!fictionMission) return;
+    if (seenFictionKeysRef.current.has(fictionMission.stableMissionKey)) return;
+    seenFictionKeysRef.current.add(fictionMission.stableMissionKey);
+    emit?.({
+      eventName: "fiction_mission_instantiated",
+      sessionId: sessionIdRef.current,
+      properties: {
+        sessionId: sessionIdRef.current,
+        templateId: fictionMission.template.id,
+        grammarKind: fictionMission.grammar.kind,
+        count: fictionMission.grammar.count,
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fictionMission]);
+  // Long-horizon resume (Slice 101): whenever freshly re-read authoritative
+  // truth lands — including after `useAuthoritativeActionResume`'s external-
+  // handoff refetch, or an ordinary query refresh hours/days later — prune
+  // any persisted fiction assignment whose real action is no longer live.
+  // Reality wins: the Fiction Director never resurrects a finished story.
+  useEffect(() => {
+    const { prunedCount } = reconcileFictionOnResume({
+      liveMissions: liveRouteMissions,
+      now: new Date(),
+      identity: props.playerIdentity ?? null,
+    });
+    if (prunedCount > 0) {
+      emit?.({
+        eventName: "long_horizon_resume",
+        sessionId: sessionIdRef.current,
+        properties: { sessionId: sessionIdRef.current, prunedCount },
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveRouteMissions, props.playerIdentity]);
   const agentWorldPresence = useMemo<AgentWorldPresence[]>(() => {
     return projectAgentWorldPresence(
       props.progression,
@@ -1911,6 +2052,24 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           </Suspense>
         ) : null}
 
+        {fictionMissionOpen && fictionMission ? (
+          <Suspense
+            fallback={
+              <div className="game-loading">
+                <Loader2 /> LOADING MISSION…
+              </div>
+            }
+          >
+            <GoldlineFictionMissionPanel
+              instance={fictionMission}
+              challengeDepth={missionDirector.challengeDepth}
+              isDriving={false}
+              authoritativeCount={props.authoritativeRouteCoverage ?? 0}
+              onClose={() => setFictionMissionOpen(false)}
+            />
+          </Suspense>
+        ) : null}
+
         {coldCallOpen && props.coldCallBatch ? (
           <ColdCallBurst
             batch={props.coldCallBatch}
@@ -2006,6 +2165,40 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                     <button onClick={() => setUtilityPanel("open-channel")}>
                       OPEN CHANNEL
                     </button>
+                    <button
+                      onClick={() => {
+                        setUtilityPanel("stronghold");
+                        emit?.({
+                          eventName: "stronghold_object_engaged",
+                          sessionId: sessionIdRef.current,
+                          properties: {
+                            sessionId: sessionIdRef.current,
+                            objectKind: "stronghold_panel",
+                          },
+                        });
+                      }}
+                    >
+                      STRONGHOLD
+                    </button>
+                    {fictionMission ? (
+                      <button
+                        data-testid="enter-fiction-mission"
+                        onClick={() => {
+                          setUtilityPanel(null);
+                          setFictionMissionOpen(true);
+                          emit?.({
+                            eventName: "fiction_mission_started",
+                            sessionId: sessionIdRef.current,
+                            properties: {
+                              sessionId: sessionIdRef.current,
+                              templateId: fictionMission.template.id,
+                            },
+                          });
+                        }}
+                      >
+                        {fictionMission.template.title}
+                      </button>
+                    ) : null}
                     <button
                       onClick={() => void props.onResolveDay()}
                       disabled={props.isResolvingDay}
@@ -2139,6 +2332,58 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                     ) : null}
                   </div>
                 </>
+              ) : null}
+              {utilityPanel === "stronghold" ? (
+                <div data-testid="stronghold-panel">
+                  <small>SOLO OPERATOR HOME BASE</small>
+                  <h2>Stronghold</h2>
+
+                  <h3>Route table</h3>
+                  <div
+                    className="stronghold-route-table"
+                    data-testid="stronghold-route-table"
+                  >
+                    {stronghold.routeTable.map(entry => (
+                      <article key={entry.mission.key}>
+                        <span>
+                          <b>{entry.mission.name}</b>
+                          <small>
+                            {entry.grammar ? entry.grammar.kind : "NO REAL ACTION"}
+                          </small>
+                        </span>
+                      </article>
+                    ))}
+                    {!stronghold.routeTable.length ? (
+                      <p>No real business action is live right now.</p>
+                    ) : null}
+                  </div>
+
+                  <h3>Agents</h3>
+                  <div className="stronghold-agents" data-testid="stronghold-agents">
+                    {stronghold.agents.map(agent => (
+                      <span key={agent.agentId}>{agent.agentId}</span>
+                    ))}
+                    {!stronghold.agents.length ? (
+                      <p>No agent capabilities have real evidence yet.</p>
+                    ) : null}
+                  </div>
+
+                  <h3>Chronicle</h3>
+                  <div
+                    className="stronghold-chronicle"
+                    data-testid="stronghold-chronicle"
+                  >
+                    {stronghold.chronicle.slice(0, 8).map(entry => (
+                      <article key={entry.mission.key}>
+                        <b>{entry.mission.name}</b>
+                        <small>{entry.mutation.destinationTreatment}</small>
+                      </article>
+                    ))}
+                    {!stronghold.chronicle.length ? (
+                      <p>No resolved history yet.</p>
+                    ) : null}
+                  </div>
+                </div>
               ) : null}
             </section>
           </div>

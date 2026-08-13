@@ -2941,3 +2941,78 @@
     max-height: 60dvh;
   }
 }
+
+/* ------------------------------------------------------------------
+   Slices 95-102 — mission fiction system + Stronghold home base.
+   `.fiction-mission-panel` extends the existing `.encounter` bottom-rail
+   language (Slice 13/59) rather than inventing a new panel chrome — the
+   world stays visible behind it exactly like Gatekeeper/Ghost/Staller.
+   `.stronghold-*` classes extend the existing `.game-utility-backdrop`
+   panel-content pattern used by the menu/route/objectives panels.
+   ------------------------------------------------------------------ */
+.fiction-mission-panel .fiction-physical-instruction {
+  font: 700 13px Inter;
+  color: #f2f7ff;
+  line-height: 1.4;
+}
+.fiction-mission-panel .fiction-stakes {
+  font: 600 11px Inter;
+  color: #9fb3c8;
+}
+.fiction-timer {
+  align-self: flex-start;
+  padding: 6px 14px;
+  border-radius: 10px;
+  border: 1px solid #ffd66f70;
+  background: #2a1f0e;
+  color: #ffd66f;
+  font: 900 20px "Barlow Condensed";
+  letter-spacing: 0.06em;
+}
+.fiction-timer[data-timer-paused="true"] {
+  color: #9fb3c8;
+  border-color: #5c929f70;
+  background: #10252e;
+  font-size: 13px;
+}
+.fiction-progress {
+  font: 800 11px Inter;
+  letter-spacing: 0.08em;
+  color: #7fd4ff;
+}
+.encounter-feedback.fiction-success {
+  border-color: #6edee870;
+}
+.encounter-feedback.fiction-failure {
+  border-color: #ffd66f70;
+}
+
+.stronghold-route-table,
+.stronghold-agents,
+.stronghold-chronicle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.stronghold-route-table article,
+.stronghold-chronicle article {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #5c929f45;
+  background: #10252e;
+}
+.stronghold-agents {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.stronghold-agents span {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #6edee870;
+  color: #6edee8;
+  font: 800 9px Inter;
+  letter-spacing: 0.08em;
+}
