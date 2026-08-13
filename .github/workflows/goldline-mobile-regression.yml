@@ -4,12 +4,21 @@ on:
   pull_request:
     paths:
       - "client/src/game/**"
+      - "client/src/pages/driver/GoldlineDriverController.tsx"
+      - "server/driverGameWorld/**"
+      - "server/capabilities/expansionScoutCapability.ts"
+      - "server/armory/armoryWeaponService.ts"
+      - "server/armory/armoryEvolution.integration.test.ts"
+      - "server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts"
+      - "shared/goldlineProgression.ts"
+      - "shared/goldlineProgression.test.ts"
       - "client/public/goldline.webmanifest"
       - "client/public/goldline-sw.js"
       - "client/public/assets/goldline/**"
       - "e2e/goldline/**"
       - "playwright.goldline.config.ts"
       - "scripts/checkGoldlineBundleBudget.mjs"
+      - "scripts/verifyPlayableGoldline.mjs"
       - ".github/workflows/goldline-mobile-regression.yml"
   workflow_dispatch:
 
@@ -76,8 +85,16 @@ jobs:
           client/src/game/actions
           client/src/game/encounters
           client/src/game/state/WorldProjection.test.ts
+          client/src/game/state/MissionDirector.test.ts
           client/src/game/state/worldMemory.test.ts
           client/src/game/session/checkpointStorage.test.ts
+          shared/goldlineProgression.test.ts
+
+      - name: Prove server-rebuilt progression and doctrine gates
+        run: >-
+          pnpm vitest run --config vitest.integration.config.ts
+          server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts
+          server/armory/armoryEvolution.integration.test.ts
 
       - name: Build production application
         run: VITE_GOLDLINE_TEST_HARNESS=1 pnpm build

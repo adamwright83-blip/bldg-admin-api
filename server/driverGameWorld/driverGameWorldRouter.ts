@@ -18,23 +18,31 @@ import {
   startColdCallTarget,
 } from "./coldCallBurstService";
 import { COMMERCIAL_MISSION_CALL_OUTCOMES } from "../commercialMissions/commercialMissionCallService";
-import { evaluateAndPersistExpansionScout } from "../capabilities/expansionScoutCapability";
+import { evaluateExpansionScoutForIdentity } from "../capabilities/expansionScoutCapability";
 import {
   getLatestScoutReport,
   runExpansionScout,
 } from "./expansionScoutService";
 import { GooglePlacesTerritoryProvider } from "../territory/googlePlacesTerritoryProvider";
+import { projectGoldlineProgressionForIdentity } from "./progressionProjectionService";
 
 function scoutProvider() {
   const key =
     process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY ?? "";
-  if (!key) throw new Error("Google Places is not configured for Expansion Scout");
+  if (!key)
+    throw new Error("Google Places is not configured for Expansion Scout");
   return new GooglePlacesTerritoryProvider(key);
 }
 
 export const driverGameWorldRouter = router({
   current: dayforgeMissionFieldProcedure.query(({ ctx }) =>
     listDriverGameWorld({
+      tenantId: ctx.tenantId,
+      actorId: ctx.user.openId,
+    })
+  ),
+  progression: dayforgeMissionFieldProcedure.query(({ ctx }) =>
+    projectGoldlineProgressionForIdentity({
       tenantId: ctx.tenantId,
       actorId: ctx.user.openId,
     })
@@ -58,7 +66,8 @@ export const driverGameWorldRouter = router({
         actorId: ctx.user.openId,
       });
       const node = world.find(item => item.missionId === input.missionId);
-      if (!node) throw new Error("Commercial mission not found in this field world");
+      if (!node)
+        throw new Error("Commercial mission not found in this field world");
       return evaluateAndPersistMutation({
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
@@ -159,8 +168,8 @@ export const driverGameWorldRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  scoutCapability: dayforgeMissionFieldProcedure.mutation(({ ctx }) =>
-    evaluateAndPersistExpansionScout({
+  scoutCapability: dayforgeMissionFieldProcedure.query(({ ctx }) =>
+    evaluateExpansionScoutForIdentity({
       tenantId: ctx.tenantId,
       actorId: ctx.user.openId,
     })

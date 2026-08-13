@@ -17,7 +17,6 @@ import type {
   ColdCallBatch,
   ColdCallTarget,
 } from "../../../../shared/coldCallBurst";
-import type { CapabilityEvaluation } from "../../../../shared/expansionScout";
 import type { RealActionRequest } from "../../game/encounters/RealActionBridge";
 import type {
   GoldlineActionServices,
@@ -51,11 +50,21 @@ const GoldlineBusinessLoopHarness =
   import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
     ? lazy(() => import("../../game/testSupport/GoldlineBusinessLoopHarness"))
     : null;
+const GoldlineProgressionHarness =
+  import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
+    ? lazy(() => import("../../game/testSupport/GoldlineProgressionHarness"))
+    : null;
 
 export default function GoldlineDriverController() {
-  const fixture = new URLSearchParams(window.location.search).get(
-    "goldlineFixture"
-  );
+  const search = new URLSearchParams(window.location.search);
+  if (GoldlineProgressionHarness && search.has("goldlineProgressionFixture")) {
+    return (
+      <Suspense fallback={null}>
+        <GoldlineProgressionHarness />
+      </Suspense>
+    );
+  }
+  const fixture = search.get("goldlineFixture");
   if (GoldlineBusinessLoopHarness && fixture) {
     return (
       <Suspense fallback={null}>
@@ -78,8 +87,6 @@ function LiveGoldlineDriverController() {
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [newOrderOpen, setNewOrderOpen] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
-  const [scoutCapability, setScoutCapability] =
-    useState<CapabilityEvaluation | null>(null);
   const [dayResolution, setDayResolution] = useState<DayResolution | null>(
     null
   );
@@ -118,6 +125,10 @@ function LiveGoldlineDriverController() {
     undefined,
     { refetchInterval: 15_000, retry: false }
   );
+  const progression = trpc.system.driverGameWorld.progression.useQuery(
+    undefined,
+    { refetchInterval: 15_000, retry: false }
+  );
   const coldCall = trpc.system.driverGameWorld.coldCall.useQuery(undefined, {
     refetchInterval: 15_000,
     retry: false,
@@ -128,6 +139,10 @@ function LiveGoldlineDriverController() {
       refetchInterval: 30_000,
       retry: false,
     }
+  );
+  const scoutCapability = trpc.system.driverGameWorld.scoutCapability.useQuery(
+    undefined,
+    { refetchInterval: 30_000, retry: false }
   );
   const followUpQueue = trpc.system.dayforgeToday.list.useQuery(undefined, {
     refetchInterval: 30_000,
@@ -204,8 +219,6 @@ function LiveGoldlineDriverController() {
     trpc.system.driverGameWorld.selectColdCallChainTarget.useMutation();
   const breakColdCallCombo =
     trpc.system.driverGameWorld.breakColdCallCombo.useMutation();
-  const evaluateScout =
-    trpc.system.driverGameWorld.scoutCapability.useMutation();
   const runScout = trpc.system.driverGameWorld.runScout.useMutation();
   const recordWeaponUsage = trpc.system.armory.recordUsage.useMutation();
   const logCallAttempt =
@@ -300,6 +313,8 @@ function LiveGoldlineDriverController() {
       utils.admin.dashboardSummary.invalidate(),
       utils.system.businessWorld.get.invalidate(),
       utils.system.driverGameWorld.current.invalidate(),
+      utils.system.driverGameWorld.progression.invalidate(),
+      utils.system.driverGameWorld.scoutCapability.invalidate(),
       utils.system.driverGameWorld.coldCall.invalidate(),
       utils.system.driverGameWorld.latestScoutReport.invalidate(),
     ]);
@@ -581,6 +596,7 @@ function LiveGoldlineDriverController() {
     await Promise.all([
       builtMissions.refetch(),
       driverGameWorld.refetch(),
+      progression.refetch(),
       utils.system.commercialMission.callAttempts.invalidate({
         missionId: input.missionId,
       }),
@@ -591,6 +607,7 @@ function LiveGoldlineDriverController() {
     await Promise.all([
       builtMissions.refetch(),
       driverGameWorld.refetch(),
+      progression.refetch(),
       moves.refetch(),
       followUpQueue.refetch(),
       missionId == null
@@ -778,12 +795,9 @@ function LiveGoldlineDriverController() {
   }
 
   async function handleEvaluateScout() {
-    const evaluation = await evaluateScout.mutateAsync();
-    setScoutCapability(evaluation);
-    if (evaluation.unlocked)
-      toast.success(
-        "Expansion Scout capability unlocked from verified business evidence."
-      );
+    const evaluation = await scoutCapability.refetch();
+    if (evaluation.data?.unlocked)
+      toast.success("Scout eligibility rebuilt from authoritative evidence.");
   }
 
   async function handleRunScout() {
@@ -795,6 +809,8 @@ function LiveGoldlineDriverController() {
       builtMissions.refetch(),
       moves.refetch(),
       driverGameWorld.refetch(),
+      progression.refetch(),
+      scoutCapability.refetch(),
     ]);
     toast.success(
       report.discoveries.length
@@ -802,15 +818,6 @@ function LiveGoldlineDriverController() {
         : "Scout completed truthfully with 0 new opportunities."
     );
   }
-
-  useEffect(() => {
-    if (!driverGameWorld.data?.some(node => node.visualState === "captured"))
-      return;
-    if (scoutCapability !== null || evaluateScout.isPending) return;
-    void handleEvaluateScout().catch(error => {
-      console.warn("[Goldline] Scout capability evaluation failed", error);
-    });
-  }, [driverGameWorld.data, evaluateScout.isPending, scoutCapability]);
 
   const currentDayProjection =
     fieldToday.data?.businessDate === selectedDate
@@ -859,6 +866,7 @@ function LiveGoldlineDriverController() {
           {...gameHomeProps}
           playerIdentity={identity.data?.openId ?? null}
           worldNodes={driverGameWorld.data}
+          progression={progression.data}
           isLoadingWorld={driverGameWorld.isLoading}
           isBeginningRekindle={beginRekindle.isPending}
           onBeginRekindle={handleBeginRekindle}
@@ -871,8 +879,8 @@ function LiveGoldlineDriverController() {
           onCompleteColdCall={handleCompleteColdCall}
           onSelectColdCallChain={handleSelectColdCallChain}
           onBreakColdCallCombo={handleBreakColdCallCombo}
-          scoutCapability={scoutCapability}
-          isEvaluatingScout={evaluateScout.isPending}
+          scoutCapability={scoutCapability.data}
+          isEvaluatingScout={scoutCapability.isFetching}
           onEvaluateScout={handleEvaluateScout}
           scoutReport={scoutReport.data}
           isRunningScout={runScout.isPending}

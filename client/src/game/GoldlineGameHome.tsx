@@ -27,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import type { DriverGameWorldNode } from "../../../shared/driverGameWorld";
+import type { GoldlineProgressionProjection } from "../../../shared/goldlineProgression";
 import { gameWorldControlPercent } from "../../../shared/driverGameWorld";
 import type {
   ColdCallBatch,
@@ -140,6 +141,7 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
    */
   playerIdentity?: string | null;
   worldNodes?: DriverGameWorldNode[];
+  progression?: GoldlineProgressionProjection | null;
   isLoadingWorld?: boolean;
   isBeginningRekindle?: boolean;
   onBeginRekindle: (missionId: number) => Promise<DriverGameWorldNode>;
@@ -561,6 +563,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [standaloneActionRequestId, setStandaloneActionRequestId] = useState<
     string | null
   >(null);
+  const pendingWeaponEvidenceRef = useRef<Promise<void>>(Promise.resolve());
 
   function sendEncounterEvent(
     event: Parameters<typeof transitionEncounter>[1]
@@ -596,8 +599,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   // stays the same shape/order contract the rest of this component already
   // expects (MissionFork's first icon is now provably the real primary).
   const missionDirector = useMemo(
-    () => selectMissionDirector(unranked, new Date()),
-    [unranked]
+    () => selectMissionDirector(unranked, new Date(), props.progression),
+    [props.progression, unranked]
   );
   const missions = useMemo(() => {
     if (!missionDirector.primary) return unranked;
@@ -1054,7 +1057,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     });
     completeMilestone("first_armory_choice");
     if (!props.onRecordWeaponUsage || !activeMission?.missionId) return;
-    void props
+    pendingWeaponEvidenceRef.current = props
       .onRecordWeaponUsage({
         missionId: activeMission.missionId,
         weaponId: weapon.id,
@@ -1157,6 +1160,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     if (!activeMission?.missionId || encounterRuntime?.phase !== "ACTION_READY")
       return;
     try {
+      // Preserve association ordering: the real action may proceed even if
+      // evidence recording failed, but it must not race ahead of a successful
+      // weapon-use write for this encounter.
+      await pendingWeaponEvidenceRef.current;
       const now = new Date();
       const requested = projectMissionAffordance(activeMission, now)
         .primary as GoldlineActionKind | null;
@@ -1317,6 +1324,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         data-authoritative-outcome-state={outcomeMission?.state ?? "NONE"}
         data-mission-affordance={missionAffordance?.primary ?? "NONE"}
         data-world-signal={missionAffordance?.worldSignal ?? "none"}
+        data-mission-reason={missionDirector.reasonCode ?? "NONE"}
+        data-challenge-depth={missionDirector.challengeDepth}
       >
         <div ref={hostRef} className="goldline-canvas-host" />
         {!runtimeReady ? (

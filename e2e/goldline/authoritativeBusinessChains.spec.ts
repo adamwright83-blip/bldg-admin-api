@@ -441,6 +441,7 @@ test("five mount cycles retain exact ticker, pointer, viewport, and resume liste
   }
 
   const final = await stableListenerSnapshot(page);
+  console.log(`[goldline-lifecycle] ${JSON.stringify(final)}`);
   expect(final).toEqual(expected);
   expect(final.pixiTicker).toBe(1);
   expect(await page.locator("canvas.goldline-game-canvas").count()).toBe(1);
