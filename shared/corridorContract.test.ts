@@ -108,37 +108,37 @@ describe("corridor_02 has a complete engineering contract without fake art", () 
     expect(fileExists("corridor_02", manifest.data.goldRoute)).toBe(true);
   });
 
-  it("ships NO substitute production art", () => {
-    // Every art slot is explicitly null rather than pointing at a stand-in.
-    expect(manifest.assets.mid).toBeNull();
-    expect(manifest.assets.far).toBeNull();
-    expect(manifest.assets.foreground).toBeNull();
-    expect(manifest.assets.effects).toBeNull();
-    expect(missingOptionalArt(manifest).length).toBeGreaterThan(0);
-  });
-
-  it("has authored population space but labels human figures as placeholders", () => {
-    expect(manifest.population.ambient.length).toBeGreaterThanOrEqual(5);
-    expect(manifest.population.missionAnchorPoints.length).toBeGreaterThan(0);
-    expect(manifest.population.assetStage).toBe("engineering_placeholder");
-    expect(manifest.population.atlas).toBeNull();
-  });
-
-  it("reports every machine-checkable production closure blocker", () => {
-    expect(productionClosureBlockers(manifest)).toEqual([
-      "assets.mid",
-      "population.assetStage",
-      "population.atlas",
-      "visualReview",
+  it("ships the supplied production-source environment plates", () => {
+    for (const asset of [
+      manifest.assets.mid,
+      manifest.assets.far,
+      manifest.assets.foreground,
+      manifest.assets.effects,
+    ]) {
+      expect(asset).not.toBeNull();
+      expect(fileExists("corridor_02", asset!)).toBe(true);
+    }
+    expect(missingOptionalArt(manifest)).toEqual([
+      "portal",
+      "stronghold",
+      "waterfallVideo",
     ]);
   });
 
-  it("has no image or video files sitting in its production directory", () => {
+  it("has authored population space backed by the production atlas", () => {
+    expect(manifest.population.ambient.length).toBeGreaterThanOrEqual(5);
+    expect(manifest.population.missionAnchorPoints.length).toBeGreaterThan(0);
+    expect(manifest.population.assetStage).toBe("production");
+    expect(manifest.population.atlas).toBe("../population/coastal_roles.webp");
+    expect(fileExists("corridor_02", manifest.population.atlas)).toBe(true);
+  });
+
+  it("reports every machine-checkable production closure blocker", () => {
+    expect(productionClosureBlockers(manifest)).toEqual(["visualReview"]);
+  });
+
+  it("does not invent optional portal, Stronghold, or video art", () => {
     for (const name of [
-      "mid.webp",
-      "far.webp",
-      "foreground.webp",
-      "effects.webp",
       "portal_coldcall.webp",
       "stronghold.webp",
       "waterfall.webm",
@@ -162,6 +162,7 @@ describe("corridor_02 has a complete engineering contract without fake art", () 
     );
     expect(readme).toMatch(/AUTHORING STAGE/);
     expect(readme).toMatch(/mid\.webp/);
+    expect(readme).toMatch(/human visual review/i);
     expect(readme).toMatch(/stage.*playable/is);
   });
 });
@@ -172,7 +173,14 @@ describe("the schema refuses to let an unfinished corridor claim playability", (
       readFileSync(resolve(ASSET_ROOT, "corridor_02", "manifest.json"), "utf8")
     ) as Record<string, unknown>;
 
-    const result = parseCorridorManifest({ ...authoring, stage: "playable" });
+    const result = parseCorridorManifest({
+      ...authoring,
+      stage: "playable",
+      assets: {
+        ...(authoring.assets as Record<string, unknown>),
+        mid: null,
+      },
+    });
 
     expect(result.success).toBe(false);
     if (!result.success) {

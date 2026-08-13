@@ -1,12 +1,18 @@
 {
   "version": 1,
-  "note": "Authored centreline for corridor_02. corridor_01's route was traced from real gold-inlay pixels in its mid plate; corridor_02 has no mid plate yet, so this is an AUTHORED placeholder centreline, not a trace. It must be re-traced from the final art before stage becomes 'playable' — that re-trace is part of the visual pass, not the engineering pass.",
+  "note": "Control points re-traced from the final mid.webp's embedded brass Line on 2026-08-13. The Line occupies a broad perspective strip in the lower market passage, so lower points follow its visual centre; the trace then converges through the distant inlay to x=0.512 at the authored exit. Coordinates are lateral screen fractions in the renderer's existing 0..1 route space.",
   "points": [
-    { "progress": 0.0, "lateral": 0.5 },
-    { "progress": 0.2, "lateral": 0.46 },
-    { "progress": 0.41, "lateral": 0.39 },
-    { "progress": 0.6, "lateral": 0.47 },
-    { "progress": 0.83, "lateral": 0.52 },
-    { "progress": 1.0, "lateral": 0.52 }
+    { "progress": 0.02, "lateral": 0.505 },
+    { "progress": 0.08, "lateral": 0.497 },
+    { "progress": 0.14, "lateral": 0.488 },
+    { "progress": 0.2, "lateral": 0.48 },
+    { "progress": 0.27, "lateral": 0.472 },
+    { "progress": 0.34, "lateral": 0.468 },
+    { "progress": 0.42, "lateral": 0.47 },
+    { "progress": 0.5, "lateral": 0.476 },
+    { "progress": 0.58, "lateral": 0.485 },
+    { "progress": 0.66, "lateral": 0.494 },
+    { "progress": 0.74, "lateral": 0.503 },
+    { "progress": 0.82, "lateral": 0.512 }
   ]
 }

@@ -3,10 +3,10 @@
   "version": 1,
   "stage": "authoring",
   "assets": {
-    "far": null,
-    "mid": null,
-    "foreground": null,
-    "effects": null,
+    "far": "far.webp",
+    "mid": "mid.webp",
+    "foreground": "foreground.webp",
+    "effects": "effects.webp",
     "portal": null,
     "stronghold": null,
     "waterfallVideo": null
@@ -34,8 +34,8 @@
     }
   ],
   "population": {
-    "assetStage": "engineering_placeholder",
-    "atlas": null,
+    "assetStage": "production",
+    "atlas": "../population/coastal_roles.webp",
     "ambient": [
       {
         "id": "arrival-walker",
@@ -154,7 +154,7 @@
     "missionSources": []
   },
   "loadPriority": {
-    "critical": [],
-    "deferred": []
+    "critical": ["mid", "populationAtlas"],
+    "deferred": ["far", "foreground", "effects"]
   }
 }

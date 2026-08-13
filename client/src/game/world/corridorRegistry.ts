@@ -24,14 +24,17 @@ export type CorridorRegistryEntry = {
 };
 
 /**
- * corridor_01 is the shipped world. corridor_02 is registered as NOT playable
- * because its engineering contract exists while its final art does not —
- * registering it keeps the contract honest and testable without ever letting
- * an unfinished corridor become the live world.
+ * corridor_01 is the shipped world. corridor_02 now has production-source art
+ * integrated, but remains registered as NOT playable until the required
+ * Pixel/mobile screenshots receive explicit human visual approval.
  */
 export const CORRIDOR_REGISTRY: readonly CorridorRegistryEntry[] = [
   { id: "corridor_01", label: "Approach corridor", playable: true },
-  { id: "corridor_02", label: "Second corridor (authoring)", playable: false },
+  {
+    id: "corridor_02",
+    label: "Second corridor (visual review pending)",
+    playable: false,
+  },
 ] as const;
 
 /** The corridor the player boots into when nothing else is determined. */

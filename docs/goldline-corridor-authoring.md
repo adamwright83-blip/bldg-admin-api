@@ -273,9 +273,9 @@ separately:
 ```
   STAGE: authoring
   ENGINEERING: complete (structural data valid)
-  PRODUCTION CLOSURE: BLOCKED — assets.mid, population.assetStage, population.atlas, visualReview
-  OPTIONAL ART ABSENT: far, foreground, effects, portal, stronghold, waterfallVideo
-  GOLD ROUTE: RETRACE BLOCKED — final assets.mid is required before tracing
+  PRODUCTION CLOSURE: BLOCKED — visualReview
+  OPTIONAL ART ABSENT: portal, stronghold, waterfallVideo
+  GOLD ROUTE: traced against final assets.mid
   HUMAN VISUAL: PENDING — approval must come from an actual reviewer after screenshots
   VISUAL: BLOCKED BY REQUIRED PRODUCTION ASSETS / REVIEW
   NOTE: this corridor is NOT production-playable; the runtime will refuse to serve it.

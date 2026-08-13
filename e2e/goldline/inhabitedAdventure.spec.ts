@@ -69,6 +69,27 @@ test.describe("inhabited world truth boundary", () => {
     await expect(world).toHaveAttribute("data-next-corridor-id", "NONE");
   });
 
+  test("CI authoring preview renders C02 production candidates without promotion", async ({
+    page,
+  }) => {
+    const response = await page.request.post("/api/auth/login", {
+      data: { password: DRIVER_PASSWORD, role: "driver" },
+    });
+    expect(response.ok()).toBeTruthy();
+    await page.goto(
+      "/driver?goldlineFixture=CALL&goldlineCorridorPreview=corridor_02"
+    );
+    const world = page.getByTestId("goldline-world");
+    await expect(world).toBeVisible({ timeout: 30_000 });
+    await expect(world).toHaveAttribute("data-corridor-id", "corridor_02");
+    await expect(world).toHaveAttribute(
+      "data-population-asset-stage",
+      "production"
+    );
+    await expect(world).toHaveAttribute("data-ambient-population-count", "6");
+    await expect(page.locator("canvas.goldline-game-canvas")).toHaveCount(1);
+  });
+
   test("Anchor, Gatekeeper, Ghost, and Staller use human behavioral staging", async ({
     page,
   }) => {

@@ -1,15 +1,20 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { Texture } from "pixi.js";
 import { parseCorridorManifest } from "../../../../shared/corridorManifest";
-import { PopulationSystem } from "./PopulationSystem";
+import {
+  PopulationSystem,
+  PRODUCTION_ROLE_ATLAS_COLUMNS,
+  PRODUCTION_ROLE_ATLAS_ORDER,
+} from "./PopulationSystem";
 
-function populationFixture() {
+function populationFixture(corridorId = "corridor_01") {
   const raw = JSON.parse(
     readFileSync(
       resolve(
         __dirname,
-        "../../../public/assets/goldline/corridor_01/manifest.json"
+        `../../../public/assets/goldline/${corridorId}/manifest.json`
       ),
       "utf8"
     )
@@ -20,10 +25,37 @@ function populationFixture() {
 }
 
 describe("PopulationSystem", () => {
+  it("keeps a stable one-cell mapping for every authored production role", () => {
+    expect(PRODUCTION_ROLE_ATLAS_COLUMNS).toBe(6);
+    expect(PRODUCTION_ROLE_ATLAS_ORDER).toEqual([
+      "field-role-a",
+      "field-role-b",
+      "field-role-c",
+      "field-role-d",
+      "field-role-e",
+      "field-role-f",
+    ]);
+  });
+
   it("shows five authored ambient figures in the opening scene", () => {
     const system = new PopulationSystem(populationFixture());
     system.update({ now: 0, width: 412, height: 923, playerProgress: 0.06 });
     expect(system.visibleAmbientCount).toBeGreaterThanOrEqual(5);
+    system.destroy();
+  });
+
+  it("keeps a normalized sprite child under authored perspective scaling", () => {
+    const system = new PopulationSystem(
+      populationFixture("corridor_02"),
+      Texture.EMPTY
+    );
+    system.update({ now: 0, width: 412, height: 923, playerProgress: 0.06 });
+    const ambientLayer = system.container.children[0];
+    const firstRole = ambientLayer?.children[0];
+    expect(system.assetStage).toBe("production");
+    expect(firstRole?.children).toHaveLength(1);
+    expect(firstRole?.children[0]?.width).toBeLessThanOrEqual(72);
+    expect(firstRole?.children[0]?.height).toBeLessThanOrEqual(144);
     system.destroy();
   });
 

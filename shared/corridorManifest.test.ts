@@ -55,6 +55,7 @@ describe("parseCorridorManifest", () => {
       )
     );
     raw.population.assetStage = "production";
+    raw.population.atlas = null;
     expect(parseCorridorManifest(raw).success).toBe(false);
   });
 

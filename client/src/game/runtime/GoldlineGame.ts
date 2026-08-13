@@ -282,6 +282,9 @@ export class GoldlineGame {
         ...(assets.strongholdUrl
           ? [["stronghold", assets.strongholdUrl] as [string, string]]
           : []),
+        ...(assets.population?.atlas
+          ? [["populationAtlas", assets.population.atlas] as [string, string]]
+          : []),
       ];
       const poseEntries = Object.entries(CHARACTER_POSE_FILES);
 
@@ -312,7 +315,7 @@ export class GoldlineGame {
       // L1 mid: prefer the richer corridor_01 mid plate; fall back to the
       // original Run-1 background if it failed to load or was not supplied.
       const background = new Sprite(midTexture ?? worldTexture);
-      background.label = midTexture ? "corridor_01-mid" : "approved-world-art";
+      background.label = midTexture ? "corridor-mid" : "approved-world-art";
       this.layerMid.addChild(background);
 
       // L0 far: optional. Rendered behind everything with slow parallax.
@@ -404,7 +407,8 @@ export class GoldlineGame {
           atlas: null,
           ambient: [],
           missionAnchorPoints: [],
-        }
+        },
+        optionalTextures.get("populationAtlas") ?? null
       );
       this.populationSystem.setMission(this.pendingMissionEmbodiment);
       this.populationSystem.setAgentPresence(this.pendingAgentPresence);

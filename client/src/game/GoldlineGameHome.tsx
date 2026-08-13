@@ -142,6 +142,19 @@ const GoldlineActionSurface = lazy(
   () => import("./actions/GoldlineActionSurface")
 );
 
+/**
+ * Lets the existing CI-only harness render an authoring pack for screenshot
+ * review without making that pack production-playable. This code path is
+ * tree-dead in normal builds because the harness flag is compile-time false.
+ */
+function authoringPreviewCorridorId(): string | null {
+  if (import.meta.env.VITE_GOLDLINE_TEST_HARNESS !== "1") return null;
+  const requested = new URLSearchParams(window.location.search).get(
+    "goldlineCorridorPreview"
+  );
+  return requested === "corridor_02" ? requested : null;
+}
+
 type GoldlineGameHomeProps = GoldlineHomeProps & {
   /**
    * Stable id of the signed-in player, used ONLY to scope the local
@@ -837,10 +850,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     // Cross-corridor resume: trust the checkpoint's corridor only if this
     // build still considers it playable, so a removed or unfinished corridor
     // can never strand the player outside the world.
+    const previewCorridorId = authoringPreviewCorridorId();
     const bootCorridorId =
-      checkpoint && isPlayableCorridor(checkpoint.corridorId)
+      previewCorridorId ??
+      (checkpoint && isPlayableCorridor(checkpoint.corridorId)
         ? checkpoint.corridorId
-        : DEFAULT_CORRIDOR_ID;
+        : DEFAULT_CORRIDOR_ID);
     activeCorridorIdRef.current = bootCorridorId;
     const restorable =
       checkpoint?.corridorId === bootCorridorId ? checkpoint : null;
@@ -848,7 +863,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     let cancelled = false;
     // The corridor is addressed by id: no caller here knows a single asset
     // URL. Everything the renderer needs comes from the validated manifest.
-    void loadCorridorPack(bootCorridorId)
+    void loadCorridorPack(bootCorridorId, {
+      requirePlayable: previewCorridorId === null,
+    })
       .then(pack => {
         if (cancelled) return false;
         transitions.adoptActiveCorridor(pack.id);

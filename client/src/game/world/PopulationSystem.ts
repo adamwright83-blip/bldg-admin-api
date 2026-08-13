@@ -1,4 +1,4 @@
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics, Rectangle, Sprite, Texture } from "pixi.js";
 import type { CorridorPopulation } from "../../../../shared/corridorManifest";
 import type { GoldlineAgentId } from "../../../../shared/goldlineProgression";
 import {
@@ -14,9 +14,11 @@ export type AgentWorldPresence = {
   hasAuthoritativeSignal: boolean;
 };
 
+export const PRODUCTION_ROLE_ATLAS_COLUMNS = 6;
+
 type PopulationNode = {
   id: string;
-  graphic: Graphics;
+  display: Container;
   baseProgress: number;
   baseLateral: number;
   visibilityRadius: number;
@@ -27,9 +29,9 @@ type PopulationNode = {
 
 /**
  * Lightweight Pixi population presentation. It owns no React state, creates
- * no missions, and runs from GoldlineGame's existing ticker. Until a final
- * human atlas is supplied, the figures are intentionally neutral faceless
- * engineering silhouettes; the manifest exposes that blocked asset stage.
+ * no missions, and runs from GoldlineGame's existing ticker. Production packs
+ * may provide a static role atlas; the neutral faceless engineering figures
+ * remain an explicit load-failure/placeholder fallback.
  */
 export class PopulationSystem {
   readonly container = new Container();
@@ -43,9 +45,20 @@ export class PopulationSystem {
   private lastBehaviorUpdateAt = Number.NEGATIVE_INFINITY;
   private reducedMotion = false;
   private destroyed = false;
+  private readonly roleTextures: ReadonlyMap<string, Texture>;
+  private readonly runtimeAssetStage: CorridorPopulation["assetStage"];
 
-  constructor(private readonly population: CorridorPopulation) {
+  constructor(
+    private readonly population: CorridorPopulation,
+    atlasTexture: Texture | null = null
+  ) {
     reportGoldlineLifecycleDelta("populationBehaviorCallback", 1);
+    this.roleTextures =
+      population.assetStage === "production" && atlasTexture
+        ? sliceRoleAtlas(atlasTexture)
+        : new Map();
+    this.runtimeAssetStage =
+      this.roleTextures.size > 0 ? "production" : "engineering_placeholder";
     this.container.label = "goldline-population";
     this.ambientLayer.label = "ambient-population";
     this.missionLayer.label = "authoritative-mission-embodiment";
@@ -56,12 +69,15 @@ export class PopulationSystem {
       this.capabilityLayer
     );
     this.ambient = population.ambient.map((person, index) => {
-      const graphic = drawRoleFigure(person.behavior, 0x7f9692, 0xd8c6a3);
-      graphic.label = `ambient:${person.id}`;
-      this.ambientLayer.addChild(graphic);
+      const texture = this.roleTextures.get(person.spriteId);
+      const display = texture
+        ? drawRoleSprite(texture)
+        : drawRoleFigure(person.behavior, 0x7f9692, 0xd8c6a3);
+      display.label = `ambient:${person.id}`;
+      this.ambientLayer.addChild(display);
       return {
         id: person.id,
-        graphic,
+        display,
         baseProgress: person.position.progress,
         baseLateral: person.position.lateral,
         visibilityRadius: person.visibilityRadius,
@@ -73,11 +89,11 @@ export class PopulationSystem {
   }
 
   get assetStage(): CorridorPopulation["assetStage"] {
-    return this.population.assetStage;
+    return this.runtimeAssetStage;
   }
 
   get visibleAmbientCount(): number {
-    return this.ambient.filter(node => node.graphic.visible).length;
+    return this.ambient.filter(node => node.display.visible).length;
   }
 
   get authoredAmbientCount(): number {
@@ -103,7 +119,9 @@ export class PopulationSystem {
     }
     this.mission = next;
     this.missionLayer.removeChildren().forEach(child => child.destroy());
-    this.missionGraphic = next ? drawMissionScene(next) : null;
+    this.missionGraphic = next
+      ? drawMissionScene(next, this.roleTextures.get(roleForMission(next)))
+      : null;
     if (this.missionGraphic) this.missionLayer.addChild(this.missionGraphic);
   }
 
@@ -148,11 +166,11 @@ export class PopulationSystem {
       const visible =
         Math.abs(node.baseProgress - input.playerProgress) <=
         node.visibilityRadius;
-      node.graphic.visible = visible;
+      node.display.visible = visible;
       if (!visible) continue; // offscreen sleep
       const position = authoredPosition(node, input.now, this.reducedMotion);
       placeAtCorridorPosition(
-        node.graphic,
+        node.display,
         position.progress,
         position.lateral,
         input.width,
@@ -212,6 +230,55 @@ function deterministicPhase(id: string, index: number): number {
   return value / 997;
 }
 
+export const PRODUCTION_ROLE_ATLAS_ORDER = [
+  "field-role-a",
+  "field-role-b",
+  "field-role-c",
+  "field-role-d",
+  "field-role-e",
+  "field-role-f",
+] as const;
+
+/**
+ * The supplied production atlas has one documented static cell per role.
+ * Sub-textures share the one Pixi source; no person triggers another load.
+ */
+function sliceRoleAtlas(atlas: Texture): ReadonlyMap<string, Texture> {
+  const textures = new Map<string, Texture>();
+  const cellWidth = atlas.frame.width / PRODUCTION_ROLE_ATLAS_ORDER.length;
+  if (cellWidth <= 0 || atlas.frame.height <= 0) return textures;
+  PRODUCTION_ROLE_ATLAS_ORDER.forEach((spriteId, index) => {
+    textures.set(
+      spriteId,
+      new Texture({
+        source: atlas.source,
+        frame: new Rectangle(
+          atlas.frame.x + index * cellWidth,
+          atlas.frame.y,
+          cellWidth,
+          atlas.frame.height
+        ),
+        label: `goldline-population:${spriteId}`,
+      })
+    );
+  });
+  return textures;
+}
+
+function drawRoleSprite(texture: Texture): Container {
+  // The authored-position system scales the returned display object for
+  // perspective. Keep the sprite's texture-normalization scale on a child so
+  // that perspective updates cannot overwrite it and explode atlas pixels to
+  // their raw 256x512 cell size.
+  const display = new Container();
+  const sprite = new Sprite(texture);
+  sprite.anchor.set(0.5, 1);
+  sprite.width = 72;
+  sprite.height = 144;
+  display.addChild(sprite);
+  return display;
+}
+
 function drawRoleFigure(
   behavior: CorridorPopulation["ambient"][number]["behavior"],
   coat: number,
@@ -239,7 +306,16 @@ function drawRoleFigure(
   return figure;
 }
 
-function drawMissionScene(mission: MissionEmbodiment): Container {
+function roleForMission(mission: MissionEmbodiment): string {
+  if (mission.archetype === "GATEKEEPER") return "field-role-a";
+  if (mission.archetype === "STALLER") return "field-role-b";
+  return "field-role-d";
+}
+
+function drawMissionScene(
+  mission: MissionEmbodiment,
+  roleTexture?: Texture
+): Container {
   const scene = new Container();
   scene.label = `mission:${mission.missionId}:${mission.anchorId}`;
   const staging = new Graphics();
@@ -252,7 +328,11 @@ function drawMissionScene(mission: MissionEmbodiment): Container {
     staging.circle(0, -42, 9).stroke({ color: 0xc7b5ff, width: 2, alpha: 0.7 });
     scene.addChild(staging);
   } else {
-    scene.addChild(drawRoleFigure("idle", 0x4c6864, 0xd8ad58));
+    scene.addChild(
+      roleTexture
+        ? drawRoleSprite(roleTexture)
+        : drawRoleFigure("idle", 0x4c6864, 0xd8ad58)
+    );
   }
   const signal = new Graphics();
   drawMissionSignal(signal, mission);
@@ -352,12 +432,12 @@ function applyBehaviorPose(
   reducedMotion: boolean
 ) {
   if (reducedMotion) {
-    node.graphic.rotation = 0;
+    node.display.rotation = 0;
     return;
   }
   const phase = now / 1000 + node.phase * Math.PI * 2;
   const amplitude = node.behavior === "walk" ? 0.025 : 0.012;
-  node.graphic.rotation = Math.sin(phase * 1.4) * amplitude;
+  node.display.rotation = Math.sin(phase * 1.4) * amplitude;
 }
 
 function applyMissionBehavior(
