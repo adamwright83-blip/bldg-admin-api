@@ -33,85 +33,57 @@ const NOW = new Date("2026-08-13T12:00:00Z");
 
 describe("liveMissionFictionKeys", () => {
   it("produces one key per mission with a resolvable real action", () => {
-    const keys = liveMissionFictionKeys([mission()], NOW);
-    expect(keys).toHaveLength(1);
+    expect(liveMissionFictionKeys([mission()], NOW)).toHaveLength(1);
   });
 
-  it("produces no key for a captured/closed mission — nothing to instantiate fiction for", () => {
-    const keys = liveMissionFictionKeys([mission({ state: "captured" })], NOW);
-    expect(keys).toHaveLength(0);
+  it("produces no key for a captured/closed mission", () => {
+    expect(liveMissionFictionKeys([mission({ state: "captured" })], NOW)).toHaveLength(0);
   });
 });
 
-describe("reconcileFictionOnResume — reality wins", () => {
+describe("reconcileFictionOnResume", () => {
   const store = new Map<string, string>();
   const fakeStorage: Storage = {
-    get length() {
-      return store.size;
-    },
+    get length() { return store.size; },
     clear: () => store.clear(),
-    getItem: (key: string) => store.get(key) ?? null,
-    key: (index: number) => Array.from(store.keys())[index] ?? null,
-    removeItem: (key: string) => void store.delete(key),
-    setItem: (key: string, value: string) => void store.set(key, value),
+    getItem: key => store.get(key) ?? null,
+    key: index => Array.from(store.keys())[index] ?? null,
+    removeItem: key => void store.delete(key),
+    setItem: (key, value) => void store.set(key, value),
   };
 
   beforeEach(() => {
     store.clear();
     (globalThis as { window?: unknown }).window = { localStorage: fakeStorage };
   });
+  afterEach(() => delete (globalThis as { window?: unknown }).window);
 
-  afterEach(() => {
-    delete (globalThis as { window?: unknown }).window;
+  it("drops a mission-backed assignment whose action resolved", () => {
+    const key = "resolved-key";
+    saveFictionAssignmentIfAbsent({ stableMissionKey: key, templateId: "neutralize-v1", rulesVersion: 1, instantiatedAt: NOW.toISOString() });
+    expect(reconcileFictionOnResume({ liveMissions: [], now: NOW }).prunedCount).toBe(1);
+    expect(loadFictionAssignment(key)).toBeNull();
   });
 
-  it("drops a fiction assignment whose real action resolved while offline", () => {
-    const resolvedKey = "resolved-key";
-    saveFictionAssignmentIfAbsent({
-      stableMissionKey: resolvedKey,
-      templateId: "neutralize-v1",
-      rulesVersion: 1,
-      instantiatedAt: NOW.toISOString(),
-    });
-
-    // Reality re-read on resume: the mission that produced `resolvedKey` no
-    // longer exists among live missions (it was captured/closed offline).
-    const { prunedCount } = reconcileFictionOnResume({ liveMissions: [], now: NOW });
-
-    expect(loadFictionAssignment(resolvedKey)).toBeNull();
-    expect(prunedCount).toBe(1);
-  });
-
-  it("keeps an assignment whose real action is still genuinely unresolved after resume", () => {
+  it("keeps a still-live mission assignment", () => {
     const liveMission = mission({ missionId: 42, phoneUrl: "tel:+13235550100" });
-    const keys = liveMissionFictionKeys([liveMission], NOW);
-    saveFictionAssignmentIfAbsent({
-      stableMissionKey: keys[0]!,
-      templateId: "neutralize-v1",
-      rulesVersion: 1,
-      instantiatedAt: NOW.toISOString(),
-    });
-
-    const { prunedCount } = reconcileFictionOnResume({
-      liveMissions: [liveMission],
-      now: NOW,
-    });
-
-    expect(loadFictionAssignment(keys[0]!)).not.toBeNull();
-    expect(prunedCount).toBe(0);
+    const key = liveMissionFictionKeys([liveMission], NOW)[0]!;
+    saveFictionAssignmentIfAbsent({ stableMissionKey: key, templateId: "neutralize-v1", rulesVersion: 1, instantiatedAt: NOW.toISOString() });
+    expect(reconcileFictionOnResume({ liveMissions: [liveMission], now: NOW }).prunedCount).toBe(0);
+    expect(loadFictionAssignment(key)).not.toBeNull();
   });
 
-  it("never resurrects a resolved mission's story merely because it was unfinished", () => {
+  it("does not prune a field-move route from mission-only reality", () => {
+    const key = "route:move-a,move-b::none::PLACE_ITEM_AT_LOCATIONS::1";
+    saveFictionAssignmentIfAbsent({ stableMissionKey: key, templateId: "neutralize-v1", rulesVersion: 1, instantiatedAt: NOW.toISOString() });
+    expect(reconcileFictionOnResume({ liveMissions: [], now: NOW }).prunedCount).toBe(0);
+    expect(loadFictionAssignment(key)).not.toBeNull();
+  });
+
+  it("does not resurrect a resolved mission story", () => {
     const key = "unfinished-story";
-    saveFictionAssignmentIfAbsent({
-      stableMissionKey: key,
-      templateId: "neutralize-v1",
-      rulesVersion: 1,
-      instantiatedAt: NOW.toISOString(),
-    });
+    saveFictionAssignmentIfAbsent({ stableMissionKey: key, templateId: "neutralize-v1", rulesVersion: 1, instantiatedAt: NOW.toISOString() });
     reconcileFictionOnResume({ liveMissions: [], now: NOW });
-    // A later call with the SAME (now-gone) key still finds nothing — the
-    // Fiction Director has no path back to it once pruned.
     expect(loadFictionAssignment(key)).toBeNull();
   });
 });
