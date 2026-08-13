@@ -72,6 +72,11 @@ test.describe("inhabited world truth boundary", () => {
   test("Anchor, Gatekeeper, Ghost, and Staller use human behavioral staging", async ({
     page,
   }) => {
+    // This single proof intentionally performs four authenticated world boots.
+    // With the CI MySQL service active those logins are substantially slower
+    // than the local synthetic-auth fallback, while every individual readiness
+    // assertion still succeeds. Keep the normal 90s suite budget elsewhere.
+    test.setTimeout(180_000);
     const fixtures = [
       ["CALL", ".anchor-encounter"],
       ["VISIT", ".gatekeeper-encounter"],
