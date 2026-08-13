@@ -47,8 +47,26 @@ const REQUESTING_LOCATION: GoldlineLocationSnapshot = {
 };
 
 const GoldlineGameHome = lazy(() => import("../../game/GoldlineGameHome"));
+const GoldlineBusinessLoopHarness =
+  import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
+    ? lazy(() => import("../../game/testSupport/GoldlineBusinessLoopHarness"))
+    : null;
 
 export default function GoldlineDriverController() {
+  const fixture = new URLSearchParams(window.location.search).get(
+    "goldlineFixture"
+  );
+  if (GoldlineBusinessLoopHarness && fixture) {
+    return (
+      <Suspense fallback={null}>
+        <GoldlineBusinessLoopHarness fixture={fixture} />
+      </Suspense>
+    );
+  }
+  return <LiveGoldlineDriverController />;
+}
+
+function LiveGoldlineDriverController() {
   const utils = trpc.useUtils();
   /**
    * Scopes the local positional checkpoint to the signed-in player, so a

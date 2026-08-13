@@ -50,6 +50,7 @@ import {
 } from "./state/EncounterProjection";
 import {
   moneyBandLabel,
+  projectMissionTruth,
   projectPersistentHistory,
   projectPlayableMissions,
 } from "./state/WorldProjection";
@@ -578,6 +579,18 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       }),
     [props.moves, props.salesMissions, props.worldNodes]
   );
+  // Captured/closed missions correctly leave the playable list, but the
+  // lifecycle still needs their freshly refetched truth for one final
+  // AWAITING_OUTCOME projection before restoring world control.
+  const authoritativeMissionTruth = useMemo(
+    () =>
+      projectMissionTruth({
+        missions: props.salesMissions,
+        moves: props.moves,
+        worldNodes: props.worldNodes,
+      }),
+    [props.moves, props.salesMissions, props.worldNodes]
+  );
   // Mission Director selects and paces which real missions get spotlighted —
   // primary first, up to 2 secondary — from real evidence only. `missions`
   // stays the same shape/order contract the rest of this component already
@@ -609,9 +622,18 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     prioritized ??
     null;
   const outcomeMission = encounterRuntime
-    ? (allMissions.find(
+    ? (authoritativeMissionTruth.find(
         mission => mission.missionId === encounterRuntime.missionId
       ) ?? null)
+    : null;
+  // Keep the typed action surface mounted across its own authoritative
+  // refetch. A winning/closed write legitimately removes the mission from
+  // the playable list before the adapter resumes; binding the surface only to
+  // `activeMission` would unmount it and suppress REAL_ACTION_PERSISTED.
+  const presentedActionMission = presentedAction
+    ? (authoritativeMissionTruth.find(
+        mission => mission.missionId === presentedAction.missionId
+      ) ?? activeMission)
     : null;
   const missionAffordance = activeMission
     ? projectMissionAffordance(activeMission, new Date())
@@ -1290,6 +1312,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         className={`playable-goldline is-${view}`}
         aria-label="Goldline playable field world"
         data-testid="goldline-world"
+        data-game-view={view}
+        data-encounter-phase={encounterRuntime?.phase ?? "NONE"}
+        data-authoritative-outcome-state={outcomeMission?.state ?? "NONE"}
         data-mission-affordance={missionAffordance?.primary ?? "NONE"}
         data-world-signal={missionAffordance?.worldSignal ?? "none"}
       >
@@ -1620,7 +1645,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           </Suspense>
         ) : null}
 
-        {presentedAction && activeMission ? (
+        {presentedAction && presentedActionMission ? (
           <Suspense
             fallback={
               <div className="game-loading">
@@ -1630,7 +1655,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           >
             <GoldlineActionSurface
               action={presentedAction}
-              mission={activeMission}
+              mission={presentedActionMission}
               requestId={
                 encounterRuntime?.actionRequestId ?? standaloneActionRequestId
               }

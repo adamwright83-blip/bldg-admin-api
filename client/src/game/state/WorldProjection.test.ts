@@ -6,6 +6,7 @@ import {
 } from "../../../../shared/driverGameWorld";
 import { equipAnchorAbilities } from "./EncounterProjection";
 import {
+  projectMissionTruth,
   projectPersistentHistory,
   projectPlayableMissions,
 } from "./WorldProjection";
@@ -20,6 +21,9 @@ describe("driver game truth projection", () => {
     );
     expect(visualStateForBusinessStatus({ missionStatus: "follow_up" })).toBe(
       "contested"
+    );
+    expect(visualStateForBusinessStatus({ missionStatus: "phone_ready" })).toBe(
+      "active"
     );
   });
 
@@ -77,6 +81,28 @@ describe("driver game truth projection", () => {
 });
 
 describe("mission source dedup", () => {
+  it("retains resolved truth after it leaves the playable mission list", () => {
+    const mission = {
+      id: 7801,
+      status: "won",
+      account: {
+        name: "Resolved fixture",
+        address: "7801 Goldline Way",
+        decisionMaker: { phone: "+13235550100" },
+      },
+      opportunity: {
+        estimatedAnnualValueCents: 240_000,
+        estimateConfidence: "high",
+      },
+      expiresAt: null,
+    } as never;
+    const input = { missions: [mission] };
+    expect(projectPlayableMissions(input)).toEqual([]);
+    expect(projectMissionTruth(input)).toMatchObject([
+      { missionId: 7801, state: "captured" },
+    ]);
+  });
+
   it("does not produce two world nodes for one real entity discovered by two sources", () => {
     const mission = {
       id: 501,

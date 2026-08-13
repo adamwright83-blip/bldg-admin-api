@@ -26,7 +26,7 @@ function moveForMission(
   return moves.find(move => move.missionId === missionId);
 }
 
-export function projectPlayableMissions(input: {
+export function projectMissionTruth(input: {
   missions?: CommercialMission[];
   moves?: FieldMovesResult;
   worldNodes?: DriverGameWorldNode[];
@@ -105,10 +105,19 @@ export function projectPlayableMissions(input: {
   // candidate that merely references the same id.
   const deduped = dedupeByEntityIdentity(
     projected,
-    entry => (entry.missionId != null ? `mission:${entry.missionId}` : entry.key),
+    entry =>
+      entry.missionId != null ? `mission:${entry.missionId}` : entry.key,
     entry => (entry.key.startsWith("mission:") ? 0 : 1)
   );
-  return deduped
+  return deduped;
+}
+
+export function projectPlayableMissions(input: {
+  missions?: CommercialMission[];
+  moves?: FieldMovesResult;
+  worldNodes?: DriverGameWorldNode[];
+}): PlayableMission[] {
+  return projectMissionTruth(input)
     .filter(mission => !["captured", "closed"].includes(mission.state))
     .slice(0, 3);
 }

@@ -64,7 +64,7 @@ export function visualStateForBusinessStatus(input: {
     return "available";
   }
   if (
-    ["game_active", "preparing", "en_route", "arrived"].includes(
+    ["game_active", "phone_ready", "preparing", "en_route", "arrived"].includes(
       input.missionStatus
     )
   ) {

@@ -80,7 +80,7 @@ jobs:
           client/src/game/session/checkpointStorage.test.ts
 
       - name: Build production application
-        run: pnpm build
+        run: VITE_GOLDLINE_TEST_HARNESS=1 pnpm build
 
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
