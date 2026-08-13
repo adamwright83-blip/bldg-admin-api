@@ -19,20 +19,30 @@ import {
   type CorridorAnchor,
   type OcclusionZone,
 } from "../world/corridorAnchors";
-import type {
-  CorridorAction,
-  CorridorBranch,
-} from "../state/GameState";
+import type { CorridorAction, CorridorBranch } from "../state/GameState";
 import type { WorldMissionState } from "../../../../shared/driverGameWorld";
+import type { MissionAffordanceProjection } from "../encounters/missionAffordance";
 import { CameraController } from "./CameraController";
-import { branchPaceFor, stepVelocity, targetSpeedForMagnitude } from "./movementFeel";
-import { lateralForProgress, loadGoldRoute, type GoldRoutePoint } from "../world/goldRoute";
+import {
+  branchPaceFor,
+  stepVelocity,
+  targetSpeedForMagnitude,
+} from "./movementFeel";
+import {
+  lateralForProgress,
+  loadGoldRoute,
+  type GoldRoutePoint,
+} from "../world/goldRoute";
 import { AdaptiveQualityMonitor, type QualityTier } from "./adaptiveQuality";
+import { reportGoldlineLifecycleDelta } from "../testSupport/lifecycleProbe";
 
 export type LandmarkArchetype = "ANCHOR" | "GATEKEEPER" | "GHOST" | "STALLER";
 
 type GoldlineGameCallbacks = {
-  onActionAvailable: (action: CorridorAction | null, label: string | null) => void;
+  onActionAvailable: (
+    action: CorridorAction | null,
+    label: string | null
+  ) => void;
   onBranchChange: (branch: CorridorBranch) => void;
   onProgress: (progress: number) => void;
   onInteract: () => void;
@@ -47,7 +57,11 @@ type GoldlineGameCallbacks = {
   /** Fires only when measured rolling frame time crosses a real degrade/recover threshold. */
   onQualityChange?: (tier: QualityTier, avgFrameMs: number) => void;
   /** Fires (throttled, ~1/s) only while the avatar is idle/walk/run — a genuinely safe resume point. */
-  onCheckpointSafe?: (progress: number, lateral: number, branch: CorridorBranch) => void;
+  onCheckpointSafe?: (
+    progress: number,
+    lateral: number,
+    branch: CorridorBranch
+  ) => void;
 };
 
 /**
@@ -124,7 +138,6 @@ function poseForState(state: AvatarState, runFrame: number): string {
   }
 }
 
-
 export class GoldlineGame {
   private app: Application | null = null;
   private world = new Container();
@@ -174,13 +187,18 @@ export class GoldlineGame {
   private anchors: CorridorAnchor[] = [];
   private goldRoutePoints: GoldRoutePoint[] = [];
   private landmarkArchetype: LandmarkArchetype | null = null;
+  private worldSignal: MissionAffordanceProjection["worldSignal"] = "none";
   private landmark = new Graphics();
   private occlusionZones: OcclusionZone[] = [];
-  private portalProximityState = new Map<string, "hidden" | "label" | "engage">();
+  private portalProximityState = new Map<
+    string,
+    "hidden" | "label" | "engage"
+  >();
   private qualityMonitor = new AdaptiveQualityMonitor();
   private qualityTier: QualityTier = "premium";
   private lastCheckpointReportAt = 0;
   private hidden = false;
+  private tickerProbeActive = false;
   private visibilityHandler = () => {
     this.hidden = document.hidden;
     if (this.hidden) this.app?.ticker.stop();
@@ -217,31 +235,50 @@ export class GoldlineGame {
       });
       this.app = app;
       app.canvas.className = "goldline-game-canvas";
-      app.canvas.setAttribute("aria-label", "Playable Goldline jungle corridor");
+      app.canvas.setAttribute(
+        "aria-label",
+        "Playable Goldline jungle corridor"
+      );
       this.host.appendChild(app.canvas);
 
-      const characterBase = assets.characterBasePath ?? "/assets/goldline/characters/trailblazer";
+      const characterBase =
+        assets.characterBasePath ?? "/assets/goldline/characters/trailblazer";
       const optionalLoads: Array<[string, string]> = [
         ...(assets.farUrl ? [["far", assets.farUrl] as [string, string]] : []),
-        ...(assets.foregroundUrl ? [["foreground", assets.foregroundUrl] as [string, string]] : []),
-        ...(assets.effectsUrl ? [["effects", assets.effectsUrl] as [string, string]] : []),
-        ...(assets.portalUrl ? [["portal", assets.portalUrl] as [string, string]] : []),
-        ...(assets.strongholdUrl ? [["stronghold", assets.strongholdUrl] as [string, string]] : []),
+        ...(assets.foregroundUrl
+          ? [["foreground", assets.foregroundUrl] as [string, string]]
+          : []),
+        ...(assets.effectsUrl
+          ? [["effects", assets.effectsUrl] as [string, string]]
+          : []),
+        ...(assets.portalUrl
+          ? [["portal", assets.portalUrl] as [string, string]]
+          : []),
+        ...(assets.strongholdUrl
+          ? [["stronghold", assets.strongholdUrl] as [string, string]]
+          : []),
       ];
       const poseEntries = Object.entries(CHARACTER_POSE_FILES);
 
-      const [worldTexture, operatorTexture, midTexture, ...rest] = await Promise.all([
-        Assets.load<Texture>(assets.worldUrl),
-        Assets.load<Texture>(assets.operatorUrl),
-        assets.midUrl ? Assets.load<Texture>(assets.midUrl).catch(() => null) : Promise.resolve(null),
-        ...optionalLoads.map(([, url]) => Assets.load<Texture>(url).catch(() => null)),
-        ...poseEntries.map(([, file]) =>
-          Assets.load<Texture>(`${characterBase}/${file}`).catch(() => null)
-        ),
-      ]);
+      const [worldTexture, operatorTexture, midTexture, ...rest] =
+        await Promise.all([
+          Assets.load<Texture>(assets.worldUrl),
+          Assets.load<Texture>(assets.operatorUrl),
+          assets.midUrl
+            ? Assets.load<Texture>(assets.midUrl).catch(() => null)
+            : Promise.resolve(null),
+          ...optionalLoads.map(([, url]) =>
+            Assets.load<Texture>(url).catch(() => null)
+          ),
+          ...poseEntries.map(([, file]) =>
+            Assets.load<Texture>(`${characterBase}/${file}`).catch(() => null)
+          ),
+        ]);
 
       const optionalTextures = new Map<string, Texture | null>();
-      optionalLoads.forEach(([key], index) => optionalTextures.set(key, rest[index] as Texture | null));
+      optionalLoads.forEach(([key], index) =>
+        optionalTextures.set(key, rest[index] as Texture | null)
+      );
       poseEntries.forEach(([key], index) => {
         const texture = rest[optionalLoads.length + index] as Texture | null;
         if (texture) this.poseTextures.set(key, texture);
@@ -277,7 +314,10 @@ export class GoldlineGame {
       if (strongholdTexture) {
         this.strongholdSprite = new Sprite(strongholdTexture);
         this.strongholdSprite.anchor.set(0.5, 1);
-        this.layerTraversal.addChildAt(this.strongholdSprite, this.layerTraversal.getChildIndex(this.fortress));
+        this.layerTraversal.addChildAt(
+          this.strongholdSprite,
+          this.layerTraversal.getChildIndex(this.fortress)
+        );
       }
 
       const characterTexture = this.poseTextures.get("idle") ?? operatorTexture;
@@ -317,7 +357,8 @@ export class GoldlineGame {
       }
 
       const portalTexture = optionalTextures.get("portal");
-      if (portalTexture) this.poseTextures.set("__portal_texture__", portalTexture);
+      if (portalTexture)
+        this.poseTextures.set("__portal_texture__", portalTexture);
 
       this.world.addChild(
         this.layerFar,
@@ -333,15 +374,21 @@ export class GoldlineGame {
         if (changedTier) {
           this.qualityTier = changedTier;
           this.applyQualityTier();
-          this.callbacks.onQualityChange?.(changedTier, this.qualityMonitor.averageFrameMs());
+          this.callbacks.onQualityChange?.(
+            changedTier,
+            this.qualityMonitor.averageFrameMs()
+          );
         }
         this.update(ticker.deltaMS / 1000, background);
       });
+      this.tickerProbeActive = true;
+      reportGoldlineLifecycleDelta("pixiTicker", 1);
       document.addEventListener("visibilitychange", this.visibilityHandler);
       window.addEventListener("pagehide", this.pageHideHandler);
       this.renderWorldState();
 
-      const anchorsBasePath = assets.anchorsBasePath ?? "/assets/goldline/corridor_01";
+      const anchorsBasePath =
+        assets.anchorsBasePath ?? "/assets/goldline/corridor_01";
       void loadCorridorAnchors(anchorsBasePath).then(result => {
         this.anchors = result.anchors;
         this.occlusionZones = result.zones;
@@ -366,7 +413,8 @@ export class GoldlineGame {
   setWorldState(state: WorldMissionState) {
     const previous = this.worldState;
     this.worldState = state;
-    if (state === "recovery_active") this.camera.focusRecoveryPath();
+    if (state === "recovery_active" || state === "recovery_available")
+      this.camera.focusRecoveryPath();
     else this.camera.focusMainGate();
     // REKINDLE: a real, authoritative transition into an active recovery —
     // the world briefly acknowledges it. Never fires from arcade state.
@@ -374,6 +422,14 @@ export class GoldlineGame {
       this.camera.impulse(-8);
     }
     this.renderWorldState();
+  }
+
+  /**
+   * Projects the current authoritative affordance into the route itself.
+   * This is presentation-only: it never changes mission or business state.
+   */
+  setWorldSignal(signal: MissionAffordanceProjection["worldSignal"]) {
+    this.worldSignal = signal;
   }
 
   /**
@@ -395,13 +451,16 @@ export class GoldlineGame {
    * driven by real corridor data rather than a guessed screen position.
    */
   stageEncounter() {
-    const nearest = this.anchors.reduce<CorridorAnchor | null>((closest, anchor) => {
-      if (!closest) return anchor;
-      return anchorDistance(anchor, this.progress, this.lateral) <
-        anchorDistance(closest, this.progress, this.lateral)
-        ? anchor
-        : closest;
-    }, null);
+    const nearest = this.anchors.reduce<CorridorAnchor | null>(
+      (closest, anchor) => {
+        if (!closest) return anchor;
+        return anchorDistance(anchor, this.progress, this.lateral) <
+          anchorDistance(closest, this.progress, this.lateral)
+          ? anchor
+          : closest;
+      },
+      null
+    );
     this.camera.stageEncounter(nearest?.position.lateral ?? this.lateral);
   }
 
@@ -449,7 +508,8 @@ export class GoldlineGame {
     if (this.effectsSprite) {
       this.fitCover(this.effectsSprite, width, height);
       const alphaEase = Math.min(1, deltaSeconds * 3);
-      this.effectsSprite.alpha += (this.effectsTargetAlpha - this.effectsSprite.alpha) * alphaEase;
+      this.effectsSprite.alpha +=
+        (this.effectsTargetAlpha - this.effectsSprite.alpha) * alphaEase;
     }
     this.drawWorld(width, height);
 
@@ -504,7 +564,10 @@ export class GoldlineGame {
     const routeCenter = lateralForProgress(this.goldRoutePoints, this.progress);
     const avatarX = width * (routeCenter + this.lateral * 0.22);
     const groundY = height * (0.88 - this.progress * 0.61);
-    const baseHeight = Math.max(134, Math.min(232, height * (0.25 - this.progress * 0.08)));
+    const baseHeight = Math.max(
+      134,
+      Math.min(232, height * (0.25 - this.progress * 0.08))
+    );
     const jumpFactor = this.avatarState.jumpHeightFactor(now);
     const jumpLift = jumpFactor * baseHeight * 0.42;
 
@@ -520,7 +583,8 @@ export class GoldlineGame {
       jumpLift +
       (this.avatarState.state === "run" ? Math.sin(now / 72) * 3 : 0);
     this.avatar.rotation = this.input.x * 0.035;
-    this.avatar.alpha = this.avatarState.state === "encounter_locked" ? 0.72 : 1;
+    this.avatar.alpha =
+      this.avatarState.state === "encounter_locked" ? 0.72 : 1;
 
     this.syncCrossfadeTransform();
     this.drawContactShadow(avatarX, groundY, baseHeight, jumpFactor);
@@ -531,7 +595,8 @@ export class GoldlineGame {
     this.updateParallax();
 
     const current = pendingTrigger(this.progress, this.completedTriggers);
-    const action = current && this.progress >= current.at - 0.04 ? current.action : null;
+    const action =
+      current && this.progress >= current.at - 0.04 ? current.action : null;
     const label = action ? current!.label : null;
     if (action !== this.availableAction || label !== this.availableLabel) {
       this.availableAction = action;
@@ -599,7 +664,8 @@ export class GoldlineGame {
 
     if (this.poseTextures.size === 0 || !this.avatar) return;
     if (state === "run" || state === "walk") {
-      this.runFrameTimer += (state === "run" ? 11 : 6) * (magnitude > 0 ? 1 : 0);
+      this.runFrameTimer +=
+        (state === "run" ? 11 : 6) * (magnitude > 0 ? 1 : 0);
     }
     const frame = Math.floor(this.runFrameTimer / 6);
     const key = poseForState(state, frame);
@@ -611,7 +677,8 @@ export class GoldlineGame {
         // frames would read as motion blur rather than a run. Every other
         // state change (idle<->run, run->jump_start, jump_air->land,
         // climb_a<->climb_b, ...) gets a brief crossfade so it never pops.
-        const isRunFrameStep = key.startsWith("run_0") && this.currentPoseKey.startsWith("run_0");
+        const isRunFrameStep =
+          key.startsWith("run_0") && this.currentPoseKey.startsWith("run_0");
         if (!isRunFrameStep && this.avatarCrossfade) {
           this.avatarCrossfade.texture = this.avatar.texture;
           this.avatarCrossfade.visible = true;
@@ -638,11 +705,18 @@ export class GoldlineGame {
     this.avatarCrossfade.y = this.avatar.y;
     this.avatarCrossfade.height = Math.abs(this.avatar.height);
     this.avatarCrossfade.width = Math.abs(this.avatar.width);
-    this.avatarCrossfade.scale.x = Math.abs(this.avatarCrossfade.scale.x) * Math.sign(this.avatar.scale.x || 1);
+    this.avatarCrossfade.scale.x =
+      Math.abs(this.avatarCrossfade.scale.x) *
+      Math.sign(this.avatar.scale.x || 1);
     this.avatarCrossfade.rotation = this.avatar.rotation;
   }
 
-  private applyOcclusion(avatarX: number, groundY: number, width: number, height: number) {
+  private applyOcclusion(
+    avatarX: number,
+    groundY: number,
+    width: number,
+    height: number
+  ) {
     const activeZone = this.occlusionZones.find(zone =>
       pointInZone(zone, this.progress, this.lateral)
     );
@@ -652,8 +726,14 @@ export class GoldlineGame {
     if (activeZone && avatarIndex > fortressIndex) {
       this.layerTraversal.setChildIndex(this.avatar, fortressIndex);
       this.layerTraversal.setChildIndex(this.avatarShadow, fortressIndex);
-    } else if (!activeZone && avatarIndex < this.layerTraversal.children.length - 1) {
-      this.layerTraversal.setChildIndex(this.avatar, this.layerTraversal.children.length - 1);
+    } else if (
+      !activeZone &&
+      avatarIndex < this.layerTraversal.children.length - 1
+    ) {
+      this.layerTraversal.setChildIndex(
+        this.avatar,
+        this.layerTraversal.children.length - 1
+      );
       this.layerTraversal.setChildIndex(
         this.avatarShadow,
         Math.max(0, this.layerTraversal.children.length - 2)
@@ -666,15 +746,18 @@ export class GoldlineGame {
     this.occlusionZones.forEach((zone, index) => {
       const sprite = this.foregroundOccluders[index];
       if (!sprite) return;
-      const zoneLateralMid = (zone.bounds.lateralMin + zone.bounds.lateralMax) / 2;
-      const zoneProgressMid = (zone.bounds.progressMin + zone.bounds.progressMax) / 2;
+      const zoneLateralMid =
+        (zone.bounds.lateralMin + zone.bounds.lateralMax) / 2;
+      const zoneProgressMid =
+        (zone.bounds.progressMin + zone.bounds.progressMax) / 2;
       const near = Math.abs(this.progress - zoneProgressMid) < 0.09;
       sprite.visible = near;
       if (!near) return;
       sprite.x = width * (0.5 + zoneLateralMid * 0.22);
       sprite.y = height * (0.88 - zoneProgressMid * 0.61) - 40;
       sprite.height = height * 0.34;
-      sprite.width = sprite.height * (sprite.texture.width / sprite.texture.height);
+      sprite.width =
+        sprite.height * (sprite.texture.width / sprite.texture.height);
       sprite.alpha = 0.94;
     });
   }
@@ -702,12 +785,17 @@ export class GoldlineGame {
     this.strongholdSprite.height = height * 0.24;
     this.strongholdSprite.width =
       this.strongholdSprite.height *
-      (this.strongholdSprite.texture.width / this.strongholdSprite.texture.height);
+      (this.strongholdSprite.texture.width /
+        this.strongholdSprite.texture.height);
     // Dim toward closed, settle brighter on a verified capture, otherwise
     // the steady baseline — bright tropical direction preserved throughout,
     // never a dark villain-fortress treatment.
     this.strongholdSprite.alpha =
-      this.worldState === "closed" ? 0.5 : this.worldState === "captured" ? 1 : 0.92;
+      this.worldState === "closed"
+        ? 0.5
+        : this.worldState === "captured"
+          ? 1
+          : 0.92;
   }
 
   /**
@@ -720,6 +808,12 @@ export class GoldlineGame {
    */
   private drawLandmark(width: number, height: number, now: number) {
     this.landmark.clear();
+    if (this.worldSignal === "dormant") {
+      const breath = 0.5 + Math.sin(now / 1_300) * 0.5;
+      this.landmark
+        .circle(width * 0.2, height * 0.14, 22 + breath * 4)
+        .stroke({ color: 0xd9bd78, width: 2, alpha: 0.12 + breath * 0.16 });
+    }
     if (!this.landmarkArchetype || this.landmarkArchetype === "ANCHOR") return;
     if (this.worldState === "captured" || this.worldState === "closed") return;
 
@@ -743,9 +837,15 @@ export class GoldlineGame {
       // someone", never as "they replied".
       const pulse = 0.5 + Math.sin(now / 900) * 0.5;
       const radius = 10 + pulse * 6;
-      this.landmark.circle(x, y, radius + 8).fill({ color: 0xa082ff, alpha: 0.06 + pulse * 0.08 });
-      this.landmark.circle(x, y, radius).stroke({ color: 0xcbb8ff, width: 2, alpha: 0.4 + pulse * 0.4 });
-      this.landmark.circle(x, y, 4).fill({ color: 0xe6dcff, alpha: 0.7 + pulse * 0.3 });
+      this.landmark
+        .circle(x, y, radius + 8)
+        .fill({ color: 0xa082ff, alpha: 0.06 + pulse * 0.08 });
+      this.landmark
+        .circle(x, y, radius)
+        .stroke({ color: 0xcbb8ff, width: 2, alpha: 0.4 + pulse * 0.4 });
+      this.landmark
+        .circle(x, y, 4)
+        .fill({ color: 0xe6dcff, alpha: 0.7 + pulse * 0.3 });
       return;
     }
 
@@ -753,7 +853,9 @@ export class GoldlineGame {
       // Frozen mechanism: a clockwork ring that ticks in small discrete
       // steps rather than spinning freely — "delayed", not "broken".
       const tickAngle = Math.floor(now / 700) * (Math.PI / 6);
-      this.landmark.circle(x, y, 16).stroke({ color: 0xffc46b, width: 2, alpha: 0.55 });
+      this.landmark
+        .circle(x, y, 16)
+        .stroke({ color: 0xffc46b, width: 2, alpha: 0.55 });
       for (let i = 0; i < 6; i += 1) {
         const angle = tickAngle + (i * Math.PI) / 3;
         const gx = x + Math.cos(angle) * 16;
@@ -796,7 +898,8 @@ export class GoldlineGame {
         sprite.anchor.set(0.5, 1);
         const targetHeight = height * (0.14 + dominance * 0.1);
         sprite.height = targetHeight;
-        sprite.width = targetHeight * (portalTexture.width / portalTexture.height);
+        sprite.width =
+          targetHeight * (portalTexture.width / portalTexture.height);
         sprite.x = px;
         sprite.y = py + targetHeight * 0.5;
         sprite.alpha = 0.55 + dominance * 0.45;
@@ -809,15 +912,22 @@ export class GoldlineGame {
       const color = anchor.type === "comms_portal" ? 0x36e8e7 : 0x8b5fe0;
       const portal = new Graphics();
       const radius = 34 + dominance * 22;
-      portal.circle(px, py, radius).fill({ color, alpha: 0.05 + dominance * 0.1 });
-      portal.circle(px, py, radius * 0.45).fill({ color, alpha: 0.08 + dominance * 0.14 });
+      portal
+        .circle(px, py, radius)
+        .fill({ color, alpha: 0.05 + dominance * 0.1 });
+      portal
+        .circle(px, py, radius * 0.45)
+        .fill({ color, alpha: 0.08 + dominance * 0.14 });
       this.portals.addChild(portal);
     }
   }
 
   private updateCameraLookahead() {
     const upcoming = this.anchors
-      .map(anchor => ({ anchor, distance: anchorDistance(anchor, this.progress, this.lateral) }))
+      .map(anchor => ({
+        anchor,
+        distance: anchorDistance(anchor, this.progress, this.lateral),
+      }))
       .filter(entry => entry.anchor.position.progress >= this.progress)
       .sort((a, b) => a.distance - b.distance)[0];
     if (!upcoming) {
@@ -855,7 +965,14 @@ export class GoldlineGame {
     // it does not disappear (the account isn't closed), but visual priority
     // shifts to the recovery path drawn below.
     const mainRouteDim =
-      this.worldState === "contested" || this.worldState === "recovery_active" ? 0.4 : 1;
+      this.worldState === "recovery_active" ||
+      this.worldState === "recovery_available"
+        ? 0.4
+        : this.worldState === "contested"
+          ? 0.65
+          : this.worldSignal === "dormant"
+            ? 0.48
+            : 1;
     drawRoute(14, 0xf4bd48, 0.15 * mainRouteDim);
     drawRoute(3, 0xffdf77, 0.86 * mainRouteDim);
 
@@ -902,8 +1019,8 @@ export class GoldlineGame {
 
     this.recoveryPath.clear();
     if (
-      this.worldState === "contested" ||
-      this.worldState === "recovery_active"
+      this.worldState === "recovery_active" ||
+      this.worldState === "recovery_available"
     ) {
       this.recoveryPath
         .moveTo(width * 0.32, height * 0.62)
@@ -969,13 +1086,21 @@ export class GoldlineGame {
 
   private renderWorldState() {
     if (!this.app) return;
-    if (this.worldState === "recovery_active") this.camera.focusRecoveryPath();
+    if (
+      this.worldState === "recovery_active" ||
+      this.worldState === "recovery_available"
+    )
+      this.camera.focusRecoveryPath();
     else this.camera.focusMainGate();
   }
 
   destroy() {
     document.removeEventListener("visibilitychange", this.visibilityHandler);
     window.removeEventListener("pagehide", this.pageHideHandler);
+    if (this.tickerProbeActive) {
+      this.tickerProbeActive = false;
+      reportGoldlineLifecycleDelta("pixiTicker", -1);
+    }
     this.app?.destroy(true, { children: true });
     this.app = null;
     this.host.replaceChildren();
@@ -983,5 +1108,8 @@ export class GoldlineGame {
 }
 
 function baseHeightAt(viewportHeight: number, progress: number): number {
-  return Math.max(134, Math.min(232, viewportHeight * (0.25 - progress * 0.08)));
+  return Math.max(
+    134,
+    Math.min(232, viewportHeight * (0.25 - progress * 0.08))
+  );
 }

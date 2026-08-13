@@ -118,7 +118,12 @@ describe("archetype selection", () => {
 
 describe("channel selection", () => {
   it("uses follow-up for missions carrying a live commitment", () => {
-    expect(channelForMission(mission({ state: "contested" }))).toBe("follow_up");
+    expect(channelForMission(mission({ state: "contested" }))).toBe(
+      "follow_up"
+    );
+    expect(channelForMission(mission({ state: "recovery_available" }))).toBe(
+      "follow_up"
+    );
     expect(channelForMission(mission({ state: "recovery_active" }))).toBe(
       "follow_up"
     );

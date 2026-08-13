@@ -19,6 +19,11 @@ import type {
 } from "../../../../shared/coldCallBurst";
 import type { CapabilityEvaluation } from "../../../../shared/expansionScout";
 import type { RealActionRequest } from "../../game/encounters/RealActionBridge";
+import type {
+  GoldlineActionServices,
+  GoldlineVisitContext,
+} from "../../game/actions/actionServices";
+import type { AuthoritativeFollowUp } from "../../game/actions/actionRegistry";
 import {
   canCompleteDelivery,
   nextCommitmentDate,
@@ -42,8 +47,26 @@ const REQUESTING_LOCATION: GoldlineLocationSnapshot = {
 };
 
 const GoldlineGameHome = lazy(() => import("../../game/GoldlineGameHome"));
+const GoldlineBusinessLoopHarness =
+  import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
+    ? lazy(() => import("../../game/testSupport/GoldlineBusinessLoopHarness"))
+    : null;
 
 export default function GoldlineDriverController() {
+  const fixture = new URLSearchParams(window.location.search).get(
+    "goldlineFixture"
+  );
+  if (GoldlineBusinessLoopHarness && fixture) {
+    return (
+      <Suspense fallback={null}>
+        <GoldlineBusinessLoopHarness fixture={fixture} />
+      </Suspense>
+    );
+  }
+  return <LiveGoldlineDriverController />;
+}
+
+function LiveGoldlineDriverController() {
   const utils = trpc.useUtils();
   /**
    * Scopes the local positional checkpoint to the signed-in player, so a
@@ -106,6 +129,10 @@ export default function GoldlineDriverController() {
       retry: false,
     }
   );
+  const followUpQueue = trpc.system.dayforgeToday.list.useQuery(undefined, {
+    refetchInterval: 30_000,
+    retry: false,
+  });
   const openChannelInput = { businessDate: selectedDate };
   const progressInput = {
     businessDate: selectedDate,
@@ -183,6 +210,16 @@ export default function GoldlineDriverController() {
   const recordWeaponUsage = trpc.system.armory.recordUsage.useMutation();
   const logCallAttempt =
     trpc.system.commercialMission.logCallAttempt.useMutation();
+  const startVisitPreparation =
+    trpc.system.commercialMission.fieldStartPreparation.useMutation();
+  const departVisit = trpc.system.commercialMission.fieldDepart.useMutation();
+  const arriveVisit = trpc.system.commercialMission.fieldArrive.useMutation();
+  const recordVisitOutcome =
+    trpc.system.commercialMission.fieldOutcome.useMutation();
+  const completeFollowUp =
+    trpc.system.dayforgeToday.completeFollowUp.useMutation();
+  const rescheduleFollowUp =
+    trpc.system.dayforgeToday.rescheduleFollowUp.useMutation();
   const recordGoldlineEvent = trpc.system.goldlineEvents.record.useMutation();
   const emitGoldlineEvent = useMemo(
     () =>
@@ -550,6 +587,175 @@ export default function GoldlineDriverController() {
     ]);
   }
 
+  async function refetchGoldlineActionTruth(missionId: number | null) {
+    await Promise.all([
+      builtMissions.refetch(),
+      driverGameWorld.refetch(),
+      moves.refetch(),
+      followUpQueue.refetch(),
+      missionId == null
+        ? Promise.resolve()
+        : utils.system.commercialMission.fieldState.invalidate({ missionId }),
+      utils.system.driverGameWorld.latestScoutReport.invalidate(),
+    ]);
+  }
+
+  async function loadVisitContext(
+    missionId: number
+  ): Promise<GoldlineVisitContext> {
+    const state = await utils.system.commercialMission.fieldState.fetch({
+      missionId,
+    });
+    if (!state) throw new Error("Authoritative visit state is unavailable");
+    return state;
+  }
+
+  async function startVisitAction(input: {
+    missionId: number;
+    requestId: string;
+  }): Promise<GoldlineVisitContext> {
+    const current = await loadVisitContext(input.missionId);
+    const next = await startVisitPreparation.mutateAsync({
+      ...input,
+      expectedMissionVersion: current.mission.version,
+    });
+    if (!next) throw new Error("Visit preparation was not persisted");
+    return next;
+  }
+
+  async function departVisitAction(input: {
+    missionId: number;
+    requestId: string;
+  }): Promise<GoldlineVisitContext> {
+    const current = await loadVisitContext(input.missionId);
+    if (!current.field)
+      throw new Error("Field preparation is required before departure");
+    const next = await departVisit.mutateAsync({
+      ...input,
+      expectedMissionVersion: current.mission.version,
+      expectedFieldVersion: current.field.version,
+    });
+    if (!next) throw new Error("Departure was not persisted");
+    return next;
+  }
+
+  async function arriveVisitAction(input: {
+    missionId: number;
+    requestId: string;
+  }): Promise<GoldlineVisitContext> {
+    const current = await loadVisitContext(input.missionId);
+    if (!current.field)
+      throw new Error("Departure must be recorded before arrival");
+    const next = await arriveVisit.mutateAsync({
+      ...input,
+      expectedMissionVersion: current.mission.version,
+      expectedFieldVersion: current.field.version,
+      checkInMethod: "manual",
+    });
+    if (!next) throw new Error("Arrival was not persisted");
+    return next;
+  }
+
+  async function recordVisitAction(
+    input: Parameters<GoldlineActionServices["recordVisitOutcome"]>[0]
+  ): Promise<GoldlineVisitContext> {
+    const current = await loadVisitContext(input.missionId);
+    if (!current.field) throw new Error("Arrival state is unavailable");
+    const next = await recordVisitOutcome.mutateAsync({
+      ...input,
+      expectedMissionVersion: current.mission.version,
+      expectedFieldVersion: current.field.version,
+    });
+    if (!next) throw new Error("Visit result was not persisted");
+    return next;
+  }
+
+  async function loadAuthoritativeFollowUp(
+    missionId: number
+  ): Promise<AuthoritativeFollowUp | null> {
+    const items = await utils.system.dayforgeToday.list.fetch();
+    const item = items.find(
+      candidate =>
+        candidate.kind === "follow_up" &&
+        candidate.missionId === missionId &&
+        candidate.pipelineId != null &&
+        candidate.followUpId != null &&
+        candidate.dueAt != null
+    );
+    if (!item?.pipelineId || !item.followUpId || !item.dueAt) return null;
+    const channel = item.phone
+      ? "phone"
+      : item.email
+        ? "email"
+        : item.address
+          ? "in_person"
+          : "unknown";
+    return {
+      pipelineId: item.pipelineId,
+      followUpId: item.followUpId,
+      dueAt: item.dueAt,
+      note: item.note,
+      channel,
+    };
+  }
+
+  async function completeFollowUpAction(input: {
+    followUp: AuthoritativeFollowUp;
+    requestId: string;
+  }) {
+    await completeFollowUp.mutateAsync({
+      pipelineId: input.followUp.pipelineId,
+      followUpId: input.followUp.followUpId,
+      requestId: input.requestId,
+    });
+  }
+
+  async function rescheduleFollowUpAction(input: {
+    followUp: AuthoritativeFollowUp;
+    requestId: string;
+    dueAt: Date;
+  }) {
+    await rescheduleFollowUp.mutateAsync({
+      pipelineId: input.followUp.pipelineId,
+      followUpId: input.followUp.followUpId,
+      requestId: input.requestId,
+      dueAt: input.dueAt,
+    });
+  }
+
+  async function recoverAction(input: {
+    missionId: number;
+    requestId: string;
+  }) {
+    const node = await beginRekindle.mutateAsync(input);
+    utils.system.driverGameWorld.current.setData(undefined, current => [
+      ...(current ?? []).filter(item => item.missionId !== input.missionId),
+      node,
+    ]);
+    return node;
+  }
+
+  async function scoutAction(input: { requestId: string }) {
+    const report = await runScout.mutateAsync(input);
+    utils.system.driverGameWorld.latestScoutReport.setData(undefined, report);
+    return report;
+  }
+
+  const actionServices: GoldlineActionServices = {
+    recordCall: handlePersistEncounterAction,
+    loadVisit: loadVisitContext,
+    startVisitPreparation: startVisitAction,
+    departVisit: departVisitAction,
+    arriveVisit: arriveVisitAction,
+    recordVisitOutcome: recordVisitAction,
+    loadFollowUp: loadAuthoritativeFollowUp,
+    completeFollowUp: completeFollowUpAction,
+    rescheduleFollowUp: rescheduleFollowUpAction,
+    recover: recoverAction,
+    scout: scoutAction,
+    refetchAuthoritativeTruth: refetchGoldlineActionTruth,
+  };
+
   async function handleSelectColdCallChain(target: ColdCallTarget) {
     const batch = coldCall.data?.batch;
     if (!batch) throw new Error("Cold-call batch is unavailable");
@@ -673,7 +879,7 @@ export default function GoldlineDriverController() {
           onRunScout={handleRunScout}
           onRequestWeapons={input => utils.system.armory.weapons.fetch(input)}
           onRecordWeaponUsage={input => recordWeaponUsage.mutateAsync(input)}
-          onPersistEncounterAction={handlePersistEncounterAction}
+          actionServices={actionServices}
           onEmitEvent={emitGoldlineEvent}
         />
       </Suspense>

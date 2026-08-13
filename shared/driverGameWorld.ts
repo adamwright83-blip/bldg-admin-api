@@ -42,7 +42,9 @@ export function gameWorldControlPercent(nodes: DriverGameWorldNode[]): number {
   // This deliberately does not represent geographic or commercial market share.
   const pursued = nodes.filter(node => node.visualState !== "closed");
   if (!pursued.length) return 0;
-  const captured = pursued.filter(node => node.visualState === "captured").length;
+  const captured = pursued.filter(
+    node => node.visualState === "captured"
+  ).length;
   return Math.round((captured / pursued.length) * 100);
 }
 
@@ -53,17 +55,16 @@ export function visualStateForBusinessStatus(input: {
   if (input.missionStatus === "won") return "captured";
   if (input.missionStatus === "lost") return "closed";
   if (input.missionStatus === "follow_up") {
-    return input.savedVisualState === "recovery_active"
-      ? "recovery_active"
+    return input.savedVisualState === "recovery_active" ||
+      input.savedVisualState === "recovery_available"
+      ? input.savedVisualState
       : "contested";
   }
-  if (
-    ["candidate", "selected", "game_ready"].includes(input.missionStatus)
-  ) {
+  if (["candidate", "selected", "game_ready"].includes(input.missionStatus)) {
     return "available";
   }
   if (
-    ["game_active", "preparing", "en_route", "arrived"].includes(
+    ["game_active", "phone_ready", "preparing", "en_route", "arrived"].includes(
       input.missionStatus
     )
   ) {
