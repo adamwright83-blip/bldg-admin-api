@@ -62,7 +62,11 @@ export function RealActionBridge(props: {
           <small>REAL ACTION · AUTHORITATIVE</small>
           <b>{props.missionName}</b>
         </span>
-        <button onClick={props.onClose} aria-label="Close real action">
+        <button
+          onClick={props.onClose}
+          aria-label="Close real action"
+          disabled={saving}
+        >
           <X />
         </button>
       </header>
@@ -113,7 +117,7 @@ export function RealActionBridge(props: {
               <Loader2 /> SAVING AUTHORITATIVE ACTION…
             </>
           ) : (
-            "SAVE REAL OUTCOME"
+            "RECORD CALL RESULT"
           )}
         </button>
       </div>

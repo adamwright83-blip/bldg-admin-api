@@ -5,22 +5,31 @@ import {
   visualStateForBusinessStatus,
 } from "../../../../shared/driverGameWorld";
 import { equipAnchorAbilities } from "./EncounterProjection";
-import { projectPersistentHistory, projectPlayableMissions } from "./WorldProjection";
+import {
+  projectPersistentHistory,
+  projectPlayableMissions,
+} from "./WorldProjection";
 
 describe("driver game truth projection", () => {
   it("maps authoritative outcomes without letting arcade state create a win", () => {
-    expect(
-      visualStateForBusinessStatus({ missionStatus: "won" })
-    ).toBe("captured");
-    expect(
-      visualStateForBusinessStatus({ missionStatus: "lost" })
-    ).toBe("closed");
-    expect(
-      visualStateForBusinessStatus({ missionStatus: "follow_up" })
-    ).toBe("contested");
+    expect(visualStateForBusinessStatus({ missionStatus: "won" })).toBe(
+      "captured"
+    );
+    expect(visualStateForBusinessStatus({ missionStatus: "lost" })).toBe(
+      "closed"
+    );
+    expect(visualStateForBusinessStatus({ missionStatus: "follow_up" })).toBe(
+      "contested"
+    );
   });
 
-  it("persists only the valid contested to recovery-active projection", () => {
+  it("preserves only server-supported recovery projections", () => {
+    expect(
+      visualStateForBusinessStatus({
+        missionStatus: "follow_up",
+        savedVisualState: "recovery_available",
+      })
+    ).toBe("recovery_available");
     expect(
       visualStateForBusinessStatus({
         missionStatus: "follow_up",

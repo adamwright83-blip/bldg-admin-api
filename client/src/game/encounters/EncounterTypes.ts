@@ -41,7 +41,11 @@ export type EncounterProps = {
  * with a live follow-up is a follow-up; one with a proposal out is a proposal.
  */
 export function channelForMission(mission: PlayableMission): SalesIntelChannel {
-  if (mission.state === "contested" || mission.state === "recovery_active") {
+  if (
+    mission.state === "contested" ||
+    mission.state === "recovery_available" ||
+    mission.state === "recovery_active"
+  ) {
     return "follow_up";
   }
   if (mission.state === "watching") return "follow_up";
@@ -78,7 +82,11 @@ export function archetypeForMission(input: {
     }
   }
 
-  if (mission.state === "contested" || mission.state === "recovery_active") {
+  if (
+    mission.state === "contested" ||
+    mission.state === "recovery_available" ||
+    mission.state === "recovery_active"
+  ) {
     return "GHOST";
   }
 

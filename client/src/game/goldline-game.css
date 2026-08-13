@@ -2742,6 +2742,100 @@
   color: #ffca78;
 }
 
+.goldline-action-surface {
+  position: absolute;
+  z-index: 48;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  width: min(440px, calc(100% - 24px));
+  max-height: min(70dvh, 660px);
+  overflow: auto;
+  border: 1px solid rgba(255, 211, 105, 0.42);
+  border-radius: 20px;
+  background: rgba(3, 12, 18, 0.88);
+  box-shadow: 0 18px 70px rgba(0, 0, 0, 0.52);
+  color: white;
+  backdrop-filter: blur(12px);
+}
+
+.goldline-action-surface header,
+.goldline-action-surface header span,
+.goldline-action-surface__body,
+.goldline-action-surface label,
+.visit-outcome-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.goldline-action-surface header {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.goldline-action-surface header button {
+  min-width: 48px;
+  min-height: 48px;
+}
+
+.goldline-action-surface__body {
+  padding: 16px;
+}
+
+.goldline-action-surface__body > button,
+.goldline-action-surface__body > a,
+.visit-outcome-fields button {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 14px;
+  background: #e8b84d;
+  color: #091015;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.goldline-action-surface input,
+.goldline-action-surface select,
+.goldline-action-surface textarea {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: #07131c;
+  color: white;
+  padding: 12px;
+  font: inherit;
+}
+
+.goldline-action-surface button:disabled {
+  opacity: 0.44;
+}
+
+.action-world-cue {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(91, 223, 255, 0.2);
+  border-radius: 14px;
+  background: rgba(19, 54, 65, 0.32);
+  padding: 12px;
+}
+
+.action-world-cue > svg {
+  flex: 0 0 auto;
+  color: #6fe3ff;
+}
+
+.action-world-cue span,
+.action-world-cue small {
+  display: block;
+}
+
 .mission-affordance-signal {
   position: absolute;
   z-index: 12;
@@ -2757,6 +2851,26 @@
   font-weight: 900;
   letter-spacing: 0.16em;
   pointer-events: none;
+}
+
+.world-outcome-cue {
+  position: absolute;
+  z-index: 24;
+  left: 50%;
+  top: 126px;
+  transform: translateX(-50%);
+  width: min(520px, calc(100% - 32px));
+  border: 1px solid rgba(255, 221, 119, 0.42);
+  border-radius: 12px;
+  background: rgba(4, 14, 20, 0.72);
+  color: #ffe7a4;
+  padding: 9px 14px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  pointer-events: none;
+  backdrop-filter: blur(5px);
 }
 
 .playable-goldline[data-world-signal="dormant"] .game-atmosphere {
@@ -2800,5 +2914,13 @@
     bottom: max(8px, env(safe-area-inset-bottom));
     width: auto;
     max-height: 58dvh;
+  }
+
+  .goldline-action-surface {
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+    bottom: max(8px, env(safe-area-inset-bottom));
+    width: auto;
+    max-height: 60dvh;
   }
 }

@@ -24,6 +24,7 @@ import type {
   CorridorBranch,
 } from "../state/GameState";
 import type { WorldMissionState } from "../../../../shared/driverGameWorld";
+import type { MissionAffordanceProjection } from "../encounters/missionAffordance";
 import { CameraController } from "./CameraController";
 import { branchPaceFor, stepVelocity, targetSpeedForMagnitude } from "./movementFeel";
 import { lateralForProgress, loadGoldRoute, type GoldRoutePoint } from "../world/goldRoute";
@@ -174,6 +175,7 @@ export class GoldlineGame {
   private anchors: CorridorAnchor[] = [];
   private goldRoutePoints: GoldRoutePoint[] = [];
   private landmarkArchetype: LandmarkArchetype | null = null;
+  private worldSignal: MissionAffordanceProjection["worldSignal"] = "none";
   private landmark = new Graphics();
   private occlusionZones: OcclusionZone[] = [];
   private portalProximityState = new Map<string, "hidden" | "label" | "engage">();
@@ -366,7 +368,8 @@ export class GoldlineGame {
   setWorldState(state: WorldMissionState) {
     const previous = this.worldState;
     this.worldState = state;
-    if (state === "recovery_active") this.camera.focusRecoveryPath();
+    if (state === "recovery_active" || state === "recovery_available")
+      this.camera.focusRecoveryPath();
     else this.camera.focusMainGate();
     // REKINDLE: a real, authoritative transition into an active recovery —
     // the world briefly acknowledges it. Never fires from arcade state.
@@ -374,6 +377,14 @@ export class GoldlineGame {
       this.camera.impulse(-8);
     }
     this.renderWorldState();
+  }
+
+  /**
+   * Projects the current authoritative affordance into the route itself.
+   * This is presentation-only: it never changes mission or business state.
+   */
+  setWorldSignal(signal: MissionAffordanceProjection["worldSignal"]) {
+    this.worldSignal = signal;
   }
 
   /**
@@ -720,6 +731,12 @@ export class GoldlineGame {
    */
   private drawLandmark(width: number, height: number, now: number) {
     this.landmark.clear();
+    if (this.worldSignal === "dormant") {
+      const breath = 0.5 + Math.sin(now / 1_300) * 0.5;
+      this.landmark
+        .circle(width * 0.2, height * 0.14, 22 + breath * 4)
+        .stroke({ color: 0xd9bd78, width: 2, alpha: 0.12 + breath * 0.16 });
+    }
     if (!this.landmarkArchetype || this.landmarkArchetype === "ANCHOR") return;
     if (this.worldState === "captured" || this.worldState === "closed") return;
 
@@ -855,7 +872,14 @@ export class GoldlineGame {
     // it does not disappear (the account isn't closed), but visual priority
     // shifts to the recovery path drawn below.
     const mainRouteDim =
-      this.worldState === "contested" || this.worldState === "recovery_active" ? 0.4 : 1;
+      this.worldState === "recovery_active" ||
+      this.worldState === "recovery_available"
+        ? 0.4
+        : this.worldState === "contested"
+          ? 0.65
+          : this.worldSignal === "dormant"
+            ? 0.48
+            : 1;
     drawRoute(14, 0xf4bd48, 0.15 * mainRouteDim);
     drawRoute(3, 0xffdf77, 0.86 * mainRouteDim);
 
@@ -902,8 +926,8 @@ export class GoldlineGame {
 
     this.recoveryPath.clear();
     if (
-      this.worldState === "contested" ||
-      this.worldState === "recovery_active"
+      this.worldState === "recovery_active" ||
+      this.worldState === "recovery_available"
     ) {
       this.recoveryPath
         .moveTo(width * 0.32, height * 0.62)
@@ -969,7 +993,11 @@ export class GoldlineGame {
 
   private renderWorldState() {
     if (!this.app) return;
-    if (this.worldState === "recovery_active") this.camera.focusRecoveryPath();
+    if (
+      this.worldState === "recovery_active" ||
+      this.worldState === "recovery_available"
+    )
+      this.camera.focusRecoveryPath();
     else this.camera.focusMainGate();
   }
 

@@ -8,14 +8,12 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
-  CalendarClock,
   Check,
   ChevronRight,
   Crosshair,
   FileText,
   Footprints,
   Loader2,
-  LockKeyhole,
   Map,
   MapPin,
   Menu,
@@ -27,13 +25,9 @@ import {
   Sparkles,
   Target,
   X,
-  Zap,
 } from "lucide-react";
 import type { DriverGameWorldNode } from "../../../shared/driverGameWorld";
-import {
-  coolingLabel,
-  gameWorldControlPercent,
-} from "../../../shared/driverGameWorld";
+import { gameWorldControlPercent } from "../../../shared/driverGameWorld";
 import type {
   ColdCallBatch,
   ColdCallTarget,
@@ -95,8 +89,6 @@ import type {
 } from "./state/GameState";
 import "./goldline-game.css";
 import { ColdCallBurst } from "./encounters/coldCall/ColdCallBurst";
-import { VictoryCeremony } from "./victory/VictoryCeremony";
-import { ScoutCapabilityChamber } from "./capabilities/ScoutCapabilityChamber";
 import { ScoutReportPanel } from "./agents/scout/ScoutReportPanel";
 import {
   hasOnboardingMilestone,
@@ -112,16 +104,18 @@ import {
   type SalesIntelChannel,
 } from "./encounters/EncounterTypes";
 import {
-  RealActionBridge,
-  type RealActionRequest,
-} from "./encounters/RealActionBridge";
-import {
   createEncounterRuntime,
   transitionEncounter,
   type EncounterRuntimeState,
 } from "./encounters/encounterLifecycle";
 import { projectAuthoritativeOutcome } from "./encounters/authoritativeOutcome";
 import { projectMissionAffordance } from "./encounters/missionAffordance";
+import {
+  resolveGoldlineAction,
+  type GoldlineActionDescriptor,
+  type GoldlineActionKind,
+} from "./actions/actionRegistry";
+import type { GoldlineActionServices } from "./actions/actionServices";
 
 // New objection encounters load only when the player actually reaches one,
 // so the base game runtime stays lean.
@@ -131,6 +125,9 @@ const GatekeeperEncounter = lazy(
 const GhostEncounter = lazy(() => import("./encounters/ghost/GhostEncounter"));
 const StallerEncounter = lazy(
   () => import("./encounters/staller/StallerEncounter")
+);
+const GoldlineActionSurface = lazy(
+  () => import("./actions/GoldlineActionSurface")
 );
 
 type GoldlineGameHomeProps = GoldlineHomeProps & {
@@ -188,7 +185,7 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
     provenanceKind: "trainer_source" | "personal_evidence" | "foundation";
     requestId: string;
   }) => Promise<unknown>;
-  onPersistEncounterAction: (input: RealActionRequest) => Promise<void>;
+  actionServices: GoldlineActionServices;
 };
 
 type UtilityPanel = "menu" | "route" | "objectives" | "open-channel" | null;
@@ -204,18 +201,14 @@ const RUNTIME_FALLBACKS = {
   characterBasePath: "/assets/goldline/characters/trailblazer",
 };
 
-function formatDue(value: string | null) {
-  if (!value) return "Awaiting a sourced follow-up time";
-  return new Date(value).toLocaleString([], {
-    weekday: "long",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 function stateTone(state: PlayableMission["state"]) {
   if (state === "captured") return "gold";
-  if (state === "contested" || state === "recovery_active") return "amber";
+  if (
+    state === "contested" ||
+    state === "recovery_available" ||
+    state === "recovery_active"
+  )
+    return "amber";
   if (state === "closed") return "muted";
   return "cyan";
 }
@@ -455,9 +448,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [arcadeResolution, setArcadeResolution] =
     useState<ArcadeResolution>(null);
   const [view, setView] = useState<GameView>("explore");
+  const [worldOutcomeCue, setWorldOutcomeCue] = useState<string | null>(null);
+  const worldOutcomeCueTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const [coldCallOpen, setColdCallOpen] = useState(false);
   const [scoutOpen, setScoutOpen] = useState(false);
-  const [scoutCapabilityOpen, setScoutCapabilityOpen] = useState(false);
   const networkStatus = useNetworkStatus();
   const sessionIdRef = useRef(getGoldlineSessionId());
   const sessionStartRef = useRef(performance.now());
@@ -482,9 +478,20 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     () => () => {
       if (onboardingToastTimer.current)
         clearTimeout(onboardingToastTimer.current);
+      if (worldOutcomeCueTimer.current)
+        clearTimeout(worldOutcomeCueTimer.current);
     },
     []
   );
+  const showWorldOutcomeCue = useRef((message: string) => {
+    setWorldOutcomeCue(message);
+    if (worldOutcomeCueTimer.current)
+      clearTimeout(worldOutcomeCueTimer.current);
+    worldOutcomeCueTimer.current = setTimeout(
+      () => setWorldOutcomeCue(null),
+      2400
+    );
+  }).current;
   const completeMilestone = useRef((milestone: OnboardingMilestone) => {
     markOnboardingMilestone(milestone);
     if (milestone === "movement") setMovementLearned(true);
@@ -548,7 +555,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [trainerIntelAvailable, setTrainerIntelAvailable] = useState(false);
   const [encounterRuntime, setEncounterRuntime] =
     useState<EncounterRuntimeState | null>(null);
-  const [realActionOpen, setRealActionOpen] = useState(false);
+  const [presentedAction, setPresentedAction] =
+    useState<GoldlineActionDescriptor | null>(null);
+  const [standaloneActionRequestId, setStandaloneActionRequestId] = useState<
+    string | null
+  >(null);
 
   function sendEncounterEvent(
     event: Parameters<typeof transitionEncounter>[1]
@@ -596,11 +607,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const activeMission =
     allMissions.find(mission => mission.key === activeKey) ??
     prioritized ??
-    history.find(mission => mission.state === "captured") ??
     null;
-  const activeSalesMission = props.salesMissions?.find(
-    mission => mission.id === activeMission?.missionId
-  );
+  const outcomeMission = encounterRuntime
+    ? (allMissions.find(
+        mission => mission.missionId === encounterRuntime.missionId
+      ) ?? null)
+    : null;
+  const missionAffordance = activeMission
+    ? projectMissionAffordance(activeMission, new Date())
+    : null;
   const equippedAbilities = useMemo(
     () => equipAnchorAbilities(props.armory?.items ?? []),
     [props.armory?.items]
@@ -752,7 +767,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   }, []);
 
   useEffect(() => {
-    if (!activeMission) return;
+    if (!activeMission) {
+      runtimeRef.current?.setWorldSignal("none");
+      runtimeRef.current?.setLandmarkArchetype(null);
+      return;
+    }
     if (!seenMissionKeysRef.current.has(activeMission.key)) {
       seenMissionKeysRef.current.add(activeMission.key);
       emit?.({
@@ -776,9 +795,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       })
     );
     if (activeMission.state === "captured") {
-      setView("captured");
-      // Fires only from real mission state, never from arcade performance —
-      // the same authoritative signal that gates VictoryCeremony itself.
+      // Fires only from real mission state, never from arcade performance.
       emit?.({
         eventName: "verified_capture",
         sessionId: sessionIdRef.current,
@@ -793,26 +810,28 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       });
       completeMilestone("first_business_resolution");
     } else if (activeMission.state === "contested") {
-      setView("rekindle");
       completeMilestone("first_business_resolution");
-    } else if (activeMission.state === "recovery_active")
-      setView("recovery_active");
-    else if (activeMission.state === "closed") {
-      setView("closed");
+    } else if (activeMission.state === "closed") {
       completeMilestone("first_business_resolution");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMission?.key, activeMission?.state]);
 
   useEffect(() => {
-    if (!activeMission || encounterRuntime?.phase !== "AWAITING_OUTCOME")
+    runtimeRef.current?.setWorldSignal(
+      missionAffordance?.worldSignal ?? "none"
+    );
+  }, [missionAffordance?.worldSignal]);
+
+  useEffect(() => {
+    if (!outcomeMission || encounterRuntime?.phase !== "AWAITING_OUTCOME")
       return;
-    const outcome = projectAuthoritativeOutcome(activeMission);
+    const outcome = projectAuthoritativeOutcome(outcomeMission);
     const revision = [
-      activeMission.key,
-      activeMission.state,
-      activeMission.contestedUntil ?? "",
-      activeMission.unlockedPath ?? "",
+      outcomeMission.key,
+      outcomeMission.state,
+      outcomeMission.contestedUntil ?? "",
+      outcomeMission.unlockedPath ?? "",
     ].join(":");
     if (
       outcome.kind === "captured" ||
@@ -820,24 +839,32 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       outcome.kind === "closed"
     ) {
       sendEncounterEvent({ type: "AUTHORITATIVE_RESOLVED", revision });
+      showWorldOutcomeCue(
+        outcome.kind === "captured"
+          ? "ROUTE STABILIZED · SERVER VERIFIED"
+          : outcome.kind === "contested"
+            ? "PATH CONTESTED · SERVER STATE PRESERVED"
+            : "ROUTE DORMANT · AUTHORITATIVE CLOSURE"
+      );
     } else if (outcome.kind === "recovery") {
       sendEncounterEvent({ type: "AUTHORITATIVE_RECOVERY", revision });
+      showWorldOutcomeCue("RECOVERY PATH PROJECTED FROM SERVER TRUTH");
     } else {
       sendEncounterEvent({ type: "AUTHORITATIVE_UNRESOLVED", revision });
-      // A persisted attempt with unchanged business state stays truthful and
-      // quiet. REKINDLE is shown only when the authoritative world projection
-      // actually exposes recovery support.
-      setView("awaiting_business_result");
+      showWorldOutcomeCue("BUSINESS STATE UNRESOLVED · NO WIN INFERRED");
     }
+    runtimeRef.current?.exitEncounterStaging();
+    setPresentedAction(null);
+    setView("explore");
     // This projection runs only after the persisted action has moved the
     // lifecycle into AWAITING_OUTCOME. Arcade state is intentionally absent.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     encounterRuntime?.phase,
-    activeMission?.key,
-    activeMission?.state,
-    activeMission?.contestedUntil,
-    activeMission?.unlockedPath,
+    outcomeMission?.key,
+    outcomeMission?.state,
+    outcomeMission?.contestedUntil,
+    outcomeMission?.unlockedPath,
   ]);
 
   useEffect(() => {
@@ -875,16 +902,34 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const handleInteractRef = useRef(() => {});
   handleInteractRef.current = () => {
     if (!activeMission) return;
-    if (activeMission.state === "captured") return setView("captured");
-    if (activeMission.state === "contested") return setView("rekindle");
-    if (activeMission.state === "recovery_active")
-      return setView("recovery_active");
-    if (activeMission.state === "closed") return setView("closed");
-    if (!activeMission.missionId) {
-      const move = props.moves?.recommendedMoves.find(
-        item => item.id === activeMission.moveId
+    if (
+      activeMission.state === "captured" ||
+      activeMission.state === "closed"
+    ) {
+      showWorldOutcomeCue(
+        activeMission.state === "captured"
+          ? "VERIFIED ROUTE HISTORY"
+          : "AUTHORITATIVE CLOSED ROUTE"
       );
-      if (move) void props.onAcceptMove(move);
+      return;
+    }
+    if (!activeMission.missionId) {
+      const scoutAction = resolveGoldlineAction(
+        {
+          mission: activeMission,
+          now: new Date(),
+          followUp: null,
+          scoutCapability: props.scoutCapability ?? null,
+          scoutReport: props.scoutReport ?? null,
+        },
+        "SCOUT"
+      );
+      if (!scoutAction) {
+        setFeedback("SCOUT REQUIRES SERVER-SUPPORTED CAPABILITY");
+        return;
+      }
+      setStandaloneActionRequestId(crypto.randomUUID());
+      setPresentedAction(scoutAction);
       return;
     }
     // Which objection this is, and on which channel, comes from real state.
@@ -1086,25 +1131,46 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     });
   }
 
-  function openRealAction() {
+  async function openRealAction() {
     if (!activeMission?.missionId || encounterRuntime?.phase !== "ACTION_READY")
       return;
-    const affordance = projectMissionAffordance(
-      activeMission,
-      new Date()
-    ).primary;
-    if (affordance === "CALL" && activeMission.phoneUrl) {
-      sendEncounterEvent({
-        type: "REAL_ACTION_STARTED",
-        requestId: crypto.randomUUID(),
-      });
-      setRealActionOpen(true);
-      return;
-    }
-    // Non-call actions retain their established authoritative flow until a
-    // purpose-built in-world bridge exists for that action type.
-    if (utilityMissionPath && affordance) {
-      window.location.assign(utilityMissionPath);
+    try {
+      const now = new Date();
+      const requested = projectMissionAffordance(activeMission, now)
+        .primary as GoldlineActionKind | null;
+      const followUp =
+        requested === "FOLLOW_UP"
+          ? await props.actionServices.loadFollowUp(activeMission.missionId)
+          : null;
+      const context = {
+        mission: activeMission,
+        now,
+        followUp,
+        scoutCapability: props.scoutCapability ?? null,
+        scoutReport: props.scoutReport ?? null,
+      };
+      const action = requested
+        ? resolveGoldlineAction(context, requested)
+        : null;
+      const truthfulFallback =
+        action ?? resolveGoldlineAction(context, "REVIEW");
+      if (!truthfulFallback) {
+        setFeedback("NO AUTHORITATIVE BUSINESS ACTION IS AVAILABLE");
+        return;
+      }
+      if (truthfulFallback.mode !== "read") {
+        sendEncounterEvent({
+          type: "REAL_ACTION_STARTED",
+          requestId: crypto.randomUUID(),
+        });
+      }
+      setPresentedAction(truthfulFallback);
+    } catch (cause) {
+      setFeedback(
+        cause instanceof Error
+          ? cause.message
+          : "AUTHORITATIVE ACTION STATE IS UNAVAILABLE"
+      );
     }
   }
 
@@ -1209,12 +1275,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     ? weakPointSize(selectedAbility.fit) +
       (branch === "upper" ? 8 : branch === "intel" ? 4 : 0)
     : 68;
-  const utilityMissionPath = activeMission?.destinationPath ?? null;
   const utilityNavigate = activeMission?.navigationUrl ?? null;
   const utilityCall = activeMission?.phoneUrl ?? null;
-  const missionAffordance = activeMission
-    ? projectMissionAffordance(activeMission, new Date())
-    : null;
 
   useVisualViewportSize(shellEl);
 
@@ -1244,6 +1306,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             aria-label={`Available mission action: ${missionAffordance.primary}`}
           >
             {missionAffordance.primary}
+          </div>
+        ) : null}
+        {worldOutcomeCue ? (
+          <div className="world-outcome-cue" role="status">
+            {worldOutcomeCue}
           </div>
         ) : null}
         {networkStatus === "offline" ? (
@@ -1300,8 +1367,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                   className={`is-${mission.state}`}
                   onClick={() => {
                     setActiveKey(mission.key);
-                    setView(
-                      mission.state === "captured" ? "captured" : "closed"
+                    showWorldOutcomeCue(
+                      mission.state === "captured"
+                        ? "VERIFIED ROUTE HISTORY"
+                        : "AUTHORITATIVE CLOSED ROUTE"
                     );
                   }}
                 >
@@ -1551,51 +1620,41 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           </Suspense>
         ) : null}
 
-        {realActionOpen &&
-        activeMission?.missionId &&
-        activeMission.phoneUrl &&
-        encounterRuntime?.phase === "ACTION_IN_PROGRESS" &&
-        encounterRuntime.actionRequestId ? (
-          <RealActionBridge
-            missionName={activeMission.name}
-            missionId={activeMission.missionId}
-            requestId={encounterRuntime.actionRequestId}
-            phoneUrl={activeMission.phoneUrl}
-            onPersist={props.onPersistEncounterAction}
-            onPersisted={() => {
-              sendEncounterEvent({ type: "REAL_ACTION_PERSISTED" });
-              setRealActionOpen(false);
-              setView("awaiting_business_result");
-            }}
-            onClose={() => {
-              setRealActionOpen(false);
-              sendEncounterEvent({ type: "REAL_ACTION_CANCELLED" });
-            }}
-          />
-        ) : null}
-
-        {view === "awaiting_business_result" &&
-        encounterRuntime?.phase === "UNRESOLVED" ? (
-          <aside className="authoritative-waiting" role="status">
-            <b>ATTEMPT SAVED · BUSINESS STATE UNRESOLVED</b>
-            <small>
-              No win was inferred. Goldline will expose a recovery route only
-              when server truth supports one.
-            </small>
-            <button onClick={() => setView("explore")}>
-              CONTINUE IN WORLD
-            </button>
-          </aside>
-        ) : null}
-
-        {view === "captured" && activeMission ? (
-          <VictoryCeremony
-            mission={activeMission}
-            onLanded={() => {
-              setView("explore");
-              setScoutCapabilityOpen(true);
-            }}
-          />
+        {presentedAction && activeMission ? (
+          <Suspense
+            fallback={
+              <div className="game-loading">
+                <Loader2 /> LOADING REAL ACTION…
+              </div>
+            }
+          >
+            <GoldlineActionSurface
+              action={presentedAction}
+              mission={activeMission}
+              requestId={
+                encounterRuntime?.actionRequestId ?? standaloneActionRequestId
+              }
+              services={props.actionServices}
+              onPersisted={() => {
+                sendEncounterEvent({ type: "REAL_ACTION_PERSISTED" });
+                setPresentedAction(null);
+                setStandaloneActionRequestId(null);
+                setView("awaiting_business_result");
+              }}
+              onClose={() => {
+                const wasReadOnly = presentedAction.mode === "read";
+                setPresentedAction(null);
+                setStandaloneActionRequestId(null);
+                if (encounterRuntime?.phase === "ACTION_IN_PROGRESS") {
+                  sendEncounterEvent({ type: "REAL_ACTION_CANCELLED" });
+                }
+                if (wasReadOnly) {
+                  runtimeRef.current?.exitEncounterStaging();
+                  setView("explore");
+                }
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {coldCallOpen && props.coldCallBatch ? (
@@ -1628,23 +1687,6 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         {view === "explore" &&
         !coldCallOpen &&
         !scoutOpen &&
-        scoutCapabilityOpen &&
-        history.some(item => item.state === "captured") ? (
-          <ScoutCapabilityChamber
-            evaluation={props.scoutCapability ?? null}
-            isEvaluating={Boolean(props.isEvaluatingScout)}
-            onEvaluate={props.onEvaluateScout}
-            onOpenScout={() => {
-              setScoutCapabilityOpen(false);
-              setScoutOpen(true);
-            }}
-          />
-        ) : null}
-
-        {view === "explore" &&
-        !coldCallOpen &&
-        !scoutOpen &&
-        !scoutCapabilityOpen &&
         props.scoutCapability?.unlocked ? (
           <button className="scout-entry" onClick={() => setScoutOpen(true)}>
             <Radar />
@@ -1653,132 +1695,6 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               <small>OPEN SOURCED REPORT</small>
             </span>
           </button>
-        ) : null}
-
-        {(view === "rekindle" || view === "recovery_active") &&
-        activeMission ? (
-          <section
-            className={`rekindle-hud${view === "recovery_active" ? " is-active" : ""}`}
-            aria-live="polite"
-          >
-            <header>
-              <span>
-                <b>MISS —</b>
-                <strong>ANCHOR HOLDS</strong>
-              </span>
-              <span>
-                <Zap /> GOLD RECOVERY PATH UNLOCKED
-              </span>
-            </header>
-            <div className="rekindle-quest">
-              <small>
-                {view === "recovery_active"
-                  ? "RECOVERY ACTIVE"
-                  : "REKINDLE · 1 MOVE"}
-              </small>
-              <h2>{activeMission.name}</h2>
-              <p>Real follow-up → active recovery quest</p>
-              <div className="cooling-rune">
-                <CalendarClock />
-                <b>{coolingLabel(activeMission.contestedUntil)}</b>
-                <span>{formatDue(activeMission.contestedUntil)}</span>
-              </div>
-              <ol>
-                <li
-                  className={
-                    activeSalesMission?.steps.some(step =>
-                      /packet|collateral|proof/i.test(
-                        `${step.label} ${step.detail}`
-                      )
-                    )
-                      ? "is-sourced"
-                      : "is-unavailable"
-                  }
-                >
-                  <FileText /> PREP PACKET
-                  <small>
-                    {activeSalesMission?.steps.some(step =>
-                      /packet|collateral|proof/i.test(
-                        `${step.label} ${step.detail}`
-                      )
-                    )
-                      ? "Sourced mission step"
-                      : "No packet action in backend"}
-                  </small>
-                </li>
-                <li
-                  className={
-                    activeMission.contestedUntil
-                      ? "is-sourced"
-                      : "is-unavailable"
-                  }
-                >
-                  <CalendarClock /> SCHEDULE FOLLOW-UP
-                  <small>{formatDue(activeMission.contestedUntil)}</small>
-                </li>
-                <li
-                  className={
-                    activeMission.phoneUrl ? "is-sourced" : "is-unavailable"
-                  }
-                >
-                  <Phone /> CALL
-                  <small>
-                    {activeMission.phoneUrl
-                      ? "Sourced decision-maker phone"
-                      : "No phone sourced"}
-                  </small>
-                </li>
-              </ol>
-              {view === "rekindle" ? (
-                <button
-                  className="begin-rekindle"
-                  disabled={
-                    !activeMission.missionId || props.isBeginningRekindle
-                  }
-                  onClick={async () => {
-                    if (!activeMission.missionId) return;
-                    await props.onBeginRekindle(activeMission.missionId);
-                    runtimeRef.current?.setWorldState("recovery_active");
-                    setView("recovery_active");
-                  }}
-                >
-                  {props.isBeginningRekindle ? <Loader2 /> : <Zap />}
-                  BEGIN REKINDLE <ChevronRight />
-                </button>
-              ) : (
-                <div className="recovery-actions">
-                  <button
-                    onClick={() =>
-                      utilityMissionPath &&
-                      window.location.assign(utilityMissionPath)
-                    }
-                  >
-                    <CalendarClock /> OPEN REAL SCHEDULE
-                  </button>
-                  <a
-                    href={utilityCall ?? undefined}
-                    aria-disabled={!utilityCall}
-                  >
-                    <Phone /> CALL WHEN DUE
-                  </a>
-                </div>
-              )}
-            </div>
-          </section>
-        ) : null}
-
-        {view === "closed" && activeMission ? (
-          <section className="closed-hud">
-            <LockKeyhole />
-            <small>AUTHORITATIVE CLOSURE</small>
-            <h2>{activeMission.name}</h2>
-            <strong>CLOSED · NO REKINDLE</strong>
-            <p>
-              {activeMission.lossReason ??
-                "The business opportunity is closed. No recovery path is fabricated."}
-            </p>
-            <button onClick={() => setView("explore")}>RETURN TO WORLD</button>
-          </section>
         ) : null}
 
         {worldLocked ? null : (

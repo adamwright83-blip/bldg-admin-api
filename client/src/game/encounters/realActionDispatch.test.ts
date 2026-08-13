@@ -9,18 +9,31 @@ const bridge = readFileSync(
   new URL("./RealActionBridge.tsx", import.meta.url),
   "utf8"
 );
+const surface = readFileSync(
+  new URL("../actions/GoldlineActionSurface.tsx", import.meta.url),
+  "utf8"
+);
+const registry = readFileSync(
+  new URL("../actions/actionRegistry.ts", import.meta.url),
+  "utf8"
+);
 
 describe("real action dispatch contract", () => {
   it("uses the lifecycle request id for authoritative persistence", () => {
-    expect(home).toContain("requestId={encounterRuntime.actionRequestId}");
+    expect(home).toContain(
+      "encounterRuntime?.actionRequestId ?? standaloneActionRequestId"
+    );
+    expect(surface).toContain("requestId={props.requestId}");
     expect(bridge).toContain("requestId: props.requestId");
     expect(bridge).not.toContain("const requestId = crypto.randomUUID()");
   });
 
   it("opens the call bridge only for an authoritative CALL with a phone", () => {
-    expect(home).toContain('affordance === "CALL" && activeMission.phoneUrl');
-    expect(home).toContain("window.location.assign(utilityMissionPath)");
-    expect(home).toContain('encounterRuntime?.phase === "ACTION_IN_PROGRESS"');
+    expect(registry).toMatch(
+      /projected\(context\) === "CALL"\s*&&\s*context\.mission\.missionId != null\s*&&\s*context\.mission\.phoneUrl/
+    );
+    expect(surface).toContain('props.action.kind === "CALL"');
+    expect(surface).toContain('props.action.kind === "VISIT"');
   });
 
   it("routes cancellation through the lifecycle reducer", () => {

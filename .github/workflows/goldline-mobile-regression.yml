@@ -70,6 +70,15 @@ jobs:
       - name: Apply repository migrations to disposable MySQL
         run: pnpm db:dayforge:release
 
+      - name: Prove authoritative business-loop contracts
+        run: >-
+          pnpm vitest run
+          client/src/game/actions
+          client/src/game/encounters
+          client/src/game/state/WorldProjection.test.ts
+          client/src/game/state/worldMemory.test.ts
+          client/src/game/session/checkpointStorage.test.ts
+
       - name: Build production application
         run: pnpm build
 
