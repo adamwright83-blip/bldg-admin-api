@@ -29,6 +29,18 @@ async function enterNeutralizeMission(page: Page) {
   await enterButton.click();
 }
 
+/**
+ * The harness's test-only controls render outside (before) the game shell,
+ * which is a full-viewport overlay — same pointer-interception issue the
+ * existing `goldline-fixture-toggle-world` control already solves via a raw
+ * DOM click rather than a simulated pointer click.
+ */
+async function clickFixtureButton(page: Page, testId: string) {
+  await page.getByTestId(testId).evaluate(node => {
+    (node as HTMLButtonElement).click();
+  });
+}
+
 test.describe("Fiction Integrity Copy Gate", () => {
   test("NEUTRALIZE title, briefing, and physical instruction pass the copy gate", async ({
     page,
@@ -85,9 +97,8 @@ test.describe("real evidence resolves the mission, not fictional performance", (
     await page.waitForTimeout(800);
     await enterNeutralizeMission(page);
 
-    const covered = page.getByTestId("fixture-mark-stop-covered");
     for (let i = 0; i < 5; i += 1) {
-      await covered.click();
+      await clickFixtureButton(page, "fixture-mark-stop-covered");
     }
 
     const panel = page.locator(".fiction-mission-panel");
@@ -116,7 +127,7 @@ test.describe("Stronghold home base", () => {
     await loginToNeutralizeFixture(page);
     await page.waitForTimeout(800);
     await openMenu(page);
-    await page.getByRole("button", { name: "STRONGHOLD" }).click();
+    await page.getByRole("button", { name: "STRONGHOLD", exact: true }).click();
 
     await expect(page.getByTestId("stronghold-panel")).toBeVisible();
     await expect(page.getByTestId("stronghold-route-table")).toBeVisible();

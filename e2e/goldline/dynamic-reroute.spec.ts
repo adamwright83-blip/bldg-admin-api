@@ -24,8 +24,20 @@ async function openMenu(page: Page) {
 
 async function openStronghold(page: Page) {
   await openMenu(page);
-  await page.getByRole("button", { name: "STRONGHOLD" }).click();
+  await page.getByRole("button", { name: "STRONGHOLD", exact: true }).click();
   await expect(page.getByTestId("stronghold-panel")).toBeVisible();
+}
+
+/**
+ * The harness's test-only controls render outside (before) the game shell,
+ * which is a full-viewport overlay — same pointer-interception issue the
+ * existing `goldline-fixture-toggle-world` control already solves via a raw
+ * DOM click rather than a simulated pointer click.
+ */
+async function clickFixtureButton(page: Page, testId: string) {
+  await page.getByTestId(testId).evaluate(node => {
+    (node as HTMLButtonElement).click();
+  });
 }
 
 test.describe("dynamic reroute reprojects immediately on real change", () => {
@@ -42,7 +54,7 @@ test.describe("dynamic reroute reprojects immediately on real change", () => {
     // Close the panel, apply the real change, reopen — proving the change
     // is reflected the very next time reality is read, with no restart.
     await page.locator(".game-panel-close").click();
-    await page.getByTestId("fixture-resolve-live-stop").click();
+    await clickFixtureButton(page, "fixture-resolve-live-stop");
     await page.waitForTimeout(300);
     await openStronghold(page);
 
@@ -53,7 +65,7 @@ test.describe("dynamic reroute reprojects immediately on real change", () => {
   test("never shows a generic 'dashboard refreshed' message", async ({ page }) => {
     await loginToNeutralizeFixture(page);
     await page.waitForTimeout(800);
-    await page.getByTestId("fixture-resolve-live-stop").click();
+    await clickFixtureButton(page, "fixture-resolve-live-stop");
     await page.waitForTimeout(300);
     await openStronghold(page);
 
@@ -73,7 +85,7 @@ test.describe("dynamic reroute reprojects immediately on real change", () => {
     // must honestly disappear rather than keep dramatizing a route that no
     // longer exists.
     for (let i = 0; i < 4; i += 1) {
-      await page.getByTestId("fixture-resolve-live-stop").click();
+      await clickFixtureButton(page, "fixture-resolve-live-stop");
       await page.waitForTimeout(150);
     }
 

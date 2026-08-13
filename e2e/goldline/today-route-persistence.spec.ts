@@ -50,16 +50,28 @@ test.describe("Today's Route persists the same fiction assignment across reload"
     await loginToNeutralizeFixture(page);
     await page.waitForTimeout(800);
     await openMenu(page);
-    await page.getByTestId("enter-fiction-mission").click();
-    await page.waitForTimeout(300);
 
-    const stored = await page.evaluate(() => {
-      const keys = Object.keys(window.localStorage).filter(key =>
-        key.startsWith("goldline:fiction-assignments:v1:")
-      );
-      return keys.map(key => window.localStorage.getItem(key));
-    });
-    expect(stored.some(value => value && value.includes("neutralize-v1"))).toBe(true);
+    const enterButton = page.getByTestId("enter-fiction-mission");
+    await expect(enterButton).toBeVisible({ timeout: 10_000 });
+    await enterButton.click();
+
+    // The assignment is actually written the moment the mission is derived
+    // (a useMemo side effect, at mount — not gated on this click), but poll
+    // rather than a flat sleep so the assertion never races render timing.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const keys = Object.keys(window.localStorage).filter(key =>
+              key.startsWith("goldline:fiction-assignments:v1:")
+            );
+            return keys.some(key =>
+              (window.localStorage.getItem(key) ?? "").includes("neutralize-v1")
+            );
+          }),
+        { timeout: 5_000 }
+      )
+      .toBe(true);
   });
 
   test("no daily reset: the same fixture the next day (simulated) still shows the same route entry count", async ({
@@ -68,7 +80,7 @@ test.describe("Today's Route persists the same fiction assignment across reload"
     await loginToNeutralizeFixture(page);
     await page.waitForTimeout(800);
     await openMenu(page);
-    await page.getByRole("button", { name: "STRONGHOLD" }).click();
+    await page.getByRole("button", { name: "STRONGHOLD", exact: true }).click();
     const routeTable = page.getByTestId("stronghold-route-table");
     const beforeCount = await routeTable.locator("article").count();
 
@@ -79,7 +91,7 @@ test.describe("Today's Route persists the same fiction assignment across reload"
     await expect(page.getByTestId("goldline-shell")).toBeVisible({ timeout: 30_000 });
     await page.waitForTimeout(800);
     await openMenu(page);
-    await page.getByRole("button", { name: "STRONGHOLD" }).click();
+    await page.getByRole("button", { name: "STRONGHOLD", exact: true }).click();
     const afterCount = await page.getByTestId("stronghold-route-table").locator("article").count();
 
     expect(afterCount).toBe(beforeCount);
