@@ -54,6 +54,10 @@ const GoldlineProgressionHarness =
   import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
     ? lazy(() => import("../../game/testSupport/GoldlineProgressionHarness"))
     : null;
+const GoldlineFictionHarness =
+  import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
+    ? lazy(() => import("../../game/testSupport/GoldlineFictionHarness"))
+    : null;
 
 export default function GoldlineDriverController() {
   const search = new URLSearchParams(window.location.search);
@@ -65,6 +69,13 @@ export default function GoldlineDriverController() {
     );
   }
   const fixture = search.get("goldlineFixture");
+  if (GoldlineFictionHarness && fixture === "NEUTRALIZE") {
+    return (
+      <Suspense fallback={null}>
+        <GoldlineFictionHarness />
+      </Suspense>
+    );
+  }
   if (GoldlineBusinessLoopHarness && fixture) {
     return (
       <Suspense fallback={null}>

@@ -79,6 +79,15 @@ export const DAYFORGE_PRODUCT_EVENT_NAMES = [
   "population_scene_presented",
   "corridor_transition_started",
   "corridor_transition_completed",
+  "today_route_projected",
+  "route_reprojected",
+  "fiction_mission_instantiated",
+  "fiction_mission_started",
+  "fiction_timer_started",
+  "fiction_timer_expired",
+  "fiction_mission_resolved",
+  "stronghold_object_engaged",
+  "long_horizon_resume",
 ] as const;
 
 export type DayforgeProductEventName =
@@ -301,6 +310,26 @@ export interface DayforgeProductEventPropertyMap {
   };
   corridor_transition_started: { sessionId: string; corridorId: string };
   corridor_transition_completed: { sessionId: string; corridorId: string };
+  today_route_projected: { sessionId: string; entryCount: number };
+  route_reprojected: { sessionId: string; entryCount: number };
+  /** grammarKind/count are coarse and privacy-safe — never a location string or contact detail. */
+  fiction_mission_instantiated: {
+    sessionId: string;
+    templateId: string;
+    grammarKind: string;
+    count: number;
+  };
+  fiction_mission_started: { sessionId: string; templateId: string };
+  fiction_timer_started: { sessionId: string; templateId: string };
+  fiction_timer_expired: { sessionId: string; templateId: string };
+  /** resolutionKind reflects the AUTHORITATIVE outcome only, never the fictional one. */
+  fiction_mission_resolved: {
+    sessionId: string;
+    templateId: string;
+    resolutionKind: string;
+  };
+  stronghold_object_engaged: { sessionId: string; objectKind: string };
+  long_horizon_resume: { sessionId: string; prunedCount: number };
 }
 
 export type DayforgeProductEventProperties<
@@ -389,6 +418,15 @@ export const DAYFORGE_PRODUCT_EVENT_PROPERTY_KEYS = {
   population_scene_presented: ["sessionId", "ambientCount", "assetStage"],
   corridor_transition_started: ["sessionId", "corridorId"],
   corridor_transition_completed: ["sessionId", "corridorId"],
+  today_route_projected: ["sessionId", "entryCount"],
+  route_reprojected: ["sessionId", "entryCount"],
+  fiction_mission_instantiated: ["sessionId", "templateId", "grammarKind", "count"],
+  fiction_mission_started: ["sessionId", "templateId"],
+  fiction_timer_started: ["sessionId", "templateId"],
+  fiction_timer_expired: ["sessionId", "templateId"],
+  fiction_mission_resolved: ["sessionId", "templateId", "resolutionKind"],
+  stronghold_object_engaged: ["sessionId", "objectKind"],
+  long_horizon_resume: ["sessionId", "prunedCount"],
 } as const satisfies {
   [Name in DayforgeProductEventName]: readonly (keyof DayforgeProductEventPropertyMap[Name])[];
 };
@@ -504,6 +542,15 @@ export const GOLDLINE_CLIENT_EVENT_NAMES = [
   "population_scene_presented",
   "corridor_transition_started",
   "corridor_transition_completed",
+  "today_route_projected",
+  "route_reprojected",
+  "fiction_mission_instantiated",
+  "fiction_mission_started",
+  "fiction_timer_started",
+  "fiction_timer_expired",
+  "fiction_mission_resolved",
+  "stronghold_object_engaged",
+  "long_horizon_resume",
 ] as const satisfies readonly DayforgeProductEventName[];
 
 export type GoldlineClientEventName =
