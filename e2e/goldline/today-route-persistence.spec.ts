@@ -56,22 +56,19 @@ test.describe("Today's Route persists the same fiction assignment across reload"
     await enterButton.click();
 
     // The assignment is actually written the moment the mission is derived
-    // (a useMemo side effect, at mount — not gated on this click), but poll
-    // rather than a flat sleep so the assertion never races render timing.
-    await expect
-      .poll(
-        () =>
-          page.evaluate(() => {
-            const keys = Object.keys(window.localStorage).filter(key =>
-              key.startsWith("goldline:fiction-assignments:v1:")
-            );
-            return keys.some(key =>
-              (window.localStorage.getItem(key) ?? "").includes("neutralize-v1")
-            );
-          }),
-        { timeout: 5_000 }
-      )
-      .toBe(true);
+    // (a useMemo side effect, at mount — not gated on this click). Read the
+    // exact known key directly (the harness's fixed playerIdentity) rather
+    // than enumerating via Object.keys(localStorage), which is unreliable
+    // for the Storage host object in some headless-browser configurations.
+    await page.waitForFunction(
+      () =>
+        (
+          window.localStorage.getItem(
+            "goldline:fiction-assignments:v1:goldline-fiction-e2e"
+          ) ?? ""
+        ).includes("neutralize-v1"),
+      { timeout: 5_000 }
+    );
   });
 
   test("no daily reset: the same fixture the next day (simulated) still shows the same route entry count", async ({
