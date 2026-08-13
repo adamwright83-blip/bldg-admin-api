@@ -266,12 +266,18 @@ node scripts/validateCorridorManifest.mjs corridor_02
 ```
 
 This checks the schema **and** that every referenced file exists on disk, then
-reports stage, engineering completeness and visual completeness separately:
+reports stage, engineering completeness, machine-checkable production
+blockers, optional absent art, route-retrace state, and human-review state
+separately:
 
 ```
   STAGE: authoring
   ENGINEERING: complete (structural data valid)
-  VISUAL: BLOCKED BY ART — missing: far, foreground, effects, portal, stronghold
+  PRODUCTION CLOSURE: BLOCKED — assets.mid, population.assetStage, population.atlas, visualReview
+  OPTIONAL ART ABSENT: far, foreground, effects, portal, stronghold, waterfallVideo
+  GOLD ROUTE: RETRACE BLOCKED — final assets.mid is required before tracing
+  HUMAN VISUAL: PENDING — approval must come from an actual reviewer after screenshots
+  VISUAL: BLOCKED BY REQUIRED PRODUCTION ASSETS / REVIEW
   NOTE: this corridor is NOT production-playable; the runtime will refuse to serve it.
 ```
 
@@ -289,12 +295,14 @@ npx vitest run shared/corridorContract.test.ts
 2. `assets.*` filled in for everything supplied.
 3. `gold_route.json` **re-traced** from the real `mid.webp`.
 4. `capabilities.*` set only where backing art exists.
-5. `"stage": "playable"`.
-6. `playable: true` for the corridor in
+5. Capture the deterministic mobile journey and obtain explicit human visual
+   approval; record the real reviewer and timestamp in `visualReview`.
+6. `"stage": "playable"`.
+7. `playable: true` for the corridor in
    `client/src/game/world/corridorRegistry.ts`.
-7. `node scripts/validateCorridorManifest.mjs corridor_NN` passes.
-8. `npx vitest run shared/corridorContract.test.ts` passes.
-9. **Visual pass** by a human — see below.
+8. `node scripts/validateCorridorManifest.mjs corridor_NN` passes with no
+   production-closure blockers.
+9. `npx vitest run shared/corridorContract.test.ts` passes.
 
 ---
 

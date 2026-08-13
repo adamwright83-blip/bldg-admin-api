@@ -14,6 +14,7 @@ import { resolve } from "node:path";
 import {
   missingOptionalArt,
   parseCorridorManifest,
+  productionClosureBlockers,
 } from "../shared/corridorManifest.ts";
 
 const corridorId = process.argv[2] ?? "corridor_01";
@@ -86,6 +87,7 @@ if (result.success) {
   console.log("");
   console.log(`  STAGE: ${manifest.stage}`);
   const missingArt = missingOptionalArt(manifest);
+  const closureBlockers = productionClosureBlockers(manifest);
   if (manifest.stage === "playable") {
     console.log("  ENGINEERING: complete");
     console.log(
@@ -101,8 +103,20 @@ if (result.success) {
   } else {
     console.log("  ENGINEERING: complete (structural data valid)");
     console.log(
-      `  VISUAL: BLOCKED BY ART — missing: ${missingArt.join(", ") || "none declared"}`
+      `  PRODUCTION CLOSURE: BLOCKED — ${closureBlockers.join(", ") || "no machine-checkable blockers"}`
     );
+    console.log(`  OPTIONAL ART ABSENT: ${missingArt.join(", ") || "none"}`);
+    if (manifest.assets.mid === null) {
+      console.log(
+        "  GOLD ROUTE: RETRACE BLOCKED — final assets.mid is required before tracing"
+      );
+    }
+    if (manifest.visualReview.status !== "approved") {
+      console.log(
+        "  HUMAN VISUAL: PENDING — approval must come from an actual reviewer after screenshots"
+      );
+    }
+    console.log("  VISUAL: BLOCKED BY REQUIRED PRODUCTION ASSETS / REVIEW");
     console.log(
       "  NOTE: this corridor is NOT production-playable; the runtime will refuse to serve it."
     );

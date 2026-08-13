@@ -1,5 +1,17 @@
 # Trailblazer character assets
 
+## Current canon gate
+
+The PR #55 visual handoff locks a newer adult female Trailblazer appearance in
+`01_trailblazer_locked_turnaround.png`. That image is a labeled, opaque
+turnaround reference, not a runtime sprite source. Its companion action image
+is also a set of unrelated poses rather than the required sequential state
+family. The current files below therefore remain the internally consistent
+legacy runtime set; they have **not** been mixed with the new reference, and
+the Trailblazer premium visual gate remains blocked until a complete,
+transparent, canon-consistent idle/run/jump/vault/climb/land source set is
+supplied.
+
 Source: an 8-image supplied art pack (idle portrait + a 5×4 action sheet).
 Originals kept locally at `_originals/` (~20MB, not committed — see repo
 `.gitignore`); this directory ships only the compressed WebP exports actually

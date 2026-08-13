@@ -5,6 +5,7 @@ import {
   isProductionPlayable,
   missingOptionalArt,
   parseCorridorManifest,
+  productionClosureBlockers,
 } from "./corridorManifest";
 
 const ASSET_ROOT = resolve(__dirname, "../client/public/assets/goldline");
@@ -121,6 +122,15 @@ describe("corridor_02 has a complete engineering contract without fake art", () 
     expect(manifest.population.missionAnchorPoints.length).toBeGreaterThan(0);
     expect(manifest.population.assetStage).toBe("engineering_placeholder");
     expect(manifest.population.atlas).toBeNull();
+  });
+
+  it("reports every machine-checkable production closure blocker", () => {
+    expect(productionClosureBlockers(manifest)).toEqual([
+      "assets.mid",
+      "population.assetStage",
+      "population.atlas",
+      "visualReview",
+    ]);
   });
 
   it("has no image or video files sitting in its production directory", () => {

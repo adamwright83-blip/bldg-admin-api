@@ -350,3 +350,32 @@ export function missingOptionalArt(manifest: CorridorManifest): string[] {
   }
   return missing;
 }
+
+/**
+ * Machine-checkable blockers for the premium production closure gate.
+ *
+ * This is intentionally separate from `isProductionPlayable`: corridor_01
+ * is the shipped legacy world and remains loadable while its new population
+ * art is still being produced. New corridor promotion tooling uses this
+ * stricter report so a mid plate alone cannot be mistaken for completion.
+ * Route retracing and screenshot approval are also required by the authoring
+ * guide; only the approval metadata is representable in the manifest today.
+ */
+export function productionClosureBlockers(
+  manifest: CorridorManifest
+): string[] {
+  const blockers: string[] = [];
+  if (manifest.assets.mid === null) blockers.push("assets.mid");
+  if (manifest.population.assetStage !== "production") {
+    blockers.push("population.assetStage");
+  }
+  if (manifest.population.atlas === null) blockers.push("population.atlas");
+  if (
+    manifest.visualReview.status !== "approved" ||
+    manifest.visualReview.reviewedAt === null ||
+    manifest.visualReview.reviewer === null
+  ) {
+    blockers.push("visualReview");
+  }
+  return blockers;
+}
