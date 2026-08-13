@@ -15,6 +15,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   armoryWeaponOutcomes,
   armoryWeaponUsages,
+  commercialMissions,
   salesIntelSourceArtifacts,
 } from "../../drizzle/schema";
 import type {
@@ -269,13 +270,34 @@ export async function listArmoryWeapons(input: {
   missionId?: number | null;
   limit?: number;
 }): Promise<ArmoryWeaponResult> {
+  let hasAuthoritativeMissionContext = input.missionId == null;
+  if (input.missionId != null) {
+    const db = await getDb();
+    const [mission] = db
+      ? await db
+          .select({ status: commercialMissions.status })
+          .from(commercialMissions)
+          .where(
+            and(
+              eq(commercialMissions.tenantId, input.tenantId),
+              eq(commercialMissions.id, input.missionId),
+              eq(commercialMissions.assignedTo, input.actorId)
+            )
+          )
+          .limit(1)
+      : [];
+    hasAuthoritativeMissionContext =
+      Boolean(mission) &&
+      mission?.status !== "won" &&
+      mission?.status !== "lost";
+  }
   const [visibleFrameworks, progression] = await Promise.all([
     queryDriverVisibleFrameworks({
       archetype: input.archetype,
       channel: input.channel,
       limit: 12,
     }),
-    input.missionId == null
+    input.missionId == null || !hasAuthoritativeMissionContext
       ? Promise.resolve(null)
       : projectGoldlineProgressionForIdentity({
           tenantId: input.tenantId,
@@ -293,9 +315,11 @@ export async function listArmoryWeapons(input: {
   const frameworks =
     input.missionId == null
       ? visibleFrameworks // doctrine/review read; not a playable encounter
-      : visibleFrameworks.filter(framework =>
-          eligibleFrameworkIds.has(framework.id)
-        );
+      : hasAuthoritativeMissionContext
+        ? visibleFrameworks.filter(framework =>
+            eligibleFrameworkIds.has(framework.id)
+          )
+        : [];
 
   const sourceById = new Map<string, { url: string | null; type: string }>();
   if (frameworks.length) {

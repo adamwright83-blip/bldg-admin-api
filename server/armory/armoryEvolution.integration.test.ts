@@ -154,7 +154,7 @@ describe.skipIf(!runDatabaseGate)("Armory Evolution", () => {
     expect(weapon!.personalEvidence).toBeNull();
   });
 
-  it("keeps accepted doctrine out of a live encounter until player branch evidence qualifies", async () => {
+  it("keeps accepted doctrine out when the client supplies no authoritative mission context", async () => {
     const tenantId = `t-${randomUUID()}`;
     tenantIds.push(tenantId);
     const seeded = await seedFramework({
