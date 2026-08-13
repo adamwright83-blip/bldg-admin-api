@@ -24,16 +24,15 @@ export type CorridorRegistryEntry = {
 };
 
 /**
- * corridor_01 is the shipped world. corridor_02 now has production-source art
- * integrated, but remains registered as NOT playable until the required
- * Pixel/mobile screenshots receive explicit human visual approval.
+ * corridor_01 and corridor_02 are shipped worlds. A registry entry becomes
+ * playable only after its production manifest and human visual review close.
  */
 export const CORRIDOR_REGISTRY: readonly CorridorRegistryEntry[] = [
   { id: "corridor_01", label: "Approach corridor", playable: true },
   {
     id: "corridor_02",
-    label: "Second corridor (visual review pending)",
-    playable: false,
+    label: "Coastal market corridor",
+    playable: true,
   },
 ] as const;
 

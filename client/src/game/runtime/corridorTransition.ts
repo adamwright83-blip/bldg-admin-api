@@ -57,6 +57,11 @@ export type CorridorLoader = (
   signal: AbortSignal
 ) => Promise<ResolvedCorridorPack>;
 
+export type CorridorRevealer = (
+  pack: ResolvedCorridorPack,
+  signal: AbortSignal
+) => void | Promise<void>;
+
 export type CorridorTransitionEvents = {
   onPhaseChange?: (
     phase: CorridorTransitionPhase,
@@ -124,7 +129,8 @@ export class CorridorTransitionController {
    */
   async requestCorridor(
     corridorId: string,
-    loader: CorridorLoader
+    loader: CorridorLoader,
+    reveal?: CorridorRevealer
   ): Promise<CorridorTransitionOutcome> {
     const requestId = ++this.requestSeq;
 
@@ -194,6 +200,23 @@ export class CorridorTransitionController {
     }
 
     this.setPhase("revealing", corridorId);
+    try {
+      await reveal?.(pack, abort.signal);
+    } catch (error) {
+      this.setPhase(
+        this.activeCorridorId ? "ready" : "idle",
+        this.activeCorridorId
+      );
+      return {
+        outcome: "failed",
+        corridorId,
+        requestId,
+        error: error instanceof Error ? error : new Error(String(error)),
+      };
+    }
+    if (requestId !== this.requestSeq || this.disposed) {
+      return { outcome: "superseded", corridorId, requestId };
+    }
     this.activeCorridorId = corridorId;
     this.setPhase("ready", corridorId);
 

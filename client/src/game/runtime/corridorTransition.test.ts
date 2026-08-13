@@ -91,6 +91,46 @@ describe("CorridorTransitionController", () => {
     expect(phases).toEqual(["signaling", "loading", "revealing", "ready"]);
   });
 
+  it("runs the reveal seam after preload and before declaring the destination active", async () => {
+    const controller = new CorridorTransitionController();
+    controller.adoptActiveCorridor("corridor_01");
+    const observations: string[] = [];
+
+    const result = await controller.requestCorridor(
+      "corridor_02",
+      async id => {
+        observations.push("loaded");
+        return pack(id);
+      },
+      destination => {
+        observations.push(`revealed:${destination.id}`);
+        expect(controller.getActiveCorridorId()).toBe("corridor_01");
+        expect(controller.getPhase()).toBe("revealing");
+      }
+    );
+
+    expect(result.outcome).toBe("applied");
+    expect(observations).toEqual(["loaded", "revealed:corridor_02"]);
+    expect(controller.getActiveCorridorId()).toBe("corridor_02");
+  });
+
+  it("keeps the current corridor active when reveal itself fails", async () => {
+    const controller = new CorridorTransitionController();
+    controller.adoptActiveCorridor("corridor_01");
+
+    const result = await controller.requestCorridor(
+      "corridor_02",
+      async id => pack(id),
+      () => {
+        throw new Error("critical texture unavailable");
+      }
+    );
+
+    expect(result.outcome).toBe("failed");
+    expect(controller.getActiveCorridorId()).toBe("corridor_01");
+    expect(controller.getPhase()).toBe("ready");
+  });
+
   describe("stale-load rejection", () => {
     it("a late corridor_A load can never replace a newer corridor_B request", async () => {
       const controller = new CorridorTransitionController();

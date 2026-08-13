@@ -1,19 +1,16 @@
-# corridor_02 — AUTHORING STAGE (not production-playable)
+# corridor_02 — PLAYABLE
 
 This corridor now has production-source environment plates, a canonical
 Trailblazer sheet, and a static six-role population atlas integrated as review
-candidates. It remains `authoring`: the required Pixel/mobile screenshots have
-not received explicit human visual approval, and reviewers must specifically
-judge whether this supplied plate set reads as one continuous corridor through
-the market, cliff approach, broken way, and new-ground beats.
+candidates. The product owner approved the final Pixel/mobile runtime review on
+2026-08-13, including continuity through the market, cliff approach, broken
+way, and new-ground beats.
 
-`manifest.json` declares `"stage": "authoring"`, which means:
+`manifest.json` declares `"stage": "playable"`, which means:
 
 - `scripts/validateCorridorManifest.mjs corridor_02` validates it,
-- the runtime **refuses** to serve it as the live world
-  (`CorridorNotPlayableError`),
-- `corridorRegistry.ts` lists it with `playable: false`, so the reality-driven
-  projection can never route a player into it.
+- the runtime may serve it through the normal corridor-transition path,
+- `corridorRegistry.ts` lists it with `playable: true`.
 
 ## What is real here
 
@@ -45,7 +42,7 @@ route against the plate.
 - `portal_coldcall.webp` — only if this corridor should host a Cold Call portal
 - `stronghold.webp` — only if this corridor should host a Stronghold
 - final environmental audio/video assets remain separate production needs
-- explicit human visual review metadata after the deterministic mobile journey
+- corridor-specific premium environmental audio/video remains a separate need
 
 The portal and Stronghold capabilities remain `false`; no missing optional art
 is being implied by the runtime.
@@ -91,20 +88,16 @@ vista supplies L0, one continuous market-to-ruins world supplies L1, a
 real-alpha coastal frame supplies L3, and a real-alpha sunlight/mist plate
 supplies L4. The new effects source is entirely non-semantic, so no fractured
 Line material is present. The Trailblazer and population exports were preserved
-unchanged. Corridor 02 remains authoring-only pending human review of the new
-runtime journey.
+unchanged. The product owner approved the resulting runtime journey on
+2026-08-13; the manifest records that approval rather than a tool-generated
+visual decision.
 
-## Promoting corridor_02 to playable
+## Promotion record
 
-1. Review the required deterministic Pixel/mobile screenshots on real device
-   framing, including reduced-motion/reduced-quality proof.
-2. Set `capabilities.coldCallPortal` / `capabilities.stronghold` to `true`
-   **only** if the matching art is present — the schema enforces this.
-3. Record explicit human review in `visualReview`; the schema rejects a
-   playable corridor whose review remains pending.
-4. Change `"stage"` to `"playable"`.
-5. Set `playable: true` for `corridor_02` in
-   `client/src/game/world/corridorRegistry.ts`.
-6. Run `node scripts/validateCorridorManifest.mjs corridor_02`.
+The deterministic Pixel/mobile journey was approved by the product owner at
+`2026-08-13T16:00:46.000Z`. Portal and Stronghold capabilities remain `false`
+because no matching C02 art was supplied. Production promotion is validated
+with `node scripts/validateCorridorManifest.mjs corridor_02` and the corridor
+contract suite.
 
 See `docs/goldline-corridor-authoring.md` for the full authoring guide.

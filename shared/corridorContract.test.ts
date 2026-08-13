@@ -88,7 +88,7 @@ describe("corridor_01 remains a valid, production-playable pack", () => {
   });
 });
 
-describe("corridor_02 has a complete engineering contract without fake art", () => {
+describe("corridor_02 is a production-playable pack without fake optional art", () => {
   const manifest = manifestFor("corridor_02");
 
   it("validates against the same schema corridor_01 uses", () => {
@@ -96,10 +96,14 @@ describe("corridor_02 has a complete engineering contract without fake art", () 
     expect(manifest.version).toBeGreaterThanOrEqual(1);
   });
 
-  it("is honestly marked as still being authored, not as production-playable", () => {
-    expect(manifest.stage).toBe("authoring");
-    expect(isProductionPlayable(manifest)).toBe(false);
-    expect(manifest.visualReview.status).toBe("pending");
+  it("records explicit human approval and is production-playable", () => {
+    expect(manifest.stage).toBe("playable");
+    expect(isProductionPlayable(manifest)).toBe(true);
+    expect(manifest.visualReview).toEqual({
+      status: "approved",
+      reviewedAt: "2026-08-13T16:00:46.000Z",
+      reviewer: "product-owner",
+    });
   });
 
   it("carries REAL structural data — the part that makes a corridor coherent", () => {
@@ -133,8 +137,8 @@ describe("corridor_02 has a complete engineering contract without fake art", () 
     expect(fileExists("corridor_02", manifest.population.atlas)).toBe(true);
   });
 
-  it("reports every machine-checkable production closure blocker", () => {
-    expect(productionClosureBlockers(manifest)).toEqual(["visualReview"]);
+  it("has no machine-checkable production closure blockers", () => {
+    expect(productionClosureBlockers(manifest)).toEqual([]);
   });
 
   it("does not invent optional portal, Stronghold, or video art", () => {
@@ -155,15 +159,15 @@ describe("corridor_02 has a complete engineering contract without fake art", () 
     expect(manifest.capabilities.stronghold).toBe(false);
   });
 
-  it("documents what is missing and how to promote it", () => {
+  it("documents the promotion and still-absent optional art", () => {
     const readme = readFileSync(
       resolve(ASSET_ROOT, "corridor_02", "README.md"),
       "utf8"
     );
-    expect(readme).toMatch(/AUTHORING STAGE/);
+    expect(readme).toMatch(/PLAYABLE/);
     expect(readme).toMatch(/mid\.webp/);
-    expect(readme).toMatch(/human visual review/i);
-    expect(readme).toMatch(/stage.*playable/is);
+    expect(readme).toMatch(/product owner approved/i);
+    expect(readme).toMatch(/Portal and Stronghold capabilities remain `false`/);
   });
 });
 

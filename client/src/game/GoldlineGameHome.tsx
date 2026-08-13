@@ -14,7 +14,6 @@ import {
   FileText,
   Footprints,
   Loader2,
-  Map,
   MapPin,
   Menu,
   Phone,
@@ -44,6 +43,7 @@ import { detectOpenChannelGap } from "../pages/driver/goldlineDriverModel";
 import worldUrl from "@/assets/goldline/generated/goldline-world-empty.png";
 import operatorUrl from "@/assets/goldline/generated/trailblazer-operator.png";
 import { GoldlineGame } from "./runtime/GoldlineGame";
+import type { PreparedCorridorAssets } from "./runtime/GoldlineGame";
 import {
   equipAnchorAbilities,
   shieldDamage,
@@ -555,6 +555,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [corridorExitNear, setCorridorExitNear] = useState(false);
   const [corridorTransitionPhase, setCorridorTransitionPhase] =
     useState<CorridorTransitionPhase>("idle");
+  const [activeCorridorId, setActiveCorridorId] = useState(DEFAULT_CORRIDOR_ID);
   const [populationDiagnostics, setPopulationDiagnostics] = useState({
     ambientCount: 0,
     assetStage: "engineering_placeholder" as
@@ -861,6 +862,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         ? checkpoint.corridorId
         : DEFAULT_CORRIDOR_ID);
     activeCorridorIdRef.current = bootCorridorId;
+    setActiveCorridorId(bootCorridorId);
     const restorable =
       checkpoint?.corridorId === bootCorridorId ? checkpoint : null;
 
@@ -898,6 +900,56 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       game.destroy();
     };
   }, []);
+
+  useEffect(() => {
+    if (!corridorExitNear || !nextCorridorId) return;
+    const game = runtimeRef.current;
+    const transitions = transitionsRef.current;
+    if (!game || !transitions) return;
+    const destinationId = nextCorridorId;
+    const prepared = new Map<string, PreparedCorridorAssets>();
+    void transitions
+      .requestCorridor(
+        destinationId,
+        async (corridorId, signal) => {
+          const pack = await loadCorridorPack(corridorId, { signal });
+          prepared.set(
+            corridorId,
+            await game.preloadCorridor(
+              corridorGameAssets(pack, RUNTIME_FALLBACKS),
+              signal
+            )
+          );
+          return pack;
+        },
+        (pack, signal) => {
+          if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+          const next = prepared.get(pack.id);
+          if (!next) throw new Error(`corridor '${pack.id}' was not preloaded`);
+          game.revealCorridor(next);
+          prepared.delete(pack.id);
+          activeCorridorIdRef.current = pack.id;
+          setActiveCorridorId(pack.id);
+          saveCheckpoint(
+            {
+              corridorId: pack.id,
+              progress: 0.06,
+              lateral: 0,
+              branch: "intel",
+              savedAt: new Date().toISOString(),
+            },
+            playerIdentityRef.current
+          );
+        }
+      )
+      .then(outcome => {
+        prepared.forEach(candidate => game.discardPreparedCorridor(candidate));
+        prepared.clear();
+        if (outcome.outcome === "failed") {
+          setFeedback("ROUTE HELD · DESTINATION UNAVAILABLE");
+        }
+      });
+  }, [corridorExitNear, nextCorridorId]);
 
   useEffect(() => {
     if (!activeMission) {
@@ -1484,7 +1536,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         data-population-asset-stage={populationDiagnostics.assetStage}
         data-ambient-population-count={populationDiagnostics.ambientCount}
         data-mission-embodiment-id={activeMission?.missionId ?? "NONE"}
-        data-corridor-id={activeCorridorIdRef.current}
+        data-corridor-id={activeCorridorId}
         data-next-corridor-id={nextCorridorId ?? "NONE"}
         data-corridor-transition-phase={corridorTransitionPhase}
         data-player-progress={progress.toFixed(3)}

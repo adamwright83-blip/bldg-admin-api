@@ -66,10 +66,10 @@ test.describe("inhabited world truth boundary", () => {
     );
     await expect(world).toHaveAttribute("data-mission-embodiment-id", "7801");
     await expect(world).toHaveAttribute("data-corridor-id", "corridor_01");
-    await expect(world).toHaveAttribute("data-next-corridor-id", "NONE");
+    await expect(world).toHaveAttribute("data-next-corridor-id", "corridor_02");
   });
 
-  test("CI authoring preview renders C02 production candidates without promotion", async ({
+  test("CI preview seam can still boot C02 directly for deterministic review", async ({
     page,
   }) => {
     const response = await page.request.post("/api/auth/login", {

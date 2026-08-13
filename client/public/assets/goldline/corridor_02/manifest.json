@@ -1,7 +1,7 @@
 {
   "id": "corridor_02",
   "version": 1,
-  "stage": "authoring",
+  "stage": "playable",
   "assets": {
     "far": "far.webp",
     "mid": "mid.webp",
@@ -144,9 +144,9 @@
     ]
   },
   "visualReview": {
-    "status": "pending",
-    "reviewedAt": null,
-    "reviewer": null
+    "status": "approved",
+    "reviewedAt": "2026-08-13T16:00:46.000Z",
+    "reviewer": "product-owner"
   },
   "capabilities": {
     "coldCallPortal": false,
