@@ -1,5 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 
+// These permanent gates intentionally drive the complete physical traversal,
+// arcade encounter, authoritative action, refetch, and projection chain. A
+// cold single-core CI runner can take longer than Playwright's 30s default
+// without any individual readiness assertion failing.
+test.describe.configure({ timeout: 90_000 });
+
 const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
 
 type ListenerSnapshot = Record<string, number> & { pixiTicker: number };
@@ -141,6 +147,25 @@ async function listenerSnapshot(page: Page): Promise<ListenerSnapshot> {
   });
 }
 
+async function stableListenerSnapshot(page: Page): Promise<ListenerSnapshot> {
+  let previous = await listenerSnapshot(page);
+  let matchingSamples = 0;
+
+  for (let sample = 0; sample < 24; sample += 1) {
+    await page.waitForTimeout(250);
+    const current = await listenerSnapshot(page);
+    if (JSON.stringify(current) === JSON.stringify(previous)) {
+      matchingSamples += 1;
+      if (matchingSamples === 4) return current;
+    } else {
+      previous = current;
+      matchingSamples = 0;
+    }
+  }
+
+  throw new Error("Goldline listener registration baseline did not settle");
+}
+
 async function fixtureProof(page: Page): Promise<FixtureProof> {
   return page.evaluate(() => {
     const proof = (
@@ -209,9 +234,15 @@ async function resolveAnchorPerfectly(page: Page) {
 }
 
 async function resolveGatekeeperPerfectly(page: Page) {
-  await page.locator(".armory-weapon-main").first().click();
-  const origin = await page.locator(".gate-origin").boundingBox();
-  const timingGate = await page.locator(".gate-node").nth(1).boundingBox();
+  const weapon = page.locator(".armory-weapon-main").first();
+  await expect(weapon).toBeVisible();
+  await weapon.click();
+  const originNode = page.locator(".gate-origin");
+  const timingGateNode = page.locator(".gate-node").nth(1);
+  await expect(originNode).toBeVisible();
+  await expect(timingGateNode).toBeVisible();
+  const origin = await originNode.boundingBox();
+  const timingGate = await timingGateNode.boundingBox();
   if (!origin || !timingGate)
     throw new Error("Gatekeeper route is unavailable");
   await page.mouse.move(
@@ -229,8 +260,12 @@ async function resolveGatekeeperPerfectly(page: Page) {
 }
 
 async function resolveGhostPerfectly(page: Page) {
-  await page.locator(".armory-weapon-main").first().click();
-  const field = await page.locator(".signal-field").boundingBox();
+  const weapon = page.locator(".armory-weapon-main").first();
+  await expect(weapon).toBeVisible();
+  await weapon.click();
+  const signalField = page.locator(".signal-field");
+  await expect(signalField).toBeVisible();
+  const field = await signalField.boundingBox();
   if (!field) throw new Error("Ghost signal field is unavailable");
   await page.mouse.move(field.x + field.width / 2, field.y + field.height / 2);
   await page.mouse.down();
@@ -240,7 +275,9 @@ async function resolveGhostPerfectly(page: Page) {
 }
 
 async function openBusinessAction(page: Page) {
-  await page.locator(".business-resolution-gate button").click();
+  const action = page.locator(".business-resolution-gate button");
+  await expect(action).toBeVisible();
+  await action.click();
   await expect(
     page.locator(".goldline-action-surface, .real-action-bridge")
   ).toBeVisible();
@@ -386,8 +423,7 @@ test("five mount cycles retain exact ticker, pointer, viewport, and resume liste
   page,
 }) => {
   await login(page, "CALL");
-  await page.waitForTimeout(500);
-  const expected = await listenerSnapshot(page);
+  const expected = await stableListenerSnapshot(page);
   expect(expected.pixiTicker).toBe(1);
 
   for (let cycle = 0; cycle < 4; cycle += 1) {
@@ -401,9 +437,10 @@ test("five mount cycles retain exact ticker, pointer, viewport, and resume liste
       (node as HTMLButtonElement).click();
     });
     await expect(page.locator("canvas.goldline-game-canvas")).toHaveCount(1);
+    expect((await stableListenerSnapshot(page)).pixiTicker).toBe(1);
   }
 
-  const final = await listenerSnapshot(page);
+  const final = await stableListenerSnapshot(page);
   expect(final).toEqual(expected);
   expect(final.pixiTicker).toBe(1);
   expect(await page.locator("canvas.goldline-game-canvas").count()).toBe(1);
