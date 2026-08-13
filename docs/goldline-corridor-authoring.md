@@ -45,13 +45,13 @@ turns the validated manifest into the renderer's arguments.
 
 This distinction is the heart of the contract.
 
-| | Makes the corridor… | Missing means… |
-| --- | --- | --- |
-| `traversal.json`, `occlusion.json`, `gold_route.json`, `manifest.json` | **coherent** | the corridor is broken; validation fails |
-| `mid.webp` | **playable** | corridor must stay `stage: "authoring"` |
-| `far`, `foreground`, `effects`, `portal`, `stronghold`, video | **finished** | corridor still playable, visually thinner |
+|                                                                        | Makes the corridor… | Missing means…                            |
+| ---------------------------------------------------------------------- | ------------------- | ----------------------------------------- |
+| `traversal.json`, `occlusion.json`, `gold_route.json`, `manifest.json` | **coherent**        | the corridor is broken; validation fails  |
+| `mid.webp`                                                             | **playable**        | corridor must stay `stage: "authoring"`   |
+| `far`, `foreground`, `effects`, `portal`, `stronghold`, video          | **finished**        | corridor still playable, visually thinner |
 
-A corridor whose art is unfinished is **not broken** — it is an *authoring*
+A corridor whose art is unfinished is **not broken** — it is an _authoring_
 corridor. Declare that honestly with `"stage": "authoring"` and the runtime
 will refuse to serve it while validation still checks its structure.
 
@@ -66,54 +66,59 @@ Defined and enforced in `shared/corridorManifest.ts`.
 
 ```jsonc
 {
-  "id": "corridor_02",          // MUST match the directory name
+  "id": "corridor_02", // MUST match the directory name
   "version": 1,
-  "stage": "authoring",         // "playable" | "authoring" (default "playable")
+  "stage": "authoring", // "playable" | "authoring" (default "playable")
 
-  "assets": {                   // every value nullable; null = not supplied
+  "assets": {
+    // every value nullable; null = not supplied
     "far": null,
-    "mid": null,                // non-null REQUIRED when stage is "playable"
+    "mid": null, // non-null REQUIRED when stage is "playable"
     "foreground": null,
     "effects": null,
     "portal": null,
     "stronghold": null,
-    "waterfallVideo": null
+    "waterfallVideo": null,
   },
 
-  "data": {                     // all three REQUIRED at every stage
+  "data": {
+    // all three REQUIRED at every stage
     "traversal": "traversal.json",
     "occlusion": "occlusion.json",
-    "goldRoute": "gold_route.json"
+    "goldRoute": "gold_route.json",
   },
 
   "parallax": {
-    "far": 0.08,                // 0.05–0.15, schema-enforced
-    "mid": 0.4                  // 0.3–0.6, optional
+    "far": 0.08, // 0.05–0.15, schema-enforced
+    "mid": 0.4, // 0.3–0.6, optional
   },
 
-  "qualityVariants": [          // at least one
+  "qualityVariants": [
+    // at least one
     { "id": "premium" },
-    { "id": "reduced" }
+    { "id": "reduced" },
   ],
 
-  "landmarks": [                // semantic landmarks the world can stage against
+  "landmarks": [
+    // semantic landmarks the world can stage against
     {
-      "id": "stronghold_gate",  // MUST match a traversal.json anchor id
-      "archetype": "ANCHOR",    // ANCHOR|GATEKEEPER|GHOST|STALLER, or null
-      "position": { "progress": 0.83, "lateral": 0 }
-    }
+      "id": "stronghold_gate", // MUST match a traversal.json anchor id
+      "archetype": "ANCHOR", // ANCHOR|GATEKEEPER|GHOST|STALLER, or null
+      "position": { "progress": 0.83, "lateral": 0 },
+    },
   ],
 
-  "capabilities": {             // what this corridor can physically host
-    "coldCallPortal": false,    // requires assets.portal — schema-enforced
-    "stronghold": false,        // requires assets.stronghold — schema-enforced
-    "missionSources": []        // field | cold_call | recovery | scout
+  "capabilities": {
+    // what this corridor can physically host
+    "coldCallPortal": false, // requires assets.portal — schema-enforced
+    "stronghold": false, // requires assets.stronghold — schema-enforced
+    "missionSources": [], // field | cold_call | recovery | scout
   },
 
   "loadPriority": {
-    "critical": ["mid"],        // must resolve before the corridor presents
-    "deferred": ["far", "effects"]
-  }
+    "critical": ["mid"], // must resolve before the corridor presents
+    "deferred": ["far", "effects"],
+  },
 }
 ```
 
@@ -157,14 +162,16 @@ exist fails the build.
 ```jsonc
 {
   "version": 1,
-  "anchors": [{
-    "id": "stronghold_gate",
-    "type": "stronghold",          // "comms_portal" | "stronghold"
-    "position": { "progress": 0.83, "lateral": 0 },
-    "labelRadius": 0.18,           // distance at which the label fades in
-    "interactionRadius": 0.06,     // tighter radius where ENGAGE appears
-    "missionBinding": "active_mission_encounter"
-  }]
+  "anchors": [
+    {
+      "id": "stronghold_gate",
+      "type": "stronghold", // "comms_portal" | "stronghold"
+      "position": { "progress": 0.83, "lateral": 0 },
+      "labelRadius": 0.18, // distance at which the label fades in
+      "interactionRadius": 0.06, // tighter radius where ENGAGE appears
+      "missionBinding": "active_mission_encounter",
+    },
+  ],
 }
 ```
 
@@ -176,14 +183,18 @@ never see what they are about to engage.
 ```jsonc
 {
   "version": 1,
-  "zones": [{
-    "id": "gate_pillar_left",
-    "bounds": {
-      "progressMin": 0.78, "progressMax": 0.86,
-      "lateralMin": -0.5,  "lateralMax": -0.14
+  "zones": [
+    {
+      "id": "gate_pillar_left",
+      "bounds": {
+        "progressMin": 0.78,
+        "progressMax": 0.86,
+        "lateralMin": -0.5,
+        "lateralMax": -0.14,
+      },
+      "occluderZIndex": 5,
     },
-    "occluderZIndex": 5
-  }]
+  ],
 }
 ```
 
@@ -197,8 +208,8 @@ it. Zones should follow the actual foreground art silhouette.
   "version": 1,
   "points": [
     { "progress": 0.0, "lateral": 0.5 },
-    { "progress": 0.83, "lateral": 0.52 }
-  ]
+    { "progress": 0.83, "lateral": 0.52 },
+  ],
 }
 ```
 
@@ -230,7 +241,25 @@ Points are interpolated piecewise-linearly and clamped at both ends.
 
 ---
 
-## 7. Validate
+## 7. Population and mission-space authoring
+
+`population.ambient` is presentation-only. It may describe a stable id,
+generic sprite role, authored position/path, depth, facing, idle activity,
+visibility radius, and occlusion behavior. It must never contain a mission,
+contact, account, candidate, opportunity, or outcome field; the strict schema
+rejects those additions.
+
+`population.missionAnchorPoints` are empty spatial slots. They provide only
+position, facing, staging radius, camera framing, capacity, and nearby ambient
+compatibility. Live authoritative mission projection chooses a slot at
+runtime. No mission binding is written back into the manifest or checkpoint.
+
+An engineering pack may use `assetStage: "engineering_placeholder"` with a
+null atlas. Production promotion requires a compact final human WebP atlas,
+`assetStage: "production"`, and explicit human review metadata. A validator
+pass cannot grant visual approval.
+
+## 8. Validate
 
 ```bash
 node scripts/validateCorridorManifest.mjs corridor_02
@@ -254,7 +283,7 @@ npx vitest run shared/corridorContract.test.ts
 
 ---
 
-## 8. Promotion checklist
+## 9. Promotion checklist
 
 1. Final art in the corridor directory.
 2. `assets.*` filled in for everything supplied.
@@ -269,7 +298,7 @@ npx vitest run shared/corridorContract.test.ts
 
 ---
 
-## 9. Engineering PASS is not Visual PASS
+## 10. Engineering PASS is not Visual PASS
 
 They are reported separately and neither implies the other.
 
@@ -287,7 +316,7 @@ It is not visually approved until someone has looked.
 
 ---
 
-## 10. Reality-driven placement
+## 11. Reality-driven placement
 
 Corridors are **not** levels and are never picked at random. Which corridor the
 player is in is a deterministic projection of authoritative business state —

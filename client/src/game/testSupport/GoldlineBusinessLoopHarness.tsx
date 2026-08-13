@@ -23,7 +23,7 @@ import type {
   GoldlineVisitContext,
 } from "../actions/actionServices";
 
-const FIXTURES = ["CALL", "VISIT", "FOLLOW_UP", "RECOVER"] as const;
+const FIXTURES = ["CALL", "VISIT", "FOLLOW_UP", "RECOVER", "STALLER"] as const;
 type BusinessLoopFixture = (typeof FIXTURES)[number];
 
 type FixtureWrite = {
@@ -84,13 +84,16 @@ function fixtureKind(value: string): BusinessLoopFixture {
 function initialMissionStatus(
   fixture: BusinessLoopFixture
 ): CommercialMissionStatus {
-  return fixture === "FOLLOW_UP" || fixture === "RECOVER"
+  return fixture === "FOLLOW_UP" ||
+    fixture === "RECOVER" ||
+    fixture === "STALLER"
     ? "follow_up"
     : "phone_ready";
 }
 
 function initialWorldState(fixture: BusinessLoopFixture): WorldMissionState {
   if (fixture === "FOLLOW_UP") return "contested";
+  if (fixture === "STALLER") return "contested";
   if (fixture === "RECOVER") return "recovery_available";
   return "active";
 }
@@ -264,7 +267,11 @@ export default function GoldlineBusinessLoopHarness(props: {
       missionStatus: initialMissionStatus(fixture),
       visualState: initialWorldState(fixture),
       contestedUntil:
-        fixture === "FOLLOW_UP" || fixture === "RECOVER" ? PAST_DUE : null,
+        fixture === "STALLER"
+          ? "2026-08-20T12:00:00.000Z"
+          : fixture === "FOLLOW_UP" || fixture === "RECOVER"
+            ? PAST_DUE
+            : null,
       unlockedPath: fixture === "RECOVER" ? "gold_recovery_path" : null,
       isHistorical: false,
     }),

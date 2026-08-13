@@ -77,6 +77,78 @@ const corridorPositionSchema = z.object({
 });
 
 /**
+ * Presentation-only people authored into a corridor. These records describe
+ * where a generic role figure may stand and how it may move; they deliberately
+ * have no mission/contact/account vocabulary. `.strict()` is load-bearing:
+ * accidental business fields fail validation instead of being silently
+ * stripped and later mistaken for trusted input.
+ */
+export const corridorAmbientPersonSchema = z
+  .object({
+    id: z.string().min(1),
+    spriteId: z.string().min(1),
+    position: corridorPositionSchema,
+    depthLayer: z.enum(["L1", "L2", "L3"]).default("L2"),
+    facing: z.enum(["left", "right", "forward"]).default("forward"),
+    behavior: z.enum([
+      "idle",
+      "walk",
+      "phone",
+      "talk",
+      "clipboard",
+      "carry",
+      "stall",
+      "sit",
+      "railing",
+    ]),
+    path: z.array(corridorPositionSchema).max(6).default([]),
+    visibilityRadius: z.number().min(0.08).max(1).default(0.42),
+    occlusionRule: z.enum(["world", "foreground", "none"]).default("world"),
+  })
+  .strict();
+
+/**
+ * An authored spatial slot to which live mission projection may bind. It is
+ * not a mission definition and cannot remember business truth. The server
+ * supplies the mission; this contract supplies only space and framing.
+ */
+export const corridorMissionAnchorPointSchema = z
+  .object({
+    id: z.string().min(1),
+    position: corridorPositionSchema,
+    facing: z.enum(["left", "right", "forward"]).default("forward"),
+    stagingRadius: z.number().min(0.02).max(0.3),
+    capacity: z.number().int().min(1).max(2).default(1),
+    cameraBias: z.number().min(-1).max(1).default(0),
+    cameraLift: z.number().min(0).max(0.4).default(0.12),
+    nearbyAmbientCompatibility: z
+      .array(corridorAmbientPersonSchema.shape.behavior)
+      .default([]),
+  })
+  .strict();
+
+export const corridorPopulationSchema = z
+  .object({
+    /** Final WebP atlas is asset-gated; vector fallback is engineering-only. */
+    assetStage: z.enum(["production", "engineering_placeholder"]),
+    atlas: z.string().min(1).nullable(),
+    ambient: z.array(corridorAmbientPersonSchema).max(12).default([]),
+    missionAnchorPoints: z
+      .array(corridorMissionAnchorPointSchema)
+      .max(12)
+      .default([]),
+  })
+  .strict();
+
+export const corridorVisualReviewSchema = z
+  .object({
+    status: z.enum(["approved", "pending"]),
+    reviewedAt: z.string().min(1).nullable(),
+    reviewer: z.string().min(1).nullable(),
+  })
+  .strict();
+
+/**
  * A semantic landmark the world can stage an encounter against. `archetype`
  * is the same ANCHOR/GATEKEEPER/GHOST/STALLER vocabulary the encounters and
  * Armory already speak, so a corridor declares what it can physically host
@@ -125,6 +197,13 @@ export const corridorManifestSchema = z
     parallax: corridorParallaxSchema,
     qualityVariants: z.array(corridorQualityVariantSchema).min(1),
     landmarks: z.array(corridorLandmarkSchema).default([]),
+    population: corridorPopulationSchema.default({
+      assetStage: "engineering_placeholder",
+      atlas: null,
+      ambient: [],
+      missionAnchorPoints: [],
+    }),
+    visualReview: corridorVisualReviewSchema,
     capabilities: corridorCapabilitiesSchema.default({
       coldCallPortal: false,
       stronghold: false,
@@ -147,8 +226,24 @@ export const corridorManifestSchema = z
           "a corridor with stage 'playable' must supply assets.mid; use stage 'authoring' while final art is outstanding",
       });
     }
+    if (
+      manifest.stage === "playable" &&
+      (manifest.visualReview.status !== "approved" ||
+        manifest.visualReview.reviewedAt === null ||
+        manifest.visualReview.reviewer === null)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["visualReview"],
+        message:
+          "a playable corridor requires explicit human visual approval metadata",
+      });
+    }
     // A corridor cannot claim a capability it has no anchor to hang it on.
-    if (manifest.capabilities.coldCallPortal && manifest.assets.portal === null) {
+    if (
+      manifest.capabilities.coldCallPortal &&
+      manifest.assets.portal === null
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["capabilities", "coldCallPortal"],
@@ -156,7 +251,10 @@ export const corridorManifestSchema = z
           "capabilities.coldCallPortal requires assets.portal — a corridor cannot host a portal it has no art for",
       });
     }
-    if (manifest.capabilities.stronghold && manifest.assets.stronghold === null) {
+    if (
+      manifest.capabilities.stronghold &&
+      manifest.assets.stronghold === null
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["capabilities", "stronghold"],
@@ -175,11 +273,49 @@ export const corridorManifestSchema = z
       }
       landmarkIds.add(landmark.id);
     }
+    if (
+      manifest.population.assetStage === "production" &&
+      manifest.population.atlas === null
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["population", "atlas"],
+        message: "production population requires a final atlas",
+      });
+    }
+    const populationIds = new Set<string>();
+    for (const person of manifest.population.ambient) {
+      if (populationIds.has(person.id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["population", "ambient"],
+          message: `duplicate ambient id '${person.id}'`,
+        });
+      }
+      populationIds.add(person.id);
+    }
+    const missionAnchorIds = new Set<string>();
+    for (const anchor of manifest.population.missionAnchorPoints) {
+      if (missionAnchorIds.has(anchor.id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["population", "missionAnchorPoints"],
+          message: `duplicate mission anchor id '${anchor.id}'`,
+        });
+      }
+      missionAnchorIds.add(anchor.id);
+    }
   });
 
 export type CorridorManifest = z.infer<typeof corridorManifestSchema>;
 export type CorridorLandmark = z.infer<typeof corridorLandmarkSchema>;
 export type CorridorCapabilities = z.infer<typeof corridorCapabilitiesSchema>;
+export type CorridorAmbientPerson = z.infer<typeof corridorAmbientPersonSchema>;
+export type CorridorMissionAnchorPoint = z.infer<
+  typeof corridorMissionAnchorPointSchema
+>;
+export type CorridorPopulation = z.infer<typeof corridorPopulationSchema>;
+export type CorridorVisualReview = z.infer<typeof corridorVisualReviewSchema>;
 
 export function parseCorridorManifest(payload: unknown) {
   return corridorManifestSchema.safeParse(payload);

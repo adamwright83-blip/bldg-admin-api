@@ -24,7 +24,9 @@ import {
   type CorridorCapabilities,
   type CorridorLandmark,
   type CorridorManifest,
+  type CorridorPopulation,
   type CorridorStage,
+  type CorridorVisualReview,
 } from "../../../../shared/corridorManifest";
 
 /** Where corridor packs live, mirroring the authored directory layout. */
@@ -49,6 +51,7 @@ export type ResolvedCorridorPack = {
   id: string;
   version: number;
   stage: CorridorStage;
+  visualReview: CorridorVisualReview;
   /** Directory the pack was loaded from; also where anchors/route JSON live. */
   basePath: string;
   assets: ResolvedCorridorAssets;
@@ -59,6 +62,7 @@ export type ResolvedCorridorPack = {
   };
   parallax: { far: number; mid?: number };
   landmarks: CorridorLandmark[];
+  population: CorridorPopulation & { atlas: string | null };
   capabilities: CorridorCapabilities;
   loadPriority: { critical: string[]; deferred: string[] };
 };
@@ -77,7 +81,10 @@ export class CorridorLoadError extends Error {
 /** No manifest at the expected path, or the fetch itself failed. */
 export class CorridorManifestNotFoundError extends CorridorLoadError {
   constructor(corridorId: string, detail: string) {
-    super(corridorId, `corridor '${corridorId}' has no loadable manifest: ${detail}`);
+    super(
+      corridorId,
+      `corridor '${corridorId}' has no loadable manifest: ${detail}`
+    );
     this.name = "CorridorManifestNotFoundError";
   }
 }
@@ -88,7 +95,10 @@ export class CorridorManifestInvalidError extends CorridorLoadError {
     corridorId: string,
     readonly issues: string[]
   ) {
-    super(corridorId, `corridor '${corridorId}' manifest is invalid: ${issues.join("; ")}`);
+    super(
+      corridorId,
+      `corridor '${corridorId}' manifest is invalid: ${issues.join("; ")}`
+    );
     this.name = "CorridorManifestInvalidError";
   }
 }
@@ -99,7 +109,10 @@ export class CorridorManifestInvalidError extends CorridorLoadError {
  * what it should, just not ready to be the live world.
  */
 export class CorridorNotPlayableError extends CorridorLoadError {
-  constructor(corridorId: string, readonly stage: CorridorStage) {
+  constructor(
+    corridorId: string,
+    readonly stage: CorridorStage
+  ) {
     super(
       corridorId,
       `corridor '${corridorId}' is stage '${stage}' and cannot be served as the live world`
@@ -114,7 +127,10 @@ function joinPath(basePath: string, relative: string): string {
   return `${trimmedBase}/${trimmedRelative}`;
 }
 
-export function corridorBasePath(corridorId: string, root = CORRIDOR_ASSET_ROOT): string {
+export function corridorBasePath(
+  corridorId: string,
+  root = CORRIDOR_ASSET_ROOT
+): string {
   return `${root.replace(/\/+$/, "")}/${corridorId}`;
 }
 
@@ -134,6 +150,7 @@ export function resolveCorridorPack(
     id: manifest.id,
     version: manifest.version,
     stage: manifest.stage,
+    visualReview: manifest.visualReview,
     basePath,
     assets: {
       far: resolveAsset(manifest.assets.far),
@@ -151,6 +168,10 @@ export function resolveCorridorPack(
     },
     parallax: manifest.parallax,
     landmarks: manifest.landmarks,
+    population: {
+      ...manifest.population,
+      atlas: resolveAsset(manifest.population.atlas),
+    },
     capabilities: manifest.capabilities,
     loadPriority: manifest.loadPriority,
   };
@@ -176,6 +197,7 @@ export type CorridorGameAssets = {
   strongholdUrl?: string;
   characterBasePath?: string;
   parallaxFar?: number;
+  population: CorridorPopulation & { atlas: string | null };
 };
 
 /**
@@ -207,6 +229,7 @@ export function corridorGameAssets(
     strongholdUrl: pack.assets.stronghold ?? undefined,
     characterBasePath: fallbacks.characterBasePath,
     parallaxFar: pack.parallax.far,
+    population: pack.population,
   };
 }
 
@@ -258,7 +281,8 @@ export async function loadCorridorPack(
   } catch (error) {
     // An abort is the caller's own decision, not a corridor defect — let it
     // propagate untouched so the transition layer can tell the two apart.
-    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    if (error instanceof DOMException && error.name === "AbortError")
+      throw error;
     if (error instanceof CorridorLoadError) throw error;
     throw new CorridorManifestNotFoundError(
       corridorId,
@@ -270,7 +294,9 @@ export async function loadCorridorPack(
   if (!parsed.success) {
     throw new CorridorManifestInvalidError(
       corridorId,
-      parsed.error.issues.map(issue => `${issue.path.join(".")}: ${issue.message}`)
+      parsed.error.issues.map(
+        issue => `${issue.path.join(".")}: ${issue.message}`
+      )
     );
   }
 

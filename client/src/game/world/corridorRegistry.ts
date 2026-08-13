@@ -49,9 +49,28 @@ export function isKnownCorridor(corridorId: string): boolean {
 
 /** Ids the runtime is permitted to serve as the live world. */
 export function playableCorridorIds(): string[] {
-  return CORRIDOR_REGISTRY.filter(entry => entry.playable).map(entry => entry.id);
+  return CORRIDOR_REGISTRY.filter(entry => entry.playable).map(
+    entry => entry.id
+  );
 }
 
 export function isPlayableCorridor(corridorId: string): boolean {
   return corridorRegistryEntry(corridorId)?.playable === true;
+}
+
+/**
+ * Returns only the next destination this build is actually allowed to serve.
+ * Merely registering an authoring corridor never makes preload legitimate.
+ */
+export function nextPlayableCorridorId(
+  currentCorridorId: string
+): string | null {
+  const currentIndex = CORRIDOR_REGISTRY.findIndex(
+    entry => entry.id === currentCorridorId
+  );
+  if (currentIndex < 0) return null;
+  return (
+    CORRIDOR_REGISTRY.slice(currentIndex + 1).find(entry => entry.playable)
+      ?.id ?? null
+  );
 }

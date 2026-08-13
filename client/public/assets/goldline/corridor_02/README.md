@@ -14,14 +14,19 @@ and nothing here pretends otherwise.
 
 ## What is real here
 
-| File | Status | Notes |
-| --- | --- | --- |
-| `manifest.json` | REAL | Declares stage, parallax, landmarks, capabilities |
-| `traversal.json` | REAL | Authored interaction anchors |
-| `occlusion.json` | REAL | Authored z-order zones |
-| `gold_route.json` | REAL, but **placeholder geometry** | See below |
+| File              | Status                             | Notes                                             |
+| ----------------- | ---------------------------------- | ------------------------------------------------- |
+| `manifest.json`   | REAL                               | Declares stage, parallax, landmarks, capabilities |
+| `traversal.json`  | REAL                               | Authored interaction anchors                      |
+| `occlusion.json`  | REAL                               | Authored z-order zones                            |
+| `gold_route.json` | REAL, but **placeholder geometry** | See below                                         |
 
-`gold_route.json` is an *authored* centreline, not a *trace*. corridor_01's
+The manifest also contains six presentation-only ambient spatial records and
+three mission anchor slots. They contain no mission, contact, account, or
+outcome truth. Runtime mission projection may bind a real mission to one slot;
+the manifest itself cannot create one.
+
+`gold_route.json` is an _authored_ centreline, not a _trace_. corridor_01's
 route was traced from actual gold-inlay pixels in its `mid.webp`; corridor_02
 has no mid plate to trace. The route must be re-traced from the final art
 before this corridor is promoted.
@@ -34,6 +39,8 @@ before this corridor is promoted.
 - `effects.webp` — L4
 - `portal_coldcall.webp` — only if this corridor should host a Cold Call portal
 - `stronghold.webp` — only if this corridor should host a Stronghold
+- a compact final human WebP atlas — the current population is explicitly
+  `engineering_placeholder`, not production character art
 
 No substitute or placeholder art has been generated for these. A low-quality
 stand-in shipped as production art would be worse than an honest absence.
@@ -45,10 +52,14 @@ stand-in shipped as production art would be worse than an honest absence.
 3. Re-trace `gold_route.json` from the real `mid.webp`.
 4. Set `capabilities.coldCallPortal` / `capabilities.stronghold` to `true`
    **only** if the matching art is present — the schema enforces this.
-5. Change `"stage"` to `"playable"`.
-6. Set `playable: true` for `corridor_02` in
+5. Replace the engineering population placeholder with the approved atlas and
+   set `population.assetStage` to `production`.
+6. Record explicit human review in `visualReview`; the schema rejects a
+   playable corridor whose review remains pending.
+7. Change `"stage"` to `"playable"`.
+8. Set `playable: true` for `corridor_02` in
    `client/src/game/world/corridorRegistry.ts`.
-7. Run `node scripts/validateCorridorManifest.mjs corridor_02`.
-8. Run the visual pass — engineering PASS does not imply visual PASS.
+9. Run `node scripts/validateCorridorManifest.mjs corridor_02`.
+10. Run the visual pass — engineering PASS does not imply visual PASS.
 
 See `docs/goldline-corridor-authoring.md` for the full authoring guide.

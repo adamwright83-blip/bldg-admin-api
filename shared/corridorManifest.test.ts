@@ -7,9 +7,12 @@ describe("parseCorridorManifest", () => {
   it("accepts corridor_01's real manifest.json", () => {
     const raw = JSON.parse(
       readFileSync(
-        resolve(__dirname, "../client/public/assets/goldline/corridor_01/manifest.json"),
-        "utf8",
-      ),
+        resolve(
+          __dirname,
+          "../client/public/assets/goldline/corridor_01/manifest.json"
+        ),
+        "utf8"
+      )
     );
     const result = parseCorridorManifest(raw);
     expect(result.success).toBe(true);
@@ -17,8 +20,42 @@ describe("parseCorridorManifest", () => {
       expect(result.data.id).toBe("corridor_01");
       expect(result.data.assets.mid).toBe("mid.webp");
       expect(result.data.assets.waterfallVideo).toBeNull();
-      expect(result.data.qualityVariants.map(v => v.id)).toEqual(["premium", "reduced"]);
+      expect(result.data.qualityVariants.map(v => v.id)).toEqual([
+        "premium",
+        "reduced",
+      ]);
+      expect(result.data.population.ambient).toHaveLength(6);
+      expect(result.data.population.missionAnchorPoints).toHaveLength(4);
     }
+  });
+
+  it("rejects business truth inside ambient people or mission anchor slots", () => {
+    const raw = JSON.parse(
+      readFileSync(
+        resolve(
+          __dirname,
+          "../client/public/assets/goldline/corridor_01/manifest.json"
+        ),
+        "utf8"
+      )
+    );
+    raw.population.ambient[0].missionId = 42;
+    raw.population.missionAnchorPoints[0].contactId = 8;
+    expect(parseCorridorManifest(raw).success).toBe(false);
+  });
+
+  it("requires a final atlas before population can claim production status", () => {
+    const raw = JSON.parse(
+      readFileSync(
+        resolve(
+          __dirname,
+          "../client/public/assets/goldline/corridor_01/manifest.json"
+        ),
+        "utf8"
+      )
+    );
+    raw.population.assetStage = "production";
+    expect(parseCorridorManifest(raw).success).toBe(false);
   });
 
   it("rejects a manifest missing the required mid layer", () => {
@@ -34,7 +71,11 @@ describe("parseCorridorManifest", () => {
         stronghold: null,
         waterfallVideo: null,
       },
-      data: { traversal: "traversal.json", occlusion: "occlusion.json", goldRoute: "gold_route.json" },
+      data: {
+        traversal: "traversal.json",
+        occlusion: "occlusion.json",
+        goldRoute: "gold_route.json",
+      },
       parallax: { far: 0.1 },
       qualityVariants: [{ id: "premium" }],
     });
@@ -54,7 +95,11 @@ describe("parseCorridorManifest", () => {
         stronghold: null,
         waterfallVideo: null,
       },
-      data: { traversal: "traversal.json", occlusion: "occlusion.json", goldRoute: "gold_route.json" },
+      data: {
+        traversal: "traversal.json",
+        occlusion: "occlusion.json",
+        goldRoute: "gold_route.json",
+      },
       parallax: { far: 0.9 },
       qualityVariants: [{ id: "premium" }],
     });
@@ -74,7 +119,11 @@ describe("parseCorridorManifest", () => {
         stronghold: null,
         waterfallVideo: null,
       },
-      data: { traversal: "traversal.json", occlusion: "occlusion.json", goldRoute: "gold_route.json" },
+      data: {
+        traversal: "traversal.json",
+        occlusion: "occlusion.json",
+        goldRoute: "gold_route.json",
+      },
       parallax: { far: 0.1 },
       qualityVariants: [],
     });
@@ -94,7 +143,11 @@ describe("parseCorridorManifest", () => {
         stronghold: null,
         waterfallVideo: null,
       },
-      data: { traversal: "traversal.json", occlusion: "occlusion.json", goldRoute: "gold_route.json" },
+      data: {
+        traversal: "traversal.json",
+        occlusion: "occlusion.json",
+        goldRoute: "gold_route.json",
+      },
       parallax: { far: 0.1 },
       qualityVariants: [{ id: "ultra" }],
     });

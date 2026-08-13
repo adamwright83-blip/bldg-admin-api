@@ -10,6 +10,11 @@ function pack(id: string): ResolvedCorridorPack {
     id,
     version: 1,
     stage: "playable",
+    visualReview: {
+      status: "approved",
+      reviewedAt: "2026-08-12T00:00:00.000Z",
+      reviewer: "test",
+    },
     basePath: `/assets/goldline/${id}`,
     assets: {
       far: null,
@@ -27,7 +32,17 @@ function pack(id: string): ResolvedCorridorPack {
     },
     parallax: { far: 0.1, mid: 0.45 },
     landmarks: [],
-    capabilities: { coldCallPortal: false, stronghold: false, missionSources: [] },
+    population: {
+      assetStage: "engineering_placeholder",
+      atlas: null,
+      ambient: [],
+      missionAnchorPoints: [],
+    },
+    capabilities: {
+      coldCallPortal: false,
+      stronghold: false,
+      missionSources: [],
+    },
     loadPriority: { critical: [], deferred: [] },
   };
 }
@@ -43,15 +58,19 @@ function deferredLoader() {
     });
   return {
     loader,
-    finish: (corridorId: string) => resolvers.get(corridorId)!(pack(corridorId)),
-    fail: (corridorId: string, error: Error) => rejecters.get(corridorId)!(error),
+    finish: (corridorId: string) =>
+      resolvers.get(corridorId)!(pack(corridorId)),
+    fail: (corridorId: string, error: Error) =>
+      rejecters.get(corridorId)!(error),
   };
 }
 
 describe("CorridorTransitionController", () => {
   it("applies a corridor that loads cleanly", async () => {
     const controller = new CorridorTransitionController();
-    const result = await controller.requestCorridor("corridor_01", async id => pack(id));
+    const result = await controller.requestCorridor("corridor_01", async id =>
+      pack(id)
+    );
 
     expect(result.outcome).toBe("applied");
     expect(controller.getActiveCorridorId()).toBe("corridor_01");
@@ -130,9 +149,12 @@ describe("CorridorTransitionController", () => {
       const controller = new CorridorTransitionController();
       await controller.requestCorridor("corridor_01", async id => pack(id));
 
-      const result = await controller.requestCorridor("corridor_broken", async () => {
-        throw new Error("manifest is invalid");
-      });
+      const result = await controller.requestCorridor(
+        "corridor_broken",
+        async () => {
+          throw new Error("manifest is invalid");
+        }
+      );
 
       expect(result.outcome).toBe("failed");
       // The world the player is standing in is untouched.
@@ -142,9 +164,12 @@ describe("CorridorTransitionController", () => {
 
     it("reports the underlying error rather than swallowing it", async () => {
       const controller = new CorridorTransitionController();
-      const result = await controller.requestCorridor("corridor_broken", async () => {
-        throw new Error("manifest is invalid");
-      });
+      const result = await controller.requestCorridor(
+        "corridor_broken",
+        async () => {
+          throw new Error("manifest is invalid");
+        }
+      );
 
       expect(result.outcome).toBe("failed");
       if (result.outcome === "failed") {
@@ -177,7 +202,10 @@ describe("CorridorTransitionController", () => {
       const controller = new CorridorTransitionController();
       const deferred = deferredLoader();
 
-      const pending = controller.requestCorridor("corridor_01", deferred.loader);
+      const pending = controller.requestCorridor(
+        "corridor_01",
+        deferred.loader
+      );
       controller.dispose();
       deferred.finish("corridor_01");
 

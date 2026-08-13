@@ -8,7 +8,12 @@ test.describe.configure({ timeout: 90_000 });
 
 const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
 
-type ListenerSnapshot = Record<string, number> & { pixiTicker: number };
+type ListenerSnapshot = Record<string, number> & {
+  pixiTicker: number;
+  populationBehaviorCallback: number;
+  corridorTransitionCallback: number;
+  audioLifecycleBinding: number;
+};
 type FixtureProof = {
   fixture: "CALL" | "VISIT" | "FOLLOW_UP" | "RECOVER";
   writes: Array<{ kind: string; missionId: number; requestId: string }>;
@@ -102,10 +107,10 @@ async function installPermanentGateProbe(page: Page) {
       return originalRemove.call(this, type, listener, options);
     };
 
-    let pixiTicker = 0;
+    const lifecycleCounts = new Map<string, number>();
     window.__GOLDLINE_LIFECYCLE_PROBE__ = {
-      update: (_kind, delta) => {
-        pixiTicker += delta;
+      update: (kind, delta) => {
+        lifecycleCounts.set(kind, (lifecycleCounts.get(kind) ?? 0) + delta);
       },
     };
     Object.defineProperty(window, "__GOLDLINE_LISTENER_PROBE__", {
@@ -113,7 +118,13 @@ async function installPermanentGateProbe(page: Page) {
       value: {
         snapshot: () => ({
           ...Object.fromEntries(counts.entries()),
-          pixiTicker,
+          pixiTicker: lifecycleCounts.get("pixiTicker") ?? 0,
+          populationBehaviorCallback:
+            lifecycleCounts.get("populationBehaviorCallback") ?? 0,
+          corridorTransitionCallback:
+            lifecycleCounts.get("corridorTransitionCallback") ?? 0,
+          audioLifecycleBinding:
+            lifecycleCounts.get("audioLifecycleBinding") ?? 0,
         }),
       },
     });
@@ -425,6 +436,9 @@ test("five mount cycles retain exact ticker, pointer, viewport, and resume liste
   await login(page, "CALL");
   const expected = await stableListenerSnapshot(page);
   expect(expected.pixiTicker).toBe(1);
+  expect(expected.populationBehaviorCallback).toBe(1);
+  expect(expected.corridorTransitionCallback).toBe(1);
+  expect(expected.audioLifecycleBinding).toBe(1);
 
   for (let cycle = 0; cycle < 4; cycle += 1) {
     await page.getByTestId("goldline-fixture-toggle-world").evaluate(node => {
@@ -432,6 +446,9 @@ test("five mount cycles retain exact ticker, pointer, viewport, and resume liste
     });
     await expect(page.locator("canvas.goldline-game-canvas")).toHaveCount(0);
     expect((await listenerSnapshot(page)).pixiTicker).toBe(0);
+    expect((await listenerSnapshot(page)).populationBehaviorCallback).toBe(0);
+    expect((await listenerSnapshot(page)).corridorTransitionCallback).toBe(0);
+    expect((await listenerSnapshot(page)).audioLifecycleBinding).toBe(0);
 
     await page.getByTestId("goldline-fixture-toggle-world").evaluate(node => {
       (node as HTMLButtonElement).click();
@@ -444,5 +461,8 @@ test("five mount cycles retain exact ticker, pointer, viewport, and resume liste
   console.log(`[goldline-lifecycle] ${JSON.stringify(final)}`);
   expect(final).toEqual(expected);
   expect(final.pixiTicker).toBe(1);
+  expect(final.populationBehaviorCallback).toBe(1);
+  expect(final.corridorTransitionCallback).toBe(1);
+  expect(final.audioLifecycleBinding).toBe(1);
   expect(await page.locator("canvas.goldline-game-canvas").count()).toBe(1);
 });

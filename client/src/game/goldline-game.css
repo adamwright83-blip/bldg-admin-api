@@ -2873,6 +2873,23 @@
   backdrop-filter: blur(5px);
 }
 
+.corridor-transition-signal {
+  position: absolute;
+  z-index: 13;
+  top: 48%;
+  right: max(14px, env(safe-area-inset-right));
+  max-width: 180px;
+  border-right: 3px solid rgba(231, 190, 85, 0.82);
+  color: #ffe4a0;
+  padding: 8px 10px;
+  text-align: right;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.11em;
+  background: linear-gradient(90deg, transparent, rgba(5, 19, 23, 0.72));
+  pointer-events: none;
+}
+
 .playable-goldline[data-world-signal="dormant"] .game-atmosphere {
   opacity: 0.45;
 }

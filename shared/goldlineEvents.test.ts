@@ -21,20 +21,24 @@ describe("Goldline client event whitelist", () => {
     expect(isGoldlineClientEventName("armory_weapon_selected")).toBe(true);
     expect(isGoldlineClientEventName("account_won")).toBe(false);
     expect(isGoldlineClientEventName("not_a_real_event")).toBe(false);
+    expect(isGoldlineClientEventName("population_scene_presented")).toBe(true);
   });
 });
 
 describe("Goldline event property sanitization", () => {
   it("strips any key not on the coarse allowlist", () => {
-    const sanitized = sanitizeDayforgeProductEventProperties("mission_engaged", {
-      sessionId: "s-1",
-      missionState: "active",
-      archetype: "ANCHOR",
-      // Attempted injection of disallowed fields:
-      prospectName: "Jane Doe",
-      phone: "+15551234567",
-      transcript: "full call transcript text",
-    });
+    const sanitized = sanitizeDayforgeProductEventProperties(
+      "mission_engaged",
+      {
+        sessionId: "s-1",
+        missionState: "active",
+        archetype: "ANCHOR",
+        // Attempted injection of disallowed fields:
+        prospectName: "Jane Doe",
+        phone: "+15551234567",
+        transcript: "full call transcript text",
+      }
+    );
     expect(sanitized).toEqual({
       sessionId: "s-1",
       missionState: "active",
@@ -46,21 +50,34 @@ describe("Goldline event property sanitization", () => {
   });
 
   it("keeps encounter_resolved coarse — archetype and performance only", () => {
-    const sanitized = sanitizeDayforgeProductEventProperties("encounter_resolved", {
-      sessionId: "s-2",
-      archetype: "GHOST",
-      performance: "clean",
-      objectionText: "they said they already have someone",
-    });
-    expect(Object.keys(sanitized).sort()).toEqual(["archetype", "performance", "sessionId"]);
+    const sanitized = sanitizeDayforgeProductEventProperties(
+      "encounter_resolved",
+      {
+        sessionId: "s-2",
+        archetype: "GHOST",
+        performance: "clean",
+        objectionText: "they said they already have someone",
+      }
+    );
+    expect(Object.keys(sanitized).sort()).toEqual([
+      "archetype",
+      "performance",
+      "sessionId",
+    ]);
   });
 
   it("keeps verified_capture free of dollar amounts, only a coarse band", () => {
-    const sanitized = sanitizeDayforgeProductEventProperties("verified_capture", {
+    const sanitized = sanitizeDayforgeProductEventProperties(
+      "verified_capture",
+      {
+        sessionId: "s-3",
+        estimatedValueBand: "verified",
+        exactAnnualValueCents: 2_160_000,
+      }
+    );
+    expect(sanitized).toEqual({
       sessionId: "s-3",
       estimatedValueBand: "verified",
-      exactAnnualValueCents: 2_160_000,
     });
-    expect(sanitized).toEqual({ sessionId: "s-3", estimatedValueBand: "verified" });
   });
 });

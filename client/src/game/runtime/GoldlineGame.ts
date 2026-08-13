@@ -22,6 +22,13 @@ import {
 import type { CorridorAction, CorridorBranch } from "../state/GameState";
 import type { WorldMissionState } from "../../../../shared/driverGameWorld";
 import type { MissionAffordanceProjection } from "../encounters/missionAffordance";
+import type { CorridorPopulation } from "../../../../shared/corridorManifest";
+import type {
+  AgentWorldPresence,
+  PopulationSystem,
+} from "../world/PopulationSystem";
+import type { AuthoritativeMissionForEmbodiment } from "../world/populationProjection";
+import { isMissionApproachable } from "../world/populationProjection";
 import { CameraController } from "./CameraController";
 import {
   branchPaceFor,
@@ -62,6 +69,17 @@ type GoldlineGameCallbacks = {
     lateral: number,
     branch: CorridorBranch
   ) => void;
+  /** Presentation boundary only; mission truth was already projected by React. */
+  onMissionProximity?: (
+    missionId: number,
+    state: "hidden" | "visible" | "engage"
+  ) => void;
+  /** Physical corridor exit zone; caller decides if a legitimate destination exists. */
+  onCorridorExitProximity?: (near: boolean) => void;
+  onPopulationReady?: (
+    ambientCount: number,
+    assetStage: CorridorPopulation["assetStage"]
+  ) => void;
 };
 
 /**
@@ -94,6 +112,7 @@ type GameAssets = {
   initialProgress?: number;
   initialLateral?: number;
   initialBranch?: CorridorBranch;
+  population?: CorridorPopulation;
 };
 
 const CHARACTER_POSE_FILES: Record<string, string> = {
@@ -148,6 +167,10 @@ export class GoldlineGame {
   private layerTraversal = new Container(); // L2 — route, portals, avatar
   private layerForeground = new Container(); // L3 — occlusion
   private layerEffects = new Container(); // L4
+  private populationSystem: PopulationSystem | null = null;
+  private pendingMissionEmbodiment: AuthoritativeMissionForEmbodiment | null =
+    null;
+  private pendingAgentPresence: readonly AgentWorldPresence[] = [];
 
   private camera = new CameraController(this.world);
   private avatar: Sprite | null = null;
@@ -194,6 +217,8 @@ export class GoldlineGame {
     string,
     "hidden" | "label" | "engage"
   >();
+  private missionProximityState: "hidden" | "visible" | "engage" = "hidden";
+  private corridorExitNear = false;
   private qualityMonitor = new AdaptiveQualityMonitor();
   private qualityTier: QualityTier = "premium";
   private lastCheckpointReportAt = 0;
@@ -367,6 +392,33 @@ export class GoldlineGame {
         this.layerForeground,
         this.layerEffects
       );
+      // Population JS is a gameplay-runtime chunk, not part of the initial
+      // route shell. It loads with the active corridor only; future corridors
+      // are not warmed at boot.
+      const { PopulationSystem: PopulationRuntime } = await import(
+        "../world/PopulationSystem"
+      );
+      this.populationSystem = new PopulationRuntime(
+        assets.population ?? {
+          assetStage: "engineering_placeholder",
+          atlas: null,
+          ambient: [],
+          missionAnchorPoints: [],
+        }
+      );
+      this.populationSystem.setMission(this.pendingMissionEmbodiment);
+      this.populationSystem.setAgentPresence(this.pendingAgentPresence);
+      this.callbacks.onPopulationReady?.(
+        this.populationSystem.authoredAmbientCount,
+        this.populationSystem.assetStage
+      );
+      // Humans share L2 with the Trailblazer and architecture. The population
+      // system itself is a compact Pixi container updated by this ticker — no
+      // per-frame React state and no second animation loop.
+      this.layerTraversal.addChildAt(
+        this.populationSystem.container,
+        Math.max(0, this.layerTraversal.getChildIndex(this.avatarShadow))
+      );
       app.stage.addChild(this.world);
 
       app.ticker.add(ticker => {
@@ -421,6 +473,14 @@ export class GoldlineGame {
     if (state === "recovery_active" && previous !== "recovery_active") {
       this.camera.impulse(-8);
     }
+    if (
+      state !== previous &&
+      ["captured", "contested", "closed", "recovery_active"].includes(state)
+    ) {
+      // Called only from authoritative mission projection. Animation reacts
+      // to truth; it can never create the outcome it acknowledges.
+      this.avatarState.acknowledgeAuthoritativeOutcome(performance.now());
+    }
     this.renderWorldState();
   }
 
@@ -441,6 +501,25 @@ export class GoldlineGame {
     this.landmarkArchetype = archetype;
   }
 
+  setMissionEmbodiment(mission: AuthoritativeMissionForEmbodiment | null) {
+    this.pendingMissionEmbodiment = mission;
+    this.populationSystem?.setMission(mission);
+    if (!mission) this.missionProximityState = "hidden";
+  }
+
+  setAgentPresence(presence: readonly AgentWorldPresence[]) {
+    this.pendingAgentPresence = [...presence];
+    this.populationSystem?.setAgentPresence(presence);
+  }
+
+  getPopulationDiagnostics() {
+    return {
+      assetStage: this.populationSystem?.assetStage ?? null,
+      visibleAmbient: this.populationSystem?.visibleAmbientCount ?? 0,
+      missionId: this.populationSystem?.missionEmbodiment?.missionId ?? null,
+    };
+  }
+
   /**
    * Physical encounter staging: the player does NOT leave the world to open an
    * encounter. The camera lifts and biases toward the landmark being engaged
@@ -451,6 +530,11 @@ export class GoldlineGame {
    * driven by real corridor data rather than a guessed screen position.
    */
   stageEncounter() {
+    const missionAnchor = this.populationSystem?.missionEmbodiment?.anchor;
+    if (missionAnchor) {
+      this.camera.stageEncounter(missionAnchor.cameraBias);
+      return;
+    }
     const nearest = this.anchors.reduce<CorridorAnchor | null>(
       (closest, anchor) => {
         if (!closest) return anchor;
@@ -467,6 +551,9 @@ export class GoldlineGame {
   /** Returns the camera to ordinary traversal framing. */
   exitEncounterStaging() {
     this.camera.clearEncounterStaging();
+    if (this.avatarState.state === "encounter_locked") {
+      this.avatarState.release();
+    }
   }
 
   /** True while the world is held in an encounter frame. */
@@ -477,10 +564,27 @@ export class GoldlineGame {
   /** Mirrors the player's OS reduced-motion preference into camera behaviour. */
   setReducedMotion(reduced: boolean) {
     this.camera.setReducedMotion(reduced);
+    this.populationSystem?.setReducedMotion(reduced);
   }
 
   performAction(action: CorridorAction) {
-    const trigger = pendingTrigger(this.progress, this.completedTriggers);
+    if (
+      action === "INTERACT" &&
+      isMissionApproachable(
+        this.populationSystem?.missionEmbodiment ?? null,
+        this.progress,
+        this.lateral
+      )
+    ) {
+      this.avatarState.lockEncounter();
+      this.callbacks.onInteract();
+      return true;
+    }
+    const rawTrigger = pendingTrigger(this.progress, this.completedTriggers);
+    const trigger =
+      rawTrigger?.action === "INTERACT" && this.populationSystem
+        ? null
+        : rawTrigger;
     if (!trigger || trigger.action !== action) return false;
     if (action === "INTERACT") {
       this.avatarState.lockEncounter();
@@ -514,13 +618,23 @@ export class GoldlineGame {
     this.drawWorld(width, height);
 
     const now = performance.now();
+    this.populationSystem?.update({
+      now,
+      width,
+      height,
+      playerProgress: this.progress,
+    });
     this.drawLandmark(width, height, now);
     this.avatarState.tick(now);
     if (this.actionUntil && now >= this.actionUntil) {
       this.actionUntil = 0;
       this.avatarState.release();
     }
-    const trigger = pendingTrigger(this.progress, this.completedTriggers);
+    const rawTrigger = pendingTrigger(this.progress, this.completedTriggers);
+    const trigger =
+      rawTrigger?.action === "INTERACT" && this.populationSystem
+        ? null
+        : rawTrigger;
     const blocked = Boolean(trigger && this.progress >= trigger.at - 0.012);
     const magnitude = Math.hypot(this.input.x, this.input.y);
     this.avatarState.setLocomotion(magnitude);
@@ -536,6 +650,7 @@ export class GoldlineGame {
         this.lastDirectionSign !== 0 &&
         directionSign !== this.lastDirectionSign;
       if (directionSign !== 0) this.lastDirectionSign = directionSign;
+      if (isReversing) this.avatarState.noteReversal();
       this.velocity = stepVelocity({
         currentVelocity: this.velocity,
         targetSpeed,
@@ -594,10 +709,44 @@ export class GoldlineGame {
     this.updateCameraLookahead();
     this.updateParallax();
 
-    const current = pendingTrigger(this.progress, this.completedTriggers);
+    const exitNear = this.progress >= 0.77;
+    if (exitNear !== this.corridorExitNear) {
+      this.corridorExitNear = exitNear;
+      this.callbacks.onCorridorExitProximity?.(exitNear);
+    }
+
+    const rawCurrent = pendingTrigger(this.progress, this.completedTriggers);
+    const current =
+      rawCurrent?.action === "INTERACT" && this.populationSystem
+        ? null
+        : rawCurrent;
+    const mission = this.populationSystem?.missionEmbodiment ?? null;
+    const missionDistance = mission
+      ? Math.hypot(
+          mission.anchor.position.progress - this.progress,
+          (mission.anchor.position.lateral - this.lateral) * 0.35
+        )
+      : Number.POSITIVE_INFINITY;
+    const missionProximity: "hidden" | "visible" | "engage" = !mission
+      ? "hidden"
+      : missionDistance <= mission.anchor.stagingRadius
+        ? "engage"
+        : missionDistance <= 0.22
+          ? "visible"
+          : "hidden";
+    if (mission && missionProximity !== this.missionProximityState) {
+      this.missionProximityState = missionProximity;
+      this.callbacks.onMissionProximity?.(mission.missionId, missionProximity);
+    }
+    const missionAction = missionProximity === "engage" ? "INTERACT" : null;
     const action =
-      current && this.progress >= current.at - 0.04 ? current.action : null;
-    const label = action ? current!.label : null;
+      missionAction ??
+      (current && this.progress >= current.at - 0.04 ? current.action : null);
+    const label = missionAction
+      ? "approach human scene"
+      : action
+        ? current!.label
+        : null;
     if (action !== this.availableAction || label !== this.availableLabel) {
       this.availableAction = action;
       this.availableLabel = label;
@@ -973,8 +1122,20 @@ export class GoldlineGame {
           : this.worldSignal === "dormant"
             ? 0.48
             : 1;
-    drawRoute(14, 0xf4bd48, 0.15 * mainRouteDim);
-    drawRoute(3, 0xffdf77, 0.86 * mainRouteDim);
+    const routeColor =
+      this.worldState === "closed"
+        ? 0x677168
+        : this.worldState === "contested"
+          ? 0xc98545
+          : 0xf4bd48;
+    const routeHighlight =
+      this.worldState === "closed"
+        ? 0x879087
+        : this.worldState === "contested"
+          ? 0xe1a05b
+          : 0xffdf77;
+    drawRoute(14, routeColor, 0.15 * mainRouteDim);
+    drawRoute(3, routeHighlight, 0.86 * mainRouteDim);
 
     this.fortress.clear();
     const gateX = width * 0.37;
@@ -1016,6 +1177,20 @@ export class GoldlineGame {
         .fill({ color: fortressColor, alpha: 0.72 })
         .stroke({ color: 0x83eaff, width: 2, alpha: 0.85 });
     }
+    if (this.worldState === "closed") {
+      // Dormant overgrowth is presentation of authoritative CLOSED only.
+      for (let index = 0; index < 7; index += 1) {
+        const offset = index / 6;
+        this.fortress
+          .ellipse(
+            gateX + gateW * offset,
+            gateY + gateH * (0.72 + (index % 2) * 0.1),
+            8,
+            4
+          )
+          .fill({ color: 0x61764b, alpha: 0.58 });
+      }
+    }
 
     this.recoveryPath.clear();
     if (
@@ -1032,7 +1207,7 @@ export class GoldlineGame {
           width * 0.35,
           height * 0.22
         )
-        .stroke({ width: 18, color: 0xffb83e, alpha: 0.14 });
+        .stroke({ width: 18, color: 0x9b72cf, alpha: 0.2 });
       this.recoveryPath
         .moveTo(width * 0.32, height * 0.62)
         .bezierCurveTo(
@@ -1044,6 +1219,14 @@ export class GoldlineGame {
           height * 0.22
         )
         .stroke({ width: 3, color: 0xffd875, alpha: 0.95 });
+      // A repaired route keeps its purple fracture visible; recovery does not
+      // erase the history that made it necessary.
+      this.recoveryPath
+        .moveTo(width * 0.19, height * 0.48)
+        .lineTo(width * 0.23, height * 0.44)
+        .lineTo(width * 0.2, height * 0.4)
+        .lineTo(width * 0.27, height * 0.35)
+        .stroke({ width: 2, color: 0xc3a2ee, alpha: 0.85 });
       this.recoveryPath
         .circle(width * 0.32, height * 0.62, 5)
         .fill({ color: 0xffe6a8, alpha: 0.9 });
@@ -1101,6 +1284,8 @@ export class GoldlineGame {
       this.tickerProbeActive = false;
       reportGoldlineLifecycleDelta("pixiTicker", -1);
     }
+    this.populationSystem?.destroy();
+    this.populationSystem = null;
     this.app?.destroy(true, { children: true });
     this.app = null;
     this.host.replaceChildren();

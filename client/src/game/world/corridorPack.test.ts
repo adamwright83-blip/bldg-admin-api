@@ -17,7 +17,9 @@ const CORRIDOR_01_DIR = resolve(
 );
 
 function corridor01Manifest(): unknown {
-  return JSON.parse(readFileSync(resolve(CORRIDOR_01_DIR, "manifest.json"), "utf8"));
+  return JSON.parse(
+    readFileSync(resolve(CORRIDOR_01_DIR, "manifest.json"), "utf8")
+  );
 }
 
 /** Minimal fetch double: maps URL -> response, everything else 404s. */
@@ -37,24 +39,38 @@ describe("corridor pack resolution", () => {
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;
 
-    const pack = resolveCorridorPack(parsed.data, "/assets/goldline/corridor_01");
+    const pack = resolveCorridorPack(
+      parsed.data,
+      "/assets/goldline/corridor_01"
+    );
 
     expect(pack.assets.mid).toBe("/assets/goldline/corridor_01/mid.webp");
     expect(pack.assets.far).toBe("/assets/goldline/corridor_01/far.webp");
-    expect(pack.data.goldRoute).toBe("/assets/goldline/corridor_01/gold_route.json");
-    expect(pack.data.traversal).toBe("/assets/goldline/corridor_01/traversal.json");
+    expect(pack.data.goldRoute).toBe(
+      "/assets/goldline/corridor_01/gold_route.json"
+    );
+    expect(pack.data.traversal).toBe(
+      "/assets/goldline/corridor_01/traversal.json"
+    );
+    expect(pack.population.ambient).toHaveLength(6);
+    expect(pack.population.atlas).toBeNull();
   });
 
   it("keeps a null optional asset null rather than inventing a URL for it", () => {
     const parsed = parseCorridorManifest(corridor01Manifest());
     if (!parsed.success) throw new Error("fixture manifest should parse");
-    const pack = resolveCorridorPack(parsed.data, "/assets/goldline/corridor_01");
+    const pack = resolveCorridorPack(
+      parsed.data,
+      "/assets/goldline/corridor_01"
+    );
     // corridor_01 genuinely has no waterfall video.
     expect(pack.assets.waterfallVideo).toBeNull();
   });
 
   it("derives the base path from the corridor id", () => {
-    expect(corridorBasePath("corridor_02")).toBe("/assets/goldline/corridor_02");
+    expect(corridorBasePath("corridor_02")).toBe(
+      "/assets/goldline/corridor_02"
+    );
   });
 });
 
@@ -89,10 +105,15 @@ describe("loadCorridorPack", () => {
   });
 
   it("rejects a manifest whose declared id disagrees with the directory it came from", async () => {
-    const renamed = { ...(corridor01Manifest() as Record<string, unknown>), id: "corridor_99" };
+    const renamed = {
+      ...(corridor01Manifest() as Record<string, unknown>),
+      id: "corridor_99",
+    };
 
     await expect(
-      loadCorridorPack("corridor_01", { fetchImpl: fetchFrom({ [manifestUrl]: renamed }) })
+      loadCorridorPack("corridor_01", {
+        fetchImpl: fetchFrom({ [manifestUrl]: renamed }),
+      })
     ).rejects.toBeInstanceOf(CorridorManifestInvalidError);
   });
 
@@ -110,12 +131,18 @@ describe("loadCorridorPack", () => {
         stronghold: null,
         waterfallVideo: null,
       },
-      capabilities: { coldCallPortal: false, stronghold: false, missionSources: [] },
+      capabilities: {
+        coldCallPortal: false,
+        stronghold: false,
+        missionSources: [],
+      },
     };
     const url = "/assets/goldline/corridor_02/manifest.json";
 
     await expect(
-      loadCorridorPack("corridor_02", { fetchImpl: fetchFrom({ [url]: authoring }) })
+      loadCorridorPack("corridor_02", {
+        fetchImpl: fetchFrom({ [url]: authoring }),
+      })
     ).rejects.toBeInstanceOf(CorridorNotPlayableError);
   });
 
@@ -133,7 +160,11 @@ describe("loadCorridorPack", () => {
         stronghold: null,
         waterfallVideo: null,
       },
-      capabilities: { coldCallPortal: false, stronghold: false, missionSources: [] },
+      capabilities: {
+        coldCallPortal: false,
+        stronghold: false,
+        missionSources: [],
+      },
     };
     const url = "/assets/goldline/corridor_02/manifest.json";
 
@@ -145,7 +176,9 @@ describe("loadCorridorPack", () => {
     expect(pack.stage).toBe("authoring");
     // Structural data is present even though the art is not — that is exactly
     // what makes it an authoring corridor rather than a broken one.
-    expect(pack.data.traversal).toBe("/assets/goldline/corridor_02/traversal.json");
+    expect(pack.data.traversal).toBe(
+      "/assets/goldline/corridor_02/traversal.json"
+    );
     expect(pack.assets.mid).toBeNull();
   });
 
