@@ -20,10 +20,7 @@
     "far": 0.1,
     "mid": 0.45
   },
-  "qualityVariants": [
-    { "id": "premium" },
-    { "id": "reduced" }
-  ],
+  "qualityVariants": [{ "id": "premium" }, { "id": "reduced" }],
   "landmarks": [
     {
       "id": "cold_call_portal",
@@ -36,6 +33,131 @@
       "position": { "progress": 0.79, "lateral": 0 }
     }
   ],
+  "population": {
+    "assetStage": "engineering_placeholder",
+    "atlas": null,
+    "ambient": [
+      {
+        "id": "market-phone",
+        "spriteId": "field-role-a",
+        "position": { "progress": 0.22, "lateral": -0.55 },
+        "depthLayer": "L2",
+        "facing": "right",
+        "behavior": "phone",
+        "path": [],
+        "visibilityRadius": 0.46,
+        "occlusionRule": "world"
+      },
+      {
+        "id": "market-carrier",
+        "spriteId": "field-role-b",
+        "position": { "progress": 0.29, "lateral": 0.48 },
+        "depthLayer": "L2",
+        "facing": "left",
+        "behavior": "carry",
+        "path": [
+          { "progress": 0.29, "lateral": 0.48 },
+          { "progress": 0.34, "lateral": 0.3 }
+        ],
+        "visibilityRadius": 0.48,
+        "occlusionRule": "world"
+      },
+      {
+        "id": "archway-walker",
+        "spriteId": "field-role-c",
+        "position": { "progress": 0.42, "lateral": -0.38 },
+        "depthLayer": "L2",
+        "facing": "right",
+        "behavior": "walk",
+        "path": [
+          { "progress": 0.4, "lateral": -0.4 },
+          { "progress": 0.48, "lateral": -0.18 }
+        ],
+        "visibilityRadius": 0.45,
+        "occlusionRule": "foreground"
+      },
+      {
+        "id": "plaza-pair-a",
+        "spriteId": "field-role-d",
+        "position": { "progress": 0.53, "lateral": 0.52 },
+        "depthLayer": "L2",
+        "facing": "left",
+        "behavior": "talk",
+        "path": [],
+        "visibilityRadius": 0.5,
+        "occlusionRule": "world"
+      },
+      {
+        "id": "plaza-pair-b",
+        "spriteId": "field-role-e",
+        "position": { "progress": 0.55, "lateral": 0.36 },
+        "depthLayer": "L2",
+        "facing": "right",
+        "behavior": "talk",
+        "path": [],
+        "visibilityRadius": 0.5,
+        "occlusionRule": "world"
+      },
+      {
+        "id": "lookout",
+        "spriteId": "field-role-f",
+        "position": { "progress": 0.68, "lateral": -0.5 },
+        "depthLayer": "L2",
+        "facing": "forward",
+        "behavior": "railing",
+        "path": [],
+        "visibilityRadius": 0.42,
+        "occlusionRule": "world"
+      }
+    ],
+    "missionAnchorPoints": [
+      {
+        "id": "mission-entry",
+        "position": { "progress": 0.7, "lateral": -0.18 },
+        "facing": "forward",
+        "stagingRadius": 0.075,
+        "capacity": 1,
+        "cameraBias": -0.12,
+        "cameraLift": 0.12,
+        "nearbyAmbientCompatibility": ["walk", "clipboard"]
+      },
+      {
+        "id": "mission-plaza",
+        "position": { "progress": 0.72, "lateral": 0.08 },
+        "facing": "left",
+        "stagingRadius": 0.08,
+        "capacity": 1,
+        "cameraBias": 0.08,
+        "cameraLift": 0.14,
+        "nearbyAmbientCompatibility": ["talk", "phone"]
+      },
+      {
+        "id": "mission-stronghold",
+        "position": { "progress": 0.75, "lateral": 0 },
+        "facing": "forward",
+        "stagingRadius": 0.075,
+        "capacity": 1,
+        "cameraBias": 0,
+        "cameraLift": 0.16,
+        "nearbyAmbientCompatibility": ["idle"]
+      },
+      {
+        "id": "mission-absence",
+        "position": { "progress": 0.73, "lateral": -0.06 },
+        "facing": "forward",
+        "stagingRadius": 0.08,
+        "capacity": 1,
+        "cameraBias": -0.06,
+        "cameraLift": 0.12,
+        "nearbyAmbientCompatibility": ["phone", "sit"]
+      }
+    ]
+  },
+  "visualReview": {
+    "status": "approved",
+    "reviewedAt": "2026-08-12T00:00:00.000Z",
+    "reviewer": "existing-production-baseline"
+  },
   "capabilities": {
     "coldCallPortal": true,
     "stronghold": true,

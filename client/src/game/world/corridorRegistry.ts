@@ -24,14 +24,16 @@ export type CorridorRegistryEntry = {
 };
 
 /**
- * corridor_01 is the shipped world. corridor_02 is registered as NOT playable
- * because its engineering contract exists while its final art does not —
- * registering it keeps the contract honest and testable without ever letting
- * an unfinished corridor become the live world.
+ * corridor_01 and corridor_02 are shipped worlds. A registry entry becomes
+ * playable only after its production manifest and human visual review close.
  */
 export const CORRIDOR_REGISTRY: readonly CorridorRegistryEntry[] = [
   { id: "corridor_01", label: "Approach corridor", playable: true },
-  { id: "corridor_02", label: "Second corridor (authoring)", playable: false },
+  {
+    id: "corridor_02",
+    label: "Coastal market corridor",
+    playable: true,
+  },
 ] as const;
 
 /** The corridor the player boots into when nothing else is determined. */
@@ -49,9 +51,28 @@ export function isKnownCorridor(corridorId: string): boolean {
 
 /** Ids the runtime is permitted to serve as the live world. */
 export function playableCorridorIds(): string[] {
-  return CORRIDOR_REGISTRY.filter(entry => entry.playable).map(entry => entry.id);
+  return CORRIDOR_REGISTRY.filter(entry => entry.playable).map(
+    entry => entry.id
+  );
 }
 
 export function isPlayableCorridor(corridorId: string): boolean {
   return corridorRegistryEntry(corridorId)?.playable === true;
+}
+
+/**
+ * Returns only the next destination this build is actually allowed to serve.
+ * Merely registering an authoring corridor never makes preload legitimate.
+ */
+export function nextPlayableCorridorId(
+  currentCorridorId: string
+): string | null {
+  const currentIndex = CORRIDOR_REGISTRY.findIndex(
+    entry => entry.id === currentCorridorId
+  );
+  if (currentIndex < 0) return null;
+  return (
+    CORRIDOR_REGISTRY.slice(currentIndex + 1).find(entry => entry.playable)
+      ?.id ?? null
+  );
 }

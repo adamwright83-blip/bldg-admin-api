@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "Authored traversal contract for corridor_02. These anchors are REAL structural authoring — they define where interaction is possible — and are deliberately independent of final art, which does not exist yet (see manifest.json stage: 'authoring' and README.md). The corridor is not production-playable until art lands and stage becomes 'playable'.",
+  "note": "Production traversal contract for corridor_02. These anchors define where interaction is possible and remain independent of business truth. The final production plates, route, population, and human visual approval are recorded by the playable manifest.",
   "anchors": [
     {
       "id": "approach_gate",

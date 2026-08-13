@@ -33,11 +33,22 @@ export function setHapticsEnabled(enabled: boolean) {
 }
 
 function supportsVibration(): boolean {
-  return typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
+  return (
+    typeof navigator !== "undefined" && typeof navigator.vibrate === "function"
+  );
+}
+
+function reducedMotionRequested(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
 }
 
 function vibrate(pattern: number | number[]): boolean {
-  if (!hapticsEnabled() || !supportsVibration()) return false;
+  if (!hapticsEnabled() || !supportsVibration() || reducedMotionRequested())
+    return false;
   try {
     return navigator.vibrate(pattern);
   } catch {
@@ -58,4 +69,32 @@ export function businessVictoryFeedback() {
 
 export function missFeedback() {
   vibrate(12);
+}
+
+const feedbackTokens = new Set<string>();
+
+function vibrateOnce(token: string, pattern: number | number[]) {
+  if (feedbackTokens.has(token)) return;
+  feedbackTokens.add(token);
+  if (feedbackTokens.size > 128) {
+    const oldest = feedbackTokens.values().next().value;
+    if (oldest) feedbackTokens.delete(oldest);
+  }
+  vibrate(pattern);
+}
+
+export function missionApproachFeedback(missionId: number) {
+  vibrateOnce(`mission-approach:${missionId}`, 10);
+}
+
+export function actionReadyFeedback(encounterId: string) {
+  vibrateOnce(`action-ready:${encounterId}`, [12, 24, 18]);
+}
+
+export function authoritativeMutationFeedback(revision: string) {
+  vibrateOnce(`authoritative-mutation:${revision}`, [18, 32, 26]);
+}
+
+export function corridorTransitionFeedback(requestId: number) {
+  vibrateOnce(`corridor-transition:${requestId}`, 16);
 }

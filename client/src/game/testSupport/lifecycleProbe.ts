@@ -1,4 +1,8 @@
-export type GoldlineLifecycleProbeKind = "pixiTicker";
+export type GoldlineLifecycleProbeKind =
+  | "pixiTicker"
+  | "populationBehaviorCallback"
+  | "corridorTransitionCallback"
+  | "audioLifecycleBinding";
 
 declare global {
   interface Window {

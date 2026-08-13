@@ -5,6 +5,7 @@ import {
   isProductionPlayable,
   missingOptionalArt,
   parseCorridorManifest,
+  productionClosureBlockers,
 } from "./corridorManifest";
 
 const ASSET_ROOT = resolve(__dirname, "../client/public/assets/goldline");
@@ -32,6 +33,7 @@ describe("corridor_01 remains a valid, production-playable pack", () => {
   it("is stage 'playable'", () => {
     expect(manifest.stage).toBe("playable");
     expect(isProductionPlayable(manifest)).toBe(true);
+    expect(manifest.visualReview.status).toBe("approved");
   });
 
   it("has every required structural data file on disk", () => {
@@ -54,22 +56,39 @@ describe("corridor_01 remains a valid, production-playable pack", () => {
 
   it("keeps its declared landmarks consistent with its authored traversal anchors", () => {
     const traversal = JSON.parse(
-      readFileSync(resolve(ASSET_ROOT, "corridor_01", manifest.data.traversal), "utf8")
-    ) as { anchors: Array<{ id: string; position: { progress: number; lateral: number } }> };
+      readFileSync(
+        resolve(ASSET_ROOT, "corridor_01", manifest.data.traversal),
+        "utf8"
+      )
+    ) as {
+      anchors: Array<{
+        id: string;
+        position: { progress: number; lateral: number };
+      }>;
+    };
 
     for (const landmark of manifest.landmarks) {
       const anchor = traversal.anchors.find(a => a.id === landmark.id);
       // A landmark the manifest advertises must correspond to a real authored
       // anchor at the same place — otherwise the manifest is describing a
       // corridor that does not exist.
-      expect(anchor, `no traversal anchor for landmark '${landmark.id}'`).toBeTruthy();
-      expect(anchor!.position.progress).toBeCloseTo(landmark.position.progress, 5);
-      expect(anchor!.position.lateral).toBeCloseTo(landmark.position.lateral, 5);
+      expect(
+        anchor,
+        `no traversal anchor for landmark '${landmark.id}'`
+      ).toBeTruthy();
+      expect(anchor!.position.progress).toBeCloseTo(
+        landmark.position.progress,
+        5
+      );
+      expect(anchor!.position.lateral).toBeCloseTo(
+        landmark.position.lateral,
+        5
+      );
     }
   });
 });
 
-describe("corridor_02 has a complete engineering contract without fake art", () => {
+describe("corridor_02 is a production-playable pack without fake optional art", () => {
   const manifest = manifestFor("corridor_02");
 
   it("validates against the same schema corridor_01 uses", () => {
@@ -77,9 +96,14 @@ describe("corridor_02 has a complete engineering contract without fake art", () 
     expect(manifest.version).toBeGreaterThanOrEqual(1);
   });
 
-  it("is honestly marked as still being authored, not as production-playable", () => {
-    expect(manifest.stage).toBe("authoring");
-    expect(isProductionPlayable(manifest)).toBe(false);
+  it("records explicit human approval and is production-playable", () => {
+    expect(manifest.stage).toBe("playable");
+    expect(isProductionPlayable(manifest)).toBe(true);
+    expect(manifest.visualReview).toEqual({
+      status: "approved",
+      reviewedAt: "2026-08-13T16:00:46.000Z",
+      reviewer: "product-owner",
+    });
   });
 
   it("carries REAL structural data — the part that makes a corridor coherent", () => {
@@ -88,26 +112,45 @@ describe("corridor_02 has a complete engineering contract without fake art", () 
     expect(fileExists("corridor_02", manifest.data.goldRoute)).toBe(true);
   });
 
-  it("ships NO substitute production art", () => {
-    // Every art slot is explicitly null rather than pointing at a stand-in.
-    expect(manifest.assets.mid).toBeNull();
-    expect(manifest.assets.far).toBeNull();
-    expect(manifest.assets.foreground).toBeNull();
-    expect(manifest.assets.effects).toBeNull();
-    expect(missingOptionalArt(manifest).length).toBeGreaterThan(0);
+  it("ships the supplied production-source environment plates", () => {
+    for (const asset of [
+      manifest.assets.mid,
+      manifest.assets.far,
+      manifest.assets.foreground,
+      manifest.assets.effects,
+    ]) {
+      expect(asset).not.toBeNull();
+      expect(fileExists("corridor_02", asset!)).toBe(true);
+    }
+    expect(missingOptionalArt(manifest)).toEqual([
+      "portal",
+      "stronghold",
+      "waterfallVideo",
+    ]);
   });
 
-  it("has no image or video files sitting in its production directory", () => {
+  it("has authored population space backed by the production atlas", () => {
+    expect(manifest.population.ambient.length).toBeGreaterThanOrEqual(5);
+    expect(manifest.population.missionAnchorPoints.length).toBeGreaterThan(0);
+    expect(manifest.population.assetStage).toBe("production");
+    expect(manifest.population.atlas).toBe("../population/coastal_roles.webp");
+    expect(fileExists("corridor_02", manifest.population.atlas)).toBe(true);
+  });
+
+  it("has no machine-checkable production closure blockers", () => {
+    expect(productionClosureBlockers(manifest)).toEqual([]);
+  });
+
+  it("does not invent optional portal, Stronghold, or video art", () => {
     for (const name of [
-      "mid.webp",
-      "far.webp",
-      "foreground.webp",
-      "effects.webp",
       "portal_coldcall.webp",
       "stronghold.webp",
       "waterfall.webm",
     ]) {
-      expect(fileExists("corridor_02", name), `unexpected art file ${name}`).toBe(false);
+      expect(
+        fileExists("corridor_02", name),
+        `unexpected art file ${name}`
+      ).toBe(false);
     }
   });
 
@@ -116,11 +159,15 @@ describe("corridor_02 has a complete engineering contract without fake art", () 
     expect(manifest.capabilities.stronghold).toBe(false);
   });
 
-  it("documents what is missing and how to promote it", () => {
-    const readme = readFileSync(resolve(ASSET_ROOT, "corridor_02", "README.md"), "utf8");
-    expect(readme).toMatch(/AUTHORING STAGE/);
+  it("documents the promotion and still-absent optional art", () => {
+    const readme = readFileSync(
+      resolve(ASSET_ROOT, "corridor_02", "README.md"),
+      "utf8"
+    );
+    expect(readme).toMatch(/PLAYABLE/);
     expect(readme).toMatch(/mid\.webp/);
-    expect(readme).toMatch(/stage.*playable/is);
+    expect(readme).toMatch(/product owner approved/i);
+    expect(readme).toMatch(/Portal and Stronghold capabilities remain `false`/);
   });
 });
 
@@ -130,11 +177,20 @@ describe("the schema refuses to let an unfinished corridor claim playability", (
       readFileSync(resolve(ASSET_ROOT, "corridor_02", "manifest.json"), "utf8")
     ) as Record<string, unknown>;
 
-    const result = parseCorridorManifest({ ...authoring, stage: "playable" });
+    const result = parseCorridorManifest({
+      ...authoring,
+      stage: "playable",
+      assets: {
+        ...(authoring.assets as Record<string, unknown>),
+        mid: null,
+      },
+    });
 
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues.some(i => i.path.join(".") === "assets.mid")).toBe(true);
+      expect(
+        result.error.issues.some(i => i.path.join(".") === "assets.mid")
+      ).toBe(true);
     }
   });
 
@@ -145,9 +201,24 @@ describe("the schema refuses to let an unfinished corridor claim playability", (
 
     const result = parseCorridorManifest({
       ...authoring,
-      capabilities: { coldCallPortal: true, stronghold: false, missionSources: [] },
+      capabilities: {
+        coldCallPortal: true,
+        stronghold: false,
+        missionSources: [],
+      },
     });
 
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects playable promotion without explicit human visual approval", () => {
+    const current = JSON.parse(
+      readFileSync(resolve(ASSET_ROOT, "corridor_01", "manifest.json"), "utf8")
+    ) as Record<string, unknown>;
+    const result = parseCorridorManifest({
+      ...current,
+      visualReview: { status: "pending", reviewedAt: null, reviewer: null },
+    });
     expect(result.success).toBe(false);
   });
 });

@@ -19,6 +19,7 @@
  * a corridor may be applied; the caller performs the swap.
  */
 import type { ResolvedCorridorPack } from "../world/corridorPack";
+import { reportGoldlineLifecycleDelta } from "../testSupport/lifecycleProbe";
 
 /**
  * `signaling` — destination became real; the world cues it (route pulse,
@@ -36,7 +37,8 @@ export const CORRIDOR_TRANSITION_PHASES = [
   "ready",
 ] as const;
 
-export type CorridorTransitionPhase = (typeof CORRIDOR_TRANSITION_PHASES)[number];
+export type CorridorTransitionPhase =
+  (typeof CORRIDOR_TRANSITION_PHASES)[number];
 
 export type CorridorTransitionOutcome =
   /** Pack loaded and is the newest request — caller should swap to it. */
@@ -55,8 +57,16 @@ export type CorridorLoader = (
   signal: AbortSignal
 ) => Promise<ResolvedCorridorPack>;
 
+export type CorridorRevealer = (
+  pack: ResolvedCorridorPack,
+  signal: AbortSignal
+) => void | Promise<void>;
+
 export type CorridorTransitionEvents = {
-  onPhaseChange?: (phase: CorridorTransitionPhase, corridorId: string | null) => void;
+  onPhaseChange?: (
+    phase: CorridorTransitionPhase,
+    corridorId: string | null
+  ) => void;
 };
 
 /**
@@ -72,8 +82,14 @@ export class CorridorTransitionController {
   private phase: CorridorTransitionPhase = "idle";
   private inflight: { requestId: number; abort: AbortController } | null = null;
   private disposed = false;
+  private probeActive = false;
 
-  constructor(private readonly events: CorridorTransitionEvents = {}) {}
+  constructor(private readonly events: CorridorTransitionEvents = {}) {
+    if (events.onPhaseChange) {
+      this.probeActive = true;
+      reportGoldlineLifecycleDelta("corridorTransitionCallback", 1);
+    }
+  }
 
   getPhase(): CorridorTransitionPhase {
     return this.phase;
@@ -113,7 +129,8 @@ export class CorridorTransitionController {
    */
   async requestCorridor(
     corridorId: string,
-    loader: CorridorLoader
+    loader: CorridorLoader,
+    reveal?: CorridorRevealer
   ): Promise<CorridorTransitionOutcome> {
     const requestId = ++this.requestSeq;
 
@@ -154,12 +171,18 @@ export class CorridorTransitionController {
         return { outcome: "superseded", corridorId, requestId };
       }
       if (isAbort) {
-        this.setPhase(this.activeCorridorId ? "ready" : "idle", this.activeCorridorId);
+        this.setPhase(
+          this.activeCorridorId ? "ready" : "idle",
+          this.activeCorridorId
+        );
         return { outcome: "aborted", corridorId, requestId };
       }
 
       // Failure returns the player to the corridor they never left.
-      this.setPhase(this.activeCorridorId ? "ready" : "idle", this.activeCorridorId);
+      this.setPhase(
+        this.activeCorridorId ? "ready" : "idle",
+        this.activeCorridorId
+      );
       return {
         outcome: "failed",
         corridorId,
@@ -177,6 +200,23 @@ export class CorridorTransitionController {
     }
 
     this.setPhase("revealing", corridorId);
+    try {
+      await reveal?.(pack, abort.signal);
+    } catch (error) {
+      this.setPhase(
+        this.activeCorridorId ? "ready" : "idle",
+        this.activeCorridorId
+      );
+      return {
+        outcome: "failed",
+        corridorId,
+        requestId,
+        error: error instanceof Error ? error : new Error(String(error)),
+      };
+    }
+    if (requestId !== this.requestSeq || this.disposed) {
+      return { outcome: "superseded", corridorId, requestId };
+    }
     this.activeCorridorId = corridorId;
     this.setPhase("ready", corridorId);
 
@@ -192,6 +232,10 @@ export class CorridorTransitionController {
     this.disposed = true;
     this.inflight?.abort.abort();
     this.inflight = null;
+    if (this.probeActive) {
+      this.probeActive = false;
+      reportGoldlineLifecycleDelta("corridorTransitionCallback", -1);
+    }
     this.setPhase("idle", null);
   }
 }

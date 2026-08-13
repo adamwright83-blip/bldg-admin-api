@@ -11,14 +11,24 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { missingOptionalArt, parseCorridorManifest } from "../shared/corridorManifest.ts";
+import {
+  missingOptionalArt,
+  parseCorridorManifest,
+  productionClosureBlockers,
+} from "../shared/corridorManifest.ts";
 
 const corridorId = process.argv[2] ?? "corridor_01";
-const corridorDir = resolve(process.cwd(), "client/public/assets/goldline", corridorId);
+const corridorDir = resolve(
+  process.cwd(),
+  "client/public/assets/goldline",
+  corridorId
+);
 const manifestPath = resolve(corridorDir, "manifest.json");
 
 if (!existsSync(manifestPath)) {
-  console.error(`[validate-corridor] No manifest.json found for '${corridorId}' at ${manifestPath}`);
+  console.error(
+    `[validate-corridor] No manifest.json found for '${corridorId}' at ${manifestPath}`
+  );
   process.exit(1);
 }
 
@@ -28,7 +38,9 @@ const result = parseCorridorManifest(raw);
 let ok = true;
 if (!result.success) {
   ok = false;
-  console.log(`  [FAIL] manifest schema: ${result.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
+  console.log(
+    `  [FAIL] manifest schema: ${result.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ")}`
+  );
 } else {
   console.log("  [PASS] manifest schema valid");
 }
@@ -45,7 +57,9 @@ if (result.success) {
       console.log(`  [PASS] ${label}: ${relativePath}`);
     } else {
       ok = false;
-      console.log(`  [FAIL] ${label}: ${relativePath} does not exist at ${full}`);
+      console.log(
+        `  [FAIL] ${label}: ${relativePath} does not exist at ${full}`
+      );
     }
   };
 
@@ -59,6 +73,13 @@ if (result.success) {
   checkFile("data.traversal", manifest.data.traversal);
   checkFile("data.occlusion", manifest.data.occlusion);
   checkFile("data.goldRoute", manifest.data.goldRoute);
+  checkFile("population.atlas", manifest.population.atlas);
+
+  console.log(
+    `  [PASS] population contract: ${manifest.population.ambient.length} ambient, ${manifest.population.missionAnchorPoints.length} mission slots`
+  );
+  console.log(`  POPULATION ASSET STAGE: ${manifest.population.assetStage}`);
+  console.log(`  HUMAN VISUAL REVIEW: ${manifest.visualReview.status}`);
 
   // Stage is the honest headline: "validates" and "is finished" are different
   // claims, and a corridor must never be mistaken for production-ready just
@@ -66,6 +87,7 @@ if (result.success) {
   console.log("");
   console.log(`  STAGE: ${manifest.stage}`);
   const missingArt = missingOptionalArt(manifest);
+  const closureBlockers = productionClosureBlockers(manifest);
   if (manifest.stage === "playable") {
     console.log("  ENGINEERING: complete");
     console.log(
@@ -73,11 +95,28 @@ if (result.success) {
         ? `  VISUAL: partial — no art supplied for: ${missingArt.join(", ")}`
         : "  VISUAL: all declared art present"
     );
+    if (manifest.population.assetStage !== "production") {
+      console.log(
+        "  HUMAN VISUAL: BLOCKED BY ASSETS — engineering placeholder figures are not production art"
+      );
+    }
   } else {
     console.log("  ENGINEERING: complete (structural data valid)");
     console.log(
-      `  VISUAL: BLOCKED BY ART — missing: ${missingArt.join(", ") || "none declared"}`
+      `  PRODUCTION CLOSURE: BLOCKED — ${closureBlockers.join(", ") || "no machine-checkable blockers"}`
     );
+    console.log(`  OPTIONAL ART ABSENT: ${missingArt.join(", ") || "none"}`);
+    if (manifest.assets.mid === null) {
+      console.log(
+        "  GOLD ROUTE: RETRACE BLOCKED — final assets.mid is required before tracing"
+      );
+    }
+    if (manifest.visualReview.status !== "approved") {
+      console.log(
+        "  HUMAN VISUAL: PENDING — approval must come from an actual reviewer after screenshots"
+      );
+    }
+    console.log("  VISUAL: BLOCKED BY REQUIRED PRODUCTION ASSETS / REVIEW");
     console.log(
       "  NOTE: this corridor is NOT production-playable; the runtime will refuse to serve it."
     );

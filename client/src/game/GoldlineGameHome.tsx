@@ -14,7 +14,6 @@ import {
   FileText,
   Footprints,
   Loader2,
-  Map,
   MapPin,
   Menu,
   Phone,
@@ -44,6 +43,7 @@ import { detectOpenChannelGap } from "../pages/driver/goldlineDriverModel";
 import worldUrl from "@/assets/goldline/generated/goldline-world-empty.png";
 import operatorUrl from "@/assets/goldline/generated/trailblazer-operator.png";
 import { GoldlineGame } from "./runtime/GoldlineGame";
+import type { PreparedCorridorAssets } from "./runtime/GoldlineGame";
 import {
   equipAnchorAbilities,
   shieldDamage,
@@ -66,8 +66,10 @@ import { corridorGameAssets, loadCorridorPack } from "./world/corridorPack";
 import {
   DEFAULT_CORRIDOR_ID,
   isPlayableCorridor,
+  nextPlayableCorridorId,
 } from "./world/corridorRegistry";
 import { CorridorTransitionController } from "./runtime/corridorTransition";
+import type { CorridorTransitionPhase } from "./runtime/corridorTransition";
 import { useVisualViewportSize } from "./session/useVisualViewportSize";
 import { registerGoldlineServiceWorker } from "./pwa/registerServiceWorker";
 import { installPwaHeadTags } from "./pwa/installPwaHead";
@@ -80,7 +82,15 @@ import {
 import { getGoldlineSessionId } from "./analytics/goldlineSession";
 import type { GoldlineEventEmitter } from "./analytics/emitGoldlineEvent";
 import { getAudioManager } from "./audio/AudioManager";
-import { arcadeFeedback, missFeedback } from "./audio/haptics";
+import {
+  actionReadyFeedback,
+  arcadeFeedback,
+  authoritativeMutationFeedback,
+  missionApproachFeedback,
+  missFeedback,
+} from "./audio/haptics";
+import type { AgentWorldPresence } from "./world/PopulationSystem";
+import { projectAgentWorldPresence } from "./world/agentPresenceProjection";
 import type {
   ArcadeResolution,
   CorridorAction,
@@ -131,6 +141,19 @@ const StallerEncounter = lazy(
 const GoldlineActionSurface = lazy(
   () => import("./actions/GoldlineActionSurface")
 );
+
+/**
+ * Lets the existing CI-only harness render an authoring pack for screenshot
+ * review without making that pack production-playable. This code path is
+ * tree-dead in normal builds because the harness flag is compile-time false.
+ */
+function authoringPreviewCorridorId(): string | null {
+  if (import.meta.env.VITE_GOLDLINE_TEST_HARNESS !== "1") return null;
+  const requested = new URLSearchParams(window.location.search).get(
+    "goldlineCorridorPreview"
+  );
+  return requested === "corridor_02" ? requested : null;
+}
 
 type GoldlineGameHomeProps = GoldlineHomeProps & {
   /**
@@ -526,14 +549,27 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [coldCallPortalState, setColdCallPortalState] = useState<
     "hidden" | "label" | "engage"
   >("hidden");
+  const [missionSpatialState, setMissionSpatialState] = useState<
+    "hidden" | "visible" | "engage"
+  >("hidden");
+  const [corridorExitNear, setCorridorExitNear] = useState(false);
+  const [corridorTransitionPhase, setCorridorTransitionPhase] =
+    useState<CorridorTransitionPhase>("idle");
+  const [activeCorridorId, setActiveCorridorId] = useState(DEFAULT_CORRIDOR_ID);
+  const [populationDiagnostics, setPopulationDiagnostics] = useState({
+    ambientCount: 0,
+    assetStage: "engineering_placeholder" as
+      | "production"
+      | "engineering_placeholder",
+  });
+  const [qualityTier, setQualityTier] = useState<"premium" | "reduced">(
+    "premium"
+  );
 
   useEffect(() => {
     const audio = getAudioManager();
     audio.primeOnGesture();
-    const handleVisibility = () => audio.setBackgrounded(document.hidden);
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () =>
-      document.removeEventListener("visibilitychange", handleVisibility);
+    return audio.bindLifecycle();
   }, []);
 
   const [canShowInstallPrompt, setCanShowInstallPrompt] =
@@ -641,6 +677,19 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const missionAffordance = activeMission
     ? projectMissionAffordance(activeMission, new Date())
     : null;
+  const activeMissionArchetype = activeMission
+    ? archetypeForMission({
+        mission: activeMission,
+        hasDecisionMakerContact: Boolean(activeMission.phoneUrl),
+      })
+    : null;
+  const agentWorldPresence = useMemo<AgentWorldPresence[]>(() => {
+    return projectAgentWorldPresence(
+      props.progression,
+      props.scoutReport?.discoveries.length ?? 0
+    );
+  }, [props.progression, props.scoutReport?.discoveries.length]);
+  const nextCorridorId = nextPlayableCorridorId(activeCorridorIdRef.current);
   const equippedAbilities = useMemo(
     () => equipAnchorAbilities(props.armory?.items ?? []),
     [props.armory?.items]
@@ -691,6 +740,30 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       onPortalProximity: (anchorId, state) => {
         if (anchorId === "cold_call_portal") setColdCallPortalState(state);
       },
+      onMissionProximity: (_missionId, state) => {
+        setMissionSpatialState(state);
+        if (state === "engage") {
+          getAudioManager().playOnce(
+            "mission_proximity",
+            `mission:${_missionId}`
+          );
+          missionApproachFeedback(_missionId);
+        }
+      },
+      onCorridorExitProximity: setCorridorExitNear,
+      onPopulationReady: (ambientCount, assetStage) => {
+        setPopulationDiagnostics({ ambientCount, assetStage });
+        emit?.({
+          eventName: "population_scene_presented",
+          sessionId: sessionIdRef.current,
+          missionId: null,
+          properties: {
+            sessionId: sessionIdRef.current,
+            ambientCount,
+            assetStage,
+          },
+        });
+      },
       onTraversalAction: action => {
         const eventName =
           action === "JUMP"
@@ -712,6 +785,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         }
       },
       onQualityChange: (tier, avgFrameMs) => {
+        setQualityTier(tier);
         emit?.({
           eventName: "visual_quality_adjusted",
           sessionId: sessionIdRef.current,
@@ -740,7 +814,38 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     });
     runtimeRef.current = game;
 
-    const transitions = new CorridorTransitionController();
+    const transitionStarted = new Set<string>();
+    const transitions = new CorridorTransitionController({
+      onPhaseChange: (phase, corridorId) => {
+        setCorridorTransitionPhase(phase);
+        if (phase === "signaling" && corridorId) {
+          transitionStarted.add(corridorId);
+          emit?.({
+            eventName: "corridor_transition_started",
+            sessionId: sessionIdRef.current,
+            missionId: null,
+            properties: {
+              sessionId: sessionIdRef.current,
+              corridorId,
+            },
+          });
+        } else if (
+          phase === "ready" &&
+          corridorId &&
+          transitionStarted.delete(corridorId)
+        ) {
+          emit?.({
+            eventName: "corridor_transition_completed",
+            sessionId: sessionIdRef.current,
+            missionId: null,
+            properties: {
+              sessionId: sessionIdRef.current,
+              corridorId,
+            },
+          });
+        }
+      },
+    });
     transitionsRef.current = transitions;
 
     // Position only — authoritative business/world state is always
@@ -750,18 +855,23 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     // Cross-corridor resume: trust the checkpoint's corridor only if this
     // build still considers it playable, so a removed or unfinished corridor
     // can never strand the player outside the world.
+    const previewCorridorId = authoringPreviewCorridorId();
     const bootCorridorId =
-      checkpoint && isPlayableCorridor(checkpoint.corridorId)
+      previewCorridorId ??
+      (checkpoint && isPlayableCorridor(checkpoint.corridorId)
         ? checkpoint.corridorId
-        : DEFAULT_CORRIDOR_ID;
+        : DEFAULT_CORRIDOR_ID);
     activeCorridorIdRef.current = bootCorridorId;
+    setActiveCorridorId(bootCorridorId);
     const restorable =
       checkpoint?.corridorId === bootCorridorId ? checkpoint : null;
 
     let cancelled = false;
     // The corridor is addressed by id: no caller here knows a single asset
     // URL. Everything the renderer needs comes from the validated manifest.
-    void loadCorridorPack(bootCorridorId)
+    void loadCorridorPack(bootCorridorId, {
+      requirePlayable: previewCorridorId === null,
+    })
       .then(pack => {
         if (cancelled) return false;
         transitions.adoptActiveCorridor(pack.id);
@@ -792,11 +902,64 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   }, []);
 
   useEffect(() => {
+    if (!corridorExitNear || !nextCorridorId) return;
+    const game = runtimeRef.current;
+    const transitions = transitionsRef.current;
+    if (!game || !transitions) return;
+    const destinationId = nextCorridorId;
+    const prepared = new Map<string, PreparedCorridorAssets>();
+    void transitions
+      .requestCorridor(
+        destinationId,
+        async (corridorId, signal) => {
+          const pack = await loadCorridorPack(corridorId, { signal });
+          prepared.set(
+            corridorId,
+            await game.preloadCorridor(
+              corridorGameAssets(pack, RUNTIME_FALLBACKS),
+              signal
+            )
+          );
+          return pack;
+        },
+        (pack, signal) => {
+          if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+          const next = prepared.get(pack.id);
+          if (!next) throw new Error(`corridor '${pack.id}' was not preloaded`);
+          game.revealCorridor(next);
+          prepared.delete(pack.id);
+          activeCorridorIdRef.current = pack.id;
+          setActiveCorridorId(pack.id);
+          saveCheckpoint(
+            {
+              corridorId: pack.id,
+              progress: 0.06,
+              lateral: 0,
+              branch: "intel",
+              savedAt: new Date().toISOString(),
+            },
+            playerIdentityRef.current
+          );
+        }
+      )
+      .then(outcome => {
+        prepared.forEach(candidate => game.discardPreparedCorridor(candidate));
+        prepared.clear();
+        if (outcome.outcome === "failed") {
+          setFeedback("ROUTE HELD · DESTINATION UNAVAILABLE");
+        }
+      });
+  }, [corridorExitNear, nextCorridorId]);
+
+  useEffect(() => {
     if (!activeMission) {
+      setMissionSpatialState("hidden");
       runtimeRef.current?.setWorldSignal("none");
       runtimeRef.current?.setLandmarkArchetype(null);
+      runtimeRef.current?.setMissionEmbodiment(null);
       return;
     }
+    setMissionSpatialState("hidden");
     if (!seenMissionKeysRef.current.has(activeMission.key)) {
       seenMissionKeysRef.current.add(activeMission.key);
       emit?.({
@@ -813,12 +976,6 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     // The landmark shape/color at the gate is set from the same archetype
     // signal the encounter itself will use, so the player can read what
     // they're approaching from the world before ever opening it.
-    runtimeRef.current?.setLandmarkArchetype(
-      archetypeForMission({
-        mission: activeMission,
-        hasDecisionMakerContact: Boolean(activeMission.phoneUrl),
-      })
-    );
     if (activeMission.state === "captured") {
       // Fires only from real mission state, never from arcade performance.
       emit?.({
@@ -843,10 +1000,43 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   }, [activeMission?.key, activeMission?.state]);
 
   useEffect(() => {
+    runtimeRef.current?.setLandmarkArchetype(activeMissionArchetype);
+    runtimeRef.current?.setMissionEmbodiment(
+      activeMission?.missionId && activeMissionArchetype && missionAffordance
+        ? {
+            missionId: activeMission.missionId,
+            missionKey: activeMission.key,
+            archetype: activeMissionArchetype,
+            state: activeMission.state,
+            affordance: missionAffordance.primary,
+            worldSignal: missionAffordance.worldSignal,
+          }
+        : null
+    );
+  }, [
+    activeMission?.key,
+    activeMission?.missionId,
+    activeMission?.state,
+    activeMissionArchetype,
+    missionAffordance?.primary,
+    missionAffordance?.worldSignal,
+  ]);
+
+  useEffect(() => {
+    runtimeRef.current?.setAgentPresence(agentWorldPresence);
+  }, [agentWorldPresence, runtimeReady]);
+
+  useEffect(() => {
     runtimeRef.current?.setWorldSignal(
       missionAffordance?.worldSignal ?? "none"
     );
   }, [missionAffordance?.worldSignal]);
+
+  useEffect(() => {
+    if (encounterRuntime?.phase !== "ACTION_READY") return;
+    getAudioManager().playOnce("action_ready", encounterRuntime.encounterId);
+    actionReadyFeedback(encounterRuntime.encounterId);
+  }, [encounterRuntime?.encounterId, encounterRuntime?.phase]);
 
   useEffect(() => {
     if (!outcomeMission || encounterRuntime?.phase !== "AWAITING_OUTCOME")
@@ -863,6 +1053,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       outcome.kind === "contested" ||
       outcome.kind === "closed"
     ) {
+      getAudioManager().playOnce(
+        outcome.kind === "captured"
+          ? "captured_truth"
+          : outcome.kind === "contested"
+            ? "contested_truth"
+            : "closed_truth",
+        revision
+      );
+      authoritativeMutationFeedback(revision);
       sendEncounterEvent({ type: "AUTHORITATIVE_RESOLVED", revision });
       showWorldOutcomeCue(
         outcome.kind === "captured"
@@ -872,6 +1071,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             : "ROUTE DORMANT · AUTHORITATIVE CLOSURE"
       );
     } else if (outcome.kind === "recovery") {
+      getAudioManager().playOnce("recovery_truth", revision);
+      authoritativeMutationFeedback(revision);
       sendEncounterEvent({ type: "AUTHORITATIVE_RECOVERY", revision });
       showWorldOutcomeCue("RECOVERY PATH PROJECTED FROM SERVER TRUTH");
     } else {
@@ -1204,7 +1405,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   }
 
   function performAction() {
-    if (action) runtimeRef.current?.performAction(action);
+    if (!action) return;
+    const performed = runtimeRef.current?.performAction(action);
+    if (!performed) return;
+    if (action === "JUMP") getAudioManager().play("jump");
+    else if (action === "VAULT" || action === "CLIMB")
+      getAudioManager().play("vault");
   }
 
   /**
@@ -1326,6 +1532,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         data-world-signal={missionAffordance?.worldSignal ?? "none"}
         data-mission-reason={missionDirector.reasonCode ?? "NONE"}
         data-challenge-depth={missionDirector.challengeDepth}
+        data-mission-spatial-state={missionSpatialState}
+        data-population-asset-stage={populationDiagnostics.assetStage}
+        data-ambient-population-count={populationDiagnostics.ambientCount}
+        data-mission-embodiment-id={activeMission?.missionId ?? "NONE"}
+        data-corridor-id={activeCorridorId}
+        data-next-corridor-id={nextCorridorId ?? "NONE"}
+        data-corridor-transition-phase={corridorTransitionPhase}
+        data-player-progress={progress.toFixed(3)}
+        data-visual-quality-tier={qualityTier}
       >
         <div ref={hostRef} className="goldline-canvas-host" />
         {!runtimeReady ? (
@@ -1345,6 +1560,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         {worldOutcomeCue ? (
           <div className="world-outcome-cue" role="status">
             {worldOutcomeCue}
+          </div>
+        ) : null}
+        {corridorExitNear && nextCorridorId ? (
+          <div className="corridor-transition-signal" role="status">
+            ROUTE CONTINUES · DESTINATION READY
           </div>
         ) : null}
         {networkStatus === "offline" ? (

@@ -76,6 +76,9 @@ export const DAYFORGE_PRODUCT_EVENT_NAMES = [
   "scout_mission_created",
   "verified_capture",
   "visual_quality_adjusted",
+  "population_scene_presented",
+  "corridor_transition_started",
+  "corridor_transition_completed",
 ] as const;
 
 export type DayforgeProductEventName =
@@ -291,6 +294,13 @@ export interface DayforgeProductEventPropertyMap {
     tier: string;
     avgFrameMs: number;
   };
+  population_scene_presented: {
+    sessionId: string;
+    ambientCount: number;
+    assetStage: string;
+  };
+  corridor_transition_started: { sessionId: string; corridorId: string };
+  corridor_transition_completed: { sessionId: string; corridorId: string };
 }
 
 export type DayforgeProductEventProperties<
@@ -376,6 +386,9 @@ export const DAYFORGE_PRODUCT_EVENT_PROPERTY_KEYS = {
   scout_mission_created: ["sessionId"],
   verified_capture: ["sessionId", "estimatedValueBand"],
   visual_quality_adjusted: ["sessionId", "tier", "avgFrameMs"],
+  population_scene_presented: ["sessionId", "ambientCount", "assetStage"],
+  corridor_transition_started: ["sessionId", "corridorId"],
+  corridor_transition_completed: ["sessionId", "corridorId"],
 } as const satisfies {
   [Name in DayforgeProductEventName]: readonly (keyof DayforgeProductEventPropertyMap[Name])[];
 };
@@ -488,6 +501,9 @@ export const GOLDLINE_CLIENT_EVENT_NAMES = [
   "scout_mission_created",
   "verified_capture",
   "visual_quality_adjusted",
+  "population_scene_presented",
+  "corridor_transition_started",
+  "corridor_transition_completed",
 ] as const satisfies readonly DayforgeProductEventName[];
 
 export type GoldlineClientEventName =

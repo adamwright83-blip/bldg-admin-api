@@ -1,12 +1,12 @@
 {
   "id": "corridor_02",
   "version": 1,
-  "stage": "authoring",
+  "stage": "playable",
   "assets": {
-    "far": null,
-    "mid": null,
-    "foreground": null,
-    "effects": null,
+    "far": "far.webp",
+    "mid": "mid.webp",
+    "foreground": "foreground.webp",
+    "effects": "effects.webp",
     "portal": null,
     "stronghold": null,
     "waterfallVideo": null
@@ -20,10 +20,7 @@
     "far": 0.08,
     "mid": 0.4
   },
-  "qualityVariants": [
-    { "id": "premium" },
-    { "id": "reduced" }
-  ],
+  "qualityVariants": [{ "id": "premium" }, { "id": "reduced" }],
   "landmarks": [
     {
       "id": "approach_gate",
@@ -36,13 +33,128 @@
       "position": { "progress": 0.83, "lateral": 0 }
     }
   ],
+  "population": {
+    "assetStage": "production",
+    "atlas": "../population/coastal_roles.webp",
+    "ambient": [
+      {
+        "id": "arrival-walker",
+        "spriteId": "field-role-a",
+        "position": { "progress": 0.16, "lateral": -0.42 },
+        "depthLayer": "L2",
+        "facing": "right",
+        "behavior": "walk",
+        "path": [
+          { "progress": 0.14, "lateral": -0.42 },
+          { "progress": 0.24, "lateral": -0.18 }
+        ],
+        "visibilityRadius": 0.42,
+        "occlusionRule": "world"
+      },
+      {
+        "id": "arrival-clipboard",
+        "spriteId": "field-role-b",
+        "position": { "progress": 0.24, "lateral": 0.38 },
+        "depthLayer": "L2",
+        "facing": "left",
+        "behavior": "clipboard",
+        "path": [],
+        "visibilityRadius": 0.46,
+        "occlusionRule": "world"
+      },
+      {
+        "id": "terrace-phone",
+        "spriteId": "field-role-c",
+        "position": { "progress": 0.39, "lateral": 0.52 },
+        "depthLayer": "L2",
+        "facing": "left",
+        "behavior": "phone",
+        "path": [],
+        "visibilityRadius": 0.44,
+        "occlusionRule": "world"
+      },
+      {
+        "id": "supply-carrier",
+        "spriteId": "field-role-d",
+        "position": { "progress": 0.47, "lateral": -0.5 },
+        "depthLayer": "L2",
+        "facing": "right",
+        "behavior": "carry",
+        "path": [
+          { "progress": 0.45, "lateral": -0.5 },
+          { "progress": 0.53, "lateral": -0.3 }
+        ],
+        "visibilityRadius": 0.46,
+        "occlusionRule": "foreground"
+      },
+      {
+        "id": "terrace-talk-a",
+        "spriteId": "field-role-e",
+        "position": { "progress": 0.62, "lateral": 0.22 },
+        "depthLayer": "L2",
+        "facing": "left",
+        "behavior": "talk",
+        "path": [],
+        "visibilityRadius": 0.48,
+        "occlusionRule": "world"
+      },
+      {
+        "id": "terrace-talk-b",
+        "spriteId": "field-role-f",
+        "position": { "progress": 0.63, "lateral": 0.06 },
+        "depthLayer": "L2",
+        "facing": "right",
+        "behavior": "talk",
+        "path": [],
+        "visibilityRadius": 0.48,
+        "occlusionRule": "world"
+      }
+    ],
+    "missionAnchorPoints": [
+      {
+        "id": "mission-arrival",
+        "position": { "progress": 0.32, "lateral": -0.12 },
+        "facing": "forward",
+        "stagingRadius": 0.08,
+        "capacity": 1,
+        "cameraBias": -0.1,
+        "cameraLift": 0.12,
+        "nearbyAmbientCompatibility": ["walk", "clipboard"]
+      },
+      {
+        "id": "mission-terrace",
+        "position": { "progress": 0.58, "lateral": 0.04 },
+        "facing": "left",
+        "stagingRadius": 0.075,
+        "capacity": 1,
+        "cameraBias": 0.05,
+        "cameraLift": 0.14,
+        "nearbyAmbientCompatibility": ["talk", "phone"]
+      },
+      {
+        "id": "mission-overlook",
+        "position": { "progress": 0.76, "lateral": -0.08 },
+        "facing": "forward",
+        "stagingRadius": 0.08,
+        "capacity": 1,
+        "cameraBias": 0,
+        "cameraLift": 0.16,
+        "nearbyAmbientCompatibility": ["idle", "railing"]
+      }
+    ]
+  },
+  "visualReview": {
+    "status": "approved",
+    "reviewedAt": "2026-08-13T16:00:46.000Z",
+    "reviewer": "product-owner"
+  },
   "capabilities": {
     "coldCallPortal": false,
     "stronghold": false,
     "missionSources": []
   },
   "loadPriority": {
-    "critical": [],
-    "deferred": []
+    "critical": ["mid", "populationAtlas"],
+    "deferred": ["far", "foreground", "effects"]
   }
 }

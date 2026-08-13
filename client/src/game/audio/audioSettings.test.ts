@@ -1,6 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cueCategory } from "./AudioManager";
-import { arcadeFeedback, businessVictoryFeedback, hapticsEnabled, setHapticsEnabled } from "./haptics";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AudioManager, cueCategory } from "./AudioManager";
+import {
+  arcadeFeedback,
+  businessVictoryFeedback,
+  hapticsEnabled,
+  setHapticsEnabled,
+} from "./haptics";
 
 describe("cueCategory", () => {
   it("distinguishes arcade feedback cues from the victory category", () => {
@@ -13,6 +18,44 @@ describe("cueCategory", () => {
 
   it("keeps failure distinct from encounter success", () => {
     expect(cueCategory("arcade_miss")).toBe("failure");
+  });
+
+  it("keeps authoritative and transition language restrained", () => {
+    expect(cueCategory("captured_truth")).toBe("world");
+    expect(cueCategory("recovery_truth")).toBe("world");
+    expect(cueCategory("corridor_transition")).toBe("traversal");
+  });
+});
+
+describe("audio lifecycle", () => {
+  it("deduplicates semantic cues across refetch/resume", () => {
+    const manager = new AudioManager();
+    const play = vi.spyOn(manager, "play").mockImplementation(() => {});
+    manager.playOnce("captured_truth", "revision-1");
+    manager.playOnce("captured_truth", "revision-1");
+    manager.playOnce("captured_truth", "revision-2");
+    expect(play).toHaveBeenCalledTimes(2);
+  });
+
+  it("binds and cleans visibility, pagehide, pageshow, and focus symmetrically", () => {
+    const manager = new AudioManager();
+    const setBackgrounded = vi
+      .spyOn(manager, "setBackgrounded")
+      .mockImplementation(() => {});
+    const documentTarget = Object.assign(new EventTarget(), {
+      hidden: false,
+    }) as unknown as Document;
+    const windowTarget = new EventTarget() as unknown as Window;
+    const cleanup = manager.bindLifecycle(documentTarget, windowTarget);
+
+    windowTarget.dispatchEvent(new Event("pagehide"));
+    windowTarget.dispatchEvent(new Event("pageshow"));
+    expect(setBackgrounded).toHaveBeenCalledTimes(2);
+
+    cleanup();
+    cleanup();
+    windowTarget.dispatchEvent(new Event("focus"));
+    expect(setBackgrounded).toHaveBeenCalledTimes(2);
   });
 });
 
