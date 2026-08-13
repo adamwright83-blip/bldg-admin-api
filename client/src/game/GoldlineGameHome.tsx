@@ -561,6 +561,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       | "production"
       | "engineering_placeholder",
   });
+  const [qualityTier, setQualityTier] = useState<"premium" | "reduced">(
+    "premium"
+  );
 
   useEffect(() => {
     const audio = getAudioManager();
@@ -781,6 +784,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         }
       },
       onQualityChange: (tier, avgFrameMs) => {
+        setQualityTier(tier);
         emit?.({
           eventName: "visual_quality_adjusted",
           sessionId: sessionIdRef.current,
@@ -1483,6 +1487,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         data-corridor-id={activeCorridorIdRef.current}
         data-next-corridor-id={nextCorridorId ?? "NONE"}
         data-corridor-transition-phase={corridorTransitionPhase}
+        data-player-progress={progress.toFixed(3)}
+        data-visual-quality-tier={qualityTier}
       >
         <div ref={hostRef} className="goldline-canvas-host" />
         {!runtimeReady ? (

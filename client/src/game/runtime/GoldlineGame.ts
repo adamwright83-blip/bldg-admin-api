@@ -186,7 +186,7 @@ export class GoldlineGame {
   private effectsSprite: Sprite | null = null;
   private effectsTargetAlpha = 0.4;
   private farSprite: Sprite | null = null;
-  private foregroundOccluders: Sprite[] = [];
+  private foregroundSprite: Sprite | null = null;
   private poseTextures = new Map<string, Texture>();
   private currentPoseKey = "idle";
   private lastAvatarStateForImpulse: AvatarState = "idle";
@@ -362,17 +362,15 @@ export class GoldlineGame {
         this.particles
       );
 
-      // L3 foreground occlusion sprites, placed at the two authored zones
-      // from occlusion.json once anchors load. Created lazily below.
+      // L3 foreground occlusion plate. It stays registered to L1 at full
+      // scene scale so its authored alpha silhouettes provide the actual
+      // columns/foliage/railings the player passes behind. occlusion.json
+      // separately controls avatar/fortress traversal z-order at those places.
       const foregroundTexture = optionalTextures.get("foreground");
       if (foregroundTexture) {
-        for (let i = 0; i < 2; i += 1) {
-          const occluder = new Sprite(foregroundTexture);
-          occluder.anchor.set(0.5, 0.5);
-          occluder.visible = false;
-          this.foregroundOccluders.push(occluder);
-          this.layerForeground.addChild(occluder);
-        }
+        this.foregroundSprite = new Sprite(foregroundTexture);
+        this.foregroundSprite.alpha = 0.94;
+        this.layerForeground.addChild(this.foregroundSprite);
       }
 
       // L4 effects: the supplied god-ray/mist plate replaces the vector ray
@@ -613,6 +611,9 @@ export class GoldlineGame {
     const height = this.app.screen.height;
     this.fitCover(background, width, height);
     if (this.farSprite) this.fitCover(this.farSprite, width, height);
+    if (this.foregroundSprite) {
+      this.fitCover(this.foregroundSprite, width, height);
+    }
     if (this.effectsSprite) {
       this.fitCover(this.effectsSprite, width, height);
       const alphaEase = Math.min(1, deltaSeconds * 3);
@@ -893,26 +894,9 @@ export class GoldlineGame {
       );
     }
 
-    // Real L3 foreground occlusion sprites: positioned over each authored
-    // zone so the avatar visually passes behind actual foliage/stonework,
-    // not just an invisible z-order swap.
-    this.occlusionZones.forEach((zone, index) => {
-      const sprite = this.foregroundOccluders[index];
-      if (!sprite) return;
-      const zoneLateralMid =
-        (zone.bounds.lateralMin + zone.bounds.lateralMax) / 2;
-      const zoneProgressMid =
-        (zone.bounds.progressMin + zone.bounds.progressMax) / 2;
-      const near = Math.abs(this.progress - zoneProgressMid) < 0.09;
-      sprite.visible = near;
-      if (!near) return;
-      sprite.x = width * (0.5 + zoneLateralMid * 0.22);
-      sprite.y = height * (0.88 - zoneProgressMid * 0.61) - 40;
-      sprite.height = height * 0.34;
-      sprite.width =
-        sprite.height * (sprite.texture.width / sprite.texture.height);
-      sprite.alpha = 0.94;
-    });
+    // The registered full-scene L3 plate supplies pixel-accurate occlusion.
+    // Keeping that plate stable avoids duplicated/shrunken edge art while the
+    // authored zones above continue to govern avatar/fortress z-order.
   }
 
   private drawContactShadow(

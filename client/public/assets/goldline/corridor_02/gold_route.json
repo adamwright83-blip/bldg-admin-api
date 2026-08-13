@@ -1,18 +1,20 @@
 {
   "version": 1,
-  "note": "Control points re-traced from the final mid.webp's embedded brass Line on 2026-08-13. The Line occupies a broad perspective strip in the lower market passage, so lower points follow its visual centre; the trace then converges through the distant inlay to x=0.512 at the authored exit. Coordinates are lateral screen fractions in the renderer's existing 0..1 route space.",
+  "note": "Fourteen control points re-traced from the final mid.webp's embedded brass Line on 2026-08-13. The trace was sampled at the renderer's progress bands, visually centered between the paired inlay rails, and converted from source pixels through the Pixel portrait fit-cover crop into the renderer's 0..1 lateral screen space. The lower points follow the entry medallion and its left shoulder before the Line converges through the market, stair, cliff, and ruined-arch approach.",
   "points": [
-    { "progress": 0.02, "lateral": 0.505 },
-    { "progress": 0.08, "lateral": 0.497 },
-    { "progress": 0.14, "lateral": 0.488 },
-    { "progress": 0.2, "lateral": 0.48 },
-    { "progress": 0.27, "lateral": 0.472 },
-    { "progress": 0.34, "lateral": 0.468 },
-    { "progress": 0.42, "lateral": 0.47 },
-    { "progress": 0.5, "lateral": 0.476 },
-    { "progress": 0.58, "lateral": 0.485 },
-    { "progress": 0.66, "lateral": 0.494 },
-    { "progress": 0.74, "lateral": 0.503 },
-    { "progress": 0.82, "lateral": 0.512 }
+    { "progress": 0.02, "lateral": 0.411 },
+    { "progress": 0.08, "lateral": 0.415 },
+    { "progress": 0.14, "lateral": 0.421 },
+    { "progress": 0.2, "lateral": 0.427 },
+    { "progress": 0.24, "lateral": 0.445 },
+    { "progress": 0.28, "lateral": 0.483 },
+    { "progress": 0.34, "lateral": 0.493 },
+    { "progress": 0.42, "lateral": 0.506 },
+    { "progress": 0.5, "lateral": 0.519 },
+    { "progress": 0.58, "lateral": 0.533 },
+    { "progress": 0.66, "lateral": 0.546 },
+    { "progress": 0.74, "lateral": 0.554 },
+    { "progress": 0.78, "lateral": 0.557 },
+    { "progress": 0.82, "lateral": 0.562 }
   ]
 }

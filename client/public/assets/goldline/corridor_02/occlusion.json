@@ -1,23 +1,43 @@
 {
   "version": 1,
-  "note": "Occlusion zones tuned against foreground.webp's actual near stone and foliage frame. The two runtime foreground sprites use these left/right near-edge regions; bounds remain spatial presentation only.",
+  "note": "Occlusion zones tuned against foreground.webp's real-alpha silhouettes after registering the plate at full scene scale. Bounds cover only reachable edge geometry: arrival masonry, the left column/vines, the right railing, and the high right palm/awning edge. The alpha plate supplies pixel-accurate visual cover; these bounds remain presentation-only traversal z-order data.",
   "zones": [
     {
-      "id": "market_frame_left",
+      "id": "arrival_collapsed_masonry_left",
       "bounds": {
-        "progressMin": 0.2,
-        "progressMax": 0.5,
+        "progressMin": 0.035,
+        "progressMax": 0.22,
         "lateralMin": -0.72,
-        "lateralMax": -0.28
+        "lateralMax": -0.48
       },
       "occluderZIndex": 5
     },
     {
-      "id": "market_frame_right",
+      "id": "market_column_vines_left",
       "bounds": {
-        "progressMin": 0.48,
+        "progressMin": 0.22,
+        "progressMax": 0.62,
+        "lateralMin": -0.72,
+        "lateralMax": -0.5
+      },
+      "occluderZIndex": 5
+    },
+    {
+      "id": "arrival_railing_masonry_right",
+      "bounds": {
+        "progressMin": 0.035,
+        "progressMax": 0.36,
+        "lateralMin": 0.46,
+        "lateralMax": 0.72
+      },
+      "occluderZIndex": 5
+    },
+    {
+      "id": "upper_palm_awning_right",
+      "bounds": {
+        "progressMin": 0.5,
         "progressMax": 0.82,
-        "lateralMin": 0.28,
+        "lateralMin": 0.56,
         "lateralMax": 0.72
       },
       "occluderZIndex": 5

@@ -33,10 +33,12 @@ three mission anchor slots. They contain no mission, contact, account, or
 outcome truth. Runtime mission projection may bind a real mission to one slot;
 the manifest itself cannot create one.
 
-`gold_route.json` was re-traced from the final `mid.webp` on 2026-08-13. Its
-lower points follow the visual centre of the broad perspective brass strip;
-upper points converge through the distant inlay toward the authored exit. A
-saved inspection overlay was used to verify the route against the plate.
+`gold_route.json` was re-traced from the final `mid.webp` on 2026-08-13. Its 14
+points follow the visual centre between the paired brass rails from the entry
+medallion through the market, stair, cliff, and ruined-arch approach. Source
+pixels were converted through the Pixel portrait fit-cover crop into runtime
+lateral coordinates, and a saved inspection overlay was used to verify the
+route against the plate.
 
 ## What remains missing or intentionally absent
 
@@ -82,6 +84,15 @@ authoritative presentation boundary. The extra airborne Trailblazer pose was
 also left unused rather than mislabeled as a runtime state. The population
 lineup contains touching neighboring figures; its six cells use clean vertical
 seams without invented/inpainted anatomy and require edge-quality review.
+
+Four replacement Corridor 02 production-source PNGs supplied later on
+2026-08-13 supersede only the environment candidates above: a distant coastal
+vista supplies L0, one continuous market-to-ruins world supplies L1, a
+real-alpha coastal frame supplies L3, and a real-alpha sunlight/mist plate
+supplies L4. The new effects source is entirely non-semantic, so no fractured
+Line material is present. The Trailblazer and population exports were preserved
+unchanged. Corridor 02 remains authoring-only pending human review of the new
+runtime journey.
 
 ## Promoting corridor_02 to playable
 
