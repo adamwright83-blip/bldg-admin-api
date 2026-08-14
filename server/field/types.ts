@@ -71,3 +71,27 @@ export type FieldMovesResult = {
   };
   dataQuality: DataQuality;
 };
+
+export type AuthoritativeVisitRouteStop = {
+  missionId: number;
+  moveId: string;
+  accountName: string;
+  destinationPath: string;
+  position: number;
+  requiresDriving: boolean;
+  evidenced: boolean;
+  visitOutcomeId: number | null;
+};
+
+/**
+ * Persisted commercial-visit route membership plus derived visit evidence.
+ * `coveredCount` is a projection only; it is never written as business truth.
+ */
+export type AuthoritativeVisitRouteProjection = {
+  occurrenceId: string;
+  businessDate: string;
+  startedAt: string;
+  totalStops: number;
+  coveredCount: number;
+  stops: AuthoritativeVisitRouteStop[];
+};

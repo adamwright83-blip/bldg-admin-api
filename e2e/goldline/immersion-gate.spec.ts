@@ -15,7 +15,9 @@ async function loginToNeutralizeFixture(page: Page) {
   });
   expect(response.ok()).toBeTruthy();
   await page.goto("/driver?goldlineFixture=NEUTRALIZE");
-  await expect(page.getByTestId("goldline-shell")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("goldline-shell")).toBeVisible({
+    timeout: 30_000,
+  });
 }
 
 async function openMenu(page: Page) {
@@ -57,10 +59,11 @@ test.describe("Fiction Integrity Copy Gate", () => {
     const panel = page.locator(".fiction-mission-panel");
     await expect(panel).toBeVisible();
     await expect(panel).toContainText("NEUTRALIZE");
+    await expect(panel).toContainText("A device has compromised this sector");
     await expect(panel).toContainText(
-      "A device has been hidden somewhere inside this sector"
+      "Visit each of the 5 marked commercial locations"
     );
-    await expect(panel).toContainText("marked tags");
+    await expect(panel).toContainText("commercial visit outcome is saved");
     await expect(panel).toContainText("5"); // real fixture count of route stops
 
     const text = (await panel.textContent()) ?? "";
@@ -71,6 +74,8 @@ test.describe("Fiction Integrity Copy Gate", () => {
       "marketing task",
       "pause the mission",
       "pause game",
+      "marked tags",
+      "front doors",
     ]) {
       expect(text.toLowerCase()).not.toContain(banned);
     }
@@ -123,7 +128,9 @@ test.describe("real evidence resolves the mission, not fictional performance", (
 });
 
 test.describe("Stronghold home base", () => {
-  test("route table, agents, and chronicle render from real projections", async ({ page }) => {
+  test("route table, agents, and chronicle render from real projections", async ({
+    page,
+  }) => {
     await loginToNeutralizeFixture(page);
     await page.waitForTimeout(800);
     await openMenu(page);

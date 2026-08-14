@@ -207,9 +207,14 @@ function LiveGoldlineDriverController() {
     enabled: location.status !== "requesting" && !fieldToday.isLoading,
     refetchInterval: 60_000,
   });
+  const visitRoute = trpc.system.field.visitRoute.useQuery(undefined, {
+    refetchInterval: 15_000,
+    retry: false,
+  });
 
   const updateStatus = trpc.admin.updateStatus.useMutation();
   const acceptMove = trpc.system.field.acceptMove.useMutation();
+  const startVisitRoute = trpc.system.field.startVisitRoute.useMutation();
   const openDispatch = trpc.system.commercialMission.openDispatch.useMutation();
   const resolveDay = trpc.system.unload.resolveDay.useMutation();
   const completeCalendar =
@@ -314,6 +319,7 @@ function LiveGoldlineDriverController() {
       deliveries.refetch(),
       fieldToday.refetch(),
       moves.refetch(),
+      visitRoute.refetch(),
       builtMissions.refetch(),
       dispatches.refetch(),
       goldlineProgress.refetch(),
@@ -386,6 +392,27 @@ function LiveGoldlineDriverController() {
         error instanceof Error ? error.message : "Could not activate this move."
       );
       await moves.refetch();
+    }
+  }
+
+  async function handleStartVisitRoute(missionIds: number[]) {
+    try {
+      const route = await startVisitRoute.mutateAsync({
+        requestId: crypto.randomUUID(),
+        missionIds,
+        ...moveInput,
+      });
+      utils.system.field.visitRoute.setData(undefined, route);
+      toast.success(
+        `Commercial visit route started: ${route.totalStops} stops.`
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not start the visit route."
+      );
+      await Promise.all([moves.refetch(), visitRoute.refetch()]);
     }
   }
 
@@ -620,6 +647,7 @@ function LiveGoldlineDriverController() {
       driverGameWorld.refetch(),
       progression.refetch(),
       moves.refetch(),
+      visitRoute.refetch(),
       followUpQueue.refetch(),
       missionId == null
         ? Promise.resolve()
@@ -899,6 +927,10 @@ function LiveGoldlineDriverController() {
           onRequestWeapons={input => utils.system.armory.weapons.fetch(input)}
           onRecordWeaponUsage={input => recordWeaponUsage.mutateAsync(input)}
           actionServices={actionServices}
+          authoritativeVisitRoute={visitRoute.data}
+          authoritativeRouteCoverage={visitRoute.data?.coveredCount ?? 0}
+          isStartingVisitRoute={startVisitRoute.isPending}
+          onStartVisitRoute={handleStartVisitRoute}
           onEmitEvent={emitGoldlineEvent}
         />
       </Suspense>

@@ -2980,6 +2980,25 @@
   letter-spacing: 0.08em;
   color: #7fd4ff;
 }
+.fiction-route-stops {
+  display: grid;
+  gap: 6px;
+}
+.fiction-route-stops a {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 9px;
+  border: 1px solid #5c929f55;
+  border-radius: 8px;
+  color: #f2f7ff;
+  font: 700 10px Inter;
+  text-decoration: none;
+}
+.fiction-route-stops b {
+  color: #7fd4ff;
+  white-space: nowrap;
+}
 .encounter-feedback.fiction-success {
   border-color: #6edee870;
 }

@@ -1,10 +1,9 @@
 /**
  * NEUTRALIZE — the canonical immersion fixture proving the fiction system.
  *
- * Real business: a genuine multi-stop route (`PLACE_ITEM_AT_LOCATIONS`,
- * `ActionGrammar.count` real due `nearby_commercial_visit` field moves — see
- * shared/actionGrammar.ts's documented discrepancy note on why this is a
- * real route rather than a fabricated "door-hanger placement" domain).
+ * Real business: a frozen route of genuine commercial visits. A stop is
+ * covered only when its existing authoritative commercial visit outcome is
+ * persisted; the fiction layer cannot certify it.
  *
  * Fiction: a counter-terrorism containment operation. A device is believed
  * hidden somewhere in the sector; every marked property requires a
@@ -13,7 +12,7 @@
  * The title and briefing are fiction-first per the Fiction Integrity Copy
  * Gate — never "Distribute N stops", never "Pause the mission and go do
  * business work". The physical instruction stays operationally unambiguous:
- * it names the real count and says "visit every required location", because
+ * it names the real count and says "record the visit result", because
  * an entertaining mission still has to tell the player's body what to
  * actually do.
  */
@@ -25,14 +24,14 @@ export const NEUTRALIZE_TEMPLATE: FictionTemplate = {
   compatibleGrammarKinds: ["PLACE_ITEM_AT_LOCATIONS"],
   title: "NEUTRALIZE",
   briefing: grammar =>
-    `A device has been hidden somewhere inside this sector. Intelligence cannot isolate the structure. Deploy one neutralizer at every one of the ${grammar.count} marked properties before containment fails.`,
+    `A device has compromised this sector. Intelligence has marked ${grammar.count} commercial sites that must be secured before containment fails.`,
   physicalInstruction: grammar =>
-    `Take the ${grammar.count} marked tags from your kit. Follow the marked route. Place one at every required front-door location — every marked property must be covered.`,
+    `Visit each of the ${grammar.count} marked commercial locations and record the real visit result. A location is secured only after its commercial visit outcome is saved.`,
   stakes:
     "Containment fails if even one marked property is left uncovered when the window closes.",
   successTreatment: {
     headline: "SECTOR CONTAINED",
-    detail: "Every marked property is covered. The device threat is neutralized.",
+    detail: "Every commercial visit is recorded. The sector is secured.",
   },
   failureTreatment: {
     headline: "CONTAINMENT WINDOW CLOSED",
@@ -41,7 +40,7 @@ export const NEUTRALIZE_TEMPLATE: FictionTemplate = {
   },
   worldReturnTreatment: "sector_secured",
   timerEligible: true,
-  drivingCompatible: false, // a walking multi-stop placement route only — never while driving
+  drivingCompatible: true, // route travel may require driving; runtime pauses the countdown until parked
   attentionSafetyClass: "safe_walking",
   humanInteractionCompatible: false,
 };

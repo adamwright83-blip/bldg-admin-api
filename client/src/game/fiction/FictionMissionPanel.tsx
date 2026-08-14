@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import type { FictionMissionInstance } from "./fictionDirector";
+import type { AuthoritativeVisitRouteStop } from "../../../../server/field/types";
 import { shouldAdvanceTimer, shouldPauseTimer } from "./timerSafety";
 import { tuneChallenge, type ChallengeDepth } from "./challengeDirector";
 
@@ -23,6 +24,7 @@ export type FictionMissionPanelProps = {
   isDriving: boolean;
   /** Real, currently-evidenced count from the authoritative action services — never inferred here. */
   authoritativeCount: number;
+  routeStops?: AuthoritativeVisitRouteStop[];
   onClose: () => void;
 };
 
@@ -36,7 +38,8 @@ export default function FictionMissionPanel(props: FictionMissionPanelProps) {
   >("in_progress");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const complete = props.authoritativeCount >= grammar.count && grammar.count > 0;
+  const complete =
+    props.authoritativeCount >= grammar.count && grammar.count > 0;
 
   useEffect(() => {
     if (complete && fictionalOutcome === "in_progress") {
@@ -65,7 +68,8 @@ export default function FictionMissionPanel(props: FictionMissionPanelProps) {
   }, [template, props.isDriving, fictionalOutcome]);
 
   const paused = shouldPauseTimer(template, { isDriving: props.isDriving });
-  const timerActive = template.timerEligible && fictionalOutcome === "in_progress";
+  const timerActive =
+    template.timerEligible && fictionalOutcome === "in_progress";
 
   return (
     <section
@@ -76,7 +80,11 @@ export default function FictionMissionPanel(props: FictionMissionPanelProps) {
       data-authoritative-count={props.authoritativeCount}
       data-required-count={grammar.count}
     >
-      <button className="encounter-close" onClick={props.onClose} aria-label="Close">
+      <button
+        className="encounter-close"
+        onClick={props.onClose}
+        aria-label="Close"
+      >
         <X />
       </button>
       <header>
@@ -85,7 +93,9 @@ export default function FictionMissionPanel(props: FictionMissionPanelProps) {
         <em>{template.briefing(grammar)}</em>
       </header>
 
-      <p className="fiction-physical-instruction">{template.physicalInstruction(grammar)}</p>
+      <p className="fiction-physical-instruction">
+        {template.physicalInstruction(grammar)}
+      </p>
       <p className="fiction-stakes">{template.stakes}</p>
 
       {timerActive ? (
@@ -103,6 +113,22 @@ export default function FictionMissionPanel(props: FictionMissionPanelProps) {
       <div className="fiction-progress" aria-label="Real coverage progress">
         {props.authoritativeCount} / {grammar.count} COVERED
       </div>
+
+      {props.routeStops?.length ? (
+        <div
+          className="fiction-route-stops"
+          aria-label="Commercial visit route"
+        >
+          {props.routeStops.map(stop => (
+            <a key={stop.missionId} href={stop.destinationPath}>
+              <span>
+                {stop.position + 1}. {stop.accountName}
+              </span>
+              <b>{stop.evidenced ? "VISIT RECORDED" : "OPEN VISIT"}</b>
+            </a>
+          ))}
+        </div>
+      ) : null}
 
       {fictionalOutcome === "success" ? (
         <div className="encounter-feedback fiction-success">

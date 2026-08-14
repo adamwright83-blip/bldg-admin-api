@@ -2,7 +2,11 @@ import { useMemo, useState, type ComponentProps } from "react";
 import type { CommercialMission } from "../../../../shared/commercialMission";
 import type { DriverGameWorldNode } from "../../../../shared/driverGameWorld";
 import type { ArmoryItem } from "../../../../server/armory/armoryTypes";
-import type { FieldMoveCandidate, FieldMovesResult } from "../../../../server/field/types";
+import type {
+  FieldMoveCandidate,
+  FieldMovesResult,
+} from "../../../../server/field/types";
+import type { AuthoritativeVisitRouteProjection } from "../../../../server/field/types";
 import GoldlineGameHome from "../GoldlineGameHome";
 import type { GoldlineActionServices } from "../actions/actionServices";
 
@@ -12,15 +16,10 @@ import type { GoldlineActionServices } from "../actions/actionServices";
  * every field here is either real production shape or a clearly-fixture
  * value, never a fabricated production data path.
  *
- * REPORTED GAP, honestly: this business domain has no real batch/route
- * completion write-path (see shared/actionGrammar.ts's discrepancy note),
- * so `authoritativeCount` in the LIVE app is always genuinely 0 — there is
- * no real endpoint to source a positive number from. This fixture
- * *simulates* what real evidence would look like (via the "MARK STOP
- * COVERED" test-only control below), exactly the way every other fixture
- * in this file simulates real service responses, so the two-clock
- * separation and world-consequence wiring can be proven end-to-end even
- * though the underlying business endpoint doesn't exist yet.
+ * Production now reads frozen commercial-visit route membership and derives
+ * coverage from authoritative visit outcomes. This fixture still simulates
+ * those service responses via the test-only control below so the two-clock
+ * UI remains deterministic without requiring a database in browser CI.
  */
 const ROUTE_STOP_COUNT = 5;
 const ANCHOR_ITEM: ArmoryItem = {
@@ -38,7 +37,11 @@ function routeMove(index: number): FieldMoveCandidate {
     id: `neutralize-stop-${index}`,
     moveType: "nearby_commercial_visit",
     title: `Stop ${index}`,
-    target: { entityType: "commercial_mission", entityId: `stop-${index}`, name: `Property ${index}` },
+    target: {
+      entityType: "commercial_mission",
+      entityId: `stop-${index}`,
+      name: `Property ${index}`,
+    },
     expectedDurationMinutes: 6,
     travelMinutes: 3,
     expectedValue: {
@@ -93,12 +96,38 @@ export default function GoldlineFictionHarness() {
   const moves = useMemo<FieldMovesResult>(
     () => ({
       generatedAt: new Date().toISOString(),
-      recommendedMoves: Array.from({ length: liveStopCount }, (_, i) => routeMove(i)),
+      recommendedMoves: Array.from({ length: liveStopCount }, (_, i) =>
+        routeMove(i)
+      ),
       reason: "MOVES_AVAILABLE",
-      constraints: { availableMinutes: 90, capacityFull: false, currentLocationAvailable: true },
+      constraints: {
+        availableMinutes: 90,
+        capacityFull: false,
+        currentLocationAvailable: true,
+      },
       dataQuality: { status: "trusted", warnings: [], sources: ["fixture"] },
     }),
     [liveStopCount]
+  );
+  const authoritativeVisitRoute = useMemo<AuthoritativeVisitRouteProjection>(
+    () => ({
+      occurrenceId: "fixture-neutralize-route",
+      businessDate: "2026-08-13",
+      startedAt: "2026-08-13T16:00:00.000Z",
+      totalStops: liveStopCount,
+      coveredCount,
+      stops: Array.from({ length: liveStopCount }, (_, index) => ({
+        missionId: 9100 + index,
+        moveId: `neutralize-stop-${index}`,
+        accountName: `Property ${index}`,
+        destinationPath: `/driver/sales-mission/${9100 + index}`,
+        position: index,
+        requiresDriving: false,
+        evidenced: index < coveredCount,
+        visitOutcomeId: index < coveredCount ? 9200 + index : null,
+      })),
+    }),
+    [coveredCount, liveStopCount]
   );
 
   const services = useMemo<GoldlineActionServices>(
@@ -189,10 +218,14 @@ export default function GoldlineFictionHarness() {
         sourceLabel: "Permanent browser gate",
       },
     },
-    onRequestWeapons: async () => ({ weapons: [], trainerIntelligenceAvailable: false }),
+    onRequestWeapons: async () => ({
+      weapons: [],
+      trainerIntelligenceAvailable: false,
+    }),
     onRecordWeaponUsage: async () => undefined,
     actionServices: services,
     authoritativeRouteCoverage: coveredCount,
+    authoritativeVisitRoute,
   };
 
   return (
@@ -205,7 +238,9 @@ export default function GoldlineFictionHarness() {
       <button
         type="button"
         data-testid="fixture-mark-stop-covered"
-        onClick={() => setCoveredCount(count => Math.min(ROUTE_STOP_COUNT, count + 1))}
+        onClick={() =>
+          setCoveredCount(count => Math.min(ROUTE_STOP_COUNT, count + 1))
+        }
       >
         MARK STOP COVERED ({coveredCount}/{ROUTE_STOP_COUNT})
       </button>

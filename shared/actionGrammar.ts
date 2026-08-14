@@ -12,26 +12,20 @@
  * business action — `deriveActionGrammar` and `deriveRouteGrammar` only
  * describe one that already exists.
  *
- * REPOSITORY DISCREPANCY, reported per the run's own instruction to trust
- * the repository over an assumed architecture: the source prompt for this
- * work assumed a "Field Kit" inventory system and an "approved marketing
- * placement route with N remaining door-hanger placements" business
- * domain. Neither exists anywhere in this codebase — the real business
- * domain is laundry/dry-cleaning operations plus B2B commercial missions
- * (one real account/opportunity per `PlayableMission`: calls, visits,
- * follow-ups, recoveries). `PLACE_ITEM_AT_LOCATIONS` here is therefore
- * backed by what is actually real: a batch of N genuinely due
- * `nearby_commercial_visit` field moves, i.e. a real multi-stop route the
- * player legitimately needs to run today. The count is always exactly how
- * many real moves exist — never inflated to match a fixture number.
- * Inventory-gating is implemented as optional and is skipped rather than
- * backed by a fabricated Field Kit.
+ * Repository truth: there is no Field Kit or physical-placement domain.
+ * Production multi-stop fiction therefore represents commercial visits.
+ * `deriveAuthoritativeRouteGrammar` consumes an explicitly-started route
+ * whose membership is persisted as business events and whose coverage is
+ * derived from `commercial_visit_outcomes`. The older `deriveRouteGrammar`
+ * remains a pure recommendation-preview helper for deterministic fixtures;
+ * production never uses it as authoritative membership.
  */
 import type {
   GoldlineActionDescriptor,
   GoldlineActionKind,
 } from "../client/src/game/actions/actionRegistry";
 import type { FieldMoveCandidate } from "../server/field/types";
+import type { AuthoritativeVisitRouteProjection } from "../server/field/types";
 
 export const ACTION_GRAMMAR_KINDS = [
   "CALL_PERSON",
@@ -205,14 +199,37 @@ export function deriveRouteGrammar(
     locations: visits.map(v => v.target.name),
     channel: "in_person",
     requiresTravel: true,
-    // A batched nearby-visit route is walked between stops, not driven — see
+    // This legacy preview helper models the deterministic walking fixture.
     // FieldMoveCandidate's moveType "nearby_commercial_visit" and the
     // canonical NEUTRALIZE fixture, which is explicitly a walking route.
-    // This is also load-bearing: NEUTRALIZE declares `drivingCompatible:
-    // false`, so a route grammar marked as requiring driving would make the
-    // canonical fixture permanently ineligible for its own proof template.
+    // The deterministic fixture remains walking-only even though production
+    // visit routes conservatively require driving between real locations.
     requiresDriving: false,
     timerSafe: true, // a walking multi-stop route is a real candidate for a safe gameplay timer
+    sensitiveConversation: false,
+  };
+}
+
+/**
+ * Production route grammar from frozen authoritative membership. Unlike the
+ * recommendation-derived preview above, completed visits remain in `count`.
+ */
+export function deriveAuthoritativeRouteGrammar(
+  route: AuthoritativeVisitRouteProjection | null
+): ActionGrammar | null {
+  if (!route || route.totalStops < 2 || route.stops.length !== route.totalStops)
+    return null;
+  return {
+    kind: "PLACE_ITEM_AT_LOCATIONS",
+    businessActionId: `visit-route:${route.occurrenceId}`,
+    occurrenceId: null,
+    sourceType: "field_move",
+    count: route.totalStops,
+    locations: route.stops.map(stop => stop.accountName),
+    channel: "in_person",
+    requiresTravel: true,
+    requiresDriving: route.stops.some(stop => stop.requiresDriving),
+    timerSafe: true,
     sensitiveConversation: false,
   };
 }

@@ -128,10 +128,11 @@ import {
   type GoldlineActionKind,
 } from "./actions/actionRegistry";
 import type { GoldlineActionServices } from "./actions/actionServices";
+import type { AuthoritativeVisitRouteProjection } from "../../../server/field/types";
 import { projectTodayRoute } from "./world/todayRoute";
 import { projectChronicle } from "./world/chronicleProjection";
 import { presentAgents, projectStronghold } from "./world/strongholdProjection";
-import { deriveRouteGrammar } from "../../../shared/actionGrammar";
+import { deriveAuthoritativeRouteGrammar } from "../../../shared/actionGrammar";
 import { selectFictionForMission } from "./fiction/fictionDirector";
 import { reconcileFictionOnResume } from "./fiction/longHorizonResume";
 import type { FictionMissionInstance } from "./fiction/fictionDirector";
@@ -222,15 +223,10 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
     requestId: string;
   }) => Promise<unknown>;
   actionServices: GoldlineActionServices;
-  /**
-   * Real evidenced coverage count for the active fiction mission's
-   * underlying route, when a real source exists. Defaults to 0 because this
-   * business domain has no batch/route completion endpoint yet (see
-   * shared/actionGrammar.ts's discrepancy note) — production honestly shows
-   * 0 rather than a fabricated number. Test harnesses may override this to
-   * prove the FictionMissionPanel/two-clock wiring end-to-end.
-   */
+  authoritativeVisitRoute?: AuthoritativeVisitRouteProjection | null;
   authoritativeRouteCoverage?: number;
+  isStartingVisitRoute?: boolean;
+  onStartVisitRoute?: (missionIds: number[]) => Promise<void>;
 };
 
 type UtilityPanel =
@@ -729,7 +725,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         scoutCapability: props.scoutCapability,
         scoutReport: props.scoutReport,
       }),
-    [liveRouteMissions, props.progression, props.scoutCapability, props.scoutReport]
+    [
+      liveRouteMissions,
+      props.progression,
+      props.scoutCapability,
+      props.scoutReport,
+    ]
   );
   const chronicle = useMemo(
     () => projectChronicle(props.worldNodes),
@@ -771,12 +772,20 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       }),
     [todayRoute, props.progression, chronicle]
   );
-  // The canonical NEUTRALIZE fixture's real business backing: a genuine
-  // multi-stop route grammar derived from real due nearby-visit field moves.
-  // Null whenever reality has not actually produced one — the Fiction
-  // Director then simply has nothing to instantiate.
+  // Production fiction binds only after explicit route start has frozen
+  // authoritative membership. Transient recommendations cannot define its
+  // denominator or silently replace completed stops.
   const routeGrammar = useMemo(
-    () => deriveRouteGrammar(props.moves?.recommendedMoves ?? []),
+    () =>
+      deriveAuthoritativeRouteGrammar(props.authoritativeVisitRoute ?? null),
+    [props.authoritativeVisitRoute]
+  );
+  const suggestedVisitMissionIds = useMemo(
+    () =>
+      (props.moves?.recommendedMoves ?? [])
+        .filter(move => move.moveType === "nearby_commercial_visit")
+        .map(move => move.missionId)
+        .filter((missionId): missionId is number => missionId !== null),
     [props.moves?.recommendedMoves]
   );
   const fictionMission = useMemo<FictionMissionInstance | null>(() => {
@@ -2065,6 +2074,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               challengeDepth={missionDirector.challengeDepth}
               isDriving={false}
               authoritativeCount={props.authoritativeRouteCoverage ?? 0}
+              routeStops={props.authoritativeVisitRoute?.stops}
               onClose={() => setFictionMissionOpen(false)}
             />
           </Suspense>
@@ -2197,6 +2207,21 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                         }}
                       >
                         {fictionMission.template.title}
+                      </button>
+                    ) : null}
+                    {!fictionMission &&
+                    suggestedVisitMissionIds.length >= 2 &&
+                    props.onStartVisitRoute ? (
+                      <button
+                        data-testid="start-authoritative-visit-route"
+                        disabled={props.isStartingVisitRoute}
+                        onClick={() =>
+                          void props.onStartVisitRoute?.(
+                            suggestedVisitMissionIds
+                          )
+                        }
+                      >
+                        START COMMERCIAL VISIT ROUTE
                       </button>
                     ) : null}
                     <button
@@ -2348,7 +2373,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                         <span>
                           <b>{entry.mission.name}</b>
                           <small>
-                            {entry.grammar ? entry.grammar.kind : "NO REAL ACTION"}
+                            {entry.grammar
+                              ? entry.grammar.kind
+                              : "NO REAL ACTION"}
                           </small>
                         </span>
                       </article>
@@ -2359,7 +2386,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                   </div>
 
                   <h3>Agents</h3>
-                  <div className="stronghold-agents" data-testid="stronghold-agents">
+                  <div
+                    className="stronghold-agents"
+                    data-testid="stronghold-agents"
+                  >
                     {stronghold.agents.map(agent => (
                       <span key={agent.agentId}>{agent.agentId}</span>
                     ))}
