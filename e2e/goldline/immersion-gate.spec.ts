@@ -128,7 +128,7 @@ test.describe("real evidence resolves the mission, not fictional performance", (
 });
 
 test.describe("Stronghold home base", () => {
-  test("route table, agents, and chronicle render from real projections", async ({
+  test("route table, driver-safe intel, agents, and chronicle render from real projections", async ({
     page,
   }) => {
     await loginToNeutralizeFixture(page);
@@ -138,6 +138,28 @@ test.describe("Stronghold home base", () => {
 
     await expect(page.getByTestId("stronghold-panel")).toBeVisible();
     await expect(page.getByTestId("stronghold-route-table")).toBeVisible();
+    await expect(page.getByTestId("stronghold-intel")).toContainText(
+      "3 accepted teachings"
+    );
+    await expect(page.getByTestId("stronghold-intel")).toContainText(
+      "discovery · 2"
+    );
     await expect(page.getByTestId("stronghold-chronicle")).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByTestId("goldline-shell")).toBeVisible();
+    await openMenu(page);
+    await page.getByRole("button", { name: "STRONGHOLD", exact: true }).click();
+    await expect(page.getByTestId("stronghold-intel")).toContainText(
+      "3 accepted teachings"
+    );
+
+    await clickFixtureButton(page, "fixture-remove-stronghold-intel");
+    await expect(page.getByTestId("stronghold-intel")).toHaveText(
+      "No reviewed sales intelligence is available."
+    );
+    await expect(page.getByTestId("stronghold-intel")).not.toContainText(
+      "discovery"
+    );
   });
 });

@@ -132,6 +132,10 @@ function LiveGoldlineDriverController() {
     refetchInterval: 15_000,
   });
   const armory = trpc.system.armory.get.useQuery({});
+  const strongholdIntel = trpc.system.armory.strongholdIntel.useQuery(
+    undefined,
+    { refetchInterval: 30_000, retry: false }
+  );
   const driverGameWorld = trpc.system.driverGameWorld.current.useQuery(
     undefined,
     { refetchInterval: 15_000, retry: false }
@@ -439,6 +443,7 @@ function LiveGoldlineDriverController() {
         fieldToday.refetch(),
         meter.refetch(),
         armory.refetch(),
+        strongholdIntel.refetch(),
         utils.system.businessWorld.get.invalidate(),
       ]);
       toast.success("The real business day is resolved.");
@@ -906,6 +911,9 @@ function LiveGoldlineDriverController() {
           playerIdentity={identity.data?.openId ?? null}
           worldNodes={driverGameWorld.data}
           progression={progression.data}
+          driverSafeSalesIntel={
+            strongholdIntel.isError ? null : (strongholdIntel.data ?? null)
+          }
           isLoadingWorld={driverGameWorld.isLoading}
           isBeginningRekindle={beginRekindle.isPending}
           onBeginRekindle={handleBeginRekindle}

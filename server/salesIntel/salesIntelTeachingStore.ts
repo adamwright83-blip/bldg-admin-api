@@ -5,8 +5,12 @@
  * deleted or overwritten).
  */
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
-import { salesIntelTeachings } from "../../drizzle/schema";
+import { and, desc, eq, sql } from "drizzle-orm";
+import {
+  salesIntelSourceArtifacts,
+  salesIntelTeachings,
+  salesIntelTranscripts,
+} from "../../drizzle/schema";
 import type {
   SalesIntelPhrase,
   SalesIntelReviewState,
@@ -214,6 +218,60 @@ export async function listAllAcceptedTeachings(): Promise<SalesIntelTeaching[]> 
     )
     .orderBy(desc(salesIntelTeachings.createdAt));
   return rows.map(teachingView);
+}
+
+export type DriverSafeTeachingCategoryCount = {
+  category: SalesIntelTeachingCategory;
+  count: number;
+};
+
+/**
+ * Narrow Stronghold read. The database returns only category + aggregate
+ * count; canonical teaching/transcript/source records never enter the driver
+ * serialization path.
+ *
+ * Both joins are part of the truth boundary. A teaching contributes only
+ * while its exact transcript still belongs to its exact source and that
+ * source remains successfully extracted. Orphaned, unlinked, superseded,
+ * pending, rejected, or failed-source rows therefore fail closed.
+ */
+export async function listDriverSafeAcceptedTeachingCounts(): Promise<
+  DriverSafeTeachingCategoryCount[]
+> {
+  const database = await db();
+  const rows = await database
+    .select({
+      category: salesIntelTeachings.category,
+      count: sql<number>`count(*)`,
+    })
+    .from(salesIntelTeachings)
+    .innerJoin(
+      salesIntelTranscripts,
+      and(
+        eq(salesIntelTranscripts.id, salesIntelTeachings.transcriptId),
+        eq(
+          salesIntelTranscripts.sourceArtifactId,
+          salesIntelTeachings.sourceArtifactId
+        )
+      )
+    )
+    .innerJoin(
+      salesIntelSourceArtifacts,
+      eq(salesIntelSourceArtifacts.id, salesIntelTeachings.sourceArtifactId)
+    )
+    .where(
+      and(
+        eq(salesIntelTeachings.reviewState, "accepted"),
+        eq(salesIntelTeachings.active, true),
+        eq(salesIntelSourceArtifacts.status, "extracted")
+      )
+    )
+    .groupBy(salesIntelTeachings.category);
+
+  return rows.map(row => ({
+    category: row.category as SalesIntelTeachingCategory,
+    count: Number(row.count),
+  }));
 }
 
 export async function setTeachingReviewState(input: {
