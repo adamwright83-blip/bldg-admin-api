@@ -3,6 +3,15 @@ import { expect, test, type Page } from "@playwright/test";
 const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
 
 async function login(page: Page) {
+  // First-entry explainer only shows once per player identity (see
+  // onboardingProgress.ts) and would otherwise intercept pointer events
+  // for every test that doesn't care about it.
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      "goldline:onboarding:v1",
+      JSON.stringify(["first_entry_explained"])
+    );
+  });
   const response = await page.request.post("/api/auth/login", {
     data: { password: DRIVER_PASSWORD, role: "driver" },
   });

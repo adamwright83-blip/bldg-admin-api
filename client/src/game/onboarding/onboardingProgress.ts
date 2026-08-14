@@ -14,6 +14,7 @@ export const ONBOARDING_MILESTONES = [
   "first_armory_choice",
   "first_mission_engaged",
   "first_business_resolution",
+  "first_entry_explained",
 ] as const;
 
 export type OnboardingMilestone = (typeof ONBOARDING_MILESTONES)[number];

@@ -133,6 +133,15 @@ async function installPermanentGateProbe(page: Page) {
 
 async function login(page: Page, fixture: FixtureProof["fixture"]) {
   await installPermanentGateProbe(page);
+  // First-entry explainer only shows once per player identity (see
+  // onboardingProgress.ts) and would otherwise intercept pointer events
+  // for every test that doesn't care about it.
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      "goldline:onboarding:v1",
+      JSON.stringify(["first_entry_explained"])
+    );
+  });
   const response = await page.request.post("/api/auth/login", {
     data: { password: DRIVER_PASSWORD, role: "driver" },
   });
@@ -191,37 +200,23 @@ async function moveForwardUntil(page: Page, action: string) {
   const actionButton = page
     .locator(".context-actions button")
     .filter({ hasText: action });
-  for (let attempt = 0; attempt < 8; attempt += 1) {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
     if (await actionButton.isVisible().catch(() => false)) return;
     const box = await page.getByTestId("goldline-joystick").boundingBox();
     if (!box) throw new Error("Goldline joystick is unavailable");
     await page.mouse.move(box.x + box.width / 2, box.y + 4);
     await page.mouse.down();
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(600);
     await page.mouse.up();
   }
   await expect(actionButton).toBeVisible();
 }
 
 async function reachPhysicalEncounter(page: Page) {
-  const jump = page
-    .locator(".context-actions button")
-    .filter({ hasText: "JUMP" });
-  await expect(jump).toBeVisible({ timeout: 10_000 });
-  await jump.click();
-
-  await moveForwardUntil(page, "CLIMB");
-  await page
-    .locator(".context-actions button")
-    .filter({ hasText: "CLIMB" })
-    .click();
-
-  await moveForwardUntil(page, "VAULT");
-  await page
-    .locator(".context-actions button")
-    .filter({ hasText: "VAULT" })
-    .click();
-
+  // JUMP/CLIMB/VAULT were removed as unsupported traversal gates (no
+  // visible world geometry backed them — see RouteCorridor.ts). Ordinary
+  // free movement up to the fortress-gate's real, always-visible geometry
+  // replaces the old obstacle-clicking sequence.
   await moveForwardUntil(page, "INTERACT");
   await page
     .locator(".context-actions button")

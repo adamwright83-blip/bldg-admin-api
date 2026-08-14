@@ -10,6 +10,7 @@ import {
 import {
   Check,
   ChevronRight,
+  ChevronUp,
   Crosshair,
   FileText,
   Footprints,
@@ -516,6 +517,13 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [movementLearned, setMovementLearned] = useState(() =>
     hasOnboardingMilestone("movement")
   );
+  const [showFirstEntryExplainer, setShowFirstEntryExplainer] = useState(
+    () => !hasOnboardingMilestone("first_entry_explained")
+  );
+  const dismissFirstEntryExplainer = useRef(() => {
+    markOnboardingMilestone("first_entry_explained");
+    setShowFirstEntryExplainer(false);
+  }).current;
   const [onboardingToast, setOnboardingToast] = useState<string | null>(null);
   const onboardingToastTimer = useRef<ReturnType<typeof setTimeout> | null>(
     null
@@ -584,6 +592,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [orderSpatialState, setOrderSpatialState] = useState<
     "hidden" | "visible" | "engage"
   >("hidden");
+  const [objectiveOffscreen, setObjectiveOffscreen] = useState<
+    "ahead" | null
+  >(null);
   const [corridorExitNear, setCorridorExitNear] = useState(false);
   const [corridorTransitionPhase, setCorridorTransitionPhase] =
     useState<CorridorTransitionPhase>("idle");
@@ -1029,6 +1040,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           getAudioManager().playOnce("mission_proximity", orderKey);
         }
       },
+      onObjectiveOffscreen: setObjectiveOffscreen,
       onCorridorExitProximity: setCorridorExitNear,
       onPopulationReady: (ambientCount, assetStage) => {
         setPopulationDiagnostics({ ambientCount, assetStage });
@@ -1948,6 +1960,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         data-corridor-transition-phase={corridorTransitionPhase}
         data-player-progress={progress.toFixed(3)}
         data-visual-quality-tier={qualityTier}
+        data-objective-offscreen={objectiveOffscreen ?? "NONE"}
       >
         <div ref={hostRef} className="goldline-canvas-host" />
         {!runtimeReady ? (
@@ -1972,6 +1985,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         {corridorExitNear && nextCorridorId ? (
           <div className="corridor-transition-signal" role="status">
             ROUTE CONTINUES · DESTINATION READY
+          </div>
+        ) : null}
+        {objectiveOffscreen === "ahead" ? (
+          <div
+            className="objective-direction-cue"
+            role="status"
+            data-testid="objective-direction-cue"
+          >
+            <ChevronUp /> OBJECTIVE AHEAD
           </div>
         ) : null}
         {networkStatus === "offline" ? (
@@ -2053,7 +2075,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 <b style={{ width: `${Math.round(progress * 100)}%` }} />
               </i>
             </div>
-            {branch === "intel" && progress > 0.38 ? (
+            {activeMission && missionSpatialState !== "hidden" ? (
               <div className="intel-pickup">
                 <Sparkles /> ENCOUNTER PREP REVEALED
               </div>
@@ -2081,10 +2103,21 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                     <small>{actionLabel}</small>
                   </span>
                 </button>
-              ) : (
-                <div className="action-awaiting">
+              ) : activeMission || nextOrderObjective ? (
+                <div className="action-awaiting" data-testid="objective-ahead">
                   <Route />
-                  <span>MOVE TO NEXT ACTION ZONE</span>
+                  <span>FOLLOW THE GOLD LINE</span>
+                </div>
+              ) : (
+                <div
+                  className="action-awaiting is-empty"
+                  data-testid="no-active-objective"
+                >
+                  <Route />
+                  <span>
+                    <b>NO ACTIVE OBJECTIVE</b>
+                    <small>No unresolved route work right now.</small>
+                  </span>
                 </div>
               )}
             </div>
@@ -2765,6 +2798,31 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           onApprove={props.onApproveOpenChannel}
         />
       </section>
+      {showFirstEntryExplainer ? (
+        <div
+          className="first-entry-explainer"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="first-entry-title"
+          data-testid="first-entry-explainer"
+        >
+          <div className="first-entry-explainer-card">
+            <h2 id="first-entry-title">YOUR BUSINESS IS THE ADVENTURE</h2>
+            <p>
+              Real work appears as objectives in this world.
+              <br />
+              Follow the Gold Line.
+              <br />
+              Do the real action.
+              <br />
+              Goldline updates from the real result.
+            </p>
+            <button type="button" onClick={dismissFirstEntryExplainer}>
+              GOT IT
+            </button>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

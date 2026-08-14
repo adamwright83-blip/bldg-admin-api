@@ -21,11 +21,9 @@ const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
 const CHECKPOINT_KEY = "goldline:checkpoint:v2:goldline-fiction-e2e";
 
 async function loginWithPreTraversalCheckpoint(page: Page) {
-  // Restores just before the corridor's first authored obstacle (0.24) so
-  // this test still exercises the real JUMP/CLIMB/VAULT traversal chain
-  // rather than skipping straight to the order's anchor cluster (~0.7-0.75)
-  // — the engine snaps progress back to the earliest incomplete trigger on
-  // the first movement frame if a later checkpoint tries to skip it.
+  // Restores before the order anchor cluster (~0.7-0.75) so this test
+  // still exercises genuine forward movement to reach it, rather than
+  // spawning already inside the staging radius.
   await page.addInitScript(
     ({ key }) => {
       window.localStorage.setItem(
@@ -41,6 +39,15 @@ async function loginWithPreTraversalCheckpoint(page: Page) {
     },
     { key: CHECKPOINT_KEY }
   );
+  // First-entry explainer only shows once per player identity (see
+  // onboardingProgress.ts) and would otherwise intercept pointer events
+  // for every test that doesn't care about it.
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      "goldline:onboarding:v1",
+      JSON.stringify(["first_entry_explained"])
+    );
+  });
   const response = await page.request.post("/api/auth/login", {
     data: { password: DRIVER_PASSWORD, role: "driver" },
   });
@@ -55,30 +62,16 @@ async function moveForwardUntil(page: Page, contextActionText: string) {
   const actionButton = page
     .locator(".context-actions button")
     .filter({ hasText: contextActionText });
-  for (let attempt = 0; attempt < 12; attempt += 1) {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
     if (await actionButton.isVisible().catch(() => false)) return;
     const box = await page.getByTestId("goldline-joystick").boundingBox();
     if (!box) throw new Error("Goldline joystick is unavailable");
     await page.mouse.move(box.x + box.width / 2, box.y + 4);
     await page.mouse.down();
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(600);
     await page.mouse.up();
   }
   await expect(actionButton).toBeVisible({ timeout: 5_000 });
-}
-
-/** Clears the real JUMP/CLIMB/VAULT obstacle chain shared by every corridor
- * traversal (mission or order) before an order's anchor cluster (~0.7-0.75)
- * becomes reachable. */
-async function clearTraversalObstacles(page: Page) {
-  await moveForwardUntil(page, "JUMP");
-  await page.locator(".context-actions button").filter({ hasText: "JUMP" }).click();
-
-  await moveForwardUntil(page, "CLIMB");
-  await page.locator(".context-actions button").filter({ hasText: "CLIMB" }).click();
-
-  await moveForwardUntil(page, "VAULT");
-  await page.locator(".context-actions button").filter({ hasText: "VAULT" }).click();
 }
 
 async function openLiveRoute(page: Page) {
@@ -130,15 +123,32 @@ test.describe("Pickup/delivery are proximity-gated world objectives", () => {
     await loginWithPreTraversalCheckpoint(page);
     await page.waitForTimeout(800);
 
-    // Genuine physical traversal through the real obstacle chain toward the
-    // order's authored anchor — the same movement grammar CALL/VISIT/
-    // FOLLOW_UP/RECOVER already use for a commercial-mission encounter.
-    await clearTraversalObstacles(page);
+    // Real navigation guidance: the order's anchor sits well ahead of the
+    // checkpoint's restored progress (0.21), so the world must honestly
+    // signal "objective ahead, not yet visible" before Trailblazer reaches
+    // proximity — never a fabricated GPS distance, just the same proximity
+    // math driving the marker's own visibility.
+    await expect(page.getByTestId("objective-direction-cue")).toBeVisible();
+    await expect(page.getByTestId("goldline-world")).toHaveAttribute(
+      "data-objective-offscreen",
+      "ahead"
+    );
 
+    // Genuine physical movement toward the order's authored anchor — the
+    // same movement grammar CALL/VISIT/FOLLOW_UP/RECOVER already use for a
+    // commercial-mission encounter.
     // The order's context-action prompt (not "approach human scene" — that
     // is the mission-only label) appears once Trailblazer enters the
     // authored staging radius.
     await moveForwardUntil(page, "INTERACT");
+
+    // Real proximity resolved the guidance signal — the objective is now
+    // close enough to be genuinely visible, so the directional cue clears.
+    await expect(page.getByTestId("objective-direction-cue")).toHaveCount(0);
+    await expect(page.getByTestId("goldline-world")).toHaveAttribute(
+      "data-objective-offscreen",
+      "NONE"
+    );
     const interactButton = page
       .locator(".context-actions button")
       .filter({ hasText: "INTERACT" });

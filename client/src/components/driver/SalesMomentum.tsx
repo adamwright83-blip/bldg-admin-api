@@ -10,12 +10,12 @@ export function SalesMomentumMeter() {
   return (
     <section aria-label="30-day sales momentum" className="border-b border-violet-200 bg-gradient-to-r from-slate-950 via-violet-950 to-fuchsia-950 px-[clamp(16px,3vw,34px)] py-[clamp(14px,2.3vw,22px)] text-white">
       <div className="mb-1 flex items-center justify-between gap-3">
-        <span className="text-[11px] font-black uppercase tracking-[.18em] text-fuchsia-200">{meter.data?.levelLabel ?? "LEVEL 1 · BUILD THE MUSCLE"}</span>
-        <span className="text-[11px] font-bold text-white/45">{meter.data?.points ?? 0}/{meter.data?.maxPoints ?? 120}</span>
+        <span className="text-[14px] font-black uppercase tracking-[.18em] text-fuchsia-200">{meter.data?.levelLabel ?? "LEVEL 1 · BUILD THE MUSCLE"}</span>
+        <span className="text-[14px] font-bold text-white/45">{meter.data?.points ?? 0}/{meter.data?.maxPoints ?? 120}</span>
       </div>
       <div className="mb-2 flex items-end justify-between gap-3">
         <strong className="text-[clamp(14px,1.9vw,19px)] font-black uppercase tracking-[.16em]">Sucker</strong>
-        <span className="text-[clamp(12px,1.7vw,17px)] font-bold text-white/60">{progress}% · 30 days</span>
+        <span className="text-[clamp(14px,1.7vw,17px)] font-bold text-white/60">{progress}% · 30 days</span>
         <strong className="text-[clamp(14px,1.9vw,19px)] font-black uppercase tracking-[.16em] text-fuchsia-200">Hustler</strong>
       </div>
       <div className="relative h-5 rounded-full border border-white/20 bg-white/10 p-1 shadow-inner">
@@ -25,7 +25,7 @@ export function SalesMomentumMeter() {
           <Diamond className="h-3.5 w-3.5 fill-white" />
         </motion.span>
       </div>
-      {meter.data?.nextLevelHint ? <p className="mt-2 text-[11px] font-semibold leading-snug text-white/45">{meter.data.nextLevelHint}</p> : null}
+      {meter.data?.nextLevelHint ? <p className="mt-2 text-[14px] font-semibold leading-snug text-white/45">{meter.data.nextLevelHint}</p> : null}
     </section>
   );
 }
@@ -39,6 +39,26 @@ function blobDataUrl(blob: Blob) {
   });
 }
 
+/**
+ * Maps a save failure to a truthful, recoverable-state message. Real user
+ * input (recording/typed text) is never cleared on any of these paths — see
+ * the catch block in `submit()`. Only distinguishes states the code can
+ * actually detect; anything else falls back to the raw server message.
+ */
+export function describeSaveError(error: unknown): string {
+  if (error instanceof TypeError && /fetch/i.test(error.message)) {
+    return "Could not reach the server. Your recording is still here — retry when you have signal.";
+  }
+  const message = error instanceof Error ? error.message : "";
+  if (/must be between .* MB|too large/i.test(message)) {
+    return "That recording is too large to upload. Try a shorter entry, or type it instead.";
+  }
+  if (/could not transcribe/i.test(message)) {
+    return "Recording uploaded, but transcription is unavailable right now. You can type it instead.";
+  }
+  return message || "Could not save your journal. Your recording is still here — retry.";
+}
+
 export function SalesJournalSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const utils = trpc.useUtils();
   const save = trpc.system.commercialMission.saveSalesJournal.useMutation();
@@ -48,6 +68,7 @@ export function SalesJournalSheet({ open, onOpenChange }: { open: boolean; onOpe
   const streamRef = React.useRef<MediaStream | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
   const [audioDataUrl, setAudioDataUrl] = React.useState<string | null>(null);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
 
   const stopTracks = React.useCallback(() => {
     streamRef.current?.getTracks().forEach(track => track.stop());
@@ -82,6 +103,7 @@ export function SalesJournalSheet({ open, onOpenChange }: { open: boolean; onOpe
   }
 
   async function submit() {
+    setSaveError(null);
     try {
       const date = new Date();
       const journalDate = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
@@ -91,9 +113,13 @@ export function SalesJournalSheet({ open, onOpenChange }: { open: boolean; onOpe
         utils.system.commercialMission.mySalesJournals.invalidate(),
       ]);
       toast.success(result.points ? `Journal absorbed · +${result.points} momentum` : "Journal absorbed into future missions");
+      // Only clear captured input on a confirmed, authoritative save — a
+      // failed save must never discard the recording or typed transcript.
       setTranscript(""); setAudioDataUrl(null); onOpenChange(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not save your journal");
+      const message = describeSaveError(error);
+      setSaveError(message);
+      toast.error(message);
     }
   }
 
@@ -105,13 +131,18 @@ export function SalesJournalSheet({ open, onOpenChange }: { open: boolean; onOpe
           <button type="button" aria-label="Close journal" disabled={recording} onClick={() => onOpenChange(false)} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10 disabled:opacity-30"><X /></button>
         </header>
         <div className="grid gap-4 p-[clamp(18px,3.5vw,32px)]">
-          <button type="button" onClick={recording ? stopRecording : startRecording} className={`flex min-h-[92px] items-center justify-center gap-4 rounded-[20px] text-xl font-black ${recording ? "bg-red-500" : audioDataUrl ? "bg-emerald-500 text-slate-950" : "bg-fuchsia-500 text-slate-950"}`}>
+          <button type="button" data-testid="journal-record-toggle" onClick={recording ? stopRecording : startRecording} className={`flex min-h-[92px] items-center justify-center gap-4 rounded-[20px] text-xl font-black ${recording ? "bg-red-500" : audioDataUrl ? "bg-emerald-500 text-slate-950" : "bg-fuchsia-500 text-slate-950"}`}>
             {recording ? <><Square className="fill-current" /> Stop recording</> : audioDataUrl ? <><Mic /> Recorded · tap to replace</> : <><Mic /> Start talking</>}
           </button>
-          <div className="flex items-center gap-3 text-xs font-black uppercase tracking-[.15em] text-white/35"><span className="h-px flex-1 bg-white/10" />or type/correct it<span className="h-px flex-1 bg-white/10" /></div>
-          <textarea value={transcript} onChange={event => setTranscript(event.target.value)} rows={5} placeholder="They said they already have laundry machines. I froze and changed the subject…" className="min-h-[130px] resize-none rounded-[18px] border border-white/15 bg-white/[.06] p-4 text-[17px] leading-relaxed outline-none placeholder:text-white/30 focus:border-fuchsia-300" />
+          <div className="flex items-center gap-3 text-[14px] font-black uppercase tracking-[.15em] text-white/35"><span className="h-px flex-1 bg-white/10" />or type/correct it<span className="h-px flex-1 bg-white/10" /></div>
+          <textarea data-testid="journal-transcript" value={transcript} onChange={event => setTranscript(event.target.value)} rows={5} placeholder="They said they already have laundry machines. I froze and changed the subject…" className="min-h-[130px] resize-none rounded-[18px] border border-white/15 bg-white/[.06] p-4 text-[17px] leading-relaxed outline-none placeholder:text-white/30 focus:border-fuchsia-300" />
           <p className="text-sm leading-relaxed text-white/45">Your recording, transcript, and extracted coaching are visible to the admin owner. Coaching will appear organically inside future mission diamonds.</p>
-          <button type="button" onClick={() => void submit()} disabled={recording || save.isPending || (!audioDataUrl && transcript.trim().length < 20)} className="flex min-h-[66px] items-center justify-center gap-3 rounded-[17px] bg-white text-lg font-black text-slate-950 disabled:opacity-35">{save.isPending ? <><Loader2 className="animate-spin" /> Absorbing the day…</> : "Save to future missions"}</button>
+          {saveError ? (
+            <p data-testid="journal-save-error" role="alert" className="rounded-[14px] border border-amber-400/40 bg-amber-500/10 p-3 text-sm leading-relaxed text-amber-100">
+              {saveError}
+            </p>
+          ) : null}
+          <button type="button" data-testid="journal-save" onClick={() => void submit()} disabled={recording || save.isPending || (!audioDataUrl && transcript.trim().length < 20)} className="flex min-h-[66px] items-center justify-center gap-3 rounded-[17px] bg-white text-lg font-black text-slate-950 disabled:opacity-35">{save.isPending ? <><Loader2 className="animate-spin" /> Absorbing the day…</> : saveError ? "Retry save" : "Save to future missions"}</button>
         </div>
       </motion.section>
     </motion.div>
