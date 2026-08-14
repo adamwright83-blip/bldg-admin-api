@@ -88,4 +88,16 @@ export type GoldlineActionServices = {
   }) => Promise<DriverGameWorldNode>;
   scout: (input: { requestId: string }) => Promise<ScoutReport>;
   refetchAuthoritativeTruth: (missionId: number | null) => Promise<void>;
+  /**
+   * Records a genuine pickup/delivery via the same canonical
+   * `admin.updateStatus` mutation the pre-existing (non-game) pickup/delivery
+   * flow already used — no second order-truth store. Resolves `false`
+   * (never throws) when the write is truthfully rejected — e.g. a payment
+   * block re-checked at write time — so the surface can show a real reason
+   * instead of a fabricated success.
+   */
+  resolveOrder: (input: {
+    orderId: number;
+    status: "collected" | "delivered";
+  }) => Promise<boolean>;
 };

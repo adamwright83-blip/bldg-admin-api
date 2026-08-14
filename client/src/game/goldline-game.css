@@ -1945,6 +1945,20 @@
   border: 1px solid #5e7c864f;
   background: #0d1c23;
 }
+.live-route-list article[data-next-objective="true"] {
+  border-color: #e8b84d99;
+  background: #1a1408;
+}
+.objective-next-badge {
+  color: #e8b84d !important;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.live-route-list button[data-order-unavailable="true"] {
+  border-color: #7b8588;
+  color: #aab2b5;
+  background: #30393d;
+}
 .live-route-list span,
 .live-route-list b,
 .live-route-list small {

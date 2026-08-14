@@ -154,6 +154,12 @@ export function deriveActionGrammar(
     case "REVIEW":
       // Read-only — never a physical action, never fiction-eligible.
       return null;
+    case "PICKUP":
+    case "DELIVERY":
+      // Real order work is presented as a genuine in-world objective
+      // directly (see GoldlineGameHome.tsx's handleSelectOrder), not routed
+      // through the mission-fiction director — never fiction-eligible.
+      return null;
     case "WAIT":
       return {
         kind: "WAIT_FOR_EVENT",
@@ -251,6 +257,9 @@ export function actionGrammarKindFromMissionKind(
     case "WAIT":
       return "WAIT_FOR_EVENT";
     case "REVIEW":
+      return null;
+    case "PICKUP":
+    case "DELIVERY":
       return null;
   }
 }

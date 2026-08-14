@@ -413,6 +413,11 @@ export default function GoldlineBusinessLoopHarness(props: {
       scout: async () => {
         throw new Error("Scout is outside this action-specific fixture");
       },
+      resolveOrder: async () => {
+        throw new Error(
+          "Pickup/delivery is outside this action-specific fixture"
+        );
+      },
       refetchAuthoritativeTruth: async () => {
         proof.current.refetches += 1;
         const next = pendingTruth.current;
