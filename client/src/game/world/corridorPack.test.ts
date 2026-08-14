@@ -53,7 +53,9 @@ describe("corridor pack resolution", () => {
       "/assets/goldline/corridor_01/traversal.json"
     );
     expect(pack.population.ambient).toHaveLength(6);
-    expect(pack.population.atlas).toBeNull();
+    expect(pack.population.atlas).toBe(
+      "/assets/goldline/corridor_01/../population/coastal_roles.webp"
+    );
   });
 
   it("keeps a null optional asset null rather than inventing a URL for it", () => {

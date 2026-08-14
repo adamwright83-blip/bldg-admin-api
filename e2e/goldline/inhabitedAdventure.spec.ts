@@ -62,7 +62,7 @@ test.describe("inhabited world truth boundary", () => {
     await expect(world).toHaveAttribute("data-ambient-population-count", "6");
     await expect(world).toHaveAttribute(
       "data-population-asset-stage",
-      "engineering_placeholder"
+      "production"
     );
     await expect(world).toHaveAttribute("data-mission-embodiment-id", "7801");
     await expect(world).toHaveAttribute("data-corridor-id", "corridor_01");
