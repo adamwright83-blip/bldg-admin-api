@@ -7,6 +7,7 @@ import {
   Texture,
 } from "pixi.js";
 import { AvatarStateMachine } from "../avatar/AvatarStateMachine";
+import { facingForInput, type TrailblazerFacing } from "../avatar/facing";
 import type { AvatarState } from "../state/GameState";
 import {
   branchForLateralPosition,
@@ -153,6 +154,25 @@ const ORDER_PROP_ENTRIES = Object.entries(ORDER_PROP_FILES) as Array<
   [keyof OrderPropTextures, string]
 >;
 
+/**
+ * True foreground-occlusion accents (bougainvillea/palm/lantern/awning
+ * clusters with genuine transparent gaps — see
+ * client/public/assets/goldline/corridor_01/occlusion-accents/README.md).
+ * Corridor_01-specific: extracted from art authored against that
+ * corridor's exact canal-market composition, so it's gated on
+ * anchorsBasePath rather than loaded unconditionally like the universal
+ * order-prop/character assets above. Additive to the existing
+ * foreground.webp (which keeps covering the full canvas as before) — these
+ * are pinned to the top corners, not a replacement.
+ */
+const FOREGROUND_ACCENT_FILES: Record<string, string> = {
+  occlusionLeftFrame:
+    "/assets/goldline/corridor_01/occlusion-accents/left-frame.webp",
+  occlusionRightFrame:
+    "/assets/goldline/corridor_01/occlusion-accents/right-frame.webp",
+};
+const FOREGROUND_ACCENT_ENTRIES = Object.entries(FOREGROUND_ACCENT_FILES);
+
 function orderPropTexturesFrom(
   optionalTextures: Map<string, Texture | null>
 ): OrderPropTextures {
@@ -177,6 +197,64 @@ const CHARACTER_POSE_FILES: Record<string, string> = {
   climb_b: "climb_b.webp",
   land: "land.webp",
 };
+
+/**
+ * Directional idle/walk variants (see
+ * client/public/assets/goldline/characters/trailblazer/directional/README.md
+ * for provenance and forensic findings). Genuinely optional — jump/climb/
+ * vault/land keep using the single canonical CHARACTER_POSE_FILES frame
+ * above regardless of facing, since the source art never claimed directional
+ * coverage for those actions and the existing choreography is stronger.
+ * Loaded the same way as CHARACTER_POSE_FILES; a missing file degrades to
+ * the non-directional base pose (see resolveDirectionalPoseKey).
+ */
+export const DIRECTIONAL_POSE_FILES: Record<string, string> = {
+  "idle-front": "directional/idle-front.webp",
+  "idle-back": "directional/idle-back.webp",
+  "idle-left": "directional/idle-left.webp",
+  "idle-right": "directional/idle-right.webp",
+  "walk-front-01": "directional/walk-front-01.webp",
+  "walk-front-02": "directional/walk-front-02.webp",
+  "walk-front-03": "directional/walk-front-03.webp",
+  "walk-front-04": "directional/walk-front-04.webp",
+  "walk-front-05": "directional/walk-front-05.webp",
+  "walk-back-01": "directional/walk-back-01.webp",
+  "walk-back-02": "directional/walk-back-02.webp",
+  "walk-back-03": "directional/walk-back-03.webp",
+  "walk-back-04": "directional/walk-back-04.webp",
+  "walk-back-05": "directional/walk-back-05.webp",
+  "walk-left-01": "directional/walk-left-01.webp",
+  "walk-left-02": "directional/walk-left-02.webp",
+  "walk-left-03": "directional/walk-left-03.webp",
+  "walk-left-04": "directional/walk-left-04.webp",
+  "walk-left-05": "directional/walk-left-05.webp",
+  "walk-right-01": "directional/walk-right-01.webp",
+  "walk-right-02": "directional/walk-right-02.webp",
+  "walk-right-03": "directional/walk-right-03.webp",
+  "walk-right-04": "directional/walk-right-04.webp",
+  "walk-right-05": "directional/walk-right-05.webp",
+};
+
+/**
+ * Resolves the facing-specific texture key for idle/walk/run, falling back
+ * to the plain non-directional key when no directional texture was loaded
+ * (missing asset, or a test environment with no textures at all) — a load
+ * failure can never break movement or leave the avatar untextured.
+ */
+export function resolveDirectionalPoseKey(
+  baseKey: string,
+  state: AvatarState,
+  facing: TrailblazerFacing,
+  runFrame: number,
+  poseTextures: ReadonlyMap<string, Texture>
+): string {
+  if (state !== "idle" && state !== "walk" && state !== "run") return baseKey;
+  const dirKey =
+    state === "idle"
+      ? `idle-${facing}`
+      : `walk-${facing}-0${(runFrame % 5) + 1}`;
+  return poseTextures.has(dirKey) ? dirKey : baseKey;
+}
 
 /**
  * State -> pose mapping. Run is genuine 5-frame sequential animation; every
@@ -238,9 +316,20 @@ export class GoldlineGame {
   private backgroundSprite: Sprite | null = null;
   private farSprite: Sprite | null = null;
   private foregroundSprite: Sprite | null = null;
+  /** Corner-pinned occlusion accents, additive to foregroundSprite above —
+   * see FOREGROUND_ACCENT_FILES. */
+  private occlusionLeftFrame: Sprite | null = null;
+  private occlusionRightFrame: Sprite | null = null;
   private poseTextures = new Map<string, Texture>();
   private currentPoseKey = "idle";
   private lastAvatarStateForImpulse: AvatarState = "idle";
+  /** Presentation-only, derived each frame from raw joystick input — see
+   * facingForInput. Defaults to "front" to match the existing non-directional
+   * idle.webp, which is authored front-facing (the run cycle, by contrast,
+   * is authored back-facing — walking away up the path — which is what the
+   * player will see as soon as they push the joystick forward). */
+  private facing: TrailblazerFacing = "front";
+  private usingDirectionalPose = false;
   private runFrameTimer = 0;
   private particles = new Container();
   private input = { x: 0, y: 0 };
@@ -339,8 +428,14 @@ export class GoldlineGame {
           ? [["populationAtlas", assets.population.atlas] as [string, string]]
           : []),
         ...ORDER_PROP_ENTRIES,
+        ...((assets.anchorsBasePath ?? "/assets/goldline/corridor_01").includes(
+          "corridor_01"
+        )
+          ? FOREGROUND_ACCENT_ENTRIES
+          : []),
       ];
       const poseEntries = Object.entries(CHARACTER_POSE_FILES);
+      const directionalPoseEntries = Object.entries(DIRECTIONAL_POSE_FILES);
 
       const [worldTexture, operatorTexture, midTexture, ...rest] =
         await Promise.all([
@@ -355,6 +450,9 @@ export class GoldlineGame {
           ...poseEntries.map(([, file]) =>
             Assets.load<Texture>(`${characterBase}/${file}`).catch(() => null)
           ),
+          ...directionalPoseEntries.map(([, file]) =>
+            Assets.load<Texture>(`${characterBase}/${file}`).catch(() => null)
+          ),
         ]);
 
       const optionalTextures = new Map<string, Texture | null>();
@@ -363,6 +461,12 @@ export class GoldlineGame {
       );
       poseEntries.forEach(([key], index) => {
         const texture = rest[optionalLoads.length + index] as Texture | null;
+        if (texture) this.poseTextures.set(key, texture);
+      });
+      directionalPoseEntries.forEach(([key], index) => {
+        const texture = rest[
+          optionalLoads.length + poseEntries.length + index
+        ] as Texture | null;
         if (texture) this.poseTextures.set(key, texture);
       });
 
@@ -426,6 +530,23 @@ export class GoldlineGame {
         this.foregroundSprite = new Sprite(foregroundTexture);
         this.foregroundSprite.alpha = 0.94;
         this.layerForeground.addChild(this.foregroundSprite);
+      }
+
+      // Corner occlusion accents (bougainvillea/palm/lantern clusters, real
+      // transparent gaps) — additive to foregroundSprite above, pinned to
+      // the top corners rather than stretched over the full canvas. See
+      // FOREGROUND_ACCENT_FILES.
+      const leftFrameTexture = optionalTextures.get("occlusionLeftFrame");
+      if (leftFrameTexture) {
+        this.occlusionLeftFrame = new Sprite(leftFrameTexture);
+        this.occlusionLeftFrame.anchor.set(0, 0);
+        this.layerForeground.addChild(this.occlusionLeftFrame);
+      }
+      const rightFrameTexture = optionalTextures.get("occlusionRightFrame");
+      if (rightFrameTexture) {
+        this.occlusionRightFrame = new Sprite(rightFrameTexture);
+        this.occlusionRightFrame.anchor.set(1, 0);
+        this.layerForeground.addChild(this.occlusionRightFrame);
       }
 
       // L4 effects: the supplied god-ray/mist plate replaces the vector ray
@@ -647,6 +768,8 @@ export class GoldlineGame {
     assets: GameAssets,
     signal: AbortSignal
   ): Promise<PreparedCorridorAssets> {
+    const anchorsBasePath =
+      assets.anchorsBasePath ?? "/assets/goldline/corridor_01";
     const optionalLoads: Array<[string, string]> = [
       ...(assets.farUrl ? [["far", assets.farUrl] as [string, string]] : []),
       ...(assets.foregroundUrl
@@ -665,9 +788,10 @@ export class GoldlineGame {
         ? [["populationAtlas", assets.population.atlas] as [string, string]]
         : []),
       ...ORDER_PROP_ENTRIES,
+      ...(anchorsBasePath.includes("corridor_01")
+        ? FOREGROUND_ACCENT_ENTRIES
+        : []),
     ];
-    const anchorsBasePath =
-      assets.anchorsBasePath ?? "/assets/goldline/corridor_01";
     const [midTexture, optionalResults, authored, goldRoutePoints] =
       await Promise.all([
         // MID is a playable corridor's only critical visual plate. Refuse the
@@ -747,6 +871,23 @@ export class GoldlineGame {
       this.foregroundSprite = new Sprite(foregroundTexture);
       this.foregroundSprite.alpha = 0.94;
       this.layerForeground.addChild(this.foregroundSprite);
+    }
+
+    this.occlusionLeftFrame?.destroy();
+    this.occlusionLeftFrame = null;
+    const leftFrameTexture = optionalTextures.get("occlusionLeftFrame");
+    if (leftFrameTexture) {
+      this.occlusionLeftFrame = new Sprite(leftFrameTexture);
+      this.occlusionLeftFrame.anchor.set(0, 0);
+      this.layerForeground.addChild(this.occlusionLeftFrame);
+    }
+    this.occlusionRightFrame?.destroy();
+    this.occlusionRightFrame = null;
+    const rightFrameTexture = optionalTextures.get("occlusionRightFrame");
+    if (rightFrameTexture) {
+      this.occlusionRightFrame = new Sprite(rightFrameTexture);
+      this.occlusionRightFrame.anchor.set(1, 0);
+      this.layerForeground.addChild(this.occlusionRightFrame);
     }
 
     this.effectsSprite?.destroy();
@@ -874,6 +1015,8 @@ export class GoldlineGame {
     if (this.foregroundSprite) {
       this.fitCover(this.foregroundSprite, width, height);
     }
+    this.positionOcclusionAccent(this.occlusionLeftFrame, width, 0);
+    this.positionOcclusionAccent(this.occlusionRightFrame, width, width);
     if (this.effectsSprite) {
       this.fitCover(this.effectsSprite, width, height);
       const alphaEase = Math.min(1, deltaSeconds * 3);
@@ -903,6 +1046,7 @@ export class GoldlineGame {
         : rawTrigger;
     const blocked = Boolean(trigger && this.progress >= trigger.at - 0.012);
     const magnitude = Math.hypot(this.input.x, this.input.y);
+    this.facing = facingForInput(this.input.x, this.input.y, this.facing);
     this.avatarState.setLocomotion(magnitude);
     if (!this.actionUntil && this.avatarState.state !== "encounter_locked") {
       const branchPace = branchPaceFor(this.branch);
@@ -956,8 +1100,17 @@ export class GoldlineGame {
     const aspect = this.avatar.texture.width / this.avatar.texture.height;
     this.avatar.height = baseHeight;
     this.avatar.width = Math.abs(baseHeight * aspect);
-    const facingLeft = this.input.x < -0.05;
-    this.avatar.scale.x = Math.abs(this.avatar.scale.x) * (facingLeft ? -1 : 1);
+    if (this.usingDirectionalPose) {
+      // A genuine directional texture is already facing the correct way —
+      // mirroring it here would reverse the satchel/thigh-strap/compass
+      // side, which is exactly the "mirror cheating" real directional art
+      // exists to avoid.
+      this.avatar.scale.x = Math.abs(this.avatar.scale.x);
+    } else {
+      const facingLeft = this.input.x < -0.05;
+      this.avatar.scale.x =
+        Math.abs(this.avatar.scale.x) * (facingLeft ? -1 : 1);
+    }
     this.avatar.x = avatarX;
     this.avatar.y =
       groundY -
@@ -1087,6 +1240,37 @@ export class GoldlineGame {
   }
 
   /**
+   * Pins a corner occlusion accent (see FOREGROUND_ACCENT_FILES) hanging
+   * down from the top corner — never stretched to fill the canvas. Scaled
+   * to a target VISIBLE height (not width): the left-frame source is a
+   * tall ~1:2 cluster and the right-frame source is closer to square, so
+   * scaling both by width alone left the right one almost entirely hidden
+   * behind the FIELD LINK header bar (confirmed by direct in-browser
+   * verification, not assumed) — a shared target height keeps both
+   * genuinely visible below the header regardless of source aspect. Width
+   * is separately capped at 42% of viewport width so the joystick, bottom
+   * nav, and the bulk of the playable world stay clear even for the
+   * squarer source.
+   */
+  private positionOcclusionAccent(
+    sprite: Sprite | null,
+    viewportWidth: number,
+    anchorX: number
+  ) {
+    if (!sprite) return;
+    const targetHeight = 300;
+    const maxWidth = viewportWidth * 0.42;
+    let scale = targetHeight / sprite.texture.height;
+    if (sprite.texture.width * scale > maxWidth) {
+      scale = maxWidth / sprite.texture.width;
+    }
+    sprite.width = sprite.texture.width * scale;
+    sprite.height = sprite.texture.height * scale;
+    sprite.x = anchorX;
+    sprite.y = 0;
+  }
+
+  /**
    * L0 parallax: the far plate drifts a fraction of lateral/progress motion.
    * The factor comes from the corridor's own manifest (`parallax.far`, schema-
    * clamped to the documented 0.05-0.15 range) so a corridor's depth is
@@ -1113,17 +1297,35 @@ export class GoldlineGame {
         (state === "run" ? 11 : 6) * (magnitude > 0 ? 1 : 0);
     }
     const frame = Math.floor(this.runFrameTimer / 6);
-    const key = poseForState(state, frame);
+    const baseKey = poseForState(state, frame);
+    const key = resolveDirectionalPoseKey(
+      baseKey,
+      state,
+      this.facing,
+      frame,
+      this.poseTextures
+    );
+    this.usingDirectionalPose = key !== baseKey;
     if (key !== this.currentPoseKey) {
       const texture = this.poseTextures.get(key);
       if (texture) {
-        // Run-cycle frame steps (run_01 -> run_02 -> ...) are deliberately
-        // NOT crossfaded — that is the animation, and blending consecutive
+        // Run-cycle frame steps (run_01 -> run_02 -> ..., or their
+        // directional walk-<facing>-0N equivalents) are deliberately NOT
+        // crossfaded — that is the animation, and blending consecutive
         // frames would read as motion blur rather than a run. Every other
         // state change (idle<->run, run->jump_start, jump_air->land,
-        // climb_a<->climb_b, ...) gets a brief crossfade so it never pops.
+        // climb_a<->climb_b, a facing change mid-stride, ...) gets a brief
+        // crossfade so it never pops.
         const isRunFrameStep =
-          key.startsWith("run_0") && this.currentPoseKey.startsWith("run_0");
+          (key.startsWith("run_0") &&
+            this.currentPoseKey.startsWith("run_0")) ||
+          (key.startsWith("walk-") &&
+            this.currentPoseKey.startsWith("walk-") &&
+            key.slice(0, key.lastIndexOf("-")) ===
+              this.currentPoseKey.slice(
+                0,
+                this.currentPoseKey.lastIndexOf("-")
+              ));
         if (!isRunFrameStep && this.avatarCrossfade) {
           this.avatarCrossfade.texture = this.avatar.texture;
           this.avatarCrossfade.visible = true;
