@@ -9,6 +9,7 @@ on:
       - "server/capabilities/expansionScoutCapability.ts"
       - "server/armory/armoryWeaponService.ts"
       - "server/armory/armoryEvolution.integration.test.ts"
+      - "server/field/**"
       - "server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts"
       - "shared/goldlineProgression.ts"
       - "shared/goldlineProgression.test.ts"
@@ -95,6 +96,7 @@ jobs:
           pnpm vitest run --config vitest.integration.config.ts
           server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts
           server/armory/armoryEvolution.integration.test.ts
+          server/field/authoritativeVisitRoute.integration.test.ts
 
       - name: Build production application
         run: VITE_GOLDLINE_TEST_HARNESS=1 pnpm build

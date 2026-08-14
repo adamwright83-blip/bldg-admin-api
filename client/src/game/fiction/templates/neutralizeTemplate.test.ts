@@ -24,19 +24,25 @@ describe("NEUTRALIZE fiction integrity", () => {
 
   it("briefing establishes fictional stakes with the required device/sector framing", () => {
     const briefing = NEUTRALIZE_TEMPLATE.briefing(GRAMMAR);
-    expect(briefing).toContain("device has been hidden somewhere inside this sector");
+    expect(briefing).toContain("device has compromised this sector");
   });
 
   it("physical instruction is operationally unambiguous about the real count and route", () => {
     const instruction = NEUTRALIZE_TEMPLATE.physicalInstruction(GRAMMAR);
     expect(instruction).toContain("25");
-    expect(instruction.toLowerCase()).toContain("every required");
+    expect(instruction.toLowerCase()).toContain("commercial locations");
+    expect(instruction.toLowerCase()).toContain("record the real visit result");
+    for (const fabricated of ["tag", "front-door", "door hanger", "kit"]) {
+      expect(instruction.toLowerCase()).not.toContain(fabricated);
+    }
   });
 
   it("physical instruction always states the REAL count from grammar, never a fixed number", () => {
     const smaller = { ...GRAMMAR, count: 3, locations: ["a", "b", "c"] };
     expect(NEUTRALIZE_TEMPLATE.physicalInstruction(smaller)).toContain("3");
-    expect(NEUTRALIZE_TEMPLATE.physicalInstruction(smaller)).not.toContain("25");
+    expect(NEUTRALIZE_TEMPLATE.physicalInstruction(smaller)).not.toContain(
+      "25"
+    );
   });
 
   it("title and briefing never use dashboard/CRM/business-chore language", () => {
@@ -61,8 +67,8 @@ describe("NEUTRALIZE fiction integrity", () => {
     );
   });
 
-  it("is not driving-compatible — the fixture is explicitly a walking route", () => {
-    expect(NEUTRALIZE_TEMPLATE.drivingCompatible).toBe(false);
+  it("can bind to a driving route while its safe-walking countdown pauses at runtime", () => {
+    expect(NEUTRALIZE_TEMPLATE.drivingCompatible).toBe(true);
     expect(NEUTRALIZE_TEMPLATE.attentionSafetyClass).toBe("safe_walking");
   });
 
@@ -71,6 +77,8 @@ describe("NEUTRALIZE fiction integrity", () => {
   });
 
   it("is only compatible with PLACE_ITEM_AT_LOCATIONS", () => {
-    expect(NEUTRALIZE_TEMPLATE.compatibleGrammarKinds).toEqual(["PLACE_ITEM_AT_LOCATIONS"]);
+    expect(NEUTRALIZE_TEMPLATE.compatibleGrammarKinds).toEqual([
+      "PLACE_ITEM_AT_LOCATIONS",
+    ]);
   });
 });

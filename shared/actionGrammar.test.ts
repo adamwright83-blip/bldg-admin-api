@@ -3,13 +3,20 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   deriveActionGrammar,
+  deriveAuthoritativeRouteGrammar,
   deriveRouteGrammar,
 } from "./actionGrammar";
 import type { GoldlineActionDescriptor } from "../client/src/game/actions/actionRegistry";
 import type { FieldMoveCandidate } from "../server/field/types";
 
 function callDescriptor(missionId: number): GoldlineActionDescriptor {
-  return { kind: "CALL", mode: "write", missionId, label: "CALL", phoneUrl: "tel:+13235550100" };
+  return {
+    kind: "CALL",
+    mode: "write",
+    missionId,
+    label: "CALL",
+    phoneUrl: "tel:+13235550100",
+  };
 }
 
 function visitDescriptor(missionId: number): GoldlineActionDescriptor {
@@ -25,15 +32,28 @@ function visitDescriptor(missionId: number): GoldlineActionDescriptor {
 }
 
 function reviewDescriptor(): GoldlineActionDescriptor {
-  return { kind: "REVIEW", mode: "read", missionId: null, label: "REVIEW", destinationPath: null };
+  return {
+    kind: "REVIEW",
+    mode: "read",
+    missionId: null,
+    label: "REVIEW",
+    destinationPath: null,
+  };
 }
 
-function fieldMove(id: string, moveType: FieldMoveCandidate["moveType"] = "nearby_commercial_visit"): FieldMoveCandidate {
+function fieldMove(
+  id: string,
+  moveType: FieldMoveCandidate["moveType"] = "nearby_commercial_visit"
+): FieldMoveCandidate {
   return {
     id,
     moveType,
     title: `Visit ${id}`,
-    target: { entityType: "commercial_mission", entityId: id, name: `Account ${id}` },
+    target: {
+      entityType: "commercial_mission",
+      entityId: id,
+      name: `Account ${id}`,
+    },
     expectedDurationMinutes: 10,
     travelMinutes: 5,
     expectedValue: { value: null, provenance: "unsourced" as never },
@@ -74,12 +94,21 @@ describe("deriveActionGrammar — Layer 2 is pure data over already-authoritativ
   });
 
   it("contains no narrative field — grammar is data only, never a story", () => {
-    const source = readFileSync(resolve(__dirname, "./actionGrammar.ts"), "utf8");
+    const source = readFileSync(
+      resolve(__dirname, "./actionGrammar.ts"),
+      "utf8"
+    );
     const typeBlock = source.slice(
       source.indexOf("export type ActionGrammar ="),
       source.indexOf("export function deriveActionGrammar")
     );
-    for (const forbidden of ["title", "briefing", "stakes", "story", "narrative"]) {
+    for (const forbidden of [
+      "title",
+      "briefing",
+      "stakes",
+      "story",
+      "narrative",
+    ]) {
       expect(typeBlock.toLowerCase()).not.toContain(forbidden);
     }
   });
@@ -123,5 +152,31 @@ describe("deriveRouteGrammar — PLACE_ITEM_AT_LOCATIONS is backed by real field
     const moves = Array.from({ length: 4 }, (_, i) => fieldMove(`w${i}`));
     const grammar = deriveRouteGrammar(moves)!;
     expect(grammar.requiresDriving).toBe(false);
+  });
+});
+
+describe("deriveAuthoritativeRouteGrammar", () => {
+  it("freezes the denominator and identity to the persisted occurrence", () => {
+    const grammar = deriveAuthoritativeRouteGrammar({
+      occurrenceId: "route-occurrence-1",
+      businessDate: "2026-08-13",
+      startedAt: "2026-08-13T16:00:00.000Z",
+      totalStops: 3,
+      coveredCount: 1,
+      stops: Array.from({ length: 3 }, (_, index) => ({
+        missionId: index + 1,
+        moveId: `mission:${index + 1}:visit`,
+        accountName: `Account ${index + 1}`,
+        destinationPath: `/driver/sales-mission/${index + 1}`,
+        position: index,
+        requiresDriving: true,
+        evidenced: index === 0,
+        visitOutcomeId: index === 0 ? 10 : null,
+      })),
+    })!;
+    expect(grammar.businessActionId).toBe("visit-route:route-occurrence-1");
+    expect(grammar.count).toBe(3);
+    expect(grammar.requiresDriving).toBe(true);
+    expect(grammar.locations).toEqual(["Account 1", "Account 2", "Account 3"]);
   });
 });

@@ -67,6 +67,16 @@ describe("Goldline canonical driver restoration", () => {
     );
   });
 
+  it("uses server-owned visit-route membership and coverage in production", () => {
+    expect(controller).toContain("trpc.system.field.visitRoute.useQuery");
+    expect(controller).toContain(
+      "trpc.system.field.startVisitRoute.useMutation"
+    );
+    expect(controller).toContain("authoritativeVisitRoute={visitRoute.data}");
+    expect(controller).toContain("visitRoute.data?.coveredCount ?? 0");
+    expect(controller).not.toContain("MARK STOP COVERED");
+  });
+
   it("uses real order mutation and preserves the unpaid delivery guard", () => {
     expect(controller).toContain("trpc.admin.updateStatus.useMutation");
     expect(controller).toContain("canCompleteDelivery(order)");
