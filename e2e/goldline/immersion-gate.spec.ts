@@ -31,6 +31,11 @@ async function enterNeutralizeMission(page: Page) {
   await enterButton.click();
 }
 
+async function openLiveRoute(page: Page) {
+  await openMenu(page);
+  await page.getByRole("button", { name: "LIVE ROUTE" }).click();
+}
+
 /**
  * The harness's test-only controls render outside (before) the game shell,
  * which is a full-viewport overlay — same pointer-interception issue the
@@ -293,5 +298,127 @@ test.describe("Stronghold home base", () => {
     await expect(page.getByTestId("stronghold-intel")).not.toContainText(
       "discovery"
     );
+  });
+});
+
+test.describe("Pickup and delivery are real in-game gameplay", () => {
+  test("GENUINE PICKUP: the next objective completes through the in-game surface, no internal dispatch page, canvas stays mounted, world updates", async ({
+    page,
+  }) => {
+    await loginToNeutralizeFixture(page);
+    await page.waitForTimeout(800);
+    await openLiveRoute(page);
+
+    const urlBeforeSelect = page.url();
+    const nextRow = page
+      .locator(".live-route-list article")
+      .filter({ has: page.getByText("Pickup Alpha") });
+    await expect(nextRow).toBeVisible();
+    await nextRow.getByRole("button", { name: "RETRIEVE CARGO" }).click();
+
+    // Same page, canvas still mounted — no navigation to a conventional
+    // internal dispatch/admin page just to perform the real pickup.
+    expect(page.url()).toBe(urlBeforeSelect);
+    expect(await page.locator("canvas.goldline-game-canvas").count()).toBe(1);
+
+    const surface = page.locator(".goldline-action-surface");
+    await expect(surface).toBeVisible();
+    await expect(surface).toContainText("PICKUP");
+    await expect(surface).toContainText("200 Fixture Ave, Testville");
+
+    await surface.getByRole("button", { name: "MARK COLLECTED" }).click();
+
+    // Canonical write completes, the surface closes, canvas remains
+    // mounted, and the objective genuinely disappears from the real route —
+    // server-derived world consequence, not a client-side fabrication.
+    await expect(surface).not.toBeVisible({ timeout: 5_000 });
+    expect(await page.locator("canvas.goldline-game-canvas").count()).toBe(1);
+    expect(page.url()).not.toContain("/driver/sales-mission/");
+
+    // Selecting an objective drills into it (closing the flat list overlay
+    // so the in-canvas surface isn't obscured by it) — reopen the list to
+    // confirm the real world consequence: the completed pickup is gone.
+    await openLiveRoute(page);
+    await expect(
+      page.locator(".live-route-list").getByText("Pickup Alpha")
+    ).toHaveCount(0);
+  });
+
+  test("GENUINE PAID DELIVERY: completes through the in-game surface and the world updates", async ({
+    page,
+  }) => {
+    await loginToNeutralizeFixture(page);
+    await page.waitForTimeout(800);
+    await openLiveRoute(page);
+
+    const row = page
+      .locator(".live-route-list article")
+      .filter({ has: page.getByText("Delivery Paid") });
+    await row.getByRole("button", { name: "DELIVER CARGO" }).click();
+
+    const surface = page.locator(".goldline-action-surface");
+    await expect(surface).toBeVisible();
+    await expect(surface).toContainText("DELIVERY");
+    await surface.getByRole("button", { name: "MARK DELIVERED" }).click();
+
+    await expect(surface).not.toBeVisible({ timeout: 5_000 });
+    expect(await page.locator("canvas.goldline-game-canvas").count()).toBe(1);
+    await openLiveRoute(page);
+    await expect(
+      page.locator(".live-route-list").getByText("Delivery Paid")
+    ).toHaveCount(0);
+  });
+
+  test("PAYMENT-BLOCKED DELIVERY: stays truthfully blocked in-game — fiction cannot bypass it", async ({
+    page,
+  }) => {
+    await loginToNeutralizeFixture(page);
+    await page.waitForTimeout(800);
+    await openLiveRoute(page);
+
+    const row = page
+      .locator(".live-route-list article")
+      .filter({ has: page.getByText("Delivery Blocked") });
+    await row.getByRole("button", { name: "PAYMENT BLOCKED" }).click();
+
+    const surface = page.locator(".goldline-action-surface");
+    await expect(surface).toBeVisible();
+    await expect(surface).toContainText("Payment has not cleared");
+    await expect(
+      surface.getByRole("button", { name: "MARK DELIVERED" })
+    ).toHaveCount(0);
+
+    await surface.getByRole("button", { name: "Close action" }).click();
+    await expect(surface).not.toBeVisible();
+
+    // The real business rule held — the order remains genuinely on the
+    // route, not silently removed or fabricated as complete.
+    await openLiveRoute(page);
+    await expect(
+      page.locator(".live-route-list").getByText("Delivery Blocked")
+    ).toBeVisible();
+  });
+
+  test("MISSING REQUIRED LOCATION: a pickup with no real address fails closed — no surface, no write, no fabricated destination", async ({
+    page,
+  }) => {
+    await loginToNeutralizeFixture(page);
+    await page.waitForTimeout(800);
+    await openLiveRoute(page);
+
+    const row = page
+      .locator(".live-route-list article")
+      .filter({ has: page.getByText("Pickup NoAddress") });
+    const button = row.getByRole("button", { name: "UNAVAILABLE" });
+    await expect(button).toBeVisible();
+    await expect(button).toBeDisabled();
+    await button.click({ force: true });
+
+    await expect(page.locator(".goldline-action-surface")).not.toBeVisible();
+    expect(page.url()).not.toContain("/driver/sales-mission/");
+    // Still genuinely on the route — never silently dropped or resolved.
+    await expect(
+      page.locator(".live-route-list").getByText("Pickup NoAddress")
+    ).toBeVisible();
   });
 });

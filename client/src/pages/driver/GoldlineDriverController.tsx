@@ -380,6 +380,13 @@ function LiveGoldlineDriverController() {
     }
   }
 
+  async function resolveOrderAction(input: {
+    orderId: number;
+    status: "collected" | "delivered";
+  }): Promise<boolean> {
+    return handleResolveOrder(input.orderId, input.status);
+  }
+
   async function handleAcceptMove(move: FieldMoveCandidate) {
     if (!move.missionId || !move.missionVersion) {
       toast.error("This sourced move is not activatable yet.");
@@ -832,6 +839,7 @@ function LiveGoldlineDriverController() {
     recover: recoverAction,
     scout: scoutAction,
     refetchAuthoritativeTruth: refetchGoldlineActionTruth,
+    resolveOrder: resolveOrderAction,
   };
 
   async function handleSelectColdCallChain(target: ColdCallTarget) {

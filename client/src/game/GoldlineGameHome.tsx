@@ -37,6 +37,7 @@ import type {
   ScoutReport,
 } from "../../../shared/expansionScout";
 import type { GoldlineHomeProps } from "../pages/goldline/GoldlineHome";
+import type { Order } from "@shared/types";
 import GoldlineHome from "../pages/goldline/GoldlineHome";
 import OpenChannel from "../pages/goldline/OpenChannel";
 import { detectOpenChannelGap } from "../pages/driver/goldlineDriverModel";
@@ -633,6 +634,14 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   // to the same fiction mission instead of the encounter's own outcome view.
   const [selectedRouteStop, setSelectedRouteStop] =
     useState<AuthoritativeVisitRouteStop | null>(null);
+  // Set only while a genuine pickup/delivery's action surface is open (see
+  // handleSelectOrder) — same purpose as selectedRouteStop above: keeps
+  // completion/close from routing through the spotlighted single-mission
+  // encounter's own outcome view.
+  const [selectedOrder, setSelectedOrder] = useState<{
+    order: Order;
+    status: "collected" | "delivered";
+  } | null>(null);
   const pendingWeaponEvidenceRef = useRef<Promise<void>>(Promise.resolve());
 
   function sendEncounterEvent(
@@ -739,11 +748,54 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       lossReason: null,
     };
   }, [presentedAction, selectedRouteStop]);
+  // A genuine pickup/delivery has no commercial-mission concept at all — its
+  // PICKUP/DELIVERY descriptor (see handleSelectOrder) uses `-order.id` as
+  // `missionId` purely as a private, collision-free join key back to this
+  // stand-in (real commercial mission ids are always positive; another real
+  // order can never produce the same negative key), never a fabricated
+  // mission identity.
+  const orderFallbackMission = useMemo<PlayableMission | null>(() => {
+    if (!selectedOrder) return null;
+    if (
+      !presentedAction ||
+      presentedAction.missionId !== -selectedOrder.order.id
+    )
+      return null;
+    const { order } = selectedOrder;
+    const address = order.address?.trim() || null;
+    return {
+      key: `order:${order.id}`,
+      missionId: -order.id,
+      moveId: `order:${order.id}`,
+      name:
+        `${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() ||
+        `Order #${order.id}`,
+      address,
+      navigationUrl: address
+        ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
+        : null,
+      phoneUrl: null,
+      destinationPath: null,
+      state: "active",
+      timeBurdenMinutes: null,
+      travelBurdenMinutes: null,
+      estimatedValueLowCents: null,
+      estimatedValueHighCents: null,
+      confidence: "unknown",
+      expiresAt: null,
+      contestedUntil: null,
+      verifiedAnnualValueCents: null,
+      realizedRevenueCents: 0,
+      unlockedPath: null,
+      lossReason: null,
+    };
+  }, [presentedAction, selectedOrder]);
   const presentedActionMission = presentedAction
     ? (authoritativeMissionTruth.find(
         mission => mission.missionId === presentedAction.missionId
       ) ??
       routeStopFallbackMission ??
+      orderFallbackMission ??
       activeMission)
     : null;
   const missionAffordance = activeMission
@@ -1628,6 +1680,57 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     setPresentedAction(action);
   }
 
+  /**
+   * A genuine pickup or delivery → in-game PICKUP/DELIVERY surface. Built
+   * directly from the real order's own fields (never fabricated) and opened
+   * through the same in-canvas overlay mechanism as route stops and
+   * spotlighted single-mission actions — never a page navigation. Fails
+   * closed (truthful feedback, no surface, no write) when the order genuinely
+   * has no address on record.
+   */
+  function handleSelectOrder(order: Order, status: "collected" | "delivered") {
+    const address = order.address?.trim() || null;
+    if (!address) {
+      setFeedback("ROUTE STOP UNAVAILABLE · NO LOCATION ON RECORD");
+      return;
+    }
+    const navigationUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+    const customerName =
+      `${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() ||
+      `Order #${order.id}`;
+    const action: GoldlineActionDescriptor =
+      status === "delivered"
+        ? {
+            kind: "DELIVERY",
+            mode: "write",
+            missionId: -order.id,
+            label: "DELIVER",
+            orderId: order.id,
+            customerName,
+            address,
+            navigationUrl,
+            paid: order.paid,
+          }
+        : {
+            kind: "PICKUP",
+            mode: "write",
+            missionId: -order.id,
+            label: "PICK UP",
+            orderId: order.id,
+            customerName,
+            address,
+            navigationUrl,
+          };
+    setSelectedOrder({ order, status });
+    setStandaloneActionRequestId(crypto.randomUUID());
+    setPresentedAction(action);
+    // The route list lives inside the higher-z-index utility backdrop,
+    // which would otherwise sit above (and intercept clicks for) the
+    // in-canvas action surface. Closing it here is a drill-down, not an
+    // exit from Goldline — the world canvas underneath was never unmounted.
+    setUtilityPanel(null);
+  }
+
   function performAction() {
     if (!action) return;
     const performed = runtimeRef.current?.performAction(action);
@@ -2129,6 +2232,26 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                   setSelectedRouteStop(null);
                   return;
                 }
+                // A pickup/delivery is likewise not the spotlighted
+                // single-mission encounter. `services.resolveOrder` already
+                // performed its own broad authoritative refresh
+                // (pickups/deliveries/Open Channel progress/etc. — see
+                // GoldlineDriverController's invalidateDriverTruth) before
+                // resolving, so the objective list picks up server truth on
+                // its own; no separate refetch call is needed here.
+                if (selectedOrder) {
+                  const { order, status } = selectedOrder;
+                  setFeedback(
+                    `${status === "delivered" ? "DELIVERED" : "COLLECTED"} · ${
+                      `${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() ||
+                      `Order #${order.id}`
+                    }`
+                  );
+                  setPresentedAction(null);
+                  setStandaloneActionRequestId(null);
+                  setSelectedOrder(null);
+                  return;
+                }
                 sendEncounterEvent({ type: "REAL_ACTION_PERSISTED" });
                 setPresentedAction(null);
                 setStandaloneActionRequestId(null);
@@ -2139,6 +2262,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                   setPresentedAction(null);
                   setStandaloneActionRequestId(null);
                   setSelectedRouteStop(null);
+                  return;
+                }
+                if (selectedOrder) {
+                  setPresentedAction(null);
+                  setStandaloneActionRequestId(null);
+                  setSelectedOrder(null);
                   return;
                 }
                 const wasReadOnly = presentedAction.mode === "read";
@@ -2392,32 +2521,45 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                         order,
                         status: "delivered" as const,
                       })),
-                    ].map(({ order, status }) => (
-                      <article key={`${status}-${order.id}`}>
-                        <span>
-                          <b>
-                            {`${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() ||
-                              `Order #${order.id}`}
-                          </b>
-                          <small>{order.address}</small>
-                        </span>
-                        <button
-                          disabled={
-                            props.isResolvingOrder ||
-                            (status === "delivered" && !order.paid)
-                          }
-                          onClick={() =>
-                            void props.onResolveOrder(order.id, status)
-                          }
+                    ].map(({ order, status }, index) => {
+                      const unavailable = !order.address?.trim();
+                      const blocked = status === "delivered" && !order.paid;
+                      const label = unavailable
+                        ? "UNAVAILABLE"
+                        : blocked
+                          ? "PAYMENT BLOCKED"
+                          : status === "collected"
+                            ? "RETRIEVE CARGO"
+                            : "DELIVER CARGO";
+                      return (
+                        <article
+                          key={`${status}-${order.id}`}
+                          data-next-objective={index === 0}
                         >
-                          {status === "collected"
-                            ? "MARK COLLECTED"
-                            : order.paid
-                              ? "MARK DELIVERED"
-                              : "PAYMENT BLOCKED"}
-                        </button>
-                      </article>
-                    ))}
+                          <span>
+                            {index === 0 ? (
+                              <small className="objective-next-badge">
+                                NEXT OBJECTIVE
+                              </small>
+                            ) : null}
+                            <b>
+                              {`${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() ||
+                                `Order #${order.id}`}
+                            </b>
+                            <small>
+                              {order.address || "No location on record"}
+                            </small>
+                          </span>
+                          <button
+                            disabled={props.isResolvingOrder || unavailable}
+                            data-order-unavailable={unavailable}
+                            onClick={() => handleSelectOrder(order, status)}
+                          >
+                            {label}
+                          </button>
+                        </article>
+                      );
+                    })}
                     {!props.pickups?.length && !props.deliveries?.length ? (
                       <p>No real route work is loaded for this date.</p>
                     ) : null}

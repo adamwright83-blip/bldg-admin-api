@@ -16,6 +16,66 @@ import type {
   GoldlineVisitContext,
 } from "../actions/actionServices";
 import type { DriverSafeSalesIntel } from "../../../../shared/driverSafeSalesIntel";
+import type { Order } from "@shared/types";
+
+/**
+ * A deterministic, real-Order-shaped fixture row — every field is either the
+ * genuine production default or a clearly-fixture value, matching the file's
+ * existing proof philosophy. Never a fabricated business fact.
+ */
+function fixtureOrder(overrides: Partial<Order> & { id: number }): Order {
+  return {
+    tenantId: "default",
+    serviceType: "wash_fold",
+    pickupDate: "2026-08-13",
+    pickupTimeWindow: "9AM-11AM",
+    deliveryDate: "2026-08-13",
+    deliveryTimeWindow: "4PM-6PM",
+    address: "200 Fixture Ave, Testville",
+    unit: null,
+    specialInstructions: null,
+    heldRawRequestText: null,
+    heldCleanedRequestText: null,
+    heldServiceSummary: null,
+    heldRequestedPickupWindow: null,
+    heldRequestedReturnBy: null,
+    heldSource: null,
+    heldMetadataJson: null,
+    residentClientRequestId: null,
+    firstName: "Fixture",
+    lastName: "Customer",
+    phone: "555-0100",
+    email: null,
+    bldgUserId: null,
+    stripeCustomerId: null,
+    stripePaymentMethodId: null,
+    stripePaymentIntentId: null,
+    status: "new",
+    weightLbs: null,
+    bagCount: 1,
+    garmentCount: null,
+    subtotal: "0",
+    discountPercent: "0",
+    total: "0",
+    upchargesJson: null,
+    drycleanItemsJson: null,
+    paid: false,
+    paidAt: null,
+    isFirstPaidOrder: false,
+    portalJwt: null,
+    buildingSlug: null,
+    vendorId: null,
+    vendorNameSnapshot: null,
+    routingPrioritySnapshot: null,
+    platformFeeCents: null,
+    vendorPayoutCents: null,
+    stripeConnectedAccountIdSnapshot: null,
+    manualRiskFlag: false,
+    createdAt: new Date("2026-08-13T08:00:00.000Z"),
+    updatedAt: new Date("2026-08-13T08:00:00.000Z"),
+    ...overrides,
+  };
+}
 
 /**
  * Deterministic per-mission visit state machine backing the NEUTRALIZE route
@@ -173,6 +233,36 @@ export default function GoldlineFictionHarness() {
   // four stops' real-address behavior the rest of the suite depends on.
   const [firstStopAddressStripped, setFirstStopAddressStripped] =
     useState(false);
+  // Genuine pickup/delivery route-work fixture — mirrors production's
+  // `admin.listByDate` result shape exactly (real Order rows). One pickup
+  // has no address on file (CASE C — fails closed truthfully); one delivery
+  // is genuinely unpaid (payment-blocked, cannot be bypassed by fiction).
+  const [pickupOrders, setPickupOrders] = useState<Order[]>([
+    fixtureOrder({ id: 9300, firstName: "Pickup", lastName: "Alpha" }),
+    fixtureOrder({
+      id: 9301,
+      firstName: "Pickup",
+      lastName: "NoAddress",
+      address: "",
+    }),
+  ]);
+  const [deliveryOrders, setDeliveryOrders] = useState<Order[]>([
+    fixtureOrder({
+      id: 9310,
+      firstName: "Delivery",
+      lastName: "Paid",
+      status: "ready",
+      paid: true,
+      paidAt: new Date("2026-08-13T09:00:00.000Z"),
+    }),
+    fixtureOrder({
+      id: 9311,
+      firstName: "Delivery",
+      lastName: "Blocked",
+      status: "ready",
+      paid: false,
+    }),
+  ]);
   const moves = useMemo<FieldMovesResult>(
     () => ({
       generatedAt: new Date().toISOString(),
@@ -234,6 +324,27 @@ export default function GoldlineFictionHarness() {
     return fixtureVisitContext(missionId, status, checklistCompleted);
   }
 
+  // Records a genuine pickup/delivery completion by removing the resolved
+  // order from the fixture's own pickups/deliveries arrays — standing in for
+  // production's canonical `admin.updateStatus` write plus its broad
+  // authoritative refetch (`invalidateDriverTruth`), which is what actually
+  // removes a resolved order from `admin.listByDate`'s cache in production.
+  function resolveFixtureOrder(
+    orderId: number,
+    status: "collected" | "delivered"
+  ): boolean {
+    if (status === "delivered") {
+      const order = deliveryOrders.find(row => row.id === orderId);
+      if (!order || !order.paid) return false;
+      setDeliveryOrders(current => current.filter(row => row.id !== orderId));
+    } else {
+      const order = pickupOrders.find(row => row.id === orderId);
+      if (!order) return false;
+      setPickupOrders(current => current.filter(row => row.id !== orderId));
+    }
+    return true;
+  }
+
   const services = useMemo<GoldlineActionServices>(
     () => ({
       recordCall: async () => undefined,
@@ -276,8 +387,12 @@ export default function GoldlineFictionHarness() {
         throw new Error("Not exercised by the NEUTRALIZE fixture");
       },
       refetchAuthoritativeTruth: async () => undefined,
+      resolveOrder: async ({ orderId, status }) =>
+        resolveFixtureOrder(orderId, status),
     }),
-    []
+    // Recreated whenever the fixture's real pickup/delivery arrays change so
+    // resolveOrder never closes over a stale removed/duplicate order list.
+    [pickupOrders, deliveryOrders]
   );
 
   const missions: CommercialMission[] = [];
@@ -297,7 +412,11 @@ export default function GoldlineFictionHarness() {
     dayResolution: null,
     selectedDate: "2026-08-13",
     onSelectedDateChange: () => undefined,
-    onResolveOrder: async () => false,
+    pickups: pickupOrders,
+    deliveries: deliveryOrders,
+    isResolvingOrder: false,
+    onResolveOrder: async (orderId, status) =>
+      resolveFixtureOrder(orderId, status),
     onAcceptMove: async () => undefined,
     onOpenWalkIn: () => undefined,
     onOpenNewOrder: () => undefined,

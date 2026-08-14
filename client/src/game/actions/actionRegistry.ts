@@ -16,6 +16,8 @@ export const GOLDLINE_ACTION_KINDS = [
   "SCOUT",
   "REVIEW",
   "WAIT",
+  "PICKUP",
+  "DELIVERY",
 ] as const;
 
 export type GoldlineActionKind = (typeof GOLDLINE_ACTION_KINDS)[number];
@@ -62,7 +64,21 @@ export type GoldlineActionDescriptor =
     })
   | (BaseAction<"SCOUT", "write"> & { capabilityId: "EXPANSION_SCOUT" })
   | (BaseAction<"REVIEW", "read"> & { destinationPath: string | null })
-  | (BaseAction<"WAIT", "read"> & { dueAt: string | null });
+  | (BaseAction<"WAIT", "read"> & { dueAt: string | null })
+  | (BaseAction<"PICKUP", "write"> & {
+      orderId: number;
+      customerName: string;
+      address: string | null;
+      navigationUrl: string | null;
+    })
+  | (BaseAction<"DELIVERY", "write"> & {
+      orderId: number;
+      customerName: string;
+      address: string | null;
+      navigationUrl: string | null;
+      /** True only when the real order is paid — never fabricated. */
+      paid: boolean;
+    });
 
 type Adapter<K extends GoldlineActionKind> = {
   kind: K;
@@ -183,6 +199,12 @@ export const GOLDLINE_ACTION_REGISTRY = {
           }
         : null,
   },
+  // Pickups/deliveries have no PlayableMission/commercial-mission concept —
+  // their descriptors are built directly from real order fields (see
+  // GoldlineGameHome.tsx's handleSelectOrder), never resolved from this
+  // mission-context adapter table.
+  PICKUP: { kind: "PICKUP", resolve: () => null },
+  DELIVERY: { kind: "DELIVERY", resolve: () => null },
 } satisfies { [K in GoldlineActionKind]: Adapter<K> };
 
 export function resolveGoldlineAction(

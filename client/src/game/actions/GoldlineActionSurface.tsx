@@ -8,6 +8,7 @@ import {
   Footprints,
   Loader2,
   MapPin,
+  Package,
   Radar,
   Route,
   X,
@@ -484,6 +485,101 @@ function SimpleWriteSurface(
   );
 }
 
+/**
+ * A genuine pickup or delivery, staged in-canvas exactly like VISIT/RECOVER —
+ * never a redirect to conventional dispatch UI. Records real completion
+ * through the same canonical `admin.updateStatus` mutation the pre-existing
+ * (non-game) pickup/delivery flow already used (`services.resolveOrder`) —
+ * no new order-truth store, no fabricated evidence (no scan/signature/photo
+ * requirement — none exist in the real business process this represents).
+ * A payment-blocked delivery renders truthfully blocked; fiction cannot
+ * bypass that real business rule.
+ */
+function OrderSurface(
+  props: SurfaceProps & {
+    action: Extract<GoldlineActionDescriptor, { kind: "PICKUP" | "DELIVERY" }>;
+  }
+) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const mounted = useMountedRef();
+  const isDelivery = props.action.kind === "DELIVERY";
+  const blocked = props.action.kind === "DELIVERY" && !props.action.paid;
+
+  async function perform() {
+    setBusy(true);
+    setError(null);
+    try {
+      const success = await props.services.resolveOrder({
+        orderId: props.action.orderId,
+        status: isDelivery ? "delivered" : "collected",
+      });
+      if (!success) {
+        if (mounted.current)
+          setError(
+            "The order could not be recorded — real business state may have changed."
+          );
+        return;
+      }
+      if (mounted.current) props.onPersisted();
+    } catch (cause) {
+      if (mounted.current)
+        setError(
+          cause instanceof Error ? cause.message : "The order could not be recorded."
+        );
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  }
+
+  return (
+    <SurfaceFrame
+      eyebrow={`${isDelivery ? "DELIVERY" : "PICKUP"} · AUTHORITATIVE`}
+      title={props.mission.name}
+      onClose={props.onClose}
+      closeDisabled={busy}
+    >
+      <div className="action-world-cue">
+        <Package />
+        <span>
+          <b>{props.action.address ?? "No address on record"}</b>
+          <small>
+            Launching maps or returning does not complete this{" "}
+            {isDelivery ? "delivery" : "pickup"}.
+          </small>
+        </span>
+      </div>
+      {props.action.navigationUrl ? (
+        <a
+          href={props.action.navigationUrl}
+          target="_blank"
+          rel="noreferrer"
+        >
+          NAVIGATE <Compass />
+        </a>
+      ) : null}
+      {blocked ? (
+        <div className="action-field-prep">
+          <p className="action-field-prep-note">
+            Payment has not cleared for this order — real business truth
+            blocks completion here, the same as everywhere else in the
+            system. This cannot be bypassed in-game.
+          </p>
+        </div>
+      ) : (
+        <button disabled={busy} onClick={() => void perform()}>
+          {busy
+            ? "RECORDING…"
+            : isDelivery
+              ? "MARK DELIVERED"
+              : "MARK COLLECTED"}
+        </button>
+      )}
+      {error ? <p role="alert">{error}</p> : null}
+    </SurfaceFrame>
+  );
+}
+
 export default function GoldlineActionSurface(props: SurfaceProps) {
   if (props.action.kind === "CALL" && props.requestId) {
     return (
@@ -525,6 +621,8 @@ export default function GoldlineActionSurface(props: SurfaceProps) {
         requestId={props.requestId}
       />
     );
+  if (props.action.kind === "PICKUP" || props.action.kind === "DELIVERY")
+    return <OrderSurface {...props} action={props.action} />;
   return (
     <SurfaceFrame
       eyebrow={`${props.action.kind} · READ ONLY`}
