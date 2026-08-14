@@ -2836,6 +2836,46 @@
   display: block;
 }
 
+.action-field-prep {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.action-field-prep-note {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.action-field-prep-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.action-field-prep-checklist button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(7, 19, 28, 0.6);
+  color: white;
+  text-align: left;
+  font-weight: 700;
+}
+
+.action-field-prep-checklist button.is-complete {
+  border-color: rgba(126, 230, 138, 0.5);
+  color: #7ee68a;
+}
+
+.action-field-prep-checklist button svg {
+  flex: 0 0 auto;
+}
+
 .mission-affordance-signal {
   position: absolute;
   z-index: 12;

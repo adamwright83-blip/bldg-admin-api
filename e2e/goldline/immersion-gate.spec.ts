@@ -128,7 +128,7 @@ test.describe("real evidence resolves the mission, not fictional performance", (
 });
 
 test.describe("NEUTRALIZE route stops stay in-game", () => {
-  test("selecting a route stop opens the in-game VISIT surface without leaving Goldline, and coverage returns to the same mission", async ({
+  test("CASE A — PREP INCOMPLETE: required field prep is completed in-game, with no fallback to the legacy sales-mission page anywhere in the VISIT lifecycle", async ({
     page,
   }) => {
     await loginToNeutralizeFixture(page);
@@ -157,7 +157,37 @@ test.describe("NEUTRALIZE route stops stay in-game", () => {
     await expect(surface).toContainText("VISIT");
 
     await surface.getByRole("button", { name: /PREPARE VISIT/ }).click();
-    await surface.getByRole("button", { name: /^DEPART/ }).click();
+
+    // Genuine field prep starts incomplete (fixture mirrors production's
+    // fieldStartPreparation seeding a required, pending checklist item) —
+    // DEPART must not be available yet, and the surface must expose the
+    // required checklist item in-game rather than a link out of Goldline.
+    const departButton = surface.getByRole("button", { name: /^DEPART/ });
+    await expect(departButton).toHaveCount(0);
+    expect(await surface.locator("a[href*='/driver/sales-mission/']").count()).toBe(
+      0
+    );
+    const checklistItem = surface.getByRole("button", {
+      name: /Confirm address/,
+    });
+    await expect(checklistItem).toBeVisible();
+    expect(page.url()).not.toContain("/driver/sales-mission/");
+    expect(await page.locator("canvas.goldline-game-canvas").count()).toBe(1);
+
+    // Complete genuine required prep in-game — the same canonical
+    // fieldChecklist mutation CommercialSalesMission.tsx uses.
+    await checklistItem.click();
+    await expect(departButton).toBeVisible({ timeout: 5_000 });
+
+    // Same page, same mounted canvas, still no legacy-page escape anywhere
+    // in the lifecycle so far.
+    expect(page.url()).toBe(urlBeforeSelect);
+    expect(await page.locator("canvas.goldline-game-canvas").count()).toBe(1);
+    expect(await surface.locator("a[href*='/driver/sales-mission/']").count()).toBe(
+      0
+    );
+
+    await departButton.click();
     await surface
       .getByRole("button", { name: /ARRIVED · RECORD VISIT/ })
       .click();
@@ -176,9 +206,34 @@ test.describe("NEUTRALIZE route stops stay in-game", () => {
     await expect(panel).toBeVisible();
     await expect(panel).toHaveAttribute("data-authoritative-count", "1");
     await expect(page.getByTestId("fixture-covered-count")).toHaveText("1");
+    expect(page.url()).not.toContain("/driver/sales-mission/");
   });
 
-  test("a stop with no real address on record stays inert — fails closed, never opens the legacy page", async ({
+  test("CASE B — NO REAL ADDRESS: a genuinely address-less route stop fails closed and never opens the legacy page", async ({
+    page,
+  }) => {
+    await loginToNeutralizeFixture(page);
+    await page.waitForTimeout(800);
+    await clickFixtureButton(page, "fixture-strip-first-stop-address");
+    await enterNeutralizeMission(page);
+
+    const unavailableStop = page
+      .locator(".fiction-route-stops button")
+      .filter({ hasText: "UNAVAILABLE" })
+      .first();
+    await expect(unavailableStop).toBeVisible();
+    await expect(unavailableStop).toBeDisabled();
+
+    await unavailableStop.click({ force: true });
+
+    // No authoritative visit write, no legacy-page fallback, no fabricated
+    // address — the stop simply never opens an action surface.
+    expect(page.url()).not.toContain("/driver/sales-mission/");
+    await expect(page.locator(".goldline-action-surface")).not.toBeVisible();
+    await expect(page.getByTestId("fixture-covered-count")).toHaveText("0");
+  });
+
+  test("CASE C — ALREADY COVERED: a recorded stop stays disabled/read-only, with no duplicate action or evidence", async ({
     page,
   }) => {
     await loginToNeutralizeFixture(page);
@@ -200,6 +255,7 @@ test.describe("NEUTRALIZE route stops stay in-game", () => {
     await recordedStop.click({ force: true });
     expect(page.url()).not.toContain("/driver/sales-mission/");
     await expect(page.locator(".goldline-action-surface")).not.toBeVisible();
+    await expect(page.getByTestId("fixture-covered-count")).toHaveText("5");
   });
 });
 

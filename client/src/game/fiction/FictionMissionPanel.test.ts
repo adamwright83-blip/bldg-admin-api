@@ -41,3 +41,32 @@ describe("GoldlineGameHome route-stop wiring", () => {
     expect(source).toMatch(/if \(!stop\.address \|\| !stop\.navigationUrl\)/);
   });
 });
+
+/**
+ * The NEUTRALIZE route-stop VISIT lifecycle spans FictionMissionPanel ->
+ * GoldlineGameHome -> GoldlineActionSurface. A structural check on
+ * FictionMissionPanel alone would miss a legacy-page escape reintroduced
+ * further along that chain — e.g. the "preparing but not ready to depart"
+ * state, which previously rendered `<a href={props.action.destinationPath}>`
+ * (REVIEW REQUIRED FIELD PREP) as a fallback out of Goldline. This guards
+ * the whole chain, and the CASE A browser test in
+ * e2e/goldline/immersion-gate.spec.ts exercises the same guarantee live
+ * (asserts zero `a[href*="/driver/sales-mission/"]` inside the mounted
+ * surface at every VISIT lifecycle stage, not just at selection time).
+ */
+describe("GoldlineActionSurface VISIT lifecycle never falls back to the legacy page", () => {
+  const source = readFileSync(
+    new URL("../actions/GoldlineActionSurface.tsx", import.meta.url),
+    "utf8"
+  );
+
+  it("never links out to destinationPath while prep is incomplete", () => {
+    expect(source).not.toContain("<a href={props.action.destinationPath}>");
+    expect(source).not.toMatch(/<a\s[^>]*action\.destinationPath/);
+  });
+
+  it("exposes required field prep as an in-game checklist action instead", () => {
+    expect(source).toContain("props.services.updateChecklistItem");
+    expect(source).toContain("action-field-prep-checklist");
+  });
+});

@@ -324,6 +324,9 @@ export default function GoldlineBusinessLoopHarness(props: {
         stageTruth({ ...truth, missionStatus: "preparing" });
         return visit.current;
       },
+      updateChecklistItem: async () => {
+        throw new Error("Not exercised by this fixture — prep starts ready");
+      },
       departVisit: async input => {
         recordWrite({ kind: "FIELD_DEPART", ...input });
         visit.current = visitContext("en_route", 3);

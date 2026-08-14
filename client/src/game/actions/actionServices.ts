@@ -49,6 +49,18 @@ export type GoldlineActionServices = {
     missionId: number;
     requestId: string;
   }) => Promise<GoldlineVisitContext>;
+  /**
+   * Toggles one canonical field-prep checklist item — the same mutation
+   * `CommercialSalesMission.tsx` uses (`fieldChecklist`). Lets the in-game
+   * VISIT surface complete genuine required preparation without navigating
+   * to that legacy page.
+   */
+  updateChecklistItem: (input: {
+    missionId: number;
+    itemKey: string;
+    status: "pending" | "completed" | "skipped";
+    requestId: string;
+  }) => Promise<GoldlineVisitContext>;
   departVisit: (input: {
     missionId: number;
     requestId: string;

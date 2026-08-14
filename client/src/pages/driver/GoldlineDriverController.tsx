@@ -249,6 +249,8 @@ function LiveGoldlineDriverController() {
   const arriveVisit = trpc.system.commercialMission.fieldArrive.useMutation();
   const recordVisitOutcome =
     trpc.system.commercialMission.fieldOutcome.useMutation();
+  const updateFieldChecklist =
+    trpc.system.commercialMission.fieldChecklist.useMutation();
   const completeFollowUp =
     trpc.system.dayforgeToday.completeFollowUp.useMutation();
   const rescheduleFollowUp =
@@ -717,6 +719,20 @@ function LiveGoldlineDriverController() {
     return next;
   }
 
+  async function updateChecklistItemAction(
+    input: Parameters<GoldlineActionServices["updateChecklistItem"]>[0]
+  ): Promise<GoldlineVisitContext> {
+    const current = await loadVisitContext(input.missionId);
+    if (!current.field)
+      throw new Error("Field preparation is required before checklist items can change");
+    const next = await updateFieldChecklist.mutateAsync({
+      ...input,
+      expectedFieldVersion: current.field.version,
+    });
+    if (!next) throw new Error("Checklist update was not persisted");
+    return next;
+  }
+
   async function recordVisitAction(
     input: Parameters<GoldlineActionServices["recordVisitOutcome"]>[0]
   ): Promise<GoldlineVisitContext> {
@@ -806,6 +822,7 @@ function LiveGoldlineDriverController() {
     recordCall: handlePersistEncounterAction,
     loadVisit: loadVisitContext,
     startVisitPreparation: startVisitAction,
+    updateChecklistItem: updateChecklistItemAction,
     departVisit: departVisitAction,
     arriveVisit: arriveVisitAction,
     recordVisitOutcome: recordVisitAction,

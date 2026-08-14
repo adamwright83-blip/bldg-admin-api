@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   CalendarClock,
+  Check,
   ChevronRight,
   Compass,
+  FileText,
   Footprints,
   Loader2,
   MapPin,
@@ -173,9 +175,45 @@ function VisitSurface(
         </button>
       ) : null}
       {context?.mission.status === "preparing" && !readyToDepart ? (
-        <a href={props.action.destinationPath}>
-          REVIEW REQUIRED FIELD PREP <ChevronRight />
-        </a>
+        <div className="action-field-prep">
+          <p className="action-field-prep-note">
+            Complete required preparation before departure — genuine field
+            prep, recorded the same as any other visit evidence.
+          </p>
+          <div className="action-field-prep-checklist">
+            {context.checklist.map(item => (
+              <button
+                key={item.itemKey}
+                type="button"
+                disabled={busy}
+                className={item.status === "completed" ? "is-complete" : ""}
+                onClick={() =>
+                  void write(() =>
+                    props.services.updateChecklistItem({
+                      missionId: props.action.missionId!,
+                      itemKey: item.itemKey,
+                      status:
+                        item.status === "completed" ? "pending" : "completed",
+                      requestId: props.requestId,
+                    })
+                  )
+                }
+              >
+                <FileText />
+                <span>
+                  {item.label}
+                  {item.required ? " *" : ""}
+                </span>
+                {item.status === "completed" ? <Check /> : null}
+              </button>
+            ))}
+          </div>
+          <p className="action-field-prep-note">
+            {context.proposal
+              ? "Approved proposal on file."
+              : "No current approved proposal — required material is not ready."}
+          </p>
+        </div>
       ) : null}
       {readyToDepart ? (
         <button
