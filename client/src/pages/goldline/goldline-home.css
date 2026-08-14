@@ -983,19 +983,19 @@ button {
   }
 }
 @media (max-width: 699px), (max-device-width: 767px) {
-  html,
-  body,
-  #root {
-    width: 100%;
-    min-width: 0;
-    min-height: 100%;
-    overflow: hidden;
-  }
+  /* Scoped to this page's own shell only — see the comment above the
+     eager-import chain note near the top of this file. This block used to
+     target bare `html, body, #root`, which leaked a permanent overflow:hidden
+     scroll lock into every route on a mobile viewport (this stylesheet is
+     reached via App's eager Driver -> GoldlineDriverController -> GoldlineHome
+     import chain, not just /driver). That silently broke scrolling on
+     unrelated pages like the Laundry Butler marketing landing page. */
   .goldline-shell {
     width: 100vw;
     min-width: 100vw;
     height: 100dvh;
     min-height: 100dvh;
+    overflow: hidden;
     place-items: stretch;
   }
   .goldline {
