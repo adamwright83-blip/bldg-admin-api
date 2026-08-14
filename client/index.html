@@ -28,6 +28,23 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Native fragment scrolling is unreliable on the mobile Laundry Butler
+      // layout because the responsive shell changes the effective scroll
+      // container. Explicitly scroll the mobile pricing target instead.
+      document.addEventListener("click", function (event) {
+        const source = event.target instanceof Element ? event.target : null;
+        const link = source?.closest('a[href="#mobile-pricing"]');
+        if (!link) return;
+
+        const pricing = document.getElementById("mobile-pricing");
+        if (!pricing) return;
+
+        event.preventDefault();
+        pricing.scrollIntoView({ behavior: "smooth", block: "start" });
+        window.history.replaceState(null, "", "#mobile-pricing");
+      });
+    </script>
   </body>
 
 </html>
