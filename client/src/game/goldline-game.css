@@ -69,8 +69,8 @@
   text-align: left;
 }
 .cold-call-entry small {
-  font-size: 9px;
-  color: #8dbcc0;
+  font-size: 11px;
+  color: #a0c8cc;
 }
 
 .cold-call-burst,
@@ -315,11 +315,11 @@
   flex: 0 0 auto;
 }
 .world-history-ribbon small {
-  font-size: 8px;
-  color: #9cb9b9;
+  font-size: 10px;
+  color: #b0c8c8;
 }
 .world-history-ribbon b {
-  font-size: 11px;
+  font-size: 13px;
   color: #e9c761;
 }
 .world-history-ribbon > div {
@@ -337,7 +337,7 @@
   border: 1px solid #42545b;
   border-radius: 8px;
   background: #111f26;
-  font-size: 9px;
+  font-size: 11px;
 }
 .world-history-ribbon button.is-captured {
   color: #ffe081;
@@ -762,12 +762,12 @@
 }
 .game-topbar span {
   color: #6edbe5;
-  font: 700 8px "Barlow Condensed";
-  letter-spacing: 0.16em;
+  font: 700 10px "Barlow Condensed";
+  letter-spacing: 0.14em;
 }
 .game-topbar span svg {
-  width: 9px;
-  height: 9px;
+  width: 10px;
+  height: 10px;
   vertical-align: -1px;
 }
 .game-topbar b {
@@ -778,9 +778,9 @@
 }
 .game-topbar small {
   margin-top: 4px;
-  color: #9aadb5;
-  font-size: 6px;
-  letter-spacing: 0.12em;
+  color: #b3c4ca;
+  font-size: 9px;
+  letter-spacing: 0.08em;
 }
 
 .mission-fork {
@@ -1131,17 +1131,17 @@
 }
 .context-actions small {
   margin-top: 2px;
-  font: 700 9px Inter;
+  font: 700 12px Inter;
 }
 .action-awaiting {
   padding: 9px;
-  color: #b7c7cd;
+  color: #c3d2d7;
   text-align: center;
   background: #061018aa;
   border: 1px solid #64798454;
   border-radius: 8px;
-  font: 700 7px Inter;
-  letter-spacing: 0.1em;
+  font: 700 12px Inter;
+  letter-spacing: 0.06em;
 }
 .action-awaiting svg {
   display: block;
@@ -1174,9 +1174,10 @@
   gap: 3px;
   border: 0;
   border-right: 1px solid #63828e40;
-  color: #bdd2d9;
+  color: #cfe0e5;
   background: transparent;
-  font: 700 8px Inter;
+  font: 700 11px Inter;
+  letter-spacing: 0.01em;
   text-decoration: none;
 }
 .game-utility-bar :last-child {
@@ -1965,20 +1966,20 @@
   display: block;
 }
 .live-route-list b {
-  font-size: 10px;
+  font-size: 13px;
 }
 .live-route-list small {
   margin-top: 3px;
-  color: #9fb2b9;
-  font-size: 7px;
+  color: #b3c2c7;
+  font-size: 12px;
 }
 .live-route-list button {
-  min-height: 36px;
+  min-height: 40px;
   padding: 0 9px;
   border: 1px solid #61dce8;
   color: #041015;
   background: #6be4ed;
-  font: 800 8px Inter;
+  font: 800 12px Inter;
 }
 .live-route-list button:disabled {
   border-color: #7b8588;
