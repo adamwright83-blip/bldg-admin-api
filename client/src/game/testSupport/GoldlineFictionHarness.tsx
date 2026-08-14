@@ -214,7 +214,22 @@ function historicalNode(): DriverGameWorldNode {
   };
 }
 
+/**
+ * True when the URL requests the deterministic empty-day fixture
+ * (`?goldlineFixture=NEUTRALIZE&goldlineEmptyDay=1`) — a real player day
+ * with genuinely zero NEUTRALIZE visit stops, pickups, or deliveries.
+ * Reused throughout this component to zero every real-work source rather
+ * than adding a second harness: missions are already always [] here, so
+ * this only needs to zero the route/pickup/delivery arrays this file
+ * itself seeds.
+ */
+function readEmptyDayFlag(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("goldlineEmptyDay") === "1";
+}
+
 export default function GoldlineFictionHarness() {
+  const emptyDay = useRef(readEmptyDayFlag()).current;
   const [coveredCount, setCoveredCount] = useState(0);
   const [driverSafeSalesIntel, setDriverSafeSalesIntel] =
     useState<DriverSafeSalesIntel | null>({
@@ -227,7 +242,9 @@ export default function GoldlineFictionHarness() {
   // Test-only: simulates a real authoritative change (a stop resolved or
   // expired) so Slice 96's dynamic reprojection can be proven against a
   // live UI re-render, not just the pure-function unit tests.
-  const [liveStopCount, setLiveStopCount] = useState(ROUTE_STOP_COUNT);
+  const [liveStopCount, setLiveStopCount] = useState(
+    emptyDay ? 0 : ROUTE_STOP_COUNT
+  );
   // Test-only: lets a browser test exercise a genuine no-address route stop
   // (CASE B — truthful unavailable treatment) without altering the other
   // four stops' real-address behavior the rest of the suite depends on.
@@ -237,16 +254,20 @@ export default function GoldlineFictionHarness() {
   // `admin.listByDate` result shape exactly (real Order rows). One pickup
   // has no address on file (CASE C — fails closed truthfully); one delivery
   // is genuinely unpaid (payment-blocked, cannot be bypassed by fiction).
-  const [pickupOrders, setPickupOrders] = useState<Order[]>([
-    fixtureOrder({ id: 9300, firstName: "Pickup", lastName: "Alpha" }),
-    fixtureOrder({
-      id: 9301,
-      firstName: "Pickup",
-      lastName: "NoAddress",
-      address: "",
-    }),
-  ]);
-  const [deliveryOrders, setDeliveryOrders] = useState<Order[]>([
+  const [pickupOrders, setPickupOrders] = useState<Order[]>(
+    emptyDay
+      ? []
+      : [
+          fixtureOrder({ id: 9300, firstName: "Pickup", lastName: "Alpha" }),
+          fixtureOrder({
+            id: 9301,
+            firstName: "Pickup",
+            lastName: "NoAddress",
+            address: "",
+          }),
+        ]
+  );
+  const [deliveryOrders, setDeliveryOrders] = useState<Order[]>(emptyDay ? [] : [
     fixtureOrder({
       id: 9310,
       firstName: "Delivery",

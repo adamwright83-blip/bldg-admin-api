@@ -87,6 +87,14 @@ type GoldlineGameCallbacks = {
   ) => void;
   /** Physical corridor exit zone; caller decides if a legitimate destination exists. */
   onCorridorExitProximity?: (near: boolean) => void;
+  /**
+   * Fires only while a genuine mission/order objective exists and its
+   * authored anchor is currently outside the visible viewport — never a
+   * fabricated GPS distance, purely "is the real objective's world
+   * position on screen right now." `null` when it's onscreen or no
+   * objective exists.
+   */
+  onObjectiveOffscreen?: (direction: "ahead" | null) => void;
   onPopulationReady?: (
     ambientCount: number,
     assetStage: CorridorPopulation["assetStage"]
@@ -359,6 +367,7 @@ export class GoldlineGame {
   >();
   private missionProximityState: "hidden" | "visible" | "engage" = "hidden";
   private orderProximityState: "hidden" | "visible" | "engage" = "hidden";
+  private objectiveOffscreenState: "ahead" | null = null;
   private corridorExitNear = false;
   private qualityMonitor = new AdaptiveQualityMonitor();
   private qualityTier: QualityTier = "premium";
@@ -689,6 +698,7 @@ export class GoldlineGame {
     // different authored anchor; retaining the prior corridor's `engage`
     // state would suppress the new transition callback and leave stale UI.
     this.missionProximityState = "hidden";
+    this.objectiveOffscreenState = null;
   }
 
   /** Same contract as setMissionEmbodiment, for a genuine pickup/delivery order. */
@@ -696,6 +706,7 @@ export class GoldlineGame {
     this.pendingOrderEmbodiment = order;
     this.populationSystem?.setOrder(order);
     this.orderProximityState = "hidden";
+    this.objectiveOffscreenState = null;
   }
 
   setAgentPresence(presence: readonly AgentWorldPresence[]) {
@@ -934,6 +945,7 @@ export class GoldlineGame {
     this.portalProximityState.clear();
     this.missionProximityState = "hidden";
     this.orderProximityState = "hidden";
+    this.objectiveOffscreenState = null;
     this.corridorExitNear = false;
     this.availableAction = null;
     this.availableLabel = null;
@@ -1179,6 +1191,28 @@ export class GoldlineGame {
         order.kind,
         orderProximity
       );
+    }
+
+    // Offscreen guidance: reuses the exact same proximity math that already
+    // drives the mission/order marker's own visibility ("hidden" below the
+    // 0.22 visible-radius threshold — see missionProximity/orderProximity
+    // above) so "is the objective visible yet" is answered from the same
+    // single geometry the marker itself uses, never a second, independently
+    // -tuned distance. Purely game-space ("ahead, not yet close enough to
+    // see"), never a fabricated real-world GPS distance.
+    const objectiveEmbodiment = mission ?? order;
+    const objectiveHidden = mission
+      ? missionProximity === "hidden"
+      : orderProximity === "hidden";
+    const objectiveOffscreen: "ahead" | null =
+      objectiveEmbodiment &&
+      objectiveHidden &&
+      objectiveEmbodiment.anchor.position.progress > this.progress
+        ? "ahead"
+        : null;
+    if (objectiveOffscreen !== this.objectiveOffscreenState) {
+      this.objectiveOffscreenState = objectiveOffscreen;
+      this.callbacks.onObjectiveOffscreen?.(objectiveOffscreen);
     }
 
     const missionAction = missionProximity === "engage" ? "INTERACT" : null;
@@ -1624,22 +1658,42 @@ export class GoldlineGame {
     drawRoute(22, routeColor, 0.08 * mainRouteDim);
     drawRoute(14, routeColor, 0.15 * mainRouteDim);
     drawRoute(3, routeHighlight, 0.86 * mainRouteDim);
+    // Real navigation guidance, not ambient decoration: when a genuine
+    // mission or order objective is embodied, the shimmer travels
+    // specifically from Trailblazer's current position toward that
+    // objective's real anchor — "energy flowing toward the real next
+    // thing to do" — rather than looping the whole route with no meaning.
+    // With no genuine objective, it stays a slow full-route ambient
+    // shimmer that points at nothing (never implies a destination that
+    // doesn't exist).
+    const objectiveProgress =
+      this.populationSystem?.missionEmbodiment?.anchor.position.progress ??
+      this.populationSystem?.orderEmbodiment?.anchor.position.progress ??
+      null;
     if (!this.reducedMotion && mainRouteDim > 0.5) {
-      const shimmerT = ((performance.now() / 6500) % 1);
-      const shimmerSpan = 0.05;
-      const shimmerStart = routeScreenPoint(
-        Math.max(0, shimmerT - shimmerSpan)
-      );
+      const toT = (p: number) => Math.max(0, Math.min(1, (p - 0.02) / 0.8));
+      const tStart = objectiveProgress != null ? toT(this.progress) : 0;
+      const tEnd = objectiveProgress != null ? toT(objectiveProgress) : 1;
+      const span = Math.max(0.03, tEnd - tStart);
+      const period = objectiveProgress != null ? 2600 : 6500;
+      const shimmerSpan = objectiveProgress != null ? span * 0.35 : 0.05;
+      const shimmerT =
+        tStart + ((performance.now() / period) % 1) * (span - shimmerSpan);
+      const shimmerStart = routeScreenPoint(Math.max(0, shimmerT));
       this.corridor.moveTo(shimmerStart.x, shimmerStart.y);
       for (let i = 1; i <= 6; i += 1) {
         const t = Math.max(
           0,
-          Math.min(1, shimmerT - shimmerSpan + (i / 6) * shimmerSpan * 2)
+          Math.min(1, shimmerT + (i / 6) * shimmerSpan)
         );
         const point = routeScreenPoint(t);
         this.corridor.lineTo(point.x, point.y);
       }
-      this.corridor.stroke({ width: 5, color: 0xfff3cf, alpha: 0.5 });
+      this.corridor.stroke({
+        width: objectiveProgress != null ? 6 : 5,
+        color: 0xfff3cf,
+        alpha: objectiveProgress != null ? 0.75 : 0.5,
+      });
     }
 
     this.fortress.clear();

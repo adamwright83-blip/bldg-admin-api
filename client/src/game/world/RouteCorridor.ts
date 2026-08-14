@@ -7,10 +7,21 @@ export type CorridorTrigger = {
   label: string;
 };
 
+/**
+ * Every remaining trigger must have unmistakable, already-visible world
+ * geometry backing it — see GoldlineGame.ts's `drawWorld()` for exactly
+ * what renders at each trigger's position. The prior fallen-arch (JUMP),
+ * white-stone (CLIMB), and water-gap (VAULT) triggers were removed: they
+ * were invisible percentage-based gates with no corresponding sprite,
+ * manifest landmark, or occlusion geometry anywhere near their positions
+ * (confirmed against corridor_01/manifest.json and traversal.json) — a
+ * real player correctly could not find any obstacle to jump/climb/vault.
+ * fortress-gate survives because it renders a real, always-visible gate
+ * (state-colored vector frame plus the stronghold sprite when present;
+ * see `this.fortress` drawing in GoldlineGame.ts) that Trailblazer visibly
+ * walks up to and INTERACTs with — never a bare percentage check.
+ */
 export const CORRIDOR_TRIGGERS: CorridorTrigger[] = [
-  { id: "fallen-arch", at: 0.24, action: "JUMP", label: "over fallen arch" },
-  { id: "white-stone", at: 0.43, action: "CLIMB", label: "white-stone wall" },
-  { id: "water-gap", at: 0.61, action: "VAULT", label: "waterfall gap" },
   { id: "fortress-gate", at: 0.79, action: "INTERACT", label: "enter encounter" },
 ];
 
