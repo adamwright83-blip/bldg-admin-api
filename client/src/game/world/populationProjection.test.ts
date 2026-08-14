@@ -3,7 +3,9 @@ import type { CorridorMissionAnchorPoint } from "../../../../shared/corridorMani
 import {
   ambientPresentation,
   bindMissionToPopulation,
+  bindOrderToPopulation,
   isMissionApproachable,
+  isOrderApproachable,
 } from "./populationProjection";
 
 const anchors: CorridorMissionAnchorPoint[] = [
@@ -111,5 +113,64 @@ describe("population truth boundary", () => {
       )
     ).toBe(true);
     expect(isMissionApproachable(embodiment, 0.05, 0.7)).toBe(false);
+  });
+});
+
+const authoritativeOrder = {
+  orderId: 501,
+  orderKey: "order:501",
+  kind: "pickup" as const,
+  label: "Fixture Customer",
+};
+
+describe("order (pickup/delivery) world-objective boundary", () => {
+  it("creates no embodiment without a real positive order id", () => {
+    expect(bindOrderToPopulation(null, anchors)).toBeNull();
+    expect(
+      bindOrderToPopulation({ ...authoritativeOrder, orderId: 0 }, anchors)
+    ).toBeNull();
+  });
+
+  it("binds the same order to the same authored slot deterministically", () => {
+    const first = bindOrderToPopulation(authoritativeOrder, anchors);
+    const second = bindOrderToPopulation(authoritativeOrder, [...anchors]);
+    expect(first?.anchorId).toBe(second?.anchorId);
+    expect(first).not.toHaveProperty("address");
+    expect(first).not.toHaveProperty("customerName");
+  });
+
+  it("avoids the active mission's anchor when more than one slot exists", () => {
+    const missionEmbodiment = bindMissionToPopulation(
+      authoritativeMission,
+      anchors
+    );
+    const orderEmbodiment = bindOrderToPopulation(
+      authoritativeOrder,
+      anchors,
+      missionEmbodiment?.anchorId ?? null
+    );
+    // Only two anchors are authored in this fixture; a genuine collision
+    // must shift to the other one rather than overlapping visually.
+    if (missionEmbodiment && orderEmbodiment) {
+      expect(orderEmbodiment.anchorId).not.toBe(missionEmbodiment.anchorId);
+    }
+  });
+
+  it("requires genuine physical proximity to the order's authored slot", () => {
+    const embodiment = bindOrderToPopulation(authoritativeOrder, anchors);
+    expect(embodiment).not.toBeNull();
+    expect(
+      isOrderApproachable(
+        embodiment,
+        embodiment!.anchor.position.progress,
+        embodiment!.anchor.position.lateral
+      )
+    ).toBe(true);
+    expect(isOrderApproachable(embodiment, 0.05, 0.7)).toBe(false);
+  });
+
+  it("removes the world objective when the real order resolves/disappears", () => {
+    expect(bindOrderToPopulation(authoritativeOrder, anchors)).not.toBeNull();
+    expect(bindOrderToPopulation(null, anchors)).toBeNull();
   });
 });

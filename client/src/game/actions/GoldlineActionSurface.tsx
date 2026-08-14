@@ -566,13 +566,20 @@ function OrderSurface(
             system. This cannot be bypassed in-game.
           </p>
         </div>
+      ) : !props.action.withinInteractionZone ? (
+        <div className="action-field-prep">
+          <p className="action-field-prep-note">
+            Move Trailblazer to the {isDelivery ? "handoff" : "retrieval"}{" "}
+            point in the world before completing this {isDelivery ? "delivery" : "pickup"}.
+          </p>
+        </div>
       ) : (
         <button disabled={busy} onClick={() => void perform()}>
           {busy
             ? "RECORDING…"
             : isDelivery
-              ? "MARK DELIVERED"
-              : "MARK COLLECTED"}
+              ? "HAND OFF"
+              : "RETRIEVE"}
         </button>
       )}
       {error ? <p role="alert">{error}</p> : null}
