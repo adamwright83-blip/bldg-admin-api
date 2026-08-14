@@ -2836,6 +2836,46 @@
   display: block;
 }
 
+.action-field-prep {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.action-field-prep-note {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.action-field-prep-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.action-field-prep-checklist button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(7, 19, 28, 0.6);
+  color: white;
+  text-align: left;
+  font-weight: 700;
+}
+
+.action-field-prep-checklist button.is-complete {
+  border-color: rgba(126, 230, 138, 0.5);
+  color: #7ee68a;
+}
+
+.action-field-prep-checklist button svg {
+  flex: 0 0 auto;
+}
+
 .mission-affordance-signal {
   position: absolute;
   z-index: 12;
@@ -2984,16 +3024,26 @@
   display: grid;
   gap: 6px;
 }
-.fiction-route-stops a {
+.fiction-route-stops button {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   padding: 7px 9px;
   border: 1px solid #5c929f55;
   border-radius: 8px;
+  background: transparent;
   color: #f2f7ff;
   font: 700 10px Inter;
   text-decoration: none;
+  text-align: left;
+  cursor: pointer;
+}
+.fiction-route-stops button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.fiction-route-stops button[data-stop-unavailable="true"] {
+  border-color: #ff6f6f55;
 }
 .fiction-route-stops b {
   color: #7fd4ff;

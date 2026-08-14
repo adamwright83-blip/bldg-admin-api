@@ -25,6 +25,12 @@ export type FictionMissionPanelProps = {
   /** Real, currently-evidenced count from the authoritative action services — never inferred here. */
   authoritativeCount: number;
   routeStops?: AuthoritativeVisitRouteStop[];
+  /**
+   * Opens the stop's real visit directly in-game (GoldlineActionSurface) —
+   * see GoldlineGameHome.tsx's onSelectRouteStop. When omitted, stops render
+   * inert (no legacy page fallback is offered from here).
+   */
+  onSelectStop?: (stop: AuthoritativeVisitRouteStop) => void;
   onClose: () => void;
 };
 
@@ -119,14 +125,29 @@ export default function FictionMissionPanel(props: FictionMissionPanelProps) {
           className="fiction-route-stops"
           aria-label="Commercial visit route"
         >
-          {props.routeStops.map(stop => (
-            <a key={stop.missionId} href={stop.destinationPath}>
-              <span>
-                {stop.position + 1}. {stop.accountName}
-              </span>
-              <b>{stop.evidenced ? "VISIT RECORDED" : "OPEN VISIT"}</b>
-            </a>
-          ))}
+          {props.routeStops.map(stop => {
+            const unavailable = !stop.address || !stop.navigationUrl;
+            return (
+              <button
+                key={stop.missionId}
+                type="button"
+                disabled={stop.evidenced || unavailable}
+                data-stop-unavailable={unavailable}
+                onClick={() => props.onSelectStop?.(stop)}
+              >
+                <span>
+                  {stop.position + 1}. {stop.accountName}
+                </span>
+                <b>
+                  {stop.evidenced
+                    ? "VISIT RECORDED"
+                    : unavailable
+                      ? "UNAVAILABLE"
+                      : "OPEN VISIT"}
+                </b>
+              </button>
+            );
+          })}
         </div>
       ) : null}
 
