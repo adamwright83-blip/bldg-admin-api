@@ -100,6 +100,7 @@ describe("PopulationSystem", () => {
       orderKey: "order:501",
       kind: "pickup",
       label: "Fixture Customer",
+      blocked: false,
     });
     expect(system.orderEmbodiment?.orderId).toBe(501);
     expect(system.orderEmbodiment?.kind).toBe("pickup");
@@ -127,12 +128,118 @@ describe("PopulationSystem", () => {
       orderKey: "order:501",
       kind: "delivery",
       label: "Fixture Customer",
+      blocked: false,
     });
     expect(system.missionEmbodiment?.missionId).toBe(71);
     expect(system.orderEmbodiment?.orderId).toBe(501);
     system.setOrder(null);
     expect(system.missionEmbodiment?.missionId).toBe(71);
     expect(system.orderEmbodiment).toBeNull();
+    system.destroy();
+  });
+
+  it("falls back to the vector marker when no illustrated texture is supplied", () => {
+    const system = new PopulationSystem(populationFixture());
+    system.setOrder({
+      orderId: 501,
+      orderKey: "order:501",
+      kind: "pickup",
+      label: "Fixture Customer",
+      blocked: false,
+    });
+    // No orderTextures were passed to the constructor — a missing asset can
+    // never masquerade as loaded production art.
+    expect(system.orderPropVisualState).toBeNull();
+    system.destroy();
+  });
+
+  it("shows the illustrated idle prop, then swaps to active as Trailblazer enters the staging radius", () => {
+    const system = new PopulationSystem(populationFixture(), null, {
+      pickupIdle: Texture.WHITE,
+      pickupActive: Texture.EMPTY,
+    });
+    system.setOrder({
+      orderId: 501,
+      orderKey: "order:501",
+      kind: "pickup",
+      label: "Fixture Customer",
+      blocked: false,
+    });
+    expect(system.orderPropVisualState).toBe("idle");
+    const anchor = system.orderEmbodiment!.anchor;
+    // Far away: stays idle.
+    system.update({
+      now: 0,
+      width: 412,
+      height: 923,
+      playerProgress: anchor.position.progress - 0.5,
+      playerLateral: 0,
+    });
+    expect(system.orderPropVisualState).toBe("idle");
+    // Physically inside the authored staging radius: swaps to active.
+    system.update({
+      now: 200,
+      width: 412,
+      height: 923,
+      playerProgress: anchor.position.progress,
+      playerLateral: anchor.position.lateral,
+    });
+    expect(system.orderPropVisualState).toBe("active");
+    system.destroy();
+  });
+
+  it("keeps a payment-blocked delivery visually blocked even at point-blank proximity", () => {
+    const system = new PopulationSystem(populationFixture(), null, {
+      deliveryIdle: Texture.WHITE,
+      deliveryActive: Texture.EMPTY,
+      deliveryBlocked: Texture.WHITE,
+    });
+    system.setOrder({
+      orderId: 777,
+      orderKey: "order:777",
+      kind: "delivery",
+      label: "Fixture Customer",
+      blocked: true,
+    });
+    expect(system.orderPropVisualState).toBe("blocked");
+    const anchor = system.orderEmbodiment!.anchor;
+    // Standing right on top of the anchor — the real payment block still
+    // wins over proximity; fiction cannot bypass it.
+    system.update({
+      now: 0,
+      width: 412,
+      height: 923,
+      playerProgress: anchor.position.progress,
+      playerLateral: anchor.position.lateral,
+    });
+    expect(system.orderPropVisualState).toBe("blocked");
+    system.destroy();
+  });
+
+  it("clears the blocked presentation once authoritative payment state resolves", () => {
+    const system = new PopulationSystem(populationFixture(), null, {
+      deliveryIdle: Texture.WHITE,
+      deliveryActive: Texture.EMPTY,
+      deliveryBlocked: Texture.WHITE,
+    });
+    system.setOrder({
+      orderId: 777,
+      orderKey: "order:777",
+      kind: "delivery",
+      label: "Fixture Customer",
+      blocked: true,
+    });
+    expect(system.orderPropVisualState).toBe("blocked");
+    // A real refetch reports the order is now paid — same order/anchor, only
+    // the authoritative blocked flag changed.
+    system.setOrder({
+      orderId: 777,
+      orderKey: "order:777",
+      kind: "delivery",
+      label: "Fixture Customer",
+      blocked: false,
+    });
+    expect(system.orderPropVisualState).toBe("idle");
     system.destroy();
   });
 });

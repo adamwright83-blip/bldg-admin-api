@@ -25,6 +25,7 @@ import type { MissionAffordanceProjection } from "../encounters/missionAffordanc
 import type { CorridorPopulation } from "../../../../shared/corridorManifest";
 import type {
   AgentWorldPresence,
+  OrderPropTextures,
   PopulationSystem,
 } from "../world/PopulationSystem";
 import type {
@@ -133,6 +134,34 @@ export type PreparedCorridorAssets = {
   goldRoutePoints: GoldRoutePoint[];
   populationSystem: PopulationSystem;
 };
+
+/**
+ * Illustrated pickup/delivery marker art. Universal across every corridor
+ * (a pickup or a delivery reads the same way regardless of which corridor
+ * it's embodied in) so these are fixed paths, not per-corridor manifest
+ * entries — the same convention CHARACTER_POSE_FILES already uses for
+ * Trailblazer. See client/public/assets/goldline/orders/README.md.
+ */
+const ORDER_PROP_FILES: Record<keyof OrderPropTextures, string> = {
+  pickupIdle: "/assets/goldline/orders/pickup-idle.webp",
+  pickupActive: "/assets/goldline/orders/pickup-active.webp",
+  deliveryIdle: "/assets/goldline/orders/delivery-idle.webp",
+  deliveryActive: "/assets/goldline/orders/delivery-active.webp",
+  deliveryBlocked: "/assets/goldline/orders/delivery-blocked.webp",
+};
+const ORDER_PROP_ENTRIES = Object.entries(ORDER_PROP_FILES) as Array<
+  [keyof OrderPropTextures, string]
+>;
+
+function orderPropTexturesFrom(
+  optionalTextures: Map<string, Texture | null>
+): OrderPropTextures {
+  const textures: OrderPropTextures = {};
+  for (const [key] of ORDER_PROP_ENTRIES) {
+    textures[key] = optionalTextures.get(key) ?? null;
+  }
+  return textures;
+}
 
 const CHARACTER_POSE_FILES: Record<string, string> = {
   idle: "idle.webp",
@@ -309,6 +338,7 @@ export class GoldlineGame {
         ...(assets.population?.atlas
           ? [["populationAtlas", assets.population.atlas] as [string, string]]
           : []),
+        ...ORDER_PROP_ENTRIES,
       ];
       const poseEntries = Object.entries(CHARACTER_POSE_FILES);
 
@@ -431,7 +461,8 @@ export class GoldlineGame {
           ambient: [],
           missionAnchorPoints: [],
         },
-        optionalTextures.get("populationAtlas") ?? null
+        optionalTextures.get("populationAtlas") ?? null,
+        orderPropTexturesFrom(optionalTextures)
       );
       this.populationSystem.setMission(this.pendingMissionEmbodiment);
       this.populationSystem.setOrder(this.pendingOrderEmbodiment);
@@ -633,6 +664,7 @@ export class GoldlineGame {
       ...(assets.population?.atlas
         ? [["populationAtlas", assets.population.atlas] as [string, string]]
         : []),
+      ...ORDER_PROP_ENTRIES,
     ];
     const anchorsBasePath =
       assets.anchorsBasePath ?? "/assets/goldline/corridor_01";
@@ -665,7 +697,8 @@ export class GoldlineGame {
         ambient: [],
         missionAnchorPoints: [],
       },
-      optionalTextures.get("populationAtlas") ?? null
+      optionalTextures.get("populationAtlas") ?? null,
+      orderPropTexturesFrom(optionalTextures)
     );
     populationSystem.setMission(this.pendingMissionEmbodiment);
     populationSystem.setOrder(this.pendingOrderEmbodiment);
@@ -855,6 +888,7 @@ export class GoldlineGame {
       width,
       height,
       playerProgress: this.progress,
+      playerLateral: this.lateral,
     });
     this.drawLandmark(width, height, now);
     this.avatarState.tick(now);

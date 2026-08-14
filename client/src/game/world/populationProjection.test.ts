@@ -121,6 +121,7 @@ const authoritativeOrder = {
   orderKey: "order:501",
   kind: "pickup" as const,
   label: "Fixture Customer",
+  blocked: false,
 };
 
 describe("order (pickup/delivery) world-objective boundary", () => {

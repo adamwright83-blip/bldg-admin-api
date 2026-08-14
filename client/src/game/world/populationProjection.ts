@@ -109,6 +109,13 @@ export type AuthoritativeOrderForEmbodiment = {
   kind: "pickup" | "delivery";
   /** Real customer/order label — never fabricated. */
   label: string;
+  /**
+   * Mirrors the same authoritative payment-eligibility check the canonical
+   * delivery mutation already enforces server-side (see
+   * `admin.updateStatus`'s payment gate) — presentation-only, never a second
+   * truth source. Always false for pickup.
+   */
+  blocked: boolean;
 };
 
 export type OrderEmbodiment = AuthoritativeOrderForEmbodiment & {

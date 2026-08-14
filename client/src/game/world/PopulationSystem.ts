@@ -4,6 +4,7 @@ import type { GoldlineAgentId } from "../../../../shared/goldlineProgression";
 import {
   bindMissionToPopulation,
   bindOrderToPopulation,
+  isOrderApproachable,
   type AuthoritativeMissionForEmbodiment,
   type AuthoritativeOrderForEmbodiment,
   type MissionEmbodiment,
@@ -18,6 +19,24 @@ export type AgentWorldPresence = {
 };
 
 export const PRODUCTION_ROLE_ATLAS_COLUMNS = 6;
+
+/**
+ * Illustrated pickup/delivery world-landmark textures (see
+ * client/public/assets/goldline/orders/README.md for provenance). Optional —
+ * `drawOrderMarker` falls back to the original vector geometry when a
+ * texture is unavailable, so a missing file can never masquerade as a loaded
+ * asset. "completed" textures are extracted and available but not wired to
+ * any current display state: the order embodiment is destroyed outright on
+ * resolution (see `setOrder(null)`), so there is no existing "linger after
+ * resolution" moment for them to occupy.
+ */
+export type OrderPropTextures = {
+  pickupIdle?: Texture | null;
+  pickupActive?: Texture | null;
+  deliveryIdle?: Texture | null;
+  deliveryActive?: Texture | null;
+  deliveryBlocked?: Texture | null;
+};
 
 type PopulationNode = {
   id: string;
@@ -47,6 +66,9 @@ export class PopulationSystem {
   private missionGraphic: Container | null = null;
   private order: OrderEmbodiment | null = null;
   private orderGraphic: Container | null = null;
+  private orderPropSprite: Sprite | null = null;
+  private orderPropState: "idle" | "active" | "blocked" | null = null;
+  private readonly orderTextures: OrderPropTextures;
   private agentPresence: readonly AgentWorldPresence[] = [];
   private lastBehaviorUpdateAt = Number.NEGATIVE_INFINITY;
   private reducedMotion = false;
@@ -56,9 +78,11 @@ export class PopulationSystem {
 
   constructor(
     private readonly population: CorridorPopulation,
-    atlasTexture: Texture | null = null
+    atlasTexture: Texture | null = null,
+    orderTextures: OrderPropTextures = {}
   ) {
     reportGoldlineLifecycleDelta("populationBehaviorCallback", 1);
+    this.orderTextures = orderTextures;
     this.roleTextures =
       population.assetStage === "production" && atlasTexture
         ? sliceRoleAtlas(atlasTexture)
@@ -112,6 +136,13 @@ export class PopulationSystem {
     return this.mission;
   }
 
+  /** Test/inspection seam: which illustrated state (if any) the order's
+   * marker is currently showing. Null when no illustrated texture was
+   * supplied (vector fallback) or no order is embodied. */
+  get orderPropVisualState(): "idle" | "active" | "blocked" | null {
+    return this.orderPropState;
+  }
+
   get orderEmbodiment(): OrderEmbodiment | null {
     return this.order;
   }
@@ -152,14 +183,55 @@ export class PopulationSystem {
     if (
       next?.orderId === this.order?.orderId &&
       next?.kind === this.order?.kind &&
-      next?.anchorId === this.order?.anchorId
+      next?.anchorId === this.order?.anchorId &&
+      next?.blocked === this.order?.blocked
     ) {
       return;
     }
     this.order = next;
     this.orderLayer.removeChildren().forEach(child => child.destroy());
-    this.orderGraphic = next ? drawOrderMarker(next) : null;
-    if (this.orderGraphic) this.orderLayer.addChild(this.orderGraphic);
+    this.orderPropSprite = null;
+    this.orderPropState = null;
+    if (next) {
+      const built = drawOrderMarker(next, this.orderTextures);
+      this.orderGraphic = built.container;
+      this.orderPropSprite = built.propSprite;
+      this.orderLayer.addChild(this.orderGraphic);
+      this.applyOrderPropState(next);
+    } else {
+      this.orderGraphic = null;
+    }
+  }
+
+  /**
+   * Swaps the order marker's illustrated texture to match real proximity
+   * (idle vs. active) and the authoritative payment block (delivery only).
+   * A blocked delivery stays visually blocked at any distance — proximity
+   * never overrides the real payment gate. No-ops when illustrated textures
+   * were not supplied (falls back to the existing vector marker).
+   */
+  private applyOrderPropState(order: OrderEmbodiment, active = false) {
+    if (!this.orderPropSprite) return;
+    const state: "idle" | "active" | "blocked" =
+      order.kind === "delivery" && order.blocked
+        ? "blocked"
+        : active
+          ? "active"
+          : "idle";
+    if (state === this.orderPropState) return;
+    const texture =
+      order.kind === "pickup"
+        ? state === "active"
+          ? this.orderTextures.pickupActive
+          : this.orderTextures.pickupIdle
+        : state === "blocked"
+          ? this.orderTextures.deliveryBlocked
+          : state === "active"
+            ? this.orderTextures.deliveryActive
+            : this.orderTextures.deliveryIdle;
+    if (!texture) return;
+    this.orderPropSprite.texture = texture;
+    this.orderPropState = state;
   }
 
   setAgentPresence(presence: readonly AgentWorldPresence[]) {
@@ -192,6 +264,7 @@ export class PopulationSystem {
     width: number;
     height: number;
     playerProgress: number;
+    playerLateral?: number;
   }) {
     if (this.destroyed) return;
     // Ten updates/second is sufficient for short human loops and keeps this
@@ -241,6 +314,14 @@ export class PopulationSystem {
         input.height
       );
       applyOrderMarkerMotion(this.orderGraphic, input.now, this.reducedMotion);
+      this.applyOrderPropState(
+        this.order,
+        isOrderApproachable(
+          this.order,
+          input.playerProgress,
+          input.playerLateral ?? 0
+        )
+      );
     }
 
     const stationPositions: Record<GoldlineAgentId, [number, number]> = {
@@ -445,21 +526,42 @@ function drawCapabilityStation(presence: AgentWorldPresence): Graphics {
 }
 
 /**
- * A genuine pickup/delivery's world marker — a clean geometric prop in the
- * same restrained vector language as the Gold Line/landmark/capability-
- * station graphics (no photographic/illustrated asset exists for this yet).
- * Pickup and delivery read as visibly distinct shapes: pickup is a crate
- * with an upward retrieval arrow, delivery a doorway with a downward
- * handoff arrow. A pale ring marks the staging radius so the player can
- * read the interaction zone before entering it.
+ * A genuine pickup/delivery's world marker. When illustrated production
+ * textures are available (see OrderPropTextures), the marker is a real
+ * illustrated satchel (pickup) or Mediterranean doorway (delivery) —
+ * `applyOrderPropState` swaps the sprite's texture between idle/active/
+ * blocked as the player approaches and as authoritative payment state
+ * changes. Falls back to the original restrained vector geometry when no
+ * texture was supplied (missing asset, or a test environment), so a load
+ * failure can never masquerade as loaded production art. A pale ring marks
+ * the staging radius so the player can read the interaction zone before
+ * entering it.
  */
-function drawOrderMarker(order: OrderEmbodiment): Container {
+function drawOrderMarker(
+  order: OrderEmbodiment,
+  textures: OrderPropTextures = {}
+): { container: Container; propSprite: Sprite | null } {
   const scene = new Container();
   scene.label = `order:${order.orderId}:${order.anchorId}`;
   const color = order.kind === "pickup" ? 0xe0ad48 : 0x6cb8ce;
   const ring = new Graphics();
   ring.circle(0, -18, 30).stroke({ color, width: 1.5, alpha: 0.35 });
   scene.addChild(ring);
+
+  const initialTexture =
+    order.kind === "pickup" ? textures.pickupIdle : textures.deliveryIdle;
+  if (initialTexture) {
+    const sprite = new Sprite(initialTexture);
+    sprite.anchor.set(0.5, 1);
+    const targetHeight = 70;
+    const scale = targetHeight / sprite.texture.height;
+    sprite.scale.set(scale);
+    sprite.x = 0;
+    sprite.y = -14;
+    scene.addChild(sprite);
+    return { container: scene, propSprite: sprite };
+  }
+
   const prop = new Graphics();
   if (order.kind === "pickup") {
     prop
@@ -499,7 +601,7 @@ function drawOrderMarker(order: OrderEmbodiment): Container {
       .fill({ color, alpha: 0.95 });
   }
   scene.addChild(prop);
-  return scene;
+  return { container: scene, propSprite: null };
 }
 
 function applyOrderMarkerMotion(

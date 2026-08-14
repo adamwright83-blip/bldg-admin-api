@@ -1320,6 +1320,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             label:
               `${nextOrderObjective.order.firstName ?? ""} ${nextOrderObjective.order.lastName ?? ""}`.trim() ||
               `Order #${nextOrderObjective.order.id}`,
+            blocked:
+              nextOrderObjective.status === "delivered" &&
+              !nextOrderObjective.order.paid,
           }
         : null
     );
