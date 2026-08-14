@@ -2984,16 +2984,26 @@
   display: grid;
   gap: 6px;
 }
-.fiction-route-stops a {
+.fiction-route-stops button {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   padding: 7px 9px;
   border: 1px solid #5c929f55;
   border-radius: 8px;
+  background: transparent;
   color: #f2f7ff;
   font: 700 10px Inter;
   text-decoration: none;
+  text-align: left;
+  cursor: pointer;
+}
+.fiction-route-stops button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.fiction-route-stops button[data-stop-unavailable="true"] {
+  border-color: #ff6f6f55;
 }
 .fiction-route-stops b {
   color: #7fd4ff;

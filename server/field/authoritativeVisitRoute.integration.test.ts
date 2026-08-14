@@ -195,6 +195,19 @@ describe.skipIf(!runDatabaseGate)(
         missionIds,
       });
       expect(started).toMatchObject({ totalStops: 3, coveredCount: 0 });
+      // Real account address, enriched from the same authoritative
+      // getCommercialMission source every other Goldline surface reads —
+      // required so a route stop can open the in-game VISIT action surface
+      // (client/src/game/GoldlineGameHome.tsx's onSelectRouteStop) without a
+      // page navigation.
+      expect(started.stops[0]?.address).toBe(
+        `${100 + 0} Route Street, Los Angeles, CA`
+      );
+      expect(started.stops[0]?.navigationUrl).toBe(
+        `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+          `${100 + 0} Route Street, Los Angeles, CA`
+        )}`
+      );
       const replay = await startAuthoritativeVisitRoute({
         tenantId,
         actorId,

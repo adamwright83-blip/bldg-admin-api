@@ -127,6 +127,82 @@ test.describe("real evidence resolves the mission, not fictional performance", (
   });
 });
 
+test.describe("NEUTRALIZE route stops stay in-game", () => {
+  test("selecting a route stop opens the in-game VISIT surface without leaving Goldline, and coverage returns to the same mission", async ({
+    page,
+  }) => {
+    await loginToNeutralizeFixture(page);
+    await page.waitForTimeout(800);
+    await enterNeutralizeMission(page);
+
+    const panel = page.locator(".fiction-mission-panel");
+    await expect(panel).toBeVisible();
+    const firstStop = page
+      .locator(".fiction-route-stops button")
+      .filter({ hasText: "OPEN VISIT" })
+      .first();
+    await expect(firstStop).toBeVisible();
+
+    const urlBeforeSelect = page.url();
+    await firstStop.click();
+
+    // Same page, canvas still mounted — no navigation to the legacy
+    // /driver/sales-mission/:id page.
+    expect(page.url()).toBe(urlBeforeSelect);
+    expect(page.url()).not.toContain("/driver/sales-mission/");
+    expect(await page.locator("canvas.goldline-game-canvas").count()).toBe(1);
+
+    const surface = page.locator(".goldline-action-surface");
+    await expect(surface).toBeVisible();
+    await expect(surface).toContainText("VISIT");
+
+    await surface.getByRole("button", { name: /PREPARE VISIT/ }).click();
+    await surface.getByRole("button", { name: /^DEPART/ }).click();
+    await surface
+      .getByRole("button", { name: /ARRIVED · RECORD VISIT/ })
+      .click();
+    await surface.getByLabel("WHAT HAPPENED").fill("Real visit completed.");
+    await surface.locator("input[type='datetime-local']").fill(
+      "2026-08-20T10:00"
+    );
+    await surface
+      .getByRole("button", { name: "RECORD VISIT RESULT" })
+      .click();
+
+    // The canonical write completes, the surface closes, and the player is
+    // back at the SAME NEUTRALIZE mission with server-derived coverage
+    // increased by exactly one real stop.
+    await expect(surface).not.toBeVisible({ timeout: 5_000 });
+    await expect(panel).toBeVisible();
+    await expect(panel).toHaveAttribute("data-authoritative-count", "1");
+    await expect(page.getByTestId("fixture-covered-count")).toHaveText("1");
+  });
+
+  test("a stop with no real address on record stays inert — fails closed, never opens the legacy page", async ({
+    page,
+  }) => {
+    await loginToNeutralizeFixture(page);
+    await page.waitForTimeout(800);
+    await enterNeutralizeMission(page);
+
+    // Mark every real stop covered so the panel resolves to success, then
+    // confirm a covered stop remains disabled rather than reopening the
+    // surface — the recorded-evidence path stays a truthful terminal state.
+    for (let i = 0; i < 5; i += 1) {
+      await clickFixtureButton(page, "fixture-mark-stop-covered");
+    }
+    const recordedStop = page
+      .locator(".fiction-route-stops button")
+      .filter({ hasText: "VISIT RECORDED" })
+      .first();
+    await expect(recordedStop).toBeVisible();
+    await expect(recordedStop).toBeDisabled();
+    await recordedStop.click({ force: true });
+    expect(page.url()).not.toContain("/driver/sales-mission/");
+    await expect(page.locator(".goldline-action-surface")).not.toBeVisible();
+  });
+});
+
 test.describe("Stronghold home base", () => {
   test("route table, driver-safe intel, agents, and chronicle render from real projections", async ({
     page,

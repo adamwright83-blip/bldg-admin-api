@@ -9,6 +9,7 @@ import {
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import { activateCommercialMissionForField } from "../commercialMissions/commercialMissionActivationService";
+import { getCommercialMission } from "../commercialMissions/commercialMissionStore";
 import { getFieldMoves } from "./fieldOpportunityService";
 import type {
   AuthoritativeVisitRouteProjection,
@@ -98,11 +99,20 @@ export function projectAuthoritativeVisitRoute(input: {
         missionId: member.missionId,
         moveId: member.moveId,
         accountName: member.accountName,
+        // Retained as a real, working route — no longer the primary way to
+        // act on a NEUTRALIZE stop (see GoldlineGameHome.tsx's in-game
+        // onSelectRouteStop), but still valid for any other legitimate
+        // consumer of this projection.
         destinationPath: `/driver/sales-mission/${member.missionId}`,
         position: member.position,
         requiresDriving: member.requiresDriving,
         evidenced: visitOutcomeId !== null,
         visitOutcomeId,
+        // Populated by `enrichStopsWithLocation` in the DB-backed callers
+        // below; left null here so this pure projection function stays
+        // testable with no database access.
+        address: null,
+        navigationUrl: null,
       };
     });
   return {
@@ -215,7 +225,7 @@ async function routeProjectionForStart(input: {
     .filter(member => ownedMissionIds.has(member.missionId));
   // A later authoritative reassignment/removal shrinks the route. It never
   // allows a replacement recommendation to enter this occurrence.
-  return projectAuthoritativeVisitRoute({
+  const projection = projectAuthoritativeVisitRoute({
     occurrenceId: metadata.occurrenceId,
     businessDate: metadata.businessDate,
     startedAt: input.start.createdAt,
@@ -223,6 +233,40 @@ async function routeProjectionForStart(input: {
     outcomes: outcomeRows,
     actorId: input.actorId,
   });
+  return {
+    ...projection,
+    stops: await enrichStopsWithLocation(input.tenantId, projection.stops),
+  };
+}
+
+/**
+ * Attaches each stop's real account address/maps link, read fresh from the
+ * same authoritative `commercialMissions`/`commercialAccounts` source every
+ * other Goldline surface uses (`getCommercialMission`). This is
+ * presentation enrichment of an already-authoritative projection, not a
+ * second truth source — nothing here is written back, and a stop whose
+ * account genuinely has no address on file stays truthfully `null` rather
+ * than inventing one.
+ */
+export async function enrichStopsWithLocation<
+  T extends { missionId: number; requiresDriving: boolean },
+>(
+  tenantId: string,
+  stops: T[]
+): Promise<Array<T & { address: string | null; navigationUrl: string | null }>> {
+  return Promise.all(
+    stops.map(async stop => {
+      const mission = await getCommercialMission({
+        tenantId,
+        missionId: stop.missionId,
+      });
+      const address = mission?.account.address?.trim() || null;
+      const navigationUrl = address
+        ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
+        : null;
+      return { ...stop, address, navigationUrl };
+    })
+  );
 }
 
 export async function getAuthoritativeVisitRoute(input: {

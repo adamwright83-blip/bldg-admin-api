@@ -81,6 +81,15 @@ export type AuthoritativeVisitRouteStop = {
   requiresDriving: boolean;
   evidenced: boolean;
   visitOutcomeId: number | null;
+  /**
+   * Real account address/maps link, when the account has one on file — never
+   * fabricated. Enables the stop to open the in-game VISIT action surface
+   * directly (see GoldlineGameHome.tsx's onSelectRouteStop) without a page
+   * navigation. `null` is a truthful "no address on record" — the caller
+   * fails closed rather than opening the surface with an invented address.
+   */
+  address: string | null;
+  navigationUrl: string | null;
 };
 
 /**

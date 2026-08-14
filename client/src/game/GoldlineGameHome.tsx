@@ -128,7 +128,10 @@ import {
   type GoldlineActionKind,
 } from "./actions/actionRegistry";
 import type { GoldlineActionServices } from "./actions/actionServices";
-import type { AuthoritativeVisitRouteProjection } from "../../../server/field/types";
+import type {
+  AuthoritativeVisitRouteProjection,
+  AuthoritativeVisitRouteStop,
+} from "../../../server/field/types";
 import { projectTodayRoute } from "./world/todayRoute";
 import { projectChronicle } from "./world/chronicleProjection";
 import { presentAgents, projectStronghold } from "./world/strongholdProjection";
@@ -624,6 +627,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [standaloneActionRequestId, setStandaloneActionRequestId] = useState<
     string | null
   >(null);
+  // Set only while a NEUTRALIZE route-stop's VISIT surface is open (see
+  // handleSelectRouteStop) — distinguishes that flow from the spotlighted
+  // single-mission encounter flow so completion/close can return the player
+  // to the same fiction mission instead of the encounter's own outcome view.
+  const [selectedRouteStop, setSelectedRouteStop] =
+    useState<AuthoritativeVisitRouteStop | null>(null);
   const pendingWeaponEvidenceRef = useRef<Promise<void>>(Promise.resolve());
 
   function sendEncounterEvent(
@@ -694,10 +703,48 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   // refetch. A winning/closed write legitimately removes the mission from
   // the playable list before the adapter resumes; binding the surface only to
   // `activeMission` would unmount it and suppress REAL_ACTION_PERSISTED.
+  // A NEUTRALIZE route-stop mission comes from `activateCommercialMissionForField`
+  // (a `nearby_commercial_visit` field move), not the AI mission-builder flow
+  // `authoritativeMissionTruth` projects from — it can legitimately be absent
+  // there. Build a minimal, truthful stand-in directly from the stop's own
+  // real fields (never fabricated) so the surface never silently falls back
+  // to an unrelated `activeMission`.
+  const routeStopFallbackMission = useMemo<PlayableMission | null>(() => {
+    if (!selectedRouteStop) return null;
+    if (
+      !presentedAction ||
+      presentedAction.missionId !== selectedRouteStop.missionId
+    )
+      return null;
+    return {
+      key: `route-stop:${selectedRouteStop.missionId}`,
+      missionId: selectedRouteStop.missionId,
+      moveId: selectedRouteStop.moveId,
+      name: selectedRouteStop.accountName,
+      address: selectedRouteStop.address,
+      navigationUrl: selectedRouteStop.navigationUrl,
+      phoneUrl: null,
+      destinationPath: selectedRouteStop.destinationPath,
+      state: "active",
+      timeBurdenMinutes: null,
+      travelBurdenMinutes: null,
+      estimatedValueLowCents: null,
+      estimatedValueHighCents: null,
+      confidence: "unknown",
+      expiresAt: null,
+      contestedUntil: null,
+      verifiedAnnualValueCents: null,
+      realizedRevenueCents: 0,
+      unlockedPath: null,
+      lossReason: null,
+    };
+  }, [presentedAction, selectedRouteStop]);
   const presentedActionMission = presentedAction
     ? (authoritativeMissionTruth.find(
         mission => mission.missionId === presentedAction.missionId
-      ) ?? activeMission)
+      ) ??
+      routeStopFallbackMission ??
+      activeMission)
     : null;
   const missionAffordance = activeMission
     ? projectMissionAffordance(activeMission, new Date())
@@ -1553,6 +1600,34 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     }
   }
 
+  /**
+   * NEUTRALIZE route stop → in-game VISIT. Opens the same
+   * `GoldlineActionSurface` VISIT lifecycle the spotlighted single-mission
+   * flow already uses, built directly from this stop's own authoritative
+   * fields — no page navigation, no fabricated business facts. Fails closed
+   * (stays in Goldline, truthful feedback, no write) when the stop has no
+   * real address on record rather than opening the surface with one invented.
+   */
+  function handleSelectRouteStop(stop: AuthoritativeVisitRouteStop) {
+    if (stop.evidenced) return;
+    if (!stop.address || !stop.navigationUrl) {
+      setFeedback("STOP UNAVAILABLE · NO LOCATION ON RECORD");
+      return;
+    }
+    const action: GoldlineActionDescriptor = {
+      kind: "VISIT",
+      mode: "external",
+      missionId: stop.missionId,
+      label: "DEPART",
+      address: stop.address,
+      navigationUrl: stop.navigationUrl,
+      destinationPath: stop.destinationPath,
+    };
+    setSelectedRouteStop(stop);
+    setStandaloneActionRequestId(crypto.randomUUID());
+    setPresentedAction(action);
+  }
+
   function performAction() {
     if (!action) return;
     const performed = runtimeRef.current?.performAction(action);
@@ -2039,12 +2114,33 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               }
               services={props.actionServices}
               onPersisted={() => {
+                // A route-stop visit is not the spotlighted single-mission
+                // encounter — it never entered `encounterRuntime`, and
+                // completing it should return the player to the SAME
+                // NEUTRALIZE mission (the fiction panel stays mounted
+                // untouched), not into the encounter's own outcome view.
+                // `GoldlineActionSurface` has already called
+                // `services.refetchAuthoritativeTruth`, which refreshes
+                // `visitRoute` — the panel picks up the new coverage on its
+                // own via `props.authoritativeVisitRoute`.
+                if (selectedRouteStop) {
+                  setPresentedAction(null);
+                  setStandaloneActionRequestId(null);
+                  setSelectedRouteStop(null);
+                  return;
+                }
                 sendEncounterEvent({ type: "REAL_ACTION_PERSISTED" });
                 setPresentedAction(null);
                 setStandaloneActionRequestId(null);
                 setView("awaiting_business_result");
               }}
               onClose={() => {
+                if (selectedRouteStop) {
+                  setPresentedAction(null);
+                  setStandaloneActionRequestId(null);
+                  setSelectedRouteStop(null);
+                  return;
+                }
                 const wasReadOnly = presentedAction.mode === "read";
                 setPresentedAction(null);
                 setStandaloneActionRequestId(null);
@@ -2074,6 +2170,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               isDriving={false}
               authoritativeCount={props.authoritativeRouteCoverage ?? 0}
               routeStops={props.authoritativeVisitRoute?.stops}
+              onSelectStop={handleSelectRouteStop}
               onClose={() => setFictionMissionOpen(false)}
             />
           </Suspense>

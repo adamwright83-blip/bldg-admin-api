@@ -1,5 +1,8 @@
-import { useMemo, useState, type ComponentProps } from "react";
-import type { CommercialMission } from "../../../../shared/commercialMission";
+import { useMemo, useRef, useState, type ComponentProps } from "react";
+import type {
+  CommercialMission,
+  CommercialMissionStatus,
+} from "../../../../shared/commercialMission";
 import type { DriverGameWorldNode } from "../../../../shared/driverGameWorld";
 import type { ArmoryItem } from "../../../../server/armory/armoryTypes";
 import type {
@@ -8,8 +11,62 @@ import type {
 } from "../../../../server/field/types";
 import type { AuthoritativeVisitRouteProjection } from "../../../../server/field/types";
 import GoldlineGameHome from "../GoldlineGameHome";
-import type { GoldlineActionServices } from "../actions/actionServices";
+import type {
+  GoldlineActionServices,
+  GoldlineVisitContext,
+} from "../actions/actionServices";
 import type { DriverSafeSalesIntel } from "../../../../shared/driverSafeSalesIntel";
+
+/**
+ * Deterministic per-mission visit state machine backing the NEUTRALIZE route
+ * stops' in-game VISIT surface — mirrors the real production status
+ * sequence (phone_ready -> preparing -> en_route -> arrived) exercised by
+ * `GoldlineActionSurface`'s `VisitSurface`, so the browser proof for
+ * "Keep NEUTRALIZE Commercial Visits In-Game" exercises the real UI states
+ * without a database. Never used for anything but this fixture harness.
+ */
+type FixtureVisitStatus = "phone_ready" | "preparing" | "en_route" | "arrived";
+
+function fixtureVisitContext(
+  missionId: number,
+  status: FixtureVisitStatus
+): GoldlineVisitContext {
+  const started = status !== "phone_ready";
+  return {
+    mission: { id: missionId, version: 1, status: status as CommercialMissionStatus },
+    field: started
+      ? {
+          version: 1,
+          notes: "",
+          preparationStartedAt: "2026-08-13T16:00:00.000Z",
+          departedAt:
+            status === "en_route" || status === "arrived"
+              ? "2026-08-13T16:05:00.000Z"
+              : null,
+          arrivedAt: status === "arrived" ? "2026-08-13T16:15:00.000Z" : null,
+        }
+      : null,
+    checklist: started
+      ? [
+          {
+            itemKey: "fixture-confirm-address",
+            label: "Confirm address",
+            required: true,
+            status: "completed",
+          },
+        ]
+      : [],
+    visitOutcome: null,
+    proposal: started
+      ? {
+          id: "fixture-proposal",
+          status: "sent",
+          validThrough: "2026-08-20T00:00:00.000Z",
+        }
+      : null,
+    navigationUrl: null,
+  };
+}
 
 /**
  * Deterministic browser fixture for the canonical NEUTRALIZE journey
@@ -134,28 +191,45 @@ export default function GoldlineFictionHarness() {
         requiresDriving: false,
         evidenced: index < coveredCount,
         visitOutcomeId: index < coveredCount ? 9200 + index : null,
+        address: `${100 + index} Fixture St, Testville`,
+        navigationUrl: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+          `${100 + index} Fixture St, Testville`
+        )}`,
       })),
     }),
     [coveredCount, liveStopCount]
   );
 
+  const visitStatusRef = useRef<Map<number, FixtureVisitStatus>>(new Map());
+
   const services = useMemo<GoldlineActionServices>(
     () => ({
       recordCall: async () => undefined,
-      loadVisit: async () => {
-        throw new Error("Not exercised by the NEUTRALIZE fixture");
+      loadVisit: async missionId => {
+        const status = visitStatusRef.current.get(missionId) ?? "phone_ready";
+        return fixtureVisitContext(missionId, status);
       },
-      startVisitPreparation: async () => {
-        throw new Error("Not exercised by the NEUTRALIZE fixture");
+      startVisitPreparation: async ({ missionId }) => {
+        visitStatusRef.current.set(missionId, "preparing");
+        return fixtureVisitContext(missionId, "preparing");
       },
-      departVisit: async () => {
-        throw new Error("Not exercised by the NEUTRALIZE fixture");
+      departVisit: async ({ missionId }) => {
+        visitStatusRef.current.set(missionId, "en_route");
+        return fixtureVisitContext(missionId, "en_route");
       },
-      arriveVisit: async () => {
-        throw new Error("Not exercised by the NEUTRALIZE fixture");
+      arriveVisit: async ({ missionId }) => {
+        visitStatusRef.current.set(missionId, "arrived");
+        return fixtureVisitContext(missionId, "arrived");
       },
-      recordVisitOutcome: async () => {
-        throw new Error("Not exercised by the NEUTRALIZE fixture");
+      recordVisitOutcome: async ({ missionId }) => {
+        // Real coverage is server-derived — this fixture simulates the exact
+        // canonical write path a route-stop visit reuses (identical services
+        // interface `GoldlineActionSurface` already uses for the spotlighted
+        // single-mission VISIT flow). Bumping `coveredCount` here stands in
+        // for the authoritative `commercial_visit_outcomes` write; production
+        // route coverage is genuinely re-derived from that table.
+        setCoveredCount(count => Math.min(ROUTE_STOP_COUNT, count + 1));
+        return fixtureVisitContext(missionId, "arrived");
       },
       loadFollowUp: async () => null,
       completeFollowUp: async () => undefined,
