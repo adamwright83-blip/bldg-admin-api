@@ -1379,8 +1379,32 @@ export class GoldlineGame {
         : this.worldState === "contested"
           ? 0xe1a05b
           : 0xffdf77;
+    // Three-pass treatment reads as light embedded in the physical world
+    // (a brass inlay catching daylight) rather than a flat UI line: a wide
+    // soft bloom, the crisp core stroke, and a short brighter segment that
+    // slowly travels the route's length — "energy moving through the
+    // route" — all pure vector math on the existing authored polyline, no
+    // new art asset.
+    drawRoute(22, routeColor, 0.08 * mainRouteDim);
     drawRoute(14, routeColor, 0.15 * mainRouteDim);
     drawRoute(3, routeHighlight, 0.86 * mainRouteDim);
+    if (!this.reducedMotion && mainRouteDim > 0.5) {
+      const shimmerT = ((performance.now() / 6500) % 1);
+      const shimmerSpan = 0.05;
+      const shimmerStart = routeScreenPoint(
+        Math.max(0, shimmerT - shimmerSpan)
+      );
+      this.corridor.moveTo(shimmerStart.x, shimmerStart.y);
+      for (let i = 1; i <= 6; i += 1) {
+        const t = Math.max(
+          0,
+          Math.min(1, shimmerT - shimmerSpan + (i / 6) * shimmerSpan * 2)
+        );
+        const point = routeScreenPoint(t);
+        this.corridor.lineTo(point.x, point.y);
+      }
+      this.corridor.stroke({ width: 5, color: 0xfff3cf, alpha: 0.5 });
+    }
 
     this.fortress.clear();
     const gateX = width * 0.37;
