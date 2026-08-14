@@ -96,3 +96,68 @@ export function isMissionApproachable(
     (embodiment?.anchor.stagingRadius ?? 0)
   );
 }
+
+/**
+ * A genuine pickup/delivery order — never a commercial-mission concept, and
+ * never routed through the ANCHOR/GATEKEEPER/GHOST/STALLER sales-encounter
+ * archetype system. `orderKey` is only a stable binding key (`order:<id>`);
+ * it carries no business fact beyond the real order's own identity.
+ */
+export type AuthoritativeOrderForEmbodiment = {
+  orderId: number;
+  orderKey: string;
+  kind: "pickup" | "delivery";
+  /** Real customer/order label — never fabricated. */
+  label: string;
+};
+
+export type OrderEmbodiment = AuthoritativeOrderForEmbodiment & {
+  anchorId: string;
+  anchor: CorridorMissionAnchorPoint;
+};
+
+/**
+ * Binds a real order to authored space using the same deterministic
+ * anchor-slot mechanism as `bindMissionToPopulation` — presentation only,
+ * never a second truth source. `avoidAnchorId` lets the caller keep an
+ * order's marker from landing on the same authored slot as the currently
+ * embodied commercial mission, when more than one anchor exists.
+ */
+export function bindOrderToPopulation(
+  order: AuthoritativeOrderForEmbodiment | null,
+  anchors: readonly CorridorMissionAnchorPoint[],
+  avoidAnchorId?: string | null
+): OrderEmbodiment | null {
+  if (!order || !Number.isInteger(order.orderId) || order.orderId <= 0)
+    return null;
+  if (anchors.length === 0) return null;
+  let index = stableHash(order.orderKey) % anchors.length;
+  if (avoidAnchorId && anchors.length > 1 && anchors[index].id === avoidAnchorId) {
+    index = (index + 1) % anchors.length;
+  }
+  const anchor = anchors[index];
+  return { ...order, anchorId: anchor.id, anchor };
+}
+
+export function orderDistance(
+  embodiment: OrderEmbodiment | null,
+  progress: number,
+  lateral: number
+): number {
+  if (!embodiment) return Number.POSITIVE_INFINITY;
+  return Math.hypot(
+    embodiment.anchor.position.progress - progress,
+    (embodiment.anchor.position.lateral - lateral) * 0.35
+  );
+}
+
+export function isOrderApproachable(
+  embodiment: OrderEmbodiment | null,
+  progress: number,
+  lateral: number
+): boolean {
+  return (
+    orderDistance(embodiment, progress, lateral) <=
+    (embodiment?.anchor.stagingRadius ?? 0)
+  );
+}

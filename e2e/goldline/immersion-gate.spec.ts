@@ -302,7 +302,18 @@ test.describe("Stronghold home base", () => {
 });
 
 test.describe("Pickup and delivery are real in-game gameplay", () => {
-  test("GENUINE PICKUP: the next objective completes through the in-game surface, no internal dispatch page, canvas stays mounted, world updates", async ({
+  // The genuine end-to-end completion path (physically reaching the
+  // world's authored interaction zone, then completing the real pickup/
+  // delivery there) is proven in
+  // e2e/goldline/pickupDeliveryWorldObjective.spec.ts — that requires
+  // driving Trailblazer through the same physical traversal chain
+  // CALL/VISIT/FOLLOW_UP/RECOVER already use. These two tests stay focused
+  // on what's reachable without that traversal: the surface opens
+  // in-canvas with truthful real info and, since the default starting
+  // position is genuinely nowhere near the order's world objective yet,
+  // correctly withholds the primary completion mechanic rather than
+  // completing on the spot.
+  test("GENUINE PICKUP: the surface opens in-canvas with real info, no internal dispatch page, canvas stays mounted", async ({
     page,
   }) => {
     await loginToNeutralizeFixture(page);
@@ -326,25 +337,28 @@ test.describe("Pickup and delivery are real in-game gameplay", () => {
     await expect(surface).toContainText("PICKUP");
     await expect(surface).toContainText("200 Fixture Ave, Testville");
 
-    await surface.getByRole("button", { name: "MARK COLLECTED" }).click();
+    // The primary in-world mechanic is never labeled MARK COLLECTED, and it
+    // is not offered at all yet — Trailblazer has not physically reached
+    // the world objective's interaction zone.
+    await expect(
+      surface.getByRole("button", { name: /MARK COLLECTED/i })
+    ).toHaveCount(0);
+    await expect(surface.getByRole("button", { name: "RETRIEVE" })).toHaveCount(
+      0
+    );
+    await expect(surface).toContainText("Move Trailblazer");
 
-    // Canonical write completes, the surface closes, canvas remains
-    // mounted, and the objective genuinely disappears from the real route —
-    // server-derived world consequence, not a client-side fabrication.
-    await expect(surface).not.toBeVisible({ timeout: 5_000 });
-    expect(await page.locator("canvas.goldline-game-canvas").count()).toBe(1);
-    expect(page.url()).not.toContain("/driver/sales-mission/");
+    await surface.getByRole("button", { name: "Close action" }).click();
+    await expect(surface).not.toBeVisible();
 
-    // Selecting an objective drills into it (closing the flat list overlay
-    // so the in-canvas surface isn't obscured by it) — reopen the list to
-    // confirm the real world consequence: the completed pickup is gone.
+    // No canonical write occurred — the order genuinely remains on the route.
     await openLiveRoute(page);
     await expect(
       page.locator(".live-route-list").getByText("Pickup Alpha")
-    ).toHaveCount(0);
+    ).toBeVisible();
   });
 
-  test("GENUINE PAID DELIVERY: completes through the in-game surface and the world updates", async ({
+  test("GENUINE PAID DELIVERY: the surface opens in-canvas with real info, no internal dispatch page, canvas stays mounted", async ({
     page,
   }) => {
     await loginToNeutralizeFixture(page);
@@ -359,14 +373,20 @@ test.describe("Pickup and delivery are real in-game gameplay", () => {
     const surface = page.locator(".goldline-action-surface");
     await expect(surface).toBeVisible();
     await expect(surface).toContainText("DELIVERY");
-    await surface.getByRole("button", { name: "MARK DELIVERED" }).click();
+    await expect(
+      surface.getByRole("button", { name: /MARK DELIVERED/i })
+    ).toHaveCount(0);
+    await expect(surface.getByRole("button", { name: "HAND OFF" })).toHaveCount(
+      0
+    );
+    await expect(surface).toContainText("Move Trailblazer");
 
-    await expect(surface).not.toBeVisible({ timeout: 5_000 });
+    await surface.getByRole("button", { name: "Close action" }).click();
     expect(await page.locator("canvas.goldline-game-canvas").count()).toBe(1);
     await openLiveRoute(page);
     await expect(
       page.locator(".live-route-list").getByText("Delivery Paid")
-    ).toHaveCount(0);
+    ).toBeVisible();
   });
 
   test("PAYMENT-BLOCKED DELIVERY: stays truthfully blocked in-game — fiction cannot bypass it", async ({

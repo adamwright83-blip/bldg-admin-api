@@ -61,4 +61,60 @@ describe("GoldlineActionSurface PICKUP/DELIVERY never falls back to conventional
     expect(source).toContain("blocked = props.action.kind === \"DELIVERY\" && !props.action.paid");
     expect(source).toContain("This cannot be bypassed in-game.");
   });
+
+  it("gates the primary completion action on genuine world proximity, not merely opening the surface", () => {
+    expect(source).toContain("!props.action.withinInteractionZone");
+    expect(source).toContain("Move Trailblazer to the");
+    // A future regression could satisfy every other check here while still
+    // always rendering the completion button — this specifically proves the
+    // button is absent whenever withinInteractionZone is false.
+    expect(source).not.toMatch(
+      /<button disabled=\{busy\} onClick=\{\(\) => void perform\(\)\}>\s*\{busy[\s\S]{0,80}\}\s*<\/button>\s*\)\}\s*\{error/
+    );
+  });
+
+  it("never re-labels the primary in-world mechanic as MARK COLLECTED / MARK DELIVERED", () => {
+    expect(source).not.toMatch(/MARK (COLLECTED|DELIVERED)/);
+    expect(source).toContain('"RETRIEVE"');
+    expect(source).toContain('"HAND OFF"');
+  });
+});
+
+/**
+ * A genuine pickup/delivery must become a real Pixi world objective —
+ * bound to an authored corridor anchor and gated by the same
+ * `isOrderApproachable` proximity mechanism already proven for commercial
+ * missions — never merely represented as a list row that opens a modal.
+ * This guards the world-runtime wiring specifically; the live browser proof
+ * (e2e/goldline/pickupDeliveryWorldObjective.spec.ts) proves the resulting
+ * behavior end-to-end.
+ */
+describe("Pickup/delivery become genuine proximity-gated world objectives", () => {
+  const gameSource = readFileSync(
+    new URL("./runtime/GoldlineGame.ts", import.meta.url),
+    "utf8"
+  );
+  const populationSource = readFileSync(
+    new URL("./world/PopulationSystem.ts", import.meta.url),
+    "utf8"
+  );
+  const homeSource = readFileSync(
+    new URL("./GoldlineGameHome.tsx", import.meta.url),
+    "utf8"
+  );
+
+  it("binds a real order to an authored corridor anchor via the population system", () => {
+    expect(populationSource).toContain("setOrder(order: AuthoritativeOrderForEmbodiment | null)");
+    expect(populationSource).toContain("bindOrderToPopulation(");
+  });
+
+  it("gates the physical INTERACT gesture on real proximity to the order's anchor", () => {
+    expect(gameSource).toContain("isOrderApproachable(");
+    expect(gameSource).toMatch(/orderProximity\s*<=\s*|orderDistance\s*<=\s*order\.anchor\.stagingRadius/);
+  });
+
+  it("wires the world's current next objective into the runtime, not just the flat route list", () => {
+    expect(homeSource).toContain("runtimeRef.current?.setOrderEmbodiment(");
+    expect(homeSource).toContain("nextOrderObjective");
+  });
 });

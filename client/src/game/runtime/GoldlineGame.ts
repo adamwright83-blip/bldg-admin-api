@@ -27,8 +27,11 @@ import type {
   AgentWorldPresence,
   PopulationSystem,
 } from "../world/PopulationSystem";
-import type { AuthoritativeMissionForEmbodiment } from "../world/populationProjection";
-import { isMissionApproachable } from "../world/populationProjection";
+import type {
+  AuthoritativeMissionForEmbodiment,
+  AuthoritativeOrderForEmbodiment,
+} from "../world/populationProjection";
+import { isMissionApproachable, isOrderApproachable } from "../world/populationProjection";
 import { CameraController } from "./CameraController";
 import {
   branchPaceFor,
@@ -72,6 +75,12 @@ type GoldlineGameCallbacks = {
   /** Presentation boundary only; mission truth was already projected by React. */
   onMissionProximity?: (
     missionId: number,
+    state: "hidden" | "visible" | "engage"
+  ) => void;
+  /** Same boundary as onMissionProximity, for a genuine pickup/delivery order. */
+  onOrderProximity?: (
+    orderKey: string,
+    kind: "pickup" | "delivery",
     state: "hidden" | "visible" | "engage"
   ) => void;
   /** Physical corridor exit zone; caller decides if a legitimate destination exists. */
@@ -180,6 +189,8 @@ export class GoldlineGame {
   private populationSystem: PopulationSystem | null = null;
   private pendingMissionEmbodiment: AuthoritativeMissionForEmbodiment | null =
     null;
+  private pendingOrderEmbodiment: AuthoritativeOrderForEmbodiment | null =
+    null;
   private pendingAgentPresence: readonly AgentWorldPresence[] = [];
 
   private camera = new CameraController(this.world);
@@ -229,6 +240,7 @@ export class GoldlineGame {
     "hidden" | "label" | "engage"
   >();
   private missionProximityState: "hidden" | "visible" | "engage" = "hidden";
+  private orderProximityState: "hidden" | "visible" | "engage" = "hidden";
   private corridorExitNear = false;
   private qualityMonitor = new AdaptiveQualityMonitor();
   private qualityTier: QualityTier = "premium";
@@ -422,6 +434,7 @@ export class GoldlineGame {
         optionalTextures.get("populationAtlas") ?? null
       );
       this.populationSystem.setMission(this.pendingMissionEmbodiment);
+      this.populationSystem.setOrder(this.pendingOrderEmbodiment);
       this.populationSystem.setAgentPresence(this.pendingAgentPresence);
       this.callbacks.onPopulationReady?.(
         this.populationSystem.authoredAmbientCount,
@@ -524,6 +537,13 @@ export class GoldlineGame {
     // different authored anchor; retaining the prior corridor's `engage`
     // state would suppress the new transition callback and leave stale UI.
     this.missionProximityState = "hidden";
+  }
+
+  /** Same contract as setMissionEmbodiment, for a genuine pickup/delivery order. */
+  setOrderEmbodiment(order: AuthoritativeOrderForEmbodiment | null) {
+    this.pendingOrderEmbodiment = order;
+    this.populationSystem?.setOrder(order);
+    this.orderProximityState = "hidden";
   }
 
   setAgentPresence(presence: readonly AgentWorldPresence[]) {
@@ -648,6 +668,7 @@ export class GoldlineGame {
       optionalTextures.get("populationAtlas") ?? null
     );
     populationSystem.setMission(this.pendingMissionEmbodiment);
+    populationSystem.setOrder(this.pendingOrderEmbodiment);
     populationSystem.setAgentPresence(this.pendingAgentPresence);
     populationSystem.setReducedMotion(this.reducedMotion);
     return {
@@ -738,6 +759,7 @@ export class GoldlineGame {
     this.completedTriggers.clear();
     this.portalProximityState.clear();
     this.missionProximityState = "hidden";
+    this.orderProximityState = "hidden";
     this.corridorExitNear = false;
     this.availableAction = null;
     this.availableLabel = null;
@@ -761,17 +783,31 @@ export class GoldlineGame {
   }
 
   performAction(action: CorridorAction) {
-    if (
-      action === "INTERACT" &&
-      isMissionApproachable(
-        this.populationSystem?.missionEmbodiment ?? null,
-        this.progress,
-        this.lateral
-      )
-    ) {
-      this.avatarState.lockEncounter();
-      this.callbacks.onInteract();
-      return true;
+    if (action === "INTERACT") {
+      if (
+        isMissionApproachable(
+          this.populationSystem?.missionEmbodiment ?? null,
+          this.progress,
+          this.lateral
+        )
+      ) {
+        this.avatarState.lockEncounter();
+        this.callbacks.onInteract();
+        return true;
+      }
+      // A genuine pickup/delivery is a lighter-weight stationary action (no
+      // full mission-encounter overlay), so it does not lock the avatar the
+      // way a mission encounter does.
+      if (
+        isOrderApproachable(
+          this.populationSystem?.orderEmbodiment ?? null,
+          this.progress,
+          this.lateral
+        )
+      ) {
+        this.callbacks.onInteract();
+        return true;
+      }
     }
     const rawTrigger = pendingTrigger(this.progress, this.completedTriggers);
     const trigger =
@@ -934,15 +970,45 @@ export class GoldlineGame {
       this.missionProximityState = missionProximity;
       this.callbacks.onMissionProximity?.(mission.missionId, missionProximity);
     }
+
+    const order = this.populationSystem?.orderEmbodiment ?? null;
+    const orderDistance = order
+      ? Math.hypot(
+          order.anchor.position.progress - this.progress,
+          (order.anchor.position.lateral - this.lateral) * 0.35
+        )
+      : Number.POSITIVE_INFINITY;
+    const orderProximity: "hidden" | "visible" | "engage" = !order
+      ? "hidden"
+      : orderDistance <= order.anchor.stagingRadius
+        ? "engage"
+        : orderDistance <= 0.22
+          ? "visible"
+          : "hidden";
+    if (order && orderProximity !== this.orderProximityState) {
+      this.orderProximityState = orderProximity;
+      this.callbacks.onOrderProximity?.(
+        order.orderKey,
+        order.kind,
+        orderProximity
+      );
+    }
+
     const missionAction = missionProximity === "engage" ? "INTERACT" : null;
+    const orderAction = orderProximity === "engage" ? "INTERACT" : null;
     const action =
       missionAction ??
+      orderAction ??
       (current && this.progress >= current.at - 0.04 ? current.action : null);
     const label = missionAction
       ? "approach human scene"
-      : action
-        ? current!.label
-        : null;
+      : orderAction
+        ? order?.kind === "delivery"
+          ? "approach handoff point"
+          : "approach retrieval point"
+        : action
+          ? current!.label
+          : null;
     if (action !== this.availableAction || label !== this.availableLabel) {
       this.availableAction = action;
       this.availableLabel = label;

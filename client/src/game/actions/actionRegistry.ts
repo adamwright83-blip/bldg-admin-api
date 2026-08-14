@@ -70,6 +70,15 @@ export type GoldlineActionDescriptor =
       customerName: string;
       address: string | null;
       navigationUrl: string | null;
+      /**
+       * True only while Trailblazer is genuinely within the world's
+       * authored interaction radius of this order's objective marker —
+       * computed each frame by the Pixi runtime, never assumed true from
+       * merely opening the surface. Gates the completion action itself so
+       * proximity cannot be bypassed regardless of entry point (world
+       * marker or route list).
+       */
+      withinInteractionZone: boolean;
     })
   | (BaseAction<"DELIVERY", "write"> & {
       orderId: number;
@@ -78,6 +87,7 @@ export type GoldlineActionDescriptor =
       navigationUrl: string | null;
       /** True only when the real order is paid — never fabricated. */
       paid: boolean;
+      withinInteractionZone: boolean;
     });
 
 type Adapter<K extends GoldlineActionKind> = {

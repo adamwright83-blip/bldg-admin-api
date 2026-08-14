@@ -91,4 +91,48 @@ describe("PopulationSystem", () => {
       system.destroy();
     }).not.toThrow();
   });
+
+  it("mounts a genuine pickup/delivery order as its own world objective", () => {
+    const system = new PopulationSystem(populationFixture());
+    expect(system.orderEmbodiment).toBeNull();
+    system.setOrder({
+      orderId: 501,
+      orderKey: "order:501",
+      kind: "pickup",
+      label: "Fixture Customer",
+    });
+    expect(system.orderEmbodiment?.orderId).toBe(501);
+    expect(system.orderEmbodiment?.kind).toBe("pickup");
+    system.update({ now: 0, width: 412, height: 923, playerProgress: 0.06 });
+    // A real order's anchor position/index are the only thing carried into
+    // the world — never a fabricated customer/address fact.
+    expect(system.orderEmbodiment).not.toHaveProperty("address");
+    system.setOrder(null);
+    expect(system.orderEmbodiment).toBeNull();
+    system.destroy();
+  });
+
+  it("keeps mission and order embodiments independent — resolving one does not disturb the other", () => {
+    const system = new PopulationSystem(populationFixture());
+    system.setMission({
+      missionId: 71,
+      missionKey: "mission:71",
+      archetype: "STALLER",
+      state: "active",
+      affordance: "VISIT",
+      worldSignal: "threshold",
+    });
+    system.setOrder({
+      orderId: 501,
+      orderKey: "order:501",
+      kind: "delivery",
+      label: "Fixture Customer",
+    });
+    expect(system.missionEmbodiment?.missionId).toBe(71);
+    expect(system.orderEmbodiment?.orderId).toBe(501);
+    system.setOrder(null);
+    expect(system.missionEmbodiment?.missionId).toBe(71);
+    expect(system.orderEmbodiment).toBeNull();
+    system.destroy();
+  });
 });

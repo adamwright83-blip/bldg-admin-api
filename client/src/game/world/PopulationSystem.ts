@@ -3,8 +3,11 @@ import type { CorridorPopulation } from "../../../../shared/corridorManifest";
 import type { GoldlineAgentId } from "../../../../shared/goldlineProgression";
 import {
   bindMissionToPopulation,
+  bindOrderToPopulation,
   type AuthoritativeMissionForEmbodiment,
+  type AuthoritativeOrderForEmbodiment,
   type MissionEmbodiment,
+  type OrderEmbodiment,
 } from "./populationProjection";
 import { reportGoldlineLifecycleDelta } from "../testSupport/lifecycleProbe";
 
@@ -37,10 +40,13 @@ export class PopulationSystem {
   readonly container = new Container();
   private readonly ambientLayer = new Container();
   private readonly missionLayer = new Container();
+  private readonly orderLayer = new Container();
   private readonly capabilityLayer = new Container();
   private readonly ambient: PopulationNode[];
   private mission: MissionEmbodiment | null = null;
   private missionGraphic: Container | null = null;
+  private order: OrderEmbodiment | null = null;
+  private orderGraphic: Container | null = null;
   private agentPresence: readonly AgentWorldPresence[] = [];
   private lastBehaviorUpdateAt = Number.NEGATIVE_INFINITY;
   private reducedMotion = false;
@@ -62,10 +68,12 @@ export class PopulationSystem {
     this.container.label = "goldline-population";
     this.ambientLayer.label = "ambient-population";
     this.missionLayer.label = "authoritative-mission-embodiment";
+    this.orderLayer.label = "authoritative-order-embodiment";
     this.capabilityLayer.label = "agent-capability-presence";
     this.container.addChild(
       this.ambientLayer,
       this.missionLayer,
+      this.orderLayer,
       this.capabilityLayer
     );
     this.ambient = population.ambient.map((person, index) => {
@@ -104,6 +112,10 @@ export class PopulationSystem {
     return this.mission;
   }
 
+  get orderEmbodiment(): OrderEmbodiment | null {
+    return this.order;
+  }
+
   setMission(mission: AuthoritativeMissionForEmbodiment | null) {
     const next = bindMissionToPopulation(
       mission,
@@ -123,6 +135,31 @@ export class PopulationSystem {
       ? drawMissionScene(next, this.roleTextures.get(roleForMission(next)))
       : null;
     if (this.missionGraphic) this.missionLayer.addChild(this.missionGraphic);
+  }
+
+  /**
+   * A genuine pickup/delivery order, bound to a corridor anchor via the same
+   * deterministic presentation-only binding `setMission` uses. Kept off the
+   * active mission's anchor when more than one slot exists, purely so the
+   * two markers don't visually overlap.
+   */
+  setOrder(order: AuthoritativeOrderForEmbodiment | null) {
+    const next = bindOrderToPopulation(
+      order,
+      this.population.missionAnchorPoints,
+      this.mission?.anchorId ?? null
+    );
+    if (
+      next?.orderId === this.order?.orderId &&
+      next?.kind === this.order?.kind &&
+      next?.anchorId === this.order?.anchorId
+    ) {
+      return;
+    }
+    this.order = next;
+    this.orderLayer.removeChildren().forEach(child => child.destroy());
+    this.orderGraphic = next ? drawOrderMarker(next) : null;
+    if (this.orderGraphic) this.orderLayer.addChild(this.orderGraphic);
   }
 
   setAgentPresence(presence: readonly AgentWorldPresence[]) {
@@ -193,6 +230,17 @@ export class PopulationSystem {
         input.now,
         this.reducedMotion
       );
+    }
+
+    if (this.order && this.orderGraphic) {
+      placeAtCorridorPosition(
+        this.orderGraphic,
+        this.order.anchor.position.progress,
+        this.order.anchor.position.lateral,
+        input.width,
+        input.height
+      );
+      applyOrderMarkerMotion(this.orderGraphic, input.now, this.reducedMotion);
     }
 
     const stationPositions: Record<GoldlineAgentId, [number, number]> = {
@@ -394,6 +442,76 @@ function drawCapabilityStation(presence: AgentWorldPresence): Graphics {
     station.circle(0, -49, 10).stroke({ color, width: 1, alpha: 0.45 });
   }
   return station;
+}
+
+/**
+ * A genuine pickup/delivery's world marker — a clean geometric prop in the
+ * same restrained vector language as the Gold Line/landmark/capability-
+ * station graphics (no photographic/illustrated asset exists for this yet).
+ * Pickup and delivery read as visibly distinct shapes: pickup is a crate
+ * with an upward retrieval arrow, delivery a doorway with a downward
+ * handoff arrow. A pale ring marks the staging radius so the player can
+ * read the interaction zone before entering it.
+ */
+function drawOrderMarker(order: OrderEmbodiment): Container {
+  const scene = new Container();
+  scene.label = `order:${order.orderId}:${order.anchorId}`;
+  const color = order.kind === "pickup" ? 0xe0ad48 : 0x6cb8ce;
+  const ring = new Graphics();
+  ring.circle(0, -18, 30).stroke({ color, width: 1.5, alpha: 0.35 });
+  scene.addChild(ring);
+  const prop = new Graphics();
+  if (order.kind === "pickup") {
+    prop
+      .roundRect(-16, -30, 32, 24, 4)
+      .fill({ color: 0x8a5a2c, alpha: 0.95 })
+      .stroke({ color: 0xe8d9bc, width: 1.5, alpha: 0.5 });
+    prop.moveTo(-16, -18).lineTo(16, -18).stroke({
+      color: 0xe8d9bc,
+      width: 1,
+      alpha: 0.4,
+    });
+    prop
+      .moveTo(0, -46)
+      .lineTo(-8, -34)
+      .lineTo(-3, -34)
+      .lineTo(-3, -28)
+      .lineTo(3, -28)
+      .lineTo(3, -34)
+      .lineTo(8, -34)
+      .closePath()
+      .fill({ color, alpha: 0.95 });
+  } else {
+    prop
+      .roundRect(-14, -40, 28, 40, 3)
+      .fill({ color: 0x35474a, alpha: 0.92 })
+      .stroke({ color, width: 1.5, alpha: 0.55 });
+    prop.circle(8, -20, 1.6).fill({ color: 0xe8d9bc, alpha: 0.9 });
+    prop
+      .moveTo(0, -2)
+      .lineTo(-8, -14)
+      .lineTo(-3, -14)
+      .lineTo(-3, -20)
+      .lineTo(3, -20)
+      .lineTo(3, -14)
+      .lineTo(8, -14)
+      .closePath()
+      .fill({ color, alpha: 0.95 });
+  }
+  scene.addChild(prop);
+  return scene;
+}
+
+function applyOrderMarkerMotion(
+  graphic: Container,
+  now: number,
+  reducedMotion: boolean
+) {
+  if (reducedMotion) {
+    graphic.rotation = 0;
+    return;
+  }
+  graphic.rotation = Math.sin(now / 1100) * 0.008;
 }
 
 function authoredPosition(

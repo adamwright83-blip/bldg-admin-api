@@ -581,6 +581,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [missionSpatialState, setMissionSpatialState] = useState<
     "hidden" | "visible" | "engage"
   >("hidden");
+  const [orderSpatialState, setOrderSpatialState] = useState<
+    "hidden" | "visible" | "engage"
+  >("hidden");
   const [corridorExitNear, setCorridorExitNear] = useState(false);
   const [corridorTransitionPhase, setCorridorTransitionPhase] =
     useState<CorridorTransitionPhase>("idle");
@@ -708,6 +711,25 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         mission => mission.missionId === encounterRuntime.missionId
       ) ?? null)
     : null;
+  // Same real order list the route panel renders, pickups before deliveries.
+  // The world only ever embodies the first order that genuinely has a real
+  // address on file — an address-less order fails closed and is skipped
+  // rather than fabricating a destination for it.
+  const orderObjectives = useMemo(
+    () => [
+      ...(props.pickups ?? []).map(order => ({
+        order,
+        status: "collected" as const,
+      })),
+      ...(props.deliveries ?? []).map(order => ({
+        order,
+        status: "delivered" as const,
+      })),
+    ],
+    [props.pickups, props.deliveries]
+  );
+  const nextOrderObjective =
+    orderObjectives.find(item => item.order.address?.trim()) ?? null;
   // Keep the typed action surface mounted across its own authoritative
   // refetch. A winning/closed write legitimately removes the mission from
   // the playable list before the adapter resumes; binding the surface only to
@@ -983,7 +1005,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       },
       onBranchChange: setBranch,
       onProgress: setProgress,
-      onInteract: () => handleInteractRef.current(),
+      onInteract: () => {
+        if (handleOrderInteractRef.current()) return;
+        handleInteractRef.current();
+      },
       onError: () => setRuntimeFailed(true),
       onPortalProximity: (anchorId, state) => {
         if (anchorId === "cold_call_portal") setColdCallPortalState(state);
@@ -996,6 +1021,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             `mission:${_missionId}`
           );
           missionApproachFeedback(_missionId);
+        }
+      },
+      onOrderProximity: (orderKey, _kind, state) => {
+        setOrderSpatialState(state);
+        if (state === "engage") {
+          getAudioManager().playOnce("mission_proximity", orderKey);
         }
       },
       onCorridorExitProximity: setCorridorExitNear,
@@ -1270,6 +1301,30 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     missionAffordance?.worldSignal,
   ]);
 
+  // A genuine pickup/delivery becomes a real playable-world objective — the
+  // player must move Trailblazer to its authored interaction zone before the
+  // primary in-world PICKUP/DELIVERY mechanic becomes available (see
+  // handleInteractRef below and OrderSurface's withinInteractionZone gate).
+  // Only the current "next objective" is ever embodied — completing or
+  // resolving it naturally advances this effect to the next genuine order.
+  useEffect(() => {
+    runtimeRef.current?.setOrderEmbodiment(
+      nextOrderObjective
+        ? {
+            orderId: nextOrderObjective.order.id,
+            orderKey: `order:${nextOrderObjective.order.id}`,
+            kind:
+              nextOrderObjective.status === "delivered"
+                ? "delivery"
+                : "pickup",
+            label:
+              `${nextOrderObjective.order.firstName ?? ""} ${nextOrderObjective.order.lastName ?? ""}`.trim() ||
+              `Order #${nextOrderObjective.order.id}`,
+          }
+        : null
+    );
+  }, [nextOrderObjective?.order.id, nextOrderObjective?.status]);
+
   useEffect(() => {
     runtimeRef.current?.setAgentPresence(agentWorldPresence);
   }, [agentWorldPresence, runtimeReady]);
@@ -1372,6 +1427,19 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.scoutReport]);
+
+  // A genuine world INTERACT gesture prefers a pickup/delivery that is
+  // currently in its authored interaction zone over the spotlighted
+  // single-mission encounter — the runtime itself only fires INTERACT at
+  // all when at least one of the two is engage-approachable (see
+  // GoldlineGame.performAction). Returns true when it truthfully handled
+  // the interact so the caller does not also try the mission path.
+  const handleOrderInteractRef = useRef<() => boolean>(() => false);
+  handleOrderInteractRef.current = () => {
+    if (orderSpatialState !== "engage" || !nextOrderObjective) return false;
+    handleSelectOrder(nextOrderObjective.order, nextOrderObjective.status);
+    return true;
+  };
 
   const handleInteractRef = useRef(() => {});
   handleInteractRef.current = () => {
@@ -1698,6 +1766,13 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     const customerName =
       `${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() ||
       `Order #${order.id}`;
+    // Only the world's current "next objective" is ever spatially embodied
+    // (see the setOrderEmbodiment effect below) — so only that order can
+    // genuinely be within its interaction zone. A different, not-yet-current
+    // order truthfully cannot be in range yet.
+    const withinInteractionZone =
+      order.id === nextOrderObjective?.order.id &&
+      orderSpatialState === "engage";
     const action: GoldlineActionDescriptor =
       status === "delivered"
         ? {
@@ -1710,6 +1785,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             address,
             navigationUrl,
             paid: order.paid,
+            withinInteractionZone,
           }
         : {
             kind: "PICKUP",
@@ -1720,6 +1796,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             customerName,
             address,
             navigationUrl,
+            withinInteractionZone,
           };
     setSelectedOrder({ order, status });
     setStandaloneActionRequestId(crypto.randomUUID());
@@ -2512,18 +2589,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                   <small>AUTHORITATIVE ROUTE</small>
                   <h2>Pickup & delivery</h2>
                   <div className="live-route-list">
-                    {[
-                      ...(props.pickups ?? []).map(order => ({
-                        order,
-                        status: "collected" as const,
-                      })),
-                      ...(props.deliveries ?? []).map(order => ({
-                        order,
-                        status: "delivered" as const,
-                      })),
-                    ].map(({ order, status }, index) => {
+                    {orderObjectives.map(({ order, status }) => {
                       const unavailable = !order.address?.trim();
                       const blocked = status === "delivered" && !order.paid;
+                      const isNext = order.id === nextOrderObjective?.order.id;
                       const label = unavailable
                         ? "UNAVAILABLE"
                         : blocked
@@ -2534,10 +2603,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                       return (
                         <article
                           key={`${status}-${order.id}`}
-                          data-next-objective={index === 0}
+                          data-next-objective={isNext}
                         >
                           <span>
-                            {index === 0 ? (
+                            {isNext ? (
                               <small className="objective-next-badge">
                                 NEXT OBJECTIVE
                               </small>
