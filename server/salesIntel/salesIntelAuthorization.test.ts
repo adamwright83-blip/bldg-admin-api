@@ -90,6 +90,9 @@ describe("Sales Intel administration is admin-only", () => {
 
 describe("the driver consumes intelligence but cannot administer it", () => {
   it("serves gameplay Armory reads on driver-reachable procedures", () => {
+    expect(armoryRouterSource).toMatch(
+      /strongholdIntel:\s*dayforgeMissionFieldProcedure/
+    );
     expect(armoryRouterSource).toMatch(/weapons:\s*dayforgeMissionFieldProcedure/);
     expect(armoryRouterSource).toMatch(
       /recordUsage:\s*dayforgeMissionFieldProcedure/

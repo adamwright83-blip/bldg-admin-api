@@ -18,7 +18,7 @@ import type { GoldlineAgentProjection } from "../../../../shared/goldlineProgres
 
 export type StrongholdIntelSummary = {
   acceptedTeachingCount: number;
-  /** Real category counts from the accepted general-teaching corpus (see shared/salesIntelTeachingCoverage.ts). */
+  /** Allowlisted category counts from the accepted general-teaching corpus. */
   byCategory: Array<{ category: string; count: number }>;
 };
 

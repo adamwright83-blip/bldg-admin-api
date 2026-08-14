@@ -132,6 +132,8 @@ import type { AuthoritativeVisitRouteProjection } from "../../../server/field/ty
 import { projectTodayRoute } from "./world/todayRoute";
 import { projectChronicle } from "./world/chronicleProjection";
 import { presentAgents, projectStronghold } from "./world/strongholdProjection";
+import { toStrongholdIntel } from "./world/intelligenceFlywheel";
+import type { DriverSafeSalesIntel } from "../../../shared/driverSafeSalesIntel";
 import { deriveAuthoritativeRouteGrammar } from "../../../shared/actionGrammar";
 import { selectFictionForMission } from "./fiction/fictionDirector";
 import { reconcileFictionOnResume } from "./fiction/longHorizonResume";
@@ -167,6 +169,8 @@ function authoringPreviewCorridorId(): string | null {
 }
 
 type GoldlineGameHomeProps = GoldlineHomeProps & {
+  /** Server-authorized, allowlisted Stronghold summary. Null is truthful. */
+  driverSafeSalesIntel?: DriverSafeSalesIntel | null;
   /**
    * Stable id of the signed-in player, used ONLY to scope the local
    * positional checkpoint so a shared device cannot hand one driver another
@@ -760,17 +764,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       projectStronghold({
         routeTable: todayRoute,
         agents: presentAgents([...(props.progression?.agents ?? [])]),
-        // Sales Intel Admin data is deliberately adminProcedure-gated and the
-        // driver role must never reach it (see
-        // server/salesIntel/salesIntelAuthorization.test.ts) — Stronghold's
-        // intel panel stays honestly empty rather than crossing that
-        // boundary. shared/salesIntelTeachingCoverage.ts +
-        // world/intelligenceFlywheel.ts are ready to wire a scoped,
-        // driver-safe read endpoint in a future run.
-        intel: null,
+        intel: props.driverSafeSalesIntel
+          ? toStrongholdIntel(props.driverSafeSalesIntel)
+          : null,
         chronicle,
       }),
-    [todayRoute, props.progression, chronicle]
+    [todayRoute, props.progression, props.driverSafeSalesIntel, chronicle]
   );
   // Production fiction binds only after explicit route start has frozen
   // authoritative membership. Transient recommendations cannot define its
@@ -2396,6 +2395,31 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                     {!stronghold.agents.length ? (
                       <p>No agent capabilities have real evidence yet.</p>
                     ) : null}
+                  </div>
+
+                  <h3>Sales intelligence</h3>
+                  <div
+                    className="stronghold-intel"
+                    data-testid="stronghold-intel"
+                  >
+                    {stronghold.intel ? (
+                      <>
+                        <p>
+                          {stronghold.intel.acceptedTeachingCount} accepted
+                          teaching
+                          {stronghold.intel.acceptedTeachingCount === 1
+                            ? ""
+                            : "s"}
+                        </p>
+                        {stronghold.intel.byCategory.map(entry => (
+                          <span key={entry.category}>
+                            {entry.category.replace(/_/g, " ")} · {entry.count}
+                          </span>
+                        ))}
+                      </>
+                    ) : (
+                      <p>No reviewed sales intelligence is available.</p>
+                    )}
                   </div>
 
                   <h3>Chronicle</h3>

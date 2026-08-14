@@ -9,6 +9,7 @@ import type {
 import type { AuthoritativeVisitRouteProjection } from "../../../../server/field/types";
 import GoldlineGameHome from "../GoldlineGameHome";
 import type { GoldlineActionServices } from "../actions/actionServices";
+import type { DriverSafeSalesIntel } from "../../../../shared/driverSafeSalesIntel";
 
 /**
  * Deterministic browser fixture for the canonical NEUTRALIZE journey
@@ -89,6 +90,14 @@ function historicalNode(): DriverGameWorldNode {
 
 export default function GoldlineFictionHarness() {
   const [coveredCount, setCoveredCount] = useState(0);
+  const [driverSafeSalesIntel, setDriverSafeSalesIntel] =
+    useState<DriverSafeSalesIntel | null>({
+      acceptedTeachingCount: 3,
+      byCategory: [
+        { category: "discovery", count: 2 },
+        { category: "closing", count: 1 },
+      ],
+    });
   // Test-only: simulates a real authoritative change (a stop resolved or
   // expired) so Slice 96's dynamic reprojection can be proven against a
   // live UI re-render, not just the pure-function unit tests.
@@ -224,6 +233,7 @@ export default function GoldlineFictionHarness() {
     }),
     onRecordWeaponUsage: async () => undefined,
     actionServices: services,
+    driverSafeSalesIntel,
     authoritativeRouteCoverage: coveredCount,
     authoritativeVisitRoute,
   };
@@ -243,6 +253,13 @@ export default function GoldlineFictionHarness() {
         }
       >
         MARK STOP COVERED ({coveredCount}/{ROUTE_STOP_COUNT})
+      </button>
+      <button
+        type="button"
+        data-testid="fixture-remove-stronghold-intel"
+        onClick={() => setDriverSafeSalesIntel(null)}
+      >
+        REMOVE AUTHORITATIVE INTEL
       </button>
       <button
         type="button"

@@ -11,6 +11,7 @@ import {
 import { getArmory } from "./armoryService";
 import { listArmoryWeapons } from "./armoryWeaponService";
 import { recordArmoryWeaponUsage } from "./armoryEvidenceService";
+import { getDriverSafeSalesIntel } from "../salesIntel/driverSafeSalesIntelService";
 
 /**
  * Gameplay-side Armory. Drivers CONSUME intelligence here; corpus
@@ -18,6 +19,16 @@ import { recordArmoryWeaponUsage } from "./armoryEvidenceService";
  * unreachable from these procedures.
  */
 export const armoryRouter = router({
+  /**
+   * Global reviewed trainer-intelligence summary for Stronghold. Access is
+   * still resource-scoped: the current authenticated tenant membership and
+   * DayForge Field entitlement are resolved server-side. No intel/entity IDs
+   * are accepted from the browser, and the admin corpus route remains closed.
+   */
+  strongholdIntel: dayforgeMissionFieldProcedure.query(() =>
+    getDriverSafeSalesIntel()
+  ),
+
   get: dayforgeTenantMemberProcedure
     .input(
       z

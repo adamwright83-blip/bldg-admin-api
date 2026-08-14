@@ -8,11 +8,14 @@ on:
       - "server/driverGameWorld/**"
       - "server/capabilities/expansionScoutCapability.ts"
       - "server/armory/armoryWeaponService.ts"
+      - "server/armory/armoryRouter.ts"
       - "server/armory/armoryEvolution.integration.test.ts"
+      - "server/salesIntel/driverSafeSalesIntel*"
       - "server/field/**"
       - "server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts"
       - "shared/goldlineProgression.ts"
       - "shared/goldlineProgression.test.ts"
+      - "shared/driverSafeSalesIntel.ts"
       - "client/public/goldline.webmanifest"
       - "client/public/goldline-sw.js"
       - "client/public/assets/goldline/**"
@@ -96,6 +99,7 @@ jobs:
           pnpm vitest run --config vitest.integration.config.ts
           server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts
           server/armory/armoryEvolution.integration.test.ts
+          server/salesIntel/driverSafeSalesIntel.integration.test.ts
           server/field/authoritativeVisitRoute.integration.test.ts
 
       - name: Build production application
