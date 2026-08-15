@@ -247,7 +247,7 @@ export async function listDriverSalesJournals(input: { tenantId: string; driverI
   return Promise.all(rows.map(async row => ({
     ...row,
     audioUrl: row.audioStorageKey ? (await storageGet(row.audioStorageKey)).url : null,
-  }));
+  })));
 }
 
 export async function selectMissionDiamond(input: { tenantId: string; driverId: string; accountType: string }): Promise<MissionDiamond> {
