@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Diamond, Loader2, Mic, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { startBrowserSpeechTranscript, type BrowserSpeechSession } from "@/lib/browserSpeechRecognition";
 
 export function SalesMomentumMeter() {
   const meter = trpc.system.adaptiveSalesMeter.myMeter.useQuery(undefined, { refetchInterval: 15_000 });
@@ -65,6 +66,7 @@ export function SalesJournalSheet({ open, onOpenChange }: { open: boolean; onOpe
   const [recording, setRecording] = React.useState(false);
   const [transcript, setTranscript] = React.useState("");
   const recorderRef = React.useRef<MediaRecorder | null>(null);
+  const speechRef = React.useRef<BrowserSpeechSession | null>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
   const [audioDataUrl, setAudioDataUrl] = React.useState<string | null>(null);
@@ -74,7 +76,7 @@ export function SalesJournalSheet({ open, onOpenChange }: { open: boolean; onOpe
     streamRef.current?.getTracks().forEach(track => track.stop());
     streamRef.current = null;
   }, []);
-  React.useEffect(() => () => stopTracks(), [stopTracks]);
+  React.useEffect(() => () => { speechRef.current?.abort(); stopTracks(); }, [stopTracks]);
 
   async function startRecording() {
     try {
@@ -83,10 +85,14 @@ export function SalesJournalSheet({ open, onOpenChange }: { open: boolean; onOpe
       streamRef.current = stream;
       recorderRef.current = recorder;
       chunksRef.current = [];
+      speechRef.current?.abort();
+      speechRef.current = startBrowserSpeechTranscript({ initialText: transcript, onTranscript: setTranscript });
       recorder.ondataavailable = event => { if (event.data.size) chunksRef.current.push(event.data); };
       recorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
         setAudioDataUrl(await blobDataUrl(blob));
+        speechRef.current?.stop();
+        speechRef.current = null;
         stopTracks();
       };
       recorder.start(500);
@@ -97,6 +103,7 @@ export function SalesJournalSheet({ open, onOpenChange }: { open: boolean; onOpe
   }
 
   function stopRecording() {
+    speechRef.current?.stop();
     recorderRef.current?.stop();
     recorderRef.current = null;
     setRecording(false);

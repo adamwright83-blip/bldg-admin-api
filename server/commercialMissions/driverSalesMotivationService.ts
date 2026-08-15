@@ -207,7 +207,7 @@ export async function saveDriverSalesJournal(input: {
     audioStorageKey = `driver-sales-journals/${input.tenantId}/${input.driverId}/${input.journalDate}-${randomUUID()}.${audioFileExtension(audio.mimeType)}`;
     await storagePut(audioStorageKey, audio.data, audio.mimeType);
     const downloadable = await storageGet(audioStorageKey);
-    const transcription = await transcribeAudio({ audioUrl: downloadable.url, language: "en", prompt: "Transcribe a driver's end-of-day sales journal, preserving objections and responses accurately." });
+    const transcription = await transcribeAudio({ audioUrl: downloadable.url, language: "en", prompt: "Transcribe a driver's end-of-day sales journal, preserving objections and responses accurately.", mimeType: audio.mimeType, fileName: `journal.${audioFileExtension(audio.mimeType)}` });
     if (!("error" in transcription)) transcript = transcription.text.trim();
     else if (!transcript) throw new Error(`Could not transcribe this recording: ${transcription.error}`);
   }

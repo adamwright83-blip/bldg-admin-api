@@ -2791,6 +2791,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           open={utilityPanel === "open-channel"}
           mission={props.openChannelMission}
           gap={openChannelGap}
+          shouldAutoIgnite={!action && !activeMission && !nextOrderObjective}
           isGenerating={Boolean(props.isGeneratingOpenChannel)}
           isApproving={Boolean(props.isApprovingOpenChannel)}
           onClose={() => setUtilityPanel(null)}
