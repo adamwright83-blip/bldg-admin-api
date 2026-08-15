@@ -614,3 +614,14 @@
     transform: translate(-16%, -50%) scale(0.92);
   }
 }
+
+/* When the full-screen briefing is open, it owns pointer input. The Pixi
+   canvas and loading scrim remain visible underneath but cannot steal taps
+   from briefing controls on mobile. */
+.goldline:has(.open-channel-overlay) .goldline-canvas-host,
+.goldline:has(.open-channel-overlay) .game-loading {
+  pointer-events: none;
+}
+.goldline .open-channel-overlay {
+  pointer-events: auto;
+}
