@@ -1,26 +1,17 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * Proves the empty-day experience is truthful end to end in a real browser.
- * A field-tester with genuinely zero missions, pickups, deliveries, or
- * cold-call work opened Goldline and saw fabricated traversal prompts
- * (JUMP/CLIMB/VAULT with no obstacle) and a lying "MOVE TO NEXT ACTION
- * ZONE" prompt while "NO ACTIVE MISSION" was also shown. This suite proves
- * that specific failure cannot recur: the world is honest about having no
- * real work, movement is genuinely free, and no fictional claim appears.
- *
- * `?goldlineEmptyDay=1` zeroes every real-work source in the NEUTRALIZE
- * fixture harness (missions, route stops, pickups, deliveries, cold-call
- * eligibility) — see GoldlineFictionHarness.tsx's readEmptyDayFlag.
+ * An empty business day is truthful but it must not be dead gameplay.
+ * When there is no mission/order/cold-call work, Goldline immediately opens
+ * the existing Open Channel briefing so the operator can tell it what today
+ * and tomorrow actually contain. The resulting plan remains a DRAFT until
+ * the operator approves it; no work is fabricated merely to fill the world.
  */
 test.describe.configure({ timeout: 90_000 });
 
 const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
 
 async function login(page: Page) {
-  // First-entry explainer only shows once per player identity — suppress it
-  // here since this suite is proving the empty-day world state, not the
-  // first-30-seconds onboarding flow (see firstThirtySeconds.spec.ts).
   await page.addInitScript(() => {
     window.localStorage.setItem(
       "goldline:onboarding:v1",
@@ -32,9 +23,7 @@ async function login(page: Page) {
   });
   expect(response.ok()).toBeTruthy();
   await page.goto("/driver?goldlineFixture=NEUTRALIZE&goldlineEmptyDay=1");
-  await expect(page.getByTestId("goldline-shell")).toBeVisible({
-    timeout: 30_000,
-  });
+  await expect(page.getByTestId("goldline-shell")).toBeVisible({ timeout: 30_000 });
 }
 
 async function holdJoystickForward(page: Page, ms: number) {
@@ -46,73 +35,50 @@ async function holdJoystickForward(page: Page, ms: number) {
   await page.mouse.up();
 }
 
-test.describe("empty-day truth boundary", () => {
-  test("a genuinely empty day never shows fake traversal prompts, fake encounter prep, or the MOVE TO NEXT ACTION ZONE lie", async ({
-    page,
-  }) => {
+test.describe("empty-day ignition", () => {
+  test("zero real work immediately asks for a truthful briefing instead of leaving Trailblazer aimless", async ({ page }) => {
     await login(page);
-    await page.waitForTimeout(1000);
 
-    // No JUMP/CLIMB/VAULT prompt should ever appear on an empty day —
-    // there is no authored obstacle requiring them (the only remaining
-    // corridor trigger is the INTERACT-only fortress gate, which nulls
-    // out entirely when no mission/order embodiment exists).
-    for (const label of ["JUMP", "CLIMB", "VAULT"]) {
-      await expect(
-        page.locator(".context-actions button").filter({ hasText: label })
-      ).toHaveCount(0);
-    }
-
-    // Genuine free movement: holding the joystick forward for a few
-    // seconds must actually advance the player's progress with nothing
-    // blocking it.
-    const progressBefore = await page
-      .getByTestId("goldline-world")
-      .getAttribute("data-player-progress");
-    await holdJoystickForward(page, 2000);
-    await page.waitForTimeout(200);
-    const progressAfter = await page
-      .getByTestId("goldline-world")
-      .getAttribute("data-player-progress");
-    expect(Number(progressAfter)).toBeGreaterThan(Number(progressBefore));
-
-    // No encounter-prep claim: there is no active mission, so this UI
-    // must never appear regardless of lane/progress.
-    await expect(page.getByText("ENCOUNTER PREP REVEALED")).toHaveCount(0);
-
-    // The old lie is gone everywhere in the DOM.
-    await expect(page.getByText("MOVE TO NEXT ACTION ZONE")).toHaveCount(0);
-
-    // The truthful empty state is shown and readable instead.
-    const noActiveObjective = page.getByTestId("no-active-objective");
-    await expect(noActiveObjective).toBeVisible();
-    await expect(noActiveObjective).toContainText("NO ACTIVE OBJECTIVE");
-    await expect(noActiveObjective).toContainText(
-      "No unresolved route work right now."
-    );
-
-    // Top bar is truthful too — no fabricated mission name.
-    await expect(page.locator(".game-topbar b")).toContainText(
-      "NO ACTIVE MISSION"
-    );
-
-    // No offscreen objective cue either — there is nothing to point at.
-    await expect(
-      page.getByTestId("objective-direction-cue")
-    ).toHaveCount(0);
+    // The world truth is still empty — no fabricated objective appears.
+    await expect(page.getByTestId("no-active-objective")).toBeVisible();
     await expect(page.getByTestId("goldline-world")).toHaveAttribute(
       "data-objective-offscreen",
       "NONE"
     );
 
-    // Field Console remains reachable but is never required to understand
-    // the state — everything above was determined from the live world UI
-    // alone, before this point.
-    const consoleButton = page.getByRole("button", {
-      name: "Open field utilities",
-    });
-    await expect(consoleButton).toBeVisible();
-    await consoleButton.click();
-    await expect(page.getByRole("button", { name: "LIVE ROUTE" })).toBeVisible();
+    // But an empty day is now an ignition state, not a successful dead-end.
+    const briefing = page.getByTestId("empty-day-briefing");
+    await expect(briefing).toBeVisible();
+    await expect(page.locator(".open-channel-overlay")).toHaveAttribute(
+      "data-auto-ignition",
+      "true"
+    );
+    await expect(briefing).toContainText("BRIEF ME");
+    await expect(briefing).toContainText(/today|tomorrow/i);
+    await expect(briefing).toContainText(/tell Goldline what is actually happening/i);
+
+    // No old fake traversal or navigation lies are reintroduced behind it.
+    for (const label of ["JUMP", "CLIMB", "VAULT"]) {
+      await expect(
+        page.locator(".context-actions button").filter({ hasText: label })
+      ).toHaveCount(0);
+    }
+    await expect(page.getByText("ENCOUNTER PREP REVEALED")).toHaveCount(0);
+    await expect(page.getByText("MOVE TO NEXT ACTION ZONE")).toHaveCount(0);
+
+    // The operator can deliberately dismiss the briefing; the world remains
+    // truthful and movement remains free rather than being blocked by fake
+    // geometry. Dismissal is a choice, not the default experience.
+    await page.getByRole("button", { name: "Close Open Channel" }).click();
+    await expect(briefing).toHaveCount(0);
+    const progressBefore = await page
+      .getByTestId("goldline-world")
+      .getAttribute("data-player-progress");
+    await holdJoystickForward(page, 1200);
+    await page.waitForTimeout(200);
+    const progressAfter = await page
+      .getByTestId("goldline-world")
+      .getAttribute("data-player-progress");
+    expect(Number(progressAfter)).toBeGreaterThan(Number(progressBefore));
   });
 });
