@@ -1,4 +1,4 @@
-.goldline .open-channel-signal {
+:is(.goldline, .playable-goldline) .open-channel-signal {
   position: absolute;
   z-index: 14;
   left: 20%;
@@ -24,7 +24,7 @@
   text-align: left;
   animation: open-channel-beacon 1.8s ease-in-out infinite;
 }
-.goldline .open-channel-signal::after {
+:is(.goldline, .playable-goldline) .open-channel-signal::after {
   content: "";
   position: absolute;
   inset: -8px;
@@ -32,7 +32,7 @@
   border-radius: 12px;
   animation: open-channel-ring 1.8s ease-out infinite;
 }
-.goldline .open-channel-signal > span {
+:is(.goldline, .playable-goldline) .open-channel-signal > span {
   grid-row: 1 / 3;
   width: 38px;
   height: 38px;
@@ -44,24 +44,24 @@
   background: #8cf7ff;
   box-shadow: 0 0 15px #55f2ff;
 }
-.goldline .open-channel-signal svg {
+:is(.goldline, .playable-goldline) .open-channel-signal svg {
   width: 22px;
   height: 22px;
 }
-.goldline .open-channel-signal b {
+:is(.goldline, .playable-goldline) .open-channel-signal b {
   font:
     800 13px/1 Cinzel,
     serif;
   letter-spacing: 0.07em;
 }
-.goldline .open-channel-signal small {
+:is(.goldline, .playable-goldline) .open-channel-signal small {
   margin-top: 4px;
   font:
     800 8px/1.2 Inter,
     sans-serif;
   color: #93f8ff;
 }
-.goldline .open-channel-signal.is-active {
+:is(.goldline, .playable-goldline) .open-channel-signal.is-active {
   border-color: #ffe387;
   box-shadow:
     inset 0 0 18px #ffcf3b2e,
@@ -92,11 +92,11 @@
   }
 }
 
-.goldline .summary-channel {
+:is(.goldline, .playable-goldline) .summary-channel {
   color: #86f8ff;
 }
 
-.goldline .open-channel-overlay {
+:is(.goldline, .playable-goldline) .open-channel-overlay {
   position: absolute;
   z-index: 60;
   inset: 0;
@@ -105,7 +105,7 @@
   background: #02080d;
   font-family: Inter, sans-serif;
 }
-.goldline .open-channel-scene {
+:is(.goldline, .playable-goldline) .open-channel-scene {
   position: relative;
   width: 100%;
   height: 100%;
@@ -118,7 +118,7 @@
     radial-gradient(circle at 72% 16%, #2deeff1c, transparent 30%),
     linear-gradient(180deg, #061218 0%, #02090e 52%, #010508 100%);
 }
-.goldline .open-channel-scene-art {
+:is(.goldline, .playable-goldline) .open-channel-scene-art {
   position: absolute;
   inset: 0 0 auto;
   height: 42%;
@@ -131,7 +131,7 @@
   -webkit-mask-image: linear-gradient(#000 0 55%, transparent 100%);
   mask-image: linear-gradient(#000 0 55%, transparent 100%);
 }
-.goldline .open-channel-scanlines {
+:is(.goldline, .playable-goldline) .open-channel-scanlines {
   position: fixed;
   z-index: 1;
   inset: 0;
@@ -144,7 +144,7 @@
   );
   mix-blend-mode: screen;
 }
-.goldline .open-channel-close {
+:is(.goldline, .playable-goldline) .open-channel-close {
   position: absolute;
   z-index: 8;
   top: max(12px, env(safe-area-inset-top));
@@ -158,24 +158,24 @@
   color: #d8fdff;
   background: #031016e8;
 }
-.goldline .open-channel-close svg {
+:is(.goldline, .playable-goldline) .open-channel-close svg {
   width: 21px;
 }
-.goldline .open-channel-header,
-.goldline .open-channel-dialogue,
-.goldline .open-channel-window,
-.goldline .open-channel-console {
+:is(.goldline, .playable-goldline) .open-channel-header,
+:is(.goldline, .playable-goldline) .open-channel-dialogue,
+:is(.goldline, .playable-goldline) .open-channel-window,
+:is(.goldline, .playable-goldline) .open-channel-console {
   position: relative;
   z-index: 3;
 }
-.goldline .open-channel-header {
+:is(.goldline, .playable-goldline) .open-channel-header {
   display: flex;
   align-items: center;
   gap: 11px;
   min-height: 52px;
   padding-right: 48px;
 }
-.goldline .open-channel-header > span {
+:is(.goldline, .playable-goldline) .open-channel-header > span {
   width: 44px;
   height: 44px;
   display: grid;
@@ -186,26 +186,26 @@
   background: #8cf7ff;
   box-shadow: 0 0 18px #54efff8c;
 }
-.goldline .open-channel-header small,
-.goldline .open-channel-header h2 {
+:is(.goldline, .playable-goldline) .open-channel-header small,
+:is(.goldline, .playable-goldline) .open-channel-header h2 {
   display: block;
   margin: 0;
 }
-.goldline .open-channel-header small {
+:is(.goldline, .playable-goldline) .open-channel-header small {
   font:
     800 8px/1 Inter,
     sans-serif;
   letter-spacing: 0.17em;
   color: #86eaf0;
 }
-.goldline .open-channel-header h2 {
+:is(.goldline, .playable-goldline) .open-channel-header h2 {
   margin-top: 4px;
   font:
     800 24px/1 Cinzel,
     serif;
   letter-spacing: 0.05em;
 }
-.goldline .open-channel-header em {
+:is(.goldline, .playable-goldline) .open-channel-header em {
   margin-left: auto;
   padding: 5px 7px;
   border: 1px solid #6affb2;
@@ -217,7 +217,7 @@
     sans-serif;
   font-style: normal;
 }
-.goldline .open-channel-dialogue {
+:is(.goldline, .playable-goldline) .open-channel-dialogue {
   margin: 96px 0 12px 14%;
   padding: 14px 14px 13px;
   border: 1px solid #74f5ff9c;
@@ -228,21 +228,21 @@
     inset 0 0 24px #2ae9ff18,
     0 0 24px #1bdcf327;
 }
-.goldline .open-channel-dialogue small {
+:is(.goldline, .playable-goldline) .open-channel-dialogue small {
   font:
     900 9px/1 Inter,
     sans-serif;
   letter-spacing: 0.12em;
   color: #72edf4;
 }
-.goldline .open-channel-dialogue p {
+:is(.goldline, .playable-goldline) .open-channel-dialogue p {
   margin: 8px 0 10px;
   font:
     700 15px/1.42 Inter,
     sans-serif;
   color: #efffff;
 }
-.goldline .open-channel-dialogue button {
+:is(.goldline, .playable-goldline) .open-channel-dialogue button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -255,38 +255,38 @@
     900 9px/1 Inter,
     sans-serif;
 }
-.goldline .open-channel-dialogue button svg {
+:is(.goldline, .playable-goldline) .open-channel-dialogue button svg {
   width: 14px;
   height: 14px;
 }
-.goldline .open-channel-window {
+:is(.goldline, .playable-goldline) .open-channel-window {
   display: grid;
   gap: 3px;
   padding: 11px 13px;
   border: 1px solid #68ecf94d;
   background: #06151bc7;
 }
-.goldline .open-channel-window span {
+:is(.goldline, .playable-goldline) .open-channel-window span {
   font:
     900 13px/1 Inter,
     sans-serif;
   color: #8df8ff;
 }
-.goldline .open-channel-window strong {
+:is(.goldline, .playable-goldline) .open-channel-window strong {
   font:
     800 9px/1.35 Inter,
     sans-serif;
   letter-spacing: 0.04em;
   color: #a6cfd2;
 }
-.goldline .open-channel-console {
+:is(.goldline, .playable-goldline) .open-channel-console {
   margin-top: 10px;
   padding: 12px;
   border: 1px solid #61eaf45c;
   background: #031017e8;
   box-shadow: inset 0 0 34px #17e8ff0f;
 }
-.goldline .open-channel-capture > button {
+:is(.goldline, .playable-goldline) .open-channel-capture > button {
   width: 100%;
   min-height: 76px;
   display: flex;
@@ -299,54 +299,54 @@
   background: linear-gradient(110deg, #06303b, #031820);
   text-align: left;
 }
-.goldline .open-channel-capture > button > svg {
+:is(.goldline, .playable-goldline) .open-channel-capture > button > svg {
   width: 30px;
   height: 30px;
   color: #8df8ff;
 }
-.goldline .open-channel-capture b,
-.goldline .open-channel-capture small {
+:is(.goldline, .playable-goldline) .open-channel-capture b,
+:is(.goldline, .playable-goldline) .open-channel-capture small {
   display: block;
 }
-.goldline .open-channel-capture b {
+:is(.goldline, .playable-goldline) .open-channel-capture b {
   font:
     900 14px/1.1 Inter,
     sans-serif;
 }
-.goldline .open-channel-capture small {
+:is(.goldline, .playable-goldline) .open-channel-capture small {
   margin-top: 5px;
   font:
     700 10px/1.3 Inter,
     sans-serif;
   color: #94c9cc;
 }
-.goldline .open-channel-capture > button.is-recording {
+:is(.goldline, .playable-goldline) .open-channel-capture > button.is-recording {
   border-color: #ff6d6d;
   background: #381014;
   box-shadow: 0 0 20px #ff38384d;
 }
-.goldline .open-channel-capture > button.is-recording svg {
+:is(.goldline, .playable-goldline) .open-channel-capture > button.is-recording svg {
   color: #ff8a8a;
   fill: currentColor;
 }
-.goldline .open-channel-capture > button.is-ready {
+:is(.goldline, .playable-goldline) .open-channel-capture > button.is-ready {
   border-color: #71ffac;
   background: #07301c;
 }
-.goldline .open-channel-capture > button.is-ready svg {
+:is(.goldline, .playable-goldline) .open-channel-capture > button.is-ready svg {
   color: #7cffb5;
 }
-.goldline .open-channel-error {
+:is(.goldline, .playable-goldline) .open-channel-error {
   margin: 8px 0 0;
   color: #ffadad;
   font-size: 11px;
   line-height: 1.35;
 }
-.goldline .open-channel-transcript {
+:is(.goldline, .playable-goldline) .open-channel-transcript {
   display: block;
   margin-top: 11px;
 }
-.goldline .open-channel-transcript > span {
+:is(.goldline, .playable-goldline) .open-channel-transcript > span {
   display: block;
   margin-bottom: 6px;
   font:
@@ -355,11 +355,11 @@
   letter-spacing: 0.12em;
   color: #77eaf1;
 }
-.goldline .open-channel-transcript textarea,
-.goldline .open-channel-plan-heading input,
-.goldline .open-channel-task-editor input,
-.goldline .open-channel-task-editor textarea,
-.goldline .open-channel-task-editor select {
+:is(.goldline, .playable-goldline) .open-channel-transcript textarea,
+:is(.goldline, .playable-goldline) .open-channel-plan-heading input,
+:is(.goldline, .playable-goldline) .open-channel-task-editor input,
+:is(.goldline, .playable-goldline) .open-channel-task-editor textarea,
+:is(.goldline, .playable-goldline) .open-channel-task-editor select {
   width: 100%;
   border: 1px solid #62d9e24d;
   border-radius: 5px;
@@ -368,14 +368,14 @@
   background: #020a0f;
   font-family: Inter, sans-serif;
 }
-.goldline .open-channel-transcript textarea {
+:is(.goldline, .playable-goldline) .open-channel-transcript textarea {
   min-height: 120px;
   resize: vertical;
   padding: 12px;
   font-size: 15px;
   line-height: 1.4;
 }
-.goldline .open-channel-primary {
+:is(.goldline, .playable-goldline) .open-channel-primary {
   width: 100%;
   min-height: 56px;
   display: flex;
@@ -392,14 +392,14 @@
     900 13px/1.1 Inter,
     sans-serif;
 }
-.goldline .open-channel-primary:disabled {
+:is(.goldline, .playable-goldline) .open-channel-primary:disabled {
   opacity: 0.38;
   box-shadow: none;
 }
-.goldline .open-channel-primary svg {
+:is(.goldline, .playable-goldline) .open-channel-primary svg {
   width: 19px;
 }
-.goldline .spin {
+:is(.goldline, .playable-goldline) .spin {
   animation: open-channel-spin 1s linear infinite;
 }
 @keyframes open-channel-spin {
@@ -407,16 +407,16 @@
     transform: rotate(360deg);
   }
 }
-.goldline .open-channel-plan-heading {
+:is(.goldline, .playable-goldline) .open-channel-plan-heading {
   display: flex;
   align-items: flex-end;
   gap: 10px;
 }
-.goldline .open-channel-plan-heading > div {
+:is(.goldline, .playable-goldline) .open-channel-plan-heading > div {
   flex: 1;
   min-width: 0;
 }
-.goldline .open-channel-plan-heading small {
+:is(.goldline, .playable-goldline) .open-channel-plan-heading small {
   display: block;
   margin-bottom: 6px;
   font:
@@ -425,31 +425,31 @@
   letter-spacing: 0.1em;
   color: #73e9ef;
 }
-.goldline .open-channel-plan-heading input {
+:is(.goldline, .playable-goldline) .open-channel-plan-heading input {
   padding: 9px 10px;
   font:
     900 18px/1.15 Cinzel,
     serif;
 }
-.goldline .open-channel-plan-heading h3 {
+:is(.goldline, .playable-goldline) .open-channel-plan-heading h3 {
   margin: 5px 0 0;
   font:
     800 22px/1.15 Cinzel,
     serif;
 }
-.goldline .open-channel-plan-heading > strong {
+:is(.goldline, .playable-goldline) .open-channel-plan-heading > strong {
   flex: 0 0 auto;
   padding: 7px 8px;
   border: 1px solid #83f5ff66;
   color: #8df8ff;
   font-size: 12px;
 }
-.goldline .open-channel-task-editor {
+:is(.goldline, .playable-goldline) .open-channel-task-editor {
   display: grid;
   gap: 9px;
   margin-top: 12px;
 }
-.goldline .open-channel-task-editor article {
+:is(.goldline, .playable-goldline) .open-channel-task-editor article {
   position: relative;
   display: grid;
   grid-template-columns: 28px 1fr 29px;
@@ -458,7 +458,7 @@
   border: 1px solid #5ee5ef4d;
   background: #07171d;
 }
-.goldline .open-channel-step-number {
+:is(.goldline, .playable-goldline) .open-channel-step-number {
   width: 27px;
   height: 27px;
   display: grid;
@@ -470,11 +470,11 @@
     900 12px/1 Inter,
     sans-serif;
 }
-.goldline .open-channel-task-editor input {
+:is(.goldline, .playable-goldline) .open-channel-task-editor input {
   padding: 8px;
   font-weight: 800;
 }
-.goldline .open-channel-task-editor textarea {
+:is(.goldline, .playable-goldline) .open-channel-task-editor textarea {
   min-height: 54px;
   margin-top: 6px;
   padding: 8px;
@@ -483,13 +483,13 @@
   line-height: 1.35;
   color: #bcdcdf;
 }
-.goldline .open-channel-task-fields {
+:is(.goldline, .playable-goldline) .open-channel-task-fields {
   display: grid;
   grid-template-columns: 58px 90px 1fr;
   gap: 6px;
   margin-top: 6px;
 }
-.goldline .open-channel-task-fields label span {
+:is(.goldline, .playable-goldline) .open-channel-task-fields label span {
   display: block;
   margin-bottom: 3px;
   font:
@@ -497,18 +497,18 @@
     sans-serif;
   color: #6fcbd1;
 }
-.goldline .open-channel-task-fields input,
-.goldline .open-channel-task-fields select {
+:is(.goldline, .playable-goldline) .open-channel-task-fields input,
+:is(.goldline, .playable-goldline) .open-channel-task-fields select {
   height: 33px;
   padding: 4px 6px;
   font-size: 10px;
 }
-.goldline .open-channel-task-controls {
+:is(.goldline, .playable-goldline) .open-channel-task-controls {
   display: grid;
   align-content: start;
   gap: 5px;
 }
-.goldline .open-channel-task-controls button {
+:is(.goldline, .playable-goldline) .open-channel-task-controls button {
   width: 28px;
   height: 28px;
   display: grid;
@@ -517,13 +517,13 @@
   color: #91eaf0;
   background: #020a0f;
 }
-.goldline .open-channel-task-controls button:disabled {
+:is(.goldline, .playable-goldline) .open-channel-task-controls button:disabled {
   opacity: 0.22;
 }
-.goldline .open-channel-task-controls svg {
+:is(.goldline, .playable-goldline) .open-channel-task-controls svg {
   width: 14px;
 }
-.goldline .open-channel-add {
+:is(.goldline, .playable-goldline) .open-channel-add {
   width: 100%;
   min-height: 42px;
   display: flex;
@@ -538,23 +538,23 @@
     900 10px/1 Inter,
     sans-serif;
 }
-.goldline .open-channel-add svg {
+:is(.goldline, .playable-goldline) .open-channel-add svg {
   width: 16px;
 }
-.goldline .open-channel-source {
+:is(.goldline, .playable-goldline) .open-channel-source {
   margin: 9px 0 0;
   text-align: center;
   color: #72969a;
   font-size: 9px;
 }
-.goldline .open-channel-active-tasks {
+:is(.goldline, .playable-goldline) .open-channel-active-tasks {
   display: grid;
   gap: 7px;
   margin: 13px 0 0;
   padding: 0;
   list-style: none;
 }
-.goldline .open-channel-active-tasks li {
+:is(.goldline, .playable-goldline) .open-channel-active-tasks li {
   display: grid;
   grid-template-columns: 32px 1fr 34px;
   align-items: center;
@@ -564,7 +564,7 @@
   border: 1px solid #5ceaf55c;
   background: #07171d;
 }
-.goldline .open-channel-active-tasks li > span {
+:is(.goldline, .playable-goldline) .open-channel-active-tasks li > span {
   width: 30px;
   height: 30px;
   display: grid;
@@ -574,22 +574,22 @@
   color: #8df8ff;
   font-weight: 900;
 }
-.goldline .open-channel-active-tasks li > span svg {
+:is(.goldline, .playable-goldline) .open-channel-active-tasks li > span svg {
   width: 16px;
 }
-.goldline .open-channel-active-tasks b,
-.goldline .open-channel-active-tasks small {
+:is(.goldline, .playable-goldline) .open-channel-active-tasks b,
+:is(.goldline, .playable-goldline) .open-channel-active-tasks small {
   display: block;
 }
-.goldline .open-channel-active-tasks b {
+:is(.goldline, .playable-goldline) .open-channel-active-tasks b {
   font-size: 13px;
 }
-.goldline .open-channel-active-tasks small {
+:is(.goldline, .playable-goldline) .open-channel-active-tasks small {
   margin-top: 4px;
   color: #82b7bb;
   font-size: 9px;
 }
-.goldline .open-channel-active-tasks a {
+:is(.goldline, .playable-goldline) .open-channel-active-tasks a {
   width: 34px;
   height: 34px;
   display: grid;
@@ -597,20 +597,42 @@
   border: 1px solid #69eaf46b;
   color: #8df8ff;
 }
-.goldline .open-channel-active-tasks a svg {
+:is(.goldline, .playable-goldline) .open-channel-active-tasks a svg {
   width: 17px;
 }
-.goldline .open-channel-active-tasks li.is-complete {
+:is(.goldline, .playable-goldline) .open-channel-active-tasks li.is-complete {
   opacity: 0.47;
   border-color: #70ff9c52;
 }
 
 @media (max-height: 720px) {
-  .goldline .open-channel-dialogue {
+  :is(.goldline, .playable-goldline) .open-channel-dialogue {
     margin-top: 62px;
   }
-  .goldline .open-channel-signal {
+  :is(.goldline, .playable-goldline) .open-channel-signal {
     top: 63%;
     transform: translate(-16%, -50%) scale(0.92);
   }
+}
+
+/* When the full-screen briefing is open, it owns pointer input. The Pixi
+   canvas and loading scrim remain visible underneath but cannot steal taps
+   from briefing controls on mobile. */
+:is(.goldline, .playable-goldline):has(.open-channel-overlay) .goldline-canvas-host,
+:is(.goldline, .playable-goldline):has(.open-channel-overlay) .game-loading {
+  pointer-events: none;
+}
+:is(.goldline, .playable-goldline) .open-channel-overlay {
+  pointer-events: auto;
+}
+
+/* The global Sonner toaster (mounted at the app root, outside the Goldline
+   tree entirely) renders bottom-right and can float over this overlay's own
+   controls (e.g. RETURN TO WORLD) right after a task-completion toast
+   fires, silently swallowing the next real tap. `:has()` here reaches up to
+   the nearest ancestor both trees share so the fix stays scoped to exactly
+   the moment the briefing is open, without touching toast behavior on any
+   other page. */
+body:has(.open-channel-overlay) [data-sonner-toaster] {
+  pointer-events: none;
 }
