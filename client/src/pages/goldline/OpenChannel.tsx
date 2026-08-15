@@ -131,29 +131,28 @@ export default function OpenChannel({
   const [tasks, setTasks] = useState<DraftTask[]>([]);
   const [autoOpen, setAutoOpen] = useState(false);
   const [autoDismissed, setAutoDismissed] = useState(false);
+  const [worldIsEmpty, setWorldIsEmpty] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const announcedRef = useRef(false);
 
-  // Goldline's playable world truthfully renders `no-active-objective` only
-  // when there is no real mission/order to pursue. In that exact state,
-  // Open Channel is the ignition system: ask the operator what is actually
-  // happening, build a reviewable mission from that briefing, then activate
-  // only what they approve. This deliberately reuses the existing canonical
-  // Open Channel persistence rather than inventing a parallel task store.
   useEffect(() => {
     if (open || !gap.available) {
       setAutoOpen(false);
-      if (!gap.available) setAutoDismissed(false);
+      if (!gap.available) {
+        setAutoDismissed(false);
+        setWorldIsEmpty(false);
+      }
       return;
     }
     const frame = requestAnimationFrame(() => {
-      const worldIsEmpty = Boolean(
+      const empty = Boolean(
         document.querySelector('[data-testid="no-active-objective"]')
       );
-      setAutoOpen(worldIsEmpty);
-      if (!worldIsEmpty) setAutoDismissed(false);
+      setWorldIsEmpty(empty);
+      setAutoOpen(empty);
+      if (!empty) setAutoDismissed(false);
     });
     return () => cancelAnimationFrame(frame);
   }, [open, gap.available, mission?.id, mission?.status, mission?.tasks]);
@@ -164,6 +163,11 @@ export default function OpenChannel({
     setAutoDismissed(true);
     setAutoOpen(false);
     onClose();
+  }
+
+  function reopenChannel() {
+    setAutoDismissed(false);
+    setAutoOpen(true);
   }
 
   useEffect(() => {
@@ -297,7 +301,6 @@ export default function OpenChannel({
     }
   }
 
-  if (!effectiveOpen) return null;
   const draft = mission?.status === "draft" ? mission : null;
   const active = mission?.status === "active" ? mission : null;
   const firstPendingTask = active?.tasks.find(task => task.status === "pending") ?? null;
@@ -305,6 +308,51 @@ export default function OpenChannel({
     (sum, task) => sum + task.estimatedMinutes,
     0
   );
+
+  if (!effectiveOpen) {
+    if (!worldIsEmpty || !gap.available) return null;
+    return (
+      <button
+        type="button"
+        data-testid="open-channel-ignition-cta"
+        onClick={reopenChannel}
+        style={{
+          position: "absolute",
+          zIndex: 48,
+          left: "50%",
+          bottom: "118px",
+          width: "min(86vw, 430px)",
+          transform: "translateX(-50%)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "12px",
+          minHeight: "68px",
+          padding: "12px 18px",
+          border: "1px solid rgba(99, 232, 255, .7)",
+          borderRadius: "16px",
+          background: "rgba(4, 22, 31, .94)",
+          color: "white",
+          boxShadow: "0 12px 40px rgba(0,0,0,.45)",
+          fontSize: "16px",
+          fontWeight: 800,
+          textAlign: "left",
+        }}
+      >
+        <Radio />
+        <span style={{ display: "grid", gap: "3px" }}>
+          <b style={{ fontSize: "18px" }}>
+            {firstPendingTask ? firstPendingTask.title : "BRIEF THE LINE"}
+          </b>
+          <small style={{ fontSize: "14px", opacity: 0.8 }}>
+            {firstPendingTask
+              ? "CURRENT REAL OBJECTIVE · TAP TO CONTINUE"
+              : "NO WORK LOADED · TELL GOLDLINE WHAT TODAY ACTUALLY CONTAINS"}
+          </small>
+        </span>
+      </button>
+    );
+  }
 
   return (
     <div
@@ -327,9 +375,7 @@ export default function OpenChannel({
         </button>
 
         <header className="open-channel-header">
-          <span>
-            <Radio />
-          </span>
+          <span><Radio /></span>
           <div>
             <small>GOLDLINE FIELD COMMS</small>
             <h2>{!mission ? "BRIEF THE LINE" : "OPEN CHANNEL"}</h2>
@@ -342,11 +388,7 @@ export default function OpenChannel({
           <p>{mission?.operatorBriefing ?? OPERATOR_OPENING}</p>
           <button
             type="button"
-            onClick={() =>
-              speakAsOperator(
-                mission?.operatorBriefing ?? OPERATOR_OPENING
-              )
-            }
+            onClick={() => speakAsOperator(mission?.operatorBriefing ?? OPERATOR_OPENING)}
           >
             <Volume2 /> PLAY OPERATOR VOICE
           </button>
@@ -366,9 +408,7 @@ export default function OpenChannel({
             <div className="open-channel-capture">
               <button
                 type="button"
-                className={
-                  recording ? "is-recording" : audioDataUrl ? "is-ready" : ""
-                }
+                className={recording ? "is-recording" : audioDataUrl ? "is-ready" : ""}
                 onClick={recording ? stopRecording : startRecording}
                 disabled={isGenerating}
               >
@@ -388,9 +428,7 @@ export default function OpenChannel({
                   </small>
                 </span>
               </button>
-              {recordingError ? (
-                <p className="open-channel-error">{recordingError}</p>
-              ) : null}
+              {recordingError ? <p className="open-channel-error">{recordingError}</p> : null}
             </div>
             <label className="open-channel-transcript">
               <span>TYPE, CORRECT, OR ADD CONTEXT</span>
@@ -404,28 +442,18 @@ export default function OpenChannel({
             <button
               type="button"
               className="open-channel-primary"
-              disabled={
-                recording ||
-                isGenerating ||
-                (!audioDataUrl && transcript.trim().length < 20)
-              }
-              onClick={() =>
-                void onGenerate({
-                  transcript: transcript.trim() || undefined,
-                  audioDataUrl: audioDataUrl ?? undefined,
-                  availableMinutes: gap.availableMinutes,
-                  nextCommitmentAt: gap.nextCommitmentAt,
-                })
-              }
+              disabled={recording || isGenerating || (!audioDataUrl && transcript.trim().length < 20)}
+              onClick={() => void onGenerate({
+                transcript: transcript.trim() || undefined,
+                audioDataUrl: audioDataUrl ?? undefined,
+                availableMinutes: gap.availableMinutes,
+                nextCommitmentAt: gap.nextCommitmentAt,
+              })}
             >
               {isGenerating ? (
-                <>
-                  <Loader2 className="spin" /> BUILDING YOUR REAL DAY…
-                </>
+                <><Loader2 className="spin" /> BUILDING YOUR REAL DAY…</>
               ) : (
-                <>
-                  <Sparkles /> TURN THIS INTO A DRAFT MISSION
-                </>
+                <><Sparkles /> TURN THIS INTO A DRAFT MISSION</>
               )}
             </button>
           </section>
@@ -436,11 +464,7 @@ export default function OpenChannel({
             <div className="open-channel-plan-heading">
               <div>
                 <small>DRAFT MISSION · NOTHING IS ACTIVE UNTIL YOU APPROVE IT</small>
-                <input
-                  value={title}
-                  onChange={event => setTitle(event.target.value)}
-                  aria-label="Mission title"
-                />
+                <input value={title} onChange={event => setTitle(event.target.value)} aria-label="Mission title" />
               </div>
               <strong>{totalMinutes} MIN</strong>
             </div>
@@ -451,16 +475,12 @@ export default function OpenChannel({
                   <div>
                     <input
                       value={task.title}
-                      onChange={event =>
-                        updateTask(index, { title: event.target.value })
-                      }
+                      onChange={event => updateTask(index, { title: event.target.value })}
                       aria-label={`Step ${index + 1} title`}
                     />
                     <textarea
                       value={task.detail}
-                      onChange={event =>
-                        updateTask(index, { detail: event.target.value })
-                      }
+                      onChange={event => updateTask(index, { detail: event.target.value })}
                       rows={2}
                       aria-label={`Step ${index + 1} details`}
                     />
@@ -472,120 +492,62 @@ export default function OpenChannel({
                           min={5}
                           max={240}
                           value={task.estimatedMinutes}
-                          onChange={event =>
-                            updateTask(index, {
-                              estimatedMinutes: Math.max(
-                                5,
-                                Number(event.target.value) || 5
-                              ),
-                            })
-                          }
+                          onChange={event => updateTask(index, { estimatedMinutes: Math.max(5, Number(event.target.value) || 5) })}
                         />
                       </label>
                       <label>
                         <span>TYPE</span>
                         <select
                           value={task.category}
-                          onChange={event =>
-                            updateTask(index, {
-                              category: event.target
-                                .value as OpenChannelTaskCategory,
-                            })
-                          }
+                          onChange={event => updateTask(index, { category: event.target.value as OpenChannelTaskCategory })}
                         >
-                          {CATEGORIES.map(category => (
-                            <option key={category}>{category}</option>
-                          ))}
+                          {CATEGORIES.map(category => <option key={category}>{category}</option>)}
                         </select>
                       </label>
                       <label className="is-map">
                         <span>MAP SEARCH</span>
                         <input
                           value={task.navigationQuery ?? ""}
-                          onChange={event =>
-                            updateTask(index, {
-                              navigationQuery: event.target.value || null,
-                            })
-                          }
+                          onChange={event => updateTask(index, { navigationQuery: event.target.value || null })}
                           placeholder="Optional"
                         />
                       </label>
                     </div>
                   </div>
                   <div className="open-channel-task-controls">
+                    <button type="button" onClick={() => moveTask(index, -1)} disabled={index === 0} aria-label={`Move step ${index + 1} up`}><ChevronUp /></button>
+                    <button type="button" onClick={() => moveTask(index, 1)} disabled={index === tasks.length - 1} aria-label={`Move step ${index + 1} down`}><ChevronDown /></button>
                     <button
                       type="button"
-                      onClick={() => moveTask(index, -1)}
-                      disabled={index === 0}
-                      aria-label={`Move step ${index + 1} up`}
-                    >
-                      <ChevronUp />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveTask(index, 1)}
-                      disabled={index === tasks.length - 1}
-                      aria-label={`Move step ${index + 1} down`}
-                    >
-                      <ChevronDown />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setTasks(current =>
-                          current.filter((_, taskIndex) => taskIndex !== index)
-                        )
-                      }
+                      onClick={() => setTasks(current => current.filter((_, taskIndex) => taskIndex !== index))}
                       disabled={tasks.length === 1}
                       aria-label={`Remove step ${index + 1}`}
-                    >
-                      <Trash2 />
-                    </button>
+                    ><Trash2 /></button>
                   </div>
                 </article>
               ))}
             </div>
-            <button
-              type="button"
-              className="open-channel-add"
-              onClick={() => setTasks(current => [...current, emptyTask()])}
-              disabled={tasks.length >= 10}
-            >
+            <button type="button" className="open-channel-add" onClick={() => setTasks(current => [...current, emptyTask()])} disabled={tasks.length >= 10}>
               <Plus /> ADD BOARD SPACE
             </button>
             <button
               type="button"
               className="open-channel-primary"
-              disabled={
-                isApproving ||
-                !title.trim() ||
-                tasks.some(task => !task.title.trim() || !task.detail.trim())
-              }
-              onClick={() =>
-                void onApprove({
-                  missionId: draft.id,
-                  title: title.trim(),
-                  tasks: tasks.map(
-                    ({ clientKey: _clientKey, ...task }) => task
-                  ),
-                })
-              }
+              disabled={isApproving || !title.trim() || tasks.some(task => !task.title.trim() || !task.detail.trim())}
+              onClick={() => void onApprove({
+                missionId: draft.id,
+                title: title.trim(),
+                tasks: tasks.map(({ clientKey: _clientKey, ...task }) => task),
+              })}
             >
               {isApproving ? (
-                <>
-                  <Loader2 className="spin" /> DEPLOYING MISSION…
-                </>
+                <><Loader2 className="spin" /> DEPLOYING MISSION…</>
               ) : (
-                <>
-                  <Check /> CONFIRM THIS IS MY DAY
-                </>
+                <><Check /> CONFIRM THIS IS MY DAY</>
               )}
             </button>
             <p className="open-channel-source">
-              Generated from your briefing ·{" "}
-              {draft.generationSource === "anthropic_structured"
-                ? "AI structured plan"
-                : "reliable fallback plan"}
+              Generated from your briefing · {draft.generationSource === "anthropic_structured" ? "AI structured plan" : "reliable fallback plan"}
             </p>
           </section>
         ) : null}
@@ -593,14 +555,8 @@ export default function OpenChannel({
         {active ? (
           <section className="open-channel-console is-active" data-testid="open-channel-active-mission">
             <div className="open-channel-plan-heading">
-              <div>
-                <small>MISSION ACTIVE</small>
-                <h3>{active.title}</h3>
-              </div>
-              <strong>
-                {active.tasks.filter(task => task.status === "completed").length}/
-                {active.tasks.length}
-              </strong>
+              <div><small>MISSION ACTIVE</small><h3>{active.title}</h3></div>
+              <strong>{active.tasks.filter(task => task.status === "completed").length}/{active.tasks.length}</strong>
             </div>
 
             {firstPendingTask ? (
@@ -613,9 +569,7 @@ export default function OpenChannel({
                     href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(firstPendingTask.navigationQuery)}`}
                     target="_blank"
                     rel="noreferrer"
-                  >
-                    <MapPin /> OPEN MAP SEARCH
-                  </a>
+                  ><MapPin /> OPEN MAP SEARCH</a>
                 ) : null}
                 <button
                   type="button"
@@ -640,18 +594,11 @@ export default function OpenChannel({
 
             <ol className="open-channel-active-tasks">
               {active.tasks.map(task => (
-                <li
-                  key={task.id}
-                  className={task.status === "completed" ? "is-complete" : ""}
-                >
-                  <span>
-                    {task.status === "completed" ? <Check /> : task.position + 1}
-                  </span>
+                <li key={task.id} className={task.status === "completed" ? "is-complete" : ""}>
+                  <span>{task.status === "completed" ? <Check /> : task.position + 1}</span>
                   <div>
                     <b>{task.title}</b>
-                    <small>
-                      {task.estimatedMinutes} MIN · {task.category.toUpperCase()}
-                    </small>
+                    <small>{task.estimatedMinutes} MIN · {task.category.toUpperCase()}</small>
                   </div>
                   {task.navigationQuery ? (
                     <a
@@ -659,18 +606,12 @@ export default function OpenChannel({
                       target="_blank"
                       rel="noreferrer"
                       aria-label={`Find ${task.title} on map`}
-                    >
-                      <MapPin />
-                    </a>
+                    ><MapPin /></a>
                   ) : null}
                 </li>
               ))}
             </ol>
-            <button
-              type="button"
-              className="open-channel-add"
-              onClick={closeChannel}
-            >
+            <button type="button" className="open-channel-add" onClick={closeChannel}>
               RETURN TO WORLD
             </button>
           </section>
