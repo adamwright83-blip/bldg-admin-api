@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   patch:
-    if: "!contains(github.event.head_commit.message, '[voice-truth-applied]')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -132,8 +131,6 @@ export function deterministicOpenChannelPlan(
     .filter(Boolean)
     .slice(0, 10)
     .map(item => ({
-      // Fallback mode does not infer a semantic task from keywords. The title
-      // and detail remain anchored to words the operator actually supplied.
       title: item.slice(0, 160),
       detail: item.slice(0, 800),
       estimatedMinutes: 20,
@@ -210,11 +207,7 @@ export function deterministicOpenChannelPlan(
           )
           approve_route = '  approve: dayforgeTenantMemberProcedure\n'
           new_routes = r'''  transcribeBriefing: dayforgeTenantMemberProcedure
-    .input(
-      z.object({
-        audioDataUrl: z.string().max(18_000_000),
-      })
-    )
+    .input(z.object({ audioDataUrl: z.string().max(18_000_000) }))
     .mutation(({ ctx, input }) =>
       transcribeOpenChannelBriefing({
         ...input,
@@ -316,7 +309,7 @@ export function deterministicOpenChannelPlan(
               raise SystemExit('generate anchor missing')
           ui = ui.replace(old_generate, new_generate, 1)
 
-          draft_anchor = r'''            <div className="open-channel-task-editor">'''
+          draft_anchor = '            <div className="open-channel-task-editor">'
           draft_truth = r'''            <section className="open-channel-dialogue" data-testid="draft-source-transcript">
               <small>WHAT GOLDLINE USED</small>
               <p>{draft.transcript}</p>
@@ -420,7 +413,6 @@ describe("decodeOpenChannelAudio", () => {
 });
 ''')
 
-          # Remove this temporary patcher from the resulting product commit.
           Path('.github/workflows/zz-goldline-voice-truth-gate-patcher.yml').unlink()
           PY
       - name: Install dependencies
