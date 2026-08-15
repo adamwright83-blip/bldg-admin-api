@@ -5,6 +5,9 @@ on:
     paths:
       - "client/src/game/**"
       - "client/src/pages/driver/GoldlineDriverController.tsx"
+      - "client/src/components/driver/SalesMomentum.tsx"
+      - "server/commercialMissions/driverSalesMotivationService.ts"
+      - "server/commercialMissions/driverSalesJournalResilience.test.ts"
       - "server/driverGameWorld/**"
       - "server/capabilities/expansionScoutCapability.ts"
       - "server/armory/armoryWeaponService.ts"
@@ -93,6 +96,12 @@ jobs:
           client/src/game/state/worldMemory.test.ts
           client/src/game/session/checkpointStorage.test.ts
           shared/goldlineProgression.test.ts
+
+      - name: Prove Android journal audio resilience
+        run: >-
+          pnpm vitest run
+          server/commercialMissions/driverSalesJournalResilience.test.ts
+          client/src/components/driver/SalesMomentum.test.ts
 
       - name: Prove server-rebuilt progression and doctrine gates
         run: >-
