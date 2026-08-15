@@ -173,12 +173,23 @@ export async function getTenantSalesMomentum(input: { tenantId: string }) {
   }));
 }
 
-function decodeAudio(dataUrl: string) {
-  const match = dataUrl.match(/^data:(audio\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/);
+export function decodeDriverSalesJournalAudio(dataUrl: string) {
+  const match = dataUrl.match(/^data:([^;,]+)((?:;[^,]*)*);base64,([\s\S]+)$/i);
   if (!match) throw new Error("Audio recording format is invalid");
-  const data = Buffer.from(match[2], "base64");
+  const mimeType = match[1].toLowerCase();
+  const isSupportedRecording =
+    mimeType.startsWith("audio/") ||
+    ["video/webm", "video/mp4", "application/ogg", "application/octet-stream"].includes(mimeType);
+  if (!isSupportedRecording) throw new Error("Audio recording format is invalid");
+  const data = Buffer.from(match[3], "base64");
   if (!data.length || data.length > 12 * 1024 * 1024) throw new Error("Audio recording must be between 1 byte and 12 MB");
-  return { mimeType: match[1], data };
+  return { mimeType, data };
+}
+
+function audioFileExtension(mimeType: string): string {
+  if (mimeType.includes("mp4") || mimeType.includes("m4a")) return "m4a";
+  if (mimeType.includes("ogg")) return "ogg";
+  return "webm";
 }
 
 export async function saveDriverSalesJournal(input: {
@@ -191,9 +202,9 @@ export async function saveDriverSalesJournal(input: {
   let audioStorageKey: string | null = null;
   let audioMimeType: string | null = null;
   if (input.audioDataUrl) {
-    const audio = decodeAudio(input.audioDataUrl);
+    const audio = decodeDriverSalesJournalAudio(input.audioDataUrl);
     audioMimeType = audio.mimeType;
-    audioStorageKey = `driver-sales-journals/${input.tenantId}/${input.driverId}/${input.journalDate}-${randomUUID()}.webm`;
+    audioStorageKey = `driver-sales-journals/${input.tenantId}/${input.driverId}/${input.journalDate}-${randomUUID()}.${audioFileExtension(audio.mimeType)}`;
     await storagePut(audioStorageKey, audio.data, audio.mimeType);
     const downloadable = await storageGet(audioStorageKey);
     const transcription = await transcribeAudio({ audioUrl: downloadable.url, language: "en", prompt: "Transcribe a driver's end-of-day sales journal, preserving objections and responses accurately." });
@@ -236,7 +247,7 @@ export async function listDriverSalesJournals(input: { tenantId: string; driverI
   return Promise.all(rows.map(async row => ({
     ...row,
     audioUrl: row.audioStorageKey ? (await storageGet(row.audioStorageKey)).url : null,
-  })));
+  }));
 }
 
 export async function selectMissionDiamond(input: { tenantId: string; driverId: string; accountType: string }): Promise<MissionDiamond> {
