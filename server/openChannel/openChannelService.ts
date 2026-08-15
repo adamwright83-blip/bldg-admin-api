@@ -170,161 +170,116 @@ function audioFileExtension(mimeType: string): string {
   return "webm";
 }
 
+async function transcribeBriefingAudio(input: {
+  tenantId: string;
+  driverId: string;
+  audioDataUrl: string;
+}): Promise<string> {
+  const audio = decodeOpenChannelAudio(input.audioDataUrl);
+  const key = `open-channel/${input.tenantId}/${input.driverId}/${randomUUID()}.${audioFileExtension(audio.mimeType)}`;
+  await storagePut(key, audio.data, audio.mimeType);
+  const transcription = await (async () => {
+    try {
+      const downloadable = await storageGet(key);
+      return await transcribeAudio({
+        audioUrl: downloadable.url,
+        language: "en",
+        prompt:
+          "Transcribe an operator's field briefing verbatim. Preserve every pickup, dropoff, visit, call, follow-up, person, place, amount, date, and time constraint. Do not summarize, infer, or add tasks that were not spoken.",
+        mimeType: audio.mimeType,
+        fileName: `briefing.${audioFileExtension(audio.mimeType)}`,
+      });
+    } finally {
+      void storageDelete(key).catch(error =>
+        console.warn("[OpenChannel] Temporary audio cleanup failed", error)
+      );
+    }
+  })();
+  if ("error" in transcription) {
+    throw new Error(`Could not transcribe this briefing: ${transcription.error}`);
+  }
+  return transcription.text.trim();
+}
+
+export async function transcribeOpenChannelBriefing(input: {
+  tenantId: string;
+  driverId: string;
+  audioDataUrl: string;
+}): Promise<{ transcript: string }> {
+  const transcript = await transcribeBriefingAudio(input);
+  if (transcript.length < 20) {
+    throw new Error(
+      "The recording did not produce enough usable speech. Record again or correct the transcript before building the mission."
+    );
+  }
+  return { transcript: transcript.slice(0, 20_000) };
+}
+
 async function briefingTranscript(input: {
   tenantId: string;
   driverId: string;
   audioDataUrl?: string;
   transcript?: string;
 }): Promise<string> {
+  // The operator-visible transcript is authoritative input to planning. If it
+  // is present, never silently replace it with a hidden second transcription.
   let transcript = input.transcript?.trim() ?? "";
-  if (input.audioDataUrl) {
-    const audio = decodeOpenChannelAudio(input.audioDataUrl);
-    const key = `open-channel/${input.tenantId}/${input.driverId}/${randomUUID()}.${audioFileExtension(audio.mimeType)}`;
-    await storagePut(key, audio.data, audio.mimeType);
-    const transcription = await (async () => {
-      try {
-        const downloadable = await storageGet(key);
-        return await transcribeAudio({
-          audioUrl: downloadable.url,
-          language: "en",
-          prompt:
-            "Transcribe an operator's field briefing. Preserve places, people, amounts, time constraints, errands, and sales tasks accurately.",
-          mimeType: audio.mimeType,
-          fileName: `briefing.${audioFileExtension(audio.mimeType)}`,
-        });
-      } finally {
-        void storageDelete(key).catch(error =>
-          console.warn("[OpenChannel] Temporary audio cleanup failed", error)
-        );
-      }
-    })();
-    if (!("error" in transcription)) transcript = transcription.text.trim();
-    else if (!transcript) {
-      throw new Error(
-        `Could not transcribe this briefing: ${transcription.error}`
-      );
-    }
+  if (!transcript && input.audioDataUrl) {
+    transcript = await transcribeBriefingAudio({
+      tenantId: input.tenantId,
+      driverId: input.driverId,
+      audioDataUrl: input.audioDataUrl,
+    });
   }
   if (transcript.length < 20) {
     throw new Error(
-      "Give the Operator a little more context about your time, location, constraints, and possible tasks."
+      "Review what Goldline heard and add enough detail about the real work before building the mission."
     );
   }
   return transcript.slice(0, 20_000);
 }
 
-const NUMBER_WORDS: Record<string, number> = {
-  one: 1,
-  two: 2,
-  three: 3,
-  four: 4,
-  five: 5,
-};
-
-function mentionedCount(transcript: string, noun: RegExp): number {
-  const match = transcript.match(
-    new RegExp(
-      `\\b(\\d+|one|two|three|four|five)\\s+(?:local\\s+)?${noun.source}`,
-      "i"
-    )
-  );
-  if (!match) return 1;
-  return Math.min(
-    5,
-    Number(match[1]) || NUMBER_WORDS[match[1].toLowerCase()] || 1
-  );
+function splitGroundedBriefingItems(transcript: string): string[] {
+  const normalized = transcript
+    .replace(/\r/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+  const coarse = normalized.split(/[.!?;\n]+/g);
+  const items: string[] = [];
+  for (const part of coarse) {
+    const clauses = part.split(
+      /(?:,\s*|\s+)\b(?:then|also|after that|next)\b\s*|\s+and\s+(?=(?:i|we|tomorrow|today|pick\s*up|pickup|drop\s*off|deliver|delivery|visit|call|follow\s*up)\b)/gi
+    );
+    for (const clause of clauses) {
+      const value = clause.replace(/\s+/g, " ").trim();
+      if (value.length >= 6) items.push(value);
+    }
+  }
+  return items.slice(0, 10);
 }
 
 export function deterministicOpenChannelPlan(
   transcript: string
 ): z.infer<typeof planSchema> {
-  const tasks: OpenChannelEditableTask[] = [];
-  const add = (
-    title: string,
-    detail: string,
-    estimatedMinutes: number,
-    category: OpenChannelTaskCategory,
-    navigationQuery: string | null = null
-  ) => {
-    if (!tasks.some(task => task.title.toLowerCase() === title.toLowerCase())) {
-      tasks.push({
-        title,
-        detail,
-        estimatedMinutes,
-        category,
-        navigationQuery,
-      });
-    }
-  };
-
-  if (/hungry|eat|food|sandwich|lunch|breakfast|dinner/i.test(transcript)) {
-    add(
-      "Secure a low-cost meal",
-      "Respect the stated spending constraint; choose a simple inexpensive option before the next work block.",
-      25,
-      "food",
-      "inexpensive grocery store food near me"
-    );
-  }
-  if (/barber|barbershop|salon/i.test(transcript)) {
-    const count = mentionedCount(transcript, /barber(?:shop)?s?|salons?/);
-    for (let index = 1; index <= count; index += 1) {
-      add(
-        `Local shop outreach ${index} of ${count}`,
-        "Bring the available collateral, introduce the towel-service offer, and record the decision-maker or next step.",
-        20,
-        "sales",
-        /huntington park/i.test(transcript)
-          ? "barbershops in Huntington Park CA"
-          : "barbershops near me"
-      );
-    }
-  }
-  if (
-    /dirty clothes|personal laundry|wash and dry|wash.*clothes/i.test(
-      transcript
-    )
-  ) {
-    add(
-      "Start personal laundry",
-      "Begin the personal wash-and-dry cycle mentioned in the briefing and set a return timer.",
-      15,
-      "personal"
-    );
-  }
-  if (/collect.*quarter|quarter.*collect/i.test(transcript)) {
-    add(
-      "Collect the quarters",
-      "Collect and secure the quarters identified in the briefing before reconciliation.",
-      15,
-      "finance"
-    );
-  }
-  if (/count.*cash|cash.*count|reconcile/i.test(transcript)) {
-    add(
-      "Count and reconcile cash",
-      "Count the cash carefully and record the total for the named person or facility.",
-      20,
-      "finance"
-    );
-  }
-
-  if (!tasks.length) {
-    const sentences = transcript
-      .split(/[.!?\n]+/)
-      .map(value => value.trim())
-      .filter(value => value.length >= 12)
-      .slice(0, 6);
-    for (const sentence of sentences) {
-      add(sentence.slice(0, 80), sentence, 25, "other");
-    }
-  }
+  const groundedItems = splitGroundedBriefingItems(transcript);
+  const tasks: OpenChannelEditableTask[] = (
+    groundedItems.length ? groundedItems : [transcript.trim()]
+  )
+    .filter(Boolean)
+    .slice(0, 10)
+    .map(item => ({
+      title: item.slice(0, 160),
+      detail: item.slice(0, 800),
+      estimatedMinutes: 20,
+      category: "other" as const,
+      navigationQuery: null,
+    }));
 
   return planSchema.parse({
-    title: "Make the gap count",
+    title: "Your briefing",
     operatorBriefing:
-      "Channel received. I turned what you know right now into a practical draft. Check the order, timing, and locations before we commit it to the board.",
-    tasks: tasks.slice(0, 10),
+      "I kept the fallback draft grounded in what you actually said. Review the transcript and each item before you make it active.",
+    tasks,
   });
 }
 
@@ -685,6 +640,43 @@ export async function generateOpenChannelDraft(input: {
   });
   if (!projected) throw new Error("Open Channel draft could not be loaded");
   return projected;
+}
+
+export async function cancelOpenChannelDraft(input: {
+  tenantId: string;
+  driverId: string;
+  missionId: string;
+}): Promise<{ cancelled: true }> {
+  await ensureOpenChannelTables();
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [mission] = await db
+    .select({ status: openChannelMissions.status })
+    .from(openChannelMissions)
+    .where(
+      and(
+        eq(openChannelMissions.tenantId, input.tenantId),
+        eq(openChannelMissions.driverId, input.driverId),
+        eq(openChannelMissions.id, input.missionId)
+      )
+    )
+    .limit(1);
+  if (!mission) throw new Error("Open Channel draft was not found");
+  if (mission.status !== "draft") {
+    throw new Error("Only an unapproved Open Channel draft can be discarded");
+  }
+  await db
+    .update(openChannelMissions)
+    .set({ status: "cancelled" })
+    .where(
+      and(
+        eq(openChannelMissions.tenantId, input.tenantId),
+        eq(openChannelMissions.driverId, input.driverId),
+        eq(openChannelMissions.id, input.missionId),
+        eq(openChannelMissions.status, "draft")
+      )
+    );
+  return { cancelled: true };
 }
 
 export async function approveOpenChannelMission(input: {

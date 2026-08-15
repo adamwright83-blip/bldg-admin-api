@@ -125,6 +125,8 @@ export default function OpenChannel({
 }: OpenChannelProps) {
   const utils = trpc.useUtils();
   const completeTask = trpc.system.openChannel.completeTask.useMutation();
+  const transcribeBriefing = trpc.system.openChannel.transcribeBriefing.useMutation();
+  const cancelDraft = trpc.system.openChannel.cancelDraft.useMutation();
   const [transcript, setTranscript] = useState("");
   const [audioDataUrl, setAudioDataUrl] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -238,10 +240,25 @@ export default function OpenChannel({
             "audio/webm",
         });
         void blobDataUrl(blob)
-          .then(setAudioDataUrl)
+          .then(async dataUrl => {
+            setAudioDataUrl(dataUrl);
+            try {
+              const heard = await transcribeBriefing.mutateAsync({
+                audioDataUrl: dataUrl,
+              });
+              setTranscript(heard.transcript);
+              setRecordingError(null);
+            } catch (error) {
+              setRecordingError(
+                error instanceof Error
+                  ? `${error.message} Review or correct the text below before building.`
+                  : "Goldline could not verify the recording. Review or correct the text below before building."
+              );
+            }
+          })
           .catch(() =>
             setRecordingError(
-              "The recording could not be prepared. Please type the briefing."
+              "The recording could not be prepared. Please record again or type the briefing."
             )
           );
         speechRef.current?.stop();
@@ -420,16 +437,18 @@ export default function OpenChannel({
                 type="button"
                 className={recording ? "is-recording" : audioDataUrl ? "is-ready" : ""}
                 onClick={recording ? stopRecording : startRecording}
-                disabled={isGenerating}
+                disabled={isGenerating || transcribeBriefing.isPending}
               >
                 {recording ? <Square /> : audioDataUrl ? <Check /> : <Mic />}
                 <span>
                   <b>
                     {recording
                       ? "STOP BRIEFING"
-                      : audioDataUrl
-                        ? "VOICE BRIEFING CAPTURED"
-                        : "BRIEF ME"}
+                      : transcribeBriefing.isPending
+                        ? "VERIFYING WHAT YOU SAID…"
+                        : audioDataUrl
+                          ? "VOICE BRIEFING CAPTURED"
+                          : "BRIEF ME"}
                   </b>
                   <small>
                     {recording
@@ -441,21 +460,24 @@ export default function OpenChannel({
               {recordingError ? <p className="open-channel-error">{recordingError}</p> : null}
             </div>
             <label className="open-channel-transcript">
-              <span>TYPE, CORRECT, OR ADD CONTEXT</span>
+              <span>WHAT GOLDLINE HEARD — REVIEW THIS BEFORE BUILDING</span>
               <textarea
                 value={transcript}
                 onChange={event => setTranscript(event.target.value)}
                 rows={6}
+                data-testid="briefing-transcript-review"
                 placeholder="Today I have two pickups, a dropoff, I need to visit apartment buildings, call Russell back, and tomorrow I need to follow up with…"
               />
             </label>
             <button
               type="button"
               className="open-channel-primary"
-              disabled={recording || isGenerating || (!audioDataUrl && transcript.trim().length < 20)}
+              disabled={recording || transcribeBriefing.isPending || isGenerating || transcript.trim().length < 20}
               onClick={() => void onGenerate({
-                transcript: transcript.trim() || undefined,
-                audioDataUrl: audioDataUrl ?? undefined,
+                // Planning uses exactly the transcript the operator can see
+                // and edit. Never perform a hidden second transcription here.
+                transcript: transcript.trim(),
+                audioDataUrl: undefined,
                 availableMinutes: gap.availableMinutes,
                 nextCommitmentAt: gap.nextCommitmentAt,
               })}
@@ -478,6 +500,34 @@ export default function OpenChannel({
               </div>
               <strong>{totalMinutes} MIN</strong>
             </div>
+            <section className="open-channel-dialogue" data-testid="draft-source-transcript">
+              <small>WHAT GOLDLINE USED</small>
+              <p>{draft.transcript}</p>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await cancelDraft.mutateAsync({ missionId: draft.id });
+                    setTranscript("");
+                    setAudioDataUrl(null);
+                    setTitle("");
+                    setTasks([]);
+                    await utils.system.openChannel.current.invalidate();
+                  } catch (error) {
+                    setTaskError(
+                      error instanceof Error
+                        ? error.message
+                        : "Could not discard this draft. Try again."
+                    );
+                  }
+                }}
+                disabled={cancelDraft.isPending}
+              >
+                {cancelDraft.isPending ? <Loader2 className="spin" /> : <Mic />}
+                DISCARD DRAFT & RECORD AGAIN
+              </button>
+              {taskError ? <p className="open-channel-error">{taskError}</p> : null}
+            </section>
             <div className="open-channel-task-editor">
               {tasks.map((task, index) => (
                 <article key={task.clientKey}>
@@ -557,7 +607,7 @@ export default function OpenChannel({
               )}
             </button>
             <p className="open-channel-source">
-              Generated from your briefing · {draft.generationSource === "anthropic_structured" ? "AI structured plan" : "reliable fallback plan"}
+              Generated from your reviewed transcript · {draft.generationSource === "anthropic_structured" ? "AI structured plan" : "grounded verbatim fallback"}
             </p>
           </section>
         ) : null}
