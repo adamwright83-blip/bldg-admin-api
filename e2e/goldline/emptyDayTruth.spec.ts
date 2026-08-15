@@ -39,14 +39,12 @@ test.describe("empty-day ignition", () => {
   test("zero real work immediately asks for a truthful briefing instead of leaving Trailblazer aimless", async ({ page }) => {
     await login(page);
 
-    // The world truth is still empty — no fabricated objective appears.
     await expect(page.getByTestId("no-active-objective")).toBeVisible();
     await expect(page.getByTestId("goldline-world")).toHaveAttribute(
       "data-objective-offscreen",
       "NONE"
     );
 
-    // But an empty day is now an ignition state, not a successful dead-end.
     const briefing = page.getByTestId("empty-day-briefing");
     await expect(briefing).toBeVisible();
     await expect(page.locator(".open-channel-overlay")).toHaveAttribute(
@@ -57,7 +55,6 @@ test.describe("empty-day ignition", () => {
     await expect(briefing).toContainText(/today|tomorrow/i);
     await expect(briefing).toContainText(/tell Goldline what is actually happening/i);
 
-    // No old fake traversal or navigation lies are reintroduced behind it.
     for (const label of ["JUMP", "CLIMB", "VAULT"]) {
       await expect(
         page.locator(".context-actions button").filter({ hasText: label })
@@ -66,11 +63,18 @@ test.describe("empty-day ignition", () => {
     await expect(page.getByText("ENCOUNTER PREP REVEALED")).toHaveCount(0);
     await expect(page.getByText("MOVE TO NEXT ACTION ZONE")).toHaveCount(0);
 
-    // The operator can deliberately dismiss the briefing; the world remains
-    // truthful and movement remains free rather than being blocked by fake
-    // geometry. Dismissal is a choice, not the default experience.
+    // Dismissing the full briefing never strands the player in an empty
+    // sandbox again. A readable in-world ignition/current-objective control
+    // remains available until authoritative work appears.
     await page.getByRole("button", { name: "Close Open Channel" }).click();
     await expect(briefing).toHaveCount(0);
+    const ignition = page.getByTestId("open-channel-ignition-cta");
+    await expect(ignition).toBeVisible();
+    await expect(ignition).toContainText("BRIEF THE LINE");
+    await expect(ignition).toContainText(/NO WORK LOADED/i);
+
+    // Movement remains real and unobstructed if the operator deliberately
+    // chooses to walk before briefing the day.
     const progressBefore = await page
       .getByTestId("goldline-world")
       .getAttribute("data-player-progress");
@@ -80,5 +84,10 @@ test.describe("empty-day ignition", () => {
       .getByTestId("goldline-world")
       .getAttribute("data-player-progress");
     expect(Number(progressAfter)).toBeGreaterThan(Number(progressBefore));
+
+    // The briefing can be resumed directly from the world without opening
+    // the Field Console escape hatch.
+    await ignition.click();
+    await expect(briefing).toBeVisible();
   });
 });
