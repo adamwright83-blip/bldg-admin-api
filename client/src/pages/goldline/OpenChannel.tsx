@@ -137,25 +137,50 @@ export default function OpenChannel({
   const chunksRef = useRef<Blob[]>([]);
   const announcedRef = useRef(false);
 
+  // Empty-world truth can land after Open Channel mounts, especially while
+  // the Pixi world and authoritative queries settle. The previous one-frame
+  // DOM check raced that render and could leave the real Android experience
+  // in the exact dead state this feature exists to eliminate. Observe the
+  // live world marker instead: whenever Goldline truthfully renders
+  // `no-active-objective`, the briefing becomes the next action. This empty-
+  // day ignition intentionally does not depend on the time-gap heuristic —
+  // an operator with zero loaded work still needs a way to tell Goldline what
+  // today/tomorrow actually contain. Nothing becomes authoritative until the
+  // existing Open Channel draft is explicitly approved.
   useEffect(() => {
-    if (open || !gap.available) {
+    if (open) {
       setAutoOpen(false);
-      if (!gap.available) {
-        setAutoDismissed(false);
-        setWorldIsEmpty(false);
-      }
       return;
     }
-    const frame = requestAnimationFrame(() => {
+
+    let frame = 0;
+    let settled = false;
+    const syncWorldTruth = () => {
+      if (settled) return;
       const empty = Boolean(
         document.querySelector('[data-testid="no-active-objective"]')
       );
       setWorldIsEmpty(empty);
       setAutoOpen(empty);
       if (!empty) setAutoDismissed(false);
+    };
+
+    syncWorldTruth();
+    frame = requestAnimationFrame(syncWorldTruth);
+    const observer = new MutationObserver(syncWorldTruth);
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-testid"],
     });
-    return () => cancelAnimationFrame(frame);
-  }, [open, gap.available, mission?.id, mission?.status, mission?.tasks]);
+
+    return () => {
+      settled = true;
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [open, mission?.id, mission?.status, mission?.tasks]);
 
   const effectiveOpen = open || (autoOpen && !autoDismissed);
 
@@ -310,7 +335,7 @@ export default function OpenChannel({
   );
 
   if (!effectiveOpen) {
-    if (!worldIsEmpty || !gap.available) return null;
+    if (!worldIsEmpty) return null;
     return (
       <button
         type="button"
