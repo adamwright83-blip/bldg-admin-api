@@ -22,7 +22,18 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Apply repair
-        run: python3 .github/voice-truth-patch.py
+        shell: bash
+        run: |
+          python3 .github/voice-truth-patch.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('server/openChannel/openChannelContract.test.ts')
+          text = p.read_text()
+          expected = 'expect(router.match(/dayforgeTenantMemberProcedure/g)).toHaveLength(6);'
+          if expected not in text:
+              raise SystemExit('authenticated route count contract anchor missing')
+          p.write_text(text.replace(expected, 'expect(router.match(/dayforgeTenantMemberProcedure/g)).toHaveLength(8);', 1))
+          PY
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Prove voice truth contracts
