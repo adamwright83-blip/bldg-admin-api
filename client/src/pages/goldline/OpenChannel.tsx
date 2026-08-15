@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { startBrowserSpeechTranscript, type BrowserSpeechSession } from "@/lib/browserSpeechRecognition";
 import type {
   OpenChannelEditableTask,
   OpenChannelMission,
@@ -34,6 +35,7 @@ type OpenChannelProps = {
   open: boolean;
   mission: OpenChannelMission | null | undefined;
   gap: OpenChannelGap;
+  shouldAutoIgnite: boolean;
   isGenerating: boolean;
   isApproving: boolean;
   onClose: () => void;
@@ -114,6 +116,7 @@ export default function OpenChannel({
   open,
   mission,
   gap,
+  shouldAutoIgnite,
   isGenerating,
   isApproving,
   onClose,
@@ -131,56 +134,23 @@ export default function OpenChannel({
   const [tasks, setTasks] = useState<DraftTask[]>([]);
   const [autoOpen, setAutoOpen] = useState(false);
   const [autoDismissed, setAutoDismissed] = useState(false);
-  const [worldIsEmpty, setWorldIsEmpty] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const speechRef = useRef<BrowserSpeechSession | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const announcedRef = useRef(false);
 
-  // Empty-world truth can land after Open Channel mounts, especially while
-  // the Pixi world and authoritative queries settle. The previous one-frame
-  // DOM check raced that render and could leave the real Android experience
-  // in the exact dead state this feature exists to eliminate. Observe the
-  // live world marker instead: whenever Goldline truthfully renders
-  // `no-active-objective`, the briefing becomes the next action. This empty-
-  // day ignition intentionally does not depend on the time-gap heuristic —
-  // an operator with zero loaded work still needs a way to tell Goldline what
-  // today/tomorrow actually contain. Nothing becomes authoritative until the
-  // existing Open Channel draft is explicitly approved.
+  // Empty-day ignition is driven by the exact same playable state that renders
+  // NO ACTIVE OBJECTIVE in GoldlineGameHome. Never infer business/game truth
+  // by scraping rendered DOM or test ids.
   useEffect(() => {
     if (open) {
       setAutoOpen(false);
       return;
     }
-
-    let frame = 0;
-    let settled = false;
-    const syncWorldTruth = () => {
-      if (settled) return;
-      const empty = Boolean(
-        document.querySelector('[data-testid="no-active-objective"]')
-      );
-      setWorldIsEmpty(empty);
-      setAutoOpen(empty);
-      if (!empty) setAutoDismissed(false);
-    };
-
-    syncWorldTruth();
-    frame = requestAnimationFrame(syncWorldTruth);
-    const observer = new MutationObserver(syncWorldTruth);
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["data-testid"],
-    });
-
-    return () => {
-      settled = true;
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-    };
-  }, [open, mission?.id, mission?.status, mission?.tasks]);
+    setAutoOpen(shouldAutoIgnite);
+    if (!shouldAutoIgnite) setAutoDismissed(false);
+  }, [open, shouldAutoIgnite]);
 
   const effectiveOpen = open || (autoOpen && !autoDismissed);
 
@@ -225,6 +195,8 @@ export default function OpenChannel({
   useEffect(
     () => () => {
       recorderRef.current?.stop();
+      speechRef.current?.abort();
+      speechRef.current = null;
       streamRef.current?.getTracks().forEach(track => track.stop());
       window.speechSynthesis?.cancel();
     },
@@ -244,6 +216,11 @@ export default function OpenChannel({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       chunksRef.current = [];
+      speechRef.current?.abort();
+      speechRef.current = startBrowserSpeechTranscript({
+        initialText: transcript,
+        onTranscript: setTranscript,
+      });
       const preferredMimeType = preferredRecorderMimeType();
       const recorder = preferredMimeType
         ? new MediaRecorder(stream, { mimeType: preferredMimeType })
@@ -267,6 +244,8 @@ export default function OpenChannel({
               "The recording could not be prepared. Please type the briefing."
             )
           );
+        speechRef.current?.stop();
+        speechRef.current = null;
         stream.getTracks().forEach(track => track.stop());
         streamRef.current = null;
         recorderRef.current = null;
@@ -284,6 +263,7 @@ export default function OpenChannel({
   }
 
   function stopRecording() {
+    speechRef.current?.stop();
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
   }
 
@@ -335,7 +315,7 @@ export default function OpenChannel({
   );
 
   if (!effectiveOpen) {
-    if (!worldIsEmpty) return null;
+    if (!shouldAutoIgnite) return null;
     return (
       <button
         type="button"

@@ -31,6 +31,8 @@ export type TranscribeOptions = {
   audioUrl: string; // URL to the audio file (e.g., S3 URL)
   language?: string; // Optional: specify language code (e.g., "en", "es", "zh")
   prompt?: string; // Optional: custom prompt for the transcription
+  mimeType?: string; // Optional trusted recorder MIME hint from the upload boundary
+  fileName?: string; // Optional filename hint for providers that validate extensions
 };
 
 // Native Whisper API segment format
@@ -104,7 +106,7 @@ export async function transcribeAudio(
       }
       
       audioBuffer = Buffer.from(await response.arrayBuffer());
-      mimeType = response.headers.get('content-type') || 'audio/mpeg';
+      mimeType = normalizeMimeType(options.mimeType) || normalizeMimeType(response.headers.get('content-type')) || 'audio/mpeg';
       
       // Check file size (16MB limit)
       const sizeMB = audioBuffer.length / (1024 * 1024);
@@ -127,7 +129,7 @@ export async function transcribeAudio(
     const formData = new FormData();
     
     // Create a Blob from the buffer and append to form
-    const filename = `audio.${getFileExtension(mimeType)}`;
+    const filename = options.fileName?.trim() || `audio.${getFileExtension(mimeType)}`;
     const audioBlob = new Blob([new Uint8Array(audioBuffer)], { type: mimeType });
     formData.append("file", audioBlob, filename);
     
@@ -192,6 +194,12 @@ export async function transcribeAudio(
       details: error instanceof Error ? error.message : "An unexpected error occurred"
     };
   }
+}
+
+/** Normalize signed-download content types and recorder parameter forms. */
+function normalizeMimeType(value: string | null | undefined): string | null {
+  const normalized = value?.split(";", 1)[0]?.trim().toLowerCase();
+  return normalized || null;
 }
 
 /**

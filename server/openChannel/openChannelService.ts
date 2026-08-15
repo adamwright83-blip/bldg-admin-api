@@ -189,6 +189,8 @@ async function briefingTranscript(input: {
           language: "en",
           prompt:
             "Transcribe an operator's field briefing. Preserve places, people, amounts, time constraints, errands, and sales tasks accurately.",
+          mimeType: audio.mimeType,
+          fileName: `briefing.${audioFileExtension(audio.mimeType)}`,
         });
       } finally {
         void storageDelete(key).catch(error =>

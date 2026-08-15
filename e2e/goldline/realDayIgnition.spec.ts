@@ -47,6 +47,7 @@ test.describe("real-day ignition on the live driver controller", () => {
     });
     const briefing = page.getByTestId("empty-day-briefing");
     await expect(briefing).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("dialog", { name: "Open Channel mission briefing" })).toHaveAttribute("data-auto-ignition", "true");
     await expect(briefing).toContainText("BRIEF ME");
 
     const suppliedBriefing =
