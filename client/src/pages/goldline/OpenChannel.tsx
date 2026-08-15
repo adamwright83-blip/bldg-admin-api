@@ -345,7 +345,12 @@ export default function OpenChannel({
           position: "absolute",
           zIndex: 48,
           left: "50%",
-          bottom: "118px",
+          // The movement joystick occupies bottom:78-196px, left:18-136px
+          // (see .game-joystick in goldline-game.css). This banner must
+          // clear its full footprint — overlapping it silently swallowed
+          // every joystick drag as a tap on this button instead, making
+          // free movement impossible while the empty-day CTA was visible.
+          bottom: "216px",
           width: "min(86vw, 430px)",
           transform: "translateX(-50%)",
           display: "flex",
