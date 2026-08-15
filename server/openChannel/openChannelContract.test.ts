@@ -20,7 +20,7 @@ const migration = readFileSync(
 
 describe("Open Channel production contract", () => {
   it("uses authenticated tenant membership for every read and mutation", () => {
-    expect(router.match(/dayforgeTenantMemberProcedure/g)).toHaveLength(6);
+    expect(router.match(/dayforgeTenantMemberProcedure/g)).toHaveLength(8);
     expect(router).toContain("ctx.tenantId");
     expect(router).toContain("ctx.user.openId");
     expect(system).toContain("openChannel: openChannelRouter");

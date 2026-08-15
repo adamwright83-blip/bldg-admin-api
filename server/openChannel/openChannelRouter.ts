@@ -2,10 +2,12 @@ import { z } from "zod";
 import { dayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   approveOpenChannelMission,
+  cancelOpenChannelDraft,
   completeOpenChannelTask,
   generateOpenChannelDraft,
   getGoldlineProgress,
   getCurrentOpenChannelMission,
+  transcribeOpenChannelBriefing,
 } from "./openChannelService";
 import { OPEN_CHANNEL_TASK_CATEGORIES } from "./openChannelTypes";
 
@@ -72,6 +74,24 @@ export const openChannelRouter = router({
     )
     .mutation(({ ctx, input }) =>
       generateOpenChannelDraft({
+        ...input,
+        tenantId: ctx.tenantId,
+        driverId: ctx.user.openId,
+      })
+    ),
+  transcribeBriefing: dayforgeTenantMemberProcedure
+    .input(z.object({ audioDataUrl: z.string().max(18_000_000) }))
+    .mutation(({ ctx, input }) =>
+      transcribeOpenChannelBriefing({
+        ...input,
+        tenantId: ctx.tenantId,
+        driverId: ctx.user.openId,
+      })
+    ),
+  cancelDraft: dayforgeTenantMemberProcedure
+    .input(z.object({ missionId: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      cancelOpenChannelDraft({
         ...input,
         tenantId: ctx.tenantId,
         driverId: ctx.user.openId,
