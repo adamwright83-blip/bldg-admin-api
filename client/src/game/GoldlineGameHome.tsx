@@ -91,6 +91,7 @@ import {
   missionApproachFeedback,
   missFeedback,
 } from "./audio/haptics";
+import { planPickupExpedition } from "./expedition/expeditionPlan";
 import type { AgentWorldPresence } from "./world/PopulationSystem";
 import { projectAgentWorldPresence } from "./world/agentPresenceProjection";
 import type {
@@ -1339,6 +1340,49 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         : null
     );
   }, [nextOrderObjective?.order.id, nextOrderObjective?.status]);
+
+  /**
+   * A genuine PICKUP objective starts the fictional expedition bound to that
+   * real order id. Identity only — the expedition layer cannot read or
+   * mutate business state, and the pickup stays pending until the canonical
+   * `orders.updateStatus` mutation says otherwise (see handleInteractRef).
+   *
+   * A delivery does not start one: this slice is the pickup heartbeat.
+   */
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    if (!runtime) return;
+
+    const isPickup =
+      nextOrderObjective && nextOrderObjective.status !== "delivered";
+    if (!isPickup) {
+      runtime.endExpedition();
+      return;
+    }
+
+    runtime.startExpedition(
+      planPickupExpedition({ orderId: nextOrderObjective.order.id }),
+      {
+        onPlayerDamaged: () => {
+          getAudioManager().play("weak_point_hit");
+          missFeedback();
+        },
+        onGuardAbsorbed: () => getAudioManager().play("vault"),
+        onHostileDefeated: () => {
+          getAudioManager().play("weak_point_hit");
+          arcadeFeedback();
+        },
+        onLineLatched: () => arcadeFeedback(),
+        onHazardTriggered: () => {
+          getAudioManager().play("vault");
+          arcadeFeedback();
+        },
+        onDefeated: () => missFeedback(),
+      }
+    );
+
+    return () => runtime.endExpedition();
+  }, [nextOrderObjective?.order.id, nextOrderObjective?.status, runtimeReady]);
 
   useEffect(() => {
     runtimeRef.current?.setAgentPresence(agentWorldPresence);
