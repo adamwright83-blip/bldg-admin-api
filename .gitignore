@@ -126,3 +126,6 @@ tmp/goldline-stage1-frames/
 
 # Goldline true-touch review frames
 tmp/goldline-truetouch-frames/
+
+# Goldline heartbeat journey frames
+tmp/goldline-heartbeat-frames/
