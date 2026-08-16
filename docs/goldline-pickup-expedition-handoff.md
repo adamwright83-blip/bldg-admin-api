@@ -4,9 +4,11 @@ Continue on the EXISTING branch. Do not restart, do not branch, do not
 redesign.
 
 - **Branch:** `agent/goldline-pickup-expedition-heartbeat`
-- **Head SHA:** `7334baff31324c0cf8d41c0d14090464a02faeea`
+- **Head SHA:** see `git rev-parse HEAD` — ALWAYS verify live. A SHA written
+  here is stale the moment the next commit lands; the doc commit itself
+  advances it. Do not reset to any SHA quoted in this file.
 - **Base:** `origin/main` = `f21d1860ce1f90bbb88e27d3780265a8717bdb50`
-- **8 commits ahead of main.** No PR opened yet.
+- **Commits ahead of main:** `git log --oneline origin/main..HEAD`. No PR yet.
 
 ## Gate status
 
@@ -98,12 +100,33 @@ because §3 requires E2E through the real touch surface.
 
 ## What REMAINS
 
-**Known issues:**
-- Art is materially better but **not §53-certified** at 393×852 DPR3.
-- A base-game Pixi portal card (purple diamond) still overlays the world
-  during an expedition. Not expedition chrome; left alone deliberately.
-- Vitals poll on a 120ms interval — fine for bars, replace if it costs
-  frames.
+**Known issues — verified in the browser, fix these first:**
+
+1. **Purple card still overlays the world.** `portalPresentation.ts` now
+   forces corridor portals to an ambient glow during an expedition, and its
+   regression tests pass — but the card is STILL visible at 393px with a
+   fresh expedition running. So it is **not** the `comms_portal` sprite.
+   Identify the real object before changing more code: candidates are the
+   landmark `Graphics` (`drawLandmark`), the stronghold sprite
+   (`updateStronghold`), or a corridor-transition overlay. Keep the portal
+   rule — it is correct and covered — but find the actual culprit.
+
+2. **Entering an expedition does not reset corridor position.** Observed
+   `data-player-progress=0.780` on `corridor_02` immediately after
+   entering, so Trailblazer renders huge and high, floating above the
+   market. `startExpedition` should place her at the expedition start
+   (~0.06) and ideally pin the corridor, otherwise the authored plan's
+   progress positions do not line up with where she actually is.
+
+3. **Ruinbound damage is aggressive.** HP fell 100%→88% within one second
+   of entering, and an idle page reached 0% HP. Damage, telegraphs and
+   threat genuinely work — but with no death UI yet she simply stands there
+   dead. Tune cadence when Phase D lands the defeat flow.
+
+4. Art is materially better but **not §53-certified** at 393×852 DPR3.
+
+5. Vitals poll on a 120ms interval — fine for bars, replace if it costs
+   frames.
 
 **Phase D** — Relic choice (three plinths at `plan.relicPlinths` 0.42),
 physical Safe/Upper fork (`plan.fork` 0.46–0.72, call
