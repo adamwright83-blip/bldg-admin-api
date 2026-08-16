@@ -3187,6 +3187,8 @@
    Everything else above is business chrome that buries the world. */
 
 /* Threshold: an in-world invitation, not a modal card wall. */
+/* The threshold is a LABEL plus one button, not a panel. Only the button is
+ * interactive, so only the button takes pointer events. */
 .expedition-threshold {
   position: absolute;
   left: 50%;
@@ -3197,8 +3199,29 @@
   align-items: center;
   gap: 0.35rem;
   z-index: 40;
-  pointer-events: auto;
+  pointer-events: none;
   text-align: center;
+}
+
+.expedition-threshold__enter {
+  pointer-events: auto;
+}
+
+/* ENTER THE LINE must not float on top of a surface the player deliberately
+ * opened.
+ *
+ * The fiction mission panel is a full-height sheet — measured at 412x564
+ * from y=359 on a 412x923 Pixel-class viewport, so it owns the entire lower
+ * screen. The threshold sits at bottom:15vh, which puts its button squarely
+ * inside that sheet and directly over the route-stop list: a tap meant for
+ * OPEN VISIT hit ENTER THE LINE instead. There is no vertical room to move
+ * the threshold into while the panel is open, and no amount of pointer-event
+ * juggling fixes two live controls occupying the same pixels.
+ *
+ * So the invitation yields to the panel. It returns the moment the panel is
+ * closed, which is when it has somewhere to be. */
+.playable-goldline-shell:has(.fiction-mission-panel) .expedition-threshold {
+  display: none;
 }
 
 .expedition-threshold__objective {
