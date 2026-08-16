@@ -858,6 +858,9 @@ export class GoldlineGame {
     });
     layer.setReducedMotion(this.reducedMotion);
     layer.load(plan);
+    // Art loads asynchronously; the procedural fallback renders until it
+    // arrives, so entry is never blocked on a texture fetch.
+    void layer.loadArt();
     // Sits in the traversal layer so the painted foreground occludes
     // guardians exactly as it occludes Trailblazer.
     this.layerTraversal.addChild(layer.container);

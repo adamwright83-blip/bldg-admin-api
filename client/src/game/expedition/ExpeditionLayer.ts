@@ -21,7 +21,25 @@
  * They are not debug circles. They are also not painted art, and that
  * limitation is reported honestly rather than self-certified.
  */
-import { Container, Graphics } from "pixi.js";
+import { Assets, Container, Graphics, Sprite, Texture } from "pixi.js";
+import hunterUrl from "../../assets/goldline/heartbeat/ruinbound_hunter.png";
+import slingerUrl from "../../assets/goldline/heartbeat/ruinbound_slinger.png";
+import shieldbearerUrl from "../../assets/goldline/heartbeat/ruinbound_shieldbearer.png";
+import grappleRingUrl from "../../assets/goldline/heartbeat/linehook_grapple_ring.png";
+import cargoHazardUrl from "../../assets/goldline/heartbeat/suspended_cargo_hazard.png";
+import pickupCacheUrl from "../../assets/goldline/heartbeat/pickup_cache_objective.png";
+
+/**
+ * Feet sit at ~0.98 of texture height for the guardians (measured from the
+ * shipped alpha), so anchoring there plants them on the stone instead of
+ * floating above it.
+ */
+const GUARDIAN_FEET_ANCHOR = 0.98;
+const HOSTILE_TEXTURE_URLS: Record<string, string> = {
+  hunter: hunterUrl,
+  slinger: slingerUrl,
+  shieldbearer: shieldbearerUrl,
+};
 import { ExpeditionClock, AIM_TIME_SCALE } from "./expeditionClock";
 import { LineCandidateRegistry } from "./lineCandidateRegistry";
 import {
@@ -111,6 +129,11 @@ export class ExpeditionLayer {
   private gCable = new Graphics();
   private gAim = new Graphics();
   private gEnv = new Graphics();
+  /** Sprite bodies, keyed by hostile id. Overlays stay in Graphics. */
+  private spriteLayer = new Container();
+  private hostileSprites = new Map<string, Sprite>();
+  private propSprites = new Map<string, Sprite>();
+  private textures = new Map<string, Texture>();
 
   private aiming = false;
   private aimRadians = 0;
@@ -145,6 +168,9 @@ export class ExpeditionLayer {
   constructor(private readonly callbacks: ExpeditionCallbacks = {}) {
     // Environment sits behind guardians; cable and aim read above both.
     this.container.addChild(this.gEnv);
+    // Sprites sit between the environment underlay and the overlay graphics,
+    // so shadows read beneath them and telegraphs/flashes read above.
+    this.container.addChild(this.spriteLayer);
     this.container.addChild(this.gHostiles);
     this.container.addChild(this.gProjectiles);
     this.container.addChild(this.gCable);
@@ -154,6 +180,35 @@ export class ExpeditionLayer {
   /** Dodge i-frames, owned by the runtime that owns movement. */
   setPlayerInvulnerable(invulnerable: boolean) {
     this.playerInvulnerable = invulnerable;
+  }
+
+  /**
+   * Loads the prototype art. Failure is non-fatal: the procedural fallback
+   * still draws, so a missing texture degrades the look rather than
+   * breaking the expedition.
+   */
+  async loadArt(): Promise<void> {
+    const entries: Array<[string, string]> = [
+      ["hunter", hunterUrl],
+      ["slinger", slingerUrl],
+      ["shieldbearer", shieldbearerUrl],
+      ["grapple_ring", grappleRingUrl],
+      ["cargo_hazard", cargoHazardUrl],
+      ["pickup_cache", pickupCacheUrl],
+    ];
+    await Promise.all(
+      entries.map(async ([key, url]) => {
+        try {
+          this.textures.set(key, await Assets.load(url));
+        } catch {
+          /* procedural fallback remains */
+        }
+      })
+    );
+  }
+
+  hasArt(): boolean {
+    return this.textures.size > 0;
   }
 
   setReducedMotion(reduced: boolean) {
@@ -545,6 +600,7 @@ export class ExpeditionLayer {
       else this.hitFlash.set(id, next);
     }
 
+    this.reapSprites();
     this.drawEnvironment(project);
     this.drawHostiles(project);
     this.drawProjectiles(project);
@@ -693,9 +749,88 @@ export class ExpeditionLayer {
           .stroke({ width: 2.5 * s, color: PALETTE.danger, alpha: 0.5 + telegraph * 0.45 });
       }
 
-      if (hostile.kind === "hunter") this.drawHunter(g, x, y, s, flash, hostile, t);
-      else if (hostile.kind === "slinger") this.drawSlinger(g, x, y, s, flash, hostile, t);
-      else this.drawShieldbearer(g, x, y, s, flash, hostile as Shieldbearer, t);
+      const texture = this.textures.get(hostile.kind);
+      if (texture) {
+        this.updateHostileSprite(hostile, texture, x, y, s, flash, t);
+      } else {
+        // Procedural fallback keeps the expedition playable without art.
+        if (hostile.kind === "hunter") this.drawHunter(g, x, y, s, flash, hostile, t);
+        else if (hostile.kind === "slinger") this.drawSlinger(g, x, y, s, flash, hostile, t);
+        else this.drawShieldbearer(g, x, y, s, flash, hostile as Shieldbearer, t);
+      }
+    }
+  }
+
+  /**
+   * Places and animates a guardian's sprite body.
+   *
+   * A static PNG is not an animation sheet, so the reactions the fight
+   * depends on are driven at runtime: telegraph lean and scale-up, recoil
+   * offset, hit flash, facing mirror, corridor depth scale and the
+   * Shieldbearer's exposed stagger.
+   */
+  private updateHostileSprite(
+    hostile: Ruinbound,
+    texture: Texture,
+    x: number,
+    y: number,
+    s: number,
+    flash: number,
+    t: number
+  ) {
+    let sprite = this.hostileSprites.get(hostile.id);
+    if (!sprite) {
+      sprite = new Sprite(texture);
+      sprite.anchor.set(0.5, GUARDIAN_FEET_ANCHOR);
+      this.spriteLayer.addChild(sprite);
+      this.hostileSprites.set(hostile.id, sprite);
+    }
+
+    const targetHeight = 150 * s;
+    sprite.height = targetHeight;
+    sprite.width = targetHeight * (texture.width / texture.height);
+
+    const telegraph = hostile.telegraphProgress();
+    const facingRight = Math.cos(hostile.facing) >= 0;
+    // Mirror toward the player so every guardian visibly faces Trailblazer.
+    sprite.scale.x = Math.abs(sprite.scale.x) * (facingRight ? 1 : -1);
+
+    sprite.x = x;
+    sprite.y = y;
+    sprite.visible = true;
+
+    // Telegraph: lean in and swell slightly, so the wind-up is legible
+    // from silhouette alone rather than only from the ground ring.
+    const lean = telegraph * 0.18 * (facingRight ? 1 : -1);
+    sprite.rotation = lean + (hostile.recoilSeconds > 0 ? -hostile.recoilX * 0.09 : 0);
+    if (telegraph > 0) {
+      sprite.scale.y = Math.abs(sprite.scale.y) * (1 + telegraph * 0.06);
+    }
+
+    // Hit flash and the exposed stagger both read through tint.
+    const exposed = hostile instanceof Shieldbearer && hostile.exposed;
+    sprite.tint =
+      flash > 0
+        ? 0xffffff
+        : exposed
+          ? 0xffd9a0
+          : 0xffffff;
+    sprite.alpha = flash > 0 ? 0.85 : 1;
+
+    if (exposed) {
+      // Hauled off balance: a visible list the player can read instantly.
+      sprite.rotation += Math.sin(t * 12) * 0.05 + 0.12;
+    }
+  }
+
+  /** Removes sprites for guardians that are gone, so nothing leaks. */
+  private reapSprites() {
+    for (const [id, sprite] of Array.from(this.hostileSprites.entries())) {
+      const hostile = this.hostiles.find(h => h.id === id);
+      if (!hostile || !hostile.alive) {
+        sprite.destroy();
+        this.hostileSprites.delete(id);
+      }
     }
   }
 
@@ -995,6 +1130,10 @@ export class ExpeditionLayer {
   }
 
   destroy() {
+    for (const sprite of Array.from(this.hostileSprites.values())) sprite.destroy();
+    this.hostileSprites.clear();
+    for (const sprite of Array.from(this.propSprites.values())) sprite.destroy();
+    this.propSprites.clear();
     this.registry.clear();
     this.hostiles = [];
     this.env = [];
