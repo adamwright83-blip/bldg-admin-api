@@ -20,21 +20,23 @@ beforeEach(() => resetProjectileIds());
 
 describe("Hunter — movement pressure", () => {
   it("ignores the player until inside aggro range", () => {
-    const hunter = new Hunter("h", { x: 1000, y: 0 });
+    const hunter = new Hunter("h", { x: 0.9, y: 0 });
     run(dt => hunter.update(dt, { x: 0, y: 0 }, []), 1);
     expect(hunter.phase).toBe("idle");
-    expect(hunter.x).toBe(1000);
+    expect(hunter.x).toBe(0.9);
   });
 
   it("closes distance once aggroed", () => {
-    const hunter = new Hunter("h", { x: 250, y: 0 });
-    run(dt => hunter.update(dt, { x: 0, y: 0 }, []), 0.5);
+    const hunter = new Hunter("h", { x: 0.06, y: 0 });
+    // Short window: it now genuinely closes, so a longer sample would
+    // already have reached strike range and moved on to the telegraph.
+    run(dt => hunter.update(dt, { x: 0, y: 0 }, []), 0.15);
     expect(hunter.phase).toBe("pursue");
-    expect(hunter.x).toBeLessThan(250);
+    expect(hunter.x).toBeLessThan(0.06);
   });
 
   it("telegraphs before striking, with readable progress", () => {
-    const hunter = new Hunter("h", { x: 40, y: 0 });
+    const hunter = new Hunter("h", { x: 0.03, y: 0 });
     const player = { x: 0, y: 0 };
     hunter.update(FRAME, player, []);
     hunter.update(FRAME, player, []);
@@ -49,7 +51,7 @@ describe("Hunter — movement pressure", () => {
   });
 
   it("commits to the telegraph so moving away is a real counter-play", () => {
-    const hunter = new Hunter("h", { x: 40, y: 0 });
+    const hunter = new Hunter("h", { x: 0.03, y: 0 });
     const player = { x: 0, y: 0 };
     hunter.update(FRAME, player, []);
     hunter.update(FRAME, player, []);
@@ -57,7 +59,7 @@ describe("Hunter — movement pressure", () => {
     const committedX = hunter.x;
 
     // Player flees during the wind-up.
-    run(dt => hunter.update(dt, { x: 400, y: 0 }, []), RUINBOUND_TUNING.hunter.telegraphSeconds + 0.05);
+    run(dt => hunter.update(dt, { x: 0.4, y: 0 }, []), RUINBOUND_TUNING.hunter.telegraphSeconds + 0.05);
 
     // It did not track during the telegraph, and the strike whiffs.
     expect(hunter.x).toBe(committedX);
@@ -65,7 +67,7 @@ describe("Hunter — movement pressure", () => {
   });
 
   it("lands the strike when the player stands still", () => {
-    const hunter = new Hunter("h", { x: 40, y: 0 });
+    const hunter = new Hunter("h", { x: 0.03, y: 0 });
     const player = { x: 0, y: 0 };
     run(dt => hunter.update(dt, player, []), RUINBOUND_TUNING.hunter.telegraphSeconds + 0.1);
     const hit = hunter.consumePendingHit();
@@ -75,7 +77,7 @@ describe("Hunter — movement pressure", () => {
   });
 
   it("dies after enough damage and stops acting", () => {
-    const hunter = new Hunter("h", { x: 60, y: 0 });
+    const hunter = new Hunter("h", { x: 0.05, y: 0 });
     hunter.applyHit(RUINBOUND_TUNING.hunter.maxHp, { x: 0, y: 0 }, false);
     expect(hunter.alive).toBe(false);
 
@@ -85,7 +87,7 @@ describe("Hunter — movement pressure", () => {
   });
 
   it("recoils away from the blow", () => {
-    const hunter = new Hunter("h", { x: 60, y: 0 });
+    const hunter = new Hunter("h", { x: 0.05, y: 0 });
     hunter.applyHit(1, { x: 0, y: 0 }, false);
     expect(hunter.recoilSeconds).toBeGreaterThan(0);
     expect(hunter.recoilX).toBe(1);
@@ -94,7 +96,7 @@ describe("Hunter — movement pressure", () => {
 
 describe("Slinger — ranged spatial pressure", () => {
   it("winds up visibly before releasing", () => {
-    const slinger = new Slinger("s", { x: 250, y: 0 });
+    const slinger = new Slinger("s", { x: 0.09, y: 0 });
     const out: Projectile[] = [];
     slinger.update(FRAME, { x: 0, y: 0 }, out);
     expect(slinger.phase).toBe("windup");
@@ -106,7 +108,7 @@ describe("Slinger — ranged spatial pressure", () => {
   });
 
   it("emits exactly one readable projectile per cycle", () => {
-    const slinger = new Slinger("s", { x: 250, y: 0 });
+    const slinger = new Slinger("s", { x: 0.09, y: 0 });
     const out: Projectile[] = [];
     run(dt => slinger.update(dt, { x: 0, y: 0 }, out), RUINBOUND_TUNING.slinger.windupSeconds + 0.1);
 
@@ -118,31 +120,31 @@ describe("Slinger — ranged spatial pressure", () => {
 
   it("uses deterministic projectile ids, never random", () => {
     const a: Projectile[] = [];
-    const s1 = new Slinger("s", { x: 250, y: 0 });
+    const s1 = new Slinger("s", { x: 0.09, y: 0 });
     run(dt => s1.update(dt, { x: 0, y: 0 }, a), RUINBOUND_TUNING.slinger.windupSeconds + 0.1);
 
     resetProjectileIds();
     const b: Projectile[] = [];
-    const s2 = new Slinger("s", { x: 250, y: 0 });
+    const s2 = new Slinger("s", { x: 0.09, y: 0 });
     run(dt => s2.update(dt, { x: 0, y: 0 }, b), RUINBOUND_TUNING.slinger.windupSeconds + 0.1);
 
     expect(a.map(p => p.id)).toEqual(b.map(p => p.id));
   });
 
   it("holds its preferred range instead of being walked over", () => {
-    const slinger = new Slinger("s", { x: 60, y: 0 });
+    const slinger = new Slinger("s", { x: 0.02, y: 0 });
     run(dt => slinger.update(dt, { x: 0, y: 0 }, []), 0.3);
     // Too close: it backs off.
-    expect(slinger.x).toBeGreaterThan(60);
+    expect(slinger.x).toBeGreaterThan(0.02);
   });
 
   it("resolves a projectile hit on the player", () => {
     const projectiles: Projectile[] = [
-      { id: "p", x: 30, y: 0, vx: -240, vy: 0, damage: 9, ttl: 4, active: true },
+      { id: "p", x: 0.05, y: 0, vx: -0.34, vy: 0, damage: 9, ttl: 4, active: true },
     ];
     let hit = null;
     run(dt => {
-      const r = stepProjectiles(projectiles, dt, { x: 0, y: 0 }, 20);
+      const r = stepProjectiles(projectiles, dt, { x: 0, y: 0 }, 0.03);
       if (r.hit) hit = r.hit;
     }, 0.3);
 
@@ -152,15 +154,15 @@ describe("Slinger — ranged spatial pressure", () => {
 
   it("expires a projectile that misses rather than leaking it", () => {
     const projectiles: Projectile[] = [
-      { id: "p", x: 0, y: 500, vx: 0, vy: 240, damage: 9, ttl: 0.5, active: true },
+      { id: "p", x: 0, y: 500, vx: 0, vy: 0.34, damage: 9, ttl: 0.5, active: true },
     ];
-    run(dt => stepProjectiles(projectiles, dt, { x: 0, y: 0 }, 20), 1);
+    run(dt => stepProjectiles(projectiles, dt, { x: 0, y: 0 }, 0.03), 1);
     expect(projectiles[0].active).toBe(false);
   });
 });
 
 describe("Shieldbearer — proves the Linehook changes combat", () => {
-  const front = { x: -100, y: 0 };
+  const front = { x: -0.06, y: 0 };
 
   function facingThePlayer() {
     const sb = new Shieldbearer("sb", { x: 0, y: 0 });
@@ -180,7 +182,7 @@ describe("Shieldbearer — proves the Linehook changes combat", () => {
 
   it("takes a basic lash from behind the guard arc", () => {
     const sb = facingThePlayer();
-    const behind = { x: 200, y: 0 };
+    const behind = { x: 0.09, y: 0 };
     const result = sb.applyHit(3, behind, false);
 
     expect(result.guarded).toBe(false);
@@ -224,7 +226,7 @@ describe("Shieldbearer — proves the Linehook changes combat", () => {
   });
 
   it("telegraphs its slam", () => {
-    const sb = new Shieldbearer("sb", { x: 50, y: 0 });
+    const sb = new Shieldbearer("sb", { x: 0.03, y: 0 });
     const player = { x: 0, y: 0 };
     sb.update(FRAME, player, []);
     expect(sb.phase).toBe("telegraph");

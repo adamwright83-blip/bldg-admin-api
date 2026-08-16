@@ -30,45 +30,64 @@ export type ShieldbearerPhase =
   | "exposed"
   | "recover";
 
-/** Tuning. Initial targets — adjusted by feel, not by implementation ease. */
+/**
+ * Lateral is authored in plan units (about +/-140 across the lane) while
+ * progress runs 0..1 along the entire corridor. Comparing them raw makes a
+ * step sideways read as a vast distance, so lateral is scaled into progress
+ * space before any radius or heading test.
+ */
+export const LATERAL_TO_PROGRESS = 1 / 700;
+
+/**
+ * Tuning in CORRIDOR PROGRESS units — not pixels.
+ *
+ * These were originally written as pixel distances (aggroRadius: 300) but
+ * compared against progress, which only ever spans 0..1. Every guardian
+ * therefore aggroed from anywhere on the map and landed a hit within a
+ * second of entry, destroying the authored safe opening. Radii and speeds
+ * now live in the same space the corridor actually uses, which is what
+ * makes spatially-bounded activation possible at all.
+ */
 export const RUINBOUND_TUNING = {
   hunter: {
     maxHp: 3,
-    speed: 82,
-    aggroRadius: 300,
-    strikeRadius: 46,
+    /** Progress per second — a shade faster than a walking player. */
+    speed: 0.085,
+    /** Short activation window: it cannot reach back into the opening. */
+    aggroRadius: 0.085,
+    strikeRadius: 0.032,
     /** Long enough to read and react to on a phone. */
     telegraphSeconds: 0.55,
     strikeSeconds: 0.16,
     recoverSeconds: 0.7,
     damage: 12,
-    knockback: 120,
+    knockback: 0.05,
   },
   slinger: {
     maxHp: 2,
     /** Holds a lane; repositions only to keep range. */
-    speed: 34,
-    aggroRadius: 420,
-    preferredRange: 250,
+    speed: 0.035,
+    aggroRadius: 0.15,
+    preferredRange: 0.095,
     windupSeconds: 0.8,
     releaseSeconds: 0.12,
     cooldownSeconds: 1.5,
-    projectileSpeed: 240,
+    projectileSpeed: 0.34,
     damage: 9,
-    knockback: 60,
+    knockback: 0.03,
   },
   shieldbearer: {
     maxHp: 6,
-    speed: 46,
-    aggroRadius: 380,
-    slamRadius: 72,
+    speed: 0.048,
+    aggroRadius: 0.13,
+    slamRadius: 0.042,
     telegraphSeconds: 0.75,
     slamSeconds: 0.2,
     recoverSeconds: 0.9,
     /** The vulnerability window the Line opens. */
     exposedSeconds: 2.2,
     damage: 18,
-    knockback: 200,
+    knockback: 0.075,
     /** Guard arc half-width: a frontal lash inside this is nearly futile. */
     guardHalfArcRadians: (75 * Math.PI) / 180,
     /** Fraction of lash damage that survives the guard. */
@@ -186,16 +205,28 @@ export abstract class Ruinbound {
   }
 
   protected faceToward(player: Vec2) {
-    this.facing = Math.atan2(player.y - this.y, player.x - this.x);
+    this.facing = Math.atan2(
+      (player.y - this.y) * LATERAL_TO_PROGRESS,
+      player.x - this.x
+    );
   }
 
   protected distanceTo(p: Vec2): number {
-    return Math.hypot(p.x - this.x, p.y - this.y);
+    return Math.hypot(p.x - this.x, (p.y - this.y) * LATERAL_TO_PROGRESS);
+  }
+
+  /** Steps toward (or away from) the player in correctly-scaled space. */
+  protected stepToward(player: Vec2, speed: number, dt: number, sign = 1) {
+    const dx = player.x - this.x;
+    const dy = (player.y - this.y) * LATERAL_TO_PROGRESS;
+    const len = Math.hypot(dx, dy) || 1;
+    this.x += (dx / len) * speed * dt * sign;
+    this.y += ((dy / len) * speed * dt * sign) / LATERAL_TO_PROGRESS;
   }
 
   protected strikePlayer(damage: number, player: Vec2, knockback: number) {
     const dx = player.x - this.x;
-    const dy = player.y - this.y;
+    const dy = (player.y - this.y) * LATERAL_TO_PROGRESS;
     const len = Math.hypot(dx, dy) || 1;
     this.pendingHit = {
       damage,
@@ -251,11 +282,7 @@ export class Hunter extends Ruinbound {
           break;
         }
         // Closes the gap. Movement pressure is the Hunter's whole job.
-        const dx = player.x - this.x;
-        const dy = player.y - this.y;
-        const len = Math.hypot(dx, dy) || 1;
-        this.x += (dx / len) * this.t.speed * dt;
-        this.y += (dy / len) * this.t.speed * dt;
+        this.stepToward(player, this.t.speed, dt);
         break;
       }
 
@@ -314,13 +341,7 @@ export class Slinger extends Ruinbound {
     // so it keeps applying spatial pressure instead of being walked over.
     if (this.phase === "idle" || this.phase === "cooldown") {
       const drift = dist < this.t.preferredRange * 0.75 ? -1 : dist > this.t.preferredRange * 1.25 ? 1 : 0;
-      if (drift !== 0) {
-        const dx = player.x - this.x;
-        const dy = player.y - this.y;
-        const len = Math.hypot(dx, dy) || 1;
-        this.x += (dx / len) * this.t.speed * dt * drift;
-        this.y += (dy / len) * this.t.speed * dt * drift;
-      }
+      if (drift !== 0) this.stepToward(player, this.t.speed, dt, drift);
     }
 
     switch (this.phase) {
@@ -335,7 +356,7 @@ export class Slinger extends Ruinbound {
       case "release": {
         if (out.every(p => p.id !== this.lastProjectileId)) {
           const dx = player.x - this.x;
-          const dy = player.y - this.y;
+          const dy = (player.y - this.y) * LATERAL_TO_PROGRESS;
           const len = Math.hypot(dx, dy) || 1;
           const id = nextProjectileId();
           this.lastProjectileId = id;
@@ -437,13 +458,7 @@ export class Shieldbearer extends Ruinbound {
           this.to("telegraph");
           break;
         }
-        if (dist <= this.t.aggroRadius) {
-          const dx = player.x - this.x;
-          const dy = player.y - this.y;
-          const len = Math.hypot(dx, dy) || 1;
-          this.x += (dx / len) * this.t.speed * dt;
-          this.y += (dy / len) * this.t.speed * dt;
-        }
+        if (dist <= this.t.aggroRadius) this.stepToward(player, this.t.speed, dt);
         break;
       }
 
@@ -489,7 +504,11 @@ export function stepProjectiles(
       p.active = false;
       continue;
     }
-    if (!hit && Math.hypot(player.x - p.x, player.y - p.y) <= playerRadius) {
+    if (
+      !hit &&
+      Math.hypot(player.x - p.x, (player.y - p.y) * LATERAL_TO_PROGRESS) <=
+        playerRadius
+    ) {
       p.active = false;
       hit = p;
     }
