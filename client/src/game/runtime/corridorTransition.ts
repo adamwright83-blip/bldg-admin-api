@@ -228,6 +228,21 @@ export class CorridorTransitionController {
         this.activeCorridorId ? "ready" : "idle",
         this.activeCorridorId
       );
+
+      // A reveal that was deliberately refused is NOT a failure. The
+      // expedition guard aborts the reveal when it takes ownership of the
+      // world, and reporting that as "failed" surfaced a false
+      // "ROUTE HELD - DESTINATION UNAVAILABLE" to a player who had simply
+      // started an expedition. The corridor is intact either way; only the
+      // truthfulness of the feedback differs.
+      const isAbort =
+        (error instanceof DOMException && error.name === "AbortError") ||
+        (error instanceof Error && error.name === "AbortError") ||
+        abort.signal.aborted;
+      if (isAbort) {
+        return { outcome: "aborted", corridorId, requestId };
+      }
+
       return {
         outcome: "failed",
         corridorId,

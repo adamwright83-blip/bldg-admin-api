@@ -78,15 +78,16 @@ function stableVariant(orderId: number, salt: number): number {
  *
  * The runtime moves Trailblazer in CORRIDOR space, which GoldlineGame owns
  * and clamps to roughly 0.035..0.82, with ordinary corridor-exit logic
- * arming at 0.77. Authored beats past that ceiling — the Shieldbearer at
- * 0.86, the destination at 0.96 — were simply unreachable: the player could
- * never physically arrive at the climax or the pickup.
+ * arming at CORRIDOR_EXIT_THRESHOLD. Authored beats past that ceiling — the
+ * Shieldbearer at 0.86, the destination at 0.96 — were simply unreachable:
+ * the player could never physically arrive at the climax or the pickup.
  *
  * So expedition space is mapped deterministically onto the genuinely
- * playable corridor span. The end is deliberately 0.78 rather than 0.82:
- * that keeps every beat below the ordinary exit trigger, so reachability
- * does not depend on transition suppression also being correct. Two
- * independent guarantees, not one.
+ * playable corridor span, and the end is DERIVED from the exit threshold
+ * minus an explicit margin rather than written as a literal. That keeps the
+ * whole reachable span below the exit trigger by construction, so
+ * reachability does not depend on transition suppression also being
+ * correct — two independent guarantees, not one.
  *
  * This is a pure coordinate mapping. It creates no second movement truth —
  * GoldlineGame remains the sole owner of Trailblazer's position, and the

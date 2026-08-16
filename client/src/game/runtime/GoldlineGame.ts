@@ -54,6 +54,10 @@ import {
   type PickupExpeditionPlan,
 } from "../expedition/expeditionPlan";
 import {
+  clampCorridorProgress,
+  forwardProgressLimit,
+} from "../expedition/movementLimit";
+import {
   DODGE,
   beginDodge,
   createDodgeState,
@@ -1298,7 +1302,14 @@ export class GoldlineGame {
     const now = performance.now();
     this.avatarState.beginAction(action, now);
     this.actionUntil = now + this.avatarState.actionDurationMs(action);
-    this.progress = Math.min(0.78, trigger.at + 0.075);
+    // Traversal actions move the player too, so they obey the same ceiling.
+    // This previously hardcoded 0.78 and was a second way to walk past the
+    // expedition limit — found by auditing every path that mutates progress
+    // rather than only the ones already under suspicion.
+    this.progress = clampCorridorProgress(
+      trigger.at + 0.075,
+      Math.min(0.78, this.forwardCeiling())
+    );
     this.spawnTrail(action === "VAULT" ? 0xffc34e : 0x5feaff);
     if (action === "JUMP" || action === "CLIMB" || action === "VAULT") {
       this.callbacks.onTraversalAction?.(action);
@@ -1373,8 +1384,17 @@ export class GoldlineGame {
       });
 
       const next = this.progress + this.velocity * directional * deltaSeconds;
-      const ceiling = trigger ? trigger.at : this.forwardCeiling();
-      this.progress = Math.max(0.035, Math.min(blocked ? ceiling : 0.82, next));
+      // The mode ceiling always applies; a traversal trigger may only make
+      // the limit tighter. Previously an unblocked step clamped to the raw
+      // 0.82 and walked straight through the expedition ceiling.
+      this.progress = clampCorridorProgress(
+        next,
+        forwardProgressLimit({
+          modeCeiling: this.forwardCeiling(),
+          triggerAt: trigger ? trigger.at : null,
+          blocked,
+        })
+      );
       this.lateral = Math.max(
         -0.72,
         Math.min(0.72, this.lateral + this.input.x * 0.72 * deltaSeconds)
@@ -1441,12 +1461,10 @@ export class GoldlineGame {
       stepDodge(this.dodgeState, deltaSeconds);
       if (this.dodgeState.active) {
         const burst = DODGE.speed * deltaSeconds;
-        this.progress = Math.max(
-          0.035,
-          Math.min(
-            this.forwardCeiling(),
-            this.progress + (-this.dodgeState.dirY * burst) / (height * PROGRESS_SPAN_FRACTION)
-          )
+        this.progress = clampCorridorProgress(
+          this.progress +
+            (-this.dodgeState.dirY * burst) / (height * PROGRESS_SPAN_FRACTION),
+          this.forwardCeiling()
         );
         this.lateral = Math.max(
           -0.72,
@@ -1500,9 +1518,9 @@ export class GoldlineGame {
           width,
           height,
         });
-        this.progress = Math.max(
-          0.035,
-          Math.min(this.forwardCeiling(), this.progress + deltaProgress)
+        this.progress = clampCorridorProgress(
+          this.progress + deltaProgress,
+          this.forwardCeiling()
         );
         this.lateral = Math.max(
           -0.72,
