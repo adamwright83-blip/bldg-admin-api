@@ -1,6 +1,7 @@
 import {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -1365,7 +1366,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
    * the player crosses the threshold explicitly (see ExpeditionHud). This
    * is the parked-play contract, not a cosmetic gate.
    */
-  const expeditionOrderId =
+  const preparedPickupOrderId =
     nextOrderObjective && nextOrderObjective.status !== "delivered"
       ? nextOrderObjective.order.id
       : null;
@@ -1375,15 +1376,59 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     momentum: number;
   }>({ hp: EXPEDITION.maxHp, momentum: 0 });
 
-  // A new objective always returns the player to the threshold.
-  useEffect(() => {
+  /**
+   * PINNED expedition identity. Derived once, on ENTER, from whatever the
+   * prepared pickup was AT THAT MOMENT — never re-derived from the live
+   * order list afterward.
+   *
+   * This exists because the canonical pickup handler optimistically removes
+   * a completed order from the pickup query cache as soon as the mutation
+   * succeeds. Without pinning, pressing SECURE CARGO would make
+   * nextOrderObjective advance to the NEXT pickup the instant the write
+   * landed, which would change the derived expeditionOrderId, tear the
+   * whole expedition down through the effect below, and destroy the climax
+   * scene at the exact moment the authoritative payoff needs to render on
+   * top of it. A later query update may legitimately advance
+   * nextOrderObjective; it must never silently swap the run already being
+   * played.
+   */
+  type ActivePickupExpedition = {
+    orderId: number;
+    customerLabel: string;
+    address: string;
+  };
+  const [activeExpedition, setActiveExpedition] =
+    useState<ActivePickupExpedition | null>(null);
+
+  const enterExpedition = useCallback(() => {
+    if (!nextOrderObjective || preparedPickupOrderId == null) return;
+    const order = nextOrderObjective.order;
+    setActiveExpedition({
+      orderId: order.id,
+      customerLabel:
+        `${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() ||
+        `Order #${order.id}`,
+      address: (order.address ?? "").trim(),
+    });
+    setExpeditionEntered(true);
+  }, [nextOrderObjective, preparedPickupOrderId]);
+
+  const exitExpedition = useCallback(() => {
     setExpeditionEntered(false);
-  }, [expeditionOrderId]);
+    setActiveExpedition(null);
+  }, []);
+
+  // A new prepared pickup returns an UNENTERED player to the threshold —
+  // this only affects presentation before ENTER THE LINE. It has no effect
+  // on an expedition already pinned and running.
+  useEffect(() => {
+    if (!expeditionEntered) setExpeditionEntered(false);
+  }, [preparedPickupOrderId, expeditionEntered]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
-    if (expeditionOrderId == null || !expeditionEntered) {
+    if (activeExpedition == null || !expeditionEntered) {
       runtime.endExpedition();
       return;
     }
@@ -1392,31 +1437,36 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     // not resolve and swap the corridor out from under active combat.
     transitionsRef.current?.cancelInflight();
 
-    runtime.startExpedition(planPickupExpedition({ orderId: expeditionOrderId }), {
-      onPlayerDamaged: () => {
-        getAudioManager().play("weak_point_hit");
-        missFeedback();
-      },
-      onGuardAbsorbed: () => getAudioManager().play("vault"),
-      onHostileDefeated: () => {
-        getAudioManager().play("weak_point_hit");
-        arcadeFeedback();
-      },
-      onLineLatched: () => {
-        getAudioManager().play("vault");
-        arcadeFeedback();
-      },
-      onHazardTriggered: () => {
-        getAudioManager().play("vault");
-        arcadeFeedback();
-      },
-      onDefeated: () => missFeedback(),
-    });
+    runtime.startExpedition(
+      planPickupExpedition({ orderId: activeExpedition.orderId }),
+      {
+        onPlayerDamaged: () => {
+          getAudioManager().play("weak_point_hit");
+          missFeedback();
+        },
+        onGuardAbsorbed: () => getAudioManager().play("vault"),
+        onHostileDefeated: () => {
+          getAudioManager().play("weak_point_hit");
+          arcadeFeedback();
+        },
+        onLineLatched: () => {
+          getAudioManager().play("vault");
+          arcadeFeedback();
+        },
+        onHazardTriggered: () => {
+          getAudioManager().play("vault");
+          arcadeFeedback();
+        },
+        onDefeated: () => missFeedback(),
+      }
+    );
 
     return () => runtime.endExpedition();
-  }, [expeditionOrderId, expeditionEntered, runtimeReady]);
+    // Deliberately keyed on the PINNED orderId, not on any live-derived
+    // value — see the identity-pinning note above.
+  }, [activeExpedition?.orderId, expeditionEntered, runtimeReady]);
 
-  // Light poll of fictional vitals for the HUD bars.
+  // Light poll of fictional vitals for the HUD bars.  // Light poll of fictional vitals for the HUD bars.
   useEffect(() => {
     if (!expeditionEntered) return;
     const id = window.setInterval(() => {
@@ -2026,11 +2076,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       ref={setShellEl}
       data-testid="goldline-shell"
       data-expedition-state={
-        expeditionOrderId == null
-          ? "none"
-          : expeditionEntered
-            ? "active"
-            : "ready"
+        activeExpedition && expeditionEntered
+          ? "active"
+          : preparedPickupOrderId != null
+            ? "ready"
+            : "none"
       }
     >
       <section
@@ -2056,18 +2106,21 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         data-objective-offscreen={objectiveOffscreen ?? "NONE"}
       >
         <div ref={hostRef} className="goldline-canvas-host" />
-        {expeditionOrderId != null && runtimeReady ? (
+        {(activeExpedition != null || preparedPickupOrderId != null) &&
+        runtimeReady ? (
           <ExpeditionHud
             runtime={runtimeRef.current}
-            active={expeditionEntered}
-            onEnter={() => setExpeditionEntered(true)}
-            onExit={() => setExpeditionEntered(false)}
+            active={Boolean(activeExpedition && expeditionEntered)}
+            onEnter={enterExpedition}
+            onExit={exitExpedition}
             objectiveLabel={
-              nextOrderObjective
-                ? `${nextOrderObjective.order.firstName ?? ""} ${
-                    nextOrderObjective.order.lastName ?? ""
-                  }`.trim() || `Order #${nextOrderObjective.order.id}`
-                : ""
+              activeExpedition
+                ? activeExpedition.customerLabel
+                : nextOrderObjective
+                  ? `${nextOrderObjective.order.firstName ?? ""} ${
+                      nextOrderObjective.order.lastName ?? ""
+                    }`.trim() || `Order #${nextOrderObjective.order.id}`
+                  : ""
             }
             hp={expeditionVitals.hp}
             maxHp={EXPEDITION.maxHp}
