@@ -100,7 +100,23 @@ because §3 requires E2E through the real touch surface.
 
 ## What REMAINS
 
-**Known issues — verified in the browser, fix these first:**
+### RESOLVED since last handoff
+
+- **Ruinbound unit-space bug (was the real cause of instant damage).**
+  `RUINBOUND_TUNING` was authored in pixels but compared against corridor
+  progress (0..1), so every guardian aggroed from anywhere. Now in progress
+  units with `LATERAL_TO_PROGRESS`. `safeOpening.test.ts` is the acceptance
+  test, and it is NOT global invulnerability — walking onto the Hunter at
+  0.18 still hurts.
+- **Expedition start position.** `startExpedition` snapshots the
+  non-expedition corridor position and places the player at
+  `EXPEDITION_START_PROGRESS` (0.06); `endExpedition` restores it. Verified
+  live: 0.780 -> 0.060 on entry, HP 100% at 1s and 12s.
+- **Asset pack installed** at `client/src/assets/goldline/heartbeat/`,
+  alpha-verified and downscaled 19.1MB -> 1.9MB. **Not yet wired into the
+  renderer** — the Ruinbound are still procedural.
+
+**Known issues — fix these first:**
 
 1. **Purple card still overlays the world.** `portalPresentation.ts` now
    forces corridor portals to an ambient glow during an expedition, and its
@@ -111,19 +127,19 @@ because §3 requires E2E through the real touch surface.
    (`updateStronghold`), or a corridor-transition overlay. Keep the portal
    rule — it is correct and covered — but find the actual culprit.
 
-2. **Entering an expedition does not reset corridor position.** Observed
-   `data-player-progress=0.780` on `corridor_02` immediately after
-   entering, so Trailblazer renders huge and high, floating above the
-   market. `startExpedition` should place her at the expedition start
-   (~0.06) and ideally pin the corridor, otherwise the authored plan's
-   progress positions do not line up with where she actually is.
+2. **Sprites not wired.** The corrected asset pack is committed and sized,
+   but `ExpeditionLayer.drawHunter/drawSlinger/drawShieldbearer` still draw
+   procedural polygons. Swapping to `Sprite` is the highest-value visual
+   work left. Anchor at the feet — solid-content bottom is ~0.98 of texture
+   height for the guardians. Keep runtime behaviour (depth scale, contact
+   shadow, facing mirror, telegraph transform, hit flash, recoil).
 
-3. **Ruinbound damage is aggressive.** HP fell 100%→88% within one second
-   of entering, and an idle page reached 0% HP. Damage, telegraphs and
-   threat genuinely work — but with no death UI yet she simply stands there
-   dead. Tune cadence when Phase D lands the defeat flow.
+3. **Corridor auto-transition is not yet blocked during an expedition.**
+   The observed `corridor_02` means ordinary transition still runs. It no
+   longer corrupts start position, but it can still drop the layer
+   mid-expedition. Guard it.
 
-4. Art is materially better but **not §53-certified** at 393×852 DPR3.
+4. Art is **not §53-certified** at 393×852 DPR3.
 
 5. Vitals poll on a 120ms interval — fine for bars, replace if it costs
    frames.
