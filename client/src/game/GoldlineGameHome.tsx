@@ -1543,7 +1543,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   );
 
   /**
-   * §33 REDEPLOY and §34 PRESS ON. Both are expedition-level only — the run
+   * §33 Redeploy and §34 Press On. Both are expedition-level only — the run
    * continues or compromises, and the real pickup is untouched either way.
    * The snapshot is refreshed immediately rather than waiting for the next
    * poll tick so the terminal HUD clears on the same interaction.
