@@ -228,3 +228,28 @@ describe("arrival requires the climax cleared, or Scarred Route", () => {
     expect(layer.run.outcome).toBe("arrived");
   });
 });
+
+describe("the climax seal is visible whenever it is blocking movement", () => {
+  it("shares one predicate between the visual state and the movement gate", () => {
+    const layer = scenario();
+    // Alive: both the barrier-up predicate and the ceiling agree it blocks.
+    expect(layer.isClimaxBarrierUp()).toBe(true);
+    expect(layer.getGameplayForwardCeiling(0.9)).toBeLessThan(0.9);
+
+    const hostiles = (
+      layer as unknown as { hostiles: Array<{ id: string; hp: number }> }
+    ).hostiles;
+    hostiles.find(h => h.id === "shieldbearer_climax")!.hp = 0;
+
+    // Dead: both agree it does not.
+    expect(layer.isClimaxBarrierUp()).toBe(false);
+    expect(layer.getGameplayForwardCeiling(0.9)).toBe(0.9);
+  });
+
+  it("agrees for the Scarred Route too — open in both senses", () => {
+    const layer = scenario();
+    layer.pressOn();
+    expect(layer.isClimaxBarrierUp()).toBe(false);
+    expect(layer.getGameplayForwardCeiling(0.9)).toBe(0.9);
+  });
+});

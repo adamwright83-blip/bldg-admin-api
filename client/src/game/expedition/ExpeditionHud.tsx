@@ -127,6 +127,10 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (!runtime) return;
+      // One action-pad gesture owns exactly one pointer. A second finger
+      // landing mid-hold must not hijack the aim/dodge state a first
+      // finger already started.
+      if (activePointerIdRef.current != null) return;
       event.preventDefault();
       padRef.current?.setPointerCapture(event.pointerId);
       activePointerIdRef.current = event.pointerId;

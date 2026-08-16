@@ -94,15 +94,40 @@ function beatPosition(targetId: string) {
   return { progress: hostile.progress, lateral: hostile.lateral };
 }
 
+/**
+ * Mirrors ExpeditionLayer's private lineTargetScreenPoint so the test aims
+ * at the exact point production targeting now uses (a guardian's torso, a
+ * ring's mount) rather than raw ground/feet, which is off by tens of
+ * pixels and would otherwise aim outside the cone at long range.
+ */
+function targetScreenPoint(
+  owner: CorridorOwner,
+  targetId: string,
+  plan: ReturnType<typeof planInCorridorSpace>
+) {
+  const hostile = plan.hostiles.find(h => h.id === targetId);
+  if (hostile) {
+    const at = owner.project(hostile.progress, hostile.lateral);
+    const s = at.scale * (0.62 + (1 - hostile.progress) * 0.5);
+    const offset =
+      hostile.kind === "hunter" ? 62 : hostile.kind === "slinger" ? 44 : 52;
+    return { x: at.x, y: at.y - offset * s };
+  }
+  const env = plan.environment.find(e => e.id === targetId)!;
+  const at = owner.project(env.progress, env.lateral);
+  const s = at.scale * (0.62 + (1 - env.progress) * 0.5);
+  return { x: at.x, y: at.y - (env.kind === "architecture" ? 40 : 48) * s };
+}
+
 function aimAt(layer: ExpeditionLayer, owner: CorridorOwner, targetId: string) {
-  const beat = beatPosition(targetId);
-  const at = owner.project(beat.progress, beat.lateral);
+  const mapped = planInCorridorSpace(planPickupExpedition({ orderId: 630031 }));
+  const at = targetScreenPoint(owner, targetId, mapped);
   // Aim direction must be computed from the SAME origin the production
-  // targeting math uses (the hand/chest point, 40px above feet) — using the
-  // raw feet point here would aim slightly differently than the cone the
-  // player would actually see.
+  // targeting math uses (the hand/chest point, scaled 40px above feet) —
+  // using the raw feet point here would aim slightly differently than the
+  // cone the player would actually see.
   const from = owner.project(owner.progress, owner.lateral * 140);
-  const originY = from.y - 40;
+  const originY = from.y - 40 * from.scale;
   layer.beginAim();
   layer.setAimRadians(Math.atan2(at.y - originY, at.x - from.x));
 }

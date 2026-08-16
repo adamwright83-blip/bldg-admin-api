@@ -1370,27 +1370,41 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     nextOrderObjective && nextOrderObjective.status !== "delivered"
       ? nextOrderObjective.order.id
       : null;
-  const [expeditionEntered, setExpeditionEntered] = useState(false);
-  const [expeditionVitals, setExpeditionVitals] = useState<{
+
+  type ExpeditionSnapshot = {
     hp: number;
     momentum: number;
-  }>({ hp: EXPEDITION.maxHp, momentum: 0 });
+    outcome: "running" | "down" | "arrived";
+    route: "unchosen" | "safe" | "upper" | "scarred";
+    relic: string | null;
+  };
+  const [expeditionSnapshot, setExpeditionSnapshot] =
+    useState<ExpeditionSnapshot>({
+      hp: EXPEDITION.maxHp,
+      momentum: 0,
+      outcome: "running",
+      route: "unchosen",
+      relic: null,
+    });
 
   /**
-   * PINNED expedition identity. Derived once, on ENTER, from whatever the
-   * prepared pickup was AT THAT MOMENT — never re-derived from the live
-   * order list afterward.
+   * PINNED expedition identity AND the single lifecycle truth.
+   * `activeExpedition !== null` is the whole active-run state — there is
+   * deliberately no separate "entered" boolean alongside it. Keeping two
+   * truths for one lifecycle produced a no-op guard
+   * (`if (!expeditionEntered) setExpeditionEntered(false)`) that was itself
+   * a sign the split didn't mean anything.
    *
-   * This exists because the canonical pickup handler optimistically removes
-   * a completed order from the pickup query cache as soon as the mutation
+   * Derived once, on ENTER, from whatever the prepared pickup was AT THAT
+   * MOMENT — never re-derived from the live order list afterward. This
+   * exists because the canonical pickup handler optimistically removes a
+   * completed order from the pickup query cache as soon as the mutation
    * succeeds. Without pinning, pressing SECURE CARGO would make
    * nextOrderObjective advance to the NEXT pickup the instant the write
-   * landed, which would change the derived expeditionOrderId, tear the
-   * whole expedition down through the effect below, and destroy the climax
-   * scene at the exact moment the authoritative payoff needs to render on
-   * top of it. A later query update may legitimately advance
-   * nextOrderObjective; it must never silently swap the run already being
-   * played.
+   * landed, tearing the whole expedition down through the effect below at
+   * exactly the moment the authoritative payoff needs to render on top of
+   * it. A later query update may legitimately advance nextOrderObjective;
+   * it must never silently swap the run already being played.
    */
   type ActivePickupExpedition = {
     orderId: number;
@@ -1403,6 +1417,13 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const enterExpedition = useCallback(() => {
     if (!nextOrderObjective || preparedPickupOrderId == null) return;
     const order = nextOrderObjective.order;
+    setExpeditionSnapshot({
+      hp: EXPEDITION.maxHp,
+      momentum: 0,
+      outcome: "running",
+      route: "unchosen",
+      relic: null,
+    });
     setActiveExpedition({
       orderId: order.id,
       customerLabel:
@@ -1410,25 +1431,16 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         `Order #${order.id}`,
       address: (order.address ?? "").trim(),
     });
-    setExpeditionEntered(true);
   }, [nextOrderObjective, preparedPickupOrderId]);
 
   const exitExpedition = useCallback(() => {
-    setExpeditionEntered(false);
     setActiveExpedition(null);
   }, []);
-
-  // A new prepared pickup returns an UNENTERED player to the threshold —
-  // this only affects presentation before ENTER THE LINE. It has no effect
-  // on an expedition already pinned and running.
-  useEffect(() => {
-    if (!expeditionEntered) setExpeditionEntered(false);
-  }, [preparedPickupOrderId, expeditionEntered]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
-    if (activeExpedition == null || !expeditionEntered) {
+    if (activeExpedition == null) {
       runtime.endExpedition();
       return;
     }
@@ -1464,17 +1476,17 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     return () => runtime.endExpedition();
     // Deliberately keyed on the PINNED orderId, not on any live-derived
     // value — see the identity-pinning note above.
-  }, [activeExpedition?.orderId, expeditionEntered, runtimeReady]);
+  }, [activeExpedition?.orderId, runtimeReady]);
 
-  // Light poll of fictional vitals for the HUD bars.  // Light poll of fictional vitals for the HUD bars.
+  // Poll of the full typed fictional run snapshot for the HUD.
   useEffect(() => {
-    if (!expeditionEntered) return;
+    if (!activeExpedition) return;
     const id = window.setInterval(() => {
-      const run = runtimeRef.current?.getExpedition()?.run;
-      if (run) setExpeditionVitals({ hp: run.hp, momentum: run.momentum });
+      const snapshot = runtimeRef.current?.getExpeditionSnapshot();
+      if (snapshot) setExpeditionSnapshot(snapshot);
     }, 120);
     return () => window.clearInterval(id);
-  }, [expeditionEntered]);
+  }, [activeExpedition]);
 
   useEffect(() => {
     runtimeRef.current?.setAgentPresence(agentWorldPresence);
@@ -2076,7 +2088,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       ref={setShellEl}
       data-testid="goldline-shell"
       data-expedition-state={
-        activeExpedition && expeditionEntered
+        activeExpedition != null
           ? "active"
           : preparedPickupOrderId != null
             ? "ready"
@@ -2110,7 +2122,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         runtimeReady ? (
           <ExpeditionHud
             runtime={runtimeRef.current}
-            active={Boolean(activeExpedition && expeditionEntered)}
+            active={activeExpedition != null}
             onEnter={enterExpedition}
             onExit={exitExpedition}
             objectiveLabel={
@@ -2122,9 +2134,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                     }`.trim() || `Order #${nextOrderObjective.order.id}`
                   : ""
             }
-            hp={expeditionVitals.hp}
+            hp={expeditionSnapshot.hp}
             maxHp={EXPEDITION.maxHp}
-            momentum={expeditionVitals.momentum}
+            momentum={expeditionSnapshot.momentum}
             maxMomentum={EXPEDITION.maxMomentum}
           />
         ) : null}
@@ -2251,7 +2263,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               </div>
             ) : null}
             <Joystick
-              disabled={false}
+              disabled={
+                activeExpedition != null &&
+                expeditionSnapshot.outcome !== "running"
+              }
               onInput={(x, y) => runtimeRef.current?.setInput(x, y)}
               showMovementHint={!movementLearned}
               onFirstMove={() => completeMilestone("movement")}

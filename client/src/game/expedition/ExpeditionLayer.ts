@@ -147,6 +147,7 @@ export class ExpeditionLayer {
   private gCable = new Graphics();
   private gAim = new Graphics();
   private gEnv = new Graphics();
+  private gSeal = new Graphics();
   /**
    * World-actor host, supplied by GoldlineGame. Guardian and prop roots are
    * added here, NOT to this layer's own container — the container is now
@@ -188,6 +189,16 @@ export class ExpeditionLayer {
   /** Corridor-space projection of rawPlan. The only plan the runtime reads. */
   private plan: PickupExpeditionPlan | null = null;
   private hitFlash = new Map<string, number>();
+  /** Depth scale at Trailblazer's current position — keeps lineOrigin's
+   *  vertical offset consistent across corridor perspective. */
+  private bodyScale = 1;
+  /**
+   * Screen position from the previous frame, used ONLY to derive the
+   * player's incoming velocity before a fresh latch — cleared on any
+   * discontinuity (load/redeploy/pressOn/terminal settle/destroy) so a
+   * teleport can never masquerade as real momentum.
+   */
+  private previousPlayerScreen: { x: number; y: number } | null = null;
 
   setActorHost(host: Container) {
     this.actorHost = host;
@@ -206,6 +217,7 @@ export class ExpeditionLayer {
     // why the telegraph rings stay up here.
     this.container.zIndex = TRAVERSAL_Z.GAMEPLAY_OVERLAY;
     this.container.addChild(this.gEnv);
+    this.container.addChild(this.gSeal);
     this.container.addChild(this.gHostiles);
     this.container.addChild(this.gProjectiles);
     this.container.addChild(this.gCable);
@@ -265,6 +277,7 @@ export class ExpeditionLayer {
     // separately makes that impossible to repeat.
     this.rawPlan = rawPlan;
     this.plan = planInCorridorSpace(rawPlan);
+    this.previousPlayerScreen = null;
     this.rebuildRouteContent();
 
     // Waystones must come from the MAPPED plan; a raw expedition-space
@@ -407,7 +420,23 @@ export class ExpeditionLayer {
   pressOn() {
     this.run.pressOn();
     this.settleNonRunningStateForTransition();
-    this.rebuildRouteContent();
+
+    // Remove fictional hostile pressure only. rebuildRouteContent() would
+    // reconstruct this.env from the plan with armed:true and Scarred
+    // filtering, which re-arms an already-triggered hazard, can drop the
+    // Upper route's grapple architecture out from under the player, and
+    // visibly rewrites already-traversed world state. Physical scenery the
+    // player has already crossed must stay exactly as it is — Press On is
+    // a compromise on combat, not a scene reset.
+    for (const visual of Array.from(this.hostileVisuals.values())) {
+      visual.root.destroy({ children: true });
+    }
+    this.hostileVisuals.clear();
+    this.hostiles = [];
+    this.projectiles = [];
+    // this.env is deliberately left untouched — spent hazard state and
+    // already-instantiated route architecture survive.
+    this.registry.clear();
   }
 
   /**
@@ -528,6 +557,10 @@ export class ExpeditionLayer {
     this.pendingImpulseX = 0;
     this.pendingImpulseY = 0;
     this.handoffSpeed = 0;
+    // Covers the down/arrived terminal settle, pressOn and redeploy (all
+    // call this): a discontinuity in the player's position must never be
+    // read as a velocity spike on the next update.
+    this.previousPlayerScreen = null;
   }
 
   beginAim() {
@@ -561,10 +594,10 @@ export class ExpeditionLayer {
     if (this.run.outcome !== "running") return false;
     const target = this.currentTarget(project);
     if (!target) return false;
-    const at = project(
-      this.progressOf(target.id) ?? 0,
-      this.lateralOf(target.id) ?? 0
-    );
+    const at = this.lineTargetScreenPoint(target.id, project) ?? {
+      x: target.x,
+      y: target.y,
+    };
     // Firing always ends the aim. Leaving dilation to a separate endAim()
     // call means any caller that misses it strands the whole fictional
     // simulation at 0.2x — so the aim is closed here, at the source.
@@ -603,7 +636,44 @@ export class ExpeditionLayer {
    * cone the math USED disagreed by 40px. This is now the only definition.
    */
   private lineOrigin(): { x: number; y: number } {
-    return { x: this.body.x, y: this.body.y - 40 };
+    return { x: this.body.x, y: this.body.y - 40 * this.bodyScale };
+  }
+
+  /**
+   * The single point the Line treats a target as being AT — the anatomical
+   * point players actually perceive (a guardian's torso, a ring's mount,
+   * an eye on suspended cargo), not the ground/feet coordinate the world
+   * position tracks internally.
+   *
+   * Before this, the registry registered a target at its FEET, fireLine
+   * anchored the tether there too, but drawAim's reticle rendered ~30px
+   * above it — so the visible lock and the physical latch point disagreed.
+   * This is now the one definition every consumer (registry, fire,
+   * reticle, latch spark) reads, rather than each recomputing its own
+   * offset.
+   */
+  private lineTargetScreenPoint(
+    id: string,
+    project: ScreenProjection
+  ): { x: number; y: number } | null {
+    const hostile = this.hostiles.find(h => h.id === id);
+    if (hostile) {
+      const at = project(hostile.x, hostile.y);
+      const s = at.scale * (0.62 + (1 - hostile.x) * 0.5);
+      const offset =
+        hostile.kind === "hunter" ? 62 : hostile.kind === "slinger" ? 44 : 52;
+      return { x: at.x, y: at.y - offset * s };
+    }
+    const env = this.env.find(e => e.id === id);
+    if (env) {
+      const at = project(env.progress, env.lateral);
+      const s = at.scale * (0.62 + (1 - env.progress) * 0.5);
+      return {
+        x: at.x,
+        y: at.y - (env.kind === "architecture" ? 40 : 48) * s,
+      };
+    }
+    return null;
   }
 
   private currentTarget(project: ScreenProjection): LineTarget | null {
@@ -639,8 +709,26 @@ export class ExpeditionLayer {
     // the velocity is handed back as an impulse below. There is deliberately
     // no second integrated player position anywhere in this layer.
     const playerAt = project(playerProgress, playerLateral);
+
+    // Before overwriting position, capture the player's REAL incoming
+    // screen-space velocity from the last frame — this is what "swing,
+    // don't zip" actually depends on. Without it a lateral approach into a
+    // latch started from zero tangential energy no matter how fast the
+    // player was actually moving. Never overwritten while latched: the
+    // tether's own physics own velocity once it has hold of the player.
+    if (
+      dt > 0 &&
+      this.previousPlayerScreen &&
+      this.linehook.phase !== "latched"
+    ) {
+      this.body.vx = (playerAt.x - this.previousPlayerScreen.x) / dt;
+      this.body.vy = (playerAt.y - this.previousPlayerScreen.y) / dt;
+    }
+
     this.body.x = playerAt.x;
     this.body.y = playerAt.y;
+    this.bodyScale = playerAt.scale;
+    this.previousPlayerScreen = { x: playerAt.x, y: playerAt.y };
 
     this.pendingImpulseX = 0;
     this.pendingImpulseY = 0;
@@ -774,28 +862,30 @@ export class ExpeditionLayer {
     this.registry.clear();
 
     for (const hostile of this.hostiles) {
-      const at = project(hostile.x, hostile.y);
+      const groundAt = project(hostile.x, hostile.y);
+      const targetAt = this.lineTargetScreenPoint(hostile.id, project) ?? groundAt;
       this.registry.registerHostile({
         id: hostile.id,
         hostile: hostile.kind,
-        x: at.x,
-        y: at.y,
+        x: targetAt.x,
+        y: targetAt.y,
         alive: hostile.alive,
-        onScreen: at.x > -80 && at.x < viewportWidth + 80,
+        onScreen: groundAt.x > -80 && groundAt.x < viewportWidth + 80,
         guardFacing:
           hostile instanceof Shieldbearer ? hostile.facing : null,
       });
     }
 
     for (const node of this.env) {
-      const at = project(node.progress, node.lateral);
+      const groundAt = project(node.progress, node.lateral);
+      const targetAt = this.lineTargetScreenPoint(node.id, project) ?? groundAt;
       this.registry.registerEnvironment({
         id: node.id,
         environment: node.kind,
-        x: at.x,
-        y: at.y,
+        x: targetAt.x,
+        y: targetAt.y,
         armed: node.armed,
-        onScreen: at.x > -80 && at.x < viewportWidth + 80,
+        onScreen: groundAt.x > -80 && groundAt.x < viewportWidth + 80,
       });
     }
   }
@@ -909,6 +999,7 @@ export class ExpeditionLayer {
 
     this.reapSprites();
     this.drawEnvironment(project);
+    this.drawClimaxSeal(project);
     this.drawHostiles(project);
     this.drawProjectiles(project);
     this.drawCable();
@@ -964,6 +1055,56 @@ export class ExpeditionLayer {
     if (this.lockedTargetId === id) return 1;
     if (this.aiming) return 0.55;
     return 0;
+  }
+
+  /**
+   * The Shieldbearer's forward barrier, rendered as an actual physical
+   * object spanning Trailblazer's route — not merely a numeric movement
+   * clamp. Visibility is driven by the EXACT SAME predicate
+   * (isClimaxBarrierUp) that getGameplayForwardCeiling uses to cap
+   * movement, so the visible seal and the invisible-if-it-weren't-drawn
+   * wall can never disagree.
+   */
+  private drawClimaxSeal(project: ScreenProjection) {
+    const g = this.gSeal;
+    g.clear();
+    if (!this.plan) return;
+    const barrier = this.plan.environment.find(e => e.id === "arch_climax_span");
+    if (!barrier) return;
+    const barrierUp = this.isClimaxBarrierUp();
+    if (!barrierUp) return;
+
+    // Centered on the actual playable lane, not the environment spawn's own
+    // authored lateral (which is an interaction fixture position, not the
+    // seal's span) — the wall must visibly cross where the player walks.
+    const left = project(barrier.progress, -110);
+    const right = project(barrier.progress, 110);
+    const s = (left.scale + right.scale) / 2;
+    const t = this.clock.fictionalElapsedSeconds();
+    const tension = 0.55 + Math.sin(t * 2.4) * 0.25;
+
+    // Two limestone/brass anchor posts.
+    for (const post of [left, right]) {
+      g.rect(post.x - 7 * s, post.y - 96 * s, 14 * s, 96 * s)
+        .fill({ color: PALETTE.limestone })
+        .stroke({ width: 2 * s, color: PALETTE.brassDark });
+      g.rect(post.x - 9 * s, post.y - 96 * s, 18 * s, 10 * s).fill({
+        color: PALETTE.brass,
+      });
+    }
+
+    // The energy span itself, between the posts.
+    const midY = (left.y + right.y) / 2 - 60 * s;
+    g.moveTo(left.x, left.y - 60 * s)
+      .lineTo(right.x, right.y - 60 * s)
+      .stroke({ width: 6 * s, color: PALETTE.brassDark, alpha: 0.9 });
+    g.moveTo(left.x, left.y - 60 * s)
+      .lineTo(right.x, right.y - 60 * s)
+      .stroke({ width: 3 * s, color: PALETTE.lineGold, alpha: tension });
+    g.circle((left.x + right.x) / 2, midY, 6 * s).fill({
+      color: PALETTE.lineFracture,
+      alpha: tension,
+    });
   }
 
   private drawEnvironment(project: ScreenProjection) {
@@ -1534,17 +1675,17 @@ export class ExpeditionLayer {
       .stroke({ width: 1.5, color: PALETTE.lineGold, alpha: 0.5 });
 
     if (!this.lockedTargetId) return;
-    const p = this.progressOf(this.lockedTargetId);
-    const l = this.lateralOf(this.lockedTargetId);
-    if (p == null || l == null) return;
-    const at = project(p, l);
+    const at = this.lineTargetScreenPoint(this.lockedTargetId, project);
+    if (!at) return;
 
-    // Lock reticle: heavy, high-contrast, unmistakable against the plate.
-    g.circle(at.x, at.y - 30 * at.scale, 30 * at.scale).stroke({
+    // Lock reticle: heavy, high-contrast, unmistakable against the plate,
+    // and now at the SAME point the registry selected and fireLine anchors
+    // to — the reticle the player sees is the point the Line actually goes.
+    g.circle(at.x, at.y, 30).stroke({
       width: 4,
       color: PALETTE.lineGold,
     });
-    g.circle(at.x, at.y - 30 * at.scale, 38 * at.scale).stroke({
+    g.circle(at.x, at.y, 38).stroke({
       width: 1.5,
       color: PALETTE.lineGold,
       alpha: 0.6,
@@ -1565,6 +1706,7 @@ export class ExpeditionLayer {
     this.hostiles = [];
     this.env = [];
     this.projectiles = [];
+    this.previousPlayerScreen = null;
     this.container.destroy({ children: true });
   }
 }

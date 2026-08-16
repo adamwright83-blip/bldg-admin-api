@@ -831,8 +831,37 @@ export class GoldlineGame {
    * can read or mutate business state, and the corridor remains fully
    * playable if this is never called (see §46's operational fallback).
    */
+  /**
+   * Forces the base objective proximity/action signals to "hidden" the
+   * instant an expedition starts. Without this, React could retain a stale
+   * missionSpatialState/orderSpatialState of "engage" from just before
+   * entry — the expedition-aware proximity code (see the mission/order
+   * nulling in update()) stops COMPUTING new values, but never emitted a
+   * final "hidden" for whatever was already showing "engage".
+   */
+  private suspendBaseObjectiveSignalsForExpedition() {
+    const mission = this.populationSystem?.missionEmbodiment ?? null;
+    if (mission && this.missionProximityState !== "hidden") {
+      this.callbacks.onMissionProximity?.(mission.missionId, "hidden");
+    }
+    const order = this.populationSystem?.orderEmbodiment ?? null;
+    if (order && this.orderProximityState !== "hidden") {
+      this.callbacks.onOrderProximity?.(order.orderKey, order.kind, "hidden");
+    }
+    if (this.objectiveOffscreenState !== null) {
+      this.callbacks.onObjectiveOffscreen?.(null);
+    }
+    this.missionProximityState = "hidden";
+    this.orderProximityState = "hidden";
+    this.objectiveOffscreenState = null;
+    this.availableAction = null;
+    this.availableLabel = null;
+    this.callbacks.onActionAvailable(null, null);
+  }
+
   startExpedition(plan: PickupExpeditionPlan, callbacks: ExpeditionCallbacks = {}) {
     this.endExpedition();
+    this.suspendBaseObjectiveSignalsForExpedition();
 
     // Entering must not inherit whatever corridor position the player
     // happened to be at. The authored plan assumes an expedition beginning
@@ -1380,6 +1409,10 @@ export class GoldlineGame {
   }
 
   performAction(action: CorridorAction) {
+    // Expedition ACT has its own API (expeditionBeginAim/Fire/Dodge) and
+    // never calls this. Ordinary corridor interaction is a second hidden
+    // path into the same world during an expedition unless blocked here.
+    if (this.expedition) return false;
     if (action === "INTERACT") {
       if (
         isMissionApproachable(
@@ -1527,7 +1560,12 @@ export class GoldlineGame {
       this.avatarState.state !== "encounter_locked" &&
       !this.expeditionDrivingMovement
     ) {
-      const branchPace = branchPaceFor(this.branch);
+      // Ordinary branchPaceFor encodes legacy corridor semantics (SAFE
+      // 0.82x, UPPER 1.08x) that would otherwise leak into combat the
+      // instant the expedition set `this.branch` to its own route choice.
+      // Any expedition route speed difference must be an explicit authored
+      // mechanic, not an inherited side effect of reusing the branch field.
+      const branchPace = this.expedition ? 1 : branchPaceFor(this.branch);
       const targetSpeed = targetSpeedForMagnitude(magnitude, branchPace);
       const forward = Math.max(0, -this.input.y);
       const backward = Math.max(0, this.input.y);
@@ -2070,6 +2108,9 @@ export class GoldlineGame {
    */
   private drawLandmark(width: number, height: number, now: number) {
     this.landmark.clear();
+    // Unrelated commercial-mission landmark presentation must not compete
+    // with the expedition world.
+    if (this.expedition) return;
     if (this.worldSignal === "dormant") {
       const breath = 0.5 + Math.sin(now / 1_300) * 0.5;
       this.landmark
@@ -2133,6 +2174,9 @@ export class GoldlineGame {
 
   private updatePortals(width: number, height: number) {
     this.portals.removeChildren();
+    // Base corridor portal/card/glow presentation is redundant and visually
+    // competes with the expedition — it has its own authored destination.
+    if (this.expedition) return;
     const portalTexture = this.poseTextures.get("__portal_texture__");
     for (const anchor of this.anchors) {
       const distance = anchorDistance(anchor, this.progress, this.lateral);
@@ -2190,6 +2234,10 @@ export class GoldlineGame {
   }
 
   private updateCameraLookahead() {
+    if (this.expedition) {
+      this.camera.clearLookahead();
+      return;
+    }
     const upcoming = this.anchors
       .map(anchor => ({
         anchor,
@@ -2363,8 +2411,9 @@ export class GoldlineGame {
 
     this.recoveryPath.clear();
     if (
-      this.worldState === "recovery_active" ||
-      this.worldState === "recovery_available"
+      !this.expedition &&
+      (this.worldState === "recovery_active" ||
+        this.worldState === "recovery_available")
     ) {
       this.recoveryPath
         .moveTo(width * 0.32, height * 0.62)
