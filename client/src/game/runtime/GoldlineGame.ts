@@ -47,6 +47,8 @@ import {
 } from "../world/goldRoute";
 import { AdaptiveQualityMonitor, type QualityTier } from "./adaptiveQuality";
 import { reportGoldlineLifecycleDelta } from "../testSupport/lifecycleProbe";
+import { ExpeditionLayer, type ExpeditionCallbacks } from "../expedition/ExpeditionLayer";
+import type { PickupExpeditionPlan } from "../expedition/expeditionPlan";
 
 export type LandmarkArchetype = "ANCHOR" | "GATEKEEPER" | "GHOST" | "STALLER";
 
@@ -369,6 +371,11 @@ export class GoldlineGame {
   private orderProximityState: "hidden" | "visible" | "engage" = "hidden";
   private objectiveOffscreenState: "ahead" | null = null;
   private corridorExitNear = false;
+  /**
+   * Fictional expedition layer. Null until a real pickup objective starts
+   * an expedition — the corridor is fully playable without it.
+   */
+  private expedition: ExpeditionLayer | null = null;
   private qualityMonitor = new AdaptiveQualityMonitor();
   private qualityTier: QualityTier = "premium";
   private lastCheckpointReportAt = 0;
@@ -764,10 +771,54 @@ export class GoldlineGame {
   }
 
   /** Mirrors the player's OS reduced-motion preference into camera behaviour. */
+
+  /**
+   * Begins the fictional expedition for a real pickup objective. The plan
+   * carries the order id as IDENTITY only — nothing in the expedition layer
+   * can read or mutate business state, and the corridor remains fully
+   * playable if this is never called (see §46's operational fallback).
+   */
+  startExpedition(plan: PickupExpeditionPlan, callbacks: ExpeditionCallbacks = {}) {
+    this.endExpedition();
+    const layer = new ExpeditionLayer(callbacks);
+    layer.setReducedMotion(this.reducedMotion);
+    layer.load(plan);
+    // Sits in the traversal layer so the painted foreground occludes
+    // guardians exactly as it occludes Trailblazer.
+    this.layerTraversal.addChild(layer.container);
+    this.expedition = layer;
+  }
+
+  endExpedition() {
+    if (!this.expedition) return;
+    this.layerTraversal.removeChild(this.expedition.container);
+    this.expedition.destroy();
+    this.expedition = null;
+  }
+
+  getExpedition(): ExpeditionLayer | null {
+    return this.expedition;
+  }
+
+  /** Screen projection for one corridor position, mirroring the avatar. */
+  private projectCorridor(progress: number, lateral: number, width: number, height: number) {
+    const routeCenter = lateralForProgress(this.goldRoutePoints, progress);
+    // Plan lateral is authored in world units; the corridor's own lateral
+    // axis is normalised, so convert rather than assuming they match.
+    const normalised = lateral / 140;
+    const baseHeight = Math.max(134, Math.min(232, height * (0.25 - progress * 0.08)));
+    return {
+      x: width * (routeCenter + normalised * 0.22),
+      y: height * (0.88 - progress * 0.61),
+      scale: baseHeight / 180,
+    };
+  }
+
   setReducedMotion(reduced: boolean) {
     this.reducedMotion = reduced;
     this.camera.setReducedMotion(reduced);
     this.populationSystem?.setReducedMotion(reduced);
+    this.expedition?.setReducedMotion(reduced);
   }
 
   /**
@@ -1139,6 +1190,20 @@ export class GoldlineGame {
     this.updatePortals(width, height);
     this.updateCameraLookahead();
     this.updateParallax();
+
+    if (this.expedition) {
+      // Fictional simulation only. `deltaSeconds` is real frame time; the
+      // expedition clock is what applies aim dilation and hit-stop, so no
+      // business timestamp can ever be reached from here.
+      this.expedition.setPlayerCorridor(this.progress, this.lateral * 140);
+      this.expedition.update(
+        deltaSeconds,
+        this.progress,
+        this.lateral * 140,
+        (progress, lateral) => this.projectCorridor(progress, lateral, width, height),
+        width
+      );
+    }
 
     const exitNear = this.progress >= 0.77;
     if (exitNear !== this.corridorExitNear) {
@@ -1837,6 +1902,7 @@ export class GoldlineGame {
   }
 
   destroy() {
+    this.endExpedition();
     document.removeEventListener("visibilitychange", this.visibilityHandler);
     window.removeEventListener("pagehide", this.pageHideHandler);
     if (this.tickerProbeActive) {
