@@ -48,15 +48,26 @@ import { ExpeditionRun, EXPEDITION } from "./expeditionState";
 
 /** Goldline's existing palette, reused rather than reinvented. */
 const PALETTE = {
-  limestone: 0xf2ece0,
-  limestoneShade: 0xcfc4b2,
-  brass: 0xb98a34,
-  brassDark: 0x6d4f1c,
+  /**
+   * Ruinbound read DARK against Goldline's sunlit plate. The first pass
+   * drew them in near-white limestone, which annihilated their silhouettes
+   * against bright turquoise and pale stone — they looked like blank paper
+   * cut-outs. Weathered basalt with a limestone rim-light keeps the world's
+   * material language while giving the guardians a shape you can actually
+   * read at 393px.
+   */
+  stone: 0x453a30,
+  stoneDeep: 0x281f19,
+  stoneRim: 0xd8cdb8,
+  brass: 0xc9942e,
+  brassDark: 0x5a4212,
   lineGold: 0xffd166,
-  lineFracture: 0xffb84d,
-  hazardRope: 0x8a6b3d,
-  danger: 0xe4572e,
-  shadow: 0x2a2118,
+  lineFracture: 0xffd98a,
+  limestone: 0xe8dcc6,
+  limestoneShade: 0xb3a486,
+  hazardRope: 0x6b5330,
+  danger: 0xf4633a,
+  shadow: 0x1a140f,
 } as const;
 
 export type ScreenProjection = (
@@ -536,35 +547,101 @@ export class ExpeditionLayer {
   private drawEnvironment(project: ScreenProjection) {
     const g = this.gEnv;
     g.clear();
+    const t = this.clock.fictionalElapsedSeconds();
+
     for (const node of this.env) {
       const at = project(node.progress, node.lateral);
-      const s = at.scale;
+      const s = at.scale * (0.62 + (1 - node.progress) * 0.5);
 
       if (node.kind === "architecture") {
-        // A brass ring set into a limestone corbel — an unmistakable,
-        // pre-existing latch point rather than an invisible affordance.
-        g.circle(at.x, at.y, 13 * s).stroke({ width: 3.5 * s, color: PALETTE.brass });
-        g.circle(at.x, at.y, 6 * s).fill({ color: PALETTE.lineGold, alpha: 0.55 });
-        g.rect(at.x - 15 * s, at.y - 26 * s, 30 * s, 14 * s)
-          .fill({ color: PALETTE.limestone })
-          .stroke({ width: 1.5 * s, color: PALETTE.limestoneShade });
+        // A chunky carved corbel with a heavy brass mooring ring. The first
+        // pass drew a thin circle, which read as a debug overlay; this is
+        // built as masonry so it belongs to the building it hangs off.
+        const cx = at.x;
+        const cy = at.y - 54 * s;
+
+        // A SHORT dark bracket, not a big pale slab. The first attempt drew
+        // a wide limestone trapezoid that floated unattached in mid-air and
+        // read as a white rectangle pasted on the painting; keeping it small
+        // and in shadow tones lets the brass ring carry the read instead.
+        g.moveTo(cx - 11 * s, cy - 14 * s)
+          .lineTo(cx + 11 * s, cy - 14 * s)
+          .lineTo(cx + 7 * s, cy + 2 * s)
+          .lineTo(cx - 7 * s, cy + 2 * s)
+          .closePath()
+          .fill({ color: PALETTE.stone })
+          .stroke({ width: 1.6 * s, color: PALETTE.stoneDeep });
+        g.moveTo(cx - 11 * s, cy - 14 * s)
+          .lineTo(cx + 11 * s, cy - 14 * s)
+          .stroke({ width: 1.8 * s, color: PALETTE.stoneRim, alpha: 0.65 });
+
+        // The ring itself: thick brass, double-struck, with a Line-lit core
+        // that pulses so it advertises itself as a latch point.
+        const glow = 0.5 + Math.sin(t * 2 + node.progress * 9) * 0.22;
+        g.circle(cx, cy + 14 * s, 19 * s).stroke({
+          width: 6.5 * s,
+          color: PALETTE.brassDark,
+        });
+        g.circle(cx, cy + 14 * s, 19 * s).stroke({
+          width: 3.4 * s,
+          color: PALETTE.brass,
+        });
+        g.circle(cx, cy + 14 * s, 11 * s).fill({
+          color: PALETTE.lineGold,
+          alpha: glow * 0.5,
+        });
+        g.circle(cx, cy + 14 * s, 5 * s).fill({
+          color: PALETTE.lineFracture,
+          alpha: glow,
+        });
       } else {
-        // §30: the hazard is visible in the world BEFORE anything
-        // references it — weathered cargo on a fraying brass cable.
-        const swing = node.armed
-          ? Math.sin(this.clock.fictionalElapsedSeconds() * 1.1) * 5 * s
-          : 0;
+        // §30: the hazard is visible in the world BEFORE anything references
+        // it — weathered cargo swinging on a fraying brass cable.
+        const swing = node.armed ? Math.sin(t * 1.05) * 7 * s : 0;
         const cx = at.x + swing;
-        g.moveTo(at.x, at.y - 120 * s)
-          .lineTo(cx, at.y - 34 * s)
-          .stroke({ width: 2.5 * s, color: PALETTE.hazardRope });
-        g.rect(cx - 26 * s, at.y - 34 * s, 52 * s, 40 * s)
-          .fill({ color: node.armed ? PALETTE.limestone : PALETTE.limestoneShade })
-          .stroke({ width: 2 * s, color: PALETTE.brassDark });
-        // Brass banding so it reads as heavy cargo, not a floating box.
-        g.rect(cx - 26 * s, at.y - 20 * s, 52 * s, 4 * s).fill({ color: PALETTE.brass });
+        const topY = at.y - 150 * s;
+        const boxY = at.y - 44 * s;
+
+        g.moveTo(at.x, topY)
+          .lineTo(cx, boxY)
+          .stroke({ width: 3.4 * s, color: PALETTE.hazardRope });
+        g.moveTo(at.x, topY)
+          .lineTo(cx, boxY)
+          .stroke({ width: 1.4 * s, color: PALETTE.brass, alpha: 0.55 });
+
         if (node.armed) {
-          g.circle(cx, at.y - 36 * s, 5 * s).fill({ color: PALETTE.lineFracture, alpha: 0.9 });
+          // Ground shadow under the suspended load — tells the player it is
+          // hanging over something, which is the whole point of it.
+          g.ellipse(at.x, at.y + 2 * s, 30 * s, 8 * s).fill({
+            color: PALETTE.shadow,
+            alpha: 0.3,
+          });
+        }
+
+        const w = 30 * s;
+        const h = 42 * s;
+        g.rect(cx - w, boxY, w * 2, h)
+          .fill({ color: node.armed ? PALETTE.limestone : PALETTE.limestoneShade })
+          .stroke({ width: 2.4 * s, color: PALETTE.brassDark });
+        // Brass banding and corner straps.
+        g.rect(cx - w, boxY + h * 0.42, w * 2, 5 * s).fill({ color: PALETTE.brass });
+        g.rect(cx - w, boxY, 5 * s, h).fill({ color: PALETTE.brass, alpha: 0.85 });
+        g.rect(cx + w - 5 * s, boxY, 5 * s, h).fill({
+          color: PALETTE.brass,
+          alpha: 0.85,
+        });
+
+        if (node.armed) {
+          // The mooring eye is the actual Line target; make it obvious.
+          const glow = 0.55 + Math.sin(t * 2.6) * 0.25;
+          g.circle(cx, boxY - 4 * s, 8.5 * s).stroke({
+            width: 3.4 * s,
+            color: PALETTE.brass,
+          });
+          g.circle(cx, boxY - 4 * s, 4 * s).fill({
+            color: PALETTE.lineFracture,
+            alpha: glow,
+          });
         }
       }
     }
@@ -573,143 +650,263 @@ export class ExpeditionLayer {
   private drawHostiles(project: ScreenProjection) {
     const g = this.gHostiles;
     g.clear();
+    const t = this.clock.fictionalElapsedSeconds();
 
     for (const hostile of this.hostiles) {
       if (!hostile.alive) continue;
       const at = project(hostile.x, hostile.y);
-      const s = at.scale;
+      // Depth: guardians further up the corridor genuinely shrink, so they
+      // sit in the painted perspective instead of floating on top of it.
+      const s = at.scale * (0.62 + (1 - hostile.x) * 0.5);
       const flash = this.hitFlash.get(hostile.id) ?? 0;
-      const recoil = hostile.recoilSeconds > 0 ? hostile.recoilX * 6 * s : 0;
+      const recoil = hostile.recoilSeconds > 0 ? hostile.recoilX * 7 * s : 0;
       const x = at.x + recoil;
       const y = at.y;
-      const bodyColor = flash > 0 ? 0xffffff : PALETTE.limestone;
 
-      // Grounding: every guardian gets a contact shadow so it stands IN
-      // the world rather than floating on top of the painted plate.
-      g.ellipse(at.x, y + 2 * s, 26 * s, 7 * s).fill({
+      // Grounding, in two parts: a soft cast shadow and a tight contact
+      // darkening directly under the feet. Without the second one nothing
+      // looks like it is standing ON the stone.
+      g.ellipse(at.x, y + 3 * s, 30 * s, 9 * s).fill({
         color: PALETTE.shadow,
-        alpha: 0.28,
+        alpha: 0.3,
+      });
+      g.ellipse(at.x, y + 1 * s, 15 * s, 4.5 * s).fill({
+        color: PALETTE.shadow,
+        alpha: 0.5,
       });
 
       const telegraph = hostile.telegraphProgress();
       if (telegraph > 0) {
-        // Wind-up ring: grows and reddens so the tell is unmissable.
-        g.circle(x, y - 30 * s, (16 + telegraph * 26) * s).stroke({
-          width: 3 * s,
-          color: PALETTE.danger,
-          alpha: 0.35 + telegraph * 0.5,
-        });
+        // A filled ground tell, not a thin ring: it reads at a glance and
+        // it reads on a bright background.
+        g.ellipse(at.x, y + 2 * s, (26 + telegraph * 30) * s, (9 + telegraph * 9) * s)
+          .fill({ color: PALETTE.danger, alpha: 0.12 + telegraph * 0.3 });
+        g.ellipse(at.x, y + 2 * s, (26 + telegraph * 30) * s, (9 + telegraph * 9) * s)
+          .stroke({ width: 2.5 * s, color: PALETTE.danger, alpha: 0.5 + telegraph * 0.45 });
       }
 
-      if (hostile.kind === "hunter") this.drawHunter(g, x, y, s, bodyColor, hostile);
-      else if (hostile.kind === "slinger") this.drawSlinger(g, x, y, s, bodyColor, hostile);
-      else this.drawShieldbearer(g, x, y, s, bodyColor, hostile as Shieldbearer);
+      if (hostile.kind === "hunter") this.drawHunter(g, x, y, s, flash, hostile, t);
+      else if (hostile.kind === "slinger") this.drawSlinger(g, x, y, s, flash, hostile, t);
+      else this.drawShieldbearer(g, x, y, s, flash, hostile as Shieldbearer, t);
     }
   }
 
-  /** Tall, narrow, forward-raked — reads as pursuit at a glance. */
+  /** Hot fracture light that pulses along a guardian's cracks. */
+  private fractureAlpha(t: number, offset: number): number {
+    return 0.55 + Math.sin(t * 2.4 + offset) * 0.3;
+  }
+
+  private bodyColor(flash: number): number {
+    return flash > 0 ? PALETTE.stoneRim : PALETTE.stone;
+  }
+
+  /**
+   * HUNTER — tall, narrow, forward-raked, with a long trailing leg. The
+   * whole silhouette leans at you; that lean IS the read.
+   */
   private drawHunter(
     g: Graphics,
     x: number,
     y: number,
     s: number,
-    color: number,
-    hostile: Ruinbound
+    flash: number,
+    hostile: Ruinbound,
+    t: number
   ) {
     const lean = Math.cos(hostile.facing) >= 0 ? 1 : -1;
-    g.moveTo(x - 11 * s, y)
-      .lineTo(x - 6 * s, y - 46 * s)
-      .lineTo(x + lean * 9 * s, y - 62 * s)
-      .lineTo(x + lean * 14 * s, y - 40 * s)
-      .lineTo(x + 10 * s, y)
+    const color = this.bodyColor(flash);
+
+    // Trailing leg, planted back — gives the lean something to push from.
+    g.moveTo(x - lean * 14 * s, y)
+      .lineTo(x - lean * 6 * s, y - 34 * s)
+      .lineTo(x - lean * 1 * s, y - 30 * s)
+      .lineTo(x - lean * 6 * s, y)
       .closePath()
-      .fill({ color })
-      .stroke({ width: 2 * s, color: PALETTE.limestoneShade });
-    // Bronze mask.
-    g.moveTo(x + lean * 2 * s, y - 62 * s)
-      .lineTo(x + lean * 15 * s, y - 55 * s)
-      .lineTo(x + lean * 6 * s, y - 46 * s)
+      .fill({ color: PALETTE.stoneDeep });
+
+    // Raked torso wedge.
+    g.moveTo(x - lean * 9 * s, y - 2 * s)
+      .lineTo(x - lean * 4 * s, y - 44 * s)
+      .lineTo(x + lean * 12 * s, y - 66 * s)
+      .lineTo(x + lean * 20 * s, y - 52 * s)
+      .lineTo(x + lean * 9 * s, y - 28 * s)
+      .lineTo(x + lean * 7 * s, y - 2 * s)
       .closePath()
-      .fill({ color: PALETTE.brass });
-    // Line fracture down the torso.
-    g.moveTo(x - 3 * s, y - 44 * s)
-      .lineTo(x + 2 * s, y - 22 * s)
-      .lineTo(x - 2 * s, y - 8 * s)
-      .stroke({ width: 2 * s, color: PALETTE.lineFracture, alpha: 0.85 });
+      .fill({ color });
+
+    // Sunward rim light along the leading edge — sells it as carved stone.
+    g.moveTo(x - lean * 4 * s, y - 44 * s)
+      .lineTo(x + lean * 12 * s, y - 66 * s)
+      .lineTo(x + lean * 20 * s, y - 52 * s)
+      .stroke({ width: 2.2 * s, color: PALETTE.stoneRim, alpha: 0.75 });
+
+    // Brass mask, angled forward.
+    g.moveTo(x + lean * 8 * s, y - 64 * s)
+      .lineTo(x + lean * 22 * s, y - 56 * s)
+      .lineTo(x + lean * 13 * s, y - 46 * s)
+      .closePath()
+      .fill({ color: PALETTE.brass })
+      .stroke({ width: 1.4 * s, color: PALETTE.brassDark });
+    // Single eye-slit of Line light.
+    g.moveTo(x + lean * 12 * s, y - 58 * s)
+      .lineTo(x + lean * 19 * s, y - 55 * s)
+      .stroke({ width: 2 * s, color: PALETTE.lineFracture, alpha: 0.95 });
+
+    // Animated fracture down the torso.
+    g.moveTo(x + lean * 2 * s, y - 46 * s)
+      .lineTo(x - lean * 1 * s, y - 30 * s)
+      .lineTo(x + lean * 3 * s, y - 16 * s)
+      .stroke({
+        width: 2.4 * s,
+        color: PALETTE.lineFracture,
+        alpha: this.fractureAlpha(t, 0),
+      });
   }
 
-  /** Low and wide with a raised throwing arm — unmistakably ranged. */
+  /**
+   * SLINGER — low, wide and squat, with one long raised throwing arm. Reads
+   * as ranged from its outline alone, never confusable with the Hunter.
+   */
   private drawSlinger(
     g: Graphics,
     x: number,
     y: number,
     s: number,
-    color: number,
-    hostile: Ruinbound
+    flash: number,
+    hostile: Ruinbound,
+    t: number
   ) {
     const face = Math.cos(hostile.facing) >= 0 ? 1 : -1;
-    g.moveTo(x - 20 * s, y)
-      .lineTo(x - 15 * s, y - 30 * s)
-      .lineTo(x + 15 * s, y - 34 * s)
-      .lineTo(x + 20 * s, y)
+    const color = this.bodyColor(flash);
+
+    // Broad planted base.
+    g.moveTo(x - 24 * s, y)
+      .lineTo(x - 19 * s, y - 26 * s)
+      .lineTo(x + 19 * s, y - 30 * s)
+      .lineTo(x + 24 * s, y)
       .closePath()
-      .fill({ color })
-      .stroke({ width: 2 * s, color: PALETTE.limestoneShade });
-    // Hunched head, low between the shoulders.
-    g.circle(x + face * 6 * s, y - 40 * s, 9 * s).fill({ color: PALETTE.brass });
-    // Raised sling arm — the readable ranged silhouette.
+      .fill({ color });
+    g.moveTo(x - 19 * s, y - 26 * s)
+      .lineTo(x + 19 * s, y - 30 * s)
+      .stroke({ width: 2 * s, color: PALETTE.stoneRim, alpha: 0.7 });
+
+    // Hunched shoulders swallowing the head.
+    g.ellipse(x + face * 3 * s, y - 34 * s, 16 * s, 10 * s).fill({ color });
+    g.circle(x + face * 7 * s, y - 40 * s, 8.5 * s)
+      .fill({ color: PALETTE.brass })
+      .stroke({ width: 1.4 * s, color: PALETTE.brassDark });
+
+    // Long throwing arm, winding further back as the tell builds.
     const wind = hostile.telegraphProgress();
-    g.moveTo(x + face * 12 * s, y - 30 * s)
-      .lineTo(x + face * (26 + wind * 8) * s, y - (46 + wind * 14) * s)
-      .stroke({ width: 5 * s, color: PALETTE.limestoneShade });
+    const handX = x + face * (24 + wind * 12) * s;
+    const handY = y - (44 + wind * 18) * s;
+    g.moveTo(x + face * 13 * s, y - 28 * s)
+      .lineTo(handX, handY)
+      .stroke({ width: 6 * s, color: PALETTE.stoneDeep });
+    g.moveTo(x + face * 13 * s, y - 28 * s)
+      .lineTo(handX, handY)
+      .stroke({ width: 2.5 * s, color: PALETTE.stoneRim, alpha: 0.5 });
+
     if (wind > 0) {
-      g.circle(
-        x + face * (26 + wind * 8) * s,
-        y - (46 + wind * 14) * s,
-        (4 + wind * 5) * s
-      ).fill({ color: PALETTE.lineFracture, alpha: 0.6 + wind * 0.4 });
+      // Gathering projectile: glow grows with the wind-up so the throw is
+      // never a surprise.
+      g.circle(handX, handY, (7 + wind * 8) * s).fill({
+        color: PALETTE.danger,
+        alpha: 0.2 + wind * 0.25,
+      });
+      g.circle(handX, handY, (3.5 + wind * 5) * s).fill({
+        color: PALETTE.lineFracture,
+        alpha: 0.7 + wind * 0.3,
+      });
     }
+
+    g.moveTo(x - 8 * s, y - 24 * s)
+      .lineTo(x - 3 * s, y - 10 * s)
+      .stroke({
+        width: 2.2 * s,
+        color: PALETTE.lineFracture,
+        alpha: this.fractureAlpha(t, 1.7),
+      });
   }
 
-  /** Squat and massive behind a full-height slab — the guard IS the read. */
+  /**
+   * SHIELDBEARER — massive, squat, and mostly SHIELD. The slab is the
+   * silhouette, so "do not lash this from the front" is legible before any
+   * text explains it.
+   */
   private drawShieldbearer(
     g: Graphics,
     x: number,
     y: number,
     s: number,
-    color: number,
-    hostile: Shieldbearer
+    flash: number,
+    hostile: Shieldbearer,
+    t: number
   ) {
     const face = Math.cos(hostile.facing) >= 0 ? 1 : -1;
-    g.moveTo(x - 22 * s, y)
-      .lineTo(x - 18 * s, y - 52 * s)
-      .lineTo(x + 18 * s, y - 52 * s)
-      .lineTo(x + 22 * s, y)
+    const color = this.bodyColor(flash);
+
+    // Heavy body.
+    g.moveTo(x - 25 * s, y)
+      .lineTo(x - 21 * s, y - 50 * s)
+      .lineTo(x + 21 * s, y - 50 * s)
+      .lineTo(x + 25 * s, y)
       .closePath()
-      .fill({ color })
-      .stroke({ width: 2.5 * s, color: PALETTE.limestoneShade });
-    g.circle(x, y - 60 * s, 11 * s).fill({ color: PALETTE.brass });
+      .fill({ color });
+    g.moveTo(x - 21 * s, y - 50 * s)
+      .lineTo(x + 21 * s, y - 50 * s)
+      .stroke({ width: 2.4 * s, color: PALETTE.stoneRim, alpha: 0.7 });
+    g.circle(x, y - 60 * s, 12 * s)
+      .fill({ color: PALETTE.brass })
+      .stroke({ width: 1.6 * s, color: PALETTE.brassDark });
 
     if (hostile.exposed) {
-      // Guard hauled aside: the shield swings wide and the body is open.
-      g.rect(x + face * 34 * s, y - 60 * s, 10 * s, 56 * s)
+      // Guard hauled aside by the Line: the slab swings wide and the whole
+      // body opens up. The vulnerability is unmistakable.
+      const swing = face * 40 * s;
+      g.moveTo(x + swing, y - 62 * s)
+        .lineTo(x + swing + face * 16 * s, y - 54 * s)
+        .lineTo(x + swing + face * 16 * s, y - 4 * s)
+        .lineTo(x + swing, y - 2 * s)
+        .closePath()
         .fill({ color: PALETTE.brassDark })
         .stroke({ width: 2 * s, color: PALETTE.brass });
-      g.circle(x, y - 30 * s, 22 * s).stroke({
-        width: 3 * s,
+      // Exposed core, pulsing hot.
+      g.circle(x, y - 28 * s, 20 * s).fill({
         color: PALETTE.lineFracture,
-        alpha: 0.9,
+        alpha: 0.22 + Math.sin(t * 9) * 0.1,
+      });
+      g.circle(x, y - 28 * s, 13 * s).fill({
+        color: PALETTE.lineGold,
+        alpha: 0.55,
       });
     } else {
-      // Full-height slab across the front — visibly not worth lashing.
-      g.rect(x + face * 16 * s, y - 66 * s, 13 * s, 68 * s)
+      // Full-height slab across the front, with a brass boss and banding so
+      // it reads as forged metal rather than a grey box.
+      const sx = x + face * 15 * s;
+      g.moveTo(sx, y - 72 * s)
+        .lineTo(sx + face * 19 * s, y - 64 * s)
+        .lineTo(sx + face * 19 * s, y - 2 * s)
+        .lineTo(sx, y + 2 * s)
+        .closePath()
         .fill({ color: PALETTE.brass })
-        .stroke({ width: 2.5 * s, color: PALETTE.brassDark });
-      g.rect(x + face * 18 * s, y - 44 * s, 9 * s, 5 * s).fill({
-        color: PALETTE.lineGold,
-        alpha: 0.7,
-      });
+        .stroke({ width: 2.4 * s, color: PALETTE.brassDark });
+      g.moveTo(sx + face * 3 * s, y - 62 * s)
+        .lineTo(sx + face * 3 * s, y - 8 * s)
+        .stroke({ width: 2 * s, color: PALETTE.brassDark, alpha: 0.8 });
+      g.circle(sx + face * 10 * s, y - 34 * s, 7 * s)
+        .fill({ color: PALETTE.lineGold, alpha: 0.85 })
+        .stroke({ width: 1.6 * s, color: PALETTE.brassDark });
     }
+
+    g.moveTo(x - 10 * s, y - 44 * s)
+      .lineTo(x - 5 * s, y - 24 * s)
+      .lineTo(x - 11 * s, y - 8 * s)
+      .stroke({
+        width: 2.6 * s,
+        color: PALETTE.lineFracture,
+        alpha: this.fractureAlpha(t, 3.1),
+      });
   }
 
   private drawProjectiles(project: ScreenProjection) {
