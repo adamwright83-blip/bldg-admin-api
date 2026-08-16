@@ -1503,10 +1503,26 @@ export class GoldlineGame {
       ? deltaSeconds * expeditionTimeScale
       : deltaSeconds;
 
+    // Down or arrived must freeze the REAL Trailblazer, not merely stop
+    // combat inside ExpeditionLayer. forwardCeiling() returning the current
+    // position only capped further FORWARD progress — it did nothing about
+    // backward movement, lateral movement, locomotion animation, or an
+    // already-active dodge continuing to carry her. This is the actual
+    // movement gate.
+    const expeditionSnapshot = this.expedition?.getSnapshot() ?? null;
+    const expeditionCanMove =
+      !this.expedition || expeditionSnapshot?.outcome === "running";
+    if (!expeditionCanMove) {
+      this.velocity = 0;
+      this.expeditionDrivingMovement = false;
+      this.dodgeState = createDodgeState();
+    }
+
     const magnitude = Math.hypot(this.input.x, this.input.y);
     this.facing = facingForInput(this.input.x, this.input.y, this.facing);
     this.avatarState.setLocomotion(magnitude);
     if (
+      expeditionCanMove &&
       !this.actionUntil &&
       this.avatarState.state !== "encounter_locked" &&
       !this.expeditionDrivingMovement
