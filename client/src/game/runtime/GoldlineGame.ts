@@ -1551,8 +1551,17 @@ export class GoldlineGame {
       this.dodgeState = createDodgeState();
     }
 
-    const magnitude = Math.hypot(this.input.x, this.input.y);
-    this.facing = facingForInput(this.input.x, this.input.y, this.facing);
+    // Every purely VISUAL movement reaction — facing, locomotion pose,
+    // avatar rotation — must react to zero, not to stale/live joystick
+    // input, once terminal. Position being frozen said nothing about
+    // whether Trailblazer kept visually jogging in place, turning, or
+    // leaning from whatever direction the thumb still happened to hold.
+    const effectiveInput = expeditionCanMove
+      ? this.input
+      : { x: 0, y: 0 };
+
+    const magnitude = Math.hypot(effectiveInput.x, effectiveInput.y);
+    this.facing = facingForInput(effectiveInput.x, effectiveInput.y, this.facing);
     this.avatarState.setLocomotion(magnitude);
     if (
       expeditionCanMove &&
@@ -1567,8 +1576,8 @@ export class GoldlineGame {
       // mechanic, not an inherited side effect of reusing the branch field.
       const branchPace = this.expedition ? 1 : branchPaceFor(this.branch);
       const targetSpeed = targetSpeedForMagnitude(magnitude, branchPace);
-      const forward = Math.max(0, -this.input.y);
-      const backward = Math.max(0, this.input.y);
+      const forward = Math.max(0, -effectiveInput.y);
+      const backward = Math.max(0, effectiveInput.y);
       const directional = forward > 0 ? 1 : backward > 0 ? -0.65 : 0;
       const directionSign = Math.sign(directional);
       const isReversing =
@@ -1598,7 +1607,7 @@ export class GoldlineGame {
       );
       this.lateral = Math.max(
         -0.72,
-        Math.min(0.72, this.lateral + this.input.x * 0.72 * gameplayDelta)
+        Math.min(0.72, this.lateral + effectiveInput.x * 0.72 * gameplayDelta)
       );
     }
 
@@ -1660,7 +1669,7 @@ export class GoldlineGame {
       groundY -
       jumpLift +
       (this.avatarState.state === "run" ? Math.sin(now / 72) * 3 : 0);
-    this.avatar.rotation = this.input.x * 0.035;
+    this.avatar.rotation = effectiveInput.x * 0.035;
     this.avatar.alpha =
       this.avatarState.state === "encounter_locked" ? 0.72 : 1;
 
@@ -1684,8 +1693,12 @@ export class GoldlineGame {
 
       // Dodge is a real corridor burst, applied through the same
       // progress/lateral the joystick uses — not a separate position.
-      stepDodge(this.dodgeState, gameplayDelta);
-      if (this.dodgeState.active) {
+      // Gated explicitly on expeditionCanMove rather than relying only on
+      // dodgeState already having been force-reset above: this is the
+      // block a reader would check first, and it should say plainly that
+      // terminal state disables it.
+      if (expeditionCanMove) stepDodge(this.dodgeState, gameplayDelta);
+      if (expeditionCanMove && this.dodgeState.active) {
         const burst = DODGE.speed * gameplayDelta;
         this.progress = clampCorridorProgress(
           this.progress +
@@ -1700,12 +1713,16 @@ export class GoldlineGame {
 
       // Contextual basic lash (§18): only while genuinely stationary, only
       // against a real hostile in range, and on a cadence so it never
-      // machine-guns or steals control from the player.
+      // machine-guns or steals control from the player. Gated on
+      // expeditionCanMove — ExpeditionLayer.tryBasicLash already rejects
+      // while terminal, but this keeps the cooldown from silently ticking
+      // down for a player who cannot act anyway.
       if (this.lashCooldown > 0) {
         this.lashCooldown = Math.max(0, this.lashCooldown - gameplayDelta);
       }
-      const stationary = Math.hypot(this.input.x, this.input.y) < 0.18;
+      const stationary = Math.hypot(effectiveInput.x, effectiveInput.y) < 0.18;
       if (
+        expeditionCanMove &&
         stationary &&
         !this.dodgeState.active &&
         !this.expedition.isAiming() &&
