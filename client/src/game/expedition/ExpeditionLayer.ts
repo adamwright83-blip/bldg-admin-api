@@ -608,6 +608,46 @@ export class ExpeditionLayer {
     this.drawAim(project, viewportWidth);
   }
 
+  /**
+   * Places a world prop sprite. Props are PHYSICAL OBJECTS first: they sit
+   * in the world at their authored anchor with a contact shadow, and their
+   * interaction affordance only intensifies when the Line can actually
+   * reach them. That ordering is what stops them reading as HUD icons.
+   */
+  private updatePropSprite(
+    id: string,
+    texture: Texture,
+    at: { x: number; y: number },
+    s: number,
+    height: number,
+    anchorY: number,
+    highlight: number
+  ) {
+    let sprite = this.propSprites.get(id);
+    if (!sprite) {
+      sprite = new Sprite(texture);
+      sprite.anchor.set(0.5, anchorY);
+      this.spriteLayer.addChild(sprite);
+      this.propSprites.set(id, sprite);
+    }
+    sprite.height = height * s;
+    sprite.width = sprite.height * (texture.width / texture.height);
+    sprite.x = at.x;
+    sprite.y = at.y;
+    sprite.visible = true;
+    // Subordinate until relevant, brighter once selectable.
+    sprite.alpha = 0.82 + highlight * 0.18;
+    sprite.tint = highlight > 0.6 ? 0xffe9b8 : 0xffffff;
+    return sprite;
+  }
+
+  /** 0..1 relevance of a prop: how close the Line is to being able to take it. */
+  private propHighlight(id: string): number {
+    if (this.lockedTargetId === id) return 1;
+    if (this.aiming) return 0.55;
+    return 0;
+  }
+
   private drawEnvironment(project: ScreenProjection) {
     const g = this.gEnv;
     g.clear();
@@ -616,6 +656,47 @@ export class ExpeditionLayer {
     for (const node of this.env) {
       const at = project(node.progress, node.lateral);
       const s = at.scale * (0.62 + (1 - node.progress) * 0.5);
+
+      const ringTexture = this.textures.get("grapple_ring");
+      const hazardTexture = this.textures.get("cargo_hazard");
+      if (node.kind === "architecture" && ringTexture) {
+        // Contact shadow first so the ring reads as mounted, not floating.
+        g.ellipse(at.x, at.y + 2 * s, 16 * s, 5 * s).fill({
+          color: PALETTE.shadow,
+          alpha: 0.22,
+        });
+        this.updatePropSprite(
+          node.id,
+          ringTexture,
+          { x: at.x, y: at.y - 44 * s },
+          s,
+          78,
+          0.5,
+          this.propHighlight(node.id)
+        );
+        continue;
+      }
+      if (node.kind === "hazard" && hazardTexture) {
+        const swing = node.armed ? Math.sin(t * 1.05) * 6 * s : 0;
+        // Ground shadow under the suspended load — tells the player it hangs
+        // over something, which is the entire point of the hazard.
+        g.ellipse(at.x, at.y + 2 * s, 26 * s, 7 * s).fill({
+          color: PALETTE.shadow,
+          alpha: node.armed ? 0.3 : 0.12,
+        });
+        const sprite = this.updatePropSprite(
+          node.id,
+          hazardTexture,
+          { x: at.x + swing, y: at.y - 30 * s },
+          s,
+          132,
+          0.82,
+          node.armed ? this.propHighlight(node.id) : 0
+        );
+        sprite.alpha = node.armed ? sprite.alpha : 0.55;
+        sprite.rotation = node.armed ? Math.sin(t * 1.05) * 0.05 : 0.34;
+        continue;
+      }
 
       if (node.kind === "architecture") {
         // A chunky carved corbel with a heavy brass mooring ring. The first
@@ -823,8 +904,14 @@ export class ExpeditionLayer {
     }
   }
 
-  /** Removes sprites for guardians that are gone, so nothing leaks. */
+  /** Removes sprites for guardians and props that are gone, so nothing leaks. */
   private reapSprites() {
+    for (const [id, sprite] of Array.from(this.propSprites.entries())) {
+      if (!this.env.some(e => e.id === id)) {
+        sprite.destroy();
+        this.propSprites.delete(id);
+      }
+    }
     for (const [id, sprite] of Array.from(this.hostileSprites.entries())) {
       const hostile = this.hostiles.find(h => h.id === id);
       if (!hostile || !hostile.alive) {
