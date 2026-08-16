@@ -79,6 +79,23 @@ await page.route("**/api/trpc/**", async route => {
   });
 });
 
+// Each run starts from a clean fixture "server", so the reload check below
+// cannot pass on leftovers from a previous run.
+//
+// Guarded by a one-shot marker because addInitScript runs on EVERY
+// navigation — including the reload this script performs. Clearing on that
+// navigation too would wipe the stand-in server mid-test and turn the reload
+// check into a test of nothing.
+await page.addInitScript(() => {
+  try {
+    if (window.sessionStorage.getItem("goldline-verify:run-started")) return;
+    window.sessionStorage.setItem("goldline-verify:run-started", "1");
+    window.sessionStorage.removeItem("goldline-fixture:server-collected-orders");
+  } catch {
+    /* nothing to clear */
+  }
+});
+
 // Hermetic: a third-party font host must never be able to fail this.
 await page.route(
   requestUrl => !requestUrl.href.startsWith(baseUrl),
@@ -362,10 +379,96 @@ const arrival = await page.evaluate(
 );
 console.log(`  outcome at the cache: ${arrival}`);
 
+console.log("TERMINAL HUD — ARRIVED");
+const arrivedPanel = page.getByTestId("expedition-arrived");
+await arrivedPanel.waitFor({ timeout: 10_000 });
+const customer = await page
+  .getByTestId("expedition-pinned-customer")
+  .textContent();
+const address = await page.getByTestId("expedition-pinned-address").textContent();
+console.log(`  pinned customer: ${customer}`);
+console.log(`  pinned address:  ${address}`);
+// The action pad is gone in a terminal state — a downed or arrived player
+// must not be left poking a control that no longer means anything.
+if (await page.getByTestId("expedition-action-pad").count()) {
+  throw new Error("Action pad is still present after arrival");
+}
+await shot("15-arrived-secure-cargo");
+
+console.log("SECURE CARGO");
+const strongholdBefore = await page.evaluate(
+  () => window.__goldlineGame.strongholdRestoration
+);
+console.log(`  stronghold before: ${JSON.stringify(strongholdBefore)}`);
+
+await page.getByTestId("secure-cargo").click();
+
+// The mutation returning must NOT be treated as a secured pickup. This is
+// the exact frame that would expose an optimistic completion.
+await page.getByTestId("cargo-verifying").waitFor({ timeout: 5_000 });
+if (await page.getByTestId("cargo-secured").count()) {
+  throw new Error(
+    "CARGO SECURED appeared before authoritative evidence confirmed it"
+  );
+}
+console.log("  VERIFYING SERVER TRUTH shown, CARGO SECURED correctly withheld");
+await shot("16-verifying-server-truth");
+
+console.log("REALITY WINS");
+await page.getByTestId("cargo-secured").waitFor({ timeout: 15_000 });
+console.log("  CARGO SECURED, on authoritative evidence");
+await settle(30);
+await shot("17-cargo-secured");
+
+const strongholdAfter = await page.evaluate(
+  () => window.__goldlineGame.strongholdRestoration
+);
+console.log(`  stronghold after:  ${JSON.stringify(strongholdAfter)}`);
+if (!strongholdAfter?.expeditionOrderCollected) {
+  throw new Error("Stronghold does not reflect the collected pinned order");
+}
+if (strongholdAfter.lanternsLit <= (strongholdBefore?.lanternsLit ?? 0)) {
+  throw new Error("Stronghold payoff did not physically change");
+}
+await settle(60);
+await shot("18-stronghold-payoff");
+
 const overflow = await page.evaluate(
   () => document.documentElement.scrollWidth > window.innerWidth
 );
 if (overflow) throw new Error("Horizontal overflow at 393x852");
+
+console.log("RELOAD — the payoff must be rebuilt from real order truth");
+// The fiction fixture rebuilds its evidence from scratch on reload, exactly
+// as production re-reads admin.listByStatus. Nothing about the payoff was
+// stored locally, so the only way the threshold can come back lit is if it
+// is genuinely a projection of collected orders.
+await page.reload({ waitUntil: "networkidle" });
+await page
+  .locator("canvas.goldline-game-canvas")
+  .waitFor({ state: "visible", timeout: 30_000 });
+const explainerAgain = page.getByTestId("first-entry-explainer");
+if (await explainerAgain.count()) {
+  await explainerAgain.getByRole("button", { name: "GOT IT" }).click();
+}
+await settle(30);
+const afterReload = await page.evaluate(
+  () => window.__goldlineGame?.strongholdRestoration ?? null
+);
+console.log(`  stronghold after reload: ${JSON.stringify(afterReload)}`);
+await shot("19-stronghold-after-reload");
+
+if (!afterReload) throw new Error("No Stronghold reading after reload");
+if (afterReload.lanternsLit !== strongholdAfter.lanternsLit) {
+  throw new Error(
+    `Payoff did not survive reload: ${strongholdAfter.lanternsLit} lanterns ` +
+      `before, ${afterReload.lanternsLit} after`
+  );
+}
+if (afterReload.conduitCharge !== strongholdAfter.conduitCharge) {
+  throw new Error("Conduit charge did not survive reload");
+}
+console.log("  payoff rebuilt identically from order truth");
 
 await browser.close();
 

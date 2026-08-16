@@ -3354,9 +3354,136 @@
   opacity: 0.62;
 }
 
+/* ---------------------------------------------------------- terminal HUD
+
+   DOWN and ARRIVED are the only two moments this surface says more than
+   MOVE and ACT, and even then it stays a low strip at the bottom of the
+   world rather than a card stack over it. The world remains dominant:
+   nothing here takes a panel, a backdrop, a modal or the centre of the
+   screen, because a real pickup arriving should not feel like a SaaS
+   dialog opening on top of an adventure. */
+.expedition-terminal {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 2.2rem);
+  transform: translateX(-50%);
+  width: min(92vw, 360px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  pointer-events: auto;
+  text-align: center;
+}
+
+.expedition-terminal__headline {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #f4633a;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.92);
+}
+
+.expedition-terminal__headline.is-secured {
+  color: #ffd166;
+  font-size: 1.05rem;
+  letter-spacing: 0.22em;
+  text-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.92),
+    0 0 28px rgba(255, 209, 102, 0.55);
+}
+
+.expedition-terminal__choices {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.expedition-terminal__choices button,
+.expedition-terminal__secure {
+  min-height: 52px;
+  padding: 0 1.5rem;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 209, 102, 0.85);
+  background: linear-gradient(
+    180deg,
+    rgba(28, 24, 18, 0.92),
+    rgba(14, 12, 9, 0.96)
+  );
+  color: #ffd166;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.expedition-terminal__secure {
+  min-height: 56px;
+  padding: 0 2.2rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.16em;
+  box-shadow: 0 0 26px rgba(255, 209, 102, 0.32);
+}
+
+/* PRESS ON is a compromise, not the recommended road. It reads quieter
+   than REDEPLOY so the shape of the choice is legible before the words. */
+.expedition-terminal__choices button[data-testid="expedition-press-on"] {
+  border-color: rgba(255, 209, 102, 0.4);
+  color: rgba(246, 239, 225, 0.82);
+}
+
+.expedition-terminal__customer {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f6efe1;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.92);
+}
+
+.expedition-terminal__address {
+  margin: 0;
+  font-size: 0.78rem;
+  color: rgba(246, 239, 225, 0.86);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+}
+
+/* VERIFYING is a truthful waiting state, not a success animation. It
+   deliberately does not look celebratory. */
+.expedition-terminal__verifying {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: rgba(255, 209, 102, 0.9);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+  animation: expedition-verifying-breath 1.5s ease-in-out infinite;
+}
+
+.expedition-terminal__failed {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  color: #f4633a;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+}
+
+@keyframes expedition-verifying-breath {
+  0%,
+  100% {
+    opacity: 0.62;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .expedition-pad,
   .expedition-hud__bar > span {
     transition: none;
+  }
+
+  .expedition-terminal__verifying {
+    animation: none;
+    opacity: 0.9;
   }
 }

@@ -94,6 +94,12 @@ import {
 } from "./audio/haptics";
 import { planPickupExpedition } from "./expedition/expeditionPlan";
 import { ExpeditionHud } from "./expedition/ExpeditionHud";
+import {
+  projectStrongholdRestoration,
+  restorationDelta,
+  type CollectedEvidenceOrder,
+  type StrongholdRestoration,
+} from "./expedition/strongholdRestoration";
 import { EXPEDITION, type ExpeditionSnapshot } from "./expedition/expeditionState";
 import type { AgentWorldPresence } from "./world/PopulationSystem";
 import { projectAgentWorldPresence } from "./world/agentPresenceProjection";
@@ -236,6 +242,19 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
     requestId: string;
   }) => Promise<unknown>;
   actionServices: GoldlineActionServices;
+  /**
+   * AUTHORITATIVE collected-order evidence — order id and status only, read
+   * from the existing admin.listByStatus queries for collected / processing
+   * / ready / delivered.
+   *
+   * This is the ONLY thing that may declare a pickup secured. It is server
+   * truth arriving through a normal query, not a local echo of a mutation
+   * this client happened to fire: a pickup collected on another surface
+   * shows up here identically, and the Stronghold payoff derived from it
+   * survives a reload because it was never stored locally in the first
+   * place. No new endpoint, no new table, no ledger.
+   */
+  collectedOrderEvidence?: readonly CollectedEvidenceOrder[];
   authoritativeVisitRoute?: AuthoritativeVisitRouteProjection | null;
   authoritativeRouteCoverage?: number;
   isStartingVisitRoute?: boolean;
@@ -1428,9 +1447,40 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     orderId: number;
     customerLabel: string;
     address: string;
+    /**
+     * The Stronghold as it stood the moment this expedition began, pinned.
+     *
+     * Derived from authoritative collected-order evidence at ENTER and never
+     * recomputed, because the whole point of a BEFORE reading is that it
+     * predates the write. Re-deriving it later from live evidence would make
+     * the delta collapse to zero exactly when the payoff needs to show
+     * something changed. It is deliberately not persisted anywhere: a reload
+     * reconstructs the AFTER state from real order truth, which is what
+     * makes the payoff survive without a local ledger.
+     */
+    restorationBefore: StrongholdRestoration;
   };
   const [activeExpedition, setActiveExpedition] =
     useState<ActivePickupExpedition | null>(null);
+
+  /**
+   * AUTHORITATIVE collected truth, as one evidence collection. Order id and
+   * status, nothing else — this is the only input the Stronghold payoff has.
+   */
+  const collectedOrderEvidence = useMemo<readonly CollectedEvidenceOrder[]>(
+    () => props.collectedOrderEvidence ?? [],
+    [props.collectedOrderEvidence]
+  );
+
+  /** The Stronghold as authoritative evidence says it stands RIGHT NOW. */
+  const restorationNow = useMemo(
+    () =>
+      projectStrongholdRestoration({
+        orders: collectedOrderEvidence,
+        expeditionOrderId: activeExpedition?.orderId ?? null,
+      }),
+    [collectedOrderEvidence, activeExpedition?.orderId]
+  );
 
   const enterExpedition = useCallback(() => {
     if (!nextOrderObjective || preparedPickupOrderId == null) return;
@@ -1448,12 +1498,140 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         `${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() ||
         `Order #${order.id}`,
       address: (order.address ?? "").trim(),
+      restorationBefore: projectStrongholdRestoration({
+        orders: collectedOrderEvidence,
+        expeditionOrderId: order.id,
+      }),
     });
-  }, [nextOrderObjective, preparedPickupOrderId]);
+  }, [nextOrderObjective, preparedPickupOrderId, collectedOrderEvidence]);
 
   const exitExpedition = useCallback(() => {
     setActiveExpedition(null);
+    setCargoPhase("idle");
   }, []);
+
+  /**
+   * SECURE CARGO's local phase. Deliberately NOT a completion state:
+   *
+   *   idle      — the player has not pressed it
+   *   verifying — the canonical mutation succeeded; server truth is awaited
+   *   failed    — the mutation itself failed; the pickup is still pending
+   *
+   * There is no "secured" member. Nothing here can declare the cargo
+   * secured, because the mutation succeeding is not the same fact as the
+   * order being collected. Only authoritative evidence settles that, which
+   * is what lets a pickup collected on another surface reconcile
+   * identically.
+   */
+  type CargoPhase = "idle" | "verifying" | "failed";
+  const [cargoPhase, setCargoPhase] = useState<CargoPhase>("idle");
+
+  /**
+   * REALITY WINS. The single predicate for "this pickup is genuinely
+   * collected", read from server truth rather than from whether this client
+   * pressed the button.
+   */
+  const pinnedOrderCollected = restorationNow.expeditionOrderCollected;
+
+  /** The honest before/after, both derived from real evidence. */
+  const payoffDelta = useMemo(
+    () =>
+      activeExpedition
+        ? restorationDelta(activeExpedition.restorationBefore, restorationNow)
+        : null,
+    [activeExpedition, restorationNow]
+  );
+
+  /**
+   * §33 REDEPLOY and §34 PRESS ON. Both are expedition-level only — the run
+   * continues or compromises, and the real pickup is untouched either way.
+   * The snapshot is refreshed immediately rather than waiting for the next
+   * poll tick so the terminal HUD clears on the same interaction.
+   */
+  const redeployExpedition = useCallback(() => {
+    if (!runtimeRef.current?.expeditionRedeploy()) return;
+    const snapshot = runtimeRef.current.getExpeditionSnapshot();
+    if (snapshot) setExpeditionSnapshot(snapshot);
+  }, []);
+
+  const pressOnExpedition = useCallback(() => {
+    if (!runtimeRef.current?.expeditionPressOn()) return;
+    const snapshot = runtimeRef.current.getExpeditionSnapshot();
+    if (snapshot) setExpeditionSnapshot(snapshot);
+  }, []);
+
+  const secureCargo = useCallback(async () => {
+    if (!activeExpedition) return;
+    if (cargoPhase === "verifying") return;
+    setCargoPhase("verifying");
+    try {
+      // The ONE canonical service. There is no alternate completion path,
+      // and this call is the only thing this surface does to the business.
+      const ok = await props.actionServices.resolveOrder({
+        orderId: activeExpedition.orderId,
+        status: "collected",
+      });
+      // Success means the write was accepted — NOT that the cargo is
+      // secured. The run stays in VERIFYING until authoritative evidence
+      // says so.
+      if (!ok) setCargoPhase("failed");
+    } catch {
+      setCargoPhase("failed");
+    }
+  }, [activeExpedition, cargoPhase, props.actionServices]);
+
+  /**
+   * The payoff fires from AUTHORITATIVE EVIDENCE, not from the mutation.
+   *
+   * Note what is absent from the condition: any check that this client
+   * pressed SECURE CARGO. If a dispatcher collected the same order on the
+   * admin surface while this expedition was being played, the evidence
+   * arrives through the same query and reconciles here identically. That is
+   * the difference between reporting server truth and echoing our own write.
+   */
+  const payoffFiredForOrderRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!activeExpedition) return;
+    if (!pinnedOrderCollected) return;
+    if (payoffFiredForOrderRef.current === activeExpedition.orderId) return;
+    payoffFiredForOrderRef.current = activeExpedition.orderId;
+
+    // Server-verified feedback. This is the only place it fires, so it can
+    // never celebrate a write that has not been confirmed.
+    getAudioManager().play("captured_truth");
+    arcadeFeedback();
+    runtimeRef.current?.finishExpeditionAtStronghold();
+  }, [activeExpedition, pinnedOrderCollected]);
+
+  useEffect(() => {
+    if (activeExpedition == null) payoffFiredForOrderRef.current = null;
+  }, [activeExpedition]);
+
+  /**
+   * The persistent physical payoff, pushed to the world whenever real
+   * evidence changes. Not gated on an expedition being active: the lit
+   * threshold is what the Stronghold IS, so it must be correct the moment
+   * the app loads and every time afterward. That is what makes a reload
+   * reproduce it — the state is a projection of order truth, not something
+   * this component accumulated.
+   */
+  useEffect(() => {
+    runtimeRef.current?.setStrongholdRestoration(restorationNow);
+  }, [restorationNow, runtimeReady]);
+
+  /**
+   * ONE confirmation pulse, and only for a delta that genuinely happened.
+   * Keyed on the pinned BEFORE reading, so a Stronghold that was already
+   * fully restored produces no fabricated missing segment to light up.
+   */
+  const pulsedForOrderRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!activeExpedition || !payoffDelta) return;
+    if (!payoffDelta.changed) return;
+    if (pulsedForOrderRef.current === activeExpedition.orderId) return;
+    pulsedForOrderRef.current = activeExpedition.orderId;
+    runtimeRef.current?.pulseStrongholdRestoration(payoffDelta);
+  }, [activeExpedition, payoffDelta]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -2174,6 +2352,17 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             maxHp={EXPEDITION.maxHp}
             momentum={expeditionSnapshot.momentum}
             maxMomentum={EXPEDITION.maxMomentum}
+            terminalState={expeditionSnapshot.outcome}
+            onRedeploy={redeployExpedition}
+            onPressOn={pressOnExpedition}
+            pinnedCustomer={activeExpedition?.customerLabel}
+            pinnedAddress={activeExpedition?.address}
+            onSecureCargo={secureCargo}
+            cargoPhase={cargoPhase}
+            // AUTHORITATIVE, not local: this is server truth about the
+            // pinned order, so a pickup collected on another surface
+            // renders CARGO SECURED here exactly the same way.
+            cargoSecured={pinnedOrderCollected}
           />
         ) : null}
         {!runtimeReady ? (

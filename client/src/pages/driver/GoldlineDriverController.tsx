@@ -117,6 +117,59 @@ function LiveGoldlineDriverController() {
   };
   const pickups = trpc.admin.listByDate.useQuery(pickupQueryInput);
   const deliveries = trpc.admin.listByDate.useQuery(deliveryQueryInput);
+
+  /**
+   * AUTHORITATIVE collected-order evidence.
+   *
+   * The four statuses that prove a pickup genuinely happened: `collected` is
+   * the transition itself, and processing/ready/delivered are downstream of
+   * it and unreachable without it. Read through the EXISTING
+   * admin.listByStatus procedure — no migration, no new endpoint, no ledger.
+   *
+   * These are polled rather than merely invalidated on our own mutation
+   * because the whole point is that this client is not the only way an order
+   * becomes collected. A dispatcher marking it on the admin surface has to
+   * reach the Stronghold here too.
+   */
+  const evidenceQueryOptions = { refetchInterval: 15_000 } as const;
+  const collectedOrders = trpc.admin.listByStatus.useQuery(
+    { status: "collected" },
+    evidenceQueryOptions
+  );
+  const processingOrders = trpc.admin.listByStatus.useQuery(
+    { status: "processing" },
+    evidenceQueryOptions
+  );
+  const readyOrders = trpc.admin.listByStatus.useQuery(
+    { status: "ready" },
+    evidenceQueryOptions
+  );
+  const deliveredOrders = trpc.admin.listByStatus.useQuery(
+    { status: "delivered" },
+    evidenceQueryOptions
+  );
+
+  /**
+   * ONE evidence collection: order id and status, nothing else. Deliberately
+   * carries no customer, address, money or date — the Stronghold payoff is
+   * derived from whether real pickups happened, and needs nothing more than
+   * that to say so.
+   */
+  const collectedOrderEvidence = useMemo(
+    () =>
+      [
+        ...(collectedOrders.data ?? []),
+        ...(processingOrders.data ?? []),
+        ...(readyOrders.data ?? []),
+        ...(deliveredOrders.data ?? []),
+      ].map(order => ({ id: order.id, status: order.status })),
+    [
+      collectedOrders.data,
+      processingOrders.data,
+      readyOrders.data,
+      deliveredOrders.data,
+    ]
+  );
   const fieldToday = trpc.system.field.today.useQuery(undefined, {
     refetchInterval: 30_000,
   });
@@ -960,6 +1013,7 @@ function LiveGoldlineDriverController() {
           onRequestWeapons={input => utils.system.armory.weapons.fetch(input)}
           onRecordWeaponUsage={input => recordWeaponUsage.mutateAsync(input)}
           actionServices={actionServices}
+          collectedOrderEvidence={collectedOrderEvidence}
           authoritativeVisitRoute={visitRoute.data}
           authoritativeRouteCoverage={visitRoute.data?.coveredCount ?? 0}
           isStartingVisitRoute={startVisitRoute.isPending}

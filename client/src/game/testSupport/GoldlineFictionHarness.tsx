@@ -17,6 +17,53 @@ import type {
 } from "../actions/actionServices";
 import type { DriverSafeSalesIntel } from "../../../../shared/driverSafeSalesIntel";
 import type { Order } from "@shared/types";
+import type { CollectedEvidenceOrder } from "../expedition/strongholdRestoration";
+
+/**
+ * How long the fixture waits before authoritative evidence reports the
+ * collection, standing in for the real gap between the canonical mutation
+ * resolving and the next admin.listByStatus poll returning it.
+ */
+const SERVER_TRUTH_DELAY_MS = 900;
+
+/**
+ * The fixture's stand-in for THE SERVER'S OWN STORAGE — not app state.
+ *
+ * A reload must reproduce the Stronghold from real order truth. That claim
+ * is only testable if the thing standing in for the database behaves like
+ * one: production re-queries admin.listByStatus and the collected order is
+ * still there, so this fixture has to still have it too. Without this, a
+ * reload would wipe the fixture's "server" and the test would prove nothing
+ * except that a page reload clears React state.
+ *
+ * The application itself stores NOTHING about restoration. That is the
+ * whole point, and it is exactly what the reload check verifies: the app
+ * re-derives the payoff from whatever this stand-in reports.
+ */
+const FIXTURE_SERVER_EVIDENCE_KEY = "goldline-fixture:server-collected-orders";
+
+function readFixtureServerEvidence(
+  seed: CollectedEvidenceOrder[]
+): CollectedEvidenceOrder[] {
+  try {
+    const raw = window.sessionStorage.getItem(FIXTURE_SERVER_EVIDENCE_KEY);
+    if (raw) return JSON.parse(raw) as CollectedEvidenceOrder[];
+  } catch {
+    /* fall through to the seed */
+  }
+  return seed;
+}
+
+function writeFixtureServerEvidence(rows: CollectedEvidenceOrder[]) {
+  try {
+    window.sessionStorage.setItem(
+      FIXTURE_SERVER_EVIDENCE_KEY,
+      JSON.stringify(rows)
+    );
+  } catch {
+    /* a fixture that cannot persist still runs, it just cannot prove reload */
+  }
+}
 
 /**
  * A deterministic, real-Order-shaped fixture row — every field is either the
@@ -267,6 +314,23 @@ export default function GoldlineFictionHarness() {
           }),
         ]
   );
+  /**
+   * AUTHORITATIVE collected-order evidence, as the real driver surface
+   * receives it from admin.listByStatus. Starts with genuine history so the
+   * Stronghold is partially restored before this expedition — a payoff
+   * measured against an empty world would prove far less.
+   */
+  const [collectedEvidence, setCollectedEvidence] = useState<
+    CollectedEvidenceOrder[]
+  >(() =>
+    emptyDay
+      ? []
+      : readFixtureServerEvidence([
+          { id: 9100, status: "delivered" },
+          { id: 9101, status: "ready" },
+        ])
+  );
+
   const [deliveryOrders, setDeliveryOrders] = useState<Order[]>(emptyDay ? [] : [
     fixtureOrder({
       id: 9310,
@@ -362,6 +426,27 @@ export default function GoldlineFictionHarness() {
       const order = pickupOrders.find(row => row.id === orderId);
       if (!order) return false;
       setPickupOrders(current => current.filter(row => row.id !== orderId));
+      // Stand in for the SERVER's own view catching up, on its own delay.
+      //
+      // In production the collected order appears in admin.listByStatus on
+      // the next poll, which is strictly later than the mutation resolving.
+      // Reproducing that gap is the entire point: a fixture that flipped the
+      // evidence synchronously would make VERIFYING SERVER TRUTH
+      // unobservable and would hide the exact bug this design prevents —
+      // treating a returned mutation as a secured pickup.
+      window.setTimeout(() => {
+        setCollectedEvidence(current => {
+          if (current.some(row => row.id === orderId)) return current;
+          const next = [
+            ...current,
+            { id: orderId, status: "collected" } as CollectedEvidenceOrder,
+          ];
+          // The stand-in "server" keeps it, so a reload can prove the app
+          // rebuilds the Stronghold from order truth rather than memory.
+          writeFixtureServerEvidence(next);
+          return next;
+        });
+      }, SERVER_TRUTH_DELAY_MS);
     }
     return true;
   }
@@ -435,6 +520,7 @@ export default function GoldlineFictionHarness() {
     onSelectedDateChange: () => undefined,
     pickups: pickupOrders,
     deliveries: deliveryOrders,
+    collectedOrderEvidence: collectedEvidence,
     isResolvingOrder: false,
     onResolveOrder: async (orderId, status) =>
       resolveFixtureOrder(orderId, status),

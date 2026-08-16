@@ -77,6 +77,25 @@ import {
   PROGRESS_SPAN_FRACTION,
 } from "../expedition/corridorCoupling";
 import { TRAVERSAL_Z, worldActorZ } from "../world/worldActorDepth";
+import {
+  STRONGHOLD_LANTERN_COUNT,
+  type StrongholdRestoration,
+} from "../expedition/strongholdRestoration";
+
+/**
+ * The Stronghold gate's rectangle, as fractions of the viewport.
+ *
+ * Extracted because the restoration lanterns have to sit on the SAME
+ * threshold the gate is drawn on. When the two carried their own literals
+ * they disagreed, and the payoff rendered as a bar floating in the sky
+ * above the building it was supposed to be mounted on.
+ */
+const GATE_RECT = {
+  left: 0.37,
+  right: 0.68,
+  topY: 0.11,
+  baseY: 0.3,
+} as const;
 
 export type LandmarkArchetype = "ANCHOR" | "GATEKEEPER" | "GHOST" | "STALLER";
 
@@ -352,6 +371,18 @@ export class GoldlineGame {
   private recoveryPath = new Graphics();
   private portals = new Container();
   private strongholdSprite: Sprite | null = null;
+  /**
+   * Six lanterns and the brass Gold-Line conduit along the Stronghold
+   * threshold. This is the PERSISTENT physical payoff, and it is drawn
+   * purely from a StrongholdRestoration that React projects out of real
+   * collected-order evidence. Nothing here is stored, and nothing here is a
+   * counter this class increments — which is exactly why a reload
+   * reproduces the same lit threshold from the same order truth.
+   */
+  private strongholdRestoration: StrongholdRestoration | null = null;
+  private gRestoration = new Graphics();
+  /** Seconds remaining in the ONE confirmation pulse for a real delta. */
+  private restorationPulse = 0;
   private effectsSprite: Sprite | null = null;
   private effectsTargetAlpha = 0.4;
   private backgroundSprite: Sprite | null = null;
@@ -576,6 +607,14 @@ export class GoldlineGame {
           this.layerTraversal.getChildIndex(this.fortress)
         );
       }
+      // Restoration light reads ON the gate, so it sits in the Stronghold
+      // band directly above the sprite and below every world actor.
+      this.gRestoration.label = "stronghold-restoration";
+      // Above the gate's own vector frame so the lit threshold is not cut by
+      // it, but still far below WORLD_ACTOR_BASE — Trailblazer and the crowd
+      // walk in front of the Stronghold, as they must.
+      this.gRestoration.zIndex = TRAVERSAL_Z.FORTRESS + 1;
+      this.layerTraversal.addChild(this.gRestoration);
 
       const characterTexture = this.poseTextures.get("idle") ?? operatorTexture;
       this.avatar = new Sprite(characterTexture);
@@ -1683,6 +1722,12 @@ export class GoldlineGame {
     this.syncCrossfadeTransform();
     this.drawContactShadow(avatarX, groundY, baseHeight, jumpFactor);
     this.applyOcclusion(avatarX, groundY, width, height);
+    // The confirmation pulse is a fixed, short decay. It intentionally does
+    // not loop: a persistent payoff should be steady, and only the moment it
+    // changes gets a flourish.
+    if (this.restorationPulse > 0) {
+      this.restorationPulse = Math.max(0, this.restorationPulse - deltaSeconds / 1.1);
+    }
     this.updateStronghold(width, height);
     this.updatePortals(width, height);
     this.updateCameraLookahead();
@@ -2095,25 +2140,144 @@ export class GoldlineGame {
   }
 
   private updateStronghold(width: number, height: number) {
-    if (!this.strongholdSprite) return;
     const gateX = width * 0.525;
     const gateY = height * 0.19;
-    this.strongholdSprite.x = gateX;
-    this.strongholdSprite.y = gateY;
-    this.strongholdSprite.height = height * 0.24;
-    this.strongholdSprite.width =
-      this.strongholdSprite.height *
-      (this.strongholdSprite.texture.width /
-        this.strongholdSprite.texture.height);
-    // Dim toward closed, settle brighter on a verified capture, otherwise
-    // the steady baseline — bright tropical direction preserved throughout,
-    // never a dark villain-fortress treatment.
-    this.strongholdSprite.alpha =
-      this.worldState === "closed"
-        ? 0.5
-        : this.worldState === "captured"
-          ? 1
-          : 0.92;
+    if (this.strongholdSprite) {
+      this.strongholdSprite.x = gateX;
+      this.strongholdSprite.y = gateY;
+      this.strongholdSprite.height = height * 0.24;
+      this.strongholdSprite.width =
+        this.strongholdSprite.height *
+        (this.strongholdSprite.texture.width /
+          this.strongholdSprite.texture.height);
+      // Dim toward closed, settle brighter on a verified capture, otherwise
+      // the steady baseline — bright tropical direction preserved throughout,
+      // never a dark villain-fortress treatment.
+      this.strongholdSprite.alpha =
+        this.worldState === "closed"
+          ? 0.5
+          : this.worldState === "captured"
+            ? 1
+            : 0.92;
+    }
+    this.drawStrongholdRestoration(width, height);
+  }
+
+  /**
+   * The persistent Stronghold payoff: six lanterns along the threshold and
+   * the brass Gold-Line conduit beneath them.
+   *
+   * Every value drawn here comes from `this.strongholdRestoration`, which
+   * React derives from authoritative collected-order evidence. There is no
+   * local counter, no stored progress and no animation state that outlives
+   * the projection — so reloading the app and re-reading the same orders
+   * reproduces exactly this threshold, which is the entire point of
+   * deriving the payoff from real truth instead of celebrating a mutation.
+   */
+  private drawStrongholdRestoration(width: number, height: number) {
+    const g = this.gRestoration;
+    g.clear();
+    const restoration = this.strongholdRestoration;
+    if (!restoration) return;
+
+    const now = performance.now();
+    // ONE brief confirmation pulse, driven by a real before/after delta.
+    const pulse = this.restorationPulse > 0 ? this.restorationPulse : 0;
+
+    // Along the gate's THRESHOLD — the base of the Stronghold, spanning its
+    // real width. The first placement used the gate's vertical midpoint and
+    // measured the horizontal span in units of HEIGHT, which put the row in
+    // the middle of the sky and made the payoff read as a floating HUD bar
+    // rather than lanterns mounted on a building.
+    const gateLeft = width * GATE_RECT.left;
+    const gateRight = width * GATE_RECT.right;
+    const gateX = (gateLeft + gateRight) / 2;
+    const span = (gateRight - gateLeft) / 2;
+    const y = height * GATE_RECT.baseY;
+    const lanternR = Math.max(3, height * 0.0065);
+
+    // The conduit: a brass channel under the lanterns whose lit fraction is
+    // the real conduitCharge. Dormant stretch first, charged stretch over it.
+    const conduitY = y + lanternR * 2.6;
+    g.moveTo(gateX - span, conduitY)
+      .lineTo(gateX + span, conduitY)
+      .stroke({ width: lanternR * 1.5, color: 0x5a4212, alpha: 0.75 });
+    if (restoration.conduitCharge > 0) {
+      const chargedTo =
+        gateX - span + span * 2 * Math.min(1, restoration.conduitCharge);
+      g.moveTo(gateX - span, conduitY)
+        .lineTo(chargedTo, conduitY)
+        .stroke({
+          width: lanternR * 1.5,
+          color: 0xc9942e,
+          alpha: 0.9,
+        });
+      g.moveTo(gateX - span, conduitY)
+        .lineTo(chargedTo, conduitY)
+        .stroke({
+          width: lanternR * 0.6,
+          color: 0xffd166,
+          alpha: 0.75 + pulse * 0.25,
+        });
+    }
+
+    // Six lanterns. An unlit lantern is still physically THERE — a dark
+    // bracket on the threshold — so the player can see how much of the
+    // Stronghold is still waiting rather than only what is already done.
+    for (let i = 0; i < STRONGHOLD_LANTERN_COUNT; i += 1) {
+      const t = i / (STRONGHOLD_LANTERN_COUNT - 1);
+      const x = gateX - span + span * 2 * t;
+      const lit = i < restoration.lanternsLit;
+
+      // Bracket.
+      g.rect(x - lanternR * 0.35, y, lanternR * 0.7, lanternR * 2.4).fill({
+        color: 0x5a4212,
+        alpha: 0.85,
+      });
+
+      if (!lit) {
+        g.circle(x, y, lanternR)
+          .fill({ color: 0x281f19, alpha: 0.55 })
+          .stroke({ width: 1.2, color: 0x5a4212, alpha: 0.8 });
+        continue;
+      }
+
+      // A lit lantern breathes; the newest one breathes harder during the
+      // single confirmation pulse.
+      const newest = i === restoration.lanternsLit - 1;
+      const breath =
+        0.75 + Math.sin(now / 620 + i * 0.9) * 0.18 + (newest ? pulse * 0.4 : 0);
+      g.circle(x, y, lanternR * (2.2 + (newest ? pulse * 1.4 : 0))).fill({
+        color: 0xffd166,
+        alpha: 0.16 * breath,
+      });
+      g.circle(x, y, lanternR * 1.35).fill({
+        color: 0xffd166,
+        alpha: 0.42 * breath,
+      });
+      g.circle(x, y, lanternR)
+        .fill({ color: 0xffd98a, alpha: Math.min(1, breath) })
+        .stroke({ width: 1.4, color: 0xc9942e, alpha: 0.95 });
+    }
+  }
+
+  /**
+   * The authoritative Stronghold reading. Called by React whenever real
+   * collected-order evidence changes — including when it changes because
+   * somebody else collected the order.
+   */
+  setStrongholdRestoration(restoration: StrongholdRestoration | null) {
+    this.strongholdRestoration = restoration;
+  }
+
+  /**
+   * ONE brief confirmation pulse for a genuine before/after delta. Callers
+   * must pass a delta computed from two real evidence readings — this
+   * deliberately has no way to celebrate a change that did not happen.
+   */
+  pulseStrongholdRestoration(delta: { changed: boolean }) {
+    if (!delta.changed) return;
+    this.restorationPulse = 1;
   }
 
   /**
@@ -2383,10 +2547,10 @@ export class GoldlineGame {
     this.fortress.renderable = corridorGateVisibleDuring({
       expeditionActive: this.expedition !== null,
     });
-    const gateX = width * 0.37;
-    const gateY = height * 0.11;
-    const gateW = width * 0.31;
-    const gateH = height * 0.19;
+    const gateX = width * GATE_RECT.left;
+    const gateY = height * GATE_RECT.topY;
+    const gateW = width * (GATE_RECT.right - GATE_RECT.left);
+    const gateH = height * (GATE_RECT.baseY - GATE_RECT.topY);
     const fortressColor =
       this.worldState === "captured"
         ? 0xd9a936
