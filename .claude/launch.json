@@ -32,6 +32,19 @@
         "--strictPort"
       ],
       "port": 5173
+    },
+    {
+      "name": "goldline-expedition-stage1",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "VITE_GOLDLINE_TEST_HARNESS=1",
+        "npx",
+        "vite",
+        "--port",
+        "5186",
+        "--strictPort"
+      ],
+      "port": 5186
     }
   ]
 }

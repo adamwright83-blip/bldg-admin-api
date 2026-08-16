@@ -55,7 +55,15 @@ type PopulationNode = {
  * may provide a static role atlas; the neutral faceless engineering figures
  * remain an explicit load-failure/placeholder fallback.
  */
+import { worldActorZ } from "./worldActorDepth";
+
+export type PopulationProjection = (
+  progress: number,
+  lateral: number
+) => { x: number; y: number; scale: number };
+
 export class PopulationSystem {
+  private actorHost: Container | null = null;
   readonly container = new Container();
   private readonly ambientLayer = new Container();
   private readonly missionLayer = new Container();
@@ -70,6 +78,17 @@ export class PopulationSystem {
   private orderPropState: "idle" | "active" | "blocked" | null = null;
   private readonly orderTextures: OrderPropTextures;
   private agentPresence: readonly AgentWorldPresence[] = [];
+  /**
+   * Explicit ownership record. Do NOT infer ownership from current parent —
+   * capability stations, the mission actor and the order actor are all
+   * reparented into the shared world-actor host once attachActorHost runs,
+   * so `capabilityLayer.children` and `missionLayer.children` no longer
+   * reflect what this system owns. This array is the only source of truth.
+   */
+  private capabilityGraphics: Array<{
+    id: GoldlineAgentId;
+    display: Container;
+  }> = [];
   private lastBehaviorUpdateAt = Number.NEGATIVE_INFINITY;
   private reducedMotion = false;
   private destroyed = false;
@@ -161,11 +180,18 @@ export class PopulationSystem {
       return;
     }
     this.mission = next;
-    this.missionLayer.removeChildren().forEach(child => child.destroy());
+    // Destroys the OWNED actor wherever it currently lives — the old
+    // `missionLayer.removeChildren()` only cleared a container the actor had
+    // already been moved out of once attachActorHost ran, which would have
+    // left the previous mission's actor alive and orphaned in the shared host.
+    this.destroyOwnedActor(this.missionGraphic);
     this.missionGraphic = next
       ? drawMissionScene(next, this.roleTextures.get(roleForMission(next)))
       : null;
-    if (this.missionGraphic) this.missionLayer.addChild(this.missionGraphic);
+    if (this.missionGraphic) {
+      this.missionGraphic.visible = !this.expeditionPresentation;
+      this.addOwnedActor(this.missionGraphic, this.missionLayer);
+    }
   }
 
   /**
@@ -189,14 +215,18 @@ export class PopulationSystem {
       return;
     }
     this.order = next;
-    this.orderLayer.removeChildren().forEach(child => child.destroy());
+    // §Phase-E requirement: real order completion calls setOrder(null), and
+    // the old visible pickup marker must actually disappear — not linger as
+    // an orphan in the shared host because orderLayer no longer parents it.
+    this.destroyOwnedActor(this.orderGraphic);
     this.orderPropSprite = null;
     this.orderPropState = null;
     if (next) {
       const built = drawOrderMarker(next, this.orderTextures);
       this.orderGraphic = built.container;
       this.orderPropSprite = built.propSprite;
-      this.orderLayer.addChild(this.orderGraphic);
+      this.orderGraphic.visible = !this.expeditionPresentation;
+      this.addOwnedActor(this.orderGraphic, this.orderLayer);
       this.applyOrderPropState(next);
     } else {
       this.orderGraphic = null;
@@ -243,20 +273,90 @@ export class PopulationSystem {
       .join("|");
     if (signature === previous) return;
     this.agentPresence = [...presence];
-    this.capabilityLayer.removeChildren().forEach(child => child.destroy());
-    presence.forEach((item, index) => {
+    for (const capability of this.capabilityGraphics) {
+      this.destroyOwnedActor(capability.display);
+    }
+    this.capabilityGraphics = [];
+    presence.forEach(item => {
       const station = drawCapabilityStation(item);
       station.label = `agent-presence:${item.agentId}`;
       station.x = 0;
       station.y = 0;
       station.alpha = 0.9;
-      station.zIndex = index;
-      this.capabilityLayer.addChild(station);
+      station.visible = !this.expeditionPresentation;
+      this.addOwnedActor(station, this.capabilityLayer);
+      this.capabilityGraphics.push({ id: item.agentId, display: station });
     });
   }
 
   setReducedMotion(reduced: boolean) {
     this.reducedMotion = reduced;
+  }
+
+  /**
+   * Attaches every actor this system owns to a SHARED sortable parent, so a
+   * single civilian can interleave with a single guardian by depth. While
+   * they lived inside this system's own nested container they could only
+   * ever render wholly in front of, or wholly behind, the Ruinbound.
+   *
+   * The host is supplied, not owned: destroy() disposes only the displays
+   * this system created, never the host itself.
+   */
+  attachActorHost(host: Container) {
+    this.actorHost = host;
+    for (const node of this.ambient) {
+      if (node.display.parent !== host) host.addChild(node.display);
+    }
+    if (this.missionGraphic && this.missionGraphic.parent !== host) {
+      host.addChild(this.missionGraphic);
+    }
+    if (this.orderGraphic && this.orderGraphic.parent !== host) {
+      host.addChild(this.orderGraphic);
+    }
+    for (const capability of this.capabilityGraphics) {
+      if (capability.display.parent !== host) host.addChild(capability.display);
+    }
+  }
+
+  /**
+   * Hides ordinary mission/order/capability presentation while a pickup
+   * expedition owns the world — it has its own authored destination, and a
+   * second visible presentation of the same underlying business object
+   * would compete with it. Ambient civilians remain visible. Business data
+   * (this.mission / this.order) is never cleared by this — only display.
+   */
+  private expeditionPresentation = false;
+
+  setExpeditionPresentation(active: boolean) {
+    this.expeditionPresentation = active;
+    if (this.missionGraphic) this.missionGraphic.visible = !active;
+    if (this.orderGraphic) this.orderGraphic.visible = !active;
+    for (const capability of this.capabilityGraphics) {
+      capability.display.visible = !active;
+    }
+  }
+
+  /** Falls back to this system's own container when no host is attached. */
+  private hostFor(): Container {
+    return this.actorHost ?? this.container;
+  }
+
+  /** Adds a display this system owns to whichever host currently applies. */
+  private addOwnedActor(display: Container, fallbackParent: Container) {
+    const parent = this.actorHost ?? fallbackParent;
+    if (display.parent !== parent) parent.addChild(display);
+  }
+
+  /**
+   * Destroys a display this system owns, regardless of which container
+   * currently parents it. Ownership does not follow reparenting — this
+   * system created the display, so it is responsible for it forever,
+   * including after attachActorHost moved it into a shared external host.
+   */
+  private destroyOwnedActor(display: Container | null) {
+    if (!display) return;
+    if (display.parent) display.parent.removeChild(display);
+    display.destroy({ children: true });
   }
 
   update(input: {
@@ -265,12 +365,24 @@ export class PopulationSystem {
     height: number;
     playerProgress: number;
     playerLateral?: number;
+    /**
+     * Shared corridor projector. Supplied by GoldlineGame so civilians and
+     * combat actors agree about where the painted road is — this system used
+     * to place actors on a straight `0.5` centreline while Trailblazer
+     * followed the authored Gold Line.
+     */
+    project?: PopulationProjection;
   }) {
     if (this.destroyed) return;
     // Ten updates/second is sufficient for short human loops and keeps this
     // population off the high-frequency gameplay path.
     if (input.now - this.lastBehaviorUpdateAt < 100) return;
     this.lastBehaviorUpdateAt = input.now;
+
+    const project =
+      input.project ??
+      ((progress: number, lateral: number) =>
+        fallbackCorridorPoint(progress, lateral, input.width, input.height));
 
     for (const node of this.ambient) {
       const visible =
@@ -279,23 +391,21 @@ export class PopulationSystem {
       node.display.visible = visible;
       if (!visible) continue; // offscreen sleep
       const position = authoredPosition(node, input.now, this.reducedMotion);
-      placeAtCorridorPosition(
-        node.display,
-        position.progress,
-        position.lateral,
-        input.width,
-        input.height
-      );
+      const point = project(position.progress, position.lateral);
+      applyProjection(node.display, point);
+      node.display.zIndex = worldActorZ(point.y, `civilian:${node.id}`);
       applyBehaviorPose(node, input.now, this.reducedMotion);
     }
 
     if (this.mission && this.missionGraphic) {
-      placeAtCorridorPosition(
-        this.missionGraphic,
+      const point = project(
         this.mission.anchor.position.progress,
-        this.mission.anchor.position.lateral,
-        input.width,
-        input.height
+        this.mission.anchor.position.lateral
+      );
+      applyProjection(this.missionGraphic, point);
+      this.missionGraphic.zIndex = worldActorZ(
+        point.y,
+        `mission:${this.mission.missionId}`
       );
       applyMissionBehavior(
         this.missionGraphic,
@@ -306,12 +416,14 @@ export class PopulationSystem {
     }
 
     if (this.order && this.orderGraphic) {
-      placeAtCorridorPosition(
-        this.orderGraphic,
+      const point = project(
         this.order.anchor.position.progress,
-        this.order.anchor.position.lateral,
-        input.width,
-        input.height
+        this.order.anchor.position.lateral
+      );
+      applyProjection(this.orderGraphic, point);
+      this.orderGraphic.zIndex = worldActorZ(
+        point.y,
+        `order:${this.order.orderKey}`
       );
       applyOrderMarkerMotion(this.orderGraphic, input.now, this.reducedMotion);
       this.applyOrderPropState(
@@ -331,16 +443,12 @@ export class PopulationSystem {
       INTEL: [0.27, -0.64],
     };
     this.agentPresence.forEach((presence, index) => {
-      const station = this.capabilityLayer.children[index];
+      const station = this.capabilityGraphics[index]?.display;
       if (!station) return;
       const [progress, lateral] = stationPositions[presence.agentId];
-      placeAtCorridorPosition(
-        station,
-        progress,
-        lateral,
-        input.width,
-        input.height
-      );
+      const point = project(progress, lateral);
+      applyProjection(station, point);
+      station.zIndex = worldActorZ(point.y, `station:${presence.agentId}`);
     });
   }
 
@@ -348,6 +456,23 @@ export class PopulationSystem {
     if (this.destroyed) return;
     this.destroyed = true;
     reportGoldlineLifecycleDelta("populationBehaviorCallback", -1);
+
+    // Explicit teardown of everything this system owns, regardless of which
+    // container currently parents it. `this.container.destroy({children:true})`
+    // alone is not sufficient once actors have been reparented into an
+    // external shared host — those actors are not children of this.container
+    // any more, and would otherwise leak. The host itself is never destroyed.
+    for (const node of this.ambient) this.destroyOwnedActor(node.display);
+    this.destroyOwnedActor(this.missionGraphic);
+    this.missionGraphic = null;
+    this.destroyOwnedActor(this.orderGraphic);
+    this.orderGraphic = null;
+    for (const capability of this.capabilityGraphics) {
+      this.destroyOwnedActor(capability.display);
+    }
+    this.capabilityGraphics = [];
+    this.actorHost = null;
+
     this.container.destroy({ children: true });
   }
 }
@@ -633,17 +758,32 @@ function authoredPosition(
   };
 }
 
-function placeAtCorridorPosition(
+function applyProjection(
   display: Container,
+  point: { x: number; y: number; scale: number }
+) {
+  display.x = point.x;
+  display.y = point.y;
+  display.scale.set(point.scale);
+}
+
+/**
+ * Only used when no projector is supplied — tests that construct a bare
+ * PopulationSystem. Production always passes GoldlineGame's shared
+ * projector, so the straight-line centreline this approximates is no longer
+ * on any production path.
+ */
+function fallbackCorridorPoint(
   progress: number,
   lateral: number,
   width: number,
   height: number
 ) {
-  display.x = width * (0.5 + lateral * 0.22);
-  display.y = height * (0.88 - progress * 0.61);
-  const scale = Math.max(0.55, Math.min(1.12, 1.12 - progress * 0.65));
-  display.scale.set(scale);
+  return {
+    x: width * (0.5 + lateral * 0.22),
+    y: height * (0.88 - progress * 0.61),
+    scale: Math.max(0.55, Math.min(1.12, 1.12 - progress * 0.65)),
+  };
 }
 
 function applyBehaviorPose(

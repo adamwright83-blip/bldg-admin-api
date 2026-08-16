@@ -100,6 +100,27 @@ export class CorridorTransitionController {
   }
 
   /** The newest request id handed out — a late load compares itself to this. */
+  /**
+   * Aborts any load currently in flight, leaving the corridor the player is
+   * standing in exactly as it is.
+   *
+   * Used when an expedition takes ownership of the world: a transition
+   * requested moments earlier must not resolve and swap the corridor out
+   * from under active combat. Returns true if something was actually
+   * cancelled, so callers can log or assert on it.
+   */
+  cancelInflight(): boolean {
+    if (!this.inflight) return false;
+    this.inflight.abort.abort();
+    this.inflight = null;
+    this.setPhase(this.activeCorridorId ? "ready" : "idle", this.activeCorridorId);
+    return true;
+  }
+
+  hasInflight(): boolean {
+    return this.inflight !== null;
+  }
+
   getLatestRequestId(): number {
     return this.requestSeq;
   }
@@ -207,6 +228,21 @@ export class CorridorTransitionController {
         this.activeCorridorId ? "ready" : "idle",
         this.activeCorridorId
       );
+
+      // A reveal that was deliberately refused is NOT a failure. The
+      // expedition guard aborts the reveal when it takes ownership of the
+      // world, and reporting that as "failed" surfaced a false
+      // "ROUTE HELD - DESTINATION UNAVAILABLE" to a player who had simply
+      // started an expedition. The corridor is intact either way; only the
+      // truthfulness of the feedback differs.
+      const isAbort =
+        (error instanceof DOMException && error.name === "AbortError") ||
+        (error instanceof Error && error.name === "AbortError") ||
+        abort.signal.aborted;
+      if (isAbort) {
+        return { outcome: "aborted", corridorId, requestId };
+      }
+
       return {
         outcome: "failed",
         corridorId,

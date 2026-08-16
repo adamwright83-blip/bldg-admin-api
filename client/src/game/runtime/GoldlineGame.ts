@@ -47,6 +47,55 @@ import {
 } from "../world/goldRoute";
 import { AdaptiveQualityMonitor, type QualityTier } from "./adaptiveQuality";
 import { reportGoldlineLifecycleDelta } from "../testSupport/lifecycleProbe";
+import { ExpeditionLayer, type ExpeditionCallbacks } from "../expedition/ExpeditionLayer";
+import {
+  EXPEDITION_CORRIDOR_END,
+  EXPEDITION_START_PROGRESS,
+  type PickupExpeditionPlan,
+} from "../expedition/expeditionPlan";
+import type { ExpeditionSnapshot } from "../expedition/expeditionState";
+import {
+  clampCorridorProgress,
+  forwardProgressLimit,
+} from "../expedition/movementLimit";
+import {
+  DODGE,
+  beginDodge,
+  createDodgeState,
+  dodgeIsInvulnerable,
+  stepDodge,
+} from "../expedition/actionPad";
+import {
+  portalPresentationFor,
+  portalGlowAlpha,
+  corridorGateVisibleDuring,
+} from "../expedition/portalPresentation";
+import {
+  corridorDeltaFromScreenImpulse,
+  projectCorridorPoint,
+  projectNormalizedCorridorPoint,
+  PROGRESS_SPAN_FRACTION,
+} from "../expedition/corridorCoupling";
+import { TRAVERSAL_Z, worldActorZ } from "../world/worldActorDepth";
+import {
+  STRONGHOLD_LANTERN_COUNT,
+  type StrongholdRestoration,
+} from "../expedition/strongholdRestoration";
+
+/**
+ * The Stronghold gate's rectangle, as fractions of the viewport.
+ *
+ * Extracted because the restoration lanterns have to sit on the SAME
+ * threshold the gate is drawn on. When the two carried their own literals
+ * they disagreed, and the payoff rendered as a bar floating in the sky
+ * above the building it was supposed to be mounted on.
+ */
+const GATE_RECT = {
+  left: 0.37,
+  right: 0.68,
+  topY: 0.11,
+  baseY: 0.3,
+} as const;
 
 export type LandmarkArchetype = "ANCHOR" | "GATEKEEPER" | "GHOST" | "STALLER";
 
@@ -298,6 +347,8 @@ export class GoldlineGame {
   // L0-L4 layer containers.
   private layerFar = new Container(); // L0
   private layerMid = new Container(); // L1
+  // Sortable so world actors — Trailblazer, civilians, guardians, props —
+  // interleave individually by screen depth rather than by container.
   private layerTraversal = new Container(); // L2 — route, portals, avatar
   private layerForeground = new Container(); // L3 — occlusion
   private layerEffects = new Container(); // L4
@@ -309,6 +360,7 @@ export class GoldlineGame {
   private pendingAgentPresence: readonly AgentWorldPresence[] = [];
 
   private camera = new CameraController(this.world);
+  private traversalSortInitialised = false;
   private avatar: Sprite | null = null;
   /** Holds the outgoing pose during a crossfade so state changes don't pop. */
   private avatarCrossfade: Sprite | null = null;
@@ -319,6 +371,18 @@ export class GoldlineGame {
   private recoveryPath = new Graphics();
   private portals = new Container();
   private strongholdSprite: Sprite | null = null;
+  /**
+   * Six lanterns and the brass Gold-Line conduit along the Stronghold
+   * threshold. This is the PERSISTENT physical payoff, and it is drawn
+   * purely from a StrongholdRestoration that React projects out of real
+   * collected-order evidence. Nothing here is stored, and nothing here is a
+   * counter this class increments — which is exactly why a reload
+   * reproduces the same lit threshold from the same order truth.
+   */
+  private strongholdRestoration: StrongholdRestoration | null = null;
+  private gRestoration = new Graphics();
+  /** Seconds remaining in the ONE confirmation pulse for a real delta. */
+  private restorationPulse = 0;
   private effectsSprite: Sprite | null = null;
   private effectsTargetAlpha = 0.4;
   private backgroundSprite: Sprite | null = null;
@@ -369,6 +433,34 @@ export class GoldlineGame {
   private orderProximityState: "hidden" | "visible" | "engage" = "hidden";
   private objectiveOffscreenState: "ahead" | null = null;
   private corridorExitNear = false;
+  /**
+   * Fictional expedition layer. Null until a real pickup objective starts
+   * an expedition — the corridor is fully playable without it.
+   */
+  private expedition: ExpeditionLayer | null = null;
+  /**
+   * True while the tether (or its residual momentum) is driving Trailblazer.
+   * Joystick locomotion stands down so the two do not fight for the same
+   * corridor position — there is one movement truth, and during a grapple
+   * the fiction is contributing to it.
+   */
+  private expeditionDrivingMovement = false;
+  private dodgeState = createDodgeState();
+  /** Fictional seconds until the contextual basic lash may fire again. */
+  private lashCooldown = 0;
+  /**
+   * Non-expedition corridor position, saved on entry and restored on exit.
+   * Fictional state only — it never touches order state, route timestamps
+   * or any business record.
+   */
+  private preExpeditionCorridor: {
+    progress: number;
+    lateral: number;
+    velocity: number;
+    branch: CorridorBranch;
+  } | null = null;
+  private lastWidth = 0;
+  private lastHeight = 0;
   private qualityMonitor = new AdaptiveQualityMonitor();
   private qualityTier: QualityTier = "premium";
   private lastCheckpointReportAt = 0;
@@ -515,6 +607,14 @@ export class GoldlineGame {
           this.layerTraversal.getChildIndex(this.fortress)
         );
       }
+      // Restoration light reads ON the gate, so it sits in the Stronghold
+      // band directly above the sprite and below every world actor.
+      this.gRestoration.label = "stronghold-restoration";
+      // Above the gate's own vector frame so the lit threshold is not cut by
+      // it, but still far below WORLD_ACTOR_BASE — Trailblazer and the crowd
+      // walk in front of the Stronghold, as they must.
+      this.gRestoration.zIndex = TRAVERSAL_Z.FORTRESS + 1;
+      this.layerTraversal.addChild(this.gRestoration);
 
       const characterTexture = this.poseTextures.get("idle") ?? operatorTexture;
       this.avatar = new Sprite(characterTexture);
@@ -764,10 +864,383 @@ export class GoldlineGame {
   }
 
   /** Mirrors the player's OS reduced-motion preference into camera behaviour. */
+
+  /**
+   * Begins the fictional expedition for a real pickup objective. The plan
+   * carries the order id as IDENTITY only — nothing in the expedition layer
+   * can read or mutate business state, and the corridor remains fully
+   * playable if this is never called (see §46's operational fallback).
+   */
+  /**
+   * Forces the base objective proximity/action signals to "hidden" the
+   * instant an expedition starts. Without this, React could retain a stale
+   * missionSpatialState/orderSpatialState of "engage" from just before
+   * entry — the expedition-aware proximity code (see the mission/order
+   * nulling in update()) stops COMPUTING new values, but never emitted a
+   * final "hidden" for whatever was already showing "engage".
+   */
+  private suspendBaseObjectiveSignalsForExpedition() {
+    const mission = this.populationSystem?.missionEmbodiment ?? null;
+    if (mission && this.missionProximityState !== "hidden") {
+      this.callbacks.onMissionProximity?.(mission.missionId, "hidden");
+    }
+    const order = this.populationSystem?.orderEmbodiment ?? null;
+    if (order && this.orderProximityState !== "hidden") {
+      this.callbacks.onOrderProximity?.(order.orderKey, order.kind, "hidden");
+    }
+    if (this.objectiveOffscreenState !== null) {
+      this.callbacks.onObjectiveOffscreen?.(null);
+    }
+    this.missionProximityState = "hidden";
+    this.orderProximityState = "hidden";
+    this.objectiveOffscreenState = null;
+    this.availableAction = null;
+    this.availableLabel = null;
+    this.callbacks.onActionAvailable(null, null);
+  }
+
+  startExpedition(plan: PickupExpeditionPlan, callbacks: ExpeditionCallbacks = {}) {
+    this.endExpedition();
+    this.suspendBaseObjectiveSignalsForExpedition();
+
+    // Entering must not inherit whatever corridor position the player
+    // happened to be at. The authored plan assumes an expedition beginning
+    // at its threshold, so inheriting progress 0.78 put every guardian,
+    // fork and destination in the wrong place and rendered Trailblazer at
+    // the wrong scale. Snapshot, then place her at the threshold.
+    this.preExpeditionCorridor = {
+      progress: this.progress,
+      lateral: this.lateral,
+      velocity: this.velocity,
+      branch: this.branch,
+    };
+    this.progress = EXPEDITION_START_PROGRESS;
+    this.lateral = 0;
+    this.velocity = 0;
+    this.dodgeState = createDodgeState();
+    this.lashCooldown = 0;
+    this.expeditionDrivingMovement = false;
+    // Neutral base branch while the expedition owns route semantics —
+    // ordinary branchForLateralPosition must not run during an expedition
+    // (see the locomotion block below), so this is a presentation default,
+    // not a live selection.
+    this.branch = "intel";
+    this.callbacks.onBranchChange(this.branch);
+    // Duplicate presentation only; the authoritative mission/order objects
+    // remain intact underneath.
+    this.populationSystem?.setExpeditionPresentation(true);
+    const layer = new ExpeditionLayer({
+      ...callbacks,
+      // Hit-stop freezes the FICTIONAL clock only — business time is
+      // structurally unreachable from here (see expeditionClock.ts).
+      onHitStop: ms => {
+        this.expedition?.clock.hitStop(ms);
+        callbacks.onHitStop?.(ms);
+      },
+      // Reuses the existing camera rather than adding a second one.
+      onCameraShake: (magnitude, dirX, dirY) => {
+        this.camera.impulse(Math.min(1.6, magnitude));
+        const horizontal = Math.abs(dirX) > Math.abs(dirY);
+        if (horizontal) this.camera.setLookahead(Math.sign(dirX), 0.5);
+        callbacks.onCameraShake?.(magnitude, dirX, dirY);
+      },
+    });
+    layer.setReducedMotion(this.reducedMotion);
+    // Guardians and props join the SHARED world-actor space so they sort
+    // against civilians and Trailblazer individually.
+    layer.setActorHost(this.layerTraversal);
+    layer.load(plan);
+    // Art loads asynchronously; the procedural fallback renders until it
+    // arrives, so entry is never blocked on a texture fetch.
+    void layer.loadArt();
+    // Sits in the traversal layer so the painted foreground occludes
+    // guardians exactly as it occludes Trailblazer.
+    this.layerTraversal.addChild(layer.container);
+    this.expedition = layer;
+  }
+
+  /** Voluntary exit: restores exactly where the player left off. */
+  endExpedition() {
+    if (!this.expedition) return;
+    this.teardownExpedition();
+
+    const saved = this.preExpeditionCorridor;
+    this.preExpeditionCorridor = null;
+    if (saved) {
+      this.progress = saved.progress;
+      this.lateral = saved.lateral;
+      this.velocity = saved.velocity;
+      this.branch = saved.branch;
+      this.callbacks.onBranchChange(this.branch);
+    }
+  }
+
+  /**
+   * Successful completion. Unlike endExpedition, this does NOT restore the
+   * pre-expedition corridor position — resuming at some earlier random spot
+   * after finishing the pickup would be incoherent. Places Trailblazer at
+   * the Stronghold/expedition threshold instead. Authoritative business
+   * state is untouched either way.
+   */
+  finishExpeditionAtStronghold() {
+    if (!this.expedition) return;
+    this.teardownExpedition();
+    this.preExpeditionCorridor = null;
+
+    this.progress = EXPEDITION_START_PROGRESS;
+    this.lateral = 0;
+    this.velocity = 0;
+    this.branch = "intel";
+    this.callbacks.onBranchChange(this.branch);
+  }
+
+  private teardownExpedition() {
+    if (!this.expedition) return;
+    this.layerTraversal.removeChild(this.expedition.container);
+    this.expedition.destroy();
+    this.expedition = null;
+    this.expeditionDrivingMovement = false;
+    this.populationSystem?.setExpeditionPresentation(false);
+  }
+
+  /** True while an expedition owns the corridor. */
+  isExpeditionActive(): boolean {
+    return this.expedition !== null;
+  }
+
+  getExpedition(): ExpeditionLayer | null {
+    return this.expedition;
+  }
+
+  /**
+   * Development-only scene-graph probe.
+   *
+   * Reports every visible display object whose global bounds intersect a
+   * screen rectangle, so an unidentified on-canvas object can be traced to
+   * its owner in one pass instead of guessed at. Two hypotheses for the
+   * purple card (the comms_portal sprite, then the Stronghold gate sprite)
+   * were each disproven only after being implemented, which is exactly the
+   * cost this avoids.
+   *
+   * Gated behind the test-harness flag so it carries no production cost.
+   */
+  probeSceneRegion(rect: { x: number; y: number; width: number; height: number }) {
+    if (import.meta.env.VITE_GOLDLINE_TEST_HARNESS !== "1") return [];
+    const hits: Array<Record<string, unknown>> = [];
+    const named = new Map<unknown, string>([
+      [this.world, "world"],
+      [this.layerFar, "layerFar"],
+      [this.layerMid, "layerMid"],
+      [this.layerTraversal, "layerTraversal"],
+      [this.layerForeground, "layerForeground"],
+      [this.layerEffects, "layerEffects"],
+      [this.portals, "portals"],
+      [this.landmark, "landmark"],
+      [this.corridor, "corridor"],
+      [this.fortress, "fortress"],
+      [this.recoveryPath, "recoveryPath"],
+      [this.particles, "particles"],
+      [this.avatar, "avatar"],
+      [this.strongholdSprite, "strongholdSprite"],
+      [this.effectsSprite, "effectsSprite"],
+      [this.backgroundSprite, "backgroundSprite"],
+      [this.farSprite, "farSprite"],
+      [this.foregroundSprite, "foregroundSprite"],
+    ]);
+
+    const walk = (node: Container, path: string, depth: number) => {
+      if (depth > 8 || !node.visible || node.alpha <= 0.01) return;
+      let bounds: { x: number; y: number; width: number; height: number };
+      try {
+        bounds = node.getBounds();
+      } catch {
+        return;
+      }
+      const overlaps =
+        bounds.x < rect.x + rect.width &&
+        bounds.x + bounds.width > rect.x &&
+        bounds.y < rect.y + rect.height &&
+        bounds.y + bounds.height > rect.y;
+      const label = named.get(node) ?? node.label ?? node.constructor?.name ?? "?";
+      const here = `${path}/${label}`;
+      const children = (node.children ?? []) as Container[];
+      if (overlaps && children.length === 0) {
+        hits.push({
+          path: here,
+          type: node.constructor?.name,
+          alpha: Number(node.alpha.toFixed(3)),
+          renderable: node.renderable,
+          bounds: {
+            x: Math.round(bounds.x),
+            y: Math.round(bounds.y),
+            w: Math.round(bounds.width),
+            h: Math.round(bounds.height),
+          },
+        });
+      }
+      for (const child of children) walk(child, here, depth + 1);
+    };
+
+    if (this.app) walk(this.app.stage as Container, "", 0);
+    return hits;
+  }
+
+  /** Dev-only: toggle a probed node by its reported path. */
+  setSceneNodeRenderable(path: string, renderable: boolean): boolean {
+    if (import.meta.env.VITE_GOLDLINE_TEST_HARNESS !== "1") return false;
+    let found = false;
+    const walk = (node: Container, current: string, depth: number) => {
+      if (depth > 8) return;
+      const label = node.label ?? node.constructor?.name ?? "?";
+      const here = `${current}/${label}`;
+      if (here === path) {
+        node.renderable = renderable;
+        found = true;
+      }
+      for (const child of (node.children ?? []) as Container[]) {
+        walk(child, here, depth + 1);
+      }
+    };
+    if (this.app) walk(this.app.stage as Container, "", 0);
+    return found;
+  }
+
+  /**
+   * Projector for actors in normalised runtime lateral — Trailblazer and
+   * every PopulationSystem actor. Same formula as the plan-unit projector.
+   */
+  private projectNormalizedCorridor(
+    progress: number,
+    lateral: number,
+    width: number,
+    height: number
+  ) {
+    return projectNormalizedCorridorPoint({
+      progress,
+      lateral,
+      routeCenter: lateralForProgress(this.goldRoutePoints, progress),
+      width,
+      height,
+    });
+  }
+
+  /** Screen projection for one corridor position, mirroring the avatar. */
+  private projectCorridor(progress: number, lateral: number, width: number, height: number) {
+    return projectCorridorPoint({
+      progress,
+      lateral,
+      routeCenter: lateralForProgress(this.goldRoutePoints, progress),
+      width,
+      height,
+    });
+  }
+
+  /** True only while the expedition is actively playable. */
+  private expeditionCanAct(): boolean {
+    if (!this.expedition) return false;
+    return this.expedition.getSnapshot().outcome === "running";
+  }
+
+  /** Action pad: hold crossed the threshold — enter Line aim. */
+  expeditionBeginAim(radians: number) {
+    if (!this.expeditionCanAct()) return;
+    this.expedition!.beginAim();
+    this.expedition!.setAimRadians(radians);
+  }
+
+  expeditionUpdateAim(radians: number) {
+    if (!this.expeditionCanAct()) return;
+    this.expedition!.setAimRadians(radians);
+  }
+
+  expeditionCancelAim() {
+    this.expedition?.endAim();
+  }
+
+  /** Action pad release with a lock. Returns false if nothing was hit. */
+  expeditionFire(): boolean {
+    if (!this.expeditionCanAct()) return false;
+    return this.expedition!.fireLine((progress, lateral) =>
+      this.projectCorridor(progress, lateral, this.lastWidth, this.lastHeight)
+    );
+  }
+
+  expeditionLockedTargetId(): string | null {
+    return this.expedition?.getLockedTargetId() ?? null;
+  }
+
+  /** Action pad tap. Burst along movement direction, else current facing. */
+  expeditionDodge(): boolean {
+    if (!this.expeditionCanAct()) return false;
+    const facingX = this.input.x !== 0 ? this.input.x : this.lastDirectionSign || 0;
+    const facingY = this.input.y !== 0 ? this.input.y : -1;
+    return beginDodge(this.dodgeState, this.input, facingX, facingY);
+  }
+
+  isDodging(): boolean {
+    return this.dodgeState.active;
+  }
+
+  getExpeditionSnapshot(): ExpeditionSnapshot | null {
+    return this.expedition?.getSnapshot() ?? null;
+  }
+
+  /** §33 Redeploy — returns to the last Waystone. No business mutation. */
+  expeditionRedeploy(): boolean {
+    if (!this.expedition) return false;
+    if (this.expedition.getSnapshot().outcome !== "down") return false;
+    const restored = this.expedition.redeploy();
+    this.progress = restored;
+    this.lateral = 0;
+    this.velocity = 0;
+    this.dodgeState = createDodgeState();
+    this.expeditionDrivingMovement = false;
+    return true;
+  }
+
+  /** §34 Press On — Scarred Route. Never moves the player. */
+  expeditionPressOn(): boolean {
+    if (!this.expedition) return false;
+    if (this.expedition.getSnapshot().outcome !== "down") return false;
+    const progressBefore = this.progress;
+    this.expedition.pressOn();
+    this.velocity = 0;
+    this.dodgeState = createDodgeState();
+    this.expeditionDrivingMovement = false;
+    this.branch = "intel";
+    this.callbacks.onBranchChange(this.branch);
+    if (this.progress !== progressBefore) {
+      // Structural guarantee, not a soft warning: Press On is defined by
+      // "no teleport". If something upstream ever mutated progress here,
+      // that contract is broken and must fail loudly rather than silently
+      // relocate the player.
+      throw new Error("PRESS ON must never move the player");
+    }
+    return true;
+  }
+
+  /**
+   * The forward limit for Trailblazer this frame.
+   *
+   * During an expedition the ceiling is the expedition's own end, which sits
+   * below the ordinary corridor-exit threshold by design. Without this the
+   * player could walk past the exit trigger inside an expedition — the
+   * authored beats stopping short of it was a coincidence of authoring, not
+   * a guarantee. All three movement paths (joystick, dodge, tether impulse)
+   * share this single ceiling.
+   */
+  private forwardCeiling(): number {
+    if (!this.expedition) return 0.82;
+    const outcome = this.expedition.getSnapshot().outcome;
+    if (outcome !== "running") return this.progress;
+    return this.expedition.getGameplayForwardCeiling(EXPEDITION_CORRIDOR_END);
+  }
+
   setReducedMotion(reduced: boolean) {
     this.reducedMotion = reduced;
     this.camera.setReducedMotion(reduced);
     this.populationSystem?.setReducedMotion(reduced);
+    this.expedition?.setReducedMotion(reduced);
   }
 
   /**
@@ -928,6 +1401,13 @@ export class GoldlineGame {
 
     this.populationSystem?.destroy();
     this.populationSystem = populationSystem;
+    // A revealed corridor brings its own PopulationSystem. Attach it to the
+    // shared world-actor host now, and only now — attaching while the
+    // preload was still inert would have shown the next corridor's civilians
+    // before the reveal.
+    if (this.traversalSortInitialised) {
+      populationSystem.attachActorHost(this.layerTraversal);
+    }
     this.layerTraversal.addChildAt(
       this.populationSystem.container,
       Math.max(0, this.layerTraversal.getChildIndex(this.avatarShadow))
@@ -969,6 +1449,10 @@ export class GoldlineGame {
   }
 
   performAction(action: CorridorAction) {
+    // Expedition ACT has its own API (expeditionBeginAim/Fire/Dodge) and
+    // never calls this. Ordinary corridor interaction is a second hidden
+    // path into the same world during an expedition unless blocked here.
+    if (this.expedition) return false;
     if (action === "INTERACT") {
       if (
         isMissionApproachable(
@@ -1010,7 +1494,14 @@ export class GoldlineGame {
     const now = performance.now();
     this.avatarState.beginAction(action, now);
     this.actionUntil = now + this.avatarState.actionDurationMs(action);
-    this.progress = Math.min(0.78, trigger.at + 0.075);
+    // Traversal actions move the player too, so they obey the same ceiling.
+    // This previously hardcoded 0.78 and was a second way to walk past the
+    // expedition limit — found by auditing every path that mutates progress
+    // rather than only the ones already under suspicion.
+    this.progress = clampCorridorProgress(
+      trigger.at + 0.075,
+      Math.min(0.78, this.forwardCeiling())
+    );
     this.spawnTrail(action === "VAULT" ? 0xffc34e : 0x5feaff);
     if (action === "JUMP" || action === "CLIMB" || action === "VAULT") {
       this.callbacks.onTraversalAction?.(action);
@@ -1038,12 +1529,26 @@ export class GoldlineGame {
     this.drawWorld(width, height);
 
     const now = performance.now();
+    if (!this.traversalSortInitialised) {
+      this.traversalSortInitialised = true;
+      this.layerTraversal.sortableChildren = true;
+      this.corridor.zIndex = TRAVERSAL_Z.STATIC_WORLD;
+      this.recoveryPath.zIndex = TRAVERSAL_Z.STATIC_WORLD + 1;
+      this.landmark.zIndex = TRAVERSAL_Z.STATIC_WORLD + 2;
+      this.portals.zIndex = TRAVERSAL_Z.STRONGHOLD;
+      this.fortress.zIndex = TRAVERSAL_Z.FORTRESS;
+      this.particles.zIndex = TRAVERSAL_Z.PARTICLES;
+      this.populationSystem?.attachActorHost(this.layerTraversal);
+    }
+
     this.populationSystem?.update({
       now,
       width,
       height,
       playerProgress: this.progress,
       playerLateral: this.lateral,
+      project: (progress, lateral) =>
+        this.projectNormalizedCorridor(progress, lateral, width, height),
     });
     this.drawLandmark(width, height, now);
     this.avatarState.tick(now);
@@ -1057,14 +1562,62 @@ export class GoldlineGame {
         ? null
         : rawTrigger;
     const blocked = Boolean(trigger && this.progress >= trigger.at - 0.012);
-    const magnitude = Math.hypot(this.input.x, this.input.y);
-    this.facing = facingForInput(this.input.x, this.input.y, this.facing);
+
+    // Aim mode dilates the FICTIONAL clock to 0.2x, but ordinary Trailblazer
+    // locomotion below used the raw real deltaSeconds — so holding ACT could
+    // slow every Ruinbound to a crawl while Trailblazer herself kept walking
+    // at full speed, an exploit and a violation of the two-clock rule.
+    // gameplayDelta is what FICTIONAL movement (locomotion, dodge, lash
+    // cadence) integrates against while an expedition is active; the real
+    // business clock this.expedition?.clock.authoritativeNowMs() reads is
+    // never touched by this scale.
+    const expeditionTimeScale = this.expedition?.clock.getTimeScale() ?? 1;
+    const gameplayDelta = this.expedition
+      ? deltaSeconds * expeditionTimeScale
+      : deltaSeconds;
+
+    // Down or arrived must freeze the REAL Trailblazer, not merely stop
+    // combat inside ExpeditionLayer. forwardCeiling() returning the current
+    // position only capped further FORWARD progress — it did nothing about
+    // backward movement, lateral movement, locomotion animation, or an
+    // already-active dodge continuing to carry her. This is the actual
+    // movement gate.
+    const expeditionSnapshot = this.expedition?.getSnapshot() ?? null;
+    const expeditionCanMove =
+      !this.expedition || expeditionSnapshot?.outcome === "running";
+    if (!expeditionCanMove) {
+      this.velocity = 0;
+      this.expeditionDrivingMovement = false;
+      this.dodgeState = createDodgeState();
+    }
+
+    // Every purely VISUAL movement reaction — facing, locomotion pose,
+    // avatar rotation — must react to zero, not to stale/live joystick
+    // input, once terminal. Position being frozen said nothing about
+    // whether Trailblazer kept visually jogging in place, turning, or
+    // leaning from whatever direction the thumb still happened to hold.
+    const effectiveInput = expeditionCanMove
+      ? this.input
+      : { x: 0, y: 0 };
+
+    const magnitude = Math.hypot(effectiveInput.x, effectiveInput.y);
+    this.facing = facingForInput(effectiveInput.x, effectiveInput.y, this.facing);
     this.avatarState.setLocomotion(magnitude);
-    if (!this.actionUntil && this.avatarState.state !== "encounter_locked") {
-      const branchPace = branchPaceFor(this.branch);
+    if (
+      expeditionCanMove &&
+      !this.actionUntil &&
+      this.avatarState.state !== "encounter_locked" &&
+      !this.expeditionDrivingMovement
+    ) {
+      // Ordinary branchPaceFor encodes legacy corridor semantics (SAFE
+      // 0.82x, UPPER 1.08x) that would otherwise leak into combat the
+      // instant the expedition set `this.branch` to its own route choice.
+      // Any expedition route speed difference must be an explicit authored
+      // mechanic, not an inherited side effect of reusing the branch field.
+      const branchPace = this.expedition ? 1 : branchPaceFor(this.branch);
       const targetSpeed = targetSpeedForMagnitude(magnitude, branchPace);
-      const forward = Math.max(0, -this.input.y);
-      const backward = Math.max(0, this.input.y);
+      const forward = Math.max(0, -effectiveInput.y);
+      const backward = Math.max(0, effectiveInput.y);
       const directional = forward > 0 ? 1 : backward > 0 ? -0.65 : 0;
       const directionSign = Math.sign(directional);
       const isReversing =
@@ -1076,31 +1629,59 @@ export class GoldlineGame {
       this.velocity = stepVelocity({
         currentVelocity: this.velocity,
         targetSpeed,
-        deltaSeconds,
+        deltaSeconds: gameplayDelta,
         isReversing,
       });
 
-      const next = this.progress + this.velocity * directional * deltaSeconds;
-      const ceiling = trigger ? trigger.at : 0.82;
-      this.progress = Math.max(0.035, Math.min(blocked ? ceiling : 0.82, next));
+      const next = this.progress + this.velocity * directional * gameplayDelta;
+      // The mode ceiling always applies; a traversal trigger may only make
+      // the limit tighter. Previously an unblocked step clamped to the raw
+      // 0.82 and walked straight through the expedition ceiling.
+      this.progress = clampCorridorProgress(
+        next,
+        forwardProgressLimit({
+          modeCeiling: this.forwardCeiling(),
+          triggerAt: trigger ? trigger.at : null,
+          blocked,
+        })
+      );
       this.lateral = Math.max(
         -0.72,
-        Math.min(0.72, this.lateral + this.input.x * 0.72 * deltaSeconds)
+        Math.min(0.72, this.lateral + effectiveInput.x * 0.72 * gameplayDelta)
       );
     }
 
-    const nextBranch = branchForLateralPosition(this.lateral);
-    if (nextBranch !== this.branch) {
-      this.branch = nextBranch;
-      this.callbacks.onBranchChange(nextBranch);
+    if (this.expedition) {
+      // ExpeditionLayer owns route commitment during a pickup expedition —
+      // the ordinary corridor branch system uses different semantics
+      // (safe/intel/upper as ambient lane choice, not an authored Safe/
+      // Upper fork) and must not fire before the mapped fork window.
+      const chosen = this.expedition.tryChooseRoute(this.progress, this.lateral);
+      if (chosen) {
+        this.branch = chosen;
+        this.callbacks.onBranchChange(chosen);
+      }
+    } else {
+      const nextBranch = branchForLateralPosition(this.lateral);
+      if (nextBranch !== this.branch) {
+        this.branch = nextBranch;
+        this.callbacks.onBranchChange(nextBranch);
+      }
     }
 
     // Authored route centerline (traced from mid.webp's painted gold inlay)
     // replaces the constant 0.5 — the player's free joystick deviation is
     // still added on top, exactly as it was against the old fixed center.
-    const routeCenter = lateralForProgress(this.goldRoutePoints, this.progress);
-    const avatarX = width * (routeCenter + this.lateral * 0.22);
-    const groundY = height * (0.88 - this.progress * 0.61);
+    // Trailblazer is projected by the SAME function as civilians and
+    // guardians, so all three agree about where the painted lane runs.
+    const playerProjection = this.projectNormalizedCorridor(
+      this.progress,
+      this.lateral,
+      width,
+      height
+    );
+    const avatarX = playerProjection.x;
+    const groundY = playerProjection.y;
     const baseHeight = Math.max(
       134,
       Math.min(232, height * (0.25 - this.progress * 0.08))
@@ -1128,19 +1709,128 @@ export class GoldlineGame {
       groundY -
       jumpLift +
       (this.avatarState.state === "run" ? Math.sin(now / 72) * 3 : 0);
-    this.avatar.rotation = this.input.x * 0.035;
+    this.avatar.rotation = effectiveInput.x * 0.035;
     this.avatar.alpha =
       this.avatarState.state === "encounter_locked" ? 0.72 : 1;
+
+    // Trailblazer sorts by the same rule as every other world actor.
+    const actorZ = worldActorZ(groundY, "trailblazer");
+    this.avatar.zIndex = actorZ;
+    if (this.avatarCrossfade) this.avatarCrossfade.zIndex = actorZ - 0.01;
+    this.avatarShadow.zIndex = actorZ - 0.02;
 
     this.syncCrossfadeTransform();
     this.drawContactShadow(avatarX, groundY, baseHeight, jumpFactor);
     this.applyOcclusion(avatarX, groundY, width, height);
+    // The confirmation pulse is a fixed, short decay. It intentionally does
+    // not loop: a persistent payoff should be steady, and only the moment it
+    // changes gets a flourish.
+    if (this.restorationPulse > 0) {
+      this.restorationPulse = Math.max(0, this.restorationPulse - deltaSeconds / 1.1);
+    }
     this.updateStronghold(width, height);
     this.updatePortals(width, height);
     this.updateCameraLookahead();
     this.updateParallax();
 
-    const exitNear = this.progress >= 0.77;
+    if (this.expedition) {
+      this.lastWidth = width;
+      this.lastHeight = height;
+
+      // Dodge is a real corridor burst, applied through the same
+      // progress/lateral the joystick uses — not a separate position.
+      // Gated explicitly on expeditionCanMove rather than relying only on
+      // dodgeState already having been force-reset above: this is the
+      // block a reader would check first, and it should say plainly that
+      // terminal state disables it.
+      if (expeditionCanMove) stepDodge(this.dodgeState, gameplayDelta);
+      if (expeditionCanMove && this.dodgeState.active) {
+        const burst = DODGE.speed * gameplayDelta;
+        this.progress = clampCorridorProgress(
+          this.progress +
+            (-this.dodgeState.dirY * burst) / (height * PROGRESS_SPAN_FRACTION),
+          this.forwardCeiling()
+        );
+        this.lateral = Math.max(
+          -0.72,
+          Math.min(0.72, this.lateral + (this.dodgeState.dirX * burst) / (width * 0.22))
+        );
+      }
+
+      // Contextual basic lash (§18): only while genuinely stationary, only
+      // against a real hostile in range, and on a cadence so it never
+      // machine-guns or steals control from the player. Gated on
+      // expeditionCanMove — ExpeditionLayer.tryBasicLash already rejects
+      // while terminal, but this keeps the cooldown from silently ticking
+      // down for a player who cannot act anyway.
+      if (this.lashCooldown > 0) {
+        this.lashCooldown = Math.max(0, this.lashCooldown - gameplayDelta);
+      }
+      const stationary = Math.hypot(effectiveInput.x, effectiveInput.y) < 0.18;
+      if (
+        expeditionCanMove &&
+        stationary &&
+        !this.dodgeState.active &&
+        !this.expedition.isAiming() &&
+        !this.expedition.linehook.isEngaged() &&
+        this.lashCooldown === 0
+      ) {
+        if (this.expedition.tryBasicLash(this.progress, this.lateral * 140, false)) {
+          this.lashCooldown = 0.55;
+          this.avatarState.noteReversal();
+        }
+      }
+
+      this.expedition.setPlayerInvulnerable(dodgeIsInvulnerable(this.dodgeState));
+
+      // Fictional simulation only. `deltaSeconds` is real frame time; the
+      // expedition clock is what applies aim dilation and hit-stop, so no
+      // business timestamp can ever be reached from here.
+      this.expedition.setPlayerCorridor(this.progress, this.lateral * 140);
+      this.expedition.update(
+        deltaSeconds,
+        this.progress,
+        this.lateral * 140,
+        (progress, lateral) => this.projectCorridor(progress, lateral, width, height),
+        width
+      );
+
+      // The fiction contributes movement in SCREEN space; convert it back
+      // through the exact inverse of projectCorridor so a swing moves the
+      // REAL Trailblazer along the real corridor. GoldlineGame remains the
+      // only owner of progress/lateral.
+      const impulse = this.expedition.consumeMovementImpulse();
+      if (impulse.dx !== 0 || impulse.dy !== 0) {
+        const { deltaProgress, deltaLateral } = corridorDeltaFromScreenImpulse({
+          dx: impulse.dx,
+          dy: impulse.dy,
+          width,
+          height,
+        });
+        this.progress = clampCorridorProgress(
+          this.progress + deltaProgress,
+          this.forwardCeiling()
+        );
+        this.lateral = Math.max(
+          -0.72,
+          Math.min(0.72, this.lateral + deltaLateral)
+        );
+      }
+
+      // Handing control back: seed eased locomotion from the momentum the
+      // player actually carried out of the swing, so the joystick resumes
+      // from real speed rather than a dead stop.
+      const handoff = this.expedition.consumeHandoffSpeed();
+      if (handoff > 0) {
+        this.velocity = Math.min(0.22, handoff / (height * PROGRESS_SPAN_FRACTION));
+      }
+      this.expeditionDrivingMovement = this.expedition.isDrivingMovement();
+    }
+
+    // Ordinary corridor exit must not arm while the expedition owns the
+    // world: revealing corridor_02 mid-combat would drop ExpeditionLayer,
+    // reset progress and replace the population underneath the player.
+    const exitNear = this.expedition === null && this.progress >= 0.77;
     if (exitNear !== this.corridorExitNear) {
       this.corridorExitNear = exitNear;
       this.callbacks.onCorridorExitProximity?.(exitNear);
@@ -1151,7 +1841,13 @@ export class GoldlineGame {
       rawCurrent?.action === "INTERACT" && this.populationSystem
         ? null
         : rawCurrent;
-    const mission = this.populationSystem?.missionEmbodiment ?? null;
+    // The expedition destination is the ONLY pickup interaction surface
+    // while a pickup expedition is active — a second live proximity path
+    // to the same underlying business object would be a second completion
+    // route into the same world.
+    const mission = this.expedition
+      ? null
+      : (this.populationSystem?.missionEmbodiment ?? null);
     const missionDistance = mission
       ? Math.hypot(
           mission.anchor.position.progress - this.progress,
@@ -1170,7 +1866,9 @@ export class GoldlineGame {
       this.callbacks.onMissionProximity?.(mission.missionId, missionProximity);
     }
 
-    const order = this.populationSystem?.orderEmbodiment ?? null;
+    const order = this.expedition
+      ? null
+      : (this.populationSystem?.orderEmbodiment ?? null);
     const orderDistance = order
       ? Math.hypot(
           order.anchor.position.progress - this.progress,
@@ -1251,6 +1949,11 @@ export class GoldlineGame {
    * Throttled to roughly once per second to avoid write-spamming storage.
    */
   private reportCheckpointIfSafe() {
+    // Expedition state is deliberately not persisted in this slice — saving
+    // an expedition coordinate into the normal corridor checkpoint would
+    // resume the player mid-combat at a position the ordinary corridor
+    // doesn't understand.
+    if (this.expedition) return;
     const safeStates: AvatarState[] = ["idle", "walk", "run"];
     if (!safeStates.includes(this.avatarState.state)) return;
     const now = performance.now();
@@ -1402,23 +2105,19 @@ export class GoldlineGame {
       pointInZone(zone, this.progress, this.lateral)
     );
     if (!this.avatar) return;
-    const fortressIndex = this.layerTraversal.getChildIndex(this.fortress);
-    const avatarIndex = this.layerTraversal.getChildIndex(this.avatar);
-    if (activeZone && avatarIndex > fortressIndex) {
-      this.layerTraversal.setChildIndex(this.avatar, fortressIndex);
-      this.layerTraversal.setChildIndex(this.avatarShadow, fortressIndex);
-    } else if (
-      !activeZone &&
-      avatarIndex < this.layerTraversal.children.length - 1
-    ) {
-      this.layerTraversal.setChildIndex(
-        this.avatar,
-        this.layerTraversal.children.length - 1
-      );
-      this.layerTraversal.setChildIndex(
-        this.avatarShadow,
-        Math.max(0, this.layerTraversal.children.length - 2)
-      );
+
+    // Authored fortress occlusion, expressed as depth rather than child
+    // index. setChildIndex fights sortableChildren — the sort would simply
+    // undo it on the next frame — so the zone now pushes Trailblazer just
+    // behind the fortress band instead. Outside a zone she keeps the normal
+    // world-actor depth assigned during update, so she interleaves with
+    // civilians and guardians as any other actor does.
+    if (activeZone) {
+      this.avatar.zIndex = TRAVERSAL_Z.FORTRESS - 0.01;
+      if (this.avatarCrossfade) {
+        this.avatarCrossfade.zIndex = TRAVERSAL_Z.FORTRESS - 0.02;
+      }
+      this.avatarShadow.zIndex = TRAVERSAL_Z.FORTRESS - 0.03;
     }
 
     // The registered full-scene L3 plate supplies pixel-accurate occlusion.
@@ -1441,25 +2140,144 @@ export class GoldlineGame {
   }
 
   private updateStronghold(width: number, height: number) {
-    if (!this.strongholdSprite) return;
     const gateX = width * 0.525;
     const gateY = height * 0.19;
-    this.strongholdSprite.x = gateX;
-    this.strongholdSprite.y = gateY;
-    this.strongholdSprite.height = height * 0.24;
-    this.strongholdSprite.width =
-      this.strongholdSprite.height *
-      (this.strongholdSprite.texture.width /
-        this.strongholdSprite.texture.height);
-    // Dim toward closed, settle brighter on a verified capture, otherwise
-    // the steady baseline — bright tropical direction preserved throughout,
-    // never a dark villain-fortress treatment.
-    this.strongholdSprite.alpha =
-      this.worldState === "closed"
-        ? 0.5
-        : this.worldState === "captured"
-          ? 1
-          : 0.92;
+    if (this.strongholdSprite) {
+      this.strongholdSprite.x = gateX;
+      this.strongholdSprite.y = gateY;
+      this.strongholdSprite.height = height * 0.24;
+      this.strongholdSprite.width =
+        this.strongholdSprite.height *
+        (this.strongholdSprite.texture.width /
+          this.strongholdSprite.texture.height);
+      // Dim toward closed, settle brighter on a verified capture, otherwise
+      // the steady baseline — bright tropical direction preserved throughout,
+      // never a dark villain-fortress treatment.
+      this.strongholdSprite.alpha =
+        this.worldState === "closed"
+          ? 0.5
+          : this.worldState === "captured"
+            ? 1
+            : 0.92;
+    }
+    this.drawStrongholdRestoration(width, height);
+  }
+
+  /**
+   * The persistent Stronghold payoff: six lanterns along the threshold and
+   * the brass Gold-Line conduit beneath them.
+   *
+   * Every value drawn here comes from `this.strongholdRestoration`, which
+   * React derives from authoritative collected-order evidence. There is no
+   * local counter, no stored progress and no animation state that outlives
+   * the projection — so reloading the app and re-reading the same orders
+   * reproduces exactly this threshold, which is the entire point of
+   * deriving the payoff from real truth instead of celebrating a mutation.
+   */
+  private drawStrongholdRestoration(width: number, height: number) {
+    const g = this.gRestoration;
+    g.clear();
+    const restoration = this.strongholdRestoration;
+    if (!restoration) return;
+
+    const now = performance.now();
+    // ONE brief confirmation pulse, driven by a real before/after delta.
+    const pulse = this.restorationPulse > 0 ? this.restorationPulse : 0;
+
+    // Along the gate's THRESHOLD — the base of the Stronghold, spanning its
+    // real width. The first placement used the gate's vertical midpoint and
+    // measured the horizontal span in units of HEIGHT, which put the row in
+    // the middle of the sky and made the payoff read as a floating HUD bar
+    // rather than lanterns mounted on a building.
+    const gateLeft = width * GATE_RECT.left;
+    const gateRight = width * GATE_RECT.right;
+    const gateX = (gateLeft + gateRight) / 2;
+    const span = (gateRight - gateLeft) / 2;
+    const y = height * GATE_RECT.baseY;
+    const lanternR = Math.max(3, height * 0.0065);
+
+    // The conduit: a brass channel under the lanterns whose lit fraction is
+    // the real conduitCharge. Dormant stretch first, charged stretch over it.
+    const conduitY = y + lanternR * 2.6;
+    g.moveTo(gateX - span, conduitY)
+      .lineTo(gateX + span, conduitY)
+      .stroke({ width: lanternR * 1.5, color: 0x5a4212, alpha: 0.75 });
+    if (restoration.conduitCharge > 0) {
+      const chargedTo =
+        gateX - span + span * 2 * Math.min(1, restoration.conduitCharge);
+      g.moveTo(gateX - span, conduitY)
+        .lineTo(chargedTo, conduitY)
+        .stroke({
+          width: lanternR * 1.5,
+          color: 0xc9942e,
+          alpha: 0.9,
+        });
+      g.moveTo(gateX - span, conduitY)
+        .lineTo(chargedTo, conduitY)
+        .stroke({
+          width: lanternR * 0.6,
+          color: 0xffd166,
+          alpha: 0.75 + pulse * 0.25,
+        });
+    }
+
+    // Six lanterns. An unlit lantern is still physically THERE — a dark
+    // bracket on the threshold — so the player can see how much of the
+    // Stronghold is still waiting rather than only what is already done.
+    for (let i = 0; i < STRONGHOLD_LANTERN_COUNT; i += 1) {
+      const t = i / (STRONGHOLD_LANTERN_COUNT - 1);
+      const x = gateX - span + span * 2 * t;
+      const lit = i < restoration.lanternsLit;
+
+      // Bracket.
+      g.rect(x - lanternR * 0.35, y, lanternR * 0.7, lanternR * 2.4).fill({
+        color: 0x5a4212,
+        alpha: 0.85,
+      });
+
+      if (!lit) {
+        g.circle(x, y, lanternR)
+          .fill({ color: 0x281f19, alpha: 0.55 })
+          .stroke({ width: 1.2, color: 0x5a4212, alpha: 0.8 });
+        continue;
+      }
+
+      // A lit lantern breathes; the newest one breathes harder during the
+      // single confirmation pulse.
+      const newest = i === restoration.lanternsLit - 1;
+      const breath =
+        0.75 + Math.sin(now / 620 + i * 0.9) * 0.18 + (newest ? pulse * 0.4 : 0);
+      g.circle(x, y, lanternR * (2.2 + (newest ? pulse * 1.4 : 0))).fill({
+        color: 0xffd166,
+        alpha: 0.16 * breath,
+      });
+      g.circle(x, y, lanternR * 1.35).fill({
+        color: 0xffd166,
+        alpha: 0.42 * breath,
+      });
+      g.circle(x, y, lanternR)
+        .fill({ color: 0xffd98a, alpha: Math.min(1, breath) })
+        .stroke({ width: 1.4, color: 0xc9942e, alpha: 0.95 });
+    }
+  }
+
+  /**
+   * The authoritative Stronghold reading. Called by React whenever real
+   * collected-order evidence changes — including when it changes because
+   * somebody else collected the order.
+   */
+  setStrongholdRestoration(restoration: StrongholdRestoration | null) {
+    this.strongholdRestoration = restoration;
+  }
+
+  /**
+   * ONE brief confirmation pulse for a genuine before/after delta. Callers
+   * must pass a delta computed from two real evidence readings — this
+   * deliberately has no way to celebrate a change that did not happen.
+   */
+  pulseStrongholdRestoration(delta: { changed: boolean }) {
+    if (!delta.changed) return;
+    this.restorationPulse = 1;
   }
 
   /**
@@ -1472,6 +2290,9 @@ export class GoldlineGame {
    */
   private drawLandmark(width: number, height: number, now: number) {
     this.landmark.clear();
+    // Unrelated commercial-mission landmark presentation must not compete
+    // with the expedition world.
+    if (this.expedition) return;
     if (this.worldSignal === "dormant") {
       const breath = 0.5 + Math.sin(now / 1_300) * 0.5;
       this.landmark
@@ -1535,6 +2356,9 @@ export class GoldlineGame {
 
   private updatePortals(width: number, height: number) {
     this.portals.removeChildren();
+    // Base corridor portal/card/glow presentation is redundant and visually
+    // competes with the expedition — it has its own authored destination.
+    if (this.expedition) return;
     const portalTexture = this.poseTextures.get("__portal_texture__");
     for (const anchor of this.anchors) {
       const distance = anchorDistance(anchor, this.progress, this.lateral);
@@ -1557,7 +2381,15 @@ export class GoldlineGame {
         baseHeightAt(height, anchor.position.progress) * 0.5;
       const dominance = 1 - Math.min(1, distance / anchor.labelRadius);
 
-      if (portalTexture && anchor.type === "comms_portal") {
+      // Presentation only — proximity callbacks above already fired.
+      const expeditionActive = this.expedition !== null;
+      const presentation = portalPresentationFor({
+        expeditionActive,
+        anchorType: anchor.type,
+        hasCardTexture: Boolean(portalTexture),
+      });
+
+      if (presentation === "card" && portalTexture) {
         const sprite = new Sprite(portalTexture);
         sprite.anchor.set(0.5, 1);
         const targetHeight = height * (0.14 + dominance * 0.1);
@@ -1576,17 +2408,18 @@ export class GoldlineGame {
       const color = anchor.type === "comms_portal" ? 0x36e8e7 : 0x8b5fe0;
       const portal = new Graphics();
       const radius = 34 + dominance * 22;
-      portal
-        .circle(px, py, radius)
-        .fill({ color, alpha: 0.05 + dominance * 0.1 });
-      portal
-        .circle(px, py, radius * 0.45)
-        .fill({ color, alpha: 0.08 + dominance * 0.14 });
+      const glow = portalGlowAlpha({ expeditionActive, dominance });
+      portal.circle(px, py, radius).fill({ color, alpha: glow.outer });
+      portal.circle(px, py, radius * 0.45).fill({ color, alpha: glow.inner });
       this.portals.addChild(portal);
     }
   }
 
   private updateCameraLookahead() {
+    if (this.expedition) {
+      this.camera.clearLookahead();
+      return;
+    }
     const upcoming = this.anchors
       .map(anchor => ({
         anchor,
@@ -1625,26 +2458,36 @@ export class GoldlineGame {
       }
       this.corridor.stroke({ width: strokeWidth, color, alpha });
     };
+    // The expedition owns an adventure-only Gold Line treatment. Without
+    // this, an unrelated commercial mission's worldState (CLOSED,
+    // CONTESTED, a recovery branch, a dormant signal) leaked into the
+    // Line's color and brightness during an active pickup expedition,
+    // making the route visibly grey or orange for reasons that have
+    // nothing to do with the expedition itself.
+    const expeditionActive = this.expedition !== null;
     // The main route dims once a recovery branch is the legitimate path —
     // it does not disappear (the account isn't closed), but visual priority
     // shifts to the recovery path drawn below.
-    const mainRouteDim =
-      this.worldState === "recovery_active" ||
-      this.worldState === "recovery_available"
+    const mainRouteDim = expeditionActive
+      ? 1
+      : this.worldState === "recovery_active" ||
+          this.worldState === "recovery_available"
         ? 0.4
         : this.worldState === "contested"
           ? 0.65
           : this.worldSignal === "dormant"
             ? 0.48
             : 1;
-    const routeColor =
-      this.worldState === "closed"
+    const routeColor = expeditionActive
+      ? 0xf4bd48
+      : this.worldState === "closed"
         ? 0x677168
         : this.worldState === "contested"
           ? 0xc98545
           : 0xf4bd48;
-    const routeHighlight =
-      this.worldState === "closed"
+    const routeHighlight = expeditionActive
+      ? 0xffdf77
+      : this.worldState === "closed"
         ? 0x879087
         : this.worldState === "contested"
           ? 0xe1a05b
@@ -1667,6 +2510,7 @@ export class GoldlineGame {
     // shimmer that points at nothing (never implies a destination that
     // doesn't exist).
     const objectiveProgress =
+      this.expedition?.getDestinationProgress() ??
       this.populationSystem?.missionEmbodiment?.anchor.position.progress ??
       this.populationSystem?.orderEmbodiment?.anchor.position.progress ??
       null;
@@ -1697,10 +2541,16 @@ export class GoldlineGame {
     }
 
     this.fortress.clear();
-    const gateX = width * 0.37;
-    const gateY = height * 0.11;
-    const gateW = width * 0.31;
-    const gateH = height * 0.19;
+    // The corridor gate panel sits over the middle of the lane and reads as
+    // a floating card during play. The expedition has its own authored
+    // destination, so the gate is redundant while it owns the world.
+    this.fortress.renderable = corridorGateVisibleDuring({
+      expeditionActive: this.expedition !== null,
+    });
+    const gateX = width * GATE_RECT.left;
+    const gateY = height * GATE_RECT.topY;
+    const gateW = width * (GATE_RECT.right - GATE_RECT.left);
+    const gateH = height * (GATE_RECT.baseY - GATE_RECT.topY);
     const fortressColor =
       this.worldState === "captured"
         ? 0xd9a936
@@ -1753,8 +2603,9 @@ export class GoldlineGame {
 
     this.recoveryPath.clear();
     if (
-      this.worldState === "recovery_active" ||
-      this.worldState === "recovery_available"
+      !this.expedition &&
+      (this.worldState === "recovery_active" ||
+        this.worldState === "recovery_available")
     ) {
       this.recoveryPath
         .moveTo(width * 0.32, height * 0.62)
@@ -1837,6 +2688,7 @@ export class GoldlineGame {
   }
 
   destroy() {
+    this.endExpedition();
     document.removeEventListener("visibilitychange", this.visibilityHandler);
     window.removeEventListener("pagehide", this.pageHideHandler);
     if (this.tickerProbeActive) {
