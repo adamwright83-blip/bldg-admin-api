@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { portalGlowAlpha, portalPresentationFor } from "./portalPresentation";
+import {
+  corridorGateVisibleDuring,
+  portalGlowAlpha,
+  portalPresentationFor,
+} from "./portalPresentation";
 
 /**
  * The regression half matters as much as the fix: suppressing the portal
@@ -74,5 +78,16 @@ describe("during an active expedition the world is not covered", () => {
     const near = portalGlowAlpha({ expeditionActive: true, dominance: 1 });
     const far = portalGlowAlpha({ expeditionActive: true, dominance: 0 });
     expect(near.outer).toBeGreaterThan(far.outer);
+  });
+});
+
+describe("corridor gate panel", () => {
+  it("renders normally outside an expedition", () => {
+    expect(corridorGateVisibleDuring({ expeditionActive: false })).toBe(true);
+  });
+
+  it("is hidden while the expedition owns the world", () => {
+    // Confirmed by scene-graph isolation: this node is the purple card.
+    expect(corridorGateVisibleDuring({ expeditionActive: true })).toBe(false);
   });
 });

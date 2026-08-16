@@ -48,3 +48,31 @@ export function portalGlowAlpha(input: {
     inner: 0.08 + input.dominance * 0.14,
   };
 }
+
+/**
+ * The corridor gate ("fortress") panel.
+ *
+ * Identified by scene-graph isolation, not by guessing: probing the live
+ * Pixi tree for visible nodes intersecting the card's screen rectangle
+ * returned `layerTraversal/fortress` at bounds x143 y92 w126 h166 — an
+ * almost exact match for the observed card at x135-255 / y87-240 — with
+ * every other hit being a full-screen background sprite. Setting its
+ * `renderable` to false removed the card. Two earlier hypotheses (the
+ * comms_portal sprite and the Stronghold gate sprite) had each been
+ * implemented and disproven before this.
+ *
+ * Outside an expedition it is the corridor's destination gate and belongs
+ * there. During an ACTIVE expedition it hovers over the middle of the lane
+ * and reads as a floating modal card, which is precisely the "world buried
+ * under UI" problem the heartbeat exists to remove. The expedition has its
+ * own authored destination, so this gate is redundant during play.
+ *
+ * Presentation only: the geometry, the world-state colours and every
+ * proximity behaviour are untouched, and ordinary corridor rendering is
+ * unchanged.
+ */
+export function corridorGateVisibleDuring(input: {
+  expeditionActive: boolean;
+}): boolean {
+  return !input.expeditionActive;
+}

@@ -63,6 +63,7 @@ import {
 import {
   portalPresentationFor,
   portalGlowAlpha,
+  corridorGateVisibleDuring,
 } from "../expedition/portalPresentation";
 import {
   corridorDeltaFromScreenImpulse,
@@ -888,6 +889,99 @@ export class GoldlineGame {
 
   getExpedition(): ExpeditionLayer | null {
     return this.expedition;
+  }
+
+  /**
+   * Development-only scene-graph probe.
+   *
+   * Reports every visible display object whose global bounds intersect a
+   * screen rectangle, so an unidentified on-canvas object can be traced to
+   * its owner in one pass instead of guessed at. Two hypotheses for the
+   * purple card (the comms_portal sprite, then the Stronghold gate sprite)
+   * were each disproven only after being implemented, which is exactly the
+   * cost this avoids.
+   *
+   * Gated behind the test-harness flag so it carries no production cost.
+   */
+  probeSceneRegion(rect: { x: number; y: number; width: number; height: number }) {
+    if (import.meta.env.VITE_GOLDLINE_TEST_HARNESS !== "1") return [];
+    const hits: Array<Record<string, unknown>> = [];
+    const named = new Map<unknown, string>([
+      [this.world, "world"],
+      [this.layerFar, "layerFar"],
+      [this.layerMid, "layerMid"],
+      [this.layerTraversal, "layerTraversal"],
+      [this.layerForeground, "layerForeground"],
+      [this.layerEffects, "layerEffects"],
+      [this.portals, "portals"],
+      [this.landmark, "landmark"],
+      [this.corridor, "corridor"],
+      [this.fortress, "fortress"],
+      [this.recoveryPath, "recoveryPath"],
+      [this.particles, "particles"],
+      [this.avatar, "avatar"],
+      [this.strongholdSprite, "strongholdSprite"],
+      [this.effectsSprite, "effectsSprite"],
+      [this.backgroundSprite, "backgroundSprite"],
+      [this.farSprite, "farSprite"],
+      [this.foregroundSprite, "foregroundSprite"],
+    ]);
+
+    const walk = (node: Container, path: string, depth: number) => {
+      if (depth > 8 || !node.visible || node.alpha <= 0.01) return;
+      let bounds: { x: number; y: number; width: number; height: number };
+      try {
+        bounds = node.getBounds();
+      } catch {
+        return;
+      }
+      const overlaps =
+        bounds.x < rect.x + rect.width &&
+        bounds.x + bounds.width > rect.x &&
+        bounds.y < rect.y + rect.height &&
+        bounds.y + bounds.height > rect.y;
+      const label = named.get(node) ?? node.label ?? node.constructor?.name ?? "?";
+      const here = `${path}/${label}`;
+      const children = (node.children ?? []) as Container[];
+      if (overlaps && children.length === 0) {
+        hits.push({
+          path: here,
+          type: node.constructor?.name,
+          alpha: Number(node.alpha.toFixed(3)),
+          renderable: node.renderable,
+          bounds: {
+            x: Math.round(bounds.x),
+            y: Math.round(bounds.y),
+            w: Math.round(bounds.width),
+            h: Math.round(bounds.height),
+          },
+        });
+      }
+      for (const child of children) walk(child, here, depth + 1);
+    };
+
+    if (this.app) walk(this.app.stage as Container, "", 0);
+    return hits;
+  }
+
+  /** Dev-only: toggle a probed node by its reported path. */
+  setSceneNodeRenderable(path: string, renderable: boolean): boolean {
+    if (import.meta.env.VITE_GOLDLINE_TEST_HARNESS !== "1") return false;
+    let found = false;
+    const walk = (node: Container, current: string, depth: number) => {
+      if (depth > 8) return;
+      const label = node.label ?? node.constructor?.name ?? "?";
+      const here = `${current}/${label}`;
+      if (here === path) {
+        node.renderable = renderable;
+        found = true;
+      }
+      for (const child of (node.children ?? []) as Container[]) {
+        walk(child, here, depth + 1);
+      }
+    };
+    if (this.app) walk(this.app.stage as Container, "", 0);
+    return found;
   }
 
   /** Screen projection for one corridor position, mirroring the avatar. */
@@ -1988,6 +2082,12 @@ export class GoldlineGame {
     }
 
     this.fortress.clear();
+    // The corridor gate panel sits over the middle of the lane and reads as
+    // a floating card during play. The expedition has its own authored
+    // destination, so the gate is redundant while it owns the world.
+    this.fortress.renderable = corridorGateVisibleDuring({
+      expeditionActive: this.expedition !== null,
+    });
     const gateX = width * 0.37;
     const gateY = height * 0.11;
     const gateW = width * 0.31;

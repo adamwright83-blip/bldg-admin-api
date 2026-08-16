@@ -1107,6 +1107,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       },
     });
     runtimeRef.current = game;
+    if (import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1") {
+      (window as unknown as { __goldlineGame?: GoldlineGame }).__goldlineGame =
+        game;
+    }
 
     const transitionStarted = new Set<string>();
     const transitions = new CorridorTransitionController({
