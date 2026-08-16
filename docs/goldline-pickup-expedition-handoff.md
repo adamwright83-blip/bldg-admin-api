@@ -165,59 +165,48 @@ touch, 14 screenshots, regressions, PR, merge, deploy verification.
 
 ## DEPENDENCY ORDER — do not skip the foundation
 
-A context reset must not jump to presentation work. The order is:
-
 1. ~~expedition progress reachability~~ **DONE**
-2. ~~corridor-transition ownership~~ **DONE**
-3. purple card identification — **IN PROGRESS, see below**
-4. sprite/prop wiring — assets committed, renderer still procedural
-5. safe-opening browser verification — **DONE** (HP 100% after 22s live)
-6. Phase D (death UX, Relic, Safe/Upper fork, Shieldbearer climax)
-7. Phase E (destination, canonical Retrieve, Cargo Secured, payoff)
-8. Phase F (Playwright touch proof, 393x852 DPR3 journey, screenshots, PR)
+2. ~~corridor-transition ownership~~ **DONE** (ceiling derived from the exit
+   threshold; in-flight loads cancelled AND reveal-guarded)
+3. ~~purple card identification~~ **DONE** — it was `layerTraversal/fortress`
+4. ~~Ruinbound sprite wiring~~ **DONE** (props still procedural)
+5. ~~safe-opening browser verification~~ **DONE**
+6. Phase D — death UX, Relic, Safe/Upper fork, Shieldbearer climax
+7. Phase E — destination, canonical Retrieve, Cargo Secured, payoff
+8. Phase F — Playwright touch proof, 393x852 DPR3 journey, screenshots, PR
 
-## The purple card — isolation state
+## Dev-only scene probe (keep — it earned its place)
 
-**Confirmed:** `elementFromPoint` at the card's centre and all four edges
-returns `CANVAS.goldline-game-canvas` at every sample, with no DOM or SVG
-node in the region. It is drawn by **Pixi**, so no CSS suppression can
-work.
+`game.probeSceneRegion({x,y,width,height})` walks the live Pixi tree and
+reports path, type, alpha, renderable and global bounds for visible nodes
+intersecting a screen rect. Gated behind `VITE_GOLDLINE_TEST_HARNESS`, so
+zero production cost. `window.__goldlineGame` is exposed under the same
+gate.
 
-**Confirmed:** the card appears in screenshots taken *before the expedition
-layer existed*. It is base corridor presentation, not something this branch
-introduced.
+This found the purple card in ONE pass after two implemented-then-disproven
+hypotheses. Use it before theorising about any unexplained on-canvas object.
 
-**Disproven by evidence, do not retry:**
+Known limitation: `setSceneNodeRenderable` builds paths differently from the
+probe, so path-based toggling does not match. Set the property directly via
+`window.__goldlineGame` instead, or unify the two path builders.
 
-| Hypothesis | Test | Result |
-|---|---|---|
-| `comms_portal` sprite | forced to ambient during expedition | card unchanged |
-| `strongholdSprite` | alpha 0 during expedition | card unchanged |
+## Open visual issues (from the live 393px capture)
 
-The stronghold box (x≈206, y≈162, h≈204 at 393×852) matched the observed
-card region (x 135–255, y 87–240) closely enough to look conclusive and
-still was not it. Measurement alone is not sufficient here.
-
-**Next move:** no Pixi app handle is exposed on `window` or the canvas, so
-console-side walking is impossible. Add a temporary dev-only accessor
-(guarded by `import.meta.env.DEV` or the test-harness flag) that exposes
-the `Application`, then walk `stage` and toggle `.renderable` on candidates
-one at a time, screenshotting after each. Remove the accessor before PR.
-
-Remaining untested candidates: the corridor-transition presentation, the
-`landmark` Graphics (GHOST draws in purple), `effectsSprite`, or the
-painted corridor plate itself.
+- Guardians cluster in the lane and can overlap civilians, which §53 calls
+  out as confusing enemy/civilian depth. Needs lateral spread and/or
+  occlusion ordering against PopulationSystem.
+- Grapple ring, hazard and pickup cache are still procedural — the sprite
+  path exists (`propSprites`, textures already loaded under keys
+  `grapple_ring`, `cargo_hazard`, `pickup_cache`) but `drawEnvironment`
+  has not been switched over.
+- Art is **not** §53-certified at 393x852 DPR3.
 
 ## Also still open
 
-- **Playwright/synthetic touch**: dispatching PointerEvents at
-  `.game-joystick` did not move the player. DOM `.click()` works for
-  buttons. Phase F requires real touch on the joystick and action pad —
-  prove this early, it may need Playwright's `touchscreen` API rather than
-  synthetic events.
-- Ruinbound still procedural; corrected assets committed at
-  `client/src/assets/goldline/heartbeat/` (alpha-clean, downscaled 19.1MB →
-  1.9MB, feet anchor ≈0.98 of texture height).
-- Art **not** §53-certified at 393×852 DPR3.
+- **Synthetic touch does not drive the joystick.** Dispatching PointerEvents
+  at `.game-joystick` did not move the player; DOM `.click()` works for
+  buttons. Phase F must prove Playwright's `touchscreen` API drives ENTER
+  THE LINE, the joystick, ACT tap, ACT hold, aim drag and release BEFORE
+  the large journey is written.
 
 **FUN GATE: PENDING ADAM REAL-DEVICE PLAYTEST.**
