@@ -1487,6 +1487,19 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           getAudioManager().play("vault");
           arcadeFeedback();
         },
+        // A relic is taken by walking to its plinth, so there is no modal to
+        // confirm it. The acknowledgement has to be felt instead.
+        onRelicTaken: () => {
+          getAudioManager().play("vault");
+          arcadeFeedback();
+        },
+        // The seal breaking is the moment the road ahead opens. Movement is
+        // already unclamped when this fires — the feedback marks it, it does
+        // not gate it.
+        onSealFractured: () => {
+          getAudioManager().play("vault");
+          arcadeFeedback();
+        },
         onDefeated: () => missFeedback(),
       }
     );

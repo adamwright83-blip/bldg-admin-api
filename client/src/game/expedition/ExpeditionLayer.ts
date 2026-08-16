@@ -1519,54 +1519,117 @@ export class ExpeditionLayer {
     g.clear();
     g.alpha = alpha;
 
-    // Two limestone/brass anchor posts. These stay put through the release —
-    // it is the SPAN that breaks, not the architecture.
+    const lintelL = ly - 104 * s;
+    const lintelR = ry - 104 * s;
+    const midX = (lx + rx) / 2;
+    const midY = (lintelL + lintelR) / 2;
+    // Each half of the curtain pulls back toward its own post as it breaks.
+    const retreat = fracture * 0.5;
+    const innerLX = lx + (midX - lx) * (1 - retreat);
+    const innerRX = rx + (midX - rx) * (1 - retreat);
+
+    // THE CURTAIN, drawn first so the posts read as holding it.
+    //
+    // The first pass drew the span as a single 3px gold line between two
+    // posts. On this sunlit plate that line was very nearly invisible, so
+    // the thing physically stopping the player looked like two pale sticks
+    // with nothing between them — a movement clamp with no visible cause.
+    // It is now a real field: a translucent gold curtain from the stone to
+    // the lintel, with tension bars across it.
+    for (const half of [
+      { from: lx, to: innerLX, fromY: ly, toY: lintelL },
+      { from: rx, to: innerRX, fromY: ry, toY: lintelR },
+    ]) {
+      if (Math.abs(half.to - half.from) < 0.5) continue;
+      // A DARK scrim first, then the gold on top of it. Gold alone at low
+      // alpha over sunlit limestone has almost no contrast — the curtain was
+      // invisible in review even after the posts read correctly. The scrim
+      // is what gives the field something to glow against, and it is also
+      // honest: a sealed arch should dim what is behind it.
+      g.moveTo(half.from, half.fromY)
+        .lineTo(half.to, half.fromY)
+        .lineTo(half.to, half.toY)
+        .lineTo(half.from, half.toY)
+        .closePath()
+        .fill({ color: PALETTE.brassDark, alpha: 0.34 });
+      g.moveTo(half.from, half.fromY)
+        .lineTo(half.to, half.fromY)
+        .lineTo(half.to, half.toY)
+        .lineTo(half.from, half.toY)
+        .closePath()
+        .fill({ color: PALETTE.lineGold, alpha: 0.24 * tension });
+    }
+    // Tension bars across the curtain — these are what make it read as a
+    // seal under load rather than a rectangle of tint.
+    for (let i = 1; i <= 4; i += 1) {
+      const y = ly - (104 * s * i) / 5;
+      for (const half of [
+        { from: lx, to: innerLX },
+        { from: rx, to: innerRX },
+      ]) {
+        if (Math.abs(half.to - half.from) < 0.5) continue;
+        g.moveTo(half.from, y)
+          .lineTo(half.to, y)
+          .stroke({
+            width: 2.6 * s,
+            color: PALETTE.lineFracture,
+            alpha: 0.55 * tension,
+          });
+      }
+    }
+
+    // Two DARK basalt posts with brass caps and feet. Pale limestone posts
+    // vanished into the bright city behind them; the dark body with a
+    // limestone rim light is the same treatment the guardians needed.
     for (const post of [
       { x: lx, y: ly },
       { x: rx, y: ry },
     ]) {
-      g.rect(post.x - 7 * s, post.y - 96 * s, 14 * s, 96 * s)
-        .fill({ color: PALETTE.limestone })
+      g.rect(post.x - 8 * s, post.y - 104 * s, 16 * s, 104 * s)
+        .fill({ color: PALETTE.stoneDeep })
         .stroke({ width: 2 * s, color: PALETTE.brassDark });
-      g.rect(post.x - 9 * s, post.y - 96 * s, 18 * s, 10 * s).fill({
-        color: PALETTE.brass,
-      });
+      // Sunward edge, so the post is carved stone rather than a black bar.
+      g.moveTo(post.x - 8 * s, post.y - 104 * s)
+        .lineTo(post.x - 8 * s, post.y)
+        .stroke({ width: 2.4 * s, color: PALETTE.stoneRim, alpha: 0.6 });
+      // Brass cap and foot.
+      g.rect(post.x - 11 * s, post.y - 108 * s, 22 * s, 12 * s)
+        .fill({ color: PALETTE.brass })
+        .stroke({ width: 1.6 * s, color: PALETTE.brassDark });
+      g.rect(post.x - 11 * s, post.y - 12 * s, 22 * s, 12 * s)
+        .fill({ color: PALETTE.brass })
+        .stroke({ width: 1.6 * s, color: PALETTE.brassDark });
     }
 
-    // The energy span, drawn as two halves so the release can part them.
-    const spanLY = ly - 60 * s;
-    const spanRY = ry - 60 * s;
-    const midX = (lx + rx) / 2;
-    const midY = (spanLY + spanRY) / 2;
-    // Each half pulls back toward its own post as the seal breaks.
-    const retreat = fracture * 0.5;
-    const innerLX = lx + (midX - lx) * (1 - retreat);
-    const innerRX = rx + (midX - rx) * (1 - retreat);
-    const innerLY = spanLY + (midY - spanLY) * (1 - retreat);
-    const innerRY = spanRY + (midY - spanRY) * (1 - retreat);
-
+    // The lintel beam the curtain hangs from.
     for (const half of [
-      { fromX: lx, fromY: spanLY, toX: innerLX, toY: innerLY },
-      { fromX: rx, fromY: spanRY, toX: innerRX, toY: innerRY },
+      { from: lx, to: innerLX, fromY: lintelL },
+      { from: rx, to: innerRX, fromY: lintelR },
     ]) {
-      g.moveTo(half.fromX, half.fromY)
-        .lineTo(half.toX, half.toY)
-        .stroke({ width: 6 * s, color: PALETTE.brassDark, alpha: 0.9 });
-      g.moveTo(half.fromX, half.fromY)
-        .lineTo(half.toX, half.toY)
-        .stroke({ width: 3 * s, color: PALETTE.lineGold, alpha: tension });
+      if (Math.abs(half.to - half.from) < 0.5) continue;
+      g.moveTo(half.from, half.fromY)
+        .lineTo(half.to, half.fromY)
+        .stroke({ width: 7 * s, color: PALETTE.brassDark, alpha: 0.95 });
+      g.moveTo(half.from, half.fromY)
+        .lineTo(half.to, half.fromY)
+        .stroke({ width: 3.5 * s, color: PALETTE.lineGold, alpha: tension });
     }
 
     if (!releasing) {
+      // The keystone where the two halves meet — the point that breaks.
+      g.circle(midX, midY, 9 * s).fill({
+        color: PALETTE.brassDark,
+        alpha: 0.9,
+      });
       g.circle(midX, midY, 6 * s).fill({
         color: PALETTE.lineFracture,
         alpha: tension,
       });
     } else {
-      // A single bright flare at the break point, shrinking as it goes.
-      g.circle(midX, midY, (6 + fracture * 22) * s).fill({
+      // A single flare at the break point, spreading as it dies.
+      g.circle(midX, midY, (9 + fracture * 30) * s).fill({
         color: PALETTE.lineFracture,
-        alpha: (1 - fracture) * 0.55,
+        alpha: (1 - fracture) * 0.6,
       });
     }
   }
@@ -1613,7 +1676,23 @@ export class ExpeditionLayer {
         points.push(at);
       }
 
-      const width = 26;
+      const width = 30;
+      // A DARK KERB first. A pale road bed alone washed straight into the
+      // sunlit stone it was painted on — in review the two branches were
+      // technically present and practically invisible, which for a choice
+      // the player has to commit to physically is the same as not drawing
+      // them. The kerb is what gives the road an edge to be seen by.
+      for (let i = 0; i < points.length - 1; i += 1) {
+        const a = points[i];
+        const b = points[i + 1];
+        g.moveTo(a.x, a.y)
+          .lineTo(b.x, b.y)
+          .stroke({
+            width: (width + 8) * a.s,
+            color: PALETTE.stoneDeep,
+            alpha: 0.14 + intensity * 0.3,
+          });
+      }
       // The road bed.
       for (let i = 0; i < points.length - 1; i += 1) {
         const a = points[i];
@@ -1623,7 +1702,7 @@ export class ExpeditionLayer {
           .stroke({
             width: width * a.s,
             color: PALETTE.limestone,
-            alpha: 0.1 + intensity * 0.26,
+            alpha: 0.16 + intensity * 0.4,
           });
       }
       // The Gold Line inlay down its centre — this is what says "taken".
@@ -1633,9 +1712,9 @@ export class ExpeditionLayer {
         g.moveTo(a.x, a.y)
           .lineTo(b.x, b.y)
           .stroke({
-            width: 4 * a.s,
+            width: 5 * a.s,
             color: taken ? PALETTE.lineGold : PALETTE.brassDark,
-            alpha: 0.15 + intensity * 0.6,
+            alpha: 0.2 + intensity * 0.7,
           });
       }
     }
@@ -1739,64 +1818,109 @@ export class ExpeditionLayer {
       g.clear();
 
       // Contact shadow, local to the actor.
-      g.ellipse(0, 2 * s, 24 * s, 7 * s).fill({
+      g.ellipse(0, 2 * s, 26 * s, 8 * s).fill({
         color: PALETTE.shadow,
-        alpha: 0.28,
+        alpha: 0.34,
       });
 
-      // Stepped limestone base — masonry, so it belongs to the world.
-      g.rect(-22 * s, -12 * s, 44 * s, 12 * s)
-        .fill({ color: PALETTE.limestone })
+      // DARK basalt, not pale limestone. The first pass drew these in
+      // limestone/limestoneShade and they read on the sunlit plate exactly
+      // the way the Ruinbound did before their own repaint: flat, blank,
+      // pasted-on rectangles. This is the same lesson the guardians and the
+      // grapple corbel already learned — dark body, limestone rim light,
+      // brass fittings. The stone has to sit IN the painting.
+      g.moveTo(-23 * s, 0)
+        .lineTo(-19 * s, -13 * s)
+        .lineTo(19 * s, -13 * s)
+        .lineTo(23 * s, 0)
+        .closePath()
+        .fill({ color: PALETTE.stoneDeep })
         .stroke({ width: 1.6 * s, color: PALETTE.brassDark });
-      g.rect(-17 * s, -46 * s, 34 * s, 34 * s)
-        .fill({ color: PALETTE.limestoneShade })
-        .stroke({ width: 1.6 * s, color: PALETTE.brassDark });
-      g.moveTo(-17 * s, -46 * s)
-        .lineTo(17 * s, -46 * s)
-        .stroke({ width: 2 * s, color: PALETTE.stoneRim, alpha: 0.7 });
+      g.moveTo(-16 * s, -13 * s)
+        .lineTo(-13 * s, -48 * s)
+        .lineTo(13 * s, -48 * s)
+        .lineTo(16 * s, -13 * s)
+        .closePath()
+        .fill({ color: PALETTE.stone })
+        .stroke({ width: 1.6 * s, color: PALETTE.stoneDeep });
+      // Sunward rim light down the leading edge and across the top — this is
+      // what makes it read as carved rather than as a filled shape.
+      g.moveTo(-13 * s, -48 * s)
+        .lineTo(13 * s, -48 * s)
+        .stroke({ width: 2.2 * s, color: PALETTE.stoneRim, alpha: 0.8 });
+      g.moveTo(-16 * s, -13 * s)
+        .lineTo(-13 * s, -48 * s)
+        .stroke({ width: 1.8 * s, color: PALETTE.stoneRim, alpha: 0.5 });
 
       // Brass cradle on top.
-      g.rect(-13 * s, -54 * s, 26 * s, 9 * s)
+      g.rect(-14 * s, -56 * s, 28 * s, 9 * s)
         .fill({ color: PALETTE.brass })
         .stroke({ width: 1.4 * s, color: PALETTE.brassDark });
+
+      // A dark halo behind the relic so gold light reads against the bright
+      // limestone city rather than dissolving into it.
+      if (lit > 0.15) {
+        g.circle(0, -74 * s, 21 * s).fill({
+          color: PALETTE.shadow,
+          alpha: 0.3 * lit,
+        });
+      }
 
       // The relic itself. One distinct silhouette each, so the three are
       // told apart by shape before any text is read.
       if (relic.id === "echo_thread") {
-        // A coiled thread: two linked rings.
-        g.circle(-6 * s, -68 * s, 8 * s).stroke({
-          width: 3 * s,
+        // A coiled thread: two linked rings, leaping from one to the next.
+        g.circle(-7 * s, -70 * s, 10 * s).stroke({
+          width: 4 * s,
+          color: PALETTE.brassDark,
+          alpha: Math.max(0.25, lit),
+        });
+        g.circle(-7 * s, -70 * s, 10 * s).stroke({
+          width: 2.4 * s,
           color: PALETTE.lineGold,
           alpha: lit,
         });
-        g.circle(6 * s, -74 * s, 8 * s).stroke({
-          width: 3 * s,
+        g.circle(8 * s, -78 * s, 10 * s).stroke({
+          width: 4 * s,
+          color: PALETTE.brassDark,
+          alpha: Math.max(0.25, lit),
+        });
+        g.circle(8 * s, -78 * s, 10 * s).stroke({
+          width: 2.4 * s,
           color: PALETTE.lineFracture,
           alpha: lit,
         });
       } else if (relic.id === "sunstep") {
         // A low sun over the road.
-        g.circle(0, -70 * s, 9 * s).fill({
+        g.circle(0, -74 * s, 11 * s).fill({
+          color: PALETTE.brassDark,
+          alpha: Math.max(0.3, lit),
+        });
+        g.circle(0, -74 * s, 8.5 * s).fill({
           color: PALETTE.lineFracture,
           alpha: lit,
         });
-        for (let i = 0; i < 6; i += 1) {
-          const a = (i / 6) * Math.PI * 2 + t * 0.4;
-          g.moveTo(0 + Math.cos(a) * 12 * s, -70 * s + Math.sin(a) * 12 * s)
-            .lineTo(0 + Math.cos(a) * 18 * s, -70 * s + Math.sin(a) * 18 * s)
-            .stroke({ width: 2.4 * s, color: PALETTE.lineGold, alpha: lit });
+        for (let i = 0; i < 8; i += 1) {
+          const a = (i / 8) * Math.PI * 2 + t * 0.4;
+          g.moveTo(Math.cos(a) * 14 * s, -74 * s + Math.sin(a) * 14 * s)
+            .lineTo(Math.cos(a) * 21 * s, -74 * s + Math.sin(a) * 21 * s)
+            .stroke({ width: 3 * s, color: PALETTE.lineGold, alpha: lit });
         }
       } else {
-        // A brass pauldron/plate.
-        g.moveTo(-11 * s, -60 * s)
-          .lineTo(0, -80 * s)
-          .lineTo(11 * s, -60 * s)
+        // A brass pauldron: the plate a blow rings off.
+        g.moveTo(-13 * s, -62 * s)
+          .lineTo(0, -86 * s)
+          .lineTo(13 * s, -62 * s)
           .closePath()
           .fill({ color: PALETTE.brass, alpha: 0.35 + lit * 0.65 })
-          .stroke({ width: 2 * s, color: PALETTE.brassDark, alpha: lit });
-        g.moveTo(-6 * s, -64 * s)
-          .lineTo(6 * s, -64 * s)
-          .stroke({ width: 2 * s, color: PALETTE.lineGold, alpha: lit });
+          .stroke({
+            width: 2.4 * s,
+            color: PALETTE.brassDark,
+            alpha: Math.max(0.3, lit),
+          });
+        g.moveTo(-7 * s, -68 * s)
+          .lineTo(7 * s, -68 * s)
+          .stroke({ width: 2.4 * s, color: PALETTE.lineGold, alpha: lit });
       }
     }
   }
