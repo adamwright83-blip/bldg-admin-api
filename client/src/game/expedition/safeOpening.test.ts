@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ExpeditionLayer } from "./ExpeditionLayer";
 import { projectCorridorPoint } from "./corridorCoupling";
-import { planPickupExpedition, activeHostiles } from "./expeditionPlan";
+import {
+  EXPEDITION_START_PROGRESS,
+  activeHostiles,
+  planPickupExpedition,
+} from "./expeditionPlan";
 import { EXPEDITION } from "./expeditionState";
 import { RUINBOUND_TUNING } from "./ruinbound";
 
@@ -84,7 +88,7 @@ describe("authored spacing creates the opening", () => {
 
   it("keeps the first guardian outside aggro range of the start", () => {
     // The expedition threshold. Nothing may reach back into it.
-    const start = 0.06;
+    const start = EXPEDITION_START_PROGRESS;
     for (const spawn of activeHostiles(plan, "unchosen")) {
       const radius =
         RUINBOUND_TUNING[spawn.kind as keyof typeof RUINBOUND_TUNING]
@@ -99,7 +103,7 @@ describe("no hostile damage during the opening", () => {
   it("leaves HP untouched while the player learns at the threshold", () => {
     const layer = startedExpedition();
     // Twenty seconds is well past the 0-15s teaching window.
-    holdAt(layer, 0.06, 20);
+    holdAt(layer, EXPEDITION_START_PROGRESS, 20);
     expect(layer.run.hp).toBe(EXPEDITION.maxHp);
   });
 
@@ -112,13 +116,13 @@ describe("no hostile damage during the opening", () => {
 
   it("survives a slow walk across the whole teaching stretch", () => {
     const layer = startedExpedition();
-    walkFrom(layer, 0.06, 0.12);
+    walkFrom(layer, EXPEDITION_START_PROGRESS, 0.12);
     expect(layer.run.hp).toBe(EXPEDITION.maxHp);
   });
 
   it("does not let a projectile cross the opening", () => {
     const layer = startedExpedition();
-    holdAt(layer, 0.06, 20);
+    holdAt(layer, EXPEDITION_START_PROGRESS, 20);
     // The Slinger is authored at 0.29; nothing it throws may reach 0.06.
     expect(layer.run.hp).toBe(EXPEDITION.maxHp);
   });
@@ -128,7 +132,7 @@ describe("pressure does begin once the player advances", () => {
   it("is not global invulnerability — walking into the Hunter still hurts", () => {
     const layer = startedExpedition();
     // hunter_first is authored at 0.18. Walk right onto it and wait.
-    walkFrom(layer, 0.06, 0.18);
+    walkFrom(layer, EXPEDITION_START_PROGRESS, 0.18);
     holdAt(layer, 0.18, 6);
 
     expect(layer.run.hp).toBeLessThan(EXPEDITION.maxHp);
@@ -139,9 +143,38 @@ describe("pressure does begin once the player advances", () => {
     const a = startedExpedition();
     const b = startedExpedition();
     for (const layer of [a, b]) {
-      walkFrom(layer, 0.06, 0.18);
+      walkFrom(layer, EXPEDITION_START_PROGRESS, 0.18);
       holdAt(layer, 0.18, 6);
     }
     expect(a.run.hp).toBe(b.run.hp);
+  });
+});
+
+describe("expedition start coordinate", () => {
+  const plan = planPickupExpedition({ orderId: ORDER_ID });
+
+  it("sits before every authored beat", () => {
+    // Entering used to inherit the ordinary corridor position — observed at
+    // 0.78 on corridor_02 — which put the player past the fork and most of
+    // the way to the destination before the expedition had begun.
+    for (const spawn of plan.hostiles) {
+      expect(spawn.progress).toBeGreaterThan(EXPEDITION_START_PROGRESS);
+    }
+    for (const spawn of plan.environment) {
+      expect(spawn.progress).toBeGreaterThan(EXPEDITION_START_PROGRESS);
+    }
+    expect(plan.relicPlinths).toBeGreaterThan(EXPEDITION_START_PROGRESS);
+    expect(plan.fork.start).toBeGreaterThan(EXPEDITION_START_PROGRESS);
+    expect(plan.destination).toBeGreaterThan(EXPEDITION_START_PROGRESS);
+  });
+
+  it("is inside the corridor's own clamps", () => {
+    expect(EXPEDITION_START_PROGRESS).toBeGreaterThanOrEqual(0.035);
+    expect(EXPEDITION_START_PROGRESS).toBeLessThanOrEqual(0.82);
+  });
+
+  it("has a waystone at or before it so redeploy always resolves", () => {
+    const earliest = Math.min(...plan.waystones.map(w => w.progress));
+    expect(earliest).toBeLessThanOrEqual(EXPEDITION_START_PROGRESS);
   });
 });

@@ -48,7 +48,10 @@ import {
 import { AdaptiveQualityMonitor, type QualityTier } from "./adaptiveQuality";
 import { reportGoldlineLifecycleDelta } from "../testSupport/lifecycleProbe";
 import { ExpeditionLayer, type ExpeditionCallbacks } from "../expedition/ExpeditionLayer";
-import type { PickupExpeditionPlan } from "../expedition/expeditionPlan";
+import {
+  EXPEDITION_START_PROGRESS,
+  type PickupExpeditionPlan,
+} from "../expedition/expeditionPlan";
 import {
   DODGE,
   beginDodge,
@@ -402,6 +405,16 @@ export class GoldlineGame {
   private dodgeState = createDodgeState();
   /** Fictional seconds until the contextual basic lash may fire again. */
   private lashCooldown = 0;
+  /**
+   * Non-expedition corridor position, saved on entry and restored on exit.
+   * Fictional state only — it never touches order state, route timestamps
+   * or any business record.
+   */
+  private preExpeditionCorridor: {
+    progress: number;
+    lateral: number;
+    velocity: number;
+  } | null = null;
   private lastWidth = 0;
   private lastHeight = 0;
   private qualityMonitor = new AdaptiveQualityMonitor();
@@ -808,6 +821,23 @@ export class GoldlineGame {
    */
   startExpedition(plan: PickupExpeditionPlan, callbacks: ExpeditionCallbacks = {}) {
     this.endExpedition();
+
+    // Entering must not inherit whatever corridor position the player
+    // happened to be at. The authored plan assumes an expedition beginning
+    // at its threshold, so inheriting progress 0.78 put every guardian,
+    // fork and destination in the wrong place and rendered Trailblazer at
+    // the wrong scale. Snapshot, then place her at the threshold.
+    this.preExpeditionCorridor = {
+      progress: this.progress,
+      lateral: this.lateral,
+      velocity: this.velocity,
+    };
+    this.progress = EXPEDITION_START_PROGRESS;
+    this.lateral = 0;
+    this.velocity = 0;
+    this.dodgeState = createDodgeState();
+    this.lashCooldown = 0;
+    this.expeditionDrivingMovement = false;
     const layer = new ExpeditionLayer({
       ...callbacks,
       // Hit-stop freezes the FICTIONAL clock only — business time is
@@ -837,6 +867,22 @@ export class GoldlineGame {
     this.layerTraversal.removeChild(this.expedition.container);
     this.expedition.destroy();
     this.expedition = null;
+    this.expeditionDrivingMovement = false;
+
+    // Restore the fictional corridor position the player left behind, so
+    // exiting does not strand Trailblazer at an expedition coordinate.
+    const saved = this.preExpeditionCorridor;
+    this.preExpeditionCorridor = null;
+    if (saved) {
+      this.progress = saved.progress;
+      this.lateral = saved.lateral;
+      this.velocity = saved.velocity;
+    }
+  }
+
+  /** True while an expedition owns the corridor. */
+  isExpeditionActive(): boolean {
+    return this.expedition !== null;
   }
 
   getExpedition(): ExpeditionLayer | null {

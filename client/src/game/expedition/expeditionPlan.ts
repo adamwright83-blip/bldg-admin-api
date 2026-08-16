@@ -68,6 +68,13 @@ function stableVariant(orderId: number, salt: number): number {
   return (x % 1000) / 1000;
 }
 
+/**
+ * Where an expedition begins. Entering places Trailblazer here rather than
+ * inheriting her ordinary corridor position, so every authored beat below
+ * lines up with the coordinate actually driving her.
+ */
+export const EXPEDITION_START_PROGRESS = 0.06;
+
 const FORK_START = 0.46;
 const FORK_END = 0.72;
 
