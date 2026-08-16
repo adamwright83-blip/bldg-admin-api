@@ -191,53 +191,78 @@ not. The tests passed because they asserted the helper, not the path.
 
 ## DEPENDENCY ORDER
 
-1. ~~expedition progress reachability~~ **DONE**
-2. ~~corridor-transition ownership~~ **DONE** (incl. aborted != failed)
-3. ~~purple card~~ **DONE** — `layerTraversal/fortress`
-4. ~~Ruinbound + prop sprites~~ **DONE**
-5. ~~safe opening~~ **DONE**
-6. ~~one projection + depth-sorted world actor space~~ **DONE**
-7. ~~setRoute double-mapping + single route truth + waystones~~ **DONE**
-8. **NEXT: Part 8 onward of Adam's spec** — see below
-9. Phase E — destination, SECURE CARGO, payoff
-10. Phase F — Playwright touch proof, screenshots, PR, merge, deploy verify
+1-7. **DONE** — reachability, transition ownership, purple card, sprites,
+   safe opening, world actor depth, route/waystone correctness.
+8. **DONE** — population ownership lifecycle, death/arrival gate combat,
+   Shieldbearer climax barrier, two-clock fix, Line origin unification,
+   duplicate shadow removed, HUD pointer cleanup, expedition identity
+   pinning. See commits `03a237a` and `6297303`.
+9. **NEXT — see "Outstanding" below.**
 
-## Adam's spec: what is implemented vs outstanding
+## What ChatGPT's second review found and where each landed
 
-Implemented: Parts 1, 2, 3, 4, 5, 6, and the waystone half of 7.
+All confirmed as real bugs by direct code inspection before fixing:
 
-**Outstanding, in order:**
+| # | Bug | Status |
+|---|---|---|
+| 0 | PopulationSystem ownership breaks after `attachActorHost` reparenting | **Fixed** — explicit `addOwnedActor`/`destroyOwnedActor`, `capabilityGraphics` array. 7 tests. |
+| 1 | `setRoute` respawns already-defeated `route:"both"` hostiles | **Fixed** — `addChosenRouteContent` is additive-only; `rebuildRouteContent` only runs at load and for Scarred. |
+| 2 | Redeploy rebuilds the whole run, not from the waystone; waystone can regress | **Fixed** — `resetFromWaystone`, monotonic `setWaystone`. |
+| 3/4 | Death/arrival don't stop combat simulation or locomotion | **Fixed** — `outcome === "running"` gates in `ExpeditionLayer.update` and `GoldlineGame.expeditionCanAct()`. |
+| 5 | Aim dilation slows enemies but not Trailblazer (two-clock violation) | **Fixed** — `gameplayDelta` scales locomotion/dodge/lash while an expedition is active. |
+| 6 | Line targeting origin (feet) disagrees with visible cone/cable origin (`body.y-40`) | **Fixed** — `lineOrigin()` is the one definition; `Linehook.fire` gained `visualOrigin`. |
+| 7 | Tether doesn't inherit the player's screen-space velocity before latch | **NOT DONE** |
+| 8 | Guardian sprites draw both a local AND a global overlay shadow | **Fixed** — global shadow only in the procedural-fallback branch. |
+| 9 | Ordinary mission/order presentation competes with the expedition | **Fixed** — `setExpeditionPresentation`. |
+| 10 | Base mission/order proximity/INTERACT still runs during combat | **Fixed** — both nulled while `this.expedition` is set. |
+| 11 | Gold Line objective points at the wrong thing during an expedition | **Fixed** — `getDestinationProgress()` takes priority. |
+| 12 | Unrelated base-world presentation not suppressed (landmark/portal/camera lookahead) | **NOT DONE** |
+| 13 | Ordinary checkpoint saves expedition coordinates | **Fixed**. |
+| 14 | Pre-expedition snapshot didn't include `branch` | **Fixed**. |
+| 15 | Base `branchForLateralPosition` fires during the expedition, interferes with the fork | **Fixed** — `tryChooseRoute` owns fork commitment; base branch logic skipped entirely while `this.expedition`. |
+| 16-17 | Redeploy/Press On wrappers | **Fixed** — `expeditionRedeploy`/`expeditionPressOn` on GoldlineGame, Press On has a hard throw if progress ever moves. |
+| 18 | Shieldbearer must gate forward progress, not just be skippable | **Fixed** — `getGameplayForwardCeiling`, verified live (25s hold-forward stops at 0.6464, short of destination 0.7128). |
+| 19 | Destination cache should not be a Line target | **NOT DONE** — `getDestinationProgress()` exists; no visual actor or registry-exclusion yet. |
+| 20 | Arrival | **Fixed** — `ExpeditionRun.arrive()`, `maybeArrive()` requires climax cleared or Scarred. |
+| 21 | Relics: only `brass_guard` has real behavior; no clash-boundary caller; no plinths | **NOT DONE** |
+| 22 | HUD pointer listener leak / stuck aim on unmount mid-hold | **Fixed** — one `cleanupPointer` path, pointer-id tracked. |
+| 23 | `expeditionOrderId` re-derived live; SECURE CARGO would tear down its own climax | **Fixed** — `activeExpedition` pinned on ENTER. Verified live. |
+| 24-29 | Authoritative collected-order evidence, reconciliation, SECURE CARGO via `actionServices.resolveOrder`, Stronghold payoff, `finishExpeditionAtStronghold` on canonical completion | **NOT DONE** — `finishExpeditionAtStronghold()` exists on GoldlineGame but nothing calls it yet. |
+| 30 | HUD terminal states (down/arrived/verifying/confirmed) | **NOT DONE** — `getSnapshot()` exists; HUD doesn't consume `outcome` yet. |
+| 31 | Physical Safe/Upper fork presentation (world decoration, not UI) | **NOT DONE** — `tryChooseRoute` works mechanically; nothing renders the fork visually yet. |
+| 32 | Guardian scale/clustering tuning | **NOT DONE** |
+| 33 | Playwright CDP touch helper for hold/drag | **NOT DONE** — confirmed correct that `Touchscreen` is tap-only; CDP `Input.dispatchTouchEvent` is the right approach, not yet built. |
+| 34 | Full regression matrix | **Partial** — A, C, D, E(waystone), G, H, I, J, M done. B, F, K, L, N-V not done. |
+| 35-37 | Visual gate, shipping | **NOT DONE** |
 
-- **Part 7 remainder** — `GoldlineGame.expeditionRedeploy()` wrapper
-  (`ExpeditionLayer.redeploy()` already returns the corridor progress).
-- **Part 8 — death freezes combat.** `ExpeditionLayer.update` must gate
-  hostile/projectile simulation on `run.outcome === "running"`, clear
-  projectiles, cancel aim and tether, block basic lash. `getSnapshot()`
-  already exists and returns hp/momentum/outcome/route/relic.
-- **Part 9 — physical Relic.** Three plinths at `plan.relicPlinths`, lanes
-  at lateral -78 / 0 / +78. `brass_guard` already works in
-  `run.takeDamage()`. `echo_thread` and `sunstep` need real behaviour before
-  any of the three is shown.
-- **Part 10 — Safe/Upper by lateral commitment** (<= -0.28 upper, >= 0.28
-  safe) inside the mapped fork window, no oscillation.
-- **Part 11 — Press On** wrapper; must NOT alter progress.
-- **Part 12 — HUD down state**, restrained world overlay, no modal.
-- **Part 13 — destination actor** at `plan.destination` +
-  `ExpeditionRun.arrive()`.
-- **Part 14/15 — SECURE CARGO** via `actionServices.resolveOrder({orderId,
-  status:"collected"})`. Do NOT open GoldlineActionSurface. Do NOT declare
-  CARGO SECURED from the boolean — reconcile from authoritative order truth,
-  then `projectStrongholdRestoration()`.
-- **Part 17 — live visual acceptance** of the ten listed checks.
+## Outstanding, in priority order
 
-## Open visual issues
-
-- **Guardian scale/clustering.** Depth ordering is correct now, but a
-  guardian at similar progress to Trailblazer renders at near her size and
-  crowds her. Consider reducing the 150px base height and widening the
-  authored lateral spread. This is a tuning problem, not an architectural
-  one.
-- Art not §53-certified at 393x852 DPR3.
+1. **Part 21 — Relics.** Implement `echo_thread` (chain lash) and `sunstep`
+   (evade-triggered burst, once-per-dodge via a consumed flag) before
+   showing any plinth. Wire `run.clashEnded()` — it exists but nothing
+   calls it. Then physical plinths at `plan.relicPlinths`.
+2. **Part 31 — physical fork presentation.** `tryChooseRoute` already works
+   mechanically (verified: `setRoute` fires from lateral commitment inside
+   the mapped window). Needs world decoration under the actor layer, not UI.
+3. **Part 30 — HUD terminal states.** Wire `getSnapshot().outcome` into
+   `ExpeditionHud`: DOWN shows REDEPLOY/PRESS ON calling
+   `expeditionRedeploy()`/`expeditionPressOn()` (both exist and are tested);
+   ARRIVED shows the pinned `activeExpedition.customerLabel`/`.address`
+   and a SECURE CARGO button.
+4. **Parts 19, 24-29 — the SECURE CARGO chain.** Destination actor (texture
+   already loaded, not registered as a Line target). Mount
+   `admin.listByStatus` for collected/processing/ready/delivered. Handler
+   calls ONLY `actionServices.resolveOrder({orderId, status:"collected"})` —
+   do not open `GoldlineActionSurface`. Do NOT show CARGO SECURED from the
+   mutation's boolean; reconcile from the authoritative evidence query
+   matching `activeExpedition.orderId`, THEN call
+   `finishExpeditionAtStronghold()` (already exists) and feed
+   `projectStrongholdRestoration()` (already exists) into a render.
+5. **Part 33 — Playwright CDP touch smoke test**, before the large journey.
+6. **Part 32 — guardian scale tuning** at 393x852 (role-specific heights,
+   not the single 150px constant).
+7. **Part 34 remainder, 35-37** — full regression matrix, visual gate,
+   shipping.
 
 ## Dev-only scene probe (keep)
 
