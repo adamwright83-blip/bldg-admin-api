@@ -199,66 +199,79 @@ not. The tests passed because they asserted the helper, not the path.
    pinning. See commits `03a237a` and `6297303`.
 9. **NEXT — see "Outstanding" below.**
 
-## Third audit round — items 1-12 done, 13-27 outstanding
+## Fourth audit round (A-Z) — status
 
-This numbering follows the third prescriptive prompt exactly (superseded
-the earlier scorecard).
+A, B, C, D, F, H, I done and verified. E, G, J(partial), K-Z NOT done.
 
-**DONE, this round:**
+**DONE, verified this round:**
 
-1. Real GoldlineGame locomotion now freezes on down/arrived — not just the
-   ceiling. `expeditionCanMove` zeroes velocity/dodge/expeditionDrivingMovement
-   and gates the whole movement block. Verified live: 3s of real
-   backward+lateral input while down produces byte-identical progress/lateral.
-2. `performAction()` returns false immediately when `this.expedition` is set.
-3. `suspendBaseObjectiveSignalsForExpedition()` fires at expedition start.
-4. `branchPaceFor` neutralized to 1x during an expedition.
-5. Press On preserves `this.env` exactly — no more re-arming spent hazards
-   or dropping Upper's grapple architecture.
-6. `lineTargetScreenPoint()` is the one definition for registry/fire/reticle.
-7. Tether inherits real incoming screen-space velocity via
-   `previousPlayerScreen`, cleared on every discontinuity.
-8. `drawClimaxSeal()` — a real physical barrier, gated by the exact
-   `isClimaxBarrierUp()` predicate the movement ceiling uses. Verified live
-   via screenshot: visible posts + span across Trailblazer's path.
-9. Landmark/portals/camera-lookahead/recoveryPath suppressed during expedition.
-10-11. `activeExpedition` is the one lifecycle truth (removed
-   `expeditionEntered`). Full typed `ExpeditionSnapshot` polled, reset on
-   ENTER. Joystick `disabled` wired to terminal outcome — verified live.
-12. Action pad refuses a second pointer mid-hold.
+A. Real character freeze, not just coordinates. `effectiveInput = {0,0}`
+   while terminal; facing/rotation/avatarState all read it. Route
+   commitment (`tryChooseRoute`) gated on `expeditionCanMove`. Verified
+   live: held continuous diagonal input while down for 1.5s — rotation
+   stayed exactly 0, facing never changed, avatarState settled to "idle".
+B. Joystick releases stale input via a `useEffect` keyed on `disabled`.
+   Verified live with real PointerEvents: held forward, forced down without
+   releasing the finger, input snapped to {0,0}; Redeploy with the finger
+   still "down" did not move the player.
+C. `GoldlineGameHome.performAction()` also checks `activeExpedition`.
+D. Expedition Gold Line no longer inherits commercial-mission
+   worldState/worldSignal color — forced to the adventure treatment
+   whenever `this.expedition` is set.
+F. `activeClimaxBarrier()` is the ONE predicate both
+   `getGameplayForwardCeiling` and `isClimaxBarrierUp` read — previously
+   two independently-maintained checks that could disagree if a plan were
+   missing the barrier fixture.
+H. Double-recoil fixed. Sprite root always gets the true world position;
+   only the child body applies recoil, once. `lineTargetScreenPoint`
+   follows that same single offset. Verified live: read the actual Pixi
+   objects one frame after setting recoil directly on a real hunter — root
+   x stayed at 195 (stable), body.x read 8 (the one offset).
+I. `ExpeditionSnapshot` exported once from `expeditionState.ts`; the
+   duplicated inline type in GoldlineGameHome (with the wrong `relic:
+   string | null` shape) is gone.
 
-**NOT DONE — still exactly as prescribed, in priority order:**
+**NOT DONE:**
 
-13. **Relics.** `echo_thread` (chain lash) and `sunstep` (once-per-dodge
-    burst) have no real implementation yet — only `brass_guard` exists, and
-    `clashEnded()` still has no caller so "first blow of each clash" is
-    false after the first absorption. Do NOT build plinths (13D) before 13A-C
-    pass tests.
-14. **Physical Safe/Upper fork presentation.** `tryChooseRoute` works
-    mechanically; nothing renders the fork as world decoration yet.
-15. **Guardian role-specific scale** (130/116/146 vs the flat 150 constant).
-16. **Destination cache as a dedicated world actor**, explicitly NOT a Line
-    target. `getDestinationProgress()` exists; no visual, no registry
-    exclusion needed since it was never registered.
-17-18. **Authoritative pickup evidence + pinned restorationBefore.** No
-    `admin.listByStatus` queries mounted yet. `activeExpedition` needs a
-    `restorationBefore: StrongholdRestoration` field, captured at ENTER using
-    the existing `projectStrongholdRestoration()`.
-19. **HUD terminal states** (DOWN/ARRIVED presentation, REDEPLOY/PRESS ON/
-    SECURE CARGO buttons). `expeditionRedeploy()`/`expeditionPressOn()` exist
-    and are tested; HUD doesn't call them yet.
-20-21. **SECURE CARGO handler + authoritative reconciliation.** Must call
-    ONLY `actionServices.resolveOrder`, never show CARGO SECURED from the
-    boolean, reconcile from evidence matching `activeExpedition.orderId`,
-    and — critically — reconcile even if an EXTERNAL surface collects the
-    order first ("reality wins").
-22. **Stronghold physical payoff** (lanterns/conduit) rendered from
-    `projectStrongholdRestoration()`.
-23. **`finishExpeditionAtStronghold()` wired to reconciliation** — the
-    method exists (added two sessions ago) but nothing calls it yet.
-24. **Playwright CDP touch smoke test**, before the large journey.
-25. **Regression matrix** — most items above still need their own test.
-26-27. **Visual gate, shipping.**
+E. Climax seal (`gSeal`) still lives in `ExpeditionLayer.container`, which
+   is the high-z gameplay overlay — it does NOT depth-sort with world
+   actors yet. A civilian or Trailblazer standing in front of it will not
+   correctly occlude it. Needs the same `HostileVisual`-style root-in-
+   `hostFor()` treatment the guardians/props already got.
+G. No release animation when the barrier drops — it disappears in one
+   frame instead of a ~250-400ms fracture. Movement already opens
+   immediately on the state change (correct), just no visual transition.
+J. Foundation gates (tests/tsc/build/bundle) re-run and green after every
+   change this round — that part of J is continuously true. The specific
+   9-point live-sanity checklist in J was only partially executed (1, 2
+   done; 3-9 not individually re-verified this round beyond what A/D/F/H
+   cover).
+
+K-Z: Relic verbs (echo_thread, sunstep, clashEnded caller), relic plinths,
+physical fork rendering, guardian scale tuning, destination world actor,
+authoritative evidence queries (listByStatus x4), pinned
+restorationBefore, HUD terminal states, SECURE CARGO handler,
+authoritative reconciliation ("reality wins"), Stronghold physical payoff,
+finishExpeditionAtStronghold wiring, CDP touch smoke test, full regression
+matrix, visual review, and shipping (PR/CI/merge/deploy) — NONE of this is
+started. This is not a small remainder: it is roughly the entire Phase E
+business-integration chain plus all of Phase D's world presentation.
+
+## Why this has taken this many rounds — stated plainly
+
+Every round this session found REAL bugs in code from the previous round
+that had been reported as done. The pattern each time: a fix was correct
+at the layer I tested (a helper, a single code path, a unit test) but a
+sibling path I hadn't traced still bypassed it. Locomotion position was
+fixed before locomotion pose. The movement ceiling was fixed before the
+thing rendering it. Recoil was fixed at the position level while still
+being computed twice. None of these were guessed at by the auditor — they
+were found by reading the actual diff, which is exactly what I should have
+done more exhaustively before calling something finished. The fixes
+landing now are real and mostly live-verified, not just unit-tested. The
+remaining scope (K-Z) is large enough that attempting it in the time
+remaining without the same discipline would very likely repeat the
+pattern rather than break it.
 
 ## Correction recorded for future sessions
 
