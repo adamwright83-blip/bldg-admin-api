@@ -289,6 +289,31 @@ function Joystick(props: {
   const baseRef = useRef<HTMLDivElement>(null);
   const pointerRef = useRef<number | null>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
+  const onInputRef = useRef(props.onInput);
+  onInputRef.current = props.onInput;
+
+  /**
+   * When `disabled` flips true mid-touch (e.g. Trailblazer just went down),
+   * the browser does not fire pointerUp/pointerCancel on its own — the
+   * finger is still physically down. Without this, pointerRef stays
+   * populated, the knob stays visually displaced, and GoldlineGame's stored
+   * input can remain nonzero. Redeploy re-enabling movement would then
+   * immediately launch Trailblazer from stale input with no new touch.
+   */
+  useEffect(() => {
+    if (!props.disabled) return;
+    const pointerId = pointerRef.current;
+    if (pointerId != null && baseRef.current?.hasPointerCapture(pointerId)) {
+      baseRef.current.releasePointerCapture(pointerId);
+    }
+    pointerRef.current = null;
+    setKnob({ x: 0, y: 0 });
+    onInputRef.current(0, 0);
+    // Deliberately depends only on props.disabled — the caller passes an
+    // inline onInput callback, and depending on it directly would retrigger
+    // this effect (and re-zero real input) on every parent render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.disabled]);
 
   function update(event: ReactPointerEvent<HTMLDivElement>) {
     const rect = baseRef.current?.getBoundingClientRect();
