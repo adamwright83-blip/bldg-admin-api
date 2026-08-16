@@ -193,28 +193,50 @@ not. The tests passed because they asserted the helper, not the path.
 
 1. ~~expedition progress reachability~~ **DONE**
 2. ~~corridor-transition ownership~~ **DONE** (incl. aborted != failed)
-3. ~~purple card~~ **DONE** — it was `layerTraversal/fortress`
-4. ~~Ruinbound + prop sprite wiring~~ **DONE**
-5. ~~safe-opening browser verification~~ **DONE**
-6. **NEXT: enemy/civilian depth readability** — blocking on §53
-7. Phase D — death UX, Relic, Safe/Upper fork, Shieldbearer climax
-8. Phase E — destination, canonical Retrieve, Cargo Secured, payoff
-9. Phase F — Playwright touch proof, 393x852 DPR3 journey, screenshots, PR
+3. ~~purple card~~ **DONE** — `layerTraversal/fortress`
+4. ~~Ruinbound + prop sprites~~ **DONE**
+5. ~~safe opening~~ **DONE**
+6. ~~one projection + depth-sorted world actor space~~ **DONE**
+7. ~~setRoute double-mapping + single route truth + waystones~~ **DONE**
+8. **NEXT: Part 8 onward of Adam's spec** — see below
+9. Phase E — destination, SECURE CARGO, payoff
+10. Phase F — Playwright touch proof, screenshots, PR, merge, deploy verify
 
-## Verified invariants (live, not just unit)
+## Adam's spec: what is implemented vs outstanding
 
-- Expedition ceiling: 25s of real forward input through `setInput` → ticker
-  → `update` gives 0.166 → 0.686 → **0.74 flat**, never reaching 0.77.
-- Ordinary corridor unchanged: after exit, movement still reaches 0.82 and
-  passes the exit threshold.
-- Safe opening: HP 100% after 22s inside an active expedition.
+Implemented: Parts 1, 2, 3, 4, 5, 6, and the waystone half of 7.
 
-## Open visual issues (blocking §53)
+**Outstanding, in order:**
 
-- **Guardian/civilian depth.** At similar progress a guardian renders near
-  Trailblazer's own scale directly behind her, and guardians overlap
-  civilians. Needs lateral spread in the authored plan and depth ordering of
-  `spriteLayer` against PopulationSystem.
+- **Part 7 remainder** — `GoldlineGame.expeditionRedeploy()` wrapper
+  (`ExpeditionLayer.redeploy()` already returns the corridor progress).
+- **Part 8 — death freezes combat.** `ExpeditionLayer.update` must gate
+  hostile/projectile simulation on `run.outcome === "running"`, clear
+  projectiles, cancel aim and tether, block basic lash. `getSnapshot()`
+  already exists and returns hp/momentum/outcome/route/relic.
+- **Part 9 — physical Relic.** Three plinths at `plan.relicPlinths`, lanes
+  at lateral -78 / 0 / +78. `brass_guard` already works in
+  `run.takeDamage()`. `echo_thread` and `sunstep` need real behaviour before
+  any of the three is shown.
+- **Part 10 — Safe/Upper by lateral commitment** (<= -0.28 upper, >= 0.28
+  safe) inside the mapped fork window, no oscillation.
+- **Part 11 — Press On** wrapper; must NOT alter progress.
+- **Part 12 — HUD down state**, restrained world overlay, no modal.
+- **Part 13 — destination actor** at `plan.destination` +
+  `ExpeditionRun.arrive()`.
+- **Part 14/15 — SECURE CARGO** via `actionServices.resolveOrder({orderId,
+  status:"collected"})`. Do NOT open GoldlineActionSurface. Do NOT declare
+  CARGO SECURED from the boolean — reconcile from authoritative order truth,
+  then `projectStrongholdRestoration()`.
+- **Part 17 — live visual acceptance** of the ten listed checks.
+
+## Open visual issues
+
+- **Guardian scale/clustering.** Depth ordering is correct now, but a
+  guardian at similar progress to Trailblazer renders at near her size and
+  crowds her. Consider reducing the 150px base height and widening the
+  authored lateral spread. This is a tuning problem, not an architectural
+  one.
 - Art not §53-certified at 393x852 DPR3.
 
 ## Dev-only scene probe (keep)
