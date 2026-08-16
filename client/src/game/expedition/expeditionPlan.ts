@@ -69,13 +69,51 @@ function stableVariant(orderId: number, salt: number): number {
 }
 
 /**
- * Where an expedition begins. Entering places Trailblazer here rather than
- * inheriting her ordinary corridor position, so every authored beat below
- * lines up with the coordinate actually driving her.
+ * EXPEDITION SPACE vs CORRIDOR SPACE.
+ *
+ * The plan below authors its beats in normalised EXPEDITION space, 0..1,
+ * because that is the readable way to describe an adventure: tutorial at
+ * 0.10, first Hunter at 0.18, fork at 0.46, climax at 0.86, destination at
+ * 0.96. Those numbers are fiction and carry no runtime meaning on their own.
+ *
+ * The runtime moves Trailblazer in CORRIDOR space, which GoldlineGame owns
+ * and clamps to roughly 0.035..0.82, with ordinary corridor-exit logic
+ * arming at 0.77. Authored beats past that ceiling — the Shieldbearer at
+ * 0.86, the destination at 0.96 — were simply unreachable: the player could
+ * never physically arrive at the climax or the pickup.
+ *
+ * So expedition space is mapped deterministically onto the genuinely
+ * playable corridor span. The end is deliberately 0.78 rather than 0.82:
+ * that keeps every beat below the ordinary exit trigger, so reachability
+ * does not depend on transition suppression also being correct. Two
+ * independent guarantees, not one.
+ *
+ * This is a pure coordinate mapping. It creates no second movement truth —
+ * GoldlineGame remains the sole owner of Trailblazer's position, and the
+ * plan owns fictional beat placement only. It cannot touch business state.
  */
-export const EXPEDITION_START_PROGRESS = 0.06;
+export const EXPEDITION_CORRIDOR_START = 0.06;
+export const EXPEDITION_CORRIDOR_END = 0.78;
 
-const FORK_START = 0.46;
+/** Normalised expedition T (0..1) -> playable corridor progress. */
+export function expeditionToCorridor(t: number): number {
+  const clamped = Math.max(0, Math.min(1, t));
+  return (
+    EXPEDITION_CORRIDOR_START +
+    clamped * (EXPEDITION_CORRIDOR_END - EXPEDITION_CORRIDOR_START)
+  );
+}
+
+/** Inverse, for reporting how far through the expedition the player is. */
+export function corridorToExpedition(progress: number): number {
+  const span = EXPEDITION_CORRIDOR_END - EXPEDITION_CORRIDOR_START;
+  return Math.max(0, Math.min(1, (progress - EXPEDITION_CORRIDOR_START) / span));
+}
+
+/** Corridor position the expedition begins at. */
+export const EXPEDITION_START_PROGRESS = expeditionToCorridor(0);
+
+const FORK_START = 0.52;
 const FORK_END = 0.72;
 
 export function planPickupExpedition(input: {
@@ -93,7 +131,7 @@ export function planPickupExpedition(input: {
       {
         id: "hunter_first",
         kind: "hunter",
-        progress: 0.18,
+        progress: 0.26,
         lateral: 34 * side,
         route: "both",
       },
@@ -102,14 +140,14 @@ export function planPickupExpedition(input: {
       {
         id: "slinger_first",
         kind: "slinger",
-        progress: 0.29,
+        progress: 0.34,
         lateral: -58 * side,
         route: "both",
       },
       {
         id: "hunter_second",
         kind: "hunter",
-        progress: 0.35,
+        progress: 0.40,
         lateral: -20 * side,
         route: "both",
       },
@@ -207,14 +245,49 @@ export function planPickupExpedition(input: {
     ],
 
     waystones: [
-      { id: "waystone_threshold", progress: 0.06 },
-      { id: "waystone_prefork", progress: 0.44 },
+      { id: "waystone_threshold", progress: 0 },
+      { id: "waystone_prefork", progress: 0.50 },
       { id: "waystone_preclimax", progress: 0.78 },
     ],
 
     fork: { start: FORK_START, end: FORK_END },
-    relicPlinths: 0.42,
+    relicPlinths: 0.46,
     destination: 0.96,
+  };
+}
+
+/**
+ * Projects an authored plan from expedition space into corridor space.
+ *
+ * Done ONCE at load so every downstream system — hostile state machines,
+ * the candidate registry, the renderer, proximity checks — works in a
+ * single consistent space. Converting per-frame would reintroduce exactly
+ * the kind of dual-space confusion that made the Ruinbound tuning bug
+ * possible.
+ */
+export function planInCorridorSpace(
+  plan: PickupExpeditionPlan
+): PickupExpeditionPlan {
+  return {
+    ...plan,
+    hostiles: plan.hostiles.map(h => ({
+      ...h,
+      progress: expeditionToCorridor(h.progress),
+    })),
+    environment: plan.environment.map(e => ({
+      ...e,
+      progress: expeditionToCorridor(e.progress),
+    })),
+    waystones: plan.waystones.map(w => ({
+      ...w,
+      progress: expeditionToCorridor(w.progress),
+    })),
+    fork: {
+      start: expeditionToCorridor(plan.fork.start),
+      end: expeditionToCorridor(plan.fork.end),
+    },
+    relicPlinths: expeditionToCorridor(plan.relicPlinths),
+    destination: expeditionToCorridor(plan.destination),
   };
 }
 

@@ -42,6 +42,7 @@ import {
 import {
   activeEnvironment,
   activeHostiles,
+  planInCorridorSpace,
   type PickupExpeditionPlan,
 } from "./expeditionPlan";
 import { ExpeditionRun, EXPEDITION } from "./expeditionState";
@@ -159,8 +160,15 @@ export class ExpeditionLayer {
     this.reducedMotion = reduced;
   }
 
-  /** Builds the fictional world for one real order. */
-  load(plan: PickupExpeditionPlan, route: typeof this.route = "unchosen") {
+  /**
+   * Builds the fictional world for one real order.
+   *
+   * The incoming plan authors its beats in normalised expedition space; it
+   * is projected into corridor space exactly once, here, so every system
+   * downstream works in the single space the runtime actually moves in.
+   */
+  load(rawPlan: PickupExpeditionPlan, route: typeof this.route = "unchosen") {
+    const plan = planInCorridorSpace(rawPlan);
     this.plan = plan;
     this.route = route;
     this.hostiles = [];

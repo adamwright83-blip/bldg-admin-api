@@ -134,8 +134,11 @@ describe("waystones", () => {
     expect(waystoneFor(plan, 0.8)?.id).toBe("waystone_preclimax");
   });
 
-  it("returns null before the first waystone", () => {
-    expect(waystoneFor(plan, 0.01)).toBeNull();
+  it("always has a waystone at the very start", () => {
+    // The threshold waystone now sits at expedition T=0, so Redeploy can
+    // always resolve — there is no window where defeat has nowhere to
+    // return to.
+    expect(waystoneFor(plan, 0)?.id).toBe("waystone_threshold");
   });
 
   it("places one before the climax so defeat there is recoverable", () => {

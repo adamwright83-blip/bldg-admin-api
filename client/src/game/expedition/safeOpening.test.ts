@@ -4,6 +4,7 @@ import { projectCorridorPoint } from "./corridorCoupling";
 import {
   EXPEDITION_START_PROGRESS,
   activeHostiles,
+  planInCorridorSpace,
   planPickupExpedition,
 } from "./expeditionPlan";
 import { EXPEDITION } from "./expeditionState";
@@ -72,8 +73,23 @@ function walkFrom(
   return p;
 }
 
+/**
+ * Corridor-space plan — the space the layer registers and the player moves
+ * in. Asserting against raw authored (expedition-space) values would only
+ * pass by coincidence once the mapping compressed everything by ~0.72x.
+ */
+const mapped = planInCorridorSpace(planPickupExpedition({ orderId: ORDER_ID }));
+
+/** Corridor position of an authored beat. */
+function beatAt(id: string): number {
+  return (
+    mapped.hostiles.find(h => h.id === id)?.progress ??
+    mapped.environment.find(e => e.id === id)!.progress
+  );
+}
+
 describe("authored spacing creates the opening", () => {
-  const plan = planPickupExpedition({ orderId: ORDER_ID });
+  const plan = mapped;
 
   it("puts a safe Line target before the first guardian", () => {
     const firstArch = plan.environment
@@ -109,14 +125,13 @@ describe("no hostile damage during the opening", () => {
 
   it("leaves HP untouched while practising on the first Line target", () => {
     const layer = startedExpedition();
-    // arch_threshold_beam sits at 0.1 — the authored teaching target.
-    holdAt(layer, 0.1, 15);
+    holdAt(layer, beatAt("arch_threshold_beam"), 15);
     expect(layer.run.hp).toBe(EXPEDITION.maxHp);
   });
 
   it("survives a slow walk across the whole teaching stretch", () => {
     const layer = startedExpedition();
-    walkFrom(layer, EXPEDITION_START_PROGRESS, 0.12);
+    walkFrom(layer, EXPEDITION_START_PROGRESS, beatAt("arch_threshold_beam") + 0.01);
     expect(layer.run.hp).toBe(EXPEDITION.maxHp);
   });
 
@@ -131,9 +146,10 @@ describe("no hostile damage during the opening", () => {
 describe("pressure does begin once the player advances", () => {
   it("is not global invulnerability — walking into the Hunter still hurts", () => {
     const layer = startedExpedition();
-    // hunter_first is authored at 0.18. Walk right onto it and wait.
-    walkFrom(layer, EXPEDITION_START_PROGRESS, 0.18);
-    holdAt(layer, 0.18, 6);
+    // Walk right onto hunter_first's mapped position and wait.
+    const hunter = beatAt("hunter_first");
+    walkFrom(layer, EXPEDITION_START_PROGRESS, hunter);
+    holdAt(layer, hunter, 6);
 
     expect(layer.run.hp).toBeLessThan(EXPEDITION.maxHp);
   });
@@ -142,16 +158,17 @@ describe("pressure does begin once the player advances", () => {
     // Two identical runs that advance identically must agree exactly.
     const a = startedExpedition();
     const b = startedExpedition();
+    const hunter = beatAt("hunter_first");
     for (const layer of [a, b]) {
-      walkFrom(layer, EXPEDITION_START_PROGRESS, 0.18);
-      holdAt(layer, 0.18, 6);
+      walkFrom(layer, EXPEDITION_START_PROGRESS, hunter);
+      holdAt(layer, hunter, 6);
     }
     expect(a.run.hp).toBe(b.run.hp);
   });
 });
 
 describe("expedition start coordinate", () => {
-  const plan = planPickupExpedition({ orderId: ORDER_ID });
+  const plan = mapped;
 
   it("sits before every authored beat", () => {
     // Entering used to inherit the ordinary corridor position — observed at

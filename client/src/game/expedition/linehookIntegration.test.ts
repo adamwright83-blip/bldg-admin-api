@@ -4,7 +4,7 @@ import {
   corridorDeltaFromScreenImpulse,
   projectCorridorPoint,
 } from "./corridorCoupling";
-import { planPickupExpedition } from "./expeditionPlan";
+import { planInCorridorSpace, planPickupExpedition } from "./expeditionPlan";
 
 /**
  * Proves the tether moves the REAL Trailblazer, not a private body.
@@ -81,25 +81,30 @@ function prime(layer: ExpeditionLayer, owner: CorridorOwner) {
   owner.step(layer, FRAME);
 }
 
+/**
+ * Reads beat positions from the CORRIDOR-space plan — the same projection
+ * ExpeditionLayer.load performs — so the test aims where the guardian
+ * actually is rather than at its authored expedition-space coordinate.
+ */
+function beatPosition(targetId: string) {
+  const plan = planInCorridorSpace(planPickupExpedition({ orderId: 630031 }));
+  const env = plan.environment.find(e => e.id === targetId);
+  if (env) return { progress: env.progress, lateral: env.lateral };
+  const hostile = plan.hostiles.find(h => h.id === targetId)!;
+  return { progress: hostile.progress, lateral: hostile.lateral };
+}
+
 function aimAt(layer: ExpeditionLayer, owner: CorridorOwner, targetId: string) {
-  const at = owner.project(
-    // Reach into the plan rather than the layer's privates.
-    planPickupExpedition({ orderId: 630031 }).environment.find(
-      e => e.id === targetId
-    )?.progress ??
-      planPickupExpedition({ orderId: 630031 }).hostiles.find(
-        h => h.id === targetId
-      )!.progress,
-    planPickupExpedition({ orderId: 630031 }).environment.find(
-      e => e.id === targetId
-    )?.lateral ??
-      planPickupExpedition({ orderId: 630031 }).hostiles.find(
-        h => h.id === targetId
-      )!.lateral
-  );
+  const beat = beatPosition(targetId);
+  const at = owner.project(beat.progress, beat.lateral);
   const from = owner.project(owner.progress, owner.lateral * 140);
   layer.beginAim();
   layer.setAimRadians(Math.atan2(at.y - from.y, at.x - from.x));
+}
+
+/** Places the player just short of a beat so it is inside Line range. */
+function standNear(owner: CorridorOwner, targetId: string, back = 0.03) {
+  owner.progress = Math.max(0.035, beatPosition(targetId).progress - back);
 }
 
 describe("coupling is an exact inverse", () => {
@@ -213,7 +218,7 @@ describe("latch resolves automatically on the connecting frame", () => {
   it("exposes the Shieldbearer without any external resolveLatch call", () => {
     const onLineLatched = vi.fn();
     const { layer, owner } = scenario({ onLineLatched });
-    owner.progress = 0.83;
+    standNear(owner, "shieldbearer_climax");
     owner.lateral = 0;
 
     prime(layer, owner);
@@ -229,7 +234,7 @@ describe("latch resolves automatically on the connecting frame", () => {
   it("resolves exactly once, never again on later frames", () => {
     const onLineLatched = vi.fn();
     const { layer, owner } = scenario({ onLineLatched });
-    owner.progress = 0.83;
+    standNear(owner, "shieldbearer_climax");
 
     prime(layer, owner);
     aimAt(layer, owner, "shieldbearer_climax");
@@ -242,7 +247,7 @@ describe("latch resolves automatically on the connecting frame", () => {
   it("triggers the environmental hazard on contact", () => {
     const onHazardTriggered = vi.fn();
     const { layer, owner } = scenario({ onHazardTriggered });
-    owner.progress = 0.78;
+    standNear(owner, "hazard_suspended_cargo");
 
     prime(layer, owner);
     aimAt(layer, owner, "hazard_suspended_cargo");
@@ -256,7 +261,7 @@ describe("latch resolves automatically on the connecting frame", () => {
   it("does not re-trigger a spent hazard", () => {
     const onHazardTriggered = vi.fn();
     const { layer, owner } = scenario({ onHazardTriggered });
-    owner.progress = 0.78;
+    standNear(owner, "hazard_suspended_cargo");
 
     prime(layer, owner);
     aimAt(layer, owner, "hazard_suspended_cargo");
@@ -274,7 +279,7 @@ describe("latch resolves automatically on the connecting frame", () => {
 
   it("does not haul the player toward a hostile control latch", () => {
     const { layer, owner } = scenario();
-    owner.progress = 0.83;
+    standNear(owner, "shieldbearer_climax");
     const startProgress = owner.progress;
 
     prime(layer, owner);

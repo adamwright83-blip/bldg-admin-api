@@ -1408,7 +1408,10 @@ export class GoldlineGame {
       this.expeditionDrivingMovement = this.expedition.isDrivingMovement();
     }
 
-    const exitNear = this.progress >= 0.77;
+    // Ordinary corridor exit must not arm while the expedition owns the
+    // world: revealing corridor_02 mid-combat would drop ExpeditionLayer,
+    // reset progress and replace the population underneath the player.
+    const exitNear = this.expedition === null && this.progress >= 0.77;
     if (exitNear !== this.corridorExitNear) {
       this.corridorExitNear = exitNear;
       this.callbacks.onCorridorExitProximity?.(exitNear);
