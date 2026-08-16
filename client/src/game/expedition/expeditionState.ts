@@ -147,9 +147,20 @@ export class ExpeditionRun {
     return amount;
   }
 
-  /** Recharges Brass Guard once the pressure genuinely lets up. */
+  /**
+   * Recharges Brass Guard once the pressure genuinely lets up. The CALLER
+   * decides what "lets up" means — ExpeditionLayer requires no living
+   * guardian in engagement range and nothing in the air, held for a fixed
+   * quiet period. A plain timer here would have re-armed the guard mid-fight.
+   */
   clashEnded() {
     this.brassGuardCharged = true;
+  }
+
+  /** Whether Brass Guard will absorb the next blow. Read-only, for tests
+   *  and feedback — nothing outside this class may set it. */
+  get guardCharged(): boolean {
+    return this.brassGuardCharged;
   }
 
   spendMomentumForRecovery(): boolean {

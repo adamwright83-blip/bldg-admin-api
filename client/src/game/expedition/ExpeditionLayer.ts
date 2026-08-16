@@ -40,6 +40,20 @@ const HOSTILE_TEXTURE_URLS: Record<string, string> = {
   slinger: slingerUrl,
   shieldbearer: shieldbearerUrl,
 };
+
+/**
+ * Per-kind sprite heights at unit depth scale.
+ *
+ * A single 150px height for all three flattened the roster: the Slinger is
+ * authored as a low, wide silhouette and the Shieldbearer as a mass, so
+ * rendering them at identical heights made role harder to read at 393px than
+ * the procedural fallback it replaced. These are the tuned values.
+ */
+const GUARDIAN_HEIGHT: Record<string, number> = {
+  hunter: 130,
+  slinger: 116,
+  shieldbearer: 146,
+};
 import { ExpeditionClock, AIM_TIME_SCALE } from "./expeditionClock";
 import { LineCandidateRegistry } from "./lineCandidateRegistry";
 import {
@@ -67,8 +81,65 @@ import {
   type HostileSpawn,
   type PickupExpeditionPlan,
 } from "./expeditionPlan";
-import { ExpeditionRun, EXPEDITION, type ExpeditionSnapshot } from "./expeditionState";
+import {
+  ExpeditionRun,
+  EXPEDITION,
+  RELICS,
+  type ExpeditionSnapshot,
+  type RelicId,
+} from "./expeditionState";
 import { TRAVERSAL_Z, worldActorZ } from "../world/worldActorDepth";
+import { LATERAL_TO_PROGRESS } from "./ruinbound";
+
+/**
+ * Where the three relic plinths stand across the lane at the plan's authored
+ * relic progress. Spacing is wide enough that the proximity radius below can
+ * never overlap two of them, which is what makes "choose by walking to one"
+ * unambiguous without a picker UI.
+ */
+export const RELIC_PLINTH_LATERAL: Record<RelicId, number> = {
+  echo_thread: -78,
+  sunstep: 0,
+  brass_guard: 78,
+};
+
+/** Corridor-space radius (progress units) for taking a relic on foot. */
+export const RELIC_TAKE_RADIUS = 0.03;
+
+/**
+ * ECHO THREAD. A damaging hit leaps once to the nearest OTHER guardian
+ * within this corridor-space radius. Exactly one leap, never a chain.
+ */
+export const ECHO_THREAD_RADIUS = 0.11;
+
+/** SUNSTEP. One burst per dodge, reaching this far in corridor space. */
+export const SUNSTEP_RADIUS = 0.075;
+
+/**
+ * BRASS GUARD. The guard re-arms only at a real clash boundary: no living
+ * guardian within engagement range and no projectile in the air, held for
+ * this long in fictional seconds. A pure timer would have re-armed it mid-
+ * fight, turning "the first blow of each clash" into a repeating shield.
+ */
+export const CLASH_ENGAGEMENT_RADIUS = 0.16;
+export const CLASH_QUIET_SECONDS = 1.2;
+
+/** Short physical release when the climax seal breaks. Visual only. */
+export const SEAL_FRACTURE_SECONDS = 0.42;
+
+/**
+ * Widest point of each rendered fork branch, in authored plan units.
+ *
+ * UPPER is negative lateral and SAFE is positive, matching the commitment
+ * thresholds in tryChooseRoute. This MUST stay inside the runtime's own
+ * lateral clamp (±0.72 normalised, so ±100.8 plan units) — a painted road
+ * the player physically cannot stand on would be the world lying about
+ * where it will let them go.
+ */
+export const FORK_BRANCH_LATERAL = { upper: -96, safe: 96 } as const;
+
+/** Ground paint (route branches, landing pools) sits under every actor. */
+const GROUND_PAINT_Z = TRAVERSAL_Z.WORLD_ACTOR_BASE - 1;
 
 /** Goldline's existing palette, reused rather than reinvented. */
 const PALETTE = {
@@ -121,6 +192,10 @@ export type ExpeditionCallbacks = {
   onDefeated?: () => void;
   onHitStop?: (ms: number) => void;
   onCameraShake?: (magnitude: number, dirX: number, dirY: number) => void;
+  /** A relic was taken by physically reaching its plinth. */
+  onRelicTaken?: (relic: RelicId) => void;
+  /** The climax seal broke. Movement has ALREADY opened when this fires. */
+  onSealFractured?: () => void;
 };
 
 type EnvNode = {
@@ -147,7 +222,7 @@ export class ExpeditionLayer {
   private gCable = new Graphics();
   private gAim = new Graphics();
   private gEnv = new Graphics();
-  private gSeal = new Graphics();
+  private gEffects = new Graphics();
   /**
    * World-actor host, supplied by GoldlineGame. Guardian and prop roots are
    * added here, NOT to this layer's own container — the container is now
@@ -157,6 +232,47 @@ export class ExpeditionLayer {
   private hostileVisuals = new Map<string, HostileVisual>();
   private propVisuals = new Map<string, HostileVisual>();
   private textures = new Map<string, Texture>();
+
+  /**
+   * Route branches and landing pools. Ground paint, so it is parented to the
+   * world-actor host but pinned BELOW every actor — Trailblazer walks on it,
+   * never behind it.
+   */
+  private groundPaint: Graphics | null = null;
+  /** One world actor per relic plinth, so a guardian can stand in front. */
+  private plinthVisuals = new Map<RelicId, { root: Container; g: Graphics }>();
+  /**
+   * The climax seal as a WORLD ACTOR, not an overlay. A Trailblazer or
+   * civilian nearer the camera must render in front of it, which a
+   * GAMEPLAY_OVERLAY-band Graphics could never do.
+   */
+  private sealVisual: { root: Container; g: Graphics } | null = null;
+  /** Last barrier fixture seen up, so the release can still be drawn. */
+  private sealLastBarrier: EnvironmentSpawn | null = null;
+  /** Fictional seconds remaining in the seal's fade/split. Visual only. */
+  private sealFracture = 0;
+  private sealWasUp = false;
+  /**
+   * The destination cache. A dedicated depth-sorted world actor: NOT an
+   * environment node, NOT a Line candidate, and NOT grappleable. Reaching it
+   * is a physical arrival, never a business mutation.
+   */
+  private cacheVisual: {
+    root: Container;
+    shadow: Graphics;
+    fallback: Graphics;
+    body: Sprite | null;
+  } | null = null;
+
+  /** Set on the rising edge of a dodge; consumed as exactly one Sunstep. */
+  private sunstepPending = false;
+  private wasInvulnerable = false;
+  /** Fictional seconds of the Sunstep burst still being drawn. */
+  private sunstepBurst = 0;
+  /** Re-entrancy guard: an Echo Thread leap can never cause another. */
+  private echoing = false;
+  /** Fictional seconds since the clash last let up, for Brass Guard. */
+  private quietSeconds = 0;
 
   private aiming = false;
   private aimRadians = 0;
@@ -208,6 +324,22 @@ export class ExpeditionLayer {
     return this.actorHost ?? this.container;
   }
 
+  /**
+   * Ground paint lives in the world-actor host so it shares the corridor's
+   * transform, but at a fixed z below WORLD_ACTOR_BASE — route branches and
+   * landing pools are painted on the stone, so every actor walks over them.
+   */
+  private groundPaintFor(): Graphics {
+    if (!this.groundPaint) {
+      const g = new Graphics();
+      g.label = "expedition:ground";
+      g.zIndex = GROUND_PAINT_Z;
+      this.hostFor().addChild(g);
+      this.groundPaint = g;
+    }
+    return this.groundPaint;
+  }
+
   constructor(private readonly callbacks: ExpeditionCallbacks = {}) {
     // Environment sits behind guardians; cable and aim read above both.
     // This container is GAMEPLAY OVERLAYS ONLY: telegraphs, projectiles,
@@ -217,16 +349,28 @@ export class ExpeditionLayer {
     // why the telegraph rings stay up here.
     this.container.zIndex = TRAVERSAL_Z.GAMEPLAY_OVERLAY;
     this.container.addChild(this.gEnv);
-    this.container.addChild(this.gSeal);
     this.container.addChild(this.gHostiles);
     this.container.addChild(this.gProjectiles);
+    this.container.addChild(this.gEffects);
     this.container.addChild(this.gCable);
     this.container.addChild(this.gAim);
   }
 
-  /** Dodge i-frames, owned by the runtime that owns movement. */
+  /**
+   * Dodge i-frames, owned by the runtime that owns movement.
+   *
+   * The RISING EDGE of this flag is the one unambiguous "a dodge just
+   * started" signal available to the fiction, and it is what arms Sunstep.
+   * Arming on the edge rather than on the flag itself is what guarantees
+   * exactly ONE burst per dodge no matter how many frames the i-frames span.
+   */
   setPlayerInvulnerable(invulnerable: boolean) {
+    const rising = invulnerable && !this.wasInvulnerable;
+    this.wasInvulnerable = invulnerable;
     this.playerInvulnerable = invulnerable;
+    if (rising && this.run.outcome === "running" && this.run.hasRelic("sunstep")) {
+      this.sunstepPending = true;
+    }
   }
 
   /**
@@ -571,6 +715,12 @@ export class ExpeditionLayer {
     // call this): a discontinuity in the player's position must never be
     // read as a velocity spike on the next update.
     this.previousPlayerScreen = null;
+    // A dodge in flight across a transition must not proc Sunstep on the
+    // far side of a redeploy, and the clash boundary restarts with the
+    // fight it belongs to.
+    this.sunstepPending = false;
+    this.wasInvulnerable = false;
+    this.quietSeconds = 0;
   }
 
   beginAim() {
@@ -747,8 +897,23 @@ export class ExpeditionLayer {
     this.pendingImpulseX = 0;
     this.pendingImpulseY = 0;
 
+    // The layer's own corridor mirror is refreshed from the values the
+    // runtime just passed in, so proximity and relic tests read the same
+    // position the projection above used. setPlayerCorridor remains for
+    // callers that step the layer without a frame.
+    this.playerProgress = playerProgress;
+    this.playerLateral = playerLateral;
+
     if (dt > 0) {
       this.run.step(dt);
+      // Visual-only. Advanced even while terminal so a seal that broke on
+      // the same frame as a defeat still finishes releasing.
+      if (this.sealFracture > 0) {
+        this.sealFracture = Math.max(0, this.sealFracture - dt);
+      }
+      if (this.sunstepBurst > 0) {
+        this.sunstepBurst = Math.max(0, this.sunstepBurst - dt);
+      }
 
       // Advance the checkpoint as the player passes each authored waystone.
       // setWaystone itself is monotonic, so a player who backtracks cannot
@@ -759,6 +924,13 @@ export class ExpeditionLayer {
       }
 
       if (this.run.outcome === "running") {
+        // Physical relic choice, before combat resolves — a relic taken on
+        // this frame is live for this frame's fight.
+        this.stepRelicProximity();
+        // One burst per dodge, resolved before the guardians act so a
+        // Sunstep that kills cannot also be hit by the corpse.
+        this.stepSunstep();
+        this.stepClashBoundary(dt);
         this.stepHostiles(dt, playerProgress, playerLateral);
 
         // A melee hit resolved above can already have reduced HP to zero
@@ -798,6 +970,11 @@ export class ExpeditionLayer {
 
         this.maybeArrive(playerProgress);
       }
+
+      // After combat has resolved, so a Shieldbearer that died this frame
+      // releases the seal on this frame. Runs regardless of outcome: a run
+      // that ends on the same frame the seal breaks still sees it break.
+      this.stepSealState();
 
       if (this.run.outcome !== "running") {
         this.settleNonRunningStateForTransition();
@@ -904,6 +1081,199 @@ export class ExpeditionLayer {
     }
   }
 
+  // ------------------------------------------------------------- relics
+
+  /** Corridor-space distance, with lateral scaled into progress units. */
+  private corridorDistance(
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number
+  ): number {
+    return Math.hypot(ax - bx, (ay - by) * LATERAL_TO_PROGRESS);
+  }
+
+  /** Nearest living guardian to a corridor point, within `radius`. */
+  private nearestHostile(
+    progress: number,
+    lateral: number,
+    radius: number,
+    excludeId?: string
+  ): Ruinbound | null {
+    let best: Ruinbound | null = null;
+    let bestDist = Infinity;
+    for (const hostile of this.hostiles) {
+      if (!hostile.alive) continue;
+      if (excludeId && hostile.id === excludeId) continue;
+      const d = this.corridorDistance(hostile.x, hostile.y, progress, lateral);
+      if (d <= radius && d < bestDist) {
+        best = hostile;
+        bestDist = d;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * ECHO THREAD — the lash leaps onward to a second guardian.
+   *
+   * Exactly ONE secondary hit, taken from the primary target's position, and
+   * only after a hit that actually landed. `echoing` makes recursion
+   * structurally impossible rather than merely unlikely: a leap can never
+   * itself trigger a further leap. Civilians and environment are not
+   * eligible — the promise is about guardians.
+   */
+  private applyEchoThread(primary: Ruinbound, fromLine: boolean) {
+    if (this.echoing) return;
+    if (!this.run.hasRelic("echo_thread")) return;
+
+    const secondary = this.nearestHostile(
+      primary.x,
+      primary.y,
+      ECHO_THREAD_RADIUS,
+      primary.id
+    );
+    if (!secondary) return;
+
+    this.echoing = true;
+    try {
+      // The echo inherits the primary's delivery, so a lash that clangs off
+      // the Shieldbearer's guard still clangs when it leaps — the relic adds
+      // reach, never a way around an enemy's whole reason to exist.
+      const result = secondary.applyHit(
+        1,
+        { x: primary.x, y: primary.y },
+        fromLine
+      );
+      this.hitFlash.set(secondary.id, 0.16);
+      if (result.defeated) {
+        this.run.addMomentum(EXPEDITION.momentum.hostileDefeated);
+        this.callbacks.onHostileDefeated?.(secondary.kind);
+      }
+    } finally {
+      this.echoing = false;
+    }
+  }
+
+  /**
+   * SUNSTEP — a clean evade leaves a burst of sunfire behind you.
+   *
+   * One burst per dodge (armed on the i-frame rising edge), striking ONE
+   * nearby guardian. Never a chain, never an aura.
+   */
+  private stepSunstep() {
+    if (!this.sunstepPending) return;
+    this.sunstepPending = false;
+    if (!this.run.hasRelic("sunstep")) return;
+
+    this.sunstepBurst = 0.26;
+    const target = this.nearestHostile(
+      this.playerProgress,
+      this.playerLateral,
+      SUNSTEP_RADIUS
+    );
+    if (!target) return;
+
+    const result = target.applyHit(
+      1,
+      { x: this.playerProgress, y: this.playerLateral },
+      true
+    );
+    this.hitFlash.set(target.id, 0.16);
+    if (result.defeated) {
+      this.run.addMomentum(EXPEDITION.momentum.hostileDefeated);
+      this.callbacks.onHostileDefeated?.(target.kind);
+    }
+  }
+
+  /**
+   * Edge-detects the climax seal breaking, in the SIMULATION rather than the
+   * renderer, so the release is a game event with a callback rather than a
+   * side effect of drawing a frame.
+   *
+   * Movement opens on the SAME frame the Shieldbearer dies:
+   * getGameplayForwardCeiling reads activeClimaxBarrier() directly and never
+   * consults sealFracture, so the fade below is purely cosmetic and the
+   * player is never held behind an animation.
+   */
+  private stepSealState() {
+    const barrier = this.activeClimaxBarrier();
+    const up = barrier !== null;
+    if (barrier) this.sealLastBarrier = barrier;
+
+    if (this.sealWasUp && !up) {
+      this.sealFracture = SEAL_FRACTURE_SECONDS;
+      this.callbacks.onSealFractured?.();
+    }
+    this.sealWasUp = up;
+  }
+
+  /** True while the fight is genuinely live — the Brass Guard's clash test. */
+  private inClash(): boolean {
+    if (this.projectiles.some(p => p.active)) return true;
+    return (
+      this.nearestHostile(
+        this.playerProgress,
+        this.playerLateral,
+        CLASH_ENGAGEMENT_RADIUS
+      ) !== null
+    );
+  }
+
+  /**
+   * BRASS GUARD re-arms at a real boundary, never on a timer.
+   *
+   * The guard recharges only once no living guardian is in engagement range
+   * and nothing is in the air, sustained for CLASH_QUIET_SECONDS. Recharging
+   * on elapsed time alone would have made "the first blow of each clash"
+   * into a blow absorbed every second of the same clash.
+   */
+  private stepClashBoundary(dt: number) {
+    if (this.inClash()) {
+      this.quietSeconds = 0;
+      return;
+    }
+    this.quietSeconds += dt;
+    if (this.quietSeconds >= CLASH_QUIET_SECONDS) {
+      this.quietSeconds = 0;
+      this.run.clashEnded();
+    }
+  }
+
+  /**
+   * Relic choice is PHYSICAL. There is no modal and no picker: three plinths
+   * stand across the lane at the plan's authored relic progress, and walking
+   * to one takes it. The plinths are optional content, so the Scarred Route
+   * forfeits them (§34).
+   */
+  private stepRelicProximity() {
+    const plan = this.plan;
+    if (!plan) return;
+    if (this.run.relic) return;
+    if (this.run.scarred || !this.run.optionalRewardsAvailable) return;
+
+    let chosen: RelicId | null = null;
+    let chosenDist = Infinity;
+    for (const relic of RELICS) {
+      const lateral = RELIC_PLINTH_LATERAL[relic.id];
+      const d = this.corridorDistance(
+        plan.relicPlinths,
+        lateral,
+        this.playerProgress,
+        this.playerLateral
+      );
+      if (d <= RELIC_TAKE_RADIUS && d < chosenDist) {
+        chosen = relic.id;
+        chosenDist = d;
+      }
+    }
+    if (!chosen) return;
+
+    this.run.chooseRelic(chosen);
+    this.callbacks.onRelicTaken?.(chosen);
+    this.callbacks.onHitStop?.(40);
+  }
+
   /** Applies a Line latch to whatever it connected with. */
   resolveLatch(targetId: string) {
     const hostile = this.hostiles.find(h => h.id === targetId);
@@ -917,6 +1287,8 @@ export class ExpeditionLayer {
         this.run.addMomentum(EXPEDITION.momentum.hostileDefeated);
         this.callbacks.onHostileDefeated?.(hostile.kind);
       }
+      // Only a hit that actually landed leaps onward.
+      if (result.applied > 0) this.applyEchoThread(hostile, true);
       return;
     }
 
@@ -967,6 +1339,7 @@ export class ExpeditionLayer {
       this.run.addMomentum(EXPEDITION.momentum.hostileDefeated);
       this.callbacks.onHostileDefeated?.(nearest.kind);
     }
+    if (result.applied > 0) this.applyEchoThread(nearest, false);
     return true;
   }
 
@@ -1012,10 +1385,16 @@ export class ExpeditionLayer {
     }
 
     this.reapSprites();
+    // Ground paint first: the road the player is choosing between, and the
+    // pool marking where they are going.
+    this.drawGroundPaint(project);
     this.drawEnvironment(project);
+    this.drawRelicPlinths(project);
+    this.drawDestinationCache(project);
     this.drawClimaxSeal(project);
     this.drawHostiles(project);
     this.drawProjectiles(project);
+    this.drawEffects(project);
     this.drawCable();
     this.drawAim(project, viewportWidth);
   }
@@ -1072,34 +1451,80 @@ export class ExpeditionLayer {
   }
 
   /**
-   * The Shieldbearer's forward barrier, rendered as an actual physical
-   * object spanning Trailblazer's route — not merely a numeric movement
-   * clamp. Visibility is driven by the EXACT SAME predicate
-   * (isClimaxBarrierUp) that getGameplayForwardCeiling uses to cap
-   * movement, so the visible seal and the invisible-if-it-weren't-drawn
-   * wall can never disagree.
+   * The Shieldbearer's forward barrier, as a WORLD ACTOR.
+   *
+   * It used to be drawn into the layer's GAMEPLAY_OVERLAY container, which
+   * meant it painted over everything: a Trailblazer standing right at the
+   * seal, or a civilian between the camera and it, vanished behind a wall
+   * they were physically in front of. It is now a root under hostFor()
+   * sorted by worldActorZ at the seal's own ground line, so anything nearer
+   * the camera renders in front of it exactly as it does for a guardian.
+   *
+   * Visibility is still driven by the single activeClimaxBarrier()
+   * predicate that getGameplayForwardCeiling uses, so the visible seal and
+   * the movement clamp can never disagree.
    */
   private drawClimaxSeal(project: ScreenProjection) {
-    const g = this.gSeal;
-    g.clear();
-    // Reads the SAME activeClimaxBarrier() the ceiling calls, rather than
-    // separately looking up the fixture and separately checking the
-    // shield's state — that duplication is exactly what let the visual
-    // and the clamp drift out of agreement.
     const barrier = this.activeClimaxBarrier();
-    if (!barrier) return;
+    const up = barrier !== null;
+
+    const fixture = barrier ?? this.sealLastBarrier;
+    if (!fixture || (!up && this.sealFracture <= 0)) {
+      if (this.sealVisual) {
+        this.sealVisual.root.destroy({ children: true });
+        this.sealVisual = null;
+      }
+      return;
+    }
+
+    if (!this.sealVisual) {
+      const root = new Container();
+      root.label = "expedition:climax_seal";
+      const g = new Graphics();
+      root.addChild(g);
+      this.hostFor().addChild(root);
+      this.sealVisual = { root, g };
+    }
 
     // Centered on the actual playable lane, not the environment spawn's own
     // authored lateral (which is an interaction fixture position, not the
     // seal's span) — the wall must visibly cross where the player walks.
-    const left = project(barrier.progress, -110);
-    const right = project(barrier.progress, 110);
+    const centre = project(fixture.progress, 0);
+    const left = project(fixture.progress, -110);
+    const right = project(fixture.progress, 110);
     const s = (left.scale + right.scale) / 2;
     const t = this.clock.fictionalElapsedSeconds();
-    const tension = 0.55 + Math.sin(t * 2.4) * 0.25;
 
-    // Two limestone/brass anchor posts.
-    for (const post of [left, right]) {
+    // The root sits ON the seal's ground line, and everything below is drawn
+    // in LOCAL space around it, so the depth sort reads a real world Y.
+    this.sealVisual.root.x = centre.x;
+    this.sealVisual.root.y = centre.y;
+    this.sealVisual.root.zIndex = worldActorZ(centre.y, "expedition:climax_seal");
+
+    // Release: the span splits at the middle and both halves retreat into
+    // their posts while the whole thing fades. Short and cheap on purpose.
+    const releasing = !up && this.sealFracture > 0;
+    const fracture = releasing ? 1 - this.sealFracture / SEAL_FRACTURE_SECONDS : 0;
+    const alpha = releasing ? 1 - fracture : 1;
+    const tension = releasing
+      ? 1 - fracture
+      : 0.55 + Math.sin(t * 2.4) * 0.25;
+
+    const lx = left.x - centre.x;
+    const rx = right.x - centre.x;
+    const ly = left.y - centre.y;
+    const ry = right.y - centre.y;
+
+    const g = this.sealVisual.g;
+    g.clear();
+    g.alpha = alpha;
+
+    // Two limestone/brass anchor posts. These stay put through the release —
+    // it is the SPAN that breaks, not the architecture.
+    for (const post of [
+      { x: lx, y: ly },
+      { x: rx, y: ry },
+    ]) {
       g.rect(post.x - 7 * s, post.y - 96 * s, 14 * s, 96 * s)
         .fill({ color: PALETTE.limestone })
         .stroke({ width: 2 * s, color: PALETTE.brassDark });
@@ -1108,17 +1533,376 @@ export class ExpeditionLayer {
       });
     }
 
-    // The energy span itself, between the posts.
-    const midY = (left.y + right.y) / 2 - 60 * s;
-    g.moveTo(left.x, left.y - 60 * s)
-      .lineTo(right.x, right.y - 60 * s)
-      .stroke({ width: 6 * s, color: PALETTE.brassDark, alpha: 0.9 });
-    g.moveTo(left.x, left.y - 60 * s)
-      .lineTo(right.x, right.y - 60 * s)
-      .stroke({ width: 3 * s, color: PALETTE.lineGold, alpha: tension });
-    g.circle((left.x + right.x) / 2, midY, 6 * s).fill({
+    // The energy span, drawn as two halves so the release can part them.
+    const spanLY = ly - 60 * s;
+    const spanRY = ry - 60 * s;
+    const midX = (lx + rx) / 2;
+    const midY = (spanLY + spanRY) / 2;
+    // Each half pulls back toward its own post as the seal breaks.
+    const retreat = fracture * 0.5;
+    const innerLX = lx + (midX - lx) * (1 - retreat);
+    const innerRX = rx + (midX - rx) * (1 - retreat);
+    const innerLY = spanLY + (midY - spanLY) * (1 - retreat);
+    const innerRY = spanRY + (midY - spanRY) * (1 - retreat);
+
+    for (const half of [
+      { fromX: lx, fromY: spanLY, toX: innerLX, toY: innerLY },
+      { fromX: rx, fromY: spanRY, toX: innerRX, toY: innerRY },
+    ]) {
+      g.moveTo(half.fromX, half.fromY)
+        .lineTo(half.toX, half.toY)
+        .stroke({ width: 6 * s, color: PALETTE.brassDark, alpha: 0.9 });
+      g.moveTo(half.fromX, half.fromY)
+        .lineTo(half.toX, half.toY)
+        .stroke({ width: 3 * s, color: PALETTE.lineGold, alpha: tension });
+    }
+
+    if (!releasing) {
+      g.circle(midX, midY, 6 * s).fill({
+        color: PALETTE.lineFracture,
+        alpha: tension,
+      });
+    } else {
+      // A single bright flare at the break point, shrinking as it goes.
+      g.circle(midX, midY, (6 + fracture * 22) * s).fill({
+        color: PALETTE.lineFracture,
+        alpha: (1 - fracture) * 0.55,
+      });
+    }
+  }
+
+  /**
+   * The physical Safe / Upper fork, painted on the stone.
+   *
+   * The fork was already a real mechanic — tryChooseRoute commits on lateral
+   * position inside the mapped window — but nothing in the world SHOWED the
+   * two branches, so the player was asked to commit to a choice they could
+   * not see. These are ground branches, not buttons and not cards: UPPER
+   * runs to negative lateral, SAFE to positive, and the one taken brightens
+   * while the other recedes.
+   */
+  private drawForkBranches(g: Graphics) {
+    const plan = this.plan;
+    if (!plan) return;
+
+    const route = this.run.route;
+    const branches: Array<{ id: "upper" | "safe"; lateral: number }> = [
+      { id: "upper", lateral: FORK_BRANCH_LATERAL.upper },
+      { id: "safe", lateral: FORK_BRANCH_LATERAL.safe },
+    ];
+
+    for (const branch of branches) {
+      // Unchosen: both read as live options. Chosen: the taken road carries
+      // the Gold Line; the road not taken dims to bare stone.
+      const taken = route === branch.id;
+      const undecided = route === "unchosen";
+      const scarred = this.run.scarred;
+      const intensity = scarred ? 0.18 : taken ? 1 : undecided ? 0.62 : 0.16;
+
+      // Sampled along the fork window: out from the lane at the mouth,
+      // held wide through the middle, back to the lane where they rejoin.
+      const points: Array<{ x: number; y: number; s: number }> = [];
+      const STEPS = 12;
+      for (let i = 0; i <= STEPS; i += 1) {
+        const u = i / STEPS;
+        const progress =
+          plan.fork.start + (plan.fork.end - plan.fork.start) * u;
+        // A smooth out-and-back so the branch reads as a road, not a wedge.
+        const spread = Math.sin(u * Math.PI) ** 0.7;
+        const at = this.projectForPaint(progress, branch.lateral * spread);
+        points.push(at);
+      }
+
+      const width = 26;
+      // The road bed.
+      for (let i = 0; i < points.length - 1; i += 1) {
+        const a = points[i];
+        const b = points[i + 1];
+        g.moveTo(a.x, a.y)
+          .lineTo(b.x, b.y)
+          .stroke({
+            width: width * a.s,
+            color: PALETTE.limestone,
+            alpha: 0.1 + intensity * 0.26,
+          });
+      }
+      // The Gold Line inlay down its centre — this is what says "taken".
+      for (let i = 0; i < points.length - 1; i += 1) {
+        const a = points[i];
+        const b = points[i + 1];
+        g.moveTo(a.x, a.y)
+          .lineTo(b.x, b.y)
+          .stroke({
+            width: 4 * a.s,
+            color: taken ? PALETTE.lineGold : PALETTE.brassDark,
+            alpha: 0.15 + intensity * 0.6,
+          });
+      }
+    }
+  }
+
+  /**
+   * Landing pool beneath the destination cache. A physical pool of Gold
+   * Line light on the stone, so the destination is legible as a PLACE from
+   * far up the corridor rather than only when the crate is on screen.
+   */
+  private drawDestinationPool(g: Graphics) {
+    const plan = this.plan;
+    if (!plan) return;
+    const at = this.projectForPaint(plan.destination, 0);
+    const t = this.clock.fictionalElapsedSeconds();
+    const pulse = 0.5 + Math.sin(t * 1.6) * 0.14;
+
+    g.ellipse(at.x, at.y, 74 * at.s, 22 * at.s).fill({
+      color: PALETTE.lineGold,
+      alpha: 0.13 * pulse + 0.06,
+    });
+    g.ellipse(at.x, at.y, 48 * at.s, 14 * at.s).fill({
       color: PALETTE.lineFracture,
-      alpha: tension,
+      alpha: 0.16 * pulse + 0.08,
+    });
+    g.ellipse(at.x, at.y, 74 * at.s, 22 * at.s).stroke({
+      width: 2 * at.s,
+      color: PALETTE.brass,
+      alpha: 0.35,
+    });
+  }
+
+  /** All ground paint for one frame, under every world actor. */
+  private drawGroundPaint(project: ScreenProjection) {
+    const g = this.groundPaintFor();
+    g.clear();
+    this.paintProject = project;
+    this.drawForkBranches(g);
+    this.drawDestinationPool(g);
+    this.paintProject = null;
+  }
+
+  /** Active only inside drawGroundPaint, so the helpers stay readable. */
+  private paintProject: ScreenProjection | null = null;
+
+  private projectForPaint(progress: number, lateral: number) {
+    const at = this.paintProject!(progress, lateral);
+    return { x: at.x, y: at.y, s: at.scale };
+  }
+
+  /**
+   * The three relic plinths, standing at the plan's authored relic point.
+   *
+   * Each is its OWN world actor so a guardian between the camera and a
+   * plinth renders in front of it. There is no picker and no modal: the
+   * plinths are objects in the road, and stepping up to one takes it.
+   */
+  private drawRelicPlinths(project: ScreenProjection) {
+    const plan = this.plan;
+    const t = this.clock.fictionalElapsedSeconds();
+    // The Scarred Route forfeits optional content (§34): the plinths are
+    // physically gone rather than present-but-inert.
+    const show = plan !== null && !this.run.scarred;
+
+    if (!show) {
+      for (const visual of Array.from(this.plinthVisuals.values())) {
+        visual.root.destroy({ children: true });
+      }
+      this.plinthVisuals.clear();
+      return;
+    }
+
+    for (const relic of RELICS) {
+      const lateral = RELIC_PLINTH_LATERAL[relic.id];
+      const at = project(plan!.relicPlinths, lateral);
+      const s = at.scale;
+
+      let visual = this.plinthVisuals.get(relic.id);
+      if (!visual) {
+        const root = new Container();
+        root.label = `relic:${relic.id}`;
+        const g = new Graphics();
+        root.addChild(g);
+        this.hostFor().addChild(root);
+        visual = { root, g };
+        this.plinthVisuals.set(relic.id, visual);
+      }
+
+      visual.root.x = at.x;
+      visual.root.y = at.y;
+      visual.root.zIndex = worldActorZ(at.y, `relic:${relic.id}`);
+
+      // Taken: this one's light stays with the player and the stone reads
+      // spent. Not taken: the other two go dark once a choice is made, so
+      // the world records the decision instead of a HUD doing it.
+      const taken = this.run.relic?.id === relic.id;
+      const decided = this.run.relic !== null;
+      const lit = decided ? (taken ? 0.9 : 0.08) : 0.55 + Math.sin(t * 2.1 + lateral) * 0.2;
+
+      const g = visual.g;
+      g.clear();
+
+      // Contact shadow, local to the actor.
+      g.ellipse(0, 2 * s, 24 * s, 7 * s).fill({
+        color: PALETTE.shadow,
+        alpha: 0.28,
+      });
+
+      // Stepped limestone base — masonry, so it belongs to the world.
+      g.rect(-22 * s, -12 * s, 44 * s, 12 * s)
+        .fill({ color: PALETTE.limestone })
+        .stroke({ width: 1.6 * s, color: PALETTE.brassDark });
+      g.rect(-17 * s, -46 * s, 34 * s, 34 * s)
+        .fill({ color: PALETTE.limestoneShade })
+        .stroke({ width: 1.6 * s, color: PALETTE.brassDark });
+      g.moveTo(-17 * s, -46 * s)
+        .lineTo(17 * s, -46 * s)
+        .stroke({ width: 2 * s, color: PALETTE.stoneRim, alpha: 0.7 });
+
+      // Brass cradle on top.
+      g.rect(-13 * s, -54 * s, 26 * s, 9 * s)
+        .fill({ color: PALETTE.brass })
+        .stroke({ width: 1.4 * s, color: PALETTE.brassDark });
+
+      // The relic itself. One distinct silhouette each, so the three are
+      // told apart by shape before any text is read.
+      if (relic.id === "echo_thread") {
+        // A coiled thread: two linked rings.
+        g.circle(-6 * s, -68 * s, 8 * s).stroke({
+          width: 3 * s,
+          color: PALETTE.lineGold,
+          alpha: lit,
+        });
+        g.circle(6 * s, -74 * s, 8 * s).stroke({
+          width: 3 * s,
+          color: PALETTE.lineFracture,
+          alpha: lit,
+        });
+      } else if (relic.id === "sunstep") {
+        // A low sun over the road.
+        g.circle(0, -70 * s, 9 * s).fill({
+          color: PALETTE.lineFracture,
+          alpha: lit,
+        });
+        for (let i = 0; i < 6; i += 1) {
+          const a = (i / 6) * Math.PI * 2 + t * 0.4;
+          g.moveTo(0 + Math.cos(a) * 12 * s, -70 * s + Math.sin(a) * 12 * s)
+            .lineTo(0 + Math.cos(a) * 18 * s, -70 * s + Math.sin(a) * 18 * s)
+            .stroke({ width: 2.4 * s, color: PALETTE.lineGold, alpha: lit });
+        }
+      } else {
+        // A brass pauldron/plate.
+        g.moveTo(-11 * s, -60 * s)
+          .lineTo(0, -80 * s)
+          .lineTo(11 * s, -60 * s)
+          .closePath()
+          .fill({ color: PALETTE.brass, alpha: 0.35 + lit * 0.65 })
+          .stroke({ width: 2 * s, color: PALETTE.brassDark, alpha: lit });
+        g.moveTo(-6 * s, -64 * s)
+          .lineTo(6 * s, -64 * s)
+          .stroke({ width: 2 * s, color: PALETTE.lineGold, alpha: lit });
+      }
+    }
+  }
+
+  /**
+   * The destination cache — the real pickup, as a physical object.
+   *
+   * A dedicated depth-sorted world actor. Deliberately NOT an
+   * EnvironmentSpawn, NOT registered with LineCandidateRegistry, and so NOT
+   * grappleable: the destination is a place you walk to, not a target you
+   * pull yourself at. Reaching it settles the FICTIONAL outcome only —
+   * business truth is untouched by arrival (see maybeArrive).
+   */
+  private drawDestinationCache(project: ScreenProjection) {
+    const plan = this.plan;
+    if (!plan) {
+      if (this.cacheVisual) {
+        this.cacheVisual.root.destroy({ children: true });
+        this.cacheVisual = null;
+      }
+      return;
+    }
+
+    if (!this.cacheVisual) {
+      const root = new Container();
+      root.label = "expedition:destination_cache";
+      const shadow = new Graphics();
+      const fallback = new Graphics();
+      root.addChild(shadow, fallback);
+      this.hostFor().addChild(root);
+      this.cacheVisual = { root, shadow, fallback, body: null };
+    }
+
+    const visual = this.cacheVisual;
+    const at = project(plan.destination, 0);
+    const s = at.scale;
+    const t = this.clock.fictionalElapsedSeconds();
+
+    visual.root.x = at.x;
+    visual.root.y = at.y;
+    visual.root.zIndex = worldActorZ(at.y, "expedition:destination_cache");
+
+    visual.shadow.clear();
+    visual.shadow
+      .ellipse(0, 3 * s, 34 * s, 10 * s)
+      .fill({ color: PALETTE.shadow, alpha: 0.32 });
+
+    const texture = this.textures.get("pickup_cache");
+    if (texture && !visual.body) {
+      const body = new Sprite(texture);
+      body.anchor.set(0.5, 0.96);
+      visual.root.addChild(body);
+      visual.body = body;
+    }
+
+    if (visual.body && texture) {
+      const height = 126 * s;
+      visual.body.height = height;
+      visual.body.width = height * (texture.width / texture.height);
+      visual.fallback.clear();
+    } else {
+      // Procedural fallback: a banded cargo cache, so the destination is
+      // still a comprehensible object if the art never loads.
+      const g = visual.fallback;
+      g.clear();
+      const w = 32 * s;
+      const h = 54 * s;
+      g.rect(-w, -h, w * 2, h)
+        .fill({ color: PALETTE.limestone })
+        .stroke({ width: 2.4 * s, color: PALETTE.brassDark });
+      g.rect(-w, -h * 0.58, w * 2, 6 * s).fill({ color: PALETTE.brass });
+      g.rect(-w, -h, 6 * s, h).fill({ color: PALETTE.brass, alpha: 0.85 });
+      g.rect(w - 6 * s, -h, 6 * s, h).fill({ color: PALETTE.brass, alpha: 0.85 });
+    }
+
+    // A standing beacon above the cache: this is the one place in the
+    // expedition the player is trying to REACH, and it has to be readable
+    // from most of the corridor.
+    const pulse = 0.55 + Math.sin(t * 2.2) * 0.28;
+    visual.shadow
+      .circle(0, -142 * s, 7 * s)
+      .fill({ color: PALETTE.lineFracture, alpha: pulse });
+    visual.shadow
+      .moveTo(0, -134 * s)
+      .lineTo(0, -70 * s)
+      .stroke({ width: 3 * s, color: PALETTE.lineGold, alpha: 0.28 * pulse });
+  }
+
+  /** The Sunstep burst, drawn where the evade actually happened. */
+  private drawEffects(project: ScreenProjection) {
+    const g = this.gEffects;
+    g.clear();
+    if (this.sunstepBurst <= 0) return;
+
+    const at = project(this.playerProgress, this.playerLateral);
+    const s = at.scale;
+    const u = 1 - this.sunstepBurst / 0.26;
+    const r = (18 + u * 62) * s;
+    g.circle(at.x, at.y - 24 * s, r).stroke({
+      width: 5 * s * (1 - u),
+      color: PALETTE.lineFracture,
+      alpha: 0.85 * (1 - u),
+    });
+    g.circle(at.x, at.y - 24 * s, r * 0.62).fill({
+      color: PALETTE.lineGold,
+      alpha: 0.18 * (1 - u),
     });
   }
 
@@ -1372,7 +2156,8 @@ export class ExpeditionLayer {
       .fill({ color: PALETTE.shadow, alpha: 0.5 });
 
     const body = visual.body;
-    const targetHeight = 150 * s;
+    // Per-kind height: role must be readable from silhouette alone at 393px.
+    const targetHeight = (GUARDIAN_HEIGHT[hostile.kind] ?? 130) * s;
     body.height = targetHeight;
     body.width = targetHeight * (texture.width / texture.height);
     body.x = 0;
@@ -1722,6 +2507,16 @@ export class ExpeditionLayer {
       v.root.destroy({ children: true });
     }
     this.propVisuals.clear();
+    for (const v of Array.from(this.plinthVisuals.values())) {
+      v.root.destroy({ children: true });
+    }
+    this.plinthVisuals.clear();
+    this.sealVisual?.root.destroy({ children: true });
+    this.sealVisual = null;
+    this.cacheVisual?.root.destroy({ children: true });
+    this.cacheVisual = null;
+    this.groundPaint?.destroy();
+    this.groundPaint = null;
     this.registry.clear();
     this.hostiles = [];
     this.env = [];
