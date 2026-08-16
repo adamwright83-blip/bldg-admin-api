@@ -163,50 +163,72 @@ collected orders into `projectStrongholdRestoration`.
 412×923 @ 2.625 and is NOT equivalent), the 35-assertion E2E through real
 touch, 14 screenshots, regressions, PR, merge, deploy verification.
 
-## DEPENDENCY ORDER — do not skip the foundation
+## REVIEW METHOD — read this before claiming any invariant holds
+
+This branch has now shipped the same class of mistake three times: a helper
+exists, unit tests pass, the commit message explains the intent, and the
+actual player path bypasses it.
+
+The worst example: `forwardCeiling()` was computed correctly and then
+discarded one line later by `Math.min(blocked ? ceiling : 0.82, next)`,
+because `blocked` is false during ordinary movement. Dodge and the tether
+respected the ceiling; the joystick — the path players use constantly — did
+not. The tests passed because they asserted the helper, not the path.
+
+**Before declaring a cross-system invariant fixed:**
+
+1. `grep` EVERY production assignment to the state in question. For player
+   progress that is: joystick, dodge, Linehook impulse, traversal action
+   (`performAction`), checkpoint restore, expedition entry, corridor reveal,
+   initial `start()`. Auditing this list is how the second bypass
+   (`performAction` hardcoding 0.78) was found.
+2. Ask "can the player reach this state through another path?"
+3. Test the PATH, not the helper. Drive the real per-frame decision with
+   realistic input over enough frames to overrun.
+4. Verify in the live runtime where possible. `window.__goldlineGame` is
+   exposed under the harness flag: `setInput(0,-1)`, sample `progress` over
+   seconds, assert the bound. That is what finally proved the ceiling.
+
+## DEPENDENCY ORDER
 
 1. ~~expedition progress reachability~~ **DONE**
-2. ~~corridor-transition ownership~~ **DONE** (ceiling derived from the exit
-   threshold; in-flight loads cancelled AND reveal-guarded)
-3. ~~purple card identification~~ **DONE** — it was `layerTraversal/fortress`
-4. ~~Ruinbound sprite wiring~~ **DONE** (props still procedural)
+2. ~~corridor-transition ownership~~ **DONE** (incl. aborted != failed)
+3. ~~purple card~~ **DONE** — it was `layerTraversal/fortress`
+4. ~~Ruinbound + prop sprite wiring~~ **DONE**
 5. ~~safe-opening browser verification~~ **DONE**
-6. Phase D — death UX, Relic, Safe/Upper fork, Shieldbearer climax
-7. Phase E — destination, canonical Retrieve, Cargo Secured, payoff
-8. Phase F — Playwright touch proof, 393x852 DPR3 journey, screenshots, PR
+6. **NEXT: enemy/civilian depth readability** — blocking on §53
+7. Phase D — death UX, Relic, Safe/Upper fork, Shieldbearer climax
+8. Phase E — destination, canonical Retrieve, Cargo Secured, payoff
+9. Phase F — Playwright touch proof, 393x852 DPR3 journey, screenshots, PR
 
-## Dev-only scene probe (keep — it earned its place)
+## Verified invariants (live, not just unit)
 
-`game.probeSceneRegion({x,y,width,height})` walks the live Pixi tree and
-reports path, type, alpha, renderable and global bounds for visible nodes
-intersecting a screen rect. Gated behind `VITE_GOLDLINE_TEST_HARNESS`, so
-zero production cost. `window.__goldlineGame` is exposed under the same
-gate.
+- Expedition ceiling: 25s of real forward input through `setInput` → ticker
+  → `update` gives 0.166 → 0.686 → **0.74 flat**, never reaching 0.77.
+- Ordinary corridor unchanged: after exit, movement still reaches 0.82 and
+  passes the exit threshold.
+- Safe opening: HP 100% after 22s inside an active expedition.
 
-This found the purple card in ONE pass after two implemented-then-disproven
-hypotheses. Use it before theorising about any unexplained on-canvas object.
+## Open visual issues (blocking §53)
 
-Known limitation: `setSceneNodeRenderable` builds paths differently from the
-probe, so path-based toggling does not match. Set the property directly via
-`window.__goldlineGame` instead, or unify the two path builders.
+- **Guardian/civilian depth.** At similar progress a guardian renders near
+  Trailblazer's own scale directly behind her, and guardians overlap
+  civilians. Needs lateral spread in the authored plan and depth ordering of
+  `spriteLayer` against PopulationSystem.
+- Art not §53-certified at 393x852 DPR3.
 
-## Open visual issues (from the live 393px capture)
+## Dev-only scene probe (keep)
 
-- Guardians cluster in the lane and can overlap civilians, which §53 calls
-  out as confusing enemy/civilian depth. Needs lateral spread and/or
-  occlusion ordering against PopulationSystem.
-- Grapple ring, hazard and pickup cache are still procedural — the sprite
-  path exists (`propSprites`, textures already loaded under keys
-  `grapple_ring`, `cargo_hazard`, `pickup_cache`) but `drawEnvironment`
-  has not been switched over.
-- Art is **not** §53-certified at 393x852 DPR3.
+`game.probeSceneRegion({x,y,width,height})` and `window.__goldlineGame`,
+both gated behind `VITE_GOLDLINE_TEST_HARNESS`. Found the purple card in one
+pass after two implemented-then-disproven guesses. Known limitation:
+`setSceneNodeRenderable` builds paths differently from the probe, so set
+properties directly instead.
 
 ## Also still open
 
-- **Synthetic touch does not drive the joystick.** Dispatching PointerEvents
-  at `.game-joystick` did not move the player; DOM `.click()` works for
-  buttons. Phase F must prove Playwright's `touchscreen` API drives ENTER
-  THE LINE, the joystick, ACT tap, ACT hold, aim drag and release BEFORE
-  the large journey is written.
+- **Synthetic touch does not drive the joystick.** Phase F must prove
+  Playwright's `touchscreen` API drives ENTER THE LINE, joystick, ACT tap,
+  ACT hold, aim drag and release BEFORE the large journey is written.
 
 **FUN GATE: PENDING ADAM REAL-DEVICE PLAYTEST.**
