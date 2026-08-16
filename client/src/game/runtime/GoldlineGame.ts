@@ -53,6 +53,7 @@ import {
   EXPEDITION_START_PROGRESS,
   type PickupExpeditionPlan,
 } from "../expedition/expeditionPlan";
+import type { ExpeditionSnapshot } from "../expedition/expeditionState";
 import {
   clampCorridorProgress,
   forwardProgressLimit,
@@ -1141,7 +1142,7 @@ export class GoldlineGame {
     return this.dodgeState.active;
   }
 
-  getExpeditionSnapshot() {
+  getExpeditionSnapshot(): ExpeditionSnapshot | null {
     return this.expedition?.getSnapshot() ?? null;
   }
 
@@ -2293,26 +2294,36 @@ export class GoldlineGame {
       }
       this.corridor.stroke({ width: strokeWidth, color, alpha });
     };
+    // The expedition owns an adventure-only Gold Line treatment. Without
+    // this, an unrelated commercial mission's worldState (CLOSED,
+    // CONTESTED, a recovery branch, a dormant signal) leaked into the
+    // Line's color and brightness during an active pickup expedition,
+    // making the route visibly grey or orange for reasons that have
+    // nothing to do with the expedition itself.
+    const expeditionActive = this.expedition !== null;
     // The main route dims once a recovery branch is the legitimate path —
     // it does not disappear (the account isn't closed), but visual priority
     // shifts to the recovery path drawn below.
-    const mainRouteDim =
-      this.worldState === "recovery_active" ||
-      this.worldState === "recovery_available"
+    const mainRouteDim = expeditionActive
+      ? 1
+      : this.worldState === "recovery_active" ||
+          this.worldState === "recovery_available"
         ? 0.4
         : this.worldState === "contested"
           ? 0.65
           : this.worldSignal === "dormant"
             ? 0.48
             : 1;
-    const routeColor =
-      this.worldState === "closed"
+    const routeColor = expeditionActive
+      ? 0xf4bd48
+      : this.worldState === "closed"
         ? 0x677168
         : this.worldState === "contested"
           ? 0xc98545
           : 0xf4bd48;
-    const routeHighlight =
-      this.worldState === "closed"
+    const routeHighlight = expeditionActive
+      ? 0xffdf77
+      : this.worldState === "closed"
         ? 0x879087
         : this.worldState === "contested"
           ? 0xe1a05b

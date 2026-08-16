@@ -67,7 +67,7 @@ import {
   type HostileSpawn,
   type PickupExpeditionPlan,
 } from "./expeditionPlan";
-import { ExpeditionRun, EXPEDITION } from "./expeditionState";
+import { ExpeditionRun, EXPEDITION, type ExpeditionSnapshot } from "./expeditionState";
 import { TRAVERSAL_Z, worldActorZ } from "../world/worldActorDepth";
 
 /** Goldline's existing palette, reused rather than reinvented. */
@@ -487,7 +487,7 @@ export class ExpeditionLayer {
   }
 
   /** Fictional run state for the HUD. Carries no business data. */
-  getSnapshot() {
+  getSnapshot(): ExpeditionSnapshot {
     return {
       hp: this.run.hp,
       momentum: this.run.momentum,

@@ -64,6 +64,21 @@ export const RELICS: readonly Relic[] = [
 export type ExpeditionOutcome = "running" | "down" | "arrived";
 export type RouteChoice = "unchosen" | "safe" | "upper" | "scarred";
 
+/**
+ * The one snapshot shape for consumers outside the expedition layer — the
+ * HUD, GoldlineGame, GoldlineGameHome. Previously GoldlineGameHome kept a
+ * hand-written duplicate (`relic: string | null`, missing the real
+ * RelicId union) alongside this. Duplicated truths in this subsystem have
+ * already caused two of the bugs fixed this session.
+ */
+export type ExpeditionSnapshot = {
+  hp: number;
+  momentum: number;
+  outcome: ExpeditionOutcome;
+  route: RouteChoice;
+  relic: RelicId | null;
+};
+
 export type Waystone = {
   readonly id: string;
   /** Corridor progress 0..1 this waystone restores to. */

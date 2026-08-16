@@ -94,7 +94,7 @@ import {
 } from "./audio/haptics";
 import { planPickupExpedition } from "./expedition/expeditionPlan";
 import { ExpeditionHud } from "./expedition/ExpeditionHud";
-import { EXPEDITION } from "./expedition/expeditionState";
+import { EXPEDITION, type ExpeditionSnapshot } from "./expedition/expeditionState";
 import type { AgentWorldPresence } from "./world/PopulationSystem";
 import { projectAgentWorldPresence } from "./world/agentPresenceProjection";
 import type {
@@ -1396,13 +1396,6 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       ? nextOrderObjective.order.id
       : null;
 
-  type ExpeditionSnapshot = {
-    hp: number;
-    momentum: number;
-    outcome: "running" | "down" | "arrived";
-    route: "unchosen" | "safe" | "upper" | "scarred";
-    relic: string | null;
-  };
   const [expeditionSnapshot, setExpeditionSnapshot] =
     useState<ExpeditionSnapshot>({
       hp: EXPEDITION.maxHp,
