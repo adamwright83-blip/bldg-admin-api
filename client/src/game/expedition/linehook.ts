@@ -77,12 +77,23 @@ export class Linehook {
     return this.phase !== "idle";
   }
 
-  /** Fires the cable. Position is never assigned from the anchor here. */
-  fire(from: PlayerBody, anchor: LinehookAnchor) {
+  /**
+   * Fires the cable. Position is never assigned from the anchor here.
+   *
+   * `visualOrigin` is where the cable is drawn from — the hand/chest, so it
+   * agrees with the aim cone the player sees — while the tether's physical
+   * rest length is always computed from the true PlayerBody, since that is
+   * what the pull/swing acceleration actually has to move.
+   */
+  fire(
+    from: PlayerBody,
+    anchor: LinehookAnchor,
+    visualOrigin: { x: number; y: number } = from
+  ) {
     this.anchor = anchor;
     this.phase = "flying";
-    this.tipX = from.x;
-    this.tipY = from.y;
+    this.tipX = visualOrigin.x;
+    this.tipY = visualOrigin.y;
     this.tension = 0;
     this.restLength =
       Math.hypot(anchor.x - from.x, anchor.y - from.y) * LINEHOOK.restLengthFactor;

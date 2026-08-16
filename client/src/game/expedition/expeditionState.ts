@@ -145,7 +145,16 @@ export class ExpeditionRun {
     return true;
   }
 
+  /**
+   * Monotonic: a waystone earlier than the one already held is ignored. The
+   * player can walk backward — toward the tutorial target, or to bait a
+   * Slinger into a better angle — and that must never overwrite a later
+   * checkpoint with an earlier one.
+   */
   setWaystone(waystone: Waystone) {
+    if (this.lastWaystone && waystone.progress <= this.lastWaystone.progress) {
+      return;
+    }
     this.lastWaystone = waystone;
   }
 
@@ -168,6 +177,15 @@ export class ExpeditionRun {
    * optional treasure and relic opportunities close. Game-only opportunity
    * cost; the real job is never blocked by game skill.
    */
+  /**
+   * The mapped destination has been physically reached with the climax
+   * genuinely cleared. Stops fictional combat. Never touches business
+   * state — arrival is a fictional milestone, not a completion event.
+   */
+  arrive(): void {
+    if (this.outcome === "running") this.outcome = "arrived";
+  }
+
   pressOn(): void {
     this.scarred = true;
     this.route = "scarred";

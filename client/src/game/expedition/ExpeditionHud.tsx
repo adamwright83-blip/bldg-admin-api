@@ -98,11 +98,38 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     [runtime, aimFrom, padModel]
   );
 
+  const moveListenerRef = useRef<((e: PointerEvent) => void) | null>(null);
+  const activePointerIdRef = useRef<number | null>(null);
+  const runtimeRef = useRef(runtime);
+  runtimeRef.current = runtime;
+
+  /**
+   * ONE cleanup path for every way a hold can end. Unmounting mid-hold
+   * previously cancelled only the RAF loop and left the window pointermove
+   * listener attached — a real risk if the component unmounts (route
+   * change, expedition ending) while a finger is still down, which would
+   * both leak the listener and strand the fictional clock dilated at 0.2x
+   * from an aim that never formally ended.
+   */
+  const cleanupPointer = useCallback(() => {
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    if (moveListenerRef.current) {
+      window.removeEventListener("pointermove", moveListenerRef.current);
+      moveListenerRef.current = null;
+    }
+    activePointerIdRef.current = null;
+    originRef.current = null;
+    padModel.cancel();
+    runtimeRef.current?.expeditionCancelAim();
+  }, [padModel]);
+
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (!runtime) return;
       event.preventDefault();
       padRef.current?.setPointerCapture(event.pointerId);
+      activePointerIdRef.current = event.pointerId;
       originRef.current = { x: event.clientX, y: event.clientY };
       padModel.pointerDown(performance.now(), DEFAULT_AIM_RADIANS);
 
@@ -112,10 +139,12 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
         rafRef.current = requestAnimationFrame(tick);
       };
       const move = (e: PointerEvent) => {
+        // Ignore any touch that is not the one that started this hold.
+        if (e.pointerId !== activePointerIdRef.current) return;
         last.x = e.clientX;
         last.y = e.clientY;
       };
-      (padRef.current as HTMLDivElement & { _move?: typeof move })._move = move;
+      moveListenerRef.current = move;
       window.addEventListener("pointermove", move);
       rafRef.current = requestAnimationFrame(tick);
     },
@@ -125,15 +154,15 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
   const finish = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (!runtime) return;
+      if (event.pointerId !== activePointerIdRef.current) return;
+
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
-      const host = padRef.current as
-        | (HTMLDivElement & { _move?: (e: PointerEvent) => void })
-        | null;
-      if (host?._move) {
-        window.removeEventListener("pointermove", host._move);
-        host._move = undefined;
+      if (moveListenerRef.current) {
+        window.removeEventListener("pointermove", moveListenerRef.current);
+        moveListenerRef.current = null;
       }
+      activePointerIdRef.current = null;
 
       const resolution = padModel.pointerUp(performance.now());
       originRef.current = null;
@@ -147,17 +176,19 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
         // dodge — a silent swapped verb is what makes controls feel untrue.
         runtime.expeditionCancelAim();
       }
-      void event;
     },
     [runtime, padModel]
   );
 
-  useEffect(
-    () => () => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+  const handlePointerCancel = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.pointerId !== activePointerIdRef.current) return;
+      cleanupPointer();
     },
-    []
+    [cleanupPointer]
   );
+
+  useEffect(() => cleanupPointer, [cleanupPointer]);
 
   if (!active) {
     return (
@@ -216,7 +247,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
         data-aiming={aiming ? "true" : "false"}
         onPointerDown={handlePointerDown}
         onPointerUp={finish}
-        onPointerCancel={finish}
+        onPointerCancel={handlePointerCancel}
         role="button"
         aria-label="Action pad: tap to evade, hold to aim the Line"
       >

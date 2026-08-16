@@ -63,6 +63,8 @@ import {
   activeHostiles,
   planInCorridorSpace,
   waystoneFor,
+  type EnvironmentSpawn,
+  type HostileSpawn,
   type PickupExpeditionPlan,
 } from "./expeditionPlan";
 import { ExpeditionRun, EXPEDITION } from "./expeditionState";
@@ -271,10 +273,51 @@ export class ExpeditionLayer {
     if (threshold) this.run.setWaystone(threshold);
   }
 
+  /** Adds one hostile instance if it is not already present (idempotent). */
+  private spawnHostile(spawn: HostileSpawn) {
+    if (this.hostiles.some(h => h.id === spawn.id)) return;
+    const at = { x: spawn.progress, y: spawn.lateral };
+    const hostile =
+      spawn.kind === "hunter"
+        ? new Hunter(spawn.id, at)
+        : spawn.kind === "slinger"
+          ? new Slinger(spawn.id, at)
+          : new Shieldbearer(spawn.id, at);
+    this.hostiles.push(hostile);
+  }
+
+  /** Adds one environment node if it is not already present (idempotent). */
+  private spawnEnvironment(spawn: EnvironmentSpawn) {
+    if (this.env.some(e => e.id === spawn.id)) return;
+    this.env.push({
+      id: spawn.id,
+      kind: spawn.kind,
+      progress: spawn.progress,
+      lateral: spawn.lateral,
+      armed: true,
+    });
+  }
+
+  /** Destroys every hostile visual whose backing hostile no longer exists. */
+  private destroyOrphanedVisuals() {
+    for (const [id, visual] of Array.from(this.hostileVisuals.entries())) {
+      if (!this.hostiles.some(h => h.id === id)) {
+        visual.root.destroy({ children: true });
+        this.hostileVisuals.delete(id);
+      }
+    }
+  }
+
   /**
-   * Rebuilds branch-specific fictional content from the ALREADY-MAPPED plan.
-   * Never remaps. Run state — hp, momentum, relic, outcome — survives,
-   * because changing route is a fork in the road, not a new expedition.
+   * Full rebuild from the mapped plan for the current route. Used only at
+   * initial load (route is still "unchosen", so this yields `route:"both"`
+   * content only) and for Scarred, which is a one-way transition to zero
+   * hostiles — nothing already defeated can be resurrected by emptying the
+   * hostile list.
+   *
+   * NEVER called from setRoute. A full rebuild there would reconstruct
+   * every `route:"both"` hostile again, resurrecting anything the player
+   * had already defeated on the approach to the fork.
    */
   private rebuildRouteContent() {
     const plan = this.plan;
@@ -284,65 +327,134 @@ export class ExpeditionLayer {
       visual.root.destroy({ children: true });
     }
     this.hostileVisuals.clear();
+    for (const visual of Array.from(this.propVisuals.values())) {
+      visual.root.destroy({ children: true });
+    }
+    this.propVisuals.clear();
 
     this.hostiles = [];
     this.env = [];
     this.projectiles = [];
     this.registry.clear();
 
-    // ExpeditionRun.route is the ONLY route truth. There is deliberately no
-    // second private flag here: setRoute changed one and pressOn changed the
-    // other, which would have broken the Scarred Route.
     const route = this.run.route;
-
-    for (const spawn of activeHostiles(plan, route)) {
-      const at = { x: spawn.progress, y: spawn.lateral };
-      const hostile =
-        spawn.kind === "hunter"
-          ? new Hunter(spawn.id, at)
-          : spawn.kind === "slinger"
-            ? new Slinger(spawn.id, at)
-            : new Shieldbearer(spawn.id, at);
-      this.hostiles.push(hostile);
-    }
-
+    for (const spawn of activeHostiles(plan, route)) this.spawnHostile(spawn);
     for (const spawn of activeEnvironment(plan, route)) {
-      this.env.push({
-        id: spawn.id,
-        kind: spawn.kind,
-        progress: spawn.progress,
-        lateral: spawn.lateral,
-        armed: true,
-      });
+      this.spawnEnvironment(spawn);
     }
   }
 
-  /** Physical route commitment. Rebuilds from the mapped plan, never remaps. */
-  setRoute(route: "safe" | "upper") {
-    if (this.run.route === route || this.run.scarred) return;
-    this.run.chooseRoute(route);
-    this.rebuildRouteContent();
+  /**
+   * Adds ONLY the branch-specific content for a chosen route, on top of
+   * whatever `route:"both"` content already exists — including whichever of
+   * it the player has already resolved. This is what setRoute calls: it
+   * must never rebuild, or a defeated hunter on the approach to the fork
+   * would reappear the instant the player committed to a side.
+   */
+  private addChosenRouteContent(route: "safe" | "upper") {
+    if (!this.plan) return;
+    for (const spawn of this.plan.hostiles) {
+      if (spawn.route === route) this.spawnHostile(spawn);
+    }
+    for (const spawn of this.plan.environment) {
+      if (spawn.route === route) this.spawnEnvironment(spawn);
+    }
   }
 
-  /** §34 Scarred Route. Hostiles vanish; physical traversal remains. */
+  /** Physical route commitment. Additive only — never rebuilds. */
+  setRoute(route: "safe" | "upper"): boolean {
+    if (this.run.route !== "unchosen" || this.run.scarred) return false;
+    this.run.chooseRoute(route);
+    this.addChosenRouteContent(route);
+    return true;
+  }
+
+  /**
+   * Fork commitment gate. Called every frame by GoldlineGame while an
+   * expedition is active, instead of the ordinary corridor's
+   * branchForLateralPosition — the two have different semantics, and the
+   * ordinary one must not fire before the authored fork or with the wrong
+   * meaning for "left/right".
+   */
+  tryChooseRoute(
+    playerProgress: number,
+    normalizedLateral: number
+  ): "safe" | "upper" | null {
+    if (!this.plan) return null;
+    if (this.run.route !== "unchosen") return null;
+    if (
+      playerProgress < this.plan.fork.start ||
+      playerProgress > this.plan.fork.end
+    ) {
+      return null;
+    }
+    if (normalizedLateral <= -0.28) {
+      this.setRoute("upper");
+      return "upper";
+    }
+    if (normalizedLateral >= 0.28) {
+      this.setRoute("safe");
+      return "safe";
+    }
+    return null;
+  }
+
+  /**
+   * §34 Scarred Route. A one-way transition to zero mandatory hostiles, so
+   * a full rebuild is safe here — there is nothing to accidentally
+   * resurrect once the target state has none.
+   */
   pressOn() {
     this.run.pressOn();
-    this.projectiles = [];
-    this.linehook.reset();
-    this.pendingLatchTargetId = null;
-    this.endAim();
+    this.settleNonRunningStateForTransition();
     this.rebuildRouteContent();
   }
 
-  /** §33 Redeploy. Returns the corridor progress to restore the player to. */
+  /**
+   * §33 Redeploy. Resets encounter content AT OR AHEAD of the restored
+   * Waystone only — fights already resolved behind the checkpoint stay
+   * resolved. A full expedition-start rebuild would have respawned every
+   * hostile the player fought to reach that point, turning a checkpoint
+   * into a full restart.
+   */
   redeploy(): number {
     const { restoredProgress } = this.run.redeploy();
-    this.projectiles = [];
-    this.linehook.reset();
-    this.pendingLatchTargetId = null;
-    this.endAim();
-    this.rebuildRouteContent();
+    this.settleNonRunningStateForTransition();
+    this.resetFromWaystone(restoredProgress);
     return restoredProgress;
+  }
+
+  private resetFromWaystone(progress: number) {
+    const plan = this.plan;
+    if (!plan) return;
+
+    // Preserve armed/spent state for hazards at or behind the checkpoint —
+    // a hazard the player already triggered stays triggered.
+    const envArmed = new Map(this.env.map(node => [node.id, node.armed]));
+
+    for (const visual of Array.from(this.hostileVisuals.values())) {
+      visual.root.destroy({ children: true });
+    }
+    this.hostileVisuals.clear();
+    this.hostiles = [];
+
+    for (const spawn of activeHostiles(plan, this.run.route)) {
+      if (spawn.progress >= progress - 0.01) this.spawnHostile(spawn);
+    }
+
+    this.env = activeEnvironment(plan, this.run.route).map(spawn => ({
+      id: spawn.id,
+      kind: spawn.kind,
+      progress: spawn.progress,
+      lateral: spawn.lateral,
+      armed:
+        spawn.progress >= progress - 0.01
+          ? true
+          : (envArmed.get(spawn.id) ?? false),
+    }));
+
+    this.projectiles = [];
+    this.registry.clear();
   }
 
   /** Fictional run state for the HUD. Carries no business data. */
@@ -356,7 +468,72 @@ export class ExpeditionLayer {
     };
   }
 
+  /** Corridor progress of the expedition's authored destination, mapped. */
+  getDestinationProgress(): number | null {
+    return this.plan?.destination ?? null;
+  }
+
+  /**
+   * Forward movement ceiling contributed by the Shieldbearer climax. While
+   * the guardian is alive, the barrier at arch_climax_span blocks further
+   * progress — sprinting past the elite and touching the cache is not a
+   * valid way to finish the expedition. Scarred Route bypasses it, matching
+   * §34's "largely reduce/bypass remaining mandatory combat".
+   */
+  getGameplayForwardCeiling(baseCeiling: number): number {
+    if (!this.plan || this.run.scarred) return baseCeiling;
+    const shieldAlive = this.hostiles.some(
+      h => h.id === "shieldbearer_climax" && h.alive
+    );
+    if (!shieldAlive) return baseCeiling;
+    const barrier = this.plan.environment.find(
+      e => e.id === "arch_climax_span"
+    );
+    if (!barrier) return baseCeiling;
+    return Math.min(baseCeiling, barrier.progress - 0.012);
+  }
+
+  /** True while the climax barrier is still up — for rendering the seal. */
+  isClimaxBarrierUp(): boolean {
+    return (
+      !this.run.scarred &&
+      this.hostiles.some(h => h.id === "shieldbearer_climax" && h.alive)
+    );
+  }
+
+  /**
+   * Reaching the mapped destination settles the expedition into "arrived"
+   * only once the climax is genuinely cleared — physically sprinting past
+   * an alive Shieldbearer must not count, which mirrors the movement
+   * ceiling in getGameplayForwardCeiling. Scarred Route bypasses the gate.
+   */
+  private maybeArrive(playerProgress: number) {
+    if (!this.plan) return;
+    if (this.run.outcome !== "running") return;
+    const shieldAlive = this.hostiles.some(
+      h => h.id === "shieldbearer_climax" && h.alive
+    );
+    if (playerProgress < this.plan.destination - 0.008) return;
+    if (!this.run.scarred && shieldAlive) return;
+    this.run.arrive();
+  }
+
+  private settleNonRunningStateForTransition() {
+    this.projectiles = [];
+    this.pendingLatchTargetId = null;
+    if (this.aiming) this.endAim();
+    this.linehook.reset();
+    this.body.vx = 0;
+    this.body.vy = 0;
+    this.pendingImpulseX = 0;
+    this.pendingImpulseY = 0;
+    this.handoffSpeed = 0;
+  }
+
   beginAim() {
+    // A downed or arrived player cannot enter aim — combat is over either
+    // way, and the destination cache is not a Line target.
+    if (this.run.outcome !== "running") return;
     this.aiming = true;
     this.clock.setTimeScale(AIM_TIME_SCALE);
   }
@@ -381,6 +558,7 @@ export class ExpeditionLayer {
 
   /** Fires the Line at the currently locked target. */
   fireLine(project: ScreenProjection): boolean {
+    if (this.run.outcome !== "running") return false;
     const target = this.currentTarget(project);
     if (!target) return false;
     const at = project(
@@ -392,12 +570,16 @@ export class ExpeditionLayer {
     // simulation at 0.2x — so the aim is closed here, at the source.
     this.endAim();
     this.pendingLatchTargetId = target.id;
-    this.linehook.fire(this.body, {
-      id: target.id,
-      x: at.x,
-      y: at.y,
-      pulls: target.kind === "environment" && target.environment === "architecture",
-    });
+    this.linehook.fire(
+      this.body,
+      {
+        id: target.id,
+        x: at.x,
+        y: at.y,
+        pulls: target.kind === "environment" && target.environment === "architecture",
+      },
+      this.lineOrigin()
+    );
     return true;
   }
 
@@ -413,11 +595,23 @@ export class ExpeditionLayer {
     return this.env.find(e => e.id === id)?.lateral ?? null;
   }
 
+  /**
+   * The physical point the Line springs from — Trailblazer's hand/chest,
+   * not her feet. Targeting selection, the aim cone, and the visible cable
+   * origin previously used three different points (body feet for
+   * targeting, body.y-40 for rendering), so the cone the player SAW and the
+   * cone the math USED disagreed by 40px. This is now the only definition.
+   */
+  private lineOrigin(): { x: number; y: number } {
+    return { x: this.body.x, y: this.body.y - 40 };
+  }
+
   private currentTarget(project: ScreenProjection): LineTarget | null {
     const maxRadius = AIM_MAX_RADIUS_CSS_PX;
+    const origin = this.lineOrigin();
     return this.registry.select({
-      originX: this.body.x,
-      originY: this.body.y,
+      originX: origin.x,
+      originY: origin.y,
       aimRadians: this.aimRadians,
       maxRadius,
       coneRadians: AIM_CONE_TOTAL_RADIANS,
@@ -453,36 +647,58 @@ export class ExpeditionLayer {
 
     if (dt > 0) {
       this.run.step(dt);
-      this.stepHostiles(dt, playerProgress, playerLateral);
-      this.stepProjectilesAndDamage(dt, project);
 
-      const wasPulling = this.linehook.phase === "latched";
-      const result = this.linehook.update(dt, this.body);
-
-      // Resolve on the EXACT frame the cable connects, exactly once.
-      if (result.latched && this.pendingLatchTargetId) {
-        const targetId = this.pendingLatchTargetId;
-        this.pendingLatchTargetId = null;
-        const target = this.registry
-          .targets()
-          .find(t => t.id === targetId);
-        if (target) this.callbacks.onLineLatched?.(target);
-        this.resolveLatch(targetId);
+      // Advance the checkpoint as the player passes each authored waystone.
+      // setWaystone itself is monotonic, so a player who backtracks cannot
+      // downgrade an already-reached checkpoint.
+      if (this.plan) {
+        const stone = waystoneFor(this.plan, playerProgress);
+        if (stone) this.run.setWaystone(stone);
       }
-      if (result.arrived) this.pendingLatchTargetId = null;
 
-      const pullingNow = this.linehook.phase === "latched";
+      if (this.run.outcome === "running") {
+        this.stepHostiles(dt, playerProgress, playerLateral);
 
-      // Only a taut tether contributes movement. Once it lets go the
-      // momentum is handed to ordinary locomotion in one clean transfer,
-      // rather than this layer continuing to nudge the player around.
-      this.pendingImpulseX = pullingNow ? this.body.vx * dt : 0;
-      this.pendingImpulseY = pullingNow ? this.body.vy * dt : 0;
+        // A melee hit resolved above can already have reduced HP to zero
+        // this frame. Re-checking before projectiles and the tether means a
+        // projectile cannot also land on the same dead-but-not-yet-settled
+        // frame, and the tether cannot keep pulling a downed player.
+        if (this.run.outcome === "running") {
+          this.stepProjectilesAndDamage(dt, project);
+        }
 
-      if (wasPulling && !pullingNow) {
-        this.handoffSpeed = Math.hypot(this.body.vx, this.body.vy);
-        this.body.vx = 0;
-        this.body.vy = 0;
+        if (this.run.outcome === "running") {
+          const wasPulling = this.linehook.phase === "latched";
+          const result = this.linehook.update(dt, this.body);
+
+          // Resolve on the EXACT frame the cable connects, exactly once.
+          if (result.latched && this.pendingLatchTargetId) {
+            const targetId = this.pendingLatchTargetId;
+            this.pendingLatchTargetId = null;
+            const target = this.registry
+              .targets()
+              .find(t => t.id === targetId);
+            if (target) this.callbacks.onLineLatched?.(target);
+            this.resolveLatch(targetId);
+          }
+          if (result.arrived) this.pendingLatchTargetId = null;
+
+          const pullingNow = this.linehook.phase === "latched";
+          this.pendingImpulseX = pullingNow ? this.body.vx * dt : 0;
+          this.pendingImpulseY = pullingNow ? this.body.vy * dt : 0;
+
+          if (wasPulling && !pullingNow) {
+            this.handoffSpeed = Math.hypot(this.body.vx, this.body.vy);
+            this.body.vx = 0;
+            this.body.vy = 0;
+          }
+        }
+
+        this.maybeArrive(playerProgress);
+      }
+
+      if (this.run.outcome !== "running") {
+        this.settleNonRunningStateForTransition();
       }
     }
 
@@ -622,6 +838,7 @@ export class ExpeditionLayer {
 
   /** Contextual basic lash (§18): stationary, valid hostile in range. */
   tryBasicLash(playerProgress: number, playerLateral: number, moving: boolean): boolean {
+    if (this.run.outcome !== "running") return false;
     if (moving) return false;
     let nearest: Ruinbound | null = null;
     let nearestDist = Infinity;
@@ -912,18 +1129,6 @@ export class ExpeditionLayer {
       const x = at.x + recoil;
       const y = at.y;
 
-      // Grounding, in two parts: a soft cast shadow and a tight contact
-      // darkening directly under the feet. Without the second one nothing
-      // looks like it is standing ON the stone.
-      g.ellipse(at.x, y + 3 * s, 30 * s, 9 * s).fill({
-        color: PALETTE.shadow,
-        alpha: 0.3,
-      });
-      g.ellipse(at.x, y + 1 * s, 15 * s, 4.5 * s).fill({
-        color: PALETTE.shadow,
-        alpha: 0.5,
-      });
-
       const telegraph = hostile.telegraphProgress();
       if (telegraph > 0) {
         // A filled ground tell, not a thin ring: it reads at a glance and
@@ -936,9 +1141,23 @@ export class ExpeditionLayer {
 
       const texture = this.textures.get(hostile.kind);
       if (texture) {
+        // The sprite-backed HostileVisual root draws its own LOCAL contact
+        // shadow (see updateHostileSprite) that travels with the actor and
+        // sorts at its depth. Drawing a second shadow here, into the flat
+        // GAMEPLAY_OVERLAY layer, duplicated it and rendered the duplicate
+        // above civilians regardless of the guardian's actual depth.
         this.updateHostileSprite(hostile, texture, x, y, s, flash, t);
       } else {
-        // Procedural fallback keeps the expedition playable without art.
+        // Procedural fallback: no sprite root exists, so its grounding has
+        // to live here.
+        g.ellipse(at.x, y + 3 * s, 30 * s, 9 * s).fill({
+          color: PALETTE.shadow,
+          alpha: 0.3,
+        });
+        g.ellipse(at.x, y + 1 * s, 15 * s, 4.5 * s).fill({
+          color: PALETTE.shadow,
+          alpha: 0.5,
+        });
         if (hostile.kind === "hunter") this.drawHunter(g, x, y, s, flash, hostile, t);
         else if (hostile.kind === "slinger") this.drawSlinger(g, x, y, s, flash, hostile, t);
         else this.drawShieldbearer(g, x, y, s, flash, hostile as Shieldbearer, t);
@@ -1275,7 +1494,7 @@ export class ExpeditionLayer {
     g.clear();
     if (!this.linehook.isEngaged()) return;
 
-    const from = { x: this.body.x, y: this.body.y - 40 };
+    const from = this.lineOrigin();
     const to = { x: this.linehook.tipX, y: this.linehook.tipY };
     // Slack sags when loose and flattens under tension — the cable reads
     // as a weighted physical object rather than a straight debug line.
@@ -1299,8 +1518,9 @@ export class ExpeditionLayer {
 
     const half = AIM_CONE_TOTAL_RADIANS / 2;
     const r = AIM_MAX_RADIUS_CSS_PX;
-    const ox = this.body.x;
-    const oy = this.body.y - 40;
+    const origin = this.lineOrigin();
+    const ox = origin.x;
+    const oy = origin.y;
 
     // The cone is a soft wedge, not an opaque overlay — it must never
     // cover Trailblazer (§53).

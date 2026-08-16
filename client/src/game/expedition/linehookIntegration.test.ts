@@ -97,9 +97,14 @@ function beatPosition(targetId: string) {
 function aimAt(layer: ExpeditionLayer, owner: CorridorOwner, targetId: string) {
   const beat = beatPosition(targetId);
   const at = owner.project(beat.progress, beat.lateral);
+  // Aim direction must be computed from the SAME origin the production
+  // targeting math uses (the hand/chest point, 40px above feet) — using the
+  // raw feet point here would aim slightly differently than the cone the
+  // player would actually see.
   const from = owner.project(owner.progress, owner.lateral * 140);
+  const originY = from.y - 40;
   layer.beginAim();
-  layer.setAimRadians(Math.atan2(at.y - from.y, at.x - from.x));
+  layer.setAimRadians(Math.atan2(at.y - originY, at.x - from.x));
 }
 
 /** Places the player just short of a beat so it is inside Line range. */

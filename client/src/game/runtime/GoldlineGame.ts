@@ -425,6 +425,7 @@ export class GoldlineGame {
     progress: number;
     lateral: number;
     velocity: number;
+    branch: CorridorBranch;
   } | null = null;
   private lastWidth = 0;
   private lastHeight = 0;
@@ -842,6 +843,7 @@ export class GoldlineGame {
       progress: this.progress,
       lateral: this.lateral,
       velocity: this.velocity,
+      branch: this.branch,
     };
     this.progress = EXPEDITION_START_PROGRESS;
     this.lateral = 0;
@@ -849,6 +851,15 @@ export class GoldlineGame {
     this.dodgeState = createDodgeState();
     this.lashCooldown = 0;
     this.expeditionDrivingMovement = false;
+    // Neutral base branch while the expedition owns route semantics —
+    // ordinary branchForLateralPosition must not run during an expedition
+    // (see the locomotion block below), so this is a presentation default,
+    // not a live selection.
+    this.branch = "intel";
+    this.callbacks.onBranchChange(this.branch);
+    // Duplicate presentation only; the authoritative mission/order objects
+    // remain intact underneath.
+    this.populationSystem?.setExpeditionPresentation(true);
     const layer = new ExpeditionLayer({
       ...callbacks,
       // Hit-stop freezes the FICTIONAL clock only — business time is
@@ -879,22 +890,48 @@ export class GoldlineGame {
     this.expedition = layer;
   }
 
+  /** Voluntary exit: restores exactly where the player left off. */
   endExpedition() {
     if (!this.expedition) return;
-    this.layerTraversal.removeChild(this.expedition.container);
-    this.expedition.destroy();
-    this.expedition = null;
-    this.expeditionDrivingMovement = false;
+    this.teardownExpedition();
 
-    // Restore the fictional corridor position the player left behind, so
-    // exiting does not strand Trailblazer at an expedition coordinate.
     const saved = this.preExpeditionCorridor;
     this.preExpeditionCorridor = null;
     if (saved) {
       this.progress = saved.progress;
       this.lateral = saved.lateral;
       this.velocity = saved.velocity;
+      this.branch = saved.branch;
+      this.callbacks.onBranchChange(this.branch);
     }
+  }
+
+  /**
+   * Successful completion. Unlike endExpedition, this does NOT restore the
+   * pre-expedition corridor position — resuming at some earlier random spot
+   * after finishing the pickup would be incoherent. Places Trailblazer at
+   * the Stronghold/expedition threshold instead. Authoritative business
+   * state is untouched either way.
+   */
+  finishExpeditionAtStronghold() {
+    if (!this.expedition) return;
+    this.teardownExpedition();
+    this.preExpeditionCorridor = null;
+
+    this.progress = EXPEDITION_START_PROGRESS;
+    this.lateral = 0;
+    this.velocity = 0;
+    this.branch = "intel";
+    this.callbacks.onBranchChange(this.branch);
+  }
+
+  private teardownExpedition() {
+    if (!this.expedition) return;
+    this.layerTraversal.removeChild(this.expedition.container);
+    this.expedition.destroy();
+    this.expedition = null;
+    this.expeditionDrivingMovement = false;
+    this.populationSystem?.setExpeditionPresentation(false);
   }
 
   /** True while an expedition owns the corridor. */
@@ -1029,15 +1066,22 @@ export class GoldlineGame {
     });
   }
 
+  /** True only while the expedition is actively playable. */
+  private expeditionCanAct(): boolean {
+    if (!this.expedition) return false;
+    return this.expedition.getSnapshot().outcome === "running";
+  }
+
   /** Action pad: hold crossed the threshold — enter Line aim. */
   expeditionBeginAim(radians: number) {
-    if (!this.expedition) return;
-    this.expedition.beginAim();
-    this.expedition.setAimRadians(radians);
+    if (!this.expeditionCanAct()) return;
+    this.expedition!.beginAim();
+    this.expedition!.setAimRadians(radians);
   }
 
   expeditionUpdateAim(radians: number) {
-    this.expedition?.setAimRadians(radians);
+    if (!this.expeditionCanAct()) return;
+    this.expedition!.setAimRadians(radians);
   }
 
   expeditionCancelAim() {
@@ -1046,8 +1090,8 @@ export class GoldlineGame {
 
   /** Action pad release with a lock. Returns false if nothing was hit. */
   expeditionFire(): boolean {
-    if (!this.expedition) return false;
-    return this.expedition.fireLine((progress, lateral) =>
+    if (!this.expeditionCanAct()) return false;
+    return this.expedition!.fireLine((progress, lateral) =>
       this.projectCorridor(progress, lateral, this.lastWidth, this.lastHeight)
     );
   }
@@ -1058,7 +1102,7 @@ export class GoldlineGame {
 
   /** Action pad tap. Burst along movement direction, else current facing. */
   expeditionDodge(): boolean {
-    if (!this.expedition) return false;
+    if (!this.expeditionCanAct()) return false;
     const facingX = this.input.x !== 0 ? this.input.x : this.lastDirectionSign || 0;
     const facingY = this.input.y !== 0 ? this.input.y : -1;
     return beginDodge(this.dodgeState, this.input, facingX, facingY);
@@ -1066,6 +1110,44 @@ export class GoldlineGame {
 
   isDodging(): boolean {
     return this.dodgeState.active;
+  }
+
+  getExpeditionSnapshot() {
+    return this.expedition?.getSnapshot() ?? null;
+  }
+
+  /** §33 Redeploy — returns to the last Waystone. No business mutation. */
+  expeditionRedeploy(): boolean {
+    if (!this.expedition) return false;
+    if (this.expedition.getSnapshot().outcome !== "down") return false;
+    const restored = this.expedition.redeploy();
+    this.progress = restored;
+    this.lateral = 0;
+    this.velocity = 0;
+    this.dodgeState = createDodgeState();
+    this.expeditionDrivingMovement = false;
+    return true;
+  }
+
+  /** §34 Press On — Scarred Route. Never moves the player. */
+  expeditionPressOn(): boolean {
+    if (!this.expedition) return false;
+    if (this.expedition.getSnapshot().outcome !== "down") return false;
+    const progressBefore = this.progress;
+    this.expedition.pressOn();
+    this.velocity = 0;
+    this.dodgeState = createDodgeState();
+    this.expeditionDrivingMovement = false;
+    this.branch = "intel";
+    this.callbacks.onBranchChange(this.branch);
+    if (this.progress !== progressBefore) {
+      // Structural guarantee, not a soft warning: Press On is defined by
+      // "no teleport". If something upstream ever mutated progress here,
+      // that contract is broken and must fail loudly rather than silently
+      // relocate the player.
+      throw new Error("PRESS ON must never move the player");
+    }
+    return true;
   }
 
   /**
@@ -1079,7 +1161,10 @@ export class GoldlineGame {
    * share this single ceiling.
    */
   private forwardCeiling(): number {
-    return this.expedition ? EXPEDITION_CORRIDOR_END : 0.82;
+    if (!this.expedition) return 0.82;
+    const outcome = this.expedition.getSnapshot().outcome;
+    if (outcome !== "running") return this.progress;
+    return this.expedition.getGameplayForwardCeiling(EXPEDITION_CORRIDOR_END);
   }
 
   setReducedMotion(reduced: boolean) {
@@ -1404,6 +1489,20 @@ export class GoldlineGame {
         ? null
         : rawTrigger;
     const blocked = Boolean(trigger && this.progress >= trigger.at - 0.012);
+
+    // Aim mode dilates the FICTIONAL clock to 0.2x, but ordinary Trailblazer
+    // locomotion below used the raw real deltaSeconds — so holding ACT could
+    // slow every Ruinbound to a crawl while Trailblazer herself kept walking
+    // at full speed, an exploit and a violation of the two-clock rule.
+    // gameplayDelta is what FICTIONAL movement (locomotion, dodge, lash
+    // cadence) integrates against while an expedition is active; the real
+    // business clock this.expedition?.clock.authoritativeNowMs() reads is
+    // never touched by this scale.
+    const expeditionTimeScale = this.expedition?.clock.getTimeScale() ?? 1;
+    const gameplayDelta = this.expedition
+      ? deltaSeconds * expeditionTimeScale
+      : deltaSeconds;
+
     const magnitude = Math.hypot(this.input.x, this.input.y);
     this.facing = facingForInput(this.input.x, this.input.y, this.facing);
     this.avatarState.setLocomotion(magnitude);
@@ -1427,11 +1526,11 @@ export class GoldlineGame {
       this.velocity = stepVelocity({
         currentVelocity: this.velocity,
         targetSpeed,
-        deltaSeconds,
+        deltaSeconds: gameplayDelta,
         isReversing,
       });
 
-      const next = this.progress + this.velocity * directional * deltaSeconds;
+      const next = this.progress + this.velocity * directional * gameplayDelta;
       // The mode ceiling always applies; a traversal trigger may only make
       // the limit tighter. Previously an unblocked step clamped to the raw
       // 0.82 and walked straight through the expedition ceiling.
@@ -1445,14 +1544,26 @@ export class GoldlineGame {
       );
       this.lateral = Math.max(
         -0.72,
-        Math.min(0.72, this.lateral + this.input.x * 0.72 * deltaSeconds)
+        Math.min(0.72, this.lateral + this.input.x * 0.72 * gameplayDelta)
       );
     }
 
-    const nextBranch = branchForLateralPosition(this.lateral);
-    if (nextBranch !== this.branch) {
-      this.branch = nextBranch;
-      this.callbacks.onBranchChange(nextBranch);
+    if (this.expedition) {
+      // ExpeditionLayer owns route commitment during a pickup expedition —
+      // the ordinary corridor branch system uses different semantics
+      // (safe/intel/upper as ambient lane choice, not an authored Safe/
+      // Upper fork) and must not fire before the mapped fork window.
+      const chosen = this.expedition.tryChooseRoute(this.progress, this.lateral);
+      if (chosen) {
+        this.branch = chosen;
+        this.callbacks.onBranchChange(chosen);
+      }
+    } else {
+      const nextBranch = branchForLateralPosition(this.lateral);
+      if (nextBranch !== this.branch) {
+        this.branch = nextBranch;
+        this.callbacks.onBranchChange(nextBranch);
+      }
     }
 
     // Authored route centerline (traced from mid.webp's painted gold inlay)
@@ -1519,9 +1630,9 @@ export class GoldlineGame {
 
       // Dodge is a real corridor burst, applied through the same
       // progress/lateral the joystick uses — not a separate position.
-      stepDodge(this.dodgeState, deltaSeconds);
+      stepDodge(this.dodgeState, gameplayDelta);
       if (this.dodgeState.active) {
-        const burst = DODGE.speed * deltaSeconds;
+        const burst = DODGE.speed * gameplayDelta;
         this.progress = clampCorridorProgress(
           this.progress +
             (-this.dodgeState.dirY * burst) / (height * PROGRESS_SPAN_FRACTION),
@@ -1537,7 +1648,7 @@ export class GoldlineGame {
       // against a real hostile in range, and on a cadence so it never
       // machine-guns or steals control from the player.
       if (this.lashCooldown > 0) {
-        this.lashCooldown = Math.max(0, this.lashCooldown - deltaSeconds);
+        this.lashCooldown = Math.max(0, this.lashCooldown - gameplayDelta);
       }
       const stationary = Math.hypot(this.input.x, this.input.y) < 0.18;
       if (
@@ -1613,7 +1724,13 @@ export class GoldlineGame {
       rawCurrent?.action === "INTERACT" && this.populationSystem
         ? null
         : rawCurrent;
-    const mission = this.populationSystem?.missionEmbodiment ?? null;
+    // The expedition destination is the ONLY pickup interaction surface
+    // while a pickup expedition is active — a second live proximity path
+    // to the same underlying business object would be a second completion
+    // route into the same world.
+    const mission = this.expedition
+      ? null
+      : (this.populationSystem?.missionEmbodiment ?? null);
     const missionDistance = mission
       ? Math.hypot(
           mission.anchor.position.progress - this.progress,
@@ -1632,7 +1749,9 @@ export class GoldlineGame {
       this.callbacks.onMissionProximity?.(mission.missionId, missionProximity);
     }
 
-    const order = this.populationSystem?.orderEmbodiment ?? null;
+    const order = this.expedition
+      ? null
+      : (this.populationSystem?.orderEmbodiment ?? null);
     const orderDistance = order
       ? Math.hypot(
           order.anchor.position.progress - this.progress,
@@ -1713,6 +1832,11 @@ export class GoldlineGame {
    * Throttled to roughly once per second to avoid write-spamming storage.
    */
   private reportCheckpointIfSafe() {
+    // Expedition state is deliberately not persisted in this slice — saving
+    // an expedition coordinate into the normal corridor checkpoint would
+    // resume the player mid-combat at a position the ordinary corridor
+    // doesn't understand.
+    if (this.expedition) return;
     const safeStates: AvatarState[] = ["idle", "walk", "run"];
     if (!safeStates.includes(this.avatarState.state)) return;
     const now = performance.now();
@@ -2130,6 +2254,7 @@ export class GoldlineGame {
     // shimmer that points at nothing (never implies a destination that
     // doesn't exist).
     const objectiveProgress =
+      this.expedition?.getDestinationProgress() ??
       this.populationSystem?.missionEmbodiment?.anchor.position.progress ??
       this.populationSystem?.orderEmbodiment?.anchor.position.progress ??
       null;
