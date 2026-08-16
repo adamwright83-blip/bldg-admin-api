@@ -1997,6 +1997,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   }
 
   function performAction() {
+    // Defense in depth: GoldlineGame.performAction() already rejects while
+    // an expedition is active, but a stale React `action` value could
+    // still reach this handler in the same render cycle an expedition
+    // starts. The expedition's own ACT surface never calls this function.
+    if (activeExpedition) return;
     if (!action) return;
     const performed = runtimeRef.current?.performAction(action);
     if (!performed) return;

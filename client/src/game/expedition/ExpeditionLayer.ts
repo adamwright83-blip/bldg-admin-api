@@ -503,6 +503,27 @@ export class ExpeditionLayer {
   }
 
   /**
+   * ONE state source for the Shieldbearer climax barrier. Previously
+   * getGameplayForwardCeiling checked plan+scarred+shield-alive+barrier-
+   * fixture-exists, while isClimaxBarrierUp only checked scarred+shield-
+   * alive — two different predicates that happened to usually agree, but
+   * a plan missing the arch_climax_span fixture would have shown a visible
+   * seal with no actual movement clamp behind it, or the reverse. Both the
+   * renderer and the ceiling now read this single function.
+   */
+  private activeClimaxBarrier(): EnvironmentSpawn | null {
+    if (!this.plan) return null;
+    if (this.run.scarred) return null;
+    const barrier =
+      this.plan.environment.find(e => e.id === "arch_climax_span") ?? null;
+    if (!barrier) return null;
+    const shieldAlive = this.hostiles.some(
+      h => h.id === "shieldbearer_climax" && h.alive
+    );
+    return shieldAlive ? barrier : null;
+  }
+
+  /**
    * Forward movement ceiling contributed by the Shieldbearer climax. While
    * the guardian is alive, the barrier at arch_climax_span blocks further
    * progress — sprinting past the elite and touching the cache is not a
@@ -510,24 +531,13 @@ export class ExpeditionLayer {
    * §34's "largely reduce/bypass remaining mandatory combat".
    */
   getGameplayForwardCeiling(baseCeiling: number): number {
-    if (!this.plan || this.run.scarred) return baseCeiling;
-    const shieldAlive = this.hostiles.some(
-      h => h.id === "shieldbearer_climax" && h.alive
-    );
-    if (!shieldAlive) return baseCeiling;
-    const barrier = this.plan.environment.find(
-      e => e.id === "arch_climax_span"
-    );
-    if (!barrier) return baseCeiling;
-    return Math.min(baseCeiling, barrier.progress - 0.012);
+    const barrier = this.activeClimaxBarrier();
+    return barrier ? Math.min(baseCeiling, barrier.progress - 0.012) : baseCeiling;
   }
 
   /** True while the climax barrier is still up — for rendering the seal. */
   isClimaxBarrierUp(): boolean {
-    return (
-      !this.run.scarred &&
-      this.hostiles.some(h => h.id === "shieldbearer_climax" && h.alive)
-    );
+    return this.activeClimaxBarrier() !== null;
   }
 
   /**
@@ -662,7 +672,11 @@ export class ExpeditionLayer {
       const s = at.scale * (0.62 + (1 - hostile.x) * 0.5);
       const offset =
         hostile.kind === "hunter" ? 62 : hostile.kind === "slinger" ? 44 : 52;
-      return { x: at.x, y: at.y - offset * s };
+      // Follows the same single recoil the visible body actually applies,
+      // so the reticle/cable target the player sees tracks the torso they
+      // see rather than the un-recoiled world root.
+      const recoil = hostile.recoilSeconds > 0 ? hostile.recoilX * 7 * s : 0;
+      return { x: at.x + recoil, y: at.y - offset * s };
     }
     const env = this.env.find(e => e.id === id);
     if (env) {
@@ -1068,11 +1082,12 @@ export class ExpeditionLayer {
   private drawClimaxSeal(project: ScreenProjection) {
     const g = this.gSeal;
     g.clear();
-    if (!this.plan) return;
-    const barrier = this.plan.environment.find(e => e.id === "arch_climax_span");
+    // Reads the SAME activeClimaxBarrier() the ceiling calls, rather than
+    // separately looking up the fixture and separately checking the
+    // shield's state — that duplication is exactly what let the visual
+    // and the clamp drift out of agreement.
+    const barrier = this.activeClimaxBarrier();
     if (!barrier) return;
-    const barrierUp = this.isClimaxBarrierUp();
-    if (!barrierUp) return;
 
     // Centered on the actual playable lane, not the environment spawn's own
     // authored lateral (which is an interaction fixture position, not the
@@ -1266,8 +1281,6 @@ export class ExpeditionLayer {
       // sit in the painted perspective instead of floating on top of it.
       const s = at.scale * (0.62 + (1 - hostile.x) * 0.5);
       const flash = this.hitFlash.get(hostile.id) ?? 0;
-      const recoil = hostile.recoilSeconds > 0 ? hostile.recoilX * 7 * s : 0;
-      const x = at.x + recoil;
       const y = at.y;
 
       const telegraph = hostile.telegraphProgress();
@@ -1282,15 +1295,22 @@ export class ExpeditionLayer {
 
       const texture = this.textures.get(hostile.kind);
       if (texture) {
-        // The sprite-backed HostileVisual root draws its own LOCAL contact
-        // shadow (see updateHostileSprite) that travels with the actor and
-        // sorts at its depth. Drawing a second shadow here, into the flat
-        // GAMEPLAY_OVERLAY layer, duplicated it and rendered the duplicate
-        // above civilians regardless of the guardian's actual depth.
-        this.updateHostileSprite(hostile, texture, x, y, s, flash, t);
+        // World ROOT stays at the true, un-recoiled world position — recoil
+        // is applied ONCE, locally, on the child body inside
+        // updateHostileSprite. Previously this call site pre-offset x by
+        // the recoil amount AND updateHostileSprite applied its own local
+        // offset on top, doubling the visible kick and desyncing the
+        // guardian's actual world/depth position from where it was drawn.
+        //
+        // The sprite-backed HostileVisual root also draws its own LOCAL
+        // contact shadow that travels with the actor and sorts at its
+        // depth, so no ground shadow is drawn here.
+        this.updateHostileSprite(hostile, texture, at.x, y, s, flash, t);
       } else {
-        // Procedural fallback: no sprite root exists, so its grounding has
-        // to live here.
+        // Procedural fallback has no sprite root, so it owns its own
+        // (single) recoil offset and its own grounding here.
+        const recoil = hostile.recoilSeconds > 0 ? hostile.recoilX * 7 * s : 0;
+        const x = at.x + recoil;
         g.ellipse(at.x, y + 3 * s, 30 * s, 9 * s).fill({
           color: PALETTE.shadow,
           alpha: 0.3,
