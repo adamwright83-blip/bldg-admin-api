@@ -163,12 +163,61 @@ collected orders into `projectStrongholdRestoration`.
 412×923 @ 2.625 and is NOT equivalent), the 35-assertion E2E through real
 touch, 14 screenshots, regressions, PR, merge, deploy verification.
 
-## Exact next step
+## DEPENDENCY ORDER — do not skip the foundation
 
-`client/src/game/expedition/ExpeditionHud.tsx` — add the Relic choice and
-route-fork presentation, driven by `ExpeditionRun.chooseRelic()` and
-`chooseRoute()`, which are already implemented and tested. Then
-`GoldlineGameHome.tsx` for the Retrieve/Secure Cargo action bound to the
-canonical mutation.
+A context reset must not jump to presentation work. The order is:
+
+1. ~~expedition progress reachability~~ **DONE**
+2. ~~corridor-transition ownership~~ **DONE**
+3. purple card identification — **IN PROGRESS, see below**
+4. sprite/prop wiring — assets committed, renderer still procedural
+5. safe-opening browser verification — **DONE** (HP 100% after 22s live)
+6. Phase D (death UX, Relic, Safe/Upper fork, Shieldbearer climax)
+7. Phase E (destination, canonical Retrieve, Cargo Secured, payoff)
+8. Phase F (Playwright touch proof, 393x852 DPR3 journey, screenshots, PR)
+
+## The purple card — isolation state
+
+**Confirmed:** `elementFromPoint` at the card's centre and all four edges
+returns `CANVAS.goldline-game-canvas` at every sample, with no DOM or SVG
+node in the region. It is drawn by **Pixi**, so no CSS suppression can
+work.
+
+**Confirmed:** the card appears in screenshots taken *before the expedition
+layer existed*. It is base corridor presentation, not something this branch
+introduced.
+
+**Disproven by evidence, do not retry:**
+
+| Hypothesis | Test | Result |
+|---|---|---|
+| `comms_portal` sprite | forced to ambient during expedition | card unchanged |
+| `strongholdSprite` | alpha 0 during expedition | card unchanged |
+
+The stronghold box (x≈206, y≈162, h≈204 at 393×852) matched the observed
+card region (x 135–255, y 87–240) closely enough to look conclusive and
+still was not it. Measurement alone is not sufficient here.
+
+**Next move:** no Pixi app handle is exposed on `window` or the canvas, so
+console-side walking is impossible. Add a temporary dev-only accessor
+(guarded by `import.meta.env.DEV` or the test-harness flag) that exposes
+the `Application`, then walk `stage` and toggle `.renderable` on candidates
+one at a time, screenshotting after each. Remove the accessor before PR.
+
+Remaining untested candidates: the corridor-transition presentation, the
+`landmark` Graphics (GHOST draws in purple), `effectsSprite`, or the
+painted corridor plate itself.
+
+## Also still open
+
+- **Playwright/synthetic touch**: dispatching PointerEvents at
+  `.game-joystick` did not move the player. DOM `.click()` works for
+  buttons. Phase F requires real touch on the joystick and action pad —
+  prove this early, it may need Playwright's `touchscreen` API rather than
+  synthetic events.
+- Ruinbound still procedural; corrected assets committed at
+  `client/src/assets/goldline/heartbeat/` (alpha-clean, downscaled 19.1MB →
+  1.9MB, feet anchor ≈0.98 of texture height).
+- Art **not** §53-certified at 393×852 DPR3.
 
 **FUN GATE: PENDING ADAM REAL-DEVICE PLAYTEST.**
