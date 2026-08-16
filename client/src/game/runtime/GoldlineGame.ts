@@ -57,6 +57,10 @@ import {
   stepDodge,
 } from "../expedition/actionPad";
 import {
+  portalPresentationFor,
+  portalGlowAlpha,
+} from "../expedition/portalPresentation";
+import {
   corridorDeltaFromScreenImpulse,
   projectCorridorPoint,
   PROGRESS_SPAN_FRACTION,
@@ -1775,7 +1779,15 @@ export class GoldlineGame {
         baseHeightAt(height, anchor.position.progress) * 0.5;
       const dominance = 1 - Math.min(1, distance / anchor.labelRadius);
 
-      if (portalTexture && anchor.type === "comms_portal") {
+      // Presentation only — proximity callbacks above already fired.
+      const expeditionActive = this.expedition !== null;
+      const presentation = portalPresentationFor({
+        expeditionActive,
+        anchorType: anchor.type,
+        hasCardTexture: Boolean(portalTexture),
+      });
+
+      if (presentation === "card" && portalTexture) {
         const sprite = new Sprite(portalTexture);
         sprite.anchor.set(0.5, 1);
         const targetHeight = height * (0.14 + dominance * 0.1);
@@ -1794,12 +1806,9 @@ export class GoldlineGame {
       const color = anchor.type === "comms_portal" ? 0x36e8e7 : 0x8b5fe0;
       const portal = new Graphics();
       const radius = 34 + dominance * 22;
-      portal
-        .circle(px, py, radius)
-        .fill({ color, alpha: 0.05 + dominance * 0.1 });
-      portal
-        .circle(px, py, radius * 0.45)
-        .fill({ color, alpha: 0.08 + dominance * 0.14 });
+      const glow = portalGlowAlpha({ expeditionActive, dominance });
+      portal.circle(px, py, radius).fill({ color, alpha: glow.outer });
+      portal.circle(px, py, radius * 0.45).fill({ color, alpha: glow.inner });
       this.portals.addChild(portal);
     }
   }

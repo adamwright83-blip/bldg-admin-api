@@ -3305,6 +3305,9 @@
 }
 
 /* Right-hand action pad. Thumb reach, 44px+ target, never over Trailblazer. */
+/* Hitbox stays 104px for thumb accuracy; the VISIBLE ring is lighter and
+   inset, so the controls read as transparent console overlays rather than
+   two dashboard buttons competing with Trailblazer for attention. */
 .expedition-pad {
   position: absolute;
   right: calc(env(safe-area-inset-right, 0px) + 1.1rem);
@@ -3312,34 +3315,43 @@
   width: 104px;
   height: 104px;
   border-radius: 999px;
-  border: 2px solid rgba(255, 209, 102, 0.55);
+  border: 1.5px solid rgba(255, 209, 102, 0.34);
   background: radial-gradient(
     circle at 50% 45%,
-    rgba(255, 209, 102, 0.22),
-    rgba(14, 12, 9, 0.72) 68%
+    rgba(255, 209, 102, 0.07),
+    rgba(14, 12, 9, 0.2) 62%,
+    rgba(14, 12, 9, 0) 76%
   );
+  opacity: 0.78;
   display: grid;
   place-items: center;
   pointer-events: auto;
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
-  box-shadow: 0 0 22px rgba(0, 0, 0, 0.45);
-  transition: transform 90ms ease, border-color 90ms ease;
+  transition: transform 90ms ease, border-color 90ms ease, opacity 120ms ease;
 }
 
+/* Aiming is the one moment the pad should assert itself. */
 .expedition-pad.is-aiming {
   transform: scale(1.06);
+  opacity: 1;
   border-color: rgba(255, 209, 102, 0.95);
-  box-shadow: 0 0 34px rgba(255, 209, 102, 0.45);
+  box-shadow: 0 0 30px rgba(255, 209, 102, 0.4);
 }
 
 .expedition-pad__label {
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.18em;
-  color: #ffd166;
+  color: rgba(255, 209, 102, 0.82);
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}
+
+/* The existing movement joystick is demoted the same way — same hitbox,
+   quieter presence — so neither control outweighs the world. */
+.playable-goldline-shell[data-expedition-state="active"] .game-joystick {
+  opacity: 0.62;
 }
 
 @media (prefers-reduced-motion: reduce) {
