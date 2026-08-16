@@ -106,6 +106,24 @@ export class ExpeditionLayer {
   /** Player body in SCREEN space; the corridor owns progress/lateral. */
   private body: PlayerBody = { x: 0, y: 0, vx: 0, vy: 0 };
   private reducedMotion = false;
+  /**
+   * Target the cable is currently travelling toward. Held from fire() until
+   * the latch frame so resolution happens exactly once, then cleared.
+   */
+  private pendingLatchTargetId: string | null = null;
+  /**
+   * Screen-space movement the fiction wants to contribute THIS frame.
+   * GoldlineGame consumes it and applies it to the real corridor position —
+   * this layer never owns a second player position.
+   */
+  private pendingImpulseX = 0;
+  private pendingImpulseY = 0;
+  /**
+   * Speed handed back to ordinary locomotion at the instant the tether lets
+   * go. Captured on the release frame — not after residual decay — so the
+   * player keeps the momentum they actually earned from the swing.
+   */
+  private handoffSpeed = 0;
   private plan: PickupExpeditionPlan | null = null;
   private route: "unchosen" | "safe" | "upper" | "scarred" = "unchosen";
   private hitFlash = new Map<string, number>();
@@ -198,6 +216,11 @@ export class ExpeditionLayer {
       this.progressOf(target.id) ?? 0,
       this.lateralOf(target.id) ?? 0
     );
+    // Firing always ends the aim. Leaving dilation to a separate endAim()
+    // call means any caller that misses it strands the whole fictional
+    // simulation at 0.2x — so the aim is closed here, at the source.
+    this.endAim();
+    this.pendingLatchTargetId = target.id;
     this.linehook.fire(this.body, {
       id: target.id,
       x: at.x,
@@ -245,15 +268,51 @@ export class ExpeditionLayer {
   ) {
     const dt = this.clock.advance(realDeltaSeconds);
 
+    // SINGLE MOVEMENT TRUTH. The body's POSITION is always re-derived from
+    // the real corridor position that GoldlineGame owns; only its VELOCITY
+    // persists here. The tether reads that position, writes velocity, and
+    // the velocity is handed back as an impulse below. There is deliberately
+    // no second integrated player position anywhere in this layer.
     const playerAt = project(playerProgress, playerLateral);
     this.body.x = playerAt.x;
     this.body.y = playerAt.y;
+
+    this.pendingImpulseX = 0;
+    this.pendingImpulseY = 0;
 
     if (dt > 0) {
       this.run.step(dt);
       this.stepHostiles(dt, playerProgress, playerLateral);
       this.stepProjectilesAndDamage(dt, project);
-      this.linehook.update(dt, this.body);
+
+      const wasPulling = this.linehook.phase === "latched";
+      const result = this.linehook.update(dt, this.body);
+
+      // Resolve on the EXACT frame the cable connects, exactly once.
+      if (result.latched && this.pendingLatchTargetId) {
+        const targetId = this.pendingLatchTargetId;
+        this.pendingLatchTargetId = null;
+        const target = this.registry
+          .targets()
+          .find(t => t.id === targetId);
+        if (target) this.callbacks.onLineLatched?.(target);
+        this.resolveLatch(targetId);
+      }
+      if (result.arrived) this.pendingLatchTargetId = null;
+
+      const pullingNow = this.linehook.phase === "latched";
+
+      // Only a taut tether contributes movement. Once it lets go the
+      // momentum is handed to ordinary locomotion in one clean transfer,
+      // rather than this layer continuing to nudge the player around.
+      this.pendingImpulseX = pullingNow ? this.body.vx * dt : 0;
+      this.pendingImpulseY = pullingNow ? this.body.vy * dt : 0;
+
+      if (wasPulling && !pullingNow) {
+        this.handoffSpeed = Math.hypot(this.body.vx, this.body.vy);
+        this.body.vx = 0;
+        this.body.vy = 0;
+      }
     }
 
     this.syncRegistry(project, viewportWidth);
@@ -409,6 +468,33 @@ export class ExpeditionLayer {
       this.callbacks.onHostileDefeated?.(nearest.kind);
     }
     return true;
+  }
+
+  /**
+   * Screen-space movement the fiction contributed this frame. GoldlineGame
+   * converts it into corridor progress/lateral — it is never applied here.
+   */
+  consumeMovementImpulse(): { dx: number; dy: number } {
+    const dx = this.pendingImpulseX;
+    const dy = this.pendingImpulseY;
+    this.pendingImpulseX = 0;
+    this.pendingImpulseY = 0;
+    return { dx, dy };
+  }
+
+  /** True only while a taut tether is actually driving the player. */
+  isDrivingMovement(): boolean {
+    return this.linehook.phase === "latched";
+  }
+
+  /**
+   * Speed to hand to ordinary locomotion, taken exactly once on the frame
+   * the tether released. Zero at any other time.
+   */
+  consumeHandoffSpeed(): number {
+    const speed = this.handoffSpeed;
+    this.handoffSpeed = 0;
+    return speed;
   }
 
   setPlayerCorridor(progress: number, lateral: number) {

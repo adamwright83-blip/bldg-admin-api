@@ -49,6 +49,11 @@ import { AdaptiveQualityMonitor, type QualityTier } from "./adaptiveQuality";
 import { reportGoldlineLifecycleDelta } from "../testSupport/lifecycleProbe";
 import { ExpeditionLayer, type ExpeditionCallbacks } from "../expedition/ExpeditionLayer";
 import type { PickupExpeditionPlan } from "../expedition/expeditionPlan";
+import {
+  corridorDeltaFromScreenImpulse,
+  projectCorridorPoint,
+  PROGRESS_SPAN_FRACTION,
+} from "../expedition/corridorCoupling";
 
 export type LandmarkArchetype = "ANCHOR" | "GATEKEEPER" | "GHOST" | "STALLER";
 
@@ -376,6 +381,13 @@ export class GoldlineGame {
    * an expedition — the corridor is fully playable without it.
    */
   private expedition: ExpeditionLayer | null = null;
+  /**
+   * True while the tether (or its residual momentum) is driving Trailblazer.
+   * Joystick locomotion stands down so the two do not fight for the same
+   * corridor position — there is one movement truth, and during a grapple
+   * the fiction is contributing to it.
+   */
+  private expeditionDrivingMovement = false;
   private qualityMonitor = new AdaptiveQualityMonitor();
   private qualityTier: QualityTier = "premium";
   private lastCheckpointReportAt = 0;
@@ -802,16 +814,13 @@ export class GoldlineGame {
 
   /** Screen projection for one corridor position, mirroring the avatar. */
   private projectCorridor(progress: number, lateral: number, width: number, height: number) {
-    const routeCenter = lateralForProgress(this.goldRoutePoints, progress);
-    // Plan lateral is authored in world units; the corridor's own lateral
-    // axis is normalised, so convert rather than assuming they match.
-    const normalised = lateral / 140;
-    const baseHeight = Math.max(134, Math.min(232, height * (0.25 - progress * 0.08)));
-    return {
-      x: width * (routeCenter + normalised * 0.22),
-      y: height * (0.88 - progress * 0.61),
-      scale: baseHeight / 180,
-    };
+    return projectCorridorPoint({
+      progress,
+      lateral,
+      routeCenter: lateralForProgress(this.goldRoutePoints, progress),
+      width,
+      height,
+    });
   }
 
   setReducedMotion(reduced: boolean) {
@@ -1111,7 +1120,11 @@ export class GoldlineGame {
     const magnitude = Math.hypot(this.input.x, this.input.y);
     this.facing = facingForInput(this.input.x, this.input.y, this.facing);
     this.avatarState.setLocomotion(magnitude);
-    if (!this.actionUntil && this.avatarState.state !== "encounter_locked") {
+    if (
+      !this.actionUntil &&
+      this.avatarState.state !== "encounter_locked" &&
+      !this.expeditionDrivingMovement
+    ) {
       const branchPace = branchPaceFor(this.branch);
       const targetSpeed = targetSpeedForMagnitude(magnitude, branchPace);
       const forward = Math.max(0, -this.input.y);
@@ -1203,6 +1216,37 @@ export class GoldlineGame {
         (progress, lateral) => this.projectCorridor(progress, lateral, width, height),
         width
       );
+
+      // The fiction contributes movement in SCREEN space; convert it back
+      // through the exact inverse of projectCorridor so a swing moves the
+      // REAL Trailblazer along the real corridor. GoldlineGame remains the
+      // only owner of progress/lateral.
+      const impulse = this.expedition.consumeMovementImpulse();
+      if (impulse.dx !== 0 || impulse.dy !== 0) {
+        const { deltaProgress, deltaLateral } = corridorDeltaFromScreenImpulse({
+          dx: impulse.dx,
+          dy: impulse.dy,
+          width,
+          height,
+        });
+        this.progress = Math.max(
+          0.035,
+          Math.min(0.82, this.progress + deltaProgress)
+        );
+        this.lateral = Math.max(
+          -0.72,
+          Math.min(0.72, this.lateral + deltaLateral)
+        );
+      }
+
+      // Handing control back: seed eased locomotion from the momentum the
+      // player actually carried out of the swing, so the joystick resumes
+      // from real speed rather than a dead stop.
+      const handoff = this.expedition.consumeHandoffSpeed();
+      if (handoff > 0) {
+        this.velocity = Math.min(0.22, handoff / (height * PROGRESS_SPAN_FRACTION));
+      }
+      this.expeditionDrivingMovement = this.expedition.isDrivingMovement();
     }
 
     const exitNear = this.progress >= 0.77;
