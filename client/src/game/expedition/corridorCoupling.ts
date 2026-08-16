@@ -64,3 +64,36 @@ export function corridorDeltaFromScreenImpulse(input: {
     deltaLateral: input.dx / (input.width * LATERAL_SPAN),
   };
 }
+
+export type CorridorScreenPoint = { x: number; y: number; scale: number };
+
+/**
+ * Projector for actors whose lateral is in Goldline's NORMALISED runtime
+ * units (-0.72..0.72) rather than authored plan units: Trailblazer, and
+ * every PopulationSystem actor.
+ *
+ * PopulationSystem previously placed civilians with a hardcoded
+ * `width * (0.5 + lateral * 0.22)` straight-line centreline, while
+ * Trailblazer and the Ruinbound followed the authored Gold Line through
+ * `lateralForProgress`. Civilians and combat actors therefore disagreed
+ * about where the painted road was, which is why guardians appeared to
+ * stand beside the lane the crowd was walking down.
+ *
+ * There is now exactly one x/y/scale formula, in projectCorridorPoint. This
+ * is a unit adapter over it, not a second implementation.
+ */
+export function projectNormalizedCorridorPoint(input: {
+  progress: number;
+  lateral: number;
+  routeCenter: number;
+  width: number;
+  height: number;
+}): CorridorScreenPoint {
+  return projectCorridorPoint({
+    progress: input.progress,
+    lateral: input.lateral * PLAN_LATERAL_UNITS,
+    routeCenter: input.routeCenter,
+    width: input.width,
+    height: input.height,
+  });
+}

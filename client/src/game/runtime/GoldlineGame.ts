@@ -72,8 +72,10 @@ import {
 import {
   corridorDeltaFromScreenImpulse,
   projectCorridorPoint,
+  projectNormalizedCorridorPoint,
   PROGRESS_SPAN_FRACTION,
 } from "../expedition/corridorCoupling";
+import { TRAVERSAL_Z, worldActorZ } from "../world/worldActorDepth";
 
 export type LandmarkArchetype = "ANCHOR" | "GATEKEEPER" | "GHOST" | "STALLER";
 
@@ -325,6 +327,8 @@ export class GoldlineGame {
   // L0-L4 layer containers.
   private layerFar = new Container(); // L0
   private layerMid = new Container(); // L1
+  // Sortable so world actors — Trailblazer, civilians, guardians, props —
+  // interleave individually by screen depth rather than by container.
   private layerTraversal = new Container(); // L2 — route, portals, avatar
   private layerForeground = new Container(); // L3 — occlusion
   private layerEffects = new Container(); // L4
@@ -336,6 +340,7 @@ export class GoldlineGame {
   private pendingAgentPresence: readonly AgentWorldPresence[] = [];
 
   private camera = new CameraController(this.world);
+  private traversalSortInitialised = false;
   private avatar: Sprite | null = null;
   /** Holds the outgoing pose during a crossfade so state changes don't pop. */
   private avatarCrossfade: Sprite | null = null;
@@ -861,6 +866,9 @@ export class GoldlineGame {
       },
     });
     layer.setReducedMotion(this.reducedMotion);
+    // Guardians and props join the SHARED world-actor space so they sort
+    // against civilians and Trailblazer individually.
+    layer.setActorHost(this.layerTraversal);
     layer.load(plan);
     // Art loads asynchronously; the procedural fallback renders until it
     // arrives, so entry is never blocked on a texture fetch.
@@ -989,6 +997,25 @@ export class GoldlineGame {
     };
     if (this.app) walk(this.app.stage as Container, "", 0);
     return found;
+  }
+
+  /**
+   * Projector for actors in normalised runtime lateral — Trailblazer and
+   * every PopulationSystem actor. Same formula as the plan-unit projector.
+   */
+  private projectNormalizedCorridor(
+    progress: number,
+    lateral: number,
+    width: number,
+    height: number
+  ) {
+    return projectNormalizedCorridorPoint({
+      progress,
+      lateral,
+      routeCenter: lateralForProgress(this.goldRoutePoints, progress),
+      width,
+      height,
+    });
   }
 
   /** Screen projection for one corridor position, mirroring the avatar. */
@@ -1220,6 +1247,13 @@ export class GoldlineGame {
 
     this.populationSystem?.destroy();
     this.populationSystem = populationSystem;
+    // A revealed corridor brings its own PopulationSystem. Attach it to the
+    // shared world-actor host now, and only now — attaching while the
+    // preload was still inert would have shown the next corridor's civilians
+    // before the reveal.
+    if (this.traversalSortInitialised) {
+      populationSystem.attachActorHost(this.layerTraversal);
+    }
     this.layerTraversal.addChildAt(
       this.populationSystem.container,
       Math.max(0, this.layerTraversal.getChildIndex(this.avatarShadow))
@@ -1337,12 +1371,26 @@ export class GoldlineGame {
     this.drawWorld(width, height);
 
     const now = performance.now();
+    if (!this.traversalSortInitialised) {
+      this.traversalSortInitialised = true;
+      this.layerTraversal.sortableChildren = true;
+      this.corridor.zIndex = TRAVERSAL_Z.STATIC_WORLD;
+      this.recoveryPath.zIndex = TRAVERSAL_Z.STATIC_WORLD + 1;
+      this.landmark.zIndex = TRAVERSAL_Z.STATIC_WORLD + 2;
+      this.portals.zIndex = TRAVERSAL_Z.STRONGHOLD;
+      this.fortress.zIndex = TRAVERSAL_Z.FORTRESS;
+      this.particles.zIndex = TRAVERSAL_Z.PARTICLES;
+      this.populationSystem?.attachActorHost(this.layerTraversal);
+    }
+
     this.populationSystem?.update({
       now,
       width,
       height,
       playerProgress: this.progress,
       playerLateral: this.lateral,
+      project: (progress, lateral) =>
+        this.projectNormalizedCorridor(progress, lateral, width, height),
     });
     this.drawLandmark(width, height, now);
     this.avatarState.tick(now);
@@ -1410,9 +1458,16 @@ export class GoldlineGame {
     // Authored route centerline (traced from mid.webp's painted gold inlay)
     // replaces the constant 0.5 — the player's free joystick deviation is
     // still added on top, exactly as it was against the old fixed center.
-    const routeCenter = lateralForProgress(this.goldRoutePoints, this.progress);
-    const avatarX = width * (routeCenter + this.lateral * 0.22);
-    const groundY = height * (0.88 - this.progress * 0.61);
+    // Trailblazer is projected by the SAME function as civilians and
+    // guardians, so all three agree about where the painted lane runs.
+    const playerProjection = this.projectNormalizedCorridor(
+      this.progress,
+      this.lateral,
+      width,
+      height
+    );
+    const avatarX = playerProjection.x;
+    const groundY = playerProjection.y;
     const baseHeight = Math.max(
       134,
       Math.min(232, height * (0.25 - this.progress * 0.08))
@@ -1443,6 +1498,12 @@ export class GoldlineGame {
     this.avatar.rotation = this.input.x * 0.035;
     this.avatar.alpha =
       this.avatarState.state === "encounter_locked" ? 0.72 : 1;
+
+    // Trailblazer sorts by the same rule as every other world actor.
+    const actorZ = worldActorZ(groundY, "trailblazer");
+    this.avatar.zIndex = actorZ;
+    if (this.avatarCrossfade) this.avatarCrossfade.zIndex = actorZ - 0.01;
+    this.avatarShadow.zIndex = actorZ - 0.02;
 
     this.syncCrossfadeTransform();
     this.drawContactShadow(avatarX, groundY, baseHeight, jumpFactor);
@@ -1803,23 +1864,19 @@ export class GoldlineGame {
       pointInZone(zone, this.progress, this.lateral)
     );
     if (!this.avatar) return;
-    const fortressIndex = this.layerTraversal.getChildIndex(this.fortress);
-    const avatarIndex = this.layerTraversal.getChildIndex(this.avatar);
-    if (activeZone && avatarIndex > fortressIndex) {
-      this.layerTraversal.setChildIndex(this.avatar, fortressIndex);
-      this.layerTraversal.setChildIndex(this.avatarShadow, fortressIndex);
-    } else if (
-      !activeZone &&
-      avatarIndex < this.layerTraversal.children.length - 1
-    ) {
-      this.layerTraversal.setChildIndex(
-        this.avatar,
-        this.layerTraversal.children.length - 1
-      );
-      this.layerTraversal.setChildIndex(
-        this.avatarShadow,
-        Math.max(0, this.layerTraversal.children.length - 2)
-      );
+
+    // Authored fortress occlusion, expressed as depth rather than child
+    // index. setChildIndex fights sortableChildren — the sort would simply
+    // undo it on the next frame — so the zone now pushes Trailblazer just
+    // behind the fortress band instead. Outside a zone she keeps the normal
+    // world-actor depth assigned during update, so she interleaves with
+    // civilians and guardians as any other actor does.
+    if (activeZone) {
+      this.avatar.zIndex = TRAVERSAL_Z.FORTRESS - 0.01;
+      if (this.avatarCrossfade) {
+        this.avatarCrossfade.zIndex = TRAVERSAL_Z.FORTRESS - 0.02;
+      }
+      this.avatarShadow.zIndex = TRAVERSAL_Z.FORTRESS - 0.03;
     }
 
     // The registered full-scene L3 plate supplies pixel-accurate occlusion.

@@ -55,7 +55,15 @@ type PopulationNode = {
  * may provide a static role atlas; the neutral faceless engineering figures
  * remain an explicit load-failure/placeholder fallback.
  */
+import { worldActorZ } from "./worldActorDepth";
+
+export type PopulationProjection = (
+  progress: number,
+  lateral: number
+) => { x: number; y: number; scale: number };
+
 export class PopulationSystem {
+  private actorHost: Container | null = null;
   readonly container = new Container();
   private readonly ambientLayer = new Container();
   private readonly missionLayer = new Container();
@@ -259,18 +267,54 @@ export class PopulationSystem {
     this.reducedMotion = reduced;
   }
 
+  /**
+   * Attaches every actor this system owns to a SHARED sortable parent, so a
+   * single civilian can interleave with a single guardian by depth. While
+   * they lived inside this system's own nested container they could only
+   * ever render wholly in front of, or wholly behind, the Ruinbound.
+   *
+   * The host is supplied, not owned: destroy() disposes only the displays
+   * this system created, never the host itself.
+   */
+  attachActorHost(host: Container) {
+    this.actorHost = host;
+    for (const node of this.ambient) host.addChild(node.display);
+    if (this.missionGraphic) host.addChild(this.missionGraphic);
+    if (this.orderGraphic) host.addChild(this.orderGraphic);
+    for (const station of this.capabilityLayer.children.slice()) {
+      host.addChild(station);
+    }
+  }
+
+  /** Falls back to this system's own container when no host is attached. */
+  private hostFor(): Container {
+    return this.actorHost ?? this.container;
+  }
+
   update(input: {
     now: number;
     width: number;
     height: number;
     playerProgress: number;
     playerLateral?: number;
+    /**
+     * Shared corridor projector. Supplied by GoldlineGame so civilians and
+     * combat actors agree about where the painted road is — this system used
+     * to place actors on a straight `0.5` centreline while Trailblazer
+     * followed the authored Gold Line.
+     */
+    project?: PopulationProjection;
   }) {
     if (this.destroyed) return;
     // Ten updates/second is sufficient for short human loops and keeps this
     // population off the high-frequency gameplay path.
     if (input.now - this.lastBehaviorUpdateAt < 100) return;
     this.lastBehaviorUpdateAt = input.now;
+
+    const project =
+      input.project ??
+      ((progress: number, lateral: number) =>
+        fallbackCorridorPoint(progress, lateral, input.width, input.height));
 
     for (const node of this.ambient) {
       const visible =
@@ -279,23 +323,21 @@ export class PopulationSystem {
       node.display.visible = visible;
       if (!visible) continue; // offscreen sleep
       const position = authoredPosition(node, input.now, this.reducedMotion);
-      placeAtCorridorPosition(
-        node.display,
-        position.progress,
-        position.lateral,
-        input.width,
-        input.height
-      );
+      const point = project(position.progress, position.lateral);
+      applyProjection(node.display, point);
+      node.display.zIndex = worldActorZ(point.y, `civilian:${node.id}`);
       applyBehaviorPose(node, input.now, this.reducedMotion);
     }
 
     if (this.mission && this.missionGraphic) {
-      placeAtCorridorPosition(
-        this.missionGraphic,
+      const point = project(
         this.mission.anchor.position.progress,
-        this.mission.anchor.position.lateral,
-        input.width,
-        input.height
+        this.mission.anchor.position.lateral
+      );
+      applyProjection(this.missionGraphic, point);
+      this.missionGraphic.zIndex = worldActorZ(
+        point.y,
+        `mission:${this.mission.missionId}`
       );
       applyMissionBehavior(
         this.missionGraphic,
@@ -306,12 +348,14 @@ export class PopulationSystem {
     }
 
     if (this.order && this.orderGraphic) {
-      placeAtCorridorPosition(
-        this.orderGraphic,
+      const point = project(
         this.order.anchor.position.progress,
-        this.order.anchor.position.lateral,
-        input.width,
-        input.height
+        this.order.anchor.position.lateral
+      );
+      applyProjection(this.orderGraphic, point);
+      this.orderGraphic.zIndex = worldActorZ(
+        point.y,
+        `order:${this.order.orderKey}`
       );
       applyOrderMarkerMotion(this.orderGraphic, input.now, this.reducedMotion);
       this.applyOrderPropState(
@@ -334,13 +378,9 @@ export class PopulationSystem {
       const station = this.capabilityLayer.children[index];
       if (!station) return;
       const [progress, lateral] = stationPositions[presence.agentId];
-      placeAtCorridorPosition(
-        station,
-        progress,
-        lateral,
-        input.width,
-        input.height
-      );
+      const point = project(progress, lateral);
+      applyProjection(station, point);
+      station.zIndex = worldActorZ(point.y, `station:${presence.agentId}`);
     });
   }
 
@@ -633,17 +673,32 @@ function authoredPosition(
   };
 }
 
-function placeAtCorridorPosition(
+function applyProjection(
   display: Container,
+  point: { x: number; y: number; scale: number }
+) {
+  display.x = point.x;
+  display.y = point.y;
+  display.scale.set(point.scale);
+}
+
+/**
+ * Only used when no projector is supplied — tests that construct a bare
+ * PopulationSystem. Production always passes GoldlineGame's shared
+ * projector, so the straight-line centreline this approximates is no longer
+ * on any production path.
+ */
+function fallbackCorridorPoint(
   progress: number,
   lateral: number,
   width: number,
   height: number
 ) {
-  display.x = width * (0.5 + lateral * 0.22);
-  display.y = height * (0.88 - progress * 0.61);
-  const scale = Math.max(0.55, Math.min(1.12, 1.12 - progress * 0.65));
-  display.scale.set(scale);
+  return {
+    x: width * (0.5 + lateral * 0.22),
+    y: height * (0.88 - progress * 0.61),
+    scale: Math.max(0.55, Math.min(1.12, 1.12 - progress * 0.65)),
+  };
 }
 
 function applyBehaviorPose(

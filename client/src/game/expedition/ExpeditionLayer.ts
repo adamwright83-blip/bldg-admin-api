@@ -58,12 +58,15 @@ import {
   type Projectile,
 } from "./ruinbound";
 import {
+  EXPEDITION_START_PROGRESS,
   activeEnvironment,
   activeHostiles,
   planInCorridorSpace,
+  waystoneFor,
   type PickupExpeditionPlan,
 } from "./expeditionPlan";
 import { ExpeditionRun, EXPEDITION } from "./expeditionState";
+import { TRAVERSAL_Z, worldActorZ } from "../world/worldActorDepth";
 
 /** Goldline's existing palette, reused rather than reinvented. */
 const PALETTE = {
@@ -93,6 +96,19 @@ export type ScreenProjection = (
   progress: number,
   lateral: number
 ) => { x: number; y: number; scale: number };
+
+/**
+ * One guardian's world presence. Its root is a DIRECT sibling of civilians
+ * and Trailblazer under the shared sortable parent, which is the only way a
+ * single guardian can render behind one civilian and in front of another.
+ * Body lean and recoil go on the child sprite so they never disturb the
+ * root's world position, which is what the depth sort reads.
+ */
+type HostileVisual = {
+  root: Container;
+  shadow: Graphics;
+  body: Sprite;
+};
 
 export type ExpeditionCallbacks = {
   onPlayerDamaged?: (amount: number, hpRemaining: number) => void;
@@ -129,10 +145,14 @@ export class ExpeditionLayer {
   private gCable = new Graphics();
   private gAim = new Graphics();
   private gEnv = new Graphics();
-  /** Sprite bodies, keyed by hostile id. Overlays stay in Graphics. */
-  private spriteLayer = new Container();
-  private hostileSprites = new Map<string, Sprite>();
-  private propSprites = new Map<string, Sprite>();
+  /**
+   * World-actor host, supplied by GoldlineGame. Guardian and prop roots are
+   * added here, NOT to this layer's own container — the container is now
+   * gameplay overlays only.
+   */
+  private actorHost: Container | null = null;
+  private hostileVisuals = new Map<string, HostileVisual>();
+  private propVisuals = new Map<string, HostileVisual>();
   private textures = new Map<string, Texture>();
 
   private aiming = false;
@@ -161,16 +181,29 @@ export class ExpeditionLayer {
   private handoffSpeed = 0;
   /** True during a dodge's i-frames — a well-timed evade is real mastery. */
   private playerInvulnerable = false;
+  /** Authored, expedition-space. Never fed back into load(). */
+  private rawPlan: PickupExpeditionPlan | null = null;
+  /** Corridor-space projection of rawPlan. The only plan the runtime reads. */
   private plan: PickupExpeditionPlan | null = null;
-  private route: "unchosen" | "safe" | "upper" | "scarred" = "unchosen";
   private hitFlash = new Map<string, number>();
+
+  setActorHost(host: Container) {
+    this.actorHost = host;
+  }
+
+  private hostFor(): Container {
+    return this.actorHost ?? this.container;
+  }
 
   constructor(private readonly callbacks: ExpeditionCallbacks = {}) {
     // Environment sits behind guardians; cable and aim read above both.
+    // This container is GAMEPLAY OVERLAYS ONLY: telegraphs, projectiles,
+    // cable, aim cone, target highlight. Bodies live in the world actor
+    // host so they can sort against civilians. Combat readability must
+    // survive a civilian standing in front of a guardian, which is exactly
+    // why the telegraph rings stay up here.
+    this.container.zIndex = TRAVERSAL_Z.GAMEPLAY_OVERLAY;
     this.container.addChild(this.gEnv);
-    // Sprites sit between the environment underlay and the overlay graphics,
-    // so shadows read beneath them and telegraphs/flashes read above.
-    this.container.addChild(this.spriteLayer);
     this.container.addChild(this.gHostiles);
     this.container.addChild(this.gProjectiles);
     this.container.addChild(this.gCable);
@@ -222,14 +255,45 @@ export class ExpeditionLayer {
    * is projected into corridor space exactly once, here, so every system
    * downstream works in the single space the runtime actually moves in.
    */
-  load(rawPlan: PickupExpeditionPlan, route: typeof this.route = "unchosen") {
-    const plan = planInCorridorSpace(rawPlan);
-    this.plan = plan;
-    this.route = route;
+  load(rawPlan: PickupExpeditionPlan) {
+    // Keep BOTH forms. `load` used to be re-entered from setRoute with an
+    // already-mapped plan, so planInCorridorSpace ran a second time and
+    // dragged every guardian and prop back toward the start of the corridor
+    // the first time the player chose Safe or Upper. Holding the raw plan
+    // separately makes that impossible to repeat.
+    this.rawPlan = rawPlan;
+    this.plan = planInCorridorSpace(rawPlan);
+    this.rebuildRouteContent();
+
+    // Waystones must come from the MAPPED plan; a raw expedition-space
+    // waystone would redeploy the player to the wrong corridor position.
+    const threshold = waystoneFor(this.plan, EXPEDITION_START_PROGRESS);
+    if (threshold) this.run.setWaystone(threshold);
+  }
+
+  /**
+   * Rebuilds branch-specific fictional content from the ALREADY-MAPPED plan.
+   * Never remaps. Run state — hp, momentum, relic, outcome — survives,
+   * because changing route is a fork in the road, not a new expedition.
+   */
+  private rebuildRouteContent() {
+    const plan = this.plan;
+    if (!plan) return;
+
+    for (const visual of Array.from(this.hostileVisuals.values())) {
+      visual.root.destroy({ children: true });
+    }
+    this.hostileVisuals.clear();
+
     this.hostiles = [];
     this.env = [];
     this.projectiles = [];
     this.registry.clear();
+
+    // ExpeditionRun.route is the ONLY route truth. There is deliberately no
+    // second private flag here: setRoute changed one and pressOn changed the
+    // other, which would have broken the Scarred Route.
+    const route = this.run.route;
 
     for (const spawn of activeHostiles(plan, route)) {
       const at = { x: spawn.progress, y: spawn.lateral };
@@ -253,17 +317,43 @@ export class ExpeditionLayer {
     }
   }
 
-  setRoute(route: typeof this.route) {
-    if (this.route === route) return;
-    this.route = route;
-    if (this.plan) {
-      // Rebuild only the branch-specific content, preserving run state.
-      const keepHp = this.run.hp;
-      const keepMomentum = this.run.momentum;
-      this.load(this.plan, route);
-      this.run.hp = keepHp;
-      this.run.momentum = keepMomentum;
-    }
+  /** Physical route commitment. Rebuilds from the mapped plan, never remaps. */
+  setRoute(route: "safe" | "upper") {
+    if (this.run.route === route || this.run.scarred) return;
+    this.run.chooseRoute(route);
+    this.rebuildRouteContent();
+  }
+
+  /** §34 Scarred Route. Hostiles vanish; physical traversal remains. */
+  pressOn() {
+    this.run.pressOn();
+    this.projectiles = [];
+    this.linehook.reset();
+    this.pendingLatchTargetId = null;
+    this.endAim();
+    this.rebuildRouteContent();
+  }
+
+  /** §33 Redeploy. Returns the corridor progress to restore the player to. */
+  redeploy(): number {
+    const { restoredProgress } = this.run.redeploy();
+    this.projectiles = [];
+    this.linehook.reset();
+    this.pendingLatchTargetId = null;
+    this.endAim();
+    this.rebuildRouteContent();
+    return restoredProgress;
+  }
+
+  /** Fictional run state for the HUD. Carries no business data. */
+  getSnapshot() {
+    return {
+      hp: this.run.hp,
+      momentum: this.run.momentum,
+      outcome: this.run.outcome,
+      route: this.run.route,
+      relic: this.run.relic?.id ?? null,
+    };
   }
 
   beginAim() {
@@ -618,27 +708,38 @@ export class ExpeditionLayer {
     id: string,
     texture: Texture,
     at: { x: number; y: number },
+    groundY: number,
     s: number,
     height: number,
     anchorY: number,
     highlight: number
   ) {
-    let sprite = this.propSprites.get(id);
-    if (!sprite) {
-      sprite = new Sprite(texture);
-      sprite.anchor.set(0.5, anchorY);
-      this.spriteLayer.addChild(sprite);
-      this.propSprites.set(id, sprite);
+    let visual = this.propVisuals.get(id);
+    if (!visual) {
+      const root = new Container();
+      root.label = `prop:${id}`;
+      const shadow = new Graphics();
+      const body = new Sprite(texture);
+      body.anchor.set(0.5, anchorY);
+      root.addChild(shadow, body);
+      this.hostFor().addChild(root);
+      visual = { root, shadow, body };
+      this.propVisuals.set(id, visual);
     }
-    sprite.height = height * s;
-    sprite.width = sprite.height * (texture.width / texture.height);
-    sprite.x = at.x;
-    sprite.y = at.y;
-    sprite.visible = true;
-    // Subordinate until relevant, brighter once selectable.
-    sprite.alpha = 0.82 + highlight * 0.18;
-    sprite.tint = highlight > 0.6 ? 0xffe9b8 : 0xffffff;
-    return sprite;
+
+    // PHYSICAL PROP sorts in the world; its INTERACTION GLOW lives in the
+    // overlay layer, so an affordance can never be hidden behind a civilian
+    // while the object it belongs to stays visible.
+    visual.root.x = at.x;
+    visual.root.y = at.y;
+    visual.root.zIndex = worldActorZ(groundY, `prop:${id}`);
+
+    const body = visual.body;
+    body.height = height * s;
+    body.width = body.height * (texture.width / texture.height);
+    body.alpha = 0.82 + highlight * 0.18;
+    body.tint = highlight > 0.6 ? 0xffe9b8 : 0xffffff;
+    return visual;
   }
 
   /** 0..1 relevance of a prop: how close the Line is to being able to take it. */
@@ -660,41 +761,44 @@ export class ExpeditionLayer {
       const ringTexture = this.textures.get("grapple_ring");
       const hazardTexture = this.textures.get("cargo_hazard");
       if (node.kind === "architecture" && ringTexture) {
-        // Contact shadow first so the ring reads as mounted, not floating.
-        g.ellipse(at.x, at.y + 2 * s, 16 * s, 5 * s).fill({
-          color: PALETTE.shadow,
-          alpha: 0.22,
-        });
-        this.updatePropSprite(
+        const ring = this.updatePropSprite(
           node.id,
           ringTexture,
           { x: at.x, y: at.y - 44 * s },
+          at.y,
           s,
           78,
           0.5,
           this.propHighlight(node.id)
         );
+        // Shadow sits at the mount point so the ring reads as fixed to
+        // stone rather than hovering in front of it.
+        ring.shadow.clear();
+        ring.shadow
+          .ellipse(0, 44 * s, 16 * s, 5 * s)
+          .fill({ color: PALETTE.shadow, alpha: 0.22 });
         continue;
       }
       if (node.kind === "hazard" && hazardTexture) {
         const swing = node.armed ? Math.sin(t * 1.05) * 6 * s : 0;
-        // Ground shadow under the suspended load — tells the player it hangs
-        // over something, which is the entire point of the hazard.
-        g.ellipse(at.x, at.y + 2 * s, 26 * s, 7 * s).fill({
-          color: PALETTE.shadow,
-          alpha: node.armed ? 0.3 : 0.12,
-        });
-        const sprite = this.updatePropSprite(
+        const cargo = this.updatePropSprite(
           node.id,
           hazardTexture,
           { x: at.x + swing, y: at.y - 30 * s },
+          at.y,
           s,
           132,
           0.82,
           node.armed ? this.propHighlight(node.id) : 0
         );
-        sprite.alpha = node.armed ? sprite.alpha : 0.55;
-        sprite.rotation = node.armed ? Math.sin(t * 1.05) * 0.05 : 0.34;
+        // Ground shadow under the suspended load — tells the player it hangs
+        // over something, which is the entire point of the hazard.
+        cargo.shadow.clear();
+        cargo.shadow
+          .ellipse(-swing, 32 * s, 26 * s, 7 * s)
+          .fill({ color: PALETTE.shadow, alpha: node.armed ? 0.3 : 0.12 });
+        cargo.body.alpha = node.armed ? cargo.body.alpha : 0.55;
+        cargo.body.rotation = node.armed ? Math.sin(t * 1.05) * 0.05 : 0.34;
         continue;
       }
 
@@ -859,64 +963,75 @@ export class ExpeditionLayer {
     flash: number,
     t: number
   ) {
-    let sprite = this.hostileSprites.get(hostile.id);
-    if (!sprite) {
-      sprite = new Sprite(texture);
-      sprite.anchor.set(0.5, GUARDIAN_FEET_ANCHOR);
-      this.spriteLayer.addChild(sprite);
-      this.hostileSprites.set(hostile.id, sprite);
+    let visual = this.hostileVisuals.get(hostile.id);
+    if (!visual) {
+      const root = new Container();
+      root.label = `ruinbound:${hostile.id}`;
+      const shadow = new Graphics();
+      const body = new Sprite(texture);
+      body.anchor.set(0.5, GUARDIAN_FEET_ANCHOR);
+      root.addChild(shadow, body);
+      this.hostFor().addChild(root);
+      visual = { root, shadow, body };
+      this.hostileVisuals.set(hostile.id, visual);
     }
 
+    // Root carries WORLD position and depth; the body carries reaction.
+    visual.root.x = x;
+    visual.root.y = y;
+    visual.root.zIndex = worldActorZ(y, `ruinbound:${hostile.id}`);
+
+    // Contact shadow drawn local to the root, so it travels with the actor
+    // and cannot be occluded independently of the body it belongs to.
+    visual.shadow.clear();
+    visual.shadow
+      .ellipse(0, 2 * s, 30 * s, 9 * s)
+      .fill({ color: PALETTE.shadow, alpha: 0.3 });
+    visual.shadow
+      .ellipse(0, 1 * s, 15 * s, 4.5 * s)
+      .fill({ color: PALETTE.shadow, alpha: 0.5 });
+
+    const body = visual.body;
     const targetHeight = 150 * s;
-    sprite.height = targetHeight;
-    sprite.width = targetHeight * (texture.width / texture.height);
+    body.height = targetHeight;
+    body.width = targetHeight * (texture.width / texture.height);
+    body.x = 0;
+    body.y = 0;
 
     const telegraph = hostile.telegraphProgress();
     const facingRight = Math.cos(hostile.facing) >= 0;
-    // Mirror toward the player so every guardian visibly faces Trailblazer.
-    sprite.scale.x = Math.abs(sprite.scale.x) * (facingRight ? 1 : -1);
+    body.scale.x = Math.abs(body.scale.x) * (facingRight ? 1 : -1);
 
-    sprite.x = x;
-    sprite.y = y;
-    sprite.visible = true;
+    // Recoil is a local body offset, never a world move — moving the root
+    // would make a hit visibly change the actor's depth.
+    body.x = hostile.recoilSeconds > 0 ? hostile.recoilX * 7 * s : 0;
 
-    // Telegraph: lean in and swell slightly, so the wind-up is legible
-    // from silhouette alone rather than only from the ground ring.
     const lean = telegraph * 0.18 * (facingRight ? 1 : -1);
-    sprite.rotation = lean + (hostile.recoilSeconds > 0 ? -hostile.recoilX * 0.09 : 0);
+    body.rotation =
+      lean + (hostile.recoilSeconds > 0 ? -hostile.recoilX * 0.09 : 0);
     if (telegraph > 0) {
-      sprite.scale.y = Math.abs(sprite.scale.y) * (1 + telegraph * 0.06);
+      body.scale.y = Math.abs(body.scale.y) * (1 + telegraph * 0.06);
     }
 
-    // Hit flash and the exposed stagger both read through tint.
     const exposed = hostile instanceof Shieldbearer && hostile.exposed;
-    sprite.tint =
-      flash > 0
-        ? 0xffffff
-        : exposed
-          ? 0xffd9a0
-          : 0xffffff;
-    sprite.alpha = flash > 0 ? 0.85 : 1;
-
-    if (exposed) {
-      // Hauled off balance: a visible list the player can read instantly.
-      sprite.rotation += Math.sin(t * 12) * 0.05 + 0.12;
-    }
+    body.tint = flash > 0 ? 0xffffff : exposed ? 0xffd9a0 : 0xffffff;
+    body.alpha = flash > 0 ? 0.85 : 1;
+    if (exposed) body.rotation += Math.sin(t * 12) * 0.05 + 0.12;
   }
 
   /** Removes sprites for guardians and props that are gone, so nothing leaks. */
   private reapSprites() {
-    for (const [id, sprite] of Array.from(this.propSprites.entries())) {
+    for (const [id, visual] of Array.from(this.propVisuals.entries())) {
       if (!this.env.some(e => e.id === id)) {
-        sprite.destroy();
-        this.propSprites.delete(id);
+        visual.root.destroy({ children: true });
+        this.propVisuals.delete(id);
       }
     }
-    for (const [id, sprite] of Array.from(this.hostileSprites.entries())) {
+    for (const [id, visual] of Array.from(this.hostileVisuals.entries())) {
       const hostile = this.hostiles.find(h => h.id === id);
       if (!hostile || !hostile.alive) {
-        sprite.destroy();
-        this.hostileSprites.delete(id);
+        visual.root.destroy({ children: true });
+        this.hostileVisuals.delete(id);
       }
     }
   }
@@ -1217,10 +1332,15 @@ export class ExpeditionLayer {
   }
 
   destroy() {
-    for (const sprite of Array.from(this.hostileSprites.values())) sprite.destroy();
-    this.hostileSprites.clear();
-    for (const sprite of Array.from(this.propSprites.values())) sprite.destroy();
-    this.propSprites.clear();
+    // Destroys only the displays this layer created — never the host.
+    for (const v of Array.from(this.hostileVisuals.values())) {
+      v.root.destroy({ children: true });
+    }
+    this.hostileVisuals.clear();
+    for (const v of Array.from(this.propVisuals.values())) {
+      v.root.destroy({ children: true });
+    }
+    this.propVisuals.clear();
     this.registry.clear();
     this.hostiles = [];
     this.env = [];
