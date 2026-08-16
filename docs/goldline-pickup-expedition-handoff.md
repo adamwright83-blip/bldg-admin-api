@@ -296,3 +296,105 @@ properties directly instead.
   ACT hold, aim drag and release BEFORE the large journey is written.
 
 **FUN GATE: PENDING ADAM REAL-DEVICE PLAYTEST.**
+
+---
+
+# SHIPPING SESSION — the heartbeat closed
+
+Three staged rounds against base `b1931a7`, each implemented, tested, live
+verified, committed and pushed. PR #70.
+
+## What changed
+
+**Stage 1 — the expedition's physical objects became world actors.** The
+climax seal moved out of the `GAMEPLAY_OVERLAY` band into `hostFor()` at
+`worldActorZ`, so a closer Trailblazer renders in front of it; the single
+`activeClimaxBarrier()` predicate still drives both the visual and the
+movement clamp, and the release is edge-detected in the simulation rather
+than as a side effect of drawing a frame. All three relics gained real
+mechanics — Echo Thread (one leap, never a chain, never past the
+Shieldbearer's guard), Sunstep (one burst per dodge, armed on the i-frame
+rising edge), Brass Guard (re-arms only at a real clash boundary; its
+`clashEnded()` recharge had never been called by anything, so the guard
+absorbed one blow per expedition and then silently stopped being a relic).
+Three plinths, chosen by walking. The Safe/Upper fork got drawn. The
+destination cache became a depth-sorted actor that is deliberately not an
+environment node and not a Line candidate. Guardian heights split to
+130/116/146.
+
+**Stage 2 — the pickup is secured by server truth.** Four existing
+`admin.listByStatus` queries unioned into one `{id, status}` evidence
+collection. `activeExpedition` pins `restorationBefore` at ENTER and never
+recomputes it. SECURE CARGO calls the one canonical service and shows
+VERIFYING SERVER TRUTH; the local phase type has no `secured` member.
+CARGO SECURED, the audio, and `finishExpeditionAtStronghold()` all fire
+from `expeditionOrderCollected` — a condition that contains no check that
+this client pressed the button, which is what makes another surface's
+collection reconcile identically. Six lanterns and a brass conduit derived
+purely from evidence, so a reload rebuilds them.
+
+**Stage 3 — proved by thumb.** Real CDP `Input.dispatchTouchEvent`, not
+synthetic events. The complete journey plus both recovery paths.
+
+## The Phase F item above is now closed
+
+Synthetic touch was never going to be adequate, and the note above was
+right to block on it. The answer was not Playwright's `touchscreen` API but
+CDP directly: `scripts/verifyGoldlineTrueTouch.mjs` dispatches real touch
+through the browser's own input pipeline, so the events arrive as real
+PointerEvents with real timestamps and real capture. That matters because
+the control grammar is decided by real elapsed time (dodge vs aim) and a
+continuous stream of touchmove points (heading and lock) — neither of which
+a synthetic dispatch reproduces.
+
+## Three verification scripts, all measuring rather than eyeballing
+
+- `verifyGoldlineTrueTouch.mjs` — the six control proofs.
+- `verifyGoldlineHeartbeat.mjs` — the full journey, 27 checks, by thumb.
+- `verifyGoldlineStage1.mjs` — the visual pass. Fails if the ceiling does
+  not open the instant the Shieldbearer dies, if Trailblazer does not sort
+  in front of the seal, or if the payoff does not survive a reload.
+
+All three run against a dev server started with
+`VITE_GOLDLINE_TEST_HARNESS=1` at `/driver?goldlineFixture=NEUTRALIZE`,
+with only `auth.me` intercepted — the fiction harness supplies the rest.
+
+## Corrections recorded this session
+
+**Pale limestone at low alpha does not read on this plate.** The seal, the
+plinths and the fork branches were each implemented and each visually
+broken the same way. This file's own comments had already recorded that
+lesson twice — for the Ruinbound ("blank paper cut-outs") and the grapple
+corbel ("a white rectangle pasted on the painting") — and the new objects
+reintroduced it anyway. Anything new drawn into this world needs a dark
+body with a limestone rim light and brass fittings, or a dark scrim under
+gold. Check it in a zoomed crop, not a full-plate screenshot: the painting
+is far too busy to judge one small object against.
+
+**Redeploying at the climax respawns the Shieldbearer**, because
+`resetFromWaystone` correctly restores every hostile at or ahead of the
+checkpoint. Any test or script that kills the elite and *then* redeploys
+walls the player in behind a resurrected barrier. Recover first, fight
+second.
+
+**A fixture standing in for a server has to persist like one.** The reload
+check initially proved nothing, because the fiction harness kept its
+evidence in React state and a reload wiped it. It now persists to
+sessionStorage under `goldline-fixture:server-collected-orders` — that is
+the stand-in DATABASE, not app state. The application still stores nothing
+about restoration, which is exactly what the reload check verifies.
+
+**The `DEPLOY` guard in `driverGameWorldContract` is substring-based.** A
+comment containing the word REDEPLOY in `GoldlineGameHome.tsx` trips it.
+The guard is not wrong — it keeps an old business-action button out of the
+game shell — so reword rather than relax it.
+
+## State at handoff
+
+- Full suite fails only the same 5 tests `b1931a7` already failed, verified
+  by running the base in a worktree rather than assuming.
+- TypeScript baseline unchanged at 28 pre-existing errors.
+- Production build succeeds; Goldline bundle budget 136.3KB gzip / 150KB.
+- No migration. `db:push` never run. #47 and #49 untouched.
+
+**FUN GATE: PENDING ADAM REAL-DEVICE PLAYTEST.**
