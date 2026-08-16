@@ -124,6 +124,8 @@ export class ExpeditionLayer {
    * player keeps the momentum they actually earned from the swing.
    */
   private handoffSpeed = 0;
+  /** True during a dodge's i-frames — a well-timed evade is real mastery. */
+  private playerInvulnerable = false;
   private plan: PickupExpeditionPlan | null = null;
   private route: "unchosen" | "safe" | "upper" | "scarred" = "unchosen";
   private hitFlash = new Map<string, number>();
@@ -135,6 +137,11 @@ export class ExpeditionLayer {
     this.container.addChild(this.gProjectiles);
     this.container.addChild(this.gCable);
     this.container.addChild(this.gAim);
+  }
+
+  /** Dodge i-frames, owned by the runtime that owns movement. */
+  setPlayerInvulnerable(invulnerable: boolean) {
+    this.playerInvulnerable = invulnerable;
   }
 
   setReducedMotion(reduced: boolean) {
@@ -331,6 +338,10 @@ export class ExpeditionLayer {
 
       const hit = hostile.consumePendingHit();
       if (hit) {
+        if (this.playerInvulnerable) {
+          this.run.addMomentum(EXPEDITION.momentum.goodEvade);
+          continue;
+        }
         const taken = this.run.takeDamage(hit.damage);
         if (this.run.guardAbsorbedThisFrame) {
           this.callbacks.onGuardAbsorbed?.();
@@ -354,6 +365,10 @@ export class ExpeditionLayer {
       0.03
     );
     if (hit) {
+      if (this.playerInvulnerable) {
+        this.run.addMomentum(EXPEDITION.momentum.goodEvade);
+        return;
+      }
       const taken = this.run.takeDamage(hit.damage);
       if (this.run.guardAbsorbedThisFrame) {
         this.callbacks.onGuardAbsorbed?.();

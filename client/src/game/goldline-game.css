@@ -3158,3 +3158,193 @@
   font: 900 16px "Barlow Condensed";
   letter-spacing: 0.06em;
 }
+
+/* ============================================================
+   PICKUP EXPEDITION — control surface and chrome suppression
+   ============================================================
+   §45: while an expedition is ACTIVE the world dominates. The field
+   console, intel line, cold-call burst, world-control readout, history
+   ribbon and the four-item bottom nav are all demoted — they bury the
+   game, and we cannot judge the game we cannot see. One unobtrusive exit
+   remains for the operational fallback (§46).
+*/
+
+/* Selectors verified against the live DOM, not guessed. */
+.playable-goldline-shell[data-expedition-state="active"] .game-topbar,
+.playable-goldline-shell[data-expedition-state="active"] .world-history-ribbon,
+.playable-goldline-shell[data-expedition-state="active"] .corridor-status,
+.playable-goldline-shell[data-expedition-state="active"] .cold-call-entry,
+.playable-goldline-shell[data-expedition-state="active"] .game-utility-bar,
+.playable-goldline-shell[data-expedition-state="active"] .context-actions,
+.playable-goldline-shell[data-expedition-state="active"] .mission-affordance-signal,
+.playable-goldline-shell[data-expedition-state="active"] .mission-fork {
+  display: none !important;
+}
+
+/* Deliberately KEPT during an expedition:
+     .game-joystick          — the left movement zone
+     .objective-direction-cue — a genuine contextual world cue
+   Everything else above is business chrome that buries the world. */
+
+/* Threshold: an in-world invitation, not a modal card wall. */
+.expedition-threshold {
+  position: absolute;
+  left: 50%;
+  bottom: 15vh;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  z-index: 40;
+  pointer-events: auto;
+  text-align: center;
+}
+
+.expedition-threshold__objective {
+  margin: 0;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  color: #f6efe1;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85);
+}
+
+.expedition-threshold__ready {
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  color: #ffd166;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+}
+
+.expedition-threshold__enter {
+  margin-top: 0.3rem;
+  min-height: 52px;
+  padding: 0 2rem;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 209, 102, 0.85);
+  background: linear-gradient(180deg, rgba(28, 24, 18, 0.92), rgba(14, 12, 9, 0.96));
+  color: #ffd166;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  box-shadow: 0 0 26px rgba(255, 209, 102, 0.3);
+}
+
+.expedition-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 38;
+  pointer-events: none;
+}
+
+.expedition-hud__status {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 0.55rem);
+  left: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  max-width: 58vw;
+}
+
+.expedition-hud__objective {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #f6efe1;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expedition-hud__bar {
+  display: block;
+  height: 6px;
+  width: 40vw;
+  border-radius: 999px;
+  background: rgba(12, 10, 8, 0.66);
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+.expedition-hud__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 140ms linear;
+}
+
+.expedition-hud__bar--hp > span {
+  background: linear-gradient(90deg, #e4572e, #ffb84d);
+}
+
+.expedition-hud__bar--momentum {
+  height: 4px;
+  width: 28vw;
+}
+
+.expedition-hud__bar--momentum > span {
+  background: linear-gradient(90deg, #b98a34, #ffd166);
+}
+
+/* The single unobtrusive escape back to the operational surface. */
+.expedition-hud__exit {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+  right: 0.6rem;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(12, 10, 8, 0.55);
+  color: rgba(246, 239, 225, 0.85);
+  font-size: 1rem;
+  pointer-events: auto;
+}
+
+/* Right-hand action pad. Thumb reach, 44px+ target, never over Trailblazer. */
+.expedition-pad {
+  position: absolute;
+  right: calc(env(safe-area-inset-right, 0px) + 1.1rem);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 2.2rem);
+  width: 104px;
+  height: 104px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 209, 102, 0.55);
+  background: radial-gradient(
+    circle at 50% 45%,
+    rgba(255, 209, 102, 0.22),
+    rgba(14, 12, 9, 0.72) 68%
+  );
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  box-shadow: 0 0 22px rgba(0, 0, 0, 0.45);
+  transition: transform 90ms ease, border-color 90ms ease;
+}
+
+.expedition-pad.is-aiming {
+  transform: scale(1.06);
+  border-color: rgba(255, 209, 102, 0.95);
+  box-shadow: 0 0 34px rgba(255, 209, 102, 0.45);
+}
+
+.expedition-pad__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: #ffd166;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .expedition-pad,
+  .expedition-hud__bar > span {
+    transition: none;
+  }
+}

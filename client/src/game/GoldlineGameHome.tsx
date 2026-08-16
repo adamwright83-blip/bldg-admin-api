@@ -92,6 +92,8 @@ import {
   missFeedback,
 } from "./audio/haptics";
 import { planPickupExpedition } from "./expedition/expeditionPlan";
+import { ExpeditionHud } from "./expedition/ExpeditionHud";
+import { EXPEDITION } from "./expedition/expeditionState";
 import type { AgentWorldPresence } from "./world/PopulationSystem";
 import { projectAgentWorldPresence } from "./world/agentPresenceProjection";
 import type {
@@ -1342,47 +1344,67 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   }, [nextOrderObjective?.order.id, nextOrderObjective?.status]);
 
   /**
-   * A genuine PICKUP objective starts the fictional expedition bound to that
-   * real order id. Identity only — the expedition layer cannot read or
-   * mutate business state, and the pickup stays pending until the canonical
-   * `orders.updateStatus` mutation says otherwise (see handleInteractRef).
-   *
-   * A delivery does not start one: this slice is the pickup heartbeat.
+   * A genuine PICKUP objective PREPARES an expedition. It does not start
+   * one. Manual combat never begins merely because the app has a pickup —
+   * the player crosses the threshold explicitly (see ExpeditionHud). This
+   * is the parked-play contract, not a cosmetic gate.
    */
+  const expeditionOrderId =
+    nextOrderObjective && nextOrderObjective.status !== "delivered"
+      ? nextOrderObjective.order.id
+      : null;
+  const [expeditionEntered, setExpeditionEntered] = useState(false);
+  const [expeditionVitals, setExpeditionVitals] = useState<{
+    hp: number;
+    momentum: number;
+  }>({ hp: EXPEDITION.maxHp, momentum: 0 });
+
+  // A new objective always returns the player to the threshold.
+  useEffect(() => {
+    setExpeditionEntered(false);
+  }, [expeditionOrderId]);
+
   useEffect(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
-
-    const isPickup =
-      nextOrderObjective && nextOrderObjective.status !== "delivered";
-    if (!isPickup) {
+    if (expeditionOrderId == null || !expeditionEntered) {
       runtime.endExpedition();
       return;
     }
 
-    runtime.startExpedition(
-      planPickupExpedition({ orderId: nextOrderObjective.order.id }),
-      {
-        onPlayerDamaged: () => {
-          getAudioManager().play("weak_point_hit");
-          missFeedback();
-        },
-        onGuardAbsorbed: () => getAudioManager().play("vault"),
-        onHostileDefeated: () => {
-          getAudioManager().play("weak_point_hit");
-          arcadeFeedback();
-        },
-        onLineLatched: () => arcadeFeedback(),
-        onHazardTriggered: () => {
-          getAudioManager().play("vault");
-          arcadeFeedback();
-        },
-        onDefeated: () => missFeedback(),
-      }
-    );
+    runtime.startExpedition(planPickupExpedition({ orderId: expeditionOrderId }), {
+      onPlayerDamaged: () => {
+        getAudioManager().play("weak_point_hit");
+        missFeedback();
+      },
+      onGuardAbsorbed: () => getAudioManager().play("vault"),
+      onHostileDefeated: () => {
+        getAudioManager().play("weak_point_hit");
+        arcadeFeedback();
+      },
+      onLineLatched: () => {
+        getAudioManager().play("vault");
+        arcadeFeedback();
+      },
+      onHazardTriggered: () => {
+        getAudioManager().play("vault");
+        arcadeFeedback();
+      },
+      onDefeated: () => missFeedback(),
+    });
 
     return () => runtime.endExpedition();
-  }, [nextOrderObjective?.order.id, nextOrderObjective?.status, runtimeReady]);
+  }, [expeditionOrderId, expeditionEntered, runtimeReady]);
+
+  // Light poll of fictional vitals for the HUD bars.
+  useEffect(() => {
+    if (!expeditionEntered) return;
+    const id = window.setInterval(() => {
+      const run = runtimeRef.current?.getExpedition()?.run;
+      if (run) setExpeditionVitals({ hp: run.hp, momentum: run.momentum });
+    }, 120);
+    return () => window.clearInterval(id);
+  }, [expeditionEntered]);
 
   useEffect(() => {
     runtimeRef.current?.setAgentPresence(agentWorldPresence);
@@ -1983,6 +2005,13 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       className="playable-goldline-shell"
       ref={setShellEl}
       data-testid="goldline-shell"
+      data-expedition-state={
+        expeditionOrderId == null
+          ? "none"
+          : expeditionEntered
+            ? "active"
+            : "ready"
+      }
     >
       <section
         className={`playable-goldline is-${view}`}
@@ -2007,6 +2036,25 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         data-objective-offscreen={objectiveOffscreen ?? "NONE"}
       >
         <div ref={hostRef} className="goldline-canvas-host" />
+        {expeditionOrderId != null && runtimeReady ? (
+          <ExpeditionHud
+            runtime={runtimeRef.current}
+            active={expeditionEntered}
+            onEnter={() => setExpeditionEntered(true)}
+            onExit={() => setExpeditionEntered(false)}
+            objectiveLabel={
+              nextOrderObjective
+                ? `${nextOrderObjective.order.firstName ?? ""} ${
+                    nextOrderObjective.order.lastName ?? ""
+                  }`.trim() || `Order #${nextOrderObjective.order.id}`
+                : ""
+            }
+            hp={expeditionVitals.hp}
+            maxHp={EXPEDITION.maxHp}
+            momentum={expeditionVitals.momentum}
+            maxMomentum={EXPEDITION.maxMomentum}
+          />
+        ) : null}
         {!runtimeReady ? (
           <div className="game-loading">
             <Loader2 /> ENTERING TERRITORY · SYNCING FIELD…

@@ -50,6 +50,13 @@ import { reportGoldlineLifecycleDelta } from "../testSupport/lifecycleProbe";
 import { ExpeditionLayer, type ExpeditionCallbacks } from "../expedition/ExpeditionLayer";
 import type { PickupExpeditionPlan } from "../expedition/expeditionPlan";
 import {
+  DODGE,
+  beginDodge,
+  createDodgeState,
+  dodgeIsInvulnerable,
+  stepDodge,
+} from "../expedition/actionPad";
+import {
   corridorDeltaFromScreenImpulse,
   projectCorridorPoint,
   PROGRESS_SPAN_FRACTION,
@@ -388,6 +395,11 @@ export class GoldlineGame {
    * the fiction is contributing to it.
    */
   private expeditionDrivingMovement = false;
+  private dodgeState = createDodgeState();
+  /** Fictional seconds until the contextual basic lash may fire again. */
+  private lashCooldown = 0;
+  private lastWidth = 0;
+  private lastHeight = 0;
   private qualityMonitor = new AdaptiveQualityMonitor();
   private qualityTier: QualityTier = "premium";
   private lastCheckpointReportAt = 0;
@@ -792,7 +804,22 @@ export class GoldlineGame {
    */
   startExpedition(plan: PickupExpeditionPlan, callbacks: ExpeditionCallbacks = {}) {
     this.endExpedition();
-    const layer = new ExpeditionLayer(callbacks);
+    const layer = new ExpeditionLayer({
+      ...callbacks,
+      // Hit-stop freezes the FICTIONAL clock only — business time is
+      // structurally unreachable from here (see expeditionClock.ts).
+      onHitStop: ms => {
+        this.expedition?.clock.hitStop(ms);
+        callbacks.onHitStop?.(ms);
+      },
+      // Reuses the existing camera rather than adding a second one.
+      onCameraShake: (magnitude, dirX, dirY) => {
+        this.camera.impulse(Math.min(1.6, magnitude));
+        const horizontal = Math.abs(dirX) > Math.abs(dirY);
+        if (horizontal) this.camera.setLookahead(Math.sign(dirX), 0.5);
+        callbacks.onCameraShake?.(magnitude, dirX, dirY);
+      },
+    });
     layer.setReducedMotion(this.reducedMotion);
     layer.load(plan);
     // Sits in the traversal layer so the painted foreground occludes
@@ -821,6 +848,45 @@ export class GoldlineGame {
       width,
       height,
     });
+  }
+
+  /** Action pad: hold crossed the threshold — enter Line aim. */
+  expeditionBeginAim(radians: number) {
+    if (!this.expedition) return;
+    this.expedition.beginAim();
+    this.expedition.setAimRadians(radians);
+  }
+
+  expeditionUpdateAim(radians: number) {
+    this.expedition?.setAimRadians(radians);
+  }
+
+  expeditionCancelAim() {
+    this.expedition?.endAim();
+  }
+
+  /** Action pad release with a lock. Returns false if nothing was hit. */
+  expeditionFire(): boolean {
+    if (!this.expedition) return false;
+    return this.expedition.fireLine((progress, lateral) =>
+      this.projectCorridor(progress, lateral, this.lastWidth, this.lastHeight)
+    );
+  }
+
+  expeditionLockedTargetId(): string | null {
+    return this.expedition?.getLockedTargetId() ?? null;
+  }
+
+  /** Action pad tap. Burst along movement direction, else current facing. */
+  expeditionDodge(): boolean {
+    if (!this.expedition) return false;
+    const facingX = this.input.x !== 0 ? this.input.x : this.lastDirectionSign || 0;
+    const facingY = this.input.y !== 0 ? this.input.y : -1;
+    return beginDodge(this.dodgeState, this.input, facingX, facingY);
+  }
+
+  isDodging(): boolean {
+    return this.dodgeState.active;
   }
 
   setReducedMotion(reduced: boolean) {
@@ -1205,6 +1271,49 @@ export class GoldlineGame {
     this.updateParallax();
 
     if (this.expedition) {
+      this.lastWidth = width;
+      this.lastHeight = height;
+
+      // Dodge is a real corridor burst, applied through the same
+      // progress/lateral the joystick uses — not a separate position.
+      stepDodge(this.dodgeState, deltaSeconds);
+      if (this.dodgeState.active) {
+        const burst = DODGE.speed * deltaSeconds;
+        this.progress = Math.max(
+          0.035,
+          Math.min(
+            0.82,
+            this.progress + (-this.dodgeState.dirY * burst) / (height * PROGRESS_SPAN_FRACTION)
+          )
+        );
+        this.lateral = Math.max(
+          -0.72,
+          Math.min(0.72, this.lateral + (this.dodgeState.dirX * burst) / (width * 0.22))
+        );
+      }
+
+      // Contextual basic lash (§18): only while genuinely stationary, only
+      // against a real hostile in range, and on a cadence so it never
+      // machine-guns or steals control from the player.
+      if (this.lashCooldown > 0) {
+        this.lashCooldown = Math.max(0, this.lashCooldown - deltaSeconds);
+      }
+      const stationary = Math.hypot(this.input.x, this.input.y) < 0.18;
+      if (
+        stationary &&
+        !this.dodgeState.active &&
+        !this.expedition.isAiming() &&
+        !this.expedition.linehook.isEngaged() &&
+        this.lashCooldown === 0
+      ) {
+        if (this.expedition.tryBasicLash(this.progress, this.lateral * 140, false)) {
+          this.lashCooldown = 0.55;
+          this.avatarState.noteReversal();
+        }
+      }
+
+      this.expedition.setPlayerInvulnerable(dodgeIsInvulnerable(this.dodgeState));
+
       // Fictional simulation only. `deltaSeconds` is real frame time; the
       // expedition clock is what applies aim dilation and hit-stop, so no
       // business timestamp can ever be reached from here.
