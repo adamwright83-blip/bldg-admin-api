@@ -49,6 +49,7 @@ import { AdaptiveQualityMonitor, type QualityTier } from "./adaptiveQuality";
 import { reportGoldlineLifecycleDelta } from "../testSupport/lifecycleProbe";
 import { ExpeditionLayer, type ExpeditionCallbacks } from "../expedition/ExpeditionLayer";
 import {
+  EXPEDITION_CORRIDOR_END,
   EXPEDITION_START_PROGRESS,
   type PickupExpeditionPlan,
 } from "../expedition/expeditionPlan";
@@ -939,6 +940,20 @@ export class GoldlineGame {
     return this.dodgeState.active;
   }
 
+  /**
+   * The forward limit for Trailblazer this frame.
+   *
+   * During an expedition the ceiling is the expedition's own end, which sits
+   * below the ordinary corridor-exit threshold by design. Without this the
+   * player could walk past the exit trigger inside an expedition — the
+   * authored beats stopping short of it was a coincidence of authoring, not
+   * a guarantee. All three movement paths (joystick, dodge, tether impulse)
+   * share this single ceiling.
+   */
+  private forwardCeiling(): number {
+    return this.expedition ? EXPEDITION_CORRIDOR_END : 0.82;
+  }
+
   setReducedMotion(reduced: boolean) {
     this.reducedMotion = reduced;
     this.camera.setReducedMotion(reduced);
@@ -1261,7 +1276,7 @@ export class GoldlineGame {
       });
 
       const next = this.progress + this.velocity * directional * deltaSeconds;
-      const ceiling = trigger ? trigger.at : 0.82;
+      const ceiling = trigger ? trigger.at : this.forwardCeiling();
       this.progress = Math.max(0.035, Math.min(blocked ? ceiling : 0.82, next));
       this.lateral = Math.max(
         -0.72,
@@ -1332,7 +1347,7 @@ export class GoldlineGame {
         this.progress = Math.max(
           0.035,
           Math.min(
-            0.82,
+            this.forwardCeiling(),
             this.progress + (-this.dodgeState.dirY * burst) / (height * PROGRESS_SPAN_FRACTION)
           )
         );
@@ -1390,7 +1405,7 @@ export class GoldlineGame {
         });
         this.progress = Math.max(
           0.035,
-          Math.min(0.82, this.progress + deltaProgress)
+          Math.min(this.forwardCeiling(), this.progress + deltaProgress)
         );
         this.lateral = Math.max(
           -0.72,

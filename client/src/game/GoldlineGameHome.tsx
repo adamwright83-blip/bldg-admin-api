@@ -1218,6 +1218,18 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         },
         (pack, signal) => {
           if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+          // A transition requested BEFORE the player entered the expedition
+          // can still resolve mid-combat. Cancelling at entry handles most
+          // of it; this refuses the reveal outright as the last line of
+          // defence, and disposes the prepared assets so nothing leaks.
+          if (game.isExpeditionActive()) {
+            const stale = prepared.get(pack.id);
+            if (stale) {
+              game.discardPreparedCorridor(stale);
+              prepared.delete(pack.id);
+            }
+            throw new DOMException("Aborted", "AbortError");
+          }
           const next = prepared.get(pack.id);
           if (!next) throw new Error(`corridor '${pack.id}' was not preloaded`);
           game.revealCorridor(next);
@@ -1371,6 +1383,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       runtime.endExpedition();
       return;
     }
+
+    // Take ownership of the world: any corridor load already in flight must
+    // not resolve and swap the corridor out from under active combat.
+    transitionsRef.current?.cancelInflight();
 
     runtime.startExpedition(planPickupExpedition({ orderId: expeditionOrderId }), {
       onPlayerDamaged: () => {

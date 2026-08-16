@@ -100,6 +100,27 @@ export class CorridorTransitionController {
   }
 
   /** The newest request id handed out — a late load compares itself to this. */
+  /**
+   * Aborts any load currently in flight, leaving the corridor the player is
+   * standing in exactly as it is.
+   *
+   * Used when an expedition takes ownership of the world: a transition
+   * requested moments earlier must not resolve and swap the corridor out
+   * from under active combat. Returns true if something was actually
+   * cancelled, so callers can log or assert on it.
+   */
+  cancelInflight(): boolean {
+    if (!this.inflight) return false;
+    this.inflight.abort.abort();
+    this.inflight = null;
+    this.setPhase(this.activeCorridorId ? "ready" : "idle", this.activeCorridorId);
+    return true;
+  }
+
+  hasInflight(): boolean {
+    return this.inflight !== null;
+  }
+
   getLatestRequestId(): number {
     return this.requestSeq;
   }

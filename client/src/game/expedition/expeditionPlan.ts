@@ -93,7 +93,30 @@ function stableVariant(orderId: number, salt: number): number {
  * plan owns fictional beat placement only. It cannot touch business state.
  */
 export const EXPEDITION_CORRIDOR_START = 0.06;
-export const EXPEDITION_CORRIDOR_END = 0.78;
+
+/**
+ * Where ordinary corridor-exit logic arms in GoldlineGame. The expedition's
+ * entire reachable span must finish before this, with margin.
+ */
+export const CORRIDOR_EXIT_THRESHOLD = 0.77;
+/** Safety margin so the ceiling can never drift up against the threshold. */
+export const EXPEDITION_EXIT_MARGIN = 0.03;
+
+/**
+ * The furthest an expedition can carry the player.
+ *
+ * This was previously 0.78 — ABOVE the 0.77 exit threshold. The authored
+ * beats happened to land below it, so the tests passed, but the reachable
+ * span itself crossed the line and the player could physically walk past
+ * the exit trigger. The invariant claimed ("max reachable < exit
+ * threshold") was therefore false; it only looked true because the last
+ * authored beat happened to be at T=0.96 rather than T=1.
+ *
+ * Derived from the threshold now, so the relationship is structural rather
+ * than a coincidence of authoring.
+ */
+export const EXPEDITION_CORRIDOR_END =
+  CORRIDOR_EXIT_THRESHOLD - EXPEDITION_EXIT_MARGIN;
 
 /** Normalised expedition T (0..1) -> playable corridor progress. */
 export function expeditionToCorridor(t: number): number {
