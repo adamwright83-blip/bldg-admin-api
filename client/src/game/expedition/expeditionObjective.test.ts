@@ -42,7 +42,7 @@ const mission: OpenChannelMission = {
 };
 
 describe("prepareExpeditionObjective", () => {
-  it("keeps a genuine native pickup as the first expedition objective", () => {
+  it("keeps a genuine native pickup as the first expedition objective without changing PR #70's plan seed", () => {
     const objective = prepareExpeditionObjective({
       pickup,
       openChannelMission: mission,
@@ -50,6 +50,7 @@ describe("prepareExpeditionObjective", () => {
     expect(objective).toMatchObject({
       kind: "native_pickup",
       orderId: 42,
+      planSeed: 42,
       label: "Ada Lovelace",
     });
   });
@@ -74,16 +75,16 @@ describe("prepareExpeditionObjective", () => {
       openChannelMission: {
         ...mission,
         tasks: mission.tasks.map(task => ({
-...task,
-status: "completed" as const,
-completedAt: "2026-08-16T09:00:00.000Z",
+          ...task,
+          status: "completed" as const,
+          completedAt: "2026-08-16T09:00:00.000Z",
         })),
       },
     });
     expect(objective).toBeNull();
   });
 
-  it("uses a stable nonzero fictional seed", () => {
+  it("uses a stable nonzero fictional seed for non-order objectives", () => {
     expect(stableObjectiveSeed("open-channel:day-1:task-1")).toBe(
       stableObjectiveSeed("open-channel:day-1:task-1")
     );
