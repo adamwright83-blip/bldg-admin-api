@@ -196,6 +196,13 @@ export type ExpeditionCallbacks = {
   onRelicTaken?: (relic: RelicId) => void;
   /** The climax seal broke. Movement has ALREADY opened when this fires. */
   onSealFractured?: () => void;
+  /**
+   * A deliberate player STRIKE was attempted (§PR77 no-dead-press). Fires
+   * on EVERY tap, whether or not a hostile was in range — the caller uses
+   * this to give visible feedback even for a whiff, since a tap that
+   * produces nothing is exactly the failure this callback exists to close.
+   */
+  onStrikeAttempt?: () => void;
 };
 
 type EnvNode = {
@@ -749,18 +756,25 @@ export class ExpeditionLayer {
     return this.lockedTargetId;
   }
 
-  /** Fires the Line at the currently locked target. */
+  /**
+   * Fires the Line at the currently locked target. Ends aim unconditionally
+   * — including on a miss, e.g. the locked hostile died or left range in
+   * the frame between lock and release (§PR77 no dead press). Leaving
+   * dilation to a separate endAim() call the caller might skip on the
+   * failure path is exactly how the fictional clock gets stranded at
+   * AIM_TIME_SCALE with no control surface left able to un-dilate it.
+   */
   fireLine(project: ScreenProjection): boolean {
     if (this.run.outcome !== "running") return false;
     const target = this.currentTarget(project);
-    if (!target) return false;
+    if (!target) {
+      this.endAim();
+      return false;
+    }
     const at = this.lineTargetScreenPoint(target.id, project) ?? {
       x: target.x,
       y: target.y,
     };
-    // Firing always ends the aim. Leaving dilation to a separate endAim()
-    // call means any caller that misses it strands the whole fictional
-    // simulation at 0.2x — so the aim is closed here, at the source.
     this.endAim();
     this.pendingLatchTargetId = target.id;
     this.linehook.fire(
@@ -1312,10 +1326,10 @@ export class ExpeditionLayer {
     }
   }
 
-  /** Contextual basic lash (§18): stationary, valid hostile in range. */
-  tryBasicLash(playerProgress: number, playerLateral: number, moving: boolean): boolean {
-    if (this.run.outcome !== "running") return false;
-    if (moving) return false;
+  /** Nearest living hostile within melee range, or null. Shared by the
+   * deliberate STRIKE and the ambient contextual lash so both agree on
+   * what "in range" means. */
+  private nearestMeleeTarget(playerProgress: number, playerLateral: number): Ruinbound | null {
     let nearest: Ruinbound | null = null;
     let nearestDist = Infinity;
     for (const hostile of this.hostiles) {
@@ -1326,20 +1340,58 @@ export class ExpeditionLayer {
         nearestDist = d;
       }
     }
-    if (!nearest) return false;
+    return nearest;
+  }
 
-    const result = nearest.applyHit(1, { x: playerProgress, y: playerLateral }, false);
-    this.hitFlash.set(nearest.id, 0.14);
+  /** Applies a melee hit to `target` and reports the momentum/defeat side
+   * effects shared by STRIKE and the ambient lash. */
+  private applyMeleeHit(
+    target: Ruinbound,
+    playerProgress: number,
+    playerLateral: number,
+    hitFlashSeconds: number
+  ) {
+    const result = target.applyHit(1, { x: playerProgress, y: playerLateral }, false);
+    this.hitFlash.set(target.id, hitFlashSeconds);
     if (result.guarded) {
       this.callbacks.onHitStop?.(40);
-      return true;
+      return;
     }
     this.callbacks.onHitStop?.(50);
     if (result.defeated) {
       this.run.addMomentum(EXPEDITION.momentum.hostileDefeated);
-      this.callbacks.onHostileDefeated?.(nearest.kind);
+      this.callbacks.onHostileDefeated?.(target.kind);
     }
-    if (result.applied > 0) this.applyEchoThread(nearest, false);
+    if (result.applied > 0) this.applyEchoThread(target, false);
+  }
+
+  /**
+   * Deliberate player STRIKE (§PR77 Part 1/2) — the tap verb, and the
+   * player's PRIMARY offensive action. Unlike `tryBasicLash`, this always
+   * reports the attempt via `onStrikeAttempt` so a tap with no hostile in
+   * range still visibly swings — a dead press is exactly what this
+   * callback exists to prevent. Works regardless of whether the player is
+   * moving; a deliberate tap is not gated on standing still.
+   */
+  tryStrike(playerProgress: number, playerLateral: number): boolean {
+    if (this.run.outcome !== "running") return false;
+    this.callbacks.onStrikeAttempt?.();
+    const nearest = this.nearestMeleeTarget(playerProgress, playerLateral);
+    if (!nearest) return false;
+    this.applyMeleeHit(nearest, playerProgress, playerLateral, 0.18);
+    return true;
+  }
+
+  /** Contextual basic lash (§18): stationary, valid hostile in range. A
+   * SECONDARY assist only — the deliberate STRIKE above is what the
+   * player actually presses, and this must never be the only convincing
+   * way to damage a hostile. */
+  tryBasicLash(playerProgress: number, playerLateral: number, moving: boolean): boolean {
+    if (this.run.outcome !== "running") return false;
+    if (moving) return false;
+    const nearest = this.nearestMeleeTarget(playerProgress, playerLateral);
+    if (!nearest) return false;
+    this.applyMeleeHit(nearest, playerProgress, playerLateral, 0.14);
     return true;
   }
 

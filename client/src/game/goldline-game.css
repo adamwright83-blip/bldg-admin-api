@@ -3407,12 +3407,68 @@
   box-shadow: 0 0 30px rgba(255, 209, 102, 0.4);
 }
 
+/* §PR77 no dead press: a legitimate flick the runtime declines (dodge on
+   cooldown) still must not read as silence. A short, unmissable rejection
+   flash — never a subtler cue than the gesture that triggered it. */
+.expedition-pad.is-denied {
+  animation: expedition-pad-denied 180ms ease-out;
+}
+
+@keyframes expedition-pad-denied {
+  0% {
+    border-color: rgba(255, 96, 96, 0.9);
+    box-shadow: 0 0 24px rgba(255, 96, 96, 0.5);
+    transform: scale(0.94);
+  }
+  100% {
+    border-color: rgba(255, 209, 102, 0.34);
+    box-shadow: none;
+    transform: scale(1);
+  }
+}
+
+/* A locked target is the one state where release has an unmistakable,
+   irreversible-feeling consequence — brighter than plain aiming. */
+.expedition-pad.is-locked {
+  border-color: rgba(255, 232, 168, 1);
+  box-shadow: 0 0 36px rgba(255, 232, 168, 0.55);
+}
+
 .expedition-pad__label {
   font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.14em;
   color: rgba(255, 209, 102, 0.82);
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+  text-align: center;
+  line-height: 1.15;
+}
+
+.expedition-pad.is-locked .expedition-pad__label {
+  color: rgba(255, 232, 168, 1);
+}
+
+/* Secondary physical hints (§PR77 Part 3) — quieter than the primary verb,
+   never a third control, gone entirely the moment aim begins. */
+.expedition-pad__hints {
+  position: absolute;
+  bottom: -1.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  pointer-events: none;
+}
+
+.expedition-pad__hint {
+  font-size: 0.46rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: rgba(255, 209, 102, 0.44);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+  white-space: nowrap;
 }
 
 /* The existing movement joystick is demoted the same way — same hitbox,

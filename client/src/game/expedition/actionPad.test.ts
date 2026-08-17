@@ -2,20 +2,89 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ActionPad,
   DODGE,
+  FLICK_DISTANCE_PX,
+  FLICK_VELOCITY_PX_MS,
   HOLD_THRESHOLD_MS,
+  MOVEMENT_DEADZONE_PX,
   beginDodge,
   createDodgeState,
   dodgeIsInvulnerable,
   stepDodge,
 } from "./actionPad";
 
-describe("tap/hold grammar", () => {
-  it("resolves a short press to a dodge", () => {
+describe("tap/flick/hold grammar", () => {
+  it("resolves a short press with no meaningful movement to a strike", () => {
     const pad = new ActionPad();
     pad.pointerDown(1000, 0);
-    pad.pointerUpdate(1000 + HOLD_THRESHOLD_MS - 40, 0);
+    pad.pointerUpdate(1000 + HOLD_THRESHOLD_MS - 40, 0, 0);
     expect(pad.getPhase()).toBe("pending");
-    expect(pad.pointerUp(1000 + HOLD_THRESHOLD_MS - 40)).toEqual({ kind: "dodge" });
+    expect(pad.pointerUp(1000 + HOLD_THRESHOLD_MS - 40)).toEqual({ kind: "strike" });
+  });
+
+  it("resolves a short press with only jitter (below the movement deadzone) to a strike", () => {
+    const pad = new ActionPad();
+    pad.pointerDown(0, 0);
+    pad.pointerUpdate(50, 0, MOVEMENT_DEADZONE_PX - 1);
+    expect(pad.pointerUp(50)).toEqual({ kind: "strike" });
+  });
+
+  it("resolves a fast, far release within the hold threshold to a dodge (flick-evade)", () => {
+    const pad = new ActionPad();
+    pad.pointerDown(0, 0);
+    // Covers FLICK_DISTANCE_PX well within HOLD_THRESHOLD_MS, comfortably
+    // above FLICK_VELOCITY_PX_MS.
+    const atMs = 60;
+    pad.pointerUpdate(atMs, 0, FLICK_DISTANCE_PX + 5);
+    expect(pad.pointerUp(atMs)).toEqual({ kind: "dodge" });
+  });
+
+  it("does not classify a release just below the flick distance as a dodge", () => {
+    const pad = new ActionPad();
+    pad.pointerDown(0, 0);
+    const atMs = 60;
+    pad.pointerUpdate(atMs, 0, FLICK_DISTANCE_PX - 1);
+    expect(pad.pointerUp(atMs)).toEqual({ kind: "strike" });
+  });
+
+  it("does not classify a release just above the flick distance as a dodge if it arrived too slowly", () => {
+    const pad = new ActionPad();
+    pad.pointerDown(0, 0);
+    // Distance clears FLICK_DISTANCE_PX, but the elapsed time keeps
+    // velocity just under FLICK_VELOCITY_PX_MS.
+    const distance = FLICK_DISTANCE_PX + 5;
+    const atMs = Math.ceil(distance / FLICK_VELOCITY_PX_MS) + 5;
+    expect(atMs).toBeLessThan(HOLD_THRESHOLD_MS);
+    pad.pointerUpdate(atMs, 0, distance);
+    expect(pad.pointerUp(atMs)).toEqual({ kind: "strike" });
+  });
+
+  it("classifies a release right at both flick thresholds as a dodge", () => {
+    const pad = new ActionPad();
+    pad.pointerDown(0, 0);
+    const atMs = Math.floor(FLICK_DISTANCE_PX / FLICK_VELOCITY_PX_MS);
+    expect(atMs).toBeLessThan(HOLD_THRESHOLD_MS);
+    pad.pointerUpdate(atMs, 0, FLICK_DISTANCE_PX);
+    expect(pad.pointerUp(atMs)).toEqual({ kind: "dodge" });
+  });
+
+  it("a flick cannot accidentally become Line aim under slow CDP/device timing", () => {
+    // Even a large, fast excursion resolves as soon as it releases before
+    // the hold threshold — promotion to aiming is driven only by elapsed
+    // time via pointerUpdate, never by distance.
+    const pad = new ActionPad();
+    pad.pointerDown(0, 0);
+    pad.pointerUpdate(HOLD_THRESHOLD_MS - 1, 0, FLICK_DISTANCE_PX * 3);
+    expect(pad.isAiming()).toBe(false);
+    expect(pad.pointerUp(HOLD_THRESHOLD_MS - 1)).toEqual({ kind: "dodge" });
+  });
+
+  it("a hold cannot accidentally become a flick even with large drag distance", () => {
+    const pad = new ActionPad();
+    pad.pointerDown(0, 0);
+    pad.pointerUpdate(HOLD_THRESHOLD_MS, 0, FLICK_DISTANCE_PX * 3);
+    expect(pad.isAiming()).toBe(true);
+    pad.setLockedTargetId(null);
+    expect(pad.pointerUp(HOLD_THRESHOLD_MS)).toEqual({ kind: "cancel" });
   });
 
   it("enters aim once the hold threshold is crossed", () => {

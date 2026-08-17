@@ -944,6 +944,12 @@ export class GoldlineGame {
         if (horizontal) this.camera.setLookahead(Math.sign(dirX), 0.5);
         callbacks.onCameraShake?.(magnitude, dirX, dirY);
       },
+      // §PR77 no-dead-press: every tap gets a visible Trailblazer reaction,
+      // whether or not it connected with a hostile.
+      onStrikeAttempt: () => {
+        this.avatarState.noteReversal();
+        callbacks.onStrikeAttempt?.();
+      },
     });
     layer.setReducedMotion(this.reducedMotion);
     // Guardians and props join the SHARED world-actor space so they sort
@@ -1157,7 +1163,13 @@ export class GoldlineGame {
     this.expedition?.endAim();
   }
 
-  /** Action pad release with a lock. Returns false if nothing was hit. */
+  /**
+   * Action pad release with a lock. Returns false if nothing was hit — e.g.
+   * the locked hostile died or left range in the frame between lock and
+   * release. `ExpeditionLayer.fireLine` ends aim unconditionally on both
+   * the hit and miss paths, so a miss here still visibly and mechanically
+   * returns to normal (§PR77 no dead press).
+   */
   expeditionFire(): boolean {
     if (!this.expeditionCanAct()) return false;
     return this.expedition!.fireLine((progress, lateral) =>
@@ -1169,12 +1181,26 @@ export class GoldlineGame {
     return this.expedition?.getLockedTargetId() ?? null;
   }
 
-  /** Action pad tap. Burst along movement direction, else current facing. */
+  /** Action pad flick. Burst along the flick/movement direction, else current facing. */
   expeditionDodge(): boolean {
     if (!this.expeditionCanAct()) return false;
     const facingX = this.input.x !== 0 ? this.input.x : this.lastDirectionSign || 0;
     const facingY = this.input.y !== 0 ? this.input.y : -1;
     return beginDodge(this.dodgeState, this.input, facingX, facingY);
+  }
+
+  /**
+   * Action pad tap — the player's deliberate, primary offensive verb
+   * (§PR77 Part 1). Returns true whenever the tap was acknowledged by live
+   * gameplay, even if nothing was in range to hit: `ExpeditionLayer.tryStrike`
+   * always fires `onStrikeAttempt` for a visible whiff, so a `false` here
+   * means only "gameplay wasn't active to receive the tap at all," not
+   * "nothing happened."
+   */
+  expeditionStrike(): boolean {
+    if (!this.expeditionCanAct()) return false;
+    this.expedition!.tryStrike(this.progress, this.lateral * 140);
+    return true;
   }
 
   isDodging(): boolean {

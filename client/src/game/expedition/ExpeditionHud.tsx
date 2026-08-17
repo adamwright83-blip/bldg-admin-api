@@ -14,7 +14,7 @@
  * begins on its own. The player crosses the threshold deliberately.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActionPad, HOLD_THRESHOLD_MS } from "./actionPad";
+import { ActionPad, HOLD_THRESHOLD_MS, MOVEMENT_DEADZONE_PX } from "./actionPad";
 
 export type ExpeditionHudRuntime = {
   expeditionBeginAim: (radians: number) => void;
@@ -22,6 +22,8 @@ export type ExpeditionHudRuntime = {
   expeditionCancelAim: () => void;
   expeditionFire: () => boolean;
   expeditionDodge: () => boolean;
+  /** Deliberate tap — the player's primary offensive verb (§PR77). */
+  expeditionStrike: () => boolean;
   expeditionLockedTargetId: () => string | null;
 };
 
@@ -98,8 +100,6 @@ export type ExpeditionHudProps = {
 
 /** Forward, up the corridor — the aim when the thumb has not been dragged. */
 const DEFAULT_AIM_RADIANS = -Math.PI / 2;
-/** Below this drag distance the thumb has not expressed a direction. */
-const AIM_DEADZONE_PX = 12;
 
 export function ExpeditionHud(props: ExpeditionHudProps) {
   const {
@@ -134,23 +134,50 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
   const padRef = useRef<HTMLDivElement | null>(null);
   const originRef = useRef<{ x: number; y: number } | null>(null);
   const rafRef = useRef<number | null>(null);
+  const deniedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [aiming, setAiming] = useState(false);
+  /**
+   * §PR77 no dead press: a flick can resolve to a legitimate EVADE gesture
+   * that the runtime nonetheless rejects (dodge on cooldown). Silence in
+   * that case reads as a broken control, not a fair no-op — this drives a
+   * brief visible "rejected" state on the pad itself.
+   */
+  const [gestureDenied, setGestureDenied] = useState(false);
+
+  const flashDenied = useCallback(() => {
+    if (deniedTimeoutRef.current != null) clearTimeout(deniedTimeoutRef.current);
+    setGestureDenied(true);
+    deniedTimeoutRef.current = setTimeout(() => setGestureDenied(false), 180);
+  }, []);
+
+  /** Mirrors padModel's lock so the label can say RELEASE · HOOK live. */
+  const [locked, setLocked] = useState(false);
 
   const padModel = useRef(
     new ActionPad({
       onEnterAim: () => setAiming(true),
-      onExitAim: () => setAiming(false),
+      onExitAim: () => {
+        setAiming(false);
+        setLocked(false);
+      },
     })
   ).current;
 
-  const aimFrom = useCallback((clientX: number, clientY: number) => {
+  /** Straight-line px distance from the press origin, or 0 with no origin. */
+  const distanceFrom = useCallback((clientX: number, clientY: number) => {
     const origin = originRef.current;
-    if (!origin) return DEFAULT_AIM_RADIANS;
-    const dx = clientX - origin.x;
-    const dy = clientY - origin.y;
-    if (Math.hypot(dx, dy) < AIM_DEADZONE_PX) return DEFAULT_AIM_RADIANS;
-    return Math.atan2(dy, dx);
+    if (!origin) return 0;
+    return Math.hypot(clientX - origin.x, clientY - origin.y);
   }, []);
+
+  const aimFrom = useCallback(
+    (clientX: number, clientY: number, distancePx: number) => {
+      const origin = originRef.current;
+      if (!origin || distancePx < MOVEMENT_DEADZONE_PX) return DEFAULT_AIM_RADIANS;
+      return Math.atan2(clientY - origin.y, clientX - origin.x);
+    },
+    []
+  );
 
   /**
    * The hold threshold is real elapsed time, so it must be polled — a
@@ -161,14 +188,23 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     (clientX: number, clientY: number) => {
       if (!runtime) return;
       const wasAiming = padModel.isAiming();
-      padModel.pointerUpdate(performance.now(), aimFrom(clientX, clientY));
+      const distancePx = distanceFrom(clientX, clientY);
+      padModel.pointerUpdate(
+        performance.now(),
+        aimFrom(clientX, clientY, distancePx),
+        distancePx
+      );
       if (padModel.isAiming()) {
         if (!wasAiming) runtime.expeditionBeginAim(padModel.getAimRadians());
         else runtime.expeditionUpdateAim(padModel.getAimRadians());
         padModel.setLockedTargetId(runtime.expeditionLockedTargetId());
+        // RELEASE · HOOK only appears once a lock genuinely exists — read
+        // the pad model itself rather than trusting the runtime's raw
+        // value, since setLockedTargetId is what actually took effect.
+        setLocked(padModel.getLockedTargetId() != null);
       }
     },
-    [runtime, aimFrom, padModel]
+    [runtime, aimFrom, distanceFrom, padModel]
   );
 
   const moveListenerRef = useRef<((e: PointerEvent) => void) | null>(null);
@@ -244,8 +280,13 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
       const resolution = padModel.pointerUp(performance.now());
       originRef.current = null;
 
-      if (resolution.kind === "dodge") {
-        runtime.expeditionDodge();
+      if (resolution.kind === "strike") {
+        runtime.expeditionStrike();
+      } else if (resolution.kind === "dodge") {
+        // A flick is always a legitimate gesture, but the runtime can
+        // still decline it (dodge on cooldown). That must not read as
+        // silence — flash the pad's rejected state instead.
+        if (!runtime.expeditionDodge()) flashDenied();
       } else if (resolution.kind === "fire") {
         runtime.expeditionFire();
       } else if (resolution.kind === "cancel") {
@@ -254,7 +295,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
         runtime.expeditionCancelAim();
       }
     },
-    [runtime, padModel]
+    [runtime, padModel, flashDenied]
   );
 
   const handlePointerCancel = useCallback(
@@ -266,6 +307,12 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
   );
 
   useEffect(() => cleanupPointer, [cleanupPointer]);
+  useEffect(
+    () => () => {
+      if (deniedTimeoutRef.current != null) clearTimeout(deniedTimeoutRef.current);
+    },
+    []
+  );
 
   if (!active) {
     return (
@@ -333,18 +380,37 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
       {terminalState === "running" ? (
         <div
           ref={padRef}
-          className={`expedition-pad${aiming ? " is-aiming" : ""}`}
+          className={`expedition-pad${aiming ? " is-aiming" : ""}${
+            locked ? " is-locked" : ""
+          }${gestureDenied ? " is-denied" : ""}`}
           data-testid="expedition-action-pad"
           data-aiming={aiming ? "true" : "false"}
+          data-locked={locked ? "true" : "false"}
+          data-denied={gestureDenied ? "true" : "false"}
           onPointerDown={handlePointerDown}
           onPointerUp={finish}
           onPointerCancel={handlePointerCancel}
           role="button"
-          aria-label="Action pad: tap to evade, hold to aim the Line"
+          aria-label="Action pad: tap to strike, flick to evade, hold to aim the Line"
         >
-          <span className="expedition-pad__label">
-            {aiming ? "LINE" : "ACT"}
+          {/*
+            No undocumented "ACT" semantics (§PR77 Part 3). Default state
+            names the player's primary verb outright and hints at the other
+            two gestures without a third button; aiming replaces all three
+            with exactly what release will do right now.
+          */}
+          <span
+            className="expedition-pad__label"
+            data-testid="expedition-pad-label"
+          >
+            {aiming ? (locked ? "RELEASE · HOOK" : "AIM THE LINE") : "STRIKE"}
           </span>
+          {!aiming ? (
+            <span className="expedition-pad__hints" aria-hidden="true">
+              <span className="expedition-pad__hint">FLICK · EVADE</span>
+              <span className="expedition-pad__hint">HOLD · LINE</span>
+            </span>
+          ) : null}
         </div>
       ) : null}
 
