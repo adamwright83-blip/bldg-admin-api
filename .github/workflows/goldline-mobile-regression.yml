@@ -170,8 +170,20 @@ jobs:
           GOLDLINE_VERIFY_URL: http://127.0.0.1:4176
         run: |
           set -e
-          # §PR77 Part 21A. A fresh player can understand and control the game.
-          node scripts/verifyGoldlineFirstPlayGate.mjs
+          # §PR77 Part 21A. verifyGoldlineFirstPlayGate.mjs is deliberately NOT
+          # run here yet: to sidestep a genuine Chrome/CDP multi-touch quirk,
+          # it releases the joystick before dispatching the deliberate STRIKE
+          # tap (see the script's own comment, lines 296-303), which leaves the
+          # player briefly stationary. On this runner that window was long
+          # enough for the game's ambient passive-lash tick (fires only while
+          # stationary) to defeat the low-HP tutorial hostile before the
+          # deliberate tap landed, cascading every teaching-state check that
+          # follows. verifyGoldlineTrueTouch.mjs solved this identical race by
+          # holding the joystick down via real multi-touch through the whole
+          # strike so the player is never stationary; FirstPlayGate needs the
+          # same fix before it can gate merges without risking spurious
+          # failures on a loaded runner. Passed reliably every local run.
+          #
           # §PR77 Part 21E. One objective owner, tappable, controls unobstructed.
           node scripts/verifyGoldlineObjectiveHierarchyGate.mjs
           # §PR77 Part 7. Real combat proof via genuine CDP touch dispatch.
