@@ -1593,6 +1593,17 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   );
 
   /**
+   * True while any completed external job still owes its owning system an
+   * update. This is real outstanding work, and the rest of the app has to
+   * treat it as such rather than as an idle day.
+   */
+  const externalReconciliationOutstanding = (props.externalOrders ?? []).some(
+    order =>
+      order.operationalStatus === "completed" &&
+      order.reconciliationStatus === "update_required"
+  );
+
+  /**
    * What the operator still owes the owning system, once the physical work is
    * done. Null for native work — there is no other system to update.
    */
@@ -3322,8 +3333,18 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           mission={props.openChannelMission}
           gap={openChannelGap}
           shouldAutoIgnite={
-            !action && !activeMission && !nextOrderObjective && !preparedObjective
+            !action &&
+            !activeMission &&
+            !nextOrderObjective &&
+            !preparedObjective &&
+            // An outstanding external update is WORK, so the day is not empty
+            // and the briefing must not auto-open over it. Without this,
+            // finishing a CleanCloud job made the day look finished and the
+            // ignition overlay opened on top of the very control the operator
+            // needed next — "I UPDATED CLEAN CLOUD".
+            !externalReconciliationOutstanding
           }
+          suppressResumeBanner={preparedObjective != null}
           isGenerating={Boolean(props.isGeneratingOpenChannel)}
           isApproving={Boolean(props.isApprovingOpenChannel)}
           onClose={() => setUtilityPanel(null)}

@@ -1258,6 +1258,13 @@ export default function GoldlineHome({
           open={panel === "open-channel"}
           mission={openChannelMission}
           gap={openChannelGap}
+          // Empty-day ignition belongs to the game shell, which is the surface
+          // that knows whether a playable objective exists. This instance
+          // opens only when the operator asks for it. Passing `false`
+          // explicitly preserves exactly the behaviour this render site
+          // already had — the prop was simply never supplied, which is why it
+          // sat in the TypeScript baseline as an error.
+          shouldAutoIgnite={false}
           isGenerating={isGeneratingOpenChannel}
           isApproving={isApprovingOpenChannel}
           onClose={() => setPanel(null)}

@@ -3563,3 +3563,27 @@
   font-weight: 700;
   letter-spacing: 0.12em;
 }
+
+/* A disabled stick is a control the player cannot use, and in a terminal
+   state its label collided with the terminal strip's own text — "MOVE" showing
+   through "CLEAN CLOUD · UPDATE REQUIRED". Fading it out removes the collision
+   without moving anything: the layout is unchanged, only a dead control stops
+   competing for the same pixels. */
+.game-joystick.is-disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Two invitations to the same objective must not stack.
+ *
+ * The Open Channel resume banner sits at bottom:216px, and the expedition
+ * threshold now sits at 25vh — on a 393x852 phone those are the same band, so
+ * "CURRENT REAL OBJECTIVE · TAP TO CONTINUE" landed on top of ENTER THE LINE
+ * and swallowed the tap. They point at the same work, and the threshold is the
+ * more specific way in, so it wins whenever both would show. The banner is
+ * still the right affordance when there is no threshold — that is exactly the
+ * case it was built for. */
+.playable-goldline-shell:has([data-testid="expedition-threshold"])
+  [data-testid="open-channel-ignition-cta"] {
+  display: none;
+}
