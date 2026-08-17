@@ -197,16 +197,49 @@ const plan = await page.evaluate(() => {
 });
 
 // Real touch: a tap must dodge, exactly as in the pickup expedition.
+//
+// Two things this has to get right, both learned the hard way.
+//
+// First, `isDodging()` is a transient flag on a 0.22s burst, so polling it from
+// the driver can miss a dodge that starts and ends between two round trips.
+// Latch it inside the page on every frame instead, armed before the touch.
+//
+// Second, the press has to actually be a TAP. HOLD_THRESHOLD_MS is 200ms of
+// real wall clock, and a driver-side `setTimeout(70)` between two CDP round
+// trips can easily land past that under load — at which point the pad promotes
+// to aim and releasing with no lock correctly resolves to `cancel`, not a
+// dodge. So: release immediately, and record whether the pad ever entered aim
+// so a failure says which of the two things went wrong instead of just "no
+// dodge".
+await page.evaluate(() => {
+  window.__padWatch = { dodged: false, aimed: false, frames: 0 };
+  const pad = () => document.querySelector('[data-testid="expedition-action-pad"]');
+  const watch = () => {
+    const w = window.__padWatch;
+    w.frames += 1;
+    if (window.__goldlineGame?.isDodging()) w.dodged = true;
+    if (pad()?.dataset.aiming === "true") w.aimed = true;
+    if (!w.dodged) requestAnimationFrame(watch);
+  };
+  requestAnimationFrame(watch);
+});
 const pad = await centerOf("expedition-action-pad");
 await touchStart(pad.x, pad.y);
-await new Promise(r => setTimeout(r, 70));
 await touchEnd();
-let dodged = false;
-for (let i = 0; i < 12 && !dodged; i += 1) {
-  dodged = await page.evaluate(() => window.__goldlineGame.isDodging());
-  if (!dodged) await settle(2);
+let padWatch = { dodged: false, aimed: false, frames: 0 };
+for (let i = 0; i < 24 && !padWatch.dodged; i += 1) {
+  padWatch = await page.evaluate(() => window.__padWatch);
+  if (!padWatch.dodged) await settle(2);
 }
-check("ACT still dodges on a non-order objective", dodged);
+check(
+  "ACT still dodges on a non-order objective",
+  padWatch.dodged,
+  padWatch.dodged
+    ? `dodged within ${padWatch.frames} frames`
+    : padWatch.aimed
+      ? "the press became a hold, so cancel was correct — the tap was too slow"
+      : `no dodge after ${padWatch.frames} frames`
+);
 
 await walkTo(plan.relic + 0.006);
 check(
