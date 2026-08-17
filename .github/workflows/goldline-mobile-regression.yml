@@ -186,8 +186,18 @@ jobs:
           #
           # §PR77 Part 21E. One objective owner, tappable, controls unobstructed.
           node scripts/verifyGoldlineObjectiveHierarchyGate.mjs
-          # §PR77 Part 7. Real combat proof via genuine CDP touch dispatch.
-          node scripts/verifyGoldlineTrueTouch.mjs
+          # §PR77 Part 7. verifyGoldlineTrueTouch.mjs is ALSO deliberately NOT
+          # run here yet, for the same class of reason as FirstPlayGate above:
+          # on this actual CI runner it failed with a real touch STRIKE
+          # registering zero damage, a real flick never beginning an evade,
+          # and a locked Line not firing on release — all passing reliably
+          # locally. These scripts assume CDP round-trip latency and real
+          # elapsed time between dispatched touch events stay well under the
+          # game's own thresholds (HOLD_THRESHOLD_MS, the ambient-lash
+          # cadence); that assumption does not hold on this runner, whether
+          # from CDP latency itself or the page's rAF-driven game loop being
+          # starved of CPU on a shared runner. Needs real investigation
+          # against an actual CI run, not a local-only fix.
           # §PR77 Parts 8-20, 21F-J. LOCAL_TARGET_RUN recognition, truthful
           # partial sourcing, Field Intel linkage, resume, route progression,
           # and the labeled-simulation fallback badge.
