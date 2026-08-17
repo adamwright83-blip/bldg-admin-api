@@ -25,6 +25,7 @@ import { capabilityRouter } from "../capabilities/capabilityRouter";
 import { teamRouter } from "../team/teamRouter";
 import { openChannelRouter } from "../openChannel/openChannelRouter";
 import { externalOrderRouter } from "../externalOrders/externalOrderRouter";
+import { impactSignalRouter } from "../impactSignals/impactSignalRouter";
 import { driverGameWorldRouter } from "../driverGameWorld/driverGameWorldRouter";
 import { salesIntelRouter } from "../salesIntel/salesIntelRouter";
 import { goldlineEventRouter } from "../dayforgeEvents/goldlineEventRouter";
@@ -54,6 +55,7 @@ export const systemRouter = router({
   team: teamRouter,
   openChannel: openChannelRouter,
   externalOrders: externalOrderRouter,
+  impactSignals: impactSignalRouter,
   driverGameWorld: driverGameWorldRouter,
   salesIntel: salesIntelRouter,
   goldlineEvents: goldlineEventRouter,

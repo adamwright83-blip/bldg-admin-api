@@ -269,19 +269,41 @@ const pad = await centerOf("expedition-action-pad");
 const dodgeBefore = await page.evaluate(() =>
   window.__goldlineGame.isDodging()
 );
+// A tap has to be a TAP. HOLD_THRESHOLD_MS is 200ms of real wall clock, and a
+// driver-side `hold(70)` between two CDP round trips can land past that under
+// load — the pad then promotes to aim and releasing with no lock correctly
+// resolves to cancel. So release immediately, and latch both the dodge and the
+// aim state inside the page every frame: the dodge burst is 0.22s and can
+// otherwise start and finish between two round trips.
+await page.evaluate(() => {
+  window.__tapWatch = { dodged: false, aimed: false, frames: 0 };
+  const pad = () =>
+    document.querySelector('[data-testid="expedition-action-pad"]');
+  const watch = () => {
+    const w = window.__tapWatch;
+    w.frames += 1;
+    if (window.__goldlineGame.isDodging()) w.dodged = true;
+    if (pad()?.dataset.aiming === "true") w.aimed = true;
+    if (!w.dodged) requestAnimationFrame(watch);
+  };
+  requestAnimationFrame(watch);
+});
 await touchStart(pad.x, pad.y);
-await hold(70); // well under the hold threshold — this is a tap
 await touchEnd();
-// Sample across the dodge's real duration rather than one frame after.
-let dodged = false;
-for (let i = 0; i < 12; i += 1) {
-  if (await page.evaluate(() => window.__goldlineGame.isDodging())) {
-    dodged = true;
-    break;
-  }
-  await settle(2);
+let tapWatch = { dodged: false, aimed: false, frames: 0 };
+for (let i = 0; i < 24 && !tapWatch.dodged; i += 1) {
+  tapWatch = await page.evaluate(() => window.__tapWatch);
+  if (!tapWatch.dodged) await settle(2);
 }
-check("a short tap starts a dodge", !dodgeBefore && dodged);
+check(
+  "a short tap starts a dodge",
+  !dodgeBefore && tapWatch.dodged,
+  tapWatch.dodged
+    ? `dodged within ${tapWatch.frames} frames`
+    : tapWatch.aimed
+      ? "the press became a hold, so cancel was correct — the tap was too slow"
+      : `no dodge after ${tapWatch.frames} frames`
+);
 check("a tap does NOT enter aim", (await padState()) === "false");
 await shot("touch-02-dodge");
 

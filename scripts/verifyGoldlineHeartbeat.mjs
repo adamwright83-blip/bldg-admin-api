@@ -319,10 +319,19 @@ if ((await snapshot()).outcome === "down") {
 // Defeat the Shieldbearer. The Line is the real counter-play, but a
 // guaranteed kill keeps this test about the JOURNEY rather than about
 // whether a scripted thumb can win a fight.
+//
+// The same reasoning has to cover the Slingers, and for a while it did not.
+// They are ranged, they stay live behind the player, and every assertion
+// above holds the player motionless at the seal inside their reach — through
+// a settle, two snapshot reads and a screenshot. Roughly one run in three
+// they simply shot it dead in that window, which read as "arrival broke"
+// when it was the fixture standing still in a firefight it had already
+// declared out of scope. Everything this script proves about hostiles,
+// relics and route selection is finished by this point; from here the
+// subject is the walk.
 await page.evaluate(() => {
   const layer = window.__goldlineGame.getExpedition();
-  const shield = layer.hostiles.find(h => h.id === "shieldbearer_climax");
-  if (shield) shield.hp = 0;
+  for (const hostile of layer.hostiles) hostile.hp = 0;
 });
 await settle(6);
 check(
@@ -332,6 +341,24 @@ check(
   )) === false
 );
 await shot("hb-07-seal-broken");
+
+// Screenshots take real time, and real time is when a run dies. Confirm the
+// player is actually alive to make the walk rather than discovering it from a
+// timeout on `expedition-arrived`.
+if ((await snapshot()).outcome === "down") {
+  await page.getByTestId("expedition-redeploy").click();
+  await settle(20);
+  await page.evaluate(() => {
+    const layer = window.__goldlineGame.getExpedition();
+    for (const hostile of layer.hostiles) hostile.hp = 0;
+  });
+  await settle(6);
+}
+check(
+  "the player is alive and free to walk the last stretch",
+  (await snapshot()).outcome === "running",
+  `outcome=${(await snapshot()).outcome}`
+);
 
 // ------------------------------------------------------ 5. reach the cache
 

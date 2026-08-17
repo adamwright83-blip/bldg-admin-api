@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { createGoldlineEventEmitter } from "../../game/analytics/emitGoldlineEvent";
 import { QuickNewOrderSheet } from "@/components/driver/QuickNewOrderSheet";
 import { AddExternalWorkSheet } from "@/components/driver/AddExternalWorkSheet";
+import { LogSignalSheet } from "@/components/driver/LogSignalSheet";
 import { SalesJournalSheet } from "@/components/driver/SalesMomentum";
 import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
 import GoldlineHome from "../goldline/GoldlineHome";
@@ -18,6 +19,7 @@ import type {
   ColdCallBatch,
   ColdCallTarget,
 } from "../../../../shared/coldCallBurst";
+import type { OperatorLocationHint } from "../../../../shared/impactSignal";
 import type { RealActionRequest } from "../../game/encounters/RealActionBridge";
 import type {
   GoldlineActionServices,
@@ -30,6 +32,36 @@ import {
   requestGoldlineLocation,
   type GoldlineLocationSnapshot,
 } from "./goldlineDriverModel";
+
+/**
+ * The ten-day rescue run. A stable literal rather than a lookup so capture can
+ * never fail because a campaign row did not exist yet — losing a doorstep
+ * observation to a missing foreign key would defeat the entire feature.
+ */
+const RESCUE_RUN_CAMPAIGN_ID = "rescue-10day";
+
+/**
+ * Order evidence, or nothing.
+ *
+ * `?? []` only guards null and undefined. Anything else non-iterable — an
+ * unexpected envelope, a paginated shape, a single object — throws inside the
+ * spread and takes the whole driver screen down to "An unexpected error
+ * occurred". That is a catastrophic response to a cosmetic problem: the
+ * Stronghold payoff is a reward, and Adam mid-route needs the route.
+ *
+ * Absent evidence is already a state this app renders honestly — it shows no
+ * restoration, which is exactly right, because unreadable evidence is not
+ * proof that a pickup happened.
+ */
+function evidenceRows(
+  data: unknown
+): Array<{ id: number; status: string }> {
+  if (!Array.isArray(data)) return [];
+  return data.filter(
+    (row): row is { id: number; status: string } =>
+      typeof row?.id === "number" && typeof row?.status === "string"
+  );
+}
 
 function getLocalYmd(date = new Date()): string {
   return [
@@ -99,6 +131,9 @@ function LiveGoldlineDriverController() {
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [newOrderOpen, setNewOrderOpen] = useState(false);
   const [addExternalWorkOpen, setAddExternalWorkOpen] = useState(false);
+  const [logSignalOpen, setLogSignalOpen] = useState(false);
+  const [operatorLocation, setOperatorLocation] =
+    useState<OperatorLocationHint | null>(null);
   const [journalOpen, setJournalOpen] = useState(false);
   const [dayResolution, setDayResolution] = useState<DayResolution | null>(
     null
@@ -160,10 +195,10 @@ function LiveGoldlineDriverController() {
   const collectedOrderEvidence = useMemo(
     () =>
       [
-        ...(collectedOrders.data ?? []),
-        ...(processingOrders.data ?? []),
-        ...(readyOrders.data ?? []),
-        ...(deliveredOrders.data ?? []),
+        ...evidenceRows(collectedOrders.data),
+        ...evidenceRows(processingOrders.data),
+        ...evidenceRows(readyOrders.data),
+        ...evidenceRows(deliveredOrders.data),
       ].map(order => ({ id: order.id, status: order.status })),
     [
       collectedOrders.data,
@@ -181,6 +216,18 @@ function LiveGoldlineDriverController() {
     { scheduledDate: selectedDate },
     { refetchInterval: 20_000, retry: false }
   );
+  /**
+   * Field intel. `proposeSignal` calls a model and writes nothing;
+   * `confirmSignal` is the only thing that persists, and it persists what the
+   * operator approved.
+   */
+  const proposeSignal = trpc.system.impactSignals.propose.useMutation();
+  const confirmSignal = trpc.system.impactSignals.confirm.useMutation();
+  const impactSignalList = trpc.system.impactSignals.list.useQuery(
+    { businessDate: selectedDate },
+    { refetchInterval: 60_000, retry: false }
+  );
+
   const extractExternalDay =
     trpc.system.externalOrders.extractFromScreenshots.useMutation();
   const confirmExternalImport =
@@ -999,6 +1046,8 @@ function LiveGoldlineDriverController() {
     onOpenWalkIn: () => setWalkInOpen(true),
     onOpenNewOrder: () => setNewOrderOpen(true),
     onOpenAddExternalWork: () => setAddExternalWorkOpen(true),
+    onOpenLogSignal: () => setLogSignalOpen(true),
+    onOperatorLocationChange: setOperatorLocation,
     onOpenJournal: () => setJournalOpen(true),
     onResolveDay: handleResolveDay,
     onOpenDispatch: activeDispatch ? handleOpenDispatch : undefined,
@@ -1060,6 +1109,25 @@ function LiveGoldlineDriverController() {
           onEmitEvent={emitGoldlineEvent}
         />
       </Suspense>
+      <LogSignalSheet
+        open={logSignalOpen}
+        onClose={() => setLogSignalOpen(false)}
+        // Only ever what the game shell reported as a real arrival. Null the
+        // rest of the time, which both the sheet and the prompt handle.
+        entityHint={operatorLocation}
+        onPropose={input => proposeSignal.mutateAsync(input)}
+        onConfirm={async signals => {
+          await confirmSignal.mutateAsync({
+            businessDate: selectedDate,
+            // The ten-day push is one run, so every signal captured during it
+            // carries the same campaign id and can be analysed together
+            // afterwards.
+            campaignId: RESCUE_RUN_CAMPAIGN_ID,
+            signals,
+          });
+          await impactSignalList.refetch();
+        }}
+      />
       <AddExternalWorkSheet
         open={addExternalWorkOpen}
         onClose={() => setAddExternalWorkOpen(false)}

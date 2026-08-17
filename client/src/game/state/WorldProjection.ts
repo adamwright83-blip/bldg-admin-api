@@ -14,8 +14,18 @@ function mapsUrl(address: string | null | undefined) {
     : null;
 }
 
+/**
+ * A missing decision-maker costs a Call link, not the whole game.
+ *
+ * This reached three levels deep unguarded, so a mission that arrived without
+ * an account or without a decision maker threw inside a `.map` during render
+ * and took the entire driver surface down to "An unexpected error occurred" —
+ * no route, no stops, no way to work the day. Absent contact detail is an
+ * ordinary state of real sales data, and the app already renders a disabled
+ * Call affordance for it.
+ */
 function phoneUrl(mission: CommercialMission) {
-  const phone = mission.account.decisionMaker.phone?.trim();
+  const phone = mission.account?.decisionMaker?.phone?.trim();
   return phone ? `tel:${phone}` : null;
 }
 
@@ -31,10 +41,18 @@ export function projectMissionTruth(input: {
   moves?: FieldMovesResult;
   worldNodes?: DriverGameWorldNode[];
 }): PlayableMission[] {
-  const missions = input.missions ?? [];
-  const moves = input.moves?.recommendedMoves ?? [];
+  // `?? []` only guards null and undefined. Anything else non-iterable — an
+  // envelope, an object, a paginated shape — throws inside these iterations
+  // during render, which white-screens the driver's entire day rather than
+  // costing the one list that arrived malformed.
+  const missions = Array.isArray(input.missions) ? input.missions : [];
+  const moveList = input.moves?.recommendedMoves;
+  const moves = Array.isArray(moveList) ? moveList : [];
   const nodeByMission = new Map(
-    (input.worldNodes ?? []).map(node => [node.missionId, node])
+    (Array.isArray(input.worldNodes) ? input.worldNodes : []).map(node => [
+      node.missionId,
+      node,
+    ])
   );
   const projected: PlayableMission[] = missions.map(mission => {
     const move = moveForMission(moves, mission.id);

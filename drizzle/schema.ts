@@ -5382,3 +5382,99 @@ export const externalOperationalOrders = mysqlTable(
     ),
   })
 );
+
+/** Field intel. See 0058_impact_signals.sql — stable schema, open vocabulary. */
+export const impactSignals = mysqlTable(
+  "impact_signals",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    campaignId: varchar("campaignId", { length: 64 }),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    signalKey: varchar("signalKey", { length: 96 }).notNull(),
+    label: varchar("label", { length: 191 }).notNull(),
+    valueType: mysqlEnum("valueType", ["text", "number", "boolean", "enum", "date"])
+      .notNull()
+      .default("text"),
+    value: text("value").notNull(),
+    unit: varchar("unit", { length: 32 }),
+    impactClass: mysqlEnum("impactClass", [
+      "observation",
+      "field_activity",
+      "response",
+      "opportunity",
+      "customer_outcome",
+      "economic_outcome",
+    ])
+      .notNull()
+      .default("observation"),
+    provenance: mysqlEnum("provenance", [
+      "system_verified",
+      "operator_confirmed",
+      "external_record",
+    ])
+      .notNull()
+      .default("operator_confirmed"),
+    entityType: varchar("entityType", { length: 64 }),
+    entityId: varchar("entityId", { length: 64 }),
+    entityLabel: varchar("entityLabel", { length: 191 }),
+    location: varchar("location", { length: 512 }),
+    notes: text("notes"),
+    metadataJson: json("metadataJson"),
+    capturedAt: timestamp("capturedAt").notNull().defaultNow(),
+    confirmedAt: timestamp("confirmedAt"),
+  },
+  table => ({
+    campaignIdx: index("idx_impact_signal_campaign").on(
+      table.tenantId,
+      table.campaignId,
+      table.businessDate
+    ),
+    keyIdx: index("idx_impact_signal_key").on(
+      table.tenantId,
+      table.signalKey,
+      table.businessDate
+    ),
+    entityIdx: index("idx_impact_signal_entity").on(
+      table.entityType,
+      table.entityId
+    ),
+  })
+);
+
+/** Reusable questions. Additive; promotion never rewrites captured signals. */
+export const trackedSignalDefinitions = mysqlTable(
+  "tracked_signal_definitions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    signalKey: varchar("signalKey", { length: 96 }).notNull(),
+    label: varchar("label", { length: 191 }).notNull(),
+    valueType: mysqlEnum("valueType", ["text", "number", "boolean", "enum", "date"])
+      .notNull()
+      .default("text"),
+    impactClass: mysqlEnum("impactClass", [
+      "observation",
+      "field_activity",
+      "response",
+      "opportunity",
+      "customer_outcome",
+      "economic_outcome",
+    ])
+      .notNull()
+      .default("observation"),
+    appliesTo: varchar("appliesTo", { length: 64 }),
+    unit: varchar("unit", { length: 32 }),
+    optionsJson: json("optionsJson"),
+    promoted: boolean("promoted").notNull().default(false),
+    observedCount: int("observedCount").notNull().default(0),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  table => ({
+    keyUnique: uniqueIndex("uq_tracked_signal_key").on(
+      table.tenantId,
+      table.signalKey
+    ),
+  })
+);
