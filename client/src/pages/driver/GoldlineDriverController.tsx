@@ -19,7 +19,7 @@ import type {
   ColdCallBatch,
   ColdCallTarget,
 } from "../../../../shared/coldCallBurst";
-import type { OperatorLocationHint } from "../../../../shared/impactSignal";
+import type { OperatorStopIdentity } from "../../../../shared/impactSignal";
 import type { RealActionRequest } from "../../game/encounters/RealActionBridge";
 import type {
   GoldlineActionServices,
@@ -132,8 +132,8 @@ function LiveGoldlineDriverController() {
   const [newOrderOpen, setNewOrderOpen] = useState(false);
   const [addExternalWorkOpen, setAddExternalWorkOpen] = useState(false);
   const [logSignalOpen, setLogSignalOpen] = useState(false);
-  const [operatorLocation, setOperatorLocation] =
-    useState<OperatorLocationHint | null>(null);
+  const [operatorStop, setOperatorStop] =
+    useState<OperatorStopIdentity | null>(null);
   const [journalOpen, setJournalOpen] = useState(false);
   const [dayResolution, setDayResolution] = useState<DayResolution | null>(
     null
@@ -1047,7 +1047,7 @@ function LiveGoldlineDriverController() {
     onOpenNewOrder: () => setNewOrderOpen(true),
     onOpenAddExternalWork: () => setAddExternalWorkOpen(true),
     onOpenLogSignal: () => setLogSignalOpen(true),
-    onOperatorLocationChange: setOperatorLocation,
+    onOperatorStopChange: setOperatorStop,
     onOpenJournal: () => setJournalOpen(true),
     onResolveDay: handleResolveDay,
     onOpenDispatch: activeDispatch ? handleOpenDispatch : undefined,
@@ -1114,7 +1114,7 @@ function LiveGoldlineDriverController() {
         onClose={() => setLogSignalOpen(false)}
         // Only ever what the game shell reported as a real arrival. Null the
         // rest of the time, which both the sheet and the prompt handle.
-        entityHint={operatorLocation}
+        entityHint={operatorStop}
         onPropose={input => proposeSignal.mutateAsync(input)}
         onConfirm={async signals => {
           await confirmSignal.mutateAsync({
@@ -1123,6 +1123,10 @@ function LiveGoldlineDriverController() {
             // carries the same campaign id and can be analysed together
             // afterwards.
             campaignId: RESCUE_RUN_CAMPAIGN_ID,
+            // The authoritative linkage. Namespace-qualified and absent unless
+            // the operator genuinely arrived somewhere — never derived from the
+            // label the model saw.
+            entityId: operatorStop?.entityId ?? null,
             signals,
           });
           await impactSignalList.refetch();

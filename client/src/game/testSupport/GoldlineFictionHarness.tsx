@@ -20,10 +20,11 @@ import type { Order } from "@shared/types";
 import {
   toSignalKey,
   type ImpactSignalProposal,
-  type OperatorLocationHint,
+  type OperatorStopIdentity,
   type ProposedImpactSignal,
 } from "../../../../shared/impactSignal";
 import { LogSignalSheet } from "@/components/driver/LogSignalSheet";
+import { AddExternalWorkSheet } from "@/components/driver/AddExternalWorkSheet";
 import type { CollectedEvidenceOrder } from "../expedition/strongholdRestoration";
 import type { OpenChannelMission } from "../../../../server/openChannel/openChannelTypes";
 import type { ExternalOperationalOrder } from "../../../../shared/externalOperationalOrder";
@@ -57,6 +58,22 @@ const FIXTURE_SERVER_EVIDENCE_KEY = "goldline-fixture:server-collected-orders";
  * capture actually left the sheet.
  */
 const FIXTURE_SIGNALS_KEY = "goldline-fixture:confirmed-signals";
+
+/**
+ * The linkage recorded alongside each confirmed signal. Persisted for the same
+ * reason the signals are: a reload is how the proof checks that rows captured
+ * before an arrival keep no linkage, rather than acquiring one retroactively.
+ */
+const FIXTURE_ENTITY_IDS_KEY = "goldline-fixture:confirmed-entity-ids";
+
+function readFixtureEntityIds(): string[] {
+  try {
+    const raw = window.sessionStorage.getItem(FIXTURE_ENTITY_IDS_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 function readFixtureSignals(): ProposedImpactSignal[] {
   try {
@@ -464,11 +481,15 @@ export default function GoldlineFictionHarness() {
   // expired) so Slice 96's dynamic reprojection can be proven against a
   // live UI re-render, not just the pure-function unit tests.
   const [logSignalOpen, setLogSignalOpen] = useState(false);
-  const [operatorLocation, setOperatorLocation] =
-    useState<OperatorLocationHint | null>(null);
+  const [addExternalWorkOpen, setAddExternalWorkOpen] = useState(false);
+  const [operatorStop, setOperatorStop] =
+    useState<OperatorStopIdentity | null>(null);
   const [confirmedSignals, setConfirmedSignals] = useState<
     ProposedImpactSignal[]
   >(() => readFixtureSignals());
+  const [confirmedEntityIds, setConfirmedEntityIds] = useState<string[]>(() =>
+    readFixtureEntityIds()
+  );
   const [liveStopCount, setLiveStopCount] = useState(
     noNativeOrders ? 0 : ROUTE_STOP_COUNT
   );
@@ -807,7 +828,10 @@ export default function GoldlineFictionHarness() {
     onOpenWalkIn: () => undefined,
     onOpenNewOrder: () => undefined,
     onOpenLogSignal: () => setLogSignalOpen(true),
-    onOperatorLocationChange: setOperatorLocation,
+    // The live controller has always passed this; the fixture needs it too, or
+    // the doorway under test cannot render.
+    onOpenAddExternalWork: () => setAddExternalWorkOpen(true),
+    onOperatorStopChange: setOperatorStop,
     onOpenJournal: () => undefined,
     onResolveDay: async () => undefined,
     openChannelMission,
@@ -909,15 +933,59 @@ export default function GoldlineFictionHarness() {
       <div data-testid="fixture-signal-classes" style={{ display: "none" }}>
         {confirmedSignals.map(s => s.impactClass).join(",")}
       </div>
+      {/* The authoritative linkage recorded with each confirmed signal. */}
+      <div data-testid="fixture-signal-entity-ids" style={{ display: "none" }}>
+        {confirmedEntityIds.join(",")}
+      </div>
       <GoldlineGameHome {...gameProps} />
+      {/*
+        The real sheet as #74 shipped it. Extraction is stubbed because reading
+        screenshots is not what the doorway proof is about — reaching the sheet
+        and finding a genuine file input is.
+      */}
+      <AddExternalWorkSheet
+        open={addExternalWorkOpen}
+        onClose={() => setAddExternalWorkOpen(false)}
+        onExtract={async images => ({
+          batchId: "fixture-batch",
+          jobs: images.map(() => ({
+            jobKind: "pickup" as const,
+            customerName: "Fixture Job",
+            address: "1 Fixture Way",
+            scheduledDate: "2026-08-13",
+            windowStart: null,
+            windowEnd: null,
+            notes: null,
+            externalOrderId: null,
+          })),
+          unreadableImageCount: 0,
+        })}
+        onConfirmImport={async () => undefined}
+        onCreateManual={async () => undefined}
+      />
       <LogSignalSheet
         open={logSignalOpen}
         onClose={() => setLogSignalOpen(false)}
-        entityHint={operatorLocation}
+        entityHint={operatorStop}
         onPropose={async ({ speech }) => proposeFixtureSignals(speech)}
         onConfirm={async signals => {
           const next = [...confirmedSignals, ...signals];
           setConfirmedSignals(next);
+          // Recorded exactly as the controller records it: whatever the game
+          // shell reported, or nothing at all.
+          const nextIds = [
+            ...confirmedEntityIds,
+            ...signals.map(() => operatorStop?.entityId ?? "none"),
+          ];
+          setConfirmedEntityIds(nextIds);
+          try {
+            window.sessionStorage.setItem(
+              FIXTURE_ENTITY_IDS_KEY,
+              JSON.stringify(nextIds)
+            );
+          } catch {
+            /* a fixture that cannot persist still runs */
+          }
           try {
             window.sessionStorage.setItem(
               FIXTURE_SIGNALS_KEY,
