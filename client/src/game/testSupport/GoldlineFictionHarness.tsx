@@ -20,6 +20,7 @@ import type { Order } from "@shared/types";
 import {
   toSignalKey,
   type ImpactSignalProposal,
+  type OperatorLocationHint,
   type ProposedImpactSignal,
 } from "../../../../shared/impactSignal";
 import { LogSignalSheet } from "@/components/driver/LogSignalSheet";
@@ -463,6 +464,8 @@ export default function GoldlineFictionHarness() {
   // expired) so Slice 96's dynamic reprojection can be proven against a
   // live UI re-render, not just the pure-function unit tests.
   const [logSignalOpen, setLogSignalOpen] = useState(false);
+  const [operatorLocation, setOperatorLocation] =
+    useState<OperatorLocationHint | null>(null);
   const [confirmedSignals, setConfirmedSignals] = useState<
     ProposedImpactSignal[]
   >(() => readFixtureSignals());
@@ -804,6 +807,7 @@ export default function GoldlineFictionHarness() {
     onOpenWalkIn: () => undefined,
     onOpenNewOrder: () => undefined,
     onOpenLogSignal: () => setLogSignalOpen(true),
+    onOperatorLocationChange: setOperatorLocation,
     onOpenJournal: () => undefined,
     onResolveDay: async () => undefined,
     openChannelMission,
@@ -909,6 +913,7 @@ export default function GoldlineFictionHarness() {
       <LogSignalSheet
         open={logSignalOpen}
         onClose={() => setLogSignalOpen(false)}
+        entityHint={operatorLocation}
         onPropose={async ({ speech }) => proposeFixtureSignals(speech)}
         onConfirm={async signals => {
           const next = [...confirmedSignals, ...signals];

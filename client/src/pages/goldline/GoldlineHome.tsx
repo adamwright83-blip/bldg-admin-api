@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import type { Order } from "@shared/types";
+import type { OperatorLocationHint } from "../../../../shared/impactSignal";
 import type { CommercialMission } from "@shared/commercialMission";
 import type {
   FieldMoveCandidate,
@@ -148,6 +149,12 @@ export type GoldlineHomeProps = {
    * it is forgotten.
    */
   onOpenLogSignal?: () => void;
+  /**
+   * Reports where the operator physically is, or null when the app does not
+   * genuinely know. Only the game shell can answer this — arrival is a fact
+   * about the run, not about the order list.
+   */
+  onOperatorLocationChange?: (hint: OperatorLocationHint | null) => void;
   onOpenJournal: () => void;
   onResolveDay: () => Promise<void>;
   onOpenDispatch?: () => Promise<void>;

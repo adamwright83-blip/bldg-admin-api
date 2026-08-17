@@ -163,6 +163,26 @@ export type ImpactSignalProposal = {
   unrecognized: string | null;
 };
 
+/**
+ * Where the operator is, when the app genuinely knows.
+ *
+ * Only ever set from an arrival the app already stands behind — the point at
+ * which it pins a named customer and an address on screen and offers to record
+ * the work as done. Being *assigned* a stop is not being *at* it, so an
+ * objective that has merely been prepared never produces one of these.
+ *
+ * A wrong building attached to an observation is worse than no building: it
+ * survives in the record and quietly misattributes what was learned. So the
+ * absent case is a first-class one, and everything downstream handles null.
+ *
+ * Note this does NOT make a signal system-verified. The location came from the
+ * app, but the observation is still the operator's — see [[SignalProvenance]].
+ */
+export type OperatorLocationHint = {
+  entityType: string;
+  entityLabel: string;
+};
+
 const CLASS_RANK: Record<ImpactClass, number> = {
   observation: 0,
   field_activity: 1,

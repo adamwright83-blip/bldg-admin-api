@@ -88,6 +88,12 @@ export type ExpeditionHudProps = {
   /** Present only while an external update is genuinely outstanding. */
   onReconcile?: () => void;
   reconcileActionLabel?: string;
+  /**
+   * Capture a field observation from the doorstep. Optional because the
+   * expedition is playable without it — a missing capture surface must never
+   * be able to block recording that the real work happened.
+   */
+  onLogSignal?: () => void;
 };
 
 /** Forward, up the corridor — the aim when the thumb has not been dragged. */
@@ -122,6 +128,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     reconciliationLabel = null,
     onReconcile,
     reconcileActionLabel = "I UPDATED IT",
+    onLogSignal,
   } = props;
 
   const padRef = useRef<HTMLDivElement | null>(null);
@@ -464,6 +471,29 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
               </button>
             </>
           )}
+
+          {/*
+            The doorstep. This is the one screen in the whole app that knows
+            both that the operator is standing somewhere and exactly where that
+            is — it is pinning the customer and the address two lines up.
+            Everything worth capturing during the ten-day run is noticed here,
+            and the operating bar that normally carries capture is hidden for
+            the duration of a run, so without this the surface is unreachable
+            at precisely the moment it matters.
+
+            Deliberately secondary and below the completion action: recording
+            the work is still the point of arriving.
+          */}
+          {onLogSignal ? (
+            <button
+              type="button"
+              className="expedition-terminal__signal"
+              data-testid="expedition-log-signal"
+              onClick={onLogSignal}
+            >
+              LOG A SIGNAL
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

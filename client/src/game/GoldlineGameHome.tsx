@@ -1490,6 +1490,35 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     useState<ActiveExpedition | null>(null);
 
   /**
+   * WHERE THE OPERATOR IS — reported upward only once it is actually true.
+   *
+   * ARRIVED is the one moment this app already commits to a physical location:
+   * it pins the customer and the address on screen and offers to record the
+   * work as done. Anything earlier is an assignment, not a position, and
+   * attaching a building to an observation on the strength of an assignment
+   * would put a wrong place in the permanent record.
+   *
+   * Open Channel work reports nothing on purpose. Its objective label is a task
+   * title ("drop the door hangers"), not a place, and deriving a building from
+   * a sentence about work is exactly the invention this must not do.
+   */
+  const reportLocation = props.onOperatorLocationChange;
+  const arrivedAtNamedPlace =
+    activeExpedition != null &&
+    expeditionSnapshot.outcome === "arrived" &&
+    (activeExpedition.kind === "native_pickup" ||
+      activeExpedition.kind === "external_order")
+      ? { entityType: "account", entityLabel: activeExpedition.label }
+      : null;
+  const arrivedLabel = arrivedAtNamedPlace?.entityLabel ?? null;
+  useEffect(() => {
+    if (!reportLocation) return;
+    reportLocation(
+      arrivedLabel ? { entityType: "account", entityLabel: arrivedLabel } : null
+    );
+  }, [reportLocation, arrivedLabel]);
+
+  /**
    * AUTHORITATIVE collected truth, as one evidence collection. Order id and
    * status, nothing else — this is the only input the Stronghold payoff has.
    */
@@ -2453,6 +2482,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             pinnedCustomer={activeExpedition?.label}
             pinnedAddress={activeExpedition?.detail}
             onSecureCargo={completeExpeditionObjective}
+            onLogSignal={props.onOpenLogSignal}
             cargoPhase={cargoPhase}
             completionActionLabel={
               activeExpedition?.kind === "open_channel" ? "SEAL THE WORK" : "SECURE CARGO"

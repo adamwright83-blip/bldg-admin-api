@@ -140,6 +140,14 @@ async function main() {
   await sheet.waitFor({ state: "visible", timeout: 8000 });
   check("capture sheet opens", true);
 
+  // Nowhere yet. The app has offered a stop but the operator has not walked to
+  // it, and an assignment is not a position — attaching a building here would
+  // put a wrong place in the permanent record.
+  check(
+    "no location is claimed before arriving anywhere",
+    (await page.getByTestId("log-signal-where").count()) === 0
+  );
+
   // 4. Voice is the primary control and is offered first, but a browser with no
   //    speech recognition must not dead-end the operator.
   const micBox = await boxOf(page, '[data-testid="log-signal-mic"]');
@@ -253,6 +261,147 @@ async function main() {
     .getByTestId("log-signal-structure")
     .isDisabled();
   check("empty speech cannot be structured", structureDisabled);
+
+  // ------------------------------------------------------------------------
+  // 12. ARRIVAL is the one moment the app genuinely knows where he is, so it
+  //     is the only moment a location may ride along with an observation.
+  await page.getByTestId("log-signal-back").click().catch(() => {});
+  await page.locator('[data-testid="log-signal-sheet"] header button').click();
+  await sheet.waitFor({ state: "detached", timeout: 8000 }).catch(() => {});
+
+  const settle = async (frames = 6) =>
+    page.evaluate(
+      count =>
+        new Promise(resolve => {
+          let seen = 0;
+          const tick = () => {
+            seen += 1;
+            if (seen >= count) resolve();
+            else requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+      frames
+    );
+  const snapshot = () =>
+    page.evaluate(() => window.__goldlineGame.getExpeditionSnapshot());
+
+  const cdp = await context.newCDPSession(page);
+  const pt = (x, y) => ({
+    x: Math.round(x),
+    y: Math.round(y),
+    radiusX: 12,
+    radiusY: 12,
+    force: 1,
+  });
+  const touch = (type, points) =>
+    cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points });
+
+  await page.getByTestId("expedition-enter").click();
+  await page.getByTestId("expedition-action-pad").waitFor({ timeout: 10000 });
+  const destination = await page.evaluate(
+    () => window.__goldlineGame.getExpedition().plan.destination
+  );
+
+  const stickBox = await boxOf(page, '[data-testid="goldline-joystick"]');
+  const stick = {
+    x: stickBox.x + stickBox.width / 2,
+    y: stickBox.y + stickBox.height / 2,
+  };
+  await touch("touchStart", [pt(stick.x, stick.y)]);
+  const walkStarted = Date.now();
+  let last = 0;
+  let stalled = 0;
+  while (Date.now() - walkStarted < 25000) {
+    await touch("touchMove", [pt(stick.x, stick.y - 46)]);
+    await settle(6);
+    const now = await page.evaluate(() => window.__goldlineGame.progress);
+    if (now >= destination - 0.004) break;
+    stalled = Math.abs(now - last) < 0.0005 ? stalled + 1 : 0;
+    if (stalled > 14) break;
+    last = now;
+  }
+  await touch("touchEnd", []);
+  await settle(8);
+
+  // The climax Shieldbearer guards the cache; clearing it is not the subject of
+  // this test, so remove the obstacle the same way the external-order proof
+  // does and recover first if it landed a killing blow.
+  if ((await snapshot()).outcome !== "arrived") {
+    const dropGuard = () =>
+      page.evaluate(() => {
+        // Every hostile. The ranged Slingers stay live behind the player and
+        // kill a fixture that stands still, which is not what this proves.
+        for (const hostile of window.__goldlineGame.getExpedition().hostiles) {
+          hostile.hp = 0;
+        }
+      });
+    await dropGuard();
+    if ((await snapshot()).outcome === "down") {
+      await page.getByTestId("expedition-redeploy").click();
+      await settle(20);
+      await dropGuard();
+    }
+    await touch("touchStart", [pt(stick.x, stick.y)]);
+    const retryStarted = Date.now();
+    while (Date.now() - retryStarted < 25000) {
+      await touch("touchMove", [pt(stick.x, stick.y - 46)]);
+      await settle(6);
+      const now = await page.evaluate(() => window.__goldlineGame.progress);
+      if (now >= destination - 0.004) break;
+    }
+    await touch("touchEnd", []);
+    await settle(8);
+  }
+
+  const arrived = (await snapshot()).outcome === "arrived";
+  check("the cache is reached on foot", arrived);
+
+  if (arrived) {
+    // The operating bar is hidden for the duration of a run, so the doorstep
+    // needs its own way in. Without this the capture surface is unreachable at
+    // the one moment the app knows both that he is standing somewhere and
+    // exactly where — which is when everything worth capturing is noticed.
+    const doorstep = page.getByTestId("expedition-log-signal");
+    check(
+      "capture is reachable from the doorstep itself",
+      (await doorstep.count()) === 1
+    );
+    const doorstepBox = await boxOf(page, '[data-testid="expedition-log-signal"]');
+    check(
+      "the doorstep control is a real thumb target",
+      Boolean(doorstepBox) && doorstepBox.height >= 44,
+      doorstepBox ? `height ${Math.round(doorstepBox.height)}` : "no box"
+    );
+    // It must not sit on top of the action that actually records the work.
+    const secureBox = await boxOf(page, '[data-testid="secure-cargo"]');
+    check(
+      "it does not overlap SECURE CARGO",
+      Boolean(secureBox) &&
+        Boolean(doorstepBox) &&
+        doorstepBox.y >= secureBox.y + secureBox.height,
+      secureBox
+        ? `secure ends ${Math.round(secureBox.y + secureBox.height)}, signal starts ${Math.round(doorstepBox.y)}`
+        : "no secure button"
+    );
+    await doorstep.click();
+    await sheet.waitFor({ state: "visible", timeout: 8000 });
+    const where = page.getByTestId("log-signal-where");
+    const shown = (await where.count()) > 0 ? await where.textContent() : null;
+    check(
+      "arriving attaches the real customer the app already pinned",
+      shown?.trim() === "Miso",
+      shown?.trim() ?? "absent"
+    );
+    // The location came from the app; the observation is still the operator's.
+    const provenanceAtStop = await page
+      .getByTestId("log-signal-speech")
+      .count();
+    check(
+      "capture still starts from the operator's own words",
+      provenanceAtStop === 1
+    );
+  }
 
   await browser.close();
 

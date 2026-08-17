@@ -3793,3 +3793,19 @@
     animation: none;
   }
 }
+
+/* Doorstep capture, inside the arrival panel. Secondary to the completion
+   action above it — quieter border, no fill — because recording that the real
+   work happened is still why the operator walked here. */
+.expedition-terminal__signal {
+  margin-top: 0.6rem;
+  min-height: 48px;
+  padding: 0 1.1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(99, 232, 255, 0.55);
+  background: none;
+  color: #63e8ff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
