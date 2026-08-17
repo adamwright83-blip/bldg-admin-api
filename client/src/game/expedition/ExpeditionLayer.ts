@@ -802,6 +802,27 @@ export class ExpeditionLayer {
   }
 
   /**
+   * Read-only observability for verification (§PR77 Part 21A first-play
+   * gate) — the CORRIDOR-space positions a harness needs to walk the
+   * player to a relic plinth or into the fork window for real, rather than
+   * guessing at the expedition-space authored values.
+   */
+  getPlanSummary(): {
+    relicPlinths: number;
+    relicLateral: Record<string, number>;
+    forkStart: number;
+    forkEnd: number;
+  } | null {
+    if (!this.plan) return null;
+    return {
+      relicPlinths: this.plan.relicPlinths,
+      relicLateral: { ...RELIC_PLINTH_LATERAL },
+      forkStart: this.plan.fork.start,
+      forkEnd: this.plan.fork.end,
+    };
+  }
+
+  /**
    * Fires the Line at the currently locked target. Ends aim unconditionally
    * — including on a miss, e.g. the locked hostile died or left range in
    * the frame between lock and release (§PR77 no dead press). Leaving
