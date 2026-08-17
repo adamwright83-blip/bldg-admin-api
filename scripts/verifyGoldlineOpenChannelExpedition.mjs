@@ -99,7 +99,7 @@ const touchEnd = () =>
 
 // The ZERO-ORDER DAY fixture: no pickups, no deliveries, one approved
 // Open Channel mission with pending real work.
-await page.goto(`${baseUrl}/driver?goldlineFixture=NEUTRALIZE&goldlineEmptyDay=1`, {
+await page.goto(`${baseUrl}/driver?goldlineFixture=NEUTRALIZE&goldlineOpenChannelDay=1`, {
   waitUntil: "networkidle",
 });
 await page

@@ -276,8 +276,30 @@ function readEmptyDayFlag(): boolean {
   return new URLSearchParams(window.location.search).get("goldlineEmptyDay") === "1";
 }
 
+/**
+ * A day with no native orders but a briefing the operator has ALREADY given
+ * and approved.
+ *
+ * Deliberately its own flag rather than riding on `goldlineEmptyDay`. An
+ * empty day means genuinely nothing to do, and three specs assert exactly
+ * that — Goldline must ask for a truthful briefing rather than leave
+ * Trailblazer aimless. Attaching an approved Open Channel mission to that
+ * flag makes the day no longer empty and breaks those assertions, correctly.
+ * This is the state AFTER the briefing: zero orders, real approved work.
+ */
+function readOpenChannelDayFlag(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    new URLSearchParams(window.location.search).get("goldlineOpenChannelDay") ===
+    "1"
+  );
+}
+
 export default function GoldlineFictionHarness() {
   const emptyDay = useRef(readEmptyDayFlag()).current;
+  const openChannelDay = useRef(readOpenChannelDayFlag()).current;
+  /** Both fixtures represent a day with no Laundry Butler-native route work. */
+  const noNativeOrders = emptyDay || openChannelDay;
   const [coveredCount, setCoveredCount] = useState(0);
   const [driverSafeSalesIntel, setDriverSafeSalesIntel] =
     useState<DriverSafeSalesIntel | null>({
@@ -291,7 +313,7 @@ export default function GoldlineFictionHarness() {
   // expired) so Slice 96's dynamic reprojection can be proven against a
   // live UI re-render, not just the pure-function unit tests.
   const [liveStopCount, setLiveStopCount] = useState(
-    emptyDay ? 0 : ROUTE_STOP_COUNT
+    noNativeOrders ? 0 : ROUTE_STOP_COUNT
   );
   // Test-only: lets a browser test exercise a genuine no-address route stop
   // (CASE B — truthful unavailable treatment) without altering the other
@@ -303,7 +325,7 @@ export default function GoldlineFictionHarness() {
   // has no address on file (CASE C — fails closed truthfully); one delivery
   // is genuinely unpaid (payment-blocked, cannot be bypassed by fiction).
   const [pickupOrders, setPickupOrders] = useState<Order[]>(
-    emptyDay
+    noNativeOrders
       ? []
       : [
           fixtureOrder({ id: 9300, firstName: "Pickup", lastName: "Alpha" }),
@@ -324,7 +346,7 @@ export default function GoldlineFictionHarness() {
   const [collectedEvidence, setCollectedEvidence] = useState<
     CollectedEvidenceOrder[]
   >(() =>
-    emptyDay
+    noNativeOrders
       ? []
       : readFixtureServerEvidence([
           { id: 9100, status: "delivered" },
@@ -350,7 +372,7 @@ export default function GoldlineFictionHarness() {
    */
   const [openChannelMission, setOpenChannelMission] =
     useState<OpenChannelMission | null>(() =>
-      emptyDay
+      openChannelDay
         ? {
             id: "fixture-open-channel-1",
             businessDate: "2026-08-13",
@@ -428,7 +450,7 @@ export default function GoldlineFictionHarness() {
     return true;
   }
 
-  const [deliveryOrders, setDeliveryOrders] = useState<Order[]>(emptyDay ? [] : [
+  const [deliveryOrders, setDeliveryOrders] = useState<Order[]>(noNativeOrders ? [] : [
     fixtureOrder({
       id: 9310,
       firstName: "Delivery",
