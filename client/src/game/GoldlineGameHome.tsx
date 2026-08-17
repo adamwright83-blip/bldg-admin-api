@@ -3344,7 +3344,6 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             // needed next — "I UPDATED CLEAN CLOUD".
             !externalReconciliationOutstanding
           }
-          suppressResumeBanner={preparedObjective != null}
           isGenerating={Boolean(props.isGeneratingOpenChannel)}
           isApproving={Boolean(props.isApprovingOpenChannel)}
           onClose={() => setUtilityPanel(null)}

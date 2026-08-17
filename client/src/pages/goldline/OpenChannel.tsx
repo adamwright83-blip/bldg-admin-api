@@ -36,14 +36,6 @@ type OpenChannelProps = {
   mission: OpenChannelMission | null | undefined;
   gap: OpenChannelGap;
   shouldAutoIgnite: boolean;
-  /**
-   * True when the expedition threshold is already offering this same
-   * objective. Both are invitations to the same work and they occupy the same
-   * band on a phone, so the more specific one (ENTER THE LINE) wins and this
-   * banner stands down. It remains the right affordance whenever there is no
-   * threshold — the case it was built for.
-   */
-  suppressResumeBanner?: boolean;
   isGenerating: boolean;
   isApproving: boolean;
   onClose: () => void;
@@ -125,7 +117,6 @@ export default function OpenChannel({
   mission,
   gap,
   shouldAutoIgnite,
-  suppressResumeBanner = false,
   isGenerating,
   isApproving,
   onClose,
@@ -375,8 +366,7 @@ export default function OpenChannel({
   const hasResumableObjective = Boolean(firstPendingTask);
 
   if (!effectiveOpen) {
-    if (!shouldAutoIgnite && (!hasResumableObjective || suppressResumeBanner))
-      return null;
+    if (!shouldAutoIgnite && !hasResumableObjective) return null;
     return (
       <button
         type="button"

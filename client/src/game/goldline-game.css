@@ -3574,16 +3574,18 @@
   pointer-events: none;
 }
 
-/* Two invitations to the same objective must not stack.
+/* Two invitations to the same objective, stacked rather than overlapping.
  *
- * The Open Channel resume banner sits at bottom:216px, and the expedition
- * threshold now sits at 25vh — on a 393x852 phone those are the same band, so
- * "CURRENT REAL OBJECTIVE · TAP TO CONTINUE" landed on top of ENTER THE LINE
- * and swallowed the tap. They point at the same work, and the threshold is the
- * more specific way in, so it wins whenever both would show. The banner is
- * still the right affordance when there is no threshold — that is exactly the
- * case it was built for. */
-.playable-goldline-shell:has([data-testid="expedition-threshold"])
-  [data-testid="open-channel-ignition-cta"] {
-  display: none;
+ * The Open Channel resume banner is pinned at bottom:216px (its own comment
+ * explains it was put there to clear the movement stick). The expedition
+ * threshold was at 25vh — 213px on a 393x852 phone — so the banner landed on
+ * top of ENTER THE LINE and swallowed the tap.
+ *
+ * Hiding one was the wrong fix: they say different things. The banner is the
+ * world's "you have work" signal and reopens the briefing; the threshold is
+ * the way into the expedition. realDayIgnition rightly asserts the banner is
+ * present after RETURN TO WORLD. So the threshold sits ABOVE the banner's band
+ * and both remain reachable. */
+.expedition-threshold {
+  bottom: 328px;
 }
