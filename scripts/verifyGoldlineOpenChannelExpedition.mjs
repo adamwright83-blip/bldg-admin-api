@@ -256,16 +256,24 @@ await walkTo(plan.destination);
 if ((await snapshot()).outcome !== "arrived") {
   await page.evaluate(() => {
     const layer = window.__goldlineGame.getExpedition();
-    const shield = layer.hostiles.find(h => h.id === "shieldbearer_climax");
-    if (shield) shield.hp = 0;
+    // Every hostile, not just the climax elite. The ranged Slingers stay live
+    // behind the player and this fixture stands still here across settles,
+    // snapshot reads and screenshots — long enough that they killed the run
+    // about one time in three. Winning the fight is explicitly not what any of
+    // these scripts are testing; reaching the cache on foot is.
+    for (const hostile of layer.hostiles) hostile.hp = 0;
   });
   if ((await snapshot()).outcome === "down") {
     await page.getByTestId("expedition-redeploy").click();
     await settle(20);
     await page.evaluate(() => {
       const layer = window.__goldlineGame.getExpedition();
-      const shield = layer.hostiles.find(h => h.id === "shieldbearer_climax");
-      if (shield) shield.hp = 0;
+      // Every hostile, not just the climax elite. The ranged Slingers stay live
+      // behind the player and this fixture stands still here across settles,
+      // snapshot reads and screenshots — long enough that they killed the run
+      // about one time in three. Winning the fight is explicitly not what any of
+      // these scripts are testing; reaching the cache on foot is.
+      for (const hostile of layer.hostiles) hostile.hp = 0;
     });
   }
   await walkTo(plan.destination);
