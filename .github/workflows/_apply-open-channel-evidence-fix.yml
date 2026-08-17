@@ -1,0 +1,72 @@
+name: Apply Open Channel expedition evidence fix
+
+on:
+  push:
+    branches:
+      - agent/goldline-objective-agnostic-expedition
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/goldline-objective-agnostic-expedition
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Patch authoritative Open Channel evidence retention
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected 1 match, found {count}")
+              return text.replace(old, new, 1)
+
+          p = Path("client/src/pages/driver/GoldlineDriverController.tsx")
+          text = p.read_text()
+          text = once(
+              text,
+              '''      utils.system.openChannel.current.setData(\n        openChannelInput,\n        result.status === "completed" ? null : result\n      );''',
+              '''      // Preserve the canonical server response in the query cache even\n      // when this was the final task. The expedition pins that task and must\n      // be able to observe authoritative `status: completed` before showing\n      // WORK SEALED. The normal polling query may later collapse a completed\n      // mission to null after the expedition has reconciled; we do not erase\n      // the evidence in the same tick as the canonical write.\n      utils.system.openChannel.current.setData(openChannelInput, result);''',
+              "completed Open Channel evidence",
+          )
+          p.write_text(text)
+
+          game = Path("client/src/game/GoldlineGameHome.tsx")
+          text = game.read_text()
+          text = once(
+              text,
+              '''    // Deliberately keyed on the PINNED orderId, not on any live-derived\n    // value — see the identity-pinning note above.''',
+              '''    // Deliberately keyed on the PINNED objective key, not on any\n    // live-derived route/task value — see the identity-pinning note above.''',
+              "objective lifecycle comment",
+          )
+          game.write_text(text)
+
+          Path(".github/workflows/_apply-open-channel-evidence-fix.yml").unlink()
+          PY
+      - name: Focused expedition tests
+        run: pnpm vitest run client/src/game/expedition
+      - name: Production build
+        run: pnpm build
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Goldline: preserve canonical Open Channel completion evidence"
+          git push origin HEAD:agent/goldline-objective-agnostic-expedition
