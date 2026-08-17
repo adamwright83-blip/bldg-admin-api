@@ -339,8 +339,8 @@ test.describe("Pixi lifecycle stays clean across repeated mounts", () => {
   });
 });
 
-test.describe("PWA scope stays driver-only", () => {
-  test("manifest keeps /driver as start_url and scope", async ({ page }) => {
+test.describe("PWA uses the canonical driver root", () => {
+  test("manifest starts and scopes at the driver host root", async ({ page }) => {
     await login(page);
 
     const manifestHref = await page.evaluate(() => {
@@ -358,9 +358,7 @@ test.describe("PWA scope stays driver-only", () => {
       scope?: string;
     };
 
-    expect(manifest.start_url).toContain("/driver");
-    expect(manifest.scope).toContain("/driver");
-    // The admin surface must never be captured by the driver PWA.
-    expect(manifest.scope).not.toBe("/");
+    expect(manifest.start_url).toBe("/");
+    expect(manifest.scope).toBe("/");
   });
 });
