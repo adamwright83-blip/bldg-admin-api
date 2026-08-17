@@ -356,6 +356,12 @@ function Router() {
     ? hostname.replace(".ops.bldg.chat", "")
     : null;
 
+  // driver.bldg.chat has one product URL: the root. Old bookmarks or
+  // accidental historical paths are collapsed invisibly back to /.
+  if (isDriverHost && window.location.pathname !== "/") {
+    return <Redirect to="/" />;
+  }
+
   if (isBoreslayHost && window.location.pathname === "/boreslay-rally") {
     return <RallyDemoRoute />;
   }

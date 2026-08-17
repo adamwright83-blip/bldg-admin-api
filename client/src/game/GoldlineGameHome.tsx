@@ -93,6 +93,10 @@ import {
   missFeedback,
 } from "./audio/haptics";
 import { planPickupExpedition } from "./expedition/expeditionPlan";
+import {
+  prepareExpeditionObjective,
+  type PreparedExpeditionObjective,
+} from "./expedition/expeditionObjective";
 import { ExpeditionHud } from "./expedition/ExpeditionHud";
 import {
   projectStrongholdRestoration,
@@ -789,6 +793,21 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   );
   const nextOrderObjective =
     orderObjectives.find(item => item.order.address?.trim()) ?? null;
+  // The expedition shell is driven by a truthful operational objective, not
+  // by the presence of a Laundry Butler-native pickup alone. Native pickup
+  // keeps priority; otherwise the first pending, human-approved Open Channel
+  // task becomes playable. Fiction never invents work here.
+  const preparedObjective = useMemo(
+    () =>
+      prepareExpeditionObjective({
+        pickup:
+          nextOrderObjective && nextOrderObjective.status !== "delivered"
+            ? nextOrderObjective.order
+            : null,
+        openChannelMission: props.openChannelMission ?? null,
+      }),
+    [nextOrderObjective, props.openChannelMission]
+  );
   // Keep the typed action surface mounted across its own authoritative
   // refetch. A winning/closed write legitimately removes the mission from
   // the playable list before the adapter resumes; binding the surface only to
@@ -1405,15 +1424,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   }, [nextOrderObjective?.order.id, nextOrderObjective?.status]);
 
   /**
-   * A genuine PICKUP objective PREPARES an expedition. It does not start
-   * one. Manual combat never begins merely because the app has a pickup —
-   * the player crosses the threshold explicitly (see ExpeditionHud). This
-   * is the parked-play contract, not a cosmetic gate.
+   * A truthful operational objective PREPARES an expedition. It does not
+   * start one. The player crosses the threshold explicitly; whether the
+   * climax resolves a native pickup or an approved Open Channel task is
+   * decided only by that objective's canonical adapter.
    */
-  const preparedPickupOrderId =
-    nextOrderObjective && nextOrderObjective.status !== "delivered"
-      ? nextOrderObjective.order.id
-      : null;
 
   const [expeditionSnapshot, setExpeditionSnapshot] =
     useState<ExpeditionSnapshot>({
@@ -1443,25 +1458,16 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
    * it. A later query update may legitimately advance nextOrderObjective;
    * it must never silently swap the run already being played.
    */
-  type ActivePickupExpedition = {
-    orderId: number;
-    customerLabel: string;
-    address: string;
+  type ActiveExpedition = PreparedExpeditionObjective & {
     /**
-     * The Stronghold as it stood the moment this expedition began, pinned.
-     *
-     * Derived from authoritative collected-order evidence at ENTER and never
-     * recomputed, because the whole point of a BEFORE reading is that it
-     * predates the write. Re-deriving it later from live evidence would make
-     * the delta collapse to zero exactly when the payoff needs to show
-     * something changed. It is deliberately not persisted anywhere: a reload
-     * reconstructs the AFTER state from real order truth, which is what
-     * makes the payoff survive without a local ledger.
+     * Pickup-only Stronghold BEFORE reading. Open Channel work deliberately
+     * carries no restoration snapshot because completing effort is not an
+     * economic/fulfillment pickup win.
      */
-    restorationBefore: StrongholdRestoration;
+    restorationBefore: StrongholdRestoration | null;
   };
   const [activeExpedition, setActiveExpedition] =
-    useState<ActivePickupExpedition | null>(null);
+    useState<ActiveExpedition | null>(null);
 
   /**
    * AUTHORITATIVE collected truth, as one evidence collection. Order id and
@@ -1477,14 +1483,16 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     () =>
       projectStrongholdRestoration({
         orders: collectedOrderEvidence,
-        expeditionOrderId: activeExpedition?.orderId ?? null,
+        expeditionOrderId:
+          activeExpedition?.kind === "native_pickup"
+            ? activeExpedition.orderId
+            : null,
       }),
-    [collectedOrderEvidence, activeExpedition?.orderId]
+    [collectedOrderEvidence, activeExpedition]
   );
 
   const enterExpedition = useCallback(() => {
-    if (!nextOrderObjective || preparedPickupOrderId == null) return;
-    const order = nextOrderObjective.order;
+    if (!preparedObjective) return;
     setExpeditionSnapshot({
       hp: EXPEDITION.maxHp,
       momentum: 0,
@@ -1493,17 +1501,16 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       relic: null,
     });
     setActiveExpedition({
-      orderId: order.id,
-      customerLabel:
-        `${order.firstName ?? ""} ${order.lastName ?? ""}`.trim() ||
-        `Order #${order.id}`,
-      address: (order.address ?? "").trim(),
-      restorationBefore: projectStrongholdRestoration({
-        orders: collectedOrderEvidence,
-        expeditionOrderId: order.id,
-      }),
+      ...preparedObjective,
+      restorationBefore:
+        preparedObjective.kind === "native_pickup"
+          ? projectStrongholdRestoration({
+              orders: collectedOrderEvidence,
+              expeditionOrderId: preparedObjective.orderId,
+            })
+          : null,
     });
-  }, [nextOrderObjective, preparedPickupOrderId, collectedOrderEvidence]);
+  }, [preparedObjective, collectedOrderEvidence]);
 
   const exitExpedition = useCallback(() => {
     setActiveExpedition(null);
@@ -1531,12 +1538,29 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
    * collected", read from server truth rather than from whether this client
    * pressed the button.
    */
-  const pinnedOrderCollected = restorationNow.expeditionOrderCollected;
+  const pinnedOrderCollected =
+    activeExpedition?.kind === "native_pickup" &&
+    restorationNow.expeditionOrderCollected;
+  const pinnedOpenChannelTaskCompleted =
+    activeExpedition?.kind === "open_channel" &&
+    props.openChannelMission?.id === activeExpedition.missionId &&
+    props.openChannelMission.tasks.some(
+      task =>
+        task.id === activeExpedition.taskId && task.status === "completed"
+    );
+  const objectiveConfirmed = Boolean(
+    activeExpedition?.kind === "native_pickup"
+      ? pinnedOrderCollected
+      : activeExpedition?.kind === "open_channel"
+        ? pinnedOpenChannelTaskCompleted
+        : false
+  );
 
-  /** The honest before/after, both derived from real evidence. */
+  /** The honest pickup before/after, both derived from real evidence. */
   const payoffDelta = useMemo(
     () =>
-      activeExpedition
+      activeExpedition?.kind === "native_pickup" &&
+      activeExpedition.restorationBefore
         ? restorationDelta(activeExpedition.restorationBefore, restorationNow)
         : null,
     [activeExpedition, restorationNow]
@@ -1560,25 +1584,34 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     if (snapshot) setExpeditionSnapshot(snapshot);
   }, []);
 
-  const secureCargo = useCallback(async () => {
+  const completeExpeditionObjective = useCallback(async () => {
     if (!activeExpedition) return;
     if (cargoPhase === "verifying") return;
     setCargoPhase("verifying");
     try {
-      // The ONE canonical service. There is no alternate completion path,
-      // and this call is the only thing this surface does to the business.
-      const ok = await props.actionServices.resolveOrder({
-        orderId: activeExpedition.orderId,
-        status: "collected",
-      });
-      // Success means the write was accepted — NOT that the cargo is
-      // secured. The run stays in VERIFYING until authoritative evidence
-      // says so.
+      const ok =
+        activeExpedition.kind === "native_pickup"
+          ? await props.actionServices.resolveOrder({
+              orderId: activeExpedition.orderId,
+              status: "collected",
+            })
+          : await props.onCompleteOpenChannelTask(
+              activeExpedition.missionId,
+              activeExpedition.taskId
+            );
+      // The adapter returning only means its canonical write was accepted.
+      // The HUD remains VERIFYING until the corresponding authoritative query
+      // reports the pinned objective resolved.
       if (!ok) setCargoPhase("failed");
     } catch {
       setCargoPhase("failed");
     }
-  }, [activeExpedition, cargoPhase, props.actionServices]);
+  }, [
+    activeExpedition,
+    cargoPhase,
+    props.actionServices,
+    props.onCompleteOpenChannelTask,
+  ]);
 
   /**
    * The payoff fires from AUTHORITATIVE EVIDENCE, not from the mutation.
@@ -1589,22 +1622,21 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
    * arrives through the same query and reconciles here identically. That is
    * the difference between reporting server truth and echoing our own write.
    */
-  const payoffFiredForOrderRef = useRef<number | null>(null);
+  const payoffFiredForObjectiveRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!activeExpedition) return;
-    if (!pinnedOrderCollected) return;
-    if (payoffFiredForOrderRef.current === activeExpedition.orderId) return;
-    payoffFiredForOrderRef.current = activeExpedition.orderId;
+    if (!activeExpedition || !objectiveConfirmed) return;
+    if (payoffFiredForObjectiveRef.current === activeExpedition.key) return;
+    payoffFiredForObjectiveRef.current = activeExpedition.key;
 
-    // Server-verified feedback. This is the only place it fires, so it can
-    // never celebrate a write that has not been confirmed.
+    // Server-verified feedback. For Open Channel this means the persisted
+    // task is completed; it does NOT imply a customer, revenue, or pickup.
     getAudioManager().play("captured_truth");
     arcadeFeedback();
     runtimeRef.current?.finishExpeditionAtStronghold();
-  }, [activeExpedition, pinnedOrderCollected]);
+  }, [activeExpedition, objectiveConfirmed]);
 
   useEffect(() => {
-    if (activeExpedition == null) payoffFiredForOrderRef.current = null;
+    if (activeExpedition == null) payoffFiredForObjectiveRef.current = null;
   }, [activeExpedition]);
 
   /**
@@ -1626,7 +1658,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
    */
   const pulsedForOrderRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!activeExpedition || !payoffDelta) return;
+    if (activeExpedition?.kind !== "native_pickup" || !payoffDelta) return;
     if (!payoffDelta.changed) return;
     if (pulsedForOrderRef.current === activeExpedition.orderId) return;
     pulsedForOrderRef.current = activeExpedition.orderId;
@@ -1646,7 +1678,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     transitionsRef.current?.cancelInflight();
 
     runtime.startExpedition(
-      planPickupExpedition({ orderId: activeExpedition.orderId }),
+      // The authored plan is fiction-only. A deterministic objective seed
+      // varies dressing without treating an Open Channel task as an order.
+      planPickupExpedition({ orderId: activeExpedition.planSeed }),
       {
         onPlayerDamaged: () => {
           getAudioManager().play("weak_point_hit");
@@ -1685,7 +1719,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     return () => runtime.endExpedition();
     // Deliberately keyed on the PINNED orderId, not on any live-derived
     // value — see the identity-pinning note above.
-  }, [activeExpedition?.orderId, runtimeReady]);
+  }, [activeExpedition?.key, runtimeReady]);
 
   // Poll of the full typed fictional run snapshot for the HUD.
   useEffect(() => {
@@ -2304,7 +2338,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       data-expedition-state={
         activeExpedition != null
           ? "active"
-          : preparedPickupOrderId != null
+          : preparedObjective != null
             ? "ready"
             : "none"
       }
@@ -2332,7 +2366,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         data-objective-offscreen={objectiveOffscreen ?? "NONE"}
       >
         <div ref={hostRef} className="goldline-canvas-host" />
-        {(activeExpedition != null || preparedPickupOrderId != null) &&
+        {(activeExpedition != null || preparedObjective != null) &&
         runtimeReady ? (
           <ExpeditionHud
             runtime={runtimeRef.current}
@@ -2340,13 +2374,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             onEnter={enterExpedition}
             onExit={exitExpedition}
             objectiveLabel={
-              activeExpedition
-                ? activeExpedition.customerLabel
-                : nextOrderObjective
-                  ? `${nextOrderObjective.order.firstName ?? ""} ${
-                      nextOrderObjective.order.lastName ?? ""
-                    }`.trim() || `Order #${nextOrderObjective.order.id}`
-                  : ""
+              activeExpedition?.label ?? preparedObjective?.label ?? ""
             }
             hp={expeditionSnapshot.hp}
             maxHp={EXPEDITION.maxHp}
@@ -2355,14 +2383,25 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             terminalState={expeditionSnapshot.outcome}
             onRedeploy={redeployExpedition}
             onPressOn={pressOnExpedition}
-            pinnedCustomer={activeExpedition?.customerLabel}
-            pinnedAddress={activeExpedition?.address}
-            onSecureCargo={secureCargo}
+            pinnedCustomer={activeExpedition?.label}
+            pinnedAddress={activeExpedition?.detail}
+            onSecureCargo={completeExpeditionObjective}
             cargoPhase={cargoPhase}
+            completionActionLabel={
+              activeExpedition?.kind === "open_channel" ? "SEAL THE WORK" : "SECURE CARGO"
+            }
+            confirmedLabel={
+              activeExpedition?.kind === "open_channel" ? "WORK SEALED" : "CARGO SECURED"
+            }
+            failedLabel={
+              activeExpedition?.kind === "open_channel"
+                ? "WORK NOT RECORDED — STILL PENDING"
+                : "PICKUP NOT RECORDED — STILL PENDING"
+            }
             // AUTHORITATIVE, not local: this is server truth about the
             // pinned order, so a pickup collected on another surface
             // renders CARGO SECURED here exactly the same way.
-            cargoSecured={pinnedOrderCollected}
+            cargoSecured={objectiveConfirmed}
           />
         ) : null}
         {!runtimeReady ? (
@@ -2415,7 +2454,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             <span>
               <Radio /> FIELD LINK
             </span>
-            <b>{activeMission?.name ?? "NO ACTIVE MISSION"}</b>
+            <b>{activeMission?.name ?? preparedObjective?.label ?? "NO ACTIVE MISSION"}</b>
             <small>STATIONARY PLAY · TEMP • INSIDE GAME LOOP</small>
           </div>
           <button
@@ -2508,7 +2547,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                     <small>{actionLabel}</small>
                   </span>
                 </button>
-              ) : activeMission || nextOrderObjective ? (
+              ) : activeMission || nextOrderObjective || preparedObjective ? (
                 <div className="action-awaiting" data-testid="objective-ahead">
                   <Route />
                   <span>FOLLOW THE GOLD LINE</span>
@@ -3196,7 +3235,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           open={utilityPanel === "open-channel"}
           mission={props.openChannelMission}
           gap={openChannelGap}
-          shouldAutoIgnite={!action && !activeMission && !nextOrderObjective}
+          shouldAutoIgnite={
+            !action && !activeMission && !nextOrderObjective && !preparedObjective
+          }
           isGenerating={Boolean(props.isGeneratingOpenChannel)}
           isApproving={Boolean(props.isApprovingOpenChannel)}
           onClose={() => setUtilityPanel(null)}
