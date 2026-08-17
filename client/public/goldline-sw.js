@@ -21,10 +21,11 @@
  * activate() deletes every cache that doesn't match, so an old install
  * never keeps serving an outdated shell.
  */
-const CACHE_VERSION = "goldline-shell-v1";
-const OFFLINE_URL = "/driver";
+const CACHE_VERSION = "goldline-shell-v2";
+const OFFLINE_URL = "/";
 
 const PRECACHE_URLS = [
+  "/",
   "/goldline.webmanifest",
   "/assets/goldline/pwa/icon-192.png",
   "/assets/goldline/pwa/icon-512.png",
@@ -83,7 +84,7 @@ self.addEventListener("fetch", event => {
     event.respondWith(
       fetch(request).catch(async () => {
         const cache = await caches.open(CACHE_VERSION);
-        return (await cache.match(OFFLINE_URL)) ?? (await cache.match("/")) ?? Response.error();
+        return (await cache.match(OFFLINE_URL)) ?? Response.error();
       })
     );
   }
