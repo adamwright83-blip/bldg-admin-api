@@ -14,7 +14,7 @@
  * begins on its own. The player crosses the threshold deliberately.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActionPad, HOLD_THRESHOLD_MS } from "./actionPad";
+import { ActionPad, HOLD_THRESHOLD_MS, MOVEMENT_DEADZONE_PX } from "./actionPad";
 
 export type ExpeditionHudRuntime = {
   expeditionBeginAim: (radians: number) => void;
@@ -22,6 +22,8 @@ export type ExpeditionHudRuntime = {
   expeditionCancelAim: () => void;
   expeditionFire: () => boolean;
   expeditionDodge: () => boolean;
+  /** Deliberate tap — the player's primary offensive verb (§PR77). */
+  expeditionStrike: () => boolean;
   expeditionLockedTargetId: () => string | null;
 };
 
@@ -46,6 +48,20 @@ export type ExpeditionHudProps = {
   onEnter: () => void;
   /** Compact real objective identity — the only business text on screen. */
   objectiveLabel: string;
+  /**
+   * §PR77 Part 17. The compact objective is interactive: tapping it opens a
+   * lightweight, secondary mission-context surface rather than replacing
+   * the game with a dashboard. This is the detail line shown there (e.g.
+   * an address or a task's free-text detail) — never re-derived, always
+   * whatever the caller already resolved for this exact objective.
+   */
+  objectiveDetail?: string | null;
+  /**
+   * Present only when the detail is a genuine, navigable address (native
+   * pickups and external orders carry one; an Open Channel task's detail
+   * is free text and must not be offered as a destination).
+   */
+  objectiveNavigationUrl?: string | null;
   hp: number;
   maxHp: number;
   momentum: number;
@@ -62,8 +78,26 @@ export type ExpeditionHudProps = {
    */
   pinnedCustomer?: string;
   pinnedAddress?: string;
+  /**
+   * Absent for a LOCAL_TARGET_RUN — there is no single "collect" action to
+   * confirm (see completeExpeditionObjective's guard). When absent, the
+   * arrived state shows real progress and points at LOG A SIGNAL instead
+   * of a dead SECURE CARGO button.
+   */
   onSecureCargo?: () => void;
   cargoPhase?: CargoPhase;
+  /**
+   * §PR77 Part 14/17/20. Real, server-owned progress for a LOCAL_TARGET_RUN
+   * — null for every other objective kind. `visitedCount`/`totalCount` come
+   * straight from the mission's `visitedTargetIds`/`sourcedTargets`, never
+   * re-derived here.
+   */
+  missionProgress?: {
+    progressLabel: string;
+    visitedCount: number;
+    totalCount: number;
+    simulated: boolean;
+  } | null;
   /**
    * AUTHORITATIVE. True only once server truth says the pinned order is
    * genuinely collected — never set from the mutation returning.
@@ -94,12 +128,18 @@ export type ExpeditionHudProps = {
    * be able to block recording that the real work happened.
    */
   onLogSignal?: () => void;
+  /**
+   * §PR77 Part 4 contextual teaching — the single next mechanic the player
+   * has not yet performed, or null once every mechanic is learned (or none
+   * is currently relevant). Never a persistent tutorial manual: this is
+   * the one hint shown at a time, and it retires the moment the caller
+   * reports the real verb succeeded — never merely from having displayed.
+   */
+  teachingHint?: string | null;
 };
 
 /** Forward, up the corridor — the aim when the thumb has not been dragged. */
 const DEFAULT_AIM_RADIANS = -Math.PI / 2;
-/** Below this drag distance the thumb has not expressed a direction. */
-const AIM_DEADZONE_PX = 12;
 
 export function ExpeditionHud(props: ExpeditionHudProps) {
   const {
@@ -107,6 +147,8 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     active,
     onEnter,
     objectiveLabel,
+    objectiveDetail = null,
+    objectiveNavigationUrl = null,
     hp,
     maxHp,
     momentum,
@@ -118,6 +160,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     pinnedCustomer,
     pinnedAddress,
     onSecureCargo,
+    missionProgress = null,
     cargoPhase = "idle",
     cargoSecured = false,
     completionActionLabel = "SECURE CARGO",
@@ -129,28 +172,66 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     onReconcile,
     reconcileActionLabel = "I UPDATED IT",
     onLogSignal,
+    teachingHint = null,
   } = props;
 
   const padRef = useRef<HTMLDivElement | null>(null);
   const originRef = useRef<{ x: number; y: number } | null>(null);
   const rafRef = useRef<number | null>(null);
+  const deniedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [aiming, setAiming] = useState(false);
+  /**
+   * §PR77 no dead press: a flick can resolve to a legitimate EVADE gesture
+   * that the runtime nonetheless rejects (dodge on cooldown). Silence in
+   * that case reads as a broken control, not a fair no-op — this drives a
+   * brief visible "rejected" state on the pad itself.
+   */
+  const [gestureDenied, setGestureDenied] = useState(false);
+
+  const flashDenied = useCallback(() => {
+    if (deniedTimeoutRef.current != null) clearTimeout(deniedTimeoutRef.current);
+    setGestureDenied(true);
+    deniedTimeoutRef.current = setTimeout(() => setGestureDenied(false), 180);
+  }, []);
+
+  /** Mirrors padModel's lock so the label can say RELEASE · HOOK live. */
+  const [locked, setLocked] = useState(false);
+
+  /**
+   * §PR77 Part 17. Secondary, on-demand context — never a replacement for
+   * the game. Closed whenever the run leaves the RUNNING state so it can
+   * never linger open over a terminal (down/arrived) screen it predates.
+   */
+  const [missionSheetOpen, setMissionSheetOpen] = useState(false);
+  useEffect(() => {
+    if (terminalState !== "running") setMissionSheetOpen(false);
+  }, [terminalState]);
 
   const padModel = useRef(
     new ActionPad({
       onEnterAim: () => setAiming(true),
-      onExitAim: () => setAiming(false),
+      onExitAim: () => {
+        setAiming(false);
+        setLocked(false);
+      },
     })
   ).current;
 
-  const aimFrom = useCallback((clientX: number, clientY: number) => {
+  /** Straight-line px distance from the press origin, or 0 with no origin. */
+  const distanceFrom = useCallback((clientX: number, clientY: number) => {
     const origin = originRef.current;
-    if (!origin) return DEFAULT_AIM_RADIANS;
-    const dx = clientX - origin.x;
-    const dy = clientY - origin.y;
-    if (Math.hypot(dx, dy) < AIM_DEADZONE_PX) return DEFAULT_AIM_RADIANS;
-    return Math.atan2(dy, dx);
+    if (!origin) return 0;
+    return Math.hypot(clientX - origin.x, clientY - origin.y);
   }, []);
+
+  const aimFrom = useCallback(
+    (clientX: number, clientY: number, distancePx: number) => {
+      const origin = originRef.current;
+      if (!origin || distancePx < MOVEMENT_DEADZONE_PX) return DEFAULT_AIM_RADIANS;
+      return Math.atan2(clientY - origin.y, clientX - origin.x);
+    },
+    []
+  );
 
   /**
    * The hold threshold is real elapsed time, so it must be polled — a
@@ -161,14 +242,23 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     (clientX: number, clientY: number) => {
       if (!runtime) return;
       const wasAiming = padModel.isAiming();
-      padModel.pointerUpdate(performance.now(), aimFrom(clientX, clientY));
+      const distancePx = distanceFrom(clientX, clientY);
+      padModel.pointerUpdate(
+        performance.now(),
+        aimFrom(clientX, clientY, distancePx),
+        distancePx
+      );
       if (padModel.isAiming()) {
         if (!wasAiming) runtime.expeditionBeginAim(padModel.getAimRadians());
         else runtime.expeditionUpdateAim(padModel.getAimRadians());
         padModel.setLockedTargetId(runtime.expeditionLockedTargetId());
+        // RELEASE · HOOK only appears once a lock genuinely exists — read
+        // the pad model itself rather than trusting the runtime's raw
+        // value, since setLockedTargetId is what actually took effect.
+        setLocked(padModel.getLockedTargetId() != null);
       }
     },
-    [runtime, aimFrom, padModel]
+    [runtime, aimFrom, distanceFrom, padModel]
   );
 
   const moveListenerRef = useRef<((e: PointerEvent) => void) | null>(null);
@@ -244,8 +334,13 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
       const resolution = padModel.pointerUp(performance.now());
       originRef.current = null;
 
-      if (resolution.kind === "dodge") {
-        runtime.expeditionDodge();
+      if (resolution.kind === "strike") {
+        runtime.expeditionStrike();
+      } else if (resolution.kind === "dodge") {
+        // A flick is always a legitimate gesture, but the runtime can
+        // still decline it (dodge on cooldown). That must not read as
+        // silence — flash the pad's rejected state instead.
+        if (!runtime.expeditionDodge()) flashDenied();
       } else if (resolution.kind === "fire") {
         runtime.expeditionFire();
       } else if (resolution.kind === "cancel") {
@@ -254,7 +349,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
         runtime.expeditionCancelAim();
       }
     },
-    [runtime, padModel]
+    [runtime, padModel, flashDenied]
   );
 
   const handlePointerCancel = useCallback(
@@ -266,6 +361,12 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
   );
 
   useEffect(() => cleanupPointer, [cleanupPointer]);
+  useEffect(
+    () => () => {
+      if (deniedTimeoutRef.current != null) clearTimeout(deniedTimeoutRef.current);
+    },
+    []
+  );
 
   if (!active) {
     return (
@@ -298,12 +399,21 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
   return (
     <div className="expedition-hud" data-testid="expedition-hud">
       <div className="expedition-hud__status">
-        <span
+        {/*
+          §PR77 Part 17. ONE compact objective owner during active
+          gameplay, and it is interactive: tapping it opens secondary
+          context rather than replacing the game with a dashboard.
+        */}
+        <button
+          type="button"
           className="expedition-hud__objective"
           data-testid="expedition-objective"
+          onClick={() => setMissionSheetOpen(open => !open)}
+          aria-expanded={missionSheetOpen}
+          aria-label={`Objective: ${objectiveLabel}. Tap for details.`}
         >
           {objectiveLabel}
-        </span>
+        </button>
         <span className="expedition-hud__bar expedition-hud__bar--hp">
           <span style={{ width: `${hpPct}%` }} data-testid="expedition-hp" />
         </span>
@@ -314,6 +424,20 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
           />
         </span>
       </div>
+
+      {/*
+        §PR77 Part 4 contextual teaching. Exactly one hint at a time, only
+        while gameplay is genuinely running, retiring the instant the real
+        verb succeeds — never a persistent tutorial manual over the world.
+      */}
+      {terminalState === "running" && teachingHint ? (
+        <p
+          className="expedition-hud__teaching-hint"
+          data-testid="expedition-teaching-hint"
+        >
+          {teachingHint}
+        </p>
+      ) : null}
 
       <button
         type="button"
@@ -326,6 +450,71 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
       </button>
 
       {/*
+        §PR77 Part 17 mission-context sheet. Secondary and on-demand: the
+        long/original briefing lives here, not continuously repeated over
+        the playfield. Never blocks or replaces MOVE/the pad — it is closed
+        the instant the run leaves RUNNING (see the effect above).
+      */}
+      {missionSheetOpen && terminalState === "running" ? (
+        <div
+          className="expedition-mission-sheet"
+          data-testid="expedition-mission-sheet"
+          role="dialog"
+          aria-label="Mission context"
+        >
+          <div
+            className="expedition-mission-sheet__backdrop"
+            onClick={() => setMissionSheetOpen(false)}
+          />
+          <div className="expedition-mission-sheet__card">
+            <button
+              type="button"
+              className="expedition-mission-sheet__close"
+              data-testid="expedition-mission-sheet-close"
+              onClick={() => setMissionSheetOpen(false)}
+              aria-label="Close mission context"
+            >
+              ✕
+            </button>
+            <p className="expedition-mission-sheet__label">{objectiveLabel}</p>
+            {provenanceLabel ? (
+              <p className="expedition-mission-sheet__provenance">
+                {provenanceLabel}
+              </p>
+            ) : null}
+            {missionProgress ? (
+              <p
+                className="expedition-mission-sheet__progress"
+                data-testid="expedition-mission-sheet-progress"
+              >
+                {missionProgress.progressLabel} · {missionProgress.visitedCount} OF{" "}
+                {missionProgress.totalCount} VISITED
+              </p>
+            ) : null}
+            {objectiveDetail ? (
+              <p
+                className="expedition-mission-sheet__detail"
+                data-testid="expedition-mission-sheet-detail"
+              >
+                {objectiveDetail}
+              </p>
+            ) : null}
+            {objectiveNavigationUrl ? (
+              <a
+                className="expedition-mission-sheet__navigate"
+                data-testid="expedition-mission-sheet-navigate"
+                href={objectiveNavigationUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                NAVIGATE
+              </a>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/*
         RUNNING is MOVE + ACT and nothing more. The pad is removed outright
         in a terminal state rather than disabled, so a downed or arrived
         player cannot keep poking a control that no longer means anything.
@@ -333,18 +522,37 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
       {terminalState === "running" ? (
         <div
           ref={padRef}
-          className={`expedition-pad${aiming ? " is-aiming" : ""}`}
+          className={`expedition-pad${aiming ? " is-aiming" : ""}${
+            locked ? " is-locked" : ""
+          }${gestureDenied ? " is-denied" : ""}`}
           data-testid="expedition-action-pad"
           data-aiming={aiming ? "true" : "false"}
+          data-locked={locked ? "true" : "false"}
+          data-denied={gestureDenied ? "true" : "false"}
           onPointerDown={handlePointerDown}
           onPointerUp={finish}
           onPointerCancel={handlePointerCancel}
           role="button"
-          aria-label="Action pad: tap to evade, hold to aim the Line"
+          aria-label="Action pad: tap to strike, flick to evade, hold to aim the Line"
         >
-          <span className="expedition-pad__label">
-            {aiming ? "LINE" : "ACT"}
+          {/*
+            No undocumented "ACT" semantics (§PR77 Part 3). Default state
+            names the player's primary verb outright and hints at the other
+            two gestures without a third button; aiming replaces all three
+            with exactly what release will do right now.
+          */}
+          <span
+            className="expedition-pad__label"
+            data-testid="expedition-pad-label"
+          >
+            {aiming ? (locked ? "RELEASE · HOOK" : "AIM THE LINE") : "STRIKE"}
           </span>
+          {!aiming ? (
+            <span className="expedition-pad__hints" aria-hidden="true">
+              <span className="expedition-pad__hint">FLICK · EVADE</span>
+              <span className="expedition-pad__hint">HOLD · LINE</span>
+            </span>
+          ) : null}
         </div>
       ) : null}
 
@@ -411,6 +619,15 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
             </p>
           ) : null}
 
+          {missionProgress ? (
+            <p
+              className="expedition-terminal__progress"
+              data-testid="expedition-target-run-progress"
+            >
+              {missionProgress.visitedCount} OF {missionProgress.totalCount} VISITED
+            </p>
+          ) : null}
+
           {cargoSecured ? (
             <>
               <p
@@ -451,7 +668,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
             >
               {verifyingLabel}
             </p>
-          ) : (
+          ) : onSecureCargo ? (
             <>
               {cargoPhase === "failed" ? (
                 <p
@@ -470,6 +687,16 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
                 {completionActionLabel}
               </button>
             </>
+          ) : (
+            // A LOCAL_TARGET_RUN has no collect action — real progress comes
+            // only from a confirmed Field Intel capture (LOG A SIGNAL,
+            // rendered just below). No dead button standing in for it.
+            <p
+              className="expedition-terminal__verifying"
+              data-testid="target-run-awaiting-signal"
+            >
+              LOG A SIGNAL TO RECORD THIS VISIT AND ADVANCE
+            </p>
           )}
 
           {/*

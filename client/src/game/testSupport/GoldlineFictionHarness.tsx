@@ -18,9 +18,9 @@ import type {
 import type { DriverSafeSalesIntel } from "../../../../shared/driverSafeSalesIntel";
 import type { Order } from "@shared/types";
 import {
+  parseOperatorStopEntityId,
   toSignalKey,
   type ImpactSignalProposal,
-  type OperatorStopIdentity,
   type ProposedImpactSignal,
 } from "../../../../shared/impactSignal";
 import { LogSignalSheet } from "@/components/driver/LogSignalSheet";
@@ -28,6 +28,13 @@ import { AddExternalWorkSheet } from "@/components/driver/AddExternalWorkSheet";
 import type { CollectedEvidenceOrder } from "../expedition/strongholdRestoration";
 import type { OpenChannelMission } from "../../../../server/openChannel/openChannelTypes";
 import type { ExternalOperationalOrder } from "../../../../shared/externalOperationalOrder";
+import type { ArrivedOperatorStop } from "../../pages/goldline/GoldlineHome";
+import {
+  decodeLocalTargetRunPayload,
+  encodeLocalTargetRunPayload,
+  localTargetRunIsComplete,
+  type LocalTargetRunPayload,
+} from "../../../../shared/localTargetRun";
 
 /**
  * How long the fixture waits before authoritative evidence reports the
@@ -387,12 +394,156 @@ function readOpenChannelDayFlag(): boolean {
   );
 }
 
+/**
+ * §PR77 Part 21 gates F-J. A day whose Open Channel mission is exactly ONE
+ * LOCAL_TARGET_RUN task ("visit 5 dry cleaners") instead of ten prose steps —
+ * see shared/localTargetRun.ts. Deliberately sources fewer targets (3) than
+ * requested (5) so gate G's partial-sourcing truth (never padded, never
+ * silently promising targets that were never found) is exercised by default.
+ */
+function readLocalTargetRunDayFlag(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    new URLSearchParams(window.location.search).get(
+      "goldlineLocalTargetRunDay"
+    ) === "1"
+  );
+}
+
+/** Toggles the fixture's LOCAL_TARGET_RUN between real-sourced and the labeled-simulation fallback (§PR77 Adam's road-testing rail). */
+function readLocalTargetRunSimulatedFlag(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    new URLSearchParams(window.location.search).get(
+      "goldlineLocalTargetRunSimulated"
+    ) === "1"
+  );
+}
+
+const FIXTURE_TARGET_RUN_VISITED_KEY =
+  "goldline-fixture:target-run-visited-ids";
+
+function readFixtureTargetRunVisited(): string[] {
+  try {
+    const raw = window.sessionStorage.getItem(FIXTURE_TARGET_RUN_VISITED_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeFixtureTargetRunVisited(ids: string[]) {
+  try {
+    window.sessionStorage.setItem(
+      FIXTURE_TARGET_RUN_VISITED_KEY,
+      JSON.stringify(ids)
+    );
+  } catch {
+    /* a fixture that cannot persist still runs, it just cannot prove reload */
+  }
+}
+
+function fixtureLocalTargetRunPayload(simulated: boolean): LocalTargetRunPayload {
+  const sourcedTargets = simulated
+    ? [
+        {
+          id: "simulated:0",
+          name: "Daffney's Cleaners",
+          address: "1 Candy Pop Lane, Nowhere, ZZ 00000",
+          lat: null,
+          lng: null,
+          website: null,
+          phone: null,
+          navigationUrl: "https://www.google.com/maps/dir/?api=1&destination=Daffney%27s+Cleaners",
+          simulated: true,
+        },
+        {
+          id: "simulated:1",
+          name: "Marshmallow Wash",
+          address: "2 Candy Pop Lane, Nowhere, ZZ 00000",
+          lat: null,
+          lng: null,
+          website: null,
+          phone: null,
+          navigationUrl: "https://www.google.com/maps/dir/?api=1&destination=Marshmallow+Wash",
+          simulated: true,
+        },
+        {
+          id: "simulated:2",
+          name: "Cotton Candy Cleaners",
+          address: "3 Candy Pop Lane, Nowhere, ZZ 00000",
+          lat: null,
+          lng: null,
+          website: null,
+          phone: null,
+          navigationUrl: "https://www.google.com/maps/dir/?api=1&destination=Cotton+Candy+Cleaners",
+          simulated: true,
+        },
+      ]
+    : [
+        {
+          id: "places:fixture-a",
+          name: "A-1 Dry Cleaners",
+          address: "410 Fixture Ave, Testville",
+          lat: 34.05,
+          lng: -118.25,
+          website: null,
+          phone: null,
+          navigationUrl:
+            "https://www.google.com/maps/dir/?api=1&destination=410+Fixture+Ave%2C+Testville",
+          simulated: false,
+        },
+        {
+          id: "places:fixture-b",
+          name: "Testville Fluff & Fold",
+          address: "418 Fixture Ave, Testville",
+          lat: 34.051,
+          lng: -118.249,
+          website: null,
+          phone: null,
+          navigationUrl:
+            "https://www.google.com/maps/dir/?api=1&destination=418+Fixture+Ave%2C+Testville",
+          simulated: false,
+        },
+        {
+          id: "places:fixture-c",
+          name: "Corner Cleaners",
+          address: "430 Fixture Ave, Testville",
+          lat: 34.052,
+          lng: -118.248,
+          website: null,
+          phone: null,
+          navigationUrl:
+            "https://www.google.com/maps/dir/?api=1&destination=430+Fixture+Ave%2C+Testville",
+          simulated: false,
+        },
+      ];
+  return {
+    kind: "local_target_run",
+    action: "visit",
+    targetQuery: "dry cleaner",
+    // Requested 5, only 3 sourced — gate G's truthful partial-sourcing case.
+    requestedCount: 5,
+    purpose: "referral partnership for fluff and fold overflow",
+    geographicAnchorLabel: "your current location",
+    sourcingStatus: "sourced",
+    simulated,
+    sourcedTargets,
+    visitedTargetIds: readFixtureTargetRunVisited(),
+  };
+}
+
 export default function GoldlineFictionHarness() {
   const emptyDay = useRef(readEmptyDayFlag()).current;
   const openChannelDay = useRef(readOpenChannelDayFlag()).current;
   const externalDay = useRef(readExternalDayFlag()).current;
+  const localTargetRunDay = useRef(readLocalTargetRunDayFlag()).current;
+  const localTargetRunSimulated = useRef(
+    readLocalTargetRunSimulatedFlag()
+  ).current;
   /** Both fixtures represent a day with no Laundry Butler-native route work. */
-  const noNativeOrders = emptyDay || openChannelDay || externalDay;
+  const noNativeOrders =
+    emptyDay || openChannelDay || externalDay || localTargetRunDay;
 
   /**
    * Real CleanCloud work, as the driver surface receives it. Starts confirmed
@@ -483,7 +634,7 @@ export default function GoldlineFictionHarness() {
   const [logSignalOpen, setLogSignalOpen] = useState(false);
   const [addExternalWorkOpen, setAddExternalWorkOpen] = useState(false);
   const [operatorStop, setOperatorStop] =
-    useState<OperatorStopIdentity | null>(null);
+    useState<ArrivedOperatorStop | null>(null);
   const [confirmedSignals, setConfirmedSignals] = useState<
     ProposedImpactSignal[]
   >(() => readFixtureSignals());
@@ -550,7 +701,39 @@ export default function GoldlineFictionHarness() {
    */
   const [openChannelMission, setOpenChannelMission] =
     useState<OpenChannelMission | null>(() =>
-      openChannelDay
+      localTargetRunDay
+        ? {
+            id: "fixture-local-target-run-1",
+            businessDate: "2026-08-13",
+            status: "active",
+            title: "DRY CLEANER REFERRAL RUN",
+            operatorBriefing:
+              "I need to stop into 5 dry cleaners to see if they'll give us their fluff and fold orders in exchange for our dry cleaning.",
+            transcript:
+              "I need to stop into 5 dry cleaners to see if they'll give us their fluff and fold orders in exchange for our dry cleaning.",
+            generationSource: "deterministic_fallback",
+            gapStartedAt: "2026-08-13T09:00:00.000Z",
+            nextCommitmentAt: null,
+            availableMinutes: 240,
+            approvedAt: "2026-08-13T09:05:00.000Z",
+            completedAt: null,
+            tasks: [
+              {
+                id: "task-local-target-run",
+                position: 0,
+                title: "Visit 5 dry cleaner",
+                detail: encodeLocalTargetRunPayload(
+                  fixtureLocalTargetRunPayload(localTargetRunSimulated)
+                ),
+                estimatedMinutes: 120,
+                category: "sales",
+                navigationQuery: null,
+                status: "pending",
+                completedAt: null,
+              },
+            ],
+          }
+        : openChannelDay
         ? {
             id: "fixture-open-channel-1",
             businessDate: "2026-08-13",
@@ -593,6 +776,52 @@ export default function GoldlineFictionHarness() {
           }
         : null
     );
+
+  /**
+   * The fixture's stand-in for `confirmImpactSignals`' best-effort
+   * `markLocalTargetRunTargetVisited` side effect (§PR77 Part 12/gate I) —
+   * same pure decode/append/re-encode logic as the server, same "server
+   * truth" delay as every other fixture write, and the same sessionStorage
+   * stand-in so a reload proves the visit survived rather than just React
+   * state (gate H).
+   */
+  function markFixtureLocalTargetRunVisited(stop: ArrivedOperatorStop | null) {
+    if (!stop?.localTargetRunContext) return;
+    const { missionId, taskId } = stop.localTargetRunContext;
+    const parsed = parseOperatorStopEntityId(stop.entityId);
+    if (!parsed || parsed.kind !== "sourced_target") return;
+    const targetId = parsed.id;
+    window.setTimeout(() => {
+      setOpenChannelMission(current => {
+        if (!current || current.id !== missionId) return current;
+        const task = current.tasks.find(row => row.id === taskId);
+        if (!task) return current;
+        const payload = decodeLocalTargetRunPayload(task.detail);
+        if (!payload) return current;
+        if (payload.visitedTargetIds.includes(targetId)) return current;
+        const nextPayload: LocalTargetRunPayload = {
+          ...payload,
+          visitedTargetIds: [...payload.visitedTargetIds, targetId],
+        };
+        writeFixtureTargetRunVisited(nextPayload.visitedTargetIds);
+        const complete = localTargetRunIsComplete(nextPayload);
+        return {
+          ...current,
+          completedAt: complete ? "2026-08-13T10:00:00.000Z" : current.completedAt,
+          tasks: current.tasks.map(row =>
+            row.id === taskId
+              ? {
+                  ...row,
+                  detail: encodeLocalTargetRunPayload(nextPayload),
+                  status: complete ? ("completed" as const) : row.status,
+                  completedAt: complete ? "2026-08-13T10:00:00.000Z" : row.completedAt,
+                }
+              : row
+          ),
+        };
+      });
+    }, SERVER_TRUTH_DELAY_MS);
+  }
 
   /**
    * The fixture's stand-in for the canonical `openChannel.completeTask`
@@ -994,6 +1223,7 @@ export default function GoldlineFictionHarness() {
           } catch {
             /* a fixture that cannot persist still runs */
           }
+          markFixtureLocalTargetRunVisited(operatorStop);
         }}
       />
     </>

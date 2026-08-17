@@ -196,8 +196,22 @@ export type ImpactSignalProposal = {
  *
  * This does NOT make a signal system-verified. The identity came from the app;
  * the observation is still the operator's — see [[SignalProvenance]].
+ *
+ * `sourced_target` (§PR77 Part 12) is the third kind, added exactly the way
+ * this comment always said a further kind would be: additively, without
+ * rewriting a single stored row. It identifies a LOCAL_TARGET_RUN business
+ * (real, provider-sourced — or, when Places is unavailable, one of the ten
+ * clearly-labeled simulated placeholders; see shared/localTargetRun.ts) by
+ * its stable target id, e.g. `sourced_target:places:ChIJ...` or
+ * `sourced_target:simulated:3`. Still not a canonical account or building —
+ * a sourced target is exactly as real as its own `simulated` flag says it
+ * is, and this identity makes no stronger claim than that.
  */
-export const OPERATOR_STOP_KINDS = ["native_order", "external_order"] as const;
+export const OPERATOR_STOP_KINDS = [
+  "native_order",
+  "external_order",
+  "sourced_target",
+] as const;
 
 export type OperatorStopKind = (typeof OPERATOR_STOP_KINDS)[number];
 

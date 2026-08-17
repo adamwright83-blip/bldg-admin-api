@@ -38,11 +38,11 @@ import type {
   CapabilityEvaluation,
   ScoutReport,
 } from "../../../shared/expansionScout";
-import type { GoldlineHomeProps } from "../pages/goldline/GoldlineHome";
-import {
-  operatorStopEntityId,
-  type OperatorStopIdentity,
-} from "../../../shared/impactSignal";
+import type {
+  ArrivedOperatorStop,
+  GoldlineHomeProps,
+} from "../pages/goldline/GoldlineHome";
+import { operatorStopEntityId } from "../../../shared/impactSignal";
 import type { Order } from "@shared/types";
 import GoldlineHome from "../pages/goldline/GoldlineHome";
 import OpenChannel from "../pages/goldline/OpenChannel";
@@ -104,6 +104,7 @@ import {
 } from "../../../shared/externalOperationalOrder";
 import {
   prepareExpeditionObjective,
+  reprojectLocalTargetRunObjective,
   type PreparedExpeditionObjective,
 } from "./expedition/expeditionObjective";
 import { ExpeditionHud } from "./expedition/ExpeditionHud";
@@ -114,6 +115,12 @@ import {
   type StrongholdRestoration,
 } from "./expedition/strongholdRestoration";
 import { EXPEDITION, type ExpeditionSnapshot } from "./expedition/expeditionState";
+import {
+  markMechanicLearned,
+  mechanicLearningState,
+  nextUnlearnedMechanic,
+  type ExpeditionMechanic,
+} from "./expedition/expeditionTeaching";
 import type { AgentWorldPresence } from "./world/PopulationSystem";
 import { projectAgentWorldPresence } from "./world/agentPresenceProjection";
 import type {
@@ -1464,6 +1471,18 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     });
 
   /**
+   * §PR77 Part 4 contextual teaching. Bumped whenever a mechanic is marked
+   * learned so the HUD hint recomputes immediately rather than waiting for
+   * an unrelated re-render — `expeditionTeaching`'s localStorage reads are
+   * not themselves reactive.
+   */
+  const [teachingVersion, setTeachingVersion] = useState(0);
+  const markTaught = useCallback((mechanic: ExpeditionMechanic) => {
+    markMechanicLearned(mechanic, playerIdentityRef.current);
+    setTeachingVersion(v => v + 1);
+  }, []);
+
+  /**
    * PINNED expedition identity AND the single lifecycle truth.
    * `activeExpedition !== null` is the whole active-run state — there is
    * deliberately no separate "entered" boolean alongside it. Keeping two
@@ -1515,7 +1534,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
    * Open Channel work reports nothing: its label is a task title ("drop the
    * door hangers"), which names an activity rather than anything identifiable.
    */
-  const arrivedStop: OperatorStopIdentity | null =
+  const arrivedStop: ArrivedOperatorStop | null =
     activeExpedition != null && expeditionSnapshot.outcome === "arrived"
       ? activeExpedition.kind === "native_pickup"
         ? {
@@ -1538,7 +1557,24 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               ),
               entityLabel: activeExpedition.label,
             }
-          : null
+          : activeExpedition.kind === "local_target_run"
+            ? {
+                entityType: "sourced_target",
+                // The current target's own stable, provider-backed (or
+                // clearly-labeled-simulated) id — never a free-text join,
+                // and never the mission/task id (those identify the RUN,
+                // not the business standing at this doorstep).
+                entityId: operatorStopEntityId(
+                  "sourced_target",
+                  activeExpedition.currentTarget.id
+                ),
+                entityLabel: activeExpedition.currentTarget.name,
+                localTargetRunContext: {
+                  missionId: activeExpedition.missionId,
+                  taskId: activeExpedition.taskId,
+                },
+              }
+            : null
       : null;
 
   /**
@@ -1548,7 +1584,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
    * text and any delimiter chosen for that round trip is one a real label can
    * contain.
    */
-  const arrivedStopRef = useRef<OperatorStopIdentity | null>(null);
+  const arrivedStopRef = useRef<ArrivedOperatorStop | null>(null);
   arrivedStopRef.current = arrivedStop;
   const arrivedStopKey = arrivedStop
     ? JSON.stringify([arrivedStop.entityId, arrivedStop.entityLabel])
@@ -1606,6 +1642,55 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   }, []);
 
   /**
+   * §PR77 Part 20/gate J. Every other objective kind is deliberately pinned
+   * at ENTER (see the ActiveExpedition doc comment above) — but a
+   * LOCAL_TARGET_RUN's progress is written by a Field Intel capture that
+   * happens WHILE the run is already active (markLocalTargetRunTargetVisited,
+   * server-side), and the operator is standing right there when it lands.
+   * Making them exit and re-enter just to see "TARGET 2 OF 3" would be
+   * exactly the kind of dead, confusing UI Adam's own playtest is about.
+   * This re-derives ONLY the target-run view fields from the live mission —
+   * never the pin itself, never any other objective kind.
+   */
+  useEffect(() => {
+    if (activeExpedition?.kind !== "local_target_run") return;
+    const mission = props.openChannelMission ?? null;
+    if (!mission || mission.id !== activeExpedition.missionId) return;
+    const task = mission.tasks.find(row => row.id === activeExpedition.taskId);
+    if (!task) return;
+    // Every sourced target visited: reprojectLocalTargetRunObjective returns
+    // null here (there is no "current" target left to point at), but the
+    // progress figure itself must still catch up to reality rather than
+    // freezing one visit short of the truth. Keep the last known target for
+    // display — objectiveConfirmed/cargoSecured takes over the headline.
+    if (task.status === "completed" && activeExpedition.visitedCount < activeExpedition.totalCount) {
+      setActiveExpedition(current =>
+        current && current.kind === "local_target_run"
+          ? { ...current, visitedCount: current.totalCount }
+          : current
+      );
+      return;
+    }
+    const refreshed = reprojectLocalTargetRunObjective(
+      activeExpedition.missionId,
+      activeExpedition.taskId,
+      mission
+    );
+    if (!refreshed) return;
+    if (
+      refreshed.currentTarget.id === activeExpedition.currentTarget.id &&
+      refreshed.visitedCount === activeExpedition.visitedCount
+    ) {
+      return;
+    }
+    setActiveExpedition(current =>
+      current && current.kind === "local_target_run"
+        ? { ...current, ...refreshed }
+        : current
+    );
+  }, [activeExpedition, props.openChannelMission]);
+
+  /**
    * SECURE CARGO's local phase. Deliberately NOT a completion state:
    *
    *   idle      — the player has not pressed it
@@ -1650,6 +1735,20 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         order.id === activeExpedition.externalOrderId &&
         order.operationalStatus === "completed"
     );
+  /**
+   * §PR77 Part 20. markLocalTargetRunTargetVisited marks the parent task
+   * "completed" the same way completeOpenChannelTask does, once every sourced
+   * target has a recorded visit — read the same way pinnedOpenChannelTaskCompleted
+   * does, so a finished referral run gets the same real completion payoff as
+   * every other objective kind instead of silently going stale.
+   */
+  const pinnedLocalTargetRunCompleted =
+    activeExpedition?.kind === "local_target_run" &&
+    props.openChannelMission?.id === activeExpedition.missionId &&
+    props.openChannelMission.tasks.some(
+      task =>
+        task.id === activeExpedition.taskId && task.status === "completed"
+    );
   const objectiveConfirmed = Boolean(
     activeExpedition?.kind === "native_pickup"
       ? pinnedOrderCollected
@@ -1657,7 +1756,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         ? pinnedOpenChannelTaskCompleted
         : activeExpedition?.kind === "external_order"
           ? pinnedExternalOrderCompleted
-          : false
+          : activeExpedition?.kind === "local_target_run"
+            ? pinnedLocalTargetRunCompleted
+            : false
   );
 
   /**
@@ -1712,6 +1813,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
 
   const completeExpeditionObjective = useCallback(async () => {
     if (!activeExpedition) return;
+    // A LOCAL_TARGET_RUN has no single "collect" action to confirm — its
+    // parent task covers every sourced target, and completing IT here would
+    // silently claim every remaining target visited from one tap. Real
+    // progress is written exactly one place: markLocalTargetRunTargetVisited,
+    // triggered only by a confirmed Field Intel capture at the current
+    // target (see LogSignalSheet's onConfirm in GoldlineDriverController).
+    // The UI never offers this control for that kind (see ExpeditionHud's
+    // completionMode below); this guard is defense in depth.
+    if (activeExpedition.kind === "local_target_run") return;
     if (cargoPhase === "verifying") return;
     setCargoPhase("verifying");
     try {
@@ -1826,9 +1936,18 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           getAudioManager().play("weak_point_hit");
           arcadeFeedback();
         },
+        // §PR77 Part 4 "first strike lands" — the deliberate tap verb,
+        // distinct from onHostileDefeated (which also fires from the
+        // ambient lash and the Line) and from onStrikeAttempt (which fires
+        // on a whiff too and only drives pad feedback, never teaching).
+        onStrikeLanded: () => markTaught("strike"),
+        // §PR77 Part 4 "first evade" — a flick that genuinely began.
+        onDodgeBegan: () => markTaught("evade"),
         onLineLatched: () => {
           getAudioManager().play("vault");
           arcadeFeedback();
+          // §PR77 Part 4 "first Line lock+fire".
+          markTaught("line");
         },
         onHazardTriggered: () => {
           getAudioManager().play("vault");
@@ -1839,6 +1958,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         onRelicTaken: () => {
           getAudioManager().play("vault");
           arcadeFeedback();
+          // §PR77 Part 4 "first relic walk-through".
+          markTaught("relic");
         },
         // The seal breaking is the moment the road ahead opens. Movement is
         // already unclamped when this fires — the feedback marks it, it does
@@ -1865,6 +1986,91 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     }, 120);
     return () => window.clearInterval(id);
   }, [activeExpedition]);
+
+  /**
+   * §PR77 Part 4 "first route choice". There is no dedicated fork-chosen
+   * callback — `route` is already polled into `expeditionSnapshot` above,
+   * so the transition away from "unchosen" is read here rather than adding
+   * a second plumbing path for the same fact.
+   */
+  const lastRouteRef = useRef(expeditionSnapshot.route);
+  useEffect(() => {
+    if (
+      lastRouteRef.current === "unchosen" &&
+      expeditionSnapshot.route !== "unchosen"
+    ) {
+      markTaught("fork");
+    }
+    lastRouteRef.current = expeditionSnapshot.route;
+  }, [expeditionSnapshot.route, markTaught]);
+
+  /**
+   * §PR77 Part 4 contextual teaching hint. Shows the single next unlearned
+   * mechanic in canonical order while the expedition is genuinely running
+   * — the authored encounter order in expeditionPlan.ts already introduces
+   * mechanics one at a time, so this naturally lines up with what the
+   * player is about to face without a second copy of corridor proximity.
+   * `teachingVersion` forces a recompute the instant a mechanic is marked
+   * learned; localStorage reads are otherwise not reactive.
+   */
+  const teachingHint = useMemo(() => {
+    if (!activeExpedition || expeditionSnapshot.outcome !== "running") return null;
+    const identity = playerIdentityRef.current;
+    const mechanic = nextUnlearnedMechanic(identity);
+    if (!mechanic) return null;
+    if (mechanicLearningState(mechanic, true, identity) !== "teaching") return null;
+    switch (mechanic) {
+      case "strike":
+        return "TAP TO STRIKE";
+      case "evade":
+        return "FLICK TO EVADE";
+      case "line":
+        return "HOLD TO AIM THE LINE";
+      case "relic":
+        return "WALK THROUGH A RELIC TO TAKE IT";
+      case "fork":
+        return "CHOOSE A PATH AT THE FORK";
+      default:
+        return null;
+    }
+    // teachingVersion is read only to force recomputation on mark-learned.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeExpedition, expeditionSnapshot.outcome, teachingVersion]);
+
+  /**
+   * §PR77 Part 17 mission-context sheet content. `detail` is an address for
+   * native_pickup/external_order (so Navigate is offered) but free task
+   * text for open_channel — never offered as a destination.
+   */
+  const missionContextObjective = activeExpedition ?? preparedObjective;
+  const missionContextDetail = missionContextObjective?.detail ?? null;
+  const missionContextNavigationUrl = useMemo(() => {
+    if (!missionContextObjective) return null;
+    // A LOCAL_TARGET_RUN target already carries its own real (or clearly
+    // simulated) navigationUrl — use it directly rather than re-deriving
+    // one from `detail`.
+    if (missionContextObjective.kind === "local_target_run") {
+      return missionContextObjective.currentTarget.navigationUrl;
+    }
+    if (
+      missionContextObjective.kind !== "native_pickup" &&
+      missionContextObjective.kind !== "external_order"
+    ) {
+      return null;
+    }
+    const address = missionContextObjective.detail?.trim();
+    if (!address) return null;
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+  }, [missionContextObjective]);
+  const missionContextProgress =
+    activeExpedition?.kind === "local_target_run"
+      ? {
+          progressLabel: activeExpedition.progressLabel,
+          visitedCount: activeExpedition.visitedCount,
+          totalCount: activeExpedition.totalCount,
+          simulated: activeExpedition.simulated,
+        }
+      : null;
 
   useEffect(() => {
     runtimeRef.current?.setAgentPresence(agentWorldPresence);
@@ -2511,6 +2717,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             objectiveLabel={
               activeExpedition?.label ?? preparedObjective?.label ?? ""
             }
+            objectiveDetail={missionContextDetail}
+            objectiveNavigationUrl={missionContextNavigationUrl}
             hp={expeditionSnapshot.hp}
             maxHp={EXPEDITION.maxHp}
             momentum={expeditionSnapshot.momentum}
@@ -2518,23 +2726,52 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             terminalState={expeditionSnapshot.outcome}
             onRedeploy={redeployExpedition}
             onPressOn={pressOnExpedition}
-            pinnedCustomer={activeExpedition?.label}
-            pinnedAddress={activeExpedition?.detail}
-            onSecureCargo={completeExpeditionObjective}
+            pinnedCustomer={
+              activeExpedition?.kind === "local_target_run"
+                ? activeExpedition.currentTarget.name
+                : activeExpedition?.label
+            }
+            pinnedAddress={
+              activeExpedition?.kind === "local_target_run"
+                ? activeExpedition.currentTarget.address
+                : activeExpedition?.detail
+            }
+            // A LOCAL_TARGET_RUN has no single "collect" action — real
+            // progress is written only by a confirmed Field Intel capture
+            // (markLocalTargetRunTargetVisited), never by a tap here. See
+            // completeExpeditionObjective's own guard for the same rule.
+            onSecureCargo={
+              activeExpedition?.kind === "local_target_run"
+                ? undefined
+                : completeExpeditionObjective
+            }
             onLogSignal={props.onOpenLogSignal}
+            teachingHint={teachingHint}
             cargoPhase={cargoPhase}
             completionActionLabel={
-              activeExpedition?.kind === "open_channel" ? "SEAL THE WORK" : "SECURE CARGO"
+              activeExpedition?.kind === "open_channel"
+                ? "SEAL THE WORK"
+                : activeExpedition?.kind === "local_target_run"
+                  ? "RUN COMPLETE"
+                  : "SECURE CARGO"
             }
+            missionProgress={missionContextProgress}
             // Provenance travels with the objective. External work is marked
             // at the threshold AND on arrival, so there is no moment where the
-            // operator could take it for a native Laundry Butler order.
+            // operator could take it for a native Laundry Butler order. A
+            // simulated target run is marked the same honest way — never
+            // presented as if it were real sourcing.
             provenanceLabel={
               preparedObjective?.kind === "external_order"
                 ? externalProvenanceLabel({
                     sourceSystem: preparedObjective.sourceSystem,
                   })
-                : null
+                : (activeExpedition?.kind === "local_target_run"
+                      ? activeExpedition.simulated
+                      : preparedObjective?.kind === "local_target_run" &&
+                        preparedObjective.simulated)
+                  ? "SIMULATED · PLACES UNAVAILABLE"
+                  : null
             }
             reconciliationLabel={
               externalReconciliation
@@ -2557,7 +2794,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 externalReconciliation?.sourceSystem ?? "manual_external",
             })}`}
             confirmedLabel={
-              activeExpedition?.kind === "open_channel" ? "WORK SEALED" : "CARGO SECURED"
+              activeExpedition?.kind === "open_channel"
+                ? "WORK SEALED"
+                : activeExpedition?.kind === "local_target_run"
+                  ? "RUN COMPLETE — EVERY TARGET VISITED"
+                  : "CARGO SECURED"
             }
             failedLabel={
               activeExpedition?.kind === "open_channel"

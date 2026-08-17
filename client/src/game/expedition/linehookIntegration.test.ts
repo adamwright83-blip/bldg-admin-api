@@ -321,3 +321,52 @@ describe("latch resolves automatically on the connecting frame", () => {
     expect(owner.progress).toBeCloseTo(startProgress, 4);
   });
 });
+
+/**
+ * §PR77 Part 2 — no dead press. A release that resolves to nothing must
+ * still visibly and mechanically return the world to normal; it must never
+ * leave state stranded (aim dilation stuck on) or silently do nothing
+ * (a tap with no hostile in range).
+ */
+describe("no dead press", () => {
+  it("ends aim even when the release finds no valid target", () => {
+    const { layer, owner } = scenario();
+    prime(layer, owner);
+    layer.beginAim();
+    // Aimed at nothing in particular — no lock will ever form.
+    layer.setAimRadians(0);
+    expect(layer.isAiming()).toBe(true);
+
+    expect(layer.fireLine(owner.project)).toBe(false);
+
+    // The aim — and with it the fictional time dilation — must not be
+    // left stranded just because nothing was hit.
+    expect(layer.isAiming()).toBe(false);
+    expect(layer.getLockedTargetId()).toBeNull();
+  });
+
+  it("a deliberate strike always reports the attempt, even with nothing in range", () => {
+    const onStrikeAttempt = vi.fn();
+    const { layer, owner } = scenario({ onStrikeAttempt });
+    prime(layer, owner);
+
+    // Far from every authored beat — guaranteed nothing in melee range.
+    const hit = layer.tryStrike(0.035, 0);
+
+    expect(onStrikeAttempt).toHaveBeenCalledTimes(1);
+    expect(hit).toBe(false);
+  });
+
+  it("a deliberate strike connects and still reports the attempt when a hostile is in range", () => {
+    const onStrikeAttempt = vi.fn();
+    const onHostileDefeated = vi.fn();
+    const { layer, owner } = scenario({ onStrikeAttempt, onHostileDefeated });
+    const target = beatPosition("hunter_first");
+    prime(layer, owner);
+
+    const hit = layer.tryStrike(target.progress, target.lateral);
+
+    expect(onStrikeAttempt).toHaveBeenCalledTimes(1);
+    expect(hit).toBe(true);
+  });
+});

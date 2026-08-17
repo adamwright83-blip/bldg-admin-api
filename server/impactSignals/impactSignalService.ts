@@ -15,6 +15,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { impactSignals, trackedSignalDefinitions } from "../../drizzle/schema";
 import { getDb } from "../db";
 import {
+  parseOperatorStopEntityId,
   resolveStopLinkage,
   tallyImpactSignals,
   type ImpactClass,
@@ -25,6 +26,7 @@ import {
   type SignalValueType,
   type TrackedSignalDefinition,
 } from "../../shared/impactSignal";
+import { markLocalTargetRunTargetVisited } from "../openChannel/openChannelService";
 
 async function db() {
   const database = await getDb();
@@ -92,6 +94,14 @@ export async function confirmImpactSignals(input: {
   provenance?: Extract<SignalProvenance, "operator_confirmed" | "external_record">;
   entityId?: string | null;
   location?: string | null;
+  /**
+   * §PR77 Part 12/20. Present only when the stop is a LOCAL_TARGET_RUN
+   * target — the mission/task this capture belongs to, so a confirmed
+   * signal here can advance that run's real visited count. Nothing else
+   * about this function's job changes; this is an additional, best-effort
+   * side effect, never a requirement for the signal itself to save.
+   */
+  localTargetRunContext?: { missionId: string; taskId: string } | null;
 }): Promise<ImpactSignal[]> {
   if (input.signals.length === 0) return [];
   const database = await db();
@@ -161,6 +171,26 @@ export async function confirmImpactSignals(input: {
         sql`${impactSignals.id} IN ${ids}`
       )
     );
+
+  // Route-progress gate (§PR77 Part 20 gate J): a confirmed signal at a
+  // sourced_target stop is the ONLY thing that advances a LOCAL_TARGET_RUN's
+  // real visited count — never navigation, never mere arrival. Best-effort:
+  // a malformed/missing context or a target that doesn't belong to this
+  // mission is silently skipped rather than failing the capture itself.
+  if (input.localTargetRunContext && linkage.entityType === "sourced_target") {
+    const parsed = parseOperatorStopEntityId(linkage.entityId);
+    if (parsed && parsed.kind === "sourced_target") {
+      await markLocalTargetRunTargetVisited({
+        tenantId: input.tenantId,
+        missionId: input.localTargetRunContext.missionId,
+        taskId: input.localTargetRunContext.taskId,
+        targetId: parsed.id,
+      }).catch(error =>
+        console.warn("[ImpactSignal] Could not advance LOCAL_TARGET_RUN progress", error)
+      );
+    }
+  }
+
   return stored.map(view);
 }
 

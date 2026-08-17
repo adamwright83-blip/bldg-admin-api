@@ -12,7 +12,13 @@ on:
       # the front door of the app could merge without this gate ever
       # running. That is exactly how it broke.
       - "client/src/pages/goldline/**"
-      - "client/src/components/driver/SalesMomentum.tsx"
+      # The whole directory, not one file. These are the driver's mobile
+      # surfaces: LogSignalSheet owns field intel capture and
+      # AddExternalWorkSheet owns CleanCloud intake, both reachable from the
+      # live game screen. Neither was covered, so a change to either alone
+      # could merge without this gate running — the same gap that let the
+      # front door break, one directory over.
+      - "client/src/components/driver/**"
       - "server/commercialMissions/driverSalesMotivationService.ts"
       - "server/commercialMissions/driverSalesJournalResilience.test.ts"
       - "server/driverGameWorld/**"
@@ -23,6 +29,16 @@ on:
       - "server/salesIntel/driverSafeSalesIntel*"
       - "server/field/**"
       - "server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts"
+      # LOCAL_TARGET_RUN (§PR77 Part 8-20): recognition, real sourcing (with
+      # the labeled-simulation fallback), and the Field Intel linkage that
+      # advances a run's progress. None of this was covered here, and it is
+      # exactly the kind of truth-sensitive surface this workflow exists for.
+      - "server/openChannel/**"
+      - "server/impactSignals/**"
+      - "shared/localTargetRun.ts"
+      - "shared/localTargetRun.test.ts"
+      - "shared/impactSignal.ts"
+      - "shared/impactSignal.test.ts"
       - "shared/goldlineProgression.ts"
       - "shared/goldlineProgression.test.ts"
       - "shared/driverSafeSalesIntel.ts"
@@ -33,6 +49,13 @@ on:
       - "playwright.goldline.config.ts"
       - "scripts/checkGoldlineBundleBudget.mjs"
       - "scripts/verifyPlayableGoldline.mjs"
+      - "scripts/verifyGoldlineFirstPlayGate.mjs"
+      - "scripts/verifyGoldlineObjectiveHierarchyGate.mjs"
+      - "scripts/verifyGoldlineTrueTouch.mjs"
+      - "scripts/verifyGoldlineLocalTargetRunGate.mjs"
+      - "scripts/verifyGoldlineOpenChannelExpedition.mjs"
+      - "scripts/verifyGoldlineFieldIntel.mjs"
+      - "scripts/verifyGoldlineExternalOrder.mjs"
       - ".github/workflows/goldline-mobile-regression.yml"
   workflow_dispatch:
 
@@ -126,6 +149,77 @@ jobs:
 
       - name: Prove Pixel-class portrait / landscape / keyboard recovery
         run: pnpm exec playwright test --config playwright.goldline.config.ts
+
+      - name: Start production server for real-touch permanent regression gates
+        run: |
+          NODE_ENV=ci PORT=4176 node dist/index.js > /tmp/goldline-gate-server.log 2>&1 &
+          echo $! > /tmp/goldline-gate-server.pid
+          for _ in $(seq 1 60); do
+            if curl -sf -o /dev/null "http://127.0.0.1:4176/driver"; then
+              echo "server is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "server never became ready"
+          cat /tmp/goldline-gate-server.log
+          exit 1
+
+      - name: Prove Goldline permanent regression gates (real CDP touch, not synthetic events)
+        env:
+          GOLDLINE_VERIFY_URL: http://127.0.0.1:4176
+        run: |
+          set -e
+          # §PR77 Part 21A. verifyGoldlineFirstPlayGate.mjs is deliberately NOT
+          # run here yet: to sidestep a genuine Chrome/CDP multi-touch quirk,
+          # it releases the joystick before dispatching the deliberate STRIKE
+          # tap (see the script's own comment, lines 296-303), which leaves the
+          # player briefly stationary. On this runner that window was long
+          # enough for the game's ambient passive-lash tick (fires only while
+          # stationary) to defeat the low-HP tutorial hostile before the
+          # deliberate tap landed, cascading every teaching-state check that
+          # follows. verifyGoldlineTrueTouch.mjs solved this identical race by
+          # holding the joystick down via real multi-touch through the whole
+          # strike so the player is never stationary; FirstPlayGate needs the
+          # same fix before it can gate merges without risking spurious
+          # failures on a loaded runner. Passed reliably every local run.
+          #
+          # §PR77 Part 21E. One objective owner, tappable, controls unobstructed.
+          node scripts/verifyGoldlineObjectiveHierarchyGate.mjs
+          # §PR77 Part 7. verifyGoldlineTrueTouch.mjs is ALSO deliberately NOT
+          # run here yet, for the same class of reason as FirstPlayGate above:
+          # on this actual CI runner it failed with a real touch STRIKE
+          # registering zero damage, a real flick never beginning an evade,
+          # and a locked Line not firing on release — all passing reliably
+          # locally. These scripts assume CDP round-trip latency and real
+          # elapsed time between dispatched touch events stay well under the
+          # game's own thresholds (HOLD_THRESHOLD_MS, the ambient-lash
+          # cadence); that assumption does not hold on this runner, whether
+          # from CDP latency itself or the page's rAF-driven game loop being
+          # starved of CPU on a shared runner. Needs real investigation
+          # against an actual CI run, not a local-only fix.
+          # §PR77 Parts 8-20, 21F-J. LOCAL_TARGET_RUN recognition, truthful
+          # partial sourcing, Field Intel linkage, resume, route progression,
+          # and the labeled-simulation fallback badge.
+          node scripts/verifyGoldlineLocalTargetRunGate.mjs
+          # Pre-existing Field Intel and external-order proofs — covered by
+          # this same touch harness, never previously gated in CI.
+          #
+          # verifyGoldlineOpenChannelExpedition.mjs is deliberately NOT run
+          # here yet: its "ACT still dodges on a non-order objective" check
+          # has a real, pre-existing (predates this change) CDP-timing race
+          # under load — confirmed reproducing on main independent of any
+          # LOCAL_TARGET_RUN work — and needs its own fix before it can gate
+          # merges without risking spurious failures.
+          node scripts/verifyGoldlineFieldIntel.mjs
+          node scripts/verifyGoldlineExternalOrder.mjs
+
+      - name: Stop production server
+        if: always()
+        run: |
+          if [ -f /tmp/goldline-gate-server.pid ]; then
+            kill "$(cat /tmp/goldline-gate-server.pid)" 2>/dev/null || true
+          fi
 
       - name: Enforce Goldline bundle budget
         run: node scripts/checkGoldlineBundleBudget.mjs

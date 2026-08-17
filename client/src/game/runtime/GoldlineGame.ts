@@ -439,6 +439,12 @@ export class GoldlineGame {
    */
   private expedition: ExpeditionLayer | null = null;
   /**
+   * The callbacks `startExpedition` was given, kept for verbs that never
+   * route through ExpeditionLayer (dodge is decided here, not there) but
+   * still need to report a genuine success to the same caller.
+   */
+  private expeditionCallbacks: ExpeditionCallbacks = {};
+  /**
    * True while the tether (or its residual momentum) is driving Trailblazer.
    * Joystick locomotion stands down so the two do not fight for the same
    * corridor position — there is one movement truth, and during a grapple
@@ -901,6 +907,7 @@ export class GoldlineGame {
 
   startExpedition(plan: PickupExpeditionPlan, callbacks: ExpeditionCallbacks = {}) {
     this.endExpedition();
+    this.expeditionCallbacks = callbacks;
     this.suspendBaseObjectiveSignalsForExpedition();
 
     // Entering must not inherit whatever corridor position the player
@@ -943,6 +950,12 @@ export class GoldlineGame {
         const horizontal = Math.abs(dirX) > Math.abs(dirY);
         if (horizontal) this.camera.setLookahead(Math.sign(dirX), 0.5);
         callbacks.onCameraShake?.(magnitude, dirX, dirY);
+      },
+      // §PR77 no-dead-press: every tap gets a visible Trailblazer reaction,
+      // whether or not it connected with a hostile.
+      onStrikeAttempt: () => {
+        this.avatarState.noteReversal();
+        callbacks.onStrikeAttempt?.();
       },
     });
     layer.setReducedMotion(this.reducedMotion);
@@ -999,6 +1012,7 @@ export class GoldlineGame {
     this.layerTraversal.removeChild(this.expedition.container);
     this.expedition.destroy();
     this.expedition = null;
+    this.expeditionCallbacks = {};
     this.expeditionDrivingMovement = false;
     this.populationSystem?.setExpeditionPresentation(false);
   }
@@ -1157,7 +1171,13 @@ export class GoldlineGame {
     this.expedition?.endAim();
   }
 
-  /** Action pad release with a lock. Returns false if nothing was hit. */
+  /**
+   * Action pad release with a lock. Returns false if nothing was hit — e.g.
+   * the locked hostile died or left range in the frame between lock and
+   * release. `ExpeditionLayer.fireLine` ends aim unconditionally on both
+   * the hit and miss paths, so a miss here still visibly and mechanically
+   * returns to normal (§PR77 no dead press).
+   */
   expeditionFire(): boolean {
     if (!this.expeditionCanAct()) return false;
     return this.expedition!.fireLine((progress, lateral) =>
@@ -1169,12 +1189,32 @@ export class GoldlineGame {
     return this.expedition?.getLockedTargetId() ?? null;
   }
 
-  /** Action pad tap. Burst along movement direction, else current facing. */
+  /** Action pad flick. Burst along the flick/movement direction, else current facing. */
   expeditionDodge(): boolean {
     if (!this.expeditionCanAct()) return false;
     const facingX = this.input.x !== 0 ? this.input.x : this.lastDirectionSign || 0;
     const facingY = this.input.y !== 0 ? this.input.y : -1;
-    return beginDodge(this.dodgeState, this.input, facingX, facingY);
+    const began = beginDodge(this.dodgeState, this.input, facingX, facingY);
+    // §PR77 Part 4 "first evade" — reported only when the dodge genuinely
+    // started, not when a flick was declined for being on cooldown. Dodge
+    // never routes through ExpeditionLayer, so this is reported directly
+    // from the callbacks startExpedition was given.
+    if (began) this.expeditionCallbacks.onDodgeBegan?.();
+    return began;
+  }
+
+  /**
+   * Action pad tap — the player's deliberate, primary offensive verb
+   * (§PR77 Part 1). Returns true whenever the tap was acknowledged by live
+   * gameplay, even if nothing was in range to hit: `ExpeditionLayer.tryStrike`
+   * always fires `onStrikeAttempt` for a visible whiff, so a `false` here
+   * means only "gameplay wasn't active to receive the tap at all," not
+   * "nothing happened."
+   */
+  expeditionStrike(): boolean {
+    if (!this.expeditionCanAct()) return false;
+    this.expedition!.tryStrike(this.progress, this.lateral * 140);
+    return true;
   }
 
   isDodging(): boolean {

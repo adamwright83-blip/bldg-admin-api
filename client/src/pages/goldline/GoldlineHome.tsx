@@ -13,6 +13,17 @@ import {
 } from "lucide-react";
 import type { Order } from "@shared/types";
 import type { OperatorStopIdentity } from "../../../../shared/impactSignal";
+
+/**
+ * §PR77 Part 12/20. An arrival at a `sourced_target` stop also carries
+ * which LOCAL_TARGET_RUN mission/task it belongs to, so a confirmed Field
+ * Intel capture there can advance that run's real visited count
+ * (markLocalTargetRunTargetVisited is the only writer). Absent for every
+ * other stop kind.
+ */
+export type ArrivedOperatorStop = OperatorStopIdentity & {
+  localTargetRunContext?: { missionId: string; taskId: string } | null;
+};
 import type { CommercialMission } from "@shared/commercialMission";
 import type {
   FieldMoveCandidate,
@@ -154,7 +165,7 @@ export type GoldlineHomeProps = {
    * not genuinely know. Only the game shell can answer this — arrival is a fact
    * about the run, not about the order list.
    */
-  onOperatorStopChange?: (stop: OperatorStopIdentity | null) => void;
+  onOperatorStopChange?: (stop: ArrivedOperatorStop | null) => void;
   onOpenJournal: () => void;
   onResolveDay: () => Promise<void>;
   onOpenDispatch?: () => Promise<void>;
