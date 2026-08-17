@@ -1889,6 +1889,34 @@
   margin: 5px 45px 16px 0;
   font: 900 29px "Barlow Condensed";
 }
+/* Day truth, not a utility — so it reads as a heading above the grid rather
+   than as one more equal tile. Cyan because work owned by another system keeps
+   the provenance colour it has everywhere else, never the Gold Line's gold. */
+.field-console-cleancloud {
+  width: 100%;
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  margin-bottom: 9px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1.5px solid #6ddce8c0;
+  color: #defbff;
+  background: linear-gradient(#123847, #0c222c);
+  text-align: left;
+}
+.field-console-cleancloud > b {
+  font: 900 17px Inter;
+  letter-spacing: 0.06em;
+}
+.field-console-cleancloud > small {
+  font: 600 12px Inter;
+  color: #9fd3de;
+}
+
 .field-console-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3808,4 +3836,159 @@
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.16em;
+}
+
+/* ------------------------------------------- CLEAN CLOUD INTAKE (#74's sheet)
+
+   #74 shipped AddExternalWorkSheet with no stylesheet at all — twelve class
+   names and nothing behind any of them. It therefore rendered as ordinary
+   document flow instead of a modal, which is why it sat under the Field
+   Console backdrop and why its own controls were unreachable on a phone. The
+   component is reused exactly as shipped; only the missing presentation is
+   added here.
+
+   Cyan throughout: work owned by another system never wears the Gold Line's
+   gold, the same rule the expedition provenance label follows. */
+.add-external-work {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 1rem;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 1rem);
+  overflow-y: auto;
+  color: #defbff;
+  background: rgba(4, 14, 20, 0.97);
+}
+
+.add-external-work__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font: 800 0.74rem Inter;
+  letter-spacing: 0.22em;
+  color: #6ddce8;
+}
+.add-external-work__header button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  color: inherit;
+  background: none;
+  font-size: 1.1rem;
+}
+
+.add-external-work__choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.add-external-work__choices button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  min-height: 76px;
+  padding: 0.8rem 0.9rem;
+  border-radius: 12px;
+  border: 1.5px solid rgba(109, 220, 232, 0.7);
+  background: linear-gradient(#123847, #0c222c);
+  color: #defbff;
+  text-align: left;
+}
+.add-external-work__choices b {
+  font: 900 1rem Inter;
+  letter-spacing: 0.05em;
+}
+.add-external-work__choices small {
+  font: 600 0.76rem Inter;
+  color: #9fd3de;
+}
+
+.add-external-work__import,
+.add-external-work__manual {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.add-external-work__upload {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem;
+  border-radius: 12px;
+  border: 1px dashed rgba(109, 220, 232, 0.6);
+  background: rgba(10, 30, 38, 0.7);
+}
+
+.add-external-work input,
+.add-external-work select,
+.add-external-work textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid rgba(222, 251, 255, 0.28);
+  background: rgba(8, 22, 28, 0.9);
+  color: #defbff;
+  font-size: 1rem;
+}
+
+.add-external-work__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+.add-external-work__rows li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.7rem;
+  border-radius: 12px;
+  border: 1px solid rgba(109, 220, 232, 0.28);
+  background: rgba(6, 18, 24, 0.72);
+}
+.add-external-work__rows li button {
+  align-self: flex-start;
+  min-height: 40px;
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 99, 58, 0.6);
+  background: none;
+  color: #f4633a;
+  font: 700 0.7rem Inter;
+  letter-spacing: 0.1em;
+}
+
+/* The review step is the point of the import path, so it is stated, not implied. */
+.add-external-work__review-note,
+.add-external-work__summary {
+  margin: 0;
+  font: 600 0.78rem Inter;
+  color: #9fd3de;
+}
+.add-external-work__warning,
+.add-external-work__error {
+  margin: 0;
+  font: 600 0.78rem Inter;
+  color: #f4633a;
+}
+
+.add-external-work__primary {
+  min-height: 56px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(109, 220, 232, 0.85);
+  background: linear-gradient(#164352, #0c222c);
+  color: #defbff;
+  font: 800 0.92rem Inter;
+  letter-spacing: 0.14em;
+}
+.add-external-work__primary:disabled {
+  opacity: 0.45;
 }

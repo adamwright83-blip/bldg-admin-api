@@ -15,6 +15,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { impactSignals, trackedSignalDefinitions } from "../../drizzle/schema";
 import { getDb } from "../db";
 import {
+  resolveStopLinkage,
   tallyImpactSignals,
   type ImpactClass,
   type ImpactLedgerTally,
@@ -97,6 +98,13 @@ export async function confirmImpactSignals(input: {
   const now = new Date();
   const provenance = input.provenance ?? "operator_confirmed";
 
+  /**
+   * ONE invariant, applied here because here is the only way in. The rule
+   * itself lives in `resolveStopLinkage` so there is exactly one definition of
+   * it — see there for why a row's entityId and entityType must agree.
+   */
+  const linkage = resolveStopLinkage(input.entityId, null);
+
   const rows = input.signals.map(signal => ({
     id: randomUUID(),
     tenantId: input.tenantId,
@@ -109,8 +117,8 @@ export async function confirmImpactSignals(input: {
     unit: signal.unit,
     impactClass: signal.impactClass,
     provenance,
-    entityType: signal.entityType,
-    entityId: input.entityId ?? null,
+    entityType: linkage.entityType ?? signal.entityType,
+    entityId: linkage.entityId,
     entityLabel: signal.entityLabel,
     location: input.location ?? null,
     notes: signal.notes,
@@ -133,7 +141,9 @@ export async function confirmImpactSignals(input: {
       label: signal.label,
       valueType: signal.valueType,
       impactClass: signal.impactClass,
-      appliesTo: signal.entityType ?? null,
+      // Same truthful type the row stores, so a definition's `appliesTo` can
+      // never disagree with the signals that produced it.
+      appliesTo: linkage.entityType ?? signal.entityType ?? null,
       unit: signal.unit,
       // A definition is only created up front when the operator explicitly
       // asked to start tracking; otherwise it is just counted.

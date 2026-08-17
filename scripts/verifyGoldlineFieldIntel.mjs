@@ -230,6 +230,17 @@ async function main() {
     `recorded=${postSave?.trim()}`
   );
 
+  // Captured before arriving anywhere: no authoritative linkage, and none
+  // invented from the label the model produced.
+  const linkageBefore = await page
+    .getByTestId("fixture-signal-entity-ids")
+    .textContent();
+  check(
+    "a capture with no arrival records no entity linkage",
+    linkageBefore?.trim() === "none",
+    `entityId=${linkageBefore?.trim()}`
+  );
+
   // 10. Reload. The sheet stores nothing, so anything still here came back from
   //     outside the component.
   await page.reload({ waitUntil: "networkidle" });
@@ -400,6 +411,42 @@ async function main() {
     check(
       "capture still starts from the operator's own words",
       provenanceAtStop === 1
+    );
+
+    // And the linkage that gets stored is namespace-qualified, and says what it
+    // really is. This fixture day is a CleanCloud job, so it must claim an
+    // external order — never a building or an account, neither of which any
+    // arrival in this app can honestly reach.
+    await page
+      .getByTestId("log-signal-speech")
+      .fill("Residents complain about no in-unit laundry");
+    await page.getByTestId("log-signal-structure").click();
+    await page
+      .getByTestId("proposed-signal")
+      .first()
+      .waitFor({ state: "visible", timeout: 8000 });
+    await page.getByTestId("log-signal-save").click();
+    await sheet.waitFor({ state: "detached", timeout: 8000 }).catch(() => {});
+
+    const linkage = (
+      await page.getByTestId("fixture-signal-entity-ids").textContent()
+    )?.trim();
+    const recorded = (linkage ?? "").split(",");
+    const atStop = recorded[recorded.length - 1] ?? "";
+    check(
+      "arriving records a namespace-qualified stop identity",
+      /^external_order:.+/.test(atStop),
+      atStop || "absent"
+    );
+    check(
+      "the identity never claims a building or an account",
+      !/^(building|account):/.test(atStop) && !/^\d+$/.test(atStop),
+      atStop
+    );
+    check(
+      "the earlier unlinked capture is still unlinked",
+      recorded[0] === "none",
+      recorded.join(",")
     );
   }
 

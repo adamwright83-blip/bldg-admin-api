@@ -22,17 +22,18 @@ import {
   impactClassLabel,
   type ImpactClass,
   type ImpactSignalProposal,
+  type OperatorStopIdentity,
   type ProposedImpactSignal,
 } from "../../../../shared/impactSignal";
 
 export type LogSignalSheetProps = {
   open: boolean;
   onClose: () => void;
-  /** Where the operator is, when the app happens to know. Never invented. */
-  entityHint?: { entityType: string; entityLabel: string } | null;
+  /** Which stop the operator is at, when the app genuinely knows. Never invented. */
+  entityHint?: OperatorStopIdentity | null;
   onPropose: (input: {
     speech: string;
-    entityHint?: { entityType: string; entityLabel: string } | null;
+    entityHint?: OperatorStopIdentity | null;
   }) => Promise<ImpactSignalProposal>;
   onConfirm: (signals: ProposedImpactSignal[]) => Promise<unknown>;
 };

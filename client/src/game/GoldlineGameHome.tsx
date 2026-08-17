@@ -39,6 +39,10 @@ import type {
   ScoutReport,
 } from "../../../shared/expansionScout";
 import type { GoldlineHomeProps } from "../pages/goldline/GoldlineHome";
+import {
+  operatorStopEntityId,
+  type OperatorStopIdentity,
+} from "../../../shared/impactSignal";
 import type { Order } from "@shared/types";
 import GoldlineHome from "../pages/goldline/GoldlineHome";
 import OpenChannel from "../pages/goldline/OpenChannel";
@@ -1502,21 +1506,56 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
    * title ("drop the door hangers"), not a place, and deriving a building from
    * a sentence about work is exactly the invention this must not do.
    */
-  const reportLocation = props.onOperatorLocationChange;
-  const arrivedAtNamedPlace =
-    activeExpedition != null &&
-    expeditionSnapshot.outcome === "arrived" &&
-    (activeExpedition.kind === "native_pickup" ||
-      activeExpedition.kind === "external_order")
-      ? { entityType: "account", entityLabel: activeExpedition.label }
+  const reportStop = props.onOperatorStopChange;
+  /**
+   * The arrival identifies an ORDER, so that is what it claims. Not an account,
+   * not a building — see [[OperatorStopIdentity]] for why nothing here can
+   * honestly reach a canonical place id.
+   *
+   * Open Channel work reports nothing: its label is a task title ("drop the
+   * door hangers"), which names an activity rather than anything identifiable.
+   */
+  const arrivedStop: OperatorStopIdentity | null =
+    activeExpedition != null && expeditionSnapshot.outcome === "arrived"
+      ? activeExpedition.kind === "native_pickup"
+        ? {
+            entityType: "native_order",
+            entityId: operatorStopEntityId(
+              "native_order",
+              activeExpedition.orderId
+            ),
+            entityLabel: activeExpedition.label,
+          }
+        : activeExpedition.kind === "external_order"
+          ? {
+              entityType: "external_order",
+              // The objective's `externalOrderId` is our own row id, not
+              // CleanCloud's order number — #74 kept their identifiers out of
+              // this seam deliberately, and that is what makes it stable here.
+              entityId: operatorStopEntityId(
+                "external_order",
+                activeExpedition.externalOrderId
+              ),
+              entityLabel: activeExpedition.label,
+            }
+          : null
       : null;
-  const arrivedLabel = arrivedAtNamedPlace?.entityLabel ?? null;
+
+  /**
+   * Reported on a genuine change of stop, not on every render that rebuilds an
+   * identical object. The identity itself travels through a ref rather than
+   * being encoded into the key and parsed back out — a customer name is free
+   * text and any delimiter chosen for that round trip is one a real label can
+   * contain.
+   */
+  const arrivedStopRef = useRef<OperatorStopIdentity | null>(null);
+  arrivedStopRef.current = arrivedStop;
+  const arrivedStopKey = arrivedStop
+    ? JSON.stringify([arrivedStop.entityId, arrivedStop.entityLabel])
+    : null;
   useEffect(() => {
-    if (!reportLocation) return;
-    reportLocation(
-      arrivedLabel ? { entityType: "account", entityLabel: arrivedLabel } : null
-    );
-  }, [reportLocation, arrivedLabel]);
+    reportStop?.(arrivedStopRef.current);
+  }, [reportStop, arrivedStopKey]);
 
   /**
    * AUTHORITATIVE collected truth, as one evidence collection. Order id and
@@ -3087,6 +3126,40 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 <>
                   <small>REAL BUSINESS UTILITIES</small>
                   <h2>Field console</h2>
+                  {/*
+                    CleanCloud intake. #74 shipped the importer and the
+                    controller has always passed the callback, but the only
+                    doorway added was on GoldlineHome — which is now just the
+                    Suspense/runtime-failure fallback. On the live game screen
+                    the capability existed with no way to reach it.
+
+                    Spans both columns and sits first because importing the
+                    day's real pickups and dropoffs is day truth, not a
+                    utility: nothing else in this panel changes what the
+                    operator is actually driving to.
+
+                    Opens the sheet exactly as #74 built it, on its own
+                    IMPORT CLEAN CLOUD DAY / ADD CLEAN CLOUD JOB chooser — so
+                    the label names both paths rather than promising only one.
+                  */}
+                  {props.onOpenAddExternalWork ? (
+                    <button
+                      className="field-console-cleancloud"
+                      data-testid="field-console-cleancloud"
+                      onClick={() => {
+                        // Leave the panel on the way out. Its backdrop sits at
+                        // z-index 70 over the whole shell, so a sheet opened
+                        // from behind it renders visibly but swallows every
+                        // tap — the menu has to close, not stack.
+                        setUtilityPanel(null);
+                        props.onOpenAddExternalWork?.();
+                      }}
+                    >
+                      <b>CLEAN CLOUD WORK</b>
+                      <small>Import screenshots or add a job</small>
+                    </button>
+                  ) : null}
+
                   <div className="field-console-grid">
                     <button onClick={props.onOpenNewOrder}>NEW ORDER</button>
                     <button onClick={props.onOpenWalkIn}>

@@ -164,24 +164,104 @@ export type ImpactSignalProposal = {
 };
 
 /**
- * Where the operator is, when the app genuinely knows.
+ * WHAT the operator is standing at — named as precisely as the data allows,
+ * and no more precisely than that.
+ *
+ * These are the only two things an arrival can honestly identify, and both are
+ * ORDERS rather than places:
+ *
+ *   native_order    a Laundry Butler pickup or delivery stop
+ *   external_order  a job owned by another system (CleanCloud)
+ *
+ * It is deliberately NOT a building or an account. There is no canonical
+ * building registry in this schema to point at: `orders.buildingSlug` is a
+ * nullable soft reference with no table behind it, `operations_events` models
+ * the slug as possibly `unresolved_needs_mapping`, and an
+ * `ExternalOperationalOrder` has nothing but a customer name and a free-text
+ * address. Deriving a building from an address is the guess this must not make.
+ * `commercialAccounts` / `commercialAccountLocations` ARE canonical, but no
+ * pickup or CleanCloud job links to them, so an arrival cannot reach one.
+ *
+ * Calling an order id an account id would be the worst outcome available: it
+ * reads as canonical linkage forever while being a category error, and the
+ * joins built on it would silently be wrong. So the id is namespace-qualified
+ * and the type says what it really is. When a genuine account or location id
+ * becomes reachable, it can be added as a further kind without rewriting a
+ * single stored row — which is the point of qualifying the namespace now.
  *
  * Only ever set from an arrival the app already stands behind — the point at
- * which it pins a named customer and an address on screen and offers to record
- * the work as done. Being *assigned* a stop is not being *at* it, so an
- * objective that has merely been prepared never produces one of these.
+ * which it pins a customer and an address on screen and offers to record the
+ * work as done. Being *assigned* a stop is not being *at* it, so a merely
+ * prepared objective never produces one. Absent stays first-class.
  *
- * A wrong building attached to an observation is worse than no building: it
- * survives in the record and quietly misattributes what was learned. So the
- * absent case is a first-class one, and everything downstream handles null.
- *
- * Note this does NOT make a signal system-verified. The location came from the
- * app, but the observation is still the operator's — see [[SignalProvenance]].
+ * This does NOT make a signal system-verified. The identity came from the app;
+ * the observation is still the operator's — see [[SignalProvenance]].
  */
-export type OperatorLocationHint = {
-  entityType: string;
+export const OPERATOR_STOP_KINDS = ["native_order", "external_order"] as const;
+
+export type OperatorStopKind = (typeof OPERATOR_STOP_KINDS)[number];
+
+export type OperatorStopIdentity = {
+  /** Truthful kind of the thing identified. Stored as the signal's entityType. */
+  entityType: OperatorStopKind;
+  /** Namespace-qualified, e.g. `native_order:1841`. Never a bare number. */
+  entityId: string;
+  /** For display and for the model's context. NEVER a join key. */
   entityLabel: string;
 };
+
+/**
+ * Builds the qualified id. Two namespaces that both count from 1 would collide
+ * on a bare id, so the kind is part of the value rather than only a sibling
+ * column — a row remains self-describing if it is ever read on its own.
+ */
+export function operatorStopEntityId(
+  kind: OperatorStopKind,
+  id: string | number
+): string {
+  const raw = String(id).trim();
+  return raw ? `${kind}:${raw}` : "";
+}
+
+/**
+ * Decides what a row may claim about the thing it is attached to.
+ *
+ * The rule: an `entityId` and an `entityType` in the same row must describe the
+ * same thing. `entityId` is a stop, so when one is present the type is the
+ * stop's kind — whatever the extraction model called what the operator talked
+ * about. A row saying entityType `building` beside `native_order:1841` would
+ * assert a canonical building linkage that does not exist, and would read as
+ * real forever.
+ *
+ * An unparseable id resolves to no linkage at all. A null is honest; an id
+ * nothing can resolve is worse, because it still looks like linkage.
+ *
+ * Pure, and the single definition of the rule — the write path calls this
+ * rather than restating it.
+ */
+export function resolveStopLinkage(
+  entityId: string | null | undefined,
+  describedEntityType: string | null
+): { entityId: string | null; entityType: string | null } {
+  const stop = parseOperatorStopEntityId(entityId ?? null);
+  if (!stop) return { entityId: null, entityType: describedEntityType ?? null };
+  return { entityId: entityId ?? null, entityType: stop.kind };
+}
+
+/** Reads a qualified id back. Returns null for anything unrecognised. */
+export function parseOperatorStopEntityId(
+  value: string | null | undefined
+): { kind: OperatorStopKind; id: string } | null {
+  if (!value) return null;
+  const separator = value.indexOf(":");
+  if (separator <= 0) return null;
+  const kind = value.slice(0, separator);
+  const id = value.slice(separator + 1);
+  if (!id) return null;
+  return OPERATOR_STOP_KINDS.includes(kind as OperatorStopKind)
+    ? { kind: kind as OperatorStopKind, id }
+    : null;
+}
 
 const CLASS_RANK: Record<ImpactClass, number> = {
   observation: 0,

@@ -11,6 +11,7 @@ import {
 } from "./impactSignalService";
 import {
   IMPACT_CLASSES,
+  OPERATOR_STOP_KINDS,
   SIGNAL_VALUE_TYPES,
 } from "../../shared/impactSignal";
 
@@ -40,9 +41,15 @@ export const impactSignalRouter = router({
     .input(
       z.object({
         speech: z.string().trim().min(2).max(4000),
+        /**
+         * The stop the operator arrived at. The kind is a closed enum on the
+         * wire so a caller cannot describe an order stop as a building — the
+         * one lie that would later read as canonical linkage.
+         */
         entityHint: z
           .object({
-            entityType: z.string().trim().min(1).max(64),
+            entityType: z.enum(OPERATOR_STOP_KINDS),
+            entityId: z.string().trim().min(1).max(64),
             entityLabel: z.string().trim().min(1).max(191),
           })
           .nullable()
@@ -66,6 +73,10 @@ export const impactSignalRouter = router({
         provenance: z
           .enum(["operator_confirmed", "external_record"])
           .optional(),
+        /**
+         * Namespace-qualified stop identity. Unparseable values are dropped
+         * rather than stored — see confirmImpactSignals.
+         */
         entityId: z.string().trim().max(64).nullable().optional(),
         location: z.string().trim().max(512).nullable().optional(),
       })

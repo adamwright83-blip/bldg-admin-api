@@ -17,10 +17,17 @@ import {
   SIGNAL_VALUE_TYPES,
   toSignalKey,
   type ImpactSignalProposal,
+  type OperatorStopIdentity,
   type ProposedImpactSignal,
 } from "../../shared/impactSignal";
 
 const EXTRACTION_MODEL = "claude-opus-5";
+
+/** How to say each stop kind to the model without overclaiming what it is. */
+const STOP_PHRASE: Record<OperatorStopIdentity["entityType"], string> = {
+  native_order: "pickup or delivery stop",
+  external_order: "job owned by another system",
+};
 
 const EXTRACTION_SYSTEM = [
   "You convert one spoken field observation from a laundry operator into structured signals.",
@@ -110,7 +117,8 @@ const EXTRACTION_SCHEMA = {
           impactClass: { type: "string", enum: [...IMPACT_CLASSES] },
           entityType: {
             type: ["string", "null"],
-            description: "What this is about, e.g. 'building', 'account', 'person'.",
+            description:
+              "What this is about, e.g. 'building', 'account', 'person'. Only when the operator NAMED it — never inferred from the stop context above.",
           },
           entityLabel: {
             type: ["string", "null"],
@@ -144,11 +152,18 @@ type Payload = {
  */
 export async function extractImpactSignals(input: {
   speech: string;
-  entityHint?: { entityType: string; entityLabel: string } | null;
+  entityHint?: OperatorStopIdentity | null;
 }): Promise<ImpactSignalProposal> {
   const contextLines = [
     input.entityHint
-      ? `The operator is currently at ${input.entityHint.entityType}: ${input.entityHint.entityLabel}. Use it as the entity only when the observation is plainly about where they are.`
+      ? [
+          `The operator is at a scheduled ${STOP_PHRASE[input.entityHint.entityType]} for: ${input.entityHint.entityLabel}.`,
+          "Use it as the entity only when the observation is plainly about where they are.",
+          // The hint identifies an order, and the model must not launder that
+          // into a claim about a building. It is the one place a category error
+          // here would look like canonical data later.
+          "This names the STOP, not a building or an account. Do not assert a building identity, and do not treat the address as one.",
+        ].join(" ")
       : "The operator's current location is unknown. Leave entity fields null unless they name something.",
     "",
     `Operator said: ${input.speech}`,

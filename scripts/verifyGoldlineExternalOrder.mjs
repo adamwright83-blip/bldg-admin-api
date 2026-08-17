@@ -142,6 +142,107 @@ async function walkTo(target, { maxMs = 20_000 } = {}) {
   return progressNow();
 }
 
+// ------------------------- 0. THE DOORWAY — reachable on the live game screen
+//
+// #74 shipped the importer and the controller always passed the callback, but
+// the only doorway added was on GoldlineHome, which is now just the
+// Suspense/runtime-failure fallback. On the real game screen the capability
+// existed with no way to reach it, which is the same as not having shipped it.
+//
+// This runs BEFORE entering the Line, because importing the day's real pickups
+// and dropoffs is day truth and has to be reachable while the day is still
+// being set up.
+console.log("\n0. CLEAN CLOUD INTAKE IS REACHABLE BEFORE THE FIRST EXPEDITION");
+// The loading veil legitimately covers the shell while the canvas boots. Any
+// elementFromPoint taken before it clears measures the veil, not the control.
+await page
+  .locator(".game-loading")
+  .waitFor({ state: "detached", timeout: 30_000 })
+  .catch(() => {});
+await page.getByTestId("expedition-threshold").waitFor({ timeout: 15_000 });
+check(
+  "the pre-expedition threshold is showing",
+  (await page.getByTestId("expedition-enter").count()) === 1
+);
+// The utilities affordance already exists here — no new surface was added.
+const utilityBarPreEntry = await page.locator(".game-utility-bar").count();
+check("field utilities are available before entering", utilityBarPreEntry === 1);
+
+await page.getByRole("button", { name: "Open field utilities" }).click();
+const cleanCloudEntry = page.getByTestId("field-console-cleancloud");
+await cleanCloudEntry.waitFor({ state: "visible", timeout: 8_000 });
+check("Field Console offers CLEAN CLOUD WORK", true);
+// Let the panel finish settling before measuring what is on top of it.
+await settle(10);
+const entryBox = await cleanCloudEntry.boundingBox();
+check(
+  "the doorway is a real thumb target",
+  Boolean(entryBox) && entryBox.height >= 44,
+  entryBox ? `${Math.round(entryBox.width)}x${Math.round(entryBox.height)}` : "no box"
+);
+const entryTopmost = await page.evaluate(box => {
+  const el = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+  return el?.closest("[data-testid]")?.getAttribute("data-testid") ?? null;
+}, entryBox);
+check(
+  "nothing covers the doorway",
+  entryTopmost === "field-console-cleancloud",
+  `elementFromPoint -> ${entryTopmost}`
+);
+await shot("ext-00-field-console");
+
+await cleanCloudEntry.click();
+await page.getByTestId("add-external-work").waitFor({ timeout: 8_000 });
+check(
+  "it opens the sheet #74 shipped, on its own chooser",
+  (await page.getByTestId("import-cleancloud-day").count()) === 1 &&
+    (await page.getByTestId("add-cleancloud-job").count()) === 1
+);
+
+await page.getByTestId("import-cleancloud-day").click();
+const upload = page.getByTestId("cleancloud-screenshots");
+await upload.waitFor({ state: "attached", timeout: 8_000 });
+check(
+  "IMPORT CLEAN CLOUD DAY exposes image upload",
+  (await upload.getAttribute("type")) === "file",
+  `accept=${await upload.getAttribute("accept")}`
+);
+
+// The manual path is a first-class route, not an OCR fallback, so it has to be
+// reachable from the same doorway rather than only as a fallback from import.
+const closeSheet = () =>
+  page.locator('[data-testid="add-external-work"] [aria-label="Close"]').click();
+await closeSheet();
+await page.getByRole("button", { name: "Open field utilities" }).click();
+await page.getByTestId("field-console-cleancloud").click();
+await page.getByTestId("add-cleancloud-job").click();
+check(
+  "manual CLEAN CLOUD JOB is still reachable",
+  (await page.getByTestId("manual-customer").count()) === 1
+);
+await shot("ext-00b-manual");
+
+// Back out cleanly and confirm the game screen is untouched.
+await closeSheet();
+await page
+  .locator(".game-utility-backdrop")
+  .click({ position: { x: 5, y: 5 } })
+  .catch(() => {});
+await settle(10);
+const barLabels = await page
+  .locator(".game-utility-bar > *")
+  .allTextContents()
+  .catch(() => []);
+check(
+  "the operating bar is unchanged — Navigate / Call / Mark / Intel / Signal",
+  barLabels.length === 5,
+  barLabels.map(t => t.trim()).join(" / ")
+);
+check(
+  "ENTER THE LINE still works after visiting intake",
+  (await page.getByTestId("expedition-enter").count()) === 1
+);
+
 // ----------------------------------- 1. external work is playable and marked
 
 console.log("\n1. CLEAN CLOUD WORK IS PLAYABLE, AND MARKED AS THEIRS");
