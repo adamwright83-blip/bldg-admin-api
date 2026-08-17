@@ -3676,6 +3676,24 @@
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
 }
 
+/* §PR77 Part 14/17/20 — real, server-owned LOCAL_TARGET_RUN progress. */
+.expedition-terminal__progress {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(246, 239, 225, 0.86);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+}
+
+.expedition-mission-sheet__progress {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(255, 209, 102, 0.85);
+}
+
 /* VERIFYING is a truthful waiting state, not a success animation. It
    deliberately does not look celebratory. */
 .expedition-terminal__verifying {

@@ -4,6 +4,14 @@ import {
   isPlayableExternalOrder,
   type ExternalOperationalOrder,
 } from "../../../../shared/externalOperationalOrder";
+import {
+  currentLocalTargetRunTarget,
+  decodeLocalTargetRunPayload,
+  localTargetRunProgressLabel,
+  localTargetRunVisitedCount,
+  type LocalTargetRunPayload,
+  type SourcedTarget,
+} from "../../../../shared/localTargetRun";
 
 export type NativePickupExpeditionObjective = {
   kind: "native_pickup";
@@ -42,10 +50,63 @@ export type ExternalOrderExpeditionObjective = {
   jobKind: ExternalOperationalOrder["jobKind"];
 };
 
+/**
+ * §PR77 Part 8-20. A recognized "visit N real businesses" objective. The
+ * current target is whatever the payload says is next — never re-derived
+ * or guessed here, so this stays a thin, honest view over server-owned
+ * progress (see markLocalTargetRunTargetVisited, the only writer).
+ */
+export type LocalTargetRunExpeditionObjective = {
+  kind: "local_target_run";
+  key: string;
+  planSeed: number;
+  label: string;
+  detail: string;
+  missionId: string;
+  taskId: string;
+  currentTarget: SourcedTarget;
+  progressLabel: string;
+  visitedCount: number;
+  totalCount: number;
+  simulated: boolean;
+};
+
 export type PreparedExpeditionObjective =
   | NativePickupExpeditionObjective
   | OpenChannelExpeditionObjective
-  | ExternalOrderExpeditionObjective;
+  | ExternalOrderExpeditionObjective
+  | LocalTargetRunExpeditionObjective;
+
+/**
+ * Builds the target-run objective from a decoded payload, or null once
+ * every sourced target is genuinely visited (nothing left to point at —
+ * completeOpenChannelTask-equivalent server logic marks the task itself
+ * completed at that point, but this guards the read side too).
+ */
+function prepareLocalTargetRunObjective(
+  missionId: string,
+  taskId: string,
+  payload: LocalTargetRunPayload
+): LocalTargetRunExpeditionObjective | null {
+  const currentTarget = currentLocalTargetRunTarget(payload);
+  const progressLabel = localTargetRunProgressLabel(payload);
+  if (!currentTarget || !progressLabel) return null;
+  const key = `local-target-run:${missionId}:${taskId}:${currentTarget.id}`;
+  return {
+    kind: "local_target_run",
+    key,
+    planSeed: stableObjectiveSeed(key),
+    label: `${payload.targetQuery.toUpperCase()} EXCHANGE RUN — ${progressLabel} — ${currentTarget.name.toUpperCase()}`,
+    detail: currentTarget.address,
+    missionId,
+    taskId,
+    currentTarget,
+    progressLabel,
+    visitedCount: localTargetRunVisitedCount(payload),
+    totalCount: payload.sourcedTargets.length,
+    simulated: payload.simulated,
+  };
+}
 
 /**
  * Deterministic fictional seed for non-order objectives. It may vary
@@ -115,6 +176,22 @@ export function prepareExpeditionObjective(input: {
     candidate => candidate.status === "pending"
   );
   if (!task) return null;
+
+  // A LOCAL_TARGET_RUN task's detail is a JSON payload, not free-text — a
+  // real business run gets its own compact "TARGET N OF M" presentation
+  // (Part 17), never rendered as a generic Open Channel step.
+  const targetRunPayload = decodeLocalTargetRunPayload(task.detail);
+  if (targetRunPayload) {
+    // Every sourced target genuinely visited but the task row hasn't
+    // caught up to "completed" yet is a brief, honest window — presenting
+    // nothing is correct there, not a fallback objective invented to fill
+    // the gap.
+    return prepareLocalTargetRunObjective(
+      input.openChannelMission.id,
+      task.id,
+      targetRunPayload
+    );
+  }
 
   const key = `open-channel:${input.openChannelMission.id}:${task.id}`;
   return {

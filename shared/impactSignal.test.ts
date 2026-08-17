@@ -274,10 +274,16 @@ describe("authoritative linkage names what it actually is", () => {
   it("never claims a building or an account, because neither is reachable", () => {
     // There is no canonical building registry to point at: orders.buildingSlug
     // is a nullable soft reference with no table behind it, and an external
-    // order carries only a name and a free-text address. If a canonical id
-    // becomes reachable it joins this list; until then these are the only two
-    // honest answers.
-    expect(OPERATOR_STOP_KINDS).toEqual(["native_order", "external_order"]);
+    // order carries only a name and a free-text address. `sourced_target`
+    // (§PR77 Part 12) is a real target from a LOCAL_TARGET_RUN — exactly as
+    // real as its own `simulated` flag says, never a building or account
+    // either. If a genuine canonical id becomes reachable it joins this list
+    // additively; until then these are the only honest answers.
+    expect(OPERATOR_STOP_KINDS).toEqual([
+      "native_order",
+      "external_order",
+      "sourced_target",
+    ]);
     expect(OPERATOR_STOP_KINDS).not.toContain("building");
     expect(OPERATOR_STOP_KINDS).not.toContain("account");
   });

@@ -37,6 +37,47 @@ describe("Open Channel deterministic mission planner", () => {
   });
 });
 
+describe("LOCAL_TARGET_RUN recognition (§PR77 Part 8, deterministic fallback path)", () => {
+  it("recognizes Adam's own example as ONE target run, not ten prose steps", () => {
+    const plan = deterministicOpenChannelPlan(
+      "I need to stop into 10 dry cleaners to see if they'll give us their fluff and fold orders in exchange for our dry cleaning."
+    );
+    expect(plan.tasks).toHaveLength(0);
+    expect(plan.localTargetRun).not.toBeNull();
+    expect(plan.localTargetRun?.action).toBe("visit");
+    expect(plan.localTargetRun?.targetQuery).toBe("dry cleaner");
+    expect(plan.localTargetRun?.requestedCount).toBe(10);
+  });
+
+  it("never invents business names — the intent carries only a query and a count", () => {
+    const plan = deterministicOpenChannelPlan(
+      "I need to visit 6 hair salons to pitch our referral program."
+    );
+    expect(plan.localTargetRun?.targetQuery).toBe("hair salon");
+    expect(plan.localTargetRun?.requestedCount).toBe(6);
+    // No business name anywhere in the recognized intent — sourcing is a
+    // separate, later step (materializeLocalTargetRun), never the model.
+    expect(JSON.stringify(plan.localTargetRun)).not.toMatch(
+      /cleaners|salon\s+(?:one|two|#)/i
+    );
+  });
+
+  it("does not misfire on an ordinary count that isn't a visit-style request", () => {
+    const plan = deterministicOpenChannelPlan(
+      "Today I have 2 pickups and 3 deliveries, then I need to call Russell."
+    );
+    expect(plan.localTargetRun).toBeNull();
+    expect(plan.tasks.length).toBeGreaterThan(0);
+  });
+
+  it("does not recognize a count outside the sane 2-25 range", () => {
+    const plan = deterministicOpenChannelPlan(
+      "I need to visit 1 dry cleaner about a referral."
+    );
+    expect(plan.localTargetRun).toBeNull();
+  });
+});
+
 describe("decodeOpenChannelAudio", () => {
   it("accepts Android codec-qualified WebM audio data URLs", () => {
     const recording = decodeOpenChannelAudio(

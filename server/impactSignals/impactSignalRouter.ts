@@ -79,6 +79,14 @@ export const impactSignalRouter = router({
          */
         entityId: z.string().trim().max(64).nullable().optional(),
         location: z.string().trim().max(512).nullable().optional(),
+        /** §PR77 Part 12/20 — present only for a sourced_target stop. */
+        localTargetRunContext: z
+          .object({
+            missionId: z.string().trim().min(1).max(36),
+            taskId: z.string().trim().min(1).max(36),
+          })
+          .nullable()
+          .optional(),
       })
     )
     .mutation(({ ctx, input }) =>

@@ -14,7 +14,9 @@ import { OPEN_CHANNEL_TASK_CATEGORIES } from "./openChannelTypes";
 const businessDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const editableTask = z.object({
   title: z.string().trim().min(1).max(160),
-  detail: z.string().trim().min(1).max(800),
+  // Raised from 800 to accommodate a LOCAL_TARGET_RUN task's JSON-encoded
+  // detail (§PR77 Part 8) — see the matching comment in openChannelService.ts.
+  detail: z.string().trim().min(1).max(12_000),
   estimatedMinutes: z.number().int().min(5).max(240),
   category: z.enum(OPEN_CHANNEL_TASK_CATEGORIES),
   navigationQuery: z.string().trim().max(500).nullable(),

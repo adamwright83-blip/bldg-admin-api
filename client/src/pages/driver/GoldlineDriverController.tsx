@@ -7,7 +7,7 @@ import { AddExternalWorkSheet } from "@/components/driver/AddExternalWorkSheet";
 import { LogSignalSheet } from "@/components/driver/LogSignalSheet";
 import { SalesJournalSheet } from "@/components/driver/SalesMomentum";
 import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
-import GoldlineHome from "../goldline/GoldlineHome";
+import GoldlineHome, { type ArrivedOperatorStop } from "../goldline/GoldlineHome";
 import type { FieldMoveCandidate } from "../../../../server/field/types";
 import type { DayResolution } from "../../../../server/unload/unloadTypes";
 import type {
@@ -19,7 +19,6 @@ import type {
   ColdCallBatch,
   ColdCallTarget,
 } from "../../../../shared/coldCallBurst";
-import type { OperatorStopIdentity } from "../../../../shared/impactSignal";
 import type { RealActionRequest } from "../../game/encounters/RealActionBridge";
 import type {
   GoldlineActionServices,
@@ -133,7 +132,7 @@ function LiveGoldlineDriverController() {
   const [addExternalWorkOpen, setAddExternalWorkOpen] = useState(false);
   const [logSignalOpen, setLogSignalOpen] = useState(false);
   const [operatorStop, setOperatorStop] =
-    useState<OperatorStopIdentity | null>(null);
+    useState<ArrivedOperatorStop | null>(null);
   const [journalOpen, setJournalOpen] = useState(false);
   const [dayResolution, setDayResolution] = useState<DayResolution | null>(
     null
@@ -1127,9 +1126,20 @@ function LiveGoldlineDriverController() {
             // the operator genuinely arrived somewhere — never derived from the
             // label the model saw.
             entityId: operatorStop?.entityId ?? null,
+            // Advances a LOCAL_TARGET_RUN's real visited count — present
+            // only when this arrival is at a sourced_target stop.
+            localTargetRunContext: operatorStop?.localTargetRunContext ?? null,
             signals,
           });
           await impactSignalList.refetch();
+          // A confirmed signal at a sourced_target stop is what advances a
+          // LOCAL_TARGET_RUN's real progress server-side (§PR77 gate J) —
+          // refetch the mission so the expedition picks up the new
+          // visitedTargetIds and moves on to the next real target instead
+          // of staying parked on the one just visited.
+          if (operatorStop?.localTargetRunContext) {
+            await utils.system.openChannel.current.invalidate();
+          }
         }}
       />
       <AddExternalWorkSheet

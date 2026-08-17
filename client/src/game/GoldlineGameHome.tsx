@@ -38,11 +38,11 @@ import type {
   CapabilityEvaluation,
   ScoutReport,
 } from "../../../shared/expansionScout";
-import type { GoldlineHomeProps } from "../pages/goldline/GoldlineHome";
-import {
-  operatorStopEntityId,
-  type OperatorStopIdentity,
-} from "../../../shared/impactSignal";
+import type {
+  ArrivedOperatorStop,
+  GoldlineHomeProps,
+} from "../pages/goldline/GoldlineHome";
+import { operatorStopEntityId } from "../../../shared/impactSignal";
 import type { Order } from "@shared/types";
 import GoldlineHome from "../pages/goldline/GoldlineHome";
 import OpenChannel from "../pages/goldline/OpenChannel";
@@ -1533,7 +1533,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
    * Open Channel work reports nothing: its label is a task title ("drop the
    * door hangers"), which names an activity rather than anything identifiable.
    */
-  const arrivedStop: OperatorStopIdentity | null =
+  const arrivedStop: ArrivedOperatorStop | null =
     activeExpedition != null && expeditionSnapshot.outcome === "arrived"
       ? activeExpedition.kind === "native_pickup"
         ? {
@@ -1556,7 +1556,24 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               ),
               entityLabel: activeExpedition.label,
             }
-          : null
+          : activeExpedition.kind === "local_target_run"
+            ? {
+                entityType: "sourced_target",
+                // The current target's own stable, provider-backed (or
+                // clearly-labeled-simulated) id — never a free-text join,
+                // and never the mission/task id (those identify the RUN,
+                // not the business standing at this doorstep).
+                entityId: operatorStopEntityId(
+                  "sourced_target",
+                  activeExpedition.currentTarget.id
+                ),
+                entityLabel: activeExpedition.currentTarget.name,
+                localTargetRunContext: {
+                  missionId: activeExpedition.missionId,
+                  taskId: activeExpedition.taskId,
+                },
+              }
+            : null
       : null;
 
   /**
@@ -1566,7 +1583,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
    * text and any delimiter chosen for that round trip is one a real label can
    * contain.
    */
-  const arrivedStopRef = useRef<OperatorStopIdentity | null>(null);
+  const arrivedStopRef = useRef<ArrivedOperatorStop | null>(null);
   arrivedStopRef.current = arrivedStop;
   const arrivedStopKey = arrivedStop
     ? JSON.stringify([arrivedStop.entityId, arrivedStop.entityLabel])
@@ -1730,6 +1747,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
 
   const completeExpeditionObjective = useCallback(async () => {
     if (!activeExpedition) return;
+    // A LOCAL_TARGET_RUN has no single "collect" action to confirm — its
+    // parent task covers every sourced target, and completing IT here would
+    // silently claim every remaining target visited from one tap. Real
+    // progress is written exactly one place: markLocalTargetRunTargetVisited,
+    // triggered only by a confirmed Field Intel capture at the current
+    // target (see LogSignalSheet's onConfirm in GoldlineDriverController).
+    // The UI never offers this control for that kind (see ExpeditionHud's
+    // completionMode below); this guard is defense in depth.
+    if (activeExpedition.kind === "local_target_run") return;
     if (cargoPhase === "verifying") return;
     setCargoPhase("verifying");
     try {
@@ -1954,6 +1980,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const missionContextDetail = missionContextObjective?.detail ?? null;
   const missionContextNavigationUrl = useMemo(() => {
     if (!missionContextObjective) return null;
+    // A LOCAL_TARGET_RUN target already carries its own real (or clearly
+    // simulated) navigationUrl — use it directly rather than re-deriving
+    // one from `detail`.
+    if (missionContextObjective.kind === "local_target_run") {
+      return missionContextObjective.currentTarget.navigationUrl;
+    }
     if (
       missionContextObjective.kind !== "native_pickup" &&
       missionContextObjective.kind !== "external_order"
@@ -1964,6 +1996,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     if (!address) return null;
     return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
   }, [missionContextObjective]);
+  const missionContextProgress =
+    activeExpedition?.kind === "local_target_run"
+      ? {
+          progressLabel: activeExpedition.progressLabel,
+          visitedCount: activeExpedition.visitedCount,
+          totalCount: activeExpedition.totalCount,
+          simulated: activeExpedition.simulated,
+        }
+      : null;
 
   useEffect(() => {
     runtimeRef.current?.setAgentPresence(agentWorldPresence);
@@ -2619,24 +2660,46 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             terminalState={expeditionSnapshot.outcome}
             onRedeploy={redeployExpedition}
             onPressOn={pressOnExpedition}
-            pinnedCustomer={activeExpedition?.label}
-            pinnedAddress={activeExpedition?.detail}
-            onSecureCargo={completeExpeditionObjective}
+            pinnedCustomer={
+              activeExpedition?.kind === "local_target_run"
+                ? activeExpedition.currentTarget.name
+                : activeExpedition?.label
+            }
+            pinnedAddress={
+              activeExpedition?.kind === "local_target_run"
+                ? activeExpedition.currentTarget.address
+                : activeExpedition?.detail
+            }
+            // A LOCAL_TARGET_RUN has no single "collect" action — real
+            // progress is written only by a confirmed Field Intel capture
+            // (markLocalTargetRunTargetVisited), never by a tap here. See
+            // completeExpeditionObjective's own guard for the same rule.
+            onSecureCargo={
+              activeExpedition?.kind === "local_target_run"
+                ? undefined
+                : completeExpeditionObjective
+            }
             onLogSignal={props.onOpenLogSignal}
             teachingHint={teachingHint}
             cargoPhase={cargoPhase}
             completionActionLabel={
               activeExpedition?.kind === "open_channel" ? "SEAL THE WORK" : "SECURE CARGO"
             }
+            missionProgress={missionContextProgress}
             // Provenance travels with the objective. External work is marked
             // at the threshold AND on arrival, so there is no moment where the
-            // operator could take it for a native Laundry Butler order.
+            // operator could take it for a native Laundry Butler order. A
+            // simulated target run is marked the same honest way — never
+            // presented as if it were real sourcing.
             provenanceLabel={
               preparedObjective?.kind === "external_order"
                 ? externalProvenanceLabel({
                     sourceSystem: preparedObjective.sourceSystem,
                   })
-                : null
+                : activeExpedition?.kind === "local_target_run" &&
+                    activeExpedition.simulated
+                  ? "SIMULATED · PLACES UNAVAILABLE"
+                  : null
             }
             reconciliationLabel={
               externalReconciliation

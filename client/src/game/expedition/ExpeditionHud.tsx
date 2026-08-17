@@ -78,8 +78,26 @@ export type ExpeditionHudProps = {
    */
   pinnedCustomer?: string;
   pinnedAddress?: string;
+  /**
+   * Absent for a LOCAL_TARGET_RUN — there is no single "collect" action to
+   * confirm (see completeExpeditionObjective's guard). When absent, the
+   * arrived state shows real progress and points at LOG A SIGNAL instead
+   * of a dead SECURE CARGO button.
+   */
   onSecureCargo?: () => void;
   cargoPhase?: CargoPhase;
+  /**
+   * §PR77 Part 14/17/20. Real, server-owned progress for a LOCAL_TARGET_RUN
+   * — null for every other objective kind. `visitedCount`/`totalCount` come
+   * straight from the mission's `visitedTargetIds`/`sourcedTargets`, never
+   * re-derived here.
+   */
+  missionProgress?: {
+    progressLabel: string;
+    visitedCount: number;
+    totalCount: number;
+    simulated: boolean;
+  } | null;
   /**
    * AUTHORITATIVE. True only once server truth says the pinned order is
    * genuinely collected — never set from the mutation returning.
@@ -142,6 +160,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     pinnedCustomer,
     pinnedAddress,
     onSecureCargo,
+    missionProgress = null,
     cargoPhase = "idle",
     cargoSecured = false,
     completionActionLabel = "SECURE CARGO",
@@ -463,6 +482,15 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
                 {provenanceLabel}
               </p>
             ) : null}
+            {missionProgress ? (
+              <p
+                className="expedition-mission-sheet__progress"
+                data-testid="expedition-mission-sheet-progress"
+              >
+                {missionProgress.progressLabel} · {missionProgress.visitedCount} OF{" "}
+                {missionProgress.totalCount} VISITED
+              </p>
+            ) : null}
             {objectiveDetail ? (
               <p
                 className="expedition-mission-sheet__detail"
@@ -591,6 +619,15 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
             </p>
           ) : null}
 
+          {missionProgress ? (
+            <p
+              className="expedition-terminal__progress"
+              data-testid="expedition-target-run-progress"
+            >
+              {missionProgress.visitedCount} OF {missionProgress.totalCount} VISITED
+            </p>
+          ) : null}
+
           {cargoSecured ? (
             <>
               <p
@@ -631,7 +668,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
             >
               {verifyingLabel}
             </p>
-          ) : (
+          ) : onSecureCargo ? (
             <>
               {cargoPhase === "failed" ? (
                 <p
@@ -650,6 +687,16 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
                 {completionActionLabel}
               </button>
             </>
+          ) : (
+            // A LOCAL_TARGET_RUN has no collect action — real progress comes
+            // only from a confirmed Field Intel capture (LOG A SIGNAL,
+            // rendered just below). No dead button standing in for it.
+            <p
+              className="expedition-terminal__verifying"
+              data-testid="target-run-awaiting-signal"
+            >
+              LOG A SIGNAL TO RECORD THIS VISIT AND ADVANCE
+            </p>
           )}
 
           {/*

@@ -27,6 +27,7 @@ const EXTRACTION_MODEL = "claude-opus-5";
 const STOP_PHRASE: Record<OperatorStopIdentity["entityType"], string> = {
   native_order: "pickup or delivery stop",
   external_order: "job owned by another system",
+  sourced_target: "sourced local business the operator is visiting",
 };
 
 const EXTRACTION_SYSTEM = [
