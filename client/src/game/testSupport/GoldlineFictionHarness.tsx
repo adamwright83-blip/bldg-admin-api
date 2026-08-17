@@ -18,6 +18,7 @@ import type {
 import type { DriverSafeSalesIntel } from "../../../../shared/driverSafeSalesIntel";
 import type { Order } from "@shared/types";
 import type { CollectedEvidenceOrder } from "../expedition/strongholdRestoration";
+import type { OpenChannelMission } from "../../../../server/openChannel/openChannelTypes";
 
 /**
  * How long the fixture waits before authoritative evidence reports the
@@ -275,8 +276,30 @@ function readEmptyDayFlag(): boolean {
   return new URLSearchParams(window.location.search).get("goldlineEmptyDay") === "1";
 }
 
+/**
+ * A day with no native orders but a briefing the operator has ALREADY given
+ * and approved.
+ *
+ * Deliberately its own flag rather than riding on `goldlineEmptyDay`. An
+ * empty day means genuinely nothing to do, and three specs assert exactly
+ * that — Goldline must ask for a truthful briefing rather than leave
+ * Trailblazer aimless. Attaching an approved Open Channel mission to that
+ * flag makes the day no longer empty and breaks those assertions, correctly.
+ * This is the state AFTER the briefing: zero orders, real approved work.
+ */
+function readOpenChannelDayFlag(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    new URLSearchParams(window.location.search).get("goldlineOpenChannelDay") ===
+    "1"
+  );
+}
+
 export default function GoldlineFictionHarness() {
   const emptyDay = useRef(readEmptyDayFlag()).current;
+  const openChannelDay = useRef(readOpenChannelDayFlag()).current;
+  /** Both fixtures represent a day with no Laundry Butler-native route work. */
+  const noNativeOrders = emptyDay || openChannelDay;
   const [coveredCount, setCoveredCount] = useState(0);
   const [driverSafeSalesIntel, setDriverSafeSalesIntel] =
     useState<DriverSafeSalesIntel | null>({
@@ -290,7 +313,7 @@ export default function GoldlineFictionHarness() {
   // expired) so Slice 96's dynamic reprojection can be proven against a
   // live UI re-render, not just the pure-function unit tests.
   const [liveStopCount, setLiveStopCount] = useState(
-    emptyDay ? 0 : ROUTE_STOP_COUNT
+    noNativeOrders ? 0 : ROUTE_STOP_COUNT
   );
   // Test-only: lets a browser test exercise a genuine no-address route stop
   // (CASE B — truthful unavailable treatment) without altering the other
@@ -302,7 +325,7 @@ export default function GoldlineFictionHarness() {
   // has no address on file (CASE C — fails closed truthfully); one delivery
   // is genuinely unpaid (payment-blocked, cannot be bypassed by fiction).
   const [pickupOrders, setPickupOrders] = useState<Order[]>(
-    emptyDay
+    noNativeOrders
       ? []
       : [
           fixtureOrder({ id: 9300, firstName: "Pickup", lastName: "Alpha" }),
@@ -323,7 +346,7 @@ export default function GoldlineFictionHarness() {
   const [collectedEvidence, setCollectedEvidence] = useState<
     CollectedEvidenceOrder[]
   >(() =>
-    emptyDay
+    noNativeOrders
       ? []
       : readFixtureServerEvidence([
           { id: 9100, status: "delivered" },
@@ -331,7 +354,103 @@ export default function GoldlineFictionHarness() {
         ])
   );
 
-  const [deliveryOrders, setDeliveryOrders] = useState<Order[]>(emptyDay ? [] : [
+  /**
+   * A real ZERO-ORDER DAY, as an operator actually has one.
+   *
+   * PR #71 made the expedition shell objective-agnostic so an approved Open
+   * Channel task can prepare the heartbeat when no Laundry Butler-native
+   * pickup exists. Nothing exercised that path: this harness supplied no
+   * openChannelMission at all, so `prepareExpeditionObjective` could only
+   * ever take its native-pickup branch here. The headline behaviour of #71
+   * was covered by a markdown acceptance file and four pure-function unit
+   * tests, none of which mount the HUD or press anything.
+   *
+   * These tasks are the operator's own real words — design the door hanger,
+   * send it to the printer, walk existing collateral to nearby shops. They
+   * are real operational work with no revenue attached, which is exactly the
+   * case that must play without inventing a customer.
+   */
+  const [openChannelMission, setOpenChannelMission] =
+    useState<OpenChannelMission | null>(() =>
+      openChannelDay
+        ? {
+            id: "fixture-open-channel-1",
+            businessDate: "2026-08-13",
+            status: "active",
+            title: "OPEN NEW GROUND",
+            operatorBriefing:
+              "No orders today. Finish the door hanger, send it to the printer, then walk the collateral I already have to the barbers on the block.",
+            transcript:
+              "No orders today. Finish the door hanger, send it to the printer, then walk the collateral I already have to the barbers on the block.",
+            generationSource: "deterministic_fallback",
+            gapStartedAt: "2026-08-13T09:00:00.000Z",
+            nextCommitmentAt: null,
+            availableMinutes: 240,
+            approvedAt: "2026-08-13T09:05:00.000Z",
+            completedAt: null,
+            tasks: [
+              {
+                id: "task-forge-the-message",
+                position: 0,
+                title: "Finish the door hanger design",
+                detail: "Export print-ready artwork for the block campaign.",
+                estimatedMinutes: 60,
+                category: "sales",
+                navigationQuery: null,
+                status: "pending",
+                completedAt: null,
+              },
+              {
+                id: "task-send-to-press",
+                position: 1,
+                title: "Send the hanger to the printer",
+                detail: "Hand the finished file to the print shop on 3rd.",
+                estimatedMinutes: 30,
+                category: "operations",
+                navigationQuery: "print shop 3rd street",
+                status: "pending",
+                completedAt: null,
+              },
+            ],
+          }
+        : null
+    );
+
+  /**
+   * The fixture's stand-in for the canonical `openChannel.completeTask`
+   * write. It marks the pinned task completed the way the server would —
+   * on its own delay, so VERIFYING remains observable and a returned
+   * mutation is never mistaken for confirmed truth.
+   */
+  function completeFixtureOpenChannelTask(
+    missionId: string,
+    taskId: string
+  ): boolean {
+    if (!openChannelMission || openChannelMission.id !== missionId) return false;
+    const task = openChannelMission.tasks.find(row => row.id === taskId);
+    if (!task || task.status === "completed") return false;
+    window.setTimeout(() => {
+      setOpenChannelMission(current =>
+        current
+          ? {
+              ...current,
+              tasks: current.tasks.map(row =>
+                row.id === taskId
+                  ? {
+                      ...row,
+                      status: "completed" as const,
+                      completedAt: "2026-08-13T10:00:00.000Z",
+                    }
+                  : row
+              ),
+            }
+          : current
+      );
+    }, SERVER_TRUTH_DELAY_MS);
+    return true;
+  }
+
+  const [deliveryOrders, setDeliveryOrders] = useState<Order[]>(noNativeOrders ? [] : [
     fixtureOrder({
       id: 9310,
       firstName: "Delivery",
@@ -529,9 +648,11 @@ export default function GoldlineFictionHarness() {
     onOpenNewOrder: () => undefined,
     onOpenJournal: () => undefined,
     onResolveDay: async () => undefined,
+    openChannelMission,
     onGenerateOpenChannel: async () => undefined,
     onApproveOpenChannel: async () => undefined,
-    onCompleteOpenChannelTask: async () => false,
+    onCompleteOpenChannelTask: async (missionId, taskId) =>
+      completeFixtureOpenChannelTask(missionId, taskId),
     onBeginRekindle: async () => historicalNode(),
     coldCallEligibleCount: 0,
     coldCallEmptyReason: "No fixture targets",
