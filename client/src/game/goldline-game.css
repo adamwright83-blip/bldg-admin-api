@@ -1169,7 +1169,10 @@
   bottom: max(7px, env(safe-area-inset-bottom));
   height: 60px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* Columns follow the children rather than a hardcoded count, so adding an
+     action can never silently wrap this fixed-height bar into a second row. */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   padding: 4px;
   border: 1px solid #6ddce878;
   border-radius: 12px 12px 7px 7px;
@@ -1197,6 +1200,11 @@
 }
 .game-utility-bar svg {
   width: 18px;
+}
+/* Five items at 393px leaves ~74px per cell; keep the label inside it. */
+.game-utility-bar a,
+.game-utility-bar button {
+  font-size: 13px;
 }
 .game-utility-bar [aria-disabled="true"] {
   opacity: 0.35;
@@ -3588,4 +3596,200 @@
  * and both remain reachable. */
 .expedition-threshold {
   bottom: 328px;
+}
+
+/* --------------------------------------------------------- LOG A SIGNAL
+
+   Capture has to be fast enough to use between buildings, so this is a sheet
+   with one big microphone and one confirm — not a form. If it ever grows a
+   field per observation it has stopped doing its job, because the whole point
+   is holding things nobody built a field for. */
+.log-signal {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 1rem);
+  background: rgba(4, 12, 18, 0.97);
+  color: #f6efe1;
+  overflow-y: auto;
+}
+
+.log-signal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: #63e8ff;
+}
+
+.log-signal__header button {
+  background: none;
+  border: 0;
+  color: inherit;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.log-signal__where {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #ffd166;
+}
+
+.log-signal__capture,
+.log-signal__review {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* The microphone is the primary action and is sized to be hit without looking. */
+.log-signal__mic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  min-height: 96px;
+  border-radius: 18px;
+  border: 1.5px solid rgba(99, 232, 255, 0.7);
+  background: radial-gradient(
+    circle at 50% 40%,
+    rgba(99, 232, 255, 0.14),
+    rgba(4, 22, 31, 0.9)
+  );
+  color: #63e8ff;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+
+.log-signal__mic.is-listening {
+  border-color: rgba(255, 209, 102, 0.9);
+  color: #ffd166;
+  animation: log-signal-listening 1.4s ease-in-out infinite;
+}
+
+@keyframes log-signal-listening {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 209, 102, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 26px 4px rgba(255, 209, 102, 0.28);
+  }
+}
+
+.log-signal textarea,
+.log-signal input,
+.log-signal select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.6rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid rgba(246, 239, 225, 0.28);
+  background: rgba(8, 18, 24, 0.9);
+  color: #f6efe1;
+  font-size: 1rem;
+}
+
+.log-signal__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.log-signal__rows li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.7rem;
+  border-radius: 12px;
+  border: 1px solid rgba(99, 232, 255, 0.25);
+  background: rgba(6, 16, 22, 0.7);
+}
+
+.log-signal__rows li button {
+  align-self: flex-start;
+  min-height: 40px;
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 99, 58, 0.6);
+  background: none;
+  color: #f4633a;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.log-signal__tracking {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #ffd166;
+  font-style: normal;
+}
+
+/* Provenance is stated on the confirm screen, so the operator sees what they
+   are actually asserting: their own observation, not a verified fact. */
+.log-signal__provenance {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: rgba(99, 232, 255, 0.85);
+}
+
+.log-signal__actions {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.log-signal__actions button {
+  flex: 1;
+  min-height: 56px;
+  border-radius: 999px;
+  border: 1px solid rgba(246, 239, 225, 0.35);
+  background: none;
+  color: #f6efe1;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.log-signal__primary {
+  min-height: 56px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 209, 102, 0.85);
+  background: linear-gradient(
+    180deg,
+    rgba(28, 24, 18, 0.92),
+    rgba(14, 12, 9, 0.96)
+  );
+  color: #ffd166;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.log-signal__warning,
+.log-signal__error {
+  margin: 0;
+  font-size: 0.76rem;
+  color: #f4633a;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .log-signal__mic.is-listening {
+    animation: none;
+  }
 }

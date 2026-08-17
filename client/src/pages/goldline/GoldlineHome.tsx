@@ -142,6 +142,12 @@ export type GoldlineHomeProps = {
   onOpenNewOrder: () => void;
   /** Bring externally-managed work (CleanCloud) into the day. */
   onOpenAddExternalWork?: () => void;
+  /**
+   * Capture a field observation right now. Reachable while operating the day —
+   * the whole value is that a realisation at a doorstep becomes durable before
+   * it is forgotten.
+   */
+  onOpenLogSignal?: () => void;
   onOpenJournal: () => void;
   onResolveDay: () => Promise<void>;
   onOpenDispatch?: () => Promise<void>;
@@ -340,6 +346,7 @@ export default function GoldlineHome({
   onOpenWalkIn,
   onOpenNewOrder,
   onOpenAddExternalWork,
+  onOpenLogSignal,
   onOpenJournal,
   onResolveDay,
   onOpenDispatch,
@@ -507,14 +514,26 @@ export default function GoldlineHome({
     );
   }
 
+  /**
+   * The four sprite actions. This list is exactly four long on purpose: the icon
+   * strip is a four-frame atlas, so a fifth entry here has no frame to draw and
+   * spills the fixed grid into a second row. New utilities go in `utilityItems`.
+   */
   const actionItems = [
     { label: "BUILD MISSION", action: () => setPanel("build") },
     { label: "NEW ORDER", action: onOpenNewOrder },
+    { label: "LOG A WALK-IN", action: onOpenWalkIn },
+    { label: "UNLOAD THE DAY", action: () => setPanel("unload") },
+  ];
+
+  /** Real-work utilities that arrived after the sprite sheet was drawn. */
+  const utilityItems = [
     ...(onOpenAddExternalWork
       ? [{ label: "ADD WORK", action: onOpenAddExternalWork }]
       : []),
-    { label: "LOG A WALK-IN", action: onOpenWalkIn },
-    { label: "UNLOAD THE DAY", action: () => setPanel("unload") },
+    ...(onOpenLogSignal
+      ? [{ label: "LOG A SIGNAL", action: onOpenLogSignal }]
+      : []),
   ];
 
   return (
@@ -790,11 +809,27 @@ export default function GoldlineHome({
         </button>
 
         <nav className="action-bar" aria-label="Primary actions">
+          {/*
+            Inside the same grid, spanning every column. Laid out by the bar
+            rather than positioned at a guessed offset above it, so the bar
+            simply grows and the two rows cannot overlap — this screen has
+            shipped that exact bug more than once.
+          */}
+          {utilityItems.length > 0 ? (
+            <div className="utility-strip" role="group" aria-label="Real work">
+              {utilityItems.map(item => (
+                <button key={item.label} onClick={item.action}>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {actionItems.map((item, index) => (
             <button key={item.label} onClick={item.action}>
               <i
                 style={{
                   backgroundImage: `url(${objects})`,
+                  // Four frames across a 400%-wide atlas: 0 / 33.3 / 66.6 / 100.
                   backgroundPosition: `${index * 33.333}% center`,
                 }}
               />

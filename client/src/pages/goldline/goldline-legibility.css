@@ -625,7 +625,7 @@ body,
   gap: 5px;
   background: linear-gradient(transparent, #090908d8 22%, #080807f2 100%);
 }
-.goldline .action-bar button {
+.goldline .action-bar > button {
   min-height: 88px;
   padding: 0 3px 8px;
   border-radius: 8px;
@@ -633,10 +633,10 @@ body,
     inset 0 0 0 2px #0007,
     0 3px 10px #0009;
 }
-.goldline .action-bar i {
+.goldline .action-bar > button > i {
   height: 58px;
 }
-.goldline .action-bar span {
+.goldline .action-bar > button > span {
   min-height: 22px;
   display: grid;
   place-items: center;
@@ -952,13 +952,13 @@ body,
     right: 5px;
     gap: 3px;
   }
-  .goldline .action-bar button {
+  .goldline .action-bar > button {
     min-height: 82px;
   }
-  .goldline .action-bar i {
+  .goldline .action-bar > button > i {
     height: 53px;
   }
-  .goldline .action-bar span {
+  .goldline .action-bar > button > span {
     font-size: 8px;
   }
 }
@@ -1007,10 +1007,10 @@ body,
   .goldline .route-stop > .route-stop-number {
     min-height: 50px;
   }
-  .goldline .action-bar button {
+  .goldline .action-bar > button {
     min-height: 78px;
   }
-  .goldline .action-bar i {
+  .goldline .action-bar > button > i {
     height: 49px;
   }
   .goldline .route-overflow {

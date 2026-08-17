@@ -17,6 +17,12 @@ import type {
 } from "../actions/actionServices";
 import type { DriverSafeSalesIntel } from "../../../../shared/driverSafeSalesIntel";
 import type { Order } from "@shared/types";
+import {
+  toSignalKey,
+  type ImpactSignalProposal,
+  type ProposedImpactSignal,
+} from "../../../../shared/impactSignal";
+import { LogSignalSheet } from "@/components/driver/LogSignalSheet";
 import type { CollectedEvidenceOrder } from "../expedition/strongholdRestoration";
 import type { OpenChannelMission } from "../../../../server/openChannel/openChannelTypes";
 import type { ExternalOperationalOrder } from "../../../../shared/externalOperationalOrder";
@@ -43,6 +49,59 @@ const SERVER_TRUTH_DELAY_MS = 900;
  * re-derives the payoff from whatever this stand-in reports.
  */
 const FIXTURE_SERVER_EVIDENCE_KEY = "goldline-fixture:server-collected-orders";
+
+/**
+ * Field intel the fixture "server" has accepted. Same stand-in trick as the
+ * collected-order evidence above: the app holds nothing, so a reload proves the
+ * capture actually left the sheet.
+ */
+const FIXTURE_SIGNALS_KEY = "goldline-fixture:confirmed-signals";
+
+function readFixtureSignals(): ProposedImpactSignal[] {
+  try {
+    const raw = window.sessionStorage.getItem(FIXTURE_SIGNALS_KEY);
+    return raw ? (JSON.parse(raw) as ProposedImpactSignal[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Stands in for the extraction call. Deliberately dumb — it structures the
+ * sentence without judging it, and never chooses a class stronger than
+ * `field_activity`. The real prompt's refusal to inflate is covered by the
+ * shared model's own tests; what this fixture exercises is the SURFACE: that a
+ * sentence can be captured, seen, corrected, and confirmed on a phone.
+ */
+function proposeFixtureSignals(speech: string): ImpactSignalProposal {
+  const said = speech.trim();
+  const count = said.match(/\b(\d+)\b/)?.[1] ?? null;
+  if (!said) {
+    return { proposalId: "fixture-empty", signals: [], unrecognized: speech };
+  }
+  const label = count ? "Door hangers left" : "Field note";
+  return {
+    proposalId: "fixture-proposal",
+    signals: [
+      {
+        signalKey: toSignalKey(label),
+        label,
+        valueType: count ? "number" : "text",
+        value: count ?? said,
+        unit: count ? "hangers" : null,
+        // Effort, never outcome. A fixture that flattered the operator would
+        // hide exactly the bug this whole feature is guarding against.
+        impactClass: count ? "field_activity" : "observation",
+        entityType: "building",
+        entityLabel: null,
+        notes: null,
+        metadata: null,
+        startsTracking: false,
+      },
+    ],
+    unrecognized: null,
+  };
+}
 
 function readFixtureServerEvidence(
   seed: CollectedEvidenceOrder[]
@@ -403,6 +462,10 @@ export default function GoldlineFictionHarness() {
   // Test-only: simulates a real authoritative change (a stop resolved or
   // expired) so Slice 96's dynamic reprojection can be proven against a
   // live UI re-render, not just the pure-function unit tests.
+  const [logSignalOpen, setLogSignalOpen] = useState(false);
+  const [confirmedSignals, setConfirmedSignals] = useState<
+    ProposedImpactSignal[]
+  >(() => readFixtureSignals());
   const [liveStopCount, setLiveStopCount] = useState(
     noNativeOrders ? 0 : ROUTE_STOP_COUNT
   );
@@ -740,6 +803,7 @@ export default function GoldlineFictionHarness() {
     onAcceptMove: async () => undefined,
     onOpenWalkIn: () => undefined,
     onOpenNewOrder: () => undefined,
+    onOpenLogSignal: () => setLogSignalOpen(true),
     onOpenJournal: () => undefined,
     onResolveDay: async () => undefined,
     openChannelMission,
@@ -831,7 +895,34 @@ export default function GoldlineFictionHarness() {
       <div data-testid="fixture-live-stop-count" style={{ display: "none" }}>
         {liveStopCount}
       </div>
+      {/*
+        The confirmed count is what a reload has to survive: the sheet holds
+        nothing, so if this number persists, the capture genuinely left it.
+      */}
+      <div data-testid="fixture-signal-count" style={{ display: "none" }}>
+        {confirmedSignals.length}
+      </div>
+      <div data-testid="fixture-signal-classes" style={{ display: "none" }}>
+        {confirmedSignals.map(s => s.impactClass).join(",")}
+      </div>
       <GoldlineGameHome {...gameProps} />
+      <LogSignalSheet
+        open={logSignalOpen}
+        onClose={() => setLogSignalOpen(false)}
+        onPropose={async ({ speech }) => proposeFixtureSignals(speech)}
+        onConfirm={async signals => {
+          const next = [...confirmedSignals, ...signals];
+          setConfirmedSignals(next);
+          try {
+            window.sessionStorage.setItem(
+              FIXTURE_SIGNALS_KEY,
+              JSON.stringify(next)
+            );
+          } catch {
+            /* a fixture that cannot persist still runs */
+          }
+        }}
+      />
     </>
   );
 }

@@ -3022,6 +3022,21 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               <Target />
               Intel
             </button>
+            {props.onOpenLogSignal ? (
+              /*
+                Capture lives in the operating bar, not in a menu behind it. The
+                observation worth keeping happens at a doorstep, and anything
+                more than one tap away from where the operator already is will
+                not survive the walk back to the van.
+              */
+              <button
+                onClick={props.onOpenLogSignal}
+                data-testid="game-log-signal"
+              >
+                <Radio />
+                Signal
+              </button>
+            ) : null}
           </nav>
         )}
 
