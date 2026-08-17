@@ -777,6 +777,31 @@ export class ExpeditionLayer {
   }
 
   /**
+   * Read-only observability for verification (§PR77 Part 7). Never used to
+   * cause an outcome — combat is still driven exclusively through
+   * tryStrike/tryBasicLash/fireLine from real player input. This exists
+   * only so an external harness can PROVE a real touch changed real
+   * hostile state, without writing HP or calling defeat internals itself.
+   */
+  getHostileSummary(): Array<{
+    id: string;
+    kind: string;
+    hp: number;
+    alive: boolean;
+    progress: number;
+    telegraphing: boolean;
+  }> {
+    return this.hostiles.map(h => ({
+      id: h.id,
+      kind: h.kind,
+      hp: h.hp,
+      alive: h.alive,
+      progress: h.x,
+      telegraphing: h.isTelegraphing(),
+    }));
+  }
+
+  /**
    * Fires the Line at the currently locked target. Ends aim unconditionally
    * — including on a miss, e.g. the locked hostile died or left range in
    * the frame between lock and release (§PR77 no dead press). Leaving
