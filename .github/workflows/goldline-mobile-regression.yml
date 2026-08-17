@@ -5,6 +5,13 @@ on:
     paths:
       - "client/src/game/**"
       - "client/src/pages/driver/GoldlineDriverController.tsx"
+      # The Goldline page surfaces are part of the playable path, not
+      # adjacent to it. OpenChannel.tsx owns the empty-day ignition and the
+      # resume banner that realDayIgnition/emptyDayTruth/firstThirtySeconds
+      # all exercise — and it was NOT covered here, so a change that broke
+      # the front door of the app could merge without this gate ever
+      # running. That is exactly how it broke.
+      - "client/src/pages/goldline/**"
       - "client/src/components/driver/SalesMomentum.tsx"
       - "server/commercialMissions/driverSalesMotivationService.ts"
       - "server/commercialMissions/driverSalesJournalResilience.test.ts"
