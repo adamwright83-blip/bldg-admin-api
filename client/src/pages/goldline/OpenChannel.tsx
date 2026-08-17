@@ -145,13 +145,33 @@ export default function OpenChannel({
   // Empty-day ignition is driven by the exact same playable state that renders
   // NO ACTIVE OBJECTIVE in GoldlineGameHome. Never infer business/game truth
   // by scraping rendered DOM or test ids.
+  /**
+   * Auto-ignition ARMS the surface. It must never retract it.
+   *
+   * `shouldAutoIgnite` means "the operator has nothing to do". Approving a
+   * day is precisely the moment that stops being true — so the previous
+   * `setAutoOpen(shouldAutoIgnite)` closed the briefing on the very click
+   * that made it useful. The operator pressed CONFIRM THIS IS MY DAY and
+   * was ejected into the world before they could see the objective they had
+   * just created. Succeeding at the task the surface exists for is not a
+   * reason to take the surface away.
+   *
+   * So it opens on the RISING edge only, and closes when the operator
+   * closes it. A later genuinely-empty day re-arms it.
+   */
+  const wasIgnitableRef = useRef(false);
   useEffect(() => {
     if (open) {
       setAutoOpen(false);
+      wasIgnitableRef.current = shouldAutoIgnite;
       return;
     }
-    setAutoOpen(shouldAutoIgnite);
-    if (!shouldAutoIgnite) setAutoDismissed(false);
+    const rearmed = shouldAutoIgnite && !wasIgnitableRef.current;
+    wasIgnitableRef.current = shouldAutoIgnite;
+    if (rearmed) {
+      setAutoDismissed(false);
+      setAutoOpen(true);
+    }
   }, [open, shouldAutoIgnite]);
 
   const effectiveOpen = open || (autoOpen && !autoDismissed);
@@ -331,8 +351,22 @@ export default function OpenChannel({
     0
   );
 
+  /**
+   * The collapsed surface still has something TRUE to say whenever the
+   * operator has approved work that is not finished yet.
+   *
+   * This used to render only while `shouldAutoIgnite` held — i.e. only while
+   * the day was empty. The moment an approved task existed, the day stopped
+   * being empty and the whole surface returned null, taking the
+   * "CURRENT REAL OBJECTIVE · TAP TO CONTINUE" banner with it. That banner's
+   * entire purpose is to point at an approved objective, so it could only
+   * ever appear in the one state where no approved objective existed. It was
+   * unreachable by construction.
+   */
+  const hasResumableObjective = Boolean(firstPendingTask);
+
   if (!effectiveOpen) {
-    if (!shouldAutoIgnite) return null;
+    if (!shouldAutoIgnite && !hasResumableObjective) return null;
     return (
       <button
         type="button"
