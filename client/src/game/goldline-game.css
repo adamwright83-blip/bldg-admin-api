@@ -3518,3 +3518,74 @@
     opacity: 0.9;
   }
 }
+
+/* ------------------------------------------------- external provenance
+
+   Gold is Laundry Butler's own truth. Cyan is work owned by another system.
+   The Gold Line itself stays gold — provenance is an accent on the objective,
+   never a recolouring of the world, because the world is the same world
+   whoever happens to own the paperwork. */
+.expedition-threshold__provenance,
+.expedition-terminal__provenance {
+  margin: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #63e8ff;
+  text-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.9),
+    0 0 18px rgba(99, 232, 255, 0.45);
+}
+
+/* The second statement, kept visually separate from CARGO SECURED so a
+   secured bag can never be read as a synced external system. */
+.expedition-terminal__reconciliation {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #63e8ff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+}
+
+.expedition-terminal__reconcile {
+  min-height: 48px;
+  padding: 0 1.4rem;
+  border-radius: 999px;
+  border: 1.5px solid rgba(99, 232, 255, 0.8);
+  background: linear-gradient(
+    180deg,
+    rgba(6, 26, 34, 0.94),
+    rgba(3, 14, 19, 0.96)
+  );
+  color: #63e8ff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+/* A disabled stick is a control the player cannot use, and in a terminal
+   state its label collided with the terminal strip's own text — "MOVE" showing
+   through "CLEAN CLOUD · UPDATE REQUIRED". Fading it out removes the collision
+   without moving anything: the layout is unchanged, only a dead control stops
+   competing for the same pixels. */
+.game-joystick.is-disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Two invitations to the same objective, stacked rather than overlapping.
+ *
+ * The Open Channel resume banner is pinned at bottom:216px (its own comment
+ * explains it was put there to clear the movement stick). The expedition
+ * threshold was at 25vh — 213px on a 393x852 phone — so the banner landed on
+ * top of ENTER THE LINE and swallowed the tap.
+ *
+ * Hiding one was the wrong fix: they say different things. The banner is the
+ * world's "you have work" signal and reopens the briefing; the threshold is
+ * the way into the expedition. realDayIgnition rightly asserts the banner is
+ * present after RETURN TO WORLD. So the threshold sits ABOVE the banner's band
+ * and both remain reachable. */
+.expedition-threshold {
+  bottom: 328px;
+}

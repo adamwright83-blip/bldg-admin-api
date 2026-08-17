@@ -19,6 +19,7 @@ import type { DriverSafeSalesIntel } from "../../../../shared/driverSafeSalesInt
 import type { Order } from "@shared/types";
 import type { CollectedEvidenceOrder } from "../expedition/strongholdRestoration";
 import type { OpenChannelMission } from "../../../../server/openChannel/openChannelTypes";
+import type { ExternalOperationalOrder } from "../../../../shared/externalOperationalOrder";
 
 /**
  * How long the fixture waits before authoritative evidence reports the
@@ -287,6 +288,20 @@ function readEmptyDayFlag(): boolean {
  * flag makes the day no longer empty and breaks those assertions, correctly.
  * This is the state AFTER the briefing: zero orders, real approved work.
  */
+/**
+ * A day whose work is owned by CleanCloud, not Laundry Butler.
+ *
+ * Its own flag because it is a genuinely different operational situation from
+ * both an empty day and a native-order day: real customers waiting, real
+ * addresses to drive to, and an external system this app cannot update.
+ */
+function readExternalDayFlag(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    new URLSearchParams(window.location.search).get("goldlineExternalDay") === "1"
+  );
+}
+
 function readOpenChannelDayFlag(): boolean {
   if (typeof window === "undefined") return false;
   return (
@@ -298,8 +313,84 @@ function readOpenChannelDayFlag(): boolean {
 export default function GoldlineFictionHarness() {
   const emptyDay = useRef(readEmptyDayFlag()).current;
   const openChannelDay = useRef(readOpenChannelDayFlag()).current;
+  const externalDay = useRef(readExternalDayFlag()).current;
   /** Both fixtures represent a day with no Laundry Butler-native route work. */
-  const noNativeOrders = emptyDay || openChannelDay;
+  const noNativeOrders = emptyDay || openChannelDay || externalDay;
+
+  /**
+   * Real CleanCloud work, as the driver surface receives it. Starts confirmed
+   * and scheduled — the review gate is exercised by the intake tests, not by
+   * every expedition run.
+   */
+  const [externalOrders, setExternalOrders] = useState<ExternalOperationalOrder[]>(
+    () =>
+      externalDay
+        ? [
+            {
+              id: "3f0b8c11-77aa-4c1e-9a52-6d2e4b8f0c31",
+              sourceSystem: "cleancloud",
+              ingestionMethod: "screenshot",
+              externalOrderId: "CC-4471",
+              jobKind: "pickup",
+              customerName: "Miso",
+              address: "Opus LA, 1601 Vine St",
+              scheduledDate: "2026-08-13",
+              windowStart: "09:00",
+              windowEnd: "11:00",
+              notes: "Comforter",
+              operationalStatus: "scheduled",
+              completedAt: null,
+              reconciliationStatus: "update_required",
+              reconciledAt: null,
+              reviewState: "confirmed",
+              importBatchId: null,
+              createdAt: "2026-08-13T08:00:00.000Z",
+            },
+          ]
+        : []
+  );
+
+  /**
+   * The physical work happened. Mirrors the real service: it sets operational
+   * truth and pointedly leaves reconciliation at `update_required`, because
+   * nothing in this build can tell CleanCloud anything.
+   */
+  function completeFixtureExternalOrder(id: string): boolean {
+    const target = externalOrders.find(row => row.id === id);
+    if (!target || target.operationalStatus === "completed") return false;
+    window.setTimeout(() => {
+      setExternalOrders(current =>
+        current.map(row =>
+          row.id === id
+            ? {
+                ...row,
+                operationalStatus: "completed" as const,
+                completedAt: "2026-08-13T10:00:00.000Z",
+              }
+            : row
+        )
+      );
+    }, SERVER_TRUTH_DELAY_MS);
+    return true;
+  }
+
+  /** The operator states they updated CleanCloud. Never a verification. */
+  function reconcileFixtureExternalOrder(id: string): boolean {
+    const target = externalOrders.find(row => row.id === id);
+    if (!target || target.operationalStatus !== "completed") return false;
+    setExternalOrders(current =>
+      current.map(row =>
+        row.id === id
+          ? {
+              ...row,
+              reconciliationStatus: "reconciled" as const,
+              reconciledAt: "2026-08-13T10:05:00.000Z",
+            }
+          : row
+      )
+    );
+    return true;
+  }
   const [coveredCount, setCoveredCount] = useState(0);
   const [driverSafeSalesIntel, setDriverSafeSalesIntel] =
     useState<DriverSafeSalesIntel | null>({
@@ -640,6 +731,9 @@ export default function GoldlineFictionHarness() {
     pickups: pickupOrders,
     deliveries: deliveryOrders,
     collectedOrderEvidence: collectedEvidence,
+    externalOrders,
+    onCompleteExternalOrder: async id => completeFixtureExternalOrder(id),
+    onReconcileExternalOrder: async id => reconcileFixtureExternalOrder(id),
     isResolvingOrder: false,
     onResolveOrder: async (orderId, status) =>
       resolveFixtureOrder(orderId, status),

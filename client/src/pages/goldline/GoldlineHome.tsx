@@ -140,6 +140,8 @@ export type GoldlineHomeProps = {
   onAcceptMove: (move: FieldMoveCandidate) => Promise<void>;
   onOpenWalkIn: () => void;
   onOpenNewOrder: () => void;
+  /** Bring externally-managed work (CleanCloud) into the day. */
+  onOpenAddExternalWork?: () => void;
   onOpenJournal: () => void;
   onResolveDay: () => Promise<void>;
   onOpenDispatch?: () => Promise<void>;
@@ -337,6 +339,7 @@ export default function GoldlineHome({
   onAcceptMove,
   onOpenWalkIn,
   onOpenNewOrder,
+  onOpenAddExternalWork,
   onOpenJournal,
   onResolveDay,
   onOpenDispatch,
@@ -507,6 +510,9 @@ export default function GoldlineHome({
   const actionItems = [
     { label: "BUILD MISSION", action: () => setPanel("build") },
     { label: "NEW ORDER", action: onOpenNewOrder },
+    ...(onOpenAddExternalWork
+      ? [{ label: "ADD WORK", action: onOpenAddExternalWork }]
+      : []),
     { label: "LOG A WALK-IN", action: onOpenWalkIn },
     { label: "UNLOAD THE DAY", action: () => setPanel("unload") },
   ];
@@ -1252,6 +1258,13 @@ export default function GoldlineHome({
           open={panel === "open-channel"}
           mission={openChannelMission}
           gap={openChannelGap}
+          // Empty-day ignition belongs to the game shell, which is the surface
+          // that knows whether a playable objective exists. This instance
+          // opens only when the operator asks for it. Passing `false`
+          // explicitly preserves exactly the behaviour this render site
+          // already had — the prop was simply never supplied, which is why it
+          // sat in the TypeScript baseline as an error.
+          shouldAutoIgnite={false}
           isGenerating={isGeneratingOpenChannel}
           isApproving={isApprovingOpenChannel}
           onClose={() => setPanel(null)}

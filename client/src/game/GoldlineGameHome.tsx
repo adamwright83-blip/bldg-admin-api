@@ -94,6 +94,11 @@ import {
 } from "./audio/haptics";
 import { planPickupExpedition } from "./expedition/expeditionPlan";
 import {
+  externalProvenanceLabel,
+  externalReconciliationLabel,
+  type ExternalOperationalOrder,
+} from "../../../shared/externalOperationalOrder";
+import {
   prepareExpeditionObjective,
   type PreparedExpeditionObjective,
 } from "./expedition/expeditionObjective";
@@ -259,6 +264,20 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
    * place. No new endpoint, no new table, no ledger.
    */
   collectedOrderEvidence?: readonly CollectedEvidenceOrder[];
+  /**
+   * Externally-managed operational work (CleanCloud and hand-entered jobs).
+   * Real work this business physically does, for orders it does not own the
+   * billing for — see shared/externalOperationalOrder.ts.
+   */
+  externalOrders?: readonly ExternalOperationalOrder[];
+  /**
+   * Records that the PHYSICAL work happened. Deliberately cannot report
+   * anything about the owning external system, because this build has no API
+   * access to it.
+   */
+  onCompleteExternalOrder?: (id: string) => Promise<boolean>;
+  /** The operator states they updated the external system themselves. */
+  onReconcileExternalOrder?: (id: string) => Promise<boolean>;
   authoritativeVisitRoute?: AuthoritativeVisitRouteProjection | null;
   authoritativeRouteCoverage?: number;
   isStartingVisitRoute?: boolean;
@@ -805,8 +824,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             ? nextOrderObjective.order
             : null,
         openChannelMission: props.openChannelMission ?? null,
+        externalOrders: props.externalOrders,
       }),
-    [nextOrderObjective, props.openChannelMission]
+    [nextOrderObjective, props.openChannelMission, props.externalOrders]
   );
   // Keep the typed action surface mounted across its own authoritative
   // refetch. A winning/closed write legitimately removes the mission from
@@ -1548,13 +1568,51 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       task =>
         task.id === activeExpedition.taskId && task.status === "completed"
     );
+  /**
+   * External work is confirmed by the SAME rule as everything else: refreshed
+   * authoritative state, not the mutation returning. The evidence here is our
+   * own external record reporting the physical work complete — which is a
+   * genuine fact this app owns. It says nothing about CleanCloud, which is
+   * why the reconciliation badge is a separate signal entirely.
+   */
+  const pinnedExternalOrderCompleted =
+    activeExpedition?.kind === "external_order" &&
+    (props.externalOrders ?? []).some(
+      order =>
+        order.id === activeExpedition.externalOrderId &&
+        order.operationalStatus === "completed"
+    );
   const objectiveConfirmed = Boolean(
     activeExpedition?.kind === "native_pickup"
       ? pinnedOrderCollected
       : activeExpedition?.kind === "open_channel"
         ? pinnedOpenChannelTaskCompleted
-        : false
+        : activeExpedition?.kind === "external_order"
+          ? pinnedExternalOrderCompleted
+          : false
   );
+
+  /**
+   * True while any completed external job still owes its owning system an
+   * update. This is real outstanding work, and the rest of the app has to
+   * treat it as such rather than as an idle day.
+   */
+  const externalReconciliationOutstanding = (props.externalOrders ?? []).some(
+    order =>
+      order.operationalStatus === "completed" &&
+      order.reconciliationStatus === "update_required"
+  );
+
+  /**
+   * What the operator still owes the owning system, once the physical work is
+   * done. Null for native work — there is no other system to update.
+   */
+  const externalReconciliation =
+    activeExpedition?.kind === "external_order"
+      ? ((props.externalOrders ?? []).find(
+          order => order.id === activeExpedition.externalOrderId
+        ) ?? null)
+      : null;
 
   /** The honest pickup before/after, both derived from real evidence. */
   const payoffDelta = useMemo(
@@ -1589,16 +1647,24 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     if (cargoPhase === "verifying") return;
     setCargoPhase("verifying");
     try {
+      // ONE ADAPTER PER PROVENANCE. Each objective kind resolves through the
+      // canonical write of the system that actually owns it — and can reach no
+      // other. An external job cannot touch a native order, and a native
+      // pickup cannot touch external state.
       const ok =
         activeExpedition.kind === "native_pickup"
           ? await props.actionServices.resolveOrder({
               orderId: activeExpedition.orderId,
               status: "collected",
             })
-          : await props.onCompleteOpenChannelTask(
-              activeExpedition.missionId,
-              activeExpedition.taskId
-            );
+          : activeExpedition.kind === "external_order"
+            ? await (props.onCompleteExternalOrder?.(
+                activeExpedition.externalOrderId
+              ) ?? Promise.resolve(false))
+            : await props.onCompleteOpenChannelTask(
+                activeExpedition.missionId,
+                activeExpedition.taskId
+              );
       // The adapter returning only means its canonical write was accepted.
       // The HUD remains VERIFYING until the corresponding authoritative query
       // reports the pinned objective resolved.
@@ -1611,6 +1677,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     cargoPhase,
     props.actionServices,
     props.onCompleteOpenChannelTask,
+    props.onCompleteExternalOrder,
   ]);
 
   /**
@@ -2390,6 +2457,36 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             completionActionLabel={
               activeExpedition?.kind === "open_channel" ? "SEAL THE WORK" : "SECURE CARGO"
             }
+            // Provenance travels with the objective. External work is marked
+            // at the threshold AND on arrival, so there is no moment where the
+            // operator could take it for a native Laundry Butler order.
+            provenanceLabel={
+              preparedObjective?.kind === "external_order"
+                ? externalProvenanceLabel({
+                    sourceSystem: preparedObjective.sourceSystem,
+                  })
+                : null
+            }
+            reconciliationLabel={
+              externalReconciliation
+                ? externalReconciliationLabel(externalReconciliation)
+                : null
+            }
+            onReconcile={
+              externalReconciliation &&
+              externalReconciliation.operationalStatus === "completed" &&
+              externalReconciliation.reconciliationStatus === "update_required" &&
+              props.onReconcileExternalOrder
+                ? () =>
+                    void props.onReconcileExternalOrder?.(
+                      externalReconciliation.id
+                    )
+                : undefined
+            }
+            reconcileActionLabel={`I UPDATED ${externalProvenanceLabel({
+              sourceSystem:
+                externalReconciliation?.sourceSystem ?? "manual_external",
+            })}`}
             confirmedLabel={
               activeExpedition?.kind === "open_channel" ? "WORK SEALED" : "CARGO SECURED"
             }
@@ -3236,7 +3333,16 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           mission={props.openChannelMission}
           gap={openChannelGap}
           shouldAutoIgnite={
-            !action && !activeMission && !nextOrderObjective && !preparedObjective
+            !action &&
+            !activeMission &&
+            !nextOrderObjective &&
+            !preparedObjective &&
+            // An outstanding external update is WORK, so the day is not empty
+            // and the briefing must not auto-open over it. Without this,
+            // finishing a CleanCloud job made the day look finished and the
+            // ignition overlay opened on top of the very control the operator
+            // needed next — "I UPDATED CLEAN CLOUD".
+            !externalReconciliationOutstanding
           }
           isGenerating={Boolean(props.isGeneratingOpenChannel)}
           isApproving={Boolean(props.isApprovingOpenChannel)}

@@ -132,3 +132,6 @@ tmp/goldline-heartbeat-frames/
 
 # Goldline zero-order day frames
 tmp/goldline-openchannel-frames/
+
+# Goldline external-order frames
+tmp/goldline-external-frames/

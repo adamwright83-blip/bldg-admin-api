@@ -73,6 +73,21 @@ export type ExpeditionHudProps = {
   confirmedLabel?: string;
   verifyingLabel?: string;
   failedLabel?: string;
+  /**
+   * Which system owns this objective. Native work says nothing; externally
+   * managed work is marked so the operator can never mistake it for an order
+   * this business originated.
+   */
+  provenanceLabel?: string | null;
+  /**
+   * What the operator still owes the owning system after the physical work is
+   * done — e.g. "CLEAN CLOUD · UPDATE REQUIRED". Never a claim that this app
+   * checked anything.
+   */
+  reconciliationLabel?: string | null;
+  /** Present only while an external update is genuinely outstanding. */
+  onReconcile?: () => void;
+  reconcileActionLabel?: string;
 };
 
 /** Forward, up the corridor — the aim when the thumb has not been dragged. */
@@ -103,6 +118,10 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     confirmedLabel = "CARGO SECURED",
     verifyingLabel = "VERIFYING SERVER TRUTH",
     failedLabel = "PICKUP NOT RECORDED — STILL PENDING",
+    provenanceLabel = null,
+    reconciliationLabel = null,
+    onReconcile,
+    reconcileActionLabel = "I UPDATED IT",
   } = props;
 
   const padRef = useRef<HTMLDivElement | null>(null);
@@ -245,6 +264,14 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     return (
       <div className="expedition-threshold" data-testid="expedition-threshold">
         <p className="expedition-threshold__objective">{objectiveLabel}</p>
+        {provenanceLabel ? (
+          <p
+            className="expedition-threshold__provenance"
+            data-testid="expedition-provenance"
+          >
+            {provenanceLabel}
+          </p>
+        ) : null}
         <p className="expedition-threshold__ready">EXPEDITION READY</p>
         <button
           type="button"
@@ -368,13 +395,48 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
             {pinnedAddress}
           </p>
 
-          {cargoSecured ? (
+          {provenanceLabel ? (
             <p
-              className="expedition-terminal__headline is-secured"
-              data-testid="cargo-secured"
+              className="expedition-terminal__provenance"
+              data-testid="expedition-provenance"
             >
-              {confirmedLabel}
+              {provenanceLabel}
             </p>
+          ) : null}
+
+          {cargoSecured ? (
+            <>
+              <p
+                className="expedition-terminal__headline is-secured"
+                data-testid="cargo-secured"
+              >
+                {confirmedLabel}
+              </p>
+              {/*
+                The second, separate statement. CARGO SECURED is about the
+                bag; this is about the other system's books. They are shown
+                apart because they are different facts, and merging them would
+                let a secured pickup imply CleanCloud had been told.
+              */}
+              {reconciliationLabel ? (
+                <p
+                  className="expedition-terminal__reconciliation"
+                  data-testid="external-reconciliation"
+                >
+                  {reconciliationLabel}
+                </p>
+              ) : null}
+              {onReconcile ? (
+                <button
+                  type="button"
+                  className="expedition-terminal__reconcile"
+                  data-testid="external-reconcile"
+                  onClick={onReconcile}
+                >
+                  {reconcileActionLabel}
+                </button>
+              ) : null}
+            </>
           ) : cargoPhase === "verifying" ? (
             <p
               className="expedition-terminal__verifying"

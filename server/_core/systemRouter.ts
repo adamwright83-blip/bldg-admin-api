@@ -24,6 +24,7 @@ import { armoryRouter } from "../armory/armoryRouter";
 import { capabilityRouter } from "../capabilities/capabilityRouter";
 import { teamRouter } from "../team/teamRouter";
 import { openChannelRouter } from "../openChannel/openChannelRouter";
+import { externalOrderRouter } from "../externalOrders/externalOrderRouter";
 import { driverGameWorldRouter } from "../driverGameWorld/driverGameWorldRouter";
 import { salesIntelRouter } from "../salesIntel/salesIntelRouter";
 import { goldlineEventRouter } from "../dayforgeEvents/goldlineEventRouter";
@@ -52,6 +53,7 @@ export const systemRouter = router({
   capabilities: capabilityRouter,
   team: teamRouter,
   openChannel: openChannelRouter,
+  externalOrders: externalOrderRouter,
   driverGameWorld: driverGameWorldRouter,
   salesIntel: salesIntelRouter,
   goldlineEvents: goldlineEventRouter,
