@@ -25,8 +25,8 @@ export type PreparedExpeditionObjective =
   | OpenChannelExpeditionObjective;
 
 /**
- * Deterministic fictional seed. It may vary expedition dressing but
- * can never create, erase, or resolve business truth.
+ * Deterministic fictional seed for non-order objectives. It may vary
+ * expedition dressing but can never create, erase, or resolve business truth.
  */
 export function stableObjectiveSeed(key: string): number {
   let hash = 2166136261;
@@ -40,10 +40,11 @@ export function stableObjectiveSeed(key: string): number {
 /**
  * One truthful bridge into the expedition shell.
  *
- * Native pickup keeps priority when one is genuinely due. Otherwise
- * the first pending, human-approved Open Channel task becomes the
- * expedition objective. No task is invented here and completed tasks
- * can never re-enter the run.
+ * Native pickup keeps priority when one is genuinely due. Its expedition seed
+ * remains the real order id so PR #70's deterministic pickup composition does
+ * not change. Otherwise the first pending, human-approved Open Channel task
+ * becomes the expedition objective. No task is invented here and completed
+ * tasks can never re-enter the run.
  */
 export function prepareExpeditionObjective(input: {
   pickup: Order | null;
@@ -55,7 +56,7 @@ export function prepareExpeditionObjective(input: {
     return {
       kind: "native_pickup",
       key,
-      planSeed: stableObjectiveSeed(key),
+      planSeed: input.pickup.id,
       label:
         `${input.pickup.firstName ?? ""} ${input.pickup.lastName ?? ""}`.trim() ||
         `Order #${input.pickup.id}`,
