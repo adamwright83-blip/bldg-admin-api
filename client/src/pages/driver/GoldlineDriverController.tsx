@@ -19,6 +19,7 @@ import type {
   ColdCallBatch,
   ColdCallTarget,
 } from "../../../../shared/coldCallBurst";
+import type { OperatorLocationHint } from "../../../../shared/impactSignal";
 import type { RealActionRequest } from "../../game/encounters/RealActionBridge";
 import type {
   GoldlineActionServices,
@@ -38,6 +39,29 @@ import {
  * observation to a missing foreign key would defeat the entire feature.
  */
 const RESCUE_RUN_CAMPAIGN_ID = "rescue-10day";
+
+/**
+ * Order evidence, or nothing.
+ *
+ * `?? []` only guards null and undefined. Anything else non-iterable — an
+ * unexpected envelope, a paginated shape, a single object — throws inside the
+ * spread and takes the whole driver screen down to "An unexpected error
+ * occurred". That is a catastrophic response to a cosmetic problem: the
+ * Stronghold payoff is a reward, and Adam mid-route needs the route.
+ *
+ * Absent evidence is already a state this app renders honestly — it shows no
+ * restoration, which is exactly right, because unreadable evidence is not
+ * proof that a pickup happened.
+ */
+function evidenceRows(
+  data: unknown
+): Array<{ id: number; status: string }> {
+  if (!Array.isArray(data)) return [];
+  return data.filter(
+    (row): row is { id: number; status: string } =>
+      typeof row?.id === "number" && typeof row?.status === "string"
+  );
+}
 
 function getLocalYmd(date = new Date()): string {
   return [
@@ -108,6 +132,8 @@ function LiveGoldlineDriverController() {
   const [newOrderOpen, setNewOrderOpen] = useState(false);
   const [addExternalWorkOpen, setAddExternalWorkOpen] = useState(false);
   const [logSignalOpen, setLogSignalOpen] = useState(false);
+  const [operatorLocation, setOperatorLocation] =
+    useState<OperatorLocationHint | null>(null);
   const [journalOpen, setJournalOpen] = useState(false);
   const [dayResolution, setDayResolution] = useState<DayResolution | null>(
     null
@@ -169,10 +195,10 @@ function LiveGoldlineDriverController() {
   const collectedOrderEvidence = useMemo(
     () =>
       [
-        ...(collectedOrders.data ?? []),
-        ...(processingOrders.data ?? []),
-        ...(readyOrders.data ?? []),
-        ...(deliveredOrders.data ?? []),
+        ...evidenceRows(collectedOrders.data),
+        ...evidenceRows(processingOrders.data),
+        ...evidenceRows(readyOrders.data),
+        ...evidenceRows(deliveredOrders.data),
       ].map(order => ({ id: order.id, status: order.status })),
     [
       collectedOrders.data,
@@ -1021,6 +1047,7 @@ function LiveGoldlineDriverController() {
     onOpenNewOrder: () => setNewOrderOpen(true),
     onOpenAddExternalWork: () => setAddExternalWorkOpen(true),
     onOpenLogSignal: () => setLogSignalOpen(true),
+    onOperatorLocationChange: setOperatorLocation,
     onOpenJournal: () => setJournalOpen(true),
     onResolveDay: handleResolveDay,
     onOpenDispatch: activeDispatch ? handleOpenDispatch : undefined,
@@ -1085,6 +1112,9 @@ function LiveGoldlineDriverController() {
       <LogSignalSheet
         open={logSignalOpen}
         onClose={() => setLogSignalOpen(false)}
+        // Only ever what the game shell reported as a real arrival. Null the
+        // rest of the time, which both the sheet and the prompt handle.
+        entityHint={operatorLocation}
         onPropose={input => proposeSignal.mutateAsync(input)}
         onConfirm={async signals => {
           await confirmSignal.mutateAsync({
