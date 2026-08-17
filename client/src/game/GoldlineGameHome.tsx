@@ -1945,6 +1945,26 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeExpedition, expeditionSnapshot.outcome, teachingVersion]);
 
+  /**
+   * §PR77 Part 17 mission-context sheet content. `detail` is an address for
+   * native_pickup/external_order (so Navigate is offered) but free task
+   * text for open_channel — never offered as a destination.
+   */
+  const missionContextObjective = activeExpedition ?? preparedObjective;
+  const missionContextDetail = missionContextObjective?.detail ?? null;
+  const missionContextNavigationUrl = useMemo(() => {
+    if (!missionContextObjective) return null;
+    if (
+      missionContextObjective.kind !== "native_pickup" &&
+      missionContextObjective.kind !== "external_order"
+    ) {
+      return null;
+    }
+    const address = missionContextObjective.detail?.trim();
+    if (!address) return null;
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+  }, [missionContextObjective]);
+
   useEffect(() => {
     runtimeRef.current?.setAgentPresence(agentWorldPresence);
   }, [agentWorldPresence, runtimeReady]);
@@ -2590,6 +2610,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             objectiveLabel={
               activeExpedition?.label ?? preparedObjective?.label ?? ""
             }
+            objectiveDetail={missionContextDetail}
+            objectiveNavigationUrl={missionContextNavigationUrl}
             hp={expeditionSnapshot.hp}
             maxHp={EXPEDITION.maxHp}
             momentum={expeditionSnapshot.momentum}

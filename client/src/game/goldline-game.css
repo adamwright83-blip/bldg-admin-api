@@ -3315,7 +3315,19 @@
   max-width: 58vw;
 }
 
+/* §PR77 Part 17: now a real button (tap for mission context), so button
+   chrome is reset back to how the plain label used to read. */
 .expedition-hud__objective {
+  display: block;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -3324,6 +3336,80 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Secondary, on-demand mission context (§PR77 Part 17) — a sheet, not a
+   dashboard: title, provenance, detail, one navigate action, nothing more. */
+.expedition-mission-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: auto;
+}
+
+.expedition-mission-sheet__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 7, 5, 0.55);
+}
+
+.expedition-mission-sheet__card {
+  position: absolute;
+  left: 0.9rem;
+  right: 0.9rem;
+  top: calc(env(safe-area-inset-top, 0px) + 4.6rem);
+  padding: 1rem 1.1rem 1.1rem;
+  border-radius: 14px;
+  background: rgba(16, 13, 10, 0.94);
+  border: 1px solid rgba(255, 209, 102, 0.4);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+.expedition-mission-sheet__close {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.7rem;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(12, 10, 8, 0.55);
+  color: rgba(246, 239, 225, 0.85);
+  font-size: 0.85rem;
+}
+
+.expedition-mission-sheet__label {
+  margin: 0 1.8rem 0.3rem 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f6efe1;
+}
+
+.expedition-mission-sheet__provenance {
+  margin: 0 0 0.4rem 0;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(255, 209, 102, 0.85);
+}
+
+.expedition-mission-sheet__detail {
+  margin: 0 0 0.8rem 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: rgba(246, 239, 225, 0.82);
+}
+
+.expedition-mission-sheet__navigate {
+  display: inline-block;
+  padding: 0.5rem 1.1rem;
+  border-radius: 999px;
+  background: rgba(255, 209, 102, 0.92);
+  color: #1a1206;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-decoration: none;
 }
 
 .expedition-hud__bar {

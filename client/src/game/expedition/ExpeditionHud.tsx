@@ -48,6 +48,20 @@ export type ExpeditionHudProps = {
   onEnter: () => void;
   /** Compact real objective identity — the only business text on screen. */
   objectiveLabel: string;
+  /**
+   * §PR77 Part 17. The compact objective is interactive: tapping it opens a
+   * lightweight, secondary mission-context surface rather than replacing
+   * the game with a dashboard. This is the detail line shown there (e.g.
+   * an address or a task's free-text detail) — never re-derived, always
+   * whatever the caller already resolved for this exact objective.
+   */
+  objectiveDetail?: string | null;
+  /**
+   * Present only when the detail is a genuine, navigable address (native
+   * pickups and external orders carry one; an Open Channel task's detail
+   * is free text and must not be offered as a destination).
+   */
+  objectiveNavigationUrl?: string | null;
   hp: number;
   maxHp: number;
   momentum: number;
@@ -115,6 +129,8 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     active,
     onEnter,
     objectiveLabel,
+    objectiveDetail = null,
+    objectiveNavigationUrl = null,
     hp,
     maxHp,
     momentum,
@@ -161,6 +177,16 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
 
   /** Mirrors padModel's lock so the label can say RELEASE · HOOK live. */
   const [locked, setLocked] = useState(false);
+
+  /**
+   * §PR77 Part 17. Secondary, on-demand context — never a replacement for
+   * the game. Closed whenever the run leaves the RUNNING state so it can
+   * never linger open over a terminal (down/arrived) screen it predates.
+   */
+  const [missionSheetOpen, setMissionSheetOpen] = useState(false);
+  useEffect(() => {
+    if (terminalState !== "running") setMissionSheetOpen(false);
+  }, [terminalState]);
 
   const padModel = useRef(
     new ActionPad({
@@ -354,12 +380,21 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
   return (
     <div className="expedition-hud" data-testid="expedition-hud">
       <div className="expedition-hud__status">
-        <span
+        {/*
+          §PR77 Part 17. ONE compact objective owner during active
+          gameplay, and it is interactive: tapping it opens secondary
+          context rather than replacing the game with a dashboard.
+        */}
+        <button
+          type="button"
           className="expedition-hud__objective"
           data-testid="expedition-objective"
+          onClick={() => setMissionSheetOpen(open => !open)}
+          aria-expanded={missionSheetOpen}
+          aria-label={`Objective: ${objectiveLabel}. Tap for details.`}
         >
           {objectiveLabel}
-        </span>
+        </button>
         <span className="expedition-hud__bar expedition-hud__bar--hp">
           <span style={{ width: `${hpPct}%` }} data-testid="expedition-hp" />
         </span>
@@ -394,6 +429,62 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
       >
         ✕
       </button>
+
+      {/*
+        §PR77 Part 17 mission-context sheet. Secondary and on-demand: the
+        long/original briefing lives here, not continuously repeated over
+        the playfield. Never blocks or replaces MOVE/the pad — it is closed
+        the instant the run leaves RUNNING (see the effect above).
+      */}
+      {missionSheetOpen && terminalState === "running" ? (
+        <div
+          className="expedition-mission-sheet"
+          data-testid="expedition-mission-sheet"
+          role="dialog"
+          aria-label="Mission context"
+        >
+          <div
+            className="expedition-mission-sheet__backdrop"
+            onClick={() => setMissionSheetOpen(false)}
+          />
+          <div className="expedition-mission-sheet__card">
+            <button
+              type="button"
+              className="expedition-mission-sheet__close"
+              data-testid="expedition-mission-sheet-close"
+              onClick={() => setMissionSheetOpen(false)}
+              aria-label="Close mission context"
+            >
+              ✕
+            </button>
+            <p className="expedition-mission-sheet__label">{objectiveLabel}</p>
+            {provenanceLabel ? (
+              <p className="expedition-mission-sheet__provenance">
+                {provenanceLabel}
+              </p>
+            ) : null}
+            {objectiveDetail ? (
+              <p
+                className="expedition-mission-sheet__detail"
+                data-testid="expedition-mission-sheet-detail"
+              >
+                {objectiveDetail}
+              </p>
+            ) : null}
+            {objectiveNavigationUrl ? (
+              <a
+                className="expedition-mission-sheet__navigate"
+                data-testid="expedition-mission-sheet-navigate"
+                href={objectiveNavigationUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                NAVIGATE
+              </a>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {/*
         RUNNING is MOVE + ACT and nothing more. The pad is removed outright
