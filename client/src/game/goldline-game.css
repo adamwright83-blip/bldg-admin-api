@@ -3518,3 +3518,48 @@
     opacity: 0.9;
   }
 }
+
+/* ------------------------------------------------- external provenance
+
+   Gold is Laundry Butler's own truth. Cyan is work owned by another system.
+   The Gold Line itself stays gold — provenance is an accent on the objective,
+   never a recolouring of the world, because the world is the same world
+   whoever happens to own the paperwork. */
+.expedition-threshold__provenance,
+.expedition-terminal__provenance {
+  margin: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #63e8ff;
+  text-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.9),
+    0 0 18px rgba(99, 232, 255, 0.45);
+}
+
+/* The second statement, kept visually separate from CARGO SECURED so a
+   secured bag can never be read as a synced external system. */
+.expedition-terminal__reconciliation {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #63e8ff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+}
+
+.expedition-terminal__reconcile {
+  min-height: 48px;
+  padding: 0 1.4rem;
+  border-radius: 999px;
+  border: 1.5px solid rgba(99, 232, 255, 0.8);
+  background: linear-gradient(
+    180deg,
+    rgba(6, 26, 34, 0.94),
+    rgba(3, 14, 19, 0.96)
+  );
+  color: #63e8ff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}

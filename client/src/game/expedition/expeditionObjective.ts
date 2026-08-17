@@ -1,5 +1,9 @@
 import type { Order } from "@shared/types";
 import type { OpenChannelMission } from "../../../../server/openChannel/openChannelTypes";
+import {
+  isPlayableExternalOrder,
+  type ExternalOperationalOrder,
+} from "../../../../shared/externalOperationalOrder";
 
 export type NativePickupExpeditionObjective = {
   kind: "native_pickup";
@@ -20,9 +24,28 @@ export type OpenChannelExpeditionObjective = {
   taskId: string;
 };
 
+/**
+ * Real work owned by another system — a CleanCloud pickup or dropoff.
+ *
+ * Carries its provenance in the type, not as a flag on the side, so no
+ * consumer can render or complete one of these without having had to see
+ * which system actually owns it.
+ */
+export type ExternalOrderExpeditionObjective = {
+  kind: "external_order";
+  key: string;
+  planSeed: number;
+  label: string;
+  detail: string;
+  externalOrderId: string;
+  sourceSystem: ExternalOperationalOrder["sourceSystem"];
+  jobKind: ExternalOperationalOrder["jobKind"];
+};
+
 export type PreparedExpeditionObjective =
   | NativePickupExpeditionObjective
-  | OpenChannelExpeditionObjective;
+  | OpenChannelExpeditionObjective
+  | ExternalOrderExpeditionObjective;
 
 /**
  * Deterministic fictional seed for non-order objectives. It may vary
@@ -49,6 +72,7 @@ export function stableObjectiveSeed(key: string): number {
 export function prepareExpeditionObjective(input: {
   pickup: Order | null;
   openChannelMission: OpenChannelMission | null;
+  externalOrders?: readonly ExternalOperationalOrder[];
 }): PreparedExpeditionObjective | null {
   const pickupAddress = input.pickup?.address?.trim();
   if (input.pickup && pickupAddress) {
@@ -62,6 +86,27 @@ export function prepareExpeditionObjective(input: {
         `Order #${input.pickup.id}`,
       detail: pickupAddress,
       orderId: input.pickup.id,
+    };
+  }
+
+  // Externally-managed work outranks an Open Channel task: a customer waiting
+  // on a pickup is time-bound in a way that "finish the door hanger" is not.
+  // It sits below a native pickup only because that one is this business's own
+  // obligation end to end.
+  const external = (input.externalOrders ?? []).find(isPlayableExternalOrder);
+  if (external) {
+    const key = `external:${external.id}`;
+    return {
+      kind: "external_order",
+      key,
+      // A fictional seed, deliberately NOT the external id: expedition
+      // dressing must never be derivable from another system's identifiers.
+      planSeed: stableObjectiveSeed(key),
+      label: external.customerName,
+      detail: external.address?.trim() || "Address not recorded",
+      externalOrderId: external.id,
+      sourceSystem: external.sourceSystem,
+      jobKind: external.jobKind,
     };
   }
 

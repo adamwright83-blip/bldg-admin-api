@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { createGoldlineEventEmitter } from "../../game/analytics/emitGoldlineEvent";
 import { QuickNewOrderSheet } from "@/components/driver/QuickNewOrderSheet";
+import { AddExternalWorkSheet } from "@/components/driver/AddExternalWorkSheet";
 import { SalesJournalSheet } from "@/components/driver/SalesMomentum";
 import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
 import GoldlineHome from "../goldline/GoldlineHome";
@@ -97,6 +98,7 @@ function LiveGoldlineDriverController() {
   const [selectedDate, setSelectedDate] = useState(() => getLocalYmd());
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [newOrderOpen, setNewOrderOpen] = useState(false);
+  const [addExternalWorkOpen, setAddExternalWorkOpen] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
   const [dayResolution, setDayResolution] = useState<DayResolution | null>(
     null
@@ -170,6 +172,26 @@ function LiveGoldlineDriverController() {
       deliveredOrders.data,
     ]
   );
+  /**
+   * Externally-managed operational work for the selected day — CleanCloud jobs
+   * imported from screenshots, plus anything entered by hand. Real work this
+   * business physically does; not orders it originated or bills for.
+   */
+  const externalOrders = trpc.system.externalOrders.list.useQuery(
+    { scheduledDate: selectedDate },
+    { refetchInterval: 20_000, retry: false }
+  );
+  const extractExternalDay =
+    trpc.system.externalOrders.extractFromScreenshots.useMutation();
+  const confirmExternalImport =
+    trpc.system.externalOrders.confirmImport.useMutation();
+  const createManualExternalOrder =
+    trpc.system.externalOrders.createManual.useMutation();
+  const completeExternalOrder =
+    trpc.system.externalOrders.complete.useMutation();
+  const reconcileExternalOrder =
+    trpc.system.externalOrders.reconcile.useMutation();
+
   const fieldToday = trpc.system.field.today.useQuery(undefined, {
     refetchInterval: 30_000,
   });
@@ -976,6 +998,7 @@ function LiveGoldlineDriverController() {
     onAcceptMove: handleAcceptMove,
     onOpenWalkIn: () => setWalkInOpen(true),
     onOpenNewOrder: () => setNewOrderOpen(true),
+    onOpenAddExternalWork: () => setAddExternalWorkOpen(true),
     onOpenJournal: () => setJournalOpen(true),
     onResolveDay: handleResolveDay,
     onOpenDispatch: activeDispatch ? handleOpenDispatch : undefined,
@@ -1017,6 +1040,19 @@ function LiveGoldlineDriverController() {
           onRecordWeaponUsage={input => recordWeaponUsage.mutateAsync(input)}
           actionServices={actionServices}
           collectedOrderEvidence={collectedOrderEvidence}
+          externalOrders={externalOrders.data ?? []}
+          onCompleteExternalOrder={async id => {
+            const updated = await completeExternalOrder.mutateAsync({ id });
+            // Refetch so the HUD's confirmation reads refreshed authoritative
+            // state rather than this mutation's return value.
+            await externalOrders.refetch();
+            return updated?.operationalStatus === "completed";
+          }}
+          onReconcileExternalOrder={async id => {
+            const updated = await reconcileExternalOrder.mutateAsync({ id });
+            await externalOrders.refetch();
+            return updated?.reconciliationStatus === "reconciled";
+          }}
           authoritativeVisitRoute={visitRoute.data}
           authoritativeRouteCoverage={visitRoute.data?.coveredCount ?? 0}
           isStartingVisitRoute={startVisitRoute.isPending}
@@ -1024,6 +1060,26 @@ function LiveGoldlineDriverController() {
           onEmitEvent={emitGoldlineEvent}
         />
       </Suspense>
+      <AddExternalWorkSheet
+        open={addExternalWorkOpen}
+        onClose={() => setAddExternalWorkOpen(false)}
+        onExtract={images => extractExternalDay.mutateAsync({ images })}
+        onConfirmImport={async input => {
+          await confirmExternalImport.mutateAsync({
+            ...input,
+            sourceSystem: "cleancloud",
+          });
+          await externalOrders.refetch();
+        }}
+        onCreateManual={async job => {
+          await createManualExternalOrder.mutateAsync({
+            ...job,
+            sourceSystem: "cleancloud",
+            ingestionMethod: "manual",
+          });
+          await externalOrders.refetch();
+        }}
+      />
       <QuickNewOrderSheet
         open={newOrderOpen}
         onOpenChange={setNewOrderOpen}

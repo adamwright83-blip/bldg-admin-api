@@ -140,6 +140,8 @@ export type GoldlineHomeProps = {
   onAcceptMove: (move: FieldMoveCandidate) => Promise<void>;
   onOpenWalkIn: () => void;
   onOpenNewOrder: () => void;
+  /** Bring externally-managed work (CleanCloud) into the day. */
+  onOpenAddExternalWork?: () => void;
   onOpenJournal: () => void;
   onResolveDay: () => Promise<void>;
   onOpenDispatch?: () => Promise<void>;
@@ -337,6 +339,7 @@ export default function GoldlineHome({
   onAcceptMove,
   onOpenWalkIn,
   onOpenNewOrder,
+  onOpenAddExternalWork,
   onOpenJournal,
   onResolveDay,
   onOpenDispatch,
@@ -507,6 +510,9 @@ export default function GoldlineHome({
   const actionItems = [
     { label: "BUILD MISSION", action: () => setPanel("build") },
     { label: "NEW ORDER", action: onOpenNewOrder },
+    ...(onOpenAddExternalWork
+      ? [{ label: "ADD WORK", action: onOpenAddExternalWork }]
+      : []),
     { label: "LOG A WALK-IN", action: onOpenWalkIn },
     { label: "UNLOAD THE DAY", action: () => setPanel("unload") },
   ];

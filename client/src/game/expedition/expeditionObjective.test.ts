@@ -91,3 +91,144 @@ describe("prepareExpeditionObjective", () => {
     expect(stableObjectiveSeed("open-channel:day-1:task-1")).toBeGreaterThan(0);
   });
 });
+
+describe("externally-managed work becomes playable without becoming native", () => {
+  const externalJob = (
+    overrides: Partial<ExternalOperationalOrder> = {}
+  ): ExternalOperationalOrder => ({
+    id: "0f5c2a7e-2b1d-4f6a-9c3e-1a2b3c4d5e6f",
+    sourceSystem: "cleancloud",
+    ingestionMethod: "screenshot",
+    externalOrderId: "CC-4471",
+    jobKind: "pickup",
+    customerName: "Miso",
+    address: "Opus LA",
+    scheduledDate: "2026-08-18",
+    windowStart: "09:00",
+    windowEnd: "11:00",
+    notes: null,
+    operationalStatus: "scheduled",
+    completedAt: null,
+    reconciliationStatus: "update_required",
+    reconciledAt: null,
+    reviewState: "confirmed",
+    importBatchId: null,
+    createdAt: "2026-08-17T09:00:00.000Z",
+    ...overrides,
+  });
+
+  it("prepares a confirmed external job when no native pickup is due", () => {
+    const objective = prepareExpeditionObjective({
+      pickup: null,
+      openChannelMission: null,
+      externalOrders: [externalJob()],
+    });
+    expect(objective?.kind).toBe("external_order");
+    expect(objective?.label).toBe("Miso");
+    expect(objective?.detail).toBe("Opus LA");
+  });
+
+  it("carries provenance in the objective itself", () => {
+    // Not a flag on the side: a consumer cannot render or complete this
+    // without having seen which system owns it.
+    const objective = prepareExpeditionObjective({
+      pickup: null,
+      openChannelMission: null,
+      externalOrders: [externalJob()],
+    });
+    expect(objective).toMatchObject({
+      kind: "external_order",
+      sourceSystem: "cleancloud",
+      jobKind: "pickup",
+    });
+  });
+
+  it("never derives expedition dressing from another system's identifiers", () => {
+    // The fictional seed must not be a function of the CleanCloud order
+    // number — external identifiers are not ours to encode into the world.
+    const a = prepareExpeditionObjective({
+      pickup: null,
+      openChannelMission: null,
+      externalOrders: [externalJob({ externalOrderId: "CC-1" })],
+    });
+    const b = prepareExpeditionObjective({
+      pickup: null,
+      openChannelMission: null,
+      externalOrders: [externalJob({ externalOrderId: "CC-99999" })],
+    });
+    expect(a?.planSeed).toBe(b?.planSeed);
+    expect(a?.planSeed).toBeGreaterThan(0);
+  });
+
+  it("never plays an unreviewed extraction", () => {
+    expect(
+      prepareExpeditionObjective({
+        pickup: null,
+        openChannelMission: null,
+        externalOrders: [externalJob({ reviewState: "pending_review" })],
+      })
+    ).toBeNull();
+  });
+
+  it("never replays completed external work", () => {
+    expect(
+      prepareExpeditionObjective({
+        pickup: null,
+        openChannelMission: null,
+        externalOrders: [externalJob({ operationalStatus: "completed" })],
+      })
+    ).toBeNull();
+  });
+
+  it("keeps a genuine native pickup ahead of external work", () => {
+    // This business's own obligation outranks work it merely performs.
+    const objective = prepareExpeditionObjective({
+      pickup: {
+        id: 9300,
+        address: "200 Fixture Ave",
+        firstName: "Pickup",
+        lastName: "Alpha",
+      } as never,
+      openChannelMission: null,
+      externalOrders: [externalJob()],
+    });
+    expect(objective?.kind).toBe("native_pickup");
+  });
+
+  it("puts a waiting customer ahead of a self-directed growth task", () => {
+    const objective = prepareExpeditionObjective({
+      pickup: null,
+      openChannelMission: {
+        id: "m1",
+        status: "active",
+        tasks: [{ id: "t1", status: "pending", title: "Door hanger", detail: "Design" }],
+      } as never,
+      externalOrders: [externalJob()],
+    });
+    expect(objective?.kind).toBe("external_order");
+  });
+
+  it("falls back to Open Channel when external work is all done", () => {
+    const objective = prepareExpeditionObjective({
+      pickup: null,
+      openChannelMission: {
+        id: "m1",
+        status: "active",
+        tasks: [{ id: "t1", status: "pending", title: "Door hanger", detail: "Design" }],
+      } as never,
+      externalOrders: [externalJob({ operationalStatus: "completed" })],
+    });
+    expect(objective?.kind).toBe("open_channel");
+  });
+
+  it("exposes no native order id on an external objective", () => {
+    // Structural: nothing downstream can accidentally resolve a native order
+    // from a CleanCloud job, because there is no field to reach for.
+    const objective = prepareExpeditionObjective({
+      pickup: null,
+      openChannelMission: null,
+      externalOrders: [externalJob()],
+    });
+    expect(Object.keys(objective ?? {})).not.toContain("orderId");
+  });
+});

@@ -5309,3 +5309,76 @@ export const missionMutations = mysqlTable(
     ),
   })
 );
+
+/**
+ * Externally-managed operational work — real jobs that did not originate in
+ * Laundry Butler.
+ *
+ * Kept out of `orders` on purpose. See 0057_external_operational_orders.sql
+ * for the reasoning: `orders` carries Stripe, resident, vendor-routing and
+ * revenue semantics that must never be inferred for a job this business does
+ * not own the billing for.
+ */
+export const externalOperationalOrders = mysqlTable(
+  "external_operational_orders",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    sourceSystem: mysqlEnum("sourceSystem", [
+      "cleancloud",
+      "manual_external",
+    ]).notNull(),
+    ingestionMethod: mysqlEnum("ingestionMethod", [
+      "screenshot",
+      "manual",
+      "voice",
+    ]).notNull(),
+    externalOrderId: varchar("externalOrderId", { length: 191 }),
+    jobKind: mysqlEnum("jobKind", ["pickup", "dropoff"]).notNull(),
+    customerName: varchar("customerName", { length: 191 }).notNull(),
+    address: varchar("address", { length: 512 }),
+    scheduledDate: varchar("scheduledDate", { length: 10 }),
+    windowStart: varchar("windowStart", { length: 5 }),
+    windowEnd: varchar("windowEnd", { length: 5 }),
+    notes: text("notes"),
+    operationalStatus: mysqlEnum("operationalStatus", [
+      "scheduled",
+      "completed",
+      "cancelled",
+    ])
+      .notNull()
+      .default("scheduled"),
+    completedAt: timestamp("completedAt"),
+    reconciliationStatus: mysqlEnum("reconciliationStatus", [
+      "update_required",
+      "reconciled",
+    ])
+      .notNull()
+      .default("update_required"),
+    reconciledAt: timestamp("reconciledAt"),
+    externalLastVerifiedAt: timestamp("externalLastVerifiedAt"),
+    reviewState: mysqlEnum("reviewState", [
+      "pending_review",
+      "confirmed",
+      "discarded",
+    ])
+      .notNull()
+      .default("pending_review"),
+    importBatchId: varchar("importBatchId", { length: 36 }),
+    confirmedAt: timestamp("confirmedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  table => ({
+    dayIdx: index("idx_external_order_day").on(
+      table.tenantId,
+      table.scheduledDate,
+      table.reviewState
+    ),
+    batchIdx: index("idx_external_order_batch").on(table.importBatchId),
+    reconciliationIdx: index("idx_external_order_reconciliation").on(
+      table.tenantId,
+      table.reconciliationStatus
+    ),
+  })
+);
