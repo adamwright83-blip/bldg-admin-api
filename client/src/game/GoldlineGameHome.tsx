@@ -104,6 +104,7 @@ import {
 } from "../../../shared/externalOperationalOrder";
 import {
   prepareExpeditionObjective,
+  reprojectLocalTargetRunObjective,
   type PreparedExpeditionObjective,
 } from "./expedition/expeditionObjective";
 import { ExpeditionHud } from "./expedition/ExpeditionHud";
@@ -1641,6 +1642,55 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   }, []);
 
   /**
+   * §PR77 Part 20/gate J. Every other objective kind is deliberately pinned
+   * at ENTER (see the ActiveExpedition doc comment above) — but a
+   * LOCAL_TARGET_RUN's progress is written by a Field Intel capture that
+   * happens WHILE the run is already active (markLocalTargetRunTargetVisited,
+   * server-side), and the operator is standing right there when it lands.
+   * Making them exit and re-enter just to see "TARGET 2 OF 3" would be
+   * exactly the kind of dead, confusing UI Adam's own playtest is about.
+   * This re-derives ONLY the target-run view fields from the live mission —
+   * never the pin itself, never any other objective kind.
+   */
+  useEffect(() => {
+    if (activeExpedition?.kind !== "local_target_run") return;
+    const mission = props.openChannelMission ?? null;
+    if (!mission || mission.id !== activeExpedition.missionId) return;
+    const task = mission.tasks.find(row => row.id === activeExpedition.taskId);
+    if (!task) return;
+    // Every sourced target visited: reprojectLocalTargetRunObjective returns
+    // null here (there is no "current" target left to point at), but the
+    // progress figure itself must still catch up to reality rather than
+    // freezing one visit short of the truth. Keep the last known target for
+    // display — objectiveConfirmed/cargoSecured takes over the headline.
+    if (task.status === "completed" && activeExpedition.visitedCount < activeExpedition.totalCount) {
+      setActiveExpedition(current =>
+        current && current.kind === "local_target_run"
+          ? { ...current, visitedCount: current.totalCount }
+          : current
+      );
+      return;
+    }
+    const refreshed = reprojectLocalTargetRunObjective(
+      activeExpedition.missionId,
+      activeExpedition.taskId,
+      mission
+    );
+    if (!refreshed) return;
+    if (
+      refreshed.currentTarget.id === activeExpedition.currentTarget.id &&
+      refreshed.visitedCount === activeExpedition.visitedCount
+    ) {
+      return;
+    }
+    setActiveExpedition(current =>
+      current && current.kind === "local_target_run"
+        ? { ...current, ...refreshed }
+        : current
+    );
+  }, [activeExpedition, props.openChannelMission]);
+
+  /**
    * SECURE CARGO's local phase. Deliberately NOT a completion state:
    *
    *   idle      — the player has not pressed it
@@ -1685,6 +1735,20 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         order.id === activeExpedition.externalOrderId &&
         order.operationalStatus === "completed"
     );
+  /**
+   * §PR77 Part 20. markLocalTargetRunTargetVisited marks the parent task
+   * "completed" the same way completeOpenChannelTask does, once every sourced
+   * target has a recorded visit — read the same way pinnedOpenChannelTaskCompleted
+   * does, so a finished referral run gets the same real completion payoff as
+   * every other objective kind instead of silently going stale.
+   */
+  const pinnedLocalTargetRunCompleted =
+    activeExpedition?.kind === "local_target_run" &&
+    props.openChannelMission?.id === activeExpedition.missionId &&
+    props.openChannelMission.tasks.some(
+      task =>
+        task.id === activeExpedition.taskId && task.status === "completed"
+    );
   const objectiveConfirmed = Boolean(
     activeExpedition?.kind === "native_pickup"
       ? pinnedOrderCollected
@@ -1692,7 +1756,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         ? pinnedOpenChannelTaskCompleted
         : activeExpedition?.kind === "external_order"
           ? pinnedExternalOrderCompleted
-          : false
+          : activeExpedition?.kind === "local_target_run"
+            ? pinnedLocalTargetRunCompleted
+            : false
   );
 
   /**
@@ -2683,7 +2749,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             teachingHint={teachingHint}
             cargoPhase={cargoPhase}
             completionActionLabel={
-              activeExpedition?.kind === "open_channel" ? "SEAL THE WORK" : "SECURE CARGO"
+              activeExpedition?.kind === "open_channel"
+                ? "SEAL THE WORK"
+                : activeExpedition?.kind === "local_target_run"
+                  ? "RUN COMPLETE"
+                  : "SECURE CARGO"
             }
             missionProgress={missionContextProgress}
             // Provenance travels with the objective. External work is marked
@@ -2696,8 +2766,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 ? externalProvenanceLabel({
                     sourceSystem: preparedObjective.sourceSystem,
                   })
-                : activeExpedition?.kind === "local_target_run" &&
-                    activeExpedition.simulated
+                : (activeExpedition?.kind === "local_target_run"
+                      ? activeExpedition.simulated
+                      : preparedObjective?.kind === "local_target_run" &&
+                        preparedObjective.simulated)
                   ? "SIMULATED · PLACES UNAVAILABLE"
                   : null
             }
@@ -2722,7 +2794,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 externalReconciliation?.sourceSystem ?? "manual_external",
             })}`}
             confirmedLabel={
-              activeExpedition?.kind === "open_channel" ? "WORK SEALED" : "CARGO SECURED"
+              activeExpedition?.kind === "open_channel"
+                ? "WORK SEALED"
+                : activeExpedition?.kind === "local_target_run"
+                  ? "RUN COMPLETE — EVERY TARGET VISITED"
+                  : "CARGO SECURED"
             }
             failedLabel={
               activeExpedition?.kind === "open_channel"

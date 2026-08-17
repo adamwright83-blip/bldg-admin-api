@@ -83,7 +83,7 @@ export type PreparedExpeditionObjective =
  * completeOpenChannelTask-equivalent server logic marks the task itself
  * completed at that point, but this guards the read side too).
  */
-function prepareLocalTargetRunObjective(
+export function prepareLocalTargetRunObjective(
   missionId: string,
   taskId: string,
   payload: LocalTargetRunPayload
@@ -91,7 +91,12 @@ function prepareLocalTargetRunObjective(
   const currentTarget = currentLocalTargetRunTarget(payload);
   const progressLabel = localTargetRunProgressLabel(payload);
   if (!currentTarget || !progressLabel) return null;
-  const key = `local-target-run:${missionId}:${taskId}:${currentTarget.id}`;
+  // Stable for the WHOLE run, not per-target: this key seeds the corridor
+  // (planSeed) and is what the runtime-mount effect in GoldlineGameHome is
+  // keyed on. A visit-driven target change must update the HUD in place —
+  // it must never tear down and regenerate a fresh corridor for every one
+  // of what could be ten real stops (see reprojectLocalTargetRunObjective).
+  const key = `local-target-run:${missionId}:${taskId}`;
   return {
     kind: "local_target_run",
     key,
@@ -106,6 +111,33 @@ function prepareLocalTargetRunObjective(
     totalCount: payload.sourcedTargets.length,
     simulated: payload.simulated,
   };
+}
+
+/**
+ * §PR77 Part 20/gate J. A LOCAL_TARGET_RUN is the one objective kind whose
+ * real-world progress can change WHILE the expedition is already running —
+ * a confirmed Field Intel capture at the doorstep (markLocalTargetRunTargetVisited)
+ * advances `visitedTargetIds` server-side, and the operator should see the
+ * next target immediately rather than having to exit and re-enter. Every
+ * other objective kind is deliberately pinned at entry (see GoldlineGameHome's
+ * `activeExpedition` doc comment) and must NOT use this — re-deriving those
+ * from a live query mid-run is the exact bug that comment guards against.
+ *
+ * Returns null on any mismatch (wrong mission, task gone, not a target-run
+ * task) so a caller can leave the pinned objective exactly as it was rather
+ * than tearing the run down.
+ */
+export function reprojectLocalTargetRunObjective(
+  missionId: string,
+  taskId: string,
+  openChannelMission: OpenChannelMission | null
+): LocalTargetRunExpeditionObjective | null {
+  if (!openChannelMission || openChannelMission.id !== missionId) return null;
+  const task = openChannelMission.tasks.find(candidate => candidate.id === taskId);
+  if (!task) return null;
+  const payload = decodeLocalTargetRunPayload(task.detail);
+  if (!payload) return null;
+  return prepareLocalTargetRunObjective(missionId, taskId, payload);
 }
 
 /**

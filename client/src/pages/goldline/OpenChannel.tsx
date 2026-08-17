@@ -22,6 +22,11 @@ import type {
   OpenChannelTaskCategory,
 } from "../../../../server/openChannel/openChannelTypes";
 import type { OpenChannelGap } from "../driver/goldlineDriverModel";
+import {
+  currentLocalTargetRunTarget,
+  decodeLocalTargetRunPayload,
+  localTargetRunVisitedCount,
+} from "../../../../shared/localTargetRun";
 import "./open-channel.css";
 
 export type OpenChannelGenerateInput = {
@@ -346,6 +351,7 @@ export default function OpenChannel({
   const draft = mission?.status === "draft" ? mission : null;
   const active = mission?.status === "active" ? mission : null;
   const firstPendingTask = active?.tasks.find(task => task.status === "pending") ?? null;
+  const firstPendingTargetRun = firstPendingTask ? decodeLocalTargetRunPayload(firstPendingTask.detail) : null;
   const totalMinutes = tasks.reduce(
     (sum, task) => sum + task.estimatedMinutes,
     0
@@ -563,67 +569,103 @@ export default function OpenChannel({
               {taskError ? <p className="open-channel-error">{taskError}</p> : null}
             </section>
             <div className="open-channel-task-editor">
-              {tasks.map((task, index) => (
-                <article key={task.clientKey}>
-                  <span className="open-channel-step-number">{index + 1}</span>
-                  <div>
-                    <input
-                      value={task.title}
-                      onChange={event => updateTask(index, { title: event.target.value })}
-                      aria-label={`Step ${index + 1} title`}
-                    />
-                    <textarea
-                      value={task.detail}
-                      onChange={event => updateTask(index, { detail: event.target.value })}
-                      rows={2}
-                      aria-label={`Step ${index + 1} details`}
-                    />
-                    <div className="open-channel-task-fields">
-                      <label>
-                        <span>MIN</span>
-                        <input
-                          type="number"
-                          min={5}
-                          max={240}
-                          value={task.estimatedMinutes}
-                          onChange={event => updateTask(index, { estimatedMinutes: Math.max(5, Number(event.target.value) || 5) })}
-                        />
-                      </label>
-                      <label>
-                        <span>TYPE</span>
-                        <select
-                          value={task.category}
-                          onChange={event => updateTask(index, { category: event.target.value as OpenChannelTaskCategory })}
-                        >
-                          {CATEGORIES.map(category => <option key={category}>{category}</option>)}
-                        </select>
-                      </label>
-                      <label className="is-map">
-                        <span>MAP SEARCH</span>
-                        <input
-                          value={task.navigationQuery ?? ""}
-                          onChange={event => updateTask(index, { navigationQuery: event.target.value || null })}
-                          placeholder="Optional"
-                        />
-                      </label>
+              {tasks.map((task, index) => {
+                const targetRun = decodeLocalTargetRunPayload(task.detail);
+                if (targetRun) {
+                  return (
+                    <article
+                      key={task.clientKey}
+                      className="open-channel-target-run-summary"
+                      data-testid="open-channel-target-run-draft"
+                    >
+                      <span className="open-channel-step-number">{index + 1}</span>
+                      <div>
+                        <p className="open-channel-target-run-title"><strong>{task.title}</strong></p>
+                        <p className="open-channel-target-run-purpose">{targetRun.purpose}</p>
+                        {targetRun.simulated ? (
+                          <p className="open-channel-target-run-badge" data-testid="target-run-simulated-badge">
+                            SIMULATED · PLACES UNAVAILABLE
+                          </p>
+                        ) : null}
+                        <p className="open-channel-target-run-count">
+                          {targetRun.sourcedTargets.length} OF {targetRun.requestedCount} TARGETS FOUND
+                        </p>
+                        <ol className="open-channel-target-run-list">
+                          {targetRun.sourcedTargets.map(target => (
+                            <li key={target.id}>
+                              <b>{target.name}</b>
+                              <small>{target.address}</small>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    </article>
+                  );
+                }
+                return (
+                  <article key={task.clientKey}>
+                    <span className="open-channel-step-number">{index + 1}</span>
+                    <div>
+                      <input
+                        value={task.title}
+                        onChange={event => updateTask(index, { title: event.target.value })}
+                        aria-label={`Step ${index + 1} title`}
+                      />
+                      <textarea
+                        value={task.detail}
+                        onChange={event => updateTask(index, { detail: event.target.value })}
+                        rows={2}
+                        aria-label={`Step ${index + 1} details`}
+                      />
+                      <div className="open-channel-task-fields">
+                        <label>
+                          <span>MIN</span>
+                          <input
+                            type="number"
+                            min={5}
+                            max={240}
+                            value={task.estimatedMinutes}
+                            onChange={event => updateTask(index, { estimatedMinutes: Math.max(5, Number(event.target.value) || 5) })}
+                          />
+                        </label>
+                        <label>
+                          <span>TYPE</span>
+                          <select
+                            value={task.category}
+                            onChange={event => updateTask(index, { category: event.target.value as OpenChannelTaskCategory })}
+                          >
+                            {CATEGORIES.map(category => <option key={category}>{category}</option>)}
+                          </select>
+                        </label>
+                        <label className="is-map">
+                          <span>MAP SEARCH</span>
+                          <input
+                            value={task.navigationQuery ?? ""}
+                            onChange={event => updateTask(index, { navigationQuery: event.target.value || null })}
+                            placeholder="Optional"
+                          />
+                        </label>
+                      </div>
                     </div>
-                  </div>
-                  <div className="open-channel-task-controls">
-                    <button type="button" onClick={() => moveTask(index, -1)} disabled={index === 0} aria-label={`Move step ${index + 1} up`}><ChevronUp /></button>
-                    <button type="button" onClick={() => moveTask(index, 1)} disabled={index === tasks.length - 1} aria-label={`Move step ${index + 1} down`}><ChevronDown /></button>
-                    <button
-                      type="button"
-                      onClick={() => setTasks(current => current.filter((_, taskIndex) => taskIndex !== index))}
-                      disabled={tasks.length === 1}
-                      aria-label={`Remove step ${index + 1}`}
-                    ><Trash2 /></button>
-                  </div>
-                </article>
-              ))}
+                    <div className="open-channel-task-controls">
+                      <button type="button" onClick={() => moveTask(index, -1)} disabled={index === 0} aria-label={`Move step ${index + 1} up`}><ChevronUp /></button>
+                      <button type="button" onClick={() => moveTask(index, 1)} disabled={index === tasks.length - 1} aria-label={`Move step ${index + 1} down`}><ChevronDown /></button>
+                      <button
+                        type="button"
+                        onClick={() => setTasks(current => current.filter((_, taskIndex) => taskIndex !== index))}
+                        disabled={tasks.length === 1}
+                        aria-label={`Remove step ${index + 1}`}
+                      ><Trash2 /></button>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
-            <button type="button" className="open-channel-add" onClick={() => setTasks(current => [...current, emptyTask()])} disabled={tasks.length >= 10}>
-              <Plus /> ADD BOARD SPACE
-            </button>
+            {tasks.some(task => decodeLocalTargetRunPayload(task.detail) !== null) ? null : (
+              <button type="button" className="open-channel-add" onClick={() => setTasks(current => [...current, emptyTask()])} disabled={tasks.length >= 10}>
+                <Plus /> ADD BOARD SPACE
+              </button>
+            )}
             <button
               type="button"
               className="open-channel-primary"
@@ -653,7 +695,33 @@ export default function OpenChannel({
               <strong>{active.tasks.filter(task => task.status === "completed").length}/{active.tasks.length}</strong>
             </div>
 
-            {firstPendingTask ? (
+            {firstPendingTask && firstPendingTargetRun ? (
+              <section className="open-channel-dialogue" data-testid="open-channel-current-objective">
+                <small>CURRENT REAL OBJECTIVE · STEP {firstPendingTask.position + 1}</small>
+                <p><strong>{firstPendingTask.title}</strong></p>
+                {firstPendingTargetRun.simulated ? (
+                  <p className="open-channel-target-run-badge" data-testid="target-run-simulated-badge">
+                    SIMULATED · PLACES UNAVAILABLE
+                  </p>
+                ) : null}
+                <p data-testid="open-channel-target-run-progress">
+                  {localTargetRunVisitedCount(firstPendingTargetRun)} OF {firstPendingTargetRun.sourcedTargets.length} VISITED
+                </p>
+                {(() => {
+                  const current = currentLocalTargetRunTarget(firstPendingTargetRun);
+                  return current ? (
+                    <>
+                      <p>Next: <strong>{current.name}</strong> — {current.address}</p>
+                      <a href={current.navigationUrl} target="_blank" rel="noreferrer"><MapPin /> NAVIGATE</a>
+                    </>
+                  ) : null;
+                })()}
+                <p className="open-channel-target-run-hint">
+                  Log a signal in the expedition when you arrive — that advances this run, not this screen.
+                </p>
+                {taskError ? <p className="open-channel-error">{taskError}</p> : null}
+              </section>
+            ) : firstPendingTask ? (
               <section className="open-channel-dialogue" data-testid="open-channel-current-objective">
                 <small>CURRENT REAL OBJECTIVE · STEP {firstPendingTask.position + 1}</small>
                 <p><strong>{firstPendingTask.title}</strong></p>
