@@ -579,10 +579,13 @@ function LiveGoldlineDriverController() {
       });
       advanceCachedProgress("mission");
       void goldlineProgress.refetch();
-      utils.system.openChannel.current.setData(
-        openChannelInput,
-        result.status === "completed" ? null : result
-      );
+      // Preserve the canonical server response in the query cache even
+      // when this was the final task. The expedition pins that task and must
+      // be able to observe authoritative `status: completed` before showing
+      // WORK SEALED. The normal polling query may later collapse a completed
+      // mission to null after the expedition has reconciled; we do not erase
+      // the evidence in the same tick as the canonical write.
+      utils.system.openChannel.current.setData(openChannelInput, result);
       toast.success(
         result.status === "completed"
           ? "Open Channel mission complete."

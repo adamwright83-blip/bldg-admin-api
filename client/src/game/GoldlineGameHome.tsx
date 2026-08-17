@@ -1717,8 +1717,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     );
 
     return () => runtime.endExpedition();
-    // Deliberately keyed on the PINNED orderId, not on any live-derived
-    // value — see the identity-pinning note above.
+    // Deliberately keyed on the PINNED objective key, not on any
+    // live-derived route/task value — see the identity-pinning note above.
   }, [activeExpedition?.key, runtimeReady]);
 
   // Poll of the full typed fictional run snapshot for the HUD.
