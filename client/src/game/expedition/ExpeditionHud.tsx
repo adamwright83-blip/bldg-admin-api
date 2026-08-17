@@ -69,6 +69,10 @@ export type ExpeditionHudProps = {
    * genuinely collected — never set from the mutation returning.
    */
   cargoSecured?: boolean;
+  completionActionLabel?: string;
+  confirmedLabel?: string;
+  verifyingLabel?: string;
+  failedLabel?: string;
 };
 
 /** Forward, up the corridor — the aim when the thumb has not been dragged. */
@@ -95,6 +99,10 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     onSecureCargo,
     cargoPhase = "idle",
     cargoSecured = false,
+    completionActionLabel = "SECURE CARGO",
+    confirmedLabel = "CARGO SECURED",
+    verifyingLabel = "VERIFYING SERVER TRUTH",
+    failedLabel = "PICKUP NOT RECORDED — STILL PENDING",
   } = props;
 
   const padRef = useRef<HTMLDivElement | null>(null);
@@ -365,14 +373,14 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
               className="expedition-terminal__headline is-secured"
               data-testid="cargo-secured"
             >
-              CARGO SECURED
+              {confirmedLabel}
             </p>
           ) : cargoPhase === "verifying" ? (
             <p
               className="expedition-terminal__verifying"
               data-testid="cargo-verifying"
             >
-              VERIFYING SERVER TRUTH
+              {verifyingLabel}
             </p>
           ) : (
             <>
@@ -381,7 +389,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
                   className="expedition-terminal__failed"
                   data-testid="cargo-failed"
                 >
-                  PICKUP NOT RECORDED — STILL PENDING
+                  {failedLabel}
                 </p>
               ) : null}
               <button
@@ -390,7 +398,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
                 data-testid="secure-cargo"
                 onClick={onSecureCargo}
               >
-                SECURE CARGO
+                {completionActionLabel}
               </button>
             </>
           )}

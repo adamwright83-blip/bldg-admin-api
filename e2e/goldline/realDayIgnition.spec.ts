@@ -47,14 +47,19 @@ test.describe("real-day ignition on the live driver controller", () => {
     });
     const briefing = page.getByTestId("empty-day-briefing");
     await expect(briefing).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole("dialog", { name: "Open Channel mission briefing" })).toHaveAttribute("data-auto-ignition", "true");
+    await expect(
+      page.getByRole("dialog", { name: "Open Channel mission briefing" })
+    ).toHaveAttribute("data-auto-ignition", "true");
     await expect(briefing).toContainText("BRIEF ME");
 
     const suppliedBriefing =
       "Today I need to visit Sunset Towers leasing office and ask about the laundry amenity. Tomorrow I must call Russell with the real result.";
-    await page.getByLabel("TYPE, CORRECT, OR ADD CONTEXT").fill(suppliedBriefing).catch(async () => {
-      await briefing.locator("textarea").fill(suppliedBriefing);
-    });
+    // Scope directly to the already-visible briefing. The old global-label
+    // locator could wait the entire test timeout before its catch fallback ran,
+    // turning a healthy product path into a 20-minute CI false negative.
+    const briefingInput = briefing.locator("textarea").first();
+    await expect(briefingInput).toBeVisible({ timeout: 10_000 });
+    await briefingInput.fill(suppliedBriefing);
 
     await page
       .getByRole("button", { name: /TURN THIS INTO A DRAFT MISSION/i })
