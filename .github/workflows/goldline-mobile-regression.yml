@@ -12,7 +12,13 @@ on:
       # the front door of the app could merge without this gate ever
       # running. That is exactly how it broke.
       - "client/src/pages/goldline/**"
-      - "client/src/components/driver/SalesMomentum.tsx"
+      # The whole directory, not one file. These are the driver's mobile
+      # surfaces: LogSignalSheet owns field intel capture and
+      # AddExternalWorkSheet owns CleanCloud intake, both reachable from the
+      # live game screen. Neither was covered, so a change to either alone
+      # could merge without this gate running — the same gap that let the
+      # front door break, one directory over.
+      - "client/src/components/driver/**"
       - "server/commercialMissions/driverSalesMotivationService.ts"
       - "server/commercialMissions/driverSalesJournalResilience.test.ts"
       - "server/driverGameWorld/**"
