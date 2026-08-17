@@ -114,6 +114,12 @@ import {
   type StrongholdRestoration,
 } from "./expedition/strongholdRestoration";
 import { EXPEDITION, type ExpeditionSnapshot } from "./expedition/expeditionState";
+import {
+  markMechanicLearned,
+  mechanicLearningState,
+  nextUnlearnedMechanic,
+  type ExpeditionMechanic,
+} from "./expedition/expeditionTeaching";
 import type { AgentWorldPresence } from "./world/PopulationSystem";
 import { projectAgentWorldPresence } from "./world/agentPresenceProjection";
 import type {
@@ -1464,6 +1470,18 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     });
 
   /**
+   * §PR77 Part 4 contextual teaching. Bumped whenever a mechanic is marked
+   * learned so the HUD hint recomputes immediately rather than waiting for
+   * an unrelated re-render — `expeditionTeaching`'s localStorage reads are
+   * not themselves reactive.
+   */
+  const [teachingVersion, setTeachingVersion] = useState(0);
+  const markTaught = useCallback((mechanic: ExpeditionMechanic) => {
+    markMechanicLearned(mechanic, playerIdentityRef.current);
+    setTeachingVersion(v => v + 1);
+  }, []);
+
+  /**
    * PINNED expedition identity AND the single lifecycle truth.
    * `activeExpedition !== null` is the whole active-run state — there is
    * deliberately no separate "entered" boolean alongside it. Keeping two
@@ -1826,9 +1844,18 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           getAudioManager().play("weak_point_hit");
           arcadeFeedback();
         },
+        // §PR77 Part 4 "first strike lands" — the deliberate tap verb,
+        // distinct from onHostileDefeated (which also fires from the
+        // ambient lash and the Line) and from onStrikeAttempt (which fires
+        // on a whiff too and only drives pad feedback, never teaching).
+        onStrikeLanded: () => markTaught("strike"),
+        // §PR77 Part 4 "first evade" — a flick that genuinely began.
+        onDodgeBegan: () => markTaught("evade"),
         onLineLatched: () => {
           getAudioManager().play("vault");
           arcadeFeedback();
+          // §PR77 Part 4 "first Line lock+fire".
+          markTaught("line");
         },
         onHazardTriggered: () => {
           getAudioManager().play("vault");
@@ -1839,6 +1866,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         onRelicTaken: () => {
           getAudioManager().play("vault");
           arcadeFeedback();
+          // §PR77 Part 4 "first relic walk-through".
+          markTaught("relic");
         },
         // The seal breaking is the moment the road ahead opens. Movement is
         // already unclamped when this fires — the feedback marks it, it does
@@ -1865,6 +1894,56 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     }, 120);
     return () => window.clearInterval(id);
   }, [activeExpedition]);
+
+  /**
+   * §PR77 Part 4 "first route choice". There is no dedicated fork-chosen
+   * callback — `route` is already polled into `expeditionSnapshot` above,
+   * so the transition away from "unchosen" is read here rather than adding
+   * a second plumbing path for the same fact.
+   */
+  const lastRouteRef = useRef(expeditionSnapshot.route);
+  useEffect(() => {
+    if (
+      lastRouteRef.current === "unchosen" &&
+      expeditionSnapshot.route !== "unchosen"
+    ) {
+      markTaught("fork");
+    }
+    lastRouteRef.current = expeditionSnapshot.route;
+  }, [expeditionSnapshot.route, markTaught]);
+
+  /**
+   * §PR77 Part 4 contextual teaching hint. Shows the single next unlearned
+   * mechanic in canonical order while the expedition is genuinely running
+   * — the authored encounter order in expeditionPlan.ts already introduces
+   * mechanics one at a time, so this naturally lines up with what the
+   * player is about to face without a second copy of corridor proximity.
+   * `teachingVersion` forces a recompute the instant a mechanic is marked
+   * learned; localStorage reads are otherwise not reactive.
+   */
+  const teachingHint = useMemo(() => {
+    if (!activeExpedition || expeditionSnapshot.outcome !== "running") return null;
+    const identity = playerIdentityRef.current;
+    const mechanic = nextUnlearnedMechanic(identity);
+    if (!mechanic) return null;
+    if (mechanicLearningState(mechanic, true, identity) !== "teaching") return null;
+    switch (mechanic) {
+      case "strike":
+        return "TAP TO STRIKE";
+      case "evade":
+        return "FLICK TO EVADE";
+      case "line":
+        return "HOLD TO AIM THE LINE";
+      case "relic":
+        return "WALK THROUGH A RELIC TO TAKE IT";
+      case "fork":
+        return "CHOOSE A PATH AT THE FORK";
+      default:
+        return null;
+    }
+    // teachingVersion is read only to force recomputation on mark-learned.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeExpedition, expeditionSnapshot.outcome, teachingVersion]);
 
   useEffect(() => {
     runtimeRef.current?.setAgentPresence(agentWorldPresence);
@@ -2522,6 +2601,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             pinnedAddress={activeExpedition?.detail}
             onSecureCargo={completeExpeditionObjective}
             onLogSignal={props.onOpenLogSignal}
+            teachingHint={teachingHint}
             cargoPhase={cargoPhase}
             completionActionLabel={
               activeExpedition?.kind === "open_channel" ? "SEAL THE WORK" : "SECURE CARGO"

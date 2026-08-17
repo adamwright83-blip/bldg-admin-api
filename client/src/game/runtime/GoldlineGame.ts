@@ -439,6 +439,12 @@ export class GoldlineGame {
    */
   private expedition: ExpeditionLayer | null = null;
   /**
+   * The callbacks `startExpedition` was given, kept for verbs that never
+   * route through ExpeditionLayer (dodge is decided here, not there) but
+   * still need to report a genuine success to the same caller.
+   */
+  private expeditionCallbacks: ExpeditionCallbacks = {};
+  /**
    * True while the tether (or its residual momentum) is driving Trailblazer.
    * Joystick locomotion stands down so the two do not fight for the same
    * corridor position — there is one movement truth, and during a grapple
@@ -901,6 +907,7 @@ export class GoldlineGame {
 
   startExpedition(plan: PickupExpeditionPlan, callbacks: ExpeditionCallbacks = {}) {
     this.endExpedition();
+    this.expeditionCallbacks = callbacks;
     this.suspendBaseObjectiveSignalsForExpedition();
 
     // Entering must not inherit whatever corridor position the player
@@ -1005,6 +1012,7 @@ export class GoldlineGame {
     this.layerTraversal.removeChild(this.expedition.container);
     this.expedition.destroy();
     this.expedition = null;
+    this.expeditionCallbacks = {};
     this.expeditionDrivingMovement = false;
     this.populationSystem?.setExpeditionPresentation(false);
   }
@@ -1186,7 +1194,13 @@ export class GoldlineGame {
     if (!this.expeditionCanAct()) return false;
     const facingX = this.input.x !== 0 ? this.input.x : this.lastDirectionSign || 0;
     const facingY = this.input.y !== 0 ? this.input.y : -1;
-    return beginDodge(this.dodgeState, this.input, facingX, facingY);
+    const began = beginDodge(this.dodgeState, this.input, facingX, facingY);
+    // §PR77 Part 4 "first evade" — reported only when the dodge genuinely
+    // started, not when a flick was declined for being on cooldown. Dodge
+    // never routes through ExpeditionLayer, so this is reported directly
+    // from the callbacks startExpedition was given.
+    if (began) this.expeditionCallbacks.onDodgeBegan?.();
+    return began;
   }
 
   /**

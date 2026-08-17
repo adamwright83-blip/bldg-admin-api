@@ -90,6 +90,13 @@ import {
 } from "./expeditionState";
 import { TRAVERSAL_Z, worldActorZ } from "../world/worldActorDepth";
 import { LATERAL_TO_PROGRESS } from "./ruinbound";
+import {
+  LINE_TARGET_INTENSITY,
+  climaxSealAffordanceState,
+  forkBranchAffordanceState,
+  lineTargetAffordanceState,
+  relicAffordanceState,
+} from "./expeditionAffordance";
 
 /**
  * Where the three relic plinths stand across the lane at the plan's authored
@@ -203,6 +210,19 @@ export type ExpeditionCallbacks = {
    * produces nothing is exactly the failure this callback exists to close.
    */
   onStrikeAttempt?: () => void;
+  /**
+   * A deliberate player STRIKE actually connected with a hostile (§PR77
+   * Part 4 contextual teaching — "first strike lands"). Distinct from
+   * `onStrikeAttempt`, which fires on every tap including a whiff; this is
+   * the signal a teaching-state caller should retire the STRIKE hint on.
+   */
+  onStrikeLanded?: () => void;
+  /**
+   * A deliberate player EVADE (flick) genuinely began — not declined for
+   * being on cooldown (§PR77 Part 4 "first evade"). Dodge is decided in
+   * GoldlineGame rather than here, but shares this same callbacks object.
+   */
+  onDodgeBegan?: () => void;
 };
 
 type EnvNode = {
@@ -1379,6 +1399,7 @@ export class ExpeditionLayer {
     const nearest = this.nearestMeleeTarget(playerProgress, playerLateral);
     if (!nearest) return false;
     this.applyMeleeHit(nearest, playerProgress, playerLateral, 0.18);
+    this.callbacks.onStrikeLanded?.();
     return true;
   }
 
@@ -1495,11 +1516,16 @@ export class ExpeditionLayer {
     return visual;
   }
 
-  /** 0..1 relevance of a prop: how close the Line is to being able to take it. */
+  /** 0..1 relevance of a Line target prop, driven by the shared
+   * at-rest/relevant/locked/resolved vocabulary (§PR77 Part 5) so a
+   * grapple ring and a hazard mooring point agree on what "locked" means. */
   private propHighlight(id: string): number {
-    if (this.lockedTargetId === id) return 1;
-    if (this.aiming) return 0.55;
-    return 0;
+    const state = lineTargetAffordanceState({
+      id,
+      lockedTargetId: this.lockedTargetId,
+      aiming: this.aiming,
+    });
+    return LINE_TARGET_INTENSITY[state];
   }
 
   /**
@@ -1519,6 +1545,11 @@ export class ExpeditionLayer {
   private drawClimaxSeal(project: ScreenProjection) {
     const barrier = this.activeClimaxBarrier();
     const up = barrier !== null;
+    // §PR77 Part 5: LOCKED while blocking, RESOLVED once dropped — the same
+    // vocabulary every other interactable uses. The seal has no bespoke
+    // "relevant" phase, so this is read for the contract rather than to
+    // drive the tension/fracture pulse below, which stays its own effect.
+    void climaxSealAffordanceState({ up });
 
     const fixture = barrier ?? this.sealLastBarrier;
     if (!fixture || (!up && this.sealFracture <= 0)) {
@@ -1708,11 +1739,27 @@ export class ExpeditionLayer {
 
     for (const branch of branches) {
       // Unchosen: both read as live options. Chosen: the taken road carries
-      // the Gold Line; the road not taken dims to bare stone.
+      // the Gold Line; the road not taken dims to bare stone. State names
+      // come from the shared affordance vocabulary (§PR77 Part 5); the
+      // brightness for each is still tuned locally to this object.
       const taken = route === branch.id;
       const undecided = route === "unchosen";
       const scarred = this.run.scarred;
-      const intensity = scarred ? 0.18 : taken ? 1 : undecided ? 0.62 : 0.16;
+      const branchState = forkBranchAffordanceState({
+        branchTaken: taken,
+        undecided,
+        scarred,
+      });
+      // "resolved" is only ever reached via the Scarred Route (the
+      // classifier checks `scarred` first), so it always means 0.18 here.
+      const intensity =
+        branchState === "resolved"
+          ? 0.18
+          : branchState === "locked"
+            ? 1
+            : branchState === "relevant"
+              ? 0.62
+              : 0.16;
 
       // Sampled along the fork window: out from the lane at the mouth,
       // held wide through the middle, back to the lane where they rejoin.
@@ -1861,10 +1908,20 @@ export class ExpeditionLayer {
 
       // Taken: this one's light stays with the player and the stone reads
       // spent. Not taken: the other two go dark once a choice is made, so
-      // the world records the decision instead of a HUD doing it.
+      // the world records the decision instead of a HUD doing it. Driven
+      // by the shared affordance vocabulary (§PR77 Part 5) — LOCKED and
+      // RESOLVED share their brightness with every other interactable's
+      // own locked/resolved reading, even though the pulse animation for
+      // RELEVANT stays bespoke to a plinth.
       const taken = this.run.relic?.id === relic.id;
       const decided = this.run.relic !== null;
-      const lit = decided ? (taken ? 0.9 : 0.08) : 0.55 + Math.sin(t * 2.1 + lateral) * 0.2;
+      const state = relicAffordanceState({ taken, decided });
+      const lit =
+        state === "locked"
+          ? 0.9
+          : state === "resolved"
+            ? 0.08
+            : 0.55 + Math.sin(t * 2.1 + lateral) * 0.2;
 
       const g = visual.g;
       g.clear();

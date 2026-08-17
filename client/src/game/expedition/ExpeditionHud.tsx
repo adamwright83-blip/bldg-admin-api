@@ -96,6 +96,14 @@ export type ExpeditionHudProps = {
    * be able to block recording that the real work happened.
    */
   onLogSignal?: () => void;
+  /**
+   * §PR77 Part 4 contextual teaching — the single next mechanic the player
+   * has not yet performed, or null once every mechanic is learned (or none
+   * is currently relevant). Never a persistent tutorial manual: this is
+   * the one hint shown at a time, and it retires the moment the caller
+   * reports the real verb succeeded — never merely from having displayed.
+   */
+  teachingHint?: string | null;
 };
 
 /** Forward, up the corridor — the aim when the thumb has not been dragged. */
@@ -129,6 +137,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     onReconcile,
     reconcileActionLabel = "I UPDATED IT",
     onLogSignal,
+    teachingHint = null,
   } = props;
 
   const padRef = useRef<HTMLDivElement | null>(null);
@@ -361,6 +370,20 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
           />
         </span>
       </div>
+
+      {/*
+        §PR77 Part 4 contextual teaching. Exactly one hint at a time, only
+        while gameplay is genuinely running, retiring the instant the real
+        verb succeeds — never a persistent tutorial manual over the world.
+      */}
+      {terminalState === "running" && teachingHint ? (
+        <p
+          className="expedition-hud__teaching-hint"
+          data-testid="expedition-teaching-hint"
+        >
+          {teachingHint}
+        </p>
+      ) : null}
 
       <button
         type="button"
