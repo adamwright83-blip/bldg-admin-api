@@ -3189,10 +3189,18 @@
 /* Threshold: an in-world invitation, not a modal card wall. */
 /* The threshold is a LABEL plus one button, not a panel. Only the button is
  * interactive, so only the button takes pointer events. */
+/* Sits ABOVE the bottom control cluster, not in it.
+ *
+ * At 15vh the button landed at y=672..724 on a 393x852 phone while the
+ * movement stick occupies y=656..774 — a 38px horizontal overlap on the
+ * stick's right edge. The button stayed clickable at its own centre, which
+ * is why nothing caught it, but a thumb reaching for the stick hit ENTER
+ * THE LINE instead. Clearing the stick's top edge is the fix; the offer has
+ * the whole world above it to live in. */
 .expedition-threshold {
   position: absolute;
   left: 50%;
-  bottom: 15vh;
+  bottom: 25vh;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;

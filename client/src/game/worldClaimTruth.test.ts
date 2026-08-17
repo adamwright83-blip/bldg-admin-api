@@ -34,10 +34,17 @@ describe("Goldline world-claim truth boundary", () => {
     expect(source).toContain("FOLLOW THE GOLD LINE");
     expect(source).toContain("NO ACTIVE OBJECTIVE");
     expect(source).toContain("No unresolved route work right now.");
-    // The truthful-objective branch must actually check for a real mission
-    // or order, not just render unconditionally.
+    // The truthful-objective branch must actually check for a real mission,
+    // order, or approved objective — not render unconditionally.
+    //
+    // PR #71 added `preparedObjective` as a third genuine source (a pending,
+    // human-approved Open Channel task) and this regex, which named only the
+    // first two, started failing. The guard itself was never wrong: it is
+    // still asserting that the branch is gated on real work existing. All
+    // three sources are named explicitly rather than loosened to a wildcard,
+    // so a future edit that drops the condition entirely still fails here.
     expect(source).toMatch(
-      /activeMission \|\| nextOrderObjective \?[\s\S]{0,200}FOLLOW THE GOLD LINE/
+      /activeMission \|\| nextOrderObjective \|\| preparedObjective \?[\s\S]{0,200}FOLLOW THE GOLD LINE/
     );
   });
 });

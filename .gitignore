@@ -129,3 +129,6 @@ tmp/goldline-truetouch-frames/
 
 # Goldline heartbeat journey frames
 tmp/goldline-heartbeat-frames/
+
+# Goldline zero-order day frames
+tmp/goldline-openchannel-frames/
