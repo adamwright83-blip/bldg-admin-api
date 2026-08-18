@@ -34,6 +34,10 @@ sequence closes that gap in small, individually playable increments.
 The sequence is allowed to end mid-list. Each PR leaves the game strictly
 better. Stopping after #80 is success, not failure. Nobody rushes #81–#83.
 
+**Numbering note:** "#78–#83" are SEQUENCE LABELS, not GitHub PR numbers —
+GitHub numbering drifts (this brief's own docs PR took github#78). The
+status tracker at the bottom records actual GitHub PR numbers as they land.
+
 ## Release protocol (non-negotiable)
 
 1. Fable releases exactly ONE surgical execution prompt (the next PR only).
