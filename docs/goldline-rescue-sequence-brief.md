@@ -306,14 +306,69 @@ to do?
 - Autonomous vendor purchasing. The Overland driving layer. Any GPS/geofence
   arrival detection. Broad audio architecture. New enemy/traversal systems.
 
+---
+
+# SEQUENCE CORRECTION v2 — 2026-08-18, after the GL-78 fun gate FAILED
+
+GL-78 (merged as github#79, `853ae26`) shipped correctly and its own items
+work on device — forward cue, section transitions, end-of-world monument,
+audio palette. Adam's live playtest then failed the gate ONE LAYER UP: the
+product model, not the PR. Recorded verbatim findings:
+
+1. **"SEAL THE WORK" renders for PHYSICAL work.** "Pick up an order for
+   Mona at Opus LA in one hour" and "drop off John's order" were typed into
+   Open Channel, landed as plain `open_channel` tasks, and GL-78's climax-
+   honesty rule (written by Fable — this fence was drawn in the wrong place)
+   gave them desk semantics: a completion button tappable from bed. The
+   type system had no physical/base distinction, so "remove fake combat
+   from desk work" silently became "all typed work is desk work."
+2. **Goldline waits to be told the day instead of assembling it.** Native
+   orders auto-populate (controller queries), CleanCloud screenshot import
+   EXISTS (`AddExternalWorkSheet`, chooser at `GoldlineGameHome.tsx` ~3386)
+   — but it is buried in the field console. Adam re-typed reality that the
+   product could have ingested with one giant button.
+3. **No campaign awareness.** The business has ~9 days to live; the brief
+   knows it; the game he holds does not. No main quest, no gap, no
+   "N days remain," no required-visits math.
+4. **The world is inert between expeditions**, and mobile legibility fails:
+   chips too small, joystick too small, dev vocabulary leaking to the
+   player ("STATIONARY PLAY · TEMP • INSIDE GAME LOOP",
+   `GoldlineGameHome.tsx:2951`), empty-state cards (COLD CALL BURST) parked
+   center-screen.
+
+Diagnosis receipts from `main` (`853ae26`):
+- `OpenChannelTask` already carries `navigationQuery: string | null` — the
+  model already signals place-bound work; nothing downstream honors it.
+  `category` is topical (food/sales/…), not an execution type.
+- CleanCloud import + manual job entry: fully built, wrong hierarchy.
+- No goal/campaign-gap model exists anywhere in server/shared (grep clean).
+- Foreground one-shot geolocation EXISTS (`requestGoldlineLocation`) for
+  move sourcing; no destination proximity, no arrival context.
+
+**The operating principle this correction enforces: Goldline begins with
+reality and generates the adventure — it never begins with an empty
+adventure and waits for the operator to type reality into it.**
+
+## Corrected sequence (supersedes the order above; scope blocks above stay valid where referenced)
+
+| Order | Label | Scope |
+|-------|-------|-------|
+| 1 | **R1 — Day assembly + physical-stop honesty + mobile legibility** | Execution typing (`base` vs `physical_stop`) on Open Channel tasks, proposed by the model (navigationQuery is the signal), CONFIRMED by the operator at approval; `physical_stop` objectives stage the expedition/Threshold flow with the same canonical completion write; SEAL THE WORK only ever for base work. Front door: on an empty day the base leads with giant thumb-first actions — IMPORT TODAY FROM CLEANCLOUD (promote existing chooser), ADD OTHER STOPS (existing sheets), OPEN CHANNEL for the rest. Legibility: chip fonts ≥11px, joystick +~18%, dev-vocab chips removed, empty-content cards never center-screen. Surgical prompt: `docs/goldline-r1-execution-prompt.md`. |
+| 2 | **R2 — Rescue Campaign Director** | The main quest. Operator-declared campaign: deadline, recurring-revenue gap, average-account value (verified where evidence exists, else explicitly operator-assumed), conversion scenario (operator-approved). HUD embodies it: days remaining, verified gap closed vs remaining, today's required qualified visits. Progress ONLY from verified evidence (impact ledger `rescue-10day`, won accounts). Numbers are never fabricated — every derived figure is labeled verified or assumption. The one justified migration (campaign store). |
+| 3 | **C1 — Consequence loop** (was step 2 above) | Immediate World Transformation + The Answering, unchanged scope from the original GL-79 block, now also reflecting campaign progress. |
+| 4 | **R3 — Protected route + growth windows** | Assembled day → real gaps between protected obligations → generated qualified-visit missions sized by R2's math, using existing fieldOpportunity moves + `localTargetRunSourcing`. "THE ROAD OPENS FOR N MINUTES." Never invents urgency; never makes him late. |
+| 5 | **R4 — Location context** | Destination geocoding for physical stops; on app-foreground, one-shot location (existing plumbing) → near destination ⇒ offer Threshold/arrival; far from an unresolved stop ⇒ truthful reconciliation question ("Mona's Opus LA pickup is still unresolved — did you complete it earlier?"). Location is CONTEXT evidence, never completion evidence. Fully graceful without permission. |
+| 6+ | Solid bodies (GL-78.5, Opus session, parallel-safe any time after R1) → Quartermaster → Replicator → world memory (Unwritten Map + Census) → Dawn (its morning role is partially absorbed by R1's front door and R2's chapter card; what remains is the cinematic staging). |
+
 ## Status tracker (executor updates this table in its PR)
 
-| PR | Branch | Status | Merged SHA | Adam played |
-|----|--------|--------|-----------|-------------|
-| #78 | `agent/goldline-pr78-playtest-closure` | IMPLEMENTED, pushed, awaiting PR + Fable review | `e331d27` (branch head, not yet merged) | — |
-| #78.5 | — | held | — | — |
-| #79 | — | held | — | — |
-| #80 | — | held | — | — |
-| #81 | — | held (swappable w/ #82) | — | — |
-| #82 | — | held | — | — |
-| #83 | — | held | — | — |
+| Seq | Label | Branch | Status | Merged | Adam played |
+|-----|-------|--------|--------|--------|-------------|
+| GL-78 | playtest closure | `agent/goldline-pr78-playtest-closure` | merged as github#79 | `853ae26` | 2026-08-18 — **FUN GATE FAILED at product-model level** (see correction) |
+| R1 | day assembly + physical stops + legibility | — | PROMPT RELEASED | — | — |
+| R2 | rescue campaign director | — | held | — | — |
+| C1 | consequence loop | — | held | — | — |
+| R3 | growth windows | — | held | — | — |
+| R4 | location context | — | held | — | — |
+| GL-78.5 | solid bodies | — | held (parallel-safe after R1) | — | — |
+| — | Quartermaster / Replicator / world memory / Dawn | — | held | — | — |
