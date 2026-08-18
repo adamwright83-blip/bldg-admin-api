@@ -147,7 +147,7 @@ const PLAN_OUTPUT_SCHEMA = {
 
 let openChannelTablesReady: Promise<void> | null = null;
 
-async function ensureOpenChannelTables(): Promise<void> {
+export async function ensureOpenChannelTables(): Promise<void> {
   if (openChannelTablesReady) return openChannelTablesReady;
   openChannelTablesReady = (async () => {
     const db = await getDb();

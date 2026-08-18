@@ -365,7 +365,8 @@ adventure and waits for the operator to type reality into it.**
 | Seq | Label | Branch | Status | Merged | Adam played |
 |-----|-------|--------|--------|--------|-------------|
 | GL-78 | playtest closure | `agent/goldline-pr78-playtest-closure` | merged as github#79 | `853ae26` | 2026-08-18 — **FUN GATE FAILED at product-model level** (see correction) |
-| R1 | day assembly + physical stops + legibility | — | PROMPT RELEASED | — | — |
+| DAY1 | **Emergency out-of-band insert, 2026-08-18** — Day 1 — The Ten Doors: a hand-verified, no-live-API, single-day mission (visit 10 real Koreatown/Silver Lake/Echo Park apartment buildings, pitch Laundry Butler) built ahead of R1/R2 because Adam needed something usable in the field the same day. Branched fresh from `origin/main` (`437ad76`), independent of the unmerged R1 branch. | `agent/goldline-day1-ten-buildings` | implemented, local gates green, awaiting review/merge | — | — |
+| R1 | day assembly + physical stops + legibility | `agent/goldline-r1-day-assembly` | implemented, local gates green, awaiting review/merge | — | — |
 | R2 | rescue campaign director | — | held | — | — |
 | C1 | consequence loop | — | held | — | — |
 | R3 | growth windows | — | held | — | — |
