@@ -1,0 +1,642 @@
+.colosseum-loading,
+.colosseum-shell {
+  min-height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  background: #0e1721;
+  color: #fff8e8;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.colosseum-loading {
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(255, 209, 102, 0.22), transparent 26%),
+    linear-gradient(180deg, #12344a 0%, #d5c09b 55%, #756044 100%);
+}
+
+.colosseum-loading-mark {
+  font-weight: 900;
+  letter-spacing: .2em;
+  color: #ffd166;
+  font-size: 13px;
+}
+
+.colosseum-loading-copy {
+  margin-top: 10px;
+  font-family: Georgia, serif;
+  font-size: clamp(24px, 8vw, 40px);
+  letter-spacing: .03em;
+}
+
+.colosseum-sky,
+.colosseum-rim,
+.colosseum-floor,
+.colosseum-scene {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.colosseum-sky {
+  background:
+    radial-gradient(circle at 50% 8%, rgba(255,255,255,.88) 0 5%, transparent 24%),
+    linear-gradient(180deg, #8cd3f5 0%, #d7edf2 36%, #f2dfb8 66%, #927757 100%);
+}
+
+.colosseum-rim {
+  top: 16%;
+  bottom: auto;
+  height: 36%;
+  border-radius: 50% 50% 8% 8% / 25% 25% 10% 10%;
+  border: 10px solid rgba(234, 219, 186, .98);
+  border-bottom-width: 18px;
+  background:
+    repeating-linear-gradient(90deg, rgba(91,70,45,.24) 0 3px, transparent 3px 36px),
+    linear-gradient(180deg, rgba(255,252,237,.92), rgba(187,160,118,.96));
+  box-shadow:
+    inset 0 -24px 0 rgba(95,68,40,.18),
+    0 24px 60px rgba(21,20,16,.35);
+  transform: scaleX(1.13);
+}
+
+.colosseum-rim::before,
+.colosseum-rim::after {
+  content: "";
+  position: absolute;
+  top: 25%;
+  width: 12px;
+  height: 80%;
+  background: linear-gradient(90deg, #9d815c, #f6ead0 45%, #806640);
+  box-shadow: 34px 0 0 #d4bd94, 68px 0 0 #aa8a60, 102px 0 0 #d4bd94;
+  opacity: .72;
+}
+
+.colosseum-rim::before { left: 8%; }
+.colosseum-rim::after { right: 8%; transform: scaleX(-1); }
+
+.colosseum-floor {
+  top: 42%;
+  background:
+    radial-gradient(ellipse at 50% 57%, rgba(255,224,155,.55) 0 3%, transparent 4% 13%, rgba(86,58,33,.13) 14% 15%, transparent 16% 27%, rgba(86,58,33,.12) 28% 29%, transparent 30%),
+    repeating-conic-gradient(from 0deg at 50% 58%, rgba(87,65,43,.13) 0deg 1deg, transparent 1deg 20deg),
+    linear-gradient(180deg, #d5bd91 0%, #9c7d57 100%);
+  clip-path: ellipse(78% 57% at 50% 58%);
+}
+
+.colosseum-objective,
+.colosseum-reveal-copy {
+  position: absolute;
+  z-index: 20;
+  top: max(14px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(92%, 460px);
+  text-align: center;
+  text-shadow: 0 2px 12px rgba(0,0,0,.55);
+}
+
+.colosseum-objective span,
+.colosseum-reveal-copy span {
+  display: block;
+  color: #ffd166;
+  font-weight: 900;
+  font-size: 11px;
+  letter-spacing: .22em;
+}
+
+.colosseum-objective strong,
+.colosseum-reveal-copy strong {
+  display: block;
+  margin-top: 3px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(25px, 7.3vw, 38px);
+  line-height: .95;
+  letter-spacing: .02em;
+}
+
+.colosseum-objective small,
+.colosseum-reveal-copy small {
+  display: block;
+  margin-top: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  opacity: .8;
+}
+
+.colosseum-boss {
+  position: absolute;
+  z-index: 12;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  place-items: center;
+}
+
+.colosseum-boss--hologram {
+  top: 19%;
+  width: 96px;
+  height: 126px;
+}
+
+.colosseum-boss img {
+  width: 78px;
+  height: 78px;
+  object-fit: cover;
+  border-radius: 50%;
+  position: relative;
+  z-index: 2;
+  filter: saturate(.8) contrast(1.08) drop-shadow(0 0 10px rgba(123,232,255,.8));
+  opacity: .9;
+}
+
+.colosseum-boss-aura {
+  position: absolute;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(136,235,255,.32), transparent 64%);
+  border: 1px solid rgba(160,242,255,.56);
+  box-shadow: 0 0 24px rgba(79,219,255,.35);
+  animation: colosseumPulse 1.4s ease-in-out infinite alternate;
+}
+
+.colosseum-boss--hologram > span {
+  margin-top: 4px;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .13em;
+  color: #c5f7ff;
+  background: rgba(10, 29, 38, .72);
+  padding: 4px 7px;
+  border: 1px solid rgba(145,235,255,.45);
+}
+
+@keyframes colosseumPulse {
+  from { transform: scale(.92); opacity: .65; }
+  to { transform: scale(1.08); opacity: 1; }
+}
+
+.colosseum-sites {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+}
+
+.colosseum-site {
+  position: absolute;
+  width: clamp(58px, 17vw, 82px);
+  height: clamp(90px, 24vw, 118px);
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #584329;
+  transform-origin: 50% 100%;
+  transition: transform .16s ease, filter .16s ease;
+  filter: drop-shadow(0 7px 6px rgba(44,31,16,.34));
+}
+
+.colosseum-site:active { transform: scale(1.06) translateY(-3px); }
+.colosseum-site--1 { left: 2%; top: 37%; transform: rotate(-7deg) scale(.9); }
+.colosseum-site--2 { left: 16%; top: 29%; transform: rotate(-3deg) scale(.92); }
+.colosseum-site--3 { left: 31%; top: 26%; transform: scale(.92); }
+.colosseum-site--4 { right: 31%; top: 26%; transform: scale(.92); }
+.colosseum-site--5 { right: 16%; top: 29%; transform: rotate(3deg) scale(.92); }
+.colosseum-site--6 { right: 2%; top: 37%; transform: rotate(7deg) scale(.9); }
+
+.colosseum-site-roof {
+  display: block;
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 1%;
+  height: 19%;
+  background: linear-gradient(180deg, #fff5da, #c9ae7d);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  border-bottom: 3px solid #816441;
+}
+
+.colosseum-site-body {
+  display: flex;
+  justify-content: space-evenly;
+  align-items: flex-start;
+  position: absolute;
+  top: 18%;
+  bottom: 9%;
+  left: 12%;
+  right: 12%;
+  background: linear-gradient(90deg, #b79768 0%, #f7e7c3 20%, #d8bf91 65%, #9d7b50 100%);
+  border: 2px solid rgba(111,82,49,.42);
+  border-radius: 2px 2px 7px 7px;
+  box-shadow: inset 0 -10px 0 rgba(74,51,29,.12);
+}
+
+.colosseum-site-body i {
+  width: 14%;
+  height: 48%;
+  margin-top: 34%;
+  border-radius: 10px 10px 1px 1px;
+  background: #3a4b4e;
+  box-shadow: 0 -8px 0 #8a6e4b;
+}
+
+.colosseum-site b {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 25px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: rgba(20,17,13,.72);
+  color: #f8e8c1;
+  font-size: 9px;
+  letter-spacing: .1em;
+}
+
+.colosseum-player,
+.colosseum-final-player {
+  position: absolute;
+  z-index: 18;
+  left: 50%;
+  width: 30px;
+  height: 52px;
+  transform: translateX(-50%);
+}
+
+.colosseum-player { bottom: 17%; }
+
+.colosseum-player span,
+.colosseum-final-player i {
+  display: block;
+  width: 22px;
+  height: 44px;
+  margin: 0 auto;
+  border-radius: 45% 45% 34% 34%;
+  background: linear-gradient(90deg, #28343a, #d2b276 48%, #31404a);
+  box-shadow: 0 8px 10px rgba(0,0,0,.25);
+}
+
+.colosseum-player span::before,
+.colosseum-final-player i::before {
+  content: "";
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: -10px auto 0;
+  border-radius: 50%;
+  background: #bd875f;
+}
+
+.colosseum-shield {
+  position: absolute;
+  z-index: 15;
+  left: 50%;
+  top: 58%;
+  transform: translate(-50%, -50%);
+  width: 52px;
+  height: 62px;
+  border-radius: 48% 48% 56% 56% / 38% 38% 70% 70%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #fff1b1 0%, #c28a21 42%, #694916 100%);
+  border: 3px solid #ffe29a;
+  box-shadow: 0 0 28px rgba(255,200,78,.52), inset 0 0 0 4px rgba(74,44,9,.28);
+}
+
+.colosseum-shield--locked { opacity: .5; filter: grayscale(.25); }
+.colosseum-shield span { font-size: 25px; color: #5f4212; }
+
+.colosseum-shot {
+  position: absolute;
+  z-index: 32;
+  left: 50%;
+  top: 29%;
+  width: 7px;
+  height: 70px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fff, #ff6a2b 30%, rgba(255,46,25,0));
+  box-shadow: 0 0 16px #ff492c;
+  transform-origin: 50% 0;
+  animation: colosseumShot .34s ease-in forwards;
+}
+.colosseum-shot--1 { transform: rotate(-15deg); }
+.colosseum-shot--2 { transform: rotate(0deg); }
+.colosseum-shot--3 { transform: rotate(15deg); }
+@keyframes colosseumShot { to { top: 68%; height: 18px; opacity: .15; } }
+
+.colosseum-death-flash {
+  position: absolute;
+  z-index: 34;
+  inset: 0;
+  background: radial-gradient(circle at 50% 75%, rgba(255,255,255,.92), rgba(255,64,28,.72) 18%, transparent 46%);
+  animation: deathFlash .8s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes deathFlash { from { opacity: 1; } to { opacity: 0; } }
+
+.colosseum-alert {
+  position: absolute;
+  z-index: 40;
+  left: 7%;
+  right: 7%;
+  top: 45%;
+  padding: 18px 14px;
+  border: 1px solid rgba(255,117,72,.65);
+  background: rgba(45,10,8,.88);
+  backdrop-filter: blur(10px);
+  text-align: center;
+  box-shadow: 0 18px 60px rgba(0,0,0,.35), inset 0 0 36px rgba(255,52,25,.13);
+}
+
+.colosseum-alert span,
+.colosseum-alert small { display: block; }
+.colosseum-alert span { color: #ff8d63; font-size: 11px; font-weight: 900; letter-spacing: .16em; }
+.colosseum-alert strong { display: block; margin: 3px 0 7px; font-family: Georgia, serif; font-size: 30px; }
+.colosseum-alert small { font-size: 9px; font-weight: 800; letter-spacing: .1em; opacity: .8; }
+
+.colosseum-hunt-call {
+  position: absolute;
+  z-index: 22;
+  left: 50%;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(88%, 410px);
+  text-align: center;
+}
+
+.colosseum-hunt-call > span {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .16em;
+  color: rgba(255,245,222,.72);
+}
+
+.colosseum-hunt-call button,
+.colosseum-grab-shield,
+.colosseum-advance-pad {
+  appearance: none;
+  width: 100%;
+  min-height: 58px;
+  border: 1px solid rgba(255,223,144,.8);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffd773 0%, #c28a24 100%);
+  color: #271b08;
+  font-weight: 950;
+  letter-spacing: .08em;
+  box-shadow: 0 12px 28px rgba(44,28,6,.28), inset 0 1px rgba(255,255,255,.65);
+}
+
+.colosseum-hunt-call.is-awake button {
+  animation: huntPulse 1s ease-in-out infinite alternate;
+}
+@keyframes huntPulse { to { box-shadow: 0 0 0 5px rgba(255,209,102,.14), 0 16px 38px rgba(44,28,6,.4); } }
+
+.colosseum-field-mode {
+  min-height: 100dvh;
+  background: #f6f0e5;
+  position: relative;
+}
+
+.colosseum-return {
+  position: fixed;
+  z-index: 90;
+  left: 12px;
+  top: max(8px, env(safe-area-inset-top));
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 999px;
+  background: rgba(16,22,29,.84);
+  color: #ffe8ac;
+  padding: 8px 11px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  backdrop-filter: blur(8px);
+}
+
+.colosseum-scene {
+  transition: opacity .15s ease;
+}
+
+.colosseum-scene--search { opacity: 1; }
+.colosseum-scene--revealed { opacity: 0; }
+.is-revealed .colosseum-scene--search { opacity: 0; }
+.is-revealed .colosseum-scene--revealed { opacity: 1; }
+
+.colosseum-sky--after {
+  background:
+    radial-gradient(circle at 50% 10%, #fff7c7 0 4%, rgba(255,225,128,.9) 7%, transparent 27%),
+    linear-gradient(180deg, #6db9d7 0%, #dbedf0 33%, #f5d492 66%, #8f6840 100%);
+}
+
+.colosseum-rim--after { filter: brightness(.78) contrast(1.04); }
+.colosseum-floor--after { filter: brightness(.9); }
+
+.colosseum-ghost-buildings { position: absolute; inset: 0; }
+.ghost-building {
+  position: absolute;
+  top: 32%;
+  width: 13%;
+  height: 21%;
+  background: linear-gradient(90deg, #9e7b52, #ead7ad, #8e6b47);
+  clip-path: polygon(14% 14%, 50% 0, 86% 14%, 100% 14%, 100% 100%, 0 100%, 0 14%);
+  box-shadow: 0 10px 20px rgba(0,0,0,.25);
+}
+.ghost-building--1 { left: 3%; transform: rotate(-7deg) scale(.88); }
+.ghost-building--2 { left: 19%; transform: rotate(-3deg); }
+.ghost-building--3 { left: 35%; }
+.ghost-building--4 { right: 35%; }
+.ghost-building--5 { right: 19%; transform: rotate(3deg); }
+.ghost-building--6 { right: 3%; transform: rotate(7deg) scale(.88); }
+
+.colosseum-explosion {
+  position: absolute;
+  z-index: 50;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle at 50% 47%, rgba(255,255,242,.96) 0 6%, rgba(255,193,70,.82) 12%, rgba(132,77,25,.55) 28%, transparent 55%);
+}
+.colosseum-explosion.is-live { animation: explosionMask .96s ease-in-out forwards; }
+.colosseum-explosion i {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  background: #b89664;
+  box-shadow: 0 0 18px rgba(255,201,91,.8);
+}
+.colosseum-explosion i:nth-child(1) { transform: translate(-90px,-35px) rotate(23deg); }
+.colosseum-explosion i:nth-child(2) { transform: translate(82px,-20px) rotate(67deg); }
+.colosseum-explosion i:nth-child(3) { transform: translate(-58px,58px) rotate(44deg); }
+.colosseum-explosion i:nth-child(4) { transform: translate(70px,66px) rotate(12deg); }
+.colosseum-explosion i:nth-child(5) { transform: translate(4px,-78px) rotate(80deg); }
+@keyframes explosionMask {
+  0% { opacity: 0; transform: scale(.45); }
+  28% { opacity: 1; transform: scale(1.05); }
+  68% { opacity: 1; transform: scale(1.22); }
+  100% { opacity: 0; transform: scale(1.52); }
+}
+
+.colosseum-target-building {
+  position: absolute;
+  z-index: 8;
+  left: 50%;
+  top: 24%;
+  transform: translateX(-50%);
+  width: min(43vw, 190px);
+  height: min(39vw, 176px);
+  filter: drop-shadow(0 10px 20px rgba(0,0,0,.3));
+}
+
+.colosseum-target-building > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #8a6b45, #f3dfb5 25%, #c7a773 70%, #785b3a);
+  clip-path: polygon(10% 18%, 50% 0, 90% 18%, 100% 18%, 100% 100%, 0 100%, 0 18%);
+  border-bottom: 8px solid #674928;
+  box-shadow: inset 0 0 0 4px rgba(255,232,179,.25), 0 0 36px rgba(255,205,86,.32);
+}
+
+.colosseum-target-building > span::after {
+  content: "";
+  display: block;
+  position: absolute;
+  left: 37%;
+  bottom: 0;
+  width: 26%;
+  height: 47%;
+  border-radius: 50% 50% 0 0;
+  background: radial-gradient(circle at 50% 24%, #ffe179 0 8%, #553922 50%);
+  box-shadow: 0 0 24px rgba(255,215,103,.7);
+}
+
+.colosseum-target-building b {
+  display: block;
+  margin-top: 7px;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: .1em;
+  color: #ffe7aa;
+  text-shadow: 0 2px 8px #000;
+}
+
+.colosseum-reveal-copy { top: max(12px, env(safe-area-inset-top)); }
+.colosseum-boss--final { top: 38%; width: 82px; height: 82px; opacity: .78; }
+.colosseum-boss--final img { width: 64px; height: 64px; }
+
+.colosseum-final-player {
+  bottom: var(--player-bottom, 11%);
+  transition: bottom .05s linear;
+}
+
+.carried-shield {
+  position: absolute;
+  z-index: 2;
+  left: -13px;
+  top: 4px;
+  width: 30px;
+  height: 38px;
+  border-radius: 48% 48% 56% 56% / 38% 38% 70% 70%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #fff0a7, #bb7e17 65%);
+  border: 2px solid #ffe198;
+  color: #49310e;
+  box-shadow: 0 0 18px rgba(255,212,93,.7);
+  font-size: 15px;
+}
+
+.colosseum-grab-shield {
+  position: absolute;
+  z-index: 28;
+  left: 50%;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(84%, 360px);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+}
+.colosseum-grab-shield span { font-size: 24px; }
+
+.colosseum-final-projectiles {
+  position: absolute;
+  inset: 0;
+  z-index: 17;
+  pointer-events: none;
+}
+.colosseum-final-projectiles i {
+  position: absolute;
+  top: 41%;
+  left: 50%;
+  width: 5px;
+  height: 44px;
+  border-radius: 999px;
+  background: linear-gradient(#fff6b8, #ff6637, transparent);
+  box-shadow: 0 0 10px #ff7549;
+  animation: finalShot 1.1s linear infinite;
+}
+.colosseum-final-projectiles i:nth-child(2) { margin-left: -50px; animation-delay: -.35s; }
+.colosseum-final-projectiles i:nth-child(3) { margin-left: 54px; animation-delay: -.7s; }
+@keyframes finalShot { to { top: 79%; opacity: 0; } }
+
+.colosseum-advance-pad {
+  position: absolute;
+  z-index: 30;
+  left: 50%;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(84%, 360px);
+  user-select: none;
+  touch-action: none;
+}
+.colosseum-advance-pad strong { display: block; font-size: 13px; }
+.colosseum-advance-pad span { display: block; margin-top: 2px; font-size: 10px; opacity: .72; }
+
+.colosseum-victory {
+  position: absolute;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  padding: 20px;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(255,240,160,.64), transparent 23%),
+    rgba(13,22,29,.72);
+  backdrop-filter: blur(6px);
+  animation: victoryIn .45s ease-out both;
+}
+@keyframes victoryIn { from { opacity: 0; transform: scale(1.06); } }
+.colosseum-victory span { color: #ffd166; font-size: 11px; font-weight: 900; letter-spacing: .18em; }
+.colosseum-victory strong { margin: 4px 0 8px; font-family: Georgia, serif; font-size: clamp(34px, 10vw, 54px); line-height: .95; }
+.colosseum-victory small { font-size: 11px; font-weight: 900; letter-spacing: .16em; }
+
+@media (max-height: 700px) {
+  .colosseum-objective strong,
+  .colosseum-reveal-copy strong { font-size: 24px; }
+  .colosseum-objective small,
+  .colosseum-reveal-copy small { margin-top: 4px; }
+  .colosseum-boss--hologram { top: 17%; transform: translateX(-50%) scale(.82); }
+  .colosseum-site { transform-origin: 50% 100%; }
+  .colosseum-site--1 { top: 34%; }
+  .colosseum-site--2 { top: 26%; }
+  .colosseum-site--3 { top: 23%; }
+  .colosseum-site--4 { top: 23%; }
+  .colosseum-site--5 { top: 26%; }
+  .colosseum-site--6 { top: 34%; }
+  .colosseum-player { bottom: 14%; }
+  .colosseum-shield { top: 57%; transform: translate(-50%,-50%) scale(.8); }
+  .colosseum-hunt-call button { min-height: 48px; }
+}
