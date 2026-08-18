@@ -61,6 +61,22 @@ export function isPlayableCorridor(corridorId: string): boolean {
 }
 
 /**
+ * Player-facing section names shown at the moment a corridor is revealed.
+ * Deliberately separate from `label` above: `label` is internal tooling
+ * copy, this is the one place a corridor's name is ever shown to the
+ * player, so it is authored here rather than left to whichever call site
+ * needed a string first.
+ */
+const SECTION_TITLES: Readonly<Record<string, string>> = {
+  corridor_01: "THE APPROACH",
+  corridor_02: "THE COASTAL MARKET",
+};
+
+export function corridorSectionTitle(corridorId: string): string | null {
+  return SECTION_TITLES[corridorId] ?? null;
+}
+
+/**
  * Returns only the next destination this build is actually allowed to serve.
  * Merely registering an authoring corridor never makes preload legitimate.
  */

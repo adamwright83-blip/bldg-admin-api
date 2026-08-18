@@ -424,6 +424,16 @@ export class GoldlineGame {
   private landmarkArchetype: LandmarkArchetype | null = null;
   private worldSignal: MissionAffordanceProjection["worldSignal"] = "none";
   private landmark = new Graphics();
+  /**
+   * The route-end marker: a physical object near the corridor's exit band
+   * (progress ~0.80). Two readings of the same slot, never both — a waypost
+   * when a playable next corridor exists, an authored monument sentence when
+   * this build's world genuinely ends here. `hasNextCorridor` defaults true
+   * so a corridor never renders the "world ends" copy before the caller has
+   * told it otherwise.
+   */
+  private routeMarker = new Graphics();
+  private hasNextCorridor = true;
   private occlusionZones: OcclusionZone[] = [];
   private portalProximityState = new Map<
     string,
@@ -597,6 +607,7 @@ export class GoldlineGame {
         this.recoveryPath,
         this.fortress,
         this.landmark,
+        this.routeMarker,
         this.portals
       );
 
@@ -785,6 +796,16 @@ export class GoldlineGame {
    */
   setWorldSignal(signal: MissionAffordanceProjection["worldSignal"]) {
     this.worldSignal = signal;
+  }
+
+  /**
+   * Tells the runtime whether the currently loaded corridor has a playable
+   * successor. The caller (React, which owns the corridor registry) decides
+   * this — the runtime itself never guesses. Drives which of the two
+   * route-end presentations `drawRouteMarker` renders.
+   */
+  setHasNextCorridor(hasNext: boolean) {
+    this.hasNextCorridor = hasNext;
   }
 
   /**
@@ -1575,6 +1596,7 @@ export class GoldlineGame {
       this.corridor.zIndex = TRAVERSAL_Z.STATIC_WORLD;
       this.recoveryPath.zIndex = TRAVERSAL_Z.STATIC_WORLD + 1;
       this.landmark.zIndex = TRAVERSAL_Z.STATIC_WORLD + 2;
+      this.routeMarker.zIndex = TRAVERSAL_Z.STATIC_WORLD + 2;
       this.portals.zIndex = TRAVERSAL_Z.STRONGHOLD;
       this.fortress.zIndex = TRAVERSAL_Z.FORTRESS;
       this.particles.zIndex = TRAVERSAL_Z.PARTICLES;
@@ -1591,6 +1613,7 @@ export class GoldlineGame {
         this.projectNormalizedCorridor(progress, lateral, width, height),
     });
     this.drawLandmark(width, height, now);
+    this.drawRouteMarker(width, height);
     this.avatarState.tick(now);
     if (this.actionUntil && now >= this.actionUntil) {
       this.actionUntil = 0;
@@ -2392,6 +2415,55 @@ export class GoldlineGame {
         .lineTo(x + Math.cos(tickAngle) * 11, y + Math.sin(tickAngle) * 11)
         .stroke({ color: 0xffe6b8, width: 2, alpha: 0.9 });
     }
+  }
+
+  /**
+   * The one physical object at the corridor's exit band (progress ~0.80,
+   * inside the [0.77 exitNear, 0.82 ceiling] window). Reads as a waypost
+   * when a next corridor exists — an ordinary EVENT is coming — or, on the
+   * last playable corridor, as an authored monument that tells the player
+   * in-world that the built route ends here, so a hard stop never reads as
+   * a bug. Same art law as every other world object: dark body, limestone
+   * rim light, brass fittings.
+   */
+  private drawRouteMarker(width: number, height: number) {
+    this.routeMarker.clear();
+    // The expedition owns exit/landmark presentation while it runs — same
+    // rule drawLandmark already follows.
+    if (this.expedition) return;
+    const { x, y } = this.projectNormalizedCorridor(0.8, 0.32, width, height);
+
+    if (this.hasNextCorridor) {
+      // Waypost: dark basalt shaft, limestone rim light down one edge, a
+      // brass cap and finial. No copy — the section-title chip and audio
+      // cue carry the "this is an event" read; this is just the physical
+      // thing the player walks past on the way there.
+      this.routeMarker
+        .roundRect(x - 7, y - 46, 14, 46, 3)
+        .fill({ color: 0x14181c, alpha: 0.92 })
+        .stroke({ color: 0xd9bd78, width: 1.4, alpha: 0.5 });
+      this.routeMarker
+        .roundRect(x - 10, y - 54, 20, 10, 2)
+        .fill({ color: 0xb08a3e, alpha: 0.95 })
+        .stroke({ color: 0xf0d9a0, width: 1, alpha: 0.6 });
+      this.routeMarker.circle(x, y - 58, 3).fill({ color: 0xf0d9a0, alpha: 0.85 });
+      return;
+    }
+
+    // Monument: a low dark stone slab, limestone rim, brass inlay line. The
+    // one authored sentence ("THE LINE ENDS HERE — BEYOND IS UNWRITTEN")
+    // renders as a DOM chip (GoldlineGameHome's end-of-world-marker), not
+    // canvas text — every other player-facing sentence in this world is DOM,
+    // and Pixi's text subsystem is not otherwise pulled into this bundle.
+    // This slab is the physical object the copy is anchored to.
+    this.routeMarker
+      .roundRect(x - 44, y - 30, 88, 30, 4)
+      .fill({ color: 0x11151a, alpha: 0.93 })
+      .stroke({ color: 0xd9bd78, width: 1.6, alpha: 0.55 });
+    this.routeMarker
+      .moveTo(x - 34, y - 8)
+      .lineTo(x + 34, y - 8)
+      .stroke({ color: 0xb08a3e, width: 1.5, alpha: 0.8 });
   }
 
   private updatePortals(width: number, height: number) {

@@ -310,7 +310,7 @@ to do?
 
 | PR | Branch | Status | Merged SHA | Adam played |
 |----|--------|--------|-----------|-------------|
-| #78 | `agent/goldline-pr78-playtest-closure` | PROMPT RELEASED | — | — |
+| #78 | `agent/goldline-pr78-playtest-closure` | IMPLEMENTED, pushed, awaiting PR + Fable review | `e331d27` (branch head, not yet merged) | — |
 | #78.5 | — | held | — | — |
 | #79 | — | held | — | — |
 | #80 | — | held | — | — |

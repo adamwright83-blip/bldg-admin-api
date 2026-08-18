@@ -43,7 +43,11 @@ export type AudioCueId =
   | "closed_truth"
   | "recovery_truth"
   | "capability_available"
-  | "corridor_transition";
+  | "corridor_transition"
+  | "strike_hit"
+  | "hostile_down"
+  | "player_hurt"
+  | "barrier_release";
 
 type ToneStep = { freq: number; durationMs: number; type?: OscillatorType };
 
@@ -172,6 +176,43 @@ const CUE_DEFINITIONS: Record<
       { freq: 440, durationMs: 100, type: "triangle" },
     ],
   },
+  // Combat palette (§PR78 Workstream C). Previously `vault` covered guard
+  // absorb, Line latch, hazard, relic, AND seal fracture, while
+  // `weak_point_hit` covered both a landed strike and a kill — envelopes
+  // below are ordered strike_hit < player_hurt < hostile_down in total
+  // weight (duration + how low the tone settles), so a hit, taking damage,
+  // and a kill are each recognizable by feel alone, not just louder.
+  strike_hit: {
+    category: "encounter",
+    steps: [{ freq: 950, durationMs: 35, type: "square" }],
+  },
+  player_hurt: {
+    category: "encounter",
+    steps: [
+      { freq: 260, durationMs: 90, type: "triangle" },
+      { freq: 190, durationMs: 110, type: "sine" },
+    ],
+  },
+  hostile_down: {
+    category: "encounter",
+    steps: [
+      { freq: 620, durationMs: 70, type: "sawtooth" },
+      { freq: 310, durationMs: 130, type: "sawtooth" },
+      { freq: 155, durationMs: 160, type: "sine" },
+    ],
+  },
+  // The climax seal breaking — distinct from `gate_unlock` (a mission-truth
+  // cue) and from `vault` (still used for guard/Line/hazard/relic). Rises
+  // out of a low fracture into a brighter settle, so it reads as release
+  // rather than another hit.
+  barrier_release: {
+    category: "encounter",
+    steps: [
+      { freq: 210, durationMs: 90, type: "sawtooth" },
+      { freq: 520, durationMs: 130, type: "triangle" },
+      { freq: 660, durationMs: 160, type: "sine" },
+    ],
+  },
 };
 
 const STORAGE_KEY = "goldline:audio:muted";
@@ -234,6 +275,17 @@ export class AudioManager {
   }
 
   play(cue: AudioCueId) {
+    // Harness-only call log, independent of mute/autoplay-suspend state
+    // below: a verification script can assert a semantic cue was actually
+    // invoked (e.g. hostile_down on a kill) without depending on real audio
+    // hardware or a user gesture having unlocked the AudioContext.
+    if (
+      typeof window !== "undefined" &&
+      import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
+    ) {
+      const w = window as unknown as { __goldlineAudioLog?: AudioCueId[] };
+      (w.__goldlineAudioLog ??= []).push(cue);
+    }
     if (this.muted) return;
     const ctx = this.ensureContext();
     if (!ctx || ctx.state === "suspended") return;

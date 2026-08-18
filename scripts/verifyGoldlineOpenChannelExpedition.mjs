@@ -1,21 +1,27 @@
 /**
  * THE ZERO-ORDER DAY — proven, not asserted in prose.
  *
- * PR #71 made the expedition shell objective-agnostic so an approved Open
- * Channel task can prepare the #70 heartbeat when no Laundry Butler-native
- * pickup exists. Its acceptance criteria shipped as seven bullets in
- * `e2e/goldline/objectiveAgnosticExpedition.contract.md` — prose that
- * nothing executes — plus four unit tests over a pure function that never
- * mount the HUD or press anything.
+ * §PR78 Workstream B1 (playtest closure). PR #71 originally made the
+ * expedition shell objective-agnostic so an approved Open Channel task could
+ * stage the #70 combat heartbeat when no Laundry Butler-native pickup
+ * existed. Adam's first real playtest found that cargo-box expedition did
+ * nothing he could perceive for a plain desk task ("design door hangers") —
+ * the climax was dishonest. §PR78 closes it: the expedition shell is now
+ * reserved for objectives with real physical arrival (native_pickup,
+ * external_order, local_target_run); a plain `open_channel` objective
+ * completes right in the base, through the exact same canonical write,
+ * with no combat staged around it at all.
  *
- * This is that contract, executed against the real runtime with real touch:
+ * This is that closure, executed against the real runtime:
  *
- *   1. No native pickup + approved Open Channel task -> ENTER THE LINE
- *   2. The run is the same #70 movement/Linehook/Relic/route heartbeat
- *   3. Arrival does NOT complete the task
- *   4. Only the canonical Open Channel write may resolve it
- *   5. The HUD stays in verification until authoritative state says completed
- *   6. Open Channel completion produces NO pickup Stronghold restoration
+ *   1. No native pickup + approved Open Channel task -> NO "ENTER THE LINE"
+ *      is ever offered for it; the base shows SEAL THE WORK directly.
+ *   2. Tapping SEAL THE WORK calls the same canonical Open Channel write.
+ *   3. The HUD stays in-base (no expedition mounts) until authoritative
+ *      state says the task is completed.
+ *   4. Completion produces NO pickup Stronghold restoration (no lanterns,
+ *      no collected-order evidence, no expedition order binding) — sealing
+ *      a desk task was never combat and still is not a pickup.
  *
  *   GOLDLINE_VERIFY_URL=http://127.0.0.1:5186 \
  *     node scripts/verifyGoldlineOpenChannelExpedition.mjs
@@ -80,22 +86,12 @@ await page.route(
   route => route.fulfill({ status: 200, body: "", contentType: "text/plain" })
 );
 
-// ------------------------------------------------------------- CDP touch
-
-const cdp = await context.newCDPSession(page);
-const pt = (x, y) => ({
-  x: Math.round(x),
-  y: Math.round(y),
-  radiusX: 12,
-  radiusY: 12,
-  force: 1,
-});
-const touchStart = (x, y) =>
-  cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [pt(x, y)] });
-const touchMove = (x, y) =>
-  cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [pt(x, y)] });
-const touchEnd = () =>
-  cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+const failures = [];
+function check(name, passed, detail) {
+  console.log(`  ${passed ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  if (!passed) failures.push(`${name}${detail ? `: ${detail}` : ""}`);
+}
+const shot = name => page.screenshot({ path: path.join(outputDir, `${name}.png`) });
 
 // The ZERO-ORDER DAY fixture: no pickups, no deliveries, one approved
 // Open Channel mission with pending real work.
@@ -110,216 +106,69 @@ if (await explainer.count()) {
   await explainer.getByRole("button", { name: "GOT IT" }).click();
 }
 
-const failures = [];
-function check(name, passed, detail) {
-  console.log(`  ${passed ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
-  if (!passed) failures.push(`${name}${detail ? `: ${detail}` : ""}`);
-}
-const shot = name => page.screenshot({ path: path.join(outputDir, `${name}.png`) });
-async function settle(frames = 8) {
-  await page.evaluate(
-    count =>
-      new Promise(resolve => {
-        let seen = 0;
-        const tick = () => {
-          seen += 1;
-          if (seen >= count) resolve();
-          else requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      }),
-    frames
-  );
-}
-async function centerOf(testId) {
-  const box = await page.getByTestId(testId).boundingBox();
-  if (!box) throw new Error(`No box for ${testId}`);
-  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-}
-const snapshot = () =>
-  page.evaluate(() => window.__goldlineGame.getExpeditionSnapshot());
-const progressNow = () => page.evaluate(() => window.__goldlineGame.progress);
+// --------------------------------- 1. no combat is ever offered or mounted
 
-async function walkTo(target, { maxMs = 20_000 } = {}) {
-  const stick = await centerOf("goldline-joystick");
-  await touchStart(stick.x, stick.y);
-  const startedAt = Date.now();
-  let last = await progressNow();
-  let stalled = 0;
-  while (Date.now() - startedAt < maxMs) {
-    await touchMove(stick.x, stick.y - 46);
-    await settle(6);
-    const now = await progressNow();
-    if (now >= target - 0.004) break;
-    stalled = Math.abs(now - last) < 0.0005 ? stalled + 1 : 0;
-    if (stalled > 14) break;
-    last = now;
-  }
-  await touchEnd();
-  await settle(6);
-  return progressNow();
-}
-
-// ------------------------------------------ 1. the day has no native work
-
-console.log("\n1. A ZERO-ORDER DAY STILL OFFERS THE LINE");
-const threshold = page.getByTestId("expedition-threshold");
-await threshold.waitFor({ timeout: 15_000 }).catch(() => {});
+console.log("\n1. A DESK TASK NEVER STAGES COMBAT");
+await page.getByTestId("seal-open-channel-task").waitFor({ timeout: 15_000 });
 check(
-  "ENTER THE LINE is offered with no native pickup at all",
-  (await page.getByTestId("expedition-enter").count()) > 0
+  "SEAL THE WORK is offered directly in the base",
+  (await page.getByTestId("seal-open-channel-task").count()) > 0
 );
-const offeredLabel = await page
-  .locator(".expedition-threshold__objective")
+check(
+  "ENTER THE LINE is never offered for this objective",
+  (await page.getByTestId("expedition-enter").count()) === 0
+);
+check(
+  "the expedition shell never mounts",
+  (await page.getByTestId("expedition-action-pad").count()) === 0
+);
+const sealLabel = await page
+  .getByTestId("seal-open-channel-task")
+  .locator("small")
   .textContent()
   .catch(() => null);
 check(
   "the offer names the operator's own real task",
-  Boolean(offeredLabel && offeredLabel.toLowerCase().includes("door hanger")),
-  offeredLabel
+  Boolean(sealLabel && sealLabel.toLowerCase().includes("door hanger")),
+  sealLabel
 );
-await shot("oc-01-threshold");
+await shot("oc-01-base-offer");
 
-// ------------------------------------------------- 2. it is the heartbeat
+// ---------------------------------- 2/3. the canonical write, and only it
 
-console.log("\n2. IT IS THE SAME #70 HEARTBEAT");
-await page.getByTestId("expedition-enter").click();
-await page.getByTestId("expedition-action-pad").waitFor({ timeout: 10_000 });
-check("the expedition runs", (await snapshot()).outcome === "running");
-
-const plan = await page.evaluate(() => {
-  const p = window.__goldlineGame.getExpedition().plan;
-  return {
-    relic: p.relicPlinths,
-    destination: p.destination,
-    climax: p.environment.find(e => e.id === "arch_climax_span").progress,
-  };
-});
-
-// Real touch: a tap must dodge, exactly as in the pickup expedition.
-//
-// Two things this has to get right, both learned the hard way.
-//
-// First, `isDodging()` is a transient flag on a 0.22s burst, so polling it from
-// the driver can miss a dodge that starts and ends between two round trips.
-// Latch it inside the page on every frame instead, armed before the touch.
-//
-// Second, the press has to actually be a TAP. HOLD_THRESHOLD_MS is 200ms of
-// real wall clock, and a driver-side `setTimeout(70)` between two CDP round
-// trips can easily land past that under load — at which point the pad promotes
-// to aim and releasing with no lock correctly resolves to `cancel`, not a
-// dodge. So: release immediately, and record whether the pad ever entered aim
-// so a failure says which of the two things went wrong instead of just "no
-// dodge".
-await page.evaluate(() => {
-  window.__padWatch = { dodged: false, aimed: false, frames: 0 };
-  const pad = () => document.querySelector('[data-testid="expedition-action-pad"]');
-  const watch = () => {
-    const w = window.__padWatch;
-    w.frames += 1;
-    if (window.__goldlineGame?.isDodging()) w.dodged = true;
-    if (pad()?.dataset.aiming === "true") w.aimed = true;
-    if (!w.dodged) requestAnimationFrame(watch);
-  };
-  requestAnimationFrame(watch);
-});
-const pad = await centerOf("expedition-action-pad");
-await touchStart(pad.x, pad.y);
-await touchEnd();
-let padWatch = { dodged: false, aimed: false, frames: 0 };
-for (let i = 0; i < 24 && !padWatch.dodged; i += 1) {
-  padWatch = await page.evaluate(() => window.__padWatch);
-  if (!padWatch.dodged) await settle(2);
-}
-check(
-  "ACT still dodges on a non-order objective",
-  padWatch.dodged,
-  padWatch.dodged
-    ? `dodged within ${padWatch.frames} frames`
-    : padWatch.aimed
-      ? "the press became a hold, so cancel was correct — the tap was too slow"
-      : `no dodge after ${padWatch.frames} frames`
-);
-
-await walkTo(plan.relic + 0.006);
-check(
-  "a relic is still taken by walking",
-  (await snapshot()).relic != null,
-  `relic=${(await snapshot()).relic}`
-);
-await shot("oc-02-playing");
-
-// ------------------------------------------- 3. arrival completes nothing
-
-console.log("\n3. ARRIVAL DOES NOT COMPLETE THE REAL TASK");
-await walkTo(plan.destination);
-if ((await snapshot()).outcome !== "arrived") {
-  await page.evaluate(() => {
-    const layer = window.__goldlineGame.getExpedition();
-    // Every hostile, not just the climax elite. The ranged Slingers stay live
-    // behind the player and this fixture stands still here across settles,
-    // snapshot reads and screenshots — long enough that they killed the run
-    // about one time in three. Winning the fight is explicitly not what any of
-    // these scripts are testing; reaching the cache on foot is.
-    for (const hostile of layer.hostiles) hostile.hp = 0;
-  });
-  if ((await snapshot()).outcome === "down") {
-    await page.getByTestId("expedition-redeploy").click();
-    await settle(20);
-    await page.evaluate(() => {
-      const layer = window.__goldlineGame.getExpedition();
-      // Every hostile, not just the climax elite. The ranged Slingers stay live
-      // behind the player and this fixture stands still here across settles,
-      // snapshot reads and screenshots — long enough that they killed the run
-      // about one time in three. Winning the fight is explicitly not what any of
-      // these scripts are testing; reaching the cache on foot is.
-      for (const hostile of layer.hostiles) hostile.hp = 0;
-    });
-  }
-  await walkTo(plan.destination);
-}
-await page.getByTestId("expedition-arrived").waitFor({ timeout: 15_000 });
-check("the cache is reached on foot", (await snapshot()).outcome === "arrived");
-check(
-  "arriving did NOT seal the work",
-  (await page.getByTestId("cargo-secured").count()) === 0
-);
-await shot("oc-03-arrived");
-
-// ------------------------- 4/5. only the canonical write may resolve it
-
-console.log("\n4. ONLY THE CANONICAL OPEN CHANNEL WRITE RESOLVES IT");
-const completionLabel = await page.getByTestId("secure-cargo").textContent();
-check(
-  "the completion verb belongs to the objective, not to cargo",
-  completionLabel?.trim() === "SEAL THE WORK",
-  completionLabel?.trim()
-);
-
+console.log("\n2. TAPPING SEAL THE WORK CALLS THE CANONICAL WRITE");
 const strongholdBefore = await page.evaluate(
   () => window.__goldlineGame.strongholdRestoration
 );
 
-await page.getByTestId("secure-cargo").click();
-await page.getByTestId("cargo-verifying").waitFor({ timeout: 5_000 });
+// This fixture mission has more than one pending task ("Finish the door
+// hanger design", then "Send the hanger to the printer") — the base offers
+// them one at a time, exactly as a real operator would work through a real
+// task list. Seal every one it offers, in order.
+let sealedCount = 0;
+for (let i = 0; i < 6 && (await page.getByTestId("seal-open-channel-task").count()) > 0; i += 1) {
+  await page.getByTestId("seal-open-channel-task").click();
+  await page
+    .waitForFunction(
+      () =>
+        !document.querySelector('[data-testid="seal-open-channel-task"]') ||
+        document.querySelector('[data-testid="seal-open-channel-task"]')?.getAttribute("disabled") === null,
+      { timeout: 5_000 }
+    )
+    .catch(() => {});
+  await new Promise(resolve => setTimeout(resolve, 1_200)); // fixture's SERVER_TRUTH_DELAY_MS
+  sealedCount += 1;
+}
+check("at least one desk task was sealed", sealedCount > 0, `sealed=${sealedCount}`);
 check(
-  "the write returning shows VERIFYING, never WORK SEALED",
-  (await page.getByTestId("cargo-secured").count()) === 0
+  "the task surface clears once every task is completed",
+  (await page.getByTestId("seal-open-channel-task").count()) === 0
 );
-await shot("oc-04-verifying");
+await shot("oc-02-sealed");
 
-await page.getByTestId("cargo-secured").waitFor({ timeout: 20_000 });
-const sealedLabel = await page.getByTestId("cargo-secured").textContent();
-check(
-  "WORK SEALED only after authoritative completion",
-  sealedLabel?.trim() === "WORK SEALED",
-  sealedLabel?.trim()
-);
-await shot("oc-05-sealed");
+// --------------------------- 4. no counterfeit economic / combat progress
 
-// --------------------------- 6. no counterfeit economic progress
-
-console.log("\n5. REAL WORK, NO COUNTERFEIT BUSINESS PROGRESS");
+console.log("\n3. REAL WORK, NO COUNTERFEIT BUSINESS PROGRESS, NO COMBAT ARTIFACTS");
 const strongholdAfter = await page.evaluate(
   () => window.__goldlineGame.strongholdRestoration
 );
@@ -334,8 +183,12 @@ check(
   `${strongholdBefore?.restoredCount ?? 0} -> ${strongholdAfter?.restoredCount ?? 0}`
 );
 check(
-  "no pickup order was bound to this run",
+  "no expedition order was ever bound",
   (strongholdAfter?.expeditionOrderCollected ?? false) === false
+);
+check(
+  "the expedition shell still never mounted after completion",
+  (await page.getByTestId("expedition-action-pad").count()) === 0
 );
 
 const overflow = await page.evaluate(
