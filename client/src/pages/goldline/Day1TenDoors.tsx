@@ -27,6 +27,13 @@ export type Day1TenDoorsMissionView = {
   outcomeCounts: { pitched: number; couldntReach: number };
 };
 
+export type Day1TenDoorsPresentation = {
+  eyebrow?: string;
+  title?: string;
+  missionLine?: string;
+  completeTitle?: string;
+};
+
 const ORDINALS = [
   "FIRST",
   "SECOND",
@@ -49,11 +56,13 @@ export default function Day1TenDoors({
   isRecordingOutcome,
   onRecordOutcome,
   onDismiss,
+  presentation,
 }: {
   mission: Day1TenDoorsMissionView;
   isRecordingOutcome: boolean;
   onRecordOutcome: (targetId: string, outcome: Day1TargetOutcome) => void;
   onDismiss: () => void;
+  presentation?: Day1TenDoorsPresentation;
 }) {
   const [location, setLocation] = useState<GoldlineLocationSnapshot>({
     status: "requesting",
@@ -138,7 +147,9 @@ export default function Day1TenDoors({
       <div className="day1-screen day1-screen--complete">
         <div className="day1-header">
           <div className="day1-eyebrow">DAY {DAY1_DAY_INDEX} COMPLETE</div>
-          <div className="day1-title">10 DOORS VISITED</div>
+          <div className="day1-title">
+            {presentation?.completeTitle ?? "10 DOORS VISITED"}
+          </div>
         </div>
         <div className="day1-complete-breakdown">
           <div className="day1-complete-row">
@@ -174,10 +185,14 @@ export default function Day1TenDoors({
     <div className="day1-screen" data-testid="day1-screen">
       <div className="day1-header">
         <div className="day1-eyebrow">
-          {RESCUE_TOTAL_DAYS} DAYS TO SAVE THE BUSINESS
+          {presentation?.eyebrow ?? `${RESCUE_TOTAL_DAYS} DAYS TO SAVE THE BUSINESS`}
         </div>
-        <div className="day1-title">DAY {DAY1_DAY_INDEX} — THE TEN DOORS</div>
-        <div className="day1-mission-line">{DAY1_MISSION_LINE}</div>
+        <div className="day1-title">
+          {presentation?.title ?? `DAY ${DAY1_DAY_INDEX} — THE TEN DOORS`}
+        </div>
+        <div className="day1-mission-line">
+          {presentation?.missionLine ?? DAY1_MISSION_LINE}
+        </div>
         <div className="day1-progress" data-testid="day1-progress">
           {mission.visitedCount} / {mission.totalCount} VISITED
         </div>
