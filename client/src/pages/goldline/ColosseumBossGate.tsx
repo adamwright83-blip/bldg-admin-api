@@ -192,11 +192,14 @@ function ColosseumFinale({
   }, []);
 
   useEffect(() => {
-    if (advance < 100 || victory) return;
-    setVictory(true);
+    if (advance >= 100 && !victory) setVictory(true);
+  }, [advance, victory]);
+
+  useEffect(() => {
+    if (!victory) return;
     const openWorld = window.setTimeout(onBossDefeated, 1450);
     return () => window.clearTimeout(openWorld);
-  }, [advance, onBossDefeated, victory]);
+  }, [onBossDefeated, victory]);
 
   useEffect(
     () => () => {
