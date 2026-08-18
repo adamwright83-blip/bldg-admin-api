@@ -1,0 +1,214 @@
+.colosseum-shell--playable {
+  touch-action: none;
+}
+
+/* Reuse the finished BORESLAY Procrastinator art as the actual boss instead
+   of cropping a generic portrait into a tiny circular hologram. */
+.colosseum-shell--playable .colosseum-boss--hologram,
+.colosseum-finale .colosseum-boss--final {
+  width: 150px;
+  height: 178px;
+  top: 17.5%;
+  pointer-events: none;
+}
+
+.colosseum-shell--playable .colosseum-boss img,
+.colosseum-finale .colosseum-boss--final img {
+  width: 148px;
+  height: 160px;
+  object-fit: contain;
+  object-position: center bottom;
+  border-radius: 0;
+  filter:
+    drop-shadow(0 10px 10px rgba(31, 20, 12, .36))
+    drop-shadow(0 0 15px rgba(122, 232, 255, .64));
+  opacity: .97;
+}
+
+.colosseum-shell--playable .colosseum-boss-aura,
+.colosseum-finale .colosseum-boss--final .colosseum-boss-aura {
+  width: 142px;
+  height: 156px;
+  border-radius: 45%;
+  background: radial-gradient(ellipse, rgba(121, 229, 255, .28), transparent 68%);
+  border: 1px solid rgba(159, 241, 255, .38);
+}
+
+.colosseum-shell--playable .colosseum-boss--hologram > span {
+  position: absolute;
+  top: 142px;
+  white-space: nowrap;
+  font-size: 8px;
+  padding: 4px 8px;
+}
+
+/* The authored building pictures remain scenery. Their hit zones are now
+   crossed by actually walking Trailblazer into them. */
+.colosseum-shell--playable .colosseum-site {
+  pointer-events: none;
+}
+
+.colosseum-player--playable {
+  bottom: auto !important;
+  width: 62px;
+  height: 88px;
+  transform: translate(-50%, -82%);
+  transform-origin: 50% 100%;
+  transition: filter .1s linear;
+  pointer-events: none;
+  will-change: left, top;
+}
+
+.colosseum-player--playable img {
+  display: block;
+  width: 62px;
+  height: 88px;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 9px 7px rgba(45, 28, 13, .35));
+}
+
+.colosseum-player--playable::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  bottom: 2px;
+  width: 34px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(55, 38, 23, .27);
+  transform: translateX(-50%);
+  filter: blur(2px);
+}
+
+.colosseum-player--playable.is-moving img {
+  animation: colosseumTrailblazerStride .28s ease-in-out infinite alternate;
+}
+
+@keyframes colosseumTrailblazerStride {
+  from { transform: translateY(0) rotate(-1deg); }
+  to { transform: translateY(-3px) rotate(1deg); }
+}
+
+.colosseum-joystick {
+  position: absolute;
+  z-index: 45;
+  left: max(18px, env(safe-area-inset-left));
+  bottom: max(92px, calc(env(safe-area-inset-bottom) + 76px));
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 236, 189, .72);
+  background:
+    radial-gradient(circle, rgba(255, 224, 151, .14) 0 30%, transparent 31%),
+    rgba(43, 32, 22, .28);
+  box-shadow:
+    inset 0 0 0 7px rgba(255,255,255,.05),
+    0 12px 30px rgba(32, 20, 10, .18);
+  backdrop-filter: blur(4px);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.colosseum-joystick::before,
+.colosseum-joystick::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: rgba(255, 239, 202, .18);
+  transform: translate(-50%, -50%);
+}
+
+.colosseum-joystick::before { width: 1px; height: 80%; }
+.colosseum-joystick::after { width: 80%; height: 1px; }
+
+.colosseum-joystick-knob {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #ffe6a3, #bd8425 68%, #6e4715);
+  border: 2px solid rgba(255, 244, 210, .82);
+  box-shadow: 0 5px 16px rgba(51, 30, 8, .38), inset 0 1px 4px rgba(255,255,255,.55);
+  transition: transform 50ms linear;
+}
+
+.colosseum-joystick-label {
+  position: absolute;
+  left: 50%;
+  bottom: -21px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  color: rgba(255, 248, 226, .78);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .16em;
+  text-shadow: 0 1px 4px rgba(0,0,0,.38);
+}
+
+.colosseum-shell--playable .colosseum-hunt-call {
+  z-index: 46;
+}
+
+.colosseum-shell--playable .colosseum-hunt-call > span {
+  text-shadow: 0 1px 5px rgba(0,0,0,.45);
+}
+
+.colosseum-proximity-ring {
+  position: absolute;
+  z-index: 11;
+  width: 54px;
+  height: 22px;
+  border: 1px solid rgba(255, 209, 102, .0);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.colosseum-proximity-ring.is-near {
+  border-color: rgba(255, 209, 102, .62);
+  box-shadow: 0 0 17px rgba(255, 209, 102, .34);
+}
+
+.colosseum-boss-name {
+  position: absolute;
+  z-index: 14;
+  top: 31.2%;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #513725;
+  font-family: Georgia, serif;
+  font-weight: 900;
+  font-size: 10px;
+  letter-spacing: .11em;
+  white-space: nowrap;
+  text-shadow: 0 1px 0 rgba(255,255,255,.45);
+  pointer-events: none;
+}
+
+.colosseum-shot--player-target {
+  left: 50%;
+  top: 28%;
+  height: var(--shot-length, 320px);
+  transform: rotate(var(--shot-angle, 0deg));
+  transform-origin: 50% 0;
+}
+
+@media (max-height: 720px) {
+  .colosseum-shell--playable .colosseum-boss--hologram {
+    top: 15%;
+    transform: translateX(-50%) scale(.84);
+  }
+  .colosseum-joystick {
+    width: 96px;
+    height: 96px;
+    bottom: 84px;
+  }
+}
