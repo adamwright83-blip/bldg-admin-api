@@ -72,6 +72,7 @@ import { loadAnyCheckpoint, saveCheckpoint } from "./session/checkpointStorage";
 import { corridorGameAssets, loadCorridorPack } from "./world/corridorPack";
 import {
   DEFAULT_CORRIDOR_ID,
+  corridorSectionTitle,
   isPlayableCorridor,
   nextPlayableCorridorId,
 } from "./world/corridorRegistry";
@@ -1236,6 +1237,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               corridorId,
             },
           });
+          // The section title moment: crossing into the next corridor is an
+          // EVENT, not a silent asset swap. Reuses the existing transient
+          // chip and audio cue rather than inventing new presentation.
+          const title = corridorSectionTitle(corridorId);
+          if (title) showWorldOutcomeCue(title);
+          getAudioManager().playOnce("corridor_transition", corridorId);
         }
       },
     });
@@ -1355,6 +1362,13 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         }
       });
   }, [corridorExitNear, nextCorridorId]);
+
+  // Tells the runtime which of the two route-end presentations to draw at
+  // the exit band: a waypost when a playable next corridor exists, the
+  // authored "world ends here" monument when this is the last one.
+  useEffect(() => {
+    runtimeRef.current?.setHasNextCorridor(nextCorridorId !== null);
+  }, [activeCorridorId, nextCorridorId, runtimeReady]);
 
   useEffect(() => {
     if (!activeMission) {
@@ -1617,6 +1631,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
 
   const enterExpedition = useCallback(() => {
     if (!preparedObjective) return;
+    // A plain Open Channel desk task has no real physical arrival — the
+    // expedition shell is reserved for objectives that do (native_pickup,
+    // external_order, local_target_run). It completes in the base via
+    // completeBaseOpenChannelObjective below and must never stage combat.
+    if (preparedObjective.kind === "open_channel") return;
     setExpeditionSnapshot({
       hp: EXPEDITION.maxHp,
       momentum: 0,
@@ -1640,6 +1659,34 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     setActiveExpedition(null);
     setCargoPhase("idle");
   }, []);
+
+  /**
+   * A plain Open Channel desk task ("design door hangers") is real work with
+   * no physical arrival — it is sealed right here in the base, through the
+   * exact same canonical write the expedition's SEAL THE WORK used to call,
+   * just without staging a cargo-box expedition around it. `open_channel`
+   * kind objectives whose payload is actually a LOCAL_TARGET_RUN never reach
+   * here (prepareExpeditionObjective returns "local_target_run" for those).
+   */
+  const [baseOpenChannelPhase, setBaseOpenChannelPhase] =
+    useState<"idle" | "sealing">("idle");
+  const completeBaseOpenChannelObjective = useCallback(async () => {
+    if (!preparedObjective || preparedObjective.kind !== "open_channel") return;
+    if (baseOpenChannelPhase === "sealing") return;
+    setBaseOpenChannelPhase("sealing");
+    try {
+      const ok = await props.onCompleteOpenChannelTask(
+        preparedObjective.missionId,
+        preparedObjective.taskId
+      );
+      if (ok) {
+        getAudioManager().play("captured_truth");
+        showWorldOutcomeCue("WORK SEALED");
+      }
+    } finally {
+      setBaseOpenChannelPhase("idle");
+    }
+  }, [preparedObjective, baseOpenChannelPhase, props.onCompleteOpenChannelTask]);
 
   /**
    * §PR77 Part 20/gate J. Every other objective kind is deliberately pinned
@@ -1928,19 +1975,22 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       planPickupExpedition({ orderId: activeExpedition.planSeed }),
       {
         onPlayerDamaged: () => {
-          getAudioManager().play("weak_point_hit");
+          getAudioManager().play("player_hurt");
           missFeedback();
         },
         onGuardAbsorbed: () => getAudioManager().play("vault"),
         onHostileDefeated: () => {
-          getAudioManager().play("weak_point_hit");
+          getAudioManager().play("hostile_down");
           arcadeFeedback();
         },
         // §PR77 Part 4 "first strike lands" — the deliberate tap verb,
         // distinct from onHostileDefeated (which also fires from the
         // ambient lash and the Line) and from onStrikeAttempt (which fires
         // on a whiff too and only drives pad feedback, never teaching).
-        onStrikeLanded: () => markTaught("strike"),
+        onStrikeLanded: () => {
+          getAudioManager().play("strike_hit");
+          markTaught("strike");
+        },
         // §PR77 Part 4 "first evade" — a flick that genuinely began.
         onDodgeBegan: () => markTaught("evade"),
         onLineLatched: () => {
@@ -1965,7 +2015,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         // already unclamped when this fires — the feedback marks it, it does
         // not gate it.
         onSealFractured: () => {
-          getAudioManager().play("vault");
+          getAudioManager().play("barrier_release");
           arcadeFeedback();
         },
         onDefeated: () => missFeedback(),
@@ -2705,9 +2755,14 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         data-player-progress={progress.toFixed(3)}
         data-visual-quality-tier={qualityTier}
         data-objective-offscreen={objectiveOffscreen ?? "NONE"}
+        data-route-end-marker={
+          nextCorridorId !== null ? "waypost" : "end-of-world"
+        }
       >
         <div ref={hostRef} className="goldline-canvas-host" />
-        {(activeExpedition != null || preparedObjective != null) &&
+        {(activeExpedition != null ||
+          (preparedObjective != null &&
+            preparedObjective.kind !== "open_channel")) &&
         runtimeReady ? (
           <ExpeditionHud
             runtime={runtimeRef.current}
@@ -2844,6 +2899,37 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             <ChevronUp /> OBJECTIVE AHEAD
           </div>
         ) : null}
+        {/* Forward route cue: shown whenever the route genuinely continues
+            (a playable next corridor exists, or the player has not yet
+            reached this corridor's exit band) and no other directional cue
+            is already on screen. Never points at nothing — it disappears
+            once the player is in the exit band on the last playable
+            corridor, which is exactly where the end-of-world marker takes
+            over. */}
+        {activeExpedition == null &&
+        !corridorExitNear &&
+        objectiveOffscreen !== "ahead" ? (
+          <div
+            className="objective-direction-cue is-forward-route"
+            role="status"
+            data-testid="forward-route-cue"
+          >
+            <ChevronUp /> ROUTE CONTINUES AHEAD
+          </div>
+        ) : null}
+        {/* Honest end of the built world: a sparse, authored, in-world
+            monument line — never an invisible wall with no explanation.
+            Shown only in the last playable corridor's own exit band, paired
+            with the physical monument object GoldlineGame draws there. */}
+        {activeExpedition == null && corridorExitNear && nextCorridorId === null ? (
+          <div
+            className="corridor-transition-signal is-end-of-world"
+            role="status"
+            data-testid="end-of-world-marker"
+          >
+            THE LINE ENDS HERE — BEYOND IS UNWRITTEN
+          </div>
+        ) : null}
         {networkStatus === "offline" ? (
           <div className="network-status-banner" role="status">
             {networkStatusLabel(networkStatus)}
@@ -2909,7 +2995,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 </button>
               ))}
               {!history.length ? (
-                <small>NO RESOLVED TERRITORY YET</small>
+                <small>NO MISSIONS RESOLVED YET</small>
               ) : null}
             </div>
           </aside>
@@ -2952,6 +3038,21 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                   <span>
                     <b>{action}</b>
                     <small>{actionLabel}</small>
+                  </span>
+                </button>
+              ) : !activeMission &&
+                !nextOrderObjective &&
+                preparedObjective?.kind === "open_channel" ? (
+                <button
+                  className="is-interact"
+                  data-testid="seal-open-channel-task"
+                  disabled={baseOpenChannelPhase === "sealing"}
+                  onClick={completeBaseOpenChannelObjective}
+                >
+                  <Footprints />
+                  <span>
+                    <b>SEAL THE WORK</b>
+                    <small>{preparedObjective.label}</small>
                   </span>
                 </button>
               ) : activeMission || nextOrderObjective || preparedObjective ? (
