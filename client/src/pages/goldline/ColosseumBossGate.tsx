@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import vorgan from "@/assets/goldline/vorgan.png";
-import Day1TenDoors, {
+import Day1FieldMission, {
   type Day1TenDoorsMissionView,
-} from "./Day1TenDoors";
+} from "./Day1FieldMission";
 import {
   COLOSSEUM_VILLAIN_TARGET_ID,
   projectColosseumMission,
@@ -49,7 +49,7 @@ export default function ColosseumBossGate({
         >
           ← RETURN TO COLOSSEUM
         </button>
-        <Day1TenDoors
+        <Day1FieldMission
           mission={campaign}
           isRecordingOutcome={isRecordingOutcome}
           onRecordOutcome={onRecordOutcome}
@@ -224,7 +224,7 @@ function ColosseumFinale({
   return (
     <main
       className={`colosseum-shell colosseum-finale is-${phase}`}
-      style={{ "--player-bottom": `${playerBottom}%` } as React.CSSProperties}
+      style={{ "--player-bottom": `${playerBottom}%` } as CSSProperties}
       data-testid="colosseum-finale"
     >
       <div className="colosseum-scene colosseum-scene--search" aria-hidden="true">
