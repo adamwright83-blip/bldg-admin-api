@@ -1,0 +1,17 @@
+.colosseum-final-player {
+  width: 58px;
+  height: 84px;
+}
+
+.colosseum-final-player img {
+  display: block;
+  width: 58px;
+  height: 84px;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 8px 7px rgba(28, 18, 9, .36));
+}
+
+.colosseum-final-player.has-shield img {
+  filter: drop-shadow(0 8px 7px rgba(28, 18, 9, .36)) drop-shadow(0 0 10px rgba(255, 209, 102, .36));
+}
