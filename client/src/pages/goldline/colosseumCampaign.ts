@@ -1,4 +1,4 @@
-import type { Day1TenDoorsMissionView } from "./Day1TenDoors";
+import type { Day1TenDoorsMissionView } from "./Day1FieldMission";
 
 /**
  * Fast, authored six-site campaign for the Colosseum opening act.
