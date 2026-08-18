@@ -17,22 +17,26 @@ import {
 import type { Day1TargetOutcome } from "../../../../shared/day1TenDoors";
 import "./colosseum-boss-gate.css";
 import "./colosseum-playable.css";
+import "./colosseum-approved-art.css";
 
 const CLOCKHEAD_SRC = "/assets/boreslay-hero/procrastinator-reference.png";
-const PLAYER_START = { x: 50, y: 79 } as const;
+const ARENA_BACKGROUND_SRC = "/assets/goldline/colosseum/arena-background.jpg";
+const SIX_DOOR_FACADE_SRC = "/assets/goldline/colosseum/six-door-facade.webp";
+const VILLAIN_REVEAL_SRC = "/assets/goldline/colosseum/villain-reveal.webp";
+const PLAYER_START = { x: 50, y: 80 } as const;
 
 /**
- * Screen-space approach points at the feet of the six authored structures.
- * They are intentionally geometry-only: the building art can remain a cheap
- * scene illusion while Trailblazer genuinely has to walk into the location.
+ * Screen-space approach points for the six real-site slots painted over the
+ * approved facade. The facade is intentionally scenery: movement + proximity
+ * remain real, while the expensive architectural transformation is an illusion.
  */
 const SITE_APPROACH_POINTS = [
-  { x: 7, y: 49 },
-  { x: 21, y: 42 },
-  { x: 36, y: 39 },
-  { x: 64, y: 39 },
-  { x: 79, y: 42 },
-  { x: 93, y: 49 },
+  { x: 8, y: 48 },
+  { x: 24, y: 45 },
+  { x: 40, y: 43 },
+  { x: 60, y: 43 },
+  { x: 76, y: 45 },
+  { x: 92, y: 48 },
 ] as const;
 
 const clamp = (value: number, min: number, max: number) =>
@@ -112,6 +116,8 @@ function ColosseumSearchArena({
   const [hasFailed, setHasFailed] = useState(false);
   const [player, setPlayer] = useState({ ...PLAYER_START });
   const [joystick, setJoystick] = useState({ x: 0, y: 0 });
+  const [shieldTaken, setShieldTaken] = useState(false);
+  const [attackTick, setAttackTick] = useState(0);
   const movementRef = useRef({ x: 0, y: 0 });
   const activePointerRef = useRef<number | null>(null);
   const resetTimer = useRef<number | null>(null);
@@ -123,8 +129,18 @@ function ColosseumSearchArena({
     []
   );
 
-  // Real continuous locomotion. The arena remains an illusion visually, but
-  // the avatar position is not: joystick input advances Trailblazer every RAF.
+  // As soon as the shield is taken, Clockhead starts firing. This is a narrow
+  // theatrical attack loop, not a new combat engine: each pulse re-aims at the
+  // avatar's current screen-space position while the existing movement stays live.
+  useEffect(() => {
+    if (!shieldTaken || failedSite != null) return;
+    setAttackTick(value => value + 1);
+    const timer = window.setInterval(() => {
+      setAttackTick(value => value + 1);
+    }, 820);
+    return () => window.clearInterval(timer);
+  }, [failedSite, shieldTaken]);
+
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
@@ -136,7 +152,7 @@ function ColosseumSearchArena({
         const speed = 24;
         setPlayer(current => ({
           x: clamp(current.x + movement.x * speed * dt, 5, 95),
-          y: clamp(current.y + movement.y * speed * dt, 36, 84),
+          y: clamp(current.y + movement.y * speed * dt, 34, 86),
         }));
       }
       raf = requestAnimationFrame(tick);
@@ -145,8 +161,6 @@ function ColosseumSearchArena({
     return () => cancelAnimationFrame(raf);
   }, [failedSite]);
 
-  // Crossing a building's approach zone is the failure trigger. There is no
-  // hidden building button any more: the player learns the rule by walking.
   useEffect(() => {
     if (failedSite != null) return;
     const hitIndex = SITE_APPROACH_POINTS.findIndex(point => {
@@ -208,12 +222,21 @@ function ColosseumSearchArena({
 
   return (
     <main
-      className="colosseum-shell colosseum-shell--playable"
+      className={`colosseum-shell colosseum-shell--playable colosseum-shell--approved-art ${shieldTaken ? "has-shield" : ""}`}
       data-testid="colosseum-boss-gate"
     >
-      <div className="colosseum-sky" aria-hidden="true" />
-      <div className="colosseum-rim" aria-hidden="true" />
-      <div className="colosseum-floor" aria-hidden="true" />
+      <img
+        className="colosseum-approved-background"
+        src={ARENA_BACKGROUND_SRC}
+        alt=""
+        aria-hidden="true"
+      />
+      <img
+        className="colosseum-approved-facade"
+        src={SIX_DOOR_FACADE_SRC}
+        alt=""
+        aria-hidden="true"
+      />
 
       <header className="colosseum-objective">
         <span>THE HUNT</span>
@@ -229,27 +252,6 @@ function ColosseumSearchArena({
         <img src={CLOCKHEAD_SRC} alt="The Procrastinator, clock-headed boss" />
         <span>LOCATION UNKNOWN</span>
       </div>
-      <div className="colosseum-boss-name" aria-hidden="true">
-        THE PROCRASTINATOR
-      </div>
-
-      <div className="colosseum-sites" aria-label="Six possible villain locations">
-        {mission.targets.map((target, index) => (
-          <div
-            key={target.id}
-            className={`colosseum-site colosseum-site--${index + 1}`}
-            aria-label={`Possible location ${index + 1}`}
-          >
-            <span className="colosseum-site-roof" />
-            <span className="colosseum-site-body">
-              <i />
-              <i />
-              <i />
-            </span>
-            <b>{String(index + 1).padStart(2, "0")}</b>
-          </div>
-        ))}
-      </div>
 
       {SITE_APPROACH_POINTS.map((point, index) => {
         const distance = Math.hypot(player.x - point.x, player.y - point.y);
@@ -263,18 +265,46 @@ function ColosseumSearchArena({
         );
       })}
 
-      <div className="colosseum-shield colosseum-shield--locked" aria-hidden="true">
+      <div
+        className={`colosseum-shield ${shieldTaken ? "is-taken" : "colosseum-shield--ready"}`}
+        aria-hidden="true"
+      >
         <span>◈</span>
       </div>
 
+      {!shieldTaken && (
+        <button
+          type="button"
+          className="colosseum-search-grab-shield"
+          onClick={() => setShieldTaken(true)}
+          data-testid="colosseum-search-grab-shield"
+        >
+          GRAB THE SHIELD
+        </button>
+      )}
+
       <div
-        className={`colosseum-player colosseum-player--playable ${moving ? "is-moving" : ""}`}
+        className={`colosseum-player colosseum-player--playable ${moving ? "is-moving" : ""} ${shieldTaken ? "has-shield" : ""}`}
         style={{ left: `${player.x}%`, top: `${player.y}%` }}
         aria-label="Trailblazer"
         data-testid="colosseum-player"
       >
+        {shieldTaken && <span className="colosseum-player-shield">◈</span>}
         <img src={operatorSprite} alt="Trailblazer" />
       </div>
+
+      {shieldTaken && failedSite == null && (
+        <svg
+          key={attackTick}
+          className="colosseum-boss-fire"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <line x1="50" y1="25" x2={player.x} y2={player.y - 3} />
+          <circle cx={player.x} cy={player.y - 3} r="1.6" />
+        </svg>
+      )}
 
       <div
         className="colosseum-joystick"
@@ -379,29 +409,18 @@ function ColosseumFinale({
 
   return (
     <main
-      className={`colosseum-shell colosseum-finale is-${phase}`}
+      className={`colosseum-shell colosseum-finale colosseum-shell--approved-art is-${phase}`}
       style={{ "--player-bottom": `${playerBottom}%` } as CSSProperties}
       data-testid="colosseum-finale"
     >
       <div className="colosseum-scene colosseum-scene--search" aria-hidden="true">
-        <div className="colosseum-sky" />
-        <div className="colosseum-rim" />
-        <div className="colosseum-floor" />
-        <div className="colosseum-ghost-buildings">
-          {mission.targets.map((target, index) => (
-            <span key={target.id} className={`ghost-building ghost-building--${index + 1}`} />
-          ))}
-        </div>
+        <img className="colosseum-approved-background" src={ARENA_BACKGROUND_SRC} alt="" />
+        <img className="colosseum-approved-facade" src={SIX_DOOR_FACADE_SRC} alt="" />
       </div>
 
       <div className="colosseum-scene colosseum-scene--revealed" aria-hidden="true">
-        <div className="colosseum-sky colosseum-sky--after" />
-        <div className="colosseum-rim colosseum-rim--after" />
-        <div className="colosseum-floor colosseum-floor--after" />
-        <div className="colosseum-target-building">
-          <span />
-          <b>{villainTarget?.name ?? "TARGET"}</b>
-        </div>
+        <img className="colosseum-approved-background" src={ARENA_BACKGROUND_SRC} alt="" />
+        <img className="colosseum-approved-facade colosseum-approved-facade--reveal" src={VILLAIN_REVEAL_SRC} alt="" />
       </div>
 
       {phase !== "revealed" && (
@@ -419,13 +438,8 @@ function ColosseumFinale({
           <header className="colosseum-reveal-copy">
             <span>TRACE COMPLETE · 6 / 6</span>
             <strong>TARGET LOCATED</strong>
-            <small>THE FALSE LOCATIONS ARE GONE.</small>
+            <small>{villainTarget?.name ?? "TARGET"}</small>
           </header>
-
-          <div className="colosseum-boss colosseum-boss--final" aria-hidden="true">
-            <div className="colosseum-boss-aura" />
-            <img src={CLOCKHEAD_SRC} alt="" />
-          </div>
 
           <div
             className={`colosseum-final-player ${shieldTaken ? "has-shield" : ""}`}
