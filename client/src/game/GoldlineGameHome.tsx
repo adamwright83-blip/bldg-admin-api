@@ -19,12 +19,14 @@ import {
   MapPin,
   Menu,
   Phone,
+  Plus,
   Radar,
   Radio,
   Route,
   Shield,
   Sparkles,
   Target,
+  Truck,
   X,
 } from "lucide-react";
 import type { DriverGameWorldNode } from "../../../shared/driverGameWorld";
@@ -593,6 +595,13 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   );
   const [coldCallOpen, setColdCallOpen] = useState(false);
   const [scoutOpen, setScoutOpen] = useState(false);
+  /**
+   * §R1 Workstream 2. ADD OTHER STOPS promotes two EXISTING manual-entry
+   * paths (QuickNewOrderSheet via onOpenNewOrder, and the manual-job side
+   * of the CleanCloud chooser) behind one tap — this is the only new UI:
+   * a two-line picker between them, not a rebuild of either sheet.
+   */
+  const [addStopsChooserOpen, setAddStopsChooserOpen] = useState(false);
   const networkStatus = useNetworkStatus();
   const sessionIdRef = useRef(getGoldlineSessionId());
   const sessionStartRef = useRef(performance.now());
@@ -1769,6 +1778,20 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         task.id === activeExpedition.taskId && task.status === "completed"
     );
   /**
+   * §R1 Workstream 1 item 5. A physical_stop resolves through the exact
+   * same canonical write as a base Open Channel task (completeOpenChannelTask)
+   * — the only difference is where the affordance to press it lives (staged
+   * at the destination, not from the desk). Read the same way
+   * pinnedOpenChannelTaskCompleted is.
+   */
+  const pinnedPhysicalStopCompleted =
+    activeExpedition?.kind === "physical_stop" &&
+    props.openChannelMission?.id === activeExpedition.missionId &&
+    props.openChannelMission.tasks.some(
+      task =>
+        task.id === activeExpedition.taskId && task.status === "completed"
+    );
+  /**
    * External work is confirmed by the SAME rule as everything else: refreshed
    * authoritative state, not the mutation returning. The evidence here is our
    * own external record reporting the physical work complete — which is a
@@ -1801,11 +1824,13 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       ? pinnedOrderCollected
       : activeExpedition?.kind === "open_channel"
         ? pinnedOpenChannelTaskCompleted
-        : activeExpedition?.kind === "external_order"
-          ? pinnedExternalOrderCompleted
-          : activeExpedition?.kind === "local_target_run"
-            ? pinnedLocalTargetRunCompleted
-            : false
+        : activeExpedition?.kind === "physical_stop"
+          ? pinnedPhysicalStopCompleted
+          : activeExpedition?.kind === "external_order"
+            ? pinnedExternalOrderCompleted
+            : activeExpedition?.kind === "local_target_run"
+              ? pinnedLocalTargetRunCompleted
+              : false
   );
 
   /**
@@ -2104,7 +2129,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     }
     if (
       missionContextObjective.kind !== "native_pickup" &&
-      missionContextObjective.kind !== "external_order"
+      missionContextObjective.kind !== "external_order" &&
+      // §R1 Workstream 1 item 5. A physical_stop's `detail` is the
+      // destination text (from navigationQuery), never free task prose —
+      // see prepareExpeditionObjective — so it is exactly as navigable as
+      // a native pickup or external order's address.
+      missionContextObjective.kind !== "physical_stop"
     ) {
       return null;
     }
@@ -2711,6 +2741,21 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
 
   if (runtimeFailed) return <GoldlineHome {...props} />;
 
+  /**
+   * §R1 Workstream 2. The ONE definition of "the day has zero assembled
+   * work" — no native orders, no external orders, no active Open Channel
+   * mission, and nothing outstanding to reconcile. Reused for BOTH the
+   * day-assembly front door below and OpenChannel's shouldAutoIgnite (which
+   * already computed this exact condition inline) so the two surfaces can
+   * never disagree about what "empty" means.
+   */
+  const dayIsEmpty =
+    !action &&
+    !activeMission &&
+    !nextOrderObjective &&
+    !preparedObjective &&
+    !externalReconciliationOutstanding;
+
   const worldLocked = view !== "explore" || coldCallOpen || scoutOpen;
   const abilitySize = selectedAbility
     ? weakPointSize(selectedAbility.fit) +
@@ -2806,9 +2851,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             completionActionLabel={
               activeExpedition?.kind === "open_channel"
                 ? "SEAL THE WORK"
-                : activeExpedition?.kind === "local_target_run"
-                  ? "RUN COMPLETE"
-                  : "SECURE CARGO"
+                : activeExpedition?.kind === "physical_stop"
+                  ? "RESOLVE THE STOP"
+                  : activeExpedition?.kind === "local_target_run"
+                    ? "RUN COMPLETE"
+                    : "SECURE CARGO"
             }
             missionProgress={missionContextProgress}
             // Provenance travels with the objective. External work is marked
@@ -2851,14 +2898,18 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             confirmedLabel={
               activeExpedition?.kind === "open_channel"
                 ? "WORK SEALED"
-                : activeExpedition?.kind === "local_target_run"
-                  ? "RUN COMPLETE — EVERY TARGET VISITED"
-                  : "CARGO SECURED"
+                : activeExpedition?.kind === "physical_stop"
+                  ? "STOP RESOLVED"
+                  : activeExpedition?.kind === "local_target_run"
+                    ? "RUN COMPLETE — EVERY TARGET VISITED"
+                    : "CARGO SECURED"
             }
             failedLabel={
               activeExpedition?.kind === "open_channel"
                 ? "WORK NOT RECORDED — STILL PENDING"
-                : "PICKUP NOT RECORDED — STILL PENDING"
+                : activeExpedition?.kind === "physical_stop"
+                  ? "STOP NOT RECORDED — STILL PENDING"
+                  : "PICKUP NOT RECORDED — STILL PENDING"
             }
             // AUTHORITATIVE, not local: this is server truth about the
             // pinned order, so a pickup collected on another surface
@@ -2948,7 +2999,6 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               <Radio /> FIELD LINK
             </span>
             <b>{activeMission?.name ?? preparedObjective?.label ?? "NO ACTIVE MISSION"}</b>
-            <small>STATIONARY PLAY · TEMP • INSIDE GAME LOOP</small>
           </div>
           <button
             onClick={() => setUtilityPanel("objectives")}
@@ -3060,53 +3110,174 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                   <Route />
                   <span>FOLLOW THE GOLD LINE</span>
                 </div>
-              ) : (
-                <div
-                  className="action-awaiting is-empty"
-                  data-testid="no-active-objective"
-                >
-                  <Route />
-                  <span>
-                    <b>NO ACTIVE OBJECTIVE</b>
-                    <small>No unresolved route work right now.</small>
-                  </span>
-                </div>
-              )}
+              ) : null}
             </div>
-            <button
-              className={`cold-call-entry is-portal-${coldCallPortalState}`}
-              disabled={
-                !props.coldCallBatch && props.coldCallEligibleCount === 0
-              }
-              onClick={async () => {
-                if (!props.coldCallBatch) {
-                  const created = await props.onCreateColdCall();
-                  if (!created) return;
-                  emit?.({
-                    eventName: "cold_call_batch_started",
-                    sessionId: sessionIdRef.current,
-                    missionId: null,
-                    properties: {
+            {/*
+              §R1 Workstream 2. The day-assembly front door. Goldline begins
+              with reality and generates the adventure — it never waits for
+              the operator to type reality into an empty adventure. When the
+              day has genuinely zero assembled work, this REPLACES the old
+              dead-end "nothing to do" card with three giant, thumb-first
+              actions, each promoting an EXISTING capability rather than
+              rebuilding one:
+                IMPORT TODAY FROM CLEANCLOUD -> onOpenAddExternalWork chooser
+                ADD OTHER STOPS               -> a 2-line pick between
+                                                  onOpenNewOrder and the same
+                                                  chooser's manual-job path
+                OPEN CHANNEL                  -> the existing voice/text flow
+              Collapses to a compact row (below) the instant the day has any
+              work at all, so it can never bury the live objective surface.
+            */}
+            {dayIsEmpty ? (
+              <div
+                className="day-assembly-front-door"
+                data-testid="day-assembly-front-door"
+              >
+                <button
+                  type="button"
+                  className="day-assembly-action is-import"
+                  data-testid="front-door-import-cleancloud"
+                  onClick={() => props.onOpenAddExternalWork?.()}
+                >
+                  <Truck />
+                  <span>
+                    <b>IMPORT TODAY FROM CLEANCLOUD</b>
+                    <small>Screenshot the driver app or add one job</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="day-assembly-action is-add-stops"
+                  data-testid="front-door-add-stops"
+                  onClick={() => setAddStopsChooserOpen(true)}
+                >
+                  <Plus />
+                  <span>
+                    <b>ADD OTHER STOPS</b>
+                    <small>A new order or a job by hand</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="day-assembly-action is-open-channel"
+                  data-testid="front-door-open-channel"
+                  onClick={() => setUtilityPanel("open-channel")}
+                >
+                  <Radio />
+                  <span>
+                    <b>OPEN CHANNEL</b>
+                    <small>Say or type what today actually is</small>
+                  </span>
+                </button>
+              </div>
+            ) : (
+              <div
+                className="day-assembly-compact-row"
+                data-testid="day-assembly-compact-row"
+                aria-label="Add real work"
+              >
+                <button
+                  type="button"
+                  data-testid="compact-import-cleancloud"
+                  aria-label="Import today from CleanCloud"
+                  onClick={() => props.onOpenAddExternalWork?.()}
+                >
+                  <Truck />
+                </button>
+                <button
+                  type="button"
+                  data-testid="compact-add-stops"
+                  aria-label="Add other stops"
+                  onClick={() => setAddStopsChooserOpen(true)}
+                >
+                  <Plus />
+                </button>
+                <button
+                  type="button"
+                  data-testid="compact-open-channel"
+                  aria-label="Open Channel"
+                  onClick={() => setUtilityPanel("open-channel")}
+                >
+                  <Radio />
+                </button>
+              </div>
+            )}
+            {addStopsChooserOpen ? (
+              <div
+                className="day-assembly-add-stops-backdrop"
+                data-testid="add-stops-chooser"
+                onClick={() => setAddStopsChooserOpen(false)}
+              >
+                <section onClick={event => event.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="game-panel-close"
+                    aria-label="Close"
+                    onClick={() => setAddStopsChooserOpen(false)}
+                  >
+                    <X />
+                  </button>
+                  <small>ADD OTHER STOPS</small>
+                  <button
+                    type="button"
+                    data-testid="add-stops-new-order"
+                    onClick={() => {
+                      setAddStopsChooserOpen(false);
+                      props.onOpenNewOrder?.();
+                    }}
+                  >
+                    NEW ORDER
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="add-stops-manual-job"
+                    onClick={() => {
+                      setAddStopsChooserOpen(false);
+                      props.onOpenAddExternalWork?.();
+                    }}
+                  >
+                    ADD A JOB MANUALLY
+                  </button>
+                </section>
+              </div>
+            ) : null}
+            {/*
+              §R1 Workstream 3 item 4. Empty-content cards never sit
+              center-screen: with no batch already started AND nothing
+              eligible, this control has nothing actionable to offer —
+              render nothing rather than a permanently-disabled button.
+            */}
+            {props.coldCallBatch || props.coldCallEligibleCount > 0 ? (
+              <button
+                className={`cold-call-entry is-portal-${coldCallPortalState}`}
+                onClick={async () => {
+                  if (!props.coldCallBatch) {
+                    const created = await props.onCreateColdCall();
+                    if (!created) return;
+                    emit?.({
+                      eventName: "cold_call_batch_started",
                       sessionId: sessionIdRef.current,
-                      targetCount: created.totalTargets,
-                    },
-                  });
-                }
-                setColdCallOpen(true);
-              }}
-            >
-              <Radio />
-              <span>
-                <b>COLD CALL BURST</b>
-                <small>
-                  {props.coldCallBatch
-                    ? `${props.coldCallBatch.totalTargets - props.coldCallBatch.completedCount} REAL TARGETS REMAIN`
-                    : props.coldCallEligibleCount
-                      ? `${props.coldCallEligibleCount} REAL TARGETS READY`
-                      : (props.coldCallEmptyReason ?? "NO ELIGIBLE TARGETS")}
-                </small>
-              </span>
-            </button>
+                      missionId: null,
+                      properties: {
+                        sessionId: sessionIdRef.current,
+                        targetCount: created.totalTargets,
+                      },
+                    });
+                  }
+                  setColdCallOpen(true);
+                }}
+              >
+                <Radio />
+                <span>
+                  <b>COLD CALL BURST</b>
+                  <small>
+                    {props.coldCallBatch
+                      ? `${props.coldCallBatch.totalTargets - props.coldCallBatch.completedCount} REAL TARGETS REMAIN`
+                      : `${props.coldCallEligibleCount} REAL TARGETS READY`}
+                  </small>
+                </span>
+              </button>
+            ) : null}
           </>
         ) : null}
 
@@ -3792,18 +3963,16 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           open={utilityPanel === "open-channel"}
           mission={props.openChannelMission}
           gap={openChannelGap}
-          shouldAutoIgnite={
-            !action &&
-            !activeMission &&
-            !nextOrderObjective &&
-            !preparedObjective &&
-            // An outstanding external update is WORK, so the day is not empty
-            // and the briefing must not auto-open over it. Without this,
-            // finishing a CleanCloud job made the day look finished and the
-            // ignition overlay opened on top of the very control the operator
-            // needed next — "I UPDATED CLEAN CLOUD".
-            !externalReconciliationOutstanding
-          }
+          // §R1 Workstream 2. Before the front door existed, auto-opening
+          // the full-screen Open Channel briefing WAS the empty-day
+          // affordance. Now the front door owns that job — it is what
+          // renders behind the world, not on top of it, and offers CleanCloud
+          // import and manual stops the briefing never could. Auto-opening it
+          // as well would stack a full-screen modal over the front door the
+          // instant the day goes empty, blocking its buttons entirely. Pass
+          // false here; OPEN CHANNEL on the front door is the one-tap path
+          // in, same as before, just not forced.
+          shouldAutoIgnite={false}
           isGenerating={Boolean(props.isGeneratingOpenChannel)}
           isApproving={Boolean(props.isApprovingOpenChannel)}
           onClose={() => setUtilityPanel(null)}

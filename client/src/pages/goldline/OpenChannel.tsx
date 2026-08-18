@@ -20,6 +20,7 @@ import type {
   OpenChannelEditableTask,
   OpenChannelMission,
   OpenChannelTaskCategory,
+  OpenChannelTaskExecution,
 } from "../../../../server/openChannel/openChannelTypes";
 import type { OpenChannelGap } from "../driver/goldlineDriverModel";
 import {
@@ -114,6 +115,7 @@ function emptyTask(): DraftTask {
     estimatedMinutes: 20,
     category: "other",
     navigationQuery: null,
+    execution: "base",
   };
 }
 
@@ -132,6 +134,7 @@ export default function OpenChannel({
   const completeTask = trpc.system.openChannel.completeTask.useMutation();
   const transcribeBriefing = trpc.system.openChannel.transcribeBriefing.useMutation();
   const cancelDraft = trpc.system.openChannel.cancelDraft.useMutation();
+  const reclassifyTask = trpc.system.openChannel.reclassifyTask.useMutation();
   const [transcript, setTranscript] = useState("");
   const [audioDataUrl, setAudioDataUrl] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -215,6 +218,7 @@ export default function OpenChannel({
         estimatedMinutes: task.estimatedMinutes,
         category: task.category,
         navigationQuery: task.navigationQuery,
+        execution: task.execution,
       }))
     );
   }, [mission?.id, mission?.status]);
@@ -344,6 +348,37 @@ export default function OpenChannel({
         error instanceof Error
           ? error.message
           : "Could not save this objective. Try again."
+      );
+    }
+  }
+
+  /**
+   * §R1 Workstream 1 item 4. The reclassify affordance for the cases the
+   * legacy default (or the model's own proposal) got wrong. Flips a
+   * still-pending task's execution and, for the physical_stop direction,
+   * requires the operator to supply a destination in the same gesture —
+   * a task can never end up physical with no place to go.
+   */
+  async function reclassifyCurrentTask(
+    missionId: string,
+    taskId: string,
+    execution: OpenChannelTaskExecution,
+    navigationQuery: string | null
+  ) {
+    setTaskError(null);
+    try {
+      await reclassifyTask.mutateAsync({
+        missionId,
+        taskId,
+        execution,
+        navigationQuery,
+      });
+      await utils.system.openChannel.current.invalidate();
+    } catch (error) {
+      setTaskError(
+        error instanceof Error
+          ? error.message
+          : "Could not reclassify this objective. Try again."
       );
     }
   }
@@ -602,6 +637,8 @@ export default function OpenChannel({
                     </article>
                   );
                 }
+                const isPhysical = task.execution === "physical_stop";
+                const missingDestination = isPhysical && !task.navigationQuery?.trim();
                 return (
                   <article key={task.clientKey}>
                     <span className="open-channel-step-number">{index + 1}</span>
@@ -617,6 +654,54 @@ export default function OpenChannel({
                         rows={2}
                         aria-label={`Step ${index + 1} details`}
                       />
+                      {/*
+                        §R1 Workstream 1 item 3. The operator is the
+                        authority: the model only proposes execution, and
+                        this large, thumb-sized toggle is what actually
+                        persists at approval. A physical_stop cannot be
+                        approved with no destination — see the disabled
+                        CONFIRM button below and the server-side guard in
+                        approveOpenChannelMission.
+                      */}
+                      <div
+                        className="open-channel-execution-toggle"
+                        role="group"
+                        aria-label={`Step ${index + 1} work type`}
+                      >
+                        <button
+                          type="button"
+                          className={!isPhysical ? "is-active" : ""}
+                          data-testid={`task-execution-base-${index}`}
+                          onClick={() => updateTask(index, { execution: "base" })}
+                        >
+                          BASE WORK
+                        </button>
+                        <button
+                          type="button"
+                          className={isPhysical ? "is-active" : ""}
+                          data-testid={`task-execution-physical-${index}`}
+                          onClick={() => updateTask(index, { execution: "physical_stop" })}
+                        >
+                          PHYSICAL STOP
+                        </button>
+                      </div>
+                      {isPhysical ? (
+                        <label className="open-channel-destination-field">
+                          <span>DESTINATION — WHERE YOU MUST GO</span>
+                          <input
+                            value={task.navigationQuery ?? ""}
+                            onChange={event => updateTask(index, { navigationQuery: event.target.value || null })}
+                            placeholder="e.g. Opus LA, 1601 Vine St"
+                            data-testid={`task-destination-${index}`}
+                            aria-invalid={missingDestination}
+                          />
+                          {missingDestination ? (
+                            <small className="open-channel-error">
+                              A physical stop needs a destination before it can be approved.
+                            </small>
+                          ) : null}
+                        </label>
+                      ) : null}
                       <div className="open-channel-task-fields">
                         <label>
                           <span>MIN</span>
@@ -637,14 +722,16 @@ export default function OpenChannel({
                             {CATEGORIES.map(category => <option key={category}>{category}</option>)}
                           </select>
                         </label>
-                        <label className="is-map">
-                          <span>MAP SEARCH</span>
-                          <input
-                            value={task.navigationQuery ?? ""}
-                            onChange={event => updateTask(index, { navigationQuery: event.target.value || null })}
-                            placeholder="Optional"
-                          />
-                        </label>
+                        {!isPhysical ? (
+                          <label className="is-map">
+                            <span>MAP SEARCH (OPTIONAL)</span>
+                            <input
+                              value={task.navigationQuery ?? ""}
+                              onChange={event => updateTask(index, { navigationQuery: event.target.value || null })}
+                              placeholder="Optional"
+                            />
+                          </label>
+                        ) : null}
                       </div>
                     </div>
                     <div className="open-channel-task-controls">
@@ -669,7 +756,16 @@ export default function OpenChannel({
             <button
               type="button"
               className="open-channel-primary"
-              disabled={isApproving || !title.trim() || tasks.some(task => !task.title.trim() || !task.detail.trim())}
+              disabled={
+                isApproving ||
+                !title.trim() ||
+                tasks.some(
+                  task =>
+                    !task.title.trim() ||
+                    !task.detail.trim() ||
+                    (task.execution === "physical_stop" && !task.navigationQuery?.trim())
+                )
+              }
               onClick={() => void onApprove({
                 missionId: draft.id,
                 title: title.trim(),
@@ -723,7 +819,10 @@ export default function OpenChannel({
               </section>
             ) : firstPendingTask ? (
               <section className="open-channel-dialogue" data-testid="open-channel-current-objective">
-                <small>CURRENT REAL OBJECTIVE · STEP {firstPendingTask.position + 1}</small>
+                <small>
+                  CURRENT REAL OBJECTIVE · STEP {firstPendingTask.position + 1}
+                  {firstPendingTask.execution === "physical_stop" ? " · PHYSICAL STOP" : ""}
+                </small>
                 <p><strong>{firstPendingTask.title}</strong></p>
                 <p>{firstPendingTask.detail}</p>
                 {firstPendingTask.navigationQuery ? (
@@ -731,20 +830,80 @@ export default function OpenChannel({
                     href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(firstPendingTask.navigationQuery)}`}
                     target="_blank"
                     rel="noreferrer"
-                  ><MapPin /> OPEN MAP SEARCH</a>
+                    data-testid="open-channel-navigate"
+                  ><MapPin /> NAVIGATE</a>
                 ) : null}
-                <button
-                  type="button"
-                  className="open-channel-primary"
-                  disabled={completeTask.isPending}
-                  onClick={() => void completeCurrentTask(active.id, firstPendingTask.id)}
-                >
-                  {completeTask.isPending ? (
-                    <><Loader2 className="spin" /> SAVING REAL RESULT…</>
-                  ) : (
-                    <><Check /> I DID THIS — ADVANCE</>
-                  )}
-                </button>
+                {firstPendingTask.execution === "physical_stop" ? (
+                  /*
+                    §R1 Workstream 1 item 3/6. The sibling of SEAL THE WORK
+                    this screen used to carry: a couch-reachable completion
+                    button for ANY pending task, physical or not. A physical
+                    stop resolves only through the SAME canonical write,
+                    staged at the destination inside the expedition — never
+                    from here. No completion control renders for it.
+                  */
+                  <>
+                    <p
+                      className="open-channel-physical-stop-hint"
+                      data-testid="open-channel-physical-stop-hint"
+                    >
+                      This is a physical stop. Go there and resolve it in the
+                      field — it cannot be completed from here.
+                    </p>
+                    <button
+                      type="button"
+                      className="open-channel-add"
+                      data-testid="reclassify-to-base"
+                      disabled={reclassifyTask.isPending}
+                      onClick={() =>
+                        void reclassifyCurrentTask(
+                          active.id,
+                          firstPendingTask.id,
+                          "base",
+                          firstPendingTask.navigationQuery
+                        )
+                      }
+                    >
+                      NOT PHYSICAL — MARK AS BASE WORK
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="open-channel-primary"
+                      disabled={completeTask.isPending}
+                      onClick={() => void completeCurrentTask(active.id, firstPendingTask.id)}
+                    >
+                      {completeTask.isPending ? (
+                        <><Loader2 className="spin" /> SAVING REAL RESULT…</>
+                      ) : (
+                        <><Check /> I DID THIS — ADVANCE</>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="open-channel-add"
+                      data-testid="reclassify-to-physical"
+                      disabled={reclassifyTask.isPending}
+                      onClick={() => {
+                        const destination = window.prompt(
+                          "Where do you actually have to go for this?",
+                          firstPendingTask.navigationQuery ?? ""
+                        );
+                        if (!destination?.trim()) return;
+                        void reclassifyCurrentTask(
+                          active.id,
+                          firstPendingTask.id,
+                          "physical_stop",
+                          destination.trim()
+                        );
+                      }}
+                    >
+                      THIS IS ACTUALLY A PHYSICAL STOP
+                    </button>
+                  </>
+                )}
                 {taskError ? <p className="open-channel-error">{taskError}</p> : null}
               </section>
             ) : (
@@ -760,7 +919,10 @@ export default function OpenChannel({
                   <span>{task.status === "completed" ? <Check /> : task.position + 1}</span>
                   <div>
                     <b>{task.title}</b>
-                    <small>{task.estimatedMinutes} MIN · {task.category.toUpperCase()}</small>
+                    <small>
+                      {task.estimatedMinutes} MIN · {task.category.toUpperCase()}
+                      {task.execution === "physical_stop" ? " · PHYSICAL" : ""}
+                    </small>
                   </div>
                   {task.navigationQuery ? (
                     <a

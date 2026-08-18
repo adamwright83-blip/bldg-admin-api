@@ -4806,6 +4806,15 @@ export const openChannelMissionTasks = mysqlTable(
       "other",
     ]).notNull(),
     navigationQuery: varchar("navigationQuery", { length: 512 }),
+    // §R1 Workstream 1. Nullable at the DB layer on purpose: a row with
+    // execution IS NULL is a pre-R1 row. Never read directly — the
+    // `missionProjection` service function is the single place that applies
+    // the legacy default (navigationQuery present -> physical_stop, else
+    // base) so every caller downstream of it sees a resolved value. Added
+    // additively via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` inside
+    // `ensureOpenChannelTables()` — this table is self-managed by that
+    // function, not the guarded dayforge migration pipeline.
+    execution: mysqlEnum("execution", ["base", "physical_stop"]),
     status: mysqlEnum("status", ["pending", "completed"])
       .notNull()
       .default("pending"),

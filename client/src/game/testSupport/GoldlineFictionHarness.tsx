@@ -728,6 +728,7 @@ export default function GoldlineFictionHarness() {
                 estimatedMinutes: 120,
                 category: "sales",
                 navigationQuery: null,
+                execution: "base",
                 status: "pending",
                 completedAt: null,
               },
@@ -740,9 +741,9 @@ export default function GoldlineFictionHarness() {
             status: "active",
             title: "OPEN NEW GROUND",
             operatorBriefing:
-              "No orders today. Finish the door hanger, send it to the printer, then walk the collateral I already have to the barbers on the block.",
+              "No orders today. Design the door hangers, then pick up Mona's order at Opus LA.",
             transcript:
-              "No orders today. Finish the door hanger, send it to the printer, then walk the collateral I already have to the barbers on the block.",
+              "No orders today. Design the door hangers, then pick up Mona's order at Opus LA.",
             generationSource: "deterministic_fallback",
             gapStartedAt: "2026-08-13T09:00:00.000Z",
             nextCommitmentAt: null,
@@ -750,25 +751,35 @@ export default function GoldlineFictionHarness() {
             approvedAt: "2026-08-13T09:05:00.000Z",
             completedAt: null,
             tasks: [
+              // §R1 verification fixture. A `base` task — completes at the
+              // desk via SEAL THE WORK, no physical arrival, no expedition
+              // staging.
               {
                 id: "task-forge-the-message",
                 position: 0,
-                title: "Finish the door hanger design",
+                title: "Design the door hangers",
                 detail: "Export print-ready artwork for the block campaign.",
                 estimatedMinutes: 60,
                 category: "sales",
                 navigationQuery: null,
+                execution: "base",
                 status: "pending",
                 completedAt: null,
               },
+              // §R1 verification fixture. The exact GL-78 fun-gate failure
+              // case: real physical work with a destination. Explicit
+              // `execution: "physical_stop"` — must NEVER show SEAL THE
+              // WORK, must show NAVIGATE + expedition staging, and must
+              // resolve only through the field ("RESOLVE THE STOP").
               {
-                id: "task-send-to-press",
+                id: "task-pickup-mona-opus-la",
                 position: 1,
-                title: "Send the hanger to the printer",
-                detail: "Hand the finished file to the print shop on 3rd.",
+                title: "Pick up Mona's order at Opus LA",
+                detail: "Mona's order is ready at Opus LA — collect it in person.",
                 estimatedMinutes: 30,
                 category: "operations",
-                navigationQuery: "print shop 3rd street",
+                navigationQuery: "Opus LA, 1601 Vine St",
+                execution: "physical_stop",
                 status: "pending",
                 completedAt: null,
               },

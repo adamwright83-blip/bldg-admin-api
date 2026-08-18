@@ -3,6 +3,7 @@ import {
   decodeOpenChannelAudio,
   deterministicOpenChannelPlan,
 } from "./openChannelService";
+import { effectiveOpenChannelTaskExecution } from "./openChannelTypes";
 
 describe("Open Channel deterministic mission planner", () => {
   it("keeps every operator briefing item instead of collapsing to one keyword task", () => {
@@ -34,6 +35,48 @@ describe("Open Channel deterministic mission planner", () => {
     expect(plan.tasks).toHaveLength(1);
     expect(plan.tasks[0].navigationQuery).toBeNull();
     expect(JSON.stringify(plan)).not.toMatch(/\b(?:am|pm)\b/i);
+  });
+
+  it("every deterministic fallback task proposes an explicit base execution", () => {
+    const plan = deterministicOpenChannelPlan(
+      "Call two leads back and check on the supply order."
+    );
+    expect(plan.tasks.every(task => task.execution === "base")).toBe(true);
+  });
+});
+
+describe("effectiveOpenChannelTaskExecution (§R1 legacy-default rule)", () => {
+  it("honors an explicit stored execution over the navigationQuery signal", () => {
+    expect(
+      effectiveOpenChannelTaskExecution({
+        execution: "base",
+        navigationQuery: "Opus LA, 1601 Vine St",
+      })
+    ).toBe("base");
+    expect(
+      effectiveOpenChannelTaskExecution({
+        execution: "physical_stop",
+        navigationQuery: null,
+      })
+    ).toBe("physical_stop");
+  });
+
+  it("defaults a legacy null-execution row with a destination to physical_stop", () => {
+    expect(
+      effectiveOpenChannelTaskExecution({
+        execution: null,
+        navigationQuery: "Opus LA, 1601 Vine St",
+      })
+    ).toBe("physical_stop");
+  });
+
+  it("defaults a legacy null-execution row with no destination to base", () => {
+    expect(
+      effectiveOpenChannelTaskExecution({
+        execution: null,
+        navigationQuery: null,
+      })
+    ).toBe("base");
   });
 });
 

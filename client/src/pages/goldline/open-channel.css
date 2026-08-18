@@ -57,7 +57,7 @@
 :is(.goldline, .playable-goldline) .open-channel-signal small {
   margin-top: 4px;
   font:
-    800 8px/1.2 Inter,
+    800 11px/1.2 Inter,
     sans-serif;
   color: #93f8ff;
 }
@@ -193,7 +193,7 @@
 }
 :is(.goldline, .playable-goldline) .open-channel-header small {
   font:
-    800 8px/1 Inter,
+    800 11px/1 Inter,
     sans-serif;
   letter-spacing: 0.17em;
   color: #86eaf0;
@@ -213,7 +213,7 @@
   color: #8affbd;
   background: #07301cbd;
   font:
-    900 9px/1 Inter,
+    900 11px/1 Inter,
     sans-serif;
   font-style: normal;
 }
@@ -230,7 +230,7 @@
 }
 :is(.goldline, .playable-goldline) .open-channel-dialogue small {
   font:
-    900 9px/1 Inter,
+    900 11px/1 Inter,
     sans-serif;
   letter-spacing: 0.12em;
   color: #72edf4;
@@ -252,7 +252,7 @@
   color: #8ef8ff;
   background: #021017;
   font:
-    900 9px/1 Inter,
+    900 11px/1 Inter,
     sans-serif;
 }
 :is(.goldline, .playable-goldline) .open-channel-dialogue button svg {
@@ -274,7 +274,7 @@
 }
 :is(.goldline, .playable-goldline) .open-channel-window strong {
   font:
-    800 9px/1.35 Inter,
+    800 11px/1.35 Inter,
     sans-serif;
   letter-spacing: 0.04em;
   color: #a6cfd2;
@@ -316,7 +316,7 @@
 :is(.goldline, .playable-goldline) .open-channel-capture small {
   margin-top: 5px;
   font:
-    700 10px/1.3 Inter,
+    700 11px/1.3 Inter,
     sans-serif;
   color: #94c9cc;
 }
@@ -350,7 +350,7 @@
   display: block;
   margin-bottom: 6px;
   font:
-    900 9px/1 Inter,
+    900 11px/1 Inter,
     sans-serif;
   letter-spacing: 0.12em;
   color: #77eaf1;
@@ -420,7 +420,7 @@
   display: block;
   margin-bottom: 6px;
   font:
-    900 8px/1 Inter,
+    900 11px/1 Inter,
     sans-serif;
   letter-spacing: 0.1em;
   color: #73e9ef;
@@ -483,6 +483,56 @@
   line-height: 1.35;
   color: #bcdcdf;
 }
+/* §R1 Workstream 1 item 3. Large, thumb-sized BASE WORK / PHYSICAL STOP
+   toggle — the operator's approval is the only thing that persists
+   execution, so this cannot be a small select. */
+:is(.goldline, .playable-goldline) .open-channel-execution-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+:is(.goldline, .playable-goldline) .open-channel-execution-toggle button {
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 8px 6px;
+  border: 1px solid #5ee5ef66;
+  border-radius: 10px;
+  color: #8df8ff;
+  background: #04141a;
+  font:
+    900 12px/1.2 Inter,
+    sans-serif;
+  letter-spacing: 0.02em;
+}
+:is(.goldline, .playable-goldline) .open-channel-execution-toggle button.is-active {
+  border-color: #7af3fc;
+  color: #04141a;
+  background: #7af3fc;
+}
+:is(.goldline, .playable-goldline) .open-channel-destination-field {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+:is(.goldline, .playable-goldline) .open-channel-destination-field span {
+  font:
+    900 11px/1.2 Inter,
+    sans-serif;
+  color: #6fcbd1;
+}
+:is(.goldline, .playable-goldline) .open-channel-destination-field input {
+  min-height: 44px;
+  padding: 8px;
+  font-size: 13px;
+}
+:is(.goldline, .playable-goldline) .open-channel-physical-stop-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #bcdcdf;
+}
 :is(.goldline, .playable-goldline) .open-channel-task-fields {
   display: grid;
   grid-template-columns: 58px 90px 1fr;
@@ -493,7 +543,7 @@
   display: block;
   margin-bottom: 3px;
   font:
-    900 7px/1 Inter,
+    900 11px/1 Inter,
     sans-serif;
   color: #6fcbd1;
 }
@@ -501,7 +551,7 @@
 :is(.goldline, .playable-goldline) .open-channel-task-fields select {
   height: 33px;
   padding: 4px 6px;
-  font-size: 10px;
+  font-size: 11px;
 }
 :is(.goldline, .playable-goldline) .open-channel-task-controls {
   display: grid;
@@ -535,7 +585,7 @@
   color: #8df8ff;
   background: #04141a;
   font:
-    900 10px/1 Inter,
+    900 11px/1 Inter,
     sans-serif;
 }
 :is(.goldline, .playable-goldline) .open-channel-add svg {
@@ -545,7 +595,7 @@
   margin: 9px 0 0;
   text-align: center;
   color: #72969a;
-  font-size: 9px;
+  font-size: 11px;
 }
 :is(.goldline, .playable-goldline) .open-channel-target-run-summary {
   grid-template-columns: 28px 1fr !important;
@@ -567,7 +617,7 @@
   border: 1px solid #f5c26866;
   color: #f5c268;
   font:
-    900 8px/1 Inter,
+    900 11px/1 Inter,
     sans-serif;
   letter-spacing: 0.04em;
 }
@@ -575,7 +625,7 @@
   margin: 6px 0 0;
   color: #8df8ff;
   font:
-    900 10px/1 Inter,
+    900 11px/1 Inter,
     sans-serif;
 }
 :is(.goldline, .playable-goldline) .open-channel-target-run-list {
@@ -595,17 +645,17 @@
   background: #050f14;
 }
 :is(.goldline, .playable-goldline) .open-channel-target-run-list b {
-  font-size: 10px;
+  font-size: 11px;
   color: #d8f6f8;
 }
 :is(.goldline, .playable-goldline) .open-channel-target-run-list small {
-  font-size: 9px;
+  font-size: 11px;
   color: #6fcbd1;
 }
 :is(.goldline, .playable-goldline) .open-channel-target-run-hint {
   margin: 8px 0 0;
   color: #6fcbd1;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.4;
 }
 :is(.goldline, .playable-goldline) .open-channel-active-tasks {
@@ -648,7 +698,7 @@
 :is(.goldline, .playable-goldline) .open-channel-active-tasks small {
   margin-top: 4px;
   color: #82b7bb;
-  font-size: 9px;
+  font-size: 11px;
 }
 :is(.goldline, .playable-goldline) .open-channel-active-tasks a {
   width: 34px;

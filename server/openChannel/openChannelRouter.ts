@@ -7,9 +7,13 @@ import {
   generateOpenChannelDraft,
   getGoldlineProgress,
   getCurrentOpenChannelMission,
+  reclassifyOpenChannelTask,
   transcribeOpenChannelBriefing,
 } from "./openChannelService";
-import { OPEN_CHANNEL_TASK_CATEGORIES } from "./openChannelTypes";
+import {
+  OPEN_CHANNEL_TASK_CATEGORIES,
+  OPEN_CHANNEL_TASK_EXECUTIONS,
+} from "./openChannelTypes";
 
 const businessDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const editableTask = z.object({
@@ -20,6 +24,7 @@ const editableTask = z.object({
   estimatedMinutes: z.number().int().min(5).max(240),
   category: z.enum(OPEN_CHANNEL_TASK_CATEGORIES),
   navigationQuery: z.string().trim().max(500).nullable(),
+  execution: z.enum(OPEN_CHANNEL_TASK_EXECUTIONS),
 });
 
 export const openChannelRouter = router({
@@ -128,6 +133,24 @@ export const openChannelRouter = router({
         tenantId: ctx.tenantId,
         driverId: ctx.user.openId,
         actorId: ctx.user.openId,
+      })
+    ),
+  // §R1 Workstream 1 item 4. Operator-triggered reclassify affordance for
+  // the cases the legacy default (or the model's proposal) gets wrong.
+  reclassifyTask: dayforgeTenantMemberProcedure
+    .input(
+      z.object({
+        missionId: z.string().uuid(),
+        taskId: z.string().uuid(),
+        execution: z.enum(OPEN_CHANNEL_TASK_EXECUTIONS),
+        navigationQuery: z.string().trim().max(500).nullable(),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      reclassifyOpenChannelTask({
+        ...input,
+        tenantId: ctx.tenantId,
+        driverId: ctx.user.openId,
       })
     ),
 });

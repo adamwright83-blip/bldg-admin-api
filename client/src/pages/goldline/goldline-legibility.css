@@ -124,7 +124,7 @@ body,
 }
 .goldline .date-stone span {
   margin-top: 6px;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.025em;
 }
 .goldline .date-stone i {
@@ -258,7 +258,7 @@ body,
   margin-top: 4px;
   color: #ff705d;
   font:
-    800 7px/1 Inter,
+    800 11px/1 Inter,
     sans-serif;
   font-style: normal;
   letter-spacing: 0.06em;
@@ -267,7 +267,7 @@ body,
   margin-top: 5px;
   color: #ead8b4;
   font:
-    700 7px/1.25 Inter,
+    700 11px/1.25 Inter,
     sans-serif;
 }
 .goldline .vorgan-chevron {
@@ -418,7 +418,7 @@ body,
   display: block;
   overflow: hidden;
   font:
-    800 10px/1 Inter,
+    800 11px/1 Inter,
     sans-serif;
   letter-spacing: 0.065em;
   text-overflow: ellipsis;
@@ -529,11 +529,11 @@ body,
   height: 16px;
 }
 .goldline .call-shrine b {
-  font-size: 9px;
+  font-size: 11px;
 }
 .goldline .call-shrine small {
   margin-top: 2px;
-  font-size: 8px;
+  font-size: 11px;
 }
 .goldline .objectives-tab {
   top: max(198px, calc(env(safe-area-inset-top) + 196px));
@@ -607,7 +607,7 @@ body,
     0 5px 14px #000a,
     0 0 15px #d8aa4633;
   font:
-    800 10px/1 Cinzel,
+    800 11px/1 Cinzel,
     serif;
   letter-spacing: 0.04em;
 }
@@ -642,7 +642,7 @@ body,
   place-items: center;
   padding: 0 2px;
   font:
-    800 9px/1.08 Cinzel,
+    800 11px/1.08 Cinzel,
     serif;
 }
 
@@ -655,7 +655,7 @@ body,
   padding-bottom: max(26px, calc(20px + env(safe-area-inset-bottom)));
 }
 .goldline .drawer-kicker {
-  font-size: 10px;
+  font-size: 11px;
 }
 .goldline .drawer-kicker.danger {
   color: #9d2a22;
@@ -695,7 +695,7 @@ body,
 }
 .goldline .route-focus-card > small {
   font:
-    800 10px/1 Inter,
+    800 11px/1 Inter,
     sans-serif;
   letter-spacing: 0.07em;
 }
@@ -868,7 +868,7 @@ body,
 .goldline .vorgan-drawer-hero b {
   color: #9d2a22;
   font:
-    800 10px/1 Inter,
+    800 11px/1 Inter,
     sans-serif;
   letter-spacing: 0.08em;
 }
@@ -902,7 +902,7 @@ body,
 .goldline .rival-readout small {
   color: #6c5940;
   font:
-    800 10px/1 Inter,
+    800 11px/1 Inter,
     sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -913,7 +913,7 @@ body,
     width: min(306px, 84vw);
   }
   .goldline .route-summary > span {
-    font-size: 10px;
+    font-size: 11px;
     gap: 4px;
   }
   .goldline .route-summary > span strong {
@@ -939,13 +939,13 @@ body,
     font-size: 21px;
   }
   .goldline .route-stop .route-stop-type {
-    font-size: 9px;
+    font-size: 11px;
   }
   .goldline .route-stop .route-stop-copy > b {
     font-size: 12px;
   }
   .goldline .route-stop .route-stop-copy > em {
-    font-size: 10px;
+    font-size: 11px;
   }
   .goldline .action-bar {
     left: 5px;
@@ -959,7 +959,7 @@ body,
     height: 53px;
   }
   .goldline .action-bar > button > span {
-    font-size: 8px;
+    font-size: 11px;
   }
 }
 
@@ -974,7 +974,7 @@ body,
   }
   .goldline .route-summary > span {
     margin-top: 7px;
-    font-size: 10px;
+    font-size: 11px;
   }
   .goldline .route-summary > span strong {
     font-size: 17px;
@@ -984,13 +984,13 @@ body,
   }
   .goldline .hustle-labels {
     padding: 6px 8px 5px;
-    font-size: 10px;
+    font-size: 11px;
   }
   .goldline .hustle-labels b {
     font-size: 12px;
   }
   .goldline .hustle em {
-    font-size: 10px;
+    font-size: 11px;
   }
   .goldline .vorgan-card {
     top: 178px;
@@ -999,7 +999,7 @@ body,
   .goldline .objectives-tab {
     top: 180px;
     min-width: 76px;
-    font-size: 10px;
+    font-size: 11px;
   }
   .goldline .route-stop {
     min-height: 64px;

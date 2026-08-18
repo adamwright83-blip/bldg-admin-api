@@ -365,7 +365,7 @@ adventure and waits for the operator to type reality into it.**
 | Seq | Label | Branch | Status | Merged | Adam played |
 |-----|-------|--------|--------|--------|-------------|
 | GL-78 | playtest closure | `agent/goldline-pr78-playtest-closure` | merged as github#79 | `853ae26` | 2026-08-18 — **FUN GATE FAILED at product-model level** (see correction) |
-| R1 | day assembly + physical stops + legibility | — | PROMPT RELEASED | — | — |
+| R1 | day assembly + physical stops + legibility | `agent/goldline-r1-day-assembly` | implemented, local gates green, awaiting review/merge | — | — |
 | R2 | rescue campaign director | — | held | — | — |
 | C1 | consequence loop | — | held | — | — |
 | R3 | growth windows | — | held | — | — |

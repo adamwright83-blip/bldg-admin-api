@@ -33,6 +33,29 @@ export type OpenChannelExpeditionObjective = {
 };
 
 /**
+ * §R1 Workstream 1 item 5. A plain Open Channel task whose effective
+ * `execution` resolves to `physical_stop` — real work with a genuine
+ * physical arrival (a pickup, a dropoff, visiting a person or place). This
+ * is the machinery `open_channel` used before GL-78's climax-honesty pass
+ * stopped staging combat for EVERY typed task regardless of physical/desk
+ * distinction — revived here under its own kind now that the task model
+ * actually carries the distinction, rather than rebuilt from scratch.
+ *
+ * `detail` is the destination text (from `navigationQuery`), never free
+ * task prose — that is what makes NAVIGATE honest for this kind the same
+ * way it already is for native_pickup/external_order.
+ */
+export type PhysicalStopExpeditionObjective = {
+  kind: "physical_stop";
+  key: string;
+  planSeed: number;
+  label: string;
+  detail: string;
+  missionId: string;
+  taskId: string;
+};
+
+/**
  * Real work owned by another system — a CleanCloud pickup or dropoff.
  *
  * Carries its provenance in the type, not as a flag on the side, so no
@@ -74,6 +97,7 @@ export type LocalTargetRunExpeditionObjective = {
 export type PreparedExpeditionObjective =
   | NativePickupExpeditionObjective
   | OpenChannelExpeditionObjective
+  | PhysicalStopExpeditionObjective
   | ExternalOrderExpeditionObjective
   | LocalTargetRunExpeditionObjective;
 
@@ -226,6 +250,26 @@ export function prepareExpeditionObjective(input: {
   }
 
   const key = `open-channel:${input.openChannelMission.id}:${task.id}`;
+
+  // §R1 Workstream 1 item 5. Execution is the operator-approved authority
+  // (task.execution already carries the legacy default resolved server-side
+  // — see effectiveOpenChannelTaskExecution). A physical_stop task with no
+  // destination should not be reachable post-approval (approveOpenChannelMission
+  // blocks it), but this never fabricates one if it somehow is — it falls
+  // back to the honest `open_channel` (base) presentation rather than
+  // offering a NAVIGATE affordance to nowhere.
+  if (task.execution === "physical_stop" && task.navigationQuery?.trim()) {
+    return {
+      kind: "physical_stop",
+      key,
+      planSeed: stableObjectiveSeed(key),
+      label: task.title,
+      detail: task.navigationQuery.trim(),
+      missionId: input.openChannelMission.id,
+      taskId: task.id,
+    };
+  }
+
   return {
     kind: "open_channel",
     key,

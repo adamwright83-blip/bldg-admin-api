@@ -32,8 +32,6 @@ describe("Goldline world-claim truth boundary", () => {
 
   it("the no-action state distinguishes 'a real objective exists, keep moving' from 'nothing exists right now'", () => {
     expect(source).toContain("FOLLOW THE GOLD LINE");
-    expect(source).toContain("NO ACTIVE OBJECTIVE");
-    expect(source).toContain("No unresolved route work right now.");
     // The truthful-objective branch must actually check for a real mission,
     // order, or approved objective — not render unconditionally.
     //
@@ -46,5 +44,21 @@ describe("Goldline world-claim truth boundary", () => {
     expect(source).toMatch(
       /activeMission \|\| nextOrderObjective \|\| preparedObjective \?[\s\S]{0,200}FOLLOW THE GOLD LINE/
     );
+  });
+
+  /**
+   * §R1 Workstream 2. "NO ACTIVE OBJECTIVE / No unresolved route work right
+   * now" was itself a dead end — a truthful but useless statement of
+   * absence. R1 replaces it with the day-assembly front door: when the day
+   * genuinely has zero assembled work, Goldline offers the three real ways
+   * to give it work instead of just reporting that there is none.
+   */
+  it("the old context-free dead end is gone, replaced by the day-assembly front door gated on the same emptiness", () => {
+    expect(source).not.toContain("NO ACTIVE OBJECTIVE");
+    expect(source).not.toContain("No unresolved route work right now.");
+    expect(source).toContain("day-assembly-front-door");
+    expect(source).toContain("IMPORT TODAY FROM CLEANCLOUD");
+    expect(source).toContain("ADD OTHER STOPS");
+    expect(source).toMatch(/dayIsEmpty \?[\s\S]{0,400}day-assembly-front-door/);
   });
 });

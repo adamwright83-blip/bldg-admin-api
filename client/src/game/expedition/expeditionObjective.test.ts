@@ -33,6 +33,7 @@ const mission: OpenChannelMission = {
       estimatedMinutes: 30,
       category: "sales",
       navigationQuery: null,
+      execution: "base",
       status: "pending",
       completedAt: null,
     },
@@ -89,6 +90,64 @@ describe("prepareExpeditionObjective", () => {
       stableObjectiveSeed("open-channel:day-1:task-1")
     );
     expect(stableObjectiveSeed("open-channel:day-1:task-1")).toBeGreaterThan(0);
+  });
+});
+
+describe("prepareExpeditionObjective (§R1 physical_stop honesty)", () => {
+  const physicalMission: OpenChannelMission = {
+    ...mission,
+    tasks: [
+      {
+        id: "task-mona",
+        position: 0,
+        title: "Pick up Mona's order at Opus LA",
+        detail: "Mona's order is ready — collect it in person.",
+        estimatedMinutes: 30,
+        category: "operations",
+        navigationQuery: "Opus LA, 1601 Vine St",
+        execution: "physical_stop",
+        status: "pending",
+        completedAt: null,
+      },
+    ],
+  };
+
+  it("resolves an operator-approved physical_stop task to the physical_stop kind, never open_channel", () => {
+    const objective = prepareExpeditionObjective({
+      pickup: null,
+      openChannelMission: physicalMission,
+    });
+    expect(objective).toMatchObject({
+      kind: "physical_stop",
+      missionId: "day-1",
+      taskId: "task-mona",
+      label: "Pick up Mona's order at Opus LA",
+      detail: "Opus LA, 1601 Vine St",
+    });
+  });
+
+  it("the operator's explicit base override wins even with a navigationQuery present", () => {
+    // The operator is the authority — the model/legacy default only
+    // PROPOSES; whatever the approved row says persists.
+    const objective = prepareExpeditionObjective({
+      pickup: null,
+      openChannelMission: {
+        ...physicalMission,
+        tasks: [{ ...physicalMission.tasks[0]!, execution: "base" }],
+      },
+    });
+    expect(objective?.kind).toBe("open_channel");
+  });
+
+  it("never fabricates a NAVIGATE destination: a physical_stop task with no navigationQuery falls back to the honest open_channel presentation", () => {
+    const objective = prepareExpeditionObjective({
+      pickup: null,
+      openChannelMission: {
+        ...physicalMission,
+        tasks: [{ ...physicalMission.tasks[0]!, navigationQuery: null }],
+      },
+    });
+    expect(objective?.kind).toBe("open_channel");
   });
 });
 
