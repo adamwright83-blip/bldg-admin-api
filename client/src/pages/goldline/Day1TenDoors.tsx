@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import "./day1-ten-doors.css";
 import {
-  DAY1_ARRIVAL_RADIUS_METERS,
   DAY1_DAY_INDEX,
   DAY1_LOCATION_POLL_MS,
   DAY1_MISSION_LINE,
   RESCUE_TOTAL_DAYS,
+  effectiveArrivalRadiusMeters,
   haversineMeters,
   type Day1Target,
   type Day1TargetOutcome,
@@ -62,9 +62,20 @@ export default function Day1TenDoors({
     reason: null,
   });
   const [showFullRoute, setShowFullRoute] = useState(false);
+  /**
+   * GPS may HELP, never BLOCK. Manual check-in is operator-confirmed
+   * location context — it never itself claims a pitch happened, it only
+   * unlocks the same two outcome buttons automatic arrival would. Keyed
+   * by target id and reset the moment the current target changes, so a
+   * stale check-in from a prior stop can never leak onto the next one.
+   */
+  const [manuallyCheckedInTargetId, setManuallyCheckedInTargetId] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     if (mission.isComplete) return;
+
     let active = true;
     function poll() {
       void requestGoldlineLocation(navigator.geolocation).then(result => {
@@ -73,23 +84,54 @@ export default function Day1TenDoors({
     }
     poll();
     const interval = window.setInterval(poll, DAY1_LOCATION_POLL_MS);
+
+    // Poll immediately on returning to the app — e.g. after NAVIGATE opened
+    // Google Maps and the operator switched back — rather than waiting up
+    // to DAY1_LOCATION_POLL_MS for the next scheduled tick. Foreground-only:
+    // both listeners only ever fire while this tab is the one being looked
+    // at, never in the background.
+    function onForegroundReturn() {
+      if (document.visibilityState === "visible") poll();
+    }
+    document.addEventListener("visibilitychange", onForegroundReturn);
+    window.addEventListener("focus", onForegroundReturn);
+
     return () => {
       active = false;
       window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onForegroundReturn);
+      window.removeEventListener("focus", onForegroundReturn);
     };
   }, [mission.isComplete]);
 
+  const currentTarget = mission.currentTarget;
+
+  // A stale manual check-in from a previous stop must never carry forward.
+  useEffect(() => {
+    setManuallyCheckedInTargetId(null);
+  }, [currentTarget?.id]);
+
   const distanceToCurrentTarget = useMemo(() => {
-    if (!mission.currentTarget || location.status !== "available") return null;
+    if (!currentTarget || location.status !== "available") return null;
     return haversineMeters(
       { lat: location.coordinates.latitude, lng: location.coordinates.longitude },
-      { lat: mission.currentTarget.lat, lng: mission.currentTarget.lng }
+      { lat: currentTarget.lat, lng: currentTarget.lng }
     );
-  }, [mission.currentTarget, location]);
+  }, [currentTarget, location]);
 
-  const arrived =
+  const autoArrived =
+    currentTarget != null &&
     distanceToCurrentTarget != null &&
-    distanceToCurrentTarget <= DAY1_ARRIVAL_RADIUS_METERS;
+    distanceToCurrentTarget <=
+      effectiveArrivalRadiusMeters(
+        currentTarget,
+        location.status === "available" ? location.accuracyMeters : null
+      );
+
+  const manuallyCheckedIn =
+    currentTarget != null && manuallyCheckedInTargetId === currentTarget.id;
+
+  const arrived = autoArrived || manuallyCheckedIn;
 
   if (mission.isComplete) {
     return (
@@ -124,7 +166,6 @@ export default function Day1TenDoors({
     );
   }
 
-  const currentTarget = mission.currentTarget;
   const targetIndex = currentTarget
     ? mission.targets.findIndex(target => target.id === currentTarget.id)
     : -1;
@@ -173,6 +214,17 @@ export default function Day1TenDoors({
           >
             NAVIGATE
           </a>
+          {/* Always available, regardless of location permission/accuracy —
+              GPS may help recognize arrival, it may never be the only way
+              to reach the pitch outcome buttons. */}
+          <button
+            type="button"
+            className="day1-btn day1-btn--checkin"
+            onClick={() => setManuallyCheckedInTargetId(currentTarget.id)}
+            data-testid="day1-checkin"
+          >
+            I'M HERE — CHECK IN
+          </button>
         </div>
       )}
 
@@ -183,7 +235,8 @@ export default function Day1TenDoors({
           </div>
           <div className="day1-target-name">{currentTarget.name}</div>
           <div className="day1-arrival-sub">
-            Now go inside and make the pitch.
+            GO INSIDE. ASK FOR THE GENERAL MANAGER OR PROPERTY MANAGER. PITCH
+            LAUNDRY BUTLER.
           </div>
           <div className="day1-outcome-buttons">
             <button

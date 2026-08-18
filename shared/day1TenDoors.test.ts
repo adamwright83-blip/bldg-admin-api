@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  DAY1_ARRIVAL_RADIUS_METERS,
+  DAY1_ARRIVAL_ACCURACY_CAP_METERS,
   DAY1_TARGETS,
   day1CurrentTarget,
   day1IsComplete,
@@ -8,6 +8,7 @@ import {
   day1ProgressLabel,
   day1VisitedCount,
   decodeDay1Payload,
+  effectiveArrivalRadiusMeters,
   encodeDay1Payload,
   haversineMeters,
   type Day1Target,
@@ -46,14 +47,42 @@ describe("DAY1_TARGETS — the hand-verified list", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("truthfully labels exactly 6 as Greystar (Koreatown) and 4 as real, named others", () => {
+  it("truthfully labels exactly 7 as Greystar and 3 as real, named other managers", () => {
     const greystar = DAY1_TARGETS.filter(target => target.isGreystar);
     const other = DAY1_TARGETS.filter(target => !target.isGreystar);
-    expect(greystar.length).toBe(6);
-    expect(other.length).toBe(4);
+    expect(greystar.length).toBe(7);
+    expect(other.length).toBe(3);
     for (const target of other) {
       expect(target.managerLabel).not.toBeNull();
       expect(target.isGreystar).toBe(false);
+    }
+  });
+
+  it("never includes an existing Laundry Butler account as a 'prospect' (Opus LA excluded)", () => {
+    expect(DAY1_TARGETS.some(target => target.id === "opus-la")).toBe(false);
+    expect(
+      DAY1_TARGETS.some(target => target.name.toLowerCase() === "opus la")
+    ).toBe(false);
+  });
+
+  it("matches the final operator-authoritative route order exactly", () => {
+    expect(DAY1_TARGETS.map(target => target.id)).toEqual([
+      "rise-koreatown",
+      "avana-on-wilshire",
+      "the-pearl-on-wilshire",
+      "wilshire-vermont",
+      "the-chadwick",
+      "onsunset",
+      "the-charlie-weho",
+      "the-alfred",
+      "blu-beverly-hills",
+      "ninety9fifty5",
+    ]);
+  });
+
+  it("every target carries a positive, tightened base arrival radius (~125m)", () => {
+    for (const target of DAY1_TARGETS) {
+      expect(target.arrivalRadiusMeters).toBe(125);
     }
   });
 });
@@ -122,17 +151,36 @@ describe("day1 progress", () => {
   });
 });
 
-describe("arrival radius", () => {
-  it("recognizes a position inside the radius as arrived", () => {
-    const target = DAY1_TARGETS[0]!;
-    // ~150m north — inside the 250m radius.
-    const near = { lat: target.lat + 0.00135, lng: target.lng };
-    expect(haversineMeters(near, target)).toBeLessThan(DAY1_ARRIVAL_RADIUS_METERS);
+describe("arrival radius — GPS helps, never blocks", () => {
+  it("recognizes a position inside a target's own tightened radius as arrived", () => {
+    const target = DAY1_TARGETS[0]!; // 125m base radius
+    const near = { lat: target.lat + 0.0005, lng: target.lng }; // ~55m
+    expect(haversineMeters(near, target)).toBeLessThan(
+      effectiveArrivalRadiusMeters(target, null)
+    );
   });
 
-  it("does not treat a mile away as arrived", () => {
+  it("does not treat a mile away as arrived even with a generous accuracy reading", () => {
     const target = DAY1_TARGETS[0]!;
     const far = { lat: target.lat + 0.02, lng: target.lng };
-    expect(haversineMeters(far, target)).toBeGreaterThan(DAY1_ARRIVAL_RADIUS_METERS);
+    expect(haversineMeters(far, target)).toBeGreaterThan(
+      effectiveArrivalRadiusMeters(target, 500)
+    );
+  });
+
+  it("uses the same tightened base radius for every target now that coordinates are real rooftops", () => {
+    const radii = new Set(DAY1_TARGETS.map(target => target.arrivalRadiusMeters));
+    expect(radii.size).toBe(1);
+    expect([...radii][0]).toBe(125);
+  });
+
+  it("folds device accuracy into the effective radius, capped so a noisy reading can't restore the old blanket radius", () => {
+    const target = DAY1_TARGETS[0]!;
+    const base = effectiveArrivalRadiusMeters(target, null);
+    const withModestAccuracy = effectiveArrivalRadiusMeters(target, 40);
+    const withHugeAccuracy = effectiveArrivalRadiusMeters(target, 5_000);
+    expect(withModestAccuracy).toBe(base + 40);
+    expect(withHugeAccuracy).toBe(base + DAY1_ARRIVAL_ACCURACY_CAP_METERS);
+    expect(withHugeAccuracy).toBeLessThan(base + 250);
   });
 });

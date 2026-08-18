@@ -11,12 +11,21 @@
  * day Adam had zero API credit headroom to risk on a live sourcing call
  * failing mid-route.
  *
- * Coordinates below are APPROXIMATE — derived from known LA street
- * geography, not geocoded through any API (none was available). The
- * NAVIGATE action always uses the full street address as the Google Maps
- * destination, so navigation itself is unaffected by that approximation;
- * only the arrival-radius proximity check depends on it, which is why
- * DAY1_ARRIVAL_RADIUS_METERS below is generous rather than doorway-tight.
+ * Coordinates below are real Census Bureau rooftop coordinates supplied
+ * by the operator — not geocoded through any live API. The NAVIGATE
+ * action still uses the full street address as the Google Maps
+ * destination (accurate regardless), and the arrival-radius proximity
+ * check now uses these precise coordinates directly, which is why the
+ * base radius (`arrivalRadiusMeters`, ~125m) is tighter than the earlier
+ * approximate-coordinate draft's blanket 250m. See
+ * `effectiveArrivalRadiusMeters` for how a reported GPS accuracy reading
+ * is folded in on top of that base value.
+ *
+ * Opus LA is excluded: Laundry Butler already operates there, so it is
+ * not a prospect and cannot count toward today's mission to acquire new
+ * buildings. This is the final, authoritative operator-curated set —
+ * route order chosen to reduce backtracking (Koreatown cluster, then
+ * Echo Park, then West Hollywood/Beverly Grove, then Beverly Hills).
  */
 
 export type Day1TargetOutcome = "pitched" | "couldnt_reach";
@@ -39,6 +48,10 @@ export type Day1Target = {
   evidenceNote: string;
   prospectNote: string;
   navigationUrl: string;
+  /** Base arrival radius for THIS target, before folding in reported GPS
+   * accuracy. Tighter in dense Koreatown blocks, looser in the more
+   * spread-out Silver Lake/Echo Park stops — see file header. */
+  arrivalRadiusMeters: number;
 };
 
 export const DAY1_BUSINESS_DATE = "2026-08-18";
@@ -49,20 +62,43 @@ export const DAY1_MISSION_LINE =
   "Visit 10 apartment buildings and pitch Laundry Butler as a no-cost resident amenity.";
 
 /**
- * Generous on purpose: these coordinates are best-effort, not
- * API-geocoded, and an apartment property is a large target, not a single
- * doorway. ~800 feet keeps false negatives ("I'm standing at the leasing
- * office and Goldline hasn't noticed") much rarer than false positives at
- * this class of target.
+ * A reported GPS accuracy reading is folded on top of a target's base
+ * `arrivalRadiusMeters`, capped here so a single noisy reading can never
+ * silently restore something close to the old blanket 250m radius. GPS
+ * is a helper, never a blocker — see `effectiveArrivalRadiusMeters` and
+ * the manual "I'M HERE — CHECK IN" fallback in the UI, which works
+ * identically whether automatic arrival ever fires or not.
  */
-export const DAY1_ARRIVAL_RADIUS_METERS = 250;
+export const DAY1_ARRIVAL_ACCURACY_CAP_METERS = 100;
 
 /** Foreground-only poll cadence while this mission is the active screen. */
 export const DAY1_LOCATION_POLL_MS = 20_000;
 
+/**
+ * Effective arrival radius for a target: its own tightened base radius,
+ * widened by however much the device says it's uncertain about its own
+ * position — but never by more than `DAY1_ARRIVAL_ACCURACY_CAP_METERS`,
+ * so a bad accuracy reading degrades gracefully instead of undoing the
+ * per-target tightening entirely.
+ */
+export function effectiveArrivalRadiusMeters(
+  target: Day1Target,
+  accuracyMeters: number | null
+): number {
+  const accuracyContribution =
+    accuracyMeters != null && Number.isFinite(accuracyMeters)
+      ? Math.min(Math.max(0, accuracyMeters), DAY1_ARRIVAL_ACCURACY_CAP_METERS)
+      : 0;
+  return target.arrivalRadiusMeters + accuracyContribution;
+}
+
 function mapsUrl(address: string): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
 }
+
+/** Uniform now that every target has a real Census rooftop coordinate —
+ * there is no more need to tier by neighborhood density. */
+const BASE_ARRIVAL_RADIUS_METERS = 125;
 
 export const DAY1_TARGETS: readonly Day1Target[] = [
   {
@@ -71,13 +107,14 @@ export const DAY1_TARGETS: readonly Day1Target[] = [
     address: "750 S Oxford Ave, Los Angeles, CA 90005",
     neighborhood: "Koreatown",
     phone: "323-991-9423",
-    lat: 34.0605,
-    lng: -118.3078,
+    lat: 34.058653,
+    lng: -118.307756,
     managerLabel: "Greystar",
     isGreystar: true,
     evidenceNote: "greystar.com property page, Greystar CA broker license footer",
     prospectNote: "Flagship-style, luxury studios/1BR",
     navigationUrl: mapsUrl("750 S Oxford Ave, Los Angeles, CA 90005"),
+    arrivalRadiusMeters: BASE_ARRIVAL_RADIUS_METERS,
   },
   {
     id: "avana-on-wilshire",
@@ -85,13 +122,14 @@ export const DAY1_TARGETS: readonly Day1Target[] = [
     address: "635 S Hobart Blvd, Los Angeles, CA 90005",
     neighborhood: "Koreatown",
     phone: "925-237-9856",
-    lat: 34.0606,
-    lng: -118.3057,
+    lat: 34.062787,
+    lng: -118.305419,
     managerLabel: "Greystar",
     isGreystar: true,
     evidenceNote: "greystar.com canonical page",
     prospectNote: "Established Greystar community",
     navigationUrl: mapsUrl("635 S Hobart Blvd, Los Angeles, CA 90005"),
+    arrivalRadiusMeters: BASE_ARRIVAL_RADIUS_METERS,
   },
   {
     id: "the-pearl-on-wilshire",
@@ -99,27 +137,14 @@ export const DAY1_TARGETS: readonly Day1Target[] = [
     address: "687 S Hobart Blvd, Los Angeles, CA 90005",
     neighborhood: "Koreatown",
     phone: "833-563-8959",
-    lat: 34.0596,
-    lng: -118.3057,
+    lat: 34.061653,
+    lng: -118.305412,
     managerLabel: "Greystar",
     isGreystar: true,
     evidenceNote: "greystar.com page",
     prospectNote: "131 reviews — large resident base",
     navigationUrl: mapsUrl("687 S Hobart Blvd, Los Angeles, CA 90005"),
-  },
-  {
-    id: "the-chadwick",
-    name: "The Chadwick",
-    address: "209 S Westmoreland Ave, Los Angeles, CA 90004",
-    neighborhood: "Koreatown",
-    phone: "213-648-1790",
-    lat: 34.0658,
-    lng: -118.2971,
-    managerLabel: "Greystar",
-    isGreystar: true,
-    evidenceNote: "greystar.com listing",
-    prospectNote: "Resort-style pool/fitness/pet park",
-    navigationUrl: mapsUrl("209 S Westmoreland Ave, Los Angeles, CA 90004"),
+    arrivalRadiusMeters: BASE_ARRIVAL_RADIUS_METERS,
   },
   {
     id: "wilshire-vermont",
@@ -127,69 +152,29 @@ export const DAY1_TARGETS: readonly Day1Target[] = [
     address: "3183 Wilshire Blvd, Los Angeles, CA 90010",
     neighborhood: "Koreatown",
     phone: "833-292-1783",
-    lat: 34.0617,
-    lng: -118.2915,
+    lat: 34.061851,
+    lng: -118.291329,
     managerLabel: "Greystar",
     isGreystar: true,
     evidenceNote: "greystar.com page",
     prospectNote: "Directly at Metro Red/Purple Line stop",
     navigationUrl: mapsUrl("3183 Wilshire Blvd, Los Angeles, CA 90010"),
+    arrivalRadiusMeters: BASE_ARRIVAL_RADIUS_METERS,
   },
   {
-    id: "opus-la",
-    name: "Opus LA",
-    address: "3545 Wilshire Blvd, Los Angeles, CA 90010",
+    id: "the-chadwick",
+    name: "The Chadwick",
+    address: "209 S Westmoreland Ave, Los Angeles, CA 90004",
     neighborhood: "Koreatown",
-    phone: "844-634-0963",
-    lat: 34.0617,
-    lng: -118.2999,
+    phone: "213-648-1790",
+    lat: 34.070264,
+    lng: -118.287968,
     managerLabel: "Greystar",
     isGreystar: true,
-    evidenceNote: "greystar.com/opus-la page",
-    prospectNote: "Wilshire corridor tower",
-    navigationUrl: mapsUrl("3545 Wilshire Blvd, Los Angeles, CA 90010"),
-  },
-  {
-    id: "violet-on-virgil",
-    name: "Violet on Virgil",
-    address: "160 S Virgil Ave, Los Angeles, CA 90004",
-    neighborhood: "Silver Lake",
-    phone: "213-325-1570",
-    lat: 34.0759,
-    lng: -118.2896,
-    managerLabel: "Vive LA",
-    isGreystar: false,
-    evidenceNote: "listing: managed by Vive LA",
-    prospectNote: "302 units, high volume",
-    navigationUrl: mapsUrl("160 S Virgil Ave, Los Angeles, CA 90004"),
-  },
-  {
-    id: "canyon",
-    name: "Canyon",
-    address: "1250 W Court St, Los Angeles, CA 90026",
-    neighborhood: "Echo Park",
-    phone: "323-905-6749",
-    lat: 34.0703,
-    lng: -118.2596,
-    managerLabel: "Oro Properties LA",
-    isGreystar: false,
-    evidenceNote: "branded under Oro Properties LA",
-    prospectNote: "Full amenity building",
-    navigationUrl: mapsUrl("1250 W Court St, Los Angeles, CA 90026"),
-  },
-  {
-    id: "encore-echo-park",
-    name: "Encore Echo Park",
-    address: "226 N Lake St, Los Angeles, CA 90026",
-    neighborhood: "Echo Park",
-    phone: "818-570-2292",
-    lat: 34.0778,
-    lng: -118.2589,
-    managerLabel: "Encore Development/Management",
-    isGreystar: false,
-    evidenceNote: "encoredevco.com: Encore Development/Management",
-    prospectNote: "Luxury new build, skyline views",
-    navigationUrl: mapsUrl("226 N Lake St, Los Angeles, CA 90026"),
+    evidenceNote: "greystar.com listing",
+    prospectNote: "Resort-style pool/fitness/pet park",
+    navigationUrl: mapsUrl("209 S Westmoreland Ave, Los Angeles, CA 90004"),
+    arrivalRadiusMeters: BASE_ARRIVAL_RADIUS_METERS,
   },
   {
     id: "onsunset",
@@ -197,13 +182,74 @@ export const DAY1_TARGETS: readonly Day1Target[] = [
     address: "2225 W Sunset Blvd, Los Angeles, CA 90026",
     neighborhood: "Echo Park",
     phone: "323-645-2496",
-    lat: 34.0779,
-    lng: -118.2565,
+    lat: 34.078085,
+    lng: -118.266133,
     managerLabel: "RPM Living",
     isGreystar: false,
     evidenceNote: "site: managed by RPM Living",
     prospectNote: "Pool, EV charging, controlled access",
     navigationUrl: mapsUrl("2225 W Sunset Blvd, Los Angeles, CA 90026"),
+    arrivalRadiusMeters: BASE_ARRIVAL_RADIUS_METERS,
+  },
+  {
+    id: "the-charlie-weho",
+    name: "The Charlie WeHo",
+    address: "7617 Santa Monica Blvd, West Hollywood, CA 90046",
+    neighborhood: "West Hollywood",
+    phone: null,
+    lat: 34.090831,
+    lng: -118.355641,
+    managerLabel: "Greystar",
+    isGreystar: true,
+    evidenceNote: "greystar.com listing",
+    prospectNote: "West Hollywood corridor",
+    navigationUrl: mapsUrl("7617 Santa Monica Blvd, West Hollywood, CA 90046"),
+    arrivalRadiusMeters: BASE_ARRIVAL_RADIUS_METERS,
+  },
+  {
+    id: "the-alfred",
+    name: "The Alfred",
+    address: "725 N Croft Ave, Los Angeles, CA 90069",
+    neighborhood: "West Hollywood",
+    phone: null,
+    lat: 34.084075,
+    lng: -118.374286,
+    managerLabel: "Greystar",
+    isGreystar: true,
+    evidenceNote: "greystar.com listing",
+    prospectNote: "Beverly Grove / West Hollywood border",
+    navigationUrl: mapsUrl("725 N Croft Ave, Los Angeles, CA 90069"),
+    arrivalRadiusMeters: BASE_ARRIVAL_RADIUS_METERS,
+  },
+  {
+    id: "blu-beverly-hills",
+    name: "Blu Beverly Hills",
+    address: "8601 Wilshire Blvd, Beverly Hills, CA 90211",
+    neighborhood: "Beverly Hills",
+    phone: null,
+    lat: 34.065795,
+    lng: -118.378367,
+    managerLabel: "Willow Bridge",
+    isGreystar: false,
+    evidenceNote: "site: managed by Willow Bridge",
+    prospectNote: "Wilshire corridor, Beverly Hills",
+    navigationUrl: mapsUrl("8601 Wilshire Blvd, Beverly Hills, CA 90211"),
+    arrivalRadiusMeters: BASE_ARRIVAL_RADIUS_METERS,
+  },
+  {
+    id: "ninety9fifty5",
+    name: "Ninety9Fifty5",
+    address: "9955 Durant Dr, Beverly Hills, CA 90212",
+    neighborhood: "Beverly Hills",
+    phone: null,
+    lat: 34.064045,
+    lng: -118.412314,
+    managerLabel: "Willow Bridge",
+    isGreystar: false,
+    evidenceNote: "site: managed by Willow Bridge",
+    prospectNote: "Century City-adjacent, Beverly Hills",
+    navigationUrl: mapsUrl("9955 Durant Dr, Beverly Hills, CA 90212"),
+    arrivalRadiusMeters: BASE_ARRIVAL_RADIUS_METERS,
   },
 ] as const;
 

@@ -140,6 +140,13 @@
   color: #ffffff;
 }
 
+.day1-btn--checkin {
+  margin-top: 8px;
+  background: #3a4152;
+  color: #f0f0f0;
+  border: 1px solid #545e73;
+}
+
 .day1-btn--primary {
   background: #d4af6a;
   color: #1a1200;
