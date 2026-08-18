@@ -8,6 +8,7 @@ import { LogSignalSheet } from "@/components/driver/LogSignalSheet";
 import { SalesJournalSheet } from "@/components/driver/SalesMomentum";
 import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
 import GoldlineHome, { type ArrivedOperatorStop } from "../goldline/GoldlineHome";
+import Day1TenDoors from "../goldline/Day1TenDoors";
 import type { FieldMoveCandidate } from "../../../../server/field/types";
 import type { DayResolution } from "../../../../server/unload/unloadTypes";
 import type {
@@ -298,6 +299,13 @@ function LiveGoldlineDriverController() {
   const goldlineProgress = trpc.system.openChannel.progress.useQuery(
     progressInput,
     { refetchInterval: 30_000 }
+  );
+  const day1TenDoors = trpc.system.day1TenDoors.current.useQuery(undefined, {
+    refetchInterval: 15_000,
+  });
+  const recordDay1Outcome = trpc.system.day1TenDoors.recordOutcome.useMutation();
+  const [day1Dismissed, setDay1Dismissed] = useState(
+    () => window.localStorage.getItem("goldline:day1:dismissed") === "1"
   );
 
   function advanceCachedProgress(kind: "pickup" | "delivery" | "mission") {
@@ -1054,6 +1062,35 @@ function LiveGoldlineDriverController() {
     onApproveOpenChannel: handleApproveOpenChannel,
     onCompleteOpenChannelTask: handleCompleteOpenChannelTask,
   };
+
+  if (day1TenDoors.data && !day1Dismissed) {
+    return (
+      <Day1TenDoors
+        mission={day1TenDoors.data}
+        isRecordingOutcome={recordDay1Outcome.isPending}
+        onRecordOutcome={async (targetId, outcome) => {
+          try {
+            const result = await recordDay1Outcome.mutateAsync({
+              missionId: day1TenDoors.data!.missionId,
+              targetId,
+              outcome,
+            });
+            utils.system.day1TenDoors.current.setData(undefined, result);
+          } catch (error) {
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : "Could not record this stop."
+            );
+          }
+        }}
+        onDismiss={() => {
+          window.localStorage.setItem("goldline:day1:dismissed", "1");
+          setDay1Dismissed(true);
+        }}
+      />
+    );
+  }
 
   return (
     <>

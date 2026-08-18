@@ -1,0 +1,268 @@
+/* DAY 1 — THE TEN DOORS. Mobile-first: operable one-handed at 393px,
+   standing outside a building. Essential controls are enormous; nothing
+   competes visually with NAVIGATE / I MADE THE PITCH / COULDN'T REACH THEM. */
+
+.day1-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: max(16px, env(safe-area-inset-top)) 16px
+    max(16px, env(safe-area-inset-bottom));
+  background: #0b0e14;
+  color: #f5f2e8;
+  overflow-y: auto;
+  font-family: inherit;
+}
+
+.day1-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.day1-eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #d4af6a;
+}
+
+.day1-title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.day1-mission-line {
+  font-size: 14px;
+  line-height: 1.4;
+  color: #cfcabb;
+}
+
+.day1-progress {
+  margin-top: 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #f5f2e8;
+}
+
+.day1-target-card,
+.day1-arrival-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 14px;
+  background: #171c26;
+  border: 1px solid #2c3444;
+}
+
+.day1-arrival-card {
+  background: #1f2a1a;
+  border-color: #4c7a34;
+}
+
+.day1-target-of {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #9fb0c9;
+}
+
+.day1-target-name {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.day1-target-neighborhood {
+  font-size: 13px;
+  color: #b7c2d6;
+}
+
+.day1-target-address {
+  font-size: 13px;
+  color: #9aa5b8;
+}
+
+.day1-manager-badge {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #2c3444;
+  color: #cfd6e4;
+}
+
+.day1-manager-badge--greystar {
+  background: #3a2f14;
+  color: #e8c876;
+}
+
+.day1-target-note {
+  font-size: 13px;
+  color: #b7c2d6;
+}
+
+.day1-arrival-headline {
+  font-size: 18px;
+  font-weight: 800;
+  color: #d7f0c0;
+}
+
+.day1-arrival-sub {
+  font-size: 14px;
+  color: #d7e6c8;
+}
+
+.day1-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  border-radius: 14px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.day1-btn--navigate {
+  margin-top: 8px;
+  background: #2f6feb;
+  color: #ffffff;
+}
+
+.day1-btn--checkin {
+  margin-top: 8px;
+  background: #3a4152;
+  color: #f0f0f0;
+  border: 1px solid #545e73;
+}
+
+.day1-btn--primary {
+  background: #d4af6a;
+  color: #1a1200;
+}
+
+.day1-outcome-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.day1-btn--pitch {
+  background: #3f9142;
+  color: #ffffff;
+}
+
+.day1-btn--couldnt-reach {
+  background: #4a4f5c;
+  color: #f0f0f0;
+}
+
+.day1-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.day1-route-toggle {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: #9fb0c9;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 8px 0;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.day1-route-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day1-route-item {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #12161f;
+  font-size: 13px;
+}
+
+.day1-route-item--current {
+  background: #1c2436;
+  border: 1px solid #2f6feb;
+}
+
+.day1-route-item--done {
+  opacity: 0.65;
+}
+
+.day1-route-index {
+  font-weight: 700;
+  color: #9fb0c9;
+}
+
+.day1-route-status {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9fb0c9;
+  text-align: right;
+}
+
+.day1-screen--complete {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.day1-complete-breakdown {
+  display: flex;
+  gap: 24px;
+  margin: 16px 0;
+}
+
+.day1-complete-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.day1-complete-count {
+  font-size: 36px;
+  font-weight: 800;
+}
+
+.day1-complete-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #cfcabb;
+}
+
+@media (max-width: 400px) {
+  .day1-title {
+    font-size: 20px;
+  }
+  .day1-target-name {
+    font-size: 18px;
+  }
+}

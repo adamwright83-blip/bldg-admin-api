@@ -24,6 +24,7 @@ import { armoryRouter } from "../armory/armoryRouter";
 import { capabilityRouter } from "../capabilities/capabilityRouter";
 import { teamRouter } from "../team/teamRouter";
 import { openChannelRouter } from "../openChannel/openChannelRouter";
+import { day1TenDoorsRouter } from "../openChannel/day1TenDoorsRouter";
 import { externalOrderRouter } from "../externalOrders/externalOrderRouter";
 import { impactSignalRouter } from "../impactSignals/impactSignalRouter";
 import { driverGameWorldRouter } from "../driverGameWorld/driverGameWorldRouter";
@@ -54,6 +55,7 @@ export const systemRouter = router({
   capabilities: capabilityRouter,
   team: teamRouter,
   openChannel: openChannelRouter,
+  day1TenDoors: day1TenDoorsRouter,
   externalOrders: externalOrderRouter,
   impactSignals: impactSignalRouter,
   driverGameWorld: driverGameWorldRouter,
