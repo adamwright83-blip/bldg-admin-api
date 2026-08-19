@@ -1,9 +1,10 @@
 import type { Day1TenDoorsMissionView } from "./Day1FieldMission";
 
 /**
- * Fast, authored six-site campaign for the Colosseum opening act.
- * These are six real targets already present in the Day 1 authoritative mission.
- * The campaign never invents a visit: progress is derived only from Day 1 outcomes.
+ * The current rescue boss is the operator-declared five-site Greystar
+ * Koreatown hunt. These are real targets already present in the Day 1 mission.
+ * The Colosseum facade may still show six fictional doors; visual door count
+ * is not business truth. Progress comes only from these five real outcomes.
  */
 export const COLOSSEUM_TARGET_IDS = [
   "rise-koreatown",
@@ -11,10 +12,9 @@ export const COLOSSEUM_TARGET_IDS = [
   "the-pearl-on-wilshire",
   "wilshire-vermont",
   "the-chadwick",
-  "the-charlie-weho",
 ] as const;
 
-export const COLOSSEUM_VILLAIN_TARGET_ID = "the-charlie-weho";
+export const COLOSSEUM_VILLAIN_TARGET_ID = "the-chadwick";
 
 const COLOSSEUM_TARGET_SET = new Set<string>(COLOSSEUM_TARGET_IDS);
 
@@ -28,8 +28,7 @@ export function projectColosseumMission(
     )
   );
   const visitedCount = Object.keys(outcomes).length;
-  const currentTarget =
-    targets.find(target => !(target.id in outcomes)) ?? null;
+  const currentTarget = targets.find(target => !(target.id in outcomes)) ?? null;
   let pitched = 0;
   let couldntReach = 0;
   for (const outcome of Object.values(outcomes)) {
