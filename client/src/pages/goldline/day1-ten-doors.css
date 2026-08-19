@@ -169,9 +169,38 @@
   color: #f0f0f0;
 }
 
-.day1-btn:disabled {
+.day1-btn:disabled,
+.day1-route-toggle:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/* Two taps after the physical interaction, no CRM form. These use the same
+   giant thumb targets as the outcome controls so evidence capture never turns
+   into standing on a sidewalk typing into a database. */
+.day1-evidence-step {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(215, 240, 192, .18);
+}
+
+.day1-evidence-label {
+  margin-bottom: 4px;
+  color: #e9f6dc;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: .11em;
+}
+
+.day1-evidence-step .day1-btn {
+  min-height: 58px;
+  padding: 10px 13px;
+  font-size: 14px;
+  line-height: 1.15;
+}
+
+.day1-evidence-step .day1-route-toggle {
+  margin-top: 4px;
 }
 
 .day1-route-toggle {
