@@ -21,6 +21,7 @@
   height: 100%;
   object-fit: cover;
   object-position: 50% 50%;
+  content: url("/assets/goldline/colosseum/arena-background-hd.webp");
   pointer-events: none;
   user-select: none;
 }
@@ -35,6 +36,7 @@
   transform: translateX(-50%);
   object-fit: contain;
   object-position: center top;
+  content: url("/assets/goldline/colosseum/six-door-facade-hd.webp");
   pointer-events: none;
   user-select: none;
   /* Render the authored facade exactly as supplied. Screen blending was a
@@ -48,6 +50,7 @@
 .colosseum-approved-facade--reveal {
   width: 113%;
   top: 18.5%;
+  content: url("/assets/goldline/colosseum/villain-reveal-hd.webp");
 }
 
 .colosseum-shell--approved-art::after {
