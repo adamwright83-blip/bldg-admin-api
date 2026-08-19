@@ -47,7 +47,13 @@ export type AudioCueId =
   | "strike_hit"
   | "hostile_down"
   | "player_hurt"
-  | "barrier_release";
+  | "barrier_release"
+  | "clockhead_charge"
+  | "clockhead_fire"
+  | "clockhead_sweep"
+  | "shield_clang"
+  | "player_stagger"
+  | "target_reveal";
 
 type ToneStep = { freq: number; durationMs: number; type?: OscillatorType };
 
@@ -176,12 +182,6 @@ const CUE_DEFINITIONS: Record<
       { freq: 440, durationMs: 100, type: "triangle" },
     ],
   },
-  // Combat palette (§PR78 Workstream C). Previously `vault` covered guard
-  // absorb, Line latch, hazard, relic, AND seal fracture, while
-  // `weak_point_hit` covered both a landed strike and a kill — envelopes
-  // below are ordered strike_hit < player_hurt < hostile_down in total
-  // weight (duration + how low the tone settles), so a hit, taking damage,
-  // and a kill are each recognizable by feel alone, not just louder.
   strike_hit: {
     category: "encounter",
     steps: [{ freq: 950, durationMs: 35, type: "square" }],
@@ -201,16 +201,60 @@ const CUE_DEFINITIONS: Record<
       { freq: 155, durationMs: 160, type: "sine" },
     ],
   },
-  // The climax seal breaking — distinct from `gate_unlock` (a mission-truth
-  // cue) and from `vault` (still used for guard/Line/hazard/relic). Rises
-  // out of a low fracture into a brighter settle, so it reads as release
-  // rather than another hit.
   barrier_release: {
     category: "encounter",
     steps: [
       { freq: 210, durationMs: 90, type: "sawtooth" },
       { freq: 520, durationMs: 130, type: "triangle" },
       { freq: 660, durationMs: 160, type: "sine" },
+    ],
+  },
+  // Clockhead's palette is deliberately percussive and mechanical. These are
+  // fictional encounter cues, not business-result sounds.
+  clockhead_charge: {
+    category: "encounter",
+    steps: [
+      { freq: 240, durationMs: 70, type: "sawtooth" },
+      { freq: 360, durationMs: 70, type: "sawtooth" },
+      { freq: 540, durationMs: 90, type: "triangle" },
+    ],
+  },
+  clockhead_fire: {
+    category: "encounter",
+    steps: [
+      { freq: 980, durationMs: 28, type: "square" },
+      { freq: 470, durationMs: 62, type: "sawtooth" },
+    ],
+  },
+  clockhead_sweep: {
+    category: "encounter",
+    steps: [
+      { freq: 190, durationMs: 120, type: "sawtooth" },
+      { freq: 280, durationMs: 120, type: "triangle" },
+    ],
+  },
+  shield_clang: {
+    category: "encounter",
+    steps: [
+      { freq: 1320, durationMs: 24, type: "square" },
+      { freq: 720, durationMs: 62, type: "triangle" },
+      { freq: 330, durationMs: 82, type: "sine" },
+    ],
+  },
+  player_stagger: {
+    category: "encounter",
+    steps: [
+      { freq: 230, durationMs: 78, type: "sawtooth" },
+      { freq: 145, durationMs: 120, type: "sine" },
+    ],
+  },
+  target_reveal: {
+    category: "world",
+    steps: [
+      { freq: 205, durationMs: 80, type: "sawtooth" },
+      { freq: 520, durationMs: 95, type: "triangle" },
+      { freq: 780, durationMs: 105, type: "triangle" },
+      { freq: 1040, durationMs: 150, type: "sine" },
     ],
   },
 };
@@ -275,10 +319,6 @@ export class AudioManager {
   }
 
   play(cue: AudioCueId) {
-    // Harness-only call log, independent of mute/autoplay-suspend state
-    // below: a verification script can assert a semantic cue was actually
-    // invoked (e.g. hostile_down on a kill) without depending on real audio
-    // hardware or a user gesture having unlocked the AudioContext.
     if (
       typeof window !== "undefined" &&
       import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
