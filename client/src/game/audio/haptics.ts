@@ -62,6 +62,21 @@ export function arcadeFeedback() {
   vibrate(18);
 }
 
+/** Fictional shield impact: tactile, but intentionally not a business-win pattern. */
+export function combatGuardFeedback() {
+  vibrate([14, 18, 30]);
+}
+
+/** Fictional damage/stagger. Stronger than a UI tap, distinct from a real win. */
+export function combatHurtFeedback() {
+  vibrate([26, 16, 18]);
+}
+
+/** Fictional boss reveal / arena fracture. Never implies a real-world outcome. */
+export function combatRevealFeedback() {
+  vibrate([16, 24, 28]);
+}
+
 /** Distinct, stronger pattern reserved for an authoritative business win. */
 export function businessVictoryFeedback() {
   vibrate([30, 40, 60]);
