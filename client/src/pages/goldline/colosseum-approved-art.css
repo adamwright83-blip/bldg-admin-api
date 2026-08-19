@@ -299,3 +299,12 @@
     top: 16.5%;
   }
 }
+
+/* PR94: PR92 moved the HD facade onto a shell pseudo-element at z-index 5,
+   but the entire live gameplay world remained a z-index 0 stacking context.
+   That trapped Clockhead, Trailblazer, projectiles and shield behind the
+   facade regardless of their internal z-index values. Keep the scenery as
+   scenery and lift the live world above it. */
+.colosseum-shell--approved-art .colosseum-world {
+  z-index: 7;
+}
