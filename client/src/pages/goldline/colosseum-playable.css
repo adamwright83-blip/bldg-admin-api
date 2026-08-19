@@ -219,79 +219,98 @@
   width: 100% !important;
 }
 
+/* PR90: characters should dominate a phone capture. The boss source is the
+   existing 1.24 MB BORESLAY reference; do not soften it by down/up-sampling
+   through a tiny intermediate box. */
 .colosseum-shell--approved-art.colosseum-shell--playable .colosseum-boss--hologram {
-  width: clamp(190px, 58vw, 238px) !important;
-  height: clamp(218px, 66vw, 272px) !important;
-  top: 17.2% !important;
+  width: clamp(240px, 72vw, 296px) !important;
+  height: clamp(276px, 82vw, 340px) !important;
+  top: 13.8% !important;
   transform: translateX(-50%) scale(1) !important;
 }
 
 .colosseum-shell--approved-art.colosseum-shell--playable .colosseum-boss--hologram img {
-  width: clamp(188px, 57vw, 234px) !important;
-  height: clamp(208px, 63vw, 258px) !important;
+  width: clamp(236px, 71vw, 288px) !important;
+  height: clamp(262px, 78vw, 322px) !important;
   object-fit: contain;
   object-position: center bottom;
+  transform-origin: 50% 86%;
+  transition: transform 120ms cubic-bezier(.2,.8,.2,1), filter 120ms ease;
+}
+
+/* Attack-specific body language makes a single finished source frame feel
+   authored in motion without inventing alternate art that is not in the repo. */
+.colosseum-shell--approved-art.colosseum-shell--playable .colosseum-boss--hologram.is-aimed img {
+  transform: translate(-5px, -2px) rotate(-2deg) scale(1.035);
+}
+
+.colosseum-shell--approved-art.colosseum-shell--playable .colosseum-boss--hologram.is-fan img {
+  transform: translateY(-3px) scale(1.055);
+}
+
+.colosseum-shell--approved-art.colosseum-shell--playable .colosseum-boss--hologram.is-sweep img {
+  transform: translate(5px, -2px) rotate(3deg) scale(1.045);
 }
 
 .colosseum-shell--approved-art.colosseum-shell--playable .colosseum-boss--hologram .colosseum-boss-aura {
-  width: clamp(178px, 54vw, 222px) !important;
-  height: clamp(194px, 59vw, 242px) !important;
+  width: clamp(224px, 68vw, 280px) !important;
+  height: clamp(248px, 74vw, 306px) !important;
 }
 
 .colosseum-shell--approved-art.colosseum-shell--playable .colosseum-boss--hologram > span {
   top: auto !important;
-  bottom: -2px;
-  font-size: 9px !important;
-  padding: 5px 9px !important;
+  bottom: 4px;
+  font-size: 10px !important;
+  padding: 6px 10px !important;
 }
 
 .colosseum-shell--approved-art.colosseum-shell--playable .colosseum-clockhead-telegraph {
-  width: 176px !important;
-  height: 176px !important;
+  width: 218px !important;
+  height: 218px !important;
 }
 
 .colosseum-shell--approved-art .colosseum-player--playable {
-  width: clamp(88px, 28vw, 108px) !important;
-  height: clamp(125px, 40vw, 154px) !important;
+  width: clamp(118px, 36vw, 142px) !important;
+  height: clamp(168px, 51vw, 202px) !important;
 }
 
 .colosseum-shell--approved-art .colosseum-player--playable img {
-  width: clamp(88px, 28vw, 108px) !important;
-  height: clamp(125px, 40vw, 154px) !important;
+  width: clamp(118px, 36vw, 142px) !important;
+  height: clamp(168px, 51vw, 202px) !important;
 }
 
 .colosseum-shell--approved-art .colosseum-player--playable::after {
-  width: clamp(46px, 14vw, 56px) !important;
-  height: 13px !important;
+  width: clamp(60px, 18vw, 72px) !important;
+  height: 16px !important;
   filter: blur(1.5px) !important;
 }
 
 .colosseum-shell--approved-art .colosseum-player-shield {
-  left: -20px !important;
-  top: 39px !important;
-  width: 46px !important;
-  height: 54px !important;
-  font-size: 19px !important;
+  left: -27px !important;
+  top: 52px !important;
+  width: 58px !important;
+  height: 68px !important;
+  font-size: 24px !important;
 }
 
 .colosseum-shell--approved-art .colosseum-shield {
-  width: 64px !important;
-  height: 76px !important;
+  width: 70px !important;
+  height: 84px !important;
 }
 
 .colosseum-shell--approved-art .colosseum-shield span {
-  font-size: 30px !important;
+  font-size: 33px !important;
 }
 
 .colosseum-shell--approved-art .colosseum-projectile {
-  width: 26px !important;
-  height: 26px !important;
+  width: 28px !important;
+  height: 28px !important;
 }
 
 .colosseum-shell--approved-art .colosseum-projectile::before {
-  right: 12px !important;
-  width: 52px !important;
-  height: 9px !important;
+  right: 13px !important;
+  width: 56px !important;
+  height: 10px !important;
 }
 
 .colosseum-shell--approved-art .colosseum-projectile i {
@@ -303,25 +322,25 @@
 }
 
 .colosseum-shell--approved-art .colosseum-impact {
-  width: 26px !important;
-  height: 26px !important;
+  width: 28px !important;
+  height: 28px !important;
 }
 
 .colosseum-finale.colosseum-shell--approved-art .colosseum-final-player {
-  width: clamp(88px, 28vw, 108px) !important;
-  height: clamp(125px, 40vw, 154px) !important;
+  width: clamp(118px, 36vw, 142px) !important;
+  height: clamp(168px, 51vw, 202px) !important;
 }
 
 .colosseum-finale.colosseum-shell--approved-art .colosseum-final-player img {
-  width: clamp(88px, 28vw, 108px) !important;
-  height: clamp(125px, 40vw, 154px) !important;
+  width: clamp(118px, 36vw, 142px) !important;
+  height: clamp(168px, 51vw, 202px) !important;
   object-fit: contain;
   object-position: center bottom;
 }
 
 .colosseum-finale.colosseum-shell--approved-art .colosseum-final-block-sparks {
-  left: calc(50% - 27px) !important;
-  bottom: calc(var(--player-bottom, 11%) + 72px) !important;
+  left: calc(50% - 32px) !important;
+  bottom: calc(var(--player-bottom, 11%) + 94px) !important;
 }
 
 @media (max-height: 720px) {
@@ -336,22 +355,22 @@
   }
 
   .colosseum-shell--approved-art.colosseum-shell--playable .colosseum-boss--hologram {
-    width: clamp(170px, 52vw, 208px) !important;
-    height: clamp(198px, 60vw, 236px) !important;
-    top: 15.5% !important;
+    width: clamp(216px, 66vw, 264px) !important;
+    height: clamp(248px, 75vw, 302px) !important;
+    top: 13.2% !important;
     transform: translateX(-50%) scale(.94) !important;
   }
 
   .colosseum-shell--approved-art.colosseum-shell--playable .colosseum-boss--hologram img {
-    width: clamp(168px, 51vw, 204px) !important;
-    height: clamp(188px, 57vw, 224px) !important;
+    width: clamp(212px, 64vw, 258px) !important;
+    height: clamp(236px, 71vw, 286px) !important;
   }
 
   .colosseum-shell--approved-art .colosseum-player--playable,
   .colosseum-shell--approved-art .colosseum-player--playable img,
   .colosseum-finale.colosseum-shell--approved-art .colosseum-final-player,
   .colosseum-finale.colosseum-shell--approved-art .colosseum-final-player img {
-    width: clamp(82px, 25vw, 96px) !important;
-    height: clamp(116px, 36vw, 137px) !important;
+    width: clamp(108px, 32vw, 126px) !important;
+    height: clamp(154px, 46vw, 180px) !important;
   }
 }
