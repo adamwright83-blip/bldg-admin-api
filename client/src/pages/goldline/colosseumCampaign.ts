@@ -1,27 +1,47 @@
+import {
+  projectLeadHuntTargets,
+  validateLeadHuntDefinition,
+  type LeadHuntDefinition,
+} from "../../../../shared/leadHunt";
 import type { Day1TenDoorsMissionView } from "./Day1FieldMission";
 
 /**
- * The current rescue boss is the operator-declared five-site Greystar
- * Koreatown hunt. These are real targets already present in the Day 1 mission.
- * The Colosseum facade may still show six fictional doors; visual door count
- * is not business truth. Progress comes only from these five real outcomes.
+ * The current rescue boss is one concrete LEAD HUNT: five real Greystar
+ * Koreatown properties. The next category (for example dry cleaners) can use
+ * this exact grammar once its real target ids are sourced/operator-declared.
+ * Nothing here can fabricate the next hunt's businesses.
  */
-export const COLOSSEUM_TARGET_IDS = [
-  "rise-koreatown",
-  "avana-on-wilshire",
-  "the-pearl-on-wilshire",
-  "wilshire-vermont",
-  "the-chadwick",
-] as const;
+export const COLOSSEUM_LEAD_HUNT = validateLeadHuntDefinition({
+  id: "greystar-koreatown-five",
+  title: "THE GREYSTAR HUNT",
+  targetCategory: "luxury_high_rise",
+  targetIds: [
+    "rise-koreatown",
+    "avana-on-wilshire",
+    "the-pearl-on-wilshire",
+    "wilshire-vermont",
+    "the-chadwick",
+  ],
+  requiredRealWorldAction: "pitch_in_person",
+  completionCount: 5,
+  villainTargetId: "the-chadwick",
+  revealTreatment: "colosseum_target_located",
+  fictionalReward: "boss_breach",
+} satisfies LeadHuntDefinition);
 
-export const COLOSSEUM_VILLAIN_TARGET_ID = "the-chadwick";
+export const COLOSSEUM_TARGET_IDS = COLOSSEUM_LEAD_HUNT.targetIds;
+export const COLOSSEUM_VILLAIN_TARGET_ID =
+  COLOSSEUM_LEAD_HUNT.villainTargetId;
 
 const COLOSSEUM_TARGET_SET = new Set<string>(COLOSSEUM_TARGET_IDS);
 
 export function projectColosseumMission(
   mission: Day1TenDoorsMissionView
 ): Day1TenDoorsMissionView {
-  const targets = mission.targets.filter(target => COLOSSEUM_TARGET_SET.has(target.id));
+  const { targets } = projectLeadHuntTargets(
+    COLOSSEUM_LEAD_HUNT,
+    mission.targets
+  );
   const outcomes = Object.fromEntries(
     Object.entries(mission.outcomes).filter(([targetId]) =>
       COLOSSEUM_TARGET_SET.has(targetId)
@@ -47,7 +67,9 @@ export function projectColosseumMission(
         : `TARGET ${visitedCount + 1} OF ${targets.length}`,
     visitedCount,
     totalCount: targets.length,
-    isComplete: targets.length > 0 && visitedCount >= targets.length,
+    isComplete:
+      targets.length >= COLOSSEUM_LEAD_HUNT.completionCount &&
+      visitedCount >= COLOSSEUM_LEAD_HUNT.completionCount,
     outcomeCounts: { pitched, couldntReach },
   };
 }
