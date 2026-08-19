@@ -37,7 +37,11 @@
   object-position: center top;
   pointer-events: none;
   user-select: none;
-  mix-blend-mode: screen;
+  /* Render the authored facade exactly as supplied. Screen blending was a
+     temporary workaround for the asset's black field, but it destroys the
+     saturated red doors and warm gold stone that define the approved art. */
+  mix-blend-mode: normal;
+  opacity: 1;
   filter: drop-shadow(0 18px 20px rgba(23, 15, 9, .31));
 }
 
