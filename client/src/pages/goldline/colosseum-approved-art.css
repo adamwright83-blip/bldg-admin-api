@@ -39,9 +39,6 @@
   content: url("/assets/goldline/colosseum/six-door-facade-hd.webp");
   pointer-events: none;
   user-select: none;
-  /* Render the authored facade exactly as supplied. Screen blending was a
-     temporary workaround for the asset's black field, but it destroys the
-     saturated red doors and warm gold stone that define the approved art. */
   mix-blend-mode: normal;
   opacity: 1;
   filter: drop-shadow(0 18px 20px rgba(23, 15, 9, .31));
@@ -154,8 +151,6 @@
   to { transform: rotate(-2deg) translateY(-1px); }
 }
 
-/* Legacy beam selectors are retained harmlessly for old screenshots; the live
-   Colosseum no longer renders .colosseum-boss-fire at all. */
 .colosseum-boss-fire {
   position: absolute;
   z-index: 25;
@@ -257,5 +252,50 @@
 
   .colosseum-search-grab-shield {
     top: 61%;
+  }
+}
+
+/* PR92: render the generated HD art through stable CSS layers. Android Chrome
+   did not reliably honor `content: url(...)` on the existing <img> elements,
+   leaving the dark fallback shell visible. The shell background and a
+   dedicated pseudo-element are deterministic across mobile browsers. */
+.colosseum-shell--approved-art {
+  background-color: #07131d !important;
+  background-image: url("/assets/goldline/colosseum/arena-background-hd.webp") !important;
+  background-size: cover !important;
+  background-position: 50% 50% !important;
+  background-repeat: no-repeat !important;
+}
+
+.colosseum-shell--approved-art .colosseum-approved-background,
+.colosseum-shell--approved-art .colosseum-approved-facade {
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+.colosseum-shell--approved-art::before {
+  content: "";
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  top: 18.5%;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  transform: translateX(-50%);
+  background-image: url("/assets/goldline/colosseum/six-door-facade-hd.webp");
+  background-size: contain;
+  background-position: center top;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  filter: drop-shadow(0 18px 20px rgba(23, 15, 9, .24));
+}
+
+.colosseum-finale.colosseum-shell--approved-art.is-revealed::before {
+  background-image: url("/assets/goldline/colosseum/villain-reveal-hd.webp");
+}
+
+@media (max-height: 720px) {
+  .colosseum-shell--approved-art::before {
+    top: 16.5%;
   }
 }
