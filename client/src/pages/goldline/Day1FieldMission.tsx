@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
 import "./day1-ten-doors.css";
 import {
   DAY1_DAY_INDEX,
@@ -10,6 +12,11 @@ import {
   type Day1Target,
   type Day1TargetOutcome,
 } from "../../../../shared/day1TenDoors";
+import type {
+  Day1DecisionMakerStatus,
+  Day1EvidenceEvent,
+  Day1VisitEvidence,
+} from "../../../../shared/day1Evidence";
 import {
   requestGoldlineLocation,
   type GoldlineLocationSnapshot,
@@ -25,6 +32,9 @@ export type Day1TenDoorsMissionView = {
   totalCount: number;
   isComplete: boolean;
   outcomeCounts: { pitched: number; couldntReach: number };
+  /** Added in-place to the existing task.detail JSON. Optional for legacy rows/tests. */
+  evidenceEvents?: Day1EvidenceEvent[];
+  visitEvidence?: Record<string, Day1VisitEvidence>;
 };
 
 export type Day1TenDoorsPresentation = {
@@ -54,7 +64,7 @@ function outcomeLabel(outcome: Day1TargetOutcome): string {
 export default function Day1FieldMission({
   mission,
   isRecordingOutcome,
-  onRecordOutcome,
+  onRecordOutcome: _onRecordOutcome,
   onDismiss,
   presentation,
 }: {
@@ -64,6 +74,9 @@ export default function Day1FieldMission({
   onDismiss: () => void;
   presentation?: Day1TenDoorsPresentation;
 }) {
+  const utils = trpc.useUtils();
+  const recordEvidence = trpc.system.day1TenDoors.recordEvidence.useMutation();
+  const recordOutcome = trpc.system.day1TenDoors.recordOutcome.useMutation();
   const [location, setLocation] = useState<GoldlineLocationSnapshot>({
     status: "requesting",
     coordinates: null,
@@ -74,6 +87,12 @@ export default function Day1FieldMission({
   const [manuallyCheckedInTargetId, setManuallyCheckedInTargetId] = useState<
     string | null
   >(null);
+  const [pendingOutcome, setPendingOutcome] = useState<Day1TargetOutcome | null>(
+    null
+  );
+  const [decisionMaker, setDecisionMaker] =
+    useState<Day1DecisionMakerStatus | null>(null);
+  const autoEvidenceRecordedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (mission.isComplete) return;
@@ -105,6 +124,9 @@ export default function Day1FieldMission({
 
   useEffect(() => {
     setManuallyCheckedInTargetId(null);
+    setPendingOutcome(null);
+    setDecisionMaker(null);
+    autoEvidenceRecordedRef.current = null;
   }, [currentTarget?.id]);
 
   const distanceToCurrentTarget = useMemo(() => {
@@ -129,13 +151,89 @@ export default function Day1FieldMission({
 
   const arrived = autoArrived || manuallyCheckedIn;
 
+  async function persistEvidence(input: {
+    targetId: string;
+    kind:
+      | "navigation_opened"
+      | "arrived"
+      | "follow_up_sent"
+      | "reply_received"
+      | "meeting_booked"
+      | "account_won"
+      | "account_lost"
+      | "revenue_recorded";
+    source: "gps" | "operator_confirmed" | "operator_backfill";
+    lat?: number | null;
+    lng?: number | null;
+    accuracyMeters?: number | null;
+  }) {
+    try {
+      const result = await recordEvidence.mutateAsync({
+        missionId: mission.missionId,
+        eventId: crypto.randomUUID(),
+        ...input,
+      });
+      utils.system.day1TenDoors.current.setData(undefined, result);
+    } catch (error) {
+      // Evidence capture may never block the physical route. Surface it, but
+      // keep the operator moving and preserve the truthful outcome controls.
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not save field evidence. Keep moving."
+      );
+    }
+  }
+
+  useEffect(() => {
+    if (!currentTarget || !autoArrived || location.status !== "available") return;
+    if (mission.visitEvidence?.[currentTarget.id]?.arrivalRecordedAt) return;
+    if (autoEvidenceRecordedRef.current === currentTarget.id) return;
+    autoEvidenceRecordedRef.current = currentTarget.id;
+    void persistEvidence({
+      targetId: currentTarget.id,
+      kind: "arrived",
+      source: "gps",
+      lat: location.coordinates.latitude,
+      lng: location.coordinates.longitude,
+      accuracyMeters: location.accuracyMeters,
+    });
+    // persistEvidence is intentionally omitted: it is an inline best-effort
+    // writer and including it would retrigger this effect every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoArrived, currentTarget?.id, location, mission.visitEvidence]);
+
+  async function persistOutcome(followUpNeeded: boolean) {
+    if (!currentTarget || !pendingOutcome) return;
+    const resolvedDecisionMaker =
+      decisionMaker ?? (pendingOutcome === "couldnt_reach" ? "unavailable" : "not_recorded");
+    try {
+      const result = await recordOutcome.mutateAsync({
+        missionId: mission.missionId,
+        targetId: currentTarget.id,
+        outcome: pendingOutcome,
+        requestId: crypto.randomUUID(),
+        decisionMaker: resolvedDecisionMaker,
+        followUpNeeded,
+        source: "operator_confirmed",
+      });
+      utils.system.day1TenDoors.current.setData(undefined, result);
+      setPendingOutcome(null);
+      setDecisionMaker(null);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not record this stop."
+      );
+    }
+  }
+
   if (mission.isComplete) {
     return (
       <div className="day1-screen day1-screen--complete">
         <div className="day1-header">
           <div className="day1-eyebrow">DAY {DAY1_DAY_INDEX} COMPLETE</div>
           <div className="day1-title">
-            {presentation?.completeTitle ?? "10 DOORS VISITED"}
+            {presentation?.completeTitle ?? `${mission.totalCount} DOORS VISITED`}
           </div>
         </div>
         <div className="day1-complete-breakdown">
@@ -167,6 +265,7 @@ export default function Day1FieldMission({
   const targetIndex = currentTarget
     ? mission.targets.findIndex(target => target.id === currentTarget.id)
     : -1;
+  const isSaving = isRecordingOutcome || recordOutcome.isPending;
 
   return (
     <div className="day1-screen" data-testid="day1-screen">
@@ -212,6 +311,13 @@ export default function Day1FieldMission({
             href={currentTarget.navigationUrl}
             target="_blank"
             rel="noreferrer"
+            onClick={() => {
+              void persistEvidence({
+                targetId: currentTarget.id,
+                kind: "navigation_opened",
+                source: "operator_confirmed",
+              });
+            }}
             data-testid="day1-navigate"
           >
             NAVIGATE
@@ -219,7 +325,14 @@ export default function Day1FieldMission({
           <button
             type="button"
             className="day1-btn day1-btn--checkin"
-            onClick={() => setManuallyCheckedInTargetId(currentTarget.id)}
+            onClick={() => {
+              setManuallyCheckedInTargetId(currentTarget.id);
+              void persistEvidence({
+                targetId: currentTarget.id,
+                kind: "arrived",
+                source: "operator_confirmed",
+              });
+            }}
             data-testid="day1-checkin"
           >
             I'M HERE — CHECK IN
@@ -237,26 +350,85 @@ export default function Day1FieldMission({
             GO INSIDE. ASK FOR THE GENERAL MANAGER OR PROPERTY MANAGER. PITCH
             LAUNDRY BUTLER.
           </div>
-          <div className="day1-outcome-buttons">
-            <button
-              type="button"
-              className="day1-btn day1-btn--pitch"
-              disabled={isRecordingOutcome}
-              onClick={() => onRecordOutcome(currentTarget.id, "pitched")}
-              data-testid="day1-pitched"
-            >
-              I MADE THE PITCH
-            </button>
-            <button
-              type="button"
-              className="day1-btn day1-btn--couldnt-reach"
-              disabled={isRecordingOutcome}
-              onClick={() => onRecordOutcome(currentTarget.id, "couldnt_reach")}
-              data-testid="day1-couldnt-reach"
-            >
-              COULDN'T REACH THEM
-            </button>
-          </div>
+
+          {pendingOutcome == null ? (
+            <div className="day1-outcome-buttons">
+              <button
+                type="button"
+                className="day1-btn day1-btn--pitch"
+                disabled={isSaving}
+                onClick={() => setPendingOutcome("pitched")}
+                data-testid="day1-pitched"
+              >
+                I MADE THE PITCH
+              </button>
+              <button
+                type="button"
+                className="day1-btn day1-btn--couldnt-reach"
+                disabled={isSaving}
+                onClick={() => {
+                  setPendingOutcome("couldnt_reach");
+                  setDecisionMaker("unavailable");
+                }}
+                data-testid="day1-couldnt-reach"
+              >
+                COULDN'T REACH THEM
+              </button>
+            </div>
+          ) : pendingOutcome === "pitched" && decisionMaker == null ? (
+            <div className="day1-evidence-step" data-testid="day1-decision-maker">
+              <div className="day1-evidence-label">WHO DID YOU REACH?</div>
+              <div className="day1-outcome-buttons">
+                <button
+                  type="button"
+                  className="day1-btn day1-btn--pitch"
+                  onClick={() => setDecisionMaker("reached")}
+                >
+                  DECISION MAKER
+                </button>
+                <button
+                  type="button"
+                  className="day1-btn day1-btn--couldnt-reach"
+                  onClick={() => setDecisionMaker("unavailable")}
+                >
+                  STAFF — MANAGER NOT THERE
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="day1-evidence-step" data-testid="day1-follow-up-needed">
+              <div className="day1-evidence-label">FOLLOW-UP?</div>
+              <div className="day1-outcome-buttons">
+                <button
+                  type="button"
+                  className="day1-btn day1-btn--pitch"
+                  disabled={isSaving}
+                  onClick={() => void persistOutcome(true)}
+                >
+                  EMAIL / CALL NEEDED
+                </button>
+                <button
+                  type="button"
+                  className="day1-btn day1-btn--couldnt-reach"
+                  disabled={isSaving}
+                  onClick={() => void persistOutcome(false)}
+                >
+                  NO FOLLOW-UP
+                </button>
+              </div>
+              <button
+                type="button"
+                className="day1-route-toggle"
+                disabled={isSaving}
+                onClick={() => {
+                  setPendingOutcome(null);
+                  setDecisionMaker(null);
+                }}
+              >
+                BACK
+              </button>
+            </div>
+          )}
         </div>
       )}
 
