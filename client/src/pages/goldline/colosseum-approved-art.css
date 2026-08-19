@@ -1,3 +1,5 @@
+@import "./colosseum-indie-pass.css";
+
 .colosseum-shell--approved-art {
   background: #07131d;
   isolation: isolate;
@@ -75,7 +77,6 @@
 
 .colosseum-shell--approved-art .colosseum-shield {
   z-index: 22;
-  top: 59%;
   transition: opacity .18s ease, transform .18s ease;
 }
 
@@ -146,6 +147,8 @@
   to { transform: rotate(-2deg) translateY(-1px); }
 }
 
+/* Legacy beam selectors are retained harmlessly for old screenshots; the live
+   Colosseum no longer renders .colosseum-boss-fire at all. */
 .colosseum-boss-fire {
   position: absolute;
   z-index: 25;
@@ -186,7 +189,7 @@
   100% { opacity: 0; transform: scale(2.8); transform-origin: center; }
 }
 
-.colosseum-shell--approved-art.has-shield .colosseum-boss--hologram {
+.colosseum-shell--approved-art.has-shield .colosseum-boss--hologram:not(.is-telegraphing) {
   animation: clockheadAttack .34s ease-in-out infinite alternate;
 }
 
@@ -227,8 +230,10 @@
 .colosseum-finale.colosseum-shell--approved-art .colosseum-grab-shield,
 .colosseum-finale.colosseum-shell--approved-art .colosseum-advance-pad,
 .colosseum-finale.colosseum-shell--approved-art .colosseum-final-projectiles,
+.colosseum-finale.colosseum-shell--approved-art .colosseum-final-block-sparks,
 .colosseum-finale.colosseum-shell--approved-art .colosseum-victory,
-.colosseum-finale.colosseum-shell--approved-art .colosseum-explosion {
+.colosseum-finale.colosseum-shell--approved-art .colosseum-explosion,
+.colosseum-finale.colosseum-shell--approved-art .colosseum-goldline-rip {
   z-index: 40;
 }
 
