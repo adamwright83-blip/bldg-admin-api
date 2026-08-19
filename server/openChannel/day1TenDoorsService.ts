@@ -42,6 +42,16 @@ import {
   type Day1TargetOutcome,
   type Day1TenDoorsPayload,
 } from "../../shared/day1TenDoors";
+import type {
+  Day1DecisionMakerStatus,
+  Day1EvidenceEvent,
+  Day1EvidencePayloadExtension,
+  Day1EvidenceSource,
+  Day1RecordEvidenceInput,
+  Day1VisitEvidence,
+} from "../../shared/day1Evidence";
+
+type EvidencePayload = Day1TenDoorsPayload & Day1EvidencePayloadExtension;
 
 export type Day1TenDoorsMission = {
   missionId: string;
@@ -57,7 +67,23 @@ export type Day1TenDoorsMission = {
   totalCount: number;
   isComplete: boolean;
   outcomeCounts: { pitched: number; couldntReach: number };
+  evidenceEvents: Day1EvidenceEvent[];
+  visitEvidence: Record<string, Day1VisitEvidence>;
 };
+
+function normaliseEvidence(payload: Day1TenDoorsPayload): EvidencePayload {
+  const candidate = payload as EvidencePayload;
+  return {
+    ...payload,
+    evidenceEvents: Array.isArray(candidate.evidenceEvents)
+      ? candidate.evidenceEvents
+      : [],
+    visitEvidence:
+      candidate.visitEvidence && typeof candidate.visitEvidence === "object"
+        ? candidate.visitEvidence
+        : {},
+  };
+}
 
 function projectMission(input: {
   missionId: string;
@@ -66,7 +92,7 @@ function projectMission(input: {
   briefing: string;
   payload: Day1TenDoorsPayload;
 }): Day1TenDoorsMission {
-  const { payload } = input;
+  const payload = normaliseEvidence(input.payload);
   return {
     missionId: input.missionId,
     taskId: input.taskId,
@@ -81,6 +107,8 @@ function projectMission(input: {
     totalCount: payload.targets.length,
     isComplete: day1IsComplete(payload),
     outcomeCounts: day1OutcomeCounts(payload),
+    evidenceEvents: payload.evidenceEvents ?? [],
+    visitEvidence: payload.visitEvidence ?? {},
   };
 }
 
@@ -127,6 +155,81 @@ async function findExistingDay1Mission(input: {
   return null;
 }
 
+async function loadWritableDay1Mission(input: {
+  tenantId: string;
+  driverId: string;
+  missionId: string;
+}) {
+  await ensureOpenChannelTables();
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [mission] = await db
+    .select()
+    .from(openChannelMissions)
+    .where(
+      and(
+        eq(openChannelMissions.tenantId, input.tenantId),
+        eq(openChannelMissions.driverId, input.driverId),
+        eq(openChannelMissions.id, input.missionId)
+      )
+    )
+    .limit(1);
+  if (!mission) throw new Error("Day 1 mission was not found");
+  const [task] = await db
+    .select()
+    .from(openChannelMissionTasks)
+    .where(
+      and(
+        eq(openChannelMissionTasks.tenantId, input.tenantId),
+        eq(openChannelMissionTasks.missionId, mission.id)
+      )
+    )
+    .limit(1);
+  if (!task) throw new Error("Day 1 mission task was not found");
+  const decoded = decodeDay1Payload(task.detail);
+  if (!decoded) throw new Error("This mission is not a Day 1 Ten Doors mission");
+  return { db, mission, task, payload: normaliseEvidence(decoded) };
+}
+
+function assertTarget(payload: Day1TenDoorsPayload, targetId: string) {
+  if (!payload.targets.some(target => target.id === targetId)) {
+    throw new Error("That building is not part of today's mission");
+  }
+}
+
+async function writePayload(input: {
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
+  tenantId: string;
+  taskId: string;
+  payload: EvidencePayload;
+}) {
+  await input.db
+    .update(openChannelMissionTasks)
+    .set({ detail: encodeDay1Payload(input.payload) })
+    .where(
+      and(
+        eq(openChannelMissionTasks.tenantId, input.tenantId),
+        eq(openChannelMissionTasks.id, input.taskId)
+      )
+    );
+}
+
+function blankVisit(targetId: string): Day1VisitEvidence {
+  return {
+    targetId,
+    arrivalRecordedAt: null,
+    arrivalSource: null,
+    lat: null,
+    lng: null,
+    accuracyMeters: null,
+    outcomeRecordedAt: null,
+    outcomeSource: null,
+    outcome: null,
+    decisionMaker: null,
+    followUpNeeded: null,
+  };
+}
+
 /**
  * Idempotent per driver+businessDate: returns the SAME mission (same
  * targets, same recorded outcomes) on every call rather than regenerating
@@ -145,10 +248,12 @@ export async function getOrCreateDay1TenDoorsMission(input: {
   if (!db) throw new Error("Database not available");
   const missionId = randomUUID();
   const taskId = randomUUID();
-  const payload: Day1TenDoorsPayload = {
+  const payload: EvidencePayload = {
     kind: "day1_ten_doors",
     targets: DAY1_TARGETS as unknown as Day1Target[],
     outcomes: {},
+    evidenceEvents: [],
+    visitEvidence: {},
   };
   const now = new Date();
   try {
@@ -185,8 +290,6 @@ export async function getOrCreateDay1TenDoorsMission(input: {
       });
     });
   } catch {
-    // Lost a race with a concurrent request for the same driver+date — the
-    // other request's mission is authoritative, not this one's.
     const raced = await findExistingDay1Mission(input);
     if (raced) return raced;
     throw new Error("Day 1 mission could not be created");
@@ -202,11 +305,98 @@ export async function getOrCreateDay1TenDoorsMission(input: {
 }
 
 /**
+ * Append lightweight, durable field evidence to the EXISTING task.detail
+ * JSON. This is intentionally not a new event table. Arrival is evidence of
+ * physical presence only; it never writes a sales outcome.
+ */
+export async function recordDay1TenDoorsEvidence(input: {
+  tenantId: string;
+  driverId: string;
+  missionId: string;
+} & Day1RecordEvidenceInput): Promise<Day1TenDoorsMission> {
+  const { db, mission, task, payload } = await loadWritableDay1Mission(input);
+  assertTarget(payload, input.targetId);
+
+  const events = payload.evidenceEvents ?? [];
+  if (events.some(event => event.id === input.eventId)) {
+    return projectMission({
+      missionId: mission.id,
+      taskId: task.id,
+      title: mission.title,
+      briefing: mission.operatorBriefing,
+      payload,
+    });
+  }
+
+  const visits = payload.visitEvidence ?? {};
+  const existingVisit = visits[input.targetId] ?? blankVisit(input.targetId);
+  if (input.kind === "arrived" && existingVisit.arrivalRecordedAt) {
+    return projectMission({
+      missionId: mission.id,
+      taskId: task.id,
+      title: mission.title,
+      briefing: mission.operatorBriefing,
+      payload,
+    });
+  }
+
+  const recordedAt = new Date().toISOString();
+  const event: Day1EvidenceEvent = {
+    id: input.eventId,
+    targetId: input.targetId,
+    kind: input.kind,
+    recordedAt,
+    source: input.source,
+    lat: input.lat ?? null,
+    lng: input.lng ?? null,
+    accuracyMeters: input.accuracyMeters ?? null,
+    decisionMaker: null,
+    followUpNeeded: null,
+    amountCents: input.amountCents ?? null,
+  };
+
+  const nextPayload: EvidencePayload = {
+    ...payload,
+    evidenceEvents: [...events, event],
+    visitEvidence:
+      input.kind === "arrived"
+        ? {
+            ...visits,
+            [input.targetId]: {
+              ...existingVisit,
+              arrivalRecordedAt: recordedAt,
+              arrivalSource: input.source,
+              lat: input.lat ?? null,
+              lng: input.lng ?? null,
+              accuracyMeters: input.accuracyMeters ?? null,
+            },
+          }
+        : visits,
+  };
+
+  await writePayload({
+    db,
+    tenantId: input.tenantId,
+    taskId: task.id,
+    payload: nextPayload,
+  });
+
+  return projectMission({
+    missionId: mission.id,
+    taskId: task.id,
+    title: mission.title,
+    briefing: mission.operatorBriefing,
+    payload: nextPayload,
+  });
+}
+
+/**
  * The ONE writer of a Day 1 outcome. GPS/arrival is context only — this is
  * only ever called from an explicit tap of I MADE THE PITCH or COULDN'T
  * REACH THEM, never from mere proximity. Idempotent: recording an outcome
- * for a target that already has one is a no-op that returns the existing
- * (first-recorded) outcome rather than overwriting it.
+ * for a target that already has one is a no-op unless the operator explicitly
+ * supplies source=operator_backfill to attach truthful metadata to a legacy
+ * outcome. Backfill timestamps mean "recorded now", never "this happened now".
  */
 export async function recordDay1TenDoorsOutcome(input: {
   tenantId: string;
@@ -214,62 +404,88 @@ export async function recordDay1TenDoorsOutcome(input: {
   missionId: string;
   targetId: string;
   outcome: Day1TargetOutcome;
+  requestId?: string;
+  decisionMaker?: Day1DecisionMakerStatus;
+  followUpNeeded?: boolean;
+  source?: Day1EvidenceSource;
 }): Promise<Day1TenDoorsMission> {
-  await ensureOpenChannelTables();
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const [mission] = await db
-    .select()
-    .from(openChannelMissions)
-    .where(
-      and(
-        eq(openChannelMissions.tenantId, input.tenantId),
-        eq(openChannelMissions.driverId, input.driverId),
-        eq(openChannelMissions.id, input.missionId)
-      )
-    )
-    .limit(1);
-  if (!mission) throw new Error("Day 1 mission was not found");
-  const [task] = await db
-    .select()
-    .from(openChannelMissionTasks)
-    .where(
-      and(
-        eq(openChannelMissionTasks.tenantId, input.tenantId),
-        eq(openChannelMissionTasks.missionId, mission.id)
-      )
-    )
-    .limit(1);
-  if (!task) throw new Error("Day 1 mission task was not found");
-  const payload = decodeDay1Payload(task.detail);
-  if (!payload) throw new Error("This mission is not a Day 1 Ten Doors mission");
-  if (!payload.targets.some(target => target.id === input.targetId)) {
-    throw new Error("That building is not part of today's mission");
+  const { db, mission, task, payload } = await loadWritableDay1Mission(input);
+  assertTarget(payload, input.targetId);
+
+  const events = payload.evidenceEvents ?? [];
+  const visits = payload.visitEvidence ?? {};
+  const existingVisit = visits[input.targetId] ?? blankVisit(input.targetId);
+  const existingOutcome = payload.outcomes[input.targetId];
+  const source = input.source ?? "operator_confirmed";
+
+  const mayBackfillLegacyOutcome =
+    existingOutcome != null &&
+    source === "operator_backfill" &&
+    existingVisit.outcomeRecordedAt == null;
+
+  if (existingOutcome != null && !mayBackfillLegacyOutcome) {
+    return projectMission({
+      missionId: mission.id,
+      taskId: task.id,
+      title: mission.title,
+      briefing: mission.operatorBriefing,
+      payload,
+    });
   }
 
-  const nextPayload: Day1TenDoorsPayload = payload.outcomes[input.targetId]
-    ? payload
-    : {
-        ...payload,
-        outcomes: { ...payload.outcomes, [input.targetId]: input.outcome },
-      };
+  const outcome = existingOutcome ?? input.outcome;
+  const recordedAt = new Date().toISOString();
+  const decisionMaker = input.decisionMaker ?? "not_recorded";
+  const followUpNeeded = input.followUpNeeded ?? null;
+  const eventId = input.requestId ?? randomUUID();
+  const event: Day1EvidenceEvent = {
+    id: eventId,
+    targetId: input.targetId,
+    kind: outcome === "pitched" ? "pitch_recorded" : "couldnt_reach_recorded",
+    recordedAt,
+    source,
+    lat: null,
+    lng: null,
+    accuracyMeters: null,
+    decisionMaker,
+    followUpNeeded,
+    amountCents: null,
+  };
 
-  if (nextPayload !== payload) {
-    await db
-      .update(openChannelMissionTasks)
-      .set({ detail: encodeDay1Payload(nextPayload) })
-      .where(
-        and(
-          eq(openChannelMissionTasks.tenantId, input.tenantId),
-          eq(openChannelMissionTasks.id, task.id)
-        )
-      );
-  }
+  const nextPayload: EvidencePayload = {
+    ...payload,
+    outcomes:
+      existingOutcome == null
+        ? { ...payload.outcomes, [input.targetId]: outcome }
+        : payload.outcomes,
+    evidenceEvents: events.some(candidate => candidate.id === eventId)
+      ? events
+      : [...events, event],
+    visitEvidence: {
+      ...visits,
+      [input.targetId]: {
+        ...existingVisit,
+        outcomeRecordedAt: recordedAt,
+        outcomeSource: source,
+        outcome,
+        decisionMaker,
+        followUpNeeded,
+      },
+    },
+  };
+
+  await writePayload({
+    db,
+    tenantId: input.tenantId,
+    taskId: task.id,
+    payload: nextPayload,
+  });
 
   if (day1IsComplete(nextPayload) && mission.status !== "completed") {
+    const completedAt = new Date();
     await db
       .update(openChannelMissions)
-      .set({ status: "completed", completedAt: new Date() })
+      .set({ status: "completed", completedAt })
       .where(
         and(
           eq(openChannelMissions.tenantId, input.tenantId),
@@ -278,7 +494,7 @@ export async function recordDay1TenDoorsOutcome(input: {
       );
     await db
       .update(openChannelMissionTasks)
-      .set({ status: "completed", completedAt: new Date() })
+      .set({ status: "completed", completedAt })
       .where(
         and(
           eq(openChannelMissionTasks.tenantId, input.tenantId),
