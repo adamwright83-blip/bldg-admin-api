@@ -6,7 +6,8 @@ import { normalizePhoneForStorage } from "./phone";
 export const WELCOME_JWT_ISSUER = "laundry-butler";
 export const WELCOME_JWT_AUDIENCE = "held-resident-app";
 const WELCOME_TOKEN_TTL_SECONDS = 5 * 60;
-const DEFAULT_RESIDENT_WEB_ORIGIN = "https://app.bldg.chat";
+const DEFAULT_LAUNDRY_BUTLER_WEB_ORIGIN =
+  "https://laundrybutler.bldg.chat";
 
 export type WelcomeOrder = {
   id: number;
@@ -69,8 +70,8 @@ function optionalText(value: string | null | undefined): string | undefined {
 }
 
 function residentWebOrigin(): string {
-  const configured = process.env.RESIDENT_WEB_ORIGIN?.trim();
-  const origin = configured || DEFAULT_RESIDENT_WEB_ORIGIN;
+  const configured = process.env.LAUNDRY_BUTLER_WEB_ORIGIN?.trim();
+  const origin = configured || DEFAULT_LAUNDRY_BUTLER_WEB_ORIGIN;
   const parsed = new URL(origin);
   if (parsed.protocol !== "https:" && process.env.NODE_ENV === "production") {
     throw new Error("RESIDENT_WEB_ORIGIN must use https in production");

@@ -16,6 +16,8 @@ import VendorPortal from "./pages/VendorPortal";
 import DigitalReceiptPage from "./pages/DigitalReceiptPage";
 import LaundryFarmHome from "./pages/LaundryFarmHome";
 import AdminCatalog from "./pages/AdminCatalog";
+import LaundryButlerWelcome from "./pages/LaundryButlerWelcome";
+import LaundryButlerAccount from "./pages/LaundryButlerAccount";
 
 // Public product sites are lazy so the operational admin bundle never pays for them.
 const BoreslayLanding = lazy(() => import("./pages/BoreslayLanding"));
@@ -436,10 +438,9 @@ function Router() {
       <Route path="/pricing" component={AdminCatalog} />
       <Route
         path={"/welcome"}
-        component={
-          tenant.templateType === "laundryfarm" ? LaundryFarmHome : ButlerHome
-        }
+        component={LaundryButlerWelcome}
       />
+      <Route path={"/account"} component={LaundryButlerAccount} />
       <Route
         path={"/"}
         component={

@@ -855,7 +855,7 @@ function StepSuccess({
   const [handoffError, setHandoffError] = useState(
     portalWelcomeUrl
       ? null
-      : "HELD is temporarily unavailable. Your pickup is still booked."
+      : "Your account is temporarily unavailable. Your pickup is still booked."
   );
 
   useEffect(() => {
@@ -880,9 +880,9 @@ function StepSuccess({
       setWelcomeUrl(retriedUrl);
       window.location.assign(retriedUrl);
     } catch (error) {
-      console.error("HELD handoff retry failed:", error);
+      console.error("Laundry Butler account handoff retry failed:", error);
       setHandoffError(
-        "Could not open HELD yet. Your pickup remains booked—please try again."
+        "Could not open your account yet. Your pickup remains booked—please try again."
       );
     } finally {
       setRetrying(false);
@@ -897,7 +897,9 @@ function StepSuccess({
     >
       <div className="rounded-xl border border-[#ead7e1] bg-white p-3">
         <p className="mb-2 text-[14px] font-semibold text-[#432530]">
-          {welcomeUrl ? "Opening HELD in a moment…" : "Your booking is safe."}
+          {welcomeUrl
+            ? "Opening your Laundry Butler account…"
+            : "Your booking is safe."}
         </p>
         <p className="text-[14px] leading-relaxed text-[#724f5d]">
           Need to update details? Call or text{" "}
@@ -918,7 +920,7 @@ function StepSuccess({
       ) : null}
 
       <PrimaryButton onClick={openHeld} loading={retrying}>
-        {retrying ? "Opening HELD..." : "Continue to HELD"}
+        {retrying ? "Opening account..." : "View my Laundry Butler account"}
       </PrimaryButton>
     </StepContainer>
   );

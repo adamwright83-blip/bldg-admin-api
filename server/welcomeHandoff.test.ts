@@ -28,7 +28,7 @@ describe("Laundry Butler welcome handoff", () => {
       "a-secure-shared-test-secret-at-least-32-chars"
     );
     vi.stubEnv(
-      "RESIDENT_WEB_ORIGIN",
+      "LAUNDRY_BUTLER_WEB_ORIGIN",
       "https://resident.example.test/some-path"
     );
     const url = await createPortalWelcomeUrl(order);
@@ -70,14 +70,14 @@ describe("Laundry Butler welcome handoff", () => {
     expect(JSON.stringify(payload)).not.toMatch(/stripe|payment|address/i);
   });
 
-  it("falls back to the production HELD origin", async () => {
+  it("falls back to the Laundry Butler customer origin", async () => {
     vi.stubEnv(
       "APP_SHARED_API_SECRET",
       "a-secure-shared-test-secret-at-least-32-chars"
     );
-    vi.stubEnv("RESIDENT_WEB_ORIGIN", "");
+    vi.stubEnv("LAUNDRY_BUTLER_WEB_ORIGIN", "");
     expect(await createPortalWelcomeUrl(order)).toMatch(
-      /^https:\/\/app\.bldg\.chat\/welcome\?token=/
+      /^https:\/\/laundrybutler\.bldg\.chat\/welcome\?token=/
     );
   });
 
@@ -138,7 +138,7 @@ describe("Laundry Butler welcome handoff", () => {
       resolve("client/src/components/SchedulePickupModal.tsx"),
       "utf8"
     );
-    expect(source).toContain('"Continue to HELD"');
+    expect(source).toContain('"View my Laundry Butler account"');
     expect(source).toContain("Your pickup remains booked—please try again.");
     expect(source).toMatch(
       /window\.setTimeout\([\s\S]*window\.location\.assign\(welcomeUrl\)[\s\S]*2500/
