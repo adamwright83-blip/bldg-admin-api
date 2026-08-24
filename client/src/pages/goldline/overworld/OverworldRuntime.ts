@@ -11,6 +11,7 @@ import { GOLDLINE_OVERWORLD_MAP } from "./mapDefinition";
 import {
   applyCorridorAssist,
   distance,
+  isWalkable,
   materialAtPoint,
   moveWithCollision,
   nearestValidPoint,
@@ -75,6 +76,11 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   private activeTraversal: { node: TraversalNode; segment: number } | null =
     null;
   private audioContext: AudioContext | null = null;
+  private resizeObserver: ResizeObserver | null = null;
+  private resizeFrame = 0;
+  private readonly debugNavigation =
+    import.meta.env.DEV &&
+    new URLSearchParams(window.location.search).has("goldlineNavDebug");
   private reducedMotion =
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
@@ -121,8 +127,10 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   }
 
   private async initialize() {
+    const initialBounds = this.host.getBoundingClientRect();
     await this.app.init({
-      resizeTo: this.host,
+      width: Math.max(1, Math.round(initialBounds.width)),
+      height: Math.max(1, Math.round(initialBounds.height)),
       backgroundAlpha: 0,
       antialias: true,
       autoDensity: true,
@@ -149,6 +157,7 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     backgroundSprite.height = MAP.height;
     backgroundSprite.zIndex = 0;
     this.world.addChild(backgroundSprite);
+    if (this.debugNavigation) this.buildNavigationDebug();
 
     this.shadow.ellipse(0, 0, 21, 7).fill({ color: 0x020507, alpha: 0.42 });
     this.shadow.zIndex = 1990;
@@ -165,10 +174,91 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     this.setPlayerTexture();
     this.updatePlayerPresentation();
     this.resize();
+    this.resizeObserver = new ResizeObserver(this.queueResize);
+    this.resizeObserver.observe(this.host);
     this.app.ticker.add(this.tick);
-    window.addEventListener("resize", this.resize);
+    window.addEventListener("resize", this.queueResize);
+    window.addEventListener("orientationchange", this.queueResize);
+    window.visualViewport?.addEventListener("resize", this.queueResize);
+    window.visualViewport?.addEventListener("scroll", this.queueResize);
     document.addEventListener("visibilitychange", this.handleVisibility);
     window.addEventListener("pagehide", this.saveNow);
+    this.installTestApi();
+  }
+
+  private installTestApi() {
+    if (
+      !import.meta.env.DEV ||
+      !new URLSearchParams(window.location.search).has(
+        "goldlineOverworldFixture"
+      )
+    )
+      return;
+    const testWindow = window as typeof window & {
+      __goldlineOverworldTest?: {
+        getState: () => unknown;
+        runRoute: (points: OverworldPoint[]) => unknown;
+        teleport: (point: OverworldPoint) => unknown;
+      };
+    };
+    testWindow.__goldlineOverworldTest = {
+      getState: () => ({
+        position: { ...this.position },
+        surfaceId: surfaceAtPoint(MAP, this.position),
+        walkable: isWalkable(MAP, this.position, PLAYER_RADIUS),
+        viewport: {
+          width: this.app.screen.width,
+          height: this.app.screen.height,
+        },
+      }),
+      teleport: point => {
+        const recovered = nearestValidPoint(MAP, point, PLAYER_RADIUS);
+        this.position = { x: recovered.x, y: recovered.y };
+        this.velocity = { x: 0, y: 0 };
+        this.updatePlayerPresentation();
+        this.updateCamera(1);
+        this.updateProximity();
+        return { ...this.position, surfaceId: recovered.surfaceId };
+      },
+      runRoute: points => {
+        const reached: OverworldPoint[] = [];
+        const failures: Array<{
+          target: OverworldPoint;
+          position: OverworldPoint;
+        }> = [];
+        for (const target of points) {
+          let frames = 0;
+          while (distance(this.position, target) > 5 && frames < 1200) {
+            const dx = target.x - this.position.x;
+            const dy = target.y - this.position.y;
+            const magnitude = Math.hypot(dx, dy) || 1;
+            this.input = { x: dx / magnitude, y: dy / magnitude };
+            this.stepPlayer(1 / 60);
+            frames += 1;
+          }
+          if (distance(this.position, target) > 7) {
+            failures.push({ target, position: { ...this.position } });
+            break;
+          }
+          reached.push(target);
+        }
+        this.input = { x: 0, y: 0 };
+        this.velocity = { x: 0, y: 0 };
+        this.moving = false;
+        this.updateAnimation(0);
+        this.updatePlayerPresentation();
+        this.updateCamera(1);
+        this.updateProximity();
+        this.saveNow();
+        return {
+          reached: reached.length,
+          failures,
+          position: { ...this.position },
+          surfaceId: surfaceAtPoint(MAP, this.position),
+          walkable: isWalkable(MAP, this.position, PLAYER_RADIUS),
+        };
+      },
+    };
   }
 
   private buildOccluders(texture: Texture) {
@@ -184,6 +274,32 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
       overlay.mask = mask;
       this.world.addChild(mask, overlay);
     }
+  }
+
+  private buildNavigationDebug() {
+    const overlay = new Graphics();
+    for (const surface of MAP.surfaces) {
+      overlay
+        .poly(surface.polygon.flatMap(point => [point.x, point.y]))
+        .fill({ color: 0x35e88b, alpha: 0.22 })
+        .stroke({ color: 0x72ffb2, alpha: 0.85, width: 3 });
+    }
+    for (const corridor of MAP.corridors) {
+      overlay.moveTo(corridor.points[0]!.x, corridor.points[0]!.y);
+      for (const point of corridor.points.slice(1))
+        overlay.lineTo(point.x, point.y);
+      overlay.stroke({
+        color: 0xffd84d,
+        alpha: 0.34,
+        width: corridor.halfWidth * 2,
+      });
+      overlay.moveTo(corridor.points[0]!.x, corridor.points[0]!.y);
+      for (const point of corridor.points.slice(1))
+        overlay.lineTo(point.x, point.y);
+      overlay.stroke({ color: 0xfff3a0, alpha: 0.95, width: 2 });
+    }
+    overlay.zIndex = 15000;
+    this.world.addChild(overlay);
   }
 
   private buildDestinationMarkers() {
@@ -396,10 +512,16 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   }
 
   private updateCamera(deltaSeconds: number) {
-    const viewportWidth =
-      this.app.renderer.width / this.app.renderer.resolution;
-    const viewportHeight =
-      this.app.renderer.height / this.app.renderer.resolution;
+    const viewportWidth = this.app.screen.width;
+    const viewportHeight = this.app.screen.height;
+    if (this.debugNavigation) {
+      const scale =
+        Math.min(viewportWidth / MAP.width, viewportHeight / MAP.height) * 0.98;
+      this.world.scale.set(scale);
+      this.world.x = (viewportWidth - MAP.width * scale) / 2;
+      this.world.y = (viewportHeight - MAP.height * scale) / 2;
+      return;
+    }
     const cover = Math.max(
       viewportWidth / MAP.width,
       viewportHeight / MAP.height
@@ -536,8 +658,21 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     });
   };
 
+  private queueResize = () => {
+    cancelAnimationFrame(this.resizeFrame);
+    this.resizeFrame = requestAnimationFrame(this.resize);
+  };
+
   resize = () => {
     if (!this.app.renderer) return;
+    const bounds = this.host.getBoundingClientRect();
+    const width = Math.max(1, Math.round(bounds.width));
+    const height = Math.max(1, Math.round(bounds.height));
+    if (this.app.screen.width !== width || this.app.screen.height !== height) {
+      this.app.renderer.resize(width, height);
+    }
+    this.app.canvas.style.setProperty("width", `${width}px`, "important");
+    this.app.canvas.style.setProperty("height", `${height}px`, "important");
     this.updateCamera(1);
   };
 
@@ -550,11 +685,20 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     if (this.destroyed) return;
     this.destroyed = true;
     this.saveNow();
-    window.removeEventListener("resize", this.resize);
+    cancelAnimationFrame(this.resizeFrame);
+    this.resizeObserver?.disconnect();
+    window.removeEventListener("resize", this.queueResize);
+    window.removeEventListener("orientationchange", this.queueResize);
+    window.visualViewport?.removeEventListener("resize", this.queueResize);
+    window.visualViewport?.removeEventListener("scroll", this.queueResize);
     window.removeEventListener("pagehide", this.saveNow);
     document.removeEventListener("visibilitychange", this.handleVisibility);
     this.app.ticker.remove(this.tick);
     if (this.audioContext) void this.audioContext.close();
+    const testWindow = window as typeof window & {
+      __goldlineOverworldTest?: unknown;
+    };
+    delete testWindow.__goldlineOverworldTest;
     this.app.destroy(true, { children: true });
   }
 }

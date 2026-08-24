@@ -5,6 +5,8 @@ import {
   isWalkable,
   moveWithCollision,
   nearestValidPoint,
+  pointInPolygon,
+  surfaceAtPoint,
 } from "./navigation";
 
 describe("overworld navigation contract", () => {
@@ -56,11 +58,26 @@ describe("overworld navigation contract", () => {
     expect(result.x).toBeGreaterThan(0);
   });
 
+  it("allows the visible up-right route from the Noticeboard spawn", () => {
+    let position = { ...map.spawns.noticeboard! };
+    const diagonal = Math.SQRT1_2;
+    for (let frame = 0; frame < 120; frame += 1) {
+      position = moveWithCollision(
+        map,
+        position,
+        { x: diagonal * 2.6, y: -diagonal * 2.6 },
+        11
+      );
+    }
+    expect(position.x).toBeGreaterThan(map.spawns.noticeboard!.x + 100);
+    expect(position.y).toBeLessThan(map.spawns.noticeboard!.y - 120);
+  });
+
   it("contains the player inside the authored Greystar bridge", () => {
     const bridge = map.corridors.find(
       item => item.id === "greystar-rope-bridge"
     )!;
-    const outside = { x: 280, y: 960 };
+    const outside = { x: 280, y: 1000 };
     expect(closestPointOnCorridor(outside, bridge).distance).toBeGreaterThan(
       bridge.halfWidth
     );
@@ -87,6 +104,35 @@ describe("overworld navigation contract", () => {
         map.surfaces.some(surface => surface.id === traversal.exitSurfaceId)
       ).toBe(true);
       expect(traversal.path.length).toBeGreaterThan(1);
+      expect(surfaceAtPoint(map, traversal.path.at(-1)!)).toBe(
+        traversal.exitSurfaceId
+      );
+    }
+  });
+
+  it("keeps every bridge edge contained away from adjoining islands", () => {
+    for (const corridor of map.corridors.filter(
+      item => item.material === "wood"
+    )) {
+      for (let index = 1; index < corridor.points.length; index += 1) {
+        const start = corridor.points[index - 1]!;
+        const end = corridor.points[index]!;
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const length = Math.hypot(dx, dy);
+        const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+        const offset = corridor.halfWidth + 14;
+        for (const side of [-1, 1]) {
+          const outside = {
+            x: midpoint.x + (-dy / length) * offset * side,
+            y: midpoint.y + (dx / length) * offset * side,
+          };
+          const adjoinsLand = map.surfaces.some(surface =>
+            pointInPolygon(outside, surface.polygon)
+          );
+          if (!adjoinsLand) expect(isWalkable(map, outside, 11)).toBe(false);
+        }
+      }
     }
   });
 });
