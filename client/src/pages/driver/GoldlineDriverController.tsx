@@ -7,7 +7,10 @@ import { AddExternalWorkSheet } from "@/components/driver/AddExternalWorkSheet";
 import { LogSignalSheet } from "@/components/driver/LogSignalSheet";
 import { SalesJournalSheet } from "@/components/driver/SalesMomentum";
 import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
-import GoldlineHome, { type ArrivedOperatorStop } from "../goldline/GoldlineHome";
+import GoldlineHome, {
+  type ArrivedOperatorStop,
+} from "../goldline/GoldlineHome";
+import GoldlineOverworld from "../goldline/GoldlineOverworld";
 import Day1TenDoors from "../goldline/Day1TenDoors";
 import type { FieldMoveCandidate } from "../../../../server/field/types";
 import type { DayResolution } from "../../../../server/unload/unloadTypes";
@@ -53,9 +56,7 @@ const RESCUE_RUN_CAMPAIGN_ID = "rescue-10day";
  * restoration, which is exactly right, because unreadable evidence is not
  * proof that a pickup happened.
  */
-function evidenceRows(
-  data: unknown
-): Array<{ id: number; status: string }> {
+function evidenceRows(data: unknown): Array<{ id: number; status: string }> {
   if (!Array.isArray(data)) return [];
   return data.filter(
     (row): row is { id: number; status: string } =>
@@ -128,12 +129,16 @@ function LiveGoldlineDriverController() {
    */
   const identity = trpc.auth.me.useQuery();
   const [selectedDate, setSelectedDate] = useState(() => getLocalYmd());
+  const [driverScene, setDriverScene] = useState<"overworld" | "colosseum">(
+    "overworld"
+  );
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [newOrderOpen, setNewOrderOpen] = useState(false);
   const [addExternalWorkOpen, setAddExternalWorkOpen] = useState(false);
   const [logSignalOpen, setLogSignalOpen] = useState(false);
-  const [operatorStop, setOperatorStop] =
-    useState<ArrivedOperatorStop | null>(null);
+  const [operatorStop, setOperatorStop] = useState<ArrivedOperatorStop | null>(
+    null
+  );
   const [journalOpen, setJournalOpen] = useState(false);
   const [dayResolution, setDayResolution] = useState<DayResolution | null>(
     null
@@ -303,11 +308,8 @@ function LiveGoldlineDriverController() {
   const day1TenDoors = trpc.system.day1TenDoors.current.useQuery(undefined, {
     refetchInterval: 15_000,
   });
-  const recordDay1Outcome = trpc.system.day1TenDoors.recordOutcome.useMutation();
-  const [day1Dismissed, setDay1Dismissed] = useState(
-    () => window.localStorage.getItem("goldline:day1:dismissed") === "1"
-  );
-
+  const recordDay1Outcome =
+    trpc.system.day1TenDoors.recordOutcome.useMutation();
   function advanceCachedProgress(kind: "pickup" | "delivery" | "mission") {
     utils.system.openChannel.progress.setData(progressInput, current => {
       if (!current) return current;
@@ -863,7 +865,9 @@ function LiveGoldlineDriverController() {
   ): Promise<GoldlineVisitContext> {
     const current = await loadVisitContext(input.missionId);
     if (!current.field)
-      throw new Error("Field preparation is required before checklist items can change");
+      throw new Error(
+        "Field preparation is required before checklist items can change"
+      );
     const next = await updateFieldChecklist.mutateAsync({
       ...input,
       expectedFieldVersion: current.field.version,
@@ -1063,7 +1067,23 @@ function LiveGoldlineDriverController() {
     onCompleteOpenChannelTask: handleCompleteOpenChannelTask,
   };
 
-  if (day1TenDoors.data && !day1Dismissed) {
+  if (driverScene === "overworld") {
+    return (
+      <GoldlineOverworld
+        pickups={pickups.data}
+        deliveries={deliveries.data}
+        isLoading={pickups.isLoading || deliveries.isLoading}
+        isResolvingOrder={updateStatus.isPending}
+        greystarActive={Boolean(
+          day1TenDoors.data && !day1TenDoors.data.isComplete
+        )}
+        onEnterGreystar={() => setDriverScene("colosseum")}
+        onResolveOrder={handleResolveOrder}
+      />
+    );
+  }
+
+  if (day1TenDoors.data && !day1TenDoors.data.isComplete) {
     return (
       <Day1TenDoors
         mission={day1TenDoors.data}
@@ -1086,7 +1106,7 @@ function LiveGoldlineDriverController() {
         }}
         onDismiss={() => {
           window.localStorage.setItem("goldline:day1:dismissed", "1");
-          setDay1Dismissed(true);
+          setDriverScene("overworld");
         }}
       />
     );
