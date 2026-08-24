@@ -29,6 +29,7 @@ import { externalOrderRouter } from "../externalOrders/externalOrderRouter";
 import { impactSignalRouter } from "../impactSignals/impactSignalRouter";
 import { driverGameWorldRouter } from "../driverGameWorld/driverGameWorldRouter";
 import { salesIntelRouter } from "../salesIntel/salesIntelRouter";
+import { salesIntelCaptureRouter } from "../salesIntel/salesIntelCaptureRouter";
 import { goldlineEventRouter } from "../dayforgeEvents/goldlineEventRouter";
 
 export const systemRouter = router({
@@ -60,6 +61,7 @@ export const systemRouter = router({
   impactSignals: impactSignalRouter,
   driverGameWorld: driverGameWorldRouter,
   salesIntel: salesIntelRouter,
+  salesIntelCapture: salesIntelCaptureRouter,
   goldlineEvents: goldlineEventRouter,
   health: publicProcedure
     .input(

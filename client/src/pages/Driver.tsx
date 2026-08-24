@@ -1,7 +1,7 @@
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
-import GoldlineDriverController from "./driver/GoldlineDriverController";
+import GoldlineDriverController from "./driver/GoldlineDriverCaptureShell";
 import "./goldline/goldline-legibility.css";
 import "./goldline/goldline-live-fix.css";
 

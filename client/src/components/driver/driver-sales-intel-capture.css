@@ -1,0 +1,222 @@
+.driver-intel-launch {
+  position: fixed;
+  z-index: 85;
+  top: max(5.4rem, calc(env(safe-area-inset-top) + 4.25rem));
+  right: max(0.75rem, env(safe-area-inset-right));
+  border: 1px solid rgba(117, 245, 220, 0.52);
+  border-radius: 999px;
+  background: rgba(7, 17, 25, 0.86);
+  color: #e8fffa;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  padding: 0.62rem 0.8rem;
+  font: 800 0.68rem/1 system-ui, sans-serif;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  backdrop-filter: blur(10px);
+}
+
+.driver-intel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(2, 7, 12, 0.58);
+  padding: 0;
+}
+
+.driver-intel-sheet {
+  width: min(100%, 34rem);
+  max-height: min(88dvh, 46rem);
+  overflow-y: auto;
+  border: 1px solid rgba(117, 245, 220, 0.3);
+  border-radius: 1.35rem 1.35rem 0 0;
+  background: #08131b;
+  color: #eefbf8;
+  box-shadow: 0 -24px 60px rgba(0, 0, 0, 0.48);
+  padding: 1.15rem 1rem calc(1rem + env(safe-area-inset-bottom));
+}
+
+.driver-intel-sheet header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.driver-intel-sheet header small {
+  display: block;
+  color: #74dcca;
+  font: 800 0.67rem/1.2 system-ui, sans-serif;
+  letter-spacing: 0.12em;
+}
+
+.driver-intel-sheet h2 {
+  margin: 0.28rem 0 0;
+  font: 800 clamp(1.5rem, 6vw, 2rem)/1 system-ui, sans-serif;
+}
+
+.driver-intel-sheet header button {
+  display: grid;
+  place-items: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+}
+
+.driver-intel-sheet header svg,
+.driver-intel-primary svg,
+.driver-intel-retry svg,
+.driver-intel-receipt > svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.driver-intel-lead,
+.driver-intel-footnote,
+.driver-intel-warning,
+.driver-intel-error {
+  font: 500 0.88rem/1.45 system-ui, sans-serif;
+}
+
+.driver-intel-lead {
+  margin: 1rem 0;
+  color: rgba(238, 251, 248, 0.74);
+}
+
+.driver-intel-warning {
+  margin: 0 0 0.9rem;
+  border: 1px solid rgba(255, 204, 92, 0.36);
+  border-radius: 0.8rem;
+  background: rgba(255, 204, 92, 0.08);
+  color: #ffe3a1;
+  padding: 0.72rem;
+}
+
+.driver-intel-input {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.driver-intel-input span {
+  color: #74dcca;
+  font: 800 0.64rem/1 system-ui, sans-serif;
+  letter-spacing: 0.11em;
+}
+
+.driver-intel-input input {
+  width: 100%;
+  min-height: 3.2rem;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 0.85rem;
+  outline: none;
+  background: #101f29;
+  color: #fff;
+  padding: 0.75rem 0.82rem;
+  font: 600 0.95rem/1.3 system-ui, sans-serif;
+}
+
+.driver-intel-input input:focus {
+  border-color: rgba(117, 245, 220, 0.72);
+  box-shadow: 0 0 0 3px rgba(117, 245, 220, 0.1);
+}
+
+.driver-intel-error {
+  margin: 0.45rem 0 0;
+  color: #ffafa7;
+}
+
+.driver-intel-primary,
+.driver-intel-retry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 3rem;
+  border-radius: 0.85rem;
+  font: 900 0.78rem/1 system-ui, sans-serif;
+  letter-spacing: 0.09em;
+}
+
+.driver-intel-primary {
+  margin-top: 0.85rem;
+  border: 1px solid #7bf4dc;
+  background: #7bf4dc;
+  color: #06130f;
+}
+
+.driver-intel-primary:disabled,
+.driver-intel-retry:disabled {
+  opacity: 0.45;
+}
+
+.driver-intel-receipt {
+  display: flex;
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+  border: 1px solid rgba(123, 244, 220, 0.3);
+  border-radius: 0.9rem;
+  background: rgba(123, 244, 220, 0.08);
+  padding: 0.78rem;
+}
+
+.driver-intel-receipt > svg {
+  flex: 0 0 auto;
+  color: #7bf4dc;
+  margin-top: 0.1rem;
+}
+
+.driver-intel-receipt div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.driver-intel-receipt strong {
+  font: 800 0.88rem/1.25 system-ui, sans-serif;
+}
+
+.driver-intel-receipt span {
+  color: rgba(238, 251, 248, 0.72);
+  font: 500 0.78rem/1.35 system-ui, sans-serif;
+}
+
+.driver-intel-retry {
+  margin-top: 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: #eefbf8;
+}
+
+.driver-intel-footnote {
+  margin: 0.9rem 0 0;
+  color: rgba(238, 251, 248, 0.52);
+  font-size: 0.72rem;
+}
+
+.is-spinning {
+  animation: driver-intel-spin 0.9s linear infinite;
+}
+
+@keyframes driver-intel-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (min-width: 700px) {
+  .driver-intel-backdrop {
+    align-items: center;
+    padding: 1rem;
+  }
+
+  .driver-intel-sheet {
+    border-radius: 1.35rem;
+    padding: 1.3rem;
+  }
+}
