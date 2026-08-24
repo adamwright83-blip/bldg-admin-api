@@ -1077,6 +1077,9 @@ function LiveGoldlineDriverController() {
         greystarActive={Boolean(
           day1TenDoors.data && !day1TenDoors.data.isComplete
         )}
+        greystarCompleted={Boolean(day1TenDoors.data?.isComplete)}
+        playerIdentity={identity.data?.openId ?? null}
+        onEmitEvent={emitGoldlineEvent}
         onEnterGreystar={() => setDriverScene("colosseum")}
         onResolveOrder={handleResolveOrder}
       />

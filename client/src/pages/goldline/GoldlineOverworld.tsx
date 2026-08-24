@@ -1,20 +1,25 @@
 import {
+  useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Check, ChevronRight, Loader2, MapPin, X } from "lucide-react";
+import { Check, ChevronRight, Loader2, LockKeyhole, X } from "lucide-react";
 import type { Order } from "@shared/types";
-import overworldUrl from "@/assets/goldline/generated/goldline-overworld.png";
-import operatorUrl from "@/assets/goldline/generated/trailblazer-operator.png";
+import type { GoldlineEventEmitter } from "../../game/analytics/emitGoldlineEvent";
+import cleanOverworldUrl from "@/assets/goldline/generated/goldline-overworld-clean.png";
+import {
+  loadOverworldCheckpoint,
+  saveOverworldCheckpoint,
+} from "./overworld/checkpoint";
+import { GoldlineOverworldRuntime } from "./overworld/OverworldRuntime";
+import type {
+  DestinationStateMap,
+  OverworldProximity,
+} from "./overworld/types";
 import "./goldline-overworld.css";
-
-type Position = { x: number; y: number };
-
-const START: Position = { x: 20, y: 87 };
-const GREYSTAR_GATE: Position = { x: 48, y: 48 };
-const ENTER_RADIUS = 11;
 
 function orderName(order: Order) {
   return (
@@ -24,48 +29,58 @@ function orderName(order: Order) {
   );
 }
 
-function OverworldJoystick({
+function DynamicJoystick({
+  disabled,
   onInput,
 }: {
+  disabled: boolean;
   onInput: (x: number, y: number) => void;
 }) {
-  const baseRef = useRef<HTMLDivElement>(null);
   const pointerRef = useRef<number | null>(null);
+  const originRef = useRef({ x: 0, y: 0 });
+  const [visible, setVisible] = useState(false);
+  const [origin, setOrigin] = useState({ x: 0, y: 0 });
   const [knob, setKnob] = useState({ x: 0, y: 0 });
+  const radius = 48;
 
   function move(event: ReactPointerEvent<HTMLDivElement>) {
-    const rect = baseRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const radius = rect.width / 2;
-    let x = (event.clientX - rect.left - radius) / radius;
-    let y = (event.clientY - rect.top - radius) / radius;
-    const magnitude = Math.hypot(x, y);
-    if (magnitude > 1) {
-      x /= magnitude;
-      y /= magnitude;
-    }
-    setKnob({ x, y });
-    onInput(x, y);
+    const dx = event.clientX - originRef.current.x;
+    const dy = event.clientY - originRef.current.y;
+    const magnitude = Math.hypot(dx, dy);
+    const scale = magnitude > radius ? radius / magnitude : 1;
+    setKnob({ x: dx * scale, y: dy * scale });
+    onInput((dx * scale) / radius, (dy * scale) / radius);
   }
 
   function release(event?: ReactPointerEvent<HTMLDivElement>) {
-    if (event && event.currentTarget.hasPointerCapture(event.pointerId)) {
+    if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     pointerRef.current = null;
+    setVisible(false);
     setKnob({ x: 0, y: 0 });
     onInput(0, 0);
   }
 
+  useEffect(() => {
+    if (!disabled) return;
+    pointerRef.current = null;
+    setVisible(false);
+    setKnob({ x: 0, y: 0 });
+    onInput(0, 0);
+  }, [disabled, onInput]);
+
   return (
     <div
-      ref={baseRef}
-      className="overworld-joystick"
-      aria-label="Move Trailblazer"
-      role="application"
+      className="overworld-joystick-zone"
+      aria-label="Touch and drag to move Trailblazer"
       onPointerDown={event => {
+        if (disabled || pointerRef.current !== null) return;
         pointerRef.current = event.pointerId;
         event.currentTarget.setPointerCapture(event.pointerId);
+        originRef.current = { x: event.clientX, y: event.clientY };
+        setOrigin(originRef.current);
+        setVisible(true);
         move(event);
       }}
       onPointerMove={event => {
@@ -74,12 +89,17 @@ function OverworldJoystick({
       onPointerUp={release}
       onPointerCancel={release}
     >
-      <i
-        style={{
-          transform: `translate(${knob.x * 27}px, ${knob.y * 27}px)`,
-        }}
-      />
-      <span>MOVE</span>
+      {visible ? (
+        <div
+          className="overworld-joystick"
+          style={{ left: origin.x, top: origin.y }}
+          aria-hidden="true"
+        >
+          <i style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
+        </div>
+      ) : (
+        <span className="overworld-move-hint">TOUCH + DRAG TO MOVE</span>
+      )}
     </div>
   );
 }
@@ -89,7 +109,10 @@ export default function GoldlineOverworld({
   deliveries = [],
   isLoading = false,
   greystarActive,
+  greystarCompleted = false,
+  playerIdentity = null,
   isResolvingOrder = false,
+  onEmitEvent,
   onEnterGreystar,
   onResolveOrder,
 }: {
@@ -97,68 +120,140 @@ export default function GoldlineOverworld({
   deliveries?: Order[];
   isLoading?: boolean;
   greystarActive: boolean;
+  greystarCompleted?: boolean;
+  playerIdentity?: string | null;
   isResolvingOrder?: boolean;
+  onEmitEvent?: GoldlineEventEmitter;
   onEnterGreystar: () => void;
   onResolveOrder: (
     orderId: number,
     status: "collected" | "delivered"
   ) => Promise<boolean>;
 }) {
-  const [position, setPosition] = useState(START);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const runtimeRef = useRef<GoldlineOverworldRuntime | null>(null);
   const [ordersOpen, setOrdersOpen] = useState(false);
-  const inputRef = useRef({ x: 0, y: 0 });
-  const positionRef = useRef(position);
-  positionRef.current = position;
+  const [runtimeReady, setRuntimeReady] = useState(false);
+  const [proximity, setProximity] = useState<OverworldProximity>(null);
+  const [lockedMessage, setLockedMessage] = useState<string | null>(null);
+  const [runtimeError, setRuntimeError] = useState(false);
+  const [sessionId] = useState(() => crypto.randomUUID());
+  const sessionStartedAt = useRef(performance.now());
   const orderCount = pickups.length + deliveries.length;
-  const gateDistance = Math.hypot(
-    position.x - GREYSTAR_GATE.x,
-    position.y - GREYSTAR_GATE.y
+  const destinationStates = useMemo<DestinationStateMap>(
+    () => ({
+      "greystar-6": greystarCompleted
+        ? "completed"
+        : greystarActive
+          ? "active"
+          : "locked",
+    }),
+    [greystarActive, greystarCompleted]
   );
-  const canEnterGreystar = greystarActive && gateDistance <= ENTER_RADIUS;
+  const destinationStatesRef = useRef(destinationStates);
+  destinationStatesRef.current = destinationStates;
 
   useEffect(() => {
-    let frame = 0;
-    let previous = performance.now();
-    const tick = (now: number) => {
-      const elapsed = Math.min(40, now - previous) / 1000;
-      previous = now;
-      const { x, y } = inputRef.current;
-      if (Math.hypot(x, y) > 0.04) {
-        const next = {
-          x: Math.min(
-            94,
-            Math.max(6, positionRef.current.x + x * 20 * elapsed)
-          ),
-          y: Math.min(
-            94,
-            Math.max(6, positionRef.current.y + y * 20 * elapsed)
-          ),
-        };
-        positionRef.current = next;
-        setPosition(next);
-      }
-      frame = requestAnimationFrame(tick);
+    const host = hostRef.current;
+    if (!host) return;
+    let cancelled = false;
+    let runtime: GoldlineOverworldRuntime | null = null;
+    void GoldlineOverworldRuntime.create({
+      host,
+      backgroundUrl: cleanOverworldUrl,
+      checkpoint: loadOverworldCheckpoint(playerIdentity),
+      destinationStates,
+      callbacks: {
+        onProximityChange: next => {
+          setProximity(next);
+          if (next?.canAct) {
+            onEmitEvent?.({
+              eventName: "mission_approached",
+              sessionId,
+              properties: {
+                sessionId,
+                missionState: next.availability,
+                overworldDestination: next.destination.id,
+              },
+            });
+          }
+        },
+        onCheckpoint: checkpoint =>
+          saveOverworldCheckpoint(checkpoint, playerIdentity),
+        onFirstMove: () =>
+          onEmitEvent?.({
+            eventName: "corridor_transition_started",
+            sessionId,
+            properties: { sessionId, corridorId: "overworld-first-movement" },
+          }),
+        onTraversalComplete: traversalId =>
+          onEmitEvent?.({
+            eventName: "corridor_transition_completed",
+            sessionId,
+            properties: { sessionId, corridorId: traversalId },
+          }),
+      },
+    })
+      .then(created => {
+        if (cancelled) {
+          void created.destroy();
+          return;
+        }
+        runtime = created;
+        runtimeRef.current = created;
+        created.setDestinationStates(destinationStatesRef.current);
+        setRuntimeReady(true);
+        onEmitEvent?.({
+          eventName: "goldline_session_started",
+          sessionId,
+          properties: { sessionId, entryPoint: "global-overworld" },
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setRuntimeError(true);
+      });
+    return () => {
+      cancelled = true;
+      setRuntimeReady(false);
+      runtimeRef.current = null;
+      if (runtime) void runtime.destroy();
+      onEmitEvent?.({
+        eventName: "goldline_session_ended",
+        sessionId,
+        properties: {
+          sessionId,
+          durationMs: Math.round(performance.now() - sessionStartedAt.current),
+        },
+      });
     };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, []);
+    // Availability is updated through setDestinationStates below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerIdentity]);
+
+  useEffect(() => {
+    runtimeRef.current?.setDestinationStates(destinationStates);
+  }, [destinationStates]);
+
+  useEffect(() => {
+    runtimeRef.current?.setPaused(ordersOpen);
+  }, [ordersOpen]);
 
   useEffect(() => {
     const pressed = new Set<string>();
     const update = () => {
-      inputRef.current = {
-        x:
-          Number(pressed.has("arrowright") || pressed.has("d")) -
-          Number(pressed.has("arrowleft") || pressed.has("a")),
-        y:
-          Number(pressed.has("arrowdown") || pressed.has("s")) -
-          Number(pressed.has("arrowup") || pressed.has("w")),
-      };
+      const x =
+        Number(pressed.has("arrowright") || pressed.has("d")) -
+        Number(pressed.has("arrowleft") || pressed.has("a"));
+      const y =
+        Number(pressed.has("arrowdown") || pressed.has("s")) -
+        Number(pressed.has("arrowup") || pressed.has("w"));
+      const magnitude = Math.hypot(x, y) || 1;
+      runtimeRef.current?.setInput(x / magnitude, y / magnitude);
     };
     const down = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
       if (
-        [
+        ![
           "arrowright",
           "arrowleft",
           "arrowdown",
@@ -168,11 +263,11 @@ export default function GoldlineOverworld({
           "s",
           "d",
         ].includes(key)
-      ) {
-        event.preventDefault();
-        pressed.add(key);
-        update();
-      }
+      )
+        return;
+      event.preventDefault();
+      pressed.add(key);
+      update();
     };
     const up = (event: KeyboardEvent) => {
       pressed.delete(event.key.toLowerCase());
@@ -186,18 +281,56 @@ export default function GoldlineOverworld({
     };
   }, []);
 
+  const setRuntimeInput = useCallback((x: number, y: number) => {
+    runtimeRef.current?.setInput(x, y);
+  }, []);
+
+  function performContextAction() {
+    const result = runtimeRef.current?.performContextAction() ?? "none";
+    if (result === "entered" && proximity?.destination.id === "greystar-6") {
+      onEmitEvent?.({
+        eventName: "mission_engaged",
+        sessionId,
+        properties: {
+          sessionId,
+          missionState: proximity.availability,
+          archetype: "greystar-6-colosseum",
+        },
+      });
+      onEnterGreystar();
+    } else if (result === "locked") {
+      setLockedMessage(
+        proximity?.availability === "completed"
+          ? `${proximity.destination.name} CONQUERED`
+          : `${proximity?.destination.name ?? "THIS DESTINATION"} IS NOT YET REACHABLE`
+      );
+      window.setTimeout(() => setLockedMessage(null), 2200);
+    }
+  }
+
   return (
     <main className="goldline-overworld-shell">
       <section
         className="goldline-overworld"
         aria-label="Goldline global overworld"
       >
-        <img
-          className="goldline-overworld-art"
-          src={overworldUrl}
-          alt="Goldline floating-island overworld with Greystar 6 at its center"
-        />
+        <div ref={hostRef} className="goldline-overworld-runtime" />
         <div className="goldline-overworld-vignette" aria-hidden="true" />
+
+        {!runtimeReady ? (
+          <div className="overworld-loading">
+            {runtimeError ? (
+              <>
+                <span>GOLDLINE COULD NOT LOAD</span>
+                <button onClick={() => window.location.reload()}>RETRY</button>
+              </>
+            ) : (
+              <>
+                <Loader2 /> ENTERING GOLDLINE…
+              </>
+            )}
+          </div>
+        ) : null}
 
         {orderCount > 0 ? (
           <button
@@ -209,115 +342,130 @@ export default function GoldlineOverworld({
           </button>
         ) : null}
 
-        <div
-          className={`overworld-player${Math.hypot(inputRef.current.x, inputRef.current.y) > 0.04 ? " is-moving" : ""}`}
-          style={{ left: `${position.x}%`, top: `${position.y}%` }}
-          aria-label="Trailblazer avatar"
-        >
-          <img src={operatorUrl} alt="" />
-        </div>
-
-        <button
-          type="button"
-          className={`overworld-greystar-gate${canEnterGreystar ? " is-near" : ""}${!greystarActive ? " is-locked" : ""}`}
-          onClick={() => {
-            if (canEnterGreystar) onEnterGreystar();
-          }}
-          aria-label={
-            greystarActive
-              ? canEnterGreystar
-                ? "Enter active Greystar 6 mission"
-                : "Greystar 6 is ahead; move closer to enter"
-              : "Greystar 6 is not currently available"
-          }
-        >
-          <span>
-            {greystarActive
-              ? canEnterGreystar
-                ? "ENTER"
-                : "ACTIVE"
-              : "LOCKED"}
-          </span>
-          <b>GREYSTAR 6</b>
-          <small>
-            {greystarActive
-              ? canEnterGreystar
-                ? "CONTINUE COLOSSEUM MISSION"
-                : "WALK TO THE COLOSSEUM"
-              : "MISSION UNAVAILABLE"}
-          </small>
-          {canEnterGreystar ? <ChevronRight /> : null}
-        </button>
-
-        <div className="overworld-compass" aria-hidden="true">
-          <MapPin /> GREYSTAR 6
-        </div>
-        <OverworldJoystick
-          onInput={(x, y) => {
-            inputRef.current = { x, y };
-          }}
+        <DynamicJoystick
+          disabled={ordersOpen || !runtimeReady}
+          onInput={setRuntimeInput}
         />
 
-        {ordersOpen ? (
-          <section
-            className="overworld-orders"
-            aria-label="Today's pickups and dropoffs"
-          >
-            <header>
-              <div>
-                <small>TODAY'S ROUTE</small>
-                <h1>{orderCount} ORDERS</h1>
-              </div>
-              <button
-                onClick={() => setOrdersOpen(false)}
-                aria-label="Close orders"
-              >
-                <X />
+        {proximity ? (
+          <div className={`overworld-context is-${proximity.availability}`}>
+            <small>{proximity.destination.subtitle}</small>
+            <b>{proximity.destination.name}</b>
+            {proximity.canAct ? (
+              <button type="button" onClick={performContextAction}>
+                {proximity.availability === "active"
+                  ? proximity.destination.id === "greystar-6"
+                    ? "ENTER GREYSTAR 6"
+                    : "CONTINUE"
+                  : proximity.availability === "completed"
+                    ? "CONQUERED"
+                    : "INSPECT"}
+                {proximity.availability === "locked" ? (
+                  <LockKeyhole />
+                ) : (
+                  <ChevronRight />
+                )}
               </button>
-            </header>
-            {isLoading ? (
-              <div className="overworld-orders-loading">
-                <Loader2 /> SYNCING ORDERS…
-              </div>
             ) : (
-              <div className="overworld-order-list">
-                {pickups.map(order => (
-                  <article key={`pickup-${order.id}`}>
-                    <span className="is-pickup">PICKUP</span>
-                    <div>
-                      <b>{orderName(order)}</b>
-                      <small>{order.pickupTimeWindow || "TIME TBD"}</small>
-                      <p>{order.address || "Address unavailable"}</p>
-                    </div>
-                    <button
-                      disabled={isResolvingOrder}
-                      onClick={() => void onResolveOrder(order.id, "collected")}
-                    >
-                      <Check /> COLLECTED
-                    </button>
-                  </article>
-                ))}
-                {deliveries.map(order => (
-                  <article key={`dropoff-${order.id}`}>
-                    <span className="is-dropoff">DROPOFF</span>
-                    <div>
-                      <b>{orderName(order)}</b>
-                      <small>{order.deliveryTimeWindow || "TIME TBD"}</small>
-                      <p>{order.address || "Address unavailable"}</p>
-                    </div>
-                    <button
-                      disabled={isResolvingOrder || !order.paid}
-                      onClick={() => void onResolveOrder(order.id, "delivered")}
-                    >
-                      <Check /> {order.paid ? "DELIVERED" : "PAYMENT BLOCKED"}
-                    </button>
-                  </article>
-                ))}
-              </div>
+              <span>MOVE TO THE ENTRANCE</span>
             )}
-          </section>
+          </div>
+        ) : null}
+
+        {lockedMessage ? (
+          <div className="overworld-locked-message">{lockedMessage}</div>
+        ) : null}
+
+        {ordersOpen ? (
+          <OrdersOverlay
+            pickups={pickups}
+            deliveries={deliveries}
+            isLoading={isLoading}
+            isResolvingOrder={isResolvingOrder}
+            onClose={() => setOrdersOpen(false)}
+            onResolveOrder={onResolveOrder}
+          />
         ) : null}
       </section>
     </main>
+  );
+}
+
+function OrdersOverlay({
+  pickups,
+  deliveries,
+  isLoading,
+  isResolvingOrder,
+  onClose,
+  onResolveOrder,
+}: {
+  pickups: Order[];
+  deliveries: Order[];
+  isLoading: boolean;
+  isResolvingOrder: boolean;
+  onClose: () => void;
+  onResolveOrder: (
+    orderId: number,
+    status: "collected" | "delivered"
+  ) => Promise<boolean>;
+}) {
+  const orderCount = pickups.length + deliveries.length;
+  return (
+    <section
+      className="overworld-orders"
+      aria-label="Today's pickups and dropoffs"
+    >
+      <header>
+        <div>
+          <small>TODAY'S ROUTE</small>
+          <h1>
+            {orderCount} {orderCount === 1 ? "ORDER" : "ORDERS"}
+          </h1>
+        </div>
+        <button onClick={onClose} aria-label="Close orders">
+          <X />
+        </button>
+      </header>
+      {isLoading ? (
+        <div className="overworld-orders-loading">
+          <Loader2 /> SYNCING ORDERS…
+        </div>
+      ) : (
+        <div className="overworld-order-list">
+          {pickups.map(order => (
+            <article key={`pickup-${order.id}`}>
+              <span className="is-pickup">PICKUP</span>
+              <div>
+                <b>{orderName(order)}</b>
+                <small>{order.pickupTimeWindow || "TIME TBD"}</small>
+                <p>{order.address || "Address unavailable"}</p>
+              </div>
+              <button
+                disabled={isResolvingOrder}
+                onClick={() => void onResolveOrder(order.id, "collected")}
+              >
+                <Check /> COLLECTED
+              </button>
+            </article>
+          ))}
+          {deliveries.map(order => (
+            <article key={`dropoff-${order.id}`}>
+              <span className="is-dropoff">DROPOFF</span>
+              <div>
+                <b>{orderName(order)}</b>
+                <small>{order.deliveryTimeWindow || "TIME TBD"}</small>
+                <p>{order.address || "Address unavailable"}</p>
+              </div>
+              <button
+                disabled={isResolvingOrder || !order.paid}
+                onClick={() => void onResolveOrder(order.id, "delivered")}
+              >
+                <Check /> {order.paid ? "DELIVERED" : "PAYMENT BLOCKED"}
+              </button>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

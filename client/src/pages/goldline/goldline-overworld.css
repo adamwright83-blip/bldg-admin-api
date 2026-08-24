@@ -10,7 +10,6 @@
   background: #07111b;
   font-family: Inter, sans-serif;
 }
-
 .goldline-overworld {
   position: relative;
   width: min(100vw, 430px);
@@ -23,35 +22,67 @@
   box-shadow: 0 0 80px #000;
   touch-action: none;
 }
-
-.goldline-overworld-art,
+.goldline-overworld-runtime,
 .goldline-overworld-vignette {
   position: absolute;
   inset: 0;
+}
+.goldline-overworld-runtime canvas {
+  display: block;
   width: 100%;
   height: 100%;
+  touch-action: none;
 }
-
-.goldline-overworld-art {
-  object-fit: cover;
-  object-position: center;
-}
-
 .goldline-overworld-vignette {
+  z-index: 2;
   pointer-events: none;
   background: linear-gradient(
     180deg,
-    rgba(0, 8, 15, 0.14),
-    transparent 22%,
+    rgba(0, 8, 15, 0.18),
+    transparent 18%,
     transparent 72%,
-    rgba(0, 8, 15, 0.42)
+    rgba(0, 8, 15, 0.48)
   );
-  box-shadow: inset 0 0 70px rgba(0, 8, 15, 0.3);
+  box-shadow: inset 0 0 72px rgba(0, 8, 15, 0.34);
+}
+
+.overworld-loading {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  background: #07151d;
+  color: #f4d46c;
+  font:
+    900 12px Cinzel,
+    serif;
+  letter-spacing: 0.12em;
+}
+.overworld-loading svg,
+.overworld-orders-loading svg {
+  animation: overworld-spin 1s linear infinite;
+}
+.overworld-loading button {
+  min-width: 120px;
+  min-height: 42px;
+  color: #171006;
+  border: 0;
+  border-radius: 10px;
+  background: #f4d46c;
+  font-weight: 900;
+}
+@keyframes overworld-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .overworld-order-count {
   position: absolute;
-  z-index: 12;
+  z-index: 15;
   top: max(14px, env(safe-area-inset-top));
   left: 14px;
   width: 52px;
@@ -63,171 +94,167 @@
   background: linear-gradient(145deg, #fff2a5, #e0a82d);
   box-shadow:
     0 4px 0 #6e4910,
-    0 8px 25px rgba(0, 0, 0, 0.42);
+    0 8px 25px #0007;
   font:
     900 23px Cinzel,
     serif;
 }
-
-.overworld-player {
-  position: absolute;
-  z-index: 7;
-  width: 20%;
-  aspect-ratio: 1;
-  transform: translate(-50%, -78%);
-  pointer-events: none;
-  filter: drop-shadow(0 5px 5px rgba(0, 0, 0, 0.55));
-  transition:
-    left 45ms linear,
-    top 45ms linear;
-}
-
-.overworld-player img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.overworld-player.is-moving img {
-  animation: overworld-stride 0.25s ease-in-out infinite alternate;
-}
-
-@keyframes overworld-stride {
-  to {
-    transform: translateY(-4px) rotate(1deg);
-  }
-}
-
-.overworld-greystar-gate {
-  position: absolute;
-  z-index: 8;
-  left: 50%;
-  top: 48%;
-  width: 47%;
-  min-height: 67px;
-  display: grid;
-  place-content: center;
-  transform: translate(-50%, -50%) scale(0.82);
-  padding: 8px 34px 8px 12px;
-  color: #fff1b3;
-  border: 1px solid rgba(255, 211, 90, 0.48);
-  border-radius: 13px;
-  background: rgba(11, 16, 19, 0.76);
+.overworld-order-count:active {
+  transform: translateY(3px);
   box-shadow:
-    0 0 0 3px rgba(22, 14, 5, 0.42),
-    0 9px 30px rgba(0, 0, 0, 0.34);
-  opacity: 0;
-  pointer-events: none;
-  font-family: Cinzel, serif;
-  text-shadow: 0 2px 3px #000;
-  transition:
-    opacity 0.2s,
-    transform 0.2s,
-    box-shadow 0.2s;
+    0 1px 0 #6e4910,
+    0 5px 18px #0008;
 }
 
-.overworld-greystar-gate span,
-.overworld-greystar-gate small {
-  color: #fff;
-  font:
-    800 9px Inter,
-    sans-serif;
-  letter-spacing: 0.13em;
-}
-
-.overworld-greystar-gate b {
-  font-size: 20px;
-}
-.overworld-greystar-gate svg {
+.overworld-joystick-zone {
   position: absolute;
-  right: 10px;
-  top: 22px;
+  z-index: 5;
+  left: 0;
+  bottom: 0;
+  width: 68%;
+  height: 58%;
+  touch-action: none;
+  user-select: none;
 }
-.overworld-greystar-gate.is-near {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translate(-50%, -50%) scale(1);
-  border-color: #ffe16c;
-  box-shadow:
-    0 0 0 3px rgba(22, 14, 5, 0.66),
-    0 0 30px rgba(255, 210, 62, 0.72);
-  animation: overworld-gate-pulse 1.2s ease-in-out infinite alternate;
-}
-.overworld-greystar-gate.is-locked {
-  opacity: 0.72;
-  pointer-events: auto;
-  filter: grayscale(1);
-}
-
-@keyframes overworld-gate-pulse {
-  to {
-    box-shadow:
-      0 0 0 3px rgba(22, 14, 5, 0.7),
-      0 0 42px rgba(255, 220, 90, 0.95);
-  }
-}
-
-.overworld-compass {
+.overworld-move-hint {
   position: absolute;
-  z-index: 8;
-  left: 14px;
-  bottom: calc(24px + env(safe-area-inset-bottom));
-  display: flex;
-  align-items: center;
-  gap: 7px;
+  left: 18px;
+  bottom: calc(20px + env(safe-area-inset-bottom));
   padding: 8px 11px;
-  color: #fff1b0;
-  border: 1px solid rgba(255, 230, 145, 0.5);
-  border-radius: 12px;
-  background: rgba(7, 15, 17, 0.7);
-  font-size: 10px;
+  color: #fff2bb;
+  border: 1px solid #ffe69666;
+  border-radius: 999px;
+  background: #061116a8;
+  box-shadow: 0 5px 18px #0006;
+  font-size: 9px;
   font-weight: 900;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
+  pointer-events: none;
+  animation: move-hint-fade 4s 2s forwards;
 }
-.overworld-compass svg {
-  width: 16px;
+@keyframes move-hint-fade {
+  to {
+    opacity: 0.28;
+  }
 }
-
 .overworld-joystick {
-  position: absolute;
-  z-index: 10;
-  right: 18px;
-  bottom: calc(18px + env(safe-area-inset-bottom));
-  width: 112px;
-  height: 112px;
-  border: 2px solid rgba(255, 238, 176, 0.62);
+  position: fixed;
+  width: 104px;
+  height: 104px;
+  margin: -52px;
+  border: 2px solid #ffeeb89c;
   border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(30, 20, 8, 0.34) 0 45%,
-    rgba(9, 14, 15, 0.78) 47%
-  );
+  background: radial-gradient(circle, #f5d26a22 0 47%, #071116b8 49%);
   box-shadow:
-    inset 0 0 25px rgba(255, 210, 89, 0.18),
-    0 8px 30px rgba(0, 0, 0, 0.4);
+    inset 0 0 28px #ffd25a26,
+    0 8px 28px #0008;
+  pointer-events: none;
+}
+.overworld-joystick::after {
+  content: "";
+  position: absolute;
+  inset: 21px;
+  border: 1px solid #fff2bd30;
+  border-radius: 50%;
 }
 .overworld-joystick i {
   position: absolute;
-  left: 34px;
-  top: 34px;
-  width: 40px;
-  height: 40px;
-  border: 2px solid #fff0a5;
+  left: 31px;
+  top: 31px;
+  width: 38px;
+  height: 38px;
+  border: 2px solid #fff3b4;
   border-radius: 50%;
   background: linear-gradient(145deg, #f5cb5a, #6d4713);
-  box-shadow: 0 4px 12px #0008;
+  box-shadow: 0 4px 12px #0009;
 }
-.overworld-joystick span {
+
+.overworld-context {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  color: #fff4c4;
+  z-index: 12;
+  left: 50%;
+  bottom: calc(22px + env(safe-area-inset-bottom));
+  width: min(76%, 310px);
+  display: grid;
+  transform: translateX(-50%);
+  padding: 12px 13px;
+  color: #fff1b3;
+  border: 1px solid #ffe07c7a;
+  border-radius: 14px;
+  background: #081116e8;
+  box-shadow:
+    0 0 0 3px #160e058f,
+    0 12px 35px #0009;
+  text-align: center;
+  font-family: Cinzel, serif;
+  text-shadow: 0 2px 3px #000;
+  backdrop-filter: blur(6px);
+}
+.overworld-context small {
+  font:
+    800 9px Inter,
+    sans-serif;
+  letter-spacing: 0.12em;
+  color: #d7dbc8;
+  text-transform: uppercase;
+}
+.overworld-context b {
+  margin: 2px 0 8px;
+  font-size: 19px;
+}
+.overworld-context span {
+  font:
+    800 9px Inter,
+    sans-serif;
+  letter-spacing: 0.12em;
+  color: #fff;
+}
+.overworld-context button {
+  min-height: 43px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #1b1204;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(#ffe894, #d99c25);
+  font:
+    900 11px Inter,
+    sans-serif;
+  letter-spacing: 0.08em;
+}
+.overworld-context button svg {
+  width: 17px;
+}
+.overworld-context.is-locked {
+  filter: saturate(0.42);
+}
+.overworld-context.is-completed {
+  border-color: #83f3d28c;
+}
+.overworld-context.is-completed button {
+  background: linear-gradient(#9af4d8, #4cb89e);
+}
+.overworld-locked-message {
+  position: absolute;
+  z-index: 18;
+  left: 50%;
+  top: 17%;
+  width: max-content;
+  max-width: 82%;
+  transform: translateX(-50%);
+  padding: 10px 14px;
+  color: #fff2c0;
+  border: 1px solid #ffe18a68;
+  border-radius: 10px;
+  background: #071116ed;
+  box-shadow: 0 8px 25px #0009;
   text-align: center;
   font:
-    900 9px Inter,
-    sans-serif;
-  letter-spacing: 0.14em;
+    900 10px Cinzel,
+    serif;
+  letter-spacing: 0.08em;
 }
 
 .overworld-orders {
@@ -238,11 +265,7 @@
   padding: max(18px, env(safe-area-inset-top)) 14px
     calc(22px + env(safe-area-inset-bottom));
   color: #efffff;
-  background: linear-gradient(
-    180deg,
-    rgba(5, 23, 30, 0.98),
-    rgba(3, 10, 14, 0.99)
-  );
+  background: linear-gradient(180deg, #05171efa, #030a0efd);
   touch-action: pan-y;
 }
 .overworld-orders header {
@@ -265,7 +288,7 @@
 .overworld-orders header button {
   width: 46px;
   height: 46px;
-  color: white;
+  color: #fff;
   border: 1px solid #5b7377;
   border-radius: 50%;
   background: #0b252e;
@@ -281,7 +304,7 @@
   padding: 14px;
   border: 1px solid #37616a;
   border-radius: 16px;
-  background: rgba(12, 42, 51, 0.9);
+  background: #0c2a33e6;
 }
 .overworld-order-list article > span {
   align-self: start;
@@ -316,7 +339,7 @@
   font-size: 12px;
 }
 .overworld-order-list article button {
-  grid-column: 1 / -1;
+  grid-column: 1/-1;
   min-height: 46px;
   display: flex;
   align-items: center;
@@ -344,27 +367,18 @@
   color: #70eeea;
   font-weight: 900;
 }
-.overworld-orders-loading svg {
-  animation: overworld-spin 1s linear infinite;
-}
-@keyframes overworld-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 
 @media (max-width: 600px), (pointer: coarse) {
   .goldline-overworld {
     width: 100vw;
-    max-height: none;
     min-height: 0;
+    max-height: none;
   }
 }
-
 @media (prefers-reduced-motion: reduce) {
-  .overworld-player,
-  .overworld-greystar-gate {
-    transition: none;
-    animation: none !important;
+  .overworld-loading svg,
+  .overworld-orders-loading svg,
+  .overworld-move-hint {
+    animation: none;
   }
 }
