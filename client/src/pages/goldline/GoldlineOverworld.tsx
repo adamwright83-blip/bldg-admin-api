@@ -114,6 +114,7 @@ export default function GoldlineOverworld({
   playerIdentity = null,
   isResolvingOrder = false,
   onEmitEvent,
+  onEnterOperations,
   onEnterGreystar,
   onEnterWayward,
   onResolveOrder,
@@ -127,6 +128,7 @@ export default function GoldlineOverworld({
   playerIdentity?: string | null;
   isResolvingOrder?: boolean;
   onEmitEvent?: GoldlineEventEmitter;
+  onEnterOperations?: () => void;
   onEnterGreystar: () => void;
   onEnterWayward?: () => void;
   onResolveOrder: (
@@ -346,6 +348,17 @@ export default function GoldlineOverworld({
             aria-label={`Open today's ${orderCount} pickup and dropoff orders`}
           >
             {orderCount}
+          </button>
+        ) : null}
+
+        {onEnterOperations ? (
+          <button
+            className="overworld-operations"
+            type="button"
+            onClick={onEnterOperations}
+            aria-label="Open Field Operations"
+          >
+            FIELD OPS
           </button>
         ) : null}
 

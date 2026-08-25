@@ -21,5 +21,13 @@ test.describe("canonical driver entry", () => {
     ).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("goldline-shell")).toHaveCount(0);
     await expect(page.getByText("CLOCKHEAD", { exact: false })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Open Field Operations" }).click();
+    await expect(page.getByTestId("goldline-shell")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(
+      page.getByRole("region", { name: "Goldline global overworld" })
+    ).toHaveCount(0);
   });
 });

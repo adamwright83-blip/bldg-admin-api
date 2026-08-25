@@ -1119,6 +1119,7 @@ function LiveGoldlineDriverController() {
         waywardUnlocked={waywardProgress.unlocked}
         playerIdentity={identity.data?.openId ?? null}
         onEmitEvent={emitGoldlineEvent}
+        onEnterOperations={() => setDriverScene("game")}
         onEnterGreystar={() => setDriverScene("colosseum")}
         onEnterWayward={() => setDriverScene("wayward")}
         onResolveOrder={handleResolveOrder}

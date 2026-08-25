@@ -48,6 +48,9 @@ describe("Goldline canonical driver restoration", () => {
     expect(controller).toContain(
       'onEnterGreystar={() => setDriverScene("colosseum")}'
     );
+    expect(controller).toContain(
+      'onEnterOperations={() => setDriverScene("game")}'
+    );
     expect(controller).not.toContain("shouldAutoEnterWayward");
   });
 
