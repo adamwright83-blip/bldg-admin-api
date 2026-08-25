@@ -1,4 +1,5 @@
 import { Loader2 } from "lucide-react";
+import { lazy, Suspense } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
 import GoldlineDriverController from "./driver/GoldlineDriverController";
@@ -7,11 +8,24 @@ import type { Order } from "@shared/types";
 import "./goldline/goldline-legibility.css";
 import "./goldline/goldline-live-fix.css";
 
+const WaywardTetheredDeck = lazy(() => import("./goldline/stages/WaywardTetheredDeck"));
+
 export default function Driver() {
   const { loading: authLoading, isAuthenticated } = useAuth();
   const overworldFixture =
     import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1" &&
     new URLSearchParams(window.location.search).has("goldlineOverworldFixture");
+  const waywardFixture =
+    import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1" &&
+    new URLSearchParams(window.location.search).get("goldlineStageFixture") === "wayward";
+
+  if (waywardFixture) {
+    return (
+      <Suspense fallback={<div style={{ minHeight: "100dvh", background: "#03070c" }} />}>
+        <WaywardTetheredDeck fixture playerIdentity="wayward-browser-fixture" onReturn={() => history.back()} />
+      </Suspense>
+    );
+  }
 
   if (overworldFixture) {
     const fixtureOrder = {

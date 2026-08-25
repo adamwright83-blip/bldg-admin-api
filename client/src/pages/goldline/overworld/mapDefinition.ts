@@ -338,14 +338,13 @@ export const GOLDLINE_OVERWORLD_MAP: OverworldMapDefinition = {
       traversalId: "treehollow-drop",
     },
     {
-      id: "horizon-sail",
-      name: "THE HORIZON SAIL",
-      subtitle: "High Value Accounts",
+      id: "wayward-approach",
+      name: "THE WAYWARD",
+      subtitle: "A dead tether hangs beyond the Horizon Sail",
       point: { x: 520, y: 550 },
       approachRadius: 80,
       entranceRadius: 45,
-      action: "traverse",
-      traversalId: "horizon-board",
+      action: "enter",
     },
   ],
   traversals: [
