@@ -47,6 +47,14 @@ export function markLegacyDay1Dismissal() {
   try { storage()?.setItem("goldline:day1:dismissed", "1"); } catch { /* migration hint only */ }
 }
 
+export function shouldAutoEnterWayward(input: {
+  colosseumResolved: boolean;
+  campaignComplete: boolean;
+  testHarness: boolean;
+}) {
+  return input.colosseumResolved && input.campaignComplete && !input.testHarness;
+}
+
 export function loadWaywardProgress(identity: string | null): WaywardProgress {
   try {
     const raw = storage()?.getItem(waywardProgressKey(identity));

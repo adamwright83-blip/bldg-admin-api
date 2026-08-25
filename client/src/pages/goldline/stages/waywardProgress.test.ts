@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { EMPTY_WAYWARD_PROGRESS, hasColosseumResolved, hasLegacyDay1Dismissal, loadWaywardProgress, markColosseumResolved, markLegacyDay1Dismissal, saveWaywardProgress, unlockWayward, waywardProgressKey } from "./waywardProgress";
+import { EMPTY_WAYWARD_PROGRESS, hasColosseumResolved, hasLegacyDay1Dismissal, loadWaywardProgress, markColosseumResolved, markLegacyDay1Dismissal, saveWaywardProgress, shouldAutoEnterWayward, unlockWayward, waywardProgressKey } from "./waywardProgress";
 
 const values = new Map<string, string>();
 const fakeStorage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value) };
@@ -34,5 +34,12 @@ describe("Wayward fantasy persistence", () => {
     };
     expect(hasLegacyDay1Dismissal()).toBe(false);
     expect(() => markLegacyDay1Dismissal()).not.toThrow();
+  });
+
+  it("auto-enters production Wayward only from truthful completion continuity", () => {
+    expect(shouldAutoEnterWayward({ colosseumResolved: true, campaignComplete: true, testHarness: false })).toBe(true);
+    expect(shouldAutoEnterWayward({ colosseumResolved: false, campaignComplete: true, testHarness: false })).toBe(false);
+    expect(shouldAutoEnterWayward({ colosseumResolved: true, campaignComplete: false, testHarness: false })).toBe(false);
+    expect(shouldAutoEnterWayward({ colosseumResolved: true, campaignComplete: true, testHarness: true })).toBe(false);
   });
 });

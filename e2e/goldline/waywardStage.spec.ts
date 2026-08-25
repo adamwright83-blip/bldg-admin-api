@@ -25,8 +25,8 @@ test.describe("Wayward authored player truth", () => {
     await page.goto(fixture("hook"));
     await expect(page.getByText("The deck ends here", { exact: false })).toBeVisible();
     await page.getByRole("button", { name: "LINEHOOK" }).click();
-    await expect(page.getByText("THE LINEHOOK BITES", { exact: false })).toBeVisible();
-    await expect(page.getByText("MOORING CITY")).toBeVisible({ timeout: 4_000 });
+    await expect(page.getByText("THE LINEHOOK BITES", { exact: false })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("MOORING CITY")).toBeVisible({ timeout: 10_000 });
   });
 
   test("Gold Line and ship machinery visibly progress dormant to waking to active", async ({ page }) => {

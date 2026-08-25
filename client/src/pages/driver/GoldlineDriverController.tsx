@@ -12,7 +12,7 @@ import GoldlineHome, {
 } from "../goldline/GoldlineHome";
 import GoldlineOverworld from "../goldline/GoldlineOverworld";
 import Day1TenDoors from "../goldline/Day1TenDoors";
-import { hasColosseumResolved, hasLegacyDay1Dismissal, loadWaywardProgress, markColosseumResolved, markLegacyDay1Dismissal, unlockWayward, type WaywardProgress } from "../goldline/stages/waywardProgress";
+import { hasColosseumResolved, hasLegacyDay1Dismissal, loadWaywardProgress, markColosseumResolved, markLegacyDay1Dismissal, shouldAutoEnterWayward, unlockWayward, type WaywardProgress } from "../goldline/stages/waywardProgress";
 import type { FieldMoveCandidate } from "../../../../server/field/types";
 import type { DayResolution } from "../../../../server/unload/unloadTypes";
 import type {
@@ -322,7 +322,11 @@ function LiveGoldlineDriverController() {
     }
     const resolved = hasColosseumResolved(playerIdentity);
     setWaywardProgress(resolved ? unlockWayward(playerIdentity) : stored);
-    if (resolved && day1TenDoors.data?.isComplete === true) {
+    if (shouldAutoEnterWayward({
+      colosseumResolved: resolved,
+      campaignComplete: day1TenDoors.data?.isComplete === true,
+      testHarness: import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1",
+    })) {
       setDriverScene(current => current === "game" ? "overworld" : current);
     }
   }, [day1TenDoors.data?.isComplete, identity.data?.openId]);
@@ -1120,7 +1124,7 @@ function LiveGoldlineDriverController() {
     );
   }
 
-  if (day1TenDoors.data) {
+  if (day1TenDoors.data && !hasLegacyDay1Dismissal()) {
     return (
       <Day1TenDoors
         mission={day1TenDoors.data}
