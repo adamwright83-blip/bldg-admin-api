@@ -16,6 +16,8 @@ describe("future Goldline stage contracts reuse production world geometry", () =
     expect(isWalkable(map, { x: 20, y: 300 }, 11)).toBe(false);
     expect(isWalkable(map, { x: 1500, y: 600 }, 11)).toBe(false);
     expect(map.traversals.find(item => item.id === "linehook-pull")).toBeTruthy();
+    expect(isWalkable(map, { x: 768, y: 380 }, 11)).toBe(false);
+    expect(isWalkable(map, { x: 768, y: 300 }, 11)).toBe(true);
   });
 
   it("reduces scale and speed toward the far stage", () => {

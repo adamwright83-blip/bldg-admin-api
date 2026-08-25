@@ -12,11 +12,11 @@ const WAYWARD_MAP: OverworldMapDefinition = {
     { id: "left-cache-reach", material: "wood", polygon: [
       { x: 230, y: 600 }, { x: 500, y: 600 }, { x: 480, y: 510 }, { x: 290, y: 500 },
     ] },
+    { id: "upper-tether", material: "wood", polygon: [
+      { x: 686, y: 318 }, { x: 850, y: 318 }, { x: 824, y: 230 }, { x: 712, y: 230 },
+    ] },
   ],
   corridors: [
-    { id: "tether-bridge", material: "wood", halfWidth: 92, centerAssist: 0.14, points: [
-      { x: 768, y: 505 }, { x: 768, y: 430 }, { x: 768, y: 360 }, { x: 768, y: 300 }, { x: 768, y: 242 },
-    ] },
     { id: "cache-side-route", material: "wood", halfWidth: 44, points: [
       { x: 500, y: 560 }, { x: 400, y: 555 }, { x: 315, y: 545 },
     ] },
@@ -32,13 +32,13 @@ const WAYWARD_MAP: OverworldMapDefinition = {
   destinations: [
     { id: "tether-guardian", name: "TETHER GUARDIAN", subtitle: "Stone, bronze and generations of rope law", point: { x: 925, y: 505 }, approachRadius: 105, entranceRadius: 56, action: "inspect" },
     { id: "forbidden-hull-cache", name: "FORBIDDEN HULL CACHE", subtitle: "A seam is waking beneath the rope", point: { x: 315, y: 545 }, approachRadius: 115, entranceRadius: 48, action: "inspect" },
-    { id: "wayward-linehook", name: "TETHER RING", subtitle: "Linehook can cross the broken span", point: { x: 768, y: 385 }, approachRadius: 100, entranceRadius: 52, action: "traverse", traversalId: "linehook-pull" },
+    { id: "wayward-linehook", name: "BROKEN SPAN", subtitle: "The deck ends here. Cast Linehook into the tether ring.", point: { x: 768, y: 442 }, approachRadius: 105, entranceRadius: 50, action: "traverse", traversalId: "linehook-pull" },
     { id: "mooring-city-barrier", name: "MOORING CITY", subtitle: "The outer tether is still sealed", point: { x: 768, y: 245 }, approachRadius: 85, entranceRadius: 38, action: "enter" },
   ],
   traversals: [{
-    id: "linehook-pull", label: "LINEHOOK", entry: { x: 768, y: 385 }, entryRadius: 52,
-    path: [{ x: 768, y: 385 }, { x: 760, y: 350 }, { x: 772, y: 315 }, { x: 768, y: 285 }],
-    exitSurfaceId: "tether-bridge",
+    id: "linehook-pull", label: "LINEHOOK", entry: { x: 768, y: 442 }, entryRadius: 50,
+    path: [{ x: 768, y: 442 }, { x: 758, y: 402 }, { x: 776, y: 356 }, { x: 768, y: 306 }],
+    exitSurfaceId: "upper-tether",
   }],
 };
 

@@ -79,7 +79,17 @@ export type OverworldRuntimeCallbacks = {
   onFirstMove?: () => void;
   onTraversalComplete?: (traversalId: string) => void;
   onRecovered?: () => void;
+  onFrame?: (deltaSeconds: number, player: OverworldPoint) => void;
 };
+
+export type RuntimeActorVisual =
+  | "ring"
+  | "rope-inspector"
+  | "rope-bird"
+  | "tether-winch"
+  | "broken-span"
+  | "deck-brace"
+  | "mooring-sail";
 
 export type RuntimeWorldActor = {
   id: string;
@@ -87,18 +97,25 @@ export type RuntimeWorldActor = {
   point: OverworldPoint;
   presentationHeight: number;
   zOffset?: number;
+  visual?: RuntimeActorVisual;
+  behavior?: "inspect-rope" | "steal-fiber" | "wake-with-tether";
 };
+
+export type RuntimeActorState = "default" | "telegraph" | "exposed" | "defeated";
+export type RuntimeScenePhase = "dormant" | "waking" | "active";
 
 export type OverworldRuntimePresentation = {
   showDestinationMarkers?: boolean;
   playerHeight?: number;
   cameraZoom?: number;
+  cameraDamping?: number;
   cameraLookAheadSeconds?: number;
   depth?: {
     nearY: number;
     farY: number;
     nearScale: number;
     farScale: number;
+    farSpeedFactor?: number;
   };
   actors?: RuntimeWorldActor[];
   goldRoute?: OverworldPoint[];
@@ -110,6 +127,9 @@ export interface OverworldRuntimeContract {
   setDestinationStates(states: DestinationStateMap): void;
   performContextAction(): "entered" | "inspected" | "locked" | "traversal" | "none";
   setActorVisible(id: string, visible: boolean): void;
+  setActorPresentation(id: string, point: OverworldPoint, state?: RuntimeActorState): void;
+  setScenePhase(phase: RuntimeScenePhase): void;
+  knockbackFrom(point: OverworldPoint, distance: number): void;
   saveNow(): void;
   resize(): void;
   destroy(): Promise<void>;

@@ -2,6 +2,7 @@ export type WaywardProgress = {
   unlocked: boolean;
   visited: boolean;
   guardianCleared: boolean;
+  spanCrossed: boolean;
   cacheCollected: boolean;
   tetherAwake: boolean;
   relic: "tether-memory" | null;
@@ -11,6 +12,7 @@ export const EMPTY_WAYWARD_PROGRESS: WaywardProgress = {
   unlocked: false,
   visited: false,
   guardianCleared: false,
+  spanCrossed: false,
   cacheCollected: false,
   tetherAwake: false,
   relic: null,
@@ -37,6 +39,14 @@ function storage(): Storage | null {
   try { return window.localStorage; } catch { return null; }
 }
 
+export function hasLegacyDay1Dismissal(): boolean {
+  try { return storage()?.getItem("goldline:day1:dismissed") === "1"; } catch { return false; }
+}
+
+export function markLegacyDay1Dismissal() {
+  try { storage()?.setItem("goldline:day1:dismissed", "1"); } catch { /* migration hint only */ }
+}
+
 export function loadWaywardProgress(identity: string | null): WaywardProgress {
   try {
     const raw = storage()?.getItem(waywardProgressKey(identity));
@@ -46,6 +56,7 @@ export function loadWaywardProgress(identity: string | null): WaywardProgress {
       unlocked: value.unlocked === true,
       visited: value.visited === true,
       guardianCleared: value.guardianCleared === true,
+      spanCrossed: value.spanCrossed === true,
       cacheCollected: value.cacheCollected === true,
       tetherAwake: value.tetherAwake === true,
       relic: value.relic === "tether-memory" ? "tether-memory" : null,

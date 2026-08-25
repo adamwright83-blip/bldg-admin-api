@@ -8,7 +8,9 @@
 .wayward-return { position:absolute; z-index:22; top:max(66px,calc(env(safe-area-inset-top) + 48px)); left:12px; border:1px solid rgba(255,220,140,.34); border-radius:999px; background:rgba(5,10,15,.66); color:#ffe7ae; padding:8px 11px; font-size:9px; font-weight:900; letter-spacing:.1em; backdrop-filter:blur(8px); }
 .wayward-relic { position:absolute; z-index:21; top:82px; right:12px; display:flex; align-items:center; gap:5px; color:#ffe19a; font-size:9px; font-weight:900; letter-spacing:.12em; text-shadow:0 2px 5px #000; }
 .wayward-relic svg { width:14px; }
-.wayward-life { position:absolute; z-index:18; top:24%; left:18px; width:150px; color:rgba(255,244,220,.78); font:italic 11px/1.35 Georgia,serif; text-shadow:0 2px 7px #000; opacity:.78; pointer-events:none; }
+.wayward-load-error { position:absolute; z-index:40; left:50%; top:42%; width:min(78%,300px); transform:translate(-50%,-50%); padding:18px; border:1px solid rgba(255,194,92,.55); border-radius:14px; background:rgba(5,8,12,.94); text-align:center; box-shadow:0 18px 60px #000; }
+.wayward-load-error b { display:block; color:#ffd780; font:800 13px Georgia,serif; letter-spacing:.12em; }
+.wayward-load-error button { min-height:44px; margin-top:12px; border:1px solid #f2c465; border-radius:8px; background:#9b661b; color:#100b04; padding:0 18px; font-weight:900; letter-spacing:.1em; }
 .wayward-context { position:absolute; z-index:30; left:50%; bottom:128px; width:min(82%,340px); transform:translateX(-50%); padding:13px 14px; border:1px solid rgba(255,213,111,.4); border-radius:14px; background:linear-gradient(135deg,rgba(3,8,13,.9),rgba(24,18,10,.8)); box-shadow:0 16px 48px rgba(0,0,0,.45); backdrop-filter:blur(12px); }
 .wayward-context small,.wayward-context b { display:block; }
 .wayward-context small { color:#d6c6aa; font-size:10px; }
@@ -24,4 +26,4 @@
 @keyframes waywardWind { from{left:-220px;opacity:0} 25%{opacity:.7} to{left:120%;opacity:0} }
 @keyframes tetherWake { 0%,100%{transform:none} 18%{transform:translate(-5px,3px) rotate(-.2deg)} 42%{transform:translate(6px,-2px) rotate(.18deg)} 65%{transform:translate(-3px,1px)} }
 @media (prefers-reduced-motion:reduce){.wayward-wind i,.wayward-shell.is-tether-awake .wayward-runtime{animation:none}}
-@media (max-width:360px){.wayward-objective{width:62%}.wayward-life{width:120px;font-size:10px}.wayward-context{bottom:116px}}
+@media (max-width:360px){.wayward-objective{width:62%}.wayward-context{bottom:116px}}

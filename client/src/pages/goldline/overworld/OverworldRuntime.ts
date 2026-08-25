@@ -18,6 +18,7 @@ import {
   surfaceAtPoint,
 } from "./navigation";
 import { facingForVelocity, remapAnalogInput, stepVelocity } from "./movement";
+import { depthProgress, depthSpeedFactorAtY } from "./perspective";
 import type {
   DestinationStateMap,
   OverworldCheckpoint,
@@ -28,6 +29,9 @@ import type {
   OverworldRuntimeContract,
   OverworldMapDefinition,
   OverworldRuntimePresentation,
+  RuntimeActorState,
+  RuntimeScenePhase,
+  RuntimeWorldActor,
   TraversalNode,
 } from "./types";
 
@@ -59,6 +63,9 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   private textures = new Map<string, Texture>();
   private markerContainers = new Map<string, Container>();
   private actorContainers = new Map<string, Container>();
+  private actorDefinitions = new Map<string, RuntimeWorldActor>();
+  private goldRouteGraphic: Graphics | null = null;
+  private scenePhase: RuntimeScenePhase = "dormant";
   private backgroundTexture: Texture | null = null;
   private input = { x: 0, y: 0 };
   private velocity: OverworldPoint = { x: 0, y: 0 };
@@ -130,8 +137,13 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
       input.presentation ?? {}
     );
     runtime.destinationStates = input.destinationStates;
-    await runtime.initialize();
-    return runtime;
+    try {
+      await runtime.initialize();
+      return runtime;
+    } catch (error) {
+      try { await runtime.destroy(); } catch { /* preserve the asset/init error */ }
+      throw error;
+    }
   }
 
   private async initialize() {
@@ -291,13 +303,10 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   private buildScenePresentation() {
     const route = this.presentation.goldRoute;
     if (route && route.length > 1) {
-      const line = new Graphics();
-      line.moveTo(route[0]!.x, route[0]!.y);
-      for (const point of route.slice(1)) line.lineTo(point.x, point.y);
-      line.stroke({ color: 0xffd35c, alpha: 0.78, width: 5 });
-      line.zIndex = 1200;
-      line.label = "gold-line";
-      this.world.addChild(line);
+      this.goldRouteGraphic = new Graphics();
+      this.goldRouteGraphic.zIndex = 1200;
+      this.goldRouteGraphic.label = "gold-line";
+      this.world.addChild(this.goldRouteGraphic);
     }
     for (const actor of this.presentation.actors ?? []) {
       const container = new Container();
@@ -311,16 +320,52 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
         sprite.scale.set(actor.presentationHeight / height);
         container.addChild(sprite);
       } else {
-        const ring = new Graphics()
-          .circle(0, -18, 18)
-          .stroke({ color: 0xffdb68, alpha: 0.95, width: 5 })
-          .circle(0, -18, 28)
-          .stroke({ color: 0xffb53e, alpha: 0.32, width: 3 });
-        container.addChild(ring);
+        container.addChild(this.buildActorGraphic(actor.visual ?? "ring"));
       }
+      this.actorDefinitions.set(actor.id, actor);
       this.actorContainers.set(actor.id, container);
       this.world.addChild(container);
     }
+  }
+
+  private buildActorGraphic(visual: NonNullable<RuntimeWorldActor["visual"]>) {
+    const graphic = new Graphics();
+    if (visual === "rope-inspector") {
+      graphic.circle(0, -42, 8).fill({ color: 0xc6a26a })
+        .rect(-8, -34, 16, 30).fill({ color: 0x33414a })
+        .moveTo(-18, -20).lineTo(18, -12).stroke({ color: 0xd0aa61, width: 4 })
+        .moveTo(18, -12).lineTo(34, 1).stroke({ color: 0x8c6738, width: 2 });
+    } else if (visual === "rope-bird") {
+      graphic.ellipse(0, -9, 11, 7).fill({ color: 0x17232d })
+        .circle(8, -14, 5).fill({ color: 0x293b49 })
+        .poly([13, -14, 21, -11, 13, -9]).fill({ color: 0xd6a84e })
+        .moveTo(-2, -8).lineTo(-14, -18).stroke({ color: 0x607787, width: 4 });
+    } else if (visual === "tether-winch") {
+      graphic.circle(0, -18, 25).fill({ color: 0x2c241b }).stroke({ color: 0xb98437, width: 5 })
+        .circle(0, -18, 7).fill({ color: 0xf0bd55 })
+        .moveTo(-22, -18).lineTo(22, -18).moveTo(0, -40).lineTo(0, 4)
+        .stroke({ color: 0x8e6936, width: 4 });
+    } else if (visual === "broken-span") {
+      graphic.poly([-86, 5, -69, -10, -45, -3, -19, -17, 5, -5, 31, -19, 55, -5, 80, -14, 88, 6])
+        .fill({ color: 0x030507, alpha: 0.94 })
+        .moveTo(-77, -4).lineTo(-52, -18).moveTo(-32, -8).lineTo(-10, -25)
+        .moveTo(34, -11).lineTo(56, -28).moveTo(62, -8).lineTo(83, -22)
+        .stroke({ color: 0x8b5e31, width: 5 });
+    } else if (visual === "deck-brace") {
+      graphic.rect(-7, -52, 14, 52).fill({ color: 0x604024 })
+        .moveTo(-34, 0).lineTo(0, -35).lineTo(34, 0)
+        .stroke({ color: 0x8f6538, width: 9 })
+        .moveTo(-34, 0).lineTo(0, -35).lineTo(34, 0)
+        .stroke({ color: 0xc89a5d, width: 2 });
+    } else if (visual === "mooring-sail") {
+      graphic.moveTo(0, -108).lineTo(0, 0).stroke({ color: 0x705034, width: 6 })
+        .poly([4, -102, 42, -22, 7, -34]).fill({ color: 0xe5d2a3, alpha: 0.86 })
+        .stroke({ color: 0xf4d475, width: 3 });
+    } else {
+      graphic.circle(0, -18, 18).stroke({ color: 0xffdb68, alpha: 0.95, width: 5 })
+        .circle(0, -18, 28).stroke({ color: 0xffb53e, alpha: 0.32, width: 3 });
+    }
+    return graphic;
   }
 
   private buildNavigationDebug() {
@@ -404,6 +449,8 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     this.updateCamera(deltaSeconds);
     this.updateProximity();
     this.updateMarkers(now);
+    this.updateScenePresentation(now);
+    this.callbacks.onFrame?.(deltaSeconds, { ...this.position });
 
     this.checkpointClock += deltaSeconds * 1000;
     if (this.checkpointClock >= CHECKPOINT_INTERVAL_MS) {
@@ -414,7 +461,17 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
 
   private stepPlayer(deltaSeconds: number) {
     const analog = remapAnalogInput(this.input.x, this.input.y);
-    this.velocity = stepVelocity(this.velocity, analog, deltaSeconds);
+    const depth = this.presentation.depth;
+    const depthFactor = depth ? depthSpeedFactorAtY(depth, this.position.y) : 1;
+    this.velocity = stepVelocity(
+      this.velocity,
+      {
+        x: analog.x * depthFactor,
+        y: analog.y * depthFactor,
+        magnitude: analog.magnitude * depthFactor,
+      },
+      deltaSeconds
+    );
     const speed = Math.hypot(this.velocity.x, this.velocity.y);
     const next = moveWithCollision(
       this.map,
@@ -544,8 +601,7 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     const authoredDepth = this.presentation.depth;
     const perspective = authoredDepth
       ? (() => {
-          const span = authoredDepth.nearY - authoredDepth.farY;
-          const t = span === 0 ? 0 : Math.max(0, Math.min(1, (authoredDepth.nearY - this.position.y) / span));
+          const t = depthProgress(authoredDepth, this.position.y);
           return authoredDepth.nearScale + (authoredDepth.farScale - authoredDepth.nearScale) * t;
         })()
       : 0.76 + (this.position.y / this.map.height) * 0.25;
@@ -595,9 +651,15 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     const minY = viewportHeight - this.map.height * scale;
     const boundedX = Math.min(0, Math.max(minX, targetX));
     const boundedY = Math.min(0, Math.max(minY, targetY));
+    const authoredDamping = Math.max(
+      0,
+      Math.min(1, this.presentation.cameraDamping ?? 0)
+    );
     const easing = this.reducedMotion
       ? 1
-      : Math.min(1, deltaSeconds * CAMERA_EASE_PER_SECOND);
+      : authoredDamping > 0
+        ? 1 - Math.pow(1 - authoredDamping, deltaSeconds * 60)
+        : Math.min(1, deltaSeconds * CAMERA_EASE_PER_SECOND);
     this.world.x += (boundedX - this.world.x) * easing;
     this.world.y += (boundedY - this.world.y) * easing;
   }
@@ -704,6 +766,115 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   setActorVisible(id: string, visible: boolean) {
     const actor = this.actorContainers.get(id);
     if (actor) actor.visible = visible;
+  }
+
+  setActorPresentation(
+    id: string,
+    point: OverworldPoint,
+    state: RuntimeActorState = "default"
+  ) {
+    const actor = this.actorContainers.get(id);
+    if (!actor) return;
+    actor.position.set(point.x, point.y);
+    actor.zIndex =
+      2000 + point.y + (this.actorDefinitions.get(id)?.zOffset ?? 0);
+    actor.alpha = state === "defeated" ? 0.62 : 1;
+    actor.rotation =
+      state === "defeated"
+        ? -0.34
+        : state === "telegraph"
+          ? Math.sin(performance.now() / 45) * 0.045
+          : 0;
+    actor.scale.set(
+      state === "telegraph" ? 1.12 : state === "exposed" ? 0.94 : 1
+    );
+    const sprite = actor.children[0];
+    if (sprite instanceof Sprite) {
+      sprite.tint =
+        state === "telegraph"
+          ? 0xff8d45
+          : state === "exposed"
+            ? 0xffd768
+            : 0xffffff;
+    }
+  }
+
+  setScenePhase(phase: RuntimeScenePhase) {
+    this.scenePhase = phase;
+    this.updateScenePresentation(performance.now());
+  }
+
+  knockbackFrom(point: OverworldPoint, amount: number) {
+    const dx = this.position.x - point.x;
+    const dy = this.position.y - point.y;
+    const length = Math.hypot(dx, dy) || 1;
+    this.position = moveWithCollision(
+      this.map,
+      this.position,
+      { x: (dx / length) * amount, y: (dy / length) * amount },
+      PLAYER_RADIUS
+    );
+    this.velocity = { x: (dx / length) * 90, y: (dy / length) * 90 };
+    navigator.vibrate?.([35, 30, 55]);
+  }
+
+  private updateScenePresentation(now: number) {
+    const route = this.presentation.goldRoute;
+    if (route && this.goldRouteGraphic) {
+      const line = this.goldRouteGraphic.clear();
+      line.moveTo(route[0]!.x, route[0]!.y);
+      for (const point of route.slice(1)) line.lineTo(point.x, point.y);
+      const wakingPulse = 0.58 + Math.sin(now / 105) * 0.24;
+      line.stroke({
+        color: this.scenePhase === "dormant" ? 0x6f6045 : 0xffd35c,
+        alpha:
+          this.scenePhase === "dormant"
+            ? 0.16
+            : this.scenePhase === "waking"
+              ? wakingPulse
+              : 0.95,
+        width:
+          this.scenePhase === "active"
+            ? 8
+            : this.scenePhase === "waking"
+              ? 6
+              : 3,
+      });
+    }
+    this.actorDefinitions.forEach((definition, id) => {
+      const actor = this.actorContainers.get(id);
+      if (!actor || !definition.behavior) return;
+      const phase = now / 1000;
+      if (definition.behavior === "inspect-rope") {
+        actor.y = definition.point.y + Math.sin(phase * 1.7) * 2;
+        actor.rotation = Math.sin(phase * 1.7) * 0.025;
+      } else if (definition.behavior === "steal-fiber") {
+        actor.x = definition.point.x + Math.sin(phase * 0.9) * 18;
+        actor.y =
+          definition.point.y - Math.abs(Math.sin(phase * 2.8)) * 7;
+        actor.rotation = Math.sin(phase * 4.5) * 0.12;
+      } else if (definition.behavior === "wake-with-tether") {
+        const awake =
+          this.scenePhase === "active"
+            ? 1
+            : this.scenePhase === "waking"
+              ? 0.55 + Math.sin(phase * 8) * 0.15
+              : 0;
+        actor.rotation = id.includes("winch") ? phase * awake * 1.8 : 0;
+        actor.y =
+          definition.point.y - awake * (id.includes("brace") ? 24 : 0);
+        actor.scale.set(
+          id.includes("sail")
+            ? Math.max(0.08, awake)
+            : id.includes("brace")
+              ? Math.max(0.25, awake)
+              : 1
+        );
+        actor.alpha = id.includes("sail") || id.includes("brace")
+          ? Math.max(0.08, awake)
+          : 0.55 + awake * 0.45;
+      }
+    });
   }
 
   saveNow = () => {
