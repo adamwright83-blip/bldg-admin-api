@@ -104,8 +104,20 @@ export type RuntimeWorldActor = {
 export type RuntimeActorState = "default" | "telegraph" | "exposed" | "defeated";
 export type RuntimeScenePhase = "dormant" | "waking" | "active";
 
+export type RuntimeSceneLayer = {
+  id: string;
+  imageUrl: string;
+  zIndex: number;
+  phaseAlpha: Record<RuntimeScenePhase, number>;
+  behavior?: "state-crossfade" | "foreground-parallax";
+  parallaxFactor?: number;
+  offsetX?: number;
+  offsetY?: number;
+};
+
 export type OverworldRuntimePresentation = {
   showDestinationMarkers?: boolean;
+  backgroundOccluders?: boolean;
   playerHeight?: number;
   cameraZoom?: number;
   cameraDamping?: number;
@@ -118,6 +130,7 @@ export type OverworldRuntimePresentation = {
     farSpeedFactor?: number;
   };
   actors?: RuntimeWorldActor[];
+  sceneLayers?: RuntimeSceneLayer[];
   goldRoute?: OverworldPoint[];
 };
 

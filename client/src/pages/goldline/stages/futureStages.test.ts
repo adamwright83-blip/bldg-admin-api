@@ -16,8 +16,8 @@ describe("future Goldline stage contracts reuse production world geometry", () =
     expect(isWalkable(map, { x: 20, y: 300 }, 11)).toBe(false);
     expect(isWalkable(map, { x: 1500, y: 600 }, 11)).toBe(false);
     expect(map.traversals.find(item => item.id === "linehook-pull")).toBeTruthy();
-    expect(isWalkable(map, { x: 768, y: 380 }, 11)).toBe(false);
-    expect(isWalkable(map, { x: 768, y: 300 }, 11)).toBe(true);
+    expect(isWalkable(map, { x: 768, y: 425 }, 11)).toBe(false);
+    expect(isWalkable(map, { x: 768, y: 350 }, 11)).toBe(true);
   });
 
   it("reduces scale and speed toward the far stage", () => {
@@ -31,5 +31,21 @@ describe("future Goldline stage contracts reuse production world geometry", () =
   it("keeps stateful figures out of permanent background art", () => {
     expect(WAYWARD_APPROACH_STAGE.presentation.liveEntityIds).toContain("tether-guardian");
     expect(CRYSTAL_CHASM_STAGE.presentation.liveEntityIds).toContain("prism-regent");
+  });
+
+  it("uses the production Wayward plates as cropped layers rather than provisional poster art", () => {
+    const presentation = WAYWARD_APPROACH_STAGE.presentation;
+    expect(presentation.provisionalArt).toBe(false);
+    expect(presentation.backgroundAsset).toContain("bridge-to-mooring-city");
+    expect(presentation.camera.zoom).toBeGreaterThan(1);
+    expect(presentation.playerHeight).toBeGreaterThanOrEqual(170);
+    expect(presentation.environmentLayers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "awakening-ship-deck", behavior: "state-crossfade" }),
+        expect.objectContaining({ id: "ship-deck-foreground", behavior: "foreground-parallax", zIndex: 9000 }),
+      ])
+    );
+    expect(presentation.entityAssets["tether-guardian"]).toContain("tether-guardian");
+    expect(presentation.entityAssets["wayward-linehook"]).toContain("broken-span-tether-ring");
   });
 });

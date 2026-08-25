@@ -1,4 +1,4 @@
-import type { OcclusionRegion, OverworldMapDefinition, OverworldPoint } from "../overworld/types";
+import type { OcclusionRegion, OverworldMapDefinition, OverworldPoint, RuntimeSceneLayer } from "../overworld/types";
 import { depthScaleAtY, depthSpeedFactorAtY } from "../overworld/perspective";
 
 /** Presentation metadata missing from the existing physical-world contract. */
@@ -6,7 +6,10 @@ export type GoldlineStagePresentation = {
   referenceAsset: string;
   backgroundAsset: string | null;
   provisionalArt: boolean;
+  playerHeight: number;
   foregroundMasks: Array<OcclusionRegion & { source: string }>;
+  environmentLayers: RuntimeSceneLayer[];
+  entityAssets: Record<string, string>;
   liveEntityIds: string[];
   depth: { nearY: number; farY: number; nearScale: number; farScale: number; farSpeedFactor: number };
   camera: { zoom: number; damping: number; lookAheadSeconds: number; start: OverworldPoint };

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, Shield, Sparkles } from "lucide-react";
-import guardianUrl from "@/assets/goldline/heartbeat/ruinbound_shieldbearer.png";
 import cacheUrl from "@/assets/goldline/heartbeat/pickup_cache_objective.png";
 import { DynamicJoystick } from "../GoldlineOverworld";
 import { GoldlineOverworldRuntime } from "../overworld/OverworldRuntime";
@@ -76,13 +75,13 @@ export default function WaywardTetheredDeck({
       : capturePoint === "hook"
         ? { x: 768, y: 475, surfaceId: "near-deck" }
         : capturePoint === "ambient"
-          ? { x: 1080, y: 555, surfaceId: "near-deck" }
+          ? { x: 960, y: 555, surfaceId: "near-deck" }
         : capturePoint === "cache"
           ? { x: 350, y: 550, surfaceId: "left-cache-reach" }
           : capturePoint === "barrier"
-            ? { x: 768, y: 275, surfaceId: "upper-tether" }
+            ? { x: 768, y: 330, surfaceId: "upper-tether" }
             : capturePoint === "active"
-              ? { x: 768, y: 275, surfaceId: "upper-tether" }
+              ? { x: 768, y: 330, surfaceId: "upper-tether" }
             : null;
     void GoldlineOverworldRuntime.create({
       host,
@@ -97,27 +96,23 @@ export default function WaywardTetheredDeck({
       destinationStates,
       presentation: {
         showDestinationMarkers: false,
-        playerHeight: 160,
+        backgroundOccluders: false,
+        playerHeight: WAYWARD_APPROACH_STAGE.presentation.playerHeight,
         cameraZoom: WAYWARD_APPROACH_STAGE.presentation.camera.zoom,
         cameraDamping: WAYWARD_APPROACH_STAGE.presentation.camera.damping,
         cameraLookAheadSeconds: WAYWARD_APPROACH_STAGE.presentation.camera.lookAheadSeconds,
         depth: WAYWARD_APPROACH_STAGE.presentation.depth,
+        sceneLayers: WAYWARD_APPROACH_STAGE.presentation.environmentLayers,
         goldRoute: [
           { x: 760, y: 605 }, { x: 755, y: 510 }, { x: 770, y: 420 },
-          { x: 760, y: 330 }, { x: 768, y: 245 },
+          { x: 760, y: 350 }, { x: 768, y: 330 },
         ],
         actors: [
-          { id: "tether-guardian", imageUrl: guardianUrl, point: { x: 925, y: 505 }, presentationHeight: 150 },
+          { id: "tether-guardian", imageUrl: WAYWARD_APPROACH_STAGE.presentation.entityAssets["tether-guardian"], point: { x: 925, y: 505 }, presentationHeight: 285, zOffset: 6500 },
           { id: "forbidden-hull-cache", imageUrl: cacheUrl, point: { x: 315, y: 545 }, presentationHeight: 90 },
-          { id: "wayward-linehook", point: { x: 768, y: 442 }, presentationHeight: 54 },
-          { id: "broken-span-edge", point: { x: 768, y: 445 }, presentationHeight: 80, visual: "broken-span", zOffset: -50 },
-          { id: "rope-inspector", point: { x: 1000, y: 525 }, presentationHeight: 72, visual: "rope-inspector", behavior: "inspect-rope" },
-          { id: "fiber-bird", point: { x: 1040, y: 510 }, presentationHeight: 34, visual: "rope-bird", behavior: "steal-fiber" },
-          { id: "tether-winch-left", point: { x: 650, y: 520 }, presentationHeight: 58, visual: "tether-winch", behavior: "wake-with-tether" },
-          { id: "tether-winch-right", point: { x: 880, y: 518 }, presentationHeight: 58, visual: "tether-winch", behavior: "wake-with-tether" },
-          { id: "deck-brace-left", point: { x: 705, y: 350 }, presentationHeight: 66, visual: "deck-brace", behavior: "wake-with-tether" },
-          { id: "deck-brace-right", point: { x: 830, y: 346 }, presentationHeight: 66, visual: "deck-brace", behavior: "wake-with-tether" },
-          { id: "mooring-sail", point: { x: 820, y: 300 }, presentationHeight: 104, visual: "mooring-sail", behavior: "wake-with-tether", zOffset: -40 },
+          { id: "wayward-linehook", imageUrl: WAYWARD_APPROACH_STAGE.presentation.entityAssets["wayward-linehook"], point: { x: 768, y: 480 }, presentationHeight: 245, zOffset: -90 },
+          { id: "rope-inspector", point: { x: 950, y: 525 }, presentationHeight: 42, visual: "rope-inspector", behavior: "inspect-rope", zOffset: 6500 },
+          { id: "fiber-bird", point: { x: 995, y: 510 }, presentationHeight: 20, visual: "rope-bird", behavior: "steal-fiber", zOffset: 6500 },
         ],
       },
       callbacks: {
@@ -159,6 +154,8 @@ export default function WaywardTetheredDeck({
       const initialPhase = progress.tetherAwake ? "active" : "dormant";
       setLinePhase(initialPhase);
       created.setScenePhase(initialPhase);
+      if (initialPhase === "active")
+        setMessage("THE SHIP MOVES · THE GOLD LINE HOLDS");
       setReady(true);
     }).catch(() => {
       if (!cancelled) {
@@ -233,7 +230,11 @@ export default function WaywardTetheredDeck({
   }
 
   return (
-    <main className={`wayward-shell ${progress.tetherAwake ? "is-tether-awake" : ""}`} data-testid="wayward-stage">
+    <main
+      className={`wayward-shell ${progress.tetherAwake ? "is-tether-awake" : ""}`}
+      data-testid="wayward-stage"
+      data-runtime-ready={ready ? "true" : "false"}
+    >
       <section className="wayward-stage" aria-label="Wayward Tethered Deck">
         <div ref={hostRef} className="wayward-runtime" />
         <div className="wayward-wind" aria-hidden="true"><i /><i /><i /></div>

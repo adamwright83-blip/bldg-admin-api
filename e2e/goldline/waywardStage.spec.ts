@@ -5,7 +5,7 @@ const fixture = (capture: string) =>
 
 test.describe("Wayward authored player truth", () => {
   test("asset failure leaves a visible retry instead of a blank deck", async ({ page }) => {
-    await page.route("**/assets/goldline/wayward/tethered-deck.webp", route => route.abort());
+    await page.route("**/assets/goldline/wayward/bridge-to-mooring-city.webp", route => route.abort());
     await page.goto(fixture("guardian"));
     await expect(page.getByRole("alert")).toContainText("THE DECK DID NOT LOAD");
     await expect(page.getByRole("button", { name: "RETRY APPROACH" })).toBeVisible();
@@ -13,10 +13,26 @@ test.describe("Wayward authored player truth", () => {
 
   test("guardian telegraphs and must be parried in its combat window", async ({ page }) => {
     await page.goto(fixture("guardian"));
-    await expect(page.getByTestId("wayward-stage")).toBeVisible();
+    const stage = page.getByTestId("wayward-stage");
+    await expect(stage).toBeVisible();
+    await expect(stage).toHaveAttribute("data-runtime-ready", "true", {
+      timeout: 30_000,
+    });
     await expect(page.getByText("PARRY · BRONZE BREAKS", { exact: false })).toHaveCount(0);
     const parry = page.getByRole("button", { name: "PARRY NOW" });
     await expect(parry).toBeVisible({ timeout: 5_000 });
+    const loadedResources = await page.evaluate(() =>
+      performance.getEntriesByType("resource").map(entry => entry.name)
+    );
+    for (const asset of [
+      "bridge-to-mooring-city.webp",
+      "awakening-ship-deck.webp",
+      "ship-deck-foreground.webp",
+      "broken-span-tether-ring.webp",
+      "tether-guardian.webp",
+    ]) {
+      expect(loadedResources.some(resource => resource.includes(asset))).toBe(true);
+    }
     await parry.click();
     await expect(page.getByText("PARRY · BRONZE BREAKS", { exact: false })).toBeVisible();
   });
