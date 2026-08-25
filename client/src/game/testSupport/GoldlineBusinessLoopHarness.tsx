@@ -63,6 +63,10 @@ type PendingTruth = {
 
 const MISSION_ID = 7801;
 const PAST_DUE = "2026-08-01T12:00:00.000Z";
+// Keep the Staller fixture genuinely future-dated. A calendar-adjacent literal
+// silently became overdue and production correctly reclassified it as Ghost,
+// making the permanent browser gate depend on the wall clock.
+const FUTURE_COMMITMENT = "2099-08-20T12:00:00.000Z";
 const FOLLOW_UP_ID = "1cba7f83-9f6f-42c2-a819-d2556cf19f78";
 
 const ANCHOR_ITEM: ArmoryItem = {
@@ -268,7 +272,7 @@ export default function GoldlineBusinessLoopHarness(props: {
       visualState: initialWorldState(fixture),
       contestedUntil:
         fixture === "STALLER"
-          ? "2026-08-20T12:00:00.000Z"
+          ? FUTURE_COMMITMENT
           : fixture === "FOLLOW_UP" || fixture === "RECOVER"
             ? PAST_DUE
             : null,
