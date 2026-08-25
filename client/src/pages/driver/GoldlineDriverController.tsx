@@ -12,6 +12,7 @@ import GoldlineHome, {
 } from "../goldline/GoldlineHome";
 import GoldlineOverworld from "../goldline/GoldlineOverworld";
 import Day1TenDoors from "../goldline/Day1TenDoors";
+import { hasColosseumResolved, hasLegacyDay1Dismissal, loadWaywardProgress, markColosseumResolved, markLegacyDay1Dismissal, shouldAutoEnterWayward, unlockWayward, type WaywardProgress } from "../goldline/stages/waywardProgress";
 import type { FieldMoveCandidate } from "../../../../server/field/types";
 import type { DayResolution } from "../../../../server/unload/unloadTypes";
 import type {
@@ -80,6 +81,7 @@ const REQUESTING_LOCATION: GoldlineLocationSnapshot = {
 };
 
 const GoldlineGameHome = lazy(() => import("../../game/GoldlineGameHome"));
+const WaywardTetheredDeck = lazy(() => import("../goldline/stages/WaywardTetheredDeck"));
 const GoldlineBusinessLoopHarness =
   import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
     ? lazy(() => import("../../game/testSupport/GoldlineBusinessLoopHarness"))
@@ -129,9 +131,10 @@ function LiveGoldlineDriverController() {
    */
   const identity = trpc.auth.me.useQuery();
   const [selectedDate, setSelectedDate] = useState(() => getLocalYmd());
-  const [driverScene, setDriverScene] = useState<"overworld" | "colosseum">(
-    "overworld"
+  const [driverScene, setDriverScene] = useState<"game" | "overworld" | "colosseum" | "wayward">(
+    "game"
   );
+  const [waywardProgress, setWaywardProgress] = useState<WaywardProgress>(() => loadWaywardProgress(null));
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [newOrderOpen, setNewOrderOpen] = useState(false);
   const [addExternalWorkOpen, setAddExternalWorkOpen] = useState(false);
@@ -308,6 +311,25 @@ function LiveGoldlineDriverController() {
   const day1TenDoors = trpc.system.day1TenDoors.current.useQuery(undefined, {
     refetchInterval: 15_000,
   });
+  useEffect(() => {
+    const playerIdentity = identity.data?.openId ?? null;
+    const stored = loadWaywardProgress(playerIdentity);
+    const legacyResolved =
+      day1TenDoors.data?.isComplete === true &&
+      hasLegacyDay1Dismissal();
+    if (legacyResolved && !hasColosseumResolved(playerIdentity)) {
+      markColosseumResolved(playerIdentity);
+    }
+    const resolved = hasColosseumResolved(playerIdentity);
+    setWaywardProgress(resolved ? unlockWayward(playerIdentity) : stored);
+    if (shouldAutoEnterWayward({
+      colosseumResolved: resolved,
+      campaignComplete: day1TenDoors.data?.isComplete === true,
+      testHarness: import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1",
+    })) {
+      setDriverScene(current => current === "game" ? "overworld" : current);
+    }
+  }, [day1TenDoors.data?.isComplete, identity.data?.openId]);
   const recordDay1Outcome =
     trpc.system.day1TenDoors.recordOutcome.useMutation();
   function advanceCachedProgress(kind: "pickup" | "delivery" | "mission") {
@@ -1078,15 +1100,31 @@ function LiveGoldlineDriverController() {
           day1TenDoors.data && !day1TenDoors.data.isComplete
         )}
         greystarCompleted={Boolean(day1TenDoors.data?.isComplete)}
+        waywardUnlocked={waywardProgress.unlocked}
         playerIdentity={identity.data?.openId ?? null}
         onEmitEvent={emitGoldlineEvent}
         onEnterGreystar={() => setDriverScene("colosseum")}
+        onEnterWayward={() => setDriverScene("wayward")}
         onResolveOrder={handleResolveOrder}
       />
     );
   }
 
-  if (day1TenDoors.data && !day1TenDoors.data.isComplete) {
+  if (driverScene === "wayward") {
+    return (
+      <Suspense fallback={<div style={{ minHeight: "100dvh", background: "#03070c" }} />}>
+        <WaywardTetheredDeck
+          playerIdentity={identity.data?.openId ?? null}
+          onReturn={() => {
+            setWaywardProgress(loadWaywardProgress(identity.data?.openId ?? null));
+            setDriverScene("overworld");
+          }}
+        />
+      </Suspense>
+    );
+  }
+
+  if (day1TenDoors.data && !hasLegacyDay1Dismissal()) {
     return (
       <Day1TenDoors
         mission={day1TenDoors.data}
@@ -1108,7 +1146,9 @@ function LiveGoldlineDriverController() {
           }
         }}
         onDismiss={() => {
-          window.localStorage.setItem("goldline:day1:dismissed", "1");
+          markLegacyDay1Dismissal();
+          markColosseumResolved(identity.data?.openId ?? null);
+          setWaywardProgress(unlockWayward(identity.data?.openId ?? null));
           setDriverScene("overworld");
         }}
       />

@@ -1,0 +1,29 @@
+.wayward-shell { min-height: 100dvh; background:#03070c; color:#fff; overflow:hidden; font-family:Inter,system-ui,sans-serif; }
+.wayward-stage { position:relative; width:100%; height:100dvh; max-width:520px; margin:auto; overflow:hidden; background:#09131d; isolation:isolate; }
+.wayward-runtime,.wayward-runtime canvas { position:absolute!important; inset:0; width:100%!important; height:100%!important; display:block; }
+.wayward-vignette { position:absolute; inset:0; pointer-events:none; box-shadow:inset 0 0 90px 22px rgba(0,0,0,.58); background:linear-gradient(180deg,rgba(1,5,10,.15),transparent 45%,rgba(1,4,7,.5)); }
+.wayward-objective { position:absolute; z-index:20; top:max(18px,env(safe-area-inset-top)); left:50%; width:min(72%,340px); transform:translateX(-50%); text-align:center; text-shadow:0 2px 8px #000; }
+.wayward-objective small { display:block; color:#f0c66b; font:700 10px/1.2 Georgia,serif; letter-spacing:.16em; }
+.wayward-objective strong { display:block; margin-top:5px; font:800 12px/1.3 Georgia,serif; letter-spacing:.07em; }
+.wayward-return { position:absolute; z-index:22; top:max(66px,calc(env(safe-area-inset-top) + 48px)); left:12px; border:1px solid rgba(255,220,140,.34); border-radius:999px; background:rgba(5,10,15,.66); color:#ffe7ae; padding:8px 11px; font-size:9px; font-weight:900; letter-spacing:.1em; backdrop-filter:blur(8px); }
+.wayward-relic { position:absolute; z-index:21; top:82px; right:12px; display:flex; align-items:center; gap:5px; color:#ffe19a; font-size:9px; font-weight:900; letter-spacing:.12em; text-shadow:0 2px 5px #000; }
+.wayward-relic svg { width:14px; }
+.wayward-load-error { position:absolute; z-index:40; left:50%; top:42%; width:min(78%,300px); transform:translate(-50%,-50%); padding:18px; border:1px solid rgba(255,194,92,.55); border-radius:14px; background:rgba(5,8,12,.94); text-align:center; box-shadow:0 18px 60px #000; }
+.wayward-load-error b { display:block; color:#ffd780; font:800 13px Georgia,serif; letter-spacing:.12em; }
+.wayward-load-error button { min-height:44px; margin-top:12px; border:1px solid #f2c465; border-radius:8px; background:#9b661b; color:#100b04; padding:0 18px; font-weight:900; letter-spacing:.1em; }
+.wayward-context { position:absolute; z-index:30; left:50%; bottom:128px; width:min(82%,340px); transform:translateX(-50%); padding:13px 14px; border:1px solid rgba(255,213,111,.4); border-radius:14px; background:linear-gradient(135deg,rgba(3,8,13,.9),rgba(24,18,10,.8)); box-shadow:0 16px 48px rgba(0,0,0,.45); backdrop-filter:blur(12px); }
+.wayward-context small,.wayward-context b { display:block; }
+.wayward-context small { color:#d6c6aa; font-size:10px; }
+.wayward-context b { margin-top:3px; color:#ffe39b; font:800 15px Georgia,serif; letter-spacing:.08em; }
+.wayward-context button { display:flex; align-items:center; justify-content:center; gap:7px; width:100%; min-height:44px; margin-top:10px; border:1px solid #f2c465; border-radius:9px; background:linear-gradient(#e0aa3c,#8e5d13); color:#100b04; font-weight:1000; letter-spacing:.11em; }
+.wayward-context button:disabled { opacity:.42; }
+.wayward-context button svg { width:17px; }
+.wayward-context span { display:block; margin-top:7px; color:#c7b99f; font-size:9px; letter-spacing:.12em; }
+.wayward-wind { position:absolute; inset:0; overflow:hidden; pointer-events:none; }
+.wayward-wind i { position:absolute; width:180px; height:1px; background:linear-gradient(90deg,transparent,rgba(245,238,210,.42),transparent); transform:rotate(-9deg); animation:waywardWind 2.8s linear infinite; }
+.wayward-wind i:nth-child(1){top:32%;animation-delay:-.8s}.wayward-wind i:nth-child(2){top:56%;animation-delay:-2s}.wayward-wind i:nth-child(3){top:72%;animation-delay:-1.4s}
+.wayward-shell.is-tether-awake .wayward-runtime { animation:tetherWake .7s cubic-bezier(.2,.9,.2,1); }
+@keyframes waywardWind { from{left:-220px;opacity:0} 25%{opacity:.7} to{left:120%;opacity:0} }
+@keyframes tetherWake { 0%,100%{transform:none} 18%{transform:translate(-5px,3px) rotate(-.2deg)} 42%{transform:translate(6px,-2px) rotate(.18deg)} 65%{transform:translate(-3px,1px)} }
+@media (prefers-reduced-motion:reduce){.wayward-wind i,.wayward-shell.is-tether-awake .wayward-runtime{animation:none}}
+@media (max-width:360px){.wayward-objective{width:62%}.wayward-context{bottom:116px}}

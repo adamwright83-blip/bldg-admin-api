@@ -18,6 +18,7 @@ import {
   surfaceAtPoint,
 } from "./navigation";
 import { facingForVelocity, remapAnalogInput, stepVelocity } from "./movement";
+import { depthProgress, depthSpeedFactorAtY } from "./perspective";
 import type {
   DestinationStateMap,
   OverworldCheckpoint,
@@ -26,10 +27,15 @@ import type {
   OverworldProximity,
   OverworldRuntimeCallbacks,
   OverworldRuntimeContract,
+  OverworldMapDefinition,
+  OverworldRuntimePresentation,
+  RuntimeActorState,
+  RuntimeSceneLayer,
+  RuntimeScenePhase,
+  RuntimeWorldActor,
   TraversalNode,
 } from "./types";
 
-const MAP = GOLDLINE_OVERWORLD_MAP;
 const PLAYER_RADIUS = 11;
 const PLAYER_PRESENTATION_HEIGHT = 138;
 const CAMERA_ZOOM = 1.45;
@@ -57,6 +63,13 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   private footfall = new Graphics();
   private textures = new Map<string, Texture>();
   private markerContainers = new Map<string, Container>();
+  private actorContainers = new Map<string, Container>();
+  private actorDefinitions = new Map<string, RuntimeWorldActor>();
+  private liveDestinationPoints = new Map<string, OverworldPoint>();
+  private sceneLayerSprites = new Map<string, Sprite>();
+  private sceneLayerDefinitions = new Map<string, RuntimeSceneLayer>();
+  private goldRouteGraphic: Graphics | null = null;
+  private scenePhase: RuntimeScenePhase = "dormant";
   private backgroundTexture: Texture | null = null;
   private input = { x: 0, y: 0 };
   private velocity: OverworldPoint = { x: 0, y: 0 };
@@ -88,12 +101,14 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     private readonly host: HTMLElement,
     private readonly backgroundUrl: string,
     checkpoint: OverworldCheckpoint | null,
-    private readonly callbacks: OverworldRuntimeCallbacks
+    private readonly callbacks: OverworldRuntimeCallbacks,
+    private readonly map: OverworldMapDefinition,
+    private readonly presentation: OverworldRuntimePresentation
   ) {
-    const fallback = MAP.spawns[MAP.defaultSpawnId]!;
+    const fallback = this.map.spawns[this.map.defaultSpawnId]!;
     const restored = checkpoint
       ? nearestValidPoint(
-          MAP,
+          this.map,
           { x: checkpoint.x, y: checkpoint.y },
           PLAYER_RADIUS
         )
@@ -114,16 +129,25 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     checkpoint: OverworldCheckpoint | null;
     callbacks: OverworldRuntimeCallbacks;
     destinationStates: DestinationStateMap;
+    map?: OverworldMapDefinition;
+    presentation?: OverworldRuntimePresentation;
   }) {
     const runtime = new GoldlineOverworldRuntime(
       input.host,
       input.backgroundUrl,
       input.checkpoint,
-      input.callbacks
+      input.callbacks,
+      input.map ?? GOLDLINE_OVERWORLD_MAP,
+      input.presentation ?? {}
     );
     runtime.destinationStates = input.destinationStates;
-    await runtime.initialize();
-    return runtime;
+    try {
+      await runtime.initialize();
+      return runtime;
+    } catch (error) {
+      try { await runtime.destroy(); } catch { /* preserve the asset/init error */ }
+      throw error;
+    }
   }
 
   private async initialize() {
@@ -143,9 +167,16 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     this.world.sortableChildren = true;
     this.app.stage.addChild(this.world);
 
+    const actorUrls = (this.presentation.actors ?? [])
+      .flatMap(actor => actor.imageUrl ? [actor.imageUrl] : []);
+    const sceneLayerUrls = (this.presentation.sceneLayers ?? []).map(
+      layer => layer.imageUrl
+    );
     const [background] = await Promise.all([
       Assets.load<Texture>(this.backgroundUrl),
       ...directionalUrls.map(url => Assets.load<Texture>(url)),
+      ...actorUrls.map(url => Assets.load<Texture>(url)),
+      ...sceneLayerUrls.map(url => Assets.load<Texture>(url)),
     ]);
     if (this.destroyed) return;
     this.backgroundTexture = background;
@@ -153,8 +184,8 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
       this.textures.set(url, Texture.from(url));
 
     const backgroundSprite = new Sprite(background);
-    backgroundSprite.width = MAP.width;
-    backgroundSprite.height = MAP.height;
+    backgroundSprite.width = this.map.width;
+    backgroundSprite.height = this.map.height;
     backgroundSprite.zIndex = 0;
     this.world.addChild(backgroundSprite);
     if (this.debugNavigation) this.buildNavigationDebug();
@@ -169,7 +200,9 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
 
     this.footfall.zIndex = 1980;
     this.world.addChild(this.footfall);
-    this.buildOccluders(background);
+    if (this.presentation.backgroundOccluders !== false)
+      this.buildOccluders(background);
+    this.buildScenePresentation();
     this.buildDestinationMarkers();
     this.setPlayerTexture();
     this.updatePlayerPresentation();
@@ -204,15 +237,15 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     testWindow.__goldlineOverworldTest = {
       getState: () => ({
         position: { ...this.position },
-        surfaceId: surfaceAtPoint(MAP, this.position),
-        walkable: isWalkable(MAP, this.position, PLAYER_RADIUS),
+        surfaceId: surfaceAtPoint(this.map, this.position),
+        walkable: isWalkable(this.map, this.position, PLAYER_RADIUS),
         viewport: {
           width: this.app.screen.width,
           height: this.app.screen.height,
         },
       }),
       teleport: point => {
-        const recovered = nearestValidPoint(MAP, point, PLAYER_RADIUS);
+        const recovered = nearestValidPoint(this.map, point, PLAYER_RADIUS);
         this.position = { x: recovered.x, y: recovered.y };
         this.velocity = { x: 0, y: 0 };
         this.updatePlayerPresentation();
@@ -254,18 +287,18 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
           reached: reached.length,
           failures,
           position: { ...this.position },
-          surfaceId: surfaceAtPoint(MAP, this.position),
-          walkable: isWalkable(MAP, this.position, PLAYER_RADIUS),
+          surfaceId: surfaceAtPoint(this.map, this.position),
+          walkable: isWalkable(this.map, this.position, PLAYER_RADIUS),
         };
       },
     };
   }
 
   private buildOccluders(texture: Texture) {
-    for (const region of MAP.occluders) {
+    for (const region of this.map.occluders) {
       const overlay = new Sprite(texture);
-      overlay.width = MAP.width;
-      overlay.height = MAP.height;
+      overlay.width = this.map.width;
+      overlay.height = this.map.height;
       overlay.zIndex = 9000;
       const mask = new Graphics()
         .poly(region.polygon.flatMap(point => [point.x, point.y]))
@@ -276,15 +309,119 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     }
   }
 
+  private buildScenePresentation() {
+    for (const definition of this.presentation.sceneLayers ?? []) {
+      const layer = new Sprite(Texture.from(definition.imageUrl));
+      layer.label = definition.id;
+      layer.width = this.map.width;
+      layer.height = this.map.height;
+      layer.zIndex = definition.zIndex;
+      layer.alpha = definition.phaseAlpha[this.scenePhase];
+      layer.position.set(definition.offsetX ?? 0, definition.offsetY ?? 0);
+      this.sceneLayerDefinitions.set(definition.id, definition);
+      this.sceneLayerSprites.set(definition.id, layer);
+      this.world.addChild(layer);
+    }
+    const route = this.presentation.goldRoute;
+    if (route && route.length > 1) {
+      this.goldRouteGraphic = new Graphics();
+      this.goldRouteGraphic.zIndex = 1200;
+      this.goldRouteGraphic.label = "gold-line";
+      this.world.addChild(this.goldRouteGraphic);
+    }
+    for (const actor of this.presentation.actors ?? []) {
+      const container = new Container();
+      container.label = actor.id;
+      container.position.set(actor.point.x, actor.point.y);
+      container.zIndex = 2000 + actor.point.y + (actor.zOffset ?? 0);
+      if (actor.imageUrl) {
+        const sprite = new Sprite(Texture.from(actor.imageUrl));
+        sprite.anchor.set(0.5, 0.9);
+        const height = Math.max(1, sprite.texture.height);
+        sprite.scale.set(actor.presentationHeight / height);
+        container.addChild(sprite);
+      } else {
+        const graphic = this.buildActorGraphic(actor.visual ?? "ring");
+        const height = Math.max(1, graphic.getLocalBounds().height);
+        graphic.scale.set(actor.presentationHeight / height);
+        container.addChild(graphic);
+      }
+      this.actorDefinitions.set(actor.id, actor);
+      this.actorContainers.set(actor.id, container);
+      this.world.addChild(container);
+    }
+  }
+
+  private buildActorGraphic(visual: NonNullable<RuntimeWorldActor["visual"]>) {
+    const graphic = new Graphics();
+    if (visual === "rope-inspector") {
+      graphic
+        .poly([-12, -59, 12, -59, 18, -27, 10, -5, -11, -5, -19, -28])
+        .fill({ color: 0x29343a })
+        .stroke({ color: 0xb58a51, width: 2 })
+        .circle(0, -68, 9)
+        .fill({ color: 0xb88e62 })
+        .poly([-12, -70, 0, -79, 13, -70, 9, -64, -10, -64])
+        .fill({ color: 0x2b2520 })
+        .moveTo(-5, -51)
+        .lineTo(-24, -34)
+        .lineTo(-32, -12)
+        .moveTo(6, -50)
+        .lineTo(25, -39)
+        .lineTo(38, -15)
+        .stroke({ color: 0xb58a62, width: 6 })
+        .moveTo(38, -15)
+        .lineTo(53, 2)
+        .stroke({ color: 0x9a7040, width: 3 })
+        .moveTo(-9, -5)
+        .lineTo(-12, 10)
+        .moveTo(8, -5)
+        .lineTo(12, 10)
+        .stroke({ color: 0x171b1d, width: 7 });
+      graphic.alpha = 0.82;
+    } else if (visual === "rope-bird") {
+      graphic.ellipse(0, -9, 11, 7).fill({ color: 0x17232d })
+        .circle(8, -14, 5).fill({ color: 0x293b49 })
+        .poly([13, -14, 21, -11, 13, -9]).fill({ color: 0xd6a84e })
+        .moveTo(-2, -8).lineTo(-14, -18).stroke({ color: 0x607787, width: 4 });
+      graphic.alpha = 0.84;
+    } else if (visual === "tether-winch") {
+      graphic.circle(0, -18, 25).fill({ color: 0x2c241b }).stroke({ color: 0xb98437, width: 5 })
+        .circle(0, -18, 7).fill({ color: 0xf0bd55 })
+        .moveTo(-22, -18).lineTo(22, -18).moveTo(0, -40).lineTo(0, 4)
+        .stroke({ color: 0x8e6936, width: 4 });
+    } else if (visual === "broken-span") {
+      graphic.poly([-86, 5, -69, -10, -45, -3, -19, -17, 5, -5, 31, -19, 55, -5, 80, -14, 88, 6])
+        .fill({ color: 0x030507, alpha: 0.94 })
+        .moveTo(-77, -4).lineTo(-52, -18).moveTo(-32, -8).lineTo(-10, -25)
+        .moveTo(34, -11).lineTo(56, -28).moveTo(62, -8).lineTo(83, -22)
+        .stroke({ color: 0x8b5e31, width: 5 });
+    } else if (visual === "deck-brace") {
+      graphic.rect(-7, -52, 14, 52).fill({ color: 0x604024 })
+        .moveTo(-34, 0).lineTo(0, -35).lineTo(34, 0)
+        .stroke({ color: 0x8f6538, width: 9 })
+        .moveTo(-34, 0).lineTo(0, -35).lineTo(34, 0)
+        .stroke({ color: 0xc89a5d, width: 2 });
+    } else if (visual === "mooring-sail") {
+      graphic.moveTo(0, -108).lineTo(0, 0).stroke({ color: 0x705034, width: 6 })
+        .poly([4, -102, 42, -22, 7, -34]).fill({ color: 0xe5d2a3, alpha: 0.86 })
+        .stroke({ color: 0xf4d475, width: 3 });
+    } else {
+      graphic.circle(0, -18, 18).stroke({ color: 0xffdb68, alpha: 0.95, width: 5 })
+        .circle(0, -18, 28).stroke({ color: 0xffb53e, alpha: 0.32, width: 3 });
+    }
+    return graphic;
+  }
+
   private buildNavigationDebug() {
     const overlay = new Graphics();
-    for (const surface of MAP.surfaces) {
+    for (const surface of this.map.surfaces) {
       overlay
         .poly(surface.polygon.flatMap(point => [point.x, point.y]))
         .fill({ color: 0x35e88b, alpha: 0.22 })
         .stroke({ color: 0x72ffb2, alpha: 0.85, width: 3 });
     }
-    for (const corridor of MAP.corridors) {
+    for (const corridor of this.map.corridors) {
       overlay.moveTo(corridor.points[0]!.x, corridor.points[0]!.y);
       for (const point of corridor.points.slice(1))
         overlay.lineTo(point.x, point.y);
@@ -303,7 +440,8 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   }
 
   private buildDestinationMarkers() {
-    for (const destination of MAP.destinations) {
+    if (this.presentation.showDestinationMarkers === false) return;
+    for (const destination of this.map.destinations) {
       const container = new Container();
       const beacon = new Graphics()
         .circle(0, 0, 12)
@@ -356,6 +494,8 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     this.updateCamera(deltaSeconds);
     this.updateProximity();
     this.updateMarkers(now);
+    this.updateScenePresentation(now);
+    this.callbacks.onFrame?.(deltaSeconds, { ...this.position });
 
     this.checkpointClock += deltaSeconds * 1000;
     if (this.checkpointClock >= CHECKPOINT_INTERVAL_MS) {
@@ -366,17 +506,27 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
 
   private stepPlayer(deltaSeconds: number) {
     const analog = remapAnalogInput(this.input.x, this.input.y);
-    this.velocity = stepVelocity(this.velocity, analog, deltaSeconds);
+    const depth = this.presentation.depth;
+    const depthFactor = depth ? depthSpeedFactorAtY(depth, this.position.y) : 1;
+    this.velocity = stepVelocity(
+      this.velocity,
+      {
+        x: analog.x * depthFactor,
+        y: analog.y * depthFactor,
+        magnitude: analog.magnitude * depthFactor,
+      },
+      deltaSeconds
+    );
     const speed = Math.hypot(this.velocity.x, this.velocity.y);
     const next = moveWithCollision(
-      MAP,
+      this.map,
       this.position,
       { x: this.velocity.x * deltaSeconds, y: this.velocity.y * deltaSeconds },
       PLAYER_RADIUS
     );
-    const assisted = applyCorridorAssist(MAP, next, deltaSeconds);
+    const assisted = applyCorridorAssist(this.map, next, deltaSeconds);
     this.position = moveWithCollision(
-      MAP,
+      this.map,
       next,
       { x: assisted.x - next.x, y: assisted.y - next.y },
       PLAYER_RADIUS
@@ -445,7 +595,7 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   private emitFootfall() {
     this.footfallClock += 1;
     if (this.footfallClock % 2 !== 0) return;
-    const material = materialAtPoint(MAP, this.position);
+    const material = materialAtPoint(this.map, this.position);
     const color =
       material === "wood"
         ? 0xc79152
@@ -493,14 +643,20 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   }
 
   private updatePlayerPresentation() {
-    const perspective = 0.76 + (this.position.y / MAP.height) * 0.25;
+    const authoredDepth = this.presentation.depth;
+    const perspective = authoredDepth
+      ? (() => {
+          const t = depthProgress(authoredDepth, this.position.y);
+          return authoredDepth.nearScale + (authoredDepth.farScale - authoredDepth.nearScale) * t;
+        })()
+      : 0.76 + (this.position.y / this.map.height) * 0.25;
     const textureHeight = Math.max(1, this.player.texture.height);
     const spriteScale =
-      (PLAYER_PRESENTATION_HEIGHT / textureHeight) * perspective;
+      ((this.presentation.playerHeight ?? PLAYER_PRESENTATION_HEIGHT) / textureHeight) * perspective;
     this.player.position.set(this.position.x, this.position.y);
     this.player.scale.set(spriteScale);
     this.player.rotation =
-      this.moving && materialAtPoint(MAP, this.position) === "wood"
+      this.moving && materialAtPoint(this.map, this.position) === "wood"
         ? Math.sin(performance.now() / 115) * 0.014
         : 0;
     this.player.zIndex = 2000 + this.position.y;
@@ -516,42 +672,51 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     const viewportHeight = this.app.screen.height;
     if (this.debugNavigation) {
       const scale =
-        Math.min(viewportWidth / MAP.width, viewportHeight / MAP.height) * 0.98;
+        Math.min(viewportWidth / this.map.width, viewportHeight / this.map.height) * 0.98;
       this.world.scale.set(scale);
-      this.world.x = (viewportWidth - MAP.width * scale) / 2;
-      this.world.y = (viewportHeight - MAP.height * scale) / 2;
+      this.world.x = (viewportWidth - this.map.width * scale) / 2;
+      this.world.y = (viewportHeight - this.map.height * scale) / 2;
       return;
     }
     const cover = Math.max(
-      viewportWidth / MAP.width,
-      viewportHeight / MAP.height
+      viewportWidth / this.map.width,
+      viewportHeight / this.map.height
     );
-    const scale = cover * CAMERA_ZOOM;
+    const scale = cover * (this.presentation.cameraZoom ?? CAMERA_ZOOM);
     this.world.scale.set(scale);
     const lookaheadX = this.reducedMotion
       ? 0
-      : this.velocity.x * LOOKAHEAD_SECONDS * scale;
+      : this.velocity.x * (this.presentation.cameraLookAheadSeconds ?? LOOKAHEAD_SECONDS) * scale;
     const lookaheadY = this.reducedMotion
       ? 0
-      : this.velocity.y * LOOKAHEAD_SECONDS * scale;
+      : this.velocity.y * (this.presentation.cameraLookAheadSeconds ?? LOOKAHEAD_SECONDS) * scale;
     const targetX = viewportWidth / 2 - this.position.x * scale - lookaheadX;
     const targetY = viewportHeight / 2 - this.position.y * scale - lookaheadY;
-    const minX = viewportWidth - MAP.width * scale;
-    const minY = viewportHeight - MAP.height * scale;
+    const minX = viewportWidth - this.map.width * scale;
+    const minY = viewportHeight - this.map.height * scale;
     const boundedX = Math.min(0, Math.max(minX, targetX));
     const boundedY = Math.min(0, Math.max(minY, targetY));
+    const authoredDamping = Math.max(
+      0,
+      Math.min(1, this.presentation.cameraDamping ?? 0)
+    );
     const easing = this.reducedMotion
       ? 1
-      : Math.min(1, deltaSeconds * CAMERA_EASE_PER_SECOND);
+      : authoredDamping > 0
+        ? 1 - Math.pow(1 - authoredDamping, deltaSeconds * 60)
+        : Math.min(1, deltaSeconds * CAMERA_EASE_PER_SECOND);
     this.world.x += (boundedX - this.world.x) * easing;
     this.world.y += (boundedY - this.world.y) * easing;
   }
 
   private updateProximity() {
-    const nearest = MAP.destinations
+    const nearest = this.map.destinations
       .map(destination => ({
         destination,
-        distance: distance(this.position, destination.point),
+        distance: distance(
+          this.position,
+          this.liveDestinationPoints.get(destination.id) ?? destination.point
+        ),
       }))
       .filter(item => item.distance <= item.destination.approachRadius)
       .sort((a, b) => a.distance - b.distance)[0];
@@ -576,7 +741,7 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   }
 
   private updateMarkers(now: number) {
-    for (const destination of MAP.destinations) {
+    for (const destination of this.map.destinations) {
       const marker = this.markerContainers.get(destination.id);
       if (!marker) continue;
       const availability = this.destinationStates[destination.id] ?? "locked";
@@ -627,14 +792,15 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     this.updateProximity();
   }
 
-  performContextAction(): "entered" | "locked" | "traversal" | "none" {
+  performContextAction(): "entered" | "inspected" | "locked" | "traversal" | "none" {
     if (!this.proximity?.canAct) return "none";
     if (this.proximity.availability !== "active") return "locked";
     if (this.proximity.destination.action === "enter") {
       this.saveNow();
       return "entered";
     }
-    const traversal = MAP.traversals.find(
+    if (this.proximity.destination.action === "inspect") return "inspected";
+    const traversal = this.map.traversals.find(
       item => item.id === this.proximity?.destination.traversalId
     );
     if (traversal) {
@@ -645,11 +811,152 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     return "locked";
   }
 
+  setActorVisible(id: string, visible: boolean) {
+    const actor = this.actorContainers.get(id);
+    if (actor) actor.visible = visible;
+  }
+
+  setActorPresentation(
+    id: string,
+    point: OverworldPoint,
+    state: RuntimeActorState = "default"
+  ) {
+    const actor = this.actorContainers.get(id);
+    if (!actor) return;
+    actor.position.set(point.x, point.y);
+    if (this.map.destinations.some(destination => destination.id === id))
+      this.liveDestinationPoints.set(id, { ...point });
+    actor.zIndex =
+      2000 + point.y + (this.actorDefinitions.get(id)?.zOffset ?? 0);
+    actor.alpha = state === "defeated" ? 0.48 : 1;
+    actor.rotation =
+      state === "defeated"
+        ? -0.68
+        : state === "telegraph"
+          ? Math.sin(performance.now() / 45) * 0.045
+          : 0;
+    actor.scale.set(
+      state === "defeated"
+        ? 0.52
+        : state === "telegraph"
+          ? 1.12
+          : state === "exposed"
+            ? 0.94
+            : 1
+    );
+    const sprite = actor.children[0];
+    if (sprite instanceof Sprite) {
+      sprite.tint =
+        state === "telegraph"
+          ? 0xff8d45
+          : state === "exposed"
+            ? 0xffd768
+            : 0xffffff;
+    }
+  }
+
+  setScenePhase(phase: RuntimeScenePhase) {
+    this.scenePhase = phase;
+    this.updateScenePresentation(performance.now());
+  }
+
+  knockbackFrom(point: OverworldPoint, amount: number) {
+    const dx = this.position.x - point.x;
+    const dy = this.position.y - point.y;
+    const length = Math.hypot(dx, dy) || 1;
+    this.position = moveWithCollision(
+      this.map,
+      this.position,
+      { x: (dx / length) * amount, y: (dy / length) * amount },
+      PLAYER_RADIUS
+    );
+    this.velocity = { x: (dx / length) * 90, y: (dy / length) * 90 };
+    navigator.vibrate?.([35, 30, 55]);
+  }
+
+  private updateScenePresentation(now: number) {
+    this.sceneLayerDefinitions.forEach((definition, id) => {
+      const layer = this.sceneLayerSprites.get(id);
+      if (!layer) return;
+      const baseAlpha = definition.phaseAlpha[this.scenePhase];
+      layer.alpha =
+        definition.behavior === "state-crossfade" &&
+        this.scenePhase === "waking"
+          ? Math.max(0, Math.min(1, baseAlpha + Math.sin(now / 145) * 0.12))
+          : baseAlpha;
+      if (definition.behavior === "foreground-parallax") {
+        const factor = definition.parallaxFactor ?? 0.015;
+        layer.x =
+          (definition.offsetX ?? 0) +
+          (this.position.x - this.map.width / 2) * -factor;
+        layer.y =
+          (definition.offsetY ?? 0) +
+          (this.position.y - this.map.height / 2) * -factor * 0.45;
+      }
+    });
+    const route = this.presentation.goldRoute;
+    if (route && this.goldRouteGraphic) {
+      const line = this.goldRouteGraphic.clear();
+      line.moveTo(route[0]!.x, route[0]!.y);
+      for (const point of route.slice(1)) line.lineTo(point.x, point.y);
+      const wakingPulse = 0.58 + Math.sin(now / 105) * 0.24;
+      line.stroke({
+        color: this.scenePhase === "dormant" ? 0x6f6045 : 0xffd35c,
+        alpha:
+          this.scenePhase === "dormant"
+            ? 0.16
+            : this.scenePhase === "waking"
+              ? wakingPulse
+              : 0.95,
+        width:
+          this.scenePhase === "active"
+            ? 8
+            : this.scenePhase === "waking"
+              ? 6
+              : 3,
+      });
+    }
+    this.actorDefinitions.forEach((definition, id) => {
+      const actor = this.actorContainers.get(id);
+      if (!actor || !definition.behavior) return;
+      const phase = now / 1000;
+      if (definition.behavior === "inspect-rope") {
+        actor.y = definition.point.y + Math.sin(phase * 1.7) * 2;
+        actor.rotation = Math.sin(phase * 1.7) * 0.025;
+      } else if (definition.behavior === "steal-fiber") {
+        actor.x = definition.point.x + Math.sin(phase * 0.9) * 18;
+        actor.y =
+          definition.point.y - Math.abs(Math.sin(phase * 2.8)) * 7;
+        actor.rotation = Math.sin(phase * 4.5) * 0.12;
+      } else if (definition.behavior === "wake-with-tether") {
+        const awake =
+          this.scenePhase === "active"
+            ? 1
+            : this.scenePhase === "waking"
+              ? 0.55 + Math.sin(phase * 8) * 0.15
+              : 0;
+        actor.rotation = id.includes("winch") ? phase * awake * 1.8 : 0;
+        actor.y =
+          definition.point.y - awake * (id.includes("brace") ? 24 : 0);
+        actor.scale.set(
+          id.includes("sail")
+            ? Math.max(0.08, awake)
+            : id.includes("brace")
+              ? Math.max(0.25, awake)
+              : 1
+        );
+        actor.alpha = id.includes("sail") || id.includes("brace")
+          ? Math.max(0.08, awake)
+          : 0.55 + awake * 0.45;
+      }
+    });
+  }
+
   saveNow = () => {
-    const surfaceId = surfaceAtPoint(MAP, this.position);
+    const surfaceId = surfaceAtPoint(this.map, this.position);
     if (!surfaceId) return;
     this.callbacks.onCheckpoint({
-      mapVersion: MAP.version,
+      mapVersion: this.map.version,
       x: this.position.x,
       y: this.position.y,
       surfaceId,

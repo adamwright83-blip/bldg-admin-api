@@ -29,7 +29,7 @@ function orderName(order: Order) {
   );
 }
 
-function DynamicJoystick({
+export function DynamicJoystick({
   disabled,
   onInput,
 }: {
@@ -110,10 +110,12 @@ export default function GoldlineOverworld({
   isLoading = false,
   greystarActive,
   greystarCompleted = false,
+  waywardUnlocked = false,
   playerIdentity = null,
   isResolvingOrder = false,
   onEmitEvent,
   onEnterGreystar,
+  onEnterWayward,
   onResolveOrder,
 }: {
   pickups?: Order[];
@@ -121,10 +123,12 @@ export default function GoldlineOverworld({
   isLoading?: boolean;
   greystarActive: boolean;
   greystarCompleted?: boolean;
+  waywardUnlocked?: boolean;
   playerIdentity?: string | null;
   isResolvingOrder?: boolean;
   onEmitEvent?: GoldlineEventEmitter;
   onEnterGreystar: () => void;
+  onEnterWayward?: () => void;
   onResolveOrder: (
     orderId: number,
     status: "collected" | "delivered"
@@ -147,8 +151,9 @@ export default function GoldlineOverworld({
         : greystarActive
           ? "active"
           : "locked",
+      "wayward-approach": waywardUnlocked ? "active" : "locked",
     }),
-    [greystarActive, greystarCompleted]
+    [greystarActive, greystarCompleted, waywardUnlocked]
   );
   const destinationStatesRef = useRef(destinationStates);
   destinationStatesRef.current = destinationStates;
@@ -298,6 +303,8 @@ export default function GoldlineOverworld({
         },
       });
       onEnterGreystar();
+    } else if (result === "entered" && proximity?.destination.id === "wayward-approach") {
+      onEnterWayward?.();
     } else if (result === "locked") {
       setLockedMessage(
         proximity?.availability === "completed"
@@ -356,7 +363,9 @@ export default function GoldlineOverworld({
                 {proximity.availability === "active"
                   ? proximity.destination.id === "greystar-6"
                     ? "ENTER GREYSTAR 6"
-                    : "CONTINUE"
+                    : proximity.destination.id === "wayward-approach"
+                      ? "CROSS THE TETHER"
+                      : "CONTINUE"
                   : proximity.availability === "completed"
                     ? "CONQUERED"
                     : "INSPECT"}

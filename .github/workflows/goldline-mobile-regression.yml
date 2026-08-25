@@ -69,7 +69,11 @@ concurrency:
 jobs:
   pixel-class-layout:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The full browser matrix currently takes ~21 minutes on a shared runner,
+    # followed by ~7 minutes of real-CDP touch proofs. Keep enough headroom for
+    # runner variance and the final bundle/whitespace checks without weakening
+    # either regression surface.
+    timeout-minutes: 45
 
     services:
       mysql:
