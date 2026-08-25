@@ -95,6 +95,17 @@ type DriverScene = "game" | "overworld" | "colosseum" | "wayward";
 
 /** A fresh driver session always begins at the world choice, never inside a stage. */
 const INITIAL_DRIVER_SCENE: DriverScene = "overworld";
+
+function initialDriverScene(): DriverScene {
+  if (
+    import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1" &&
+    new URLSearchParams(window.location.search).get("goldlineSceneFixture") ===
+      "game"
+  ) {
+    return "game";
+  }
+  return INITIAL_DRIVER_SCENE;
+}
 const GoldlineBusinessLoopHarness =
   import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
     ? lazy(() => import("../../game/testSupport/GoldlineBusinessLoopHarness"))
@@ -144,9 +155,8 @@ function LiveGoldlineDriverController() {
    */
   const identity = trpc.auth.me.useQuery();
   const [selectedDate, setSelectedDate] = useState(() => getLocalYmd());
-  const [driverScene, setDriverScene] = useState<DriverScene>(
-    INITIAL_DRIVER_SCENE
-  );
+  const [driverScene, setDriverScene] =
+    useState<DriverScene>(initialDriverScene);
   const [waywardProgress, setWaywardProgress] = useState<WaywardProgress>(() => loadWaywardProgress(null));
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [newOrderOpen, setNewOrderOpen] = useState(false);

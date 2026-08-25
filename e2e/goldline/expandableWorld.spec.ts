@@ -34,7 +34,11 @@ async function login(page: Page, fixture?: "CALL") {
     data: { password: DRIVER_PASSWORD, role: "driver" },
   });
   expect(response.ok()).toBeTruthy();
-  await page.goto(fixture ? `/driver?goldlineFixture=${fixture}` : "/driver");
+  await page.goto(
+    fixture
+      ? `/driver?goldlineFixture=${fixture}`
+      : "/driver?goldlineSceneFixture=game"
+  );
   await expect(page.getByTestId("goldline-shell")).toBeVisible({
     timeout: 30_000,
   });
@@ -304,9 +308,9 @@ test.describe("Pixi lifecycle stays clean across repeated mounts", () => {
     for (let iteration = 0; iteration < 5; iteration += 1) {
       // Leave the Goldline route entirely, then return — the same teardown
       // path a real player triggers by navigating.
-      await page.goto("/driver?view=away");
+      await page.goto("/driver?view=away&goldlineSceneFixture=game");
       await page.waitForTimeout(250);
-      await page.goto("/driver");
+      await page.goto("/driver?goldlineSceneFixture=game");
       await expect(page.getByTestId("goldline-shell")).toBeVisible({
         timeout: 30_000,
       });
@@ -326,9 +330,9 @@ test.describe("Pixi lifecycle stays clean across repeated mounts", () => {
 
     await login(page);
     for (let iteration = 0; iteration < 3; iteration += 1) {
-      await page.goto("/driver?view=away");
+      await page.goto("/driver?view=away&goldlineSceneFixture=game");
       await page.waitForTimeout(200);
-      await page.goto("/driver");
+      await page.goto("/driver?goldlineSceneFixture=game");
       await expect(page.getByTestId("goldline-shell")).toBeVisible({
         timeout: 30_000,
       });

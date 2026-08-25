@@ -39,6 +39,11 @@ describe("Goldline canonical driver restoration", () => {
     expect(controller).toContain(
       'const INITIAL_DRIVER_SCENE: DriverScene = "overworld"'
     );
+    expect(controller).toContain('useState<DriverScene>(initialDriverScene)');
+    expect(controller).toContain(
+      'import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"'
+    );
+    expect(controller).toContain('"goldlineSceneFixture"');
     expect(controller).toContain('driverScene === "colosseum" &&');
     expect(controller).toContain(
       'onEnterGreystar={() => setDriverScene("colosseum")}'
