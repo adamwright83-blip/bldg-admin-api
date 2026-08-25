@@ -81,11 +81,35 @@ export type OverworldRuntimeCallbacks = {
   onRecovered?: () => void;
 };
 
+export type RuntimeWorldActor = {
+  id: string;
+  imageUrl?: string;
+  point: OverworldPoint;
+  presentationHeight: number;
+  zOffset?: number;
+};
+
+export type OverworldRuntimePresentation = {
+  showDestinationMarkers?: boolean;
+  playerHeight?: number;
+  cameraZoom?: number;
+  cameraLookAheadSeconds?: number;
+  depth?: {
+    nearY: number;
+    farY: number;
+    nearScale: number;
+    farScale: number;
+  };
+  actors?: RuntimeWorldActor[];
+  goldRoute?: OverworldPoint[];
+};
+
 export interface OverworldRuntimeContract {
   setInput(x: number, y: number): void;
   setPaused(paused: boolean): void;
   setDestinationStates(states: DestinationStateMap): void;
-  performContextAction(): "entered" | "locked" | "traversal" | "none";
+  performContextAction(): "entered" | "inspected" | "locked" | "traversal" | "none";
+  setActorVisible(id: string, visible: boolean): void;
   saveNow(): void;
   resize(): void;
   destroy(): Promise<void>;

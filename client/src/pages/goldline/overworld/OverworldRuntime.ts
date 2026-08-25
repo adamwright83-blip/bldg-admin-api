@@ -26,10 +26,11 @@ import type {
   OverworldProximity,
   OverworldRuntimeCallbacks,
   OverworldRuntimeContract,
+  OverworldMapDefinition,
+  OverworldRuntimePresentation,
   TraversalNode,
 } from "./types";
 
-const MAP = GOLDLINE_OVERWORLD_MAP;
 const PLAYER_RADIUS = 11;
 const PLAYER_PRESENTATION_HEIGHT = 138;
 const CAMERA_ZOOM = 1.45;
@@ -57,6 +58,7 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   private footfall = new Graphics();
   private textures = new Map<string, Texture>();
   private markerContainers = new Map<string, Container>();
+  private actorContainers = new Map<string, Container>();
   private backgroundTexture: Texture | null = null;
   private input = { x: 0, y: 0 };
   private velocity: OverworldPoint = { x: 0, y: 0 };
@@ -88,12 +90,14 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     private readonly host: HTMLElement,
     private readonly backgroundUrl: string,
     checkpoint: OverworldCheckpoint | null,
-    private readonly callbacks: OverworldRuntimeCallbacks
+    private readonly callbacks: OverworldRuntimeCallbacks,
+    private readonly map: OverworldMapDefinition,
+    private readonly presentation: OverworldRuntimePresentation
   ) {
-    const fallback = MAP.spawns[MAP.defaultSpawnId]!;
+    const fallback = this.map.spawns[this.map.defaultSpawnId]!;
     const restored = checkpoint
       ? nearestValidPoint(
-          MAP,
+          this.map,
           { x: checkpoint.x, y: checkpoint.y },
           PLAYER_RADIUS
         )
@@ -114,12 +118,16 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     checkpoint: OverworldCheckpoint | null;
     callbacks: OverworldRuntimeCallbacks;
     destinationStates: DestinationStateMap;
+    map?: OverworldMapDefinition;
+    presentation?: OverworldRuntimePresentation;
   }) {
     const runtime = new GoldlineOverworldRuntime(
       input.host,
       input.backgroundUrl,
       input.checkpoint,
-      input.callbacks
+      input.callbacks,
+      input.map ?? GOLDLINE_OVERWORLD_MAP,
+      input.presentation ?? {}
     );
     runtime.destinationStates = input.destinationStates;
     await runtime.initialize();
@@ -143,9 +151,12 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     this.world.sortableChildren = true;
     this.app.stage.addChild(this.world);
 
+    const actorUrls = (this.presentation.actors ?? [])
+      .flatMap(actor => actor.imageUrl ? [actor.imageUrl] : []);
     const [background] = await Promise.all([
       Assets.load<Texture>(this.backgroundUrl),
       ...directionalUrls.map(url => Assets.load<Texture>(url)),
+      ...actorUrls.map(url => Assets.load<Texture>(url)),
     ]);
     if (this.destroyed) return;
     this.backgroundTexture = background;
@@ -153,8 +164,8 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
       this.textures.set(url, Texture.from(url));
 
     const backgroundSprite = new Sprite(background);
-    backgroundSprite.width = MAP.width;
-    backgroundSprite.height = MAP.height;
+    backgroundSprite.width = this.map.width;
+    backgroundSprite.height = this.map.height;
     backgroundSprite.zIndex = 0;
     this.world.addChild(backgroundSprite);
     if (this.debugNavigation) this.buildNavigationDebug();
@@ -170,6 +181,7 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     this.footfall.zIndex = 1980;
     this.world.addChild(this.footfall);
     this.buildOccluders(background);
+    this.buildScenePresentation();
     this.buildDestinationMarkers();
     this.setPlayerTexture();
     this.updatePlayerPresentation();
@@ -204,15 +216,15 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     testWindow.__goldlineOverworldTest = {
       getState: () => ({
         position: { ...this.position },
-        surfaceId: surfaceAtPoint(MAP, this.position),
-        walkable: isWalkable(MAP, this.position, PLAYER_RADIUS),
+        surfaceId: surfaceAtPoint(this.map, this.position),
+        walkable: isWalkable(this.map, this.position, PLAYER_RADIUS),
         viewport: {
           width: this.app.screen.width,
           height: this.app.screen.height,
         },
       }),
       teleport: point => {
-        const recovered = nearestValidPoint(MAP, point, PLAYER_RADIUS);
+        const recovered = nearestValidPoint(this.map, point, PLAYER_RADIUS);
         this.position = { x: recovered.x, y: recovered.y };
         this.velocity = { x: 0, y: 0 };
         this.updatePlayerPresentation();
@@ -254,18 +266,18 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
           reached: reached.length,
           failures,
           position: { ...this.position },
-          surfaceId: surfaceAtPoint(MAP, this.position),
-          walkable: isWalkable(MAP, this.position, PLAYER_RADIUS),
+          surfaceId: surfaceAtPoint(this.map, this.position),
+          walkable: isWalkable(this.map, this.position, PLAYER_RADIUS),
         };
       },
     };
   }
 
   private buildOccluders(texture: Texture) {
-    for (const region of MAP.occluders) {
+    for (const region of this.map.occluders) {
       const overlay = new Sprite(texture);
-      overlay.width = MAP.width;
-      overlay.height = MAP.height;
+      overlay.width = this.map.width;
+      overlay.height = this.map.height;
       overlay.zIndex = 9000;
       const mask = new Graphics()
         .poly(region.polygon.flatMap(point => [point.x, point.y]))
@@ -276,15 +288,50 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     }
   }
 
+  private buildScenePresentation() {
+    const route = this.presentation.goldRoute;
+    if (route && route.length > 1) {
+      const line = new Graphics();
+      line.moveTo(route[0]!.x, route[0]!.y);
+      for (const point of route.slice(1)) line.lineTo(point.x, point.y);
+      line.stroke({ color: 0xffd35c, alpha: 0.78, width: 5 });
+      line.zIndex = 1200;
+      line.label = "gold-line";
+      this.world.addChild(line);
+    }
+    for (const actor of this.presentation.actors ?? []) {
+      const container = new Container();
+      container.label = actor.id;
+      container.position.set(actor.point.x, actor.point.y);
+      container.zIndex = 2000 + actor.point.y + (actor.zOffset ?? 0);
+      if (actor.imageUrl) {
+        const sprite = new Sprite(Texture.from(actor.imageUrl));
+        sprite.anchor.set(0.5, 0.9);
+        const height = Math.max(1, sprite.texture.height);
+        sprite.scale.set(actor.presentationHeight / height);
+        container.addChild(sprite);
+      } else {
+        const ring = new Graphics()
+          .circle(0, -18, 18)
+          .stroke({ color: 0xffdb68, alpha: 0.95, width: 5 })
+          .circle(0, -18, 28)
+          .stroke({ color: 0xffb53e, alpha: 0.32, width: 3 });
+        container.addChild(ring);
+      }
+      this.actorContainers.set(actor.id, container);
+      this.world.addChild(container);
+    }
+  }
+
   private buildNavigationDebug() {
     const overlay = new Graphics();
-    for (const surface of MAP.surfaces) {
+    for (const surface of this.map.surfaces) {
       overlay
         .poly(surface.polygon.flatMap(point => [point.x, point.y]))
         .fill({ color: 0x35e88b, alpha: 0.22 })
         .stroke({ color: 0x72ffb2, alpha: 0.85, width: 3 });
     }
-    for (const corridor of MAP.corridors) {
+    for (const corridor of this.map.corridors) {
       overlay.moveTo(corridor.points[0]!.x, corridor.points[0]!.y);
       for (const point of corridor.points.slice(1))
         overlay.lineTo(point.x, point.y);
@@ -303,7 +350,8 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   }
 
   private buildDestinationMarkers() {
-    for (const destination of MAP.destinations) {
+    if (this.presentation.showDestinationMarkers === false) return;
+    for (const destination of this.map.destinations) {
       const container = new Container();
       const beacon = new Graphics()
         .circle(0, 0, 12)
@@ -369,14 +417,14 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     this.velocity = stepVelocity(this.velocity, analog, deltaSeconds);
     const speed = Math.hypot(this.velocity.x, this.velocity.y);
     const next = moveWithCollision(
-      MAP,
+      this.map,
       this.position,
       { x: this.velocity.x * deltaSeconds, y: this.velocity.y * deltaSeconds },
       PLAYER_RADIUS
     );
-    const assisted = applyCorridorAssist(MAP, next, deltaSeconds);
+    const assisted = applyCorridorAssist(this.map, next, deltaSeconds);
     this.position = moveWithCollision(
-      MAP,
+      this.map,
       next,
       { x: assisted.x - next.x, y: assisted.y - next.y },
       PLAYER_RADIUS
@@ -445,7 +493,7 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   private emitFootfall() {
     this.footfallClock += 1;
     if (this.footfallClock % 2 !== 0) return;
-    const material = materialAtPoint(MAP, this.position);
+    const material = materialAtPoint(this.map, this.position);
     const color =
       material === "wood"
         ? 0xc79152
@@ -493,14 +541,21 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   }
 
   private updatePlayerPresentation() {
-    const perspective = 0.76 + (this.position.y / MAP.height) * 0.25;
+    const authoredDepth = this.presentation.depth;
+    const perspective = authoredDepth
+      ? (() => {
+          const span = authoredDepth.nearY - authoredDepth.farY;
+          const t = span === 0 ? 0 : Math.max(0, Math.min(1, (authoredDepth.nearY - this.position.y) / span));
+          return authoredDepth.nearScale + (authoredDepth.farScale - authoredDepth.nearScale) * t;
+        })()
+      : 0.76 + (this.position.y / this.map.height) * 0.25;
     const textureHeight = Math.max(1, this.player.texture.height);
     const spriteScale =
-      (PLAYER_PRESENTATION_HEIGHT / textureHeight) * perspective;
+      ((this.presentation.playerHeight ?? PLAYER_PRESENTATION_HEIGHT) / textureHeight) * perspective;
     this.player.position.set(this.position.x, this.position.y);
     this.player.scale.set(spriteScale);
     this.player.rotation =
-      this.moving && materialAtPoint(MAP, this.position) === "wood"
+      this.moving && materialAtPoint(this.map, this.position) === "wood"
         ? Math.sin(performance.now() / 115) * 0.014
         : 0;
     this.player.zIndex = 2000 + this.position.y;
@@ -516,28 +571,28 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     const viewportHeight = this.app.screen.height;
     if (this.debugNavigation) {
       const scale =
-        Math.min(viewportWidth / MAP.width, viewportHeight / MAP.height) * 0.98;
+        Math.min(viewportWidth / this.map.width, viewportHeight / this.map.height) * 0.98;
       this.world.scale.set(scale);
-      this.world.x = (viewportWidth - MAP.width * scale) / 2;
-      this.world.y = (viewportHeight - MAP.height * scale) / 2;
+      this.world.x = (viewportWidth - this.map.width * scale) / 2;
+      this.world.y = (viewportHeight - this.map.height * scale) / 2;
       return;
     }
     const cover = Math.max(
-      viewportWidth / MAP.width,
-      viewportHeight / MAP.height
+      viewportWidth / this.map.width,
+      viewportHeight / this.map.height
     );
-    const scale = cover * CAMERA_ZOOM;
+    const scale = cover * (this.presentation.cameraZoom ?? CAMERA_ZOOM);
     this.world.scale.set(scale);
     const lookaheadX = this.reducedMotion
       ? 0
-      : this.velocity.x * LOOKAHEAD_SECONDS * scale;
+      : this.velocity.x * (this.presentation.cameraLookAheadSeconds ?? LOOKAHEAD_SECONDS) * scale;
     const lookaheadY = this.reducedMotion
       ? 0
-      : this.velocity.y * LOOKAHEAD_SECONDS * scale;
+      : this.velocity.y * (this.presentation.cameraLookAheadSeconds ?? LOOKAHEAD_SECONDS) * scale;
     const targetX = viewportWidth / 2 - this.position.x * scale - lookaheadX;
     const targetY = viewportHeight / 2 - this.position.y * scale - lookaheadY;
-    const minX = viewportWidth - MAP.width * scale;
-    const minY = viewportHeight - MAP.height * scale;
+    const minX = viewportWidth - this.map.width * scale;
+    const minY = viewportHeight - this.map.height * scale;
     const boundedX = Math.min(0, Math.max(minX, targetX));
     const boundedY = Math.min(0, Math.max(minY, targetY));
     const easing = this.reducedMotion
@@ -548,7 +603,7 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   }
 
   private updateProximity() {
-    const nearest = MAP.destinations
+    const nearest = this.map.destinations
       .map(destination => ({
         destination,
         distance: distance(this.position, destination.point),
@@ -576,7 +631,7 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   }
 
   private updateMarkers(now: number) {
-    for (const destination of MAP.destinations) {
+    for (const destination of this.map.destinations) {
       const marker = this.markerContainers.get(destination.id);
       if (!marker) continue;
       const availability = this.destinationStates[destination.id] ?? "locked";
@@ -627,14 +682,15 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     this.updateProximity();
   }
 
-  performContextAction(): "entered" | "locked" | "traversal" | "none" {
+  performContextAction(): "entered" | "inspected" | "locked" | "traversal" | "none" {
     if (!this.proximity?.canAct) return "none";
     if (this.proximity.availability !== "active") return "locked";
     if (this.proximity.destination.action === "enter") {
       this.saveNow();
       return "entered";
     }
-    const traversal = MAP.traversals.find(
+    if (this.proximity.destination.action === "inspect") return "inspected";
+    const traversal = this.map.traversals.find(
       item => item.id === this.proximity?.destination.traversalId
     );
     if (traversal) {
@@ -645,11 +701,16 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     return "locked";
   }
 
+  setActorVisible(id: string, visible: boolean) {
+    const actor = this.actorContainers.get(id);
+    if (actor) actor.visible = visible;
+  }
+
   saveNow = () => {
-    const surfaceId = surfaceAtPoint(MAP, this.position);
+    const surfaceId = surfaceAtPoint(this.map, this.position);
     if (!surfaceId) return;
     this.callbacks.onCheckpoint({
-      mapVersion: MAP.version,
+      mapVersion: this.map.version,
       x: this.position.x,
       y: this.position.y,
       surfaceId,
