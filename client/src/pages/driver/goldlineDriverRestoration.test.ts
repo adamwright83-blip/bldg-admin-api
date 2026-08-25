@@ -35,6 +35,17 @@ const mission = readFileSync(
 );
 
 describe("Goldline canonical driver restoration", () => {
+  it("starts every fresh driver session on Overland and enters Clockhead only by scene choice", () => {
+    expect(controller).toContain(
+      'const INITIAL_DRIVER_SCENE: DriverScene = "overworld"'
+    );
+    expect(controller).toContain('driverScene === "colosseum" &&');
+    expect(controller).toContain(
+      'onEnterGreystar={() => setDriverScene("colosseum")}'
+    );
+    expect(controller).not.toContain("shouldAutoEnterWayward");
+  });
+
   it("renders authenticated Driver through Goldline while preserving ProductShell routes", () => {
     expect(driver).toContain("GoldlineDriverController");
     expect(driver).toContain('role="driver"');

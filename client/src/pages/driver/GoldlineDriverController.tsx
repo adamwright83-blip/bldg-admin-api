@@ -12,7 +12,15 @@ import GoldlineHome, {
 } from "../goldline/GoldlineHome";
 import GoldlineOverworld from "../goldline/GoldlineOverworld";
 import Day1TenDoors from "../goldline/Day1TenDoors";
-import { hasColosseumResolved, hasLegacyDay1Dismissal, loadWaywardProgress, markColosseumResolved, markLegacyDay1Dismissal, shouldAutoEnterWayward, unlockWayward, type WaywardProgress } from "../goldline/stages/waywardProgress";
+import {
+  hasColosseumResolved,
+  hasLegacyDay1Dismissal,
+  loadWaywardProgress,
+  markColosseumResolved,
+  markLegacyDay1Dismissal,
+  unlockWayward,
+  type WaywardProgress,
+} from "../goldline/stages/waywardProgress";
 import type { FieldMoveCandidate } from "../../../../server/field/types";
 import type { DayResolution } from "../../../../server/unload/unloadTypes";
 import type {
@@ -82,6 +90,11 @@ const REQUESTING_LOCATION: GoldlineLocationSnapshot = {
 
 const GoldlineGameHome = lazy(() => import("../../game/GoldlineGameHome"));
 const WaywardTetheredDeck = lazy(() => import("../goldline/stages/WaywardTetheredDeck"));
+
+type DriverScene = "game" | "overworld" | "colosseum" | "wayward";
+
+/** A fresh driver session always begins at the world choice, never inside a stage. */
+const INITIAL_DRIVER_SCENE: DriverScene = "overworld";
 const GoldlineBusinessLoopHarness =
   import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
     ? lazy(() => import("../../game/testSupport/GoldlineBusinessLoopHarness"))
@@ -131,8 +144,8 @@ function LiveGoldlineDriverController() {
    */
   const identity = trpc.auth.me.useQuery();
   const [selectedDate, setSelectedDate] = useState(() => getLocalYmd());
-  const [driverScene, setDriverScene] = useState<"game" | "overworld" | "colosseum" | "wayward">(
-    "game"
+  const [driverScene, setDriverScene] = useState<DriverScene>(
+    INITIAL_DRIVER_SCENE
   );
   const [waywardProgress, setWaywardProgress] = useState<WaywardProgress>(() => loadWaywardProgress(null));
   const [walkInOpen, setWalkInOpen] = useState(false);
@@ -322,13 +335,6 @@ function LiveGoldlineDriverController() {
     }
     const resolved = hasColosseumResolved(playerIdentity);
     setWaywardProgress(resolved ? unlockWayward(playerIdentity) : stored);
-    if (shouldAutoEnterWayward({
-      colosseumResolved: resolved,
-      campaignComplete: day1TenDoors.data?.isComplete === true,
-      testHarness: import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1",
-    })) {
-      setDriverScene(current => current === "game" ? "overworld" : current);
-    }
   }, [day1TenDoors.data?.isComplete, identity.data?.openId]);
   const recordDay1Outcome =
     trpc.system.day1TenDoors.recordOutcome.useMutation();
@@ -1124,7 +1130,11 @@ function LiveGoldlineDriverController() {
     );
   }
 
-  if (day1TenDoors.data && !hasLegacyDay1Dismissal()) {
+  if (
+    driverScene === "colosseum" &&
+    day1TenDoors.data &&
+    !hasLegacyDay1Dismissal()
+  ) {
     return (
       <Day1TenDoors
         mission={day1TenDoors.data}
