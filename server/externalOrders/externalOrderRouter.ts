@@ -39,7 +39,9 @@ export const externalOrderRouter = router({
    */
   extractFromScreenshots: dayforgeTenantMemberProcedure
     .input(z.object({ images: z.array(dataUrl).min(1).max(6) }))
-    .mutation(({ input }) => extractExternalDayFromScreenshots(input)),
+    .mutation(({ ctx, input }) =>
+      extractExternalDayFromScreenshots({ ...input, tenantId: ctx.tenantId })
+    ),
 
   /**
    * Persists what the operator actually approved. The jobs come from the
