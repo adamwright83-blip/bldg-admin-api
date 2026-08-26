@@ -18,14 +18,6 @@ import type {
 } from "../../shared/externalOperationalOrder";
 import { randomUUID } from "node:crypto";
 
-/**
- * Claude Opus 5 — the strongest available reading of a dense, unfamiliar
- * mobile UI, which is exactly what a competitor's driver app is. Extraction
- * accuracy here is worth more than the token difference: a misread row costs
- * the operator a correction at best and a wrong-address drive at worst.
- */
-const EXTRACTION_MODEL = "claude-opus-5";
-
 const EXTRACTION_SYSTEM = [
   "You read a screenshot of a laundry driver's job list and report the jobs visible in it.",
   "",
@@ -117,9 +109,15 @@ type ExtractionPayload = {
 };
 
 /** A single screenshot's worth of reading. */
-async function extractOneImage(dataUrl: string): Promise<ExtractionPayload> {
+async function extractOneImage(
+  dataUrl: string,
+  tenantId?: string
+): Promise<ExtractionPayload> {
+  // Do not hard-code a speculative provider model id here. invokeLLM's
+  // configured/default Anthropic model is the production authority and is
+  // already normalized for retired model names in _core/env.ts.
   const result = await invokeLLM({
-    model: EXTRACTION_MODEL,
+    tenantId,
     maxTokens: 4096,
     messages: [
       { role: "system", content: EXTRACTION_SYSTEM },
@@ -129,7 +127,7 @@ async function extractOneImage(dataUrl: string): Promise<ExtractionPayload> {
           { type: "image_url", image_url: { url: dataUrl } },
           {
             type: "text",
-            text: "List every job visible in this driver app screenshot.",
+            text: "List every job visible in this CleanCloud Driver App screenshot. A row may contain a customer name, pickup/delivery marker, address, time window, date, and order number. Return all visible rows for human review.",
           },
         ],
       },
@@ -146,8 +144,6 @@ async function extractOneImage(dataUrl: string): Promise<ExtractionPayload> {
   try {
     parsed = JSON.parse(text) as ExtractionPayload;
   } catch {
-    // Unparseable output is an unreadable image, not a crash. The operator
-    // still gets whatever the other screenshots produced.
     return { readable: false, jobs: [] };
   }
   if (!parsed || !Array.isArray(parsed.jobs)) {
@@ -156,17 +152,8 @@ async function extractOneImage(dataUrl: string): Promise<ExtractionPayload> {
   return { readable: Boolean(parsed.readable), jobs: parsed.jobs };
 }
 
-/**
- * Normalises one extracted row.
- *
- * Blank strings become null rather than empty text, so a field the model
- * couldn't read reaches the review screen visibly missing instead of quietly
- * present-but-empty — the operator needs to see the gap to fill it.
- */
 function normalizeJob(job: ExtractedExternalJob): ExtractedExternalJob | null {
   const customerName = (job.customerName ?? "").trim();
-  // A job with no customer is not a job we can meaningfully review or drive
-  // to. Dropping it is more honest than surfacing a nameless row.
   if (!customerName) return null;
   const clean = (value: string | null | undefined) => {
     const trimmed = (value ?? "").trim();
@@ -184,25 +171,18 @@ function normalizeJob(job: ExtractedExternalJob): ExtractedExternalJob | null {
   };
 }
 
-/**
- * Reads one or more screenshots into a reviewable proposal.
- *
- * Images are read independently and concatenated in upload order. An
- * unreadable image is COUNTED rather than silently skipped: an operator who
- * uploaded four screenshots and sees jobs from three of them needs to know
- * that, or they will assume the fourth simply had nothing on it.
- */
 export async function extractExternalDayFromScreenshots(input: {
   images: string[];
+  tenantId?: string;
 }): Promise<ExternalImportProposal> {
   const readings = await Promise.all(
     input.images.map(async image => {
       try {
-        return await extractOneImage(image);
-      } catch {
-        // A provider error is an unreadable image from the operator's point of
-        // view. Failing the whole import because one of four screenshots
-        // errored would throw away three good readings.
+        return await extractOneImage(image, input.tenantId);
+      } catch (error) {
+        // Keep multi-image import resilient, but log the provider failure so a
+        // real model/configuration error is not silently misdiagnosed as bad OCR.
+        console.error("[external-orders] CleanCloud screenshot extraction failed", error);
         return { readable: false, jobs: [] } satisfies ExtractionPayload;
       }
     })
