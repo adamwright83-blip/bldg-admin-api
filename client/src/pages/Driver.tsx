@@ -8,21 +8,49 @@ import type { Order } from "@shared/types";
 import "./goldline/goldline-legibility.css";
 import "./goldline/goldline-live-fix.css";
 
-const WaywardTetheredDeck = lazy(() => import("./goldline/stages/WaywardTetheredDeck"));
+const WaywardTetheredDeck = lazy(
+  () => import("./goldline/stages/WaywardTetheredDeck")
+);
+const GoldlineDayPlanFixture =
+  import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
+    ? lazy(() => import("./goldline/GoldlineDayPlanFixture"))
+    : null;
 
 export default function Driver() {
-  const { loading: authLoading, isAuthenticated } = useAuth();
   const overworldFixture =
     import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1" &&
     new URLSearchParams(window.location.search).has("goldlineOverworldFixture");
   const waywardFixture =
     import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1" &&
-    new URLSearchParams(window.location.search).get("goldlineStageFixture") === "wayward";
+    new URLSearchParams(window.location.search).get("goldlineStageFixture") ===
+      "wayward";
+  const dayPlanFixture =
+    import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
+      ? new URLSearchParams(window.location.search).get(
+          "goldlineDayPlanFixture"
+        )
+      : null;
+
+  if (GoldlineDayPlanFixture && dayPlanFixture) {
+    return (
+      <Suspense fallback={null}>
+        <GoldlineDayPlanFixture state={dayPlanFixture} />
+      </Suspense>
+    );
+  }
 
   if (waywardFixture) {
     return (
-      <Suspense fallback={<div style={{ minHeight: "100dvh", background: "#03070c" }} />}>
-        <WaywardTetheredDeck fixture playerIdentity="wayward-browser-fixture" onReturn={() => history.back()} />
+      <Suspense
+        fallback={
+          <div style={{ minHeight: "100dvh", background: "#03070c" }} />
+        }
+      >
+        <WaywardTetheredDeck
+          fixture
+          playerIdentity="wayward-browser-fixture"
+          onReturn={() => history.back()}
+        />
       </Suspense>
     );
   }
@@ -49,6 +77,11 @@ export default function Driver() {
     );
   }
 
+  return <AuthenticatedDriver />;
+}
+
+function AuthenticatedDriver() {
+  const { loading: authLoading, isAuthenticated } = useAuth();
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
