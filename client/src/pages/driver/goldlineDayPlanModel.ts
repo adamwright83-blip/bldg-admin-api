@@ -7,13 +7,25 @@ import type {
   OpenChannelTask,
 } from "../../../../server/openChannel/openChannelTypes";
 import { detectOpenChannelGap } from "./goldlineDriverModel";
+import type {
+  DayDirectorCommitment,
+  ProcessingLocation,
+} from "@shared/dayDirector";
 
-export type DayPlanStopKind = "pickup" | "dropoff" | "sales" | "prep";
+export type DayPlanStopKind =
+  | "pickup"
+  | "dropoff"
+  | "sales"
+  | "prep"
+  | "processing"
+  | "growth";
 export type DayPlanSource =
   | "laundry_butler"
   | "cleancloud"
   | "open_channel"
-  | "commercial_mission";
+  | "commercial_mission"
+  | "derived_operation"
+  | "user_commitment";
 
 export type DayPlanStop = {
   id: string;
@@ -24,7 +36,7 @@ export type DayPlanStop = {
   timeLabel: string;
   sortKey: string;
   estimatedMinutes: number | null;
-  status: "upcoming" | "ready" | "completed" | "cancelled";
+  status: "upcoming" | "ready" | "blocked" | "completed" | "cancelled";
   fixed: boolean;
   address: string | null;
   navigationUrl: string | null;
@@ -38,6 +50,7 @@ export type DayPlanProjection = {
   counts: Record<DayPlanStopKind, number>;
   fixedWindowCount: number;
   cleanCloudCount: number;
+  growthCoverage: "covered" | "underfilled" | "blocked" | "unknown";
 };
 
 function nameForOrder(order: Order): string {
@@ -193,6 +206,9 @@ export function buildDayPlanProjection(input: {
   salesMissions?: CommercialMission[];
   now?: Date;
   nextCommitmentAt?: string | null;
+  processingLocation?: ProcessingLocation | null;
+  commitments?: DayDirectorCommitment[];
+  physicalVisitBlocked?: boolean;
 }): DayPlanProjection {
   const fixedCount = [
     ...(input.pickups ?? []),
@@ -213,7 +229,7 @@ export function buildDayPlanProjection(input: {
     seen.add(stop.id);
     return true;
   };
-  const stops = [
+  const baseStops = [
     ...(input.pickups ?? []).map(order => nativeStop(order, "pickup")),
     ...(input.deliveries ?? []).map(order => nativeStop(order, "dropoff")),
     ...(input.externalOrders ?? [])
@@ -224,8 +240,8 @@ export function buildDayPlanProjection(input: {
           openChannelStop(task, input.openChannelMission!)
         )
       : []),
-    ...(input.salesMissions ?? []).map(mission =>
-      commercialStop(
+    ...(input.salesMissions ?? []).flatMap(mission => {
+      const primary = commercialStop(
         mission,
         gap.available &&
           [
@@ -235,12 +251,108 @@ export function buildDayPlanProjection(input: {
             "en_route",
             "arrived",
           ].includes(mission.status)
+      );
+      if (
+        !/greystar|colosseum/i.test(`${mission.account.name} ${mission.code}`)
       )
+        return [primary];
+      return [
+        {
+          ...primary,
+          id: `${primary.id}-email`,
+          title: `${mission.account.name} email follow-up`,
+          timeLabel: "Flexible · 20 min",
+          fixed: false,
+          address: null,
+          navigationUrl: null,
+          status:
+            primary.status === "completed"
+              ? ("completed" as const)
+              : ("ready" as const),
+        },
+        {
+          ...primary,
+          id: `${primary.id}-visits`,
+          title: `${mission.account.name} field visits`,
+          timeLabel: input.physicalVisitBlocked
+            ? "Deferred · readiness required"
+            : "Readiness unknown",
+          fixed: false,
+          status:
+            primary.status === "completed"
+              ? ("completed" as const)
+              : input.physicalVisitBlocked
+                ? ("blocked" as const)
+                : ("upcoming" as const),
+        },
+      ];
+    }),
+    ...(input.commitments ?? []).map(
+      (commitment, index): DayPlanStop => ({
+        id: `commitment-${commitment.id}`,
+        kind: commitment.kind === "growth" ? "growth" : "prep",
+        title: commitment.title,
+        source: "user_commitment",
+        sourceLabel:
+          commitment.provenance === "user_reported"
+            ? "You committed today"
+            : "Added manually",
+        timeLabel: commitment.quantity
+          ? `${commitment.quantity} to complete`
+          : "Flexible today",
+        sortKey: `75:${String(index).padStart(3, "0")}`,
+        estimatedMinutes: null,
+        status: commitment.status === "completed" ? "completed" : "upcoming",
+        fixed: false,
+        address: null,
+        navigationUrl: null,
+        missionTarget: null,
+        completedAt: commitment.completedAt,
+      })
     ),
-  ]
+  ];
+  const pickups = baseStops.filter(
+    stop => stop.kind === "pickup" && stop.status !== "cancelled"
+  );
+  const finalPickup = [...pickups]
+    .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+    .at(-1);
+  const represented =
+    input.processingLocation &&
+    baseStops.some(stop =>
+      stop.title
+        .toLowerCase()
+        .includes(input.processingLocation!.name.toLowerCase())
+    );
+  if (finalPickup && input.processingLocation && !represented) {
+    baseStops.push({
+      id: `derived-processing-${input.businessDate}`,
+      kind: "processing",
+      title: input.processingLocation.name,
+      source: "derived_operation",
+      sourceLabel: `Auto-added after final pickup${input.processingLocation.locality ? ` · ${input.processingLocation.locality}` : ""}`,
+      timeLabel: "Processing handoff",
+      sortKey: `${finalPickup.sortKey}~processing`,
+      estimatedMinutes: null,
+      status: "upcoming",
+      fixed: false,
+      address: input.processingLocation.address,
+      navigationUrl: navigationUrl(input.processingLocation.address),
+      missionTarget: null,
+      completedAt: null,
+    });
+  }
+  const stops = baseStops
     .filter(unique)
     .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-  const counts = { pickup: 0, dropoff: 0, sales: 0, prep: 0 };
+  const counts: Record<DayPlanStopKind, number> = {
+    pickup: 0,
+    dropoff: 0,
+    sales: 0,
+    prep: 0,
+    processing: 0,
+    growth: 0,
+  };
   for (const stop of stops) counts[stop.kind] += 1;
   return {
     businessDate: input.businessDate,
@@ -248,5 +360,14 @@ export function buildDayPlanProjection(input: {
     counts,
     fixedWindowCount: stops.filter(stop => stop.fixed).length,
     cleanCloudCount: stops.filter(stop => stop.source === "cleancloud").length,
+    growthCoverage: stops.some(
+      stop =>
+        stop.kind === "growth" ||
+        (stop.kind === "sales" && stop.status === "ready")
+    )
+      ? "covered"
+      : stops.some(stop => stop.kind === "sales" && stop.status === "blocked")
+        ? "blocked"
+        : "underfilled",
   };
 }

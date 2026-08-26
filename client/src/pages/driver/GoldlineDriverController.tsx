@@ -265,6 +265,13 @@ function LiveGoldlineDriverController() {
     { scheduledDate: selectedDate },
     { refetchInterval: 20_000, retry: false }
   );
+  const dayDirectorState = trpc.system.dayDirector.state.useQuery(
+    { businessDate: selectedDate },
+    { refetchInterval: 60_000, retry: false }
+  );
+  const proposeDayCommitment = trpc.system.dayDirector.propose.useMutation();
+  const acceptDayCommitment = trpc.system.dayDirector.accept.useMutation();
+  const dismissDayPrompt = trpc.system.dayDirector.dismiss.useMutation();
   /**
    * Field intel. `proposeSignal` calls a model and writes nothing;
    * `confirmSignal` is the only thing that persists, and it persists what the
@@ -1141,6 +1148,10 @@ function LiveGoldlineDriverController() {
           externalOrders={externalOrders.data ?? []}
           openChannelMission={openChannel.data}
           salesMissions={builtMissions.data}
+          processingLocation={dayDirectorState.data?.processingLocation}
+          commitments={dayDirectorState.data?.commitments}
+          intelligenceAvailable={dayDirectorState.data?.intelligenceAvailable}
+          dismissedPromptKeys={dayDirectorState.data?.dismissedPromptKeys}
           nextCommitmentAt={
             currentDayProjection?.nextFixedCommitment?.scheduledAt
           }
@@ -1155,6 +1166,15 @@ function LiveGoldlineDriverController() {
           onEnterColosseum={() => {
             setStageReturnScene("day-plan");
             setDriverScene("colosseum");
+          }}
+          onProposeCommitment={sourceText => proposeDayCommitment.mutateAsync({ sourceText })}
+          onAcceptProposal={async proposal => {
+            await acceptDayCommitment.mutateAsync({ businessDate: selectedDate, proposal });
+            await dayDirectorState.refetch();
+          }}
+          onDismissProposal={async promptKey => {
+            await dismissDayPrompt.mutateAsync({ businessDate: selectedDate, promptKey });
+            await dayDirectorState.refetch();
           }}
         />
         <AddExternalWorkSheet
