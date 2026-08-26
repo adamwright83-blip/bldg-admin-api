@@ -15,6 +15,7 @@
  * CONFIRM.
  */
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import type {
   ExtractedExternalJob,
   ExternalJobKind,
@@ -113,9 +114,15 @@ export function AddExternalWorkSheet(props: AddExternalWorkSheetProps) {
   const pickupCount = rows.filter(r => r.jobKind === "pickup").length;
   const dropoffCount = rows.length - pickupCount;
 
-  return (
-    <div className="add-external-work" role="dialog" aria-modal="true"
-      aria-label="Add externally managed work" data-testid="add-external-work">
+  return createPortal(
+    <div
+      className="add-external-work"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add externally managed work"
+      data-testid="add-external-work"
+      style={{ zIndex: 10000 }}
+    >
       <header className="add-external-work__header">
         <span>CLEAN CLOUD</span>
         <button type="button" onClick={close} aria-label="Close">✕</button>
@@ -163,11 +170,6 @@ export function AddExternalWorkSheet(props: AddExternalWorkSheetProps) {
                 {pickupCount} PICKUP{pickupCount === 1 ? "" : "S"} ·{" "}
                 {dropoffCount} DELIVER{dropoffCount === 1 ? "Y" : "IES"}
               </p>
-              {/*
-                Read honestly. An operator who uploaded four screenshots and
-                sees jobs from three needs to know the fourth was unreadable,
-                or they will assume it simply had nothing on it.
-              */}
               {unreadable > 0 ? (
                 <p className="add-external-work__warning" data-testid="import-unreadable">
                   {unreadable} screenshot{unreadable === 1 ? "" : "s"} could not be
@@ -349,6 +351,7 @@ export function AddExternalWorkSheet(props: AddExternalWorkSheetProps) {
           {error}
         </p>
       ) : null}
-    </div>
+    </div>,
+    document.body
   );
 }
