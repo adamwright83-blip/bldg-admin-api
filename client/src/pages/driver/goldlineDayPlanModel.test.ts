@@ -16,13 +16,17 @@ const native = (id: number, status: Order["status"] = "new") =>
     updatedAt: new Date("2026-08-25T17:14:00.000Z"),
   }) as Order;
 
-const external = (reviewState: ExternalOperationalOrder["reviewState"]) =>
+const external = (
+  reviewState: ExternalOperationalOrder["reviewState"],
+  jobKind: ExternalOperationalOrder["jobKind"] = "dropoff",
+  id = `clean-${reviewState}`
+) =>
   ({
-    id: `clean-${reviewState}`,
+    id,
     sourceSystem: "cleancloud",
     ingestionMethod: "screenshot",
     externalOrderId: null,
-    jobKind: "dropoff",
+    jobKind,
     customerName: "Evergreen CPAs",
     address: "456 World Road",
     scheduledDate: "2026-08-25",
@@ -118,13 +122,96 @@ describe("authoritative Goldline Day Plan projection", () => {
       nextCommitmentAt: new Date(now.getTime() + 30 * 60_000).toISOString(),
       now,
     });
-    expect(ready.stops[0]).toMatchObject({
+    expect(ready.stops.find(stop => stop.id.endsWith("-email"))).toMatchObject({
       status: "ready",
       missionTarget: "colosseum",
     });
-    expect(blocked.stops[0]).toMatchObject({
+    expect(
+      blocked.stops.find(stop => stop.id.endsWith("-visits"))
+    ).toMatchObject({
       status: "upcoming",
       missionTarget: "colosseum",
     });
+  });
+
+  const processingLocation = {
+    name: "Lugo's Lavanderia",
+    locality: "Huntington Park",
+    address: null,
+  };
+
+  it("derives one processing handoff immediately after one pickup", () => {
+    const plan = buildDayPlanProjection({
+      businessDate: "2026-08-25",
+      pickups: [native(1)],
+      processingLocation,
+    });
+    expect(plan.stops.map(stop => stop.kind)).toEqual(["pickup", "processing"]);
+    expect(plan.stops[1]).toMatchObject({
+      title: "Lugo's Lavanderia",
+      source: "derived_operation",
+    });
+  });
+
+  it("derives exactly one handoff after the final pickup across native and confirmed CleanCloud work", () => {
+    const first = native(1);
+    first.pickupTimeWindow = "9:00–10:00";
+    const second = native(2);
+    second.pickupTimeWindow = "12:00–2:00";
+    const plan = buildDayPlanProjection({
+      businessDate: "2026-08-25",
+      pickups: [first, second],
+      externalOrders: [external("confirmed", "pickup", "cc-pickup")],
+      processingLocation,
+    });
+    expect(plan.stops.filter(stop => stop.kind === "processing")).toHaveLength(
+      1
+    );
+    const processingIndex = plan.stops.findIndex(
+      stop => stop.kind === "processing"
+    );
+    expect(processingIndex).toBeGreaterThan(
+      plan.stops.findIndex(stop => stop.id === "native-pickup-2")
+    );
+  });
+
+  it("does not derive processing for dropoff-only or pending external work", () => {
+    const dropoffs = buildDayPlanProjection({
+      businessDate: "2026-08-25",
+      deliveries: [native(1)],
+      externalOrders: [external("pending_review", "pickup")],
+      processingLocation,
+    });
+    expect(dropoffs.stops.some(stop => stop.kind === "processing")).toBe(false);
+  });
+
+  it("projects confirmed user truth once and keeps Greystar email actionable while field visits are blocked", () => {
+    const plan = buildDayPlanProjection({
+      businessDate: "2026-08-25",
+      salesMissions: [greystar("game_ready")],
+      physicalVisitBlocked: true,
+      commitments: [
+        {
+          id: "postcards",
+          businessDate: "2026-08-25",
+          title: "Mail 4 customer postcards",
+          kind: "growth",
+          quantity: 4,
+          provenance: "user_reported",
+          status: "open",
+          completedAt: null,
+        },
+      ],
+    });
+    expect(
+      plan.stops.filter(stop => stop.id === "commitment-postcards")
+    ).toHaveLength(1);
+    expect(plan.stops.find(stop => stop.id.endsWith("-email"))?.status).toBe(
+      "ready"
+    );
+    expect(plan.stops.find(stop => stop.id.endsWith("-visits"))?.status).toBe(
+      "blocked"
+    );
+    expect(plan.growthCoverage).toBe("covered");
   });
 });

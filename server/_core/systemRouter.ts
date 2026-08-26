@@ -30,6 +30,7 @@ import { impactSignalRouter } from "../impactSignals/impactSignalRouter";
 import { driverGameWorldRouter } from "../driverGameWorld/driverGameWorldRouter";
 import { salesIntelRouter } from "../salesIntel/salesIntelRouter";
 import { goldlineEventRouter } from "../dayforgeEvents/goldlineEventRouter";
+import { dayDirectorRouter } from "../dayDirector/dayDirectorRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
@@ -61,6 +62,7 @@ export const systemRouter = router({
   driverGameWorld: driverGameWorldRouter,
   salesIntel: salesIntelRouter,
   goldlineEvents: goldlineEventRouter,
+  dayDirector: dayDirectorRouter,
   health: publicProcedure
     .input(
       z.object({

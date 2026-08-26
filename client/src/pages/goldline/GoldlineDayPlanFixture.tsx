@@ -2,8 +2,17 @@ import type { Order } from "@shared/types";
 import type { CommercialMission } from "@shared/commercialMission";
 import type { ExternalOperationalOrder } from "@shared/externalOperationalOrder";
 import GoldlineDayPlan from "./GoldlineDayPlan";
+import { useState } from "react";
+import type { DayDirectorCommitment } from "@shared/dayDirector";
 
 export default function GoldlineDayPlanFixture({ state }: { state: string }) {
+  const storagePrefix = `day-director-${state}`;
+  const [commitments, setCommitments] = useState<DayDirectorCommitment[]>(() =>
+    JSON.parse(sessionStorage.getItem(`${storagePrefix}-commitments`) ?? "[]")
+  );
+  const [dismissed, setDismissed] = useState<string[]>(() =>
+    JSON.parse(sessionStorage.getItem(`${storagePrefix}-dismissed`) ?? "[]")
+  );
   const order = (
     id: number,
     kind: "pickup" | "dropoff",
@@ -71,7 +80,65 @@ export default function GoldlineDayPlanFixture({ state }: { state: string }) {
       ]}
       deliveries={[order(6, "dropoff", "Park Meridian", "3:00–4:00", "ready")]}
       externalOrders={imported}
-      salesMissions={[mission]}
+      salesMissions={state.startsWith("director") ? [] : [mission]}
+      processingLocation={{
+        name: "Lugo's Lavanderia",
+        locality: "Huntington Park",
+        address: null,
+      }}
+      commitments={commitments}
+      intelligenceAvailable={!state.startsWith("director-fallback")}
+      dismissedPromptKeys={dismissed}
+      onProposeCommitment={async sourceText => ({
+        promptKey: "fixture-postcards",
+        title: state.startsWith("director-fallback")
+          ? sourceText
+          : "Mail customer postcards",
+        kind: "growth",
+        quantity: state.startsWith("director-fallback") ? null : 4,
+        sourceText,
+        prerequisites: state.startsWith("director-fallback")
+          ? []
+          : ["postcards available"],
+        question: state.startsWith("director-fallback")
+          ? null
+          : "Do you already have the postcards with you?",
+        intelligence: state.startsWith("director-fallback")
+          ? "manual_fallback"
+          : "anthropic",
+      })}
+      onAcceptProposal={async proposal =>
+        setCommitments(current => {
+          const next = current.some(item => item.id === proposal.promptKey)
+            ? current
+            : [
+                ...current,
+                {
+                  id: proposal.promptKey,
+                  businessDate: "2026-08-25",
+                  title: proposal.title,
+                  kind: proposal.kind,
+                  quantity: proposal.quantity,
+                  provenance: "user_reported",
+                  status: "open",
+                  completedAt: null,
+                },
+              ];
+          sessionStorage.setItem(
+            `${storagePrefix}-commitments`,
+            JSON.stringify(next)
+          );
+          return next;
+        })
+      }
+      onDismissProposal={async promptKey => {
+        const next = [...new Set([...dismissed, promptKey])];
+        setDismissed(next);
+        sessionStorage.setItem(
+          `${storagePrefix}-dismissed`,
+          JSON.stringify(next)
+        );
+      }}
       nextCommitmentAt={
         state === "active"
           ? new Date(Date.now() + 3 * 60 * 60_000).toISOString()

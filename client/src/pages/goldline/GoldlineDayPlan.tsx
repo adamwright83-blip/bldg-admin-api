@@ -10,6 +10,11 @@ import {
 import type { Order } from "@shared/types";
 import type { CommercialMission } from "@shared/commercialMission";
 import type { ExternalOperationalOrder } from "@shared/externalOperationalOrder";
+import type {
+  DayDirectorCommitment,
+  DayDirectorProposal,
+  ProcessingLocation,
+} from "@shared/dayDirector";
 import type { OpenChannelMission } from "../../../../server/openChannel/openChannelTypes";
 import {
   buildDayPlanProjection,
@@ -32,6 +37,13 @@ export type GoldlineDayPlanProps = {
   onEnterOperations: () => void;
   onEnterWorld: (trackedStopId?: string) => void;
   onEnterColosseum: () => void;
+  processingLocation?: ProcessingLocation | null;
+  commitments?: DayDirectorCommitment[];
+  intelligenceAvailable?: boolean;
+  dismissedPromptKeys?: string[];
+  onProposeCommitment?: (sourceText: string) => Promise<DayDirectorProposal>;
+  onAcceptProposal?: (proposal: DayDirectorProposal) => Promise<void>;
+  onDismissProposal?: (promptKey: string) => Promise<void>;
 };
 
 const KIND_LABEL = {
@@ -39,6 +51,8 @@ const KIND_LABEL = {
   dropoff: "DROPOFF",
   sales: "SALES STOP",
   prep: "PREP TASK",
+  processing: "PROCESSING",
+  growth: "GROWTH",
 } as const;
 
 function dateHeading(ymd: string): string {
@@ -129,6 +143,9 @@ function StopCard({
 
 export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [truthText, setTruthText] = useState("");
+  const [proposal, setProposal] = useState<DayDirectorProposal | null>(null);
+  const [directorBusy, setDirectorBusy] = useState(false);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
@@ -144,6 +161,8 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         openChannelMission: props.openChannelMission,
         salesMissions: props.salesMissions,
         nextCommitmentAt: props.nextCommitmentAt,
+        processingLocation: props.processingLocation,
+        commitments: props.commitments,
         now,
       }),
     [
@@ -154,6 +173,8 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       props.openChannelMission,
       props.salesMissions,
       props.nextCommitmentAt,
+      props.processingLocation,
+      props.commitments,
       now,
     ]
   );
@@ -249,6 +270,98 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         {props.isLoading && (
           <div className="gdp-empty">Charting today’s Gold Line…</div>
         )}
+        {!props.isLoading &&
+          plan.growthCoverage !== "covered" &&
+          !proposal &&
+          !props.dismissedPromptKeys?.includes("growth-intake") && (
+            <aside className="gdp-director" data-testid="day-director-intake">
+              <strong>DAY DIRECTOR</strong>
+              <p>What has to move forward today?</p>
+              {!props.intelligenceAvailable && (
+                <small>
+                  Planning intelligence unavailable — operational route
+                  preserved. Add today’s commitment manually.
+                </small>
+              )}
+              <textarea
+                aria-label="Today's commitment"
+                value={truthText}
+                onChange={event => setTruthText(event.target.value)}
+                placeholder="Tell me what you committed to, promised, need to sell, or need to finish."
+              />
+              <div>
+                <button
+                  type="button"
+                  disabled={directorBusy || !truthText.trim()}
+                  onClick={async () => {
+                    if (!props.onProposeCommitment) return;
+                    setDirectorBusy(true);
+                    try {
+                      setProposal(await props.onProposeCommitment(truthText));
+                    } finally {
+                      setDirectorBusy(false);
+                    }
+                  }}
+                >
+                  {props.intelligenceAvailable ? "REVIEW PLAN" : "ADD MANUALLY"}
+                </button>
+                <button
+                  type="button"
+                  disabled={directorBusy}
+                  onClick={async () => {
+                    await props.onDismissProposal?.("growth-intake");
+                    setProposal(null);
+                  }}
+                >
+                  NOT NOW
+                </button>
+              </div>
+            </aside>
+          )}
+        {proposal &&
+          !props.dismissedPromptKeys?.includes(proposal.promptKey) && (
+            <aside className="gdp-director" data-testid="day-director-proposal">
+              <strong>DAY DIRECTOR</strong>
+              <p>
+                {proposal.title}
+                {proposal.quantity ? ` · ${proposal.quantity}` : ""}
+              </p>
+              {proposal.question && <small>{proposal.question}</small>}
+              <div>
+                <button
+                  type="button"
+                  disabled={directorBusy}
+                  onClick={async () => {
+                    setDirectorBusy(true);
+                    try {
+                      await props.onAcceptProposal?.(proposal);
+                      setProposal(null);
+                      setTruthText("");
+                    } finally {
+                      setDirectorBusy(false);
+                    }
+                  }}
+                >
+                  ADD TO PLAN
+                </button>
+                <button
+                  type="button"
+                  disabled={directorBusy}
+                  onClick={async () => {
+                    setDirectorBusy(true);
+                    try {
+                      await props.onDismissProposal?.(proposal.promptKey);
+                      setProposal(null);
+                    } finally {
+                      setDirectorBusy(false);
+                    }
+                  }}
+                >
+                  NOT NOW
+                </button>
+              </div>
+            </aside>
+          )}
         {!props.isLoading && plan.stops.length === 0 && (
           <div className="gdp-empty">
             <strong>Your route is open.</strong>

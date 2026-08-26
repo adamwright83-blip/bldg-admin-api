@@ -1964,8 +1964,13 @@ export const driverSalesScoreEvents = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   table => ({
-    tenantDedupeUnique: uniqueIndex("uq_driver_sales_score_tenant_dedupe").on(table.tenantId, table.dedupeKey),
-    tenantDriverOccurredIdx: index("idx_driver_sales_score_tenant_driver_occurred").on(table.tenantId, table.driverId, table.occurredAt),
+    tenantDedupeUnique: uniqueIndex("uq_driver_sales_score_tenant_dedupe").on(
+      table.tenantId,
+      table.dedupeKey
+    ),
+    tenantDriverOccurredIdx: index(
+      "idx_driver_sales_score_tenant_driver_occurred"
+    ).on(table.tenantId, table.driverId, table.occurredAt),
   })
 );
 
@@ -1980,14 +1985,22 @@ export const driverSalesJournals = mysqlTable(
     audioMimeType: varchar("audioMimeType", { length: 96 }),
     transcript: text("transcript").notNull(),
     insightsJson: json("insightsJson").notNull(),
-    processingStatus: mysqlEnum("processingStatus", ["processed", "fallback"]).notNull(),
+    processingStatus: mysqlEnum("processingStatus", [
+      "processed",
+      "fallback",
+    ]).notNull(),
     journalPoints: int("journalPoints").notNull().default(0),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => ({
-    tenantDriverDateUnique: uniqueIndex("uq_driver_sales_journal_tenant_driver_date").on(table.tenantId, table.driverId, table.journalDate),
-    tenantCreatedIdx: index("idx_driver_sales_journal_tenant_created").on(table.tenantId, table.createdAt),
+    tenantDriverDateUnique: uniqueIndex(
+      "uq_driver_sales_journal_tenant_driver_date"
+    ).on(table.tenantId, table.driverId, table.journalDate),
+    tenantCreatedIdx: index("idx_driver_sales_journal_tenant_created").on(
+      table.tenantId,
+      table.createdAt
+    ),
   })
 );
 
@@ -1997,7 +2010,13 @@ export const driverSalesPlaybookSources = mysqlTable(
     id: varchar("id", { length: 36 }).primaryKey(),
     tenantId: varchar("tenantId", { length: 64 }).notNull(),
     name: varchar("name", { length: 191 }).notNull(),
-    sourceType: mysqlEnum("sourceType", ["foundation", "instagram", "document", "video", "other"]).notNull(),
+    sourceType: mysqlEnum("sourceType", [
+      "foundation",
+      "instagram",
+      "document",
+      "video",
+      "other",
+    ]).notNull(),
     sourceUrl: varchar("sourceUrl", { length: 1024 }),
     attribution: varchar("attribution", { length: 512 }),
     content: text("content").notNull(),
@@ -2006,7 +2025,12 @@ export const driverSalesPlaybookSources = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => ({ tenantActiveIdx: index("idx_driver_sales_playbook_tenant_active").on(table.tenantId, table.active) })
+  table => ({
+    tenantActiveIdx: index("idx_driver_sales_playbook_tenant_active").on(
+      table.tenantId,
+      table.active
+    ),
+  })
 );
 
 export const tenantCommercialProposalProfiles = mysqlTable(
@@ -4473,15 +4497,25 @@ export const businessGameMoveDecisions = mysqlTable(
     moveId: varchar("moveId", { length: 191 }).notNull(),
     sourceType: varchar("sourceType", { length: 64 }).notNull(),
     sourceId: varchar("sourceId", { length: 191 }).notNull(),
-    decision: mysqlEnum("decision", ["accepted", "dismissed", "completed"]).notNull(),
+    decision: mysqlEnum("decision", [
+      "accepted",
+      "dismissed",
+      "completed",
+    ]).notNull(),
     actorId: varchar("actorId", { length: 128 }).notNull(),
     requestId: varchar("requestId", { length: 36 }).notNull(),
     metadataJson: json("metadataJson"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   table => ({
-    tenantRequestUnique: uniqueIndex("uq_business_move_decisions_tenant_request").on(table.tenantId, table.requestId),
-    tenantMoveIdx: index("idx_business_move_decisions_tenant_move").on(table.tenantId, table.moveId, table.createdAt),
+    tenantRequestUnique: uniqueIndex(
+      "uq_business_move_decisions_tenant_request"
+    ).on(table.tenantId, table.requestId),
+    tenantMoveIdx: index("idx_business_move_decisions_tenant_move").on(
+      table.tenantId,
+      table.moveId,
+      table.createdAt
+    ),
   })
 );
 
@@ -4533,9 +4567,12 @@ export const driverGameWorldNodes = mysqlTable(
     tenantActorMissionUnique: uniqueIndex(
       "uq_driver_game_world_actor_mission"
     ).on(table.tenantId, table.actorId, table.missionId),
-    tenantActorStateIdx: index(
-      "idx_driver_game_world_tenant_actor_state"
-    ).on(table.tenantId, table.actorId, table.visualState, table.updatedAt),
+    tenantActorStateIdx: index("idx_driver_game_world_tenant_actor_state").on(
+      table.tenantId,
+      table.actorId,
+      table.visualState,
+      table.updatedAt
+    ),
   })
 );
 
@@ -4703,8 +4740,12 @@ export const businessDayResolutions = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   table => ({
-    tenantDateActorUnique: uniqueIndex("uq_business_day_resolutions_tenant_date_actor").on(table.tenantId, table.businessDate, table.actorId),
-    tenantRequestUnique: uniqueIndex("uq_business_day_resolutions_tenant_request").on(table.tenantId, table.requestId),
+    tenantDateActorUnique: uniqueIndex(
+      "uq_business_day_resolutions_tenant_date_actor"
+    ).on(table.tenantId, table.businessDate, table.actorId),
+    tenantRequestUnique: uniqueIndex(
+      "uq_business_day_resolutions_tenant_request"
+    ).on(table.tenantId, table.requestId),
   })
 );
 
@@ -4716,7 +4757,13 @@ export const employeeOperatingProfiles = mysqlTable(
     tenantId: varchar("tenantId", { length: 64 }).notNull(),
     userOpenId: varchar("userOpenId", { length: 64 }).notNull(),
     displayName: varchar("displayName", { length: 255 }).notNull(),
-    employmentStatus: mysqlEnum("employmentStatus", ["active", "leave", "ended"]).notNull().default("active"),
+    employmentStatus: mysqlEnum("employmentStatus", [
+      "active",
+      "leave",
+      "ended",
+    ])
+      .notNull()
+      .default("active"),
     skillsJson: json("skillsJson").notNull(),
     weeklyCapacityUnits: int("weeklyCapacityUnits"),
     createdBy: varchar("createdBy", { length: 128 }).notNull(),
@@ -4725,8 +4772,13 @@ export const employeeOperatingProfiles = mysqlTable(
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => ({
-    tenantUserUnique: uniqueIndex("uq_employee_operating_profiles_tenant_user").on(table.tenantId, table.userOpenId),
-    tenantStatusIdx: index("idx_employee_operating_profiles_tenant_status").on(table.tenantId, table.employmentStatus),
+    tenantUserUnique: uniqueIndex(
+      "uq_employee_operating_profiles_tenant_user"
+    ).on(table.tenantId, table.userOpenId),
+    tenantStatusIdx: index("idx_employee_operating_profiles_tenant_status").on(
+      table.tenantId,
+      table.employmentStatus
+    ),
   })
 );
 
@@ -4743,8 +4795,14 @@ export const employeeOperatingProfileEvents = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   table => ({
-    tenantRequestUnique: uniqueIndex("uq_employee_profile_events_tenant_request").on(table.tenantId, table.requestId),
-    tenantProfileIdx: index("idx_employee_profile_events_tenant_profile").on(table.tenantId, table.profileId, table.createdAt),
+    tenantRequestUnique: uniqueIndex(
+      "uq_employee_profile_events_tenant_request"
+    ).on(table.tenantId, table.requestId),
+    tenantProfileIdx: index("idx_employee_profile_events_tenant_profile").on(
+      table.tenantId,
+      table.profileId,
+      table.createdAt
+    ),
   })
 );
 
@@ -4933,7 +4991,11 @@ export const salesIntelSources = mysqlTable(
     id: varchar("id", { length: 36 }).primaryKey(),
     creatorName: varchar("creatorName", { length: 191 }).notNull(),
     creatorHandle: varchar("creatorHandle", { length: 191 }),
-    platform: mysqlEnum("platform", ["youtube", "instagram", "manual"]).notNull(),
+    platform: mysqlEnum("platform", [
+      "youtube",
+      "instagram",
+      "manual",
+    ]).notNull(),
     sourceType: mysqlEnum("sourceType", [
       "youtube_channel",
       "youtube_playlist",
@@ -4941,8 +5003,12 @@ export const salesIntelSources = mysqlTable(
       "instagram_profile_reference",
       "manual_source",
     ]).notNull(),
-    canonicalSourceUrl: varchar("canonicalSourceUrl", { length: 1024 }).notNull(),
-    canonicalSourceUrlHash: varchar("canonicalSourceUrlHash", { length: 64 }).notNull(),
+    canonicalSourceUrl: varchar("canonicalSourceUrl", {
+      length: 1024,
+    }).notNull(),
+    canonicalSourceUrlHash: varchar("canonicalSourceUrlHash", {
+      length: 64,
+    }).notNull(),
     externalChannelId: varchar("externalChannelId", { length: 191 }),
     acquisitionMode: mysqlEnum("acquisitionMode", [
       "AUTO_YOUTUBE",
@@ -4951,7 +5017,9 @@ export const salesIntelSources = mysqlTable(
       "URL_REFERENCE_ONLY",
       "PROVIDER_ANALYSIS",
     ]).notNull(),
-    status: mysqlEnum("status", ["active", "disabled"]).notNull().default("active"),
+    status: mysqlEnum("status", ["active", "disabled"])
+      .notNull()
+      .default("active"),
     notes: varchar("notes", { length: 2048 }),
     lastCheckedAt: timestamp("lastCheckedAt"),
     createdBy: varchar("createdBy", { length: 128 }).notNull(),
@@ -5393,7 +5461,13 @@ export const impactSignals = mysqlTable(
     businessDate: varchar("businessDate", { length: 10 }).notNull(),
     signalKey: varchar("signalKey", { length: 96 }).notNull(),
     label: varchar("label", { length: 191 }).notNull(),
-    valueType: mysqlEnum("valueType", ["text", "number", "boolean", "enum", "date"])
+    valueType: mysqlEnum("valueType", [
+      "text",
+      "number",
+      "boolean",
+      "enum",
+      "date",
+    ])
       .notNull()
       .default("text"),
     value: text("value").notNull(),
@@ -5450,7 +5524,13 @@ export const trackedSignalDefinitions = mysqlTable(
     tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
     signalKey: varchar("signalKey", { length: 96 }).notNull(),
     label: varchar("label", { length: 191 }).notNull(),
-    valueType: mysqlEnum("valueType", ["text", "number", "boolean", "enum", "date"])
+    valueType: mysqlEnum("valueType", [
+      "text",
+      "number",
+      "boolean",
+      "enum",
+      "date",
+    ])
       .notNull()
       .default("text"),
     impactClass: mysqlEnum("impactClass", [
@@ -5475,6 +5555,84 @@ export const trackedSignalDefinitions = mysqlTable(
     keyUnique: uniqueIndex("uq_tracked_signal_key").on(
       table.tenantId,
       table.signalKey
+    ),
+  })
+);
+
+/** Tenant-scoped operational handoff destination used by Day Director. */
+export const dayDirectorProcessingLocations = mysqlTable(
+  "day_director_processing_locations",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    name: varchar("name", { length: 191 }).notNull(),
+    locality: varchar("locality", { length: 191 }),
+    address: varchar("address", { length: 512 }),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantUnique: uniqueIndex("uq_day_director_processing_tenant").on(
+      table.tenantId
+    ),
+  })
+);
+
+/** Human-approved daily truth and per-day prompt lifecycle. */
+export const dayDirectorCommitments = mysqlTable(
+  "day_director_commitments",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    kind: mysqlEnum("kind", ["growth", "prep", "operations"]).notNull(),
+    quantity: int("quantity"),
+    provenance: mysqlEnum("provenance", ["user_reported", "manual"]).notNull(),
+    status: mysqlEnum("status", ["open", "completed"])
+      .notNull()
+      .default("open"),
+    sourceText: text("sourceText"),
+    metadataJson: json("metadataJson"),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_day_director_commitment_key").on(
+      table.tenantId,
+      table.actorId,
+      table.businessDate,
+      table.idempotencyKey
+    ),
+    todayIdx: index("idx_day_director_commitment_today").on(
+      table.tenantId,
+      table.actorId,
+      table.businessDate
+    ),
+  })
+);
+
+export const dayDirectorPromptStates = mysqlTable(
+  "day_director_prompt_states",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    promptKey: varchar("promptKey", { length: 191 }).notNull(),
+    state: mysqlEnum("state", ["accepted", "dismissed"]).notNull(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    promptUnique: uniqueIndex("uq_day_director_prompt_state").on(
+      table.tenantId,
+      table.actorId,
+      table.businessDate,
+      table.promptKey
     ),
   })
 );
