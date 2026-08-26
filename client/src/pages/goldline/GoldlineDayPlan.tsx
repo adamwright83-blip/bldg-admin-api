@@ -146,6 +146,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
   const [truthText, setTruthText] = useState("");
   const [proposal, setProposal] = useState<DayDirectorProposal | null>(null);
   const [directorBusy, setDirectorBusy] = useState(false);
+  const [directorError, setDirectorError] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
@@ -327,6 +328,11 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
                 {proposal.quantity ? ` · ${proposal.quantity}` : ""}
               </p>
               {proposal.question && <small>{proposal.question}</small>}
+              {directorError && (
+                <small className="gdp-director-error" role="alert">
+                  {directorError}
+                </small>
+              )}
               <div>
                 <button
                   type="button"
@@ -334,9 +340,14 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
                   onClick={async () => {
                     setDirectorBusy(true);
                     try {
+                      setDirectorError(null);
                       await props.onAcceptProposal?.(proposal);
                       setProposal(null);
                       setTruthText("");
+                    } catch {
+                      setDirectorError(
+                        "Could not add this to Today. Please try again."
+                      );
                     } finally {
                       setDirectorBusy(false);
                     }
@@ -350,8 +361,13 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
                   onClick={async () => {
                     setDirectorBusy(true);
                     try {
+                      setDirectorError(null);
                       await props.onDismissProposal?.(proposal.promptKey);
                       setProposal(null);
+                    } catch {
+                      setDirectorError(
+                        "Could not dismiss this prompt. Please try again."
+                      );
                     } finally {
                       setDirectorBusy(false);
                     }

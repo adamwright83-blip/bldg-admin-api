@@ -14,7 +14,11 @@ const run = async (sql, label) => {
     await conn.execute(sql);
     console.log("✓", label);
   } catch (e) {
-    if (e.code === "ER_DUP_FIELDNAME" || e.code === "ER_TABLE_EXISTS_ERROR" || String(e.message).includes("Duplicate column")) {
+    if (
+      e.code === "ER_DUP_FIELDNAME" ||
+      e.code === "ER_TABLE_EXISTS_ERROR" ||
+      String(e.message).includes("Duplicate column")
+    ) {
       console.log("→ already exists, skipping:", label);
     } else {
       console.error("✗", label, e.message);
@@ -22,8 +26,19 @@ const run = async (sql, label) => {
   }
 };
 
+const runRequired = async (sql, label) => {
+  try {
+    await conn.execute(sql);
+    console.log("✓", label);
+  } catch (error) {
+    console.error("✗ required migration failed:", label, error.message);
+    throw error;
+  }
+};
+
 // ── users table ──────────────────────────────────────────────────
-await run(`
+await run(
+  `
   CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     tenantId VARCHAR(64) DEFAULT 'default',
@@ -36,15 +51,30 @@ await run(`
     updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     lastSignedIn TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
   )
-`, "CREATE TABLE users");
+`,
+  "CREATE TABLE users"
+);
 
-await run(`ALTER TABLE users ADD COLUMN tenantId VARCHAR(64) DEFAULT 'default' AFTER id`, "users.tenantId");
-await run(`ALTER TABLE users ADD COLUMN loginMethod VARCHAR(64) AFTER email`, "users.loginMethod");
-await run(`ALTER TABLE users ADD COLUMN role ENUM('user','admin') NOT NULL DEFAULT 'user' AFTER loginMethod`, "users.role");
-await run(`ALTER TABLE users ADD COLUMN lastSignedIn TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER updatedAt`, "users.lastSignedIn");
+await run(
+  `ALTER TABLE users ADD COLUMN tenantId VARCHAR(64) DEFAULT 'default' AFTER id`,
+  "users.tenantId"
+);
+await run(
+  `ALTER TABLE users ADD COLUMN loginMethod VARCHAR(64) AFTER email`,
+  "users.loginMethod"
+);
+await run(
+  `ALTER TABLE users ADD COLUMN role ENUM('user','admin') NOT NULL DEFAULT 'user' AFTER loginMethod`,
+  "users.role"
+);
+await run(
+  `ALTER TABLE users ADD COLUMN lastSignedIn TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER updatedAt`,
+  "users.lastSignedIn"
+);
 
 // ── orders table ─────────────────────────────────────────────────
-await run(`
+await run(
+  `
   CREATE TABLE IF NOT EXISTS orders (
     id INT AUTO_INCREMENT PRIMARY KEY,
     tenantId VARCHAR(64) DEFAULT 'default',
@@ -79,26 +109,76 @@ await run(`
     createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   )
-`, "CREATE TABLE orders");
+`,
+  "CREATE TABLE orders"
+);
 
 // Add any missing columns to existing orders table
 const cols = [
-  [`ALTER TABLE orders ADD COLUMN tenantId VARCHAR(64) DEFAULT 'default' AFTER id`, "orders.tenantId"],
-  [`ALTER TABLE orders ADD COLUMN bldgUserId INT AFTER email`, "orders.bldgUserId"],
-  [`ALTER TABLE orders ADD COLUMN stripePaymentIntentId VARCHAR(255) AFTER stripePaymentMethodId`, "orders.stripePaymentIntentId"],
-  [`ALTER TABLE orders ADD COLUMN weightLbs DECIMAL(8,2) AFTER status`, "orders.weightLbs"],
-  [`ALTER TABLE orders ADD COLUMN bagCount INT DEFAULT 1 AFTER weightLbs`, "orders.bagCount"],
-  [`ALTER TABLE orders ADD COLUMN garmentCount INT AFTER bagCount`, "orders.garmentCount"],
-  [`ALTER TABLE orders ADD COLUMN subtotal DECIMAL(10,2) DEFAULT 0 AFTER garmentCount`, "orders.subtotal"],
-  [`ALTER TABLE orders ADD COLUMN discountPercent DECIMAL(5,2) DEFAULT 0 AFTER subtotal`, "orders.discountPercent"],
-  [`ALTER TABLE orders ADD COLUMN total DECIMAL(10,2) DEFAULT 0 AFTER discountPercent`, "orders.total"],
-  [`ALTER TABLE orders ADD COLUMN upchargesJson JSON AFTER total`, "orders.upchargesJson"],
-  [`ALTER TABLE orders ADD COLUMN drycleanItemsJson JSON AFTER upchargesJson`, "orders.drycleanItemsJson"],
-  [`ALTER TABLE orders ADD COLUMN paid BOOLEAN NOT NULL DEFAULT FALSE AFTER drycleanItemsJson`, "orders.paid"],
-  [`ALTER TABLE orders ADD COLUMN isFirstPaidOrder BOOLEAN NOT NULL DEFAULT FALSE AFTER paid`, "orders.isFirstPaidOrder"],
-  [`ALTER TABLE orders ADD COLUMN portalJwt TEXT AFTER isFirstPaidOrder`, "orders.portalJwt"],
-  [`ALTER TABLE orders ADD COLUMN deliveryDate VARCHAR(20) AFTER pickupTimeWindow`, "orders.deliveryDate"],
-  [`ALTER TABLE orders ADD COLUMN deliveryTimeWindow VARCHAR(50) AFTER deliveryDate`, "orders.deliveryTimeWindow"],
+  [
+    `ALTER TABLE orders ADD COLUMN tenantId VARCHAR(64) DEFAULT 'default' AFTER id`,
+    "orders.tenantId",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN bldgUserId INT AFTER email`,
+    "orders.bldgUserId",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN stripePaymentIntentId VARCHAR(255) AFTER stripePaymentMethodId`,
+    "orders.stripePaymentIntentId",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN weightLbs DECIMAL(8,2) AFTER status`,
+    "orders.weightLbs",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN bagCount INT DEFAULT 1 AFTER weightLbs`,
+    "orders.bagCount",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN garmentCount INT AFTER bagCount`,
+    "orders.garmentCount",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN subtotal DECIMAL(10,2) DEFAULT 0 AFTER garmentCount`,
+    "orders.subtotal",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN discountPercent DECIMAL(5,2) DEFAULT 0 AFTER subtotal`,
+    "orders.discountPercent",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN total DECIMAL(10,2) DEFAULT 0 AFTER discountPercent`,
+    "orders.total",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN upchargesJson JSON AFTER total`,
+    "orders.upchargesJson",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN drycleanItemsJson JSON AFTER upchargesJson`,
+    "orders.drycleanItemsJson",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN paid BOOLEAN NOT NULL DEFAULT FALSE AFTER drycleanItemsJson`,
+    "orders.paid",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN isFirstPaidOrder BOOLEAN NOT NULL DEFAULT FALSE AFTER paid`,
+    "orders.isFirstPaidOrder",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN portalJwt TEXT AFTER isFirstPaidOrder`,
+    "orders.portalJwt",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN deliveryDate VARCHAR(20) AFTER pickupTimeWindow`,
+    "orders.deliveryDate",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN deliveryTimeWindow VARCHAR(50) AFTER deliveryDate`,
+    "orders.deliveryTimeWindow",
+  ],
 ];
 
 for (const [sql, label] of cols) {
@@ -106,7 +186,8 @@ for (const [sql, label] of cols) {
 }
 
 // ── vendors table (Phase 1) ───────────────────────────────────────
-await run(`
+await run(
+  `
   CREATE TABLE IF NOT EXISTS vendors (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -123,7 +204,9 @@ await run(`
     createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   )
-`, "CREATE TABLE vendors");
+`,
+  "CREATE TABLE vendors"
+);
 
 // ── vendors: per-vendor platform fee ─────────────────────────────
 await run(
@@ -133,13 +216,34 @@ await run(
 
 // ── orders: vendor + payout columns (Phase 1) ────────────────────
 const vendorCols = [
-  [`ALTER TABLE orders ADD COLUMN buildingSlug VARCHAR(100) AFTER portalJwt`, "orders.buildingSlug"],
-  [`ALTER TABLE orders ADD COLUMN vendorId INT AFTER buildingSlug`, "orders.vendorId"],
-  [`ALTER TABLE orders ADD COLUMN vendorNameSnapshot VARCHAR(255) AFTER vendorId`, "orders.vendorNameSnapshot"],
-  [`ALTER TABLE orders ADD COLUMN routingPrioritySnapshot INT AFTER vendorNameSnapshot`, "orders.routingPrioritySnapshot"],
-  [`ALTER TABLE orders ADD COLUMN platformFeeCents INT AFTER routingPrioritySnapshot`, "orders.platformFeeCents"],
-  [`ALTER TABLE orders ADD COLUMN vendorPayoutCents INT AFTER platformFeeCents`, "orders.vendorPayoutCents"],
-  [`ALTER TABLE orders ADD COLUMN stripeConnectedAccountIdSnapshot VARCHAR(255) AFTER vendorPayoutCents`, "orders.stripeConnectedAccountIdSnapshot"],
+  [
+    `ALTER TABLE orders ADD COLUMN buildingSlug VARCHAR(100) AFTER portalJwt`,
+    "orders.buildingSlug",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN vendorId INT AFTER buildingSlug`,
+    "orders.vendorId",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN vendorNameSnapshot VARCHAR(255) AFTER vendorId`,
+    "orders.vendorNameSnapshot",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN routingPrioritySnapshot INT AFTER vendorNameSnapshot`,
+    "orders.routingPrioritySnapshot",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN platformFeeCents INT AFTER routingPrioritySnapshot`,
+    "orders.platformFeeCents",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN vendorPayoutCents INT AFTER platformFeeCents`,
+    "orders.vendorPayoutCents",
+  ],
+  [
+    `ALTER TABLE orders ADD COLUMN stripeConnectedAccountIdSnapshot VARCHAR(255) AFTER vendorPayoutCents`,
+    "orders.stripeConnectedAccountIdSnapshot",
+  ],
 ];
 
 for (const [sql, label] of vendorCols) {
@@ -147,12 +251,22 @@ for (const [sql, label] of vendorCols) {
 }
 
 // ── vendors: vendor portal columns ────────────────────────────────
-await run(`ALTER TABLE vendors ADD COLUMN slug VARCHAR(50) UNIQUE AFTER platformFeePercent`, "vendors.slug");
-await run(`ALTER TABLE vendors ADD COLUMN brandName VARCHAR(100) AFTER slug`, "vendors.brandName");
-await run(`ALTER TABLE vendors ADD COLUMN logoUrl VARCHAR(512) AFTER brandName`, "vendors.logoUrl");
+await run(
+  `ALTER TABLE vendors ADD COLUMN slug VARCHAR(50) UNIQUE AFTER platformFeePercent`,
+  "vendors.slug"
+);
+await run(
+  `ALTER TABLE vendors ADD COLUMN brandName VARCHAR(100) AFTER slug`,
+  "vendors.brandName"
+);
+await run(
+  `ALTER TABLE vendors ADD COLUMN logoUrl VARCHAR(512) AFTER brandName`,
+  "vendors.logoUrl"
+);
 
 // ── vendor_users table (vendor portal auth) ───────────────────────
-await run(`
+await run(
+  `
   CREATE TABLE IF NOT EXISTS vendor_users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     vendorId INT NOT NULL,
@@ -162,10 +276,13 @@ await run(`
     createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_vendor_email (vendorId, email)
   )
-`, "CREATE TABLE vendor_users");
+`,
+  "CREATE TABLE vendor_users"
+);
 
 // ── vendor_service_coverage table (Phase 2) ───────────────────────
-await run(`
+await run(
+  `
   CREATE TABLE IF NOT EXISTS vendor_service_coverage (
     id INT AUTO_INCREMENT PRIMARY KEY,
     vendorId INT NOT NULL,
@@ -180,7 +297,78 @@ await run(`
     updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_vendor_coverage (vendorId, buildingSlug, serviceType)
   )
-`, "CREATE TABLE vendor_service_coverage");
+`,
+  "CREATE TABLE vendor_service_coverage"
+);
+
+// ── Goldline Day Director ────────────────────────────────────────
+// Keep this idempotent production bootstrap aligned with migration 0059.
+await runRequired(
+  `
+  CREATE TABLE IF NOT EXISTS day_director_processing_locations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL DEFAULT 'default',
+    name VARCHAR(191) NOT NULL,
+    locality VARCHAR(191),
+    address VARCHAR(512),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_day_director_processing_tenant (tenantId)
+  )
+`,
+  "CREATE TABLE day_director_processing_locations"
+);
+
+await runRequired(
+  `
+  CREATE TABLE IF NOT EXISTS day_director_commitments (
+    id VARCHAR(36) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL DEFAULT 'default',
+    actorId VARCHAR(128) NOT NULL,
+    businessDate VARCHAR(10) NOT NULL,
+    idempotencyKey VARCHAR(191) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    kind ENUM('growth','prep','operations') NOT NULL,
+    quantity INT,
+    provenance ENUM('user_reported','manual') NOT NULL,
+    status ENUM('open','completed') NOT NULL DEFAULT 'open',
+    sourceText TEXT,
+    metadataJson JSON,
+    completedAt TIMESTAMP NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_day_director_commitment_key (tenantId,actorId,businessDate,idempotencyKey),
+    KEY idx_day_director_commitment_today (tenantId,actorId,businessDate)
+  )
+`,
+  "CREATE TABLE day_director_commitments"
+);
+
+await runRequired(
+  `
+  CREATE TABLE IF NOT EXISTS day_director_prompt_states (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL DEFAULT 'default',
+    actorId VARCHAR(128) NOT NULL,
+    businessDate VARCHAR(10) NOT NULL,
+    promptKey VARCHAR(191) NOT NULL,
+    state ENUM('accepted','dismissed') NOT NULL,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_day_director_prompt_state (tenantId,actorId,businessDate,promptKey)
+  )
+`,
+  "CREATE TABLE day_director_prompt_states"
+);
+
+await runRequired(
+  `
+  INSERT INTO day_director_processing_locations (tenantId,name,locality,active)
+  VALUES ('default','Lugo''s Lavanderia','Huntington Park',TRUE)
+  ON DUPLICATE KEY UPDATE tenantId = VALUES(tenantId)
+`,
+  "seed default Day Director processing location"
+);
 
 await conn.end();
 console.log("\nMigration complete.");
