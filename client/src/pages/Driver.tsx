@@ -7,6 +7,7 @@ import GoldlineOverworld from "./goldline/GoldlineOverworld";
 import type { Order } from "@shared/types";
 import "./goldline/goldline-legibility.css";
 import "./goldline/goldline-live-fix.css";
+import "./goldline/goldline-import-overlay.css";
 
 const WaywardTetheredDeck = lazy(
   () => import("./goldline/stages/WaywardTetheredDeck")
