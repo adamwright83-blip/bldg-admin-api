@@ -256,6 +256,10 @@
   color: #d8d2c3;
   line-height: 1.35;
 }
+.gdp-director .gdp-director-error {
+  color: #ffd0c7;
+  font-weight: 800;
+}
 .gdp-director textarea {
   width: 100%;
   min-height: 74px;
