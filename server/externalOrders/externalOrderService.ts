@@ -7,7 +7,7 @@
  * table or anything downstream of it.
  */
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { externalOperationalOrders } from "../../drizzle/schema";
 import { getDb } from "../db";
 import type {
@@ -18,9 +18,66 @@ import type {
   ExtractedExternalJob,
 } from "../../shared/externalOperationalOrder";
 
+let schemaReady: Promise<void> | null = null;
+
+/**
+ * Production-safe schema guard.
+ *
+ * This table was introduced by 0057_external_operational_orders.sql, but the
+ * production app process does not run drizzle migrations on startup. A route
+ * must not render an import UI that can only work after a separate operator
+ * remembers to run a DB command. CREATE TABLE IF NOT EXISTS is idempotent and
+ * keeps this truth-isolated table available without mutating native orders.
+ */
+async function ensureExternalOrdersSchema(
+  database: Awaited<ReturnType<typeof getDb>>
+): Promise<void> {
+  if (!database) throw new Error("Database not available");
+  if (!schemaReady) {
+    schemaReady = database
+      .execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS external_operational_orders (
+          id varchar(36) NOT NULL,
+          tenantId varchar(64) NOT NULL DEFAULT 'default',
+          sourceSystem enum('cleancloud','manual_external') NOT NULL,
+          ingestionMethod enum('screenshot','manual','voice') NOT NULL,
+          externalOrderId varchar(191) NULL,
+          jobKind enum('pickup','dropoff') NOT NULL,
+          customerName varchar(191) NOT NULL,
+          address varchar(512) NULL,
+          scheduledDate varchar(10) NULL,
+          windowStart varchar(5) NULL,
+          windowEnd varchar(5) NULL,
+          notes text NULL,
+          operationalStatus enum('scheduled','completed','cancelled') NOT NULL DEFAULT 'scheduled',
+          completedAt timestamp NULL,
+          reconciliationStatus enum('update_required','reconciled') NOT NULL DEFAULT 'update_required',
+          reconciledAt timestamp NULL,
+          externalLastVerifiedAt timestamp NULL,
+          reviewState enum('pending_review','confirmed','discarded') NOT NULL DEFAULT 'pending_review',
+          importBatchId varchar(36) NULL,
+          confirmedAt timestamp NULL,
+          createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (id),
+          INDEX idx_external_order_day (tenantId, scheduledDate, reviewState),
+          INDEX idx_external_order_batch (importBatchId),
+          INDEX idx_external_order_reconciliation (tenantId, reconciliationStatus)
+        )
+      `))
+      .then(() => undefined)
+      .catch(error => {
+        schemaReady = null;
+        throw error;
+      });
+  }
+  await schemaReady;
+}
+
 async function db() {
   const database = await getDb();
   if (!database) throw new Error("Database not available");
+  await ensureExternalOrdersSchema(database);
   return database;
 }
 
@@ -52,14 +109,6 @@ function view(
   };
 }
 
-/**
- * Persists a reviewed batch of screenshot-extracted jobs.
- *
- * The jobs written are the ones the OPERATOR confirmed, not the ones the model
- * proposed — the caller passes back the corrected list, so an edit made on the
- * review screen is what lands. Rows are written already `confirmed`, because
- * the human review that `pending_review` exists to gate has just happened.
- */
 export async function confirmExternalImport(input: {
   tenantId: string;
   batchId: string;
@@ -96,14 +145,6 @@ export async function confirmExternalImport(input: {
   return stored.map(view);
 }
 
-/**
- * One job the operator entered by hand.
- *
- * A first-class path, not a fallback for failed OCR: customers who text, call,
- * or DM are legitimate work that never appears in any driver app screenshot.
- * It is written confirmed for the same reason as the import above — the person
- * typing it IS the review.
- */
 export async function createManualExternalOrder(input: {
   tenantId: string;
   sourceSystem: ExternalSourceSystem;
@@ -139,10 +180,10 @@ export async function createManualExternalOrder(input: {
     .select()
     .from(externalOperationalOrders)
     .where(eq(externalOperationalOrders.id, id));
+  if (!row) throw new Error("External order was not persisted");
   return view(row);
 }
 
-/** Confirmed external work for a day, newest first. */
 export async function listExternalOrders(input: {
   tenantId: string;
   scheduledDate?: string;
@@ -153,9 +194,7 @@ export async function listExternalOrders(input: {
     eq(externalOperationalOrders.reviewState, "confirmed"),
   ];
   if (input.scheduledDate) {
-    filters.push(
-      eq(externalOperationalOrders.scheduledDate, input.scheduledDate)
-    );
+    filters.push(eq(externalOperationalOrders.scheduledDate, input.scheduledDate));
   }
   const rows = await database
     .select()
@@ -165,13 +204,6 @@ export async function listExternalOrders(input: {
   return rows.map(view);
 }
 
-/**
- * The physical work is done.
- *
- * This is the ONLY thing SECURE CARGO may assert for an external job, and it
- * deliberately leaves `reconciliationStatus` at `update_required`. The bag is
- * in the car; CleanCloud has not been told, and this build cannot tell it.
- */
 export async function completeExternalOrder(input: {
   tenantId: string;
   id: string;
@@ -193,17 +225,6 @@ export async function completeExternalOrder(input: {
   return row ? view(row) : null;
 }
 
-/**
- * The operator says they updated CleanCloud.
- *
- * Records a human's statement, which is the strongest claim available without
- * API access. It is called `reconciled` rather than `verified` precisely
- * because nothing here checked anything — see the note in
- * shared/externalOperationalOrder.ts.
- *
- * Refuses to mark work reconciled before it is physically complete: that
- * ordering would let the badge clear while the laundry was still in the shop.
- */
 export async function reconcileExternalOrder(input: {
   tenantId: string;
   id: string;
