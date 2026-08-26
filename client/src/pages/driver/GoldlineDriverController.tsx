@@ -11,6 +11,7 @@ import GoldlineHome, {
   type ArrivedOperatorStop,
 } from "../goldline/GoldlineHome";
 import GoldlineOverworld from "../goldline/GoldlineOverworld";
+import GoldlineDayPlan from "../goldline/GoldlineDayPlan";
 import Day1TenDoors from "../goldline/Day1TenDoors";
 import {
   hasColosseumResolved,
@@ -89,12 +90,14 @@ const REQUESTING_LOCATION: GoldlineLocationSnapshot = {
 };
 
 const GoldlineGameHome = lazy(() => import("../../game/GoldlineGameHome"));
-const WaywardTetheredDeck = lazy(() => import("../goldline/stages/WaywardTetheredDeck"));
+const WaywardTetheredDeck = lazy(
+  () => import("../goldline/stages/WaywardTetheredDeck")
+);
 
-type DriverScene = "game" | "overworld" | "colosseum" | "wayward";
+type DriverScene = "day-plan" | "game" | "overworld" | "colosseum" | "wayward";
 
-/** A fresh driver session always begins at the world choice, never inside a stage. */
-const INITIAL_DRIVER_SCENE: DriverScene = "overworld";
+/** The authoritative real-day projection is the fresh-session home. */
+export const INITIAL_DRIVER_SCENE: DriverScene = "day-plan";
 
 function initialDriverScene(): DriverScene {
   if (
@@ -157,7 +160,12 @@ function LiveGoldlineDriverController() {
   const [selectedDate, setSelectedDate] = useState(() => getLocalYmd());
   const [driverScene, setDriverScene] =
     useState<DriverScene>(initialDriverScene);
-  const [waywardProgress, setWaywardProgress] = useState<WaywardProgress>(() => loadWaywardProgress(null));
+  const [stageReturnScene, setStageReturnScene] = useState<
+    "day-plan" | "overworld"
+  >("overworld");
+  const [waywardProgress, setWaywardProgress] = useState<WaywardProgress>(() =>
+    loadWaywardProgress(null)
+  );
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [newOrderOpen, setNewOrderOpen] = useState(false);
   const [addExternalWorkOpen, setAddExternalWorkOpen] = useState(false);
@@ -185,6 +193,16 @@ function LiveGoldlineDriverController() {
   };
   const pickups = trpc.admin.listByDate.useQuery(pickupQueryInput);
   const deliveries = trpc.admin.listByDate.useQuery(deliveryQueryInput);
+  const completedPickups = trpc.admin.listByDate.useQuery({
+    date: selectedDate,
+    status: "collected" as const,
+    dateField: "pickupDate" as const,
+  });
+  const completedDeliveries = trpc.admin.listByDate.useQuery({
+    date: selectedDate,
+    status: "delivered" as const,
+    dateField: "deliveryDate" as const,
+  });
 
   /**
    * AUTHORITATIVE collected-order evidence.
@@ -338,8 +356,7 @@ function LiveGoldlineDriverController() {
     const playerIdentity = identity.data?.openId ?? null;
     const stored = loadWaywardProgress(playerIdentity);
     const legacyResolved =
-      day1TenDoors.data?.isComplete === true &&
-      hasLegacyDay1Dismissal();
+      day1TenDoors.data?.isComplete === true && hasLegacyDay1Dismissal();
     if (legacyResolved && !hasColosseumResolved(playerIdentity)) {
       markColosseumResolved(playerIdentity);
     }
@@ -1105,6 +1122,65 @@ function LiveGoldlineDriverController() {
     onCompleteOpenChannelTask: handleCompleteOpenChannelTask,
   };
 
+  const dayPlanPickups = [
+    ...(completedPickups.data ?? []),
+    ...(pickups.data ?? []),
+  ];
+  const dayPlanDeliveries = [
+    ...(completedDeliveries.data ?? []),
+    ...(deliveries.data ?? []),
+  ];
+
+  if (driverScene === "day-plan") {
+    return (
+      <>
+        <GoldlineDayPlan
+          businessDate={selectedDate}
+          pickups={dayPlanPickups}
+          deliveries={dayPlanDeliveries}
+          externalOrders={externalOrders.data ?? []}
+          openChannelMission={openChannel.data}
+          salesMissions={builtMissions.data}
+          nextCommitmentAt={
+            currentDayProjection?.nextFixedCommitment?.scheduledAt
+          }
+          isLoading={
+            pickups.isLoading ||
+            deliveries.isLoading ||
+            externalOrders.isLoading
+          }
+          onOpenImport={() => setAddExternalWorkOpen(true)}
+          onEnterOperations={() => setDriverScene("game")}
+          onEnterWorld={() => setDriverScene("overworld")}
+          onEnterColosseum={() => {
+            setStageReturnScene("day-plan");
+            setDriverScene("colosseum");
+          }}
+        />
+        <AddExternalWorkSheet
+          open={addExternalWorkOpen}
+          onClose={() => setAddExternalWorkOpen(false)}
+          onExtract={images => extractExternalDay.mutateAsync({ images })}
+          onConfirmImport={async input => {
+            await confirmExternalImport.mutateAsync({
+              ...input,
+              sourceSystem: "cleancloud",
+            });
+            await externalOrders.refetch();
+          }}
+          onCreateManual={async job => {
+            await createManualExternalOrder.mutateAsync({
+              ...job,
+              sourceSystem: "cleancloud",
+              ingestionMethod: "manual",
+            });
+            await externalOrders.refetch();
+          }}
+        />
+      </>
+    );
+  }
+
   if (driverScene === "overworld") {
     return (
       <GoldlineOverworld
@@ -1120,7 +1196,10 @@ function LiveGoldlineDriverController() {
         playerIdentity={identity.data?.openId ?? null}
         onEmitEvent={emitGoldlineEvent}
         onEnterOperations={() => setDriverScene("game")}
-        onEnterGreystar={() => setDriverScene("colosseum")}
+        onEnterGreystar={() => {
+          setStageReturnScene("overworld");
+          setDriverScene("colosseum");
+        }}
         onEnterWayward={() => setDriverScene("wayward")}
         onResolveOrder={handleResolveOrder}
       />
@@ -1129,11 +1208,17 @@ function LiveGoldlineDriverController() {
 
   if (driverScene === "wayward") {
     return (
-      <Suspense fallback={<div style={{ minHeight: "100dvh", background: "#03070c" }} />}>
+      <Suspense
+        fallback={
+          <div style={{ minHeight: "100dvh", background: "#03070c" }} />
+        }
+      >
         <WaywardTetheredDeck
           playerIdentity={identity.data?.openId ?? null}
           onReturn={() => {
-            setWaywardProgress(loadWaywardProgress(identity.data?.openId ?? null));
+            setWaywardProgress(
+              loadWaywardProgress(identity.data?.openId ?? null)
+            );
             setDriverScene("overworld");
           }}
         />
@@ -1170,7 +1255,7 @@ function LiveGoldlineDriverController() {
           markLegacyDay1Dismissal();
           markColosseumResolved(identity.data?.openId ?? null);
           setWaywardProgress(unlockWayward(identity.data?.openId ?? null));
-          setDriverScene("overworld");
+          setDriverScene(stageReturnScene);
         }}
       />
     );
