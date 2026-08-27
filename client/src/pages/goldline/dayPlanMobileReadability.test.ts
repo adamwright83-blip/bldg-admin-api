@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { isForcedMobileDayPlanViewport } from "./GoldlineDayPlan";
 
 const css = readFileSync(path.join(__dirname, "goldline-day-plan.css"), "utf8");
 
@@ -12,11 +13,40 @@ describe("Goldline Day Plan mobile readability", () => {
     expect(css).toContain("min-height: 38vw");
     expect(css).toContain("font-size: 4.9vw");
     expect(css).toContain("font-size: 3.7vw");
+    expect(css).toContain(".gdp-shell--forced-mobile .gdp-stop");
+  });
+
+  it("detects a phone that exposes a desktop-sized layout viewport", () => {
+    expect(
+      isForcedMobileDayPlanViewport({
+        layoutWidth: 980,
+        screenWidth: 390,
+        coarsePointer: true,
+        hoverless: true,
+      })
+    ).toBe(true);
+    expect(
+      isForcedMobileDayPlanViewport({
+        layoutWidth: 390,
+        screenWidth: 390,
+        coarsePointer: true,
+        hoverless: true,
+      })
+    ).toBe(false);
+    expect(
+      isForcedMobileDayPlanViewport({
+        layoutWidth: 1440,
+        screenWidth: 1440,
+        coarsePointer: false,
+        hoverless: false,
+      })
+    ).toBe(false);
   });
 
   it("keeps the world portal secondary to the work cards", () => {
     expect(css).toContain("width: 45vw");
     expect(css).toContain("height: 45vw");
     expect(css).toContain("font-size: 4.5vw");
+    expect(css).toContain("width: 28vw");
   });
 });

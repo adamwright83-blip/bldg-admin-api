@@ -565,6 +565,13 @@
     padding-inline: 0.4rem;
     font-size: 0.75rem;
   }
+  .gdp-now {
+    min-height: 9rem;
+  }
+  .gdp-now img {
+    width: 7rem;
+    max-height: 11rem;
+  }
   .gdp-world-entry {
     min-height: 13.5rem;
     margin-top: -3.5rem;
@@ -714,7 +721,7 @@
     font-size: 3vw;
   }
   .gdp-now {
-    min-height: 28vw;
+    min-height: 36vw;
   }
   .gdp-now > div {
     width: 24vw;
@@ -730,8 +737,8 @@
     font-size: 2.1vw;
   }
   .gdp-now img {
-    width: 20vw;
-    max-height: 34vw;
+    width: 28vw;
+    max-height: 42vw;
   }
   .gdp-world-entry {
     min-height: 54vw;
@@ -793,11 +800,11 @@
     grid-template-columns: 1fr;
   }
   .gdp-now > div {
-    width: 6rem;
-    height: 6rem;
+    width: 6.5rem;
+    height: 6.5rem;
   }
   .gdp-now img {
-    width: 5rem;
+    width: 6.5rem;
   }
 }
 @media (min-width: 700px) {
@@ -807,4 +814,131 @@
   .gdp-stop:nth-of-type(3n) {
     transform: translateX(8%);
   }
+}
+
+/* Runtime fallback for phones whose browser lies about `device-width` while
+   desktop-site scaling is active. This class is measured from screen width,
+   pointer type, and the live layout width in the component. Keep it last so
+   generic desktop rules cannot shrink or reposition the phone composition. */
+.gdp-shell--forced-mobile .gdp-header {
+  max-width: none;
+  padding: 4vw 3vw 2vw;
+}
+.gdp-shell--forced-mobile .gdp-header > p {
+  margin-right: 15vw;
+  margin-bottom: 3vw;
+  font-size: 5.7vw;
+}
+.gdp-shell--forced-mobile .gdp-menu-button {
+  top: 3vw;
+  right: 3vw;
+  width: 13vw;
+  height: 13vw;
+}
+.gdp-shell--forced-mobile .gdp-counts {
+  max-width: none;
+}
+.gdp-shell--forced-mobile .gdp-counts strong {
+  font-size: 6vw;
+}
+.gdp-shell--forced-mobile .gdp-counts span {
+  font-size: 2.5vw;
+}
+.gdp-shell--forced-mobile .gdp-summary {
+  gap: 1.5vw;
+  margin-top: 2.5vw;
+  padding-top: 2vw;
+  font-size: 2.8vw;
+}
+.gdp-shell--forced-mobile .gdp-import {
+  min-width: 46vw;
+  gap: 2.5vw;
+  margin-top: 3vw;
+  padding: 3vw 4vw;
+}
+.gdp-shell--forced-mobile .gdp-import span {
+  font-size: 2.6vw;
+}
+.gdp-shell--forced-mobile .gdp-import strong {
+  font-size: 4.2vw;
+}
+.gdp-shell--forced-mobile .gdp-route {
+  max-width: none;
+  min-height: 190vw;
+  padding: 5vw 3vw 32vw;
+  gap: 7vw;
+}
+.gdp-shell--forced-mobile .gdp-stop {
+  width: 91vw;
+  max-width: none;
+  min-height: 38vw;
+  box-sizing: border-box;
+  padding: 4.2vw 4.2vw 4vw 15vw;
+  border-width: 0.55vw;
+  border-radius: 4vw;
+}
+.gdp-shell--forced-mobile .gdp-stop--left {
+  transform: translateX(0.5vw) rotate(-0.45deg);
+}
+.gdp-shell--forced-mobile .gdp-stop--right {
+  transform: translateX(-0.5vw) rotate(0.45deg);
+  padding-right: 15vw;
+  padding-left: 4.2vw;
+}
+.gdp-shell--forced-mobile .gdp-stop--processing,
+.gdp-shell--forced-mobile .gdp-stop--growth {
+  width: 94vw;
+  min-height: 40vw;
+}
+.gdp-shell--forced-mobile .gdp-node {
+  left: -5.4vw;
+  top: 4vw;
+  width: 14vw;
+  height: 14vw;
+  border-width: 1vw;
+  font-size: 5vw;
+}
+.gdp-shell--forced-mobile .gdp-stop--right .gdp-node {
+  right: -5.4vw;
+  left: auto;
+}
+.gdp-shell--forced-mobile .gdp-card-kicker {
+  font-size: 3.3vw;
+  line-height: 1.3;
+}
+.gdp-shell--forced-mobile .gdp-card-copy h2 {
+  margin: 1.5vw 0 1.7vw;
+  font-size: 4.9vw;
+  line-height: 1.22;
+}
+.gdp-shell--forced-mobile .gdp-card-meta,
+.gdp-shell--forced-mobile .gdp-source {
+  font-size: 3.7vw;
+  line-height: 1.38;
+}
+.gdp-shell--forced-mobile .gdp-map-link {
+  position: static;
+  min-height: 11vw;
+  margin: 2vw 0 -1vw auto;
+  font-size: 3vw;
+}
+.gdp-shell--forced-mobile .gdp-now {
+  min-height: 36vw;
+}
+.gdp-shell--forced-mobile .gdp-now > div {
+  width: 24vw;
+  height: 24vw;
+}
+.gdp-shell--forced-mobile .gdp-now img {
+  width: 28vw;
+  max-height: 42vw;
+}
+.gdp-shell--forced-mobile .gdp-world-entry {
+  min-height: 54vw;
+  margin-top: -14vw;
+}
+.gdp-shell--forced-mobile .gdp-world-entry button {
+  width: 45vw;
+  height: 45vw;
+  font-size: 4.5vw;
 }
