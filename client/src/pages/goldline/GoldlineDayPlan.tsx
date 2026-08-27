@@ -72,6 +72,20 @@ function shortTime(value: string | null): string | null {
     : parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+export function isForcedMobileDayPlanViewport(input: {
+  layoutWidth: number;
+  screenWidth: number;
+  coarsePointer: boolean;
+  hoverless: boolean;
+}) {
+  return (
+    input.layoutWidth >= 700 &&
+    input.screenWidth <= 699 &&
+    input.coarsePointer &&
+    input.hoverless
+  );
+}
+
 function StopCard({
   stop,
   index,
@@ -148,9 +162,31 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
   const [directorBusy, setDirectorBusy] = useState(false);
   const [directorError, setDirectorError] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const [forcedMobileViewport, setForcedMobileViewport] = useState(false);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    const updateViewportMode = () => {
+      const fixtureOverride =
+        import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1" &&
+        new URLSearchParams(window.location.search).has(
+          "goldlineForcedMobileViewport"
+        );
+      setForcedMobileViewport(
+        fixtureOverride ||
+          isForcedMobileDayPlanViewport({
+            layoutWidth: window.innerWidth,
+            screenWidth: window.screen.width,
+            coarsePointer: window.matchMedia("(pointer: coarse)").matches,
+            hoverless: window.matchMedia("(hover: none)").matches,
+          })
+      );
+    };
+    updateViewportMode();
+    window.addEventListener("resize", updateViewportMode);
+    return () => window.removeEventListener("resize", updateViewportMode);
   }, []);
   const plan = useMemo(
     () =>
@@ -186,7 +222,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
 
   return (
     <main
-      className="gdp-shell"
+      className={`gdp-shell${forcedMobileViewport ? " gdp-shell--forced-mobile" : ""}`}
       style={{ "--gdp-world": `url(${world})` } as React.CSSProperties}
     >
       <header className="gdp-header">
