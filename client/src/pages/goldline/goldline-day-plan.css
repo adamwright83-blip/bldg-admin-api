@@ -576,6 +576,176 @@
     font-size: 1.1rem;
   }
 }
+/* Android Chrome can keep the physical device width while exposing a desktop
+   layout viewport near 980px. Fixed/clamped CSS-pixel caps are then shrunk by
+   the browser and become unreadable. In that mode, size the whole Day Plan in
+   viewport units so the physical result matches the normal 360–430px layout. */
+@media (min-width: 700px) and (max-device-width: 699px) and (hover: none) and (pointer: coarse) {
+  .gdp-header {
+    max-width: none;
+    padding: 4vw 3vw 2vw;
+  }
+  .gdp-header > p {
+    margin-right: 15vw;
+    margin-bottom: 3vw;
+    font-size: 5.7vw;
+  }
+  .gdp-menu-button {
+    top: 3vw;
+    right: 3vw;
+    width: 13vw;
+    height: 13vw;
+  }
+  .gdp-menu-button svg {
+    width: 6vw;
+  }
+  .gdp-counts {
+    max-width: none;
+    gap: 1vw;
+  }
+  .gdp-counts div {
+    column-gap: 1vw;
+  }
+  .gdp-counts strong {
+    font-size: 6vw;
+  }
+  .gdp-counts span {
+    font-size: 2.5vw;
+  }
+  .gdp-summary {
+    gap: 1.5vw;
+    margin-top: 2.5vw;
+    padding-top: 2vw;
+    font-size: 2.8vw;
+  }
+  .gdp-import {
+    min-width: 46vw;
+    gap: 2.5vw;
+    margin-top: 3vw;
+    padding: 3vw 4vw;
+    border-width: 0.5vw;
+    border-radius: 1.8vw;
+  }
+  .gdp-import svg {
+    width: 8vw;
+  }
+  .gdp-import span {
+    font-size: 2.6vw;
+  }
+  .gdp-import strong {
+    font-size: 4.2vw;
+  }
+  .gdp-route {
+    max-width: none;
+    min-height: 190vw;
+    padding: 5vw 3vw 32vw;
+    gap: 7vw;
+  }
+  .gdp-stop {
+    width: 91vw;
+    max-width: none;
+    min-height: 38vw;
+    box-sizing: border-box;
+    padding: 4.2vw 4.2vw 4vw 15vw;
+    border-width: 0.55vw;
+    border-radius: 4vw;
+    background: linear-gradient(110deg, #fffef9fa, #f7f1e5f7);
+  }
+  .gdp-stop--left {
+    transform: translateX(0.5vw) rotate(-0.45deg);
+  }
+  .gdp-stop--right {
+    transform: translateX(-0.5vw) rotate(0.45deg);
+    padding-right: 15vw;
+    padding-left: 4.2vw;
+  }
+  .gdp-stop--processing,
+  .gdp-stop--growth {
+    width: 94vw;
+    min-height: 40vw;
+  }
+  .gdp-node {
+    left: -5.4vw;
+    top: 4vw;
+    width: 14vw;
+    height: 14vw;
+    border-width: 1vw;
+    font-size: 5vw;
+  }
+  .gdp-stop--right .gdp-node {
+    right: -5.4vw;
+    left: auto;
+  }
+  .gdp-node svg {
+    width: 7vw;
+  }
+  .gdp-card-kicker {
+    gap: 2vw;
+    font-size: 3.3vw;
+    line-height: 1.3;
+  }
+  .gdp-card-copy h2 {
+    margin: 1.5vw 0 1.7vw;
+    font-size: 4.9vw;
+    line-height: 1.22;
+  }
+  .gdp-card-meta {
+    gap: 1.8vw 3vw;
+    font-size: 3.7vw;
+    line-height: 1.38;
+  }
+  .gdp-source {
+    margin-top: 2vw;
+    color: color-mix(in srgb, var(--tone) 86%, #101b19);
+    font-size: 3.7vw;
+    line-height: 1.35;
+  }
+  .gdp-complete {
+    position: static;
+    margin-top: 2.5vw;
+    font-size: 3vw;
+  }
+  .gdp-map-link {
+    position: static;
+    width: fit-content;
+    min-height: 11vw;
+    margin: 2vw 0 -1vw auto;
+    padding-inline: 1.5vw;
+    font-size: 3vw;
+  }
+  .gdp-now {
+    min-height: 28vw;
+  }
+  .gdp-now > div {
+    width: 24vw;
+    height: 24vw;
+  }
+  .gdp-now strong {
+    font-size: 4.2vw;
+  }
+  .gdp-now span {
+    font-size: 4.8vw;
+  }
+  .gdp-now small {
+    font-size: 2.1vw;
+  }
+  .gdp-now img {
+    width: 20vw;
+    max-height: 34vw;
+  }
+  .gdp-world-entry {
+    min-height: 54vw;
+    margin-top: -14vw;
+    padding-bottom: 8vw;
+  }
+  .gdp-world-entry button {
+    width: 45vw;
+    height: 45vw;
+    border-width: 1.5vw;
+    outline-width: 0.75vw;
+    font-size: 4.5vw;
+  }
+}
 @keyframes gdp-shimmer {
   50% {
     box-shadow:
