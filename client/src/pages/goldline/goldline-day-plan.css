@@ -502,6 +502,80 @@
 .gdp-world-entry svg {
   margin: 0.5rem auto 0;
 }
+@media (max-width: 699px) {
+  .gdp-route {
+    min-height: 48rem;
+    padding-inline: 0.75rem;
+    gap: 1.75rem;
+  }
+  .gdp-stop {
+    width: min(91%, 24rem);
+    min-height: 9.5rem;
+    box-sizing: border-box;
+    padding: 1.05rem 1.1rem 1rem 4rem;
+    border-width: 2px;
+    background: linear-gradient(110deg, #fffef9fa, #f7f1e5f7);
+  }
+  .gdp-stop--left {
+    transform: translateX(0.15rem) rotate(-0.45deg);
+  }
+  .gdp-stop--right {
+    transform: translateX(-0.15rem) rotate(0.45deg);
+    padding-right: 4rem;
+    padding-left: 1.1rem;
+  }
+  .gdp-stop--processing,
+  .gdp-stop--growth {
+    width: min(94%, 25rem);
+    min-height: 10rem;
+  }
+  .gdp-card-kicker {
+    align-items: center;
+    font-size: 0.82rem;
+    line-height: 1.3;
+    letter-spacing: 0.015em;
+  }
+  .gdp-card-copy h2 {
+    margin: 0.4rem 0 0.45rem;
+    font-size: clamp(1.125rem, 4.9vw, 1.25rem);
+    line-height: 1.22;
+    letter-spacing: -0.01em;
+  }
+  .gdp-card-meta {
+    gap: 0.45rem 0.75rem;
+    font-size: clamp(0.875rem, 3.7vw, 1rem);
+    line-height: 1.38;
+  }
+  .gdp-source {
+    margin-top: 0.5rem;
+    color: color-mix(in srgb, var(--tone) 86%, #101b19);
+    font-size: clamp(0.875rem, 3.7vw, 1rem);
+    line-height: 1.35;
+  }
+  .gdp-complete {
+    position: static;
+    margin-top: 0.65rem;
+    font-size: 0.78rem;
+  }
+  .gdp-map-link {
+    position: static;
+    width: fit-content;
+    min-height: 2.75rem;
+    margin: 0.55rem 0 -0.35rem auto;
+    padding-inline: 0.4rem;
+    font-size: 0.75rem;
+  }
+  .gdp-world-entry {
+    min-height: 13.5rem;
+    margin-top: -3.5rem;
+  }
+  .gdp-world-entry button {
+    width: 11rem;
+    height: 11rem;
+    border-width: 6px;
+    font-size: 1.1rem;
+  }
+}
 @keyframes gdp-shimmer {
   50% {
     box-shadow:
@@ -530,8 +604,16 @@
     gap: 0.35rem;
   }
   .gdp-stop {
-    width: 84%;
-    padding-left: 3rem;
+    width: 92%;
+    padding-left: 3.65rem;
+  }
+  .gdp-stop--processing,
+  .gdp-stop--growth {
+    width: 95%;
+  }
+  .gdp-stop--right {
+    padding-right: 3.65rem;
+    padding-left: 1rem;
   }
   .gdp-node {
     width: 3.5rem;
