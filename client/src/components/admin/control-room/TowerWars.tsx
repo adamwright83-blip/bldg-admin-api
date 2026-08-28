@@ -37,7 +37,7 @@ const ACTION_CLASSES = [
 
 function BuildingArt({ opus, name, damage }: { opus: boolean; name: string; damage: TowerDamageState }) {
   const src = opus
-    ? "/assets/admin/control-room/tower-wars/opus-la-tower-v2.png"
+    ? "/assets/admin/control-room/tower-wars/opus-la-siege-driver-v4.png"
     : "/assets/admin/control-room/tower-wars/century-park-east-tower-v2.png";
   const weapon = opus ? "architectural-scale hinged golf driver" : "compact rooftop valet bazooka";
   return <img className="tw-building-layer" src={src} alt={`${name}, ${damage.replace("-", " ")} damage, with ${weapon}`} />;
