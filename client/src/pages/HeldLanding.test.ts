@@ -10,7 +10,12 @@ describe("Held resident landing page", () => {
     expect(app).toContain(": HeldLandingRoute");
     expect(page).toContain("Pull the pen");
     expect(page).toContain("Say what you need");
-    expect(page).toContain("Top-rated local 5-star vendors, curated for your building");
+    expect(page).toContain("Top-rated local vendors, selected for your building");
+  });
+
+  it("uses no stock icon library or generic SVG icon components", () => {
+    expect(page).not.toContain("lucide-react");
+    expect(page).not.toMatch(/<(ArrowRight|Check|ChevronDown|Mic|Sparkles|Icon)\b/);
   });
 
   it("presents every resident service and natural-language rescheduling", () => {

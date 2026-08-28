@@ -1,11 +1,10 @@
-import { ArrowRight, Car, Check, ChevronDown, Dog, Mic, Shirt, Sparkles } from "lucide-react";
 import "./held-landing.css";
 
 const services = [
-  { icon: Shirt, label: "Laundry" },
-  { icon: Dog, label: "Dog grooming" },
-  { icon: Car, label: "Car detailing" },
-  { icon: Sparkles, label: "Dry cleaning" },
+  { number: "01", label: "Laundry" },
+  { number: "02", label: "Dog grooming" },
+  { number: "03", label: "Car detailing" },
+  { number: "04", label: "Dry cleaning" },
 ];
 
 const examples = [
@@ -39,13 +38,13 @@ export default function HeldLanding() {
               Laundry, dog grooming, car detailing, or dry cleaning—ordered in one sentence.
               No menus. No forms. No eight-click checkout.
             </p>
-            <p className="held-vendor-trust"><Sparkles /> Top-rated local 5-star vendors, curated for your building.</p>
+            <p className="held-vendor-trust"><span>CURATED / 5.0</span> Top-rated local vendors, selected for your building.</p>
             <div className="held-actions">
-              <a className="held-primary" href="/account">Open Held <ArrowRight /></a>
-              <a className="held-secondary" href="#how">See the 10-second order <ChevronDown /></a>
+              <a className="held-primary" href="/account">Open Held</a>
+              <a className="held-secondary" href="#how">See the 10-second order</a>
             </div>
             <div className="held-command-strip" aria-label="Example voice command">
-              <span><Mic /></span>
+              <span className="held-wave" aria-hidden><i /><i /><i /><i /></span>
               <div><small>JUST SAY</small><strong>“Laundry tomorrow after six.”</strong></div>
               <i>Handled.</i>
             </div>
@@ -58,13 +57,13 @@ export default function HeldLanding() {
             </div>
             <div className="held-pull-note"><span>1</span><b>Pull down</b><small>the fountain pen</small></div>
             <div className="held-speak-note"><span>2</span><b>Speak or type</b><small>one natural command</small></div>
-            <div className="held-done-note"><Check /><b>Order placed</b><small>Your building handles the rest</small></div>
+            <div className="held-done-note"><span>HELD</span><b>Order placed</b><small>Your building handles the rest</small></div>
           </div>
         </section>
 
         <section className="held-service-ribbon" id="services">
           <p>One gesture unlocks all four</p>
-          <div>{services.map(({ icon: Icon, label }) => <span key={label}><Icon /><b>{label}</b></span>)}</div>
+          <div>{services.map(({ number, label }) => <span key={label}><i>{number}</i><b>{label}</b></span>)}</div>
         </section>
 
         <section className="held-how" id="how">
@@ -75,8 +74,8 @@ export default function HeldLanding() {
           </header>
           <div className="held-steps">
             <article><b>01</b><div className="held-mini-pen" /><h3>Pull the pen</h3><p>The physical gesture opens your private request tray.</p></article>
-            <article><b>02</b><Mic /><h3>Say it normally</h3><p>“Laundry.” “Groom Milo Friday.” “Detail my car downstairs.”</p></article>
-            <article><b>03</b><Check /><h3>It’s already handled</h3><p>Held enrolls you in the best available window and confirms the order.</p></article>
+            <article><b>02</b><div className="held-step-wave" aria-hidden><i /><i /><i /><i /><i /></div><h3>Say it normally</h3><p>“Laundry.” “Groom Milo Friday.” “Detail my car downstairs.”</p></article>
+            <article><b>03</b><div className="held-step-seal">HELD</div><h3>It’s already handled</h3><p>Held enrolls you in the best available window and confirms the order.</p></article>
           </div>
         </section>
 
@@ -86,9 +85,9 @@ export default function HeldLanding() {
             <h2>Change your mind<br />the same way you made it.</h2>
             <p>If the automatic pickup window doesn’t work, just tell Held what does. It feels less like filling out a form and more like texting someone who already knows your building.</p>
             <ul>
-              <li><Check /> No service menus to navigate</li>
-              <li><Check /> No dates and time slots before you can order</li>
-              <li><Check /> No support ticket to change a request</li>
+              <li><span>01</span> No service menus to navigate</li>
+              <li><span>02</span> No dates and time slots before you can order</li>
+              <li><span>03</span> No support ticket to change a request</li>
             </ul>
           </div>
           <div className="held-chat-demo">
@@ -104,7 +103,7 @@ export default function HeldLanding() {
         <section className="held-final">
           <span className="held-mark">H</span>
           <h2>Your building can do more.<br /><em>You barely have to ask.</em></h2>
-          <a className="held-primary" href="/account">Open Held <ArrowRight /></a>
+          <a className="held-primary" href="/account">Open Held</a>
         </section>
       </main>
 
