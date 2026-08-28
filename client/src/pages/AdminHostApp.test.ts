@@ -74,6 +74,14 @@ describe("truth-bound visual rules", () => {
     expect(towerSource).not.toMatch(/⚡|100\/100|Season 7|3,450/);
   });
 
+  it("uses the dimensional OPUS LA and Century Park East assets on Tower Wars and Home", () => {
+    for (const asset of ["opus-la-tower-v2.png", "century-park-east-tower-v2.png"]) {
+      expect(towerSource).toContain(asset);
+      expect(homeSource).toContain(asset);
+    }
+    expect(towerSource).not.toContain('className="tw-opus-art"');
+  });
+
   it("shows Clockhead and Collector only under authoritative conditions", () => {
     expect(homeSource).toContain("promiseRisk.length > 0");
     expect(homeSource).toContain("overdueFollowups.length > 0");

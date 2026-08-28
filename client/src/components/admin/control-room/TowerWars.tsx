@@ -36,8 +36,11 @@ const ACTION_CLASSES = [
 ] as const;
 
 function BuildingArt({ opus, name, damage }: { opus: boolean; name: string; damage: TowerDamageState }) {
-  if (!opus) return <img className="tw-building-layer" src="/assets/admin/control-room/tower-wars/century-bazooka-optimized.png" alt={`${name}, ${damage.replace("-", " ")} damage`} />;
-  return <div className="tw-opus-art" role="img" aria-label={`${name}, ${damage.replace("-", " ")} damage, with architectural-scale hinged golf driver`}><div className="tw-opus-tower"><span /></div><div className="tw-opus-annex"><b /></div><i className="tw-driver-pivot" /><i className="tw-driver-shaft" /><i className="tw-driver-head" /></div>;
+  const src = opus
+    ? "/assets/admin/control-room/tower-wars/opus-la-tower-v2.png"
+    : "/assets/admin/control-room/tower-wars/century-park-east-tower-v2.png";
+  const weapon = opus ? "architectural-scale hinged golf driver" : "compact rooftop valet bazooka";
+  return <img className="tw-building-layer" src={src} alt={`${name}, ${damage.replace("-", " ")} damage, with ${weapon}`} />;
 }
 
 export function TowerWars({ data, loading, onNavigate, compact = false }: TowerWarsProps) {
