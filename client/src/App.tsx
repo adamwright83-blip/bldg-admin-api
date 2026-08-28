@@ -8,7 +8,6 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { TenantProvider, useTenant } from "./hooks/useTenant";
 import { useAuth } from "./_core/hooks/useAuth";
 import { LoginForm } from "./components/LoginForm";
-import ButlerHome from "./pages/Home";
 import Admin from "./pages/Admin";
 import AdminHostApp from "./pages/AdminHostApp";
 import Driver from "./pages/Driver";
@@ -22,6 +21,7 @@ import LaundryButlerAccount from "./pages/LaundryButlerAccount";
 const BoreslayLanding = lazy(() => import("./pages/BoreslayLanding"));
 const DayforgeLanding = lazy(() => import("./pages/DayforgeLanding"));
 const LandingFinal = lazy(() => import("./pages/LandingFinal"));
+const HeldLanding = lazy(() => import("./pages/HeldLanding"));
 const TerritoryPreview = lazy(() => import("./pages/TerritoryPreview"));
 const CommercialMissionAdmin = lazy(
   () => import("./pages/CommercialMissionAdmin")
@@ -79,6 +79,14 @@ function LandingFinalRoute() {
   return (
     <Suspense fallback={<PublicLandingFallback />}>
       <LandingFinal />
+    </Suspense>
+  );
+}
+
+function HeldLandingRoute() {
+  return (
+    <Suspense fallback={<PublicLandingFallback />}>
+      <HeldLanding />
     </Suspense>
   );
 }
@@ -465,7 +473,7 @@ function Router() {
               ? () => <VendorPortal slug={vendorSlug ?? ""} />
               : tenant.templateType === "laundryfarm"
                 ? LaundryFarmHome
-                : ButlerHome
+                : HeldLandingRoute
         }
       />
       <Route path={"/admin"} component={Admin} />
