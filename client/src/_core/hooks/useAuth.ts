@@ -9,10 +9,12 @@ type UseAuthOptions = {
 };
 
 export function useAuth(options?: UseAuthOptions) {
+  const visualTestMode = import.meta.env.DEV && import.meta.env.VITE_ADMIN_VISUAL_TEST === "1";
   const { redirectOnUnauthenticated = false, redirectPath } = options ?? {};
   const utils = trpc.useUtils();
 
   const meQuery = trpc.auth.me.useQuery(undefined, {
+    enabled: !visualTestMode,
     retry: false,
     refetchOnWindowFocus: false,
   });
@@ -42,12 +44,13 @@ export function useAuth(options?: UseAuthOptions) {
 
   const state = useMemo(() => {
     return {
-      user: meQuery.data ?? null,
-      loading: meQuery.isLoading || logoutMutation.isPending,
-      error: meQuery.error ?? logoutMutation.error ?? null,
-      isAuthenticated: Boolean(meQuery.data),
+      user: visualTestMode ? { openId: "visual-test", name: "Admin Preview", email: null, role: "admin" as const } : meQuery.data ?? null,
+      loading: visualTestMode ? false : meQuery.isLoading || logoutMutation.isPending,
+      error: visualTestMode ? null : meQuery.error ?? logoutMutation.error ?? null,
+      isAuthenticated: visualTestMode || Boolean(meQuery.data),
     };
   }, [
+    visualTestMode,
     meQuery.data,
     meQuery.error,
     meQuery.isLoading,

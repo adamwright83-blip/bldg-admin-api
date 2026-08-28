@@ -15,7 +15,6 @@ import Driver from "./pages/Driver";
 import VendorPortal from "./pages/VendorPortal";
 import DigitalReceiptPage from "./pages/DigitalReceiptPage";
 import LaundryFarmHome from "./pages/LaundryFarmHome";
-import AdminCatalog from "./pages/AdminCatalog";
 import LaundryButlerWelcome from "./pages/LaundryButlerWelcome";
 import LaundryButlerAccount from "./pages/LaundryButlerAccount";
 
@@ -147,6 +146,25 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/home",
   "/demo",
   "/live",
+  "/operations",
+  "/growth",
+  "/growth/lantern-city",
+  "/growth/tower-wars",
+  "/growth/driver-intelligence",
+  "/growth/driver-intelligence/overlook",
+  "/growth/driver-intelligence/archive",
+  "/growth/driver-intelligence/beacon",
+  "/growth/driver-intelligence/long-table",
+  "/growth/driver-intelligence/field-kit",
+  "/growth/driver-intelligence/ledger-room",
+  "/growth/buildings",
+  "/growth/offers",
+  "/home/today",
+  "/home/exceptions",
+  "/home/signals",
+  "/home/notes",
+  "/money",
+  "/settings",
   "/new-order",
   "/customers",
   "/pnl",
@@ -256,13 +274,7 @@ function AdminHostRouter() {
           <CommercialMissionAdmin />
         </Suspense>
       </Route>
-      <Route path="/sales-intel">
-        <AdminAuthGate>
-          <Suspense fallback={<PublicLandingFallback />}>
-            <SalesIntelAdmin />
-          </Suspense>
-        </AdminAuthGate>
-      </Route>
+      <Route path="/sales-intel" component={AdminHostApp} />
       <Route path="/goldline-effectiveness">
         <AdminAuthGate>
           <Suspense fallback={<PublicLandingFallback />}>
@@ -294,23 +306,26 @@ function AdminHostRouter() {
           <CommercialProposalSettings />
         </Suspense>
       </Route>
-      <Route path="/churn-radar">
-        <Suspense fallback={<PublicLandingFallback />}>
-          <ChurnRadarPage />
-        </Suspense>
-      </Route>
-      <Route path="/commercial-pipeline">
-        <Suspense fallback={<PublicLandingFallback />}>
-          <CommercialPipelinePage />
-        </Suspense>
-      </Route>
+      <Route path="/churn-radar" component={AdminHostApp} />
+      <Route path="/commercial-pipeline" component={AdminHostApp} />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
-      <Route path="/catalog" component={AdminCatalog} />
-      <Route path="/pricing" component={AdminCatalog} />
+      <Route path="/catalog" component={AdminHostApp} />
+      <Route path="/pricing" component={AdminHostApp} />
       <Route path="/admin" component={AdminHostApp} />
       <Route path="/home" component={AdminHostApp} />
       <Route path="/demo" component={AdminHostApp} />
       <Route path="/live" component={AdminHostApp} />
+      <Route path="/operations" component={AdminHostApp} />
+      <Route path="/growth" component={AdminHostApp} />
+      <Route path="/growth/lantern-city" component={AdminHostApp} />
+      <Route path="/growth/tower-wars" component={AdminHostApp} />
+      <Route path="/growth/driver-intelligence" component={AdminHostApp} />
+      <Route path="/growth/driver-intelligence/:rest*" component={AdminHostApp} />
+      <Route path="/growth/buildings" component={AdminHostApp} />
+      <Route path="/growth/offers" component={AdminHostApp} />
+      <Route path="/home/:rest*" component={AdminHostApp} />
+      <Route path="/money" component={AdminHostApp} />
+      <Route path="/settings" component={AdminHostApp} />
       <Route path="/new-order" component={AdminHostApp} />
       <Route path="/customers" component={AdminHostApp} />
       <Route path="/pnl" component={AdminHostApp} />
@@ -434,8 +449,8 @@ function Router() {
         component={CommercialProposalPrintRoute}
       />
       <Route path="/receipt/:orderId" component={DigitalReceiptPage} />
-      <Route path="/catalog" component={AdminCatalog} />
-      <Route path="/pricing" component={AdminCatalog} />
+      <Route path="/catalog" component={AdminHostApp} />
+      <Route path="/pricing" component={AdminHostApp} />
       <Route
         path={"/welcome"}
         component={LaundryButlerWelcome}

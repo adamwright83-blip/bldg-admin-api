@@ -25,7 +25,6 @@ import {
   nextLiveStatus,
   olderThan24Hours,
   phoneHref,
-  pickOneThingRightNow,
   serviceLabel,
   shortBuilding,
   statusTone,
@@ -33,6 +32,15 @@ import {
   type LiveStatus,
   type LiveOrderGroup,
 } from "./adminLiveModel";
+
+const PRODUCTION_ICON: Record<LiveStatus, string> = {
+  "intake-pending": "received",
+  new: "received",
+  collected: "dispatch",
+  processing: "processing",
+  ready: "ready",
+  delivered: "dispatch",
+};
 
 type AdminLiveProps = {
   onNavigate: (path: string) => void;
@@ -126,15 +134,6 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
   const readyDueToday = ordersByStatus.ready.filter((o) => isToday(o.deliveryDate));
   const readyToCharge = [...ordersByStatus.ready, ...ordersByStatus.delivered].filter((o) => !o.paid && amountCents(o) >= 50);
   const blocked = unpaidDelivered.filter((o) => olderThan24Hours(o.updatedAt ?? o.createdAt));
-  const staleCollectedOrProcessing = [...ordersByStatus.collected, ...ordersByStatus.processing].filter((o) => olderThan24Hours(o.updatedAt ?? o.createdAt));
-  const priority = pickOneThingRightNow({
-    heldReviewOrders: ordersByStatus["intake-pending"],
-    unpaidDelivered,
-    readyDueToday,
-    newOrders: ordersByStatus.new,
-    staleCollectedOrProcessing,
-    blocked,
-  });
   const loading = Object.values(statusQueries).some((q) => q.isLoading);
 
   useEffect(() => {
@@ -462,7 +461,10 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
                 {LIVE_LANES.map((lane) => (
                   <section key={lane.status} className="flex min-h-[320px] flex-col md:min-h-[620px]">
                     <div className="flex items-center justify-between border-b border-[#D8D1C4] px-3 py-3">
-                      <h2 className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/75">{lane.title}</h2>
+                      <h2 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-black/75">
+                        <img className="h-5 w-5" src={`/assets/admin/control-room/production/${PRODUCTION_ICON[lane.status]}.svg`} alt="" />
+                        {lane.title}
+                      </h2>
                       <span className="font-mono text-xs text-black/55">{liveLaneOrders[lane.status].length}</span>
                     </div>
                     <div className="flex-1 space-y-3 p-3">
@@ -519,22 +521,6 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
             )}
           </CommandPanel>
 
-          <CommandPanel title="ONE THING RIGHT NOW">
-            {priority ? (
-              <div className="border border-red-200 bg-red-50 p-3 text-center">
-                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-red-700">{priority.status === "intake-pending" ? "HELD review" : priority.paid ? "Due today" : "Payment open"}</div>
-                <div className="mt-3 text-sm font-bold">{customerName(priority)}</div>
-                <div className="font-mono text-xs text-black/55">Order #{priority.id}</div>
-                <div className="mt-2 font-mono text-2xl font-semibold">{money(priority.total)}</div>
-                <div className="mt-3 grid gap-2">
-                  <Button className="h-8 rounded-none bg-black text-xs uppercase tracking-[0.12em] text-white hover:bg-black/80" onClick={() => { setSelectedOrderId(priority.id); openOrder(priority); }}>Open order</Button>
-                  <Button variant="outline" className="h-8 rounded-none border-[#C9C0B1] bg-white text-xs uppercase tracking-[0.12em]" onClick={() => onNavigate(`/intake?orderId=${priority.id}`)}>Open intake</Button>
-                  {priority.phone ? <button className="border border-[#C9C0B1] bg-white px-3 py-2 text-center text-xs font-bold uppercase tracking-[0.12em]" onClick={() => copySms(priority)}>Copy SMS</button> : null}
-                </div>
-              </div>
-            ) : <div className="text-sm text-black/45">No critical action.</div>}
-          </CommandPanel>
-
           <CommandPanel title="SELECTED ORDER ACTIONS">
             <LiveTools
               order={selectedOrder}
@@ -551,7 +537,7 @@ export default function AdminLive({ onNavigate, onOpenCustomer }: AdminLiveProps
             />
           </CommandPanel>
 
-          <CommandPanel title="DRIVER ACTIVE">
+          <CommandPanel title="DISPATCH OVERSIGHT">
             <div className="flex items-center justify-between">
               <span className="text-xs uppercase tracking-[0.12em] text-black/60">Stops remaining</span>
               <span className="font-mono text-2xl font-semibold">{ordersByStatus.new.length + ordersByStatus.ready.length}</span>

@@ -55,5 +55,47 @@ export function adminTabToPath(tab: AdminWorkspaceTab): string {
 }
 
 export function isAdminCommandCenterPath(path: string): boolean {
-  return path === "/" || path === "/home";
+  return path === "/" || path === "/home" || path.startsWith("/home/");
+}
+
+export type AdminNorthDomain =
+  | "home"
+  | "operations"
+  | "customers"
+  | "growth"
+  | "money"
+  | "settings";
+
+const OPERATIONS_PATHS = new Set([
+  "/operations",
+  "/live",
+  "/new-order",
+  "/intake",
+  "/processing",
+  "/ready",
+  "/pickups",
+  "/operations-events",
+]);
+
+const CUSTOMER_PATHS = new Set(["/customers", "/leads", "/vendors"]);
+const MONEY_PATHS = new Set(["/money", "/payment-reconciliation", "/pnl"]);
+const SETTINGS_PATHS = new Set(["/settings", "/catalog", "/pricing"]);
+
+export function northDomainForPath(path: string): AdminNorthDomain | null {
+  if (isAdminCommandCenterPath(path) || path === "/demo" || path === "/operator-reflection") return "home";
+  if (OPERATIONS_PATHS.has(path)) return "operations";
+  if (CUSTOMER_PATHS.has(path)) return "customers";
+  if (
+    path === "/growth" ||
+    path.startsWith("/growth/") ||
+    path === "/commercial-pipeline" ||
+    path === "/churn-radar" ||
+    path === "/sales-intel" ||
+    path === "/commercial-missions" ||
+    path === "/goldline-effectiveness" ||
+    path === "/commercial-proposal-settings"
+  ) return "growth";
+  if (MONEY_PATHS.has(path)) return "money";
+  if (SETTINGS_PATHS.has(path)) return "settings";
+  return null;
 }

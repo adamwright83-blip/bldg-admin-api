@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Menu, Loader2, ArrowUpRight } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
 import { CustomerProfileDrawer } from "@/components/CustomerProfileDrawer";
@@ -13,8 +13,8 @@ import {
 } from "@/admin/adminPaths";
 import AdminHome from "./AdminHome";
 import AdminLive from "./AdminLive";
+import AdminCatalog from "./AdminCatalog";
 import OperatorReflection from "./OperatorReflection";
-import { Level4OffensiveHost } from "@/components/Level4OffensiveHost";
 import { AdminCustomerSearchBlock, AdminTabPanels } from "./Admin";
 import TruePnlCockpitPage from "./TruePnlCockpitPage";
 import { ResidentFollowupAlert } from "@/components/admin/ResidentFollowupAlert";
@@ -24,6 +24,24 @@ import FirstRealProposalBootstrapPage from "./FirstRealProposalBootstrapPage";
 import VendorCastingSprintPage from "./VendorCastingSprintPage";
 import MissionControlPage from "./MissionControlPage";
 import PostConsentActionPlanPage from "./PostConsentActionPlanPage";
+import { ControlRoomNav } from "@/components/admin/control-room/ControlRoomNav";
+import {
+  GrowthBuildingsPage,
+  GrowthOffersPage,
+  MoneyControlRoom,
+  SettingsControlRoom,
+} from "@/components/admin/control-room/ControlRoomSections";
+import LanternCityAtlas from "@/components/admin/control-room/LanternCityAtlas";
+import DriverIntelligenceOverview from "@/components/admin/control-room/DriverIntelligenceOverview";
+import { TowerWars } from "@/components/admin/control-room/TowerWars";
+import "@/components/admin/control-room/admin-control-room.css";
+
+const ArchivedLevel4OffensiveHost = lazy(() =>
+  import("@/components/Level4OffensiveHost").then((module) => ({ default: module.Level4OffensiveHost }))
+);
+const CommercialPipelinePage = lazy(() => import("./CommercialPipelinePage"));
+const ChurnRadarPage = lazy(() => import("./ChurnRadarPage"));
+const SalesIntelAdmin = lazy(() => import("./SalesIntelAdmin"));
 
 const LIVE_INTERNAL_TABS = new Set<AdminWorkspaceTab>([
   "Intake",
@@ -32,16 +50,6 @@ const LIVE_INTERNAL_TABS = new Set<AdminWorkspaceTab>([
   "Pickups",
 ]);
 
-/**
- * THREE ROOMS AND A DRAWER — the sellable information architecture.
- * Paths are unchanged (deep links + muscle memory survive); the sidebar
- * groups them into rooms, and a room tab strip renders above the page.
- *
- *  KINGDOM  — feel the business, one next action (home).
- *  COUNTER  — where the work gets done (Live is the spine).
- *  PEOPLE   — who we serve, recover, sell to.
- *  DRAWER   — low-frequency configuration only. Money is NOT in here.
- */
 /**
  * Two workspaces share the Counter room but are never shown at once.
  * Laundry Butler is the laundry POS workflow; HELD Corporate is the
@@ -58,7 +66,7 @@ const LAUNDRY_BUTLER_TABS: Array<{ label: string; path: string }> = [
   { label: "Cleaning", path: "/processing" },
   { label: "Ready", path: "/ready" },
   { label: "Pickups", path: "/pickups" },
-  { label: "Pipeline", path: "/live" },
+  { label: "Production board", path: "/operations" },
   { label: "History", path: "/operations-events" },
   { label: "Money owed", path: "/payment-reconciliation" },
 ];
@@ -78,6 +86,7 @@ const HELD_CORPORATE_PATHS = new Set(HELD_CORPORATE_TABS.map((t) => t.path));
 const COUNTER_PATHS = new Set([
   ...LAUNDRY_BUTLER_TABS.map((t) => t.path),
   ...HELD_CORPORATE_TABS.map((t) => t.path),
+  "/live",
 ]);
 const PEOPLE_PATHS = new Set(["/customers", "/leads", "/vendors"]);
 
@@ -138,23 +147,39 @@ export default function AdminHostApp() {
     enabled: isAuthenticated,
   });
   const leadsCount = trpc.admin.countUnreadLeads.useQuery(undefined, { enabled: isAuthenticated });
+  const towerCustomers = trpc.admin.listCustomers.useQuery(
+    { sortBy: "spend", includeLegacyCleanCloud: true },
+    { enabled: isAuthenticated && path === "/growth/tower-wars", staleTime: 60_000 }
+  );
 
   useEffect(() => {
-    if (path === "/admin") navigate("/new-order", { replace: true });
+    if (path === "/admin") navigate("/", { replace: true });
   }, [path, navigate]);
 
   const isHome = isAdminCommandCenterPath(path);
   const isOperatorDemo = path === "/demo";
-  const isLive = path === "/live";
+  const isLive = path === "/live" || path === "/operations";
   const isLevel4 = path === "/level4";
   const isPnl = path === "/pnl";
   const isOperatorReflection = path === "/operator-reflection";
+  const isGrowth = path === "/growth";
+  const isLanternCity = path === "/growth/lantern-city";
+  const isTowerWars = path === "/growth/tower-wars";
+  const isDriverIntelligence = path.startsWith("/growth/driver-intelligence");
+  const isGrowthBuildings = path === "/growth/buildings";
+  const isGrowthOffers = path === "/growth/offers";
+  const isCommercialPipeline = path === "/commercial-pipeline";
+  const isChurnRadar = path === "/churn-radar";
+  const isSalesIntel = path === "/sales-intel";
+  const isMoney = path === "/money";
+  const isSettings = path === "/settings";
+  const isCatalog = path === "/catalog" || path === "/pricing";
+  const isControlRoomSection = isGrowth || isLanternCity || isTowerWars || isDriverIntelligence || isGrowthBuildings || isGrowthOffers || isCommercialPipeline || isChurnRadar || isSalesIntel || isMoney || isSettings || isCatalog;
   const activeTab = adminPathToTab(path);
   const isLiveNavActive = isLive || (activeTab !== null && LIVE_INTERNAL_TABS.has(activeTab));
   const isCounter = COUNTER_PATHS.has(path);
   const isPeople = PEOPLE_PATHS.has(path);
   const activeWorkspace = workspaceForPath(path);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   // Inside the Counter room, show ONLY the active workspace's tabs --
   // never both products at once. People keeps its own tab set.
   const roomTabs = isCounter
@@ -169,9 +194,13 @@ export default function AdminHostApp() {
   const quickReceiptOpen = path === "/intake" && parseQuickReceiptFromLocation(loc);
 
   useEffect(() => {
+    if (path === "/growth") {
+      navigate("/growth/lantern-city", { replace: true });
+      return;
+    }
     if (path === "/admin") return;
-    if (!isHome && !isOperatorDemo && !isLive && !isLevel4 && !isOperatorReflection && activeTab === null) navigate("/", { replace: true });
-  }, [isHome, isOperatorDemo, isLive, isLevel4, isOperatorReflection, activeTab, path, navigate]);
+    if (!isHome && !isOperatorDemo && !isLive && !isLevel4 && !isOperatorReflection && !isControlRoomSection && activeTab === null) navigate("/", { replace: true });
+  }, [isHome, isOperatorDemo, isLive, isLevel4, isOperatorReflection, isControlRoomSection, activeTab, path, navigate]);
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -202,7 +231,9 @@ export default function AdminHostApp() {
           ← Exit Level 4
         </Link>
         <div className="mx-auto w-full max-w-[1480px] px-3 pt-14 pb-6">
-          <Level4OffensiveHost />
+          <Suspense fallback={<div className="py-20 text-center text-white/50">Loading archived Level 4 experience…</div>}>
+            <ArchivedLevel4OffensiveHost />
+          </Suspense>
         </div>
       </div>
     );
@@ -225,248 +256,21 @@ export default function AdminHostApp() {
   }
 
   return (
-    <div
-      className="min-h-screen bg-white text-black flex"
-      style={{ fontFamily: '"Inter", system-ui, sans-serif' }}
-    >
-      {/* Drop-everything resident message alarm — flashing red, top of every admin screen. */}
-      <ResidentFollowupAlert />
-      {mobileNavOpen ? (
-        <button
-          type="button"
-          className="fixed inset-0 z-30 bg-black/25 md:hidden"
-          aria-label="Close navigation"
-          onClick={() => setMobileNavOpen(false)}
-        />
-      ) : null}
+    <div className="cr-shell">
+      {isCounter && activeWorkspace !== "held_corporate" ? <ResidentFollowupAlert /> : null}
 
-      <aside
-        className={`fixed md:sticky top-0 z-40 h-screen w-56 shrink-0 border-r border-black/10 bg-white flex flex-col py-4 px-2 transition-transform duration-200 md:translate-x-0 ${
-          mobileNavOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-        }`}
-      >
-        <div className="px-2 mb-4">
-          <span className="text-xs font-semibold tracking-widest uppercase text-black">
-            {activeWorkspace === "held_corporate" ? "HELD Corporate" : "Laundry Butler"}
-          </span>
-        </div>
-        {/* THREE ROOMS AND A DRAWER. Every old path still works — the rooms
-            are how you move, the tabs (rendered above each room) are how you
-            work. Level 4 is reached through the Kingdom (villains/war strip),
-            not the nav. The drawer holds configuration only — money lives in
-            the Counter where it belongs. */}
-        <nav className="flex flex-col gap-0.5 flex-1 overflow-y-auto">
-          <Link
-            href="/"
-            className={`block rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
-              isHome || isLevel4 ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
-            }`}
-            onClick={() => setMobileNavOpen(false)}
-          >
-            🏰 Kingdom
-          </Link>
-          <Link
-            href="/demo"
-            className={`block rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
-              isOperatorDemo ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
-            }`}
-            onClick={() => setMobileNavOpen(false)}
-          >
-            ✨ Demo Mode
-          </Link>
-          <Link
-            href="/new-order"
-            className={`block rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
-              isCounter ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
-            }`}
-            onClick={() => setMobileNavOpen(false)}
-          >
-            🧺 Counter
-            {(requestsCount.data ?? 0) >= 1 ? (
-              <span className="ml-1.5 rounded-full bg-black/10 px-1.5 py-0.5 text-[10px] font-bold text-black/60">
-                {requestsCount.data}
-              </span>
-            ) : null}
-          </Link>
-          <Link
-            href="/customers"
-            className={`block rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
-              isPeople ? "bg-black text-white" : "text-black/70 hover:bg-black/5 hover:text-black"
-            }`}
-            onClick={() => setMobileNavOpen(false)}
-          >
-            🫂 People
-            {(leadsCount.data ?? 0) >= 1 ? (
-              <span className="ml-1.5 rounded-full bg-black/10 px-1.5 py-0.5 text-[10px] font-bold text-black/60">
-                {leadsCount.data}
-              </span>
-            ) : null}
-          </Link>
-          <Link
-            href="/commercial-missions"
-            className="block rounded-md px-3 py-2 text-sm font-semibold text-black/70 transition-colors hover:bg-black/5 hover:text-black"
-            onClick={() => setMobileNavOpen(false)}
-          >
-            📡 Revenue Radar
-          </Link>
-          <Link
-            href="/commercial-pipeline"
-            className="block rounded-md px-3 py-2 text-sm font-semibold text-black/70 transition-colors hover:bg-black/5 hover:text-black"
-            onClick={() => setMobileNavOpen(false)}
-          >
-            📈 Revenue Pipeline
-          </Link>
-          <Link
-            href="/churn-radar"
-            className="block rounded-md px-3 py-2 text-sm font-semibold text-black/70 transition-colors hover:bg-black/5 hover:text-black"
-            onClick={() => setMobileNavOpen(false)}
-          >
-            🛡 Churn Radar
-          </Link>
-          <Link
-            href="/sales-intel"
-            className="block rounded-md px-3 py-2 text-sm font-semibold text-black/70 transition-colors hover:bg-black/5 hover:text-black"
-            onClick={() => setMobileNavOpen(false)}
-          >
-            🧠 Sales Intel
-          </Link>
+      <ControlRoomNav
+        path={path}
+        mobileOpen={mobileNavOpen}
+        onNavigate={() => setMobileNavOpen(false)}
+        requestCount={requestsCount.data ?? 0}
+        leadCount={leadsCount.data ?? 0}
+        userName={user?.name || "Admin"}
+        onOpenMobileNav={() => setMobileNavOpen(true)}
+      />
 
-          <div className="mt-auto flex flex-col gap-2">
-            {/* Red diving board — the deliberate, can't-miss jump between
-                the two workspaces. Sits above the Drawer. Label + target
-                flip based on the path-derived active workspace. */}
-            <button
-              type="button"
-              aria-label={
-                activeWorkspace === "held_corporate"
-                  ? "Switch to Laundry Butler workspace"
-                  : "Switch to HELD Corporate workspace"
-              }
-              onClick={() => {
-                setMobileNavOpen(false);
-                navigate(activeWorkspace === "held_corporate" ? "/new-order" : "/mission-control");
-              }}
-              className="group relative block w-full -skew-x-6 rounded-md bg-red-600 px-3 py-2.5 text-left shadow-[0_4px_0_0_rgb(127_29_29)] outline-none transition-all hover:-translate-y-0.5 hover:bg-red-700 hover:shadow-[0_6px_0_0_rgb(127_29_29)] focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2 active:translate-y-0.5 active:shadow-[0_2px_0_0_rgb(127_29_29)]"
-            >
-              <span className="flex skew-x-6 items-center justify-between gap-2">
-                <span className="flex flex-col leading-tight">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-white/75">Switch to</span>
-                  <span className="text-sm font-extrabold text-white">
-                    {activeWorkspace === "held_corporate" ? "Laundry Butler" : "HELD Corporate"}
-                  </span>
-                </span>
-                <ArrowUpRight className="h-5 w-5 shrink-0 text-white transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-              </span>
-            </button>
-          </div>
-
-          <div className="border-t border-black/10 pt-2">
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-black/55 transition-colors hover:bg-black/5 hover:text-black"
-              onClick={() => setDrawerOpen((v) => !v)}
-              aria-expanded={drawerOpen}
-            >
-              ⚙ Drawer
-              <span className="text-[10px] text-black/35">{drawerOpen ? "▲" : "▼"}</span>
-            </button>
-            {drawerOpen ? (
-              <div className="mt-0.5 flex flex-col gap-0.5 pl-2">
-                <a
-                  href="/catalog"
-                  className="block rounded-md px-3 py-1.5 text-[13px] text-black/60 hover:bg-black/5 hover:text-black"
-                  onClick={() => setMobileNavOpen(false)}
-                >
-                  Price list
-                </a>
-                <Link
-                  href="/pnl"
-                  className="block rounded-md px-3 py-1.5 text-[13px] text-black/60 hover:bg-black/5 hover:text-black"
-                  onClick={() => setMobileNavOpen(false)}
-                >
-                  CFO Cockpit (add-on)
-                </Link>
-                <Link
-                  href="/operator-reflection"
-                  className={`block rounded-md px-3 py-1.5 text-[13px] hover:bg-black/5 hover:text-black ${
-                    isOperatorReflection ? "text-black font-semibold" : "text-black/60"
-                  }`}
-                  onClick={() => setMobileNavOpen(false)}
-                >
-                  Reflection archive
-                </Link>
-              </div>
-            ) : null}
-          </div>
-        </nav>
-      </aside>
-
-      <div className="flex-1 flex flex-col min-w-0">
-        {!isHome && !isOperatorDemo ? (
-          <>
-            <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-black/10 bg-white px-4 py-2 md:py-3 md:px-6">
-              <button
-                type="button"
-                className="md:hidden rounded-md border border-black/15 p-2 text-black"
-                onClick={() => setMobileNavOpen(true)}
-                aria-label="Open navigation"
-              >
-                <Menu className="h-5 w-5" />
-              </button>
-              {/* Room tabs: the views inside a room. Same truth, one room. */}
-              {roomTabs ? (
-                <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" aria-label="Room views">
-                  {roomTabs.map((t) => {
-                    const tabActive =
-                      path === t.path ||
-                      (t.path === "/live" && isLiveNavActive);
-                    return (
-                      <Link
-                        key={t.path}
-                        href={t.path}
-                        className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
-                          tabActive
-                            ? "bg-black text-white"
-                            : "text-black/55 hover:bg-black/5 hover:text-black"
-                        }`}
-                      >
-                        {t.label}
-                        {t.path === "/requests" && (requestsCount.data ?? 0) >= 1 ? (
-                          <span className={`ml-1 text-[10px] font-bold ${tabActive ? "text-white/70" : "text-black/40"}`}>
-                            {requestsCount.data}
-                          </span>
-                        ) : null}
-                      </Link>
-                    );
-                  })}
-                </nav>
-              ) : null}
-              {/* + Order is the Laundry Butler global action. It is hidden
-                  in the HELD Corporate workspace so the misleading laundry
-                  CTA is never the primary corporate action (HELD's mission
-                  composer lives on the Mission Control page itself). */}
-              {activeWorkspace === "held_corporate" ? (
-                <span className="ml-auto" />
-              ) : (
-                <div className="ml-auto flex shrink-0 items-center gap-2">
-                  <Link
-                    href="/catalog?new=1"
-                    className="shrink-0 rounded-md border border-black/20 bg-white px-3 py-1.5 text-[12.5px] font-bold text-black transition-colors hover:border-black/40 hover:bg-black/5"
-                  >
-                    New SKU
-                  </Link>
-                  <Link
-                    href="/new-order"
-                    className="shrink-0 rounded-md bg-black px-3 py-1.5 text-[12.5px] font-bold text-white transition-colors hover:bg-black/80"
-                  >
-                    + Order
-                  </Link>
-                </div>
-              )}
-              <span className="hidden text-xs text-black/40 sm:inline">{user?.name || "Admin"}</span>
-            </header>
-
-            {!isLive && !isOperatorReflection ? (
+      <div className="cr-main-column">
+        {!isHome && !isOperatorDemo && !isLive && !isOperatorReflection && !isControlRoomSection ? (
               <AdminCustomerSearchBlock
                 customerSearchQuery={customerSearchQuery}
                 setCustomerSearchQuery={setCustomerSearchQuery}
@@ -479,14 +283,13 @@ export default function AdminHostApp() {
                   setCustomerSearchQuery("");
                 }}
               />
-            ) : null}
-          </>
         ) : null}
 
         {isHome || isOperatorDemo ? (
           <AdminHome
             experienceMode={isOperatorDemo ? "operator-demo" : "kingdom"}
             operatorName={user?.name || "Admin"}
+            path={path}
             onOpenMobileNav={() => setMobileNavOpen(true)}
             onNavigate={(path) => navigate(path)}
             onOpenCustomer={(phone) => setProfilePhone(phone)}
@@ -496,6 +299,28 @@ export default function AdminHostApp() {
             onNavigate={(path) => navigate(path)}
             onOpenCustomer={(phone) => setProfilePhone(phone)}
           />
+        ) : isLanternCity ? (
+          <LanternCityAtlas onOpenCustomer={(phone) => setProfilePhone(phone)} />
+        ) : isTowerWars ? (
+          <TowerWars data={towerCustomers.data?.contestTotals} loading={towerCustomers.isLoading} onNavigate={(nextPath) => navigate(nextPath)} />
+        ) : isDriverIntelligence ? (
+          <DriverIntelligenceOverview path={path} />
+        ) : isGrowthBuildings ? (
+          <GrowthBuildingsPage />
+        ) : isGrowthOffers ? (
+          <GrowthOffersPage />
+        ) : isCommercialPipeline ? (
+          <Suspense fallback={<div className="cr-route-loading">Loading Commercial Pipeline…</div>}><CommercialPipelinePage /></Suspense>
+        ) : isChurnRadar ? (
+          <Suspense fallback={<div className="cr-route-loading">Loading Churn / Winback…</div>}><ChurnRadarPage /></Suspense>
+        ) : isSalesIntel ? (
+          <Suspense fallback={<div className="cr-route-loading">Loading Sales Intelligence…</div>}><SalesIntelAdmin /></Suspense>
+        ) : isMoney ? (
+          <MoneyControlRoom />
+        ) : isSettings ? (
+          <SettingsControlRoom />
+        ) : isCatalog ? (
+          <AdminCatalog />
         ) : isOperatorReflection ? (
           <OperatorReflection />
         ) : path === "/job-cards" ? (

@@ -1,0 +1,50 @@
+[
+  {
+    "route": "/home",
+    "file": "home.png",
+    "hasContent": true,
+    "expectedTextPresent": true,
+    "errorOverlay": false,
+    "consoleErrors": []
+  },
+  {
+    "route": "/growth/lantern-city",
+    "file": "growth-lantern-city.png",
+    "hasContent": true,
+    "expectedTextPresent": true,
+    "errorOverlay": false,
+    "consoleErrors": []
+  },
+  {
+    "route": "/growth/tower-wars",
+    "file": "growth-tower-wars.png",
+    "hasContent": true,
+    "expectedTextPresent": true,
+    "errorOverlay": false,
+    "consoleErrors": []
+  },
+  {
+    "route": "/operations",
+    "file": "operations.png",
+    "hasContent": true,
+    "expectedTextPresent": true,
+    "errorOverlay": false,
+    "consoleErrors": []
+  },
+  {
+    "route": "/customers",
+    "file": "customers.png",
+    "hasContent": true,
+    "expectedTextPresent": true,
+    "errorOverlay": false,
+    "consoleErrors": []
+  },
+  {
+    "route": "/growth/driver-intelligence",
+    "file": "growth-driver-intelligence.png",
+    "hasContent": true,
+    "expectedTextPresent": true,
+    "errorOverlay": false,
+    "consoleErrors": []
+  }
+]

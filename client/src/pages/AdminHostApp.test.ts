@@ -1,137 +1,82 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { northDomainForPath } from "@/admin/adminPaths";
+import { damageStateForRevenue } from "@/components/admin/control-room/TowerWars";
+import { classifyLanternCustomer, resolveCustomerMapLocation } from "@/components/admin/control-room/LanternCityAtlas";
 
-// This repo runs Vitest in a node environment with no DOM renderer, so
-// every UI test here is a source-structure assertion (the same convention
-// the MissionControlPage tests use). They verify the navigation split is
-// wired correctly in the shell rather than rendering it.
 const source = fs.readFileSync(path.resolve(import.meta.dirname, "AdminHostApp.tsx"), "utf8");
+const homeSource = fs.readFileSync(path.resolve(import.meta.dirname, "AdminHome.tsx"), "utf8");
 const appSource = fs.readFileSync(path.resolve(import.meta.dirname, "..", "App.tsx"), "utf8");
+const navSource = fs.readFileSync(path.resolve(import.meta.dirname, "..", "components", "admin", "control-room", "ControlRoomNav.tsx"), "utf8");
+const towerSource = fs.readFileSync(path.resolve(import.meta.dirname, "..", "components", "admin", "control-room", "TowerWars.tsx"), "utf8");
 
-const lbBlock = source.slice(source.indexOf("const LAUNDRY_BUTLER_TABS"), source.indexOf("const HELD_CORPORATE_TABS"));
-const heldBlock = source.slice(source.indexOf("const HELD_CORPORATE_TABS"), source.indexOf("HELD_CORPORATE_PATHS = new Set"));
-
-describe("AdminHostApp -- workspace tab split", () => {
-  it("defines a Laundry Butler tab set with exactly its 8 workflow tabs", () => {
-    for (const label of ["New order", "Intake", "Cleaning", "Ready", "Pickups", "Pipeline", "History", "Money owed"]) {
-      expect(lbBlock).toContain(label);
-    }
+describe("Admin six-domain shell", () => {
+  it("defines exactly the approved north domains and no Team domain", () => {
+    for (const label of ["Home", "Operations", "Customers", "Growth", "Money", "Settings"]) expect(navSource).toContain(`label: "${label}"`);
+    expect(navSource).not.toContain('domain: "team"');
+    expect(appSource).not.toContain('<Route path="/team"');
   });
 
-  it("the Laundry Butler tab set contains none of the HELD Corporate tabs", () => {
-    for (const label of ["Requests", "Job cards", "Proposal review", "Proposal bootstrap", "Casting sprint", "Mission control", "Post-consent plans"]) {
-      expect(lbBlock).not.toContain(label);
-    }
+  it("infers domains from deep links", () => {
+    expect(northDomainForPath("/home/exceptions")).toBe("home");
+    expect(northDomainForPath("/intake")).toBe("operations");
+    expect(northDomainForPath("/customers")).toBe("customers");
+    expect(northDomainForPath("/growth/driver-intelligence/beacon")).toBe("growth");
+    expect(northDomainForPath("/commercial-pipeline")).toBe("growth");
+    expect(northDomainForPath("/pnl")).toBe("money");
+    expect(northDomainForPath("/catalog")).toBe("settings");
   });
 
-  it("defines a HELD Corporate tab set with exactly its 7 corporate tabs", () => {
-    for (const label of ["Requests", "Job cards", "Proposal review", "Proposal bootstrap", "Casting sprint", "Mission control", "Post-consent plans"]) {
-      expect(heldBlock).toContain(label);
-    }
-  });
-
-  it("the HELD Corporate tab set contains none of the Laundry Butler tabs", () => {
-    for (const label of ["New order", "Cleaning", "Pickups", "Money owed"]) {
-      expect(heldBlock).not.toContain(label);
-    }
-  });
-
-  it("never reintroduces a single combined tab array (the old mixed nav is gone)", () => {
-    expect(source).not.toMatch(/COUNTER_TABS/);
+  it("defaults Growth to Lantern City and nests Driver Intelligence", () => {
+    expect(source).toContain('navigate("/growth/lantern-city", { replace: true })');
+    expect(navSource).toContain('path: "/growth/driver-intelligence"');
+    expect(navSource).toContain('label: "Overlook — Scout"');
   });
 });
 
-describe("AdminHostApp -- path-derived active workspace (no stale state)", () => {
-  it("derives the workspace purely from the path: any HELD Corporate path => held_corporate, else laundry_butler", () => {
-    expect(source).toMatch(/function workspaceForPath\(path: string\): AdminWorkspace \{/);
-    expect(source).toMatch(/HELD_CORPORATE_PATHS\.has\(path\) \? "held_corporate" : "laundry_butler"/);
+describe("route and archive safety", () => {
+  it("preserves all HELD Corporate deep links", () => {
+    for (const route of ["/requests", "/job-cards", "/proposal-review", "/proposal-bootstrap", "/casting-sprint", "/mission-control", "/post-consent-plans"]) expect(appSource).toContain(`<Route path="${route}" component={AdminHostApp} />`);
   });
 
-  it("builds the HELD Corporate path set from the HELD tab paths, so nav and routing can never drift apart", () => {
-    expect(source).toMatch(/HELD_CORPORATE_PATHS = new Set\(HELD_CORPORATE_TABS\.map/);
+  it("registers new Growth routes and wraps existing growth pages", () => {
+    for (const route of ["/growth/lantern-city", "/growth/tower-wars", "/growth/driver-intelligence", "/growth/buildings", "/growth/offers", "/commercial-pipeline", "/churn-radar", "/sales-intel"]) expect(appSource).toContain(`path="${route}"`);
   });
 
-  it("uses no localStorage / persisted workspace state -- route inference is the only source of truth", () => {
-    expect(source).not.toMatch(/localStorage\.(get|set|remove)Item/);
-  });
-
-  it("renders ONLY the active workspace's tabs inside the Counter room, never both", () => {
-    expect(source).toMatch(/activeWorkspace === "held_corporate"\s*\?\s*HELD_CORPORATE_TABS\s*:\s*LAUNDRY_BUTLER_TABS/);
-  });
-
-  it("keeps the active-route pill styling intact for whichever workspace is shown", () => {
-    expect(source).toMatch(/tabActive\s*\?\s*"bg-black text-white"/);
-  });
-
-  it("labels the sidebar by the active workspace, so HELD nav is never shown under a Laundry Butler header", () => {
-    expect(source).toMatch(/activeWorkspace === "held_corporate" \? "HELD Corporate" : "Laundry Butler"/);
+  it("keeps archived Level 4 lazy and out of active navigation", () => {
+    expect(source).toContain("const ArchivedLevel4OffensiveHost = lazy");
+    expect(navSource).not.toContain("Level 4");
   });
 });
 
-describe("AdminHostApp -- red diving-board workspace switch", () => {
-  it("renders a real, keyboard-accessible <button> (not a div) with an accessible label", () => {
-    expect(source).toMatch(/aria-label=\{[\s\S]*?Switch to Laundry Butler workspace[\s\S]*?Switch to HELD Corporate workspace[\s\S]*?\}/);
+describe("truth-bound visual rules", () => {
+  it("classifies lanterns deterministically from persisted recency status", () => {
+    expect(classifyLanternCustomer({ recencyStatus: "active" } as never)).toBe("active");
+    expect(classifyLanternCustomer({ recencyStatus: "warm" } as never)).toBe("active");
+    expect(classifyLanternCustomer({ recencyStatus: "cooling" } as never)).toBe("dimming");
+    expect(classifyLanternCustomer({ recencyStatus: "lapsed" } as never)).toBe("dark");
   });
 
-  it("flips its navigation target by active workspace: Laundry Butler -> /mission-control, HELD Corporate -> /new-order", () => {
-    expect(source).toMatch(/navigate\(activeWorkspace === "held_corporate" \? "\/new-order" : "\/mission-control"\)/);
+  it("maps only confident customer locations", () => {
+    expect(resolveCustomerMapLocation({ propertyGroup: "opus_la", address: "" } as never)?.neighborhood).toBe("Koreatown");
+    expect(resolveCustomerMapLocation({ propertyGroup: "century_park_east", address: "" } as never)?.neighborhood).toBe("Century City");
+    expect(resolveCustomerMapLocation({ propertyGroup: "unknown", address: "somewhere in Los Angeles" } as never)).toBeNull();
   });
 
-  it("flips its visible label by active workspace", () => {
-    expect(source).toMatch(/Switch to/);
-    expect(source).toMatch(/activeWorkspace === "held_corporate" \? "Laundry Butler" : "HELD Corporate"/);
+  it("derives damage from relative revenue without invented scores", () => {
+    expect(damageStateForRevenue(100, 100)).toBe("pristine");
+    expect(damageStateForRevenue(70, 100)).toBe("cracked");
+    expect(damageStateForRevenue(10, 100)).toBe("critical");
+    expect(towerSource).toContain("Accumulated real order value");
+    expect(towerSource).toContain("Attack threshold");
+    expect(towerSource).toContain("Not configured");
+    expect(towerSource).not.toMatch(/⚡|100\/100|Season 7|3,450/);
   });
 
-  it("is visually a red slab with an upward-right arrow that stands apart from ordinary nav links", () => {
-    expect(source).toMatch(/bg-red-600/);
-    expect(source).toMatch(/ArrowUpRight/);
-  });
-
-  it("has hover and keyboard-focus states", () => {
-    expect(source).toMatch(/hover:bg-red-700/);
-    expect(source).toMatch(/focus-visible:ring/);
-  });
-
-  it("sits above the Drawer control in the sidebar (diving board block precedes the Drawer block)", () => {
-    const divingBoardIndex = source.indexOf("Red diving board");
-    const drawerIndex = source.indexOf("⚙ Drawer");
-    expect(divingBoardIndex).toBeGreaterThan(-1);
-    expect(drawerIndex).toBeGreaterThan(divingBoardIndex);
-  });
-});
-
-describe("AdminHostApp -- far-right CTA by workspace", () => {
-  it("puts a direct New SKU action immediately before + Order", () => {
-    expect(source).toMatch(/href="\/catalog\?new=1"[\s\S]*?New SKU[\s\S]*?href="\/new-order"[\s\S]*?\+ Order/);
-  });
-
-  it("shows the Laundry Butler + Order CTA only when not in HELD Corporate", () => {
-    expect(source).toMatch(/activeWorkspace === "held_corporate" \? \(/);
-    expect(source).toMatch(/\+ Order/);
-  });
-
-  it("does not present the laundry + Order CTA as the primary HELD Corporate action", () => {
-    // The + Order Link is inside the else branch of the held_corporate
-    // check, so it can never render in the HELD Corporate workspace.
-    const heldCtaCheck = source.indexOf('activeWorkspace === "held_corporate" ? (\n                <span className="ml-auto" />');
-    expect(heldCtaCheck).toBeGreaterThan(-1);
-  });
-});
-
-describe("App.tsx -- routing preserved + post-consent-plans registered", () => {
-  it("registers /post-consent-plans in the local-admin path allowlist (previously missing => 404)", () => {
-    const allowlist = appSource.slice(appSource.indexOf("LOCAL_ADMIN_PATHS"), appSource.indexOf("function AdminHostRouter"));
-    expect(allowlist).toContain('"/post-consent-plans"');
-  });
-
-  it("registers a /post-consent-plans route in the admin host router", () => {
-    expect(appSource).toMatch(/<Route path="\/post-consent-plans" component=\{AdminHostApp\} \/>/);
-  });
-
-  it("still registers every other existing admin route (no route removed)", () => {
-    for (const p of ["/new-order", "/intake", "/processing", "/ready", "/pickups", "/live", "/operations-events", "/payment-reconciliation", "/requests", "/job-cards", "/proposal-review", "/proposal-bootstrap", "/casting-sprint", "/mission-control"]) {
-      expect(appSource).toContain(`<Route path="${p}" component={AdminHostApp} />`);
-    }
+  it("shows Clockhead and Collector only under authoritative conditions", () => {
+    expect(homeSource).toContain("promiseRisk.length > 0");
+    expect(homeSource).toContain("overdueFollowups.length > 0");
+    expect(homeSource).toContain('item.kind === "follow_up" && item.urgency === "overdue"');
   });
 });
