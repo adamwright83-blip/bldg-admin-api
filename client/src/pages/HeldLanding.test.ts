@@ -10,6 +10,7 @@ describe("Held resident landing page", () => {
     expect(app).toContain(": HeldLandingRoute");
     expect(page).toContain("Pull the pen");
     expect(page).toContain("Say what you need");
+    expect(page).toContain("Top-rated local 5-star vendors, curated for your building");
   });
 
   it("presents every resident service and natural-language rescheduling", () => {

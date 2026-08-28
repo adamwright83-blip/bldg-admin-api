@@ -39,6 +39,7 @@ export default function HeldLanding() {
               Laundry, dog grooming, car detailing, or dry cleaning—ordered in one sentence.
               No menus. No forms. No eight-click checkout.
             </p>
+            <p className="held-vendor-trust"><Sparkles /> Top-rated local 5-star vendors, curated for your building.</p>
             <div className="held-actions">
               <a className="held-primary" href="/account">Open Held <ArrowRight /></a>
               <a className="held-secondary" href="#how">See the 10-second order <ChevronDown /></a>
