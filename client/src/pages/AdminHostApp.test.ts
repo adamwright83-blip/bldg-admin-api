@@ -75,7 +75,7 @@ describe("truth-bound visual rules", () => {
   });
 
   it("uses the dimensional OPUS LA and Century Park East assets on Tower Wars and Home", () => {
-    for (const asset of ["opus-la-siege-driver-v4.png", "century-park-east-tower-v2.png"]) {
+    for (const asset of ["opus-la-siege-driver-v5.png", "century-park-east-tower-v2.png"]) {
       expect(towerSource).toContain(asset);
       expect(homeSource).toContain(asset);
     }
