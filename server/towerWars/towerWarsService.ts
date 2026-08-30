@@ -8,7 +8,12 @@ import {
 } from "../../drizzle/schema";
 import { BUILDINGS, matchBuilding } from "../../shared/buildings";
 import { customerIdentityHash } from "../customerAssets/customerIdentity";
-import { getBusinessDayWindow } from "../dashboardZoned";
+import {
+  getBusinessDayWindow,
+  getDashboardTimeZone,
+  zonedDayStartUtc,
+  zonedYmd,
+} from "../dashboardZoned";
 import { getDb } from "../db";
 import { normalizePropertyTower } from "../../shared/propertyTowers";
 import {
@@ -23,6 +28,7 @@ import {
   type TowerWarsRevenueSource,
 } from "../../shared/towerWars";
 import { TOWER_WARS_ATTACK_THRESHOLD_CENTS } from "../../shared/goldlineGameConfig";
+import { settleTowerWars } from "../../shared/towerWarsSettlement";
 
 export type TowerWarsCandidate = {
   sourceKey: string;
@@ -398,6 +404,89 @@ export async function getTowerWarsToday(input: {
       century_park_east: contributors(compiled.events, "century_park_east"),
     },
     promises,
+  };
+}
+
+/** How far back a settlement reads by default. */
+export const TOWER_WARS_SETTLEMENT_HISTORY_DAYS = 180;
+
+/**
+ * Today's match plus the permanent strata underneath it.
+ *
+ * Each business day is compiled SEPARATELY through `compileAuthoritativeEvents`
+ * rather than compiling the whole window at once. That is deliberate: the
+ * cross-source duplicate guard in that function compares candidates without a
+ * date bound, so a single multi-month compile would start flagging a stripe
+ * order and a CleanCloud order with the same amount and phone as duplicates
+ * even when they are weeks apart. Per-day compilation keeps its semantics
+ * exactly as they behave in production today.
+ */
+export async function getTowerWarsSettlement(input: {
+  tenantId: string;
+  now?: Date;
+  historyDays?: number;
+}) {
+  const timeZone = getDashboardTimeZone();
+  const bounds = getBusinessDayWindow(input.now, timeZone);
+  const historyDays = Math.max(
+    1,
+    input.historyDays ?? TOWER_WARS_SETTLEMENT_HISTORY_DAYS
+  );
+  const startUtc = new Date(
+    zonedDayStartUtc(bounds.businessDate, timeZone).getTime() -
+      historyDays * 86_400_000
+  );
+
+  const db = await getDb();
+  if (!db) {
+    return {
+      evidenceSufficient: false,
+      settlement: settleTowerWars({
+        events: [],
+        todayBusinessDate: bounds.businessDate,
+      }),
+      businessDate: bounds.businessDate,
+      timeZone,
+      historyDays,
+    };
+  }
+
+  const candidates = await loadCandidates(
+    input.tenantId,
+    startUtc,
+    bounds.endExclusiveUtc
+  );
+
+  const byBusinessDate = new Map<string, TowerWarsCandidate[]>();
+  for (const candidate of candidates) {
+    const businessDate = zonedYmd(candidate.occurredAt, timeZone);
+    const bucket = byBusinessDate.get(businessDate);
+    if (bucket) bucket.push(candidate);
+    else byBusinessDate.set(businessDate, [candidate]);
+  }
+
+  const events: TowerWarsBusinessEvent[] = [];
+  for (const [businessDate, dayCandidates] of Array.from(
+    byBusinessDate.entries()
+  )) {
+    events.push(
+      ...compileAuthoritativeEvents({
+        tenantId: input.tenantId,
+        businessDate,
+        candidates: dayCandidates,
+      }).events
+    );
+  }
+
+  return {
+    evidenceSufficient: true,
+    settlement: settleTowerWars({
+      events,
+      todayBusinessDate: bounds.businessDate,
+    }),
+    businessDate: bounds.businessDate,
+    timeZone,
+    historyDays,
   };
 }
 

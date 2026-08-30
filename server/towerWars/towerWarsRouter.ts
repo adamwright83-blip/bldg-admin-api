@@ -3,6 +3,7 @@ import { adminProcedure, router } from "../_core/trpc";
 import {
   activateTowerWarsPromise,
   fulfillTowerWarsPromise,
+  getTowerWarsSettlement,
   getTowerWarsToday,
   recordTowerWarsPromise,
 } from "./towerWarsService";
@@ -14,6 +15,19 @@ export const towerWarsRouter = router({
   today: adminProcedure.query(({ ctx }) =>
     getTowerWarsToday({ tenantId: ctx.tenantId })
   ),
+  /** Today's legible match plus the permanent strata beneath it. */
+  settlement: adminProcedure
+    .input(
+      z
+        .object({ historyDays: z.number().int().min(1).max(3650).optional() })
+        .optional()
+    )
+    .query(({ ctx, input }) =>
+      getTowerWarsSettlement({
+        tenantId: ctx.tenantId,
+        historyDays: input?.historyDays,
+      })
+    ),
   recordPromise: adminProcedure
     .input(
       z.object({

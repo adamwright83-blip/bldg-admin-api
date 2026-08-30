@@ -48,8 +48,12 @@ import {
 } from "@shared/canonicalBuilding";
 import type { CommercialMissionStatus } from "@shared/commercialMission";
 import { getLevel4OffensiveState } from "../level4Offensive";
-import { getTowerWarsToday } from "../towerWars/towerWarsService";
+import {
+  getTowerWarsSettlement,
+  getTowerWarsToday,
+} from "../towerWars/towerWarsService";
 import { visualStateForBusinessStatus } from "@shared/driverGameWorld";
+import type { TowerWarsSettlement } from "@shared/towerWarsSettlement";
 
 export type CanonicalBuildingView = {
   building: CanonicalBuilding;
@@ -69,6 +73,7 @@ export type CanonicalBuildingWorld = {
   /** False when the database is unavailable — callers must not treat empty as zero. */
   evidenceSufficient: boolean;
   buildings: CanonicalBuildingView[];
+  settlement: TowerWarsSettlement;
   /**
    * Addresses that one registry recognised and the other did not. A non-empty
    * list is a real data problem, not a display concern: those orders drop out
@@ -325,9 +330,10 @@ export async function getCanonicalBuildingWorld(input: {
   tenantId: string;
   now?: Date;
 }): Promise<CanonicalBuildingWorld> {
-  const [offensive, war, rows] = await Promise.all([
+  const [offensive, war, settled, rows] = await Promise.all([
     getLevel4OffensiveState(input.tenantId),
     getTowerWarsToday({ tenantId: input.tenantId, now: input.now }),
+    getTowerWarsSettlement({ tenantId: input.tenantId, now: input.now }),
     loadMissionLocationRows(input.tenantId),
   ]);
 
@@ -383,11 +389,13 @@ export async function getCanonicalBuildingWorld(input: {
             towerWarsBuildingId: towerState.buildingId,
             revenueCents: towerState.revenueCents,
             orderCount: towerState.orderCount,
-            todayDamage: towerState.damage,
-            // Nothing settles into permanent history yet — the daily-settle
-            // contract is not built. Reported honestly as zero rather than
-            // borrowing today's damage and calling it history.
-            settledScars: 0,
+            // Today's match only — a fresh, legible fight rather than the old
+            // monotonic count that pinned both buildings at "critical" forever.
+            todayDamage:
+              settled.settlement.buildings[towerState.buildingId].today.damage,
+            // Real settled history: attacks absorbed on every prior day.
+            settledScars:
+              settled.settlement.buildings[towerState.buildingId].settledScars,
           }
         : null,
     });
@@ -403,8 +411,18 @@ export async function getCanonicalBuildingWorld(input: {
 
   return {
     tenantId: input.tenantId,
-    evidenceSufficient: offensive.dbAvailable && war.evidenceSufficient,
+    evidenceSufficient:
+      offensive.dbAvailable &&
+      war.evidenceSufficient &&
+      settled.evidenceSufficient,
     buildings,
     registryDisagreements: missions.disagreements,
+    /**
+     * Per-building strata, oldest first. Exposed so a consumer can render a
+     * facade's permanent architectural record without recomputing it, and so
+     * "how much has this building been through" is answerable without reaching
+     * for the old monotonic counter.
+     */
+    settlement: settled.settlement,
   };
 }
