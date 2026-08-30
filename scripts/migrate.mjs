@@ -36,6 +36,21 @@ const runRequired = async (sql, label) => {
   }
 };
 
+const assertRequiredColumns = async (tableName, columns) => {
+  const [rows] = await conn.execute(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+    [tableName]
+  );
+  const present = new Set(rows.map(row => row.COLUMN_NAME));
+  const missing = columns.filter(column => !present.has(column));
+  if (missing.length) {
+    throw new Error(
+      `Required migration ${tableName} is incomplete; missing: ${missing.join(", ")}`
+    );
+  }
+  console.log("✓", `${tableName} required columns verified`);
+};
+
 // ── users table ──────────────────────────────────────────────────
 await run(
   `
@@ -369,6 +384,72 @@ await runRequired(
 `,
   "seed default Day Director processing location"
 );
+
+// ── Goldline truth-bound world ───────────────────────────────────
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS entity_locations (
+    id VARCHAR(36) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    entityType ENUM('customer','building','commercial_prospect') NOT NULL,
+    entityKey VARCHAR(191) NOT NULL,
+    sourceAddress VARCHAR(512) NOT NULL,
+    normalizedSourceAddress VARCHAR(512) NOT NULL,
+    canonicalAddress VARCHAR(512), latitude DECIMAL(10,7), longitude DECIMAL(10,7),
+    googlePlaceId VARCHAR(255),
+    geocodeStatus ENUM('pending','success','missing_address','ambiguous','provider_failure','transient_failure','unconfigured') NOT NULL DEFAULT 'pending',
+    geocodeProvider VARCHAR(64), geocodedAt TIMESTAMP NULL, geocodeError VARCHAR(512), lastAttemptAt TIMESTAMP NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_entity_locations_tenant_entity (tenantId,entityType,entityKey),
+    KEY idx_entity_locations_tenant_status (tenantId,geocodeStatus),
+    KEY idx_entity_locations_tenant_address (tenantId,normalizedSourceAddress)
+  )`,
+  "CREATE TABLE entity_locations"
+);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS tower_wars_promises (
+    id VARCHAR(36) PRIMARY KEY, tenantId VARCHAR(64) NOT NULL,
+    buildingId ENUM('opus_la','century_park_east') NOT NULL,
+    customerIdentity VARCHAR(191),
+    promiseType ENUM('offer_insert','referral_card','loyalty_reward','thank_you_presentation','other') NOT NULL,
+    sourceText TEXT NOT NULL, quantity INT,
+    permissionStatus ENUM('not_required_physical_fulfillment','recorded','not_recorded','revoked') NOT NULL,
+    permissionChannel ENUM('physical_delivery','sms','email','phone','none') NOT NULL,
+    permissionEvidence TEXT, sourceReference VARCHAR(512) NOT NULL,
+    idempotencyKey VARCHAR(191) NOT NULL, fulfilledAt TIMESTAMP NULL,
+    fulfilledBy VARCHAR(128), fulfillmentEvidence TEXT,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_tower_wars_promises_tenant_key (tenantId,idempotencyKey),
+    KEY idx_tower_wars_promises_building_open (tenantId,buildingId,fulfilledAt)
+  )`,
+  "CREATE TABLE tower_wars_promises"
+);
+
+await assertRequiredColumns("entity_locations", [
+  "tenantId",
+  "entityType",
+  "entityKey",
+  "sourceAddress",
+  "normalizedSourceAddress",
+  "latitude",
+  "longitude",
+  "googlePlaceId",
+  "geocodeStatus",
+  "geocodedAt",
+]);
+await assertRequiredColumns("tower_wars_promises", [
+  "tenantId",
+  "buildingId",
+  "sourceText",
+  "permissionStatus",
+  "permissionChannel",
+  "permissionEvidence",
+  "sourceReference",
+  "idempotencyKey",
+  "fulfilledAt",
+]);
 
 await conn.end();
 console.log("\nMigration complete.");

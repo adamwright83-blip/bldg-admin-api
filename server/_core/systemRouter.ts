@@ -31,6 +31,8 @@ import { driverGameWorldRouter } from "../driverGameWorld/driverGameWorldRouter"
 import { salesIntelRouter } from "../salesIntel/salesIntelRouter";
 import { goldlineEventRouter } from "../dayforgeEvents/goldlineEventRouter";
 import { dayDirectorRouter } from "../dayDirector/dayDirectorRouter";
+import { towerWarsRouter } from "../towerWars/towerWarsRouter";
+import { geographicTruthRouter } from "../geography/geographicTruthRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
@@ -63,6 +65,8 @@ export const systemRouter = router({
   salesIntel: salesIntelRouter,
   goldlineEvents: goldlineEventRouter,
   dayDirector: dayDirectorRouter,
+  towerWars: towerWarsRouter,
+  geographicTruth: geographicTruthRouter,
   health: publicProcedure
     .input(
       z.object({

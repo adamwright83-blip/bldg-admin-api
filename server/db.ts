@@ -1,32 +1,94 @@
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, max, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  lt,
+  max,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
-  InsertUser, users,
-  orders, InsertOrder, Order, operationsEvents,
-  vendors, InsertVendor, Vendor,
-  vendorUsers, InsertVendorUser, VendorUser,
-  vendorServiceCoverage, InsertVendorServiceCoverage, VendorServiceCoverage,
-  serviceRequests, bldgUsers,
-  leads, Lead, InsertLead,
-  catalogItems, CatalogItem,
-  agentEvents, InsertAgentEvent, AgentEvent,
-  residentAgentPlans, InsertResidentAgentPlan, ResidentAgentPlan,
-  residentCoordinatedRequests, InsertResidentCoordinatedRequest, ResidentCoordinatedRequest,
-  operatorTasks, InsertOperatorTask, OperatorTask,
-  tenantAiUsage, TenantAiUsage,
-  vendorProfiles, InsertVendorProfile, VendorProfile,
-  vendorServices, InsertVendorService, VendorService,
-  vendorAvailabilityWindows, InsertVendorAvailabilityWindow, VendorAvailabilityWindow,
-  vendorAdminConfigs, InsertVendorAdminConfig, VendorAdminConfig,
-  vendorPeerServiceRequests, InsertVendorPeerServiceRequest, VendorPeerServiceRequest,
-  vendorPricingRecommendations, InsertVendorPricingRecommendation, VendorPricingRecommendation,
-  vendorDataExports, InsertVendorDataExport, VendorDataExport,
-  vendorGuestBookingSessions, InsertVendorGuestBookingSession, VendorGuestBookingSession,
-  vendorOnboardingSessions, InsertVendorOnboardingSession, VendorOnboardingSession,
-  vendorOnboardingMessages, InsertVendorOnboardingMessage, VendorOnboardingMessage,
+  InsertUser,
+  users,
+  orders,
+  InsertOrder,
+  Order,
+  operationsEvents,
+  vendors,
+  InsertVendor,
+  Vendor,
+  vendorUsers,
+  InsertVendorUser,
+  VendorUser,
+  vendorServiceCoverage,
+  InsertVendorServiceCoverage,
+  VendorServiceCoverage,
+  serviceRequests,
+  bldgUsers,
+  leads,
+  Lead,
+  InsertLead,
+  catalogItems,
+  CatalogItem,
+  agentEvents,
+  InsertAgentEvent,
+  AgentEvent,
+  residentAgentPlans,
+  InsertResidentAgentPlan,
+  ResidentAgentPlan,
+  residentCoordinatedRequests,
+  InsertResidentCoordinatedRequest,
+  ResidentCoordinatedRequest,
+  operatorTasks,
+  InsertOperatorTask,
+  OperatorTask,
+  tenantAiUsage,
+  TenantAiUsage,
+  vendorProfiles,
+  InsertVendorProfile,
+  VendorProfile,
+  vendorServices,
+  InsertVendorService,
+  VendorService,
+  vendorAvailabilityWindows,
+  InsertVendorAvailabilityWindow,
+  VendorAvailabilityWindow,
+  vendorAdminConfigs,
+  InsertVendorAdminConfig,
+  VendorAdminConfig,
+  vendorPeerServiceRequests,
+  InsertVendorPeerServiceRequest,
+  VendorPeerServiceRequest,
+  vendorPricingRecommendations,
+  InsertVendorPricingRecommendation,
+  VendorPricingRecommendation,
+  vendorDataExports,
+  InsertVendorDataExport,
+  VendorDataExport,
+  vendorGuestBookingSessions,
+  InsertVendorGuestBookingSession,
+  VendorGuestBookingSession,
+  vendorOnboardingSessions,
+  InsertVendorOnboardingSession,
+  VendorOnboardingSession,
+  vendorOnboardingMessages,
+  InsertVendorOnboardingMessage,
+  VendorOnboardingMessage,
 } from "../drizzle/schema";
-import type { RequestJobCardSourceRecords, RequestJobCardSourceType } from "./procurement/requestJobCardReadModel";
-import { ENV } from './_core/env';
+import type {
+  RequestJobCardSourceRecords,
+  RequestJobCardSourceType,
+} from "./procurement/requestJobCardReadModel";
+import { ENV } from "./_core/env";
 import { matchBuilding } from "@shared/buildings";
 import { resolveOrderLocationForInsert } from "./orderLocation";
 import {
@@ -47,7 +109,11 @@ import {
   buildPickupCompletedOperationsEventForOrder,
   type OperationsEventActorContext,
 } from "./operationsEvents";
-import { normalizePhoneForStorage, phoneDigits, sameNormalizedPhone } from "./phone";
+import {
+  normalizePhoneForStorage,
+  phoneDigits,
+  sameNormalizedPhone,
+} from "./phone";
 
 export type { AdminCustomerAggregateDbRow };
 
@@ -103,8 +169,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values.role = user.role;
       updateSet.role = user.role;
     } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
+      values.role = "admin";
+      updateSet.role = "admin";
     }
 
     if (!values.lastSignedIn) {
@@ -131,7 +197,11 @@ export async function getUserByOpenId(openId: string) {
     return undefined;
   }
 
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.openId, openId))
+    .limit(1);
 
   return result.length > 0 ? result[0] : undefined;
 }
@@ -163,7 +233,13 @@ export async function createOrder(order: InsertOrder): Promise<number> {
   return insertId;
 }
 
-const OPEN_ORDER_STATUSES: Order["status"][] = ["intake-pending", "new", "collected", "processing", "ready"];
+const OPEN_ORDER_STATUSES: Order["status"][] = [
+  "intake-pending",
+  "new",
+  "collected",
+  "processing",
+  "ready",
+];
 
 function normalizeDuplicateText(value: unknown) {
   return String(value ?? "")
@@ -173,7 +249,12 @@ function normalizeDuplicateText(value: unknown) {
     .replace(/\s+/g, " ");
 }
 
-function duplicateRequestSignal(order: Pick<InsertOrder, "heldCleanedRequestText" | "heldRawRequestText" | "specialInstructions">) {
+function duplicateRequestSignal(
+  order: Pick<
+    InsertOrder,
+    "heldCleanedRequestText" | "heldRawRequestText" | "specialInstructions"
+  >
+) {
   return normalizeDuplicateText(
     order.heldCleanedRequestText ||
       order.heldRawRequestText ||
@@ -183,39 +264,62 @@ function duplicateRequestSignal(order: Pick<InsertOrder, "heldCleanedRequestText
 }
 
 function sameDuplicateResident(left: InsertOrder, right: Order) {
-  if (left.bldgUserId != null && right.bldgUserId != null) return left.bldgUserId === right.bldgUserId;
+  if (left.bldgUserId != null && right.bldgUserId != null)
+    return left.bldgUserId === right.bldgUserId;
   const leftPhone = phoneDigits(left.phone);
   const rightPhone = phoneDigits(right.phone);
   if (!leftPhone || !rightPhone) return false;
-  const normalizedLeft = leftPhone.length === 11 && leftPhone.startsWith("1") ? leftPhone.slice(1) : leftPhone;
-  const normalizedRight = rightPhone.length === 11 && rightPhone.startsWith("1") ? rightPhone.slice(1) : rightPhone;
+  const normalizedLeft =
+    leftPhone.length === 11 && leftPhone.startsWith("1")
+      ? leftPhone.slice(1)
+      : leftPhone;
+  const normalizedRight =
+    rightPhone.length === 11 && rightPhone.startsWith("1")
+      ? rightPhone.slice(1)
+      : rightPhone;
   return normalizedLeft === normalizedRight;
 }
 
-export async function findLikelyDuplicateOpenResidentOrder(order: InsertOrder): Promise<Order | undefined> {
+export async function findLikelyDuplicateOpenResidentOrder(
+  order: InsertOrder
+): Promise<Order | undefined> {
   const db = await getDb();
   if (!db) return undefined;
 
   const candidates = await db
     .select()
     .from(orders)
-    .where(and(
-      eq(orders.tenantId, order.tenantId ?? "default"),
-      inArray(orders.status, OPEN_ORDER_STATUSES),
-      eq(orders.serviceType, order.serviceType),
-      eq(orders.pickupDate, order.pickupDate),
-      order.deliveryDate == null ? isNull(orders.deliveryDate) : eq(orders.deliveryDate, order.deliveryDate)
-    ))
+    .where(
+      and(
+        eq(orders.tenantId, order.tenantId ?? "default"),
+        inArray(orders.status, OPEN_ORDER_STATUSES),
+        eq(orders.serviceType, order.serviceType),
+        eq(orders.pickupDate, order.pickupDate),
+        order.deliveryDate == null
+          ? isNull(orders.deliveryDate)
+          : eq(orders.deliveryDate, order.deliveryDate)
+      )
+    )
     .orderBy(desc(orders.createdAt), desc(orders.id))
     .limit(25);
 
   const incomingSignal = duplicateRequestSignal(order);
-  return candidates.find((candidate) => {
+  return candidates.find(candidate => {
     if (!sameDuplicateResident(order, candidate)) return false;
-    if (normalizeDuplicateText(order.unit) !== normalizeDuplicateText(candidate.unit)) return false;
-    if (normalizeDuplicateText(order.buildingSlug || order.address) !== normalizeDuplicateText(candidate.buildingSlug || candidate.address)) return false;
+    if (
+      normalizeDuplicateText(order.unit) !==
+      normalizeDuplicateText(candidate.unit)
+    )
+      return false;
+    if (
+      normalizeDuplicateText(order.buildingSlug || order.address) !==
+      normalizeDuplicateText(candidate.buildingSlug || candidate.address)
+    )
+      return false;
     const candidateSignal = duplicateRequestSignal(candidate);
-    return incomingSignal ? incomingSignal === candidateSignal : candidateSignal === "";
+    return incomingSignal
+      ? incomingSignal === candidateSignal
+      : candidateSignal === "";
   });
 }
 
@@ -227,25 +331,33 @@ export async function findLikelyDuplicateOpenResidentOrder(order: InsertOrder): 
  * deliveryDate/metadata shapes for one user action, which defeated the strict
  * match and created a duplicate order.
  */
-async function findOpenResidentLaundryOrderLoose(order: InsertOrder): Promise<Order | undefined> {
+async function findOpenResidentLaundryOrderLoose(
+  order: InsertOrder
+): Promise<Order | undefined> {
   const db = await getDb();
   if (!db) return undefined;
 
   const candidates = await db
     .select()
     .from(orders)
-    .where(and(
-      eq(orders.tenantId, order.tenantId ?? "default"),
-      inArray(orders.status, OPEN_ORDER_STATUSES),
-      eq(orders.serviceType, order.serviceType),
-      eq(orders.pickupDate, order.pickupDate)
-    ))
+    .where(
+      and(
+        eq(orders.tenantId, order.tenantId ?? "default"),
+        inArray(orders.status, OPEN_ORDER_STATUSES),
+        eq(orders.serviceType, order.serviceType),
+        eq(orders.pickupDate, order.pickupDate)
+      )
+    )
     .orderBy(desc(orders.createdAt), desc(orders.id))
     .limit(25);
 
-  return candidates.find((candidate) => {
+  return candidates.find(candidate => {
     if (!sameDuplicateResident(order, candidate)) return false;
-    if (normalizeDuplicateText(order.unit) !== normalizeDuplicateText(candidate.unit)) return false;
+    if (
+      normalizeDuplicateText(order.unit) !==
+      normalizeDuplicateText(candidate.unit)
+    )
+      return false;
     return (
       normalizeDuplicateText(order.buildingSlug || order.address) ===
       normalizeDuplicateText(candidate.buildingSlug || candidate.address)
@@ -255,7 +367,10 @@ async function findOpenResidentLaundryOrderLoose(order: InsertOrder): Promise<Or
 
 /** True for a MySQL duplicate-key violation (ER_DUP_ENTRY / errno 1062). */
 function isDuplicateKeyError(err: unknown): boolean {
-  const e = err as { code?: string; errno?: number; message?: string } | null | undefined;
+  const e = err as
+    | { code?: string; errno?: number; message?: string }
+    | null
+    | undefined;
   if (!e) return false;
   return (
     e.code === "ER_DUP_ENTRY" ||
@@ -304,10 +419,18 @@ export async function createOrReuseResidentLaundryOrder(
 ): Promise<{ orderId: number; reused: boolean }> {
   // Debugging mirror only — the physical column / opts are authoritative.
   const metadataKey =
-    order.heldMetadataJson && typeof order.heldMetadataJson === "object" && !Array.isArray(order.heldMetadataJson)
-      ? ((order.heldMetadataJson as Record<string, unknown>).clientRequestId as string | undefined)
+    order.heldMetadataJson &&
+    typeof order.heldMetadataJson === "object" &&
+    !Array.isArray(order.heldMetadataJson)
+      ? ((order.heldMetadataJson as Record<string, unknown>).clientRequestId as
+          | string
+          | undefined)
       : undefined;
-  const clientRequestId = opts?.clientRequestId ?? order.residentClientRequestId ?? metadataKey ?? null;
+  const clientRequestId =
+    opts?.clientRequestId ??
+    order.residentClientRequestId ??
+    metadataKey ??
+    null;
 
   // 1) Fast path: this key already produced an order.
   if (clientRequestId) {
@@ -338,7 +461,10 @@ export async function createOrReuseResidentLaundryOrder(
   //    above, but only one wins the key — the loser gets ER_DUP_ENTRY and we
   //    resolve it back to the winning order instead of creating a duplicate.
   try {
-    const orderId = await createOrder({ ...order, residentClientRequestId: clientRequestId ?? null });
+    const orderId = await createOrder({
+      ...order,
+      residentClientRequestId: clientRequestId ?? null,
+    });
     return { orderId, reused: false };
   } catch (err) {
     if (clientRequestId && isDuplicateKeyError(err)) {
@@ -409,7 +535,10 @@ export async function updateOrderBuildingSlugForCustomer(input: {
 
   const where =
     input.scope === "latest"
-      ? and(eq(orders.phone, input.phone), eq(orders.id, input.latestOrderId ?? 0))
+      ? and(
+          eq(orders.phone, input.phone),
+          eq(orders.id, input.latestOrderId ?? 0)
+        )
       : eq(orders.phone, input.phone);
 
   const result = await db
@@ -424,7 +553,11 @@ export async function getOrderById(id: number): Promise<Order | undefined> {
   const db = await getDb();
   if (!db) return undefined;
 
-  const result = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+  const result = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.id, id))
+    .limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
 
@@ -473,9 +606,10 @@ export async function listLatestCustomerIdentityForExport(options?: {
     })
     .from(orders);
 
-  const rows = await (options?.since
-    ? baseQuery.where(gte(orders.createdAt, options.since))
-    : baseQuery
+  const rows = await (
+    options?.since
+      ? baseQuery.where(gte(orders.createdAt, options.since))
+      : baseQuery
   ).orderBy(desc(orders.createdAt), desc(orders.id));
 
   const byPhone = new Map<string, (typeof rows)[number]>();
@@ -489,7 +623,7 @@ export async function listLatestCustomerIdentityForExport(options?: {
     a.phone.localeCompare(b.phone)
   );
 
-  return sorted.map((row) => {
+  return sorted.map(row => {
     const slugFromOrder = row.buildingSlug?.trim() || null;
     const slugFromAddress = matchBuilding(row.address)?.slug ?? null;
     return {
@@ -503,14 +637,21 @@ export async function listLatestCustomerIdentityForExport(options?: {
 }
 
 /** All orders for one phone (exact match), newest first */
-export async function getOrdersByPhoneExact(phone: string): Promise<Order[]> {
+export async function getOrdersByPhoneExact(
+  phone: string,
+  tenantId?: string
+): Promise<Order[]> {
   const db = await getDb();
   if (!db) return [];
 
   return db
     .select()
     .from(orders)
-    .where(eq(orders.phone, phone))
+    .where(
+      tenantId
+        ? and(eq(orders.phone, phone), eq(orders.tenantId, tenantId))
+        : eq(orders.phone, phone)
+    )
     .orderBy(desc(orders.createdAt), desc(orders.id));
 }
 
@@ -518,7 +659,9 @@ export async function getOrdersByPhoneExact(phone: string): Promise<Order[]> {
  * Admin customer aggregates by stable composite customer key.
  * Metrics use full order history per key; display fields use the best row (see adminCustomerAggregate.ts).
  */
-export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggregateDbRow[]> {
+export async function listAdminCustomerAggregates(
+  tenantId?: string
+): Promise<AdminCustomerAggregateDbRow[]> {
   const db = await getDb();
   if (!db) return [];
 
@@ -536,9 +679,12 @@ export async function listAdminCustomerAggregates(): Promise<AdminCustomerAggreg
       paid: orders.paid,
       total: orders.total,
     })
-    .from(orders);
+    .from(orders)
+    .where(tenantId ? eq(orders.tenantId, tenantId) : undefined);
 
-  return buildAdminCustomerAggregatesInMemory(rows.map(normalizeOrderRowFromDb));
+  return buildAdminCustomerAggregatesInMemory(
+    rows.map(normalizeOrderRowFromDb)
+  );
 }
 
 export type BuildingRevenueOrderRow = {
@@ -549,7 +695,9 @@ export type BuildingRevenueOrderRow = {
 };
 
 /** Paid orders for per-order building revenue attribution */
-export async function listPaidOrdersForBuildingRevenue(): Promise<BuildingRevenueOrderRow[]> {
+export async function listPaidOrdersForBuildingRevenue(
+  tenantId?: string
+): Promise<BuildingRevenueOrderRow[]> {
   const db = await getDb();
   if (!db) return [];
 
@@ -561,7 +709,11 @@ export async function listPaidOrdersForBuildingRevenue(): Promise<BuildingRevenu
       total: orders.total,
     })
     .from(orders)
-    .where(eq(orders.paid, true));
+    .where(
+      tenantId
+        ? and(eq(orders.paid, true), eq(orders.tenantId, tenantId))
+        : eq(orders.paid, true)
+    );
 }
 
 export type AdminDashboardSummary = {
@@ -596,8 +748,16 @@ async function paidRevenueAndCountInPaidAtWindow(
       and(
         eq(orders.paid, true),
         or(
-          and(isNotNull(orders.paidAt), gte(orders.paidAt, start), lt(orders.paidAt, end)),
-          and(isNull(orders.paidAt), gte(orders.updatedAt, start), lt(orders.updatedAt, end))
+          and(
+            isNotNull(orders.paidAt),
+            gte(orders.paidAt, start),
+            lt(orders.paidAt, end)
+          ),
+          and(
+            isNull(orders.paidAt),
+            gte(orders.updatedAt, start),
+            lt(orders.updatedAt, end)
+          )
         )
       )
     );
@@ -621,26 +781,38 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary 
   const todayStart = zonedDayStartUtc(todayYmd, tz);
   const tomorrowYmd = zonedNextDayYmd(todayYmd, tz);
   const todayEnd = zonedDayStartUtc(tomorrowYmd, tz);
-  const { start: weekStart, end: weekEnd } = zonedWeekRangeUtcContaining(now, tz);
-  const { start: monthStart, end: monthEnd } = zonedMonthRangeUtcContaining(now, tz);
+  const { start: weekStart, end: weekEnd } = zonedWeekRangeUtcContaining(
+    now,
+    tz
+  );
+  const { start: monthStart, end: monthEnd } = zonedMonthRangeUtcContaining(
+    now,
+    tz
+  );
 
-  const [todayAgg, weekAgg, monthAgg, buildingsRow, phonesRow, totalRow] = await Promise.all([
-    paidRevenueAndCountInPaidAtWindow(db, todayStart, todayEnd),
-    paidRevenueAndCountInPaidAtWindow(db, weekStart, weekEnd),
-    paidRevenueAndCountInPaidAtWindow(db, monthStart, monthEnd),
-    db
-      .select({
-        n: sql<number>`COUNT(DISTINCT ${orders.buildingSlug})`,
-      })
-      .from(orders)
-      .where(and(sql`${orders.buildingSlug} IS NOT NULL`, sql`${orders.buildingSlug} != ''`)),
-    db
-      .select({
-        n: sql<number>`COUNT(DISTINCT ${orders.phone})`,
-      })
-      .from(orders),
-    db.select({ n: sql<number>`COUNT(*)` }).from(orders),
-  ]);
+  const [todayAgg, weekAgg, monthAgg, buildingsRow, phonesRow, totalRow] =
+    await Promise.all([
+      paidRevenueAndCountInPaidAtWindow(db, todayStart, todayEnd),
+      paidRevenueAndCountInPaidAtWindow(db, weekStart, weekEnd),
+      paidRevenueAndCountInPaidAtWindow(db, monthStart, monthEnd),
+      db
+        .select({
+          n: sql<number>`COUNT(DISTINCT ${orders.buildingSlug})`,
+        })
+        .from(orders)
+        .where(
+          and(
+            sql`${orders.buildingSlug} IS NOT NULL`,
+            sql`${orders.buildingSlug} != ''`
+          )
+        ),
+      db
+        .select({
+          n: sql<number>`COUNT(DISTINCT ${orders.phone})`,
+        })
+        .from(orders),
+      db.select({ n: sql<number>`COUNT(*)` }).from(orders),
+    ]);
 
   const paidOrderCountMonth = monthAgg.count;
   const avgOrderValueMonth =
@@ -669,14 +841,11 @@ export async function getOrdersByStatus(
   const db = await getDb();
   if (!db) return [];
 
-  const where = vendorId != null
-    ? and(eq(orders.status, status), eq(orders.vendorId, vendorId))
-    : eq(orders.status, status);
-  return db
-    .select()
-    .from(orders)
-    .where(where)
-    .orderBy(desc(orders.createdAt));
+  const where =
+    vendorId != null
+      ? and(eq(orders.status, status), eq(orders.vendorId, vendorId))
+      : eq(orders.status, status);
+  return db.select().from(orders).where(where).orderBy(desc(orders.createdAt));
 }
 
 export async function getOrdersByVendorId(
@@ -686,14 +855,11 @@ export async function getOrdersByVendorId(
   const db = await getDb();
   if (!db) return [];
 
-  const where = status != null
-    ? and(eq(orders.vendorId, vendorId), eq(orders.status, status))
-    : eq(orders.vendorId, vendorId);
-  return db
-    .select()
-    .from(orders)
-    .where(where)
-    .orderBy(desc(orders.createdAt));
+  const where =
+    status != null
+      ? and(eq(orders.vendorId, vendorId), eq(orders.status, status))
+      : eq(orders.vendorId, vendorId);
+  return db.select().from(orders).where(where).orderBy(desc(orders.createdAt));
 }
 
 export async function getOrdersByDateAndStatus(
@@ -705,7 +871,8 @@ export async function getOrdersByDateAndStatus(
   const db = await getDb();
   if (!db) return [];
 
-  const col = dateField === "deliveryDate" ? orders.deliveryDate : orders.pickupDate;
+  const col =
+    dateField === "deliveryDate" ? orders.deliveryDate : orders.pickupDate;
   const conditions = [eq(col, date), eq(orders.status, status)];
   if (vendorId != null) conditions.push(eq(orders.vendorId, vendorId));
   return db
@@ -739,8 +906,15 @@ export async function attemptOrderPickupCollection(
   const result = await db
     .update(orders)
     .set({ status: "collected" })
-    .where(and(eq(orders.id, orderId), inArray(orders.status, ["new", "intake-pending"])));
-  const affectedRows = Number((result as { [0]?: { affectedRows?: number } })[0]?.affectedRows ?? 0);
+    .where(
+      and(
+        eq(orders.id, orderId),
+        inArray(orders.status, ["new", "intake-pending"])
+      )
+    );
+  const affectedRows = Number(
+    (result as { [0]?: { affectedRows?: number } })[0]?.affectedRows ?? 0
+  );
 
   const order = await getOrderById(orderId);
   return { transitioned: affectedRows > 0, order };
@@ -754,8 +928,12 @@ export async function updateOrderStatus(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.transaction(async (tx) => {
-    const existing = await tx.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  await db.transaction(async tx => {
+    const existing = await tx
+      .select()
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
     const previousOrder = existing[0];
     await tx.update(orders).set({ status }).where(eq(orders.id, orderId));
     if (!previousOrder) return;
@@ -771,7 +949,12 @@ export async function updateOrderStatus(
     const existingEvent = await tx
       .select({ id: operationsEvents.id })
       .from(operationsEvents)
-      .where(and(eq(operationsEvents.orderId, orderId), eq(operationsEvents.sourceEventType, event.sourceEventType)))
+      .where(
+        and(
+          eq(operationsEvents.orderId, orderId),
+          eq(operationsEvents.sourceEventType, event.sourceEventType)
+        )
+      )
       .limit(1);
     if (existingEvent.length > 0) return;
 
@@ -799,15 +982,25 @@ export async function ensurePickupCompletedOperationsEventForOrder(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  return db.transaction(async (tx) => {
+  return db.transaction(async tx => {
     const existingEvent = await tx
       .select({ id: operationsEvents.id })
       .from(operationsEvents)
-      .where(and(eq(operationsEvents.orderId, orderId), eq(operationsEvents.sourceEventType, "pickup_completed")))
+      .where(
+        and(
+          eq(operationsEvents.orderId, orderId),
+          eq(operationsEvents.sourceEventType, "pickup_completed")
+        )
+      )
       .limit(1);
-    if (existingEvent[0]) return { created: false, eventId: existingEvent[0].id };
+    if (existingEvent[0])
+      return { created: false, eventId: existingEvent[0].id };
 
-    const [order] = await tx.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+    const [order] = await tx
+      .select()
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
     if (!order) throw new Error(`Order #${orderId} not found`);
 
     const event = buildPickupCompletedOperationsEventForOrder({
@@ -840,7 +1033,9 @@ export async function listRecentAgentEvents(
     .limit(Math.min(Math.max(limit, 1), 500));
 }
 
-export async function createAgentEvent(event: InsertAgentEvent): Promise<number | null> {
+export async function createAgentEvent(
+  event: InsertAgentEvent
+): Promise<number | null> {
   const db = await getDb();
   if (!db) {
     console.warn("[AgentEvents] Database not available; event not persisted", {
@@ -857,7 +1052,9 @@ export async function createAgentEvent(event: InsertAgentEvent): Promise<number 
 export type OperatorTaskLevel = OperatorTask["level"];
 export type OperatorTaskStatus = OperatorTask["status"];
 
-export async function createOperatorTask(task: InsertOperatorTask): Promise<OperatorTask | null> {
+export async function createOperatorTask(
+  task: InsertOperatorTask
+): Promise<OperatorTask | null> {
   const db = await getDb();
   if (!db) {
     console.warn("[OperatorTasks] Database not available; task not persisted", {
@@ -869,15 +1066,21 @@ export async function createOperatorTask(task: InsertOperatorTask): Promise<Oper
 
   const result = await db.insert(operatorTasks).values(task);
   const insertId = Number(result[0].insertId);
-  const rows = await db.select().from(operatorTasks).where(eq(operatorTasks.id, insertId)).limit(1);
+  const rows = await db
+    .select()
+    .from(operatorTasks)
+    .where(eq(operatorTasks.id, insertId))
+    .limit(1);
   return rows[0] ?? null;
 }
 
-export async function listOperatorTasks(input: {
-  tenantId?: string;
-  status?: OperatorTaskStatus | "active";
-  limit?: number;
-} = {}): Promise<OperatorTask[]> {
+export async function listOperatorTasks(
+  input: {
+    tenantId?: string;
+    status?: OperatorTaskStatus | "active";
+    limit?: number;
+  } = {}
+): Promise<OperatorTask[]> {
   const db = await getDb();
   if (!db) return [];
 
@@ -908,7 +1111,12 @@ export async function updateOperatorTaskStatus(input: {
   await db
     .update(operatorTasks)
     .set({ status: input.status })
-    .where(and(eq(operatorTasks.id, input.id), eq(operatorTasks.tenantId, input.tenantId ?? "default")));
+    .where(
+      and(
+        eq(operatorTasks.id, input.id),
+        eq(operatorTasks.tenantId, input.tenantId ?? "default")
+      )
+    );
 }
 
 export function currentAiUsageMonth(now = new Date()): string {
@@ -925,7 +1133,9 @@ export async function getTenantAiUsage(
   const rows = await db
     .select()
     .from(tenantAiUsage)
-    .where(and(eq(tenantAiUsage.tenantId, tenantId), eq(tenantAiUsage.month, month)))
+    .where(
+      and(eq(tenantAiUsage.tenantId, tenantId), eq(tenantAiUsage.month, month))
+    )
     .limit(1);
   return rows[0] ?? null;
 }
@@ -1073,7 +1283,8 @@ export async function findStripeCardByPhone(
   const normalizedPhone = normalizePhoneForStorage(phone);
   if (!normalizedPhone) return null;
   const digits = phoneDigits(normalizedPhone);
-  const nationalDigits = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  const nationalDigits =
+    digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
   const storedPhoneDigits = sql<string>`REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${orders.phone}, '+', ''), '-', ''), ' ', ''), '(', ''), ')', ''), '.', '')`;
 
   const result = await db
@@ -1099,7 +1310,9 @@ export async function findStripeCardByPhone(
     .orderBy(desc(orders.createdAt))
     .limit(25);
 
-  const match = result.find((row) => sameNormalizedPhone(row.phone, normalizedPhone));
+  const match = result.find(row =>
+    sameNormalizedPhone(row.phone, normalizedPhone)
+  );
   if (match?.stripeCustomerId && match.stripePaymentMethodId) {
     return {
       stripeCustomerId: match.stripeCustomerId,
@@ -1119,10 +1332,7 @@ export async function hasCustomerPaidBefore(
     .select({ count: sql<number>`count(*)` })
     .from(orders)
     .where(
-      and(
-        eq(orders.stripeCustomerId, stripeCustomerId),
-        eq(orders.paid, true)
-      )
+      and(eq(orders.stripeCustomerId, stripeCustomerId), eq(orders.paid, true))
     );
 
   return (result[0]?.count ?? 0) > 0;
@@ -1135,7 +1345,10 @@ export async function deleteOrder(orderId: number): Promise<void> {
   await db.delete(orders).where(eq(orders.id, orderId));
 }
 
-export async function updateOrderVendor(orderId: number, vendorId: number | null): Promise<void> {
+export async function updateOrderVendor(
+  orderId: number,
+  vendorId: number | null
+): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -1159,9 +1372,10 @@ export async function createVendor(data: {
     email: data.email ?? null,
     country: data.country ?? "US",
     isActive: data.isActive ?? false,
-    platformFeePercent: data.platformFeePercent != null
-      ? data.platformFeePercent.toString()
-      : null,
+    platformFeePercent:
+      data.platformFeePercent != null
+        ? data.platformFeePercent.toString()
+        : null,
   });
   return Number(result[0].insertId);
 }
@@ -1170,15 +1384,25 @@ export async function getVendorById(id: number): Promise<Vendor | undefined> {
   const db = await getDb();
   if (!db) return undefined;
 
-  const result = await db.select().from(vendors).where(eq(vendors.id, id)).limit(1);
+  const result = await db
+    .select()
+    .from(vendors)
+    .where(eq(vendors.id, id))
+    .limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function getVendorBySlug(slug: string): Promise<Vendor | undefined> {
+export async function getVendorBySlug(
+  slug: string
+): Promise<Vendor | undefined> {
   const db = await getDb();
   if (!db) return undefined;
 
-  const result = await db.select().from(vendors).where(eq(vendors.slug, slug)).limit(1);
+  const result = await db
+    .select()
+    .from(vendors)
+    .where(eq(vendors.slug, slug))
+    .limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
 
@@ -1195,7 +1419,11 @@ export async function isVendorPublicBookingSlugTaken(input: {
   if (input.excludeVendorId != null) {
     vendorConditions.push(ne(vendors.id, input.excludeVendorId));
   }
-  const vendorRows = await db.select({ id: vendors.id }).from(vendors).where(and(...vendorConditions)).limit(1);
+  const vendorRows = await db
+    .select({ id: vendors.id })
+    .from(vendors)
+    .where(and(...vendorConditions))
+    .limit(1);
   if (vendorRows.length > 0) return true;
 
   const configConditions = [
@@ -1203,7 +1431,9 @@ export async function isVendorPublicBookingSlugTaken(input: {
     eq(vendorAdminConfigs.publicBookingSlug, normalized),
   ];
   if (input.excludeVendorId != null) {
-    configConditions.push(ne(vendorAdminConfigs.vendorId, input.excludeVendorId));
+    configConditions.push(
+      ne(vendorAdminConfigs.vendorId, input.excludeVendorId)
+    );
   }
   const configRows = await db
     .select({ id: vendorAdminConfigs.id })
@@ -1223,7 +1453,12 @@ export async function getVendorUserByVendorIdAndEmail(
   const result = await db
     .select()
     .from(vendorUsers)
-    .where(and(eq(vendorUsers.vendorId, vendorId), eq(vendorUsers.email, email.toLowerCase().trim())))
+    .where(
+      and(
+        eq(vendorUsers.vendorId, vendorId),
+        eq(vendorUsers.email, email.toLowerCase().trim())
+      )
+    )
     .limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
@@ -1257,7 +1492,12 @@ export async function updateVendorUserPassword(
   await db
     .update(vendorUsers)
     .set({ passwordHash })
-    .where(and(eq(vendorUsers.vendorId, vendorId), eq(vendorUsers.email, email.toLowerCase().trim())));
+    .where(
+      and(
+        eq(vendorUsers.vendorId, vendorId),
+        eq(vendorUsers.email, email.toLowerCase().trim())
+      )
+    );
 }
 
 export async function updateVendorBranding(
@@ -1270,11 +1510,17 @@ export async function updateVendorBranding(
   await db.update(vendors).set(data).where(eq(vendors.id, vendorId));
 }
 
-export async function updateVendorSlug(vendorId: number, slug: string): Promise<void> {
+export async function updateVendorSlug(
+  vendorId: number,
+  slug: string
+): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(vendors).set({ slug: slug.trim().toLowerCase() }).where(eq(vendors.id, vendorId));
+  await db
+    .update(vendors)
+    .set({ slug: slug.trim().toLowerCase() })
+    .where(eq(vendors.id, vendorId));
 }
 
 export async function listVendors(): Promise<Vendor[]> {
@@ -1284,7 +1530,10 @@ export async function listVendors(): Promise<Vendor[]> {
   return db.select().from(vendors).orderBy(asc(vendors.name));
 }
 
-export async function updateVendorIsActive(id: number, isActive: boolean): Promise<void> {
+export async function updateVendorIsActive(
+  id: number,
+  isActive: boolean
+): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -1298,9 +1547,12 @@ export async function updateVendorPlatformFeePercent(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(vendors).set({
-    platformFeePercent: platformFeePercent.toString(),
-  }).where(eq(vendors.id, id));
+  await db
+    .update(vendors)
+    .set({
+      platformFeePercent: platformFeePercent.toString(),
+    })
+    .where(eq(vendors.id, id));
 }
 
 export async function updateVendorConnectAccount(
@@ -1310,13 +1562,16 @@ export async function updateVendorConnectAccount(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(vendors).set({
-    stripeConnectAccountId,
-    isActive: false,
-    chargesEnabled: false,
-    payoutsEnabled: false,
-    detailsSubmitted: false,
-  }).where(eq(vendors.id, id));
+  await db
+    .update(vendors)
+    .set({
+      stripeConnectAccountId,
+      isActive: false,
+      chargesEnabled: false,
+      payoutsEnabled: false,
+      detailsSubmitted: false,
+    })
+    .where(eq(vendors.id, id));
 }
 
 /**
@@ -1331,16 +1586,19 @@ export async function replaceVendorConnectAccount(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(vendors).set({
-    stripeConnectAccountId: newStripeConnectAccountId,
-    isActive: false,
-    chargesEnabled: false,
-    payoutsEnabled: false,
-    detailsSubmitted: false,
-    currentlyDue: null,
-    pastDue: null,
-    disabledReason: null,
-  }).where(eq(vendors.id, id));
+  await db
+    .update(vendors)
+    .set({
+      stripeConnectAccountId: newStripeConnectAccountId,
+      isActive: false,
+      chargesEnabled: false,
+      payoutsEnabled: false,
+      detailsSubmitted: false,
+      currentlyDue: null,
+      pastDue: null,
+      disabledReason: null,
+    })
+    .where(eq(vendors.id, id));
 }
 
 export async function updateVendorConnectStatus(
@@ -1357,19 +1615,24 @@ export async function updateVendorConnectStatus(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(vendors).set({
-    chargesEnabled: status.chargesEnabled,
-    payoutsEnabled: status.payoutsEnabled,
-    detailsSubmitted: status.detailsSubmitted,
-    currentlyDue: status.currentlyDue,
-    pastDue: status.pastDue,
-    disabledReason: status.disabledReason,
-  }).where(eq(vendors.id, id));
+  await db
+    .update(vendors)
+    .set({
+      chargesEnabled: status.chargesEnabled,
+      payoutsEnabled: status.payoutsEnabled,
+      detailsSubmitted: status.detailsSubmitted,
+      currentlyDue: status.currentlyDue,
+      pastDue: status.pastDue,
+      disabledReason: status.disabledReason,
+    })
+    .where(eq(vendors.id, id));
 }
 
 /* ===== UNIVERSAL VENDOR ONBOARDING HELPERS ===== */
 
-export async function createVendorProfile(data: InsertVendorProfile): Promise<number> {
+export async function createVendorProfile(
+  data: InsertVendorProfile
+): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const result = await db.insert(vendorProfiles).values(data);
@@ -1385,7 +1648,12 @@ export async function getVendorProfileByVendorId(
   const rows = await db
     .select()
     .from(vendorProfiles)
-    .where(and(eq(vendorProfiles.tenantId, tenantId), eq(vendorProfiles.vendorId, vendorId)))
+    .where(
+      and(
+        eq(vendorProfiles.tenantId, tenantId),
+        eq(vendorProfiles.vendorId, vendorId)
+      )
+    )
     .limit(1);
   return rows[0];
 }
@@ -1400,10 +1668,17 @@ export async function updateVendorProfileByVendorId(
   await db
     .update(vendorProfiles)
     .set(data)
-    .where(and(eq(vendorProfiles.tenantId, tenantId), eq(vendorProfiles.vendorId, vendorId)));
+    .where(
+      and(
+        eq(vendorProfiles.tenantId, tenantId),
+        eq(vendorProfiles.vendorId, vendorId)
+      )
+    );
 }
 
-export async function createVendorServices(data: InsertVendorService[]): Promise<number[]> {
+export async function createVendorServices(
+  data: InsertVendorService[]
+): Promise<number[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   if (data.length === 0) return [];
@@ -1424,7 +1699,12 @@ export async function listVendorServices(
   return db
     .select()
     .from(vendorServices)
-    .where(and(eq(vendorServices.tenantId, tenantId), eq(vendorServices.vendorId, vendorId)))
+    .where(
+      and(
+        eq(vendorServices.tenantId, tenantId),
+        eq(vendorServices.vendorId, vendorId)
+      )
+    )
     .orderBy(asc(vendorServices.serviceName));
 }
 
@@ -1450,11 +1730,21 @@ export async function listVendorAvailabilityWindows(
   return db
     .select()
     .from(vendorAvailabilityWindows)
-    .where(and(eq(vendorAvailabilityWindows.tenantId, tenantId), eq(vendorAvailabilityWindows.vendorId, vendorId)))
-    .orderBy(asc(vendorAvailabilityWindows.dayOfWeek), asc(vendorAvailabilityWindows.startTime));
+    .where(
+      and(
+        eq(vendorAvailabilityWindows.tenantId, tenantId),
+        eq(vendorAvailabilityWindows.vendorId, vendorId)
+      )
+    )
+    .orderBy(
+      asc(vendorAvailabilityWindows.dayOfWeek),
+      asc(vendorAvailabilityWindows.startTime)
+    );
 }
 
-export async function createVendorAdminConfig(data: InsertVendorAdminConfig): Promise<number> {
+export async function createVendorAdminConfig(
+  data: InsertVendorAdminConfig
+): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const result = await db.insert(vendorAdminConfigs).values(data);
@@ -1470,7 +1760,12 @@ export async function getVendorAdminConfig(
   const rows = await db
     .select()
     .from(vendorAdminConfigs)
-    .where(and(eq(vendorAdminConfigs.tenantId, tenantId), eq(vendorAdminConfigs.vendorId, vendorId)))
+    .where(
+      and(
+        eq(vendorAdminConfigs.tenantId, tenantId),
+        eq(vendorAdminConfigs.vendorId, vendorId)
+      )
+    )
     .limit(1);
   return rows[0];
 }
@@ -1484,10 +1779,15 @@ export async function getVendorAdminConfigBySlug(
   const rows = await db
     .select()
     .from(vendorAdminConfigs)
-    .where(and(
-      eq(vendorAdminConfigs.tenantId, tenantId),
-      eq(vendorAdminConfigs.publicBookingSlug, publicBookingSlug.trim().toLowerCase())
-    ))
+    .where(
+      and(
+        eq(vendorAdminConfigs.tenantId, tenantId),
+        eq(
+          vendorAdminConfigs.publicBookingSlug,
+          publicBookingSlug.trim().toLowerCase()
+        )
+      )
+    )
     .limit(1);
   return rows[0];
 }
@@ -1502,7 +1802,12 @@ export async function updateVendorAdminConfig(
   await db
     .update(vendorAdminConfigs)
     .set(data)
-    .where(and(eq(vendorAdminConfigs.tenantId, tenantId), eq(vendorAdminConfigs.vendorId, vendorId)));
+    .where(
+      and(
+        eq(vendorAdminConfigs.tenantId, tenantId),
+        eq(vendorAdminConfigs.vendorId, vendorId)
+      )
+    );
 }
 
 export async function createVendorPeerServiceRequest(
@@ -1523,7 +1828,12 @@ export async function getVendorPeerServiceRequest(
   const rows = await db
     .select()
     .from(vendorPeerServiceRequests)
-    .where(and(eq(vendorPeerServiceRequests.tenantId, tenantId), eq(vendorPeerServiceRequests.id, id)))
+    .where(
+      and(
+        eq(vendorPeerServiceRequests.tenantId, tenantId),
+        eq(vendorPeerServiceRequests.id, id)
+      )
+    )
     .limit(1);
   return rows[0];
 }
@@ -1538,7 +1848,12 @@ export async function updateVendorPeerServiceRequest(
   await db
     .update(vendorPeerServiceRequests)
     .set(data)
-    .where(and(eq(vendorPeerServiceRequests.tenantId, tenantId), eq(vendorPeerServiceRequests.id, id)));
+    .where(
+      and(
+        eq(vendorPeerServiceRequests.tenantId, tenantId),
+        eq(vendorPeerServiceRequests.id, id)
+      )
+    );
 }
 
 export async function createResidentAgentPlan(
@@ -1559,7 +1874,12 @@ export async function getResidentAgentPlan(
   const rows = await db
     .select()
     .from(residentAgentPlans)
-    .where(and(eq(residentAgentPlans.tenantId, tenantId), eq(residentAgentPlans.id, id)))
+    .where(
+      and(
+        eq(residentAgentPlans.tenantId, tenantId),
+        eq(residentAgentPlans.id, id)
+      )
+    )
     .limit(1);
   return rows[0];
 }
@@ -1574,7 +1894,12 @@ export async function updateResidentAgentPlan(
   await db
     .update(residentAgentPlans)
     .set(data)
-    .where(and(eq(residentAgentPlans.tenantId, tenantId), eq(residentAgentPlans.id, id)));
+    .where(
+      and(
+        eq(residentAgentPlans.tenantId, tenantId),
+        eq(residentAgentPlans.id, id)
+      )
+    );
 }
 
 export async function createResidentCoordinatedRequest(
@@ -1595,7 +1920,12 @@ export async function getResidentCoordinatedRequest(
   const rows = await db
     .select()
     .from(residentCoordinatedRequests)
-    .where(and(eq(residentCoordinatedRequests.tenantId, tenantId), eq(residentCoordinatedRequests.id, id)))
+    .where(
+      and(
+        eq(residentCoordinatedRequests.tenantId, tenantId),
+        eq(residentCoordinatedRequests.id, id)
+      )
+    )
     .limit(1);
   return rows[0];
 }
@@ -1613,7 +1943,9 @@ export async function listRequestJobCardSourceRecords(input: {
 }): Promise<RequestJobCardSourceRecords> {
   const db = await getDb();
   const empty: RequestJobCardSourceRecords = {
-    serviceRequests: [], coordinatedRequests: [], residentPlans: [],
+    serviceRequests: [],
+    coordinatedRequests: [],
+    residentPlans: [],
   };
   if (!db) return empty;
   const limit = Math.max(1, Math.min(1051, Math.trunc(input.fetchCount)));
@@ -1621,37 +1953,62 @@ export async function listRequestJobCardSourceRecords(input: {
 
   const [serviceRows, coordinatedRequests, residentPlans] = await Promise.all([
     selected.has("service_request")
-      ? db.select({
-          record: {
-            id: serviceRequests.id, bldgUserId: serviceRequests.bldgUserId,
-            serviceType: serviceRequests.serviceType, status: serviceRequests.status,
-            requestSummary: serviceRequests.requestSummary, requestJson: serviceRequests.requestJson,
-            scheduledDate: serviceRequests.scheduledDate, scheduledWindow: serviceRequests.scheduledWindow,
-            createdAt: serviceRequests.createdAt,
-          },
-          residentContext: {
-            bldgUserId: bldgUsers.id, residentName: sql<string | null>`TRIM(CONCAT_WS(' ', ${bldgUsers.firstName}, ${bldgUsers.lastName}))`,
-            buildingSlug: bldgUsers.buildingSlug, unit: bldgUsers.unit,
-          },
-        }).from(serviceRequests)
-        .leftJoin(bldgUsers, eq(serviceRequests.bldgUserId, bldgUsers.id))
-        .orderBy(desc(serviceRequests.createdAt), desc(serviceRequests.id)).limit(limit)
+      ? db
+          .select({
+            record: {
+              id: serviceRequests.id,
+              bldgUserId: serviceRequests.bldgUserId,
+              serviceType: serviceRequests.serviceType,
+              status: serviceRequests.status,
+              requestSummary: serviceRequests.requestSummary,
+              requestJson: serviceRequests.requestJson,
+              scheduledDate: serviceRequests.scheduledDate,
+              scheduledWindow: serviceRequests.scheduledWindow,
+              createdAt: serviceRequests.createdAt,
+            },
+            residentContext: {
+              bldgUserId: bldgUsers.id,
+              residentName: sql<
+                string | null
+              >`TRIM(CONCAT_WS(' ', ${bldgUsers.firstName}, ${bldgUsers.lastName}))`,
+              buildingSlug: bldgUsers.buildingSlug,
+              unit: bldgUsers.unit,
+            },
+          })
+          .from(serviceRequests)
+          .leftJoin(bldgUsers, eq(serviceRequests.bldgUserId, bldgUsers.id))
+          .orderBy(desc(serviceRequests.createdAt), desc(serviceRequests.id))
+          .limit(limit)
       : Promise.resolve([]),
     selected.has("resident_coordinated_request")
-      ? db.select().from(residentCoordinatedRequests)
-        .where(eq(residentCoordinatedRequests.tenantId, input.tenantId))
-        .orderBy(desc(residentCoordinatedRequests.createdAt), desc(residentCoordinatedRequests.id)).limit(limit)
+      ? db
+          .select()
+          .from(residentCoordinatedRequests)
+          .where(eq(residentCoordinatedRequests.tenantId, input.tenantId))
+          .orderBy(
+            desc(residentCoordinatedRequests.createdAt),
+            desc(residentCoordinatedRequests.id)
+          )
+          .limit(limit)
       : Promise.resolve([]),
     selected.has("resident_agent_plan")
-      ? db.select().from(residentAgentPlans)
-        .where(eq(residentAgentPlans.tenantId, input.tenantId))
-        .orderBy(desc(residentAgentPlans.createdAt), desc(residentAgentPlans.id)).limit(limit)
+      ? db
+          .select()
+          .from(residentAgentPlans)
+          .where(eq(residentAgentPlans.tenantId, input.tenantId))
+          .orderBy(
+            desc(residentAgentPlans.createdAt),
+            desc(residentAgentPlans.id)
+          )
+          .limit(limit)
       : Promise.resolve([]),
   ]);
   return {
     serviceRequests: serviceRows.map(row => ({
       ...row,
-      residentContext: row.residentContext ?? { bldgUserId: row.record.bldgUserId },
+      residentContext: row.residentContext ?? {
+        bldgUserId: row.record.bldgUserId,
+      },
     })),
     coordinatedRequests,
     residentPlans,
@@ -1663,15 +2020,27 @@ export async function listVendorPeerServiceProviders(input: {
   serviceCategory: string;
   excludeVendorId?: number | null;
   limit?: number;
-}): Promise<Array<Vendor & { profile?: VendorProfile | null; adminConfig?: VendorAdminConfig | null }>> {
+}): Promise<
+  Array<
+    Vendor & {
+      profile?: VendorProfile | null;
+      adminConfig?: VendorAdminConfig | null;
+    }
+  >
+> {
   const all = await listVendors();
   const providers = [];
   for (const vendor of all) {
-    if (input.excludeVendorId != null && vendor.id === input.excludeVendorId) continue;
+    if (input.excludeVendorId != null && vendor.id === input.excludeVendorId)
+      continue;
     const profile = await getVendorProfileByVendorId(input.tenantId, vendor.id);
     if (profile && profile.vendorCategory !== input.serviceCategory) continue;
     const adminConfig = await getVendorAdminConfig(input.tenantId, vendor.id);
-    providers.push({ ...vendor, profile: profile ?? null, adminConfig: adminConfig ?? null });
+    providers.push({
+      ...vendor,
+      profile: profile ?? null,
+      adminConfig: adminConfig ?? null,
+    });
     if (providers.length >= (input.limit ?? 3)) break;
   }
   return providers;
@@ -1695,11 +2064,18 @@ export async function listVendorPricingRecommendations(
   return db
     .select()
     .from(vendorPricingRecommendations)
-    .where(and(eq(vendorPricingRecommendations.tenantId, tenantId), eq(vendorPricingRecommendations.vendorId, vendorId)))
+    .where(
+      and(
+        eq(vendorPricingRecommendations.tenantId, tenantId),
+        eq(vendorPricingRecommendations.vendorId, vendorId)
+      )
+    )
     .orderBy(desc(vendorPricingRecommendations.createdAt));
 }
 
-export async function createVendorDataExport(data: InsertVendorDataExport): Promise<number> {
+export async function createVendorDataExport(
+  data: InsertVendorDataExport
+): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const result = await db.insert(vendorDataExports).values(data);
@@ -1715,7 +2091,12 @@ export async function getVendorDataExport(
   const rows = await db
     .select()
     .from(vendorDataExports)
-    .where(and(eq(vendorDataExports.tenantId, tenantId), eq(vendorDataExports.id, id)))
+    .where(
+      and(
+        eq(vendorDataExports.tenantId, tenantId),
+        eq(vendorDataExports.id, id)
+      )
+    )
     .limit(1);
   return rows[0];
 }
@@ -1738,7 +2119,12 @@ export async function getVendorGuestBookingSession(
   const rows = await db
     .select()
     .from(vendorGuestBookingSessions)
-    .where(and(eq(vendorGuestBookingSessions.tenantId, tenantId), eq(vendorGuestBookingSessions.id, id)))
+    .where(
+      and(
+        eq(vendorGuestBookingSessions.tenantId, tenantId),
+        eq(vendorGuestBookingSessions.id, id)
+      )
+    )
     .limit(1);
   return rows[0];
 }
@@ -1761,7 +2147,12 @@ export async function getVendorOnboardingSessionByToken(
   const rows = await db
     .select()
     .from(vendorOnboardingSessions)
-    .where(and(eq(vendorOnboardingSessions.tenantId, tenantId), eq(vendorOnboardingSessions.sessionId, sessionToken)))
+    .where(
+      and(
+        eq(vendorOnboardingSessions.tenantId, tenantId),
+        eq(vendorOnboardingSessions.sessionId, sessionToken)
+      )
+    )
     .limit(1);
   return rows[0];
 }
@@ -1776,7 +2167,12 @@ export async function updateVendorOnboardingSession(
   await db
     .update(vendorOnboardingSessions)
     .set(data)
-    .where(and(eq(vendorOnboardingSessions.tenantId, tenantId), eq(vendorOnboardingSessions.id, id)));
+    .where(
+      and(
+        eq(vendorOnboardingSessions.tenantId, tenantId),
+        eq(vendorOnboardingSessions.id, id)
+      )
+    );
 }
 
 export async function createVendorOnboardingMessage(
@@ -1798,8 +2194,16 @@ export async function listVendorOnboardingMessages(
   return db
     .select()
     .from(vendorOnboardingMessages)
-    .where(and(eq(vendorOnboardingMessages.tenantId, tenantId), eq(vendorOnboardingMessages.sessionId, sessionId)))
-    .orderBy(asc(vendorOnboardingMessages.createdAt), asc(vendorOnboardingMessages.id))
+    .where(
+      and(
+        eq(vendorOnboardingMessages.tenantId, tenantId),
+        eq(vendorOnboardingMessages.sessionId, sessionId)
+      )
+    )
+    .orderBy(
+      asc(vendorOnboardingMessages.createdAt),
+      asc(vendorOnboardingMessages.id)
+    )
     .limit(Math.min(Math.max(limit, 1), 500));
 }
 
@@ -1816,7 +2220,14 @@ export async function listAbandonedVendorOnboardingCandidates(
     .where(
       and(
         eq(vendorOnboardingSessions.tenantId, tenantId),
-        inArray(vendorOnboardingSessions.status, ["started", "collecting_details", "pricing_setup", "availability_setup", "payment_setup", "admin_configured"]),
+        inArray(vendorOnboardingSessions.status, [
+          "started",
+          "collecting_details",
+          "pricing_setup",
+          "availability_setup",
+          "payment_setup",
+          "admin_configured",
+        ]),
         lt(vendorOnboardingSessions.updatedAt, twoHours)
       )
     )
@@ -1862,17 +2273,24 @@ export async function updateVendorCoverage(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(vendorServiceCoverage).set(data).where(eq(vendorServiceCoverage.id, id));
+  await db
+    .update(vendorServiceCoverage)
+    .set(data)
+    .where(eq(vendorServiceCoverage.id, id));
 }
 
 export async function deleteVendorCoverage(id: number): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.delete(vendorServiceCoverage).where(eq(vendorServiceCoverage.id, id));
+  await db
+    .delete(vendorServiceCoverage)
+    .where(eq(vendorServiceCoverage.id, id));
 }
 
-export async function listVendorCoverage(vendorId?: number): Promise<VendorServiceCoverage[]> {
+export async function listVendorCoverage(
+  vendorId?: number
+): Promise<VendorServiceCoverage[]> {
   const db = await getDb();
   if (!db) return [];
 
@@ -1883,12 +2301,23 @@ export async function listVendorCoverage(vendorId?: number): Promise<VendorServi
       .where(eq(vendorServiceCoverage.vendorId, vendorId))
       .orderBy(asc(vendorServiceCoverage.priority));
   }
-  return db.select().from(vendorServiceCoverage).orderBy(asc(vendorServiceCoverage.priority));
+  return db
+    .select()
+    .from(vendorServiceCoverage)
+    .orderBy(asc(vendorServiceCoverage.priority));
 }
 
 export async function getVendorCustomers(
   vendorId: number
-): Promise<{ firstName: string; buildingSlug: string | null; unit: string | null; totalOrdersWithThisVendor: number; lastOrderDate: string }[]> {
+): Promise<
+  {
+    firstName: string;
+    buildingSlug: string | null;
+    unit: string | null;
+    totalOrdersWithThisVendor: number;
+    lastOrderDate: string;
+  }[]
+> {
   const db = await getDb();
   if (!db) return [];
 
@@ -1903,13 +2332,25 @@ export async function getVendorCustomers(
     .where(eq(orders.vendorId, vendorId))
     .orderBy(desc(orders.updatedAt));
 
-  const byKey = new Map<string, { firstName: string; buildingSlug: string | null; unit: string | null; count: number; lastDate: Date }>();
+  const byKey = new Map<
+    string,
+    {
+      firstName: string;
+      buildingSlug: string | null;
+      unit: string | null;
+      count: number;
+      lastDate: Date;
+    }
+  >();
   for (const r of rows) {
     const key = `${r.firstName}|${r.buildingSlug ?? ""}|${r.unit ?? ""}`;
     const existing = byKey.get(key);
     if (existing) {
       existing.count += 1;
-      if (r.lastOrderDate && (!existing.lastDate || r.lastOrderDate > existing.lastDate)) {
+      if (
+        r.lastOrderDate &&
+        (!existing.lastDate || r.lastOrderDate > existing.lastDate)
+      ) {
         existing.lastDate = r.lastOrderDate;
       }
     } else {
@@ -1927,13 +2368,13 @@ export async function getVendorCustomers(
     buildingSlug: v.buildingSlug,
     unit: v.unit,
     totalOrdersWithThisVendor: v.count,
-    lastOrderDate: v.lastDate.getTime() ? v.lastDate.toISOString().split("T")[0] : "",
+    lastOrderDate: v.lastDate.getTime()
+      ? v.lastDate.toISOString().split("T")[0]
+      : "",
   }));
 }
 
-export async function getVendorPayouts(
-  vendorId: number
-): Promise<Order[]> {
+export async function getVendorPayouts(vendorId: number): Promise<Order[]> {
   const db = await getDb();
   if (!db) return [];
 
@@ -1948,7 +2389,10 @@ export async function listVendorUsers(vendorId: number): Promise<VendorUser[]> {
   const db = await getDb();
   if (!db) return [];
 
-  return db.select().from(vendorUsers).where(eq(vendorUsers.vendorId, vendorId));
+  return db
+    .select()
+    .from(vendorUsers)
+    .where(eq(vendorUsers.vendorId, vendorId));
 }
 
 export async function getVendorForOrder(
@@ -1979,7 +2423,10 @@ export async function getVendorForOrder(
 /* ===== COORDINATED SERVICE REQUESTS (from resident app) ===== */
 
 const COORDINATED_SERVICE_TYPES = ["car-wash", "grooming", "other"] as const;
-const RESIDENT_COORDINATED_OPEN_STATUSES = ["pending_operator_review", "pending_provider_confirmation"] as const;
+const RESIDENT_COORDINATED_OPEN_STATUSES = [
+  "pending_operator_review",
+  "pending_provider_confirmation",
+] as const;
 
 export type UnifiedCoordinatedRequest = {
   id: number;
@@ -2030,10 +2477,14 @@ function nullableString(value: unknown): string | null {
 }
 
 function legacyRequestJson(value: unknown): LegacyRequestJson {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as LegacyRequestJson : {};
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as LegacyRequestJson)
+    : {};
 }
 
-export function coordinatedRequestServiceLabel(category: string | null): string {
+export function coordinatedRequestServiceLabel(
+  category: string | null
+): string {
   switch (category) {
     case "dog_grooming":
     case "grooming":
@@ -2069,13 +2520,16 @@ export function mapLegacyServiceRequestForRequestsPage(
     buildingSlug: nullableString(requestJson.buildingSlug),
     buildingName: nullableString(requestJson.buildingName),
     unit: nullableString(requestJson.unit),
-    requestedDate: request.scheduledDate ?? nullableString(requestJson.requestedDate),
-    requestedWindow: request.scheduledWindow ?? nullableString(requestJson.requestedWindow),
+    requestedDate:
+      request.scheduledDate ?? nullableString(requestJson.requestedDate),
+    requestedWindow:
+      request.scheduledWindow ?? nullableString(requestJson.requestedWindow),
     deadlineDate: nullableString(requestJson.deadlineDate),
     deadlineReason: nullableString(requestJson.deadlineReason),
     origin: nullableString(requestJson.origin),
     destination: nullableString(requestJson.destination),
-    serviceRequested: nullableString(requestJson.serviceRequested) ?? request.requestSummary,
+    serviceRequested:
+      nullableString(requestJson.serviceRequested) ?? request.requestSummary,
     notes: nullableString(requestJson.notes),
     parentPlanId: null,
     createdAt: request.createdAt,
@@ -2112,7 +2566,9 @@ export function mapResidentCoordinatedRequestForRequestsPage(
   };
 }
 
-function sortRequestsNewestFirst<T extends { createdAt: Date | null }>(requests: T[]): T[] {
+function sortRequestsNewestFirst<T extends { createdAt: Date | null }>(
+  requests: T[]
+): T[] {
   return requests.sort((a, b) => {
     const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -2130,7 +2586,9 @@ export function mergeCoordinatedRequestsForRequestsPage(
   ]);
 }
 
-export async function listCoordinatedRequests(): Promise<UnifiedCoordinatedRequest[]> {
+export async function listCoordinatedRequests(): Promise<
+  UnifiedCoordinatedRequest[]
+> {
   const db = await getDb();
   if (!db) return [];
 
@@ -2138,7 +2596,9 @@ export async function listCoordinatedRequests(): Promise<UnifiedCoordinatedReque
     db
       .select()
       .from(serviceRequests)
-      .where(inArray(serviceRequests.serviceType, [...COORDINATED_SERVICE_TYPES]))
+      .where(
+        inArray(serviceRequests.serviceType, [...COORDINATED_SERVICE_TYPES])
+      )
       .orderBy(desc(serviceRequests.createdAt)),
     db
       .select()
@@ -2146,7 +2606,10 @@ export async function listCoordinatedRequests(): Promise<UnifiedCoordinatedReque
       .orderBy(desc(residentCoordinatedRequests.createdAt)),
   ]);
 
-  return mergeCoordinatedRequestsForRequestsPage(legacyRequests, residentRequests);
+  return mergeCoordinatedRequestsForRequestsPage(
+    legacyRequests,
+    residentRequests
+  );
 }
 
 export async function getNewCoordinatedRequestsCount(): Promise<number> {
@@ -2166,15 +2629,33 @@ export async function getNewCoordinatedRequestsCount(): Promise<number> {
     db
       .select({ count: sql<number>`count(*)` })
       .from(residentCoordinatedRequests)
-      .where(inArray(residentCoordinatedRequests.status, [...RESIDENT_COORDINATED_OPEN_STATUSES])),
+      .where(
+        inArray(residentCoordinatedRequests.status, [
+          ...RESIDENT_COORDINATED_OPEN_STATUSES,
+        ])
+      ),
   ]);
 
-  return Number(legacyResult[0]?.count ?? 0) + Number(residentResult[0]?.count ?? 0);
+  return (
+    Number(legacyResult[0]?.count ?? 0) + Number(residentResult[0]?.count ?? 0)
+  );
 }
 
 function residentRequestStatusFromAdminAction(status: string): {
-  status: "pending_operator_review" | "pending_provider_confirmation" | "confirmed" | "cancelled" | "completed" | "failed";
-  residentVisibleStatus: "pending_operator_review" | "pending_provider_confirmation" | "confirmed" | "cancelled" | "completed" | "failed";
+  status:
+    | "pending_operator_review"
+    | "pending_provider_confirmation"
+    | "confirmed"
+    | "cancelled"
+    | "completed"
+    | "failed";
+  residentVisibleStatus:
+    | "pending_operator_review"
+    | "pending_provider_confirmation"
+    | "confirmed"
+    | "cancelled"
+    | "completed"
+    | "failed";
   statusReason: string;
 } {
   switch (status) {
@@ -2377,7 +2858,9 @@ export async function listCatalogItemsForAdmin(
     .orderBy(asc(catalogItems.sortOrder), asc(catalogItems.id));
 }
 
-export async function listActiveCatalogForPublic(tenantId: string): Promise<PublicCatalogRow[]> {
+export async function listActiveCatalogForPublic(
+  tenantId: string
+): Promise<PublicCatalogRow[]> {
   const db = await getDb();
   if (!db) return [];
   return db
@@ -2486,7 +2969,10 @@ export async function updateCatalogItemRow(
   return true;
 }
 
-export async function archiveCatalogItemRow(id: number, tenantId: string): Promise<boolean> {
+export async function archiveCatalogItemRow(
+  id: number,
+  tenantId: string
+): Promise<boolean> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const existing = await getCatalogItemByIdForTenant(id, tenantId);
@@ -2507,8 +2993,10 @@ export async function reorderCatalogItemsForTenant(
   const rows = await db
     .select({ id: catalogItems.id })
     .from(catalogItems)
-    .where(and(eq(catalogItems.tenantId, tenantId), eq(catalogItems.archived, false)));
-  const allowed = new Set(rows.map((r) => r.id));
+    .where(
+      and(eq(catalogItems.tenantId, tenantId), eq(catalogItems.archived, false))
+    );
+  const allowed = new Set(rows.map(r => r.id));
   for (let i = 0; i < orderedIds.length; i++) {
     const id = orderedIds[i];
     if (!allowed.has(id)) continue;
@@ -2539,7 +3027,10 @@ export async function getCatalogItemBySlugForTenant(
   return rows[0] ?? null;
 }
 
-export async function archiveCatalogItemBySlug(slug: string, tenantId: string): Promise<boolean> {
+export async function archiveCatalogItemBySlug(
+  slug: string,
+  tenantId: string
+): Promise<boolean> {
   const row = await getCatalogItemBySlugForTenant(slug, tenantId);
   if (!row) return false;
   return archiveCatalogItemRow(row.id, tenantId);
@@ -2584,7 +3075,9 @@ export async function resolveActiveCatalogItemBySlugOrName(
   const n = name?.trim();
   if (n && n.length >= 2) {
     const hits = await findActiveCatalogItemsForTenantSearch(tenantId, n, 8);
-    const exact = hits.find((h) => h.name.trim().toLowerCase() === n.toLowerCase());
+    const exact = hits.find(
+      h => h.name.trim().toLowerCase() === n.toLowerCase()
+    );
     if (exact) return exact;
     if (hits.length === 1) return hits[0] ?? null;
   }
@@ -2632,7 +3125,9 @@ export async function bulkApplyCatalogImport(
       const hit = await database
         .select({ id: catalogItems.id })
         .from(catalogItems)
-        .where(and(eq(catalogItems.tenantId, tenantId), eq(catalogItems.slug, s)))
+        .where(
+          and(eq(catalogItems.tenantId, tenantId), eq(catalogItems.slug, s))
+        )
         .limit(1);
       if (hit.length === 0) return s;
       s = `${base}_${n}`;
@@ -2647,7 +3142,12 @@ export async function bulkApplyCatalogImport(
     const existing = await database
       .select()
       .from(catalogItems)
-      .where(and(eq(catalogItems.tenantId, tenantId), eq(catalogItems.slug, row.slug)))
+      .where(
+        and(
+          eq(catalogItems.tenantId, tenantId),
+          eq(catalogItems.slug, row.slug)
+        )
+      )
       .limit(1);
     const ex = existing[0];
 

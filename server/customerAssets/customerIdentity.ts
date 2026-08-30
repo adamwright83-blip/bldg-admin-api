@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 export type CustomerIdentityInput = {
   phone?: string | null;
+  email?: string | null;
+  bldgUserId?: number | null;
   firstName?: string | null;
   lastName?: string | null;
   unit?: string | null;
@@ -10,23 +12,135 @@ export type CustomerIdentityInput = {
 };
 
 function normalized(value: string | null | undefined): string {
-  return String(value ?? "").trim().toLowerCase();
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
 }
 
-export function rawCustomerIdentityKey(input: CustomerIdentityInput): string {
-  const phone = normalized(input.phone).replace(/\D/g, "");
+function normalizedPhone(value: string | null | undefined): string {
+  let digits = normalized(value).replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) digits = digits.slice(1);
+  return digits;
+}
+
+/** Pre-stable-identity key retained only for persisted churn/recovery joins. */
+export function legacyRawCustomerIdentityKey(
+  input: CustomerIdentityInput
+): string {
+  const phone = normalizedPhone(input.phone);
   if (phone.length >= 7) return `phone:${phone}`;
-  return [input.firstName, input.lastName, input.unit, input.buildingSlug, input.address]
+  return [
+    input.firstName,
+    input.lastName,
+    input.unit,
+    input.buildingSlug,
+    input.address,
+  ]
     .map(normalized)
     .join("|");
 }
 
-export function customerIdentityHash(tenantId: string, input: CustomerIdentityInput): string {
-  return createHash("sha256")
-    .update(`${tenantId}:${rawCustomerIdentityKey(input)}`)
-    .digest("hex");
+export function rawCustomerIdentityKey(input: CustomerIdentityInput): string {
+  const phone = normalizedPhone(input.phone);
+  if (phone.length >= 7) return `phone:${phone}`;
+  if (input.bldgUserId != null && input.bldgUserId > 0)
+    return `bldg-user:${input.bldgUserId}`;
+  const email = normalized(input.email);
+  if (email.includes("@")) return `email:${email}`;
+  return [
+    input.firstName,
+    input.lastName,
+    input.unit,
+    input.buildingSlug,
+    input.address,
+  ]
+    .map(normalized)
+    .join("|");
 }
 
-export function customerAssetId(tenantId: string, input: CustomerIdentityInput): string {
+function hashIdentityKey(tenantId: string, key: string): string {
+  return createHash("sha256").update(`${tenantId}:${key}`).digest("hex");
+}
+
+export function customerIdentityHash(
+  tenantId: string,
+  input: CustomerIdentityInput
+): string {
+  return hashIdentityKey(tenantId, rawCustomerIdentityKey(input));
+}
+
+export function legacyCustomerIdentityHash(
+  tenantId: string,
+  input: CustomerIdentityInput
+): string {
+  return hashIdentityKey(tenantId, legacyRawCustomerIdentityKey(input));
+}
+
+/** Canonical identity plus any distinct persisted legacy churn key. */
+export function customerIdentityHashes(
+  tenantId: string,
+  input: CustomerIdentityInput
+): string[] {
+  return Array.from(
+    new Set([
+      customerIdentityHash(tenantId, input),
+      legacyCustomerIdentityHash(tenantId, input),
+    ])
+  );
+}
+
+/**
+ * Groups records by the connected set of trustworthy identity candidates.
+ * This keeps a customer's history together when a later order gains a
+ * stronger identifier (for example, bldgUserId) while retaining the first
+ * deterministic canonical key for persistence compatibility.
+ */
+export function groupCustomerRecords<T>(
+  tenantId: string,
+  records: readonly T[],
+  getIdentity: (record: T) => CustomerIdentityInput
+): Array<{ key: string; records: T[] }> {
+  const parent = new Map<string, string>();
+  const find = (value: string): string => {
+    const current = parent.get(value);
+    if (!current || current === value) {
+      parent.set(value, value);
+      return value;
+    }
+    const root = find(current);
+    parent.set(value, root);
+    return root;
+  };
+  const union = (left: string, right: string) => {
+    const leftRoot = find(left);
+    const rightRoot = find(right);
+    if (leftRoot !== rightRoot) parent.set(rightRoot, leftRoot);
+  };
+  const aliasesByRecord = records.map(record => {
+    const aliases = customerIdentityHashes(tenantId, getIdentity(record));
+    aliases.forEach(find);
+    for (const alias of aliases.slice(1)) union(aliases[0]!, alias);
+    return aliases;
+  });
+  const groups = new Map<string, T[]>();
+  records.forEach((record, index) => {
+    const aliases = aliasesByRecord[index]!;
+    const root = find(aliases[0]!);
+    const group = groups.get(root) ?? [];
+    group.push(record);
+    groups.set(root, group);
+  });
+  return Array.from(groups.values()).map(group => ({
+    // The caller supplies deterministic order (createdAt/id for orders), so
+    // the first record preserves the established canonical identity key.
+    key: customerIdentityHash(tenantId, getIdentity(group[0]!)),
+    records: group,
+  }));
+}
+
+export function customerAssetId(
+  tenantId: string,
+  input: CustomerIdentityInput
+): string {
   return `customer:${customerIdentityHash(tenantId, input)}`;
 }

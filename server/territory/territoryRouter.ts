@@ -1,9 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import {
-  dayforgeTerritoryProcedure,
-  router,
-} from "../_core/trpc";
+import { dayforgeTerritoryProcedure, router } from "../_core/trpc";
 import { createCommercialMission } from "../commercialMissions/commercialMissionStore";
 import {
   discoverLaundryTerritory,
@@ -16,6 +13,7 @@ import {
   persistTerritoryScan,
   saveTerritoryOperatorProfile,
 } from "./territoryStore";
+import { ENV } from "../_core/env";
 
 const scanInput = z.object({ address: z.string().trim().min(5).max(512) });
 const profileInput = z.object({
@@ -38,14 +36,18 @@ const profileInput = z.object({
 });
 
 function provider() {
-  const key =
-    process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY ?? "";
-  if (!key)
+  const placesApiKey = process.env.GOOGLE_PLACES_API_KEY?.trim() ?? "";
+  if (!placesApiKey || !ENV.googleGeocodingApiKey)
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
-      message: "Territory provider is not configured",
+      message: !placesApiKey
+        ? "Places Search provider is not configured"
+        : "Geographic provider is not configured",
     });
-  return new GooglePlacesTerritoryProvider(key);
+  return new GooglePlacesTerritoryProvider({
+    placesApiKey,
+    geocodingApiKey: ENV.googleGeocodingApiKey,
+  });
 }
 
 export const territoryRouter = router({

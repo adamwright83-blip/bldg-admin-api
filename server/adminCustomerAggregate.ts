@@ -109,7 +109,8 @@ export function normalizeOrderRowFromDb(r: {
       r.buildingSlug != null && String(r.buildingSlug).trim() !== ""
         ? String(r.buildingSlug).trim()
         : null,
-    createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
+    createdAt:
+      r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
     paid: r.paid === true || r.paid === 1,
     total: r.total != null ? String(r.total) : null,
   };
@@ -159,7 +160,7 @@ function mergeDisplayFields(group: OrderAggRow[]): {
   address: string;
   buildingSlug: string | null;
 } {
-  const sorted = [...group].sort((a, b) => compareDisplayCandidates(b, a));
+  const sorted = [...group].sort(compareDisplayCandidates);
 
   let phone = "";
   let firstName = "";

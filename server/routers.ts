@@ -7,7 +7,10 @@ import {
 import { COOKIE_NAME, VENDOR_COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { attributeOrderFromCampaign, reverseCommercialOrderAttribution } from "./commercialCampaigns/commercialAttributionService";
+import {
+  attributeOrderFromCampaign,
+  reverseCommercialOrderAttribution,
+} from "./commercialCampaigns/commercialAttributionService";
 import { requestJobCardRouter } from "./procurement/requestJobCardRouter";
 import { vendorProposalReviewRouter } from "./procurement/vendorProposalReviewRouter";
 import { firstRealProposalBootstrapRouter } from "./procurement/firstRealProposalBootstrapRouter";
@@ -753,7 +756,12 @@ export const appRouter = router({
         z.object({
           question: z.string().min(1).max(500),
           history: z
-            .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() }))
+            .array(
+              z.object({
+                role: z.enum(["user", "assistant"]),
+                content: z.string(),
+              })
+            )
             .max(20)
             .optional(),
           mode: z.enum(["summary"]).optional(),
@@ -1961,9 +1969,9 @@ export const appRouter = router({
     /** Customer intelligence — all orders for exact phone (no Stripe fields in response) */
     getCustomerProfile: protectedProcedure
       .input(z.object({ phone: z.string().min(3).max(50) }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         const phone = input.phone.trim();
-        const rows = await getOrdersByPhoneExact(phone);
+        const rows = await getOrdersByPhoneExact(phone, ctx.tenantId);
         return buildCustomerProfile(phone, rows);
       }),
 
@@ -1989,13 +1997,13 @@ export const appRouter = router({
           })
           .optional()
       )
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         const safeLower = (value: unknown): string =>
           typeof value === "string" ? value.toLowerCase() : "";
 
         const [aggregateRows, paidOrders] = await Promise.all([
-          listAdminCustomerAggregates(),
-          listPaidOrdersForBuildingRevenue(),
+          listAdminCustomerAggregates(ctx.tenantId),
+          listPaidOrdersForBuildingRevenue(ctx.tenantId),
         ]);
         const includeLegacyCleanCloud = input?.includeLegacyCleanCloud ?? true;
         let rows: any[] = hydrateCustomerAggregates(aggregateRows).map(row => {
@@ -2020,7 +2028,10 @@ export const appRouter = router({
         });
 
         let abeDedupedOrLinked = false;
-        const clearentCustomers = await listImportedClearentCustomers();
+        const clearentCustomers =
+          ctx.tenantId === "default"
+            ? await listImportedClearentCustomers()
+            : [];
         for (const clearent of clearentCustomers) {
           const clearentEmail = clearent.email?.trim().toLowerCase() || "";
           const clearentPhoneDigits = clearent.phone.replace(/\D/g, "");
@@ -2122,7 +2133,9 @@ export const appRouter = router({
         }
 
         const reconciledCleanCloudCustomers =
-          await listReconciledCleanCloudCustomerRevenue();
+          ctx.tenantId === "default"
+            ? await listReconciledCleanCloudCustomerRevenue()
+            : [];
         for (const reconciled of reconciledCleanCloudCustomers) {
           const reconciledEmail =
             reconciled.customerEmail?.trim().toLowerCase() || "";
@@ -2234,9 +2247,11 @@ export const appRouter = router({
 
         if (includeLegacyCleanCloud) {
           const importedLegacyCustomers =
-            await listImportedCleanCloudLegacyCustomers();
+            ctx.tenantId === "default"
+              ? await listImportedCleanCloudLegacyCustomers()
+              : [];
           const legacyCustomers = [
-            ...cleanCloudLegacyCustomers,
+            ...(ctx.tenantId === "default" ? cleanCloudLegacyCustomers : []),
             ...importedLegacyCustomers,
           ];
           for (const legacy of legacyCustomers) {
@@ -2757,22 +2772,20 @@ export const appRouter = router({
           // Repeated requests, network retries, duplicate tabs, or two
           // staff members racing all resolve to the same idempotent
           // "already completed" result and never double-send.
-          const { transitioned, order: collectedOrder } = await attemptOrderPickupCollection(input.orderId);
+          const { transitioned, order: collectedOrder } =
+            await attemptOrderPickupCollection(input.orderId);
           if (!collectedOrder) throw new Error("Order not found");
           if (!transitioned) {
             return { success: true, alreadyCompleted: true };
           }
 
-          await ensurePickupCompletedOperationsEventForOrder(
-            input.orderId,
-            {
-              source: "driver_app_bldg",
-              actorUserId: ctx.user?.id ?? null,
-              actorDisplayName: ctx.user?.name ?? ctx.user?.email ?? null,
-              actualEventTimestamp: new Date(),
-              reason: "driver_pickup_completed",
-            }
-          );
+          await ensurePickupCompletedOperationsEventForOrder(input.orderId, {
+            source: "driver_app_bldg",
+            actorUserId: ctx.user?.id ?? null,
+            actorDisplayName: ctx.user?.name ?? ctx.user?.email ?? null,
+            actualEventTimestamp: new Date(),
+            reason: "driver_pickup_completed",
+          });
 
           recordWarActionSafe({
             tenantId: ctx.tenantId ?? "default",
@@ -2835,13 +2848,17 @@ export const appRouter = router({
           customerPhone = order?.phone ?? null;
         }
         if (!customerPhone) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "No phone number found for that lead/order." });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "No phone number found for that lead/order.",
+          });
         }
         const repPhone = process.env.SALESLAY_BOLD_PITCH_REP_PHONE;
         if (!repPhone) {
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
-            message: "Bold Pitch rep phone is not configured (SALESLAY_BOLD_PITCH_REP_PHONE).",
+            message:
+              "Bold Pitch rep phone is not configured (SALESLAY_BOLD_PITCH_REP_PHONE).",
           });
         }
         try {
@@ -2856,7 +2873,10 @@ export const appRouter = router({
         } catch (err) {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: err instanceof Error ? err.message : "Failed to start Bold Pitch call",
+            message:
+              err instanceof Error
+                ? err.message
+                : "Failed to start Bold Pitch call",
           });
         }
       }),
@@ -3049,7 +3069,9 @@ export const appRouter = router({
           // Stripe rather than trusting the cached vendor flags.
           const vendor = order.vendorId
             ? await getVendorById(order.vendorId)
-            : await getVendorForOrder(order.buildingSlug, order.serviceType);
+            : order.buildingSlug
+              ? await getVendorForOrder(order.buildingSlug, order.serviceType)
+              : null;
           if (!vendor) {
             throw new TRPCError({
               code: "PRECONDITION_FAILED",
@@ -3064,7 +3086,8 @@ export const appRouter = router({
             });
           }
           const paymentRoute = (await listVendorCoverage(vendor.id)).find(
-            route => route.isActive &&
+            route =>
+              route.isActive &&
               route.buildingSlug === order.buildingSlug &&
               route.serviceType === order.serviceType
           );
@@ -3082,14 +3105,12 @@ export const appRouter = router({
           if (!vendorAccountId) {
             throw new TRPCError({
               code: "PRECONDITION_FAILED",
-              message:
-                `${vendor.name} has no Stripe connected account. Customer was not charged.`,
+              message: `${vendor.name} has no Stripe connected account. Customer was not charged.`,
             });
           }
 
-          const connectedAccount = await stripe.accounts.retrieve(
-            vendorAccountId
-          );
+          const connectedAccount =
+            await stripe.accounts.retrieve(vendorAccountId);
           await updateVendorConnectStatus(vendor.id, {
             chargesEnabled: connectedAccount.charges_enabled,
             payoutsEnabled: connectedAccount.payouts_enabled,
@@ -3109,8 +3130,7 @@ export const appRouter = router({
           ) {
             throw new TRPCError({
               code: "PRECONDITION_FAILED",
-              message:
-                `${vendor.name} is not ready to receive Stripe payouts. Customer was not charged.`,
+              message: `${vendor.name} is not ready to receive Stripe payouts. Customer was not charged.`,
             });
           }
 
@@ -3491,10 +3511,14 @@ export const appRouter = router({
       .input(z.object({ orderId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const order = await getOrderById(input.orderId);
-        if (order) await reverseCommercialOrderAttribution({
-          tenantId: order.tenantId ?? "default", orderId: input.orderId,
-          actorId: ctx.user.openId, requestId: crypto.randomUUID(), reason: "Order deleted by an authorized operator",
-        });
+        if (order)
+          await reverseCommercialOrderAttribution({
+            tenantId: order.tenantId ?? "default",
+            orderId: input.orderId,
+            actorId: ctx.user.openId,
+            requestId: crypto.randomUUID(),
+            reason: "Order deleted by an authorized operator",
+          });
         await deleteOrder(input.orderId);
         return { success: true };
       }),
@@ -3875,26 +3899,51 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         if (input.isActive) {
           const vendor = await getVendorById(input.vendorId);
-          if (!vendor) throw new TRPCError({ code: "NOT_FOUND", message: "Vendor not found" });
+          if (!vendor)
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Vendor not found",
+            });
           if (!vendor.stripeConnectAccountId) {
-            throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Connect Stripe before activating payments." });
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message: "Connect Stripe before activating payments.",
+            });
           }
           const stripe = getStripe();
-          const account = await stripe.accounts.retrieve(vendor.stripeConnectAccountId);
+          const account = await stripe.accounts.retrieve(
+            vendor.stripeConnectAccountId
+          );
           await updateVendorConnectStatus(vendor.id, {
             chargesEnabled: account.charges_enabled,
             payoutsEnabled: account.payouts_enabled,
             detailsSubmitted: account.details_submitted,
-            currentlyDue: JSON.stringify(account.requirements?.currently_due ?? []),
+            currentlyDue: JSON.stringify(
+              account.requirements?.currently_due ?? []
+            ),
             pastDue: JSON.stringify(account.requirements?.past_due ?? []),
             disabledReason: account.requirements?.disabled_reason ?? null,
           });
-          if (!account.charges_enabled || !account.payouts_enabled || !account.details_submitted) {
-            throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Stripe onboarding is not complete. Vendor remains inactive." });
+          if (
+            !account.charges_enabled ||
+            !account.payouts_enabled ||
+            !account.details_submitted
+          ) {
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message:
+                "Stripe onboarding is not complete. Vendor remains inactive.",
+            });
           }
-          const coverage = (await listVendorCoverage(vendor.id)).filter(row => row.isActive);
+          const coverage = (await listVendorCoverage(vendor.id)).filter(
+            row => row.isActive
+          );
           if (coverage.length === 0) {
-            throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Assign at least one active building/service route before activation." });
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message:
+                "Assign at least one active building/service route before activation.",
+            });
           }
         }
         await updateVendorIsActive(input.vendorId, input.isActive);
@@ -4138,13 +4187,17 @@ export const appRouter = router({
       )
       .mutation(async ({ input }) => {
         const conflicts = (await listVendorCoverage()).filter(
-          row => row.isActive && row.vendorId !== input.vendorId &&
-            row.buildingSlug === input.buildingSlug && row.serviceType === input.serviceType
+          row =>
+            row.isActive &&
+            row.vendorId !== input.vendorId &&
+            row.buildingSlug === input.buildingSlug &&
+            row.serviceType === input.serviceType
         );
         if (input.isActive && conflicts.length > 0) {
           throw new TRPCError({
             code: "CONFLICT",
-            message: "That building/service route is already assigned to another active vendor.",
+            message:
+              "That building/service route is already assigned to another active vendor.",
           });
         }
         const id = await createVendorCoverage(input);
@@ -4163,22 +4216,40 @@ export const appRouter = router({
       )
       .mutation(async ({ input }) => {
         const { coverageId, ...data } = input;
-        const route = (await listVendorCoverage()).find(row => row.id === coverageId);
-        if (!route) throw new TRPCError({ code: "NOT_FOUND", message: "Payment route not found" });
+        const route = (await listVendorCoverage()).find(
+          row => row.id === coverageId
+        );
+        if (!route)
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Payment route not found",
+          });
         if (data.isActive === true) {
           const conflict = (await listVendorCoverage()).find(
-            row => row.id !== coverageId && row.isActive &&
-              row.buildingSlug === route.buildingSlug && row.serviceType === route.serviceType
+            row =>
+              row.id !== coverageId &&
+              row.isActive &&
+              row.buildingSlug === route.buildingSlug &&
+              row.serviceType === route.serviceType
           );
-          if (conflict) throw new TRPCError({ code: "CONFLICT", message: "That route is already assigned to another active vendor." });
+          if (conflict)
+            throw new TRPCError({
+              code: "CONFLICT",
+              message:
+                "That route is already assigned to another active vendor.",
+            });
         }
         if (data.isActive === false) {
           const vendor = await getVendorById(route.vendorId);
-          const otherActiveRoutes = (await listVendorCoverage(route.vendorId)).filter(
-            row => row.id !== coverageId && row.isActive
-          );
+          const otherActiveRoutes = (
+            await listVendorCoverage(route.vendorId)
+          ).filter(row => row.id !== coverageId && row.isActive);
           if (vendor?.isActive && otherActiveRoutes.length === 0) {
-            throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Deactivate the vendor before disabling its final payment route." });
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message:
+                "Deactivate the vendor before disabling its final payment route.",
+            });
           }
         }
         await updateVendorCoverage(coverageId, data);
@@ -4188,14 +4259,28 @@ export const appRouter = router({
     deleteVendorCoverage: protectedProcedure
       .input(z.object({ coverageId: z.number() }))
       .mutation(async ({ input }) => {
-        const route = (await listVendorCoverage()).find(row => row.id === input.coverageId);
-        if (!route) throw new TRPCError({ code: "NOT_FOUND", message: "Payment route not found" });
-        const vendor = await getVendorById(route.vendorId);
-        const otherActiveRoutes = (await listVendorCoverage(route.vendorId)).filter(
-          row => row.id !== input.coverageId && row.isActive
+        const route = (await listVendorCoverage()).find(
+          row => row.id === input.coverageId
         );
-        if (vendor?.isActive && route.isActive && otherActiveRoutes.length === 0) {
-          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Deactivate the vendor before removing its final payment route." });
+        if (!route)
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Payment route not found",
+          });
+        const vendor = await getVendorById(route.vendorId);
+        const otherActiveRoutes = (
+          await listVendorCoverage(route.vendorId)
+        ).filter(row => row.id !== input.coverageId && row.isActive);
+        if (
+          vendor?.isActive &&
+          route.isActive &&
+          otherActiveRoutes.length === 0
+        ) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message:
+              "Deactivate the vendor before removing its final payment route.",
+          });
         }
         await deleteVendorCoverage(input.coverageId);
         return { success: true };

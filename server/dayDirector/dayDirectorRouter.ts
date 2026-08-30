@@ -2,10 +2,12 @@ import { z } from "zod";
 import { dayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   acceptProposal,
+  completeDayDirectorCommitment,
   getDayDirectorState,
   proposeCommitment,
   setPromptState,
 } from "./dayDirectorService";
+import { dayDirectorActorId } from "./dayDirectorActor";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const proposal = z.object({
@@ -18,16 +20,13 @@ const proposal = z.object({
   question: z.string().max(500).nullable(),
   intelligence: z.enum(["anthropic", "manual_fallback"]),
 });
-const actor = (ctx: { user?: { id?: unknown } }) =>
-  String(ctx.user?.id ?? "unknown");
-
 export const dayDirectorRouter = router({
   state: dayforgeTenantMemberProcedure
     .input(z.object({ businessDate: date }))
     .query(({ ctx, input }) =>
       getDayDirectorState({
         tenantId: ctx.tenantId,
-        actorId: actor(ctx),
+        actorId: dayDirectorActorId(ctx),
         ...input,
       })
     ),
@@ -39,7 +38,11 @@ export const dayDirectorRouter = router({
   accept: dayforgeTenantMemberProcedure
     .input(z.object({ businessDate: date, proposal }))
     .mutation(({ ctx, input }) =>
-      acceptProposal({ tenantId: ctx.tenantId, actorId: actor(ctx), ...input })
+      acceptProposal({
+        tenantId: ctx.tenantId,
+        actorId: dayDirectorActorId(ctx),
+        ...input,
+      })
     ),
   dismiss: dayforgeTenantMemberProcedure
     .input(
@@ -48,9 +51,18 @@ export const dayDirectorRouter = router({
     .mutation(({ ctx, input }) =>
       setPromptState({
         tenantId: ctx.tenantId,
-        actorId: actor(ctx),
+        actorId: dayDirectorActorId(ctx),
         state: "dismissed",
         ...input,
+      })
+    ),
+  complete: dayforgeTenantMemberProcedure
+    .input(z.object({ commitmentId: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      completeDayDirectorCommitment({
+        tenantId: ctx.tenantId,
+        actorId: dayDirectorActorId(ctx),
+        commitmentId: input.commitmentId,
       })
     ),
 });

@@ -37,7 +37,9 @@ import { TowerWars } from "@/components/admin/control-room/TowerWars";
 import "@/components/admin/control-room/admin-control-room.css";
 
 const ArchivedLevel4OffensiveHost = lazy(() =>
-  import("@/components/Level4OffensiveHost").then((module) => ({ default: module.Level4OffensiveHost }))
+  import("@/components/Level4OffensiveHost").then(module => ({
+    default: module.Level4OffensiveHost,
+  }))
 );
 const CommercialPipelinePage = lazy(() => import("./CommercialPipelinePage"));
 const ChurnRadarPage = lazy(() => import("./ChurnRadarPage"));
@@ -80,12 +82,12 @@ const HELD_CORPORATE_TABS: Array<{ label: string; path: string }> = [
   { label: "Post-consent plans", path: "/post-consent-plans" },
 ];
 
-const HELD_CORPORATE_PATHS = new Set(HELD_CORPORATE_TABS.map((t) => t.path));
+const HELD_CORPORATE_PATHS = new Set(HELD_CORPORATE_TABS.map(t => t.path));
 
 /** Counter room = both workspaces' tabs (the union); used only for room detection. */
 const COUNTER_PATHS = new Set([
-  ...LAUNDRY_BUTLER_TABS.map((t) => t.path),
-  ...HELD_CORPORATE_TABS.map((t) => t.path),
+  ...LAUNDRY_BUTLER_TABS.map(t => t.path),
+  ...HELD_CORPORATE_TABS.map(t => t.path),
   "/live",
 ]);
 const PEOPLE_PATHS = new Set(["/customers", "/leads", "/vendors"]);
@@ -135,7 +137,9 @@ export default function AdminHostApp() {
   const path = normalizePath(loc);
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [profilePhone, setProfilePhone] = useState<string | null>(null);
-  const [newOrderPhoneSeed, setNewOrderPhoneSeed] = useState<string | null>(null);
+  const [newOrderPhoneSeed, setNewOrderPhoneSeed] = useState<string | null>(
+    null
+  );
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const debouncedCustomerQuery = useDebounce(customerSearchQuery, 300);
@@ -143,14 +147,15 @@ export default function AdminHostApp() {
     { q: debouncedCustomerQuery },
     { enabled: debouncedCustomerQuery.length >= 2 && isAuthenticated }
   );
-  const requestsCount = trpc.admin.countNewCoordinatedRequests.useQuery(undefined, {
+  const requestsCount = trpc.admin.countNewCoordinatedRequests.useQuery(
+    undefined,
+    {
+      enabled: isAuthenticated,
+    }
+  );
+  const leadsCount = trpc.admin.countUnreadLeads.useQuery(undefined, {
     enabled: isAuthenticated,
   });
-  const leadsCount = trpc.admin.countUnreadLeads.useQuery(undefined, { enabled: isAuthenticated });
-  const towerCustomers = trpc.admin.listCustomers.useQuery(
-    { sortBy: "spend", includeLegacyCleanCloud: true },
-    { enabled: isAuthenticated && path === "/growth/tower-wars", staleTime: 60_000 }
-  );
 
   useEffect(() => {
     if (path === "/admin") navigate("/", { replace: true });
@@ -174,9 +179,22 @@ export default function AdminHostApp() {
   const isMoney = path === "/money";
   const isSettings = path === "/settings";
   const isCatalog = path === "/catalog" || path === "/pricing";
-  const isControlRoomSection = isGrowth || isLanternCity || isTowerWars || isDriverIntelligence || isGrowthBuildings || isGrowthOffers || isCommercialPipeline || isChurnRadar || isSalesIntel || isMoney || isSettings || isCatalog;
+  const isControlRoomSection =
+    isGrowth ||
+    isLanternCity ||
+    isTowerWars ||
+    isDriverIntelligence ||
+    isGrowthBuildings ||
+    isGrowthOffers ||
+    isCommercialPipeline ||
+    isChurnRadar ||
+    isSalesIntel ||
+    isMoney ||
+    isSettings ||
+    isCatalog;
   const activeTab = adminPathToTab(path);
-  const isLiveNavActive = isLive || (activeTab !== null && LIVE_INTERNAL_TABS.has(activeTab));
+  const isLiveNavActive =
+    isLive || (activeTab !== null && LIVE_INTERNAL_TABS.has(activeTab));
   const isCounter = COUNTER_PATHS.has(path);
   const isPeople = PEOPLE_PATHS.has(path);
   const activeWorkspace = workspaceForPath(path);
@@ -190,8 +208,11 @@ export default function AdminHostApp() {
       ? PEOPLE_TABS
       : null;
   const initialSelectedOrderId =
-    path === "/intake" ? parseOrderIdFromLocation(loc) ?? parseOrderIdFromWindowSearch() : null;
-  const quickReceiptOpen = path === "/intake" && parseQuickReceiptFromLocation(loc);
+    path === "/intake"
+      ? (parseOrderIdFromLocation(loc) ?? parseOrderIdFromWindowSearch())
+      : null;
+  const quickReceiptOpen =
+    path === "/intake" && parseQuickReceiptFromLocation(loc);
 
   useEffect(() => {
     if (path === "/growth") {
@@ -199,8 +220,27 @@ export default function AdminHostApp() {
       return;
     }
     if (path === "/admin") return;
-    if (!isHome && !isOperatorDemo && !isLive && !isLevel4 && !isOperatorReflection && !isControlRoomSection && activeTab === null) navigate("/", { replace: true });
-  }, [isHome, isOperatorDemo, isLive, isLevel4, isOperatorReflection, isControlRoomSection, activeTab, path, navigate]);
+    if (
+      !isHome &&
+      !isOperatorDemo &&
+      !isLive &&
+      !isLevel4 &&
+      !isOperatorReflection &&
+      !isControlRoomSection &&
+      activeTab === null
+    )
+      navigate("/", { replace: true });
+  }, [
+    isHome,
+    isOperatorDemo,
+    isLive,
+    isLevel4,
+    isOperatorReflection,
+    isControlRoomSection,
+    activeTab,
+    path,
+    navigate,
+  ]);
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -215,7 +255,9 @@ export default function AdminHostApp() {
   }
 
   if (!isAuthenticated) {
-    return <LoginForm role="admin" onSuccess={() => window.location.reload()} />;
+    return (
+      <LoginForm role="admin" onSuccess={() => window.location.reload()} />
+    );
   }
 
   if (isLevel4) {
@@ -231,7 +273,13 @@ export default function AdminHostApp() {
           ← Exit Level 4
         </Link>
         <div className="mx-auto w-full max-w-[1480px] px-3 pt-14 pb-6">
-          <Suspense fallback={<div className="py-20 text-center text-white/50">Loading archived Level 4 experience…</div>}>
+          <Suspense
+            fallback={
+              <div className="py-20 text-center text-white/50">
+                Loading archived Level 4 experience…
+              </div>
+            }
+          >
             <ArchivedLevel4OffensiveHost />
           </Suspense>
         </div>
@@ -257,7 +305,9 @@ export default function AdminHostApp() {
 
   return (
     <div className="cr-shell">
-      {isCounter && activeWorkspace !== "held_corporate" ? <ResidentFollowupAlert /> : null}
+      {isCounter && activeWorkspace !== "held_corporate" ? (
+        <ResidentFollowupAlert />
+      ) : null}
 
       <ControlRoomNav
         path={path}
@@ -270,19 +320,23 @@ export default function AdminHostApp() {
       />
 
       <div className="cr-main-column">
-        {!isHome && !isOperatorDemo && !isLive && !isOperatorReflection && !isControlRoomSection ? (
-              <AdminCustomerSearchBlock
-                customerSearchQuery={customerSearchQuery}
-                setCustomerSearchQuery={setCustomerSearchQuery}
-                debouncedCustomerQuery={debouncedCustomerQuery}
-                searchOrders={searchOrders}
-                setProfilePhone={setProfilePhone}
-                onPrefillNewOrder={(phone) => {
-                  setNewOrderPhoneSeed(phone);
-                  navigate("/new-order");
-                  setCustomerSearchQuery("");
-                }}
-              />
+        {!isHome &&
+        !isOperatorDemo &&
+        !isLive &&
+        !isOperatorReflection &&
+        !isControlRoomSection ? (
+          <AdminCustomerSearchBlock
+            customerSearchQuery={customerSearchQuery}
+            setCustomerSearchQuery={setCustomerSearchQuery}
+            debouncedCustomerQuery={debouncedCustomerQuery}
+            searchOrders={searchOrders}
+            setProfilePhone={setProfilePhone}
+            onPrefillNewOrder={phone => {
+              setNewOrderPhoneSeed(phone);
+              navigate("/new-order");
+              setCustomerSearchQuery("");
+            }}
+          />
         ) : null}
 
         {isHome || isOperatorDemo ? (
@@ -291,18 +345,18 @@ export default function AdminHostApp() {
             operatorName={user?.name || "Admin"}
             path={path}
             onOpenMobileNav={() => setMobileNavOpen(true)}
-            onNavigate={(path) => navigate(path)}
-            onOpenCustomer={(phone) => setProfilePhone(phone)}
+            onNavigate={path => navigate(path)}
+            onOpenCustomer={phone => setProfilePhone(phone)}
           />
         ) : isLive ? (
           <AdminLive
-            onNavigate={(path) => navigate(path)}
-            onOpenCustomer={(phone) => setProfilePhone(phone)}
+            onNavigate={path => navigate(path)}
+            onOpenCustomer={phone => setProfilePhone(phone)}
           />
         ) : isLanternCity ? (
-          <LanternCityAtlas onOpenCustomer={(phone) => setProfilePhone(phone)} />
+          <LanternCityAtlas onOpenCustomer={phone => setProfilePhone(phone)} />
         ) : isTowerWars ? (
-          <TowerWars data={towerCustomers.data?.contestTotals} loading={towerCustomers.isLoading} onNavigate={(nextPath) => navigate(nextPath)} />
+          <TowerWars onNavigate={nextPath => navigate(nextPath)} />
         ) : isDriverIntelligence ? (
           <DriverIntelligenceOverview path={path} />
         ) : isGrowthBuildings ? (
@@ -310,11 +364,33 @@ export default function AdminHostApp() {
         ) : isGrowthOffers ? (
           <GrowthOffersPage />
         ) : isCommercialPipeline ? (
-          <Suspense fallback={<div className="cr-route-loading">Loading Commercial Pipeline…</div>}><CommercialPipelinePage /></Suspense>
+          <Suspense
+            fallback={
+              <div className="cr-route-loading">
+                Loading Commercial Pipeline…
+              </div>
+            }
+          >
+            <CommercialPipelinePage />
+          </Suspense>
         ) : isChurnRadar ? (
-          <Suspense fallback={<div className="cr-route-loading">Loading Churn / Winback…</div>}><ChurnRadarPage /></Suspense>
+          <Suspense
+            fallback={
+              <div className="cr-route-loading">Loading Churn / Winback…</div>
+            }
+          >
+            <ChurnRadarPage />
+          </Suspense>
         ) : isSalesIntel ? (
-          <Suspense fallback={<div className="cr-route-loading">Loading Sales Intelligence…</div>}><SalesIntelAdmin /></Suspense>
+          <Suspense
+            fallback={
+              <div className="cr-route-loading">
+                Loading Sales Intelligence…
+              </div>
+            }
+          >
+            <SalesIntelAdmin />
+          </Suspense>
         ) : isMoney ? (
           <MoneyControlRoom />
         ) : isSettings ? (
@@ -362,11 +438,11 @@ export default function AdminHostApp() {
 
         <CustomerProfileDrawer
           open={profilePhone !== null}
-          onOpenChange={(open) => {
+          onOpenChange={open => {
             if (!open) setProfilePhone(null);
           }}
           phone={profilePhone}
-          onPrefillNewOrder={(p) => {
+          onPrefillNewOrder={p => {
             setNewOrderPhoneSeed(p);
             navigate("/new-order");
           }}

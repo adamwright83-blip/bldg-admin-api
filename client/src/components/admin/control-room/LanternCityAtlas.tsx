@@ -1,16 +1,8 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, MapPinOff, Search, X } from "lucide-react";
-import type { inferRouterOutputs } from "@trpc/server";
-import type { AppRouter } from "../../../../../server/routers";
+import { ArrowRight, MapPinOff, RefreshCw, Search, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
-type ListCustomersOutput = inferRouterOutputs<AppRouter>["admin"]["listCustomers"];
-export type LanternCustomer = ListCustomersOutput["customers"][number];
-export type LanternState = "active" | "dimming" | "dark";
-
 const MAP_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas.jpg";
-const TERMINAL_PIPELINE_STAGES = new Set(["won", "lost"]);
-
 const NEIGHBORHOODS = [
   { label: "West Hollywood", x: 18, y: 18 },
   { label: "Beverly Hills", x: 13, y: 43 },
@@ -22,85 +14,330 @@ const NEIGHBORHOODS = [
   { label: "Echo Park", x: 86, y: 72 },
 ] as const;
 
-export function classifyLanternCustomer(customer: Pick<LanternCustomer, "recencyStatus">): LanternState {
-  if (customer.recencyStatus === "lapsed") return "dark";
-  if (customer.recencyStatus === "cooling") return "dimming";
-  return "active";
+export {
+  inferCustomerCadence,
+  projectLatLngToLanternAtlas,
+} from "@shared/lanternCity";
+export function classifyLanternCustomer(customer: { recencyStatus: string }) {
+  if (customer.recencyStatus === "lapsed") return "dark" as const;
+  if (customer.recencyStatus === "cooling") return "dimming" as const;
+  return "active" as const;
 }
 
-export function resolveCustomerMapLocation(customer: Pick<LanternCustomer, "propertyGroup" | "address">) {
-  if (customer.propertyGroup === "opus_la") return { neighborhood: "Koreatown", x: 51, y: 70, confidence: "building" as const };
-  if (customer.propertyGroup === "century_park_east") return { neighborhood: "Century City", x: 12, y: 76, confidence: "building" as const };
-  const address = String(customer.address ?? "").toLowerCase();
-  if (/west hollywood|\b90069\b/.test(address)) return { neighborhood: "West Hollywood", x: 18, y: 18, confidence: "address" as const };
-  if (/beverly hills|\b90210\b|\b90211\b|\b90212\b/.test(address)) return { neighborhood: "Beverly Hills", x: 13, y: 43, confidence: "address" as const };
-  if (/century city|century park/.test(address)) return { neighborhood: "Century City", x: 12, y: 76, confidence: "address" as const };
-  if (/\bkoreatown\b|wilshire blvd|\b90005\b|\b90010\b/.test(address)) return { neighborhood: "Koreatown", x: 51, y: 70, confidence: "address" as const };
-  if (/\bhollywood\b|\b90028\b|\b90038\b/.test(address)) return { neighborhood: "Hollywood", x: 47, y: 34, confidence: "address" as const };
-  if (/los feliz|\b90027\b/.test(address)) return { neighborhood: "Los Feliz", x: 76, y: 20, confidence: "address" as const };
-  if (/silver lake/.test(address)) return { neighborhood: "Silver Lake", x: 82, y: 43, confidence: "address" as const };
-  if (/echo park/.test(address)) return { neighborhood: "Echo Park", x: 86, y: 72, confidence: "address" as const };
-  return null;
-}
-
-function stableOffset(customer: Pick<LanternCustomer, "phone" | "firstName" | "lastName">, axis: number) {
-  const key = `${customer.phone}|${customer.firstName}|${customer.lastName}`;
-  let hash = axis ? 2166136261 : 5381;
-  for (let index = 0; index < key.length; index += 1) hash = Math.imul(hash ^ key.charCodeAt(index), 16777619);
-  return ((Math.abs(hash) % 1000) / 1000 - 0.5) * 6;
-}
-
-function customerName(customer: LanternCustomer) {
-  return `${customer.firstName ?? ""} ${customer.lastName ?? ""}`.trim() || "Customer name unavailable";
-}
-
-function formatMoney(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
-}
-
-function StatusCard({ state, label, value, note }: { state: LanternState | "pursued"; label: string; value: number | null; note: string }) {
-  return <article className={`lc-status-card state-${state}`}><span className="lc-status-icon" aria-hidden>{state === "pursued" ? "♨" : ""}</span><div><small>{label}</small><strong>{value === null ? "—" : value}</strong><p>{note}</p></div></article>;
-}
-
-export default function LanternCityAtlas({ onOpenCustomer }: { onOpenCustomer: (phone: string) => void }) {
+export default function LanternCityAtlas({
+  onOpenCustomer,
+}: {
+  onOpenCustomer: (phone: string) => void;
+}) {
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<LanternCustomer | null>(null);
-  const customers = trpc.admin.listCustomers.useQuery({ sortBy: "lastOrder", includeLegacyCleanCloud: true }, { staleTime: 60_000 });
-  const pipeline = trpc.system.commercialPipeline.list.useQuery(undefined, { retry: false });
-  const rows = customers.data?.customers ?? [];
-  const mapped = useMemo(() => rows.map(customer => ({ customer, location: resolveCustomerMapLocation(customer), state: classifyLanternCustomer(customer) })).filter(item => item.location !== null), [rows]);
-  const unmapped = rows.length - mapped.length;
-  const normalizedQuery = query.trim().toLowerCase();
-  const visible = mapped.filter(({ customer, location }) => !normalizedQuery || `${customerName(customer)} ${customer.address} ${location?.neighborhood}`.toLowerCase().includes(normalizedQuery));
-  const counts = rows.reduce<Record<LanternState, number>>((acc, customer) => { acc[classifyLanternCustomer(customer)] += 1; return acc; }, { active: 0, dimming: 0, dark: 0 });
-  const pursued = pipeline.data ? pipeline.data.filter(item => !TERMINAL_PIPELINE_STAGES.has(item.stage)).length : null;
+  const [selectedCustomer, setSelectedCustomer] = useState<
+    NonNullable<ReturnType<typeof useAtlasData>>["customers"][number] | null
+  >(null);
+  const [selectedPursuit, setSelectedPursuit] = useState<
+    NonNullable<ReturnType<typeof useAtlasData>>["pursued"][number] | null
+  >(null);
+  const atlas = trpc.system.geographicTruth.atlas.useQuery(undefined, {
+    staleTime: 30_000,
+  });
+  const geocode = trpc.system.geographicTruth.geocodePending.useMutation({
+    onSuccess: () => atlas.refetch(),
+  });
+  const data = atlas.data;
+  const normalized = query.trim().toLowerCase();
+  const customers = data?.customers ?? [];
+  const pursued = data?.pursued ?? [];
+  const visibleCustomers = useMemo(
+    () =>
+      customers.filter(
+        customer =>
+          customer.location &&
+          (!normalized ||
+            `${customer.displayName} ${customer.address} ${customer.location.canonicalAddress ?? ""}`
+              .toLowerCase()
+              .includes(normalized))
+      ),
+    [customers, normalized]
+  );
+  const visiblePursuits = useMemo(
+    () =>
+      pursued.filter(
+        item =>
+          item.location &&
+          (!normalized ||
+            `${item.name} ${item.address} ${item.stage}`
+              .toLowerCase()
+              .includes(normalized))
+      ),
+    [pursued, normalized]
+  );
+  const counts = customers.reduce(
+    (acc, customer) => ({
+      ...acc,
+      [customer.cadence.state]: acc[customer.cadence.state] + 1,
+    }),
+    { active: 0, dimming: 0, dark: 0 }
+  );
+  const unmappedCustomers = customers.filter(
+    customer => !customer.location
+  ).length;
+  const unmappedPursuits = pursued.filter(item => !item.location).length;
 
   return (
     <main className="lc-page">
-      <header className="lc-page-header"><div><span className="lc-spark">✦</span><h1>Lantern City Atlas — Los Angeles</h1><p>Illuminate every neighborhood. Grow every route.</p></div><label className="lc-search"><Search aria-hidden /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search customers, neighborhoods…" aria-label="Search Lantern City" />{query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search"><X /></button> : null}</label></header>
-      <section className="lc-status-grid" aria-label="Customer relationship counts">
-        <StatusCard state="active" label="Active" value={customers.isLoading || customers.isError ? null : counts.active} note={customers.isError ? "Customer source unavailable" : "Active, new, or warm cadence"} />
-        <StatusCard state="dimming" label="Dimming" value={customers.isLoading || customers.isError ? null : counts.dimming} note={customers.isError ? "Customer source unavailable" : "Cooling cadence"} />
-        <StatusCard state="dark" label="Dark" value={customers.isLoading || customers.isError ? null : counts.dark} note={customers.isError ? "Customer source unavailable" : "Lapsed cadence"} />
-        <StatusCard state="pursued" label="Pursued" value={pipeline.isLoading || pipeline.isError ? null : pursued} note={pipeline.error ? "Pipeline unavailable" : "Active persisted opportunities"} />
+      <header className="lc-page-header">
+        <div>
+          <span className="lc-spark">✦</span>
+          <h1>Lantern City Atlas — Los Angeles</h1>
+          <p>Real customer geography · {data?.businessDate ?? "Today"}</p>
+        </div>
+        <label className="lc-search">
+          <Search aria-hidden />
+          <input
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            placeholder="Search customers and opportunities…"
+            aria-label="Search Lantern City"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+            >
+              <X />
+            </button>
+          ) : null}
+        </label>
+      </header>
+      <section
+        className="lc-status-grid"
+        aria-label="Customer relationship counts"
+      >
+        {(["active", "dimming", "dark"] as const).map(state => (
+          <article key={state} className={`lc-status-card state-${state}`}>
+            <span className="lc-status-icon" />
+            <div>
+              <small>{state === "dark" ? "Dormant" : state}</small>
+              <strong>
+                {atlas.isLoading || atlas.isError ? "—" : counts[state]}
+              </strong>
+              <p>Customer-specific order cadence</p>
+            </div>
+          </article>
+        ))}
+        <article className="lc-status-card state-pursued">
+          <span className="lc-status-icon">♨</span>
+          <div>
+            <small>Pursued</small>
+            <strong>
+              {atlas.isLoading || atlas.isError ? "—" : pursued.length}
+            </strong>
+            <p>Active persisted opportunities</p>
+          </div>
+        </article>
       </section>
       <section className="lc-map" aria-label="Customer relationship atlas">
         <img src={MAP_IMAGE} alt="Illustrated Los Angeles relationship atlas" />
         <div className="lc-map-wash" />
-        {NEIGHBORHOODS.map(neighborhood => <span key={neighborhood.label} className="lc-neighborhood" style={{ left: `${neighborhood.x}%`, top: `${neighborhood.y}%` }}>{neighborhood.label}</span>)}
-        {visible.map(({ customer, location, state }, index) => {
-          if (!location) return null;
-          const x = Math.max(4, Math.min(96, location.x + stableOffset(customer, 0)));
-          const y = Math.max(8, Math.min(92, location.y + stableOffset(customer, 1)));
-          return <button type="button" key={`${customer.phone}-${customer.lastOrderId}-${index}`} className={`lc-lantern state-${state}`} style={{ left: `${x}%`, top: `${y}%` }} onClick={() => setSelected(customer)} aria-label={`${customerName(customer)}, ${state}, ${location.neighborhood}`}><span className="lc-lantern-handle" /><span className="lc-lantern-body" /><span className="lc-lantern-base" /></button>;
-        })}
-        {!customers.isLoading && visible.length === 0 ? <div className="lc-map-empty"><strong>{customers.isError ? "Customer data unavailable" : "No mapped customers match this view"}</strong><span>{customers.isError ? "The authoritative customer source could not be read." : "Lanterns appear only when a customer has an authoritative location."}</span></div> : null}
+        {NEIGHBORHOODS.map(item => (
+          <span
+            key={item.label}
+            className="lc-neighborhood"
+            style={{ left: `${item.x}%`, top: `${item.y}%` }}
+          >
+            {item.label}
+          </span>
+        ))}
+        {visibleCustomers.map(customer => (
+          <button
+            type="button"
+            key={customer.identityKey}
+            className={`lc-lantern state-${customer.cadence.state}`}
+            style={{
+              left: `${customer.location!.x}%`,
+              top: `${customer.location!.y}%`,
+            }}
+            onClick={() => {
+              setSelectedPursuit(null);
+              setSelectedCustomer(customer);
+            }}
+            aria-label={`${customer.displayName}, ${customer.cadence.state}`}
+          >
+            <span className="lc-lantern-handle" />
+            <span className="lc-lantern-body" />
+            <span className="lc-lantern-base" />
+          </button>
+        ))}
+        {visiblePursuits.map(item => (
+          <button
+            type="button"
+            key={item.pipelineId}
+            className="lc-pursued-flame"
+            style={{
+              left: `${item.location!.x}%`,
+              top: `${item.location!.y}%`,
+            }}
+            onClick={() => {
+              setSelectedCustomer(null);
+              setSelectedPursuit(item);
+            }}
+            aria-label={`Pursued: ${item.name}`}
+          >
+            ♨
+          </button>
+        ))}
+        {!atlas.isLoading &&
+        visibleCustomers.length + visiblePursuits.length === 0 ? (
+          <div className="lc-map-empty">
+            <strong>
+              {atlas.isError
+                ? "Geographic truth unavailable"
+                : "No geocoded records match this view"}
+            </strong>
+            <span>
+              Records without successful provider coordinates remain outside the
+              illustrated map.
+            </span>
+          </div>
+        ) : null}
       </section>
       <section className="lc-utility-row">
-        <article className="lc-legend"><h2>Lantern legend</h2>{(["active", "dimming", "dark"] as LanternState[]).map(state => <span key={state}><i className={`lc-mini-lantern state-${state}`} /><strong>{state === "dark" ? "Dormant" : state[0].toUpperCase() + state.slice(1)}</strong></span>)}<span><i className="lc-mini-flame">♨</i><strong>Pursued</strong></span></article>
-        <article className="lc-unmapped"><MapPinOff aria-hidden /><div><h2>Location unavailable</h2><strong>{unmapped}</strong><p>{unmapped === 1 ? "customer is" : "customers are"} held outside the map because no confident location mapping exists.</p></div></article>
+        <article className="lc-legend">
+          <h2>Lantern legend</h2>
+          {(["active", "dimming", "dark"] as const).map(state => (
+            <span key={state}>
+              <i className={`lc-mini-lantern state-${state}`} />
+              <strong>{state === "dark" ? "Dormant" : state}</strong>
+            </span>
+          ))}
+          <span>
+            <i className="lc-mini-flame">♨</i>
+            <strong>Pursued</strong>
+          </span>
+        </article>
+        <article className="lc-unmapped">
+          <MapPinOff aria-hidden />
+          <div>
+            <h2>Geographic Truth</h2>
+            <strong>{unmappedCustomers + unmappedPursuits}</strong>
+            <p>
+              {data?.provider.status === "unconfigured"
+                ? "Geographic provider not configured. Credential-independent records and statuses remain operational."
+                : `${unmappedCustomers} customers and ${unmappedPursuits} pursuits need location.`}
+            </p>
+            <small>
+              {Object.entries(data?.statusCounts ?? {})
+                .map(([status, value]) => `${status}: ${value}`)
+                .join(" · ")}
+            </small>
+            <button
+              type="button"
+              disabled={geocode.isPending}
+              onClick={() => geocode.mutate({ batchSize: 20 })}
+            >
+              <RefreshCw className={geocode.isPending ? "animate-spin" : ""} />
+              {geocode.isPending
+                ? "Geocoding bounded batch…"
+                : "Geocode pending locations"}
+            </button>
+          </div>
+        </article>
       </section>
-      {selected ? <aside className="lc-detail" aria-live="polite"><button type="button" onClick={() => setSelected(null)} aria-label="Close customer detail"><X /></button><span>{classifyLanternCustomer(selected)} lantern</span><h2>{customerName(selected)}</h2><p>{selected.address || "Address unavailable"}{selected.unit ? ` · Unit ${selected.unit}` : ""}</p><dl><div><dt>Last order</dt><dd>{selected.lastOrderAt ? new Date(selected.lastOrderAt).toLocaleDateString() : "Unavailable"}</dd></div><div><dt>Orders</dt><dd>{selected.totalOrders}</dd></div><div><dt>Last 90 days</dt><dd>{selected.ordersLast90Days}</dd></div><div><dt>Operational revenue</dt><dd>{formatMoney(selected.totalOperationalRevenue)}</dd></div></dl><button type="button" className="lc-open-customer" onClick={() => onOpenCustomer(selected.phone)}>Open customer evidence <ArrowRight /></button></aside> : null}
+      {selectedCustomer ? (
+        <aside className="lc-detail" aria-live="polite">
+          <button
+            type="button"
+            onClick={() => setSelectedCustomer(null)}
+            aria-label="Close customer detail"
+          >
+            <X />
+          </button>
+          <span>
+            {selectedCustomer.cadence.state} lantern ·{" "}
+            {selectedCustomer.cadence.confidence} cadence
+          </span>
+          <h2>{selectedCustomer.displayName}</h2>
+          <p>
+            {selectedCustomer.location?.canonicalAddress ??
+              selectedCustomer.address}
+            {selectedCustomer.unit ? ` · Unit ${selectedCustomer.unit}` : ""}
+          </p>
+          <dl>
+            <div>
+              <dt>Normal cadence</dt>
+              <dd>
+                {selectedCustomer.cadence.expectedCadenceDays
+                  ? `${selectedCustomer.cadence.expectedCadenceDays} days`
+                  : "Sparse history"}
+              </dd>
+            </div>
+            <div>
+              <dt>Days since order</dt>
+              <dd>{selectedCustomer.cadence.daysSinceLastOrder}</dd>
+            </div>
+            <div>
+              <dt>Expected next</dt>
+              <dd>
+                {selectedCustomer.cadence.expectedNextOrder ?? "Unavailable"}
+              </dd>
+            </div>
+            <div>
+              <dt>Cycles missed</dt>
+              <dd>{selectedCustomer.cadence.cyclesMissed ?? "Unavailable"}</dd>
+            </div>
+          </dl>
+          <button
+            type="button"
+            className="lc-open-customer"
+            onClick={() => onOpenCustomer(selectedCustomer.phone)}
+          >
+            Open customer evidence <ArrowRight />
+          </button>
+        </aside>
+      ) : null}
+      {selectedPursuit ? (
+        <aside className="lc-detail" aria-live="polite">
+          <button
+            type="button"
+            onClick={() => setSelectedPursuit(null)}
+            aria-label="Close pursuit detail"
+          >
+            <X />
+          </button>
+          <span>Persisted commercial pursuit</span>
+          <h2>{selectedPursuit.name}</h2>
+          <p>
+            {selectedPursuit.location?.canonicalAddress ??
+              selectedPursuit.address}
+          </p>
+          <dl>
+            <div>
+              <dt>Pipeline stage</dt>
+              <dd>{selectedPursuit.stage.replaceAll("_", " ")}</dd>
+            </div>
+            <div>
+              <dt>Source</dt>
+              <dd>Commercial Pipeline</dd>
+            </div>
+            <div>
+              <dt>Last activity</dt>
+              <dd>
+                {new Date(selectedPursuit.updatedAt).toLocaleDateString()}
+              </dd>
+            </div>
+          </dl>
+          <a
+            className="lc-open-customer"
+            href={`/commercial-pipeline?pipeline=${selectedPursuit.pipelineId}`}
+          >
+            Open Growth evidence <ArrowRight />
+          </a>
+        </aside>
+      ) : null}
     </main>
   );
+}
+
+function useAtlasData() {
+  return trpc.system.geographicTruth.atlas.useQuery().data;
 }
