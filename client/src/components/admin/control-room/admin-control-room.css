@@ -107,14 +107,28 @@
 .cb-warning{margin:0;padding:9px 12px;border:1px solid #e0b8ae;border-radius:8px;background:#fdf4f2;color:#a8452f;font-size:12px}
 .cb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr));gap:14px}
 .cb-building{display:flex;flex-direction:column;gap:14px;padding:20px;border:1px solid var(--cr-line);border-radius:12px;background:var(--cr-paper);box-shadow:0 8px 22px #0d25400a}
-.cb-building.is-held_penetrating,.cb-building.is-held_unpenetrated{border-color:#bfa06a;box-shadow:0 8px 22px #0d25400a,inset 3px 0 var(--cr-gold)}
-.cb-building.is-closed{opacity:.72}
-.cb-building-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.cb-building.is-access-held{border-color:#bfa06a;box-shadow:0 8px 22px #0d25400a,inset 3px 0 var(--cr-gold)}
+.cb-building.is-access-closed{opacity:.72}
+.cb-building-head{display:flex;flex-direction:column;gap:10px}
 .cb-building-head h3{margin:0;font-size:15px}
-.cb-phase{margin:4px 0 0;color:var(--cr-muted);font-size:12px;max-width:40ch}
-.cb-phase-chip{padding:4px 9px;border-radius:20px;font-size:9px;font-weight:850;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}
-.cb-phase-chip.is-sealed{border:1px solid var(--cr-line);color:var(--cr-muted)}
-.cb-phase-chip.is-open{background:var(--cr-gold);color:#2b1d00}
+/* Two axes, side by side and equally weighted: neither is a verdict on the
+   other. A sealed account with an already-active resident board is a real and
+   common state, and must never read as "the building is closed". */
+.cb-axes{display:flex;flex-wrap:wrap;gap:8px 22px}
+.cb-axis{display:flex;flex-direction:column;gap:4px}
+.cb-axis-title{color:var(--cr-muted);font-size:8px;font-weight:850;letter-spacing:.14em;text-transform:uppercase}
+.cb-axis-detail{margin:0 0 8px;color:var(--cr-muted);font-size:11px;line-height:1.5;max-width:46ch}
+.cb-axis-chip{align-self:flex-start;padding:4px 9px;border-radius:20px;font-size:9px;font-weight:850;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;border:1px solid transparent}
+.cb-axis-chip.is-held{background:var(--cr-gold);color:#2b1d00}
+.cb-axis-chip.is-inside{background:#efe7ff;color:#4a2a9c;border-color:#c9b3f5}
+.cb-axis-chip.is-sealed{border-color:var(--cr-line);color:var(--cr-muted)}
+.cb-axis-chip.is-closed{border-color:#e0b8ae;color:#a8452f}
+.cb-axis-chip.is-no_mission{border-color:var(--cr-line);color:var(--cr-muted);opacity:.8}
+.cb-axis-chip.is-unlocked_by_win{background:#e8f4ec;color:#1f6b41;border-color:#a9d3ba}
+.cb-axis-chip.is-active_preexisting{background:#e9f0fa;color:#1f4b7a;border-color:#a9c3de}
+.cb-axis-chip.is-none{border-color:var(--cr-line);color:var(--cr-muted);opacity:.8}
+.cb-enrolled{margin:0;color:var(--cr-muted);font-size:11px;font-variant-numeric:tabular-nums}
+.cb-enrolled strong{color:var(--cr-ink)}
 .cb-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:18px}
 @media (max-width:44rem){.cb-body{grid-template-columns:1fr}}
 .cb-body h4{margin:0 0 8px;color:var(--cr-muted);font-size:9px;font-weight:850;letter-spacing:.14em;text-transform:uppercase}

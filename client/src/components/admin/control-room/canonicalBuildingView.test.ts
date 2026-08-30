@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   LADDER_DEPTHS,
+  commercialAccessCopy,
+  commercialAccessFor,
   fieldShape,
-  isHeld,
-  phaseHeadline,
   projectOccupancyField,
   projectSiegeLadder,
+  residentTerritoryCopy,
+  residentTerritoryFor,
+  winOpenedTheBoard,
 } from "./canonicalBuildingView";
 
 describe("the siege ladder", () => {
@@ -170,23 +173,97 @@ describe("occupancy arrangement is presentation, counts are truth", () => {
   });
 });
 
-describe("phase copy makes the hinge obvious", () => {
-  it("says winning opened the doors without saying it finished anything", () => {
-    expect(phaseHeadline("held_unpenetrated")).toBe(
-      "The doors are open. Nobody inside is yours yet."
+describe("the two axes are independent", () => {
+  it("reads commercial access from the siege depth alone", () => {
+    expect(commercialAccessFor(null)).toBe("no_mission");
+    expect(commercialAccessFor("unsighted")).toBe("sealed");
+    expect(commercialAccessFor("at_the_door")).toBe("sealed");
+    expect(commercialAccessFor("inside")).toBe("inside");
+    expect(commercialAccessFor("held")).toBe("held");
+    expect(commercialAccessFor("closed")).toBe("closed");
+  });
+
+  it("reads resident territory from the access reason alone", () => {
+    expect(
+      residentTerritoryFor({ hasField: false, access: "commercial_win" })
+    ).toBe("none");
+    expect(
+      residentTerritoryFor({ hasField: true, access: "commercial_win" })
+    ).toBe("unlocked_by_win");
+    expect(
+      residentTerritoryFor({ hasField: true, access: "preexisting_residents" })
+    ).toBe("active_preexisting");
+  });
+
+  /**
+   * The case this whole split exists for: Century Park East today. A sealed
+   * commercial approach must not imply the resident board is unavailable.
+   */
+  it("allows a sealed account alongside an already-active resident board", () => {
+    const access = commercialAccessFor("at_the_door");
+    const territory = residentTerritoryFor({
+      hasField: true,
+      access: "preexisting_residents",
+    });
+    expect(access).toBe("sealed");
+    expect(territory).toBe("active_preexisting");
+    expect(commercialAccessCopy(access).label).toBe("Sealed");
+    expect(residentTerritoryCopy(territory).label).toBe(
+      "Active — pre-existing"
     );
-    expect(phaseHeadline("held_penetrating")).toContain("board now");
   });
 
-  it("distinguishes sealed prospect from active siege", () => {
-    expect(phaseHeadline("prospect")).toContain("Not yet targeted");
-    expect(phaseHeadline("under_siege")).toContain("working your way in");
+  it("never claims a win opened a board that predates the mission", () => {
+    expect(winOpenedTheBoard("active_preexisting")).toBe(false);
+    expect(winOpenedTheBoard("none")).toBe(false);
+    expect(winOpenedTheBoard("unlocked_by_win")).toBe(true);
+    expect(residentTerritoryCopy("active_preexisting").detail).toContain(
+      "predate any commercial mission"
+    );
   });
 
-  it("treats both held phases as held", () => {
-    expect(isHeld("held_unpenetrated")).toBe(true);
-    expect(isHeld("held_penetrating")).toBe(true);
-    expect(isHeld("under_siege")).toBe(false);
-    expect(isHeld("closed")).toBe(false);
+  it("says winning opened the board without saying it finished anything", () => {
+    expect(residentTerritoryCopy("unlocked_by_win").detail).toContain(
+      "not the end of anything"
+    );
+  });
+
+  it("distinguishes being inside from having won", () => {
+    expect(commercialAccessCopy("inside").detail).toContain("Not won yet");
+    expect(commercialAccessCopy("held").detail).toContain("held");
+  });
+
+  it("never describes a whole building with a single verdict", () => {
+    // Each copy function may only speak about its own axis.
+    for (const state of ["sealed", "inside", "held", "closed", "no_mission"] as const) {
+      const detail = commercialAccessCopy(state).detail.toLowerCase();
+      expect(detail).not.toContain("resident");
+    }
+    for (const state of ["none", "active_preexisting", "unlocked_by_win"] as const) {
+      const label = residentTerritoryCopy(state).label.toLowerCase();
+      expect(label).not.toContain("sealed");
+    }
+  });
+});
+
+describe("enrolled total is reported without double counting", () => {
+  const field = projectOccupancyField({
+    totalUnits: 428,
+    denominatorVerified: true,
+    signups: 61,
+    paidResidents: 34,
+  })!;
+
+  it("sums paying plus signup-only", () => {
+    expect(field.totalEnrolled).toBe(61);
+    expect(field.paidResidents + field.signupsOnly).toBe(field.totalEnrolled);
+  });
+
+  it("keeps the enrolled figure out of the field bands", () => {
+    // Three bands only; totalEnrolled must never become a fourth.
+    const bandTotal =
+      field.paidResidents + field.signupsOnly + field.unclaimed;
+    expect(bandTotal).toBe(field.totalUnits);
+    expect(field.cells).toHaveLength(field.totalUnits);
   });
 });

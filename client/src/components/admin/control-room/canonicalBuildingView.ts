@@ -1,25 +1,36 @@
 /**
  * THE SEAM, MADE VISIBLE — getting in, then how much of the inside is yours.
  *
- * A commercial building runs two entirely different real games, and winning
- * the account is the hinge between them, not the finish line:
+ * A commercial building runs two entirely different real games. They are
+ * INDEPENDENT AXES, not stages of one story, and the UI must never collapse
+ * them into a single verdict about the building:
  *
- *   SIEGE       a sealed structure. Every rung of the ladder is a real
- *               transition in the thirteen-state mission machine, and the
- *               lowest sealed rung IS the next action.
- *   PENETRATION once held, the building opens and its finite resident
- *               population becomes the board. 428 doors at OPUS, 576 at
- *               Century Park East — the only honest denominators in the
- *               product, because they are countable physical facts.
+ *   COMMERCIAL ACCESS   how far into the account you have got. Every rung is
+ *                       a real transition in the thirteen-state machine, and
+ *                       the lowest sealed rung IS the next action.
+ *   RESIDENT TERRITORY  whether the finite resident population is in play.
+ *                       428 doors at OPUS, 576 at Century Park East — the
+ *                       only honest denominators in the product, because they
+ *                       are countable physical facts.
+ *
+ * An unfinished commercial siege does NOT imply the resident board is closed.
+ * Century Park East is exactly that case today: no won account, and residents
+ * who predate any mission. Saying "Sealed" about the whole building there
+ * would be false, and would erase the distinction `preexisting_residents`
+ * exists to record.
+ *
+ * The account_won -> board opens transformation is real, but it may only be
+ * claimed where `access === "commercial_win"`. Where residents predate the
+ * mission, the board was already there and nothing opened it.
  *
  * WHAT THE OCCUPANCY FIELD DOES AND DOES NOT CLAIM
  *
- * The field draws one cell per real rentable unit and lights the real number
- * that have signed up or paid. The COUNTS and the DENOMINATOR are truth. The
- * ARRANGEMENT is not: no cell corresponds to a specific apartment, no unit
- * numbers exist in the data, and none are rendered. Lit cells are scattered
+ * Each mark represents one unit of aggregate building capacity. The COUNTS
+ * and the DENOMINATOR are authoritative. The coloured POSITION is not: it does
+ * not identify which apartment or customer is paying or signed up. No unit
+ * identities exist in the data and none are rendered. Cells are scattered
  * deterministically so the field reads as a building with lights on rather
- * than as a progress bar — but a viewer must never be able to point at a cell
+ * than as a progress bar — but a viewer must never be able to point at a mark
  * and say "that one is 14B", because the data cannot support it.
  *
  * A denominator that is still a placeholder (`needsVerification` upstream)
@@ -84,13 +95,25 @@ export function projectSiegeLadder(depth: SiegeDepth | null): SiegeRung[] {
 
 /* ── The occupancy field ────────────────────────────────────────────────── */
 
+/**
+ * `signup` means signed up but NOT paying. The upstream `signups` count
+ * includes payers, so this band is the remainder — naming it plainly here
+ * stops the legend from reading as though 27 people signed up in total when
+ * the real enrolled figure is 61.
+ */
 export type OccupancyCell = "paid" | "signup" | "unclaimed";
 
 export type OccupancyField = {
   totalUnits: number;
   paidResidents: number;
-  /** Signed up but not yet paying. Never negative. */
+  /** Signed up but NOT paying. Never negative. A band, not a total. */
   signupsOnly: number;
+  /**
+   * Everyone enrolled: paying plus signed-up-only. Exposed for copy that wants
+   * the headline figure, and deliberately NOT a fourth band — adding it to the
+   * field would double-count the payers it already contains.
+   */
+  totalEnrolled: number;
   unclaimed: number;
   denominatorVerified: boolean;
   columns: number;
@@ -178,6 +201,7 @@ export function projectOccupancyField(
     totalUnits,
     paidResidents,
     signupsOnly,
+    totalEnrolled: paidResidents + signupsOnly,
     unclaimed,
     denominatorVerified: input.denominatorVerified,
     columns,
@@ -186,39 +210,99 @@ export function projectOccupancyField(
   };
 }
 
-/* ── Phase copy ─────────────────────────────────────────────────────────── */
+/* ── The two axes ───────────────────────────────────────────────────────── */
 
-export type BuildingPhase =
-  | "unknown"
-  | "prospect"
-  | "under_siege"
-  | "held_unpenetrated"
-  | "held_penetrating"
+/** How far into the commercial account you have got. Says nothing about residents. */
+export type CommercialAccess =
+  | "no_mission"
+  | "sealed"
+  | "inside"
+  | "held"
   | "closed";
 
-/**
- * What the operator should understand at a glance. The held phrasings exist to
- * make the hinge obvious: winning the account opened the doors, it did not
- * finish anything.
- */
-export function phaseHeadline(phase: BuildingPhase): string {
-  switch (phase) {
-    case "prospect":
-      return "Sealed. Not yet targeted.";
-    case "under_siege":
-      return "Sealed. You are working your way in.";
-    case "held_unpenetrated":
-      return "The doors are open. Nobody inside is yours yet.";
-    case "held_penetrating":
-      return "The doors are open. The building is the board now.";
+/** Whether the resident population is in play, and what put it there. */
+export type ResidentTerritory =
+  | "none"
+  | "active_preexisting"
+  | "unlocked_by_win";
+
+export function commercialAccessFor(
+  depth: SiegeDepth | null | undefined
+): CommercialAccess {
+  if (depth == null) return "no_mission";
+  if (depth === "closed") return "closed";
+  if (depth === "held") return "held";
+  if (depth === "inside") return "inside";
+  return "sealed";
+}
+
+export function residentTerritoryFor(input: {
+  hasField: boolean;
+  access: string | null | undefined;
+}): ResidentTerritory {
+  if (!input.hasField) return "none";
+  // Only a real won account may claim it opened this board.
+  if (input.access === "commercial_win") return "unlocked_by_win";
+  return "active_preexisting";
+}
+
+export type AxisCopy = { label: string; detail: string };
+
+export function commercialAccessCopy(state: CommercialAccess): AxisCopy {
+  switch (state) {
+    case "held":
+      return {
+        label: "Won",
+        detail: "The account is held.",
+      };
+    case "inside":
+      return {
+        label: "Inside",
+        detail: "You have been inside and talked to someone. Not won yet.",
+      };
+    case "sealed":
+      return {
+        label: "Sealed",
+        detail: "Still working your way into the account.",
+      };
     case "closed":
-      return "Closed. The approach ended.";
-    case "unknown":
+      return {
+        label: "Closed",
+        detail: "The approach ended.",
+      };
+    case "no_mission":
     default:
-      return "Nothing known about this building yet.";
+      return {
+        label: "No commercial mission",
+        detail: "Nothing is being pursued at this building.",
+      };
   }
 }
 
-export function isHeld(phase: BuildingPhase): boolean {
-  return phase === "held_unpenetrated" || phase === "held_penetrating";
+export function residentTerritoryCopy(state: ResidentTerritory): AxisCopy {
+  switch (state) {
+    case "unlocked_by_win":
+      return {
+        label: "Unlocked by the win",
+        detail:
+          "Winning the account opened this board. That is the start of the resident game, not the end of anything.",
+      };
+    case "active_preexisting":
+      return {
+        label: "Active — pre-existing",
+        detail:
+          "These residents predate any commercial mission here, so no win opened this board. It was already in play.",
+      };
+    case "none":
+    default:
+      return {
+        label: "No resident evidence",
+        detail: "No resident unit data for this building yet.",
+      };
+  }
+}
+
+/** True only where a real commercial win is what put the board in play. */
+export function winOpenedTheBoard(state: ResidentTerritory): boolean {
+  return state === "unlocked_by_win";
 }

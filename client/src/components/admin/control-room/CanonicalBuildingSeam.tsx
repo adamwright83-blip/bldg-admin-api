@@ -1,23 +1,31 @@
 /**
- * The seam, on screen: a sealed structure you are working into, and — once
- * won — an open one whose finite resident population becomes the next board.
+ * The seam, on screen — as TWO independent axes, never one verdict.
  *
- * The transition is the point. Winning the account does not complete a bar or
- * retire the building; it changes what game the building is in. Under siege
- * the structure is drawn shut with its rungs, and the lowest sealed rung is
- * the next action. Held, the doors open and every real rentable unit appears.
+ * Commercial access says how far into the account you have got. Resident
+ * territory says whether the finite population is in play. A building can sit
+ * at "Sealed" commercially while its resident board is already active, because
+ * those residents predate any mission; Century Park East is exactly that.
+ * Labelling the whole building "Sealed" there would be false.
+ *
+ * The account_won -> board opens transformation is rendered as a real event
+ * only where `access === "commercial_win"`. Where residents predate the
+ * mission, nothing here claims a win opened anything.
  */
 import { useMemo } from "react";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../../../server/routers";
 import { trpc } from "@/lib/trpc";
 import {
-  isHeld,
-  phaseHeadline,
+  commercialAccessCopy,
+  commercialAccessFor,
   projectOccupancyField,
   projectSiegeLadder,
-  type BuildingPhase,
+  residentTerritoryCopy,
+  residentTerritoryFor,
+  winOpenedTheBoard,
+  type CommercialAccess,
   type OccupancyField,
+  type ResidentTerritory,
   type SiegeRung,
 } from "./canonicalBuildingView";
 
@@ -74,12 +82,18 @@ function OccupancyGrid({
         }`}
         style={{ ["--cb-cols" as string]: String(field.columns) }}
         role="img"
-        aria-label={`${buildingName}: ${field.paidResidents} paying and ${
+        aria-label={`${buildingName} aggregate capacity: ${
+          field.paidResidents
+        } units paying, ${
           field.signupsOnly
-        } signed up, of ${field.totalUnits} rentable units${
+        } signed up but not paying, ${
+          field.unclaimed
+        } not yet a customer, of ${
+          field.totalUnits
+        } rentable units. Positions do not identify individual apartments${
           field.denominatorVerified
             ? ""
-            : " — unit count not yet verified, treat as provisional"
+            : "; the unit count is not verified, treat every share as provisional"
         }`}
       >
         {field.cells.map((cell, index) => (
@@ -96,30 +110,39 @@ function OccupancyGrid({
         </div>
         <div>
           <dt>
-            <i className="cb-cell is-signup" aria-hidden="true" /> Signed up
+            <i className="cb-cell is-signup" aria-hidden="true" /> Signed up,
+            not paying
           </dt>
           <dd>{field.signupsOnly}</dd>
         </div>
         <div>
           <dt>
-            <i className="cb-cell is-unclaimed" aria-hidden="true" /> Not yours
+            <i className="cb-cell is-unclaimed" aria-hidden="true" /> Not yet a
+            customer
           </dt>
           <dd>{field.unclaimed}</dd>
         </div>
       </dl>
 
+      <p className="cb-enrolled">
+        {field.paidResidents} paying + {field.signupsOnly} signup-only ={" "}
+        <strong>{field.totalEnrolled} enrolled</strong>
+      </p>
+
       <p className="cb-field-note">
         {field.denominatorVerified ? (
           <>
-            {field.totalUnits} rentable units. Each mark is one unit, but the
-            arrangement is not a floor plan — the data holds counts, not
-            individual apartments.
+            Each mark represents one unit of aggregate building capacity across{" "}
+            {field.totalUnits} rentable units. The coloured position does not
+            identify which apartment or customer is paying or signed up — only
+            the counts are authoritative.
           </>
         ) : (
           <>
             <strong>Provisional.</strong> {field.totalUnits} units is a
             placeholder that has not been verified, so every share above is an
-            estimate rather than a count.
+            estimate rather than a count. Positions still do not identify
+            individual apartments.
           </>
         )}
       </p>
@@ -127,9 +150,24 @@ function OccupancyGrid({
   );
 }
 
+function AxisChip({
+  kind,
+  state,
+  label,
+}: {
+  kind: "commercial" | "resident";
+  state: CommercialAccess | ResidentTerritory;
+  label: string;
+}) {
+  return (
+    <span className={`cb-axis-chip is-${kind} is-${state}`}>{label}</span>
+  );
+}
+
 function BuildingCard({ view }: { view: BuildingView }) {
   const { building } = view;
-  const phase = building.phase as BuildingPhase;
+  const name = building.identity.displayName;
+
   const rungs = useMemo(
     () => projectSiegeLadder(building.siege?.depth ?? null),
     [building.siege?.depth]
@@ -149,36 +187,53 @@ function BuildingCard({ view }: { view: BuildingView }) {
     [building.penetration]
   );
 
-  const held = isHeld(phase);
-  const name = building.identity.displayName;
+  const access = commercialAccessFor(building.siege?.depth ?? null);
+  const territory = residentTerritoryFor({
+    hasField: field !== null,
+    access: building.penetration?.access ?? null,
+  });
+  const accessCopy = commercialAccessCopy(access);
+  const territoryCopy = residentTerritoryCopy(territory);
 
   return (
-    <article className={`cb-building is-${phase}`} aria-label={name}>
+    <article className={`cb-building is-access-${access}`} aria-label={name}>
       <header className="cb-building-head">
-        <div>
-          <h3>{name}</h3>
-          <p className="cb-phase">{phaseHeadline(phase)}</p>
+        <h3>{name}</h3>
+        <div className="cb-axes">
+          <div className="cb-axis">
+            <span className="cb-axis-title">Commercial access</span>
+            <AxisChip kind="commercial" state={access} label={accessCopy.label} />
+          </div>
+          <div className="cb-axis">
+            <span className="cb-axis-title">Resident territory</span>
+            <AxisChip
+              kind="resident"
+              state={territory}
+              label={territoryCopy.label}
+            />
+          </div>
         </div>
-        <span className={`cb-phase-chip is-${held ? "open" : "sealed"}`}>
-          {held ? "Doors open" : "Sealed"}
-        </span>
       </header>
 
       <div className="cb-body">
-        <section className="cb-way-in" aria-label={`Way into ${name}`}>
-          <h4>Getting in</h4>
+        <section className="cb-way-in" aria-label={`Commercial access at ${name}`}>
+          <h4>Commercial access</h4>
+          <p className="cb-axis-detail">{accessCopy.detail}</p>
           {building.siege ? (
             <SiegeLadder rungs={rungs} />
           ) : (
             <p className="cb-note">
               No commercial mission targets this building, so there is no
-              approach to show. Its residents predate any account.
+              approach to show.
             </p>
           )}
           {view.firstBroken ? (
             <p className="cb-blocked">
-              Waiting on <strong>{view.firstBroken.stage.replace(/_/g, " ")}</strong>
-              {view.firstBroken.evidence ? ` — ${view.firstBroken.evidence}` : null}
+              Waiting on{" "}
+              <strong>{view.firstBroken.stage.replace(/_/g, " ")}</strong>
+              {view.firstBroken.evidence
+                ? ` — ${view.firstBroken.evidence}`
+                : null}
             </p>
           ) : (
             <p className="cb-complete">
@@ -187,30 +242,22 @@ function BuildingCard({ view }: { view: BuildingView }) {
           )}
         </section>
 
-        <section className="cb-inside" aria-label={`Inside ${name}`}>
-          <h4>Inside</h4>
+        <section
+          className="cb-inside"
+          aria-label={`Resident territory at ${name}`}
+        >
+          <h4>Resident territory</h4>
+          <p className="cb-axis-detail">{territoryCopy.detail}</p>
           {field ? (
             <>
-              {phase === "held_unpenetrated" ? (
+              {winOpenedTheBoard(territory) && field.totalEnrolled === 0 ? (
                 <p className="cb-note">
-                  The account is won and the doors are open. That is the start
-                  of the resident game, not the end of anything.
+                  The board is open and nobody inside is yours yet.
                 </p>
               ) : null}
               <OccupancyGrid field={field} buildingName={name} />
-              {building.penetration?.access === "preexisting_residents" ? (
-                <p className="cb-note cb-access">
-                  These residents predate any commercial win here, so nothing
-                  claims a mission opened this door.
-                </p>
-              ) : null}
             </>
-          ) : (
-            <p className="cb-note">
-              No resident unit data for this building yet, so there is no
-              population to show.
-            </p>
-          )}
+          ) : null}
         </section>
       </div>
     </article>
@@ -246,10 +293,11 @@ export function CanonicalBuildingSeam() {
   return (
     <section className="cb-panel" aria-label="Buildings">
       <header className="cb-panel-head">
-        <h2>Getting in, then getting inside</h2>
+        <h2>Commercial access and resident territory</h2>
         <p>
-          Winning a building does not finish it. It changes the game from an
-          approach into a finite resident population.
+          Two independent truths per building. Winning an account opens the
+          resident board — but a board can also already be open because its
+          residents predate any mission.
         </p>
       </header>
 
