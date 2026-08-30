@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
 import {
   commercialAccountLocations,
@@ -25,6 +25,22 @@ export type GeographicEntityType =
   | "customer"
   | "building"
   | "commercial_prospect";
+
+const ACTIVE_COMMERCIAL_PIPELINE_STAGES: Array<
+  typeof commercialPipelineRecords.$inferSelect.stage
+> = [
+  "discovered",
+  "qualified",
+  "mission_created",
+  "game_ready",
+  "field_ready",
+  "visit_planned",
+  "visited",
+  "follow_up",
+  "proposal_sent",
+  "pilot_requested",
+  "verbal_yes",
+];
 export type DiscoveredEntity = {
   entityType: GeographicEntityType;
   entityKey: string;
@@ -85,6 +101,69 @@ export function deduplicateDiscoveredEntities(
   );
 }
 
+export function deduplicatePursuedPipelineRows<
+  T extends { accountId: number; id: number; updatedAt: Date },
+>(rows: readonly T[]): T[] {
+  const sorted = [...rows].sort(
+    (left, right) =>
+      right.updatedAt.getTime() - left.updatedAt.getTime() || right.id - left.id
+  );
+  const byAccount = new Map<number, T>();
+  for (const row of sorted) {
+    if (!byAccount.has(row.accountId)) byAccount.set(row.accountId, row);
+  }
+  return Array.from(byAccount.values());
+}
+
+type GeocodeQueueRow = {
+  id: string;
+  entityKey: string;
+  geocodeStatus: string;
+  lastAttemptAt: Date | null;
+  createdAt: Date;
+};
+
+function geocodeRetryDelayMs(
+  status: string,
+  providerConfigured: boolean
+): number {
+  if (status === "pending") return 0;
+  if (status === "transient_failure") return 5 * 60_000;
+  if (status === "provider_failure") return 60 * 60_000;
+  if (status === "ambiguous") return 24 * 60 * 60_000;
+  if (status === "unconfigured") return providerConfigured ? 0 : 15 * 60_000;
+  return Number.POSITIVE_INFINITY;
+}
+
+export function eligibleGeocodeQueue<T extends GeocodeQueueRow>(
+  rows: readonly T[],
+  input: { now: Date; providerConfigured: boolean }
+): T[] {
+  return rows
+    .filter(row => {
+      if (
+        row.geocodeStatus === "success" ||
+        row.geocodeStatus === "missing_address"
+      )
+        return false;
+      if (!row.lastAttemptAt) return true;
+      return (
+        input.now.getTime() - row.lastAttemptAt.getTime() >=
+        geocodeRetryDelayMs(row.geocodeStatus, input.providerConfigured)
+      );
+    })
+    .sort(
+      (left, right) =>
+        Number(Boolean(left.lastAttemptAt)) -
+          Number(Boolean(right.lastAttemptAt)) ||
+        (left.lastAttemptAt?.getTime() ?? 0) -
+          (right.lastAttemptAt?.getTime() ?? 0) ||
+        left.createdAt.getTime() - right.createdAt.getTime() ||
+        left.entityKey.localeCompare(right.entityKey) ||
+        left.id.localeCompare(right.id)
+    );
+}
+
 export function normalizeSourceAddress(address: string): string {
   return address
     .trim()
@@ -109,6 +188,10 @@ export function geographicLocationSyncDecision(input: {
     input.existingNormalizedAddress !== normalizedSourceAddress;
   const coordinatesEqual =
     hasCoordinates &&
+    input.existingLatitude != null &&
+    input.existingLongitude != null &&
+    input.existingLatitude !== "" &&
+    input.existingLongitude !== "" &&
     Number.isFinite(Number(input.existingLatitude)) &&
     Number.isFinite(Number(input.existingLongitude)) &&
     Math.abs(Number(input.existingLatitude) - input.latitude!) <= 0.0000001 &&
@@ -213,19 +296,10 @@ async function discoverEntities(tenantId: string): Promise<DiscoveredEntity[]> {
     .where(
       and(
         eq(commercialPipelineRecords.tenantId, tenantId),
-        inArray(commercialPipelineRecords.stage, [
-          "discovered",
-          "qualified",
-          "mission_created",
-          "game_ready",
-          "field_ready",
-          "visit_planned",
-          "visited",
-          "follow_up",
-          "proposal_sent",
-          "pilot_requested",
-          "verbal_yes",
-        ])
+        inArray(
+          commercialPipelineRecords.stage,
+          ACTIVE_COMMERCIAL_PIPELINE_STAGES
+        )
       )
     )
     .limit(500);
@@ -355,23 +429,21 @@ export async function geocodePendingLocations(input: {
   tenantId: string;
   batchSize?: number;
   geocoder?: GoogleGeocoder;
+  now?: Date;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await syncGeographicEntities(input.tenantId);
   const batchSize = Math.max(1, Math.min(50, input.batchSize ?? 20));
-  const pending = (
+  const now = input.now ?? new Date();
+  const providerConfigured = Boolean(ENV.googleGeocodingApiKey);
+  const pending = eligibleGeocodeQueue(
     await db
       .select()
       .from(entityLocations)
-      .where(eq(entityLocations.tenantId, input.tenantId))
-  )
-    .filter(
-      row =>
-        row.geocodeStatus !== "success" &&
-        row.geocodeStatus !== "missing_address"
-    )
-    .slice(0, batchSize);
+      .where(eq(entityLocations.tenantId, input.tenantId)),
+    { now, providerConfigured }
+  ).slice(0, batchSize);
   const successful = await db
     .select()
     .from(entityLocations)
@@ -414,7 +486,6 @@ export async function geocodePendingLocations(input: {
     counts.attempted += 1;
     const result = await geocoder.geocode(row.sourceAddress);
     if (result.status === "success") {
-      const now = new Date();
       await db
         .update(entityLocations)
         .set({
@@ -438,7 +509,7 @@ export async function geocodePendingLocations(input: {
         .set({
           geocodeStatus: status,
           geocodeProvider: "google_geocoding",
-          lastAttemptAt: new Date(),
+          lastAttemptAt: now,
           geocodeError:
             "error" in result
               ? result.error
@@ -449,19 +520,23 @@ export async function geocodePendingLocations(input: {
       else counts.failed += 1;
     }
   }
+  const unresolved = await db
+    .select()
+    .from(entityLocations)
+    .where(eq(entityLocations.tenantId, input.tenantId));
+  const immediatelyEligible = eligibleGeocodeQueue(unresolved, {
+    now,
+    providerConfigured,
+  });
+  const unresolvedCount = unresolved.filter(
+    row =>
+      row.geocodeStatus !== "success" && row.geocodeStatus !== "missing_address"
+  ).length;
   return {
     ...counts,
     processed: pending.length,
-    hasMore: (
-      await db
-        .select()
-        .from(entityLocations)
-        .where(eq(entityLocations.tenantId, input.tenantId))
-    ).some(
-      row =>
-        row.geocodeStatus !== "success" &&
-        row.geocodeStatus !== "missing_address"
-    ),
+    hasMore: immediatelyEligible.length > 0,
+    deferred: Math.max(0, unresolvedCount - immediatelyEligible.length),
   };
 }
 
@@ -496,7 +571,6 @@ export async function getGeographicTruth(input: {
         updatedAt: commercialPipelineRecords.updatedAt,
         accountId: commercialAccounts.id,
         name: commercialAccounts.name,
-        address: commercialAccountLocations.address,
       })
       .from(commercialPipelineRecords)
       .innerJoin(
@@ -506,14 +580,19 @@ export async function getGeographicTruth(input: {
           eq(commercialAccounts.id, commercialPipelineRecords.accountId)
         )
       )
-      .innerJoin(
-        commercialAccountLocations,
+      .where(
         and(
-          eq(commercialAccountLocations.tenantId, input.tenantId),
-          eq(commercialAccountLocations.accountId, commercialAccounts.id)
+          eq(commercialPipelineRecords.tenantId, input.tenantId),
+          inArray(
+            commercialPipelineRecords.stage,
+            ACTIVE_COMMERCIAL_PIPELINE_STAGES
+          )
         )
       )
-      .where(eq(commercialPipelineRecords.tenantId, input.tenantId))
+      .orderBy(
+        desc(commercialPipelineRecords.updatedAt),
+        desc(commercialPipelineRecords.id)
+      )
       .limit(250),
   ]);
   const locationMap = new Map(
@@ -566,35 +645,33 @@ export async function getGeographicTruth(input: {
       geocodeStatus: location?.geocodeStatus ?? "pending",
     };
   });
-  const pursued = pipeline
-    .filter(row => row.stage !== "won" && row.stage !== "lost")
-    .map(row => {
-      const location = locationMap.get(`commercial_prospect:${row.accountId}`);
-      const latitude =
-        location?.latitude == null ? null : Number(location.latitude);
-      const longitude =
-        location?.longitude == null ? null : Number(location.longitude);
-      return {
-        pipelineId: row.id,
-        accountId: row.accountId,
-        name: row.name,
-        address: row.address,
-        stage: row.stage,
-        updatedAt: row.updatedAt.toISOString(),
-        location:
-          latitude != null &&
-          longitude != null &&
-          location?.geocodeStatus === "success"
-            ? {
-                latitude,
-                longitude,
-                canonicalAddress: location.canonicalAddress,
-                ...projectLatLngToLanternAtlas({ latitude, longitude }),
-              }
-            : null,
-        geocodeStatus: location?.geocodeStatus ?? "pending",
-      };
-    });
+  const pursued = deduplicatePursuedPipelineRows(pipeline).map(row => {
+    const location = locationMap.get(`commercial_prospect:${row.accountId}`);
+    const latitude =
+      location?.latitude == null ? null : Number(location.latitude);
+    const longitude =
+      location?.longitude == null ? null : Number(location.longitude);
+    return {
+      pipelineId: row.id,
+      accountId: row.accountId,
+      name: row.name,
+      address: location?.sourceAddress ?? "Address unavailable",
+      stage: row.stage,
+      updatedAt: row.updatedAt.toISOString(),
+      location:
+        latitude != null &&
+        longitude != null &&
+        location?.geocodeStatus === "success"
+          ? {
+              latitude,
+              longitude,
+              canonicalAddress: location.canonicalAddress,
+              ...projectLatLngToLanternAtlas({ latitude, longitude }),
+            }
+          : null,
+      geocodeStatus: location?.geocodeStatus ?? "pending",
+    };
+  });
   const statusCounts = locations.reduce<Record<string, number>>(
     (acc, row) => ({
       ...acc,

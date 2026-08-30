@@ -23,6 +23,10 @@ import {
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
 import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
+import {
+  customerIdentityHash,
+  customerIdentityHashes,
+} from "../customerAssets/customerIdentity";
 
 type OrderRow = typeof orders.$inferSelect;
 type Transaction = Parameters<
@@ -59,22 +63,8 @@ function normalizePhone(value: string): string {
   return digits;
 }
 
-function rawCustomerKey(row: OrderRow): string {
-  const phone = normalizePhone(row.phone);
-  if (phone.length >= 7) return `phone:${phone}`;
-  return [row.firstName, row.lastName, row.unit, row.buildingSlug, row.address]
-    .map(value =>
-      String(value ?? "")
-        .trim()
-        .toLowerCase()
-    )
-    .join("|");
-}
-
 function customerKeyHash(tenantId: string, row: OrderRow): string {
-  return createHash("sha256")
-    .update(`${tenantId}:${rawCustomerKey(row)}`)
-    .digest("hex");
+  return customerIdentityHash(tenantId, row);
 }
 
 function contentHash(message: string): string {
@@ -411,7 +401,9 @@ export async function runCustomerChurnScan(input: {
     await db.transaction(async tx => {
       if (snapshots.length > 0)
         await tx.insert(customerChurnSnapshots).values(snapshots);
-      for (const snapshot of snapshots.filter(item => (item.score ?? 0) >= 40)) {
+      for (const snapshot of snapshots.filter(
+        item => (item.score ?? 0) >= 40
+      )) {
         const correlationId = `churn-scan:${scanId}`;
         await writeDayforgeEventWith(tx, {
           tenantId: input.tenantId,
@@ -427,7 +419,9 @@ export async function runCustomerChurnScan(input: {
             grade: snapshot.grade,
             confidence: snapshot.confidence,
             historyOrderCount: snapshot.historyOrderCount,
-            signalCount: Array.isArray(snapshot.reasonsJson) ? snapshot.reasonsJson.length : 0,
+            signalCount: Array.isArray(snapshot.reasonsJson)
+              ? snapshot.reasonsJson.length
+              : 0,
           },
           source: "churn_radar",
           correlationId,
@@ -437,7 +431,9 @@ export async function runCustomerChurnScan(input: {
             properties: {
               riskBand: snapshot.grade,
               confidenceBand: snapshot.confidence,
-              signalCount: Array.isArray(snapshot.reasonsJson) ? snapshot.reasonsJson.length : 0,
+              signalCount: Array.isArray(snapshot.reasonsJson)
+                ? snapshot.reasonsJson.length
+                : 0,
             },
           },
         });
@@ -1095,7 +1091,10 @@ export async function approveCustomerRecoveryDraft(input: {
         idempotencyKey: `${projectionCorrelationId}:approved`,
         productEvent: {
           name: "win_back_approved",
-          properties: { channel: "sms_manual", approvalSource: "tenant_operator" },
+          properties: {
+            channel: "sms_manual",
+            approvalSource: "tenant_operator",
+          },
         },
       });
       await tx.insert(opsTaskEvents).values({
@@ -1586,7 +1585,9 @@ export async function refreshCustomerRecoveryAttribution(tenantId: string) {
   for (const intervention of contacted) {
     const match = paidOrders.find(
       order =>
-        customerKeyHash(tenantId, order) === intervention.customerKeyHash &&
+        customerIdentityHashes(tenantId, order).includes(
+          intervention.customerKeyHash
+        ) &&
         order.createdAt.getTime() > (intervention.contactedAt?.getTime() ?? 0)
     );
     if (!match) continue;

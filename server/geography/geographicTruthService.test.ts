@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   deduplicateDiscoveredEntities,
+  deduplicatePursuedPipelineRows,
+  eligibleGeocodeQueue,
   geographicLocationSyncDecision,
   normalizeSourceAddress,
 } from "./geographicTruthService";
@@ -119,5 +121,66 @@ describe("geographic truth location synchronization", () => {
       longitude: -118.41,
     });
     expect(unchanged.changed).toBe(false);
+  });
+
+  it("returns one current pursuit per account", () => {
+    const rows = deduplicatePursuedPipelineRows([
+      {
+        id: 10,
+        accountId: 7,
+        updatedAt: new Date("2026-08-29T12:00:00Z"),
+        stage: "qualified",
+      },
+      {
+        id: 11,
+        accountId: 7,
+        updatedAt: new Date("2026-08-30T12:00:00Z"),
+        stage: "visit_planned",
+      },
+      {
+        id: 12,
+        accountId: 8,
+        updatedAt: new Date("2026-08-30T11:00:00Z"),
+        stage: "follow_up",
+      },
+    ]);
+    expect(rows.map(row => row.id)).toEqual([11, 12]);
+  });
+
+  it("prioritizes never-attempted geocodes and defers recent failures", () => {
+    const now = new Date("2026-08-30T12:00:00Z");
+    const row = (
+      id: string,
+      geocodeStatus: string,
+      lastAttemptAt: Date | null
+    ) => ({
+      id,
+      entityKey: id,
+      geocodeStatus,
+      lastAttemptAt,
+      createdAt: new Date("2026-08-01T00:00:00Z"),
+    });
+    const queue = eligibleGeocodeQueue(
+      [
+        row(
+          "recent-transient",
+          "transient_failure",
+          new Date("2026-08-30T11:59:00Z")
+        ),
+        row(
+          "old-provider",
+          "provider_failure",
+          new Date("2026-08-30T10:00:00Z")
+        ),
+        row("never-b", "pending", null),
+        row("never-a", "pending", null),
+      ],
+      { now, providerConfigured: true }
+    );
+    expect(queue.map(item => item.id)).toEqual([
+      "never-a",
+      "never-b",
+      "old-provider",
+    ]);
   });
 });

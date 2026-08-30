@@ -17,8 +17,31 @@ function normalized(value: string | null | undefined): string {
     .toLowerCase();
 }
 
+function normalizedPhone(value: string | null | undefined): string {
+  let digits = normalized(value).replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) digits = digits.slice(1);
+  return digits;
+}
+
+/** Pre-stable-identity key retained only for persisted churn/recovery joins. */
+export function legacyRawCustomerIdentityKey(
+  input: CustomerIdentityInput
+): string {
+  const phone = normalizedPhone(input.phone);
+  if (phone.length >= 7) return `phone:${phone}`;
+  return [
+    input.firstName,
+    input.lastName,
+    input.unit,
+    input.buildingSlug,
+    input.address,
+  ]
+    .map(normalized)
+    .join("|");
+}
+
 export function rawCustomerIdentityKey(input: CustomerIdentityInput): string {
-  const phone = normalized(input.phone).replace(/\D/g, "");
+  const phone = normalizedPhone(input.phone);
   if (phone.length >= 7) return `phone:${phone}`;
   if (input.bldgUserId != null && input.bldgUserId > 0)
     return `bldg-user:${input.bldgUserId}`;
@@ -35,13 +58,35 @@ export function rawCustomerIdentityKey(input: CustomerIdentityInput): string {
     .join("|");
 }
 
+function hashIdentityKey(tenantId: string, key: string): string {
+  return createHash("sha256").update(`${tenantId}:${key}`).digest("hex");
+}
+
 export function customerIdentityHash(
   tenantId: string,
   input: CustomerIdentityInput
 ): string {
-  return createHash("sha256")
-    .update(`${tenantId}:${rawCustomerIdentityKey(input)}`)
-    .digest("hex");
+  return hashIdentityKey(tenantId, rawCustomerIdentityKey(input));
+}
+
+export function legacyCustomerIdentityHash(
+  tenantId: string,
+  input: CustomerIdentityInput
+): string {
+  return hashIdentityKey(tenantId, legacyRawCustomerIdentityKey(input));
+}
+
+/** Canonical identity plus any distinct persisted legacy churn key. */
+export function customerIdentityHashes(
+  tenantId: string,
+  input: CustomerIdentityInput
+): string[] {
+  return Array.from(
+    new Set([
+      customerIdentityHash(tenantId, input),
+      legacyCustomerIdentityHash(tenantId, input),
+    ])
+  );
 }
 
 export function customerAssetId(
