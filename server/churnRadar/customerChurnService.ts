@@ -680,10 +680,18 @@ export async function createCustomerRecoveryIntervention(input: {
           sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}`
         );
       const customerKeys = new Set([snapshot.customerKeyHash]);
-      for (const order of relatedOrders) {
-        const aliases = customerIdentityHashes(input.tenantId, order);
-        if (aliases.some(alias => customerKeys.has(alias)))
-          aliases.forEach(alias => customerKeys.add(alias));
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        for (const order of relatedOrders) {
+          const aliases = customerIdentityHashes(input.tenantId, order);
+          if (!aliases.some(alias => customerKeys.has(alias))) continue;
+          for (const alias of aliases) {
+            if (customerKeys.has(alias)) continue;
+            customerKeys.add(alias);
+            expanded = true;
+          }
+        }
       }
 
       const active = await tx
