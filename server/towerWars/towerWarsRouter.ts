@@ -6,6 +6,7 @@ import {
   getTowerWarsToday,
   recordTowerWarsPromise,
 } from "./towerWarsService";
+import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
 
 const buildingId = z.enum(["opus_la", "century_park_east"]);
 
@@ -65,7 +66,7 @@ export const towerWarsRouter = router({
       fulfillTowerWarsPromise({
         ...input,
         tenantId: ctx.tenantId,
-        actorId: ctx.user.openId,
+        actorId: dayDirectorActorId(ctx),
       })
     ),
   activatePromise: adminProcedure
@@ -74,7 +75,7 @@ export const towerWarsRouter = router({
       activateTowerWarsPromise({
         ...input,
         tenantId: ctx.tenantId,
-        actorId: ctx.user.openId,
+        actorId: dayDirectorActorId(ctx),
       })
     ),
 });

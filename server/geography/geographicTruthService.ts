@@ -25,13 +25,65 @@ export type GeographicEntityType =
   | "customer"
   | "building"
   | "commercial_prospect";
-type DiscoveredEntity = {
+export type DiscoveredEntity = {
   entityType: GeographicEntityType;
   entityKey: string;
   sourceAddress: string;
   latitude?: number | null;
   longitude?: number | null;
+  isPrimary?: boolean;
+  sourceUpdatedAt?: Date | null;
+  sourceOrdinal?: number;
 };
+
+function hasValidCoordinates(entity: {
+  latitude?: number | null;
+  longitude?: number | null;
+}): boolean {
+  return (
+    Number.isFinite(entity.latitude) &&
+    Number.isFinite(entity.longitude) &&
+    entity.latitude! >= -90 &&
+    entity.latitude! <= 90 &&
+    entity.longitude! >= -180 &&
+    entity.longitude! <= 180
+  );
+}
+
+function compareDiscoveredAuthority(
+  left: DiscoveredEntity,
+  right: DiscoveredEntity
+): number {
+  return (
+    Number(Boolean(right.isPrimary)) - Number(Boolean(left.isPrimary)) ||
+    Number(hasValidCoordinates(right)) - Number(hasValidCoordinates(left)) ||
+    (right.sourceUpdatedAt?.getTime() ?? 0) -
+      (left.sourceUpdatedAt?.getTime() ?? 0) ||
+    (right.sourceOrdinal ?? 0) - (left.sourceOrdinal ?? 0) ||
+    normalizeSourceAddress(left.sourceAddress).localeCompare(
+      normalizeSourceAddress(right.sourceAddress)
+    )
+  );
+}
+
+/** One deterministic persistence candidate per tenant-scoped entity key. */
+export function deduplicateDiscoveredEntities(
+  entities: readonly DiscoveredEntity[]
+): DiscoveredEntity[] {
+  const byKey = new Map<string, DiscoveredEntity>();
+  for (const entity of entities) {
+    const key = `${entity.entityType}:${entity.entityKey}`;
+    const current = byKey.get(key);
+    if (!current || compareDiscoveredAuthority(entity, current) < 0) {
+      byKey.set(key, entity);
+    }
+  }
+  return Array.from(byKey.values()).sort(
+    (left, right) =>
+      left.entityType.localeCompare(right.entityType) ||
+      left.entityKey.localeCompare(right.entityKey)
+  );
+}
 
 export function normalizeSourceAddress(address: string): string {
   return address
@@ -43,18 +95,34 @@ export function normalizeSourceAddress(address: string): string {
 
 export function geographicLocationSyncDecision(input: {
   existingNormalizedAddress?: string | null;
+  existingLatitude?: string | number | null;
+  existingLongitude?: string | number | null;
+  existingProvider?: string | null;
   sourceAddress: string;
   latitude?: number | null;
   longitude?: number | null;
 }) {
   const normalizedSourceAddress = normalizeSourceAddress(input.sourceAddress);
-  const hasCoordinates = input.latitude != null && input.longitude != null;
+  const hasCoordinates = hasValidCoordinates(input);
+  const addressChanged =
+    input.existingNormalizedAddress == null ||
+    input.existingNormalizedAddress !== normalizedSourceAddress;
+  const coordinatesEqual =
+    hasCoordinates &&
+    Number.isFinite(Number(input.existingLatitude)) &&
+    Number.isFinite(Number(input.existingLongitude)) &&
+    Math.abs(Number(input.existingLatitude) - input.latitude!) <= 0.0000001 &&
+    Math.abs(Number(input.existingLongitude) - input.longitude!) <= 0.0000001;
+  const authoritativeCoordinatesChanged =
+    hasCoordinates &&
+    (input.existingProvider !== "existing_commercial_location" ||
+      !coordinatesEqual);
   return {
     normalizedSourceAddress,
     hasCoordinates,
-    changed:
-      input.existingNormalizedAddress == null ||
-      input.existingNormalizedAddress !== normalizedSourceAddress,
+    addressChanged,
+    authoritativeCoordinatesChanged,
+    changed: addressChanged || authoritativeCoordinatesChanged,
     geocodeStatus: hasCoordinates
       ? ("success" as const)
       : normalizedSourceAddress
@@ -120,9 +188,12 @@ async function discoverEntities(tenantId: string): Promise<DiscoveredEntity[]> {
   const prospects = await db
     .select({
       accountId: commercialAccounts.id,
+      locationId: commercialAccountLocations.id,
       address: commercialAccountLocations.address,
       latitude: commercialAccountLocations.latitude,
       longitude: commercialAccountLocations.longitude,
+      isPrimary: commercialAccountLocations.isPrimary,
+      locationUpdatedAt: commercialAccountLocations.updatedAt,
     })
     .from(commercialPipelineRecords)
     .innerJoin(
@@ -167,6 +238,9 @@ async function discoverEntities(tenantId: string): Promise<DiscoveredEntity[]> {
       sourceAddress: row.address.trim(),
       latitude: row.latitude == null ? null : Number(row.latitude),
       longitude: row.longitude == null ? null : Number(row.longitude),
+      isPrimary: row.isPrimary,
+      sourceUpdatedAt: row.locationUpdatedAt,
+      sourceOrdinal: row.locationId,
     })),
   ];
 }
@@ -174,7 +248,9 @@ async function discoverEntities(tenantId: string): Promise<DiscoveredEntity[]> {
 export async function syncGeographicEntities(tenantId: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const discovered = await discoverEntities(tenantId);
+  const discovered = deduplicateDiscoveredEntities(
+    await discoverEntities(tenantId)
+  );
   const existing = await db
     .select()
     .from(entityLocations)
@@ -196,7 +272,7 @@ export async function syncGeographicEntities(tenantId: string) {
     const current = byKey.get(key);
     if (!current) {
       const hasCoordinates = decision.hasCoordinates;
-      await db.insert(entityLocations).values({
+      const insertedValues = {
         id: randomUUID(),
         tenantId,
         entityType: entity.entityType,
@@ -209,11 +285,38 @@ export async function syncGeographicEntities(tenantId: string) {
         geocodeStatus: decision.geocodeStatus,
         geocodeProvider: hasCoordinates ? "existing_commercial_location" : null,
         geocodedAt: hasCoordinates ? new Date() : null,
-      });
+      };
+      await db
+        .insert(entityLocations)
+        .values(insertedValues)
+        .onDuplicateKeyUpdate({
+          set: hasCoordinates
+            ? {
+                sourceAddress: insertedValues.sourceAddress,
+                normalizedSourceAddress: insertedValues.normalizedSourceAddress,
+                canonicalAddress: insertedValues.canonicalAddress,
+                latitude: insertedValues.latitude,
+                longitude: insertedValues.longitude,
+                geocodeStatus: insertedValues.geocodeStatus,
+                geocodeProvider: insertedValues.geocodeProvider,
+                geocodedAt: insertedValues.geocodedAt,
+                googlePlaceId: null,
+                geocodeError: null,
+              }
+            : {
+                // A concurrent sync won the insert. Do not let a stale,
+                // coordinate-free candidate overwrite its geographic truth;
+                // the next sync will reconcile from the persisted row.
+                entityKey: insertedValues.entityKey,
+              },
+        });
       inserted += 1;
     } else if (
       geographicLocationSyncDecision({
         existingNormalizedAddress: current.normalizedSourceAddress,
+        existingLatitude: current.latitude,
+        existingLongitude: current.longitude,
+        existingProvider: current.geocodeProvider,
         sourceAddress: entity.sourceAddress,
         latitude: entity.latitude,
         longitude: entity.longitude,
