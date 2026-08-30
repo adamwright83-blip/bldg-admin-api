@@ -83,6 +83,11 @@ export const BUILDINGS: BuildingConfig[] = [
       "century park e",
       "century park east",
       "century pke",
+      // "Century Pk E" is the canonical form in propertyTowers.ts
+      // (buildingAddressCanonical). Without it, an order stored in that exact
+      // canonical form matched the tower registry but not this one, dropping
+      // out of buildingSlug derivation and therefore out of penetration counts.
+      "century pk e",
     ],
     defaultAddress: "2170 Century Park E, Los Angeles, CA 90067",
     total_units: 576,

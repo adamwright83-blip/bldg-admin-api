@@ -33,6 +33,7 @@ import { goldlineEventRouter } from "../dayforgeEvents/goldlineEventRouter";
 import { dayDirectorRouter } from "../dayDirector/dayDirectorRouter";
 import { towerWarsRouter } from "../towerWars/towerWarsRouter";
 import { geographicTruthRouter } from "../geography/geographicTruthRouter";
+import { canonicalBuildingRouter } from "../canonicalBuilding/canonicalBuildingRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
@@ -67,6 +68,7 @@ export const systemRouter = router({
   dayDirector: dayDirectorRouter,
   towerWars: towerWarsRouter,
   geographicTruth: geographicTruthRouter,
+  canonicalBuilding: canonicalBuildingRouter,
   health: publicProcedure
     .input(
       z.object({

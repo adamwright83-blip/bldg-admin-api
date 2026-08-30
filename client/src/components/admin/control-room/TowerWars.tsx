@@ -21,6 +21,8 @@ import {
   type TowerWarsBuildingId,
 } from "@shared/towerWars";
 import { towerComparisonState } from "./towerWarsGeometry";
+import { FacadeScarLayer } from "./FacadeScarLayer";
+import type { SettledStratum } from "./facadeScars";
 
 export { damageStateForIncomingAttacks } from "@shared/towerWars";
 export type TowerWarsData =
@@ -51,9 +53,11 @@ function money(cents: number) {
 function BuildingArt({
   buildingId,
   damage,
+  strata,
 }: {
   buildingId: TowerWarsBuildingId;
   damage: TowerDamageState;
+  strata: readonly SettledStratum[];
 }) {
   const opus = buildingId === "opus_la";
   return (
@@ -65,7 +69,13 @@ function BuildingArt({
             ? "/assets/admin/control-room/tower-wars/opus-la-tower-v2.png"
             : "/assets/admin/control-room/tower-wars/century-park-east-tower-v2.png"
         }
-        alt={`${NAMES[buildingId]}, ${damage.replace("-", " ")} damage`}
+        alt={`${NAMES[buildingId]}, ${damage.replace("-", " ")} damage today`}
+      />
+      {/* Settled history sits on the architecture, beneath today's effects. */}
+      <FacadeScarLayer
+        strata={strata}
+        buildingId={buildingId}
+        buildingName={NAMES[buildingId]}
       />
       {opus ? (
         <>
@@ -139,6 +149,10 @@ function useReplay(data: TowerWarsData | undefined) {
 
 export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   const [printPromiseId, setPrintPromiseId] = useState<string | null>(null);
+  const settlementQuery = trpc.system.towerWars.settlement.useQuery(
+    undefined,
+    { staleTime: 60_000 }
+  );
   const today = trpc.system.towerWars.today.useQuery(undefined, {
     staleTime: 30_000,
   });
@@ -259,7 +273,14 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
               <span className={`tw-possession ${index ? "is-rival" : ""}`}>
                 {hasLoser ? (index ? "Rival" : "You") : "Tie"}
               </span>
-              <BuildingArt buildingId={buildingId} damage={building.damage} />
+              <BuildingArt
+                buildingId={buildingId}
+                damage={building.damage}
+                strata={
+                  settlementQuery.data?.settlement.buildings[buildingId]
+                    .strata ?? []
+                }
+              />
               <span
                 className="tw-projectile"
                 data-weapon={buildingId === "opus_la" ? "golf-ball" : "car"}
@@ -272,6 +293,24 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
                   {building.incomingAttackCount} incoming strikes ·{" "}
                   {building.damage.replace("-", " ")}
                 </small>
+                {settlementQuery.data
+                  ? (() => {
+                      const settled =
+                        settlementQuery.data.settlement.buildings[buildingId]
+                          .settledScars;
+                      return settled > 0 ? (
+                        <em className="tw-piece-history">
+                          {settled} repaired across{" "}
+                          {
+                            settlementQuery.data.settlement.buildings[
+                              buildingId
+                            ].strata.length
+                          }{" "}
+                          settled days
+                        </em>
+                      ) : null;
+                    })()
+                  : null}
               </span>
             </div>
           );

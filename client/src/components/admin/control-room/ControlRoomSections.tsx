@@ -2,6 +2,8 @@ import { ArrowRight, Clock3, MapPin, ShieldCheck } from "lucide-react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { TowerWars } from "./TowerWars";
+import { BuildingStrata } from "./BuildingStrata";
+import { CanonicalBuildingSeam } from "./CanonicalBuildingSeam";
 
 const ASSET_ROOT = "/assets/admin/control-room";
 
@@ -77,6 +79,8 @@ export function GrowthControlRoom({
         copy="Understand what converted, what realized value, and which relationship needs management follow-up. Field execution stays in Goldline."
       />
       <TowerWars onNavigate={onNavigate} compact />
+      <BuildingStrata />
+      <CanonicalBuildingSeam />
       <section className="cr-destination-grid" aria-label="Growth workspaces">
         <DestinationCard
           icon="growth"

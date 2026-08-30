@@ -1,0 +1,281 @@
+import { describe, expect, it } from "vitest";
+import { TOWER_WARS_ATTACK_THRESHOLD_CENTS } from "./goldlineGameConfig";
+import type { TowerWarsBusinessEvent } from "./towerWars";
+import {
+  compileDailyMatch,
+  lifetimeIncomingAttacks,
+  settleTowerWars,
+} from "./towerWarsSettlement";
+
+const THRESHOLD = TOWER_WARS_ATTACK_THRESHOLD_CENTS;
+
+let sequence = 0;
+function event(
+  businessDate: string,
+  buildingId: TowerWarsBusinessEvent["buildingId"],
+  cents: number,
+  hour = 12
+): TowerWarsBusinessEvent {
+  sequence += 1;
+  return {
+    eventId: `event:${sequence}`,
+    occurredAt: `${businessDate}T${String(hour).padStart(2, "0")}:00:00.000Z`,
+    businessDate,
+    buildingId,
+    buildingDisplayName: buildingId,
+    orderId: sequence,
+    customerIdentity: `customer:${sequence}`,
+    customerDisplayName: null,
+    customerPhone: null,
+    revenueSource: "stripe",
+    realOrderValueCents: cents,
+    sourceEvidence: { economicEventKey: `event:${sequence}` },
+  };
+}
+
+describe("the threshold is the one in config", () => {
+  it("is 5000 cents", () => {
+    expect(THRESHOLD).toBe(5000);
+  });
+});
+
+describe("daily combat resets at the business-day boundary", () => {
+  it("does not let yesterday's unspent charge fire today's shot", () => {
+    // The canonical example: $40 on day 1, $10 on day 2. 4000 + 1000 reaches
+    // the threshold, but day 2's accumulator starts at zero, so nothing fires.
+    const events = [
+      event("2026-08-28", "opus_la", 4000),
+      event("2026-08-29", "opus_la", 1000),
+    ];
+    const settlement = settleTowerWars({
+      events,
+      todayBusinessDate: "2026-08-29",
+    });
+    const cpe = settlement.buildings.century_park_east;
+
+    expect(cpe.today.incomingAttacks).toBe(0);
+    expect(cpe.today.damage).toBe("pristine");
+    expect(cpe.settledScars).toBe(0);
+    expect(cpe.strata).toHaveLength(0);
+  });
+
+  it("starts each day's accumulator at zero", () => {
+    const settlement = settleTowerWars({
+      events: [
+        event("2026-08-28", "opus_la", THRESHOLD - 1),
+        event("2026-08-29", "opus_la", 1),
+      ],
+      todayBusinessDate: "2026-08-29",
+    });
+    expect(settlement.buildings.opus_la.today.unspentValueCents).toBe(1);
+    expect(
+      settlement.buildings.century_park_east.today.incomingAttacks
+    ).toBe(0);
+  });
+
+  it("fires only when a single day's own orders cross the threshold", () => {
+    const settlement = settleTowerWars({
+      events: [
+        event("2026-08-29", "opus_la", 3000),
+        event("2026-08-29", "opus_la", 2000),
+      ],
+      todayBusinessDate: "2026-08-29",
+    });
+    expect(
+      settlement.buildings.century_park_east.today.incomingAttacks
+    ).toBe(1);
+    expect(settlement.buildings.opus_la.today.outgoingAttacks).toBe(1);
+    expect(settlement.buildings.opus_la.today.unspentValueCents).toBe(0);
+  });
+});
+
+describe("replaying one business date in isolation", () => {
+  const history = [
+    event("2026-08-27", "opus_la", 4900),
+    event("2026-08-28", "opus_la", 4900),
+    event("2026-08-29", "opus_la", THRESHOLD * 2 + 1200),
+    event("2026-08-29", "century_park_east", 5100),
+  ];
+
+  it("reproduces that date's attacks and damage regardless of prior remainders", () => {
+    for (const date of ["2026-08-27", "2026-08-28", "2026-08-29"]) {
+      const isolated = compileDailyMatch({
+        businessDate: date,
+        // Only that day's events exist at all.
+        events: history.filter(e => e.businessDate === date),
+      });
+      const fromFullHistory = settleTowerWars({
+        events: history,
+        todayBusinessDate: date,
+      });
+      for (const building of ["opus_la", "century_park_east"] as const) {
+        expect(fromFullHistory.buildings[building].today.incomingAttacks).toBe(
+          isolated[building].incomingAttacks
+        );
+        expect(fromFullHistory.buildings[building].today.damage).toBe(
+          isolated[building].damage
+        );
+        expect(
+          fromFullHistory.buildings[building].today.unspentValueCents
+        ).toBe(isolated[building].unspentValueCents);
+      }
+    }
+  });
+
+  it("gives two near-miss days no attacks at all", () => {
+    // 4900 + 4900 would cross under a continuous fold. It must not here.
+    const settlement = settleTowerWars({
+      events: history.slice(0, 2),
+      todayBusinessDate: "2026-08-28",
+    });
+    expect(settlement.buildings.century_park_east.settledScars).toBe(0);
+    expect(
+      settlement.buildings.century_park_east.today.incomingAttacks
+    ).toBe(0);
+  });
+});
+
+describe("today is a fresh, legible match", () => {
+  it("reflects only today's attacks, not accumulated history", () => {
+    const events = [
+      event("2026-08-25", "opus_la", THRESHOLD),
+      event("2026-08-26", "opus_la", THRESHOLD),
+      event("2026-08-27", "opus_la", THRESHOLD),
+      event("2026-08-28", "opus_la", THRESHOLD),
+      event("2026-08-29", "opus_la", THRESHOLD),
+    ];
+    const cpe = settleTowerWars({
+      events,
+      todayBusinessDate: "2026-08-29",
+    }).buildings.century_park_east;
+
+    // Under the old monotonic rule this building would be permanently
+    // "critical". Today's match reads honestly.
+    expect(cpe.today.incomingAttacks).toBe(1);
+    expect(cpe.today.damage).toBe("chipped");
+    expect(cpe.settledScars).toBe(4);
+    expect(lifetimeIncomingAttacks(cpe)).toBe(5);
+  });
+
+  it("gives a building with no activity today a pristine match", () => {
+    const cpe = settleTowerWars({
+      events: [event("2026-08-25", "opus_la", THRESHOLD)],
+      todayBusinessDate: "2026-08-29",
+    }).buildings.century_park_east;
+    expect(cpe.today.incomingAttacks).toBe(0);
+    expect(cpe.today.damage).toBe("pristine");
+    expect(cpe.settledScars).toBe(1);
+  });
+});
+
+describe("revenue survives every combat reset", () => {
+  it("keeps sub-threshold revenue as business truth even though it never fired", () => {
+    const settlement = settleTowerWars({
+      events: [
+        event("2026-08-28", "opus_la", 4000),
+        event("2026-08-29", "opus_la", 1000),
+      ],
+      todayBusinessDate: "2026-08-29",
+    });
+    const opus = settlement.buildings.opus_la;
+    // No attack was ever emitted, and not one cent went missing.
+    expect(opus.lifetime.revenueCents).toBe(5000);
+    expect(opus.lifetime.orderCount).toBe(2);
+    expect(settlement.buildings.century_park_east.settledScars).toBe(0);
+  });
+
+  it("counts revenue across every day in range, not just today", () => {
+    const opus = settleTowerWars({
+      events: [
+        event("2026-08-20", "opus_la", 12_345),
+        event("2026-08-25", "opus_la", 500),
+        event("2026-08-29", "opus_la", 99),
+      ],
+      todayBusinessDate: "2026-08-29",
+    }).buildings.opus_la;
+    expect(opus.lifetime.revenueCents).toBe(12_944);
+    expect(opus.lifetime.orderCount).toBe(3);
+    expect(opus.today.revenueCents).toBe(99);
+  });
+});
+
+describe("strata are permanent and positioned in time", () => {
+  it("records one stratum per day the building was actually hit, oldest first", () => {
+    const settlement = settleTowerWars({
+      events: [
+        event("2026-08-25", "opus_la", THRESHOLD),
+        event("2026-08-27", "opus_la", THRESHOLD * 3),
+        event("2026-08-29", "opus_la", THRESHOLD),
+      ],
+      todayBusinessDate: "2026-08-29",
+    });
+    const strata = settlement.buildings.century_park_east.strata;
+    expect(strata.map(s => s.businessDate)).toEqual([
+      "2026-08-25",
+      "2026-08-27",
+    ]);
+    expect(strata.map(s => s.incomingAttacks)).toEqual([1, 3]);
+    expect(strata[1]!.damageAtSettlement).toBe("heavily-damaged");
+  });
+
+  it("leaves no mark on a day the building absorbed nothing", () => {
+    const settlement = settleTowerWars({
+      events: [
+        event("2026-08-25", "opus_la", THRESHOLD),
+        event("2026-08-26", "century_park_east", THRESHOLD),
+      ],
+      todayBusinessDate: "2026-08-29",
+    });
+    expect(
+      settlement.buildings.opus_la.strata.map(s => s.businessDate)
+    ).toEqual(["2026-08-26"]);
+  });
+
+  it("never lets settled scars decrease as history grows", () => {
+    const events = [
+      event("2026-08-25", "opus_la", THRESHOLD),
+      event("2026-08-26", "opus_la", THRESHOLD),
+      event("2026-08-27", "opus_la", THRESHOLD),
+    ];
+    let previous = 0;
+    for (const today of ["2026-08-26", "2026-08-27", "2026-08-28"]) {
+      const settled = settleTowerWars({ events, todayBusinessDate: today })
+        .buildings.century_park_east.settledScars;
+      expect(settled).toBeGreaterThanOrEqual(previous);
+      previous = settled;
+    }
+    expect(previous).toBe(3);
+  });
+});
+
+describe("a settlement never depends on the future", () => {
+  it("ignores events dated after the settlement date", () => {
+    const settlement = settleTowerWars({
+      events: [
+        event("2026-08-25", "opus_la", THRESHOLD),
+        event("2026-09-15", "opus_la", THRESHOLD * 5),
+      ],
+      todayBusinessDate: "2026-08-26",
+    });
+    expect(settlement.buildings.century_park_east.settledScars).toBe(1);
+    expect(
+      settlement.buildings.century_park_east.today.incomingAttacks
+    ).toBe(0);
+    // The future order's revenue must not leak into lifetime either.
+    expect(settlement.buildings.opus_la.lifetime.revenueCents).toBe(THRESHOLD);
+  });
+
+  it("is deterministic regardless of input event order", () => {
+    const events = [
+      event("2026-08-25", "opus_la", THRESHOLD),
+      event("2026-08-26", "century_park_east", THRESHOLD * 2),
+      event("2026-08-27", "opus_la", THRESHOLD),
+    ];
+    const forward = settleTowerWars({ events, todayBusinessDate: "2026-08-28" });
+    const reversed = settleTowerWars({
+      events: [...events].reverse(),
+      todayBusinessDate: "2026-08-28",
+    });
+    expect(reversed.buildings).toEqual(forward.buildings);
+  });
+});

@@ -43,3 +43,128 @@
 .tw-piece-rival.is-firing .tw-projectile{animation-name:tw-projectile-flight-reverse}
 @keyframes tw-projectile-flight-reverse{0%{opacity:1;transform:translateX(0) scale(1)}85%{opacity:1;transform:translateX(-45vw) scale(.55)}100%{opacity:0;transform:translateX(-50vw) scale(1.8)}}
 @media print{body *{visibility:hidden!important}.tw-print-sheet,.tw-print-sheet *{visibility:visible!important}.tw-print-sheet{position:absolute;inset:0;display:block;padding:36px;color:#111;background:#fff}.tw-print-sheet article{margin-top:24px;padding:20px;border:2px solid #111}.tw-print-sheet h1,.tw-print-sheet h2{margin:0 0 8px}}
+
+/* Facade record — today's match above the line, settled stone below */
+.cr-strata-panel{display:flex;max-width:1320px;margin:22px auto;flex-direction:column;gap:14px}
+.cr-strata-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px 24px}
+.cr-strata-head h2{margin:0;font-size:22px;letter-spacing:-.02em}
+.cr-strata-head p{max-width:56ch;margin:5px 0 0;color:var(--cr-muted);font-size:12px}
+.cr-strata-toggle{padding:7px 13px;border:1px solid var(--cr-line);border-radius:8px;background:var(--cr-paper);color:var(--cr-muted);font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+.cr-strata-toggle:hover{color:var(--cr-ink);border-color:var(--cr-purple)}
+.cr-strata-toggle:focus-visible{outline:2px solid var(--cr-purple);outline-offset:2px}
+.cr-strata-toggle[aria-pressed=true]{color:var(--cr-purple);border-color:var(--cr-purple)}
+.cr-facade-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr));gap:14px}
+.cr-facade{display:flex;flex-direction:column;gap:10px;padding:20px;border:1px solid var(--cr-line);border-radius:12px;background:var(--cr-paper);box-shadow:0 8px 22px #0d25400a}
+.cr-facade-head h3{margin:0;font-size:14px}
+.cr-facade-sub{margin:4px 0 0;color:var(--cr-muted);font-size:11px}
+.cr-today-band{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px;border:1px dashed var(--cr-line);border-radius:8px}
+.cr-today-label{color:var(--cr-muted);font-size:9px;font-weight:850;letter-spacing:.14em;text-transform:uppercase}
+.cr-today-marks{display:inline-flex;align-items:center;gap:4px}
+.cr-today-intact{color:var(--cr-muted);font-size:11px}
+.cr-today-charge{margin-inline-start:auto;color:var(--cr-muted);font-size:11px;font-variant-numeric:tabular-nums}
+.cr-strike,.cr-scar{inline-size:8px;block-size:8px;border-radius:1px;transform:skewX(-18deg)}
+.cr-strike{background:var(--cr-gold)}
+.cr-scar{background:var(--cr-muted);opacity:.55}
+.cr-today-band--chipped,.cr-today-band--cracked{border-style:solid}
+.cr-today-band--heavily-damaged,.cr-today-band--critical{border-style:solid;border-color:#be6e32}
+.cr-settled-rule{display:flex;align-items:center;gap:10px;color:var(--cr-muted);font-size:9px;font-weight:850;letter-spacing:.16em;text-transform:uppercase}
+.cr-settled-rule:before,.cr-settled-rule:after{content:"";flex:1;block-size:1px;background:var(--cr-line)}
+.cr-strata{display:flex;margin:0;padding:0;flex-direction:column;gap:2px;list-style:none}
+.cr-stratum{display:grid;grid-template-columns:3rem 1fr auto;align-items:center;gap:10px;padding:6px 9px;border-left:3px solid var(--cr-line);border-radius:0 4px 4px 0;background:#f4f6fa;font-size:12px}
+.cr-stratum-date{color:var(--cr-muted);font-variant-numeric:tabular-nums}
+.cr-stratum-marks{display:inline-flex;align-items:center;gap:3px}
+.cr-stratum-reading{color:var(--cr-muted);font-size:11px}
+.cr-stratum--chipped{border-left-color:#c3cbd8}
+.cr-stratum--cracked{border-left-color:var(--cr-gold)}
+.cr-stratum--heavy{border-left-color:#be6e32}
+.cr-stratum--critical{border-left-color:#c0432f}
+.cr-facade-empty,.cr-facade-warning{margin:0;color:var(--cr-muted);font-size:12px}
+.cr-facade-warning{color:#a8452f}
+.cr-facade-foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;padding-top:8px;border-top:1px solid var(--cr-line);color:var(--cr-muted);font-size:11px;font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){.cr-strata-panel *{animation:none!important;transition:none!important}}
+
+/* Facade scars — settled history repaired into the tower architecture.
+   Painted above the building art (z-index 2) but below today's damage vfx
+   (z-index 4), so the live match always reads first. */
+.tw-scar-layer{position:absolute;inset:0;z-index:2;inline-size:100%;block-size:100%;pointer-events:none;overflow:visible}
+.tw-scar{color:#cdbfa6}
+.tw-scar rect{fill:currentColor;fill-opacity:.58;stroke:#20160c;stroke-opacity:.9;stroke-width:1.3;vector-effect:non-scaling-stroke;paint-order:stroke fill}
+.tw-scar line,.tw-scar path{stroke:#2a1d10;stroke-opacity:.7;stroke-width:1;fill:none;vector-effect:non-scaling-stroke;stroke-linecap:round}
+.tw-scar--seam path{stroke:#e6d8bd;stroke-opacity:.85;stroke-width:1.8}
+.tw-scar--patch rect{fill-opacity:.62}
+.tw-scar--graft rect{fill-opacity:.42}
+/* Cool steel plating reads better against OPUS's purple glass. */
+.tw-piece.is-opus .tw-scar{color:#9fb0c6}
+.tw-piece.is-opus .tw-scar--seam path{stroke:#dce7f5}
+.tw-piece-history{display:block;margin-top:2px;color:var(--cr-muted);font-size:9px;font-style:normal;letter-spacing:.04em;opacity:.85}
+.tw-patina{fill:#2a1d10;mix-blend-mode:multiply}
+.tw-piece.is-opus .tw-patina{fill:#0f1830}
+
+/* Canonical building seam — sealed approach, then the finite population */
+.cb-panel{display:flex;max-width:1320px;margin:22px auto;flex-direction:column;gap:14px}
+.cb-panel-head h2{margin:0;font-size:22px;letter-spacing:-.02em}
+.cb-panel-head p{max-width:60ch;margin:5px 0 0;color:var(--cr-muted);font-size:12px}
+.cb-warning{margin:0;padding:9px 12px;border:1px solid #e0b8ae;border-radius:8px;background:#fdf4f2;color:#a8452f;font-size:12px}
+.cb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr));gap:14px}
+.cb-building{display:flex;flex-direction:column;gap:14px;padding:20px;border:1px solid var(--cr-line);border-radius:12px;background:var(--cr-paper);box-shadow:0 8px 22px #0d25400a}
+.cb-building.is-access-held{border-color:#bfa06a;box-shadow:0 8px 22px #0d25400a,inset 3px 0 var(--cr-gold)}
+.cb-building.is-access-closed{opacity:.72}
+.cb-building-head{display:flex;flex-direction:column;gap:10px}
+.cb-building-head h3{margin:0;font-size:15px}
+/* Two axes, side by side and equally weighted: neither is a verdict on the
+   other. A sealed account with an already-active resident board is a real and
+   common state, and must never read as "the building is closed". */
+.cb-axes{display:flex;flex-wrap:wrap;gap:8px 22px}
+.cb-axis{display:flex;flex-direction:column;gap:4px}
+.cb-axis-title{color:var(--cr-muted);font-size:8px;font-weight:850;letter-spacing:.14em;text-transform:uppercase}
+.cb-axis-detail{margin:0 0 8px;color:var(--cr-muted);font-size:11px;line-height:1.5;max-width:46ch}
+.cb-axis-chip{align-self:flex-start;padding:4px 9px;border-radius:20px;font-size:9px;font-weight:850;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;border:1px solid transparent}
+.cb-axis-chip.is-held{background:var(--cr-gold);color:#2b1d00}
+.cb-axis-chip.is-inside{background:#efe7ff;color:#4a2a9c;border-color:#c9b3f5}
+.cb-axis-chip.is-sealed{border-color:var(--cr-line);color:var(--cr-muted)}
+.cb-axis-chip.is-closed{border-color:#e0b8ae;color:#a8452f}
+.cb-axis-chip.is-no_mission{border-color:var(--cr-line);color:var(--cr-muted);opacity:.8}
+.cb-axis-chip.is-unlocked_by_win{background:#e8f4ec;color:#1f6b41;border-color:#a9d3ba}
+.cb-axis-chip.is-active_preexisting{background:#e9f0fa;color:#1f4b7a;border-color:#a9c3de}
+.cb-axis-chip.is-none{border-color:var(--cr-line);color:var(--cr-muted);opacity:.8}
+.cb-enrolled{margin:0;color:var(--cr-muted);font-size:11px;font-variant-numeric:tabular-nums}
+.cb-enrolled strong{color:var(--cr-ink)}
+.cb-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:18px}
+@media (max-width:44rem){.cb-body{grid-template-columns:1fr}}
+.cb-body h4{margin:0 0 8px;color:var(--cr-muted);font-size:9px;font-weight:850;letter-spacing:.14em;text-transform:uppercase}
+
+/* The way in — a climb, highest rung at the top */
+.cb-ladder{display:flex;margin:0;padding:0;flex-direction:column;gap:2px;list-style:none}
+.cb-rung{display:grid;grid-template-columns:14px 1fr auto;align-items:center;gap:9px;padding:5px 8px;border-radius:5px;font-size:12px}
+.cb-rung-mark{inline-size:9px;block-size:9px;border-radius:2px;border:1.5px solid var(--cr-muted)}
+.cb-rung.is-open .cb-rung-mark{background:var(--cr-gold);border-color:#b98c17}
+.cb-rung.is-open{color:var(--cr-ink)}
+.cb-rung.is-sealed{color:var(--cr-muted)}
+.cb-rung.is-current{background:#fdf6e6;font-weight:700}
+.cb-rung.is-next{background:#f2f0fd;color:var(--cr-ink);box-shadow:inset 2px 0 var(--cr-purple)}
+.cb-rung.is-next .cb-rung-mark{border-color:var(--cr-purple);border-style:dashed}
+.cb-rung-body{display:flex;min-width:0;flex-direction:column}
+.cb-rung-next{color:var(--cr-purple);font-size:11px;font-weight:700}
+.cb-rung-state{color:var(--cr-muted);font-size:9px;letter-spacing:.08em;text-transform:uppercase}
+.cb-note{margin:8px 0 0;color:var(--cr-muted);font-size:11px;line-height:1.5}
+.cb-access{font-style:italic}
+.cb-blocked,.cb-complete{margin:10px 0 0;padding:7px 9px;border-radius:6px;font-size:11px}
+.cb-blocked{background:#f5f7fb;color:var(--cr-muted)}
+.cb-complete{background:#f1f8f3;color:#1f6b41}
+
+/* The population — one mark per real unit; arrangement is not a floor plan */
+.cb-occupancy{display:flex;flex-direction:column;gap:10px}
+.cb-field{display:grid;grid-template-columns:repeat(var(--cb-cols,20),1fr);gap:2px;padding:9px;border-radius:8px;background:#f4f6fa}
+.cb-field.is-verified{border:1px solid var(--cr-line)}
+.cb-field.is-provisional{border:1.5px dashed #c9922f;background:#fbf6ec}
+.cb-cell{aspect-ratio:1;border-radius:1px;background:#dbe1ea}
+.cb-cell.is-paid{background:var(--cr-gold);box-shadow:0 0 3px #f0a91680}
+.cb-cell.is-signup{background:#b9a3f0}
+.cb-cell.is-unclaimed{background:#dbe1ea}
+.cb-legend{display:flex;flex-wrap:wrap;margin:0;gap:6px 18px}
+.cb-legend>div{display:flex;align-items:baseline;gap:7px}
+.cb-legend dt{display:flex;align-items:center;gap:5px;color:var(--cr-muted);font-size:11px}
+.cb-legend dt .cb-cell{inline-size:9px;block-size:9px;aspect-ratio:auto}
+.cb-legend dd{margin:0;font-size:12px;font-weight:750;font-variant-numeric:tabular-nums}
+.cb-field-note{margin:0;color:var(--cr-muted);font-size:11px;line-height:1.5}
+.cb-field-note strong{color:#a8752f}
