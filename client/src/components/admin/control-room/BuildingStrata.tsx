@@ -189,10 +189,11 @@ export function BuildingStrata() {
     <section className="cr-strata-panel" aria-label="Facade records">
       <header className="cr-strata-head">
         <div>
-          <h2>The record</h2>
+          <h2>Reading the scars</h2>
           <p>
-            Today&rsquo;s match sits above the line. Everything below it is
-            finished and permanent.
+            Every repair on the towers above corresponds to a row here. Today&rsquo;s
+            match sits above the line; everything below it has settled into the
+            architecture and cannot change.
           </p>
         </div>
         <button

@@ -82,3 +82,18 @@
 .cr-facade-warning{color:#a8452f}
 .cr-facade-foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;padding-top:8px;border-top:1px solid var(--cr-line);color:var(--cr-muted);font-size:11px;font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){.cr-strata-panel *{animation:none!important;transition:none!important}}
+
+/* Facade scars — settled history repaired into the tower architecture.
+   Painted above the building art (z-index 2) but below today's damage vfx
+   (z-index 4), so the live match always reads first. */
+.tw-scar-layer{position:absolute;inset:0;z-index:2;inline-size:100%;block-size:100%;pointer-events:none;overflow:visible}
+.tw-scar{color:#cdbfa6}
+.tw-scar rect{fill:currentColor;fill-opacity:.58;stroke:#20160c;stroke-opacity:.9;stroke-width:1.3;vector-effect:non-scaling-stroke;paint-order:stroke fill}
+.tw-scar line,.tw-scar path{stroke:#2a1d10;stroke-opacity:.7;stroke-width:1;fill:none;vector-effect:non-scaling-stroke;stroke-linecap:round}
+.tw-scar--seam path{stroke:#e6d8bd;stroke-opacity:.85;stroke-width:1.8}
+.tw-scar--patch rect{fill-opacity:.62}
+.tw-scar--graft rect{fill-opacity:.42}
+/* Cool steel plating reads better against OPUS's purple glass. */
+.tw-piece.is-opus .tw-scar{color:#9fb0c6}
+.tw-piece.is-opus .tw-scar--seam path{stroke:#dce7f5}
+.tw-piece-history{display:block;margin-top:2px;color:var(--cr-muted);font-size:9px;font-style:normal;letter-spacing:.04em;opacity:.85}
