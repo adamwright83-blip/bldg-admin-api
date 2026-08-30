@@ -61,6 +61,11 @@ function normalizeAddressToken(address: string | null | undefined): string {
     .replace(/\bwest\b/g, "w")
     .replace(/\bboulevard\b/g, "blvd")
     .replace(/\bpark east\b/g, "pk e")
+    // Bare "Park E" is a real form in stored addresses and was previously
+    // unrecognised here while matching fine in buildings.ts — the same
+    // disagreement as "Century Pk E" in the other direction. Safe after the
+    // rule above: \bpark e\b cannot match inside "park east".
+    .replace(/\bpark e\b/g, "pk e")
     .replace(/\bstreet\b/g, "st")
     .replace(/\s+/g, " ")
     .trim();
