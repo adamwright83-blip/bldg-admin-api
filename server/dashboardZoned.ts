@@ -18,7 +18,10 @@ export function zonedDayStartUtc(ymd: string, timeZone: string): Date {
     const t = new Date(base + h * 3600 * 1000);
     if (formatInTimeZone(t, timeZone, "yyyy-MM-dd") === ymd) {
       let u = t.getTime();
-      while (u > base && formatInTimeZone(new Date(u - 1), timeZone, "yyyy-MM-dd") === ymd) {
+      while (
+        u > base &&
+        formatInTimeZone(new Date(u - 1), timeZone, "yyyy-MM-dd") === ymd
+      ) {
         u -= 1;
       }
       return new Date(u);
@@ -28,18 +31,54 @@ export function zonedDayStartUtc(ymd: string, timeZone: string): Date {
 }
 
 export function zonedNextDayYmd(ymd: string, timeZone: string): string {
-  const start = zonedDayStartUtc(ymd, timeZone);
-  return formatInTimeZone(new Date(start.getTime() + 24 * 3600 * 1000), timeZone, "yyyy-MM-dd");
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!match) throw new Error(`zonedNextDayYmd: invalid date ${ymd}`);
+  const next = new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + 1)
+  );
+  return [
+    next.getUTCFullYear(),
+    String(next.getUTCMonth() + 1).padStart(2, "0"),
+    String(next.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+export type BusinessDayWindow = {
+  businessDate: string;
+  timeZone: string;
+  startUtc: Date;
+  endExclusiveUtc: Date;
+};
+
+/** Canonical Goldline/Admin business-day window. */
+export function getBusinessDayWindow(
+  now = new Date(),
+  timeZone = getDashboardTimeZone()
+): BusinessDayWindow {
+  const businessDate = zonedYmd(now, timeZone);
+  const startUtc = zonedDayStartUtc(businessDate, timeZone);
+  const endExclusiveUtc = zonedDayStartUtc(
+    zonedNextDayYmd(businessDate, timeZone),
+    timeZone
+  );
+  return { businessDate, timeZone, startUtc, endExclusiveUtc };
 }
 
 /** Monday 00:00 through next Monday 00:00 in `timeZone`, as UTC Date bounds [start, end). */
-export function zonedWeekRangeUtcContaining(now: Date, timeZone: string): { start: Date; end: Date } {
+export function zonedWeekRangeUtcContaining(
+  now: Date,
+  timeZone: string
+): { start: Date; end: Date } {
   const todayYmd = zonedYmd(now, timeZone);
   let d = zonedDayStartUtc(todayYmd, timeZone);
   for (let guard = 0; guard < 8; guard++) {
     const dow = parseInt(formatInTimeZone(d, timeZone, "i"), 10);
     if (dow === 1) break;
-    const prevYmd = formatInTimeZone(new Date(d.getTime() - 1), timeZone, "yyyy-MM-dd");
+    const prevYmd = formatInTimeZone(
+      new Date(d.getTime() - 1),
+      timeZone,
+      "yyyy-MM-dd"
+    );
     d = zonedDayStartUtc(prevYmd, timeZone);
   }
   const start = d;
@@ -52,7 +91,10 @@ export function zonedWeekRangeUtcContaining(now: Date, timeZone: string): { star
 }
 
 /** First day of month through first day of next month in `timeZone`, [start, end). */
-export function zonedMonthRangeUtcContaining(now: Date, timeZone: string): { start: Date; end: Date } {
+export function zonedMonthRangeUtcContaining(
+  now: Date,
+  timeZone: string
+): { start: Date; end: Date } {
   const ymd = zonedYmd(now, timeZone);
   const [yStr, mStr] = ymd.split("-");
   const y = parseInt(yStr!, 10);

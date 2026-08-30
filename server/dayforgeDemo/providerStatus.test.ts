@@ -20,19 +20,27 @@ describe("DayForge demo provider status", () => {
     expect(status.print).toBe("BROWSER_PDF_FALLBACK");
   });
 
-  it("reports google LIVE only when GOOGLE_MAPS_API_KEY is present", () => {
+  it("reports google LIVE only when Places Search and geocoding keys are present", () => {
     expect(googleProviderStatus({})).toBe("NOT_CONFIGURED");
     expect(googleProviderStatus({ GOOGLE_MAPS_API_KEY: "  " })).toBe(
       "NOT_CONFIGURED"
     );
-    expect(googleProviderStatus({ GOOGLE_MAPS_API_KEY: "abc123" })).toBe(
-      "LIVE"
+    expect(
+      googleProviderStatus({
+        GOOGLE_PLACES_API_KEY: "places",
+        GOOGLE_GEOCODING_API_KEY: "geocoding",
+      })
+    ).toBe("LIVE");
+    expect(googleProviderStatus({ GOOGLE_PLACES_API_KEY: "places" })).toBe(
+      "NOT_CONFIGURED"
     );
   });
 
   it("distinguishes stripe TEST vs LIVE by key prefix, and requires a real-length key", () => {
     expect(
-      stripeProviderStatus({ DAYFORGE_BILLING_STRIPE_SECRET_KEY: "sk_test_short" })
+      stripeProviderStatus({
+        DAYFORGE_BILLING_STRIPE_SECRET_KEY: "sk_test_short",
+      })
     ).toBe("NOT_CONFIGURED");
     expect(
       stripeProviderStatus({

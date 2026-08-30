@@ -5636,3 +5636,113 @@ export const dayDirectorPromptStates = mysqlTable(
     ),
   })
 );
+
+/** Canonical address/geocode truth for residential, building, and prospect entities. */
+export const entityLocations = mysqlTable(
+  "entity_locations",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    entityType: mysqlEnum("entityType", [
+      "customer",
+      "building",
+      "commercial_prospect",
+    ]).notNull(),
+    entityKey: varchar("entityKey", { length: 191 }).notNull(),
+    sourceAddress: varchar("sourceAddress", { length: 512 }).notNull(),
+    normalizedSourceAddress: varchar("normalizedSourceAddress", {
+      length: 512,
+    }).notNull(),
+    canonicalAddress: varchar("canonicalAddress", { length: 512 }),
+    latitude: decimal("latitude", { precision: 10, scale: 7 }),
+    longitude: decimal("longitude", { precision: 10, scale: 7 }),
+    googlePlaceId: varchar("googlePlaceId", { length: 255 }),
+    geocodeStatus: mysqlEnum("geocodeStatus", [
+      "pending",
+      "success",
+      "missing_address",
+      "ambiguous",
+      "provider_failure",
+      "transient_failure",
+      "unconfigured",
+    ])
+      .notNull()
+      .default("pending"),
+    geocodeProvider: varchar("geocodeProvider", { length: 64 }),
+    geocodedAt: timestamp("geocodedAt"),
+    geocodeError: varchar("geocodeError", { length: 512 }),
+    lastAttemptAt: timestamp("lastAttemptAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    entityUnique: uniqueIndex("uq_entity_locations_tenant_entity").on(
+      table.tenantId,
+      table.entityType,
+      table.entityKey
+    ),
+    statusIdx: index("idx_entity_locations_tenant_status").on(
+      table.tenantId,
+      table.geocodeStatus
+    ),
+    addressIdx: index("idx_entity_locations_tenant_address").on(
+      table.tenantId,
+      table.normalizedSourceAddress
+    ),
+  })
+);
+
+/** Explicit permission/promise evidence. Tower Wars never infers these rows. */
+export const towerWarsPromises = mysqlTable(
+  "tower_wars_promises",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    buildingId: mysqlEnum("buildingId", [
+      "opus_la",
+      "century_park_east",
+    ]).notNull(),
+    customerIdentity: varchar("customerIdentity", { length: 191 }),
+    promiseType: mysqlEnum("promiseType", [
+      "offer_insert",
+      "referral_card",
+      "loyalty_reward",
+      "thank_you_presentation",
+      "other",
+    ]).notNull(),
+    sourceText: text("sourceText").notNull(),
+    quantity: int("quantity"),
+    permissionStatus: mysqlEnum("permissionStatus", [
+      "not_required_physical_fulfillment",
+      "recorded",
+      "not_recorded",
+      "revoked",
+    ]).notNull(),
+    permissionChannel: mysqlEnum("permissionChannel", [
+      "physical_delivery",
+      "sms",
+      "email",
+      "phone",
+      "none",
+    ]).notNull(),
+    permissionEvidence: text("permissionEvidence"),
+    sourceReference: varchar("sourceReference", { length: 512 }).notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    fulfilledAt: timestamp("fulfilledAt"),
+    fulfilledBy: varchar("fulfilledBy", { length: 128 }),
+    fulfillmentEvidence: text("fulfillmentEvidence"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_tower_wars_promises_tenant_key").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
+    buildingOpenIdx: index("idx_tower_wars_promises_building_open").on(
+      table.tenantId,
+      table.buildingId,
+      table.fulfilledAt
+    ),
+  })
+);

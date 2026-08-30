@@ -1,93 +1,488 @@
-import { ArrowRight, LockKeyhole, ShieldCheck } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowRight,
+  LockKeyhole,
+  Pause,
+  Play,
+  RotateCcw,
+  ShieldCheck,
+} from "lucide-react";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../../../server/routers";
+import { trpc } from "@/lib/trpc";
+import { TOWER_WARS_ATTACK_THRESHOLD_CENTS } from "@shared/goldlineGameConfig";
+import {
+  applyTowerWarsEvent,
+  canExecuteTowerWarsPromise,
+  initialTowerWarsState,
+  type TowerDamageState,
+  type TowerWarsBattleState,
+  type TowerWarsBuildingId,
+} from "@shared/towerWars";
 import { towerComparisonState } from "./towerWarsGeometry";
 
-export type TowerWarsData = inferRouterOutputs<AppRouter>["admin"]["listCustomers"]["contestTotals"];
-type Property =
-  | TowerWarsData["properties"]["opus_la"]
-  | TowerWarsData["properties"]["century_park_east"];
-export type TowerDamageState = "pristine" | "chipped" | "cracked" | "heavily-damaged" | "critical";
+export { damageStateForIncomingAttacks } from "@shared/towerWars";
+export type TowerWarsData =
+  inferRouterOutputs<AppRouter>["system"]["towerWars"]["today"];
+type TowerWarsProps = { onNavigate: (path: string) => void; compact?: boolean };
+type Contributor = {
+  identityKey: string;
+  customerDisplayName: string;
+  customerPhone: string | null;
+  contributedValueCents: number;
+  orderCount: number;
+  events: Array<{ occurredAt: string }>;
+};
 
-type TowerWarsProps = { data?: TowerWarsData; loading?: boolean; onNavigate: (path: string) => void; compact?: boolean };
+const NAMES: Record<TowerWarsBuildingId, string> = {
+  opus_la: "OPUS LA",
+  century_park_east: "Century Park East",
+};
 
-function usd(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
+function money(cents: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: cents % 100 ? 2 : 0,
+  }).format(cents / 100);
 }
 
-export function damageStateForRevenue(value: number, leaderValue: number): TowerDamageState {
-  if (leaderValue <= 0 || value >= leaderValue) return "pristine";
-  const ratio = value / leaderValue;
-  if (ratio >= 0.8) return "chipped";
-  if (ratio >= 0.55) return "cracked";
-  if (ratio >= 0.3) return "heavily-damaged";
-  return "critical";
+function BuildingArt({
+  buildingId,
+  damage,
+}: {
+  buildingId: TowerWarsBuildingId;
+  damage: TowerDamageState;
+}) {
+  const opus = buildingId === "opus_la";
+  return (
+    <>
+      <img
+        className="tw-building-layer"
+        src={
+          opus
+            ? "/assets/admin/control-room/tower-wars/opus-la-tower-v2.png"
+            : "/assets/admin/control-room/tower-wars/century-park-east-tower-v2.png"
+        }
+        alt={`${NAMES[buildingId]}, ${damage.replace("-", " ")} damage`}
+      />
+      {opus ? (
+        <>
+          <span
+            className="tw-opus-driver"
+            aria-label="Giant architectural golf driver"
+          />
+          <span className="tw-opus-ball" />
+        </>
+      ) : (
+        <img
+          className="tw-cpe-launcher"
+          src="/assets/admin/control-room/tower-wars/century-bazooka-optimized.png"
+          alt="Compact rooftop valet bazooka"
+        />
+      )}
+    </>
+  );
 }
 
-function RealValueBreakdown({ property }: { property: Property }) {
-  return <div className="tw-source-breakdown"><span><small>Stripe verified</small><strong>{usd(property.stripeVerifiedRevenue)}</strong></span><span><small>CleanCloud history</small><strong>{usd(property.legacyCleanCloudRevenue)}</strong></span><span><small>Clearent / XplorPay</small><strong>{usd(property.clearentXplorPayRevenue)}</strong></span></div>;
+function useReplay(data: TowerWarsData | undefined) {
+  const [mode, setMode] = useState<"live" | "playing" | "paused" | "complete">(
+    "live"
+  );
+  const [index, setIndex] = useState(0);
+  const [state, setState] = useState<TowerWarsBattleState>(() =>
+    initialTowerWarsState()
+  );
+  const priorAttackCount = useRef(0);
+  const [activeAttack, setActiveAttack] = useState<string | null>(null);
+  const ledger = data?.ledger ?? [];
+
+  useEffect(() => {
+    if (mode !== "playing") return;
+    if (index >= ledger.length) {
+      setMode("complete");
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setState(previous => {
+        const next = applyTowerWarsEvent(previous, ledger[index]!);
+        if (next.attacks.length > priorAttackCount.current) {
+          setActiveAttack(next.attacks.at(-1)?.attackerBuildingId ?? null);
+          window.setTimeout(() => setActiveAttack(null), 650);
+        }
+        priorAttackCount.current = next.attacks.length;
+        return next;
+      });
+      setIndex(value => value + 1);
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [index, ledger, mode]);
+
+  const restart = () => {
+    priorAttackCount.current = 0;
+    setState(initialTowerWarsState());
+    setIndex(0);
+    setActiveAttack(null);
+    setMode("playing");
+  };
+  return {
+    mode,
+    index,
+    state: mode === "live" ? data?.state : state,
+    activeAttack,
+    restart,
+    toggle: () =>
+      setMode(value => (value === "playing" ? "paused" : "playing")),
+  };
 }
 
-const ACTION_CLASSES = [
-  { title: "Fulfill promise", detail: "No active promise records", tone: "blue" },
-  { title: "Arm referral", detail: "No permission-backed referral work", tone: "orange" },
-  { title: "Arm loyalty", detail: "No configured loyalty rule", tone: "gold" },
-  { title: "Upgrade presentation", detail: "No fulfillment instruction configured", tone: "teal" },
-] as const;
+export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
+  const today = trpc.system.towerWars.today.useQuery(undefined, {
+    staleTime: 30_000,
+  });
+  const fulfill = trpc.system.towerWars.fulfillPromise.useMutation({
+    onSuccess: () => today.refetch(),
+  });
+  const activate = trpc.system.towerWars.activatePromise.useMutation();
+  const data = today.data;
+  const replay = useReplay(data);
+  if (today.isLoading)
+    return (
+      <div className="tw-loading">
+        Compiling today’s authoritative battle ledger…
+      </div>
+    );
+  if (!data || today.isError)
+    return (
+      <div className="cr-empty-state">
+        <div>
+          <strong>Tower Wars is waiting for revenue truth</strong>
+          <p>
+            The arena remains inactive because the tenant-scoped ledger could
+            not be compiled.
+          </p>
+        </div>
+      </div>
+    );
 
-function BuildingArt({ opus, name, damage }: { opus: boolean; name: string; damage: TowerDamageState }) {
-  const src = opus
-    ? "/assets/admin/control-room/tower-wars/opus-la-siege-driver-v5.png"
-    : "/assets/admin/control-room/tower-wars/century-park-east-tower-v2.png";
-  const weapon = opus ? "architectural-scale hinged golf driver" : "compact rooftop valet bazooka";
-  return <img className="tw-building-layer" src={src} alt={`${name}, ${damage.replace("-", " ")} damage, with ${weapon}`} />;
-}
-
-export function TowerWars({ data, loading, onNavigate, compact = false }: TowerWarsProps) {
-  if (loading) return <div className="tw-loading">Reading verified building revenue…</div>;
-  if (!data) return <div className="cr-empty-state"><div><strong>Tower Wars is waiting for revenue truth</strong><p>The arena remains inactive until the property revenue aggregate is available.</p></div></div>;
-
-  const properties = [data.properties.opus_la, data.properties.century_park_east] as const;
-  const comparison = towerComparisonState(properties[0].totalOperationalRevenue, properties[1].totalOperationalRevenue);
-  const leaderIndex = comparison.leaderIndex;
+  const state = replay.state ?? data.state;
+  const opus = state.buildings.opus_la;
+  const century = state.buildings.century_park_east;
+  const comparison = towerComparisonState(
+    opus.revenueCents,
+    century.revenueCents
+  );
   const hasLoser = comparison.kind === "lead";
-  const loserIndex = hasLoser ? (leaderIndex === 0 ? 1 : 0) : 0;
-  const you = properties[loserIndex];
-  const rival = properties[loserIndex === 0 ? 1 : 0];
-  const leaderRevenue = Math.max(...properties.map(property => property.totalOperationalRevenue));
-  const youDamage = damageStateForRevenue(you.totalOperationalRevenue, leaderRevenue);
-  const rivalDamage = damageStateForRevenue(rival.totalOperationalRevenue, leaderRevenue);
-  const isOpusYou = you.propertyDisplayName === "OPUS LA";
+  const youId: TowerWarsBuildingId = hasLoser
+    ? comparison.leaderIndex === 0
+      ? "century_park_east"
+      : "opus_la"
+    : "opus_la";
+  const rivalId: TowerWarsBuildingId =
+    youId === "opus_la" ? "century_park_east" : "opus_la";
+  const you = state.buildings[youId];
+  const rival = state.buildings[rivalId];
+  const openPromises = data.promises.filter(promise => !promise.fulfilledAt);
+  const actionDefinitions = [
+    {
+      title: "Fulfill promise",
+      types: ["offer_insert", "other"],
+      unavailable: "No active permission-backed promise",
+    },
+    {
+      title: "Arm referral",
+      types: ["referral_card"],
+      unavailable: "No configured referral action",
+    },
+    {
+      title: "Arm loyalty",
+      types: ["loyalty_reward"],
+      unavailable: "No configured loyalty rule",
+    },
+    {
+      title: "Upgrade presentation",
+      types: ["thank_you_presentation"],
+      unavailable: "No presentation instruction",
+    },
+  ] as const;
+  const currentContributors = data.contributors[youId] as Contributor[];
 
   return (
     <main className={`tw-page ${compact ? "is-compact" : ""}`}>
       <section className="tw-arena" aria-labelledby="tower-wars-title">
-        <img className="tw-environment" src="/assets/admin/control-room/tower-wars/battle-environment.jpg" alt="Sunlit Los Angeles Tower Wars arena" />
+        <img
+          className="tw-environment"
+          src="/assets/admin/control-room/tower-wars/battle-environment.jpg"
+          alt="Sunlit Los Angeles Tower Wars arena"
+        />
         <div className="tw-arena-shade" />
         <header className="tw-scoreboard">
-          <div className="tw-score-you"><span>{you.propertyDisplayName}</span><small>{hasLoser ? "You · comeback building" : "Assignment pending"}</small><strong>{usd(you.totalOperationalRevenue)}</strong></div>
-          <div className="tw-versus"><b>VS</b><span>{comparison.kind === "lead" ? `Trailing by ${usd(comparison.delta)}` : comparison.kind === "even" ? "Even" : "Awaiting first order"}</span></div>
-          <div className="tw-score-rival"><span>{rival.propertyDisplayName}</span><small>{hasLoser ? "Current rival" : "Comparison building"}</small><strong>{usd(rival.totalOperationalRevenue)}</strong></div>
+          <div className="tw-score-you">
+            <span>{NAMES[youId]}</span>
+            <small>
+              {hasLoser ? "You · comeback building" : "Tie · no loser assigned"}
+            </small>
+            <strong>{money(you.revenueCents)}</strong>
+          </div>
+          <div className="tw-versus">
+            <b>TODAY</b>
+            <span>
+              {comparison.kind === "lead"
+                ? `Trailing by ${money(comparison.delta)}`
+                : comparison.kind === "even"
+                  ? "Even"
+                  : "Awaiting first order"}
+            </span>
+            <em>
+              {data.businessDate} · {data.timeZone}
+            </em>
+          </div>
+          <div className="tw-score-rival">
+            <span>{NAMES[rivalId]}</span>
+            <small>{hasLoser ? "Current rival" : "Comparison building"}</small>
+            <strong>{money(rival.revenueCents)}</strong>
+          </div>
         </header>
-        <h1 id="tower-wars-title" className="sr-only">Tower Wars</h1>
-        <div className={`tw-piece tw-piece-you ${isOpusYou ? "is-opus" : "is-century"}`} data-damage={youDamage}>
-          <span className="tw-possession">{hasLoser ? "You" : "Pending"}</span>
-          <BuildingArt opus={isOpusYou} name={you.propertyDisplayName} damage={youDamage} />
-          <span className="tw-damage-vfx" aria-hidden />
-          <span className="tw-piece-label"><strong>{you.propertyDisplayName}</strong><small>{hasLoser ? `${youDamage.replace("-", " ")} · losing building` : "No losing building derived"}</small></span>
-        </div>
-        <div className={`tw-piece tw-piece-rival ${isOpusYou ? "is-century" : "is-opus"}`} data-damage={rivalDamage}>
-          <span className="tw-possession is-rival">Rival</span>
-          <BuildingArt opus={!isOpusYou} name={rival.propertyDisplayName} damage={rivalDamage} />
-          <span className="tw-projectile-vfx" aria-hidden />
-          <span className="tw-piece-label"><strong>{rival.propertyDisplayName}</strong><small>{hasLoser ? `${rivalDamage.replace("-", " ")} · leading building` : "Comparison building"}</small></span>
-        </div>
-        <aside className="tw-truth-hud"><span><i /> Live comparison</span><strong>Accumulated real order value</strong><p>No fictional energy or attack currency.</p><RealValueBreakdown property={you} /><div className="tw-threshold"><ShieldCheck /><span><small>Attack threshold</small><strong>Not configured</strong></span></div><button type="button" onClick={() => onNavigate("/customers")}>Open account evidence <ArrowRight /></button></aside>
+        <h1 id="tower-wars-title" className="sr-only">
+          Tower Wars Today
+        </h1>
+        {[youId, rivalId].map((buildingId, index) => {
+          const building = state.buildings[buildingId];
+          return (
+            <div
+              key={buildingId}
+              className={`tw-piece ${index === 0 ? "tw-piece-you" : "tw-piece-rival"} ${buildingId === "opus_la" ? "is-opus" : "is-century"} ${replay.activeAttack === buildingId ? "is-firing" : ""}`}
+              data-damage={building.damage}
+            >
+              <span className={`tw-possession ${index ? "is-rival" : ""}`}>
+                {hasLoser ? (index ? "Rival" : "You") : "Tie"}
+              </span>
+              <BuildingArt buildingId={buildingId} damage={building.damage} />
+              <span
+                className="tw-projectile"
+                data-weapon={buildingId === "opus_la" ? "golf-ball" : "car"}
+                aria-hidden
+              />
+              <span className="tw-damage-vfx" aria-hidden />
+              <span className="tw-piece-label">
+                <strong>{NAMES[buildingId]}</strong>
+                <small>
+                  {building.incomingAttackCount} incoming strikes ·{" "}
+                  {building.damage.replace("-", " ")}
+                </small>
+              </span>
+            </div>
+          );
+        })}
+        <aside className="tw-truth-hud">
+          <span>
+            <i />{" "}
+            {replay.mode === "live"
+              ? "Live compilation"
+              : `Replay event ${replay.index} / ${data.ledger.length}`}
+          </span>
+          <strong>Real orders create attacks</strong>
+          <p>
+            {data.ledger.length} qualifying events · {data.exclusions.length}{" "}
+            held out
+          </p>
+          <div className="tw-source-breakdown">
+            <span>
+              <small>Orders today</small>
+              <strong>{you.orderCount}</strong>
+            </span>
+            <span>
+              <small>Attacks fired</small>
+              <strong>{you.attackCount}</strong>
+            </span>
+            <span>
+              <small>Last revenue</small>
+              <strong>
+                {you.lastRevenueEventAt
+                  ? new Date(you.lastRevenueEventAt).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })
+                  : "—"}
+              </strong>
+            </span>
+          </div>
+          <div className="tw-threshold">
+            <ShieldCheck />
+            <span>
+              <small>Next strike</small>
+              <strong>
+                {money(you.unspentValueCents)} /{" "}
+                {money(TOWER_WARS_ATTACK_THRESHOLD_CENTS)}
+              </strong>
+            </span>
+          </div>
+          <div className="tw-replay-controls">
+            <button type="button" onClick={replay.restart}>
+              <RotateCcw /> Replay Today
+            </button>
+            {replay.mode !== "live" ? (
+              <button type="button" onClick={replay.toggle}>
+                {replay.mode === "playing" ? <Pause /> : <Play />}
+                {replay.mode === "playing" ? "Pause" : "Play"}
+              </button>
+            ) : null}
+          </div>
+        </aside>
       </section>
       <section className="tw-actions" aria-label="Comeback actions">
-        {ACTION_CLASSES.map(action => <article key={action.title} className={`tone-${action.tone}`}><LockKeyhole aria-hidden /><span><small>Authoritative action class</small><strong>{action.title}</strong><p>{action.detail}</p></span><b>Not configured</b></article>)}
+        {actionDefinitions.map(action => {
+          const promise = openPromises.find(
+            item =>
+              (action.types as readonly string[]).includes(item.promiseType) &&
+              item.buildingId === youId &&
+              canExecuteTowerWarsPromise(item)
+          );
+          return (
+            <article
+              key={action.title}
+              className={promise ? "is-eligible" : "is-locked"}
+            >
+              {promise ? (
+                <ShieldCheck aria-hidden />
+              ) : (
+                <LockKeyhole aria-hidden />
+              )}
+              <span>
+                <small>Authoritative action class</small>
+                <strong>{action.title}</strong>
+                <p>{promise ? promise.sourceText : action.unavailable}</p>
+              </span>
+              {promise ? (
+                <button
+                  type="button"
+                  disabled={fulfill.isPending || activate.isPending}
+                  onClick={() => {
+                    if (promise.promiseType === "offer_insert") {
+                      window.print();
+                      if (
+                        window.confirm(
+                          "Mark this physical promise fulfilled after printing?"
+                        )
+                      ) {
+                        fulfill.mutate({
+                          promiseId: promise.id,
+                          fulfillmentEvidence:
+                            "Owner confirmed printed fulfillment from Tower Wars",
+                        });
+                      }
+                      return;
+                    }
+                    activate.mutate({ promiseId: promise.id });
+                  }}
+                >
+                  {promise.promiseType === "offer_insert"
+                    ? `Print${promise.quantity ? ` ${promise.quantity}` : ""} inserts`
+                    : "Arm in Day Director"}
+                </button>
+              ) : (
+                <b>Unavailable</b>
+              )}
+            </article>
+          );
+        })}
       </section>
-      <section className="tw-evidence-strip"><div><span>Current possession</span><strong>{hasLoser ? `${you.propertyDisplayName} is YOU because it is losing.` : "No losing building is currently derived."}</strong></div><div><span>Damage rule</span><strong>Deterministic revenue ratio · {youDamage.replace("-", " ")}</strong></div><div><span>Combat input</span><strong>{usd(you.totalOperationalRevenue)} real order value</strong></div><button type="button" onClick={() => onNavigate("/commercial-pipeline")}>Engineer the comeback <ArrowRight /></button></section>
+      <section className="tw-contributors">
+        <header>
+          <div>
+            <span>Who built this tower today?</span>
+            <h2>{NAMES[youId]} contributors</h2>
+          </div>
+          <button type="button" onClick={() => onNavigate("/customers")}>
+            Open all customer evidence <ArrowRight />
+          </button>
+        </header>
+        {currentContributors.length ? (
+          <div>
+            {currentContributors.map(contributor => (
+              <article key={contributor.identityKey}>
+                <strong>{contributor.customerDisplayName}</strong>
+                <span>
+                  {money(contributor.contributedValueCents)} ·{" "}
+                  {contributor.orderCount}{" "}
+                  {contributor.orderCount === 1 ? "order" : "orders"}
+                </span>
+                <small>
+                  {contributor.events
+                    .map(event =>
+                      new Date(event.occurredAt).toLocaleTimeString([], {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })
+                    )
+                    .join(" · ")}
+                </small>
+                {contributor.customerPhone ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onNavigate(
+                        `/customers?phone=${encodeURIComponent(contributor.customerPhone!)}`
+                      )
+                    }
+                  >
+                    Evidence <ArrowRight />
+                  </button>
+                ) : (
+                  <em>Identity unresolved</em>
+                )}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p>
+            No qualifying customer orders have contributed to this building
+            today.
+          </p>
+        )}
+      </section>
+      <section className="tw-evidence-strip">
+        <div>
+          <span>Current possession</span>
+          <strong>
+            {hasLoser
+              ? `${NAMES[youId]} is YOU because it is losing today.`
+              : "Today is tied. No building is assigned YOU."}
+          </strong>
+        </div>
+        <div>
+          <span>Damage rule</span>
+          <strong>
+            {you.incomingAttackCount} real incoming strikes ·{" "}
+            {you.damage.replace("-", " ")}
+          </strong>
+        </div>
+        <div>
+          <span>Combat input</span>
+          <strong>{money(you.revenueCents)} real order value today</strong>
+        </div>
+        <button
+          type="button"
+          onClick={() => onNavigate("/commercial-pipeline")}
+        >
+          Engineer the comeback <ArrowRight />
+        </button>
+      </section>
+      <section className="tw-print-sheet" aria-hidden="true">
+        <h1>Goldline promise fulfillment sheet</h1>
+        <p>
+          {data.businessDate} · {data.timeZone} · {NAMES[youId]}
+        </p>
+        {openPromises
+          .filter(promise => promise.promiseType === "offer_insert")
+          .map(promise => (
+            <article key={promise.id}>
+              <h2>{promise.quantity ?? "Recorded"} physical inserts</h2>
+              <p>{promise.sourceText}</p>
+              <small>Promise evidence ID: {promise.id}</small>
+            </article>
+          ))}
+      </section>
     </main>
   );
 }
