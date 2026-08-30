@@ -232,9 +232,13 @@ export function projectFacade(
 
   // Walk backwards from the most recent day, taking whole days until the
   // individual-scar budget is spent. Everything older is compressed.
-  let budget = MAX_RENDERED_SCARS;
-  let splitIndex = settled.length;
-  for (let index = settled.length - 1; index >= 0; index -= 1) {
+  //
+  // The most recent day is ALWAYS drawn, even when it alone exceeds the
+  // budget: compressing the present would invert the whole point of this
+  // split. projectFacadeScars truncates within that day if it has to.
+  let splitIndex = settled.length - 1;
+  let budget = MAX_RENDERED_SCARS - settled[splitIndex]!.incomingAttacks;
+  for (let index = settled.length - 2; index >= 0; index -= 1) {
     const cost = settled[index]!.incomingAttacks;
     if (cost > budget) break;
     budget -= cost;
@@ -297,15 +301,4 @@ export function projectPatina(
     heightPercent: bandHeight,
     intensity: zone.absorbedStrikes / heaviest,
   }));
-}
-
-/** True when the facade is showing less than the full settled record. */
-export function scarsWereTruncated(
-  strata: readonly SettledStratum[]
-): boolean {
-  const total = strata.reduce(
-    (sum, stratum) => sum + Math.max(0, stratum.incomingAttacks),
-    0
-  );
-  return total > MAX_RENDERED_SCARS;
 }

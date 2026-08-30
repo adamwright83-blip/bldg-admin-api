@@ -4,6 +4,7 @@ import {
   commercialAccessCopy,
   commercialAccessFor,
   fieldShape,
+  MAX_FIELD_UNITS,
   projectOccupancyField,
   projectSiegeLadder,
   residentTerritoryCopy,
@@ -111,6 +112,20 @@ describe("the occupancy field uses the real denominator", () => {
       })
     ).toBeNull();
     expect(projectOccupancyField(null)).toBeNull();
+  });
+
+  it("refuses a denominator too large to be a building", () => {
+    // A config typo must degrade, not allocate and sort millions of cells.
+    expect(
+      projectOccupancyField({
+        totalUnits: MAX_FIELD_UNITS + 1,
+        denominatorVerified: true,
+        signups: 1,
+        paidResidents: 1,
+      })
+    ).toBeNull();
+    // The real denominators stay comfortably inside the cap.
+    expect(576).toBeLessThan(MAX_FIELD_UNITS);
   });
 
   it("clamps bad data so the field can never over-fill", () => {

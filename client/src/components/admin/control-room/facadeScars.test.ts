@@ -5,7 +5,6 @@ import {
   projectFacade,
   projectFacadeScars,
   scarKindFor,
-  scarsWereTruncated,
   type SettledStratum,
 } from "./facadeScars";
 
@@ -189,7 +188,28 @@ describe("dense history compresses rather than disappearing", () => {
     expect(compressed).toBe(false);
     expect(patina).toEqual([]);
     expect(scars).toHaveLength(6);
-    expect(scarsWereTruncated(strata)).toBe(false);
+  });
+
+  it("always draws the most recent day, even when it alone exceeds the budget", () => {
+    // Compressing the present would invert the point of the split.
+    const oneHugeDay: SettledStratum[] = [
+      {
+        businessDate: "2026-07-01",
+        incomingAttacks: 5,
+        damageAtSettlement: "critical",
+      },
+      {
+        businessDate: "2026-07-02",
+        incomingAttacks: MAX_RENDERED_SCARS + 20,
+        damageAtSettlement: "critical",
+      },
+    ];
+    const { scars, patina } = projectFacade(oneHugeDay);
+    expect(scars.length).toBeGreaterThan(0);
+    expect(scars.every(s => s.businessDate === "2026-07-02")).toBe(true);
+    expect(scars.length).toBeLessThanOrEqual(MAX_RENDERED_SCARS);
+    // The older day still survives as weathering rather than vanishing.
+    expect(patina.map(z => z.absorbedStrikes)).toEqual([5]);
   });
 
   it("is deterministic", () => {

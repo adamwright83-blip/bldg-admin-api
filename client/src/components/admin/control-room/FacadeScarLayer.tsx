@@ -123,8 +123,16 @@ export function FacadeScarLayer({
 
   if (!scars.length && !patina.length) return null;
 
-  const settledDays = strata.filter(s => s.incomingAttacks > 0).length;
-  const total = scars.length;
+  // Count the WHOLE record, not just what is drawn individually. Reporting
+  // scars.length beside a full day count would announce a truncated strike
+  // total against every settled day, which is simply wrong once history
+  // compresses.
+  const settledDays = strata.filter(s => s.incomingAttacks > 0);
+  const totalAbsorbed = settledDays.reduce(
+    (sum, s) => sum + s.incomingAttacks,
+    0
+  );
+  const dayCount = settledDays.length;
 
   return (
     <svg
@@ -132,11 +140,11 @@ export function FacadeScarLayer({
       viewBox={`0 0 ${ART_WIDTH} ${ART_HEIGHT}`}
       preserveAspectRatio="xMidYMax meet"
       role="img"
-      aria-label={`${buildingName} carries ${total} repaired ${
-        total === 1 ? "strike" : "strikes"
-      } across ${settledDays} settled ${settledDays === 1 ? "day" : "days"}${
+      aria-label={`${buildingName} carries ${totalAbsorbed} repaired ${
+        totalAbsorbed === 1 ? "strike" : "strikes"
+      } across ${dayCount} settled ${dayCount === 1 ? "day" : "days"}${
         compressed
-          ? "; older history is consolidated into weathering at the base"
+          ? `; ${scars.length} shown individually and the rest consolidated into weathering at the base`
           : ""
       }`}
     >

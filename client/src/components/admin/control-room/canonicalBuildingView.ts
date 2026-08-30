@@ -122,6 +122,14 @@ export type OccupancyField = {
   cells: OccupancyCell[];
 };
 
+/**
+ * Upper bound on units the field will lay out. A real residential tower is
+ * hundreds of units, so anything past this is a data error rather than a
+ * building — and the field must degrade instead of allocating and sorting an
+ * arbitrarily large array and rendering one node per element.
+ */
+export const MAX_FIELD_UNITS = 5000;
+
 export type PenetrationInput = {
   totalUnits: number;
   denominatorVerified: boolean;
@@ -173,6 +181,8 @@ export function projectOccupancyField(
   if (!input) return null;
   const totalUnits = Math.floor(input.totalUnits);
   if (!Number.isFinite(totalUnits) || totalUnits <= 0) return null;
+  // A denominator this large is a config error, not a building.
+  if (totalUnits > MAX_FIELD_UNITS) return null;
 
   const paidResidents = Math.max(0, Math.min(totalUnits, input.paidResidents));
   // Signups include payers upstream, so the "signed up only" band is the
