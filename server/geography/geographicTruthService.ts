@@ -231,6 +231,26 @@ function displayTier(order: {
   return 1;
 }
 
+export function selectAuthoritativeCustomerOrder<
+  T extends {
+    buildingSlug: string | null;
+    address: string;
+    firstName: string;
+    lastName: string;
+    unit: string | null;
+    createdAt: Date;
+    id: number;
+  },
+>(group: readonly T[]): T {
+  const withAddress = group.filter(order => order.address.trim().length > 0);
+  return [...(withAddress.length > 0 ? withAddress : group)].sort(
+    (left, right) =>
+      right.createdAt.getTime() - left.createdAt.getTime() ||
+      displayTier(right) - displayTier(left) ||
+      right.id - left.id
+  )[0]!;
+}
+
 async function loadCustomerGroups(tenantId: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -256,12 +276,7 @@ async function discoverEntities(tenantId: string): Promise<DiscoveredEntity[]> {
   if (!db) throw new Error("Database not available");
   const groups = await loadCustomerGroups(tenantId);
   const customers = Array.from(groups.entries()).map(([entityKey, group]) => {
-    const best = [...group].sort(
-      (a, b) =>
-        displayTier(b) - displayTier(a) ||
-        b.createdAt.getTime() - a.createdAt.getTime() ||
-        b.id - a.id
-    )[0]!;
+    const best = selectAuthoritativeCustomerOrder(group);
     return {
       entityType: "customer" as const,
       entityKey,

@@ -673,15 +673,28 @@ export async function createCustomerRecoveryIntervention(input: {
       if (snapshot.score < 40 || snapshot.activeOrderCount > 0)
         throw new Error("This customer is not eligible for a win-back mission");
 
+      const relatedOrders = await tx
+        .select()
+        .from(orders)
+        .where(
+          sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}`
+        );
+      const customerKeys = new Set([snapshot.customerKeyHash]);
+      for (const order of relatedOrders) {
+        const aliases = customerIdentityHashes(input.tenantId, order);
+        if (aliases.some(alias => customerKeys.has(alias)))
+          aliases.forEach(alias => customerKeys.add(alias));
+      }
+
       const active = await tx
         .select({ id: customerRecoveryInterventions.id })
         .from(customerRecoveryInterventions)
         .where(
           and(
             eq(customerRecoveryInterventions.tenantId, input.tenantId),
-            eq(
+            inArray(
               customerRecoveryInterventions.customerKeyHash,
-              snapshot.customerKeyHash
+              Array.from(customerKeys)
             ),
             inArray(customerRecoveryInterventions.status, [
               ...ACTIVE_INTERVENTION_STATUSES,

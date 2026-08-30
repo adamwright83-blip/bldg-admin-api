@@ -5,6 +5,7 @@ import {
   eligibleGeocodeQueue,
   geographicLocationSyncDecision,
   normalizeSourceAddress,
+  selectAuthoritativeCustomerOrder,
 } from "./geographicTruthService";
 
 describe("geographic truth location synchronization", () => {
@@ -77,6 +78,30 @@ describe("geographic truth location synchronization", () => {
       latitude: 34.02,
       longitude: -118.42,
     });
+  });
+
+  it("prefers the customer's current address over an older recognized building", () => {
+    const selected = selectAuthoritativeCustomerOrder([
+      {
+        id: 1,
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+        buildingSlug: "westview",
+        address: "100 Westview Blvd",
+        firstName: "Ada",
+        lastName: "L",
+        unit: "4",
+      },
+      {
+        id: 2,
+        createdAt: new Date("2026-08-30T00:00:00Z"),
+        buildingSlug: null,
+        address: "200 New Place",
+        firstName: "Ada",
+        lastName: "L",
+        unit: "4",
+      },
+    ]);
+    expect(selected.address).toBe("200 New Place");
   });
 
   it("adopts authoritative coordinates that arrive or change for the same address", () => {
