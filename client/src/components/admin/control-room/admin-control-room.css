@@ -43,3 +43,42 @@
 .tw-piece-rival.is-firing .tw-projectile{animation-name:tw-projectile-flight-reverse}
 @keyframes tw-projectile-flight-reverse{0%{opacity:1;transform:translateX(0) scale(1)}85%{opacity:1;transform:translateX(-45vw) scale(.55)}100%{opacity:0;transform:translateX(-50vw) scale(1.8)}}
 @media print{body *{visibility:hidden!important}.tw-print-sheet,.tw-print-sheet *{visibility:visible!important}.tw-print-sheet{position:absolute;inset:0;display:block;padding:36px;color:#111;background:#fff}.tw-print-sheet article{margin-top:24px;padding:20px;border:2px solid #111}.tw-print-sheet h1,.tw-print-sheet h2{margin:0 0 8px}}
+
+/* Facade record — today's match above the line, settled stone below */
+.cr-strata-panel{display:flex;max-width:1320px;margin:22px auto;flex-direction:column;gap:14px}
+.cr-strata-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px 24px}
+.cr-strata-head h2{margin:0;font-size:22px;letter-spacing:-.02em}
+.cr-strata-head p{max-width:56ch;margin:5px 0 0;color:var(--cr-muted);font-size:12px}
+.cr-strata-toggle{padding:7px 13px;border:1px solid var(--cr-line);border-radius:8px;background:var(--cr-paper);color:var(--cr-muted);font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+.cr-strata-toggle:hover{color:var(--cr-ink);border-color:var(--cr-purple)}
+.cr-strata-toggle:focus-visible{outline:2px solid var(--cr-purple);outline-offset:2px}
+.cr-strata-toggle[aria-pressed=true]{color:var(--cr-purple);border-color:var(--cr-purple)}
+.cr-facade-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr));gap:14px}
+.cr-facade{display:flex;flex-direction:column;gap:10px;padding:20px;border:1px solid var(--cr-line);border-radius:12px;background:var(--cr-paper);box-shadow:0 8px 22px #0d25400a}
+.cr-facade-head h3{margin:0;font-size:14px}
+.cr-facade-sub{margin:4px 0 0;color:var(--cr-muted);font-size:11px}
+.cr-today-band{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px;border:1px dashed var(--cr-line);border-radius:8px}
+.cr-today-label{color:var(--cr-muted);font-size:9px;font-weight:850;letter-spacing:.14em;text-transform:uppercase}
+.cr-today-marks{display:inline-flex;align-items:center;gap:4px}
+.cr-today-intact{color:var(--cr-muted);font-size:11px}
+.cr-today-charge{margin-inline-start:auto;color:var(--cr-muted);font-size:11px;font-variant-numeric:tabular-nums}
+.cr-strike,.cr-scar{inline-size:8px;block-size:8px;border-radius:1px;transform:skewX(-18deg)}
+.cr-strike{background:var(--cr-gold)}
+.cr-scar{background:var(--cr-muted);opacity:.55}
+.cr-today-band--chipped,.cr-today-band--cracked{border-style:solid}
+.cr-today-band--heavily-damaged,.cr-today-band--critical{border-style:solid;border-color:#be6e32}
+.cr-settled-rule{display:flex;align-items:center;gap:10px;color:var(--cr-muted);font-size:9px;font-weight:850;letter-spacing:.16em;text-transform:uppercase}
+.cr-settled-rule:before,.cr-settled-rule:after{content:"";flex:1;block-size:1px;background:var(--cr-line)}
+.cr-strata{display:flex;margin:0;padding:0;flex-direction:column;gap:2px;list-style:none}
+.cr-stratum{display:grid;grid-template-columns:3rem 1fr auto;align-items:center;gap:10px;padding:6px 9px;border-left:3px solid var(--cr-line);border-radius:0 4px 4px 0;background:#f4f6fa;font-size:12px}
+.cr-stratum-date{color:var(--cr-muted);font-variant-numeric:tabular-nums}
+.cr-stratum-marks{display:inline-flex;align-items:center;gap:3px}
+.cr-stratum-reading{color:var(--cr-muted);font-size:11px}
+.cr-stratum--chipped{border-left-color:#c3cbd8}
+.cr-stratum--cracked{border-left-color:var(--cr-gold)}
+.cr-stratum--heavy{border-left-color:#be6e32}
+.cr-stratum--critical{border-left-color:#c0432f}
+.cr-facade-empty,.cr-facade-warning{margin:0;color:var(--cr-muted);font-size:12px}
+.cr-facade-warning{color:#a8452f}
+.cr-facade-foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;padding-top:8px;border-top:1px solid var(--cr-line);color:var(--cr-muted);font-size:11px;font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){.cr-strata-panel *{animation:none!important;transition:none!important}}
