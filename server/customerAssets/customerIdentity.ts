@@ -89,6 +89,55 @@ export function customerIdentityHashes(
   );
 }
 
+/**
+ * Groups records by the connected set of trustworthy identity candidates.
+ * This keeps a customer's history together when a later order gains a
+ * stronger identifier (for example, bldgUserId) while retaining the first
+ * deterministic canonical key for persistence compatibility.
+ */
+export function groupCustomerRecords<T>(
+  tenantId: string,
+  records: readonly T[],
+  getIdentity: (record: T) => CustomerIdentityInput
+): Array<{ key: string; records: T[] }> {
+  const parent = new Map<string, string>();
+  const find = (value: string): string => {
+    const current = parent.get(value);
+    if (!current || current === value) {
+      parent.set(value, value);
+      return value;
+    }
+    const root = find(current);
+    parent.set(value, root);
+    return root;
+  };
+  const union = (left: string, right: string) => {
+    const leftRoot = find(left);
+    const rightRoot = find(right);
+    if (leftRoot !== rightRoot) parent.set(rightRoot, leftRoot);
+  };
+  const aliasesByRecord = records.map(record => {
+    const aliases = customerIdentityHashes(tenantId, getIdentity(record));
+    aliases.forEach(find);
+    for (const alias of aliases.slice(1)) union(aliases[0]!, alias);
+    return aliases;
+  });
+  const groups = new Map<string, T[]>();
+  records.forEach((record, index) => {
+    const aliases = aliasesByRecord[index]!;
+    const root = find(aliases[0]!);
+    const group = groups.get(root) ?? [];
+    group.push(record);
+    groups.set(root, group);
+  });
+  return Array.from(groups.values()).map(group => ({
+    // The caller supplies deterministic order (createdAt/id for orders), so
+    // the first record preserves the established canonical identity key.
+    key: customerIdentityHash(tenantId, getIdentity(group[0]!)),
+    records: group,
+  }));
+}
+
 export function customerAssetId(
   tenantId: string,
   input: CustomerIdentityInput

@@ -24,7 +24,7 @@ import { getDb } from "../db";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
 import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
 import {
-  customerIdentityHash,
+  groupCustomerRecords,
   customerIdentityHashes,
 } from "../customerAssets/customerIdentity";
 
@@ -61,10 +61,6 @@ function normalizePhone(value: string): string {
   let digits = value.replace(/\D/g, "");
   if (digits.length === 11 && digits.startsWith("1")) digits = digits.slice(1);
   return digits;
-}
-
-function customerKeyHash(tenantId: string, row: OrderRow): string {
-  return customerIdentityHash(tenantId, row);
 }
 
 function contentHash(message: string): string {
@@ -338,13 +334,11 @@ export async function runCustomerChurnScan(input: {
       .from(orders)
       .where(sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}`)
       .orderBy(orders.createdAt, orders.id);
-    const grouped = new Map<string, OrderRow[]>();
-    for (const row of sourceRows) {
-      const key = customerKeyHash(input.tenantId, row);
-      const group = grouped.get(key);
-      if (group) group.push(row);
-      else grouped.set(key, [row]);
-    }
+    const grouped = new Map(
+      groupCustomerRecords(input.tenantId, sourceRows, row => row).map(
+        group => [group.key, group.records]
+      )
+    );
 
     const snapshots: Array<typeof customerChurnSnapshots.$inferInsert> = [];
     for (const [keyHash, group] of Array.from(grouped.entries())) {

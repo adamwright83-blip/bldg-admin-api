@@ -58,5 +58,7 @@ describe("Goldline geographic truth contract", () => {
   it("does not limit multiplied prospect joins before deduplication", () => {
     expect(service).not.toContain(".limit(500)");
     expect(service).toContain("deduplicateDiscoveredEntities");
+    expect(service).not.toMatch(/\.limit\(250\)/);
+    expect(service).toContain("deduplicatePursuedPipelineRows(pipeline)");
   });
 });

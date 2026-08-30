@@ -15,7 +15,10 @@ import {
   projectLatLngToLanternAtlas,
   type LanternState,
 } from "../../shared/lanternCity";
-import { customerIdentityHash } from "../customerAssets/customerIdentity";
+import {
+  customerIdentityHash,
+  groupCustomerRecords,
+} from "../customerAssets/customerIdentity";
 import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
 import { getDb } from "../db";
 import { GoogleGeocoder } from "./googleGeocoder";
@@ -236,12 +239,16 @@ async function loadCustomerGroups(tenantId: string) {
     .from(orders)
     .where(eq(orders.tenantId, tenantId));
   const qualifying = rows.filter(row => row.status !== "cancelled");
-  const groups = new Map<string, typeof qualifying>();
-  for (const order of qualifying) {
-    const key = customerIdentityHash(tenantId, order);
-    groups.set(key, [...(groups.get(key) ?? []), order]);
-  }
-  return groups;
+  qualifying.sort(
+    (left, right) =>
+      left.createdAt.getTime() - right.createdAt.getTime() || left.id - right.id
+  );
+  return new Map(
+    groupCustomerRecords(tenantId, qualifying, order => order).map(group => [
+      group.key,
+      group.records,
+    ])
+  );
 }
 
 async function discoverEntities(tenantId: string): Promise<DiscoveredEntity[]> {
@@ -591,8 +598,7 @@ export async function getGeographicTruth(input: {
       .orderBy(
         desc(commercialPipelineRecords.updatedAt),
         desc(commercialPipelineRecords.id)
-      )
-      .limit(250),
+      ),
   ]);
   const locationMap = new Map(
     locations.map(row => [`${row.entityType}:${row.entityKey}`, row])
@@ -644,33 +650,35 @@ export async function getGeographicTruth(input: {
       geocodeStatus: location?.geocodeStatus ?? "pending",
     };
   });
-  const pursued = deduplicatePursuedPipelineRows(pipeline).map(row => {
-    const location = locationMap.get(`commercial_prospect:${row.accountId}`);
-    const latitude =
-      location?.latitude == null ? null : Number(location.latitude);
-    const longitude =
-      location?.longitude == null ? null : Number(location.longitude);
-    return {
-      pipelineId: row.id,
-      accountId: row.accountId,
-      name: row.name,
-      address: location?.sourceAddress ?? "Address unavailable",
-      stage: row.stage,
-      updatedAt: row.updatedAt.toISOString(),
-      location:
-        latitude != null &&
-        longitude != null &&
-        location?.geocodeStatus === "success"
-          ? {
-              latitude,
-              longitude,
-              canonicalAddress: location.canonicalAddress,
-              ...projectLatLngToLanternAtlas({ latitude, longitude }),
-            }
-          : null,
-      geocodeStatus: location?.geocodeStatus ?? "pending",
-    };
-  });
+  const pursued = deduplicatePursuedPipelineRows(pipeline)
+    .slice(0, 250)
+    .map(row => {
+      const location = locationMap.get(`commercial_prospect:${row.accountId}`);
+      const latitude =
+        location?.latitude == null ? null : Number(location.latitude);
+      const longitude =
+        location?.longitude == null ? null : Number(location.longitude);
+      return {
+        pipelineId: row.id,
+        accountId: row.accountId,
+        name: row.name,
+        address: location?.sourceAddress ?? "Address unavailable",
+        stage: row.stage,
+        updatedAt: row.updatedAt.toISOString(),
+        location:
+          latitude != null &&
+          longitude != null &&
+          location?.geocodeStatus === "success"
+            ? {
+                latitude,
+                longitude,
+                canonicalAddress: location.canonicalAddress,
+                ...projectLatLngToLanternAtlas({ latitude, longitude }),
+              }
+            : null,
+        geocodeStatus: location?.geocodeStatus ?? "pending",
+      };
+    });
   const statusCounts = locations.reduce<Record<string, number>>(
     (acc, row) => ({
       ...acc,

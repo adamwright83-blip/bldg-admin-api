@@ -21,7 +21,7 @@ import {
   customerAssetId,
   customerIdentityHash,
   customerIdentityHashes,
-  rawCustomerIdentityKey,
+  groupCustomerRecords,
 } from "./customerIdentity";
 import type {
   CustomerAsset,
@@ -170,13 +170,12 @@ export async function projectCustomerAssets(input: {
   const paymentByOrder = new Map(
     payments.map(payment => [payment.orderId, payment])
   );
-  const grouped = new Map<string, typeof orderRows>();
-  for (const row of orderRows) {
-    const key = rawCustomerIdentityKey(row);
-    const group = grouped.get(key) ?? [];
-    group.push(row);
-    grouped.set(key, group);
-  }
+  const grouped = new Map(
+    groupCustomerRecords(input.tenantId, orderRows, row => row).map(group => [
+      group.key,
+      group.records,
+    ])
+  );
 
   const residential: CustomerAsset[] = Array.from(grouped.values()).map(
     group => {

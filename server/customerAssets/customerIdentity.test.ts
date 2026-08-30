@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   customerIdentityHash,
   customerIdentityHashes,
+  groupCustomerRecords,
   legacyCustomerIdentityHash,
   rawCustomerIdentityKey,
 } from "./customerIdentity";
@@ -57,5 +58,36 @@ describe("customer asset identity", () => {
       customerIdentityHash("tenant-a", input),
       legacyCustomerIdentityHash("tenant-a", input),
     ]);
+  });
+
+  it("keeps history together when a later order gains a stronger identifier", () => {
+    const records = [
+      {
+        id: 1,
+        createdAt: new Date("2025-01-01T00:00:00Z"),
+        firstName: "Ada",
+        lastName: "L",
+        unit: "4",
+        address: "1 Main",
+        phone: "",
+        email: "ada@example.com",
+        bldgUserId: null,
+      },
+      {
+        id: 2,
+        createdAt: new Date("2025-02-01T00:00:00Z"),
+        firstName: "Ada",
+        lastName: "L",
+        unit: "4",
+        address: "1 Main",
+        phone: "",
+        email: "ada@example.com",
+        bldgUserId: 42,
+      },
+    ];
+    const groups = groupCustomerRecords("tenant-a", records, row => row);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.records.map(row => row.id)).toEqual([1, 2]);
+    expect(groups[0]?.key).toBe(customerIdentityHash("tenant-a", records[0]!));
   });
 });
