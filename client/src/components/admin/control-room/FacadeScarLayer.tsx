@@ -12,9 +12,9 @@
 import { useMemo } from "react";
 import {
   boundsForBuilding,
-  projectFacadeScars,
-  scarsWereTruncated,
+  projectFacade,
   type FacadeScar,
+  type PatinaZone,
   type SettledStratum,
 } from "./facadeScars";
 
@@ -82,6 +82,31 @@ function ScarMark({ scar }: { scar: FacadeScar }) {
   }
 }
 
+/**
+ * A consolidated era. Deliberately low-detail: it reads as accumulated
+ * weathering on the lower structure, not as a stack of analytics bands.
+ */
+function PatinaBand({ zone }: { zone: PatinaZone }) {
+  const x = (zone.xPercent / 100) * ART_WIDTH;
+  const y = (zone.yPercent / 100) * ART_HEIGHT;
+  const width = (zone.widthPercent / 100) * ART_WIDTH;
+  const height = (zone.heightPercent / 100) * ART_HEIGHT;
+  return (
+    <rect
+      className="tw-patina"
+      x={x}
+      y={y}
+      width={width}
+      height={height}
+      opacity={0.1 + zone.intensity * 0.16}
+    >
+      <title>
+        {`${zone.days} settled days, ${zone.fromDate} to ${zone.toDate}: ${zone.absorbedStrikes} repaired strikes`}
+      </title>
+    </rect>
+  );
+}
+
 export function FacadeScarLayer({
   strata,
   buildingId,
@@ -91,13 +116,12 @@ export function FacadeScarLayer({
   buildingId: string;
   buildingName: string;
 }) {
-  const scars = useMemo(
-    () => projectFacadeScars(strata, boundsForBuilding(buildingId)),
+  const { scars, patina, compressed } = useMemo(
+    () => projectFacade(strata, boundsForBuilding(buildingId)),
     [strata, buildingId]
   );
-  const truncated = useMemo(() => scarsWereTruncated(strata), [strata]);
 
-  if (!scars.length) return null;
+  if (!scars.length && !patina.length) return null;
 
   const settledDays = strata.filter(s => s.incomingAttacks > 0).length;
   const total = scars.length;
@@ -111,9 +135,15 @@ export function FacadeScarLayer({
       aria-label={`${buildingName} carries ${total} repaired ${
         total === 1 ? "strike" : "strikes"
       } across ${settledDays} settled ${settledDays === 1 ? "day" : "days"}${
-        truncated ? "; older history continues below in the record" : ""
+        compressed
+          ? "; older history is consolidated into weathering at the base"
+          : ""
       }`}
     >
+      {/* Compressed eras first, so individual repairs sit on top of them. */}
+      {patina.map(zone => (
+        <PatinaBand key={zone.key} zone={zone} />
+      ))}
       {scars.map(scar => (
         <g
           key={scar.key}

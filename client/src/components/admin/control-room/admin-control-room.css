@@ -97,3 +97,60 @@
 .tw-piece.is-opus .tw-scar{color:#9fb0c6}
 .tw-piece.is-opus .tw-scar--seam path{stroke:#dce7f5}
 .tw-piece-history{display:block;margin-top:2px;color:var(--cr-muted);font-size:9px;font-style:normal;letter-spacing:.04em;opacity:.85}
+.tw-patina{fill:#2a1d10;mix-blend-mode:multiply}
+.tw-piece.is-opus .tw-patina{fill:#0f1830}
+
+/* Canonical building seam — sealed approach, then the finite population */
+.cb-panel{display:flex;max-width:1320px;margin:22px auto;flex-direction:column;gap:14px}
+.cb-panel-head h2{margin:0;font-size:22px;letter-spacing:-.02em}
+.cb-panel-head p{max-width:60ch;margin:5px 0 0;color:var(--cr-muted);font-size:12px}
+.cb-warning{margin:0;padding:9px 12px;border:1px solid #e0b8ae;border-radius:8px;background:#fdf4f2;color:#a8452f;font-size:12px}
+.cb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr));gap:14px}
+.cb-building{display:flex;flex-direction:column;gap:14px;padding:20px;border:1px solid var(--cr-line);border-radius:12px;background:var(--cr-paper);box-shadow:0 8px 22px #0d25400a}
+.cb-building.is-held_penetrating,.cb-building.is-held_unpenetrated{border-color:#bfa06a;box-shadow:0 8px 22px #0d25400a,inset 3px 0 var(--cr-gold)}
+.cb-building.is-closed{opacity:.72}
+.cb-building-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.cb-building-head h3{margin:0;font-size:15px}
+.cb-phase{margin:4px 0 0;color:var(--cr-muted);font-size:12px;max-width:40ch}
+.cb-phase-chip{padding:4px 9px;border-radius:20px;font-size:9px;font-weight:850;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}
+.cb-phase-chip.is-sealed{border:1px solid var(--cr-line);color:var(--cr-muted)}
+.cb-phase-chip.is-open{background:var(--cr-gold);color:#2b1d00}
+.cb-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:18px}
+@media (max-width:44rem){.cb-body{grid-template-columns:1fr}}
+.cb-body h4{margin:0 0 8px;color:var(--cr-muted);font-size:9px;font-weight:850;letter-spacing:.14em;text-transform:uppercase}
+
+/* The way in — a climb, highest rung at the top */
+.cb-ladder{display:flex;margin:0;padding:0;flex-direction:column;gap:2px;list-style:none}
+.cb-rung{display:grid;grid-template-columns:14px 1fr auto;align-items:center;gap:9px;padding:5px 8px;border-radius:5px;font-size:12px}
+.cb-rung-mark{inline-size:9px;block-size:9px;border-radius:2px;border:1.5px solid var(--cr-muted)}
+.cb-rung.is-open .cb-rung-mark{background:var(--cr-gold);border-color:#b98c17}
+.cb-rung.is-open{color:var(--cr-ink)}
+.cb-rung.is-sealed{color:var(--cr-muted)}
+.cb-rung.is-current{background:#fdf6e6;font-weight:700}
+.cb-rung.is-next{background:#f2f0fd;color:var(--cr-ink);box-shadow:inset 2px 0 var(--cr-purple)}
+.cb-rung.is-next .cb-rung-mark{border-color:var(--cr-purple);border-style:dashed}
+.cb-rung-body{display:flex;min-width:0;flex-direction:column}
+.cb-rung-next{color:var(--cr-purple);font-size:11px;font-weight:700}
+.cb-rung-state{color:var(--cr-muted);font-size:9px;letter-spacing:.08em;text-transform:uppercase}
+.cb-note{margin:8px 0 0;color:var(--cr-muted);font-size:11px;line-height:1.5}
+.cb-access{font-style:italic}
+.cb-blocked,.cb-complete{margin:10px 0 0;padding:7px 9px;border-radius:6px;font-size:11px}
+.cb-blocked{background:#f5f7fb;color:var(--cr-muted)}
+.cb-complete{background:#f1f8f3;color:#1f6b41}
+
+/* The population — one mark per real unit; arrangement is not a floor plan */
+.cb-occupancy{display:flex;flex-direction:column;gap:10px}
+.cb-field{display:grid;grid-template-columns:repeat(var(--cb-cols,20),1fr);gap:2px;padding:9px;border-radius:8px;background:#f4f6fa}
+.cb-field.is-verified{border:1px solid var(--cr-line)}
+.cb-field.is-provisional{border:1.5px dashed #c9922f;background:#fbf6ec}
+.cb-cell{aspect-ratio:1;border-radius:1px;background:#dbe1ea}
+.cb-cell.is-paid{background:var(--cr-gold);box-shadow:0 0 3px #f0a91680}
+.cb-cell.is-signup{background:#b9a3f0}
+.cb-cell.is-unclaimed{background:#dbe1ea}
+.cb-legend{display:flex;flex-wrap:wrap;margin:0;gap:6px 18px}
+.cb-legend>div{display:flex;align-items:baseline;gap:7px}
+.cb-legend dt{display:flex;align-items:center;gap:5px;color:var(--cr-muted);font-size:11px}
+.cb-legend dt .cb-cell{inline-size:9px;block-size:9px;aspect-ratio:auto}
+.cb-legend dd{margin:0;font-size:12px;font-weight:750;font-variant-numeric:tabular-nums}
+.cb-field-note{margin:0;color:var(--cr-muted);font-size:11px;line-height:1.5}
+.cb-field-note strong{color:#a8752f}

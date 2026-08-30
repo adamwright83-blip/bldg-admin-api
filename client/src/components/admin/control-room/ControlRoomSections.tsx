@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { TowerWars } from "./TowerWars";
 import { BuildingStrata } from "./BuildingStrata";
+import { CanonicalBuildingSeam } from "./CanonicalBuildingSeam";
 
 const ASSET_ROOT = "/assets/admin/control-room";
 
@@ -79,6 +80,7 @@ export function GrowthControlRoom({
       />
       <TowerWars onNavigate={onNavigate} compact />
       <BuildingStrata />
+      <CanonicalBuildingSeam />
       <section className="cr-destination-grid" aria-label="Growth workspaces">
         <DestinationCard
           icon="growth"

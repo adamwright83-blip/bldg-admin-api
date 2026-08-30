@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_PATINA_ZONES,
   MAX_RENDERED_SCARS,
+  projectFacade,
   projectFacadeScars,
   scarKindFor,
   scarsWereTruncated,
@@ -126,25 +128,71 @@ describe("age reads as integration, oldest first", () => {
   });
 });
 
-describe("dense history is truncated, never fabricated", () => {
+describe("dense history compresses rather than disappearing", () => {
+  // 40 days x 4 strikes = 160 absorbed, far past the individual-draw budget.
   const heavy: SettledStratum[] = Array.from({ length: 40 }).map((_, i) => ({
-    businessDate: `2026-06-${String((i % 28) + 1).padStart(2, "0")}`,
+    businessDate: `2026-06-${String(i + 1).padStart(2, "0")}`,
     incomingAttacks: 4,
     damageAtSettlement: "critical" as const,
   }));
 
-  it("caps the drawn marks", () => {
-    expect(projectFacadeScars(heavy)).toHaveLength(MAX_RENDERED_SCARS);
-    expect(scarsWereTruncated(heavy)).toBe(true);
+  it("never draws more individual marks than the budget", () => {
+    expect(projectFacade(heavy).scars.length).toBeLessThanOrEqual(
+      MAX_RENDERED_SCARS
+    );
   });
 
-  it("keeps the most recent history when it truncates", () => {
-    const scars = projectFacadeScars(heavy);
-    const lastDate = heavy.at(-1)!.businessDate;
-    expect(scars.some(s => s.businessDate === lastDate)).toBe(true);
+  it("consolidates the older era instead of dropping it", () => {
+    const { patina, compressed } = projectFacade(heavy);
+    expect(compressed).toBe(true);
+    expect(patina.length).toBeGreaterThan(0);
+    expect(patina.length).toBeLessThanOrEqual(MAX_PATINA_ZONES);
   });
 
-  it("reports no truncation when the record fits", () => {
+  it("preserves every absorbed strike across scars plus patina", () => {
+    const { scars, patina } = projectFacade(heavy);
+    const total = heavy.reduce((sum, s) => sum + s.incomingAttacks, 0);
+    const kept =
+      scars.length + patina.reduce((sum, z) => sum + z.absorbedStrikes, 0);
+    // Nothing is lost: the oldest history became weathering, not absence.
+    expect(kept).toBe(total);
+  });
+
+  it("keeps the most recent days as individual repairs", () => {
+    const { scars } = projectFacade(heavy);
+    expect(scars.some(s => s.businessDate === heavy.at(-1)!.businessDate)).toBe(
+      true
+    );
+  });
+
+  it("gives each patina zone a real date range and strike count", () => {
+    for (const zone of projectFacade(heavy).patina) {
+      expect(zone.fromDate <= zone.toDate).toBe(true);
+      expect(zone.absorbedStrikes).toBeGreaterThan(0);
+      expect(zone.days).toBeGreaterThan(0);
+    }
+  });
+
+  it("never splits a single day between drawn and compressed", () => {
+    const { scars, patina } = projectFacade(heavy);
+    const drawnDates = new Set(scars.map(s => s.businessDate));
+    for (const zone of patina) {
+      // A compressed zone's range must not contain an individually drawn day.
+      for (const date of drawnDates) {
+        expect(date >= zone.fromDate && date <= zone.toDate).toBe(false);
+      }
+    }
+  });
+
+  it("does not compress a record that fits", () => {
+    const { patina, compressed, scars } = projectFacade(strata);
+    expect(compressed).toBe(false);
+    expect(patina).toEqual([]);
+    expect(scars).toHaveLength(6);
     expect(scarsWereTruncated(strata)).toBe(false);
+  });
+
+  it("is deterministic", () => {
+    expect(projectFacade(heavy)).toEqual(projectFacade(heavy));
   });
 });
