@@ -272,6 +272,7 @@ function LiveGoldlineDriverController() {
   const proposeDayCommitment = trpc.system.dayDirector.propose.useMutation();
   const acceptDayCommitment = trpc.system.dayDirector.accept.useMutation();
   const dismissDayPrompt = trpc.system.dayDirector.dismiss.useMutation();
+  const completeDayCommitment = trpc.system.dayDirector.complete.useMutation();
   /**
    * Field intel. `proposeSignal` calls a model and writes nothing;
    * `confirmSignal` is the only thing that persists, and it persists what the
@@ -1167,13 +1168,25 @@ function LiveGoldlineDriverController() {
             setStageReturnScene("day-plan");
             setDriverScene("colosseum");
           }}
-          onProposeCommitment={sourceText => proposeDayCommitment.mutateAsync({ sourceText })}
+          onProposeCommitment={sourceText =>
+            proposeDayCommitment.mutateAsync({ sourceText })
+          }
           onAcceptProposal={async proposal => {
-            await acceptDayCommitment.mutateAsync({ businessDate: selectedDate, proposal });
+            await acceptDayCommitment.mutateAsync({
+              businessDate: selectedDate,
+              proposal,
+            });
             await dayDirectorState.refetch();
           }}
           onDismissProposal={async promptKey => {
-            await dismissDayPrompt.mutateAsync({ businessDate: selectedDate, promptKey });
+            await dismissDayPrompt.mutateAsync({
+              businessDate: selectedDate,
+              promptKey,
+            });
+            await dayDirectorState.refetch();
+          }}
+          onCompleteCommitment={async commitmentId => {
+            await completeDayCommitment.mutateAsync({ commitmentId });
             await dayDirectorState.refetch();
           }}
         />

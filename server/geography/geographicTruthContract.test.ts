@@ -20,6 +20,10 @@ const atlas = fs.readFileSync(
   ),
   "utf8"
 );
+const service = fs.readFileSync(
+  path.join(root, "server/geography/geographicTruthService.ts"),
+  "utf8"
+);
 
 describe("Goldline geographic truth contract", () => {
   it("normalizes equivalent source addresses for cache reuse", () => {
@@ -49,5 +53,10 @@ describe("Goldline geographic truth contract", () => {
     expect(atlas).not.toContain("resolveCustomerMapLocation");
     expect(atlas).not.toMatch(/90069|90210|wilshire blvd/i);
     expect(atlas).toContain("customer.location");
+  });
+
+  it("does not limit multiplied prospect joins before deduplication", () => {
+    expect(service).not.toContain(".limit(500)");
+    expect(service).toContain("deduplicateDiscoveredEntities");
   });
 });

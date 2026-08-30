@@ -10,7 +10,10 @@ const mocks = vi.hoisted(() => ({ getDb: vi.fn() }));
 vi.mock("../db", () => ({ getDb: mocks.getDb }));
 
 import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
-import { getDayDirectorState } from "../dayDirector/dayDirectorService";
+import {
+  completeDayDirectorCommitment,
+  getDayDirectorState,
+} from "../dayDirector/dayDirectorService";
 import { activateTowerWarsPromise } from "./towerWarsService";
 
 type Row = Record<string, any>;
@@ -40,8 +43,11 @@ function memoryDb() {
     permissionChannel: "sms",
     permissionEvidence:
       "Customer explicitly requested the referral card by SMS.",
+    fulfilledAt: null,
+    fulfilledBy: null,
+    fulfillmentEvidence: null,
   };
-  const db = {
+  const db: any = {
     select: vi.fn(() => ({
       from: (table: object) => ({
         where: (predicate: unknown) => {
@@ -57,7 +63,7 @@ function memoryDb() {
               row =>
                 row.tenantId === params[0] &&
                 row.actorId === params[1] &&
-                row.businessDate === params[2]
+                (row.businessDate === params[2] || row.id === params[2])
             );
           } else if (
             table === dayDirectorProcessingLocations ||
@@ -86,7 +92,30 @@ function memoryDb() {
         },
       }),
     })),
+    update: vi.fn((table: object) => ({
+      set: (values: Row) => ({
+        where: async (predicate: unknown) => {
+          const params = predicateParameters(predicate);
+          if (table === dayDirectorCommitments) {
+            const row = commitments.find(
+              item =>
+                item.tenantId === params[0] &&
+                item.actorId === params[1] &&
+                item.id === params[2]
+            );
+            if (row) Object.assign(row, values);
+          } else if (
+            table === towerWarsPromises &&
+            promise.tenantId === params[0] &&
+            promise.id === params[1]
+          ) {
+            Object.assign(promise, values);
+          }
+        },
+      }),
+    })),
   };
+  db.transaction = async (run: (tx: typeof db) => unknown) => run(db);
   return { db, commitments, promise };
 }
 
@@ -119,5 +148,30 @@ describe("Tower Wars → Day Director actor identity", () => {
     ]);
     expect(memory.commitments[0]?.actorId).toBe("42");
     expect(memory.commitments[0]?.actorId).not.toBe(ctx.user.openId);
+  });
+
+  it("fulfills the originating promise when its Day Director work completes", async () => {
+    const memory = memoryDb();
+    mocks.getDb.mockResolvedValue(memory.db);
+    const actorId = dayDirectorActorId({ user: { id: 42 } });
+    await activateTowerWarsPromise({
+      tenantId: "tenant-a",
+      promiseId: memory.promise.id,
+      actorId,
+    });
+    const commitmentId = String(memory.commitments[0]!.id);
+
+    await completeDayDirectorCommitment({
+      tenantId: "tenant-a",
+      actorId,
+      commitmentId,
+    });
+
+    expect(memory.commitments[0]).toMatchObject({ status: "completed" });
+    expect(memory.promise).toMatchObject({
+      fulfilledBy: "42",
+      fulfillmentEvidence: `Completed through Day Director commitment ${commitmentId}`,
+    });
+    expect(memory.promise.fulfilledAt).toBeInstanceOf(Date);
   });
 });

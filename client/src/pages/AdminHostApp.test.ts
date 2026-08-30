@@ -141,6 +141,8 @@ describe("truth-bound visual rules", () => {
     expect(damageStateForIncomingAttacks(4)).toBe("critical");
     expect(towerSource).toContain("Replay Today");
     expect(towerSource).toContain("TOWER_WARS_ATTACK_THRESHOLD_CENTS");
+    expect(towerSource).toContain("promise.id === printPromiseId");
+    expect(towerSource).toContain("flushSync");
     expect(towerSource).not.toContain("Not configured");
     expect(towerSource).not.toMatch(/⚡|100\/100|Season 7|3,450/);
   });

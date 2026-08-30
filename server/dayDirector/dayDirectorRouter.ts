@@ -2,6 +2,7 @@ import { z } from "zod";
 import { dayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   acceptProposal,
+  completeDayDirectorCommitment,
   getDayDirectorState,
   proposeCommitment,
   setPromptState,
@@ -53,6 +54,15 @@ export const dayDirectorRouter = router({
         actorId: dayDirectorActorId(ctx),
         state: "dismissed",
         ...input,
+      })
+    ),
+  complete: dayforgeTenantMemberProcedure
+    .input(z.object({ commitmentId: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      completeDayDirectorCommitment({
+        tenantId: ctx.tenantId,
+        actorId: dayDirectorActorId(ctx),
+        commitmentId: input.commitmentId,
       })
     ),
 });

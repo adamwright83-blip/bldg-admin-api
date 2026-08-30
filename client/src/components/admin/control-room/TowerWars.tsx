@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   ArrowRight,
   LockKeyhole,
@@ -137,6 +138,7 @@ function useReplay(data: TowerWarsData | undefined) {
 }
 
 export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
+  const [printPromiseId, setPrintPromiseId] = useState<string | null>(null);
   const today = trpc.system.towerWars.today.useQuery(undefined, {
     staleTime: 30_000,
   });
@@ -359,6 +361,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
                   disabled={fulfill.isPending || activate.isPending}
                   onClick={() => {
                     if (promise.promiseType === "offer_insert") {
+                      flushSync(() => setPrintPromiseId(promise.id));
                       window.print();
                       if (
                         window.confirm(
@@ -371,6 +374,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
                             "Owner confirmed printed fulfillment from Tower Wars",
                         });
                       }
+                      setPrintPromiseId(null);
                       return;
                     }
                     activate.mutate({ promiseId: promise.id });
@@ -474,7 +478,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
           {data.businessDate} · {data.timeZone} · {NAMES[youId]}
         </p>
         {openPromises
-          .filter(promise => promise.promiseType === "offer_insert")
+          .filter(promise => promise.id === printPromiseId)
           .map(promise => (
             <article key={promise.id}>
               <h2>{promise.quantity ?? "Recorded"} physical inserts</h2>

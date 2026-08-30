@@ -301,8 +301,7 @@ async function discoverEntities(tenantId: string): Promise<DiscoveredEntity[]> {
           ACTIVE_COMMERCIAL_PIPELINE_STAGES
         )
       )
-    )
-    .limit(500);
+    );
   return [
     ...customers,
     ...buildings,

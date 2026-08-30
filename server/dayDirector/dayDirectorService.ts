@@ -1,9 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import {
   dayDirectorCommitments,
   dayDirectorProcessingLocations,
   dayDirectorPromptStates,
+  towerWarsPromises,
 } from "../../drizzle/schema";
 import type { DayDirectorProposal } from "../../shared/dayDirector";
 import { getDb } from "../db";
@@ -246,4 +247,65 @@ export async function setPromptState(input: {
     .values(input)
     .onDuplicateKeyUpdate({ set: { state: input.state } });
   return { ok: true };
+}
+
+export async function completeDayDirectorCommitment(input: {
+  tenantId: string;
+  actorId: string;
+  commitmentId: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async tx => {
+    const [commitment] = await tx
+      .select()
+      .from(dayDirectorCommitments)
+      .where(
+        and(
+          eq(dayDirectorCommitments.tenantId, input.tenantId),
+          eq(dayDirectorCommitments.actorId, input.actorId),
+          eq(dayDirectorCommitments.id, input.commitmentId)
+        )
+      )
+      .limit(1);
+    if (!commitment) throw new Error("Day Director commitment not found");
+    const alreadyCompleted = commitment.status === "completed";
+    const completedAt = commitment.completedAt ?? new Date();
+    if (!alreadyCompleted) {
+      await tx
+        .update(dayDirectorCommitments)
+        .set({ status: "completed", completedAt })
+        .where(
+          and(
+            eq(dayDirectorCommitments.tenantId, input.tenantId),
+            eq(dayDirectorCommitments.actorId, input.actorId),
+            eq(dayDirectorCommitments.id, input.commitmentId)
+          )
+        );
+    }
+    const metadata = commitment.metadataJson as {
+      towerWarsPromiseId?: unknown;
+    } | null;
+    const towerWarsPromiseId =
+      typeof metadata?.towerWarsPromiseId === "string"
+        ? metadata.towerWarsPromiseId
+        : null;
+    if (towerWarsPromiseId) {
+      await tx
+        .update(towerWarsPromises)
+        .set({
+          fulfilledAt: completedAt,
+          fulfilledBy: input.actorId,
+          fulfillmentEvidence: `Completed through Day Director commitment ${commitment.id}`,
+        })
+        .where(
+          and(
+            eq(towerWarsPromises.tenantId, input.tenantId),
+            eq(towerWarsPromises.id, towerWarsPromiseId),
+            isNull(towerWarsPromises.fulfilledAt)
+          )
+        );
+    }
+    return { ok: true as const, alreadyCompleted };
+  });
 }

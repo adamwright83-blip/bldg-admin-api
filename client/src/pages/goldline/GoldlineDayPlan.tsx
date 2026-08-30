@@ -44,6 +44,7 @@ export type GoldlineDayPlanProps = {
   onProposeCommitment?: (sourceText: string) => Promise<DayDirectorProposal>;
   onAcceptProposal?: (proposal: DayDirectorProposal) => Promise<void>;
   onDismissProposal?: (promptKey: string) => Promise<void>;
+  onCompleteCommitment?: (commitmentId: string) => Promise<void>;
 };
 
 const KIND_LABEL = {
@@ -91,11 +92,15 @@ function StopCard({
   index,
   onEnterColosseum,
   onEnterWorld,
+  onCompleteCommitment,
+  completingCommitmentId,
 }: {
   stop: DayPlanStop;
   index: number;
   onEnterColosseum: () => void;
   onEnterWorld: (trackedStopId?: string) => void;
+  onCompleteCommitment?: (commitmentId: string) => Promise<void>;
+  completingCommitmentId: string | null;
 }) {
   const completedTime = shortTime(stop.completedAt);
   return (
@@ -128,6 +133,24 @@ function StopCard({
             <Check /> COMPLETED{completedTime ? ` · ${completedTime}` : ""}
           </div>
         )}
+        {onCompleteCommitment &&
+          stop.source === "user_commitment" &&
+          stop.status !== "completed" && (
+            <div className="gdp-mission-actions">
+              <button
+                type="button"
+                disabled={completingCommitmentId === stop.id}
+                onClick={() =>
+                  onCompleteCommitment?.(stop.id.replace(/^commitment-/, ""))
+                }
+              >
+                <Check />
+                {completingCommitmentId === stop.id
+                  ? "COMPLETING…"
+                  : "MARK COMPLETE"}
+              </button>
+            </div>
+          )}
         {stop.status === "ready" && stop.missionTarget === "colosseum" && (
           <div className="gdp-mission-actions">
             <button type="button" onClick={onEnterColosseum}>
@@ -161,6 +184,9 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
   const [proposal, setProposal] = useState<DayDirectorProposal | null>(null);
   const [directorBusy, setDirectorBusy] = useState(false);
   const [directorError, setDirectorError] = useState<string | null>(null);
+  const [completingCommitmentId, setCompletingCommitmentId] = useState<
+    string | null
+  >(null);
   const [now, setNow] = useState(() => new Date());
   const [forcedMobileViewport, setForcedMobileViewport] = useState(false);
   useEffect(() => {
@@ -445,6 +471,16 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
               index={index}
               onEnterColosseum={props.onEnterColosseum}
               onEnterWorld={props.onEnterWorld}
+              completingCommitmentId={completingCommitmentId}
+              onCompleteCommitment={async commitmentId => {
+                const stopId = `commitment-${commitmentId}`;
+                setCompletingCommitmentId(stopId);
+                try {
+                  await props.onCompleteCommitment?.(commitmentId);
+                } finally {
+                  setCompletingCommitmentId(null);
+                }
+              }}
             />
           </div>
         ))}
