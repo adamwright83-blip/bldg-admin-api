@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { ArrowRight, MapPinOff, RefreshCw, Search, X } from "lucide-react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { CityTowerButton } from "./CityTowerButton";
+import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
 
 const MAP_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas.jpg";
 const NEIGHBORHOODS = [
@@ -27,8 +29,10 @@ export function classifyLanternCustomer(customer: { recencyStatus: string }) {
 
 export default function LanternCityAtlas({
   onOpenCustomer,
+  onNavigate,
 }: {
   onOpenCustomer: (phone: string) => void;
+  onNavigate: (path: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<
@@ -140,6 +144,13 @@ export default function LanternCityAtlas({
       <section className="lc-map" aria-label="Customer relationship atlas">
         <img src={MAP_IMAGE} alt="Illustrated Los Angeles relationship atlas" />
         <div className="lc-map-wash" />
+        {([
+          { id: "century_park_east", latitude: 34.0591, longitude: -118.4147 },
+          { id: "opus_la", latitude: 34.0618, longitude: -118.3011 },
+        ] as const).map(tower => {
+          const point = projectLatLngToLanternAtlas(tower);
+          return <CityTowerButton key={tower.id} buildingId={tower.id} className="lc-world-tower" style={{ left: `${point.x}%`, top: `${point.y}%` }} returnPath="/growth/lantern-city" onNavigate={onNavigate} subtitle="TODAY battle truth" />;
+        })}
         {NEIGHBORHOODS.map(item => (
           <span
             key={item.label}

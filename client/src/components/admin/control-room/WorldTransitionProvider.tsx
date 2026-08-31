@@ -49,6 +49,7 @@ type Pending = {
   sourceRect: WorldRect | null;
   returnPath: string | null;
   reducedMotion: boolean;
+  kind: TransitionKind;
 };
 
 type Ctx = {
@@ -62,6 +63,7 @@ type Ctx = {
     to: WorldCamera;
     sourceEl?: Element | null;
     returnPath?: string | null;
+    kind?: TransitionKind;
   }) => void;
   /** A destination calls this once its building has laid out. */
   arrive: (entityId: string, destEl: Element | null) => void;
@@ -91,6 +93,7 @@ export function WorldTransitionProvider({
   const [pending, setPending] = useState<Pending | null>(null);
   const [flight, setFlight] = useState<Flight | null>(null);
   const [landed, setLanded] = useState(false);
+  const [returnAnchor, setReturnAnchor] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
 
   const clearTimer = () => {
@@ -115,7 +118,9 @@ export function WorldTransitionProvider({
       sourceRect: measureRect(input.sourceEl ?? null),
       returnPath: input.returnPath ?? null,
       reducedMotion: prefersReducedMotion(),
+      kind: input.kind ?? "traversal",
     });
+    if (input.kind !== "reverse") setReturnAnchor(input.returnPath ?? null);
     setLanded(false);
   }, []);
 
@@ -127,7 +132,7 @@ export function WorldTransitionProvider({
       if (!destRect || !current.sourceRect) return null;
       setFlight({
         entityId: current.entityId,
-        kind: "traversal",
+        kind: current.kind,
         from: current.from,
         to: current.to,
         sourceRect: current.sourceRect,
@@ -168,13 +173,13 @@ export function WorldTransitionProvider({
   const value = useMemo<Ctx>(
     () => ({
       approaching: pending?.entityId ?? flight?.entityId ?? null,
-      returnPath: pending?.returnPath ?? null,
+      returnPath: returnAnchor,
       begin,
       arrive,
       cancel,
       isArriving: Boolean(pending || flight),
     }),
-    [pending, flight, begin, arrive, cancel]
+    [pending, flight, returnAnchor, begin, arrive, cancel]
   );
 
   return (

@@ -152,12 +152,18 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   const [printPromiseId, setPrintPromiseId] = useState<string | null>(null);
   const [comebackBuilding, setComebackBuilding] = useState<TowerWarsBuildingId | null>(null);
   // The building the camera was moving toward, carried from the city.
-  const { approaching, arrive, isArriving } = useWorldTransition();
+  const { approaching, arrive, isArriving, begin, returnPath } = useWorldTransition();
   const enteredFor =
     approaching ??
     (typeof window !== "undefined"
       ? entityFromSearch(window.location.search)
       : null);
+  const [isEstablishing, setIsEstablishing] = useState(() => Boolean(!approaching && enteredFor));
+  useEffect(() => {
+    if (!isEstablishing) return;
+    const timer = window.setTimeout(() => setIsEstablishing(false), 420);
+    return () => window.clearTimeout(timer);
+  }, [isEstablishing]);
   const pieceRefs = useRef<Record<string, HTMLDivElement | null>>({});
   useLayoutEffect(() => {
     if (!enteredFor) return;
@@ -262,7 +268,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
       {today.isError ? <div className="tw-confidence" role="status">Live feed interrupted · holding the last trusted world · new claims and mutating actions are suppressed</div> : null}
       {comebackBuilding ? <SiegeComeback buildingId={comebackBuilding} onClose={() => setComebackBuilding(null)} onContinue={() => onNavigate("/commercial-pipeline")} /> : null}
       <section
-        className={`tw-arena ${isArriving ? "tw-arriving" : ""}`}
+        className={`tw-arena ${isArriving || isEstablishing ? "tw-arriving" : ""}`}
         data-unseen-events={unseenEvents.length}
         aria-labelledby="tower-wars-title"
       >
@@ -272,6 +278,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
           alt="Sunlit Los Angeles Tower Wars arena"
         />
         <div className="tw-arena-shade" />
+        {isEstablishing && enteredFor ? <div className="tw-establishing" aria-live="polite"><CanonicalBuildingArt buildingId={enteredFor}/><span>Direct arrival · establishing {NAMES[enteredFor]} in Los Angeles</span></div> : null}
         <header className="tw-scoreboard">
           <div className="tw-score-you">
             <span>{NAMES[youId]}</span>
@@ -566,6 +573,10 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
         >
           Engineer the comeback <ArrowRight />
         </button>
+        <button type="button" onClick={() => {
+          begin({ entityId: youId, from: "building", to: "city", sourceEl: pieceRefs.current[youId], returnPath, kind: "reverse" });
+          onNavigate(returnPath ?? "/growth/lantern-city");
+        }}>Return to the city <ArrowRight /></button>
       </section>
       <section className="tw-print-sheet" aria-hidden="true">
         <h1>Goldline promise fulfillment sheet</h1>

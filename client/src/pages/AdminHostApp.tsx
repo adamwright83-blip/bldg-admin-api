@@ -361,7 +361,7 @@ export default function AdminHostApp() {
             onOpenCustomer={phone => setProfilePhone(phone)}
           />
         ) : isLanternCity ? (
-          <LanternCityAtlas onOpenCustomer={phone => setProfilePhone(phone)} />
+          <LanternCityAtlas onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
         ) : isTowerWars ? (
           <TowerWars onNavigate={nextPath => navigate(nextPath)} />
         ) : isSandbox ? (

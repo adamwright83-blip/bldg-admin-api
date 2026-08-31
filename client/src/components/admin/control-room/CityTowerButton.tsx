@@ -9,7 +9,7 @@
  * Both Home towers previously navigated to the same path with no payload, so the
  * destination could not tell which building had been chosen.
  */
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { CanonicalBuildingArt } from "./CanonicalBuildingArt";
 import { useWorldTransition } from "./WorldTransitionProvider";
 import { BUILDING_ART, type CanonicalBuildingId } from "./buildingArt";
@@ -20,21 +20,27 @@ export function CityTowerButton({
   subtitle,
   onNavigate,
   returnPath = "/",
+  style,
 }: {
   buildingId: CanonicalBuildingId;
   className: string;
   subtitle: React.ReactNode;
   onNavigate: (path: string) => void;
   returnPath?: string;
+  style?: React.CSSProperties;
 }) {
   const artRef = useRef<HTMLSpanElement>(null);
-  const { begin } = useWorldTransition();
+  const { begin, approaching, arrive } = useWorldTransition();
   const art = BUILDING_ART[buildingId];
+  useLayoutEffect(() => {
+    if (approaching === buildingId) arrive(buildingId, artRef.current);
+  }, [approaching, arrive, buildingId]);
 
   return (
     <button
       type="button"
       className={className}
+      style={style}
       onClick={() => {
         begin({
           entityId: buildingId,
@@ -42,6 +48,7 @@ export function CityTowerButton({
           to: "building",
           sourceEl: artRef.current,
           returnPath,
+          kind: "traversal",
         });
         // State commits first: navigate immediately, camera follows.
         onNavigate(`/growth/tower-wars?building=${buildingId}`);
