@@ -1,0 +1,53 @@
+import { z } from "zod";
+import {
+  dayforgeMissionFieldProcedure,
+  dayforgeTenantAdminProcedure,
+  dayforgeTenantOperatorProcedure,
+  router,
+} from "../_core/trpc";
+import {
+  listEntityChronicle,
+  listUnpresentedCelebrationEvents,
+  recordGoldlineEventReceipt,
+} from "./worldEventStore";
+import { approveAndPublishTower, getForgeReview, listForgeJobs, processTowerForgeJob, queueTowerForgeJob, rejectTowerForgeJob, selectTowerWeaponConcept } from "../worldForge/worldForgeService";
+
+export const goldlineWorldRouter = router({
+  unpresentedCelebrations: dayforgeMissionFieldProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(50).default(20) }).optional())
+    .query(({ ctx, input }) => listUnpresentedCelebrationEvents({
+      tenantId: ctx.tenantId,
+      viewerId: ctx.user.openId,
+      limit: input?.limit,
+    })),
+  markEvent: dayforgeMissionFieldProcedure.input(z.object({
+    worldEventId: z.string().uuid(),
+    receiptType: z.enum(["presented", "read", "acknowledged"]),
+  })).mutation(({ ctx, input }) => recordGoldlineEventReceipt({
+    tenantId: ctx.tenantId,
+    viewerId: ctx.user.openId,
+    ...input,
+  })),
+  chronicle: dayforgeTenantOperatorProcedure.input(z.object({
+    physicalEntityId: z.string().uuid(),
+    limit: z.number().int().min(1).max(200).default(100),
+  })).query(({ ctx, input }) => listEntityChronicle({ tenantId: ctx.tenantId, ...input })),
+  forgeJobs: dayforgeTenantAdminProcedure.input(z.object({
+    limit: z.number().int().min(1).max(200).default(100),
+  }).optional()).query(({ ctx, input }) => listForgeJobs({ tenantId: ctx.tenantId, limit: input?.limit })),
+  forgeReview: dayforgeTenantAdminProcedure.input(z.object({ forgeJobId: z.string().uuid() }))
+    .query(({ ctx, input }) => getForgeReview({ tenantId: ctx.tenantId, ...input })),
+  selectWeapon: dayforgeTenantAdminProcedure.input(z.object({ forgeJobId: z.string().uuid(), conceptId: z.string().uuid() }))
+    .mutation(({ ctx, input }) => selectTowerWeaponConcept({ tenantId: ctx.tenantId, ...input })),
+  rejectForge: dayforgeTenantAdminProcedure.input(z.object({ forgeJobId: z.string().uuid(), confirmation: z.literal("REJECT"), reason: z.string().trim().min(3).max(512) }))
+    .mutation(({ ctx, input }) => rejectTowerForgeJob({ tenantId: ctx.tenantId, forgeJobId: input.forgeJobId, reason: input.reason })),
+  approveAndPublish: dayforgeTenantAdminProcedure.input(z.object({ forgeJobId: z.string().uuid(), assetId: z.string().uuid(), confirmation: z.literal("PUBLISH") }))
+    .mutation(({ ctx, input }) => approveAndPublishTower({ tenantId: ctx.tenantId, forgeJobId: input.forgeJobId, assetId: input.assetId, actorId: ctx.user.openId })),
+  retryForge: dayforgeTenantAdminProcedure.input(z.object({ forgeJobId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      queueTowerForgeJob({ tenantId: ctx.tenantId, forgeJobId: input.forgeJobId });
+      return { queued: true } as const;
+    }),
+  processForgeNow: dayforgeTenantAdminProcedure.input(z.object({ forgeJobId: z.string().uuid() }))
+    .mutation(({ ctx, input }) => processTowerForgeJob({ tenantId: ctx.tenantId, forgeJobId: input.forgeJobId })),
+});

@@ -28,6 +28,10 @@ const mocks = vi.hoisted(() => ({
   storageGet: vi.fn(async () => ({ url: "https://storage.example/fake-audio.webm" })),
 }));
 const envState = vi.hoisted(() => ({ anthropicApiKey: "" }));
+const worldMocks = vi.hoisted(() => ({
+  append: vi.fn(async (input: Record<string, unknown>) => ({ id: "world-event-1", ...input })),
+  queue: vi.fn(),
+}));
 
 vi.mock("../_core/voiceTranscription", () => ({
   transcribeAudio: mocks.transcribeAudio,
@@ -41,6 +45,8 @@ vi.mock("../storage", () => ({
 }));
 
 vi.mock("../_core/env", () => ({ ENV: envState }));
+vi.mock("../goldlineWorld/worldEventStore", () => ({ appendGoldlineWorldEvent: worldMocks.append }));
+vi.mock("../goldlineWorld/fieldJournalProcessingService", () => ({ queueFieldJournalProcessing: worldMocks.queue }));
 
 type InsertedRow = Record<string, unknown>;
 
@@ -97,25 +103,26 @@ beforeEach(() => {
 const AUDIO_DATA_URL = `data:audio/webm;codecs=opus;base64,${Buffer.from("fake-audio-bytes").toString("base64")}`;
 
 describe("driver sales journal resilience", () => {
-  it("Case A — text-only journal saves via fallback when Anthropic is not configured", async () => {
+  it("Case A — text-only journal is durable before extraction when Anthropic is not configured", async () => {
     envState.anthropicApiKey = "";
     const result = await saveDriverSalesJournal({
       tenantId: "t1",
       driverId: "d1",
       journalDate: "2026-08-14",
+      clientRequestId: "11111111-1111-4111-8111-111111111111",
       transcript:
         "They said they already have laundry machines but I explained we handle the overflow items instead.",
     });
-    expect(result.processingStatus).toBe("fallback");
+    expect(result.processingStatus).toBe("captured");
     expect(mocks.invokeLLM).not.toHaveBeenCalled();
     const journalRow = insertedRows.find(row => "transcript" in row);
     expect(journalRow).toBeDefined();
-    expect(journalRow?.processingStatus).toBe("fallback");
+    expect(journalRow?.processingStatus).toBe("captured");
     // Never fabricated — the saved transcript is exactly what was typed.
     expect(journalRow?.transcript).toBe(result.transcript);
   });
 
-  it("Case B — Android codec-parameter audio succeeds when transcription and Anthropic succeed", async () => {
+  it("Case B — Android codec-parameter audio is persisted before transcription begins", async () => {
     envState.anthropicApiKey = "sk-test-key";
     mocks.transcribeAudio.mockResolvedValue({
       text: "They said the price was too high, so I walked them through the real cost of doing it in-house.",
@@ -140,6 +147,7 @@ describe("driver sales journal resilience", () => {
       tenantId: "t1",
       driverId: "d1",
       journalDate: "2026-08-14",
+      clientRequestId: "22222222-2222-4222-8222-222222222222",
       audioDataUrl: AUDIO_DATA_URL,
     });
     expect(mocks.storagePut).toHaveBeenCalledWith(
@@ -147,27 +155,28 @@ describe("driver sales journal resilience", () => {
       expect.any(Buffer),
       "audio/webm"
     );
-    expect(mocks.transcribeAudio).toHaveBeenCalled();
-    expect(result.processingStatus).toBe("processed");
+    expect(mocks.transcribeAudio).not.toHaveBeenCalled();
+    expect(result.processingStatus).toBe("captured");
     const journalRow = insertedRows.find(row => "transcript" in row);
     expect(journalRow?.audioStorageKey).toBeTruthy();
     expect(journalRow?.audioMimeType).toBe("audio/webm");
-    expect(journalRow?.processingStatus).toBe("processed");
+    expect(journalRow?.processingStatus).toBe("captured");
+    expect(worldMocks.queue).toHaveBeenCalledWith({ tenantId: "t1", journalEntryId: expect.any(String) });
   });
 
-  it("Case C — transcription unavailable with no typed fallback fails closed: no row, no fabricated transcript", async () => {
+  it("Case C — transcription availability cannot prevent raw audio persistence", async () => {
     envState.anthropicApiKey = "";
     mocks.transcribeAudio.mockResolvedValue({ error: "provider_unavailable" });
-    await expect(
-      saveDriverSalesJournal({
-        tenantId: "t1",
-        driverId: "d1",
-        journalDate: "2026-08-14",
-        audioDataUrl: AUDIO_DATA_URL,
-      })
-    ).rejects.toThrow(/could not transcribe/i);
+    const result = await saveDriverSalesJournal({
+      tenantId: "t1",
+      driverId: "d1",
+      journalDate: "2026-08-14",
+      clientRequestId: "33333333-3333-4333-8333-333333333333",
+      audioDataUrl: AUDIO_DATA_URL,
+    });
     expect(mocks.storagePut).toHaveBeenCalled();
-    expect(insertedRows.find(row => "transcript" in row)).toBeUndefined();
+    expect(insertedRows.find(row => "transcript" in row)).toBeDefined();
+    expect(result.processingStatus).toBe("captured");
   });
 
   it("Case E — Anthropic fails after a real transcript still saves via fallback, never blocking the journal", async () => {
@@ -180,12 +189,12 @@ describe("driver sales journal resilience", () => {
       tenantId: "t1",
       driverId: "d1",
       journalDate: "2026-08-14",
+      clientRequestId: "44444444-4444-4444-8444-444444444444",
       audioDataUrl: AUDIO_DATA_URL,
     });
-    expect(result.processingStatus).toBe("fallback");
+    expect(result.processingStatus).toBe("captured");
     const journalRow = insertedRows.find(row => "transcript" in row);
-    expect(journalRow?.processingStatus).toBe("fallback");
-    expect(journalRow?.transcript).toMatch(/current vendor already covers it/i);
+    expect(journalRow?.processingStatus).toBe("captured");
   });
 
   it("Case F — both AI systems unavailable: a typed-only journal still saves", async () => {
@@ -194,12 +203,13 @@ describe("driver sales journal resilience", () => {
       tenantId: "t1",
       driverId: "d1",
       journalDate: "2026-08-14",
+      clientRequestId: "55555555-5555-4555-8555-555555555555",
       transcript:
         "I called the front desk, they said no laundry needs right now, I asked who to follow up with next month.",
     });
     expect(mocks.transcribeAudio).not.toHaveBeenCalled();
     expect(mocks.invokeLLM).not.toHaveBeenCalled();
-    expect(result.processingStatus).toBe("fallback");
+    expect(result.processingStatus).toBe("captured");
     expect(insertedRows.find(row => "transcript" in row)).toBeDefined();
   });
 });

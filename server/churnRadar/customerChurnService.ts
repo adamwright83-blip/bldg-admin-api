@@ -23,6 +23,7 @@ import {
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
 import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
+import { appendGoldlineWorldEvent } from "../goldlineWorld/worldEventStore";
 import {
   groupCustomerRecords,
   customerIdentityHashes,
@@ -1462,6 +1463,12 @@ export async function markCustomerRecoveryContacted(input: {
       note: "Operator reported manual outreach; provider delivery is not verified.",
     });
   });
+  await appendGoldlineWorldEvent({
+    tenantId: input.tenantId, physicalEntityId: null, eventType: "recovery_outreach_completed", classification: "action", actorType: "operator", actorId: input.actorId,
+    occurredAt: new Date().toISOString(), observedAt: null, sourceType: "customer_recovery_interventions", sourceId: input.interventionId, sourceEvidenceReference: `customer_recovery_interventions:${input.interventionId}`,
+    provenanceClass: "operator_reported", verificationClass: "ATTESTED", confidence: "high", idempotencyKey: `recovery-outreach:${input.tenantId}:${input.requestId}`, correlationId: `recovery-intervention:${input.interventionId}`,
+    metadata: { draftId: input.draftId, actionOnly: true, doesNotMeanRecovered: true },
+  });
   return getRecoveryInterventionDetail(input);
 }
 
@@ -1610,7 +1617,15 @@ export async function refreshCustomerRecoveryAttribution(tenantId: string) {
       const transitioned = await db.transaction(tx =>
         markRecoveredWith(tx, { tenantId, intervention, order: match })
       );
-      if (transitioned) recovered += 1;
+      if (transitioned) {
+        recovered += 1;
+        await appendGoldlineWorldEvent({
+          tenantId, physicalEntityId: null, eventType: "customer_recovered", classification: "outcome", actorType: "customer", actorId: null,
+          occurredAt: (match.paidAt ?? match.createdAt).toISOString(), observedAt: null, sourceType: "orders", sourceId: String(match.id), sourceEvidenceReference: `orders:${match.id}`,
+          provenanceClass: "existing_business_record", verificationClass: "VERIFIED", confidence: "high", idempotencyKey: `customer-recovered:${tenantId}:${intervention.id}:${match.id}`, correlationId: `recovery-intervention:${intervention.id}`,
+          metadata: { interventionId: intervention.id, orderId: match.id, recoveredRevenueCents: cents(match.total), authoritativePaidOrder: true },
+        });
+      }
     } catch (error) {
       if (!isDuplicateKeyError(error)) throw error;
     }

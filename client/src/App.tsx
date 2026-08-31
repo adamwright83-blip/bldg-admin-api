@@ -16,6 +16,7 @@ import DigitalReceiptPage from "./pages/DigitalReceiptPage";
 import LaundryFarmHome from "./pages/LaundryFarmHome";
 import LaundryButlerWelcome from "./pages/LaundryButlerWelcome";
 import LaundryButlerAccount from "./pages/LaundryButlerAccount";
+import { GoldlineCelebrationProvider } from "./components/goldline/GoldlineCelebrationProvider";
 
 // Public product sites are lazy so the operational admin bundle never pays for them.
 const BoreslayLanding = lazy(() => import("./pages/BoreslayLanding"));
@@ -28,6 +29,7 @@ const CommercialMissionAdmin = lazy(
 );
 const SalesIntelAdmin = lazy(() => import("./pages/SalesIntelAdmin"));
 const GoldlineEffectivenessAdmin = lazy(() => import("./pages/GoldlineEffectivenessAdmin"));
+const TowerForgeAdmin = lazy(() => import("./pages/TowerForgeAdmin"));
 const CommercialSalesMission = lazy(
   () => import("./pages/CommercialSalesMission")
 );
@@ -194,6 +196,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/vendors",
   "/level4",
   "/commercial-missions",
+  "/tower-forge",
   "/sales-intel",
   "/goldline-effectiveness",
   "/commercial-proposal-settings",
@@ -282,6 +285,9 @@ function AdminHostRouter() {
         <Suspense fallback={<PublicLandingFallback />}>
           <CommercialMissionAdmin />
         </Suspense>
+      </Route>
+      <Route path="/tower-forge">
+        <AdminAuthGate><Suspense fallback={<PublicLandingFallback />}><TowerForgeAdmin /></Suspense></AdminAuthGate>
       </Route>
       <Route path="/sales-intel" component={AdminHostApp} />
       <Route path="/goldline-effectiveness">
@@ -492,10 +498,12 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
         <TenantProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Router />
-          </TooltipProvider>
+          <GoldlineCelebrationProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Router />
+            </TooltipProvider>
+          </GoldlineCelebrationProvider>
         </TenantProvider>
       </ThemeProvider>
     </ErrorBoundary>

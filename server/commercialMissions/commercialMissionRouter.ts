@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { appendGoldlineWorldEvent } from "../goldlineWorld/worldEventStore";
 import {
   COMMERCIAL_CONTACT_PREFERRED_CHANNELS,
   COMMERCIAL_CONTACT_RELATIONSHIP_TYPES,
@@ -203,8 +204,16 @@ export const commercialMissionRouter = router({
   saveSalesJournal: dayforgeMissionFieldProcedure
     .input(z.object({
       journalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      clientRequestId: z.string().uuid(),
       audioDataUrl: z.string().max(16_500_000).optional(),
       transcript: z.string().trim().max(20_000).optional(),
+      location: z.object({
+        latitude: z.number().min(-90).max(90),
+        longitude: z.number().min(-180).max(180),
+        accuracyMeters: z.number().nonnegative().max(100_000),
+        capturedAt: z.string().datetime(),
+        contemporaneous: z.boolean(),
+      }).optional(),
     }).refine(value => Boolean(value.audioDataUrl || value.transcript), "A recording or transcript is required"))
     .mutation(({ ctx, input }) => saveDriverSalesJournal({
       ...input, tenantId: ctx.tenantId, driverId: ctx.user.openId,
@@ -286,11 +295,18 @@ export const commercialMissionRouter = router({
         userId: ctx.user.openId,
         isAdmin: ctx.dayforgeMembership.role !== "field",
       });
-      return recordCommercialMissionCallAttempt({
+      const result = await recordCommercialMissionCallAttempt({
         ...input,
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
       });
+      const worldEvent = await appendGoldlineWorldEvent({
+        tenantId: ctx.tenantId, physicalEntityId: null, eventType: "call_completed", classification: "action", actorType: "field", actorId: ctx.user.openId,
+        occurredAt: new Date().toISOString(), observedAt: null, sourceType: "commercial_mission_call_attempts", sourceId: String(input.requestId), sourceEvidenceReference: `commercial_missions:${input.missionId}`,
+        provenanceClass: "operator_reported", verificationClass: "ATTESTED", confidence: "high", idempotencyKey: `call-completed:${ctx.tenantId}:${input.requestId}`, correlationId: `commercial-mission:${input.missionId}`,
+        metadata: { missionId: input.missionId, outcome: input.outcome, actionOnly: true },
+      });
+      return { ...result, worldEvent };
     }),
   createLuxuryHotelIrlPlan: dayforgeMissionOperatorProcedure.input(z.object({
     missionId: z.number().int().positive(), requestId: z.string().uuid(),
@@ -376,12 +392,21 @@ export const commercialMissionRouter = router({
       quoteRequested: z.boolean().optional(),
       pilotRequested: z.boolean().optional(),
     }))
-    .mutation(({ ctx, input }) => logCommercialWalkIn({
-      ...input,
-      tenantId: ctx.tenantId,
-      actorId: ctx.user.openId,
-      assignedTo: input.assignedTo ?? ctx.user.openId,
-    })),
+    .mutation(async ({ ctx, input }) => {
+      const result = await logCommercialWalkIn({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        assignedTo: input.assignedTo ?? ctx.user.openId,
+      });
+      const worldEvent = await appendGoldlineWorldEvent({
+        tenantId: ctx.tenantId, physicalEntityId: null, eventType: "visited", classification: "action", actorType: "field", actorId: ctx.user.openId,
+        occurredAt: new Date().toISOString(), observedAt: null, sourceType: "commercial_walk_ins", sourceId: String(input.requestId), sourceEvidenceReference: `commercial_walk_ins:${input.requestId}`,
+        provenanceClass: "operator_reported", verificationClass: "ATTESTED", confidence: "high", idempotencyKey: `commercial-visit:${ctx.tenantId}:${input.requestId}`, correlationId: `walk-in:${input.requestId}`,
+        metadata: { businessName: input.businessName, visitResult: input.visitResult, actionOnly: true, doesNotImplyOutcome: true },
+      });
+      return { ...result, worldEvent };
+    }),
   timeline: dayforgeTenantAdminProcedure
     .input(
       z

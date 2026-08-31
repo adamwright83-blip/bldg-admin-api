@@ -1428,7 +1428,7 @@ function LiveGoldlineDriverController() {
           toast.success(`Walk-in ${result.missionCode} saved.${calendarText}`);
         }}
       />
-      <SalesJournalSheet open={journalOpen} onOpenChange={setJournalOpen} />
+      <SalesJournalSheet open={journalOpen} onOpenChange={setJournalOpen} location={location} />
     </>
   );
 }
