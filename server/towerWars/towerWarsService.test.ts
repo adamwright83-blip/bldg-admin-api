@@ -84,6 +84,32 @@ describe("Tower Wars authoritative source compiler", () => {
     );
   });
 
+  it("awards a stale-slug order to the tower its own address names", () => {
+    // 14 paid production orders carry an OPUS slug against a CPE address.
+    const result = compileAuthoritativeEvents({
+      tenantId: "tenant-a",
+      businessDate: "2026-08-30",
+      candidates: [
+        {
+          ...base,
+          address: "2170 Century Park East, Los Angeles, CA 90067",
+          buildingSlug: "opusla",
+        },
+      ],
+    });
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]?.buildingId).toBe("century_park_east");
+  });
+
+  it("keeps an uncontradicted OPUS order on OPUS", () => {
+    const result = compileAuthoritativeEvents({
+      tenantId: "tenant-a",
+      businessDate: "2026-08-30",
+      candidates: [base],
+    });
+    expect(result.events[0]?.buildingId).toBe("opus_la");
+  });
+
   it("excludes unresolved building evidence instead of guessing", () => {
     const result = compileAuthoritativeEvents({
       tenantId: "tenant-a",

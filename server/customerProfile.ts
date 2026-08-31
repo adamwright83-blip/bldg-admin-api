@@ -1,4 +1,4 @@
-import { matchBuilding } from "@shared/buildings";
+import { matchBuilding, resolveBuildingEvidence } from "@shared/buildings";
 import {
   computeCustomerTier,
   computeRecencyStatus,
@@ -227,8 +227,11 @@ export function hydrateCustomerAggregates(rows: CustomerAggregateDbRow[]): Custo
       lastName: toSafeString(r.lastName),
       email: toSafeNullableString(r.email),
       unit: r.unit ?? null,
+      // Same evidence rule as the Tower Wars ledger, so a stale slug cannot make
+      // the profile disagree with the tower the revenue is awarded to.
       buildingSlug:
-        r.buildingSlug?.trim() || matchBuilding(toSafeString(r.address))?.slug || null,
+        resolveBuildingEvidence(toSafeString(r.address), r.buildingSlug)
+          .building?.slug ?? null,
       floorNumber: deriveFloorNumber(r.unit),
       address: toSafeString(r.address),
       totalOrders: Number(r.totalOrders || 0),

@@ -369,3 +369,21 @@
 .sb-cap-body small{display:block;color:#9eb0c4;font-size:8px}
 .pwc-header-actions{display:flex;align-items:center;gap:10px}
 .lc-cluster-detail{max-height:min(620px,calc(100dvh - 40px));overflow:auto}.lc-cluster-composition{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:14px 0}.lc-cluster-composition b{padding:7px 5px;border-radius:6px;background:#f3f0fa;text-align:center;font-size:9px;text-transform:uppercase}.lc-cluster-customers{display:grid;gap:6px;margin:0;padding:0;list-style:none}.lc-cluster-customers button{display:flex;width:100%;min-height:48px;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #e0e4eb;border-radius:7px;background:#fafbfc;text-align:left}.lc-cluster-customers button span{display:flex;min-width:0;flex-direction:column}.lc-cluster-customers button strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}.lc-cluster-customers button small{margin-top:2px;color:var(--cr-muted);font-size:8px}.lc-cluster-customers button svg{width:15px;flex:0 0 auto;color:#6631cf}
+
+/* Atlas-only collision fan-out. Two truthful locations can share a pixel at
+   this scale (2170 and 2160 Century Park East are ~20m apart), which left the
+   lower lantern unclickable. The lantern is offset in pixels so it clears its
+   neighbour at any viewport width, its true anchor stays marked, and a stem
+   ties the two together. Anchor and stem never take pointer input. */
+.lc-lantern.fan-1{--fx:46px;--fy:-32px}
+.lc-lantern.fan-2{--fx:-46px;--fy:-32px}
+.lc-lantern.fan-3{--fx:46px;--fy:32px}
+.lc-lantern.fan-4{--fx:-46px;--fy:32px}
+.lc-lantern[class*="fan-"]{transform:translate(calc(-50% + var(--fx,0px)),calc(-50% + var(--fy,0px)))}
+.lc-lantern[class*="fan-"]:hover,.lc-lantern[class*="fan-"]:focus-visible{z-index:8;transform:translate(calc(-50% + var(--fx,0px)),calc(-50% + var(--fy,0px))) scale(1.2)}
+.lc-anchor{position:absolute;z-index:4;width:9px;height:9px;transform:translate(-50%,-50%);border:2px solid #fff8e6;border-radius:50%;background:#8f4805;box-shadow:0 1px 3px #2c180060;pointer-events:none}
+.lc-stem{position:absolute;z-index:4;height:2px;transform-origin:0 50%;border-radius:2px;background:linear-gradient(90deg,#8f4805,#8f480540);pointer-events:none}
+.lc-stem.fan-1{width:56px;transform:rotate(-34.8deg)}
+.lc-stem.fan-2{width:56px;transform:rotate(-145.2deg)}
+.lc-stem.fan-3{width:56px;transform:rotate(34.8deg)}
+.lc-stem.fan-4{width:56px;transform:rotate(145.2deg)}

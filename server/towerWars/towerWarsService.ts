@@ -6,7 +6,7 @@ import {
   orders,
   towerWarsPromises,
 } from "../../drizzle/schema";
-import { BUILDINGS, matchBuilding } from "../../shared/buildings";
+import { resolveBuildingEvidence } from "../../shared/buildings";
 import { customerIdentityHash } from "../customerAssets/customerIdentity";
 import {
   getBusinessDayWindow,
@@ -46,15 +46,24 @@ export type TowerWarsCandidate = {
   sourceEvidence: Record<string, string | number | boolean | null>;
 };
 
+/** Records the slug/address contradiction on the event so it is never silent. */
+function buildingConflictNote(
+  address: string | null | undefined,
+  slug: string | null | undefined
+): string | null {
+  const { conflict } = resolveBuildingEvidence(address, slug);
+  return conflict
+    ? `slug:${conflict.slugBuilding} vs address:${conflict.addressBuilding}`
+    : null;
+}
+
 function buildingIdFor(
   candidate: Pick<TowerWarsCandidate, "address" | "buildingSlug">
 ): TowerWarsBuildingId | null {
-  const configured =
-    BUILDINGS.find(
-      building =>
-        building.slug === candidate.buildingSlug ||
-        building.slugAliases.includes(candidate.buildingSlug ?? "")
-    ) ?? matchBuilding(candidate.address);
+  const configured = resolveBuildingEvidence(
+    candidate.address,
+    candidate.buildingSlug
+  ).building;
   const normalized = normalizePropertyTower(candidate.address, {
     propertyGroup:
       configured?.id === "opus_la" || configured?.id === "century_park_east"
@@ -248,6 +257,10 @@ async function loadCandidates(
         orderId: order.id,
         stripePaymentIntentId: order.stripePaymentIntentId,
         paidAtBasis: stripe ? "stripe_payment_intent" : "unverified_paidAt",
+        buildingEvidenceConflict: buildingConflictNote(
+          order.address,
+          order.buildingSlug
+        ),
       },
     };
   });
@@ -298,6 +311,10 @@ async function loadCandidates(
         cleancloudPaidOrderId: row.id,
         cleancloudOrderId: row.cleancloudOrderId,
         sourceReportType: row.sourceReportType,
+        buildingEvidenceConflict: buildingConflictNote(
+          row.address ?? row.buildingName,
+          row.buildingSlug
+        ),
         timestampField:
           row.sourceReportType === "orders_sales"
             ? "paymentDateUtc"

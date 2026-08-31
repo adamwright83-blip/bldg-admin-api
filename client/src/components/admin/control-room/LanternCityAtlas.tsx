@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { ArrowRight, MapPinOff, RefreshCw, Search, X } from "lucide-react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { WorldGeographySurface } from "./WorldGeographySurface";
 import type { GeographicEntity } from "./GoogleMapsRealityLayer";
 import { WorldDayPhaseIndicator } from "./WorldDayPhase";
-import { clusterGeographicCustomers, clustersAsGoogleEntities } from "./customerGeography";
+import { clusterGeographicCustomers, clustersAsGoogleEntities, fanOutAtlasCollisions } from "./customerGeography";
 import type { CustomerLocationCluster } from "./customerGeography";
 import { CustomerClusterDetail } from "./CustomerClusterDetail";
 
@@ -188,26 +188,33 @@ export default function LanternCityAtlas({
             record already carries the latitude/longitude the atlas projection
             was derived from, so nothing is estimated to do this.
           */}
-          {!googleVisible && customerClusters.filter(cluster => !cluster.outsideAtlas).map(cluster => (
-            <button
-              type="button"
-              key={cluster.key}
-              className={`lc-lantern state-${cluster.dark === cluster.total ? "dark" : cluster.dimming > 0 || cluster.dark > 0 ? "dimming" : "active"}`}
-              style={{
-                left: `${cluster.x}%`,
-                top: `${cluster.y}%`,
-              }}
-              onClick={() => {
-                setSelectedPursuit(null);
-                setSelectedCluster(cluster);
-              }}
-              aria-label={`${cluster.total} customer${cluster.total === 1 ? "" : "s"} at this location`}
-            >
-              <span className="lc-lantern-handle" />
-              <span className="lc-lantern-body" />
-              <span className="lc-lantern-base" />
-              {cluster.total > 1 ? <b>{cluster.total}</b> : null}
-            </button>
+          {!googleVisible && fanOutAtlasCollisions(customerClusters.filter(cluster => !cluster.outsideAtlas)).map(({ cluster, fanSlot }) => (
+            <Fragment key={cluster.key}>
+              {fanSlot > 0 ? (
+                <>
+                  <span className="lc-anchor" style={{ left: `${cluster.x}%`, top: `${cluster.y}%` }} aria-hidden />
+                  <span className={`lc-stem fan-${fanSlot}`} style={{ left: `${cluster.x}%`, top: `${cluster.y}%` }} aria-hidden />
+                </>
+              ) : null}
+              <button
+                type="button"
+                className={`lc-lantern state-${cluster.dark === cluster.total ? "dark" : cluster.dimming > 0 || cluster.dark > 0 ? "dimming" : "active"}${fanSlot > 0 ? ` fan-${fanSlot}` : ""}`}
+                style={{
+                  left: `${cluster.x}%`,
+                  top: `${cluster.y}%`,
+                }}
+                onClick={() => {
+                  setSelectedPursuit(null);
+                  setSelectedCluster(cluster);
+                }}
+                aria-label={`${cluster.total} customer${cluster.total === 1 ? "" : "s"} at this location`}
+              >
+                <span className="lc-lantern-handle" />
+                <span className="lc-lantern-body" />
+                <span className="lc-lantern-base" />
+                {cluster.total > 1 ? <b>{cluster.total}</b> : null}
+              </button>
+            </Fragment>
           ))}
 
           {!googleVisible && visiblePursuits.map(item => (

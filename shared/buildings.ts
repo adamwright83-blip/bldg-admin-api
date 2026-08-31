@@ -111,3 +111,49 @@ export function matchBuilding(address: string | null | undefined): BuildingConfi
     b.addressKeywords.some((kw) => lower.includes(kw))
   );
 }
+
+export type BuildingEvidence = {
+  /** The building the combined evidence identifies, if any. */
+  building: BuildingConfig | undefined;
+  /**
+   * Set when a persisted slug names a different building than the record's own
+   * address. Callers must surface this rather than let one side win silently.
+   */
+  conflict: { slugBuilding: string; addressBuilding: string } | null;
+};
+
+/** Resolve a persisted building slug (or one of its aliases) to its config. */
+export function buildingFromSlug(
+  slug: string | null | undefined
+): BuildingConfig | undefined {
+  const value = slug?.trim().toLowerCase();
+  if (!value) return undefined;
+  return BUILDINGS.find(
+    (b) => b.slug === value || b.slugAliases.includes(value)
+  );
+}
+
+/**
+ * Combine the two pieces of building evidence a record carries.
+ *
+ * A slug is a persisted label and can go stale; the address on the record is
+ * what the order was actually placed against and is what Address Validation
+ * canonicalises. So when the two contradict, the address decides and the
+ * contradiction is reported. The slug is not discarded: it still resolves the
+ * building whenever the address matches none, which is the only evidence some
+ * records have.
+ */
+export function resolveBuildingEvidence(
+  address: string | null | undefined,
+  slug: string | null | undefined
+): BuildingEvidence {
+  const fromAddress = matchBuilding(address);
+  const fromSlug = buildingFromSlug(slug);
+  if (fromAddress && fromSlug && fromAddress.id !== fromSlug.id) {
+    return {
+      building: fromAddress,
+      conflict: { slugBuilding: fromSlug.id, addressBuilding: fromAddress.id },
+    };
+  }
+  return { building: fromAddress ?? fromSlug, conflict: null };
+}

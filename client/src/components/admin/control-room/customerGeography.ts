@@ -60,3 +60,56 @@ export function clusterGeographicCustomers(customers: GeographicCustomer[]): Cus
 export function clustersAsGoogleEntities(clusters: CustomerLocationCluster[], onSelect: (cluster: CustomerLocationCluster) => void): GeographicEntity[] {
   return clusters.map(cluster => ({ id: `customer-cluster:${cluster.key}`, latitude: cluster.latitude, longitude: cluster.longitude, label: cluster.total === 1 ? cluster.customers[0]!.displayName : `${cluster.total} customers`, kind: "customer", onSelect: () => onSelect(cluster) }));
 }
+
+/**
+ * Two lanterns can sit on the same pixel while describing genuinely different
+ * places — 2170 and 2160 Century Park East are ~20m apart, so at atlas scale
+ * one covers the other and only the top one can be clicked. Rather than move
+ * either place, the atlas fans colliding lanterns onto deterministic slots and
+ * draws a stem back to the true anchor, which stays marked. Slot 0 is the
+ * anchor itself; the offsets for the other slots live in the stylesheet, in
+ * pixels, so a fanned lantern clears its neighbour at any viewport width.
+ *
+ * Geography is never edited to do this: `x`/`y` remain the true projection and
+ * Google mode, which places by latitude/longitude, does not fan at all.
+ */
+export const ATLAS_FAN_SLOTS = 5;
+
+/** Percent-space nearness at which two lanterns overlap enough to block a click. */
+const COLLISION_X = 2;
+const COLLISION_Y = 4;
+
+export type FannedCluster = {
+  cluster: CustomerLocationCluster;
+  /** 0 = drawn on its true anchor; >0 = drawn on an offset slot with a stem. */
+  fanSlot: number;
+};
+
+export function fanOutAtlasCollisions(
+  clusters: CustomerLocationCluster[]
+): FannedCluster[] {
+  const ordered = [...clusters].sort((left, right) =>
+    left.key.localeCompare(right.key)
+  );
+  const groupOf = new Map<string, number>();
+  let nextGroup = 0;
+  for (const cluster of ordered) {
+    const near = ordered.find(
+      other =>
+        groupOf.has(other.key) &&
+        Math.abs(other.x - cluster.x) <= COLLISION_X &&
+        Math.abs(other.y - cluster.y) <= COLLISION_Y
+    );
+    groupOf.set(
+      cluster.key,
+      near ? groupOf.get(near.key)! : nextGroup++
+    );
+  }
+  const takenPerGroup = new Map<number, number>();
+  return ordered.map(cluster => {
+    const group = groupOf.get(cluster.key)!;
+    const used = takenPerGroup.get(group) ?? 0;
+    takenPerGroup.set(group, used + 1);
+    return { cluster, fanSlot: used % ATLAS_FAN_SLOTS };
+  });
+}

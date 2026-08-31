@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, RefreshCw, TrendingUp, Users } from "lucide-react";
 import type { Order } from "@shared/types";
 import { trpc } from "@/lib/trpc";
@@ -6,7 +6,7 @@ import { classifyLanternCustomer } from "@/components/admin/control-room/Lantern
 import { CityTowerButton } from "@/components/admin/control-room/CityTowerButton";
 import { WorldGeographySurface } from "@/components/admin/control-room/WorldGeographySurface";
 import { WorldDayPhaseIndicator } from "@/components/admin/control-room/WorldDayPhase";
-import { clusterGeographicCustomers, clustersAsGoogleEntities } from "@/components/admin/control-room/customerGeography";
+import { clusterGeographicCustomers, clustersAsGoogleEntities, fanOutAtlasCollisions } from "@/components/admin/control-room/customerGeography";
 import type { CustomerLocationCluster } from "@/components/admin/control-room/customerGeography";
 import { CustomerClusterDetail } from "@/components/admin/control-room/CustomerClusterDetail";
 
@@ -116,8 +116,16 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
               <i /> {sourceGap ? "Source gap" : "Living LA Live"}
             </span>
           </header>
-          {customerClusters.filter(cluster => !cluster.outsideAtlas).map(cluster => (
-            <button type="button" key={cluster.key} className={`lc-lantern state-${cluster.dark === cluster.total ? "dark" : cluster.dimming > 0 || cluster.dark > 0 ? "dimming" : "active"}`} style={{ left: `${cluster.x}%`, top: `${cluster.y}%` }} onClick={() => setSelectedCluster(cluster)} aria-label={`${cluster.total} customer${cluster.total === 1 ? "" : "s"} at this location`}><span className="lc-lantern-handle" /><span className="lc-lantern-body" /><span className="lc-lantern-base" />{cluster.total > 1 ? <b>{cluster.total}</b> : null}</button>
+          {fanOutAtlasCollisions(customerClusters.filter(cluster => !cluster.outsideAtlas)).map(({ cluster, fanSlot }) => (
+            <Fragment key={cluster.key}>
+              {fanSlot > 0 ? (
+                <>
+                  <span className="lc-anchor" style={{ left: `${cluster.x}%`, top: `${cluster.y}%` }} aria-hidden />
+                  <span className={`lc-stem fan-${fanSlot}`} style={{ left: `${cluster.x}%`, top: `${cluster.y}%` }} aria-hidden />
+                </>
+              ) : null}
+              <button type="button" className={`lc-lantern state-${cluster.dark === cluster.total ? "dark" : cluster.dimming > 0 || cluster.dark > 0 ? "dimming" : "active"}${fanSlot > 0 ? ` fan-${fanSlot}` : ""}`} style={{ left: `${cluster.x}%`, top: `${cluster.y}%` }} onClick={() => setSelectedCluster(cluster)} aria-label={`${cluster.total} customer${cluster.total === 1 ? "" : "s"} at this location`}><span className="lc-lantern-handle" /><span className="lc-lantern-body" /><span className="lc-lantern-base" />{cluster.total > 1 ? <b>{cluster.total}</b> : null}</button>
+            </Fragment>
           ))}
           {customerClusters.filter(cluster => cluster.outsideAtlas).length > 0 ? <button type="button" className="pwc-risk-lantern" onClick={() => onNavigate("/growth/lantern-city")}>{customerClusters.filter(cluster => cluster.outsideAtlas).reduce((sum, cluster) => sum + cluster.total, 0)} outside atlas</button> : null}
         </WorldGeographySurface>
