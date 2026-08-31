@@ -23,8 +23,33 @@ export type RealityRendererType =
   | "photorealistic_3d_tiles"
   | "authored_fallback";
 
+/**
+ * An entity placed by its real coordinate rather than by an atlas percentage.
+ *
+ * Goldline's illustrated Los Angeles is a painting, and
+ * `projectLatLngToLanternAtlas()` maps real lat/lng onto that painting. Those
+ * percentages are meaningful ONLY against the JPG. When Google is drawing the
+ * world, the camera is somewhere specific over real geography and a percentage
+ * of the viewport is not a location — pinning entities that way puts OPUS in
+ * whatever patch of the real city happens to sit at 51%/70% of the frame.
+ *
+ * So entities handed to the reality layer travel as coordinates, and the
+ * renderer places them natively.
+ */
+export type GeographicEntity = {
+  id: string;
+  latitude: number;
+  longitude: number;
+  label: string;
+  /** Drives the marker's colour band. */
+  kind: "canonical_tower" | "customer" | "pursued";
+  onSelect?: () => void;
+};
+
 export type GoogleMapsRealityLayerProps = {
   apiKey?: string | null;
+  /** Placed by real coordinate. Ignored unless the 3D renderer is active. */
+  entities?: GeographicEntity[];
   target?: GeographicCameraTarget;
   initialTarget?: GeographicCameraTarget;
   onApproachStarted?: () => void;
@@ -75,6 +100,7 @@ export function GoogleMapsRealityLayer({
   onRendererError,
   onApproachStarted,
   onApproachCompleted,
+  entities,
   className = "",
   children,
 }: GoogleMapsRealityLayerProps) {
@@ -220,6 +246,50 @@ export function GoogleMapsRealityLayer({
       if (target.tilt != null) inst.setTilt(target.tilt);
     }
   }, [target.latitude, target.longitude, target.zoom, target.tilt, target.heading, target.range, isLoaded]);
+
+  /**
+   * Place entities natively, by coordinate, inside the 3D renderer.
+   *
+   * Only the 3D renderer is addressed. The 2D fallback and the authored
+   * fallback deliberately receive no markers: a wrong-but-present pin is worse
+   * than an absent one, and callers hide their own overlays whenever this layer
+   * is visible, so nothing is being double-drawn.
+   */
+  const markersRef = useRef<any[]>([]);
+  useEffect(() => {
+    const google = (window as any).google;
+    const map = mapInstanceRef.current;
+    if (!isLoaded || !map || activeRenderer !== "maps_js_3d" || !google?.maps?.maps3d) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const lib = await google.maps.importLibrary("maps3d");
+      if (cancelled) return;
+      for (const marker of markersRef.current) marker.remove?.();
+      markersRef.current = [];
+      for (const entity of entities ?? []) {
+        const Ctor = entity.onSelect && lib.Marker3DInteractiveElement
+          ? lib.Marker3DInteractiveElement
+          : lib.Marker3DElement;
+        if (!Ctor) break;
+        const marker = new Ctor({
+          position: { lat: entity.latitude, lng: entity.longitude, altitude: 0 },
+          label: entity.label,
+          altitudeMode: lib.AltitudeMode?.CLAMP_TO_GROUND,
+          extruded: entity.kind === "canonical_tower",
+        });
+        if (entity.onSelect) marker.addEventListener?.("gmp-click", entity.onSelect);
+        map.appendChild(marker);
+        markersRef.current.push(marker);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      for (const marker of markersRef.current) marker.remove?.();
+      markersRef.current = [];
+    };
+  }, [entities, isLoaded, activeRenderer]);
 
   return (
     <div className={`cr-maps-reality-wrapper ${className}`}>

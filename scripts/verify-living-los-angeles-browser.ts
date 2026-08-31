@@ -221,6 +221,141 @@ async function main() {
   await runJourney("mobile-opus", { width: 390, height: 844 }, "no-preference", "/home", "OPUS LA");
   await runJourney("reduced-opus", { width: 1440, height: 900 }, "reduce", "/home", "OPUS LA");
 
+  // ── Overlay geography: nothing atlas-positioned may sit over real geography ──
+  {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    await page.route("**/api/trpc/**", async route => {
+      const url = new URL(route.request().url());
+      const encoded = url.pathname.split("/api/trpc/")[1] || "";
+      const procedures = decodeURIComponent(encoded).split(",").filter(Boolean);
+      await route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify(procedures.map(p => ({ result: { data: { json: fixtureFor(p) } } }))) });
+    });
+    await page.goto(`${origin}/growth/lantern-city`, { waitUntil: "networkidle" });
+
+    const atlasCounts = () => page.evaluate(() => ({
+      towerAnchors: document.querySelectorAll(".cr-world-tower-anchor").length,
+      districtGlows: document.querySelectorAll(".cr-district-glow").length,
+      lanterns: document.querySelectorAll(".lc-lantern").length,
+      pursuits: document.querySelectorAll(".lc-pursued-flame").length,
+      neighbourhoodLabels: document.querySelectorAll(".cr-world-neighborhood-label").length,
+      marker3d: document.querySelectorAll("gmp-marker-3d, gmp-marker-3d-interactive").length,
+    }));
+
+    console.log("  [overlay] atlas mode:", JSON.stringify(await atlasCounts()));
+    await page.screenshot({ path: path.join(outDir, "overlay-01-atlas-mode.png") });
+
+    const toggle = page.getByRole("button", { name: "3D Reality View" });
+    if ((await toggle.count()) > 0) {
+      await toggle.first().click();
+      await page.waitForTimeout(9000);
+      const g = await atlasCounts();
+      console.log("  [overlay] google mode:", JSON.stringify(g));
+      const lying = g.towerAnchors + g.districtGlows + g.lanterns + g.pursuits + g.neighbourhoodLabels;
+      console.log(`  [overlay] atlas-positioned overlays over real geography: ${lying} (must be 0)`);
+      console.log(`  [overlay] renderer-native geographic markers: ${g.marker3d}`);
+      // Present is not the same as correct: assert each marker sits on the
+      // canonical coordinate rather than anywhere the renderer felt like.
+      const positions = await page.evaluate(() =>
+        [...document.querySelectorAll("gmp-marker-3d, gmp-marker-3d-interactive")].map(
+          (m: any) => ({ label: m.label ?? null, lat: m.position?.lat ?? null, lng: m.position?.lng ?? null })
+        )
+      );
+      console.log(`  [overlay] marker coordinates: ${JSON.stringify(positions)}`);
+      await page.screenshot({ path: path.join(outDir, "overlay-02-google-mode.png") });
+    } else {
+      console.log("  [overlay] 3D Reality View toggle not found");
+    }
+    await page.close();
+  }
+
+  // ── Reverse journey ──────────────────────────────────────────────────────
+  {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    await page.route("**/api/trpc/**", async route => {
+      const url = new URL(route.request().url());
+      const encoded = url.pathname.split("/api/trpc/")[1] || "";
+      const procedures = decodeURIComponent(encoded).split(",").filter(Boolean);
+      await route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify(procedures.map(p => ({ result: { data: { json: fixtureFor(p) } } }))) });
+    });
+
+    // Cold deep link must NOT fabricate a journey it never made.
+    await page.goto(`${origin}/growth/tower-wars?building=opus_la`, { waitUntil: "networkidle" });
+    await page.waitForTimeout(1500);
+    const coldStage = await page.evaluate(() => {
+      const el = document.querySelector("[data-world-phase]");
+      return el ? el.getAttribute("data-world-phase") : null;
+    });
+    console.log(`  [reverse] cold deep link fabricated a journey: ${coldStage !== null} (must be false)`);
+
+    // A real outbound journey, then back out.
+    await page.goto(`${origin}/home`, { waitUntil: "networkidle" });
+    await page.getByRole("button", { name: "Enter OPUS LA" }).first().click();
+    await page.waitForTimeout(9000);
+    const afterOut = { url: page.url(), stage: await page.evaluate(() => {
+      const el = document.querySelector("[data-world-phase]");
+      return el ? el.getAttribute("data-world-phase") : null; }) };
+    console.log(`  [reverse] outbound landed: url=${afterOut.url} staleStage=${afterOut.stage}`);
+    await page.screenshot({ path: path.join(outDir, "reverse-01-arrived.png") });
+
+    const back = page.getByRole("button", { name: /back to the city|return|leave/i });
+    if ((await back.count()) > 0) {
+      await back.first().click();
+    } else {
+      await page.goBack();
+    }
+    const revTimeline: string[] = [];
+    let last: string | null = "__init";
+    const t0 = Date.now();
+    for (let i = 0; i < 60; i++) {
+      const cur = await page.evaluate(() => {
+        const el = document.querySelector("[data-world-phase]");
+        return el ? el.getAttribute("data-world-phase") : null;
+      });
+      if (cur !== last) { revTimeline.push(`+${Date.now() - t0}ms ${cur ?? "(no stage)"}`); last = cur; }
+      await page.waitForTimeout(120);
+    }
+    const entity = await page.evaluate(() => {
+      const el = document.querySelector("[data-world-entity]");
+      return el ? el.getAttribute("data-world-entity") : null;
+    });
+    console.log(`  [reverse] timeline: ${revTimeline.join(" -> ")}`);
+    console.log(`  [reverse] returned to: ${page.url()} | entity=${entity}`);
+    await page.screenshot({ path: path.join(outDir, "reverse-02-returned.png") });
+    await page.close();
+
+    const rm = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    await rm.route("**/api/trpc/**", async route => {
+      const url = new URL(route.request().url());
+      const encoded = url.pathname.split("/api/trpc/")[1] || "";
+      const procedures = decodeURIComponent(encoded).split(",").filter(Boolean);
+      await route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify(procedures.map(p => ({ result: { data: { json: fixtureFor(p) } } }))) });
+    });
+    await rm.goto(`${origin}/home`, { waitUntil: "networkidle" });
+    await rm.getByRole("button", { name: "Enter OPUS LA" }).first().click();
+    await rm.waitForTimeout(2500);
+    // Use the same return affordance as the full-motion case, so the two are
+    // actually comparable; browser back is a different mechanism entirely.
+    const rmBack = rm.getByRole("button", { name: /back to the city|return|leave/i });
+    if ((await rmBack.count()) > 0) await rmBack.first().click();
+    else await rm.goBack();
+    const rmTl: string[] = [];
+    let rmLast: string | null = "__init";
+    const rt0 = Date.now();
+    for (let i = 0; i < 30; i++) {
+      const cur = await rm.evaluate(() => {
+        const el = document.querySelector("[data-world-phase]");
+        return el ? el.getAttribute("data-world-phase") : null;
+      });
+      if (cur !== rmLast) { rmTl.push(`+${Date.now() - rt0}ms ${cur ?? "(no stage)"}`); rmLast = cur; }
+      await rm.waitForTimeout(100);
+    }
+    console.log(`  [reverse] reduced-motion reverse: ${rmTl.join(" -> ")} | url=${rm.url()}`);
+    await rm.close();
+  }
+
   await browser.close();
   await fs.writeFile(path.join(outDir, "report.json"), JSON.stringify(results, null, 2));
   console.log(`\nArtifacts written to ${outDir}`);

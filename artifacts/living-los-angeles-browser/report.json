@@ -17,35 +17,35 @@
     {
       "name": "phase-2-approach",
       "phase": "approach",
-      "googleRequests": 136,
+      "googleRequests": 74,
       "attributionVisible": true,
       "note": "observed journey phase approach"
     },
     {
       "name": "phase-3-contamination",
       "phase": "contamination",
-      "googleRequests": 282,
+      "googleRequests": 156,
       "attributionVisible": true,
       "note": "observed journey phase contamination"
     },
     {
       "name": "phase-4-threshold",
       "phase": "threshold",
-      "googleRequests": 282,
+      "googleRequests": 215,
       "attributionVisible": true,
       "note": "observed journey phase threshold"
     },
     {
       "name": "phase-5-authored_landing",
       "phase": "authored_landing",
-      "googleRequests": 282,
+      "googleRequests": 235,
       "attributionVisible": true,
       "note": "observed journey phase authored_landing"
     },
     {
       "name": "99-destination",
       "phase": null,
-      "googleRequests": 282,
+      "googleRequests": 238,
       "attributionVisible": null,
       "note": "landed; url=http://localhost:3000/growth/tower-wars?building=opus_la"
     }
@@ -68,35 +68,35 @@
     {
       "name": "phase-2-approach",
       "phase": "approach",
-      "googleRequests": 137,
+      "googleRequests": 66,
       "attributionVisible": true,
       "note": "observed journey phase approach"
     },
     {
       "name": "phase-3-contamination",
       "phase": "contamination",
-      "googleRequests": 276,
+      "googleRequests": 133,
       "attributionVisible": true,
       "note": "observed journey phase contamination"
     },
     {
       "name": "phase-4-threshold",
       "phase": "threshold",
-      "googleRequests": 276,
+      "googleRequests": 204,
       "attributionVisible": true,
       "note": "observed journey phase threshold"
     },
     {
       "name": "phase-5-authored_landing",
       "phase": "authored_landing",
-      "googleRequests": 276,
+      "googleRequests": 230,
       "attributionVisible": true,
       "note": "observed journey phase authored_landing"
     },
     {
       "name": "99-destination",
       "phase": null,
-      "googleRequests": 276,
+      "googleRequests": 237,
       "attributionVisible": null,
       "note": "landed; url=http://localhost:3000/growth/tower-wars?building=century_park_east"
     }
@@ -119,35 +119,35 @@
     {
       "name": "phase-2-approach",
       "phase": "approach",
-      "googleRequests": 134,
+      "googleRequests": 97,
       "attributionVisible": true,
       "note": "observed journey phase approach"
     },
     {
       "name": "phase-3-contamination",
       "phase": "contamination",
-      "googleRequests": 281,
+      "googleRequests": 237,
       "attributionVisible": true,
       "note": "observed journey phase contamination"
     },
     {
       "name": "phase-4-threshold",
       "phase": "threshold",
-      "googleRequests": 281,
+      "googleRequests": 259,
       "attributionVisible": true,
       "note": "observed journey phase threshold"
     },
     {
       "name": "phase-5-authored_landing",
       "phase": "authored_landing",
-      "googleRequests": 281,
+      "googleRequests": 259,
       "attributionVisible": true,
       "note": "observed journey phase authored_landing"
     },
     {
       "name": "99-destination",
       "phase": null,
-      "googleRequests": 281,
+      "googleRequests": 261,
       "attributionVisible": null,
       "note": "landed; url=http://localhost:3000/growth/tower-wars?building=opus_la"
     }
@@ -170,35 +170,35 @@
     {
       "name": "phase-2-approach",
       "phase": "approach",
-      "googleRequests": 71,
+      "googleRequests": 72,
       "attributionVisible": true,
       "note": "observed journey phase approach"
     },
     {
       "name": "phase-3-contamination",
       "phase": "contamination",
-      "googleRequests": 176,
+      "googleRequests": 170,
       "attributionVisible": true,
       "note": "observed journey phase contamination"
     },
     {
       "name": "phase-4-threshold",
       "phase": "threshold",
-      "googleRequests": 176,
+      "googleRequests": 170,
       "attributionVisible": true,
       "note": "observed journey phase threshold"
     },
     {
       "name": "phase-5-authored_landing",
       "phase": "authored_landing",
-      "googleRequests": 176,
+      "googleRequests": 170,
       "attributionVisible": true,
       "note": "observed journey phase authored_landing"
     },
     {
       "name": "99-destination",
       "phase": null,
-      "googleRequests": 176,
+      "googleRequests": 170,
       "attributionVisible": null,
       "note": "landed; url=http://localhost:3000/growth/tower-wars?building=opus_la"
     }

@@ -3,6 +3,7 @@ import { ArrowRight, MapPinOff, RefreshCw, Search, X } from "lucide-react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { WorldGeographySurface } from "./WorldGeographySurface";
+import type { GeographicEntity } from "./GoogleMapsRealityLayer";
 import { WorldDayPhaseIndicator } from "./WorldDayPhase";
 
 export {
@@ -67,6 +68,41 @@ export default function LanternCityAtlas({
               .includes(normalized))
       ),
     [pursued, normalized]
+  );
+
+  const [googleVisible, setGoogleVisible] = useState(false);
+
+  /**
+   * The same visible records, addressed by the real coordinate the atlas
+   * projection was derived from. Only records with a successful geocode carry
+   * a location at all, so nothing here is estimated or back-filled.
+   */
+  const googleEntities: GeographicEntity[] = useMemo(
+    () => [
+      ...visibleCustomers.map(customer => ({
+        id: `customer:${customer.identityKey}`,
+        latitude: customer.location!.latitude,
+        longitude: customer.location!.longitude,
+        label: customer.displayName,
+        kind: "customer" as const,
+        onSelect: () => {
+          setSelectedPursuit(null);
+          setSelectedCustomer(customer);
+        },
+      })),
+      ...visiblePursuits.map(item => ({
+        id: `pursued:${item.pipelineId}`,
+        latitude: item.location!.latitude,
+        longitude: item.location!.longitude,
+        label: item.name,
+        kind: "pursued" as const,
+        onSelect: () => {
+          setSelectedCustomer(null);
+          setSelectedPursuit(item);
+        },
+      })),
+    ],
+    [visibleCustomers, visiblePursuits]
   );
 
   const counts = customers.reduce(
@@ -145,8 +181,19 @@ export default function LanternCityAtlas({
           onNavigate={onNavigate}
           showNeighborhoods={true}
           showOpportunityLayer={true}
+          onGoogleVisibilityChange={setGoogleVisible}
+          geographicEntities={googleEntities}
         >
-          {visibleCustomers.map(customer => (
+          {/*
+            Lanterns and pursuit flames are positioned with the atlas x/y
+            percentages that `projectLatLngToLanternAtlas()` produced for the
+            illustrated map. Those percentages describe a spot on the painting,
+            not a place, so they are not drawn over real geography — the same
+            records are handed to the renderer as coordinates instead. Each
+            record already carries the latitude/longitude the atlas projection
+            was derived from, so nothing is estimated to do this.
+          */}
+          {!googleVisible && visibleCustomers.map(customer => (
             <button
               type="button"
               key={customer.identityKey}
@@ -167,7 +214,7 @@ export default function LanternCityAtlas({
             </button>
           ))}
 
-          {visiblePursuits.map(item => (
+          {!googleVisible && visiblePursuits.map(item => (
             <button
               type="button"
               key={item.pipelineId}

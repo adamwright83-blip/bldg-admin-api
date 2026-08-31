@@ -8,6 +8,29 @@ Status vocabulary: `implemented`, `unit-tested`, `configured`, `live-exercised`,
 `available`, `coverage_missing`, `permission_denied`, `provider_failure`,
 `fallback`, `not_implemented`.
 
+## 0. Scope — nine integrated capabilities, one deferred
+
+This PR integrates **nine** Google capabilities. It is not a "ten capability
+activation", and earlier wording that said so was wrong.
+
+- **Production-integrated and live-exercised (7):** Weather, Air Quality,
+  Address Validation, Places, Places Aggregate (Area Insights), Street View
+  Static, Maps JavaScript 3D.
+- **Integrated, exercised, partial real-world coverage (1):** Aerial View —
+  active for OPUS, genuinely `coverage_missing` for Century Park East. That is
+  a true fact about the world, not a failure.
+- **Integrated, exercised, failing on configuration (1):** Geocoding — the
+  Railway key is malformed, so it returns `permission_denied`. Not blocking;
+  it is fallback only behind Address Validation, and it is Adam's to fix (§3).
+- **Deferred, not implemented (1):** Map Tiles / Photorealistic 3D Tiles. No
+  prototype was built, nothing was rendered, nothing was measured, and no
+  comparison against Maps JS 3D was performed. `GOOGLE_MAP_TILES_API_KEY`
+  remains provisioned and unused.
+
+Maps JS 3D is the production geographic renderer for this PR because it has
+been observed working end to end, not because Tiles was evaluated and
+rejected.
+
 ## 1. Baseline
 
 - Base main: `4bcc8f40377996f7d571663329c4580e99e4d2c6`
@@ -35,7 +58,7 @@ Obtained by `railway run npx tsx scripts/verify-living-los-angeles-live.ts`.
 | Aerial View (CPE) | `live-exercised` / `coverage_missing` | 243 ms | Genuinely no coverage — not an error |
 | Geocoding | `live-exercised` / `permission_denied` | 134 ms | Key rejected; see §3 |
 | Maps JavaScript 3D | `live-exercised` / `available` | — | Real 3D geometry observed rendering in a browser; see §4 |
-| Map Tiles / Photorealistic 3D Tiles | `not_implemented` | — | See §5 |
+| Map Tiles / Photorealistic 3D Tiles | `not_implemented` — **deferred from this PR** | — | Never implemented, never exercised, never compared. See §5 |
 
 The district counts differ substantially from those in the previous version of
 this report (which claimed 2,045 units across districts such as Koreatown 320
@@ -124,6 +147,8 @@ after   +5ms loading -> +4373ms approach -> +6218ms contamination
 | Mobile 390×844 — Home → OPUS | Full five-state journey; 187 Google requests |
 | Reduced motion — Home → OPUS | `loading → threshold → authored_landing` in ~670ms, no geographic flight, reality layer not mounted |
 | Lantern City → OPUS | Full five-state journey (see §4d) |
+| Reverse — Tower Wars → city | Full five-state reverse; correct entity and return context (§4f) |
+| Overlay geography in Google mode | Zero atlas-positioned overlays; renderer-native markers at canonical coordinates (§4e) |
 | Degradation — no Maps key / renderer error | Falls back to the authored transition; business truth and the authored game remain usable |
 
 Attribution was present in every sampled phase in which Google content was
@@ -156,6 +181,74 @@ Observed after the fix:
 -> +7018ms threshold -> +7595ms authored_landing -> +8280ms complete
 ```
 
+### 4e. Overlay geography — nothing atlas-positioned over real geography
+
+Every entity overlay was positioned by atlas percentage and rendered in **both**
+view modes, so all four classes were lying spatially whenever Google was
+visible. The canonical towers were additionally clamped into an 8–94% box,
+making their position a composition choice rather than a location. Only the
+neighbourhood labels were correctly gated to the atlas.
+
+The percentages were habit, not a data limitation: customers and pursuits carry
+`latitude`/`longitude` alongside the atlas `x`/`y`, districts carry a real
+`center`, and towers carry canonical coordinates.
+
+Canonical towers, customer lanterns and pursued commercial locations are now
+placed **renderer-natively** as `Marker3DElement` / `Marker3DInteractiveElement`
+at their real coordinates whenever the 3D renderer is active, and the
+atlas-percentage DOM overlays are not rendered at all in that mode.
+`projectLatLngToLanternAtlas()` remains in use only for the illustrated JPG.
+
+Observed on Lantern City:
+
+| | atlas mode | Google mode |
+|---|---|---|
+| tower anchors (%) | 2 | **0** |
+| district glows (%) | 9 | **0** |
+| lanterns (%) | 0 | **0** |
+| pursuit flames (%) | 0 | **0** |
+| neighbourhood labels (%) | 9 | **0** |
+| renderer-native 3D markers | 0 | **2** |
+
+Marker coordinates were asserted, not just counted — present is not the same as
+correct:
+
+```
+[{"label":"Century Park East","lat":34.0591,"lng":-118.4147},
+ {"label":"OPUS LA","lat":34.0618,"lng":-118.3011}]
+```
+
+Those are exactly the canonical coordinates. In the establishing frame over
+downtown LA both markers are correctly *off-screen*, because Koreatown and
+Century City genuinely are not in that view — previously they were pinned into
+frame regardless of where the camera was looking.
+
+**Deliberate deferral — opportunity regions.** Districts are areas of pressure,
+and the data carries only a `center` point, not a boundary. Drawing a point
+marker for a region would assert a precision that does not exist, so the
+opportunity layer is hidden while Google is rendering rather than misplaced. It
+remains fully present on the authored atlas, which is what it was drawn for.
+
+**Not verifiable locally — customer lanterns and pursuits.** Railway MySQL is
+unreachable from a local run, so there are zero geocoded customers and zero
+pursuits to place; both counts are 0 in *both* modes above. The code path that
+converts them to coordinates is exercised by the same `geographicEntities` prop
+that the towers use, but it has not been observed carrying real records. This
+is honest scaffolding-limited coverage, not a pass.
+
+### 4f. Reverse journey
+
+Verified once, end to end, in a real browser.
+
+| Check | Result |
+|---|---|
+| Cold deep link fabricates a journey | **false** — `/growth/tower-wars?building=opus_la` entered cold shows no transition stage |
+| Stale transition after outbound landing | **none** — stage is null once landed |
+| Reverse plays the full grammar | `loading → approach → contamination → threshold → authored_landing` |
+| Same canonical entity | `data-world-entity="opus_la"` |
+| Return context | returns to `/`, the surface the journey departed from |
+| Reduced-motion reverse | `loading → threshold → authored_landing` in 531ms, returns to `/` — same short grammar as the reduced-motion outbound |
+
 Captured pixels and the machine-readable timeline are in
 `artifacts/living-los-angeles-browser/`.
 
@@ -165,28 +258,33 @@ Captured pixels and the machine-readable timeline are in
 PRIMARY_GEOGRAPHIC_RENDERER = MAPS_JS_3D
 ```
 
-Observed reason, not inherited reason: Maps JS 3D was verified rendering real
-photorealistic geography in a real browser, driving a real `flyCameraTo()`
-approach to the canonical coordinates, compositing the authored tower and
-contamination FX cleanly over it, at both 1440×900 and 390×844, with Google's
-own attribution intact.
+Chosen because it was observed working: real photorealistic geography rendering
+in a real browser, a real `flyCameraTo()` approach to the canonical
+coordinates, the authored tower and contamination FX compositing cleanly over
+it, at both 1440×900 and 390×844, with Google's own attribution intact
+throughout.
 
-The previous version of this report described a Photorealistic 3D Tiles
-prototype and compared it against Maps JS. **No such prototype existed.** The
-code labelled an ordinary tilted 2D `google.maps.Map` as
-`photorealistic_3d_tiles`, so the renderer reported a fidelity it was not
-drawing. That label has been removed — the fallback now names itself
-`maps_js_2d_fallback` — and the comparison claims have been deleted rather than
-restated.
+**Photorealistic 3D Tiles is deferred from this PR.** It was not implemented,
+not prototyped, not rendered, not measured, and not compared. Any earlier
+statement in this repository describing a Tiles prototype or a fidelity /
+performance / attribution comparison was false and has been removed. What
+actually existed was a code path that labelled an ordinary tilted 2D
+`google.maps.Map` as `photorealistic_3d_tiles` — a renderer reporting a
+fidelity it was not drawing. That label is gone; the fallback now names itself
+`maps_js_2d_fallback`.
 
-A genuine Map Tiles prototype using `GOOGLE_MAP_TILES_API_KEY` was **not
-built**. The decision above therefore rests on Maps JS 3D being verified
-sufficient, not on Tiles having been measured and rejected. Status:
-`not_implemented`.
+No second renderer was built to satisfy that earlier promise. Maps JS 3D
+satisfies the intended experience and is the production renderer.
 
-Worth recording for that future evaluation: Maps JS 3D is already streaming
-photorealistic Earth mesh from `keyhole-pa`, so the fidelity gap between the two
-paths is likely far smaller than the earlier report assumed.
+### Future work (not a commitment made by this PR)
+
+A genuine Photorealistic 3D Tiles evaluation using `GOOGLE_MAP_TILES_API_KEY`
+remains open, and would need to compare fidelity, camera choreography, startup
+latency, mobile performance, overlay compositing, attribution obligations and
+coverage against what Maps JS 3D now demonstrably delivers. Worth recording for
+whoever picks it up: Maps JS 3D is already streaming photorealistic Earth mesh
+from `keyhole-pa`, so the fidelity gap between the two paths may be much
+smaller than previously assumed.
 
 ## 6. Security and credential boundary
 
@@ -209,15 +307,21 @@ not shipped — production 404s the path — so the exposure is closed before me
 
 ## 7. Remaining limitations
 
-These are real and unresolved. They are listed instead of being closed out.
+These are real. They are listed instead of being closed out.
 
-1. **Reverse journey (Tower Wars → city) not verified in a browser.**
-2. **Photorealistic 3D Tiles prototype not built** (§5).
-3. **Google-mode overlay placement not re-verified.** Canonical towers, resolved
-   customer lanterns and opportunity regions are positioned by
-   `projectLatLngToLanternAtlas()` percentages, which is correct for the
-   illustrated atlas. Whether they are re-projected geographically while Google
-   is rendering was not confirmed this pass.
+1. **Photorealistic 3D Tiles deferred from this PR** (§0, §5). A deliberate
+   product scope decision, not an oversight. Nothing was implemented,
+   prototyped, rendered, measured or compared, and no wording in this
+   repository should imply otherwise.
+2. **Customer lanterns and pursued locations were not observed carrying real
+   records in Google mode** (§4e). The coordinate path they use is the same one
+   the canonical towers were proven on, but with no geocoded data reachable
+   locally, both counts were zero in both view modes — so this is
+   scaffolding-limited coverage, not a pass.
+3. **Opportunity regions are intentionally hidden while Google renders** (§4e).
+   The data carries a district `center` but no boundary, and a point marker
+   would assert a precision that does not exist. Documented decision, not a gap
+   to be silently filled.
 4. **Business truth could not be exercised locally.** Railway MySQL is on a
    private network and is unreachable from a local run, so Home shows "Revenue
    unavailable" and Tower Wars compiles no ledger. The browser harness therefore
@@ -225,7 +329,10 @@ These are real and unresolved. They are listed instead of being closed out.
    compilers — zero events, a genuine $0/$0 with no invented orders, customers
    or amounts — purely so the arena mounts and the camera can be observed. No
    revenue figure in this document comes from that scaffolding.
-5. **Geocoding key invalid** (§3) — external, requires Adam.
+5. **Geocoding key malformed** (§3) — Railway configuration owned by Adam, and
+   explicitly out of scope for this PR. Not blocking: Address Validation-first
+   reconciliation is live-proven at PREMISE granularity for both canonical
+   buildings, and Geocoding is fallback only.
 
 ## 8. Tests
 

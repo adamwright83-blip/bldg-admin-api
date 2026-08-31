@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
 import {
@@ -9,7 +9,7 @@ import {
 import type { CanonicalBuildingId } from "./buildingArt";
 import { CityTowerButton } from "./CityTowerButton";
 import { WorldAtmosphereOverlay } from "./WorldAtmosphereOverlay";
-import { GoogleMapsRealityLayer, type GeographicCameraTarget, type RealityRendererType } from "./GoogleMapsRealityLayer";
+import { GoogleMapsRealityLayer, type GeographicCameraTarget, type GeographicEntity, type RealityRendererType } from "./GoogleMapsRealityLayer";
 import { RealityWindow } from "./RealityWindow";
 import { GoogleAttributionSafeZone } from "./GoogleAttributionSafeZone";
 
@@ -26,6 +26,18 @@ export type WorldGeographySurfaceProps = {
   children?: React.ReactNode;
   className?: string;
   battleState?: { pressureBuilding: CanonicalBuildingId | null; revenueCue: CanonicalBuildingId | null; revenues: Record<CanonicalBuildingId, number | null> };
+  /**
+   * Entities the caller wants placed by real coordinate while Google is
+   * drawing. They are handed to the renderer, never positioned with atlas
+   * percentages.
+   */
+  geographicEntities?: GeographicEntity[];
+  /**
+   * Announces whether Google is currently the base layer, so callers can hide
+   * their own atlas-percentage overlays instead of pinning them over real
+   * geography they do not correspond to.
+   */
+  onGoogleVisibilityChange?: (googleVisible: boolean) => void;
 };
 
 const CANONICAL_TOWERS: Array<{
@@ -62,6 +74,8 @@ export function WorldGeographySurface({
   children,
   className = "",
   battleState,
+  geographicEntities,
+  onGoogleVisibilityChange,
 }: WorldGeographySurfaceProps) {
   const [realityBuildingId, setRealityBuildingId] = useState<CanonicalBuildingId | null>(null);
   const [viewMode, setViewMode] = useState<"atlas" | "reality_3d">("atlas");
@@ -105,6 +119,29 @@ export function WorldGeographySurface({
     };
   }, [selectedBuildingId]);
 
+  // Google is the base layer only when 3D view is chosen AND a key exists.
+  const googleVisible = viewMode === "reality_3d" && Boolean(mapsApiKey);
+  useEffect(() => {
+    onGoogleVisibilityChange?.(googleVisible);
+  }, [googleVisible, onGoogleVisibilityChange]);
+
+  // Canonical towers travel to the renderer as coordinates, never percentages.
+  const towerEntities: GeographicEntity[] = useMemo(
+    () =>
+      CANONICAL_TOWERS.map(tower => ({
+        id: tower.id,
+        latitude: tower.latitude,
+        longitude: tower.longitude,
+        label: tower.name,
+        kind: "canonical_tower" as const,
+        onSelect: () => {
+          onSelectBuilding?.(tower.id);
+          onNavigate?.(`/growth/tower-wars?building=${tower.id}`);
+        },
+      })),
+    [onSelectBuilding, onNavigate]
+  );
+
   return (
     <div
       className={`cr-world-geography-surface mode-${mode} view-${viewMode} ${className}`}
@@ -117,6 +154,7 @@ export function WorldGeographySurface({
           target={cameraTarget}
           mode="maps_js_3d"
           className="cr-world-reality-engine"
+          entities={[...towerEntities, ...(geographicEntities ?? [])]}
         />
       ) : (
         <div className="cr-world-skin-container">
@@ -133,7 +171,7 @@ export function WorldGeographySurface({
       <WorldAtmosphereOverlay atmosphere={atmosphere} />
 
       {/* 3. Places Aggregate Opportunity Density / Territory Glow */}
-      {showOpportunityLayer && opportunity ? (
+      {showOpportunityLayer && opportunity && !googleVisible ? (
         <div className="cr-opportunity-layer" aria-hidden="true">
           {opportunity.districts.map(district => (
             <div
@@ -168,7 +206,18 @@ export function WorldGeographySurface({
         </div>
       ) : null}
 
-      {/* 5. Canonical Building Towers (at real coordinates) */}
+      {/*
+        5. Canonical building towers.
+
+        These are positioned with projectLatLngToLanternAtlas() percentages,
+        which are meaningful only against the illustrated atlas JPG — and are
+        additionally clamped into an 8–94% box, so the position is a
+        composition choice rather than a location. That is fine over the
+        painting and false over real geography, so while Google is drawing the
+        world the authored anchors are not rendered at all; the same towers are
+        placed by real coordinate inside the renderer instead (towerEntities).
+      */}
+      {!googleVisible ? (
       <div className="cr-world-towers-layer">
         {CANONICAL_TOWERS.map(tower => {
           const pt = projectLatLngToLanternAtlas(tower);
@@ -206,6 +255,7 @@ export function WorldGeographySurface({
           );
         })}
       </div>
+      ) : null}
 
       {/* Additional UI elements (lanterns, search, controls passed as children) */}
       {children}
