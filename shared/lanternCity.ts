@@ -81,115 +81,56 @@ export function inferCustomerCadence(input: {
 export type AtlasPoint = { x: number; y: number };
 export type GeoPoint = { latitude: number; longitude: number };
 
-export const LANTERN_CITY_CONTROL_POINTS = [
+export const GOLDLINE_LA_VIEWPORT = {
+  west: -118.445,
+  east: -118.225,
+  south: 34.02,
+  north: 34.135,
+} as const;
+
+export const GOLDLINE_LA_LANDMARKS = [
   {
     name: "Century City",
     latitude: 34.0537,
     longitude: -118.4134,
-    x: 12,
-    y: 76,
   },
   {
     name: "Beverly Hills",
     latitude: 34.0736,
     longitude: -118.4004,
-    x: 13,
-    y: 43,
   },
   {
     name: "West Hollywood",
     latitude: 34.09,
     longitude: -118.3617,
-    x: 18,
-    y: 18,
   },
-  { name: "Hollywood", latitude: 34.0928, longitude: -118.3287, x: 47, y: 34 },
-  { name: "Koreatown", latitude: 34.0578, longitude: -118.3009, x: 51, y: 70 },
-  { name: "Los Feliz", latitude: 34.1182, longitude: -118.2865, x: 76, y: 20 },
+  { name: "Hollywood", latitude: 34.0928, longitude: -118.3287 },
+  { name: "Koreatown", latitude: 34.0578, longitude: -118.3009 },
+  { name: "Los Feliz", latitude: 34.1182, longitude: -118.2865 },
   {
     name: "Silver Lake",
     latitude: 34.0869,
     longitude: -118.2702,
-    x: 82,
-    y: 43,
   },
-  { name: "Echo Park", latitude: 34.0782, longitude: -118.2606, x: 86, y: 72 },
+  { name: "Echo Park", latitude: 34.0782, longitude: -118.2606 },
+  { name: "Downtown", latitude: 34.0505, longitude: -118.2479 },
 ] as const;
 
-function solve3(
-  matrix: number[][],
-  vector: number[]
-): [number, number, number] {
-  const augmented = matrix.map((row, index) => [...row, vector[index]!]);
-  for (let pivot = 0; pivot < 3; pivot += 1) {
-    let best = pivot;
-    for (let row = pivot + 1; row < 3; row += 1)
-      if (
-        Math.abs(augmented[row]![pivot]!) > Math.abs(augmented[best]![pivot]!)
-      )
-        best = row;
-    [augmented[pivot], augmented[best]] = [augmented[best]!, augmented[pivot]!];
-    const scale = augmented[pivot]![pivot]!;
-    for (let col = pivot; col < 4; col += 1) augmented[pivot]![col] /= scale;
-    for (let row = 0; row < 3; row += 1) {
-      if (row === pivot) continue;
-      const factor = augmented[row]![pivot]!;
-      for (let col = pivot; col < 4; col += 1)
-        augmented[row]![col] -= factor * augmented[pivot]![col]!;
-    }
-  }
-  return [augmented[0]![3]!, augmented[1]![3]!, augmented[2]![3]!];
+function mercatorY(latitude: number): number {
+  const radians = latitude * Math.PI / 180;
+  return Math.log(Math.tan(Math.PI / 4 + radians / 2));
 }
-
-function fit(axis: "x" | "y"): [number, number, number] {
-  let ll = 0,
-    la = 0,
-    l = 0,
-    aa = 0,
-    a = 0,
-    n = 0,
-    lv = 0,
-    av = 0,
-    v = 0;
-  for (const point of LANTERN_CITY_CONTROL_POINTS) {
-    const value = point[axis];
-    ll += point.longitude * point.longitude;
-    la += point.longitude * point.latitude;
-    l += point.longitude;
-    aa += point.latitude * point.latitude;
-    a += point.latitude;
-    n += 1;
-    lv += point.longitude * value;
-    av += point.latitude * value;
-    v += value;
-  }
-  return solve3(
-    [
-      [ll, la, l],
-      [la, aa, a],
-      [l, a, n],
-    ],
-    [lv, av, v]
-  );
-}
-
-const X_COEFFICIENTS = fit("x");
-const Y_COEFFICIENTS = fit("y");
 
 export function projectLatLngToLanternAtlas(
   point: GeoPoint
 ): AtlasPoint & { outOfBounds: boolean } {
-  const rawX =
-    X_COEFFICIENTS[0] * point.longitude +
-    X_COEFFICIENTS[1] * point.latitude +
-    X_COEFFICIENTS[2];
-  const rawY =
-    Y_COEFFICIENTS[0] * point.longitude +
-    Y_COEFFICIENTS[1] * point.latitude +
-    Y_COEFFICIENTS[2];
+  const rawX = (point.longitude - GOLDLINE_LA_VIEWPORT.west) / (GOLDLINE_LA_VIEWPORT.east - GOLDLINE_LA_VIEWPORT.west) * 100;
+  const northY = mercatorY(GOLDLINE_LA_VIEWPORT.north);
+  const southY = mercatorY(GOLDLINE_LA_VIEWPORT.south);
+  const rawY = (northY - mercatorY(point.latitude)) / (northY - southY) * 100;
   return {
-    x: Math.max(2, Math.min(98, rawX)),
-    y: Math.max(5, Math.min(95, rawY)),
-    outOfBounds: rawX < 2 || rawX > 98 || rawY < 5 || rawY > 95,
+    x: rawX,
+    y: rawY,
+    outOfBounds: rawX < 0 || rawX > 100 || rawY < 0 || rawY > 100,
   };
 }

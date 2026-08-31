@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
+import { GOLDLINE_LA_LANDMARKS, projectLatLngToLanternAtlas } from "@shared/lanternCity";
 import {
   CANONICAL_BUILDING_GEOGRAPHY,
   LOS_ANGELES_ESTABLISHING,
@@ -13,7 +13,7 @@ import { GoogleMapsRealityLayer, type GeographicCameraTarget, type GeographicEnt
 import { RealityWindow } from "./RealityWindow";
 import { GoogleAttributionSafeZone } from "./GoogleAttributionSafeZone";
 
-const ATLAS_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas.jpg";
+const ATLAS_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas-v2.png";
 
 export type WorldGeographySurfaceProps = {
   mode?: "overview" | "lantern_atlas" | "reality_approach";
@@ -191,18 +191,20 @@ export function WorldGeographySurface({
       {/* 4. Strategic Neighborhood Labels */}
       {showNeighborhoods && viewMode === "atlas" ? (
         <div className="cr-world-neighborhoods" aria-hidden="true">
-          {opportunity?.districts.map(district => (
+          {GOLDLINE_LA_LANDMARKS.map(district => {
+            const point = projectLatLngToLanternAtlas(district);
+            return (
             <span
-              key={district.districtId}
+              key={district.name}
               className="cr-world-neighborhood-label"
               style={{
-                left: `${district.atlasAnchor.x}%`,
-                top: `${district.atlasAnchor.y}%`,
+                left: `${point.x}%`,
+                top: `${point.y}%`,
               }}
             >
               {district.name}
             </span>
-          )) ?? null}
+          )})}
         </div>
       ) : null}
 
@@ -221,16 +223,13 @@ export function WorldGeographySurface({
       <div className="cr-world-towers-layer">
         {CANONICAL_TOWERS.map(tower => {
           const pt = projectLatLngToLanternAtlas(tower);
-          const edgeSafe = {
-            x: Math.min(94, Math.max(8, pt.x)),
-            y: Math.min(92, Math.max(8, pt.y)),
-          };
+          if (pt.outOfBounds) return null;
 
           return (
             <div
               key={tower.id}
                 className={`cr-world-tower-anchor ${selectedBuildingId === tower.id ? "is-selected" : ""} ${battleState?.pressureBuilding === tower.id ? "is-pressure" : ""} ${battleState?.revenueCue === tower.id ? "is-revenue-cue" : ""}`}
-              style={{ left: `${edgeSafe.x}%`, top: `${edgeSafe.y}%` }}
+              style={{ left: `${pt.x}%`, top: `${pt.y}%` }}
             >
               <CityTowerButton
                 buildingId={tower.id}

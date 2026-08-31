@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   inferCustomerCadence,
-  LANTERN_CITY_CONTROL_POINTS,
+  GOLDLINE_LA_LANDMARKS,
   projectLatLngToLanternAtlas,
 } from "./lanternCity";
 
@@ -48,22 +48,20 @@ describe("customer cadence", () => {
   });
 });
 
-describe("illustrated atlas projection", () => {
-  it("calibrates against multiple LA control points", () => {
-    for (const point of LANTERN_CITY_CONTROL_POINTS) {
+describe("fixed geographic atlas projection", () => {
+  it("projects strategic LA landmarks inside the fixed viewport", () => {
+    for (const point of GOLDLINE_LA_LANDMARKS) {
       const projected = projectLatLngToLanternAtlas(point);
-      expect(Math.abs(projected.x - point.x)).toBeLessThan(18);
-      expect(Math.abs(projected.y - point.y)).toBeLessThan(24);
+      expect(projected.outOfBounds).toBe(false);
     }
   });
 
-  it("clamps out-of-bounds geography", () => {
+  it("does not clamp out-of-bounds geography", () => {
     const point = projectLatLngToLanternAtlas({
       latitude: 40.7128,
       longitude: -74.006,
     });
     expect(point.outOfBounds).toBe(true);
-    expect(point.x).toBeGreaterThanOrEqual(2);
-    expect(point.y).toBeLessThanOrEqual(95);
+    expect(point.x).toBeGreaterThan(100);
   });
 });
