@@ -20,6 +20,7 @@ export type WorldGeographySurfaceProps = {
   showLanterns?: boolean;
   children?: React.ReactNode;
   className?: string;
+  battleState?: { pressureBuilding: CanonicalBuildingId | null; revenueCue: CanonicalBuildingId | null; revenues: Record<CanonicalBuildingId, number | null> };
 };
 
 const CANONICAL_TOWERS: Array<{
@@ -55,6 +56,7 @@ export function WorldGeographySurface({
   showLanterns = false,
   children,
   className = "",
+  battleState,
 }: WorldGeographySurfaceProps) {
   const [realityBuildingId, setRealityBuildingId] = useState<CanonicalBuildingId | null>(null);
   const [viewMode, setViewMode] = useState<"atlas" | "reality_3d">("atlas");
@@ -162,7 +164,7 @@ export function WorldGeographySurface({
           return (
             <div
               key={tower.id}
-              className={`cr-world-tower-anchor ${selectedBuildingId === tower.id ? "is-selected" : ""}`}
+                className={`cr-world-tower-anchor ${selectedBuildingId === tower.id ? "is-selected" : ""} ${battleState?.pressureBuilding === tower.id ? "is-pressure" : ""} ${battleState?.revenueCue === tower.id ? "is-revenue-cue" : ""}`}
               style={{ left: `${edgeSafe.x}%`, top: `${edgeSafe.y}%` }}
             >
               <CityTowerButton
@@ -170,9 +172,10 @@ export function WorldGeographySurface({
                 className={`pwc-building ${tower.id === "opus_la" ? "opus" : "cpe"}`}
                 onNavigate={path => {
                   onSelectBuilding?.(tower.id);
+                  if (mapsApiKey) setViewMode("reality_3d");
                   onNavigate?.(path);
                 }}
-                subtitle={`${tower.neighborhood} · TODAY battle truth`}
+                subtitle={`${tower.neighborhood} · TODAY ${battleState?.revenues[tower.id] == null ? "—" : `$${(battleState.revenues[tower.id]! / 100).toFixed(0)}`} · battle truth`}
               />
               <button
                 type="button"

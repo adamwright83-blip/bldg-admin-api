@@ -50,6 +50,23 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
   const overdueFollowups = todayQueue.data?.filter(item => item.kind === "follow_up" && item.urgency === "overdue") ?? [];
   const promiseRisk = useMemo(() => [...(received.data ?? []), ...(collected.data ?? []), ...(processing.data ?? [])].filter(order => order.deliveryDate === todayYmd()), [received.data, collected.data, processing.data]);
   const buildingCounts = rows.reduce((acc, customer) => { if (customer.propertyGroup === "opus_la") acc.opus += 1; if (customer.propertyGroup === "century_park_east") acc.century += 1; return acc; }, { opus: 0, century: 0 });
+  const opusRevenue = towerToday.data?.state.buildings.opus_la.revenueCents ?? null;
+  const cpeRevenue = towerToday.data?.state.buildings.century_park_east.revenueCents ?? null;
+  const pressureBuilding = opusRevenue !== null && cpeRevenue !== null && opusRevenue !== cpeRevenue ? (opusRevenue < cpeRevenue ? "opus_la" : "century_park_east") : null;
+  const [revenueCue, setRevenueCue] = useState<"opus_la" | "century_park_east" | null>(null);
+  const priorTowerEvents = useRef<string[] | null>(null);
+  useEffect(() => {
+    if (!towerToday.data) return;
+    const ids = towerToday.data.ledger.map(item => item.eventId);
+    if (priorTowerEvents.current === null) { priorTowerEvents.current = ids; return; }
+    const known = new Set(priorTowerEvents.current);
+    const newest = towerToday.data.ledger.filter(item => !known.has(item.eventId)).at(-1);
+    priorTowerEvents.current = ids;
+    if (!newest) return;
+    setRevenueCue(newest.buildingId);
+    const timer = window.setTimeout(() => setRevenueCue(null), 1400);
+    return () => window.clearTimeout(timer);
+  }, [towerToday.data]);
   const firstName = operatorName.split(/\s+/)[0] || "Admin";
   const viewName = path.startsWith("/home/") ? path.split("/").pop() : "overview";
   const sourceGap = dashboard.isError || customers.isError || todayQueue.isError || towerToday.isError;
@@ -83,6 +100,7 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
           onNavigate={onNavigate}
           showNeighborhoods={true}
           showOpportunityLayer={true}
+          battleState={{ pressureBuilding, revenueCue, revenues: { opus_la: opusRevenue, century_park_east: cpeRevenue } }}
         >
           <header className="pwc-world-header">
             <strong>Live world overview — Los Angeles</strong>
