@@ -46,6 +46,7 @@ const ArchivedLevel4OffensiveHost = lazy(() =>
 const CommercialPipelinePage = lazy(() => import("./CommercialPipelinePage"));
 const ChurnRadarPage = lazy(() => import("./ChurnRadarPage"));
 const SalesIntelAdmin = lazy(() => import("./SalesIntelAdmin"));
+const SandboxMode = lazy(() => import("@/components/admin/control-room/SandboxMode"));
 
 const LIVE_INTERNAL_TABS = new Set<AdminWorkspaceTab>([
   "Intake",
@@ -172,6 +173,7 @@ export default function AdminHostApp() {
   const isGrowth = path === "/growth";
   const isLanternCity = path === "/growth/lantern-city";
   const isTowerWars = path === "/growth/tower-wars";
+  const isSandbox = path === "/growth/sandbox";
   const isDriverIntelligence = path.startsWith("/growth/driver-intelligence");
   const isGrowthBuildings = path === "/growth/buildings";
   const isGrowthOffers = path === "/growth/offers";
@@ -185,6 +187,7 @@ export default function AdminHostApp() {
     isGrowth ||
     isLanternCity ||
     isTowerWars ||
+    isSandbox ||
     isDriverIntelligence ||
     isGrowthBuildings ||
     isGrowthOffers ||
@@ -361,6 +364,8 @@ export default function AdminHostApp() {
           <LanternCityAtlas onOpenCustomer={phone => setProfilePhone(phone)} />
         ) : isTowerWars ? (
           <TowerWars onNavigate={nextPath => navigate(nextPath)} />
+        ) : isSandbox ? (
+          <Suspense fallback={<div className="cr-route-loading">Checking sandbox gate…</div>}><SandboxMode onNavigate={nextPath => navigate(nextPath)} /></Suspense>
         ) : isDriverIntelligence ? (
           <DriverIntelligenceOverview path={path} />
         ) : isGrowthBuildings ? (

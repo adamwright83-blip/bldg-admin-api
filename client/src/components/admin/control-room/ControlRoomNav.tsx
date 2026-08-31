@@ -49,6 +49,7 @@ const CUSTOMERS_WEST: WestItem[] = [
 const GROWTH_WEST: WestItem[] = [
   { label: "Lantern City", path: "/growth/lantern-city", icon: Map },
   { label: "Tower Wars", path: "/growth/tower-wars", icon: Building2 },
+  { label: "Sandbox", path: "/growth/sandbox", icon: Sparkles },
   { label: "Commercial Pipeline", path: "/commercial-pipeline", icon: TrendingUp },
   { label: "Churn / Winback", path: "/churn-radar", icon: Users },
   { label: "Driver Intelligence", path: "/growth/driver-intelligence", icon: Sparkles },

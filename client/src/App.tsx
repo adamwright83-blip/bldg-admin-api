@@ -327,6 +327,7 @@ function AdminHostRouter() {
       <Route path="/growth" component={AdminHostApp} />
       <Route path="/growth/lantern-city" component={AdminHostApp} />
       <Route path="/growth/tower-wars" component={AdminHostApp} />
+      <Route path="/growth/sandbox" component={AdminHostApp} />
       <Route path="/growth/driver-intelligence" component={AdminHostApp} />
       <Route path="/growth/driver-intelligence/:rest*" component={AdminHostApp} />
       <Route path="/growth/buildings" component={AdminHostApp} />
