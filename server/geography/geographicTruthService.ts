@@ -22,6 +22,7 @@ import {
 import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
 import { getDb } from "../db";
 import { GoogleGeocoder } from "./googleGeocoder";
+import { GoogleAddressValidationService, type AddressValidationResult } from "../google/googleAddressValidationService";
 import { ENV } from "../_core/env";
 
 export type GeographicEntityType =
@@ -450,6 +451,7 @@ export async function geocodePendingLocations(input: {
   tenantId: string;
   batchSize?: number;
   geocoder?: GoogleGeocoder;
+  addressValidator?: GoogleAddressValidationService;
   now?: Date;
 }) {
   const db = await getDb();
@@ -478,6 +480,7 @@ export async function geocodePendingLocations(input: {
     successful.map(row => [row.normalizedSourceAddress, row])
   );
   const geocoder = input.geocoder ?? new GoogleGeocoder();
+  const addressValidator = input.addressValidator ?? new GoogleAddressValidationService();
   const counts = {
     attempted: 0,
     success: 0,
@@ -505,7 +508,19 @@ export async function geocodePendingLocations(input: {
       continue;
     }
     counts.attempted += 1;
-    const result = await geocoder.geocode(row.sourceAddress);
+    // Address Validation is the authoritative first pass; only fall back to
+    // legacy Geocoding when it cannot establish a usable premise coordinate.
+    const validated = await addressValidator.validateAddress(row.sourceAddress);
+    const result = validated.status === "success" && validated.latitude != null && validated.longitude != null
+      ? {
+          status: "success" as const,
+          canonicalAddress: validated.formattedAddress,
+          latitude: validated.latitude,
+          longitude: validated.longitude,
+          googlePlaceId: validated.placeId,
+          provider: "google_address_validation" as const,
+        }
+      : await geocoder.geocode(row.sourceAddress);
     if (result.status === "success") {
       await db
         .update(entityLocations)

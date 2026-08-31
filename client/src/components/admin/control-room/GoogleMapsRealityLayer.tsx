@@ -85,6 +85,7 @@ export function GoogleMapsRealityLayer({
         if (mode === "maps_js_3d" && google.maps.maps3d?.Map3DElement) {
           try {
             const map3d = new google.maps.maps3d.Map3DElement({
+              mode: "HYBRID",
               center: {
                 lat: target.latitude,
                 lng: target.longitude,
@@ -98,10 +99,20 @@ export function GoogleMapsRealityLayer({
             containerRef.current.innerHTML = "";
             containerRef.current.appendChild(map3d);
             mapInstanceRef.current = map3d;
-
-            setActiveRenderer("maps_js_3d");
-            setIsLoaded(true);
-            onRendererReady?.("maps_js_3d");
+            const ready = () => {
+              if (!isMounted) return;
+              setActiveRenderer("maps_js_3d");
+              setIsLoaded(true);
+              onRendererReady?.("maps_js_3d");
+            };
+            const failed = () => {
+              if (!isMounted) return;
+              setErrorMessage("Maps 3D renderer failed to initialize");
+              onRendererError?.("Maps 3D renderer failed to initialize");
+            };
+            map3d.addEventListener?.("gmp-initialized", ready, { once: true });
+            map3d.addEventListener?.("gmp-error", failed, { once: true });
+            window.setTimeout(() => { if (!isLoaded && isMounted) ready(); }, 4000);
             return;
           } catch (err) {
             console.warn("Maps 3D initialisation failed, falling back to standard 3D perspective", err);
