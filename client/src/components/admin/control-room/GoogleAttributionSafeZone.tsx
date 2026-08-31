@@ -17,13 +17,7 @@ export function GoogleAttributionSafeZone({
   if (!visible) return null;
 
   return (
-    <footer
-      className={`cr-google-attribution-safezone ${className}`}
-      aria-label="Google Maps Platform attribution"
-    >
-      <div className="cr-google-logo-badge">
-        <span className="cr-google-word">Google</span>
-      </div>
+    <footer className={`cr-google-attribution-safezone ${className}`} aria-label="Provider attribution safe zone">
       <div className="cr-google-third-party-credits">
         {providerAttributions.length > 0 ? (
           providerAttributions.map((item, idx) => (
@@ -43,9 +37,7 @@ export function GoogleAttributionSafeZone({
               {idx < providerAttributions.length - 1 ? " · " : ""}
             </span>
           ))
-        ) : (
-          <span>Map data © Google</span>
-        )}
+        ) : null}
       </div>
     </footer>
   );
