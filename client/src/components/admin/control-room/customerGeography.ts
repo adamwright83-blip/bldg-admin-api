@@ -23,9 +23,22 @@ export type CustomerLocationCluster = {
   dark: number;
 };
 
+/**
+ * Residents of one building must land on one lantern. Address Validation returns a
+ * per-resident canonical address, so the same premise arrives with a unit token and
+ * with a unit-specific ZIP+4 suffix; both are stripped so the building is what
+ * identifies the physical location. The street number is never stripped — neighbouring
+ * towers are genuinely different places and stay separate lanterns.
+ */
 function physicalKey(customer: GeographicCustomer): string {
   const location = customer.location!;
-  const address = location.canonicalAddress?.toLowerCase().replace(/(?:\b(?:apt|unit|suite)\s*|#\s*)[a-z0-9-]+\b/g, "").replace(/\s+/g, " ").trim();
+  const address = location.canonicalAddress
+    ?.toLowerCase()
+    .replace(/(?:\b(?:apartment|apt|unit|suite|ste|floor|fl)\.?\s*|#\s*)[a-z0-9-]+\b/g, "")
+    .replace(/(\b\d{5})-\d{4}\b/g, "$1")
+    .replace(/\s+/g, " ")
+    .replace(/\s+,/g, ",")
+    .trim();
   return address ? `address:${address}` : `coord:${location.latitude.toFixed(5)},${location.longitude.toFixed(5)}`;
 }
 
