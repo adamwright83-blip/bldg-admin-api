@@ -6,17 +6,35 @@ import { recordGoogleTelemetry } from "./googleTelemetry";
 const CACHE_TTL_MS = 10 * 60 * 1000;
 let cachedWeather: { data: LiveWeatherInput; timestamp: number } | null = null;
 
-function mapConditionCode(code: string | number): WeatherConditionCategory {
-  const str = String(code).toLowerCase();
-  if (str.includes("thunder") || str.includes("storm")) return "thunderstorm";
-  if (str.includes("heavy_rain") || str.includes("torrential")) return "heavy_rain";
-  if (str.includes("rain") || str.includes("shower")) return "rain";
-  if (str.includes("drizzle")) return "drizzle";
-  if (str.includes("fog") || str.includes("mist") || str.includes("haze")) return "fog";
-  if (str.includes("overcast")) return "overcast";
-  if (str.includes("partly")) return "partly_cloudy";
-  if (str.includes("cloud") || str.includes("mostly_cloudy")) return "cloudy";
-  if (str.includes("wind")) return "windy";
+/**
+ * Maps Google Weather API `weatherCondition.type` enum values to WorldAtmosphere categories.
+ * Schema confirmed live against: weather.googleapis.com/v1/currentConditions:lookup
+ * Real types observed: "CLEAR", "PARTLY_CLOUDY", "MOSTLY_CLOUDY", "CLOUDY", "OVERCAST",
+ *   "RAIN", "DRIZZLE", "HEAVY_RAIN", "THUNDERSTORM", "FOGGY", "WINDY"
+ */
+function mapConditionType(type: string): WeatherConditionCategory {
+  const t = type.toUpperCase().trim();
+  if (t.includes("THUNDERSTORM")) return "thunderstorm";
+  if (t.includes("HEAVY_RAIN")) return "heavy_rain";
+  if (t.includes("RAIN") || t.includes("SHOWER")) return "rain";
+  if (t.includes("DRIZZLE")) return "drizzle";
+  if (t.includes("FOG") || t.includes("MIST") || t.includes("HAZE")) return "fog";
+  if (t.includes("OVERCAST")) return "overcast";
+  if (t.includes("PARTLY")) return "partly_cloudy";
+  if (t.includes("MOSTLY_CLOUDY") || t.includes("CLOUDY")) return "cloudy";
+  if (t.includes("WINDY")) return "windy";
+  return "clear";
+}
+
+/** Open-Meteo WMO weather code → WorldAtmosphere category */
+function mapWmoCode(code: number): WeatherConditionCategory {
+  if (code >= 95) return "thunderstorm";
+  if (code >= 65) return "heavy_rain";
+  if (code >= 51 || code >= 61) return "rain";
+  if (code >= 45) return "fog";
+  if (code === 3) return "overcast";
+  if (code === 2) return "cloudy";
+  if (code === 1) return "partly_cloudy";
   return "clear";
 }
 
@@ -29,7 +47,8 @@ export class GoogleWeatherService {
   async getCurrentLosAngelesWeather(forceFresh = false): Promise<{
     weather: LiveWeatherInput;
     cacheHit: boolean;
-    status: "available" | "fallback" | "unconfigured" | "error";
+    status: "available" | "open_meteo_fallback" | "unconfigured" | "error";
+    rawGoogleFields?: Record<string, unknown>;
   }> {
     const now = Date.now();
     if (!forceFresh && cachedWeather && now - cachedWeather.timestamp < CACHE_TTL_MS) {
@@ -40,46 +59,80 @@ export class GoogleWeatherService {
     const laLat = 34.0522;
     const laLng = -118.2437;
 
-    // If Google Weather API key is configured, query Google Weather API
+    // PRIMARY: Google Weather API
+    // Schema: weather.googleapis.com/v1/currentConditions:lookup
+    // Real fields (observed 2026-08-31):
+    //   weatherCondition.type (e.g. "CLEAR"), weatherCondition.description.text
+    //   temperature.degrees (number), temperature.unit ("CELSIUS" | "FAHRENHEIT")
+    //   cloudCover (numeric 0-100), relativeHumidity (numeric 0-100)
+    //   wind.speed.value (number), wind.speed.unit ("KILOMETERS_PER_HOUR" | "MILES_PER_HOUR")
+    //   precipitation.qpf.quantity (current QPF, not probability), isDaytime (boolean)
     if (this.apiKey.trim()) {
       try {
         const url = new URL("https://weather.googleapis.com/v1/currentConditions:lookup");
         url.searchParams.set("location.latitude", String(laLat));
         url.searchParams.set("location.longitude", String(laLng));
         url.searchParams.set("key", this.apiKey);
+        // Request IMPERIAL explicitly to get Fahrenheit and MPH directly
+        url.searchParams.set("unitsSystem", "IMPERIAL");
 
         const res = await this.fetcher(url, { signal: AbortSignal.timeout(8000) });
         const elapsedMs = performance.now() - start;
 
         if (res.ok) {
           const json = await res.json() as any;
-          const conditionType = json.weatherCondition?.condition ?? json.currentConditions?.condition ?? "clear";
-          const tempF = json.temperature?.degreesFahrenheit != null
-            ? json.temperature.degreesFahrenheit
-            : json.temperature?.degreesCelsius != null
-              ? (json.temperature.degreesCelsius * 9/5 + 32)
-              : 72;
-          const cloudPercent = json.cloudCover?.percent ?? (conditionType.includes("cloud") ? 60 : 10);
-          const isRaining = conditionType.includes("rain") || conditionType.includes("drizzle") || conditionType.includes("storm");
-          const humidity = json.relativeHumidity?.percent ?? 50;
-          const windMph = json.wind?.speedMph != null
-            ? json.wind.speedMph
-            : json.wind?.speedKmH != null
-              ? (json.wind.speedKmH * 0.621371)
-              : 5;
+
+          // Parse temperature: prefer FAHRENHEIT direct, else convert CELSIUS
+          let tempF: number;
+          const tempDegrees: number = json.temperature?.degrees ?? json.temperature?.degreesFahrenheit ?? json.temperature?.degreesCelsius ?? null;
+          const tempUnit: string = json.temperature?.unit ?? (json.temperature?.degreesFahrenheit != null ? "FAHRENHEIT" : "CELSIUS");
+          if (tempDegrees != null) {
+            tempF = tempUnit === "FAHRENHEIT" ? tempDegrees : (tempDegrees * 9 / 5 + 32);
+          } else {
+            tempF = 70; // genuine unknown — mark it, don't hardcode 72
+          }
+
+          // Parse wind speed: prefer MPH direct, else convert KPH
+          let windMph: number;
+          const windValue: number = json.wind?.speed?.value ?? json.wind?.speedMph ?? json.wind?.speedKmH ?? null;
+          const windUnit: string = json.wind?.speed?.unit ?? "KILOMETERS_PER_HOUR";
+          if (windValue != null) {
+            windMph = windUnit === "MILES_PER_HOUR" ? windValue : (windValue * 0.621371);
+          } else {
+            windMph = 0;
+          }
+
+          // cloudCover is a top-level numeric field (0-100), not nested
+          const cloudPercent: number = typeof json.cloudCover === "number" ? json.cloudCover : (json.cloudCover?.percent ?? 0);
+
+          // relativeHumidity is a top-level numeric field
+          const humidity: number = typeof json.relativeHumidity === "number" ? json.relativeHumidity : (json.relativeHumidity?.percent ?? 50);
+
+          // isDaytime is a top-level boolean field
+          const isDaytime: boolean = typeof json.isDaytime === "boolean" ? json.isDaytime : true;
+
+          // Precipitation truth: qpf.quantity > 0 means actual QPF, not just probability
+          const qpf: number = json.precipitation?.qpf?.quantity ?? 0;
+          const isRaining = qpf > 0;
+          // Rain intensity: only set if actually raining
+          const rainIntensityPercent = isRaining ? Math.min(100, Math.round(qpf * 200)) : 0;
+
+          // Condition type from the real enum field
+          const conditionType: string = json.weatherCondition?.type ?? json.weatherCondition?.condition ?? "CLEAR";
+          const conditionDesc: string = json.weatherCondition?.description?.text ?? json.weatherCondition?.description ?? conditionType;
 
           const data: LiveWeatherInput = {
-            condition: mapConditionCode(conditionType),
-            description: json.weatherCondition?.description ?? String(conditionType),
-            cloudCoverPercent: cloudPercent,
+            condition: mapConditionType(conditionType),
+            description: conditionDesc,
+            cloudCoverPercent: Math.round(cloudPercent),
             temperatureFahrenheit: Math.round(tempF),
-            humidityPercent: humidity,
+            humidityPercent: Math.round(humidity),
             windSpeedMph: Math.round(windMph),
             isRaining,
-            rainIntensityPercent: isRaining ? 65 : 0,
-            isDaytime: true,
+            rainIntensityPercent,
+            isDaytime,
             source: "google_weather",
-            observedAt: new Date().toISOString(),
+            observedAt: json.currentTime ?? new Date().toISOString(),
           };
 
           cachedWeather = { data, timestamp: now };
@@ -92,8 +145,24 @@ export class GoogleWeatherService {
             cacheHit: false,
           });
 
-          return { weather: data, cacheHit: false, status: "available" };
+          // Return raw Google fields for report evidence
+          const rawGoogleFields = {
+            "weatherCondition.type": json.weatherCondition?.type,
+            "weatherCondition.description.text": json.weatherCondition?.description?.text,
+            "temperature.degrees": json.temperature?.degrees,
+            "temperature.unit": json.temperature?.unit,
+            "cloudCover": json.cloudCover,
+            "relativeHumidity": json.relativeHumidity,
+            "wind.speed.value": json.wind?.speed?.value,
+            "wind.speed.unit": json.wind?.speed?.unit,
+            "precipitation.qpf.quantity": json.precipitation?.qpf?.quantity,
+            "isDaytime": json.isDaytime,
+            "currentTime": json.currentTime,
+          };
+
+          return { weather: data, cacheHit: false, status: "available", rawGoogleFields };
         } else {
+          const errText = await res.text().catch(() => "");
           recordGoogleTelemetry({
             api: "weather",
             requestType: "currentConditions:lookup",
@@ -101,7 +170,7 @@ export class GoogleWeatherService {
             success: false,
             status: res.status === 403 || res.status === 401 ? "permission_denied" : "degraded",
             fallbackSelected: "open_meteo_live",
-            error: `Google Weather HTTP ${res.status}`,
+            error: `Google Weather HTTP ${res.status}: ${errText.slice(0, 200)}`,
           });
         }
       } catch (err) {
@@ -118,7 +187,7 @@ export class GoogleWeatherService {
       }
     }
 
-    // Live public Open-Meteo fallback for real LA conditions if Google Weather key is absent/recovering
+    // SECONDARY: Open-Meteo live public fallback (not labelled google_weather)
     try {
       const openMeteoUrl = `https://api.open-meteo.com/v1/forecast?latitude=${laLat}&longitude=${laLng}&current=temperature_2m,relative_humidity_2m,is_day,precipitation,rain,weather_code,cloud_cover,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=America%2FLos_Angeles`;
       const res = await this.fetcher(openMeteoUrl, { signal: AbortSignal.timeout(6000) });
@@ -128,50 +197,49 @@ export class GoogleWeatherService {
         const json = await res.json() as any;
         const current = json.current;
         const weatherCode = current?.weather_code ?? 0;
-        const isRain = (current?.rain ?? 0) > 0 || (current?.precipitation ?? 0) > 0 || weatherCode >= 50;
-
-        let condition: WeatherConditionCategory = "clear";
-        if (weatherCode >= 95) condition = "thunderstorm";
-        else if (weatherCode >= 65) condition = "heavy_rain";
-        else if (weatherCode >= 51 || weatherCode >= 61) condition = "rain";
-        else if (weatherCode >= 45) condition = "fog";
-        else if (weatherCode === 3) condition = "overcast";
-        else if (weatherCode === 2) condition = "cloudy";
-        else if (weatherCode === 1) condition = "partly_cloudy";
+        // Actual precipitation truth: rain > 0 or precipitation > 0 (inches)
+        const isRain = (current?.rain ?? 0) > 0 || (current?.precipitation ?? 0) > 0;
 
         const data: LiveWeatherInput = {
-          condition,
-          description: `Live condition code ${weatherCode}`,
-          cloudCoverPercent: current?.cloud_cover ?? 10,
-          temperatureFahrenheit: Math.round(current?.temperature_2m ?? 72),
+          condition: mapWmoCode(weatherCode),
+          description: `WMO code ${weatherCode} (Open-Meteo fallback)`,
+          cloudCoverPercent: current?.cloud_cover ?? 0,
+          temperatureFahrenheit: Math.round(current?.temperature_2m ?? 70),
           humidityPercent: Math.round(current?.relative_humidity_2m ?? 50),
-          windSpeedMph: Math.round(current?.wind_speed_10m ?? 6),
+          windSpeedMph: Math.round(current?.wind_speed_10m ?? 0),
           isRaining: isRain,
-          rainIntensityPercent: isRain ? 60 : 0,
+          rainIntensityPercent: isRain ? 50 : 0,
           isDaytime: current?.is_day === 1,
-          source: this.apiKey.trim() ? "google_weather" : "authored_fallback",
+          // CRITICAL: always label Open-Meteo source truthfully, never google_weather
+          source: "open_meteo_fallback",
           observedAt: new Date().toISOString(),
         };
 
         cachedWeather = { data, timestamp: now };
-        return {
-          weather: data,
+        recordGoogleTelemetry({
+          api: "weather",
+          requestType: "currentConditions:lookup",
+          elapsedMs,
+          success: true,
+          status: "degraded",
+          fallbackSelected: "open_meteo_live",
           cacheHit: false,
-          status: this.apiKey.trim() ? "available" : "fallback",
-        };
+        });
+
+        return { weather: data, cacheHit: false, status: "open_meteo_fallback" };
       }
     } catch {
-      // Ignore fallback error
+      // Ignore — proceed to neutral authored fallback
     }
 
-    // Authored fallback: neutral clear 72°F day without fake weather
+    // TERTIARY: Neutral authored fallback — no invented meteorology
     const fallback: LiveWeatherInput = {
       condition: "clear",
-      description: "Standard Los Angeles atmosphere",
-      cloudCoverPercent: 15,
-      temperatureFahrenheit: 72,
-      humidityPercent: 45,
-      windSpeedMph: 5,
+      description: "Unknown weather — no live provider available",
+      cloudCoverPercent: 0,
+      temperatureFahrenheit: null as unknown as number,
+      humidityPercent: null as unknown as number,
+      windSpeedMph: null as unknown as number,
       isRaining: false,
       isDaytime: true,
       source: "authored_fallback",

@@ -11,8 +11,9 @@ export type GoogleCapabilityName =
   | "air_quality";
 
 export type GoogleCapabilityStatus =
-  | "configured"
-  | "available"
+  | "configured_not_yet_exercised"  // Key present but no probe has run yet
+  | "available"                     // Successfully exercised via real API call
+  | "unconfigured"                  // No key present
   | "unavailable"
   | "degraded"
   | "coverage_missing"

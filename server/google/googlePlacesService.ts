@@ -75,7 +75,7 @@ export class GooglePlacesService {
       let primaryPhotoAttribution: { displayName: string; uri?: string } | undefined;
 
       if (firstPhoto?.name) {
-        primaryPhotoUri = `https://places.googleapis.com/v1/${firstPhoto.name}/media?maxHeightPx=600&maxWidthPx=800&key=${this.apiKey}`;
+        primaryPhotoUri = `/api/google/places-photo?name=${encodeURIComponent(firstPhoto.name)}`;
         const author = firstPhoto.authorAttributions?.[0];
         if (author) {
           primaryPhotoAttribution = {
@@ -183,7 +183,7 @@ export class GooglePlacesService {
       let primaryPhotoAttribution: { displayName: string; uri?: string } | undefined;
 
       if (firstPhoto?.name) {
-        primaryPhotoUri = `https://places.googleapis.com/v1/${firstPhoto.name}/media?maxHeightPx=600&maxWidthPx=800&key=${this.apiKey}`;
+        primaryPhotoUri = `/api/google/places-photo?name=${encodeURIComponent(firstPhoto.name)}`;
         const author = firstPhoto.authorAttributions?.[0];
         if (author) {
           primaryPhotoAttribution = {

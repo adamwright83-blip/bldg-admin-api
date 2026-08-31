@@ -90,14 +90,8 @@ export class GoogleStreetViewService {
         };
       }
 
-      // 2. Generate Street View Image URL for runtime display
-      const imageUrl = new URL("https://maps.googleapis.com/maps/api/streetview");
-      imageUrl.searchParams.set("size", "640x400");
-      imageUrl.searchParams.set("location", `${input.latitude},${input.longitude}`);
-      if (input.heading != null) imageUrl.searchParams.set("heading", String(input.heading));
-      if (input.pitch != null) imageUrl.searchParams.set("pitch", String(input.pitch));
-      if (input.fov != null) imageUrl.searchParams.set("fov", String(input.fov));
-      imageUrl.searchParams.set("key", this.apiKey);
+      // 2. Generate Street View Image URL via server proxy (keeps API key server-side)
+      const imageUrl = `/api/google/streetview-facade?buildingId=${encodeURIComponent(input.buildingId)}&lat=${input.latitude}&lng=${input.longitude}&heading=${input.heading ?? 0}`;
 
       recordGoogleTelemetry({
         api: "street_view_static",
@@ -112,7 +106,7 @@ export class GoogleStreetViewService {
         hasCoverage: true,
         panoId: json.pano_id,
         location: json.location ? { latitude: json.location.lat, longitude: json.location.lng } : undefined,
-        imageUrl: imageUrl.toString(),
+        imageUrl,
         attributionText: json.copyright ?? "© Google Street View",
         status: "available",
         contextLabel,

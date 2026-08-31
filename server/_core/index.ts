@@ -26,6 +26,7 @@ import { registerVendorOnboardingSessionRoutes } from "../vendorOnboardingSessio
 import { registerVendorBookingPublicRoutes } from "../vendorBookingPublicApi";
 import { registerLevel4TwilioRoutes } from "../level4Twilio";
 import { registerSalesCallRoutes } from "../salesCalls";
+import { registerGoogleProxyRoutes } from "../google/googleProxyRoutes";
 import { registerCleanCloudImportRoutes } from "../cleancloudImportRoute";
 import { registerClearentImportRoutes } from "../clearentImportRoute";
 import { registerPaymentReconciliationRoutes } from "../paymentReconciliationRoute";

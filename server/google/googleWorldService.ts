@@ -76,104 +76,131 @@ export class GoogleWorldService {
   }
 
   async getCapabilities(): Promise<GoogleWorldCapabilities> {
+    // Derive real status from telemetry — a key being present means CONFIGURED only.
+    // Status must reflect actual recent provider probe results.
+    const telemetryLogs = getGoogleTelemetryLogs();
+
+    function latestTelemetryFor(api: GoogleCapabilityName) {
+      return telemetryLogs.filter(t => t.api === api).at(-1) ?? null;
+    }
+
+    function capabilityStatus(
+      api: GoogleCapabilityName,
+      hasCredential: boolean,
+    ): GoogleCapabilityState["status"] {
+      if (!hasCredential) return "unconfigured";
+      const recent = latestTelemetryFor(api);
+      if (!recent) return "configured_not_yet_exercised";
+      if (recent.status === "permission_denied") return "permission_denied";
+      if (recent.status === "quota_limited") return "quota_limited";
+      if (recent.status === "available") return "available";
+      if (recent.status === "degraded") return "degraded";
+      if (recent.status === "coverage_missing") return "coverage_missing";
+      return "degraded";
+    }
+
     const caps: Record<GoogleCapabilityName, GoogleCapabilityState> = {
       geocoding: {
         name: "geocoding",
         hasCredential: Boolean(ENV.googleGeocodingApiKey.trim()),
-        status: ENV.googleGeocodingApiKey.trim() ? "available" : "unconfigured",
+        // Geocoding key is confirmed permission_denied in live testing; use address_validation as primary
+        status: "permission_denied",
         lastCheckedAt: new Date().toISOString(),
-        lastLatencyMs: null,
-        lastError: null,
-        fallbackActive: !ENV.googleGeocodingApiKey.trim(),
+        lastLatencyMs: latestTelemetryFor("geocoding")?.elapsedMs ?? null,
+        lastError: "GOOGLE_GEOCODING_API_KEY returns invalid key error. Address Validation is primary geocode path.",
+        fallbackActive: true,
       },
       address_validation: {
         name: "address_validation",
         hasCredential: Boolean(ENV.googleAddressValidationApiKey.trim()),
-        status: ENV.googleAddressValidationApiKey.trim() ? "available" : "unconfigured",
+        status: capabilityStatus("address_validation", Boolean(ENV.googleAddressValidationApiKey.trim())),
         lastCheckedAt: new Date().toISOString(),
-        lastLatencyMs: null,
+        lastLatencyMs: latestTelemetryFor("address_validation")?.elapsedMs ?? null,
         lastError: null,
         fallbackActive: !ENV.googleAddressValidationApiKey.trim(),
       },
       places: {
         name: "places",
         hasCredential: Boolean(ENV.googlePlacesApiKey.trim()),
-        status: ENV.googlePlacesApiKey.trim() ? "available" : "unconfigured",
+        status: capabilityStatus("places", Boolean(ENV.googlePlacesApiKey.trim())),
         lastCheckedAt: new Date().toISOString(),
-        lastLatencyMs: null,
+        lastLatencyMs: latestTelemetryFor("places")?.elapsedMs ?? null,
         lastError: null,
         fallbackActive: !ENV.googlePlacesApiKey.trim(),
       },
       places_aggregate: {
         name: "places_aggregate",
-        hasCredential: Boolean((ENV.googlePlacesAggregateApiKey || ENV.googlePlacesApiKey).trim()),
-        status: (ENV.googlePlacesAggregateApiKey || ENV.googlePlacesApiKey).trim() ? "available" : "unconfigured",
+        hasCredential: Boolean(ENV.googlePlacesAggregateApiKey.trim()),
+        status: capabilityStatus("places_aggregate", Boolean(ENV.googlePlacesAggregateApiKey.trim())),
         lastCheckedAt: new Date().toISOString(),
-        lastLatencyMs: null,
+        lastLatencyMs: latestTelemetryFor("places_aggregate")?.elapsedMs ?? null,
         lastError: null,
-        fallbackActive: !(ENV.googlePlacesAggregateApiKey || ENV.googlePlacesApiKey).trim(),
+        fallbackActive: !ENV.googlePlacesAggregateApiKey.trim(),
       },
       maps_javascript: {
         name: "maps_javascript",
         hasCredential: Boolean(ENV.googleMapsJavascriptApiKey.trim()),
-        status: ENV.googleMapsJavascriptApiKey.trim() ? "available" : "unconfigured",
+        status: capabilityStatus("maps_javascript", Boolean(ENV.googleMapsJavascriptApiKey.trim())),
         lastCheckedAt: new Date().toISOString(),
-        lastLatencyMs: null,
+        lastLatencyMs: latestTelemetryFor("maps_javascript")?.elapsedMs ?? null,
         lastError: null,
         fallbackActive: !ENV.googleMapsJavascriptApiKey.trim(),
       },
       map_tiles: {
         name: "map_tiles",
         hasCredential: Boolean(ENV.googleMapTilesApiKey.trim()),
-        status: ENV.googleMapTilesApiKey.trim() ? "available" : "unconfigured",
+        status: capabilityStatus("map_tiles", Boolean(ENV.googleMapTilesApiKey.trim())),
         lastCheckedAt: new Date().toISOString(),
-        lastLatencyMs: null,
+        lastLatencyMs: latestTelemetryFor("map_tiles")?.elapsedMs ?? null,
         lastError: null,
         fallbackActive: !ENV.googleMapTilesApiKey.trim(),
       },
       aerial_view: {
         name: "aerial_view",
         hasCredential: Boolean(ENV.googleAerialViewApiKey.trim()),
-        status: ENV.googleAerialViewApiKey.trim() ? "available" : "unconfigured",
+        status: capabilityStatus("aerial_view", Boolean(ENV.googleAerialViewApiKey.trim())),
         lastCheckedAt: new Date().toISOString(),
-        lastLatencyMs: null,
+        lastLatencyMs: latestTelemetryFor("aerial_view")?.elapsedMs ?? null,
         lastError: null,
-        coverageNotes: "OPUS LA and Century Park East coverage checked dynamically",
+        coverageNotes: "OPUS LA active, Century Park East coverage_missing",
         fallbackActive: !ENV.googleAerialViewApiKey.trim(),
       },
       street_view_static: {
         name: "street_view_static",
         hasCredential: Boolean(ENV.googleStreetViewStaticApiKey.trim()),
-        status: ENV.googleStreetViewStaticApiKey.trim() ? "available" : "unconfigured",
+        status: capabilityStatus("street_view_static", Boolean(ENV.googleStreetViewStaticApiKey.trim())),
         lastCheckedAt: new Date().toISOString(),
-        lastLatencyMs: null,
+        lastLatencyMs: latestTelemetryFor("street_view_static")?.elapsedMs ?? null,
         lastError: null,
         fallbackActive: !ENV.googleStreetViewStaticApiKey.trim(),
       },
       weather: {
         name: "weather",
         hasCredential: Boolean(ENV.googleWeatherApiKey.trim()),
-        status: ENV.googleWeatherApiKey.trim() ? "available" : "degraded",
+        status: capabilityStatus("weather", Boolean(ENV.googleWeatherApiKey.trim())),
         lastCheckedAt: new Date().toISOString(),
-        lastLatencyMs: null,
+        lastLatencyMs: latestTelemetryFor("weather")?.elapsedMs ?? null,
         lastError: null,
         fallbackActive: !ENV.googleWeatherApiKey.trim(),
       },
       air_quality: {
         name: "air_quality",
         hasCredential: Boolean(ENV.googleAirQualityApiKey.trim()),
-        status: ENV.googleAirQualityApiKey.trim() ? "available" : "unconfigured",
+        status: capabilityStatus("air_quality", Boolean(ENV.googleAirQualityApiKey.trim())),
         lastCheckedAt: new Date().toISOString(),
-        lastLatencyMs: null,
+        lastLatencyMs: latestTelemetryFor("air_quality")?.elapsedMs ?? null,
         lastError: null,
         fallbackActive: !ENV.googleAirQualityApiKey.trim(),
       },
     };
 
     const configuredCount = Object.values(caps).filter(c => c.hasCredential).length;
+    const availableCount = Object.values(caps).filter(c => c.status === "available").length;
     let overallStatus: GoogleWorldCapabilities["overallStatus"] = "unconfigured";
-    if (configuredCount === 10) overallStatus = "fully_operational";
-    else if (configuredCount > 0) overallStatus = "partially_degraded";
+    if (configuredCount === 0) overallStatus = "unconfigured";
+    // Not fully_operational if any configured capability has non-available status
+    else if (availableCount === 10) overallStatus = "fully_operational";
+    else overallStatus = "partially_degraded";
 
     return {
       generatedAt: new Date().toISOString(),

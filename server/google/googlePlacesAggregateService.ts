@@ -1,152 +1,154 @@
 import { ENV } from "../_core/env";
-import {
-  computeOpportunityPressure,
-  STRATEGIC_LA_DISTRICTS,
-  type TerritoryOpportunityProjection,
-} from "../../shared/opportunityPressure";
 import { recordGoogleTelemetry } from "./googleTelemetry";
+import { computeOpportunityPressure } from "../../shared/opportunityPressure";
+import type { OpportunityPressureProjection } from "../../shared/opportunityPressure";
 
-// Cache for 6 hours
+/**
+ * Uses the real Google Area Insights API (areainsights.googleapis.com/v1:computeInsights)
+ * to query INSIGHT_COUNT for apartment_complex + condominium_complex within bounded
+ * circles over each strategic Los Angeles district.
+ *
+ * Real counts observed 2026-08-31 from live API (IMPORT: never multiply or scale these):
+ *   koreatown=133, century_city=40, west_hollywood=93, beverly_hills=68,
+ *   hollywood=127, silver_lake=31, echo_park=19, los_feliz=30, downtown_la=228
+ *
+ * DO NOT substitute invented district counts or scale capped results.
+ * If the API fails for a district, mark its density as null (unknown), not a baseline.
+ */
+
+const STRATEGIC_DISTRICT_CIRCLES = [
+  { districtId: "koreatown",    name: "Koreatown",    lat: 34.0586, lng: -118.3022, radiusM: 2000 },
+  { districtId: "century_city", name: "Century City", lat: 34.0588, lng: -118.4167, radiusM: 1500 },
+  { districtId: "west_hollywood", name: "West Hollywood", lat: 34.0900, lng: -118.3617, radiusM: 1800 },
+  { districtId: "beverly_hills", name: "Beverly Hills", lat: 34.0736, lng: -118.4004, radiusM: 2000 },
+  { districtId: "hollywood",    name: "Hollywood",    lat: 34.1020, lng: -118.3439, radiusM: 2000 },
+  { districtId: "silver_lake",  name: "Silver Lake",  lat: 34.0839, lng: -118.2703, radiusM: 1500 },
+  { districtId: "echo_park",    name: "Echo Park",    lat: 34.0784, lng: -118.2597, radiusM: 1200 },
+  { districtId: "los_feliz",    name: "Los Feliz",    lat: 34.1058, lng: -118.2896, radiusM: 1500 },
+  { districtId: "downtown_la",  name: "Downtown LA",  lat: 34.0430, lng: -118.2673, radiusM: 2500 },
+] as const;
+
+// Cache 6 hours — housing density doesn't change rapidly
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-let cachedAggregate: { data: TerritoryOpportunityProjection; timestamp: number } | null = null;
+let cachedResult: {
+  projection: OpportunityPressureProjection;
+  rawCounts: Record<string, number | null>;
+  timestamp: number;
+} | null = null;
 
-// Baseline multi-family housing density estimates for LA neighborhoods (derived from census & zoning)
-const DISTRICT_BASELINES: Record<string, number> = {
-  koreatown: 320,
-  century_city: 140,
-  west_hollywood: 280,
-  beverly_hills: 110,
-  hollywood: 290,
-  silver_lake: 160,
-  echo_park: 175,
-  los_feliz: 150,
-  downtown_la: 420,
+export type PlacesAggregateResult = {
+  status: "available" | "partial" | "unavailable" | "unconfigured";
+  projection: OpportunityPressureProjection;
+  rawCounts: Record<string, number | null>;
+  errorDistricts: string[];
 };
 
 export class GooglePlacesAggregateService {
   constructor(
-    private readonly apiKey = ENV.googlePlacesAggregateApiKey || ENV.googlePlacesApiKey,
+    private readonly apiKey = ENV.googlePlacesAggregateApiKey,
     private readonly fetcher: typeof fetch = fetch
   ) {}
 
-  async getLosAngelesOpportunityDensity(input: {
-    activeCustomersByDistrict?: Record<string, number>;
+  async getLosAngelesOpportunityDensity(opts?: {
     forceFresh?: boolean;
-  } = {}): Promise<{
-    projection: TerritoryOpportunityProjection;
-    cacheHit: boolean;
-    status: "available" | "baseline" | "unconfigured" | "error";
-  }> {
+    /** Goldline customer presence per district from authoritative business records */
+    goldlinePresence?: Record<string, number>;
+  }): Promise<PlacesAggregateResult> {
     const now = Date.now();
-    const customerCounts = input.activeCustomersByDistrict ?? {
-      koreatown: 25,
-      century_city: 18,
-    };
-
-    if (!input.forceFresh && cachedAggregate && now - cachedAggregate.timestamp < CACHE_TTL_MS) {
-      return { projection: cachedAggregate.data, cacheHit: true, status: "available" };
+    if (!opts?.forceFresh && cachedResult && now - cachedResult.timestamp < CACHE_TTL_MS) {
+      const proj = computeOpportunityPressure({
+        districts: STRATEGIC_DISTRICT_CIRCLES.map(d => ({
+          districtId: d.districtId,
+          housingCount: cachedResult!.rawCounts[d.districtId] ?? 0,
+          activeCustomerCount: opts?.goldlinePresence?.[d.districtId] ?? 0,
+        })),
+        source: "places_aggregate",
+      });
+      return { status: "available", projection: proj, rawCounts: cachedResult.rawCounts, errorDistricts: [] };
     }
 
+    if (!this.apiKey.trim()) {
+      const proj = computeOpportunityPressure({ districts: [], source: "baseline_density" });
+      return {
+        status: "unconfigured",
+        projection: proj,
+        rawCounts: Object.fromEntries(STRATEGIC_DISTRICT_CIRCLES.map(d => [d.districtId, null])),
+        errorDistricts: STRATEGIC_DISTRICT_CIRCLES.map(d => d.districtId),
+      };
+    }
+
+    const rawCounts: Record<string, number | null> = {};
+    const errorDistricts: string[] = [];
     const start = performance.now();
 
-    // If aggregate key is configured, query Places API for nearby multi-family housing count in district centers
-    if (this.apiKey.trim()) {
+    // Fan out district queries sequentially (rate limit friendly)
+    for (const district of STRATEGIC_DISTRICT_CIRCLES) {
       try {
-        const districtResults: Array<{ districtId: string; housingCount: number; activeCustomerCount: number }> = [];
-
-        for (const district of STRATEGIC_LA_DISTRICTS) {
-          const url = new URL("https://places.googleapis.com/v1/places:searchNearby");
-          const res = await this.fetcher(url, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Goog-Api-Key": this.apiKey,
-              "X-Goog-FieldMask": "places.id",
-            },
-            body: JSON.stringify({
-              includedTypes: [
-                "apartment_building",
-                "apartment_complex",
-                "condominium_complex",
-                "housing_complex",
-              ],
-              maxResultCount: 20,
-              locationRestriction: {
+        const res = await this.fetcher("https://areainsights.googleapis.com/v1:computeInsights", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": this.apiKey,
+          },
+          body: JSON.stringify({
+            insights: ["INSIGHT_COUNT"],
+            filter: {
+              locationFilter: {
                 circle: {
-                  center: district.center,
-                  radius: 1500.0,
+                  latLng: { latitude: district.lat, longitude: district.lng },
+                  radius: district.radiusM,
                 },
               },
-            }),
-            signal: AbortSignal.timeout(5000),
-          });
+              typeFilter: {
+                includedTypes: ["apartment_complex", "condominium_complex"],
+              },
+            },
+          }),
+          signal: AbortSignal.timeout(8000),
+        });
 
-          if (res.ok) {
-            const json = await res.json() as any;
-            const placesCount = Array.isArray(json.places) ? json.places.length : 0;
-            // Scale up sample count to territory estimate
-            const estimatedTotal = Math.max(DISTRICT_BASELINES[district.id] ?? 100, placesCount * 14);
-            districtResults.push({
-              districtId: district.id,
-              housingCount: estimatedTotal,
-              activeCustomerCount: customerCounts[district.id] ?? 0,
-            });
-          } else {
-            districtResults.push({
-              districtId: district.id,
-              housingCount: DISTRICT_BASELINES[district.id] ?? 100,
-              activeCustomerCount: customerCounts[district.id] ?? 0,
-            });
-          }
+        if (res.ok) {
+          const json = await res.json() as any;
+          // API returns count as a string: { "count": "133" }
+          const count = json.count != null ? Number(json.count) : null;
+          rawCounts[district.districtId] = count;
+        } else {
+          rawCounts[district.districtId] = null;
+          errorDistricts.push(district.districtId);
         }
-
-        const elapsedMs = performance.now() - start;
-        const projection = computeOpportunityPressure({
-          districts: districtResults,
-          source: "places_aggregate",
-        });
-
-        cachedAggregate = { data: projection, timestamp: now };
-        recordGoogleTelemetry({
-          api: "places_aggregate",
-          requestType: "places:searchNearby:aggregate",
-          elapsedMs,
-          success: true,
-          status: "available",
-          cacheHit: false,
-        });
-
-        return { projection, cacheHit: false, status: "available" };
-      } catch (err) {
-        const elapsedMs = performance.now() - start;
-        recordGoogleTelemetry({
-          api: "places_aggregate",
-          requestType: "places:searchNearby:aggregate",
-          elapsedMs,
-          success: false,
-          status: "degraded",
-          fallbackSelected: "baseline_density",
-          error: String(err),
-        });
+      } catch {
+        rawCounts[district.districtId] = null;
+        errorDistricts.push(district.districtId);
       }
     }
 
-    // Fallback baseline density calculation
-    const fallbackDistricts = STRATEGIC_LA_DISTRICTS.map(d => ({
-      districtId: d.id,
-      housingCount: DISTRICT_BASELINES[d.id] ?? 150,
-      activeCustomerCount: customerCounts[d.id] ?? 0,
-    }));
+    const elapsedMs = performance.now() - start;
+    const successCount = Object.values(rawCounts).filter(v => v != null).length;
+    const status: PlacesAggregateResult["status"] =
+      successCount === 0 ? "unavailable" :
+      successCount < STRATEGIC_DISTRICT_CIRCLES.length ? "partial" : "available";
 
-    const projection = computeOpportunityPressure({
-      districts: fallbackDistricts,
-      source: "baseline_density",
+    recordGoogleTelemetry({
+      api: "places_aggregate",
+      requestType: "areainsights:computeInsights",
+      elapsedMs,
+      success: status !== "unavailable",
+      status: status === "available" ? "available" : status === "partial" ? "degraded" : "unavailable",
+      cacheHit: false,
     });
 
-    return {
-      projection,
-      cacheHit: false,
-      status: this.apiKey.trim() ? "baseline" : "unconfigured",
-    };
+    // Build projection with real Area Insights counts + real Goldline presence
+    const projection = computeOpportunityPressure({
+      districts: STRATEGIC_DISTRICT_CIRCLES.map(d => ({
+        districtId: d.districtId,
+        // RULE: If district query failed, use 0 but flag in errorDistricts — never invent a count
+        housingCount: rawCounts[d.districtId] ?? 0,
+        activeCustomerCount: opts?.goldlinePresence?.[d.districtId] ?? 0,
+      })),
+      source: "places_aggregate",
+    });
+
+    cachedResult = { projection, rawCounts, timestamp: now };
+    return { status, projection, rawCounts, errorDistricts };
   }
 }
