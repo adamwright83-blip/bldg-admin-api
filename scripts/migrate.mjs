@@ -407,6 +407,18 @@ await runRequired(
   "CREATE TABLE entity_locations"
 );
 
+for (const [sql, label] of [
+  [`ALTER TABLE entity_locations ADD COLUMN canonicalAddress VARCHAR(512) AFTER normalizedSourceAddress`, "entity_locations.canonicalAddress"],
+  [`ALTER TABLE entity_locations ADD COLUMN geocodeProvider VARCHAR(64) AFTER geocodeStatus`, "entity_locations.geocodeProvider"],
+  [`ALTER TABLE entity_locations ADD COLUMN geocodeError VARCHAR(512) AFTER geocodedAt`, "entity_locations.geocodeError"],
+  [`ALTER TABLE entity_locations ADD COLUMN lastAttemptAt TIMESTAMP NULL AFTER geocodeError`, "entity_locations.lastAttemptAt"],
+  [`ALTER TABLE entity_locations ADD COLUMN createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`, "entity_locations.createdAt"],
+  [`ALTER TABLE entity_locations ADD COLUMN updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`, "entity_locations.updatedAt"],
+]) await runRequired(sql, label).catch(error => {
+  if (error.code === "ER_DUP_FIELDNAME" || String(error.message).includes("Duplicate column")) console.log("→ already exists, skipping:", label);
+  else throw error;
+});
+
 await runRequired(
   `CREATE TABLE IF NOT EXISTS tower_wars_promises (
     id VARCHAR(36) PRIMARY KEY, tenantId VARCHAR(64) NOT NULL,
@@ -438,6 +450,12 @@ await assertRequiredColumns("entity_locations", [
   "googlePlaceId",
   "geocodeStatus",
   "geocodedAt",
+  "canonicalAddress",
+  "geocodeProvider",
+  "geocodeError",
+  "lastAttemptAt",
+  "createdAt",
+  "updatedAt",
 ]);
 await assertRequiredColumns("tower_wars_promises", [
   "tenantId",
