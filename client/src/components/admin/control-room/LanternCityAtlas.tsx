@@ -2,25 +2,15 @@ import { useMemo, useState } from "react";
 import { ArrowRight, MapPinOff, RefreshCw, Search, X } from "lucide-react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { CityTowerButton } from "./CityTowerButton";
-import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
-
-const MAP_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas.jpg";
-const NEIGHBORHOODS = [
-  { label: "West Hollywood", x: 18, y: 18 },
-  { label: "Beverly Hills", x: 13, y: 43 },
-  { label: "Century City", x: 12, y: 76 },
-  { label: "Hollywood", x: 47, y: 34 },
-  { label: "Koreatown", x: 51, y: 70 },
-  { label: "Los Feliz", x: 76, y: 20 },
-  { label: "Silver Lake", x: 82, y: 43 },
-  { label: "Echo Park", x: 86, y: 72 },
-] as const;
+import { WorldGeographySurface } from "./WorldGeographySurface";
+import type { GeographicEntity } from "./GoogleMapsRealityLayer";
+import { WorldDayPhaseIndicator } from "./WorldDayPhase";
 
 export {
   inferCustomerCadence,
   projectLatLngToLanternAtlas,
 } from "@shared/lanternCity";
+
 export function classifyLanternCustomer(customer: { recencyStatus: string }) {
   if (customer.recencyStatus === "lapsed") return "dark" as const;
   if (customer.recencyStatus === "cooling") return "dimming" as const;
@@ -41,16 +31,19 @@ export default function LanternCityAtlas({
   const [selectedPursuit, setSelectedPursuit] = useState<
     NonNullable<ReturnType<typeof useAtlasData>>["pursued"][number] | null
   >(null);
+
   const atlas = trpc.system.geographicTruth.atlas.useQuery(undefined, {
     staleTime: 30_000,
   });
   const geocode = trpc.system.geographicTruth.geocodePending.useMutation({
     onSuccess: () => atlas.refetch(),
   });
+
   const data = atlas.data;
   const normalized = query.trim().toLowerCase();
   const customers = data?.customers ?? [];
   const pursued = data?.pursued ?? [];
+
   const visibleCustomers = useMemo(
     () =>
       customers.filter(
@@ -63,6 +56,7 @@ export default function LanternCityAtlas({
       ),
     [customers, normalized]
   );
+
   const visiblePursuits = useMemo(
     () =>
       pursued.filter(
@@ -75,6 +69,42 @@ export default function LanternCityAtlas({
       ),
     [pursued, normalized]
   );
+
+  const [googleVisible, setGoogleVisible] = useState(false);
+
+  /**
+   * The same visible records, addressed by the real coordinate the atlas
+   * projection was derived from. Only records with a successful geocode carry
+   * a location at all, so nothing here is estimated or back-filled.
+   */
+  const googleEntities: GeographicEntity[] = useMemo(
+    () => [
+      ...visibleCustomers.map(customer => ({
+        id: `customer:${customer.identityKey}`,
+        latitude: customer.location!.latitude,
+        longitude: customer.location!.longitude,
+        label: customer.displayName,
+        kind: "customer" as const,
+        onSelect: () => {
+          setSelectedPursuit(null);
+          setSelectedCustomer(customer);
+        },
+      })),
+      ...visiblePursuits.map(item => ({
+        id: `pursued:${item.pipelineId}`,
+        latitude: item.location!.latitude,
+        longitude: item.location!.longitude,
+        label: item.name,
+        kind: "pursued" as const,
+        onSelect: () => {
+          setSelectedCustomer(null);
+          setSelectedPursuit(item);
+        },
+      })),
+    ],
+    [visibleCustomers, visiblePursuits]
+  );
+
   const counts = customers.reduce(
     (acc, customer) => ({
       ...acc,
@@ -82,9 +112,8 @@ export default function LanternCityAtlas({
     }),
     { active: 0, dimming: 0, dark: 0 }
   );
-  const unmappedCustomers = customers.filter(
-    customer => !customer.location
-  ).length;
+
+  const unmappedCustomers = customers.filter(customer => !customer.location).length;
   const unmappedPursuits = pursued.filter(item => !item.location).length;
 
   return (
@@ -95,25 +124,29 @@ export default function LanternCityAtlas({
           <h1>Lantern City Atlas — Los Angeles</h1>
           <p>Real customer geography · {data?.businessDate ?? "Today"}</p>
         </div>
-        <label className="lc-search">
-          <Search aria-hidden />
-          <input
-            value={query}
-            onChange={event => setQuery(event.target.value)}
-            placeholder="Search customers and opportunities…"
-            aria-label="Search Lantern City"
-          />
-          {query ? (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              aria-label="Clear search"
-            >
-              <X />
-            </button>
-          ) : null}
-        </label>
+        <div className="lc-header-controls">
+          <WorldDayPhaseIndicator />
+          <label className="lc-search">
+            <Search aria-hidden />
+            <input
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Search customers and opportunities…"
+              aria-label="Search Lantern City"
+            />
+            {query ? (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+              >
+                <X />
+              </button>
+            ) : null}
+          </label>
+        </div>
       </header>
+
       <section
         className="lc-status-grid"
         aria-label="Customer relationship counts"
@@ -141,79 +174,82 @@ export default function LanternCityAtlas({
           </div>
         </article>
       </section>
+
       <section className="lc-map" aria-label="Customer relationship atlas">
-        <img src={MAP_IMAGE} alt="Illustrated Los Angeles relationship atlas" />
-        <div className="lc-map-wash" />
-        {([
-          { id: "century_park_east", latitude: 34.0591, longitude: -118.4147 },
-          { id: "opus_la", latitude: 34.0618, longitude: -118.3011 },
-        ] as const).map(tower => {
-          const point = projectLatLngToLanternAtlas(tower);
-          const edgeSafe = { x: Math.min(94, Math.max(8, point.x)), y: Math.min(92, Math.max(8, point.y)) };
-          return <CityTowerButton key={tower.id} buildingId={tower.id} className="lc-world-tower" style={{ left: `${edgeSafe.x}%`, top: `${edgeSafe.y}%` }} returnPath="/growth/lantern-city" onNavigate={onNavigate} subtitle="TODAY battle truth" />;
-        })}
-        {NEIGHBORHOODS.map(item => (
-          <span
-            key={item.label}
-            className="lc-neighborhood"
-            style={{ left: `${item.x}%`, top: `${item.y}%` }}
-          >
-            {item.label}
-          </span>
-        ))}
-        {visibleCustomers.map(customer => (
-          <button
-            type="button"
-            key={customer.identityKey}
-            className={`lc-lantern state-${customer.cadence.state}`}
-            style={{
-              left: `${customer.location!.x}%`,
-              top: `${customer.location!.y}%`,
-            }}
-            onClick={() => {
-              setSelectedPursuit(null);
-              setSelectedCustomer(customer);
-            }}
-            aria-label={`${customer.displayName}, ${customer.cadence.state}`}
-          >
-            <span className="lc-lantern-handle" />
-            <span className="lc-lantern-body" />
-            <span className="lc-lantern-base" />
-          </button>
-        ))}
-        {visiblePursuits.map(item => (
-          <button
-            type="button"
-            key={item.pipelineId}
-            className="lc-pursued-flame"
-            style={{
-              left: `${item.location!.x}%`,
-              top: `${item.location!.y}%`,
-            }}
-            onClick={() => {
-              setSelectedCustomer(null);
-              setSelectedPursuit(item);
-            }}
-            aria-label={`Pursued: ${item.name}`}
-          >
-            ♨
-          </button>
-        ))}
-        {!atlas.isLoading &&
-        visibleCustomers.length + visiblePursuits.length === 0 ? (
-          <div className="lc-map-empty">
-            <strong>
-              {atlas.isError
-                ? "Geographic truth unavailable"
-                : "No geocoded records match this view"}
-            </strong>
-            <span>
-              Records without successful provider coordinates remain outside the
-              illustrated map.
-            </span>
-          </div>
-        ) : null}
+        <WorldGeographySurface
+          mode="lantern_atlas"
+          onNavigate={onNavigate}
+          showNeighborhoods={true}
+          showOpportunityLayer={true}
+          onGoogleVisibilityChange={setGoogleVisible}
+          geographicEntities={googleEntities}
+        >
+          {/*
+            Lanterns and pursuit flames are positioned with the atlas x/y
+            percentages that `projectLatLngToLanternAtlas()` produced for the
+            illustrated map. Those percentages describe a spot on the painting,
+            not a place, so they are not drawn over real geography — the same
+            records are handed to the renderer as coordinates instead. Each
+            record already carries the latitude/longitude the atlas projection
+            was derived from, so nothing is estimated to do this.
+          */}
+          {!googleVisible && visibleCustomers.map(customer => (
+            <button
+              type="button"
+              key={customer.identityKey}
+              className={`lc-lantern state-${customer.cadence.state}`}
+              style={{
+                left: `${customer.location!.x}%`,
+                top: `${customer.location!.y}%`,
+              }}
+              onClick={() => {
+                setSelectedPursuit(null);
+                setSelectedCustomer(customer);
+              }}
+              aria-label={`${customer.displayName}, ${customer.cadence.state}`}
+            >
+              <span className="lc-lantern-handle" />
+              <span className="lc-lantern-body" />
+              <span className="lc-lantern-base" />
+            </button>
+          ))}
+
+          {!googleVisible && visiblePursuits.map(item => (
+            <button
+              type="button"
+              key={item.pipelineId}
+              className="lc-pursued-flame"
+              style={{
+                left: `${item.location!.x}%`,
+                top: `${item.location!.y}%`,
+              }}
+              onClick={() => {
+                setSelectedCustomer(null);
+                setSelectedPursuit(item);
+              }}
+              aria-label={`Pursued: ${item.name}`}
+            >
+              ♨
+            </button>
+          ))}
+
+          {!atlas.isLoading &&
+          visibleCustomers.length + visiblePursuits.length === 0 ? (
+            <div className="lc-map-empty">
+              <strong>
+                {atlas.isError
+                  ? "Geographic truth unavailable"
+                  : "No geocoded records match this view"}
+              </strong>
+              <span>
+                Records without successful provider coordinates remain outside the
+                illustrated map.
+              </span>
+            </div>
+          ) : null}
+        </WorldGeographySurface>
       </section>
+
       <section className="lc-utility-row">
         <article className="lc-legend">
           <h2>Lantern legend</h2>
@@ -228,6 +264,7 @@ export default function LanternCityAtlas({
             <strong>Pursued</strong>
           </span>
         </article>
+
         <article className="lc-unmapped">
           <MapPinOff aria-hidden />
           <div>
@@ -256,6 +293,7 @@ export default function LanternCityAtlas({
           </div>
         </article>
       </section>
+
       {selectedCustomer ? (
         <aside className="lc-detail" aria-live="polite">
           <button
@@ -308,6 +346,7 @@ export default function LanternCityAtlas({
           </button>
         </aside>
       ) : null}
+
       {selectedPursuit ? (
         <aside className="lc-detail" aria-live="polite">
           <button
@@ -339,9 +378,6 @@ export default function LanternCityAtlas({
               </dd>
             </div>
           </dl>
-          {/* Client-side so the selected pursuit's identity survives the move.
-              This was a raw <a href>, which forced a full document load and threw
-              away in-memory state along with it. */}
           <Link
             className="lc-open-customer"
             href={`/commercial-pipeline?pipeline=${selectedPursuit.pipelineId}`}

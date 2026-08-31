@@ -232,6 +232,12 @@ export function dayforgeSecurityHeaders(
     "https://forge.butterfly-effect.dev",
     "https://maps.googleapis.com",
     "https://maps.gstatic.com",
+    // Maps 3D renders through a WebAssembly renderer (map3d.wasm). Production
+    // deliberately omits 'unsafe-eval', which also blocks WASM compilation, so
+    // without this the 3D geographic layer works locally and dies in
+    // production. 'wasm-unsafe-eval' permits WASM only — it does not restore
+    // eval() for scripts.
+    "'wasm-unsafe-eval'",
     ...configuredScripts,
     // Vite's dev-only inline react-refresh preamble and esbuild transform
     // require 'unsafe-inline'/'unsafe-eval' locally; production serves
@@ -244,6 +250,15 @@ export function dayforgeSecurityHeaders(
     "https://api.stripe.com",
     "https://forge.butterfly-effect.dev",
     "https://maps.googleapis.com",
+    // Maps 3D streams its actual Earth geometry from keyhole-pa, NOT from
+    // maps.googleapis.com: PlanetoidMetadata, BulkMetadata and NodeData carry
+    // the mesh and imagery, and Copyrights carries the attribution Google
+    // requires us to display. With this host absent the renderer loaded, the
+    // journey phases advanced, and the map painted pure black behind the
+    // authored tower — every callback fired while nothing geographic existed.
+    "https://keyhole-pa.googleapis.com",
+    // Map style/legend resources fetched by the 3D renderer.
+    "https://www.gstatic.com",
     "https://*.posthog.com",
     "https://*.i.posthog.com",
     ...configuredConnections,

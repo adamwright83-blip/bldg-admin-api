@@ -87,11 +87,25 @@ describe("Admin six-domain shell", () => {
 
 describe("Admin Home battle truth", () => {
   it("derives pressure and revenue cues from Tower Wars today, not customer penetration", () => {
+    // Pressure comes from real TODAY Tower Wars revenue, never from customer
+    // penetration counts. The assertions below name the product law rather than
+    // an incidental spelling: an earlier assertion pinned the literal string
+    // `pressureBuilding === "opus_la"`, which the correct implementation stopped
+    // containing once the comparison became a ternary — a passing/failing signal
+    // that tracked source formatting instead of truth.
     expect(homeSource).toContain("towerWars.today.useQuery");
+    // The loser is the LOWER actual revenue.
     expect(homeSource).toContain("opusRevenue < cpeRevenue");
-    expect(homeSource).toContain('pressureBuilding === "opus_la"');
+    // A tie — including $0/$0 — yields no loser at all.
+    expect(homeSource).toContain("opusRevenue !== cpeRevenue");
+    // Both sides must be known before any pressure is claimed.
+    expect(homeSource).toContain(
+      "const pressureBuilding = opusRevenue !== null && cpeRevenue !== null"
+    );
+    // A new real ledger event drives the temporary revenue cue.
     expect(homeSource).toContain("newest.buildingId");
-    expect(homeSource).toContain("const pressureBuilding = opusRevenue !== null && cpeRevenue !== null");
+    // Penetration counts may travel as context, but never as the pressure source.
+    expect(homeSource).not.toMatch(/pressureBuilding\s*=\s*[^;]*penetration/i);
   });
 });
 

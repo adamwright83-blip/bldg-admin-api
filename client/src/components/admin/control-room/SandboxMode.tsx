@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, ChevronLeft, ChevronRight, FlaskConical, LockKeyhole } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Cloud, Compass, Eye, FlaskConical, LockKeyhole, Sun, Zap } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { projectSandboxSettlement } from "@shared/sandboxProjection";
 import type { SandboxScenario } from "@shared/sandboxScenarios";
@@ -15,7 +15,29 @@ const CREATURES: Array<{ kind: PsychSignalKind; appears: string; clears: string 
   { kind: "ruinbound", appears: "A real mission is executing", clears: "The encounter or mission resolves" },
 ];
 
-const DEGRADATIONS = ["Maps works / Places fails", "Places works / Weather fails", "Aerial unavailable for one building", "Street View unavailable", "Map Tiles timeout", "Geocoding quota error", "Aggregate has no coverage", "Google entirely unavailable"];
+const DEGRADATIONS = [
+  "Maps works / Places fails",
+  "Places works / Weather fails",
+  "Weather works / AQ fails (No AQ modulation)",
+  "Aerial unavailable for one building",
+  "Street View unavailable",
+  "Map Tiles timeout",
+  "Geocoding quota error",
+  "Aggregate has no coverage",
+  "Google entirely unavailable",
+];
+
+const ATMOSPHERE_OVERRIDES = [
+  { label: "Live Los Angeles Atmosphere", value: "live" },
+  { label: "Clear Midday", value: "clear_midday" },
+  { label: "Overcast / Heavy Cloud", value: "cloudy" },
+  { label: "Sunset / Amber Dusk", value: "sunset" },
+  { label: "Midnight Clear", value: "night" },
+  { label: "Active Rainstorm", value: "rain" },
+  { label: "Heavy Smog / AQ Haze", value: "smog" },
+  { label: "Crisp Clean Air", value: "clean_air" },
+  { label: "AQ Offline (No Modulation)", value: "unknown_aq" },
+];
 
 function completedReplayMaxDate(now = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -30,9 +52,11 @@ function completedReplayMaxDate(now = new Date()): string {
 
 export default function SandboxMode({ onNavigate }: { onNavigate: (path: string) => void }) {
   const query = trpc.system.towerWars.sandbox.useQuery(undefined, { retry: false, staleTime: Infinity });
+  const googleCaps = trpc.system.google.capabilities.useQuery(undefined, { retry: false, staleTime: 30_000 });
   const [selected, setSelected] = useState<SandboxScenario>("THREE_ORDER_BATTLE");
   const [cursor, setCursor] = useState(0);
   const [degradation, setDegradation] = useState<string | null>(null);
+  const [atmoOverride, setAtmoOverride] = useState("live");
   const [replayDate, setReplayDate] = useState("");
   const [requestedReplayDate, setRequestedReplayDate] = useState("");
   const replay = trpc.system.towerWars.sandboxReplay.useQuery({ businessDate: requestedReplayDate }, { enabled: requestedReplayDate.length === 10, retry: false });
@@ -44,17 +68,186 @@ export default function SandboxMode({ onNavigate }: { onNavigate: (path: string)
   if (query.isLoading) return <main className="sb-page"><div className="sb-banner"><FlaskConical /> SANDBOX GATE CHECK</div></main>;
   if (!query.data) return <main className="sb-page"><div className="sb-denied"><LockKeyhole /><h1>Sandbox is server-disabled</h1><p>Set GOLDLINE_SANDBOX_ENABLED=true on an admin environment. No client switch can bypass this gate.</p></div></main>;
 
-  return <main className="sb-page" data-animation-cursor={cursor} data-degradation={degradation ?? "none"}>
-    <div className="sb-banner"><AlertTriangle /> {query.data.banner} <AlertTriangle /></div>
-    <header className="sb-head"><div><small>Permanent development infrastructure</small><h1>One World Sandbox</h1><p>Deterministic fixtures enter the real Tower Wars compiler and settlement reducer. This route exposes no mutations.</p></div><label>Scenario<select value={selected} onChange={event => { setSelected(event.target.value as SandboxScenario); setCursor(0); }}>{query.data.scenarios.map(item => <option key={item.scenario}>{item.scenario}</option>)}</select></label></header>
-    {scenario ? <>
-      <section className="sb-battle"><div className="sb-tower"><CanonicalBuildingArt buildingId="opus_la" businessDate={scenario.fixture.todayBusinessDate} strata={projection?.buildings.opus_la.strata ?? []} incomingToday={projection?.buildings.opus_la.today.incomingAttacks ?? 0} charge={(projection?.buildings.opus_la.today.unspentValueCents ?? 0) / 5000}/><b>OPUS · ${((projection?.buildings.opus_la.today.revenueCents ?? 0) / 100).toFixed(0)}</b></div><div className="sb-cursor"><strong>{scenario.scenario}</strong><p>{scenario.description}</p><span>Deterministic event {cursor} / {scenario.fixture.events.length}</span><div><button type="button" onClick={() => setCursor(value => Math.max(0, value - 1))}><ChevronLeft /> Step back</button><button type="button" onClick={() => setCursor(value => Math.min(scenario.fixture.events.length, value + 1))}>Step event <ChevronRight /></button></div></div><div className="sb-tower"><CanonicalBuildingArt buildingId="century_park_east" businessDate={scenario.fixture.todayBusinessDate} strata={projection?.buildings.century_park_east.strata ?? []} incomingToday={projection?.buildings.century_park_east.today.incomingAttacks ?? 0} charge={(projection?.buildings.century_park_east.today.unspentValueCents ?? 0) / 5000}/><b>CPE · ${((projection?.buildings.century_park_east.today.revenueCents ?? 0) / 100).toFixed(0)}</b></div></section>
-      <section className="sb-math"><h2>Settled proof</h2>{(["opus_la", "century_park_east"] as const).map(id => { const day = scenario.settlement.buildings[id].today; return <article key={id}><b>{id}</b><span>${day.revenueCents / 100}</span><span>{day.outgoingAttacks} outgoing</span><span>{day.incomingAttacks} incoming</span><span>${day.unspentValueCents / 100} charge</span></article>; })}</section>
-    </> : null}
-    <section className="sb-actions"><h2>ACTION_ELIGIBILITY</h2><button disabled title="Sandbox never writes production truth">Mutating action disabled — sandbox cannot fulfill promises</button></section>
-    <section className="sb-matrix"><h2>CREATURE_MATRIX</h2><div>{CREATURES.map(item => <article key={item.kind}><img src={SIGNAL_ART[item.kind]} alt=""/><b>{SIGNAL_LABEL[item.kind]}</b><span>Appears: {item.appears}</span><span>Clears only: {item.clears}</span></article>)}</div></section>
-    <section className="sb-matrix"><h2>TRANSITION_MATRIX</h2><div className="sb-transition-buttons"><button onClick={() => onNavigate("/growth/lantern-city")}>City → tower</button><button onClick={() => onNavigate("/growth/tower-wars?building=opus_la")}>Direct-link OPUS</button><button onClick={() => onNavigate("/growth/tower-wars?building=century_park_east")}>Direct-link CPE</button><button onClick={() => history.back()}>Back / forward</button><button onClick={() => document.documentElement.classList.toggle("sandbox-reduced-motion")}>Reduced motion</button></div></section>
-    <section className="sb-matrix"><h2>API_DEGRADATION</h2><p>Presentation faults never alter fixture truth.</p><div className="sb-degradation">{DEGRADATIONS.map(item => <button className={degradation === item ? "is-active" : ""} onClick={() => setDegradation(item)} key={item}>{item}</button>)}</div>{degradation ? <div className="sb-fallback">{degradation}: authored geography remains visible; external confidence is reduced; no canonical entity is removed.</div> : null}</section>
-    <section className="sb-real-replay"><h2>REAL_DAY_REPLAY</h2><p>Completed dates only. Production settlement is read with an isolated sandbox cursor and cannot consume unseen live events or write history.</p><div><input type="date" value={replayDate} max={completedReplayMaxDate()} onChange={event => setReplayDate(event.target.value)}/><button type="button" disabled={replayDate.length !== 10} onClick={() => setRequestedReplayDate(replayDate)}>Load read-only day</button></div>{replay.data ? <p className="sb-replay-result">{replay.data.businessDate} · {replay.data.cursorScope} · OPUS ${replay.data.settlement.buildings.opus_la.today.revenueCents / 100} · CPE ${replay.data.settlement.buildings.century_park_east.today.revenueCents / 100}</p> : null}{replay.error ? <p className="sb-fallback">Replay unavailable: {replay.error.message}</p> : null}</section>
-  </main>;
+  const capabilities = googleCaps.data?.capabilities.capabilities;
+
+  return (
+    <main
+      className="sb-page"
+      data-animation-cursor={cursor}
+      data-degradation={degradation ?? "none"}
+      data-atmo-override={atmoOverride}
+    >
+      <div className="sb-banner"><AlertTriangle /> {query.data.banner} <AlertTriangle /></div>
+      <header className="sb-head">
+        <div>
+          <small>Permanent development infrastructure</small>
+          <h1>One World Sandbox — Living Los Angeles</h1>
+          <p>Deterministic fixtures enter the real Tower Wars compiler and settlement reducer. Google capability states reflect live deployment status.</p>
+        </div>
+        <label>Scenario
+          <select value={selected} onChange={event => { setSelected(event.target.value as SandboxScenario); setCursor(0); }}>
+            {query.data.scenarios.map(item => <option key={item.scenario}>{item.scenario}</option>)}
+          </select>
+        </label>
+      </header>
+
+      {scenario ? <>
+        <section className="sb-battle">
+          <div className="sb-tower">
+            <CanonicalBuildingArt buildingId="opus_la" businessDate={scenario.fixture.todayBusinessDate} strata={projection?.buildings.opus_la.strata ?? []} incomingToday={projection?.buildings.opus_la.today.incomingAttacks ?? 0} charge={(projection?.buildings.opus_la.today.unspentValueCents ?? 0) / 5000}/>
+            <b>OPUS · ${((projection?.buildings.opus_la.today.revenueCents ?? 0) / 100).toFixed(0)}</b>
+          </div>
+          <div className="sb-cursor">
+            <strong>{scenario.scenario}</strong>
+            <p>{scenario.description}</p>
+            <span>Deterministic event {cursor} / {scenario.fixture.events.length}</span>
+            <div>
+              <button type="button" onClick={() => setCursor(value => Math.max(0, value - 1))}><ChevronLeft /> Step back</button>
+              <button type="button" onClick={() => setCursor(value => Math.min(scenario.fixture.events.length, value + 1))}>Step event <ChevronRight /></button>
+            </div>
+          </div>
+          <div className="sb-tower">
+            <CanonicalBuildingArt buildingId="century_park_east" businessDate={scenario.fixture.todayBusinessDate} strata={projection?.buildings.century_park_east.strata ?? []} incomingToday={projection?.buildings.century_park_east.today.incomingAttacks ?? 0} charge={(projection?.buildings.century_park_east.today.unspentValueCents ?? 0) / 5000}/>
+            <b>CPE · ${((projection?.buildings.century_park_east.today.revenueCents ?? 0) / 100).toFixed(0)}</b>
+          </div>
+        </section>
+        <section className="sb-math">
+          <h2>Settled proof</h2>
+          {(["opus_la", "century_park_east"] as const).map(id => {
+            const day = scenario.settlement.buildings[id].today;
+            return <article key={id}>
+              <b>{id}</b>
+              <span>${day.revenueCents / 100}</span>
+              <span>{day.outgoingAttacks} outgoing</span>
+              <span>{day.incomingAttacks} incoming</span>
+              <span>${day.unspentValueCents / 100} charge</span>
+            </article>;
+          })}
+        </section>
+      </> : null}
+
+      {/* Google Live Capability Status Pane */}
+      <section className="sb-matrix">
+        <h2>GOOGLE_CAPABILITIES_SPINE</h2>
+        <p>Live capability audit across all 10 provisioned Google Platform APIs. Secrets remain strictly redacted.</p>
+        <div className="sb-google-grid">
+          {capabilities ? (
+            Object.values(capabilities).map(cap => (
+              <article key={cap.name} className={`sb-cap-card is-${cap.status}`}>
+                <div className="sb-cap-head">
+                  <strong>{cap.name.replace(/_/g, " ").toUpperCase()}</strong>
+                  <span className={`sb-cap-badge is-${cap.status}`}>{cap.status}</span>
+                </div>
+                <div className="sb-cap-body">
+                  <small>Credential: {cap.hasCredential ? "Configured in Railway" : "Unset"}</small>
+                  <small>Fallback: {cap.fallbackActive ? "Active" : "Standard"}</small>
+                  {cap.coverageNotes ? <p>{cap.coverageNotes}</p> : null}
+                </div>
+              </article>
+            ))
+          ) : (
+            <p className="sb-fallback">Loading live Google capability spine…</p>
+          )}
+        </div>
+      </section>
+
+      {/* Living Atmosphere Simulation Controls */}
+      <section className="sb-matrix">
+        <h2>LIVING_ATMOSPHERE_SIMULATION</h2>
+        <p>Test bounded atmospheric variables on the One World surface without altering business truth.</p>
+        <div className="sb-degradation">
+          {ATMOSPHERE_OVERRIDES.map(item => (
+            <button
+              key={item.value}
+              className={atmoOverride === item.value ? "is-active" : ""}
+              onClick={() => setAtmoOverride(item.value)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="sb-actions">
+        <h2>ACTION_ELIGIBILITY</h2>
+        <button disabled title="Sandbox never writes production truth">
+          Mutating action disabled — sandbox cannot fulfill promises
+        </button>
+      </section>
+
+      <section className="sb-matrix">
+        <h2>CREATURE_MATRIX</h2>
+        <div>
+          {CREATURES.map(item => (
+            <article key={item.kind}>
+              <img src={SIGNAL_ART[item.kind]} alt=""/>
+              <b>{SIGNAL_LABEL[item.kind]}</b>
+              <span>Appears: {item.appears}</span>
+              <span>Clears only: {item.clears}</span>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="sb-matrix">
+        <h2>TRANSITION_MATRIX</h2>
+        <div className="sb-transition-buttons">
+          <button onClick={() => onNavigate("/growth/lantern-city")}>City → tower</button>
+          <button onClick={() => onNavigate("/growth/tower-wars?building=opus_la")}>Direct-link OPUS</button>
+          <button onClick={() => onNavigate("/growth/tower-wars?building=century_park_east")}>Direct-link CPE</button>
+          <button onClick={() => history.back()}>Back / forward</button>
+          <button onClick={() => document.documentElement.classList.toggle("sandbox-reduced-motion")}>Reduced motion</button>
+        </div>
+      </section>
+
+      <section className="sb-matrix">
+        <h2>API_DEGRADATION</h2>
+        <p>Presentation faults never alter fixture truth.</p>
+        <div className="sb-degradation">
+          {DEGRADATIONS.map(item => (
+            <button
+              className={degradation === item ? "is-active" : ""}
+              onClick={() => setDegradation(item)}
+              key={item}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+        {degradation ? (
+          <div className="sb-fallback">
+            {degradation}: authored geography remains visible; external confidence is reduced; no canonical entity is removed.
+          </div>
+        ) : null}
+      </section>
+
+      <section className="sb-real-replay">
+        <h2>REAL_DAY_REPLAY</h2>
+        <p>Completed dates only. Production settlement is read with an isolated sandbox cursor and cannot consume unseen live events or write history.</p>
+        <div>
+          <input
+            type="date"
+            value={replayDate}
+            max={completedReplayMaxDate()}
+            onChange={event => setReplayDate(event.target.value)}
+          />
+          <button
+            type="button"
+            disabled={replayDate.length !== 10}
+            onClick={() => setRequestedReplayDate(replayDate)}
+          >
+            Load read-only day
+          </button>
+        </div>
+        {replay.data ? (
+          <p className="sb-replay-result">
+            {replay.data.businessDate} · {replay.data.cursorScope} · OPUS ${replay.data.settlement.buildings.opus_la.today.revenueCents / 100} · CPE ${replay.data.settlement.buildings.century_park_east.today.revenueCents / 100}
+          </p>
+        ) : null}
+        {replay.error ? (
+          <p className="sb-fallback">Replay unavailable: {replay.error.message}</p>
+        ) : null}
+      </section>
+    </main>
+  );
 }
