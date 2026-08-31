@@ -66,7 +66,7 @@ function BuildingArt({
         className="tw-building-layer"
         src={
           opus
-            ? "/assets/admin/control-room/tower-wars/opus-la-tower-v2.png"
+            ? "/assets/admin/control-room/tower-wars/opus-la-tower-plate-v3.png"
             : "/assets/admin/control-room/tower-wars/century-park-east-tower-v2.png"
         }
         alt={`${NAMES[buildingId]}, ${damage.replace("-", " ")} damage today`}
@@ -81,9 +81,8 @@ function BuildingArt({
         <>
           <span
             className="tw-opus-driver"
-            aria-label="Giant architectural golf driver"
+            aria-label="Giant architectural golf driver, addressing the ball"
           />
-          <span className="tw-opus-ball" />
         </>
       ) : (
         <img

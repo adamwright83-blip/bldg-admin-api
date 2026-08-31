@@ -149,13 +149,19 @@ describe("truth-bound visual rules", () => {
 
   it("uses the dimensional OPUS LA and Century Park East assets on Tower Wars and Home", () => {
     for (const asset of [
-      "opus-la-tower-v2.png",
+      // The plate is opus-la-tower-v2 with only its baked-in club removed;
+      // the club now ships as a separate overlay so it can actually swing.
+      "opus-la-tower-plate-v3.png",
       "century-park-east-tower-v2.png",
     ])
       expect(towerSource).toContain(asset);
     expect(homeSource).toContain("opus-la-siege-driver-v5.png");
     expect(homeSource).toContain("century-park-east-tower-v2.png");
     expect(towerSource).not.toContain('className="tw-opus-art"');
+    // Exactly one club and one ball: the old CSS blob club and CSS circle
+    // ball were duplicates stacked on art that already contained both.
+    expect(towerSource).not.toContain("tw-opus-ball");
+    expect(towerSource).toContain("tw-opus-driver");
   });
 
   it("shows Clockhead and Collector only under authoritative conditions", () => {
