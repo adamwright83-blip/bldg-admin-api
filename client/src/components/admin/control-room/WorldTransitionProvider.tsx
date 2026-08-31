@@ -107,11 +107,16 @@ export function WorldTransitionProvider({
   const [returnAnchor, setReturnAnchor] = useState<string | null>(null);
   const runtimeConfig = trpc.system.google.runtimeConfig.useQuery(undefined, { staleTime: Infinity });
   const timer = useRef<number | null>(null);
+  const phaseTimer = useRef<number | null>(null);
 
   const clearTimer = () => {
     if (timer.current != null) {
       window.clearTimeout(timer.current);
       timer.current = null;
+    }
+    if (phaseTimer.current != null) {
+      window.clearTimeout(phaseTimer.current);
+      phaseTimer.current = null;
     }
   };
 
@@ -120,6 +125,7 @@ export function WorldTransitionProvider({
     setPending(null);
     setFlight(null);
     setLanded(false);
+    setPhase("loading");
   }, []);
 
   const begin = useCallback<Ctx["begin"]>(input => {
@@ -134,6 +140,7 @@ export function WorldTransitionProvider({
     });
     if (input.kind !== "reverse") setReturnAnchor(input.returnPath ?? null);
     setLanded(false);
+    setPhase("loading");
   }, []);
 
   const arrive = useCallback<Ctx["arrive"]>((entityId, destEl) => {
@@ -167,8 +174,18 @@ export function WorldTransitionProvider({
       setLanded(false);
       timer.current = null;
     }, 6500);
-    return () => window.cancelAnimationFrame(raf);
+    return () => { window.cancelAnimationFrame(raf); clearTimer(); };
   }, [flight]);
+
+  useEffect(() => {
+    if (!flight) return;
+    if (phase === "threshold") {
+      phaseTimer.current = window.setTimeout(() => setPhase("authored_landing"), flight.reducedMotion ? 120 : 520);
+    } else if (phase === "authored_landing") {
+      phaseTimer.current = window.setTimeout(() => { setFlight(null); setLanded(false); setPhase("loading"); }, flight.reducedMotion ? 180 : 700);
+    }
+    return () => { if (phaseTimer.current != null) { window.clearTimeout(phaseTimer.current); phaseTimer.current = null; } };
+  }, [phase, flight]);
 
   // Any interruption lands the world in its truthful final state.
   useEffect(() => {
@@ -209,13 +226,13 @@ export function WorldTransitionProvider({
           {runtimeConfig.data?.mapsJavascriptApiKey ? (
             <GoogleMapsRealityLayer
               apiKey={runtimeConfig.data.mapsJavascriptApiKey}
-              target={{ latitude: flight.geographicTarget.latitude, longitude: flight.geographicTarget.longitude, altitude: flight.geographicTarget.altitude, tilt: flight.geographicTarget.tilt, heading: flight.geographicTarget.heading }}
+              target={{ latitude: flight.geographicTarget.latitude, longitude: flight.geographicTarget.longitude, altitude: flight.geographicTarget.altitude, range: flight.geographicTarget.range, tilt: flight.geographicTarget.tilt, heading: flight.geographicTarget.heading }}
               mode="maps_js_3d"
               interactive={false}
               initialTarget={{ latitude: 34.0522, longitude: -118.2437, altitude: 5000, range: 18000, tilt: 35, heading: 0 }}
               onRendererReady={() => setPhase("reality_ready")}
               onApproachStarted={() => setPhase("approach")}
-              onApproachCompleted={() => { setPhase("contamination"); window.setTimeout(() => setPhase("threshold"), 700); }}
+              onApproachCompleted={() => { setPhase("contamination"); phaseTimer.current = window.setTimeout(() => setPhase("threshold"), flight.reducedMotion ? 80 : 700); }}
               onRendererError={() => setPhase("authored_landing")}
             />
           ) : null}
