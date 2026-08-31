@@ -24,6 +24,12 @@ import { towerComparisonState } from "./towerWarsGeometry";
 import { CanonicalBuildingArt } from "./CanonicalBuildingArt";
 import { useWorldTransition } from "./WorldTransitionProvider";
 import { entityFromSearch } from "./worldTransition";
+import {
+  adoptWithoutSpectacle,
+  chargeFraction,
+  readSeenCursor,
+  writeSeenCursor,
+} from "./spectacle";
 import type { SettledStratum } from "./facadeScars";
 
 export { damageStateForIncomingAttacks } from "@shared/towerWars";
@@ -67,12 +73,14 @@ function BuildingArt({
   businessDate,
   incomingToday,
   strikesRevealed,
+  charge,
 }: {
   buildingId: TowerWarsBuildingId;
   strata: readonly SettledStratum[];
   businessDate: string;
   incomingToday: number;
   strikesRevealed?: number;
+  charge: number;
 }) {
   // One composition, shared with Home and Lantern City, so the building cannot
   // change identity or weapon between screens.
@@ -83,6 +91,7 @@ function BuildingArt({
       strata={strata}
       incomingToday={incomingToday}
       strikesRevealed={strikesRevealed}
+      charge={charge}
     />
   );
 }
@@ -157,13 +166,30 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
     undefined,
     { staleTime: 60_000 }
   );
+  // Tower Wars was the only admin surface that never polled, so a new order never
+  // reached an open tab. Siblings poll at 2.5s-60s.
   const today = trpc.system.towerWars.today.useQuery(undefined, {
     staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
   const fulfill = trpc.system.towerWars.fulfillPromise.useMutation({
     onSuccess: () => today.refetch(),
   });
   const activate = trpc.system.towerWars.activatePromise.useMutation();
+  // Only authoritative events this viewer has never seen may produce spectacle.
+  // The cursor is this viewer's own storage — never server truth.
+  const [unseenEvents, setUnseenEvents] = useState<string[]>([]);
+  const ledgerKey = (today.data?.ledger ?? [])
+    .map(e => e.eventId)
+    .join("|");
+  useEffect(() => {
+    const ids = ledgerKey ? ledgerKey.split("|") : [];
+    if (!ids.length) return;
+    const { cursor, play } = adoptWithoutSpectacle(ids, readSeenCursor());
+    writeSeenCursor(cursor);
+    setUnseenEvents(play);
+  }, [ledgerKey]);
   const data = today.data;
   const replay = useReplay(data);
   if (today.isLoading)
@@ -231,6 +257,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
     <main className={`tw-page ${compact ? "is-compact" : ""}`}>
       <section
         className={`tw-arena ${isArriving ? "tw-arriving" : ""}`}
+        data-unseen-events={unseenEvents.length}
         aria-labelledby="tower-wars-title"
       >
         <img
@@ -297,6 +324,12 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
                 /* The replay reducer already yields the prefix count, so damage at
                    event N equals business state after event N for free. */
                 incomingToday={building.incomingAttackCount}
+                /* The $50 threshold, made physical. unspentValueCents already
+                   existed but only ever rendered as text. */
+                charge={chargeFraction(
+                  building.unspentValueCents,
+                  TOWER_WARS_ATTACK_THRESHOLD_CENTS
+                )}
               />
               <span
                 className="tw-projectile"

@@ -12,7 +12,7 @@
  */
 import { FacadeScarLayer } from "./FacadeScarLayer";
 import { FreshDamageLayer } from "./FreshDamageLayer";
-import { BUILDING_ART, type CanonicalBuildingId } from "./buildingArt";
+import { ART_SPACE, BUILDING_ART, type CanonicalBuildingId } from "./buildingArt";
 import type { SettledStratum } from "./facadeScars";
 
 export function CanonicalBuildingArt({
@@ -22,6 +22,7 @@ export function CanonicalBuildingArt({
   incomingToday = 0,
   strikesRevealed,
   showWeapon = true,
+  charge = 0,
   children,
 }: {
   buildingId: CanonicalBuildingId;
@@ -34,6 +35,11 @@ export function CanonicalBuildingArt({
   /** Replay prefix: show damage only through event N. */
   strikesRevealed?: number;
   showWeapon?: boolean;
+  /**
+   * 0..1 toward the next strike. Makes the $50 threshold physical instead of a
+   * line of text, so an order that charges without firing still visibly resolves.
+   */
+  charge?: number;
   /** Arena-only chrome (projectile, vfx) that must share the same transform. */
   children?: React.ReactNode;
 }) {
@@ -69,7 +75,54 @@ export function CanonicalBuildingArt({
           }
         />
       ) : null}
+      {showWeapon ? (
+        <WeaponChargeLayer buildingId={buildingId} charge={charge} />
+      ) : null}
       {children}
     </div>
+  );
+}
+
+/**
+ * The charge meter, drawn at the weapon's own mount in the 800x1200 art space so it
+ * letterboxes exactly like every other layer. A CSS-percentage version floated above
+ * the building, because the weapon element fills the piece box while the art does not.
+ */
+function WeaponChargeLayer({
+  buildingId,
+  charge,
+}: {
+  buildingId: CanonicalBuildingId;
+  charge: number;
+}) {
+  const value = Math.max(0, Math.min(1, charge));
+  if (value <= 0) return null;
+  const { pivot } = BUILDING_ART[buildingId].weaponGeometry;
+  const W = 150;
+  const H = 26;
+  const x = pivot.x - W / 2;
+  const y = pivot.y - H / 2;
+  return (
+    <svg
+      className={`cb-charge-layer ${value >= 1 ? "is-full" : ""}`}
+      viewBox={`0 0 ${ART_SPACE.width} ${ART_SPACE.height}`}
+      preserveAspectRatio="xMidYMax meet"
+      role="img"
+      aria-label={
+        value >= 1
+          ? "Weapon armed"
+          : `Weapon ${Math.round(value * 100)} percent charged`
+      }
+    >
+      <rect className="cb-charge-track" x={x} y={y} width={W} height={H} rx={H / 2} />
+      <rect
+        className="cb-charge-fill"
+        x={x + 3}
+        y={y + 3}
+        width={Math.max(0, (W - 6) * value)}
+        height={H - 6}
+        rx={(H - 6) / 2}
+      />
+    </svg>
   );
 }

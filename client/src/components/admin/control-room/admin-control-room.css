@@ -216,3 +216,15 @@
   .wt-flyer{transition-duration:160ms!important}
   .tw-arriving .tw-scoreboard,.tw-arriving .tw-truth-hud,.tw-arriving .tw-piece-label{transition-duration:.01ms}
 }
+
+/* Weapon charge — drawn in ART SPACE by WeaponChargeLayer, not by CSS percentages.
+   The weapon element fills the piece box while the art letterboxes inside it, so a
+   CSS percentage lands somewhere other than the gun. */
+.cb-charge-layer{position:absolute;inset:0;z-index:4;inline-size:100%;block-size:100%;pointer-events:none;overflow:visible}
+.cb-charge-track{fill:#0a0f18;fill-opacity:.82;stroke:#ffffff4d;stroke-width:2;vector-effect:non-scaling-stroke}
+.cb-charge-fill{stroke:none}
+.cb-art.is-opus_la .cb-charge-fill{fill:#c39bff}
+.cb-art.is-century_park_east .cb-charge-fill{fill:#ffc247}
+.cb-charge-layer.is-full .cb-charge-fill{filter:drop-shadow(0 0 7px currentColor)}
+.cb-art.is-opus_la .cb-charge-layer.is-full{color:#c39bff}
+.cb-art.is-century_park_east .cb-charge-layer.is-full{color:#ffc247}
