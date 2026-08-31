@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { WorldGeographySurface } from "./WorldGeographySurface";
 import type { GeographicEntity } from "./GoogleMapsRealityLayer";
 import { WorldDayPhaseIndicator } from "./WorldDayPhase";
+import { clusterGeographicCustomers, clustersAsGoogleEntities } from "./customerGeography";
 
 export {
   inferCustomerCadence,
@@ -71,6 +72,7 @@ export default function LanternCityAtlas({
   );
 
   const [googleVisible, setGoogleVisible] = useState(false);
+  const customerClusters = useMemo(() => clusterGeographicCustomers(visibleCustomers as any), [visibleCustomers]);
 
   /**
    * The same visible records, addressed by the real coordinate the atlas
@@ -79,17 +81,10 @@ export default function LanternCityAtlas({
    */
   const googleEntities: GeographicEntity[] = useMemo(
     () => [
-      ...visibleCustomers.map(customer => ({
-        id: `customer:${customer.identityKey}`,
-        latitude: customer.location!.latitude,
-        longitude: customer.location!.longitude,
-        label: customer.displayName,
-        kind: "customer" as const,
-        onSelect: () => {
-          setSelectedPursuit(null);
-          setSelectedCustomer(customer);
-        },
-      })),
+      ...clustersAsGoogleEntities(customerClusters, cluster => {
+        setSelectedPursuit(null);
+        setSelectedCustomer(cluster.customers[0] as any);
+      }),
       ...visiblePursuits.map(item => ({
         id: `pursued:${item.pipelineId}`,
         latitude: item.location!.latitude,
@@ -102,7 +97,7 @@ export default function LanternCityAtlas({
         },
       })),
     ],
-    [visibleCustomers, visiblePursuits]
+    [customerClusters, visiblePursuits]
   );
 
   const counts = customers.reduce(
@@ -193,24 +188,25 @@ export default function LanternCityAtlas({
             record already carries the latitude/longitude the atlas projection
             was derived from, so nothing is estimated to do this.
           */}
-          {!googleVisible && visibleCustomers.map(customer => (
+          {!googleVisible && customerClusters.filter(cluster => !cluster.outsideAtlas).map(cluster => (
             <button
               type="button"
-              key={customer.identityKey}
-              className={`lc-lantern state-${customer.cadence.state}`}
+              key={cluster.key}
+              className={`lc-lantern state-${cluster.dark === cluster.total ? "dark" : cluster.dimming > 0 || cluster.dark > 0 ? "dimming" : "active"}`}
               style={{
-                left: `${customer.location!.x}%`,
-                top: `${customer.location!.y}%`,
+                left: `${cluster.x}%`,
+                top: `${cluster.y}%`,
               }}
               onClick={() => {
                 setSelectedPursuit(null);
-                setSelectedCustomer(customer);
+                setSelectedCustomer(cluster.customers[0] as any);
               }}
-              aria-label={`${customer.displayName}, ${customer.cadence.state}`}
+              aria-label={`${cluster.total} customer${cluster.total === 1 ? "" : "s"} at this location`}
             >
               <span className="lc-lantern-handle" />
               <span className="lc-lantern-body" />
               <span className="lc-lantern-base" />
+              {cluster.total > 1 ? <b>{cluster.total}</b> : null}
             </button>
           ))}
 

@@ -6,6 +6,7 @@ import { classifyLanternCustomer } from "@/components/admin/control-room/Lantern
 import { CityTowerButton } from "@/components/admin/control-room/CityTowerButton";
 import { WorldGeographySurface } from "@/components/admin/control-room/WorldGeographySurface";
 import { WorldDayPhaseIndicator } from "@/components/admin/control-room/WorldDayPhase";
+import { clusterGeographicCustomers, clustersAsGoogleEntities } from "@/components/admin/control-room/customerGeography";
 
 type AdminHomeProps = {
   experienceMode?: "kingdom" | "operator-demo";
@@ -34,7 +35,7 @@ function MetricCard({ tone, icon, label, value, note }: { tone: string; icon: Re
   return <article className={`pwc-metric tone-${tone}`}><div className="pwc-metric-icon">{icon}</div><span><small>{label}</small><strong>{value}</strong><p>{note}</p></span><i /></article>;
 }
 
-export default function AdminHome({ operatorName = "Admin", path = "/", onNavigate = next => { window.location.href = next; } }: AdminHomeProps) {
+export default function AdminHome({ operatorName = "Admin", path = "/", onNavigate = next => { window.location.href = next; }, onOpenCustomer }: AdminHomeProps) {
   const options = { refetchInterval: 30_000, refetchOnWindowFocus: true } as const;
   const dashboard = trpc.admin.dashboardSummary.useQuery(undefined, options);
   const customers = trpc.admin.listCustomers.useQuery({ sortBy: "lastOrder", includeLegacyCleanCloud: true }, { staleTime: 60_000 });
@@ -43,6 +44,9 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
   const processing = trpc.admin.listByStatus.useQuery({ status: "processing" }, options);
   const todayQueue = trpc.system.dayforgeToday.list.useQuery(undefined, { retry: false, refetchInterval: 30_000 });
   const towerToday = trpc.system.towerWars.today.useQuery(undefined, options);
+  const geographicAtlas = trpc.system.geographicTruth.atlas.useQuery(undefined, { staleTime: 30_000 });
+  const customerClusters = useMemo(() => clusterGeographicCustomers((geographicAtlas.data?.customers ?? []) as any), [geographicAtlas.data?.customers]);
+  const geographicEntities = useMemo(() => clustersAsGoogleEntities(customerClusters, cluster => { const phone = cluster.customers[0]?.phone; if (phone) onOpenCustomer?.(phone); }), [customerClusters, onOpenCustomer]);
 
   const rows = customers.data?.customers ?? [];
   const activeCustomers = rows.filter(customer => classifyLanternCustomer(customer) === "active").length;
@@ -100,6 +104,7 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
           onNavigate={onNavigate}
           showNeighborhoods={true}
           showOpportunityLayer={true}
+          geographicEntities={geographicEntities}
           battleState={{ pressureBuilding, revenueCue, revenues: { opus_la: opusRevenue, century_park_east: cpeRevenue } }}
         >
           <header className="pwc-world-header">
@@ -108,17 +113,10 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
               <i /> {sourceGap ? "Source gap" : "Living LA Live"}
             </span>
           </header>
-          {churnRisk > 0 ? (
-            <button
-              type="button"
-              className="pwc-risk-lantern"
-              onClick={() => onNavigate("/growth/lantern-city")}
-              aria-label={`${churnRisk} churn-risk lanterns`}
-            >
-              <span className="pwc-lantern-symbol" />
-              <b>{churnRisk}</b>
-            </button>
-          ) : null}
+          {customerClusters.filter(cluster => !cluster.outsideAtlas).map(cluster => (
+            <button type="button" key={cluster.key} className={`lc-lantern state-${cluster.dark === cluster.total ? "dark" : cluster.dimming > 0 || cluster.dark > 0 ? "dimming" : "active"}`} style={{ left: `${cluster.x}%`, top: `${cluster.y}%` }} onClick={() => { const phone = cluster.customers[0]?.phone; if (phone) onOpenCustomer?.(phone); else onNavigate("/growth/lantern-city"); }} aria-label={`${cluster.total} customer${cluster.total === 1 ? "" : "s"} at this location`}><span className="lc-lantern-handle" /><span className="lc-lantern-body" /><span className="lc-lantern-base" />{cluster.total > 1 ? <b>{cluster.total}</b> : null}</button>
+          ))}
+          {customerClusters.filter(cluster => cluster.outsideAtlas).length > 0 ? <button type="button" className="pwc-risk-lantern" onClick={() => onNavigate("/growth/lantern-city")}>{customerClusters.filter(cluster => cluster.outsideAtlas).reduce((sum, cluster) => sum + cluster.total, 0)} outside atlas</button> : null}
         </WorldGeographySurface>
       </div>
 

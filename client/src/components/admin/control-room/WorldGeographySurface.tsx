@@ -13,7 +13,7 @@ import { GoogleMapsRealityLayer, type GeographicCameraTarget, type GeographicEnt
 import { RealityWindow } from "./RealityWindow";
 import { GoogleAttributionSafeZone } from "./GoogleAttributionSafeZone";
 
-const ATLAS_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas-v2.png";
+const ATLAS_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas-v2.webp";
 
 export type WorldGeographySurfaceProps = {
   mode?: "overview" | "lantern_atlas" | "reality_approach";
