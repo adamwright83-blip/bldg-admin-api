@@ -29,7 +29,7 @@ export function CityTowerButton({
   returnPath?: string;
   style?: React.CSSProperties;
 }) {
-  const artRef = useRef<HTMLSpanElement>(null);
+  const artRef = useRef<HTMLDivElement>(null);
   const { begin, approaching, arrive } = useWorldTransition();
   const art = BUILDING_ART[buildingId];
   useLayoutEffect(() => {
@@ -55,9 +55,9 @@ export function CityTowerButton({
       }}
       aria-label={`Enter ${art.displayName}`}
     >
-      <span className="pwc-building-canon" ref={artRef}>
+      <div className="pwc-building-canon" ref={artRef}>
         <CanonicalBuildingArt buildingId={buildingId} />
-      </span>
+      </div>
       <strong>{art.displayName}</strong>
       <small>{subtitle}</small>
     </button>
