@@ -91,9 +91,10 @@ export function CustomerProfileDrawer({
 
   const currentBuildingSlug = profile.data?.overview.buildingSlug?.trim() || "";
   const addressMatchedBuilding = matchBuilding(profile.data?.overview.address ?? "");
-  const hasBuildingMismatch =
-    !!addressMatchedBuilding &&
-    currentBuildingSlug !== addressMatchedBuilding.slug;
+  // The displayed building already follows the address when the two disagree, so
+  // the contradiction is reported by the server rather than inferred from what
+  // is on screen — otherwise correcting the display would hide the stale record.
+  const hasBuildingMismatch = !!profile.data?.overview.buildingEvidenceConflict;
 
   useEffect(() => {
     if (!profile.data) return;

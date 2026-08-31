@@ -1,4 +1,4 @@
-import { matchBuilding, resolveBuildingEvidence } from "@shared/buildings";
+import { resolveBuildingEvidence } from "@shared/buildings";
 import {
   computeCustomerTier,
   computeRecencyStatus,
@@ -11,9 +11,9 @@ import {
 import type { Order } from "../drizzle/schema";
 
 export function deriveBuildingSlug(order: Pick<Order, "buildingSlug" | "address">): string | null {
-  const s = order.buildingSlug?.trim();
-  if (s) return s;
-  return matchBuilding(order.address)?.slug ?? null;
+  // Same evidence rule as the Tower Wars ledger: a persisted slug that its own
+  // order address contradicts must not be shown as the customer's building.
+  return resolveBuildingEvidence(order.address, order.buildingSlug).building?.slug ?? null;
 }
 
 /**
@@ -68,6 +68,8 @@ export type CustomerProfilePayload = {
     email: string | null;
     unit: string | null;
     buildingSlug: string | null;
+    /** Set when the persisted slug names a building the address contradicts. */
+    buildingEvidenceConflict: { slugBuilding: string; addressBuilding: string } | null;
     address: string;
     lifetimeSpend: number;
     totalOrders: number;
@@ -139,6 +141,10 @@ export function buildCustomerProfile(phone: string, rows: Order[]): CustomerProf
       email: latest.email ?? null,
       unit: latest.unit ?? null,
       buildingSlug: deriveBuildingSlug(latest),
+      buildingEvidenceConflict: resolveBuildingEvidence(
+        latest.address,
+        latest.buildingSlug
+      ).conflict,
       address: latest.address,
       lifetimeSpend: spend,
       totalOrders: sorted.length,
