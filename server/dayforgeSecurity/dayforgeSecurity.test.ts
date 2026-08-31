@@ -164,4 +164,34 @@ describe("DayForge request security", () => {
     expect(setHeader).toHaveBeenCalledWith("X-Content-Type-Options", "nosniff");
     expect(next).toHaveBeenCalledOnce();
   });
+
+  it("permits the hosts Maps 3D actually streams its geography from", () => {
+    // This is a regression guard for a defect no other test could see. The CSP
+    // allowed maps.googleapis.com, so the Maps JS bundle and the 3D WASM
+    // renderer both loaded and every journey callback fired on schedule — while
+    // the map painted pure black, because the actual Earth mesh, imagery and
+    // the required Copyrights attribution all come from keyhole-pa, which was
+    // blocked. A green test suite and a working-looking console described a
+    // world that had no geography in it.
+    const setHeader = vi.fn();
+    const next = vi.fn();
+    dayforgeSecurityHeaders(production)({} as never, { setHeader } as never, next);
+    const csp = setHeader.mock.calls.find(
+      call => call[0] === "Content-Security-Policy"
+    )?.[1] as string;
+    const connectSrc = csp.split("; ").find(d => d.startsWith("connect-src")) ?? "";
+
+    // The mesh/imagery/attribution host.
+    expect(connectSrc).toContain("https://keyhole-pa.googleapis.com");
+    // Style and legend resources the 3D renderer fetches.
+    expect(connectSrc).toContain("https://www.gstatic.com");
+
+    // Production omits 'unsafe-eval', which also blocks WebAssembly
+    // compilation. Without an explicit WASM allowance the 3D renderer works in
+    // development and dies only once deployed.
+    const scriptSrc = csp.split("; ").find(d => d.startsWith("script-src")) ?? "";
+    expect(scriptSrc).toContain("'wasm-unsafe-eval'");
+    expect(scriptSrc).not.toContain("'unsafe-eval' ");
+  });
+
 });
