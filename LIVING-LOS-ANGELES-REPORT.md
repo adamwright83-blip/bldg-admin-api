@@ -123,12 +123,38 @@ after   +5ms loading -> +4373ms approach -> +6218ms contamination
 | Desktop 1440×900 — Home → CPE | Full five-state journey; 271 Google requests |
 | Mobile 390×844 — Home → OPUS | Full five-state journey; 187 Google requests |
 | Reduced motion — Home → OPUS | `loading → threshold → authored_landing` in ~670ms, no geographic flight, reality layer not mounted |
-| Lantern City → OPUS | **Traverses instantly with no journey.** See §7 |
+| Lantern City → OPUS | Full five-state journey (see §4d) |
 | Degradation — no Maps key / renderer error | Falls back to the authored transition; business truth and the authored game remain usable |
 
 Attribution was present in every sampled phase in which Google content was
 visible (`approach`, `contamination`, `threshold`, `authored_landing`) and
 absent only after Google had fully exited.
+
+### 4d. The journey was being lost to query cache temperature
+
+Lantern City → Tower Wars committed instantly while Home → Tower Wars played the
+full journey, with identical wiring, identical navigation and a healthy source
+rect on both surfaces.
+
+Tower Wars early-returns a "waiting for revenue truth" panel while
+`towerWars.today` is null, so on a cold cache the arena — and therefore every
+entry in `pieceRefs` — does not exist on the first render. `arrive()` was called
+exactly once on mount with `pieceRefs.current[enteredFor] ?? null`, took the
+null, correctly declined to fabricate a flight from missing geometry, and was
+never retried because its dependencies never changed.
+
+AdminHome already queries `towerWars.today`, so entering from Home found a warm
+cache and a laid-out arena; Lantern City does not query it at all. The traversal
+was being decided by React Query cache temperature rather than by anything about
+the journey. `arrive()` now waits for real destination geometry and is retried
+when it appears.
+
+Observed after the fix:
+
+```
++0ms (no stage) -> +125ms loading -> +4530ms approach -> +6321ms contamination
+-> +7018ms threshold -> +7595ms authored_landing -> +8280ms complete
+```
 
 Captured pixels and the machine-readable timeline are in
 `artifacts/living-los-angeles-browser/`.
@@ -185,26 +211,21 @@ not shipped — production 404s the path — so the exposure is closed before me
 
 These are real and unresolved. They are listed instead of being closed out.
 
-1. **Lantern City → Tower Wars plays no journey.** The traversal commits
-   instantly. Verified not to be a missing button or a zero-size source rect —
-   the OPUS art measures 148×188 on that surface, and both surfaces navigate
-   through the same wouter `navigate(path)`. Cause not yet identified. Home →
-   Tower Wars is unaffected.
-2. **Reverse journey (Tower Wars → city) not verified in a browser.**
-3. **Photorealistic 3D Tiles prototype not built** (§5).
-4. **Google-mode overlay placement not re-verified.** Canonical towers, resolved
+1. **Reverse journey (Tower Wars → city) not verified in a browser.**
+2. **Photorealistic 3D Tiles prototype not built** (§5).
+3. **Google-mode overlay placement not re-verified.** Canonical towers, resolved
    customer lanterns and opportunity regions are positioned by
    `projectLatLngToLanternAtlas()` percentages, which is correct for the
    illustrated atlas. Whether they are re-projected geographically while Google
    is rendering was not confirmed this pass.
-5. **Business truth could not be exercised locally.** Railway MySQL is on a
+4. **Business truth could not be exercised locally.** Railway MySQL is on a
    private network and is unreachable from a local run, so Home shows "Revenue
    unavailable" and Tower Wars compiles no ledger. The browser harness therefore
    compiles a *structurally real but empty* state through the production
    compilers — zero events, a genuine $0/$0 with no invented orders, customers
    or amounts — purely so the arena mounts and the camera can be observed. No
    revenue figure in this document comes from that scaffolding.
-6. **Geocoding key invalid** (§3) — external, requires Adam.
+5. **Geocoding key invalid** (§3) — external, requires Adam.
 
 ## 8. Tests
 

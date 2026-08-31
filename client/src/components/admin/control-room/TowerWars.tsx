@@ -168,11 +168,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
     return () => window.clearTimeout(timer);
   }, [isEstablishing]);
   const pieceRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  useLayoutEffect(() => {
-    if (!enteredFor) return;
-    // Report the real destination geometry so the flyer lands exactly on it.
-    arrive(enteredFor, pieceRefs.current[enteredFor] ?? null);
-  }, [enteredFor, arrive]);
+
   const settlementQuery = trpc.system.towerWars.settlement.useQuery(
     undefined,
     { staleTime: 60_000 }
@@ -223,6 +219,31 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
     ]);
   }, [ledgerRevision, activeSpectacle?.eventId]);
   const data = today.data ?? trustedData.current;
+
+  /**
+   * Report the real destination geometry so the flyer lands exactly on it.
+   *
+   * This must run AFTER `data` exists, and must be retried when it appears.
+   * Tower Wars early-returns a "waiting for revenue truth" panel while `data`
+   * is null, so on a cold cache the arena — and therefore every entry in
+   * `pieceRefs` — does not exist on first render. arrive() was previously
+   * called once on mount with `pieceRefs.current[enteredFor] ?? null`, took the
+   * null, silently declined to build a flight, and never ran again because its
+   * dependencies never changed.
+   *
+   * That is why Home -> Tower Wars played the journey and Lantern City ->
+   * Tower Wars did not: AdminHome already queries towerWars.today, so the cache
+   * was warm and the arena rendered on the first paint, while Lantern City does
+   * not query it at all. The traversal was being lost to query cache
+   * temperature rather than to anything about the journey itself.
+   */
+  useLayoutEffect(() => {
+    if (!enteredFor) return;
+    const destEl = pieceRefs.current[enteredFor];
+    // Not laid out yet — wait to be re-run rather than reporting no geometry.
+    if (!destEl) return;
+    arrive(enteredFor, destEl);
+  }, [enteredFor, arrive, data]);
   useEffect(() => {
     if (today.isError || activeSpectacle || unseenEvents.length === 0) return;
     setActiveSpectacle({ eventId: unseenEvents[0]!, phase: "revenue", revealedDischarges: 0 });
