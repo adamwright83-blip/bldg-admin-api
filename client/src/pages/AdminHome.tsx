@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, RefreshCw, TrendingUp, Users } from "lucide-react";
 import type { Order } from "@shared/types";
 import { trpc } from "@/lib/trpc";
@@ -42,6 +42,7 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
   const collected = trpc.admin.listByStatus.useQuery({ status: "collected" }, options);
   const processing = trpc.admin.listByStatus.useQuery({ status: "processing" }, options);
   const todayQueue = trpc.system.dayforgeToday.list.useQuery(undefined, { retry: false, refetchInterval: 30_000 });
+  const towerToday = trpc.system.towerWars.today.useQuery(undefined, options);
   const rows = customers.data?.customers ?? [];
   const activeCustomers = rows.filter(customer => classifyLanternCustomer(customer) === "active").length;
   const churnRisk = rows.filter(customer => classifyLanternCustomer(customer) !== "active").length;
@@ -50,8 +51,30 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
   const buildingCounts = rows.reduce((acc, customer) => { if (customer.propertyGroup === "opus_la") acc.opus += 1; if (customer.propertyGroup === "century_park_east") acc.century += 1; return acc; }, { opus: 0, century: 0 });
   const firstName = operatorName.split(/\s+/)[0] || "Admin";
   const viewName = path.startsWith("/home/") ? path.split("/").pop() : "overview";
-  const sourceGap = dashboard.isError || customers.isError || todayQueue.isError;
-  const refresh = () => { void Promise.all([dashboard.refetch(), customers.refetch(), received.refetch(), collected.refetch(), processing.refetch(), todayQueue.refetch()]); };
+  const sourceGap = dashboard.isError || customers.isError || todayQueue.isError || towerToday.isError;
+  const opusRevenue = towerToday.data?.state.buildings.opus_la.revenueCents ?? null;
+  const cpeRevenue = towerToday.data?.state.buildings.century_park_east.revenueCents ?? null;
+  const pressureBuilding = opusRevenue !== null && cpeRevenue !== null && opusRevenue !== cpeRevenue
+    ? opusRevenue < cpeRevenue ? "opus_la" : "century_park_east"
+    : null;
+  const [revenueCue, setRevenueCue] = useState<"opus_la" | "century_park_east" | null>(null);
+  const priorTowerEvents = useRef<string[] | null>(null);
+  useEffect(() => {
+    if (!towerToday.data) return;
+    const ids = towerToday.data.ledger.map(item => item.eventId);
+    if (priorTowerEvents.current === null) {
+      priorTowerEvents.current = ids;
+      return;
+    }
+    const known = new Set(priorTowerEvents.current);
+    const newest = towerToday.data.ledger.filter(item => !known.has(item.eventId)).at(-1);
+    priorTowerEvents.current = ids;
+    if (!newest) return;
+    setRevenueCue(newest.buildingId);
+    const timer = window.setTimeout(() => setRevenueCue(null), 1400);
+    return () => window.clearTimeout(timer);
+  }, [towerToday.data]);
+  const refresh = () => { void Promise.all([dashboard.refetch(), customers.refetch(), received.refetch(), collected.refetch(), processing.refetch(), todayQueue.refetch(), towerToday.refetch()]); };
 
   return <main className="pwc-page">
     <header className="pwc-title"><div><span>{viewName === "overview" ? "✦" : ""}</span><h1>{viewName === "overview" ? "Persistent World Control" : `Home · ${viewName?.replace(/^./, letter => letter.toUpperCase())}`}</h1><p>Real world. Real customers. Live business truth. You’re in control, {firstName}.</p></div><button type="button" onClick={refresh}><RefreshCw /> Refresh truth</button></header>
@@ -66,8 +89,8 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
         <img src={WORLD_IMAGE} alt="Illustrated Los Angeles business world" /><div className="pwc-world-shade" />
         <header><strong>Live world overview — Los Angeles</strong><span className={sourceGap ? "has-gap" : ""}><i /> {sourceGap ? "Source gap" : "Live"}</span></header>
         {[{ label: "West Hollywood", x: 13, y: 24 }, { label: "Beverly Hills", x: 12, y: 52 }, { label: "Century City", x: 18, y: 81 }, { label: "Hollywood", x: 46, y: 37 }, { label: "Koreatown", x: 54, y: 76 }, { label: "Los Feliz", x: 78, y: 25 }, { label: "Silver Lake", x: 84, y: 50 }, { label: "Echo Park", x: 87, y: 77 }].map(neighborhood => <span key={neighborhood.label} className="pwc-place" style={{ left: `${neighborhood.x}%`, top: `${neighborhood.y}%` }}>{neighborhood.label}</span>)}
-        <CityTowerButton buildingId="century_park_east" className="pwc-building cpe" onNavigate={onNavigate} subtitle={<>Century City · {customers.isLoading || customers.isError ? "—" : buildingCounts.century} customers</>} />
-        <CityTowerButton buildingId="opus_la" className="pwc-building opus" onNavigate={onNavigate} subtitle={<>Koreatown · {customers.isLoading || customers.isError ? "—" : buildingCounts.opus} customers</>} />
+        <CityTowerButton buildingId="century_park_east" className={`pwc-building cpe ${pressureBuilding === "century_park_east" ? "is-pressure" : ""} ${revenueCue === "century_park_east" ? "is-revenue-cue" : ""}`} onNavigate={onNavigate} subtitle={<>Century City · TODAY {cpeRevenue === null ? "—" : money(cpeRevenue / 100)} · {customers.isLoading || customers.isError ? "—" : buildingCounts.century} customers</>} />
+        <CityTowerButton buildingId="opus_la" className={`pwc-building opus ${pressureBuilding === "opus_la" ? "is-pressure" : ""} ${revenueCue === "opus_la" ? "is-revenue-cue" : ""}`} onNavigate={onNavigate} subtitle={<>Koreatown · TODAY {opusRevenue === null ? "—" : money(opusRevenue / 100)} · {customers.isLoading || customers.isError ? "—" : buildingCounts.opus} customers</>} />
         {churnRisk > 0 ? <button type="button" className="pwc-risk-lantern" onClick={() => onNavigate("/growth/lantern-city")} aria-label={`${churnRisk} churn-risk lanterns`}><span className="pwc-lantern-symbol" /><b>{churnRisk}</b></button> : null}
       </div>
       <aside className="pwc-alerts">

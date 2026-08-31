@@ -20,6 +20,7 @@ const CPE_ADDRESS = "2170 Century Pk E";
 function row(overrides: Partial<MissionLocationRow>): MissionLocationRow {
   return {
     missionId: 1,
+    pipelineId: null,
     status: "arrived",
     opportunityId: 10,
     accountId: 100,

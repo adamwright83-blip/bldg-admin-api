@@ -21,6 +21,8 @@
  * may gate a business fact behind an animation.
  */
 
+import type { CanonicalBuildingId } from "./buildingArt";
+
 export type WorldCamera = "city" | "building" | "interior";
 
 /** Why we are moving. Only `traversal` earns a camera journey. */
@@ -96,9 +98,12 @@ export function classifyArrival(input: {
 }
 
 /** Read the canonical entity a destination was entered for, if any. */
-export function entityFromSearch(search: string): string | null {
+export function entityFromSearch(search: string): CanonicalBuildingId | null {
   const q = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
-  return q.get("building");
+  const building = q.get("building");
+  return building === "opus_la" || building === "century_park_east"
+    ? building
+    : null;
 }
 
 /**

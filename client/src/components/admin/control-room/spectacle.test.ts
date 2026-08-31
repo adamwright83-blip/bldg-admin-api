@@ -10,8 +10,10 @@ import {
   spectacleMagnitude,
   unseenEventIds,
   writeSeenCursor,
+  projectLiveEvent,
 } from "./spectacle";
 import { IMPACT_CLASSES } from "@shared/impactSignal";
+import { initialTowerWarsState } from "@shared/towerWars";
 
 describe("magnitude is a pure function of impact class", () => {
   it("covers every rung of the honesty ladder", () => {
@@ -159,6 +161,38 @@ describe("the weapon charge makes the threshold visible", () => {
     });
     expect(plan.strikes).toBe(1);
     expect(plan.remainderCents).toBe(1000);
+  });
+});
+
+describe("live event causal projection", () => {
+  const event = {
+    eventId: "real:125",
+    occurredAt: "2026-08-30T18:00:00.000Z",
+    businessDate: "2026-08-30",
+    buildingId: "century_park_east" as const,
+    buildingDisplayName: "Century Park East",
+    orderId: 125,
+    customerIdentity: "customer:1",
+    customerDisplayName: "Resident",
+    customerPhone: null,
+    revenueSource: "stripe" as const,
+    realOrderValueCents: 12500,
+    sourceEvidence: {},
+  };
+
+  it("shows one revenue arrival followed by exactly two truthful discharges", () => {
+    const prior = initialTowerWarsState();
+    const arrival = projectLiveEvent({ prior, event, revealedDischarges: 0, thresholdCents: 5000 });
+    expect(arrival.state.buildings.century_park_east.revenueCents).toBe(12500);
+    expect(arrival.state.buildings.century_park_east.attackCount).toBe(0);
+    expect(arrival.totalDischarges).toBe(2);
+    const first = projectLiveEvent({ prior, event, revealedDischarges: 1, thresholdCents: 5000 });
+    expect(first.state.buildings.century_park_east.attackCount).toBe(1);
+    expect(first.state.buildings.opus_la.incomingAttackCount).toBe(1);
+    const second = projectLiveEvent({ prior, event, revealedDischarges: 2, thresholdCents: 5000 });
+    expect(second.state.buildings.century_park_east.attackCount).toBe(2);
+    expect(second.state.buildings.century_park_east.unspentValueCents).toBe(2500);
+    expect(second.state.buildings.opus_la.incomingAttackCount).toBe(2);
   });
 });
 

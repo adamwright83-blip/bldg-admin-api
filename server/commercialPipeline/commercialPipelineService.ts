@@ -30,6 +30,7 @@ import {
 } from "../commercialMissions/commercialMissionStore";
 import { associateArmoryOutcome } from "../armory/armoryEvidenceService";
 import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
+import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
 
 type Transaction = Parameters<
   Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]
@@ -374,6 +375,7 @@ export async function getCommercialPipelineDetail(input: {
     : [[], [], [], []];
   return {
     id: pipeline.id,
+    businessDate: zonedYmd(new Date(), getDashboardTimeZone()),
     stage: pipeline.stage,
     version: pipeline.version,
     mission,

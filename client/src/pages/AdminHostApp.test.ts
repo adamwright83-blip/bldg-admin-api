@@ -77,6 +77,22 @@ describe("Admin six-domain shell", () => {
     expect(navSource).toContain('path: "/growth/driver-intelligence"');
     expect(navSource).toContain('label: "Overlook — Scout"');
   });
+
+  it("shows the sandbox route only from the server-authoritative capability", () => {
+    expect(source).toContain("towerWars.sandboxCapability.useQuery");
+    expect(source).toContain("sandboxEnabled={sandboxCapability.data?.enabled === true}");
+    expect(navSource).toContain('item.path !== "/growth/sandbox"');
+  });
+});
+
+describe("Admin Home battle truth", () => {
+  it("derives pressure and revenue cues from Tower Wars today, not customer penetration", () => {
+    expect(homeSource).toContain("towerWars.today.useQuery");
+    expect(homeSource).toContain("opusRevenue < cpeRevenue");
+    expect(homeSource).toContain('pressureBuilding === "opus_la"');
+    expect(homeSource).toContain("newest.buildingId");
+    expect(homeSource).toContain("const pressureBuilding = opusRevenue !== null && cpeRevenue !== null");
+  });
 });
 
 describe("route and archive safety", () => {

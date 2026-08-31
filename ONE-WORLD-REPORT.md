@@ -11,11 +11,11 @@
 ## Phase summary
 
 - Phase 1: canonical plates and weapon compositions, identity-fixed arena geometry, deterministic fresh damage.
-- Phase 2: same-entity routing, persistent transition coordinator, towers in Lantern City at projected real coordinates, reverse traversal, direct-link establishing arrival, and neutral cold/failure continuity.
-- Phase 3: unseen-event cursor, polling, deterministic spectacle queue/projection, physical charge, and impact-scaled causal presentation.
-- Phase 4: six evidence-derived psychological signals using the supplied production art; view/refetch state cannot clear them.
+- Phase 2 / 2b: same-entity routing, persistent transition coordinator, towers in Lantern City at projected real coordinates, reverse traversal, direct-link establishing arrival, and neutral cold/failure continuity. Engineer the Comeback now retains the exact mission-owned pipeline id and the same canonical OPUS/CPE art while weapons withdraw; an absent linkage disables continuation instead of guessing an account.
+- Phase 3: authoritative polling feeds an ordered unseen-event queue. Cold mounts silently adopt the ledger; each later order gets one revenue arrival, visible charge, N real threshold discharges, projectile/impact/damage progression, then cursor consumption. Feed interruption pauses without consuming the event.
+- Phase 4: `deriveSignals` and `PsychSignalLayer` are wired to the production Commercial Pipeline situation. Only supported facts render: open overdue follow-ups produce vines, real future follow-ups produce clocks, and executing mission statuses produce Ruinbound. The production schema does not establish silence, reply cadence, or response meaning, so Ghost, Goblins, and Fog are deliberately not fabricated there. View/refetch state cannot clear anything.
 - Phase 5: siege depth now changes building architecture; comeback begins inside the same losing building; commercial and resident axes remain distinct; route/destination treatments animate; a shared LA day phase persists across surfaces. Existing per-business-day settlement remains the authority for daily reset, settled scars, and lifetime memory.
-- Phase 6: server-gated admin sandbox, permanent warning banner, deterministic production-reducer fixtures, required scenario matrix, frame/event stepping, disabled writes, API-degradation controls, and read-only past-day settlement replay with an isolated cursor.
+- Phase 6: server-gated admin sandbox, permanent warning banner, deterministic production-reducer fixtures, required scenario matrix, frame/event stepping, disabled writes, API-degradation controls, and read-only past-day settlement replay with an isolated cursor. Gate-off navigation is projected from an always-readable server capability, hides the entry, and direct URLs remain unusable. Replay eligibility uses the Los Angeles business date; every synthetic timestamp is valid ISO even for large fixture ids.
 
 ## No-production-write proof
 
@@ -35,14 +35,15 @@ Initial Adam Test answer: **It still felt like screens during cold Tower Wars ar
 
 All three material issues were repaired during the browser pass. The cold state now retains authored Los Angeles architecture and the selected canonical building while explicitly withholding score, winner, charge, and damage claims. Atlas tower placement is edge-safe. The sandbox local route now reaches and visibly enforces its server gate.
 
-Final Adam Test answer: **The verified Home → city → selected building journey reads as one continuous authored world, including direct-link and mobile cold arrival. I cannot honestly certify the live battle, comeback-to-pipeline, reverse animation, gate-on sandbox, or Google handoff end to end without the Railway backend and provisioned credentials.**
+Final closure Adam Test answer: **Home now communicates the right hierarchy: customer counts remain useful territory context, but only real TODAY Tower Wars revenue can put a building under pressure, and a tie has no red loser. Home → Lantern City → the selected canonical building remains a continuous authored world on desktop and mobile; direct links preserve the selected building during neutral cold establishment. The exact comeback-to-pipeline bindings and production signals are regression-proved, but cannot be honestly live-data browser-certified without the Railway database.**
 
 ## Gates
 
-- Focused final gate: 64/64 passing.
-- Full Vitest: 3,940 passing, 6 skipped, 7 failing. The seven failures are pre-existing and outside One World: two operations-events-dashboard assertions, operations-events source assertion, driver-restoration source assertion, marketplace dry-run route policy fixture, resident-intake fixture, and day-director production-contract count.
-- `npx vite build`: PASS.
+- Focused closure gate: 91/91 passing, including the strengthened same-entity transition suite.
+- Full Vitest: 3,948 passing, 6 skipped, 7 failing. The same seven failures are pre-existing and outside One World: two operations-events-dashboard assertions, operations-events source assertion, driver-restoration source assertion, marketplace dry-run route policy fixture, resident-intake fixture, and day-director production-contract count.
+- `npm run build` (Vite client plus server/worker bundles): PASS.
 - `npx tsc --noEmit`: FAIL on pre-existing repository-wide errors outside One World. The production Vite build compiles the One World changes.
+- Browser: desktop visual pass at 1280×720; exact 390×844 pass with no horizontal overflow; reduced-motion media query active; gate-off Sandbox absent from Growth and direct URL shows only the disabled state; OPUS/CPE direct-link cold states retain the selected architecture and withhold score/damage claims.
 
 ## Google API capability decision
 
@@ -52,7 +53,7 @@ The credentials are Railway-only and the local server cannot start without its R
 
 ## Remaining defects personally observed
 
-- Live-data battle, comeback continuation, reverse landing, and gate-on sandbox could not be browser-exercised locally without the Railway backend.
+- Live-data battle, both real comeback bindings, production signal mutation/removal, reverse landing, and gate-on sandbox could not be browser-exercised against business truth locally without the Railway backend. Their pure projections and source wiring are covered by regression tests; this is not represented as equivalent to live verification.
 - The Google renderer prototype and attribution audit remain blocked on the provisioned Railway environment.
 - Lantern City uses an edge-safe visual clamp for CPE because the fixed authored atlas projection extends beyond its crop; this is disclosed presentation correction, not altered geographic truth.
 - Full Vitest and repository-wide TypeScript are not globally green for the unrelated failures listed above.

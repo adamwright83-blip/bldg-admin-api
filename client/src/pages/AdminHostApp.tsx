@@ -159,6 +159,10 @@ export default function AdminHostApp() {
   const leadsCount = trpc.admin.countUnreadLeads.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+  const sandboxCapability = trpc.system.towerWars.sandboxCapability.useQuery(
+    undefined,
+    { enabled: isAuthenticated, retry: false }
+  );
 
   useEffect(() => {
     if (path === "/admin") navigate("/", { replace: true });
@@ -322,6 +326,7 @@ export default function AdminHostApp() {
         requestCount={requestsCount.data ?? 0}
         leadCount={leadsCount.data ?? 0}
         userName={user?.name || "Admin"}
+        sandboxEnabled={sandboxCapability.data?.enabled === true}
         onOpenMobileNav={() => setMobileNavOpen(true)}
       />
 

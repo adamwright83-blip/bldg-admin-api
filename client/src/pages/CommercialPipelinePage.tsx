@@ -32,6 +32,9 @@ import {
   type CommercialPipelineStage,
 } from "@shared/commercialPipeline";
 import "./commercial-pipeline.css";
+import { PsychSignalLayer } from "@/components/admin/control-room/PsychSignalLayer";
+import { deriveSignals } from "@/components/admin/control-room/psychSignals";
+import { commercialSignalContext } from "@/components/admin/control-room/commercialSignalContext";
 
 const AGREEMENT_CONFIRMATION =
   "I verified this approved agreement value and its evidence" as const;
@@ -116,11 +119,19 @@ export default function CommercialPipelinePage() {
       requestedId === null
         ? null
         : pipeline.data.find(item => item.id === requestedId);
-    setSelectedId(requested ? requested.id : pipeline.data[0].id);
+    if (requestedId !== null) {
+      setSelectedId(requested?.id ?? null);
+      return;
+    }
+    setSelectedId(pipeline.data[0].id);
   }, [pipeline.data, selectedId, requestedId]);
   const selectedSummary =
     pipeline.data?.find(item => item.id === selectedId) ?? null;
   const selected = detail.data ?? null;
+  const signals = useMemo(
+    () => selected ? deriveSignals(commercialSignalContext(selected)) : [],
+    [selected]
+  );
 
   const metrics = useMemo(() => {
     const records = pipeline.data ?? [];
@@ -375,6 +386,10 @@ export default function CommercialPipelinePage() {
                     </span>
                   </div>
                 </div>
+                <PsychSignalLayer
+                  signals={signals}
+                  situationLabel={`${selected.account?.name ?? "commercial account"} pursuit`}
+                />
 
                 <div className="cp-context-grid">
                   <article>

@@ -55,9 +55,12 @@ function event(input: {
   hour?: number;
 }): TowerWarsBusinessEvent {
   const who = SANDBOX_CUSTOMERS[(input.n - 1) % SANDBOX_CUSTOMERS.length]!;
+  // Fixture ids intentionally grow into the hundreds. Keep the clock independent
+  // from that identity so every synthetic event remains a valid ISO instant.
+  const hour = input.hour ?? 9 + ((input.n - 1) % 8);
   return {
     eventId: `${SANDBOX_PREFIX}order:${input.n}`,
-    occurredAt: `${input.businessDate}T${String(input.hour ?? 9 + input.n).padStart(2, "0")}:00:00.000Z`,
+    occurredAt: `${input.businessDate}T${String(hour).padStart(2, "0")}:00:00.000Z`,
     businessDate: input.businessDate,
     buildingId: input.buildingId,
     buildingDisplayName: NAMES[input.buildingId],

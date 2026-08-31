@@ -59,6 +59,15 @@ describe("the sandbox cannot touch production truth", () => {
     }
   });
 
+  it("gives every event a valid deterministic ISO timestamp regardless of id size", () => {
+    for (const fixture of allSandboxFixtures()) {
+      for (const event of fixture.events) {
+        expect(Number.isFinite(Date.parse(event.occurredAt))).toBe(true);
+        expect(new Date(event.occurredAt).toISOString()).toBe(event.occurredAt);
+      }
+    }
+  });
+
   it("never borrows a real customer's name", () => {
     for (const fixture of allSandboxFixtures()) {
       for (const event of fixture.events) {

@@ -14,6 +14,7 @@ import { trpc } from "@/lib/trpc";
 import { TOWER_WARS_ATTACK_THRESHOLD_CENTS } from "@shared/goldlineGameConfig";
 import {
   applyTowerWarsEvent,
+  compileTowerWarsState,
   canExecuteTowerWarsPromise,
   initialTowerWarsState,
   type TowerDamageState,
@@ -25,9 +26,11 @@ import { CanonicalBuildingArt } from "./CanonicalBuildingArt";
 import { useWorldTransition } from "./WorldTransitionProvider";
 import { entityFromSearch } from "./worldTransition";
 import {
-  adoptWithoutSpectacle,
   chargeFraction,
+  markSeen,
+  projectLiveEvent,
   readSeenCursor,
+  unseenEventIds,
   writeSeenCursor,
 } from "./spectacle";
 import type { SettledStratum } from "./facadeScars";
@@ -190,17 +193,78 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   // Only authoritative events this viewer has never seen may produce spectacle.
   // The cursor is this viewer's own storage — never server truth.
   const [unseenEvents, setUnseenEvents] = useState<string[]>([]);
+  const [activeSpectacle, setActiveSpectacle] = useState<{
+    eventId: string;
+    phase: "revenue" | "discharge" | "settle";
+    revealedDischarges: number;
+  } | null>(null);
+  const adoptedThisMount = useRef(false);
   const ledgerKey = (today.data?.ledger ?? [])
     .map(e => e.eventId)
     .join("|");
+  const ledgerRevision = today.data
+    ? `${today.data.businessDate}|${ledgerKey}`
+    : "loading";
   useEffect(() => {
+    if (!today.data) return;
     const ids = ledgerKey ? ledgerKey.split("|") : [];
-    if (!ids.length) return;
-    const { cursor, play } = adoptWithoutSpectacle(ids, readSeenCursor());
-    writeSeenCursor(cursor);
-    setUnseenEvents(play);
-  }, [ledgerKey]);
+    const cursor = readSeenCursor();
+    // Every mount adopts its initial authoritative ledger silently. A remount or
+    // afternoon direct load is not a new economic event.
+    if (!adoptedThisMount.current) {
+      adoptedThisMount.current = true;
+      writeSeenCursor(markSeen(ids, cursor));
+      return;
+    }
+    const play = unseenEventIds(ids, cursor);
+    setUnseenEvents(existing => [
+      ...existing,
+      ...play.filter(id => id !== activeSpectacle?.eventId && !existing.includes(id)),
+    ]);
+  }, [ledgerRevision, activeSpectacle?.eventId]);
   const data = today.data ?? trustedData.current;
+  useEffect(() => {
+    if (today.isError || activeSpectacle || unseenEvents.length === 0) return;
+    setActiveSpectacle({ eventId: unseenEvents[0]!, phase: "revenue", revealedDischarges: 0 });
+    setUnseenEvents(existing => existing.slice(1));
+  }, [activeSpectacle, today.isError, unseenEvents]);
+
+  useEffect(() => {
+    if (!activeSpectacle || today.isError || !data) return;
+    const event = data.ledger.find(item => item.eventId === activeSpectacle.eventId);
+    if (!event) return;
+    const prior = compileTowerWarsState(
+      data.ledger.filter(item => readSeenCursor().seen.includes(item.eventId))
+    );
+    const total = projectLiveEvent({
+      prior,
+      event,
+      revealedDischarges: activeSpectacle.revealedDischarges,
+      thresholdCents: TOWER_WARS_ATTACK_THRESHOLD_CENTS,
+    }).totalDischarges;
+    const timer = window.setTimeout(() => {
+      if (activeSpectacle.phase === "revenue") {
+        setActiveSpectacle(current => current && ({
+          ...current,
+          phase: total > 0 ? "discharge" : "settle",
+          revealedDischarges: total > 0 ? 1 : 0,
+        }));
+        return;
+      }
+      if (activeSpectacle.phase === "discharge" && activeSpectacle.revealedDischarges < total) {
+        setActiveSpectacle(current => current && ({ ...current, revealedDischarges: current.revealedDischarges + 1 }));
+        return;
+      }
+      if (activeSpectacle.phase !== "settle") {
+        setActiveSpectacle(current => current && ({ ...current, phase: "settle" }));
+        return;
+      }
+      const cursor = markSeen([event.eventId], readSeenCursor());
+      writeSeenCursor(cursor);
+      setActiveSpectacle(null);
+    }, activeSpectacle.phase === "settle" ? 450 : 700);
+    return () => window.clearTimeout(timer);
+  }, [activeSpectacle, data, today.isError]);
   const replay = useReplay(data);
   if (today.isLoading && !data)
     return (
@@ -228,7 +292,23 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
       </div>
     );
 
-  const state = replay.state ?? data.state;
+  const liveSpectacleEvent = activeSpectacle
+    ? data.ledger.find(item => item.eventId === activeSpectacle.eventId) ?? null
+    : null;
+  const spectaclePrior = liveSpectacleEvent
+    ? compileTowerWarsState(data.ledger.filter(item => readSeenCursor().seen.includes(item.eventId)))
+    : null;
+  const spectacleProjection = liveSpectacleEvent && spectaclePrior
+    ? projectLiveEvent({
+        prior: spectaclePrior,
+        event: liveSpectacleEvent,
+        revealedDischarges: activeSpectacle?.revealedDischarges ?? 0,
+        thresholdCents: TOWER_WARS_ATTACK_THRESHOLD_CENTS,
+      })
+    : null;
+  const state = replay.mode === "live"
+    ? spectacleProjection?.state ?? data.state
+    : replay.state ?? data.state;
   const opus = state.buildings.opus_la;
   const century = state.buildings.century_park_east;
   const comparison = towerComparisonState(
@@ -273,10 +353,10 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   return (
     <main className={`tw-page ${compact ? "is-compact" : ""}`}>
       {today.isError ? <div className="tw-confidence" role="status">Live feed interrupted · holding the last trusted world · new claims and mutating actions are suppressed</div> : null}
-      {comebackBuilding ? <SiegeComeback buildingId={comebackBuilding} onClose={() => setComebackBuilding(null)} onContinue={() => onNavigate("/commercial-pipeline")} /> : null}
+      {comebackBuilding ? <SiegeComeback buildingId={comebackBuilding} onClose={() => setComebackBuilding(null)} onContinue={pipelineId => onNavigate(`/commercial-pipeline?pipeline=${pipelineId}`)} /> : null}
       <section
         className={`tw-arena ${isArriving || isEstablishing ? "tw-arriving" : ""}`}
-        data-unseen-events={unseenEvents.length}
+        data-unseen-events={unseenEvents.length + (activeSpectacle ? 1 : 0)}
         aria-labelledby="tower-wars-title"
       >
         <img
@@ -326,7 +406,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
               }}
               className={`tw-piece ${
                 isArriving && buildingId === enteredFor ? "is-inbound" : ""
-              } ${buildingId === youId ? "tw-piece-you" : "tw-piece-rival"} ${buildingId === "opus_la" ? "is-opus" : "is-century"} ${replay.activeAttack === buildingId ? "is-firing" : ""}`}
+              } ${buildingId === youId ? "tw-piece-you" : "tw-piece-rival"} ${buildingId === "opus_la" ? "is-opus" : "is-century"} ${replay.activeAttack === buildingId || (activeSpectacle?.phase === "discharge" && liveSpectacleEvent?.buildingId === buildingId) ? "is-firing" : ""} ${activeSpectacle?.phase === "revenue" && liveSpectacleEvent?.buildingId === buildingId ? "is-revenue-arriving" : ""}`}
               data-damage={building.damage}
             >
               <span
@@ -357,6 +437,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
                 aria-hidden
               />
               <span className="tw-damage-vfx" aria-hidden />
+              {activeSpectacle?.phase === "revenue" && liveSpectacleEvent?.buildingId === buildingId ? <span className="tw-live-revenue" role="status">+{money(liveSpectacleEvent.realOrderValueCents)} real order</span> : null}
               <span className="tw-piece-label">
                 <strong>{NAMES[buildingId]}</strong>
                 <small>
@@ -576,9 +657,10 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
         </div>
         <button
           type="button"
+          disabled={!hasLoser}
           onClick={() => setComebackBuilding(youId)}
         >
-          Engineer the comeback <ArrowRight />
+          {hasLoser ? "Engineer the comeback" : "No comeback assigned on a tie"} <ArrowRight />
         </button>
         <button type="button" onClick={() => {
           begin({ entityId: youId, from: "building", to: "city", sourceEl: pieceRefs.current[youId], returnPath, kind: "reverse" });

@@ -10,11 +10,13 @@ import {
 import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
 import { sandboxFixture, SANDBOX_SCENARIOS } from "@shared/sandboxScenarios";
 import { settleTowerWars } from "@shared/towerWarsSettlement";
-import { requireSandboxEnabled } from "./sandboxGate";
+import { isCompletedReplayDate, requireSandboxEnabled, sandboxEnabled } from "./sandboxGate";
+import { getDashboardTimeZone } from "../dashboardZoned";
 
 const buildingId = z.enum(["opus_la", "century_park_east"]);
 
 export const towerWarsRouter = router({
+  sandboxCapability: adminProcedure.query(() => ({ enabled: sandboxEnabled() })),
   sandbox: adminProcedure.query(() => {
     requireSandboxEnabled();
     return {
@@ -34,8 +36,10 @@ export const towerWarsRouter = router({
     .input(z.object({ businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
     .query(async ({ ctx, input }) => {
       requireSandboxEnabled();
-      const today = new Date().toISOString().slice(0, 10);
-      if (input.businessDate >= today) throw new Error("REAL_DAY_REPLAY accepts completed past business dates only.");
+      const now = new Date();
+      if (!isCompletedReplayDate(input.businessDate, now, getDashboardTimeZone())) {
+        throw new Error("REAL_DAY_REPLAY accepts completed past business dates only.");
+      }
       const replay = await getTowerWarsSettlement({ tenantId: ctx.tenantId, now: new Date(`${input.businessDate}T19:00:00.000Z`) });
       return { ...replay, readOnly: true as const, cursorScope: `sandbox:replay:${input.businessDate}` };
     }),

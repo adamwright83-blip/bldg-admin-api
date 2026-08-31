@@ -130,9 +130,9 @@ describe("same-entity routing survives the move", () => {
   });
 
   it("only falls back to the first record when no entity was requested", () => {
-    expect(pipeline).toContain(
-      "setSelectedId(requested ? requested.id : pipeline.data[0].id)"
-    );
+    expect(pipeline).toContain("if (requestedId !== null)");
+    expect(pipeline).toContain("setSelectedId(requested?.id ?? null)");
+    expect(pipeline).toContain("setSelectedId(pipeline.data[0].id)");
   });
 
   it("navigates client-side so in-memory state is not discarded", () => {

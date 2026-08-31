@@ -29,6 +29,11 @@
  *    thing may animate is decided by what class of fact it actually is.
  */
 import type { ImpactClass } from "@shared/impactSignal";
+import {
+  damageStateForIncomingAttacks,
+  type TowerWarsBattleState,
+  type TowerWarsBusinessEvent,
+} from "@shared/towerWars";
 
 /* ── Magnitude ──────────────────────────────────────────────────────────── */
 
@@ -184,4 +189,47 @@ export function dischargePlan(input: {
     strikes: Math.floor(total / input.thresholdCents),
     remainderCents: total % input.thresholdCents,
   };
+}
+
+/**
+ * Truthful prefix projection for one live event. Revenue arrives once; then each
+ * real threshold crossing is revealed independently. This is presentation state
+ * only and never feeds a reducer or write back to the server.
+ */
+export function projectLiveEvent(input: {
+  prior: TowerWarsBattleState;
+  event: TowerWarsBusinessEvent;
+  revealedDischarges: number;
+  thresholdCents: number;
+}): { state: TowerWarsBattleState; totalDischarges: number } {
+  const state: TowerWarsBattleState = {
+    buildings: {
+      opus_la: { ...input.prior.buildings.opus_la },
+      century_park_east: { ...input.prior.buildings.century_park_east },
+    },
+    processedEventIds: [...input.prior.processedEventIds],
+    attacks: [...input.prior.attacks],
+  };
+  const attacker = state.buildings[input.event.buildingId];
+  const defenderId = input.event.buildingId === "opus_la"
+    ? "century_park_east"
+    : "opus_la";
+  const defender = state.buildings[defenderId];
+  const total = attacker.unspentValueCents + input.event.realOrderValueCents;
+  const totalDischarges = input.thresholdCents > 0
+    ? Math.floor(total / input.thresholdCents)
+    : 0;
+  const revealed = Math.max(0, Math.min(totalDischarges, input.revealedDischarges));
+
+  attacker.revenueCents += input.event.realOrderValueCents;
+  attacker.orderCount += 1;
+  attacker.lastRevenueEventAt = input.event.occurredAt;
+  attacker.attackCount += revealed;
+  defender.incomingAttackCount += revealed;
+  defender.damage = damageStateForIncomingAttacks(defender.incomingAttackCount);
+  const remaining = total - revealed * input.thresholdCents;
+  attacker.unspentValueCents = revealed < totalDischarges
+    ? Math.min(input.thresholdCents, remaining)
+    : remaining;
+  return { state, totalDischarges };
 }

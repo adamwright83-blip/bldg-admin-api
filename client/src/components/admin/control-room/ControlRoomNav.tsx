@@ -12,6 +12,7 @@ type ControlRoomNavProps = {
   requestCount: number;
   leadCount: number;
   userName?: string;
+  sandboxEnabled?: boolean;
 };
 
 const NORTH_ITEMS = [
@@ -107,9 +108,12 @@ function isWestActive(path: string, itemPath: string) {
   return path === itemPath;
 }
 
-export function ControlRoomNav({ path, mobileOpen, onNavigate, onOpenMobileNav, requestCount, leadCount, userName = "Admin" }: ControlRoomNavProps) {
+export function ControlRoomNav({ path, mobileOpen, onNavigate, onOpenMobileNav, requestCount, leadCount, userName = "Admin", sandboxEnabled = false }: ControlRoomNavProps) {
   const activeDomain = northDomainForPath(path);
   const west = westItemsForPath(path);
+  const visibleWestItems = sandboxEnabled
+    ? west.items
+    : west.items.filter(item => item.path !== "/growth/sandbox");
   const initials = userName.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join("").toUpperCase() || "A";
   return (
     <>
@@ -133,7 +137,7 @@ export function ControlRoomNav({ path, mobileOpen, onNavigate, onOpenMobileNav, 
         <div className="cr-west-brand-mobile"><img src={`${ASSET_ROOT}/brand/goldline-admin-crest.svg`} alt="" /><strong>Tower Wars</strong></div>
         <span className="cr-west-label">{west.label}</span>
         <nav aria-label={`${west.label} views`}>
-          {west.items.map(item => { const Icon = item.icon; const active = isWestActive(path, item.path); return <Link key={item.path} href={item.path} className={`${active ? "is-active" : ""} ${item.nested ? "is-nested" : ""}`} aria-current={active ? "page" : undefined} onClick={onNavigate}><Icon aria-hidden /><span>{item.label}</span></Link>; })}
+          {visibleWestItems.map(item => { const Icon = item.icon; const active = isWestActive(path, item.path); return <Link key={item.path} href={item.path} className={`${active ? "is-active" : ""} ${item.nested ? "is-nested" : ""}`} aria-current={active ? "page" : undefined} onClick={onNavigate}><Icon aria-hidden /><span>{item.label}</span></Link>; })}
         </nav>
         <div className="cr-season-card" aria-label="Competition season not configured"><span className="cr-season-trophy">★</span><div><strong>Competition</strong><small>Season not configured</small></div><span>No leaderboard available</span></div>
       </aside>
