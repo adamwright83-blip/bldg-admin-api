@@ -1,6 +1,11 @@
 import React, { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
+import {
+  CANONICAL_BUILDING_GEOGRAPHY,
+  LOS_ANGELES_ESTABLISHING,
+  canonicalGeographyFor,
+} from "@shared/canonicalGeography";
 import type { CanonicalBuildingId } from "./buildingArt";
 import { CityTowerButton } from "./CityTowerButton";
 import { WorldAtmosphereOverlay } from "./WorldAtmosphereOverlay";
@@ -32,16 +37,16 @@ const CANONICAL_TOWERS: Array<{
 }> = [
   {
     id: "century_park_east",
-    name: "Century Park East",
-    latitude: 34.0591,
-    longitude: -118.4147,
+    name: CANONICAL_BUILDING_GEOGRAPHY.century_park_east.name,
+    latitude: CANONICAL_BUILDING_GEOGRAPHY.century_park_east.latitude,
+    longitude: CANONICAL_BUILDING_GEOGRAPHY.century_park_east.longitude,
     neighborhood: "Century City",
   },
   {
     id: "opus_la",
-    name: "OPUS LA",
-    latitude: 34.0618,
-    longitude: -118.3011,
+    name: CANONICAL_BUILDING_GEOGRAPHY.opus_la.name,
+    latitude: CANONICAL_BUILDING_GEOGRAPHY.opus_la.latitude,
+    longitude: CANONICAL_BUILDING_GEOGRAPHY.opus_la.longitude,
     neighborhood: "Koreatown",
   },
 ];
@@ -79,14 +84,25 @@ export function WorldGeographySurface({
   const atmosphere = atmosphereQuery.data ?? null;
   const opportunity = opportunityQuery.data?.projection ?? null;
 
+  // Position comes from canonical geography; zoom/tilt are presentation choices.
   const cameraTarget: GeographicCameraTarget = useMemo(() => {
-    if (selectedBuildingId === "opus_la") {
-      return { latitude: 34.0618, longitude: -118.3011, zoom: 16, tilt: 55, heading: 195 };
+    const geo = canonicalGeographyFor(selectedBuildingId);
+    if (geo) {
+      return {
+        latitude: geo.latitude,
+        longitude: geo.longitude,
+        heading: geo.facadeHeading,
+        zoom: 16,
+        tilt: 55,
+      };
     }
-    if (selectedBuildingId === "century_park_east") {
-      return { latitude: 34.0591, longitude: -118.4147, zoom: 16, tilt: 55, heading: 140 };
-    }
-    return { latitude: 34.0522, longitude: -118.2437, zoom: 12, tilt: 45, heading: 0 };
+    return {
+      latitude: LOS_ANGELES_ESTABLISHING.latitude,
+      longitude: LOS_ANGELES_ESTABLISHING.longitude,
+      zoom: 12,
+      tilt: 45,
+      heading: 0,
+    };
   }, [selectedBuildingId]);
 
   return (

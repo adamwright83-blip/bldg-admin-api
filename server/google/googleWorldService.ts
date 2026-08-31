@@ -17,23 +17,31 @@ import type {
   GoogleWorldCapabilities,
 } from "../../shared/googleCapabilities";
 import { getGoogleTelemetryLogs } from "./googleTelemetry";
+import { CANONICAL_BUILDING_GEOGRAPHY } from "../../shared/canonicalGeography";
 
+/**
+ * Canonical building geography, derived from the single shared source of truth.
+ *
+ * The coordinates deliberately do NOT live here any more. `heading` is retained
+ * under its historical name for existing server callers, but its value is the
+ * building's physical facade heading, not a camera preference.
+ */
 export const CANONICAL_BUILDING_GEO = {
   opus_la: {
-    id: "opus_la",
-    name: "OPUS LA",
-    address: "3545 Wilshire Blvd, Los Angeles, CA 90010",
-    latitude: 34.0618,
-    longitude: -118.3011,
-    heading: 195,
+    id: CANONICAL_BUILDING_GEOGRAPHY.opus_la.id,
+    name: CANONICAL_BUILDING_GEOGRAPHY.opus_la.name,
+    address: CANONICAL_BUILDING_GEOGRAPHY.opus_la.address,
+    latitude: CANONICAL_BUILDING_GEOGRAPHY.opus_la.latitude,
+    longitude: CANONICAL_BUILDING_GEOGRAPHY.opus_la.longitude,
+    heading: CANONICAL_BUILDING_GEOGRAPHY.opus_la.facadeHeading,
   },
   century_park_east: {
-    id: "century_park_east",
-    name: "Century Park East",
-    address: "2170 Century Park E, Los Angeles, CA 90067",
-    latitude: 34.0591,
-    longitude: -118.4147,
-    heading: 140,
+    id: CANONICAL_BUILDING_GEOGRAPHY.century_park_east.id,
+    name: CANONICAL_BUILDING_GEOGRAPHY.century_park_east.name,
+    address: CANONICAL_BUILDING_GEOGRAPHY.century_park_east.address,
+    latitude: CANONICAL_BUILDING_GEOGRAPHY.century_park_east.latitude,
+    longitude: CANONICAL_BUILDING_GEOGRAPHY.century_park_east.longitude,
+    heading: CANONICAL_BUILDING_GEOGRAPHY.century_park_east.facadeHeading,
   },
 } as const;
 

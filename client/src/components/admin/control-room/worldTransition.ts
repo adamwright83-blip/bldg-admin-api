@@ -22,6 +22,7 @@
  */
 
 import type { CanonicalBuildingId } from "./buildingArt";
+import { CANONICAL_BUILDING_GEOGRAPHY } from "@shared/canonicalGeography";
 
 export type WorldCamera = "city" | "building" | "interior";
 
@@ -57,9 +58,31 @@ export type WorldTransition = {
   startedAt: number;
 };
 
+/**
+ * Where the camera flies, for each canonical building.
+ *
+ * Presentation owns the choreography — altitude, range and tilt are how we
+ * choose to depict an approach. It does NOT own the position: latitude,
+ * longitude and the facade heading are read from the shared canonical
+ * geography so this file can never drift from what the server resolves.
+ */
 export const CANONICAL_GEOGRAPHIC_TARGETS = {
-  opus_la: { latitude: 34.0618, longitude: -118.3011, altitude: 700, range: 1400, heading: 195, tilt: 55 },
-  century_park_east: { latitude: 34.0591, longitude: -118.4147, altitude: 700, range: 1400, heading: 140, tilt: 55 },
+  opus_la: {
+    latitude: CANONICAL_BUILDING_GEOGRAPHY.opus_la.latitude,
+    longitude: CANONICAL_BUILDING_GEOGRAPHY.opus_la.longitude,
+    heading: CANONICAL_BUILDING_GEOGRAPHY.opus_la.facadeHeading,
+    altitude: 700,
+    range: 1400,
+    tilt: 55,
+  },
+  century_park_east: {
+    latitude: CANONICAL_BUILDING_GEOGRAPHY.century_park_east.latitude,
+    longitude: CANONICAL_BUILDING_GEOGRAPHY.century_park_east.longitude,
+    heading: CANONICAL_BUILDING_GEOGRAPHY.century_park_east.facadeHeading,
+    altitude: 700,
+    range: 1400,
+    tilt: 55,
+  },
 } as const;
 
 export const TRAVERSAL_MS = 900;
