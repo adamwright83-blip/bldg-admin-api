@@ -153,7 +153,8 @@ describe("Google Service Adapters Suite", () => {
       expect(result.status).toBe("available");
       expect(result.place?.displayName).toBe("OPUS LA");
       expect(result.place?.primaryPhotoAttribution?.displayName).toBe("John Contributor");
-      expect(result.place?.primaryPhotoUri).toContain("places/ChIJMockPlaceId/photos/photo123/media");
+      expect(result.place?.primaryPhotoUri).toContain("/api/google/places-photo");
+      expect(result.place?.primaryPhotoUri).not.toContain("key=");
     });
   });
 
@@ -205,7 +206,8 @@ describe("Google Service Adapters Suite", () => {
       expect(result.hasCoverage).toBe(true);
       expect(result.contextLabel).toBe("Verified facade");
       expect(result.attributionText).toBe("© 2026 Google");
-      expect(result.imageUrl).toContain("maps.googleapis.com/maps/api/streetview");
+      expect(result.imageUrl).toContain("/api/google/streetview-facade");
+      expect(result.imageUrl).not.toContain("key=");
     });
 
     it("labels GPS-proven arrival accurately", async () => {
