@@ -196,3 +196,23 @@
    they must never carry left/right/width/height, or a lead change would make a
    building physically swap sides and change size. */
 .tw-piece-you,.tw-piece-rival{}
+
+/* World transition — the camera move between scales.
+   The flyer is a copy of the SAME canonical building, so the entity never changes
+   identity mid-journey. It sits above the worlds but below nav chrome. */
+.wt-stage{position:fixed;inset:0;z-index:40;pointer-events:none}
+.wt-flyer{position:absolute;transform-origin:top left;will-change:transform;
+  transition-property:transform;transition-timing-function:cubic-bezier(.22,.61,.36,1)}
+.wt-stage.is-reduced .wt-flyer{transition-timing-function:ease-out}
+/* The destination holds its HUD back until the building has arrived. */
+.tw-arriving .tw-scoreboard,.tw-arriving .tw-truth-hud,.tw-arriving .tw-piece-label,
+.tw-arriving .tw-actions,.tw-arriving .tw-contributors,.tw-arriving .tw-evidence-strip{
+  opacity:0;transform:translateY(8px);transition:opacity .3s ease,transform .3s ease}
+.tw-arena:not(.tw-arriving) .tw-scoreboard,.tw-arena:not(.tw-arriving) .tw-truth-hud,
+.tw-arena:not(.tw-arriving) .tw-piece-label{opacity:1;transform:none;transition:opacity .35s ease .05s,transform .35s ease .05s}
+/* The building the camera is carrying is hidden in place until it lands. */
+.tw-piece.is-inbound .cb-art{opacity:0}
+@media (prefers-reduced-motion:reduce){
+  .wt-flyer{transition-duration:160ms!important}
+  .tw-arriving .tw-scoreboard,.tw-arriving .tw-truth-hud,.tw-arriving .tw-piece-label{transition-duration:.01ms}
+}

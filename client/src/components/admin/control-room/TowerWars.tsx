@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import {
   ArrowRight,
@@ -22,6 +22,8 @@ import {
 } from "@shared/towerWars";
 import { towerComparisonState } from "./towerWarsGeometry";
 import { CanonicalBuildingArt } from "./CanonicalBuildingArt";
+import { useWorldTransition } from "./WorldTransitionProvider";
+import { entityFromSearch } from "./worldTransition";
 import type { SettledStratum } from "./facadeScars";
 
 export { damageStateForIncomingAttacks } from "@shared/towerWars";
@@ -138,6 +140,19 @@ function useReplay(data: TowerWarsData | undefined) {
 
 export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   const [printPromiseId, setPrintPromiseId] = useState<string | null>(null);
+  // The building the camera was moving toward, carried from the city.
+  const { approaching, arrive, isArriving } = useWorldTransition();
+  const enteredFor =
+    approaching ??
+    (typeof window !== "undefined"
+      ? entityFromSearch(window.location.search)
+      : null);
+  const pieceRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  useLayoutEffect(() => {
+    if (!enteredFor) return;
+    // Report the real destination geometry so the flyer lands exactly on it.
+    arrive(enteredFor, pieceRefs.current[enteredFor] ?? null);
+  }, [enteredFor, arrive]);
   const settlementQuery = trpc.system.towerWars.settlement.useQuery(
     undefined,
     { staleTime: 60_000 }
@@ -214,7 +229,10 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
 
   return (
     <main className={`tw-page ${compact ? "is-compact" : ""}`}>
-      <section className="tw-arena" aria-labelledby="tower-wars-title">
+      <section
+        className={`tw-arena ${isArriving ? "tw-arriving" : ""}`}
+        aria-labelledby="tower-wars-title"
+      >
         <img
           className="tw-environment"
           src="/assets/admin/control-room/tower-wars/battle-environment.jpg"
@@ -256,7 +274,12 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
           return (
             <div
               key={buildingId}
-              className={`tw-piece ${buildingId === youId ? "tw-piece-you" : "tw-piece-rival"} ${buildingId === "opus_la" ? "is-opus" : "is-century"} ${replay.activeAttack === buildingId ? "is-firing" : ""}`}
+              ref={el => {
+                pieceRefs.current[buildingId] = el;
+              }}
+              className={`tw-piece ${
+                isArriving && buildingId === enteredFor ? "is-inbound" : ""
+              } ${buildingId === youId ? "tw-piece-you" : "tw-piece-rival"} ${buildingId === "opus_la" ? "is-opus" : "is-century"} ${replay.activeAttack === buildingId ? "is-firing" : ""}`}
               data-damage={building.damage}
             >
               <span

@@ -152,9 +152,9 @@ describe("truth-bound visual rules", () => {
     // different weapon depending on which screen you are on. Home previously used
     // opus-la-siege-driver-v5 (old composite with a thin baked club) while Tower
     // Wars used the plate plus the current driver overlay.
-    for (const source of [towerSource, homeSource]) {
-      expect(source).toContain("CanonicalBuildingArt");
-    }
+    expect(towerSource).toContain("CanonicalBuildingArt");
+    // Home renders the same composition through CityTowerButton.
+    expect(homeSource).toContain("CityTowerButton");
     for (const retired of [
       "opus-la-siege-driver-v5.png",
       "century-bazooka-optimized.png",

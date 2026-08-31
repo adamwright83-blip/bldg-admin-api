@@ -94,10 +94,30 @@ export default function CommercialPipelinePage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Same-entity continuity. Lantern City links here with `?pipeline=<id>` after the
+   * operator picks a specific pursuit on the map. This page previously ignored the
+   * query string entirely and defaulted to whatever record the server returned
+   * first, so clicking a glowing opportunity could land you on a different account.
+   *
+   * The requested record wins whenever it exists; falling back to the first record
+   * is only for arriving with no entity in mind.
+   */
+  const requestedId = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    const raw = new URLSearchParams(window.location.search).get("pipeline");
+    const parsed = raw === null ? Number.NaN : Number(raw);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+  }, []);
+
   useEffect(() => {
-    if (selectedId === null && pipeline.data?.[0])
-      setSelectedId(pipeline.data[0].id);
-  }, [pipeline.data, selectedId]);
+    if (selectedId !== null || !pipeline.data?.length) return;
+    const requested =
+      requestedId === null
+        ? null
+        : pipeline.data.find(item => item.id === requestedId);
+    setSelectedId(requested ? requested.id : pipeline.data[0].id);
+  }, [pipeline.data, selectedId, requestedId]);
   const selectedSummary =
     pipeline.data?.find(item => item.id === selectedId) ?? null;
   const selected = detail.data ?? null;

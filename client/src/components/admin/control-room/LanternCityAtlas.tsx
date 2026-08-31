@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ArrowRight, MapPinOff, RefreshCw, Search, X } from "lucide-react";
+import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 
 const MAP_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas.jpg";
@@ -326,12 +327,15 @@ export default function LanternCityAtlas({
               </dd>
             </div>
           </dl>
-          <a
+          {/* Client-side so the selected pursuit's identity survives the move.
+              This was a raw <a href>, which forced a full document load and threw
+              away in-memory state along with it. */}
+          <Link
             className="lc-open-customer"
             href={`/commercial-pipeline?pipeline=${selectedPursuit.pipelineId}`}
           >
             Open Growth evidence <ArrowRight />
-          </a>
+          </Link>
         </aside>
       ) : null}
     </main>

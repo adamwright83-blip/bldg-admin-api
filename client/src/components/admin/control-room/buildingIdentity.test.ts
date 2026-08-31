@@ -73,9 +73,13 @@ describe("identity owns geometry; roles do not", () => {
 
 describe("one building, one composition, everywhere", () => {
   it("renders both surfaces through the shared component", () => {
-    for (const source of [tower, home]) {
-      expect(source).toContain("CanonicalBuildingArt");
-    }
+    expect(tower).toContain("CanonicalBuildingArt");
+    // Home composes via CityTowerButton, which renders the same component and also
+    // carries the building's identity into the traversal.
+    expect(home).toContain("CityTowerButton");
+    const cityButton = read("./CityTowerButton.tsx");
+    expect(cityButton).toContain("CanonicalBuildingArt");
+    expect(cityButton).toContain("begin({");
   });
 
   it("never references a retired asset from live code", () => {

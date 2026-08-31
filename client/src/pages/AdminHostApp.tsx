@@ -35,6 +35,7 @@ import LanternCityAtlas from "@/components/admin/control-room/LanternCityAtlas";
 import DriverIntelligenceOverview from "@/components/admin/control-room/DriverIntelligenceOverview";
 import { TowerWars } from "@/components/admin/control-room/TowerWars";
 import "@/components/admin/control-room/admin-control-room.css";
+import { WorldTransitionProvider } from "@/components/admin/control-room/WorldTransitionProvider";
 
 const ArchivedLevel4OffensiveHost = lazy(() =>
   import("@/components/Level4OffensiveHost").then(module => ({
@@ -304,6 +305,7 @@ export default function AdminHostApp() {
   }
 
   return (
+    <WorldTransitionProvider>
     <div className="cr-shell">
       {isCounter && activeWorkspace !== "held_corporate" ? (
         <ResidentFollowupAlert />
@@ -449,5 +451,6 @@ export default function AdminHostApp() {
         />
       </div>
     </div>
+    </WorldTransitionProvider>
   );
 }
