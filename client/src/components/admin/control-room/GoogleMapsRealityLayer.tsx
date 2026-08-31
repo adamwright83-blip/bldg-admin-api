@@ -8,6 +8,7 @@ export type GeographicCameraTarget = {
   tilt?: number;
   heading?: number;
   altitude?: number;
+  range?: number;
 };
 
 export type RealityRendererType = "maps_js_3d" | "photorealistic_3d_tiles" | "authored_fallback";
@@ -15,6 +16,9 @@ export type RealityRendererType = "maps_js_3d" | "photorealistic_3d_tiles" | "au
 export type GoogleMapsRealityLayerProps = {
   apiKey?: string | null;
   target?: GeographicCameraTarget;
+  initialTarget?: GeographicCameraTarget;
+  onApproachStarted?: () => void;
+  onApproachCompleted?: () => void;
   mode?: RealityRendererType;
   interactive?: boolean;
   onRendererReady?: (renderer: RealityRendererType) => void;
@@ -54,10 +58,13 @@ function loadGoogleMapsScript(apiKey: string): Promise<void> {
 export function GoogleMapsRealityLayer({
   apiKey,
   target = { latitude: 34.0522, longitude: -118.2437, zoom: 12, tilt: 45, heading: 0 },
+  initialTarget,
   mode = "maps_js_3d",
   interactive = true,
   onRendererReady,
   onRendererError,
+  onApproachStarted,
+  onApproachCompleted,
   className = "",
   children,
 }: GoogleMapsRealityLayerProps) {
@@ -87,13 +94,13 @@ export function GoogleMapsRealityLayer({
             const map3d = new google.maps.maps3d.Map3DElement({
               mode: "HYBRID",
               center: {
-                lat: target.latitude,
-                lng: target.longitude,
-                altitude: target.altitude ?? 450,
+                lat: (initialTarget ?? target).latitude,
+                lng: (initialTarget ?? target).longitude,
+                altitude: (initialTarget ?? target).altitude ?? 450,
               },
-              tilt: target.tilt ?? 55,
-              heading: target.heading ?? 0,
-              range: 1200,
+              tilt: (initialTarget ?? target).tilt ?? 55,
+              heading: (initialTarget ?? target).heading ?? 0,
+              range: (initialTarget ?? target).range ?? 18000,
             });
 
             containerRef.current.innerHTML = "";
@@ -158,6 +165,7 @@ export function GoogleMapsRealityLayer({
     const inst = mapInstanceRef.current;
 
     if (inst.flyCameraTo) {
+      onApproachStarted?.();
       inst.flyCameraTo({
         endCamera: {
           center: {
@@ -167,17 +175,18 @@ export function GoogleMapsRealityLayer({
           },
           tilt: target.tilt ?? 55,
           heading: target.heading ?? 0,
-          range: 1200,
+          range: target.range ?? 1200,
         },
-        durationMillis: 1200,
+        durationMillis: 1800,
       });
+      window.setTimeout(() => onApproachCompleted?.(), 1850);
     } else if (inst.panTo && inst.setHeading) {
       inst.panTo({ lat: target.latitude, lng: target.longitude });
       if (target.zoom != null) inst.setZoom(target.zoom);
       if (target.heading != null) inst.setHeading(target.heading);
       if (target.tilt != null) inst.setTilt(target.tilt);
     }
-  }, [target.latitude, target.longitude, target.zoom, target.tilt, target.heading, isLoaded]);
+  }, [target.latitude, target.longitude, target.zoom, target.tilt, target.heading, target.range, isLoaded]);
 
   return (
     <div className={`cr-maps-reality-wrapper ${className}`}>

@@ -49,6 +49,7 @@ type Flight = {
   destRect: WorldRect;
   reducedMotion: boolean;
   geographicTarget: typeof import("./worldTransition").CANONICAL_GEOGRAPHIC_TARGETS[CanonicalBuildingId];
+  phase: "loading" | "reality_ready" | "approach" | "contamination" | "threshold" | "authored_landing";
 };
 
 type Pending = {
@@ -102,6 +103,7 @@ export function WorldTransitionProvider({
   const [pending, setPending] = useState<Pending | null>(null);
   const [flight, setFlight] = useState<Flight | null>(null);
   const [landed, setLanded] = useState(false);
+  const [phase, setPhase] = useState<Flight["phase"]>("loading");
   const [returnAnchor, setReturnAnchor] = useState<string | null>(null);
   const runtimeConfig = trpc.system.google.runtimeConfig.useQuery(undefined, { staleTime: Infinity });
   const timer = useRef<number | null>(null);
@@ -149,6 +151,7 @@ export function WorldTransitionProvider({
         destRect,
         reducedMotion: current.reducedMotion,
         geographicTarget: CANONICAL_GEOGRAPHIC_TARGETS[current.entityId],
+        phase: "loading",
       });
       return null;
     });
@@ -163,7 +166,7 @@ export function WorldTransitionProvider({
       setFlight(null);
       setLanded(false);
       timer.current = null;
-    }, transitionDuration(flight) + 50);
+    }, 6500);
     return () => window.cancelAnimationFrame(raf);
   }, [flight]);
 
@@ -197,18 +200,23 @@ export function WorldTransitionProvider({
     <WorldTransitionContext.Provider value={value}>
       {children}
       {flight ? (
-        <div
-          className={`wt-stage ${landed ? "is-landed" : ""} ${
+          <div
+          className={`wt-stage phase-${phase} ${landed ? "is-landed" : ""} ${
             flight.reducedMotion ? "is-reduced" : ""
           }`}
-          aria-hidden="true"
-        >
+            aria-hidden="true"
+          >
           {runtimeConfig.data?.mapsJavascriptApiKey ? (
             <GoogleMapsRealityLayer
               apiKey={runtimeConfig.data.mapsJavascriptApiKey}
               target={{ latitude: flight.geographicTarget.latitude, longitude: flight.geographicTarget.longitude, altitude: flight.geographicTarget.altitude, tilt: flight.geographicTarget.tilt, heading: flight.geographicTarget.heading }}
               mode="maps_js_3d"
               interactive={false}
+              initialTarget={{ latitude: 34.0522, longitude: -118.2437, altitude: 5000, range: 18000, tilt: 35, heading: 0 }}
+              onRendererReady={() => setPhase("reality_ready")}
+              onApproachStarted={() => setPhase("approach")}
+              onApproachCompleted={() => { setPhase("contamination"); window.setTimeout(() => setPhase("threshold"), 700); }}
+              onRendererError={() => setPhase("authored_landing")}
             />
           ) : null}
           {/* Real spatial journey / fantasy contamination FX */}
