@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { adminProcedure, publicProcedure, router } from "../_core/trpc";
+import { adminProcedure, router } from "../_core/trpc";
 import { googleWorldService } from "./googleWorldService";
 
 export const googleRouter = router({
@@ -11,11 +11,27 @@ export const googleRouter = router({
     return { capabilities, runtimeConfig };
   }),
 
-  runtimeConfig: publicProcedure.query(() => {
+  /**
+   * Admin-only, despite returning a browser-intended key.
+   *
+   * The Maps JavaScript key must reach the browser to be usable, so it is not
+   * a server secret. But serving it from an ANONYMOUS endpoint means it can be
+   * harvested without ever loading the admin app, and every consumer of this
+   * procedure (WorldGeographySurface, WorldTransitionProvider) already renders
+   * behind admin auth — so `publicProcedure` bought nothing and cost key
+   * hygiene. Referrer restrictions in Google Cloud remain the real control;
+   * this removes the free scraping surface in front of them.
+   */
+  runtimeConfig: adminProcedure.query(() => {
     return googleWorldService.getPublicRuntimeConfig();
   }),
 
-  atmosphere: publicProcedure
+  /**
+   * Admin-only for billing integrity: this proxies live Google Weather and Air
+   * Quality calls, so an anonymous caller could drive metered provider spend
+   * simply by polling it. Its only consumers are admin surfaces.
+   */
+  atmosphere: adminProcedure
     .input(z.object({ forceFresh: z.boolean().optional() }).optional())
     .query(async ({ input }) => {
       return googleWorldService.getAtmosphere(input?.forceFresh);

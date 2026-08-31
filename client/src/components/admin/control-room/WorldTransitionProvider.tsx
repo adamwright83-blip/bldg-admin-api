@@ -39,6 +39,7 @@ import {
   type WorldRect,
 } from "./worldTransition";
 import { CANONICAL_GEOGRAPHIC_TARGETS } from "./worldTransition";
+import { LOS_ANGELES_ESTABLISHING } from "@shared/canonicalGeography";
 
 type Flight = {
   entityId: CanonicalBuildingId;
@@ -221,6 +222,9 @@ export function WorldTransitionProvider({
           className={`wt-stage phase-${phase} ${landed ? "is-landed" : ""} ${
             flight.reducedMotion ? "is-reduced" : ""
           }`}
+            data-world-phase={phase}
+            data-world-entity={flight.entityId}
+            data-world-reduced={flight.reducedMotion ? "true" : "false"}
             aria-hidden="true"
           >
           {runtimeConfig.data?.mapsJavascriptApiKey ? (
@@ -229,7 +233,7 @@ export function WorldTransitionProvider({
               target={{ latitude: flight.geographicTarget.latitude, longitude: flight.geographicTarget.longitude, altitude: flight.geographicTarget.altitude, range: flight.geographicTarget.range, tilt: flight.geographicTarget.tilt, heading: flight.geographicTarget.heading }}
               mode="maps_js_3d"
               interactive={false}
-              initialTarget={{ latitude: 34.0522, longitude: -118.2437, altitude: 5000, range: 18000, tilt: 35, heading: 0 }}
+              initialTarget={{ latitude: LOS_ANGELES_ESTABLISHING.latitude, longitude: LOS_ANGELES_ESTABLISHING.longitude, altitude: 5000, range: 18000, tilt: 35, heading: 0 }}
               onRendererReady={() => setPhase("reality_ready")}
               onApproachStarted={() => setPhase("approach")}
               onApproachCompleted={() => { setPhase("contamination"); phaseTimer.current = window.setTimeout(() => setPhase("threshold"), flight.reducedMotion ? 80 : 700); }}
