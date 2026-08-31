@@ -66,7 +66,7 @@ function BuildingArt({
         className="tw-building-layer"
         src={
           opus
-            ? "/assets/admin/control-room/tower-wars/opus-la-tower-plate-v3.png"
+            ? "/assets/admin/control-room/tower-wars/opus-la-tower-plate-v4.png"
             : "/assets/admin/control-room/tower-wars/century-park-east-tower-v2.png"
         }
         alt={`${NAMES[buildingId]}, ${damage.replace("-", " ")} damage today`}

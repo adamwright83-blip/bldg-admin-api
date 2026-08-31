@@ -149,9 +149,10 @@ describe("truth-bound visual rules", () => {
 
   it("uses the dimensional OPUS LA and Century Park East assets on Tower Wars and Home", () => {
     for (const asset of [
-      // The plate is opus-la-tower-v2 with only its baked-in club removed;
-      // the club now ships as a separate overlay so it can actually swing.
-      "opus-la-tower-plate-v3.png",
+      // The plate is opus-la-tower-v2 with its baked-in club AND ball
+      // removed; both now ship as separate overlays so the club can swing and
+      // the single ball can leave the tee.
+      "opus-la-tower-plate-v4.png",
       "century-park-east-tower-v2.png",
     ])
       expect(towerSource).toContain(asset);
