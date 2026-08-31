@@ -57,6 +57,8 @@ import type { TowerWarsSettlement } from "@shared/towerWarsSettlement";
 
 export type CanonicalBuildingView = {
   building: CanonicalBuilding;
+  /** Exact production work destination bound through this building's mission. */
+  pipelineId: number | null;
   continuity: ContinuityLink[];
   unbroken: boolean;
   firstBroken: ContinuityLink | null;
@@ -93,6 +95,7 @@ export type CanonicalBuildingWorld = {
  */
 export type MissionLocationRow = {
   missionId: number;
+  pipelineId: number | null;
   status: CommercialMissionStatus;
   opportunityId: number | null;
   /** Account reached via this mission's own opportunity. */
@@ -111,6 +114,7 @@ export type MissionLocationRow = {
 
 export type BoundMission = {
   missionId: number;
+  pipelineId: number | null;
   status: CommercialMissionStatus;
   accountId: number;
   locationId: number;
@@ -159,6 +163,7 @@ export function bindMissionsToLocations(
     if (!chosen || chosen.accountId == null) continue;
     bound.push({
       missionId,
+      pipelineId: chosen.pipelineId,
       status: chosen.status,
       accountId: chosen.accountId,
       locationId: chosen.locationId,
@@ -260,6 +265,7 @@ async function loadMissionLocationRows(
     return (await db
       .select({
         missionId: commercialMissions.id,
+        pipelineId: commercialPipelineRecords.id,
         status: commercialMissions.status,
         opportunityId: commercialMissions.opportunityId,
         accountId: commercialOpportunities.accountId,
@@ -403,6 +409,7 @@ export async function getCanonicalBuildingWorld(input: {
 
     buildings.push({
       building: composed,
+      pipelineId: mission?.pipelineId ?? null,
       continuity: traceBuildingContinuity(composed),
       unbroken: hasUnbrokenContinuity(composed),
       firstBroken: firstBrokenLink(composed),

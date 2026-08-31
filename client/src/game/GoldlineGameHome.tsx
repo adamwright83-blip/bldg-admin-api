@@ -3775,7 +3775,20 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                     {stronghold.chronicle.slice(0, 8).map(entry => (
                       <article key={entry.mission.key}>
                         <b>{entry.mission.name}</b>
-                        <small>{entry.mutation.destinationTreatment}</small>
+                        <span
+                          className={`world-route-treatment is-${entry.mutation.routeTreatment}`}
+                          aria-label={`Route ${entry.mutation.routeTreatment}`}
+                        >
+                          <i aria-hidden />
+                          route
+                        </span>
+                        <span
+                          className={`world-destination-treatment is-${entry.mutation.destinationTreatment}`}
+                          aria-label={`Destination ${entry.mutation.destinationTreatment}`}
+                        >
+                          <i aria-hidden />
+                          destination
+                        </span>
                       </article>
                     ))}
                     {!stronghold.chronicle.length ? (

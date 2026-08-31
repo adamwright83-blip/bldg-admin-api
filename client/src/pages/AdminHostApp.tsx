@@ -35,6 +35,8 @@ import LanternCityAtlas from "@/components/admin/control-room/LanternCityAtlas";
 import DriverIntelligenceOverview from "@/components/admin/control-room/DriverIntelligenceOverview";
 import { TowerWars } from "@/components/admin/control-room/TowerWars";
 import "@/components/admin/control-room/admin-control-room.css";
+import { WorldTransitionProvider } from "@/components/admin/control-room/WorldTransitionProvider";
+import { WorldDayPhaseIndicator } from "@/components/admin/control-room/WorldDayPhase";
 
 const ArchivedLevel4OffensiveHost = lazy(() =>
   import("@/components/Level4OffensiveHost").then(module => ({
@@ -44,6 +46,7 @@ const ArchivedLevel4OffensiveHost = lazy(() =>
 const CommercialPipelinePage = lazy(() => import("./CommercialPipelinePage"));
 const ChurnRadarPage = lazy(() => import("./ChurnRadarPage"));
 const SalesIntelAdmin = lazy(() => import("./SalesIntelAdmin"));
+const SandboxMode = lazy(() => import("@/components/admin/control-room/SandboxMode"));
 
 const LIVE_INTERNAL_TABS = new Set<AdminWorkspaceTab>([
   "Intake",
@@ -156,6 +159,10 @@ export default function AdminHostApp() {
   const leadsCount = trpc.admin.countUnreadLeads.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+  const sandboxCapability = trpc.system.towerWars.sandboxCapability.useQuery(
+    undefined,
+    { enabled: isAuthenticated, retry: false }
+  );
 
   useEffect(() => {
     if (path === "/admin") navigate("/", { replace: true });
@@ -170,6 +177,7 @@ export default function AdminHostApp() {
   const isGrowth = path === "/growth";
   const isLanternCity = path === "/growth/lantern-city";
   const isTowerWars = path === "/growth/tower-wars";
+  const isSandbox = path === "/growth/sandbox";
   const isDriverIntelligence = path.startsWith("/growth/driver-intelligence");
   const isGrowthBuildings = path === "/growth/buildings";
   const isGrowthOffers = path === "/growth/offers";
@@ -183,6 +191,7 @@ export default function AdminHostApp() {
     isGrowth ||
     isLanternCity ||
     isTowerWars ||
+    isSandbox ||
     isDriverIntelligence ||
     isGrowthBuildings ||
     isGrowthOffers ||
@@ -304,6 +313,7 @@ export default function AdminHostApp() {
   }
 
   return (
+    <WorldTransitionProvider>
     <div className="cr-shell">
       {isCounter && activeWorkspace !== "held_corporate" ? (
         <ResidentFollowupAlert />
@@ -316,10 +326,12 @@ export default function AdminHostApp() {
         requestCount={requestsCount.data ?? 0}
         leadCount={leadsCount.data ?? 0}
         userName={user?.name || "Admin"}
+        sandboxEnabled={sandboxCapability.data?.enabled === true}
         onOpenMobileNav={() => setMobileNavOpen(true)}
       />
 
       <div className="cr-main-column">
+        {isControlRoomSection || isHome ? <WorldDayPhaseIndicator /> : null}
         {!isHome &&
         !isOperatorDemo &&
         !isLive &&
@@ -354,9 +366,11 @@ export default function AdminHostApp() {
             onOpenCustomer={phone => setProfilePhone(phone)}
           />
         ) : isLanternCity ? (
-          <LanternCityAtlas onOpenCustomer={phone => setProfilePhone(phone)} />
+          <LanternCityAtlas onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
         ) : isTowerWars ? (
           <TowerWars onNavigate={nextPath => navigate(nextPath)} />
+        ) : isSandbox ? (
+          <Suspense fallback={<div className="cr-route-loading">Checking sandbox gate…</div>}><SandboxMode onNavigate={nextPath => navigate(nextPath)} /></Suspense>
         ) : isDriverIntelligence ? (
           <DriverIntelligenceOverview path={path} />
         ) : isGrowthBuildings ? (
@@ -449,5 +463,6 @@ export default function AdminHostApp() {
         />
       </div>
     </div>
+    </WorldTransitionProvider>
   );
 }

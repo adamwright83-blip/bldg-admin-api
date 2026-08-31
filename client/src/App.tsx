@@ -158,6 +158,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/growth",
   "/growth/lantern-city",
   "/growth/tower-wars",
+  "/growth/sandbox",
   "/growth/driver-intelligence",
   "/growth/driver-intelligence/overlook",
   "/growth/driver-intelligence/archive",
@@ -327,6 +328,7 @@ function AdminHostRouter() {
       <Route path="/growth" component={AdminHostApp} />
       <Route path="/growth/lantern-city" component={AdminHostApp} />
       <Route path="/growth/tower-wars" component={AdminHostApp} />
+      <Route path="/growth/sandbox" component={AdminHostApp} />
       <Route path="/growth/driver-intelligence" component={AdminHostApp} />
       <Route path="/growth/driver-intelligence/:rest*" component={AdminHostApp} />
       <Route path="/growth/buildings" component={AdminHostApp} />

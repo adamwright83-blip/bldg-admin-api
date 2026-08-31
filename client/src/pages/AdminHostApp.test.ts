@@ -77,6 +77,22 @@ describe("Admin six-domain shell", () => {
     expect(navSource).toContain('path: "/growth/driver-intelligence"');
     expect(navSource).toContain('label: "Overlook — Scout"');
   });
+
+  it("shows the sandbox route only from the server-authoritative capability", () => {
+    expect(source).toContain("towerWars.sandboxCapability.useQuery");
+    expect(source).toContain("sandboxEnabled={sandboxCapability.data?.enabled === true}");
+    expect(navSource).toContain('item.path !== "/growth/sandbox"');
+  });
+});
+
+describe("Admin Home battle truth", () => {
+  it("derives pressure and revenue cues from Tower Wars today, not customer penetration", () => {
+    expect(homeSource).toContain("towerWars.today.useQuery");
+    expect(homeSource).toContain("opusRevenue < cpeRevenue");
+    expect(homeSource).toContain('pressureBuilding === "opus_la"');
+    expect(homeSource).toContain("newest.buildingId");
+    expect(homeSource).toContain("const pressureBuilding = opusRevenue !== null && cpeRevenue !== null");
+  });
 });
 
 describe("route and archive safety", () => {
@@ -148,21 +164,25 @@ describe("truth-bound visual rules", () => {
   });
 
   it("uses the dimensional OPUS LA and Century Park East assets on Tower Wars and Home", () => {
-    for (const asset of [
-      // The plate is opus-la-tower-v2 with its baked-in club AND ball
-      // removed; both now ship as separate overlays so the club can swing and
-      // the single ball can leave the tee.
-      "opus-la-tower-plate-v4.png",
+    // Both surfaces now render CanonicalBuildingArt, so a building cannot show a
+    // different weapon depending on which screen you are on. Home previously used
+    // opus-la-siege-driver-v5 (old composite with a thin baked club) while Tower
+    // Wars used the plate plus the current driver overlay.
+    expect(towerSource).toContain("CanonicalBuildingArt");
+    // Home renders the same composition through CityTowerButton.
+    expect(homeSource).toContain("CityTowerButton");
+    for (const retired of [
+      "opus-la-siege-driver-v5.png",
+      "century-bazooka-optimized.png",
       "century-park-east-tower-v2.png",
-    ])
-      expect(towerSource).toContain(asset);
-    expect(homeSource).toContain("opus-la-siege-driver-v5.png");
-    expect(homeSource).toContain("century-park-east-tower-v2.png");
+      "opus-la-tower-v2.png",
+    ]) {
+      expect(towerSource).not.toContain(retired);
+      expect(homeSource).not.toContain(retired);
+    }
     expect(towerSource).not.toContain('className="tw-opus-art"');
-    // Exactly one club and one ball: the old CSS blob club and CSS circle
-    // ball were duplicates stacked on art that already contained both.
     expect(towerSource).not.toContain("tw-opus-ball");
-    expect(towerSource).toContain("tw-opus-driver");
+    expect(towerSource).toContain("ARENA_ORDER");
   });
 
   it("shows Clockhead and Collector only under authoritative conditions", () => {

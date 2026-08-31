@@ -3136,6 +3136,13 @@
   border: 1px solid #5c929f45;
   background: #10252e;
 }
+.world-route-treatment,.world-destination-treatment{display:inline-flex;align-items:center;gap:5px;padding:3px 7px;border:1px solid #ffffff26;border-radius:999px;color:#b8c4d4;font-size:8px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;transition:opacity .45s ease,border-color .45s ease,filter .45s ease}
+.world-route-treatment i,.world-destination-treatment i{width:6px;height:6px;border-radius:50%;background:currentColor;transition:transform .45s ease,box-shadow .45s ease}
+.world-route-treatment.is-fractured{border-style:dashed;color:#e07367}.world-route-treatment.is-fractured i{border-radius:1px;transform:rotate(45deg)}
+.world-route-treatment.is-stable{color:#6ed69a}.world-route-treatment.is-stable i{box-shadow:7px 0 #6ed69a,-7px 0 #6ed69a}
+.world-route-treatment.is-receding{opacity:.55;filter:saturate(.25)}.world-route-treatment.is-recovery{color:#f0be5c}.world-route-treatment.is-recovery i{animation:world-reignite 1.5s ease-in-out infinite}
+.world-destination-treatment.is-illuminated{color:#f4ce68}.world-destination-treatment.is-illuminated i{box-shadow:0 0 8px currentColor}.world-destination-treatment.is-guarded{color:#d87862}.world-destination-treatment.is-dormant{opacity:.5;filter:saturate(.2)}
+@keyframes world-reignite{50%{transform:scale(1.8);box-shadow:0 0 9px currentColor}}
 .stronghold-agents {
   flex-direction: row;
   flex-wrap: wrap;
