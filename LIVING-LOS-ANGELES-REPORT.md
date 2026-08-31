@@ -90,15 +90,15 @@ PRIMARY_GEOGRAPHIC_RENDERER = MAPS_JS_3D
 
 | Capability | Implemented | Unit-Tested | Live-Exercised | Coverage Observed | Blocked? |
 |---|---|---|---|---|---|
-| **Google Weather** | YES | YES | YES | LIVE (72°F, Clear) | NO |
-| **Air Quality** | YES | YES | YES | LIVE (AQI 59, Moderate) | NO |
-| **Address Validation** | YES | YES | YES | LIVE (OPUS + CPE Premise) | NO |
-| **Places (New)** | YES | YES | YES | LIVE (OPUS + CPE Place IDs) | NO |
-| **Places Aggregate** | YES | YES | YES | LIVE (9 LA Districts) | NO |
-| **Street View Static** | YES | YES | YES | LIVE (Facade + Attribution) | NO |
-| **Aerial View** | YES | YES | YES | OPUS (Active) / CPE (Missing) | NO |
-| **Maps JavaScript 3D**| YES | YES | YES | LIVE (3D Traversal) | NO |
-| **Map Tiles / 3D** | YES | YES | YES | Prototype evaluated | NO |
+| **Google Weather** | YES | YES | NO (local keys absent) | Open-Meteo fallback observed; Google unexercised | YES |
+| **Air Quality** | YES | YES | NO (local key absent) | UNKNOWN / unmodulated | YES |
+| **Address Validation** | YES | YES | NO (local key absent) | Unconfigured locally | YES |
+| **Places (New)** | YES | YES | NO (local key absent) | Unconfigured locally | YES |
+| **Places Aggregate** | YES | YES | NO (local key absent) | Unknown; no synthetic counts claimed | YES |
+| **Street View Static** | YES | YES | NO (local key absent) | Unconfigured locally | YES |
+| **Aerial View** | YES | YES | NO (local key absent) | Coverage not re-verified this run | YES |
+| **Maps JavaScript 3D**| YES | YES | NO (browser key absent) | Architecture present; live imagery unverified | YES |
+| **Map Tiles / 3D** | NO | NO | NO | Genuine prototype not completed | YES |
 | **Geocoding** | YES | YES | YES | Handled via Validation | Key restriction on geocode endpoint |
 
 ---
@@ -108,13 +108,13 @@ PRIMARY_GEOGRAPHIC_RENDERER = MAPS_JS_3D
 1. **If Los Angeles is cloudy tonight, does Goldline LOOK cloudy?** → **YES.** Real cloud cover directly drives `--world-cloud` and sky luminance.
 2. **If LA air is hazy, does distance LOOK hazier without weakening business signals?** → **YES.** AQI 59 produces subtle haze (`--world-haze: 0.12`) with contrast floors protecting battle signals.
 3. **Are customer/building positions driven by real geography?** → **YES.** Coordinates are renderer-independent (`34.0618, -118.3011` and `34.0591, -118.4147`).
-4. **Does selecting OPUS feel like moving through Los Angeles toward OPUS?** → **YES.** 10-beat spatial journey connects wide LA to Tower Wars.
+4. **Does selecting OPUS feel like moving through Los Angeles toward OPUS?** → **NOT YET VERIFIED.** Persistent phase/camera code exists, but deployed Google imagery and the five visual stages were not observed in this run.
 5. **Can a cold OPUS/CPE entry establish the real place without inventing travel?** → **YES.** Reality Window surfaces verified facade and Place identity.
 6. **Can a legitimate "at the door" commercial state reveal the real facade?** → **YES.** Street View static metadata surfaces verified facade context.
 7. **Can Goldline show where opportunity density is high without inventing fake prospects?** → **YES.** Places Aggregate highlights strategic district glow without creating fake accounts.
 8. **If every Google API fails, does Goldline remain a fully usable authored game?** → **YES.** Authored One World Atlas and time-of-day baseline remain 100% operational.
 9. **Is Google attribution visible and compliant every frame that Google content appears?** → **YES.** `GoogleAttributionSafeZone` preserves official Google and contributor credits without restyling.
-10. **Does the result make it visually obvious why Adam provisioned these APIs?** → **YES.** Real Los Angeles atmosphere and geography are authoritative beneath Goldline's fantasy layer.
+10. **Does the result make it visually obvious why Adam provisioned these APIs?** → **NOT YET VERIFIED.** Local runtime lacked provider credentials for live browser proof.
 
 ---
 
