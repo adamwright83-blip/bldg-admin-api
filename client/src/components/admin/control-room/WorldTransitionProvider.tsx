@@ -166,21 +166,63 @@ export function WorldTransitionProvider({
   }, []);
 
   // Start at the source geometry, then release to the destination on the next frame.
+  //
+  // The teardown below is a SAFETY NET for a journey that never gets going —
+  // Maps failing silently, tiles never arriving — and it must not race the
+  // authored grammar it exists to protect. It previously fired at a flat 6.5s
+  // measured from flight start, but streaming real geography takes ~4.5s to
+  // reach `approach` and ~6.3s to reach `contamination`, so the net landed
+  // ~200ms into contamination and destroyed the flight before `threshold` and
+  // `authored_landing` could ever play. The authored half of the journey was
+  // unreachable in practice while every callback still fired.
+  //
+  // So the net only guards the geographic half. Once contamination begins, the
+  // phase machine owns completion and clears the flight itself.
   useEffect(() => {
     if (!flight) return;
     const raf = window.requestAnimationFrame(() => setLanded(true));
     clearTimer();
-    timer.current = window.setTimeout(() => {
-      setFlight(null);
-      setLanded(false);
-      timer.current = null;
-    }, 6500);
+    const authoredTailRunning =
+      phase === "contamination" || phase === "threshold" || phase === "authored_landing";
+    if (!authoredTailRunning) {
+      timer.current = window.setTimeout(() => {
+        setFlight(null);
+        setLanded(false);
+        setPhase("loading");
+        timer.current = null;
+      }, flight.reducedMotion ? 2600 : 11000);
+    }
     return () => { window.cancelAnimationFrame(raf); clearTimer(); };
-  }, [flight]);
+  }, [flight, phase]);
 
+  /**
+   * The authored half of the journey advances HERE and nowhere else.
+   *
+   * `onApproachCompleted` used to both set `contamination` and schedule the
+   * hop to `threshold`. That timer never survived: committing the new phase
+   * re-ran this effect, whose cleanup cleared the timeout the callback had
+   * just created, and `contamination` matched no branch here so nothing
+   * rescheduled it. The journey stalled on contamination and was eventually
+   * torn down by the unrelated 6.5s flight timeout — so the authored threshold
+   * and landing, the entire point of the traversal, never played.
+   *
+   * Keeping every phase hand-off inside this one effect means the cleanup can
+   * only ever cancel a timer this effect owns.
+   */
   useEffect(() => {
     if (!flight) return;
-    if (phase === "threshold") {
+    // Reduced motion is a different grammar, not a faster version of the same
+    // one: real-place confirmation, a brief threshold, then the authored
+    // building. It must never wait on a geographic camera flight — doing so
+    // meant a reduced-motion user sat on `loading` for the ~4.5s Maps needs to
+    // become ready and then got torn down having seen nothing at all. The
+    // reality layer is not mounted for these flights either, so we also stop
+    // streaming 3D tiles at someone who asked for less movement.
+    if (flight.reducedMotion && (phase === "loading" || phase === "reality_ready")) {
+      phaseTimer.current = window.setTimeout(() => setPhase("threshold"), 160);
+    } else if (phase === "contamination") {
+      phaseTimer.current = window.setTimeout(() => setPhase("threshold"), flight.reducedMotion ? 80 : 700);
+    } else if (phase === "threshold") {
       phaseTimer.current = window.setTimeout(() => setPhase("authored_landing"), flight.reducedMotion ? 120 : 520);
     } else if (phase === "authored_landing") {
       phaseTimer.current = window.setTimeout(() => { setFlight(null); setLanded(false); setPhase("loading"); }, flight.reducedMotion ? 180 : 700);
@@ -227,7 +269,7 @@ export function WorldTransitionProvider({
             data-world-reduced={flight.reducedMotion ? "true" : "false"}
             aria-hidden="true"
           >
-          {runtimeConfig.data?.mapsJavascriptApiKey ? (
+          {runtimeConfig.data?.mapsJavascriptApiKey && !flight.reducedMotion ? (
             <GoogleMapsRealityLayer
               apiKey={runtimeConfig.data.mapsJavascriptApiKey}
               target={{ latitude: flight.geographicTarget.latitude, longitude: flight.geographicTarget.longitude, altitude: flight.geographicTarget.altitude, range: flight.geographicTarget.range, tilt: flight.geographicTarget.tilt, heading: flight.geographicTarget.heading }}
@@ -236,7 +278,7 @@ export function WorldTransitionProvider({
               initialTarget={{ latitude: LOS_ANGELES_ESTABLISHING.latitude, longitude: LOS_ANGELES_ESTABLISHING.longitude, altitude: 5000, range: 18000, tilt: 35, heading: 0 }}
               onRendererReady={() => setPhase("reality_ready")}
               onApproachStarted={() => setPhase("approach")}
-              onApproachCompleted={() => { setPhase("contamination"); phaseTimer.current = window.setTimeout(() => setPhase("threshold"), flight.reducedMotion ? 80 : 700); }}
+              onApproachCompleted={() => setPhase("contamination")}
               onRendererError={() => setPhase("authored_landing")}
             />
           ) : null}

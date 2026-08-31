@@ -182,7 +182,18 @@ async function main() {
     await tower.first().click();
     // Sample the journey densely enough to catch each authored phase.
     const seen = new Set<string>();
+    const timeline: string[] = [];
+    let lastPhase: string | null = "__init";
+    const t0 = Date.now();
     for (let i = 0; i < 90; i++) {
+      const cur = await page.evaluate(() => {
+        const el = document.querySelector("[data-world-phase]");
+        return el ? el.getAttribute("data-world-phase") : null;
+      });
+      if (cur !== lastPhase) {
+        timeline.push(`+${Date.now() - t0}ms ${cur ?? "(no stage)"}`);
+        lastPhase = cur;
+      }
       const phase = await page.evaluate(() => {
         const el = document.querySelector("[data-world-phase]");
         return el ? el.getAttribute("data-world-phase") : null;
@@ -193,6 +204,7 @@ async function main() {
       }
       await page.waitForTimeout(120);
     }
+    console.log(`  [${label}] timeline: ${timeline.join(" -> ")}`);
     await page.waitForTimeout(800);
     await snap("99-destination", `landed; url=${page.url()}`);
     if (consoleErrors.length) {
