@@ -228,3 +228,27 @@
 .cb-charge-layer.is-full .cb-charge-fill{filter:drop-shadow(0 0 7px currentColor)}
 .cb-art.is-opus_la .cb-charge-layer.is-full{color:#c39bff}
 .cb-art.is-century_park_east .cb-charge-layer.is-full{color:#ffc247}
+
+/* Psychological world signals — uncertainty around a situation.
+   Never inside a person's card, never as their portrait. Intensity is earned by
+   evidence or elapsed time, so it is expressed as presence rather than alarm. */
+.ps-layer{display:flex;margin:10px 0 0;padding:0;flex-direction:column;gap:8px;list-style:none}
+.ps-signal{display:grid;grid-template-columns:46px 1fr;align-items:center;gap:11px;
+  padding:9px 11px;border:1px solid var(--cr-line);border-radius:10px;background:var(--cr-paper)}
+.ps-art{width:46px;height:46px;object-fit:contain;filter:drop-shadow(0 2px 4px #0b1a2e22)}
+.ps-body{display:flex;min-width:0;flex-direction:column;gap:2px}
+.ps-label{font-size:11px;letter-spacing:.02em}
+.ps-because{color:var(--cr-muted);font-size:11px;line-height:1.45}
+.ps-cleared{color:var(--cr-muted);font-size:10px;font-style:italic;opacity:.85}
+/* Intensity: faint signals recede, insistent ones sit forward. Never red alarm —
+   these are conditions to understand, not failures to be scolded for. */
+.ps-signal.is-faint{opacity:.72}
+.ps-signal.is-faint .ps-art{width:36px;height:36px}
+.ps-signal.is-insistent{border-color:#c9b3f5;box-shadow:0 2px 10px #6630d41f}
+.ps-signal.is-insistent .ps-art{width:54px;height:54px}
+.ps-signal.is-vines.is-insistent{border-color:#a9d3ba;box-shadow:0 2px 10px #1f6b411f}
+.ps-signal.is-clock.is-insistent{border-color:#e0c08a;box-shadow:0 2px 10px #b9781c26}
+.ps-layer.is-compact .ps-signal{grid-template-columns:30px 1fr;padding:6px 8px}
+.ps-layer.is-compact .ps-art{width:30px;height:30px}
+.ps-layer.is-compact .ps-because{font-size:10px}
+@media (prefers-reduced-motion:reduce){.ps-signal{transition:none}}
