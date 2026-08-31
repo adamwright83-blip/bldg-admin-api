@@ -39,11 +39,12 @@ Final closure Adam Test answer: **Home now communicates the right hierarchy: cus
 
 ## Gates
 
-- Focused closure gate: 91/91 passing, including the strengthened same-entity transition suite.
-- Full Vitest: 3,948 passing, 6 skipped, 7 failing. The same seven failures are pre-existing and outside One World: two operations-events-dashboard assertions, operations-events source assertion, driver-restoration source assertion, marketplace dry-run route policy fixture, resident-intake fixture, and day-director production-contract count.
+- Focused closure gate: prior 91/91 passing, plus 49/49 passing for the spectacle-storage and settled-history sandbox regressions.
+- Full Vitest: 3,952 passing, 6 skipped, 7 failing. The same seven failures are pre-existing and outside One World: two operations-events-dashboard assertions, operations-events source assertion, driver-restoration source assertion, marketplace dry-run route policy fixture, resident-intake fixture, and day-director production-contract count.
 - `npm run build` (Vite client plus server/worker bundles): PASS.
 - `npx tsc --noEmit`: FAIL on pre-existing repository-wide errors outside One World. The production Vite build compiles the One World changes.
 - Browser: desktop visual pass at 1280×720; exact 390×844 pass with no horizontal overflow; reduced-motion media query active; gate-off Sandbox absent from Growth and direct URL shows only the disabled state; OPUS/CPE direct-link cold states retain the selected architecture and withhold score/damage claims.
+- Sandbox historical fixtures now project through the production daily settlement reducer; prior-day attacks and charge never become TODAY wounds or carry-over charge. Replay date maximum is derived from the Los Angeles business date on the client, matching the server cutoff.
 
 ## Google API capability decision
 

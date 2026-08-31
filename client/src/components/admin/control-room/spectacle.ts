@@ -78,30 +78,35 @@ export function magnitudeWeight(m: SpectacleMagnitude): number {
 
 const CURSOR_KEY = "goldline.spectacle.seen.v1";
 const MAX_REMEMBERED = 400;
+let storageUnavailable = false;
+let sessionCursor: SeenCursor = { seen: [] };
 
 export type SeenCursor = { seen: string[] };
 
 function safeRead(storage?: Storage): SeenCursor {
+  if (storageUnavailable) return { seen: [...sessionCursor.seen] };
   try {
     const raw = (storage ?? window.localStorage).getItem(CURSOR_KEY);
     if (!raw) return { seen: [] };
     const parsed = JSON.parse(raw) as SeenCursor;
     return Array.isArray(parsed?.seen) ? { seen: parsed.seen } : { seen: [] };
   } catch {
-    // Private mode, cleared storage, quota — a viewer with no cursor simply sees
-    // nothing replay, which is the safe direction to fail.
-    return { seen: [] };
+    storageUnavailable = true;
+    return { seen: [...sessionCursor.seen] };
   }
 }
 
 function safeWrite(cursor: SeenCursor, storage?: Storage): void {
+  sessionCursor = { seen: cursor.seen.slice(-MAX_REMEMBERED) };
+  if (storageUnavailable) return;
   try {
     (storage ?? window.localStorage).setItem(
       CURSOR_KEY,
       JSON.stringify({ seen: cursor.seen.slice(-MAX_REMEMBERED) })
     );
   } catch {
-    /* presentation only — never worth surfacing */
+    storageUnavailable = true;
+    /* presentation only — memory fallback remains local to this session */
   }
 }
 
@@ -137,6 +142,12 @@ export function readSeenCursor(storage?: Storage): SeenCursor {
 
 export function writeSeenCursor(cursor: SeenCursor, storage?: Storage): void {
   safeWrite(cursor, storage);
+}
+
+/** Test-only reset; production callers never need to clear presentation memory. */
+export function resetSessionSeenCursorForTests(): void {
+  storageUnavailable = false;
+  sessionCursor = { seen: [] };
 }
 
 /**

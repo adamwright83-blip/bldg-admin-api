@@ -11,6 +11,7 @@ import {
   unseenEventIds,
   writeSeenCursor,
   projectLiveEvent,
+  resetSessionSeenCursorForTests,
 } from "./spectacle";
 import { IMPACT_CLASSES } from "@shared/impactSignal";
 import { initialTowerWarsState } from "@shared/towerWars";
@@ -98,6 +99,7 @@ describe("the seen cursor is presentation, never truth", () => {
   });
 
   it("degrades to replaying nothing when storage is unavailable", () => {
+    resetSessionSeenCursorForTests();
     const hostile = {
       getItem: () => {
         throw new Error("blocked");
@@ -108,6 +110,18 @@ describe("the seen cursor is presentation, never truth", () => {
     } as unknown as Storage;
     expect(readSeenCursor(hostile)).toEqual({ seen: [] });
     expect(() => writeSeenCursor({ seen: ["a"] }, hostile)).not.toThrow();
+    resetSessionSeenCursorForTests();
+  });
+
+  it("keeps an in-memory cursor when storage is unavailable", () => {
+    resetSessionSeenCursorForTests();
+    const hostile = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } } as unknown as Storage;
+    const adopted = markSeen(["A", "B"], readSeenCursor(hostile));
+    writeSeenCursor(adopted, hostile);
+    expect(unseenEventIds(["A", "B"], readSeenCursor(hostile))).toEqual([]);
+    expect(unseenEventIds(["A", "B", "C"], readSeenCursor(hostile))).toEqual(["C"]);
+    expect(unseenEventIds(["A", "B"], readSeenCursor(hostile))).toEqual([]);
+    resetSessionSeenCursorForTests();
   });
 
   it("is never sent to the server", () => {
