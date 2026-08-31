@@ -158,6 +158,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/growth",
   "/growth/lantern-city",
   "/growth/tower-wars",
+  "/growth/sandbox",
   "/growth/driver-intelligence",
   "/growth/driver-intelligence/overlook",
   "/growth/driver-intelligence/archive",

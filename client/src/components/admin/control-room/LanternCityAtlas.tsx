@@ -149,7 +149,8 @@ export default function LanternCityAtlas({
           { id: "opus_la", latitude: 34.0618, longitude: -118.3011 },
         ] as const).map(tower => {
           const point = projectLatLngToLanternAtlas(tower);
-          return <CityTowerButton key={tower.id} buildingId={tower.id} className="lc-world-tower" style={{ left: `${point.x}%`, top: `${point.y}%` }} returnPath="/growth/lantern-city" onNavigate={onNavigate} subtitle="TODAY battle truth" />;
+          const edgeSafe = { x: Math.min(94, Math.max(8, point.x)), y: Math.min(92, Math.max(8, point.y)) };
+          return <CityTowerButton key={tower.id} buildingId={tower.id} className="lc-world-tower" style={{ left: `${edgeSafe.x}%`, top: `${edgeSafe.y}%` }} returnPath="/growth/lantern-city" onNavigate={onNavigate} subtitle="TODAY battle truth" />;
         })}
         {NEIGHBORHOODS.map(item => (
           <span

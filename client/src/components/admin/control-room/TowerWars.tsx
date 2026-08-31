@@ -204,9 +204,16 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   const replay = useReplay(data);
   if (today.isLoading && !data)
     return (
-      <div className="tw-loading">
-        Compiling today’s authoritative battle ledger…
-      </div>
+      <main className="tw-page">
+        <section className="tw-cold-world" aria-busy="true">
+          <img className="tw-environment" src="/assets/admin/control-room/tower-wars/battle-environment.jpg" alt="Sunlit Los Angeles establishing architecture" />
+          <div className="tw-arena-shade" />
+          <div className="tw-cold-building">
+            {enteredFor ? <CanonicalBuildingArt buildingId={enteredFor} /> : <><CanonicalBuildingArt buildingId="opus_la" /><CanonicalBuildingArt buildingId="century_park_east" /></>}
+          </div>
+          <div className="tw-cold-copy"><strong>Establishing the building</strong><span>Revenue, winner, charge, and damage remain unclaimed until authoritative truth arrives.</span></div>
+        </section>
+      </main>
     );
   if (!data)
     return (
