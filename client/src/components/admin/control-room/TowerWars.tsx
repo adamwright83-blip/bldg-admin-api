@@ -31,6 +31,7 @@ import {
   writeSeenCursor,
 } from "./spectacle";
 import type { SettledStratum } from "./facadeScars";
+import { SiegeComeback } from "./SiegeComeback";
 
 export { damageStateForIncomingAttacks } from "@shared/towerWars";
 export type TowerWarsData =
@@ -149,6 +150,7 @@ function useReplay(data: TowerWarsData | undefined) {
 
 export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   const [printPromiseId, setPrintPromiseId] = useState<string | null>(null);
+  const [comebackBuilding, setComebackBuilding] = useState<TowerWarsBuildingId | null>(null);
   // The building the camera was moving toward, carried from the city.
   const { approaching, arrive, isArriving } = useWorldTransition();
   const enteredFor =
@@ -173,6 +175,8 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
+  const trustedData = useRef<TowerWarsData | undefined>(undefined);
+  if (today.data) trustedData.current = today.data;
   const fulfill = trpc.system.towerWars.fulfillPromise.useMutation({
     onSuccess: () => today.refetch(),
   });
@@ -190,15 +194,15 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
     writeSeenCursor(cursor);
     setUnseenEvents(play);
   }, [ledgerKey]);
-  const data = today.data;
+  const data = today.data ?? trustedData.current;
   const replay = useReplay(data);
-  if (today.isLoading)
+  if (today.isLoading && !data)
     return (
       <div className="tw-loading">
         Compiling today’s authoritative battle ledger…
       </div>
     );
-  if (!data || today.isError)
+  if (!data)
     return (
       <div className="cr-empty-state">
         <div>
@@ -255,6 +259,8 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
 
   return (
     <main className={`tw-page ${compact ? "is-compact" : ""}`}>
+      {today.isError ? <div className="tw-confidence" role="status">Live feed interrupted · holding the last trusted world · new claims and mutating actions are suppressed</div> : null}
+      {comebackBuilding ? <SiegeComeback buildingId={comebackBuilding} onClose={() => setComebackBuilding(null)} onContinue={() => onNavigate("/commercial-pipeline")} /> : null}
       <section
         className={`tw-arena ${isArriving ? "tw-arriving" : ""}`}
         data-unseen-events={unseenEvents.length}
@@ -447,7 +453,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
               {promise ? (
                 <button
                   type="button"
-                  disabled={fulfill.isPending || activate.isPending}
+                  disabled={today.isError || fulfill.isPending || activate.isPending}
                   onClick={() => {
                     if (promise.promiseType === "offer_insert") {
                       flushSync(() => setPrintPromiseId(promise.id));
@@ -556,7 +562,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
         </div>
         <button
           type="button"
-          onClick={() => onNavigate("/commercial-pipeline")}
+          onClick={() => setComebackBuilding(youId)}
         >
           Engineer the comeback <ArrowRight />
         </button>

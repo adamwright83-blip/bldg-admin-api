@@ -36,6 +36,7 @@ import DriverIntelligenceOverview from "@/components/admin/control-room/DriverIn
 import { TowerWars } from "@/components/admin/control-room/TowerWars";
 import "@/components/admin/control-room/admin-control-room.css";
 import { WorldTransitionProvider } from "@/components/admin/control-room/WorldTransitionProvider";
+import { WorldDayPhaseIndicator } from "@/components/admin/control-room/WorldDayPhase";
 
 const ArchivedLevel4OffensiveHost = lazy(() =>
   import("@/components/Level4OffensiveHost").then(module => ({
@@ -322,6 +323,7 @@ export default function AdminHostApp() {
       />
 
       <div className="cr-main-column">
+        {isControlRoomSection || isHome ? <WorldDayPhaseIndicator /> : null}
         {!isHome &&
         !isOperatorDemo &&
         !isLive &&

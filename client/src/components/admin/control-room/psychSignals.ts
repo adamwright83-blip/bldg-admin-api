@@ -182,8 +182,10 @@ export function deriveSignals(ctx: SignalContext): PsychSignal[] {
   }
 
   // CLOCK — a real dated commitment, still ahead. Not vague urgency.
-  const untilCommitment = daysBetween(ctx.today, ctx.commitmentDueAt);
-  if (ctx.commitmentDueAt !== null && untilCommitment !== null && untilCommitment >= 0) {
+  const untilCommitment = ctx.commitmentDueAt === null
+    ? null
+    : daysBetween(ctx.today, ctx.commitmentDueAt);
+  if (untilCommitment !== null && untilCommitment >= 0) {
     out.push({
       kind: "clock",
       intensity: untilCommitment <= 0 ? "insistent" : untilCommitment <= 2 ? "present" : "faint",
