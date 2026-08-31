@@ -38,9 +38,22 @@ describe("no legacy club or ball geometry survives", () => {
 
 describe("the tower plate carries neither club nor ball", () => {
   it("uses the twice-cleaned plate and no earlier tower art", () => {
-    expect(tsx).toContain(OPUS_PIECE_ASSETS.plate);
-    expect(tsx).not.toContain("opus-la-tower-v2.png");
-    expect(tsx).not.toContain("opus-la-tower-plate-v3.png");
+    // Plates now live in buildingArt.ts so every surface composes identically.
+    const registryRaw = readFileSync(
+      new URL("./buildingArt.ts", import.meta.url),
+      "utf8"
+    );
+    // Strip comments: the docblock explains WHY those assets are retired, and a
+    // guard that trips on its own rationale is worse than no guard.
+    const registry = registryRaw
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    expect(registry).toContain(OPUS_PIECE_ASSETS.plate);
+    for (const stale of ["opus-la-tower-v2.png", "opus-la-tower-plate-v3.png"]) {
+      expect(tsx).not.toContain(stale);
+      // present only inside the RETIRED list, never as a live asset path
+      expect(registry.split("RETIRED_BUILDING_ART")[0]).not.toContain(stale);
+    }
   });
 
   it("ships the club and the ball as separate assets from the plate", () => {
@@ -123,18 +136,15 @@ describe("locked strike geometry", () => {
     expect(css).toContain(`transform-origin:${x}% ${y}%`);
   });
 
-  it("locks the club and ball to the tower's own scale", () => {
-    // The OPUS tower image is scaled 1.12 from centre bottom; both overlays
-    // must match it exactly or they drift off the building.
-    const towerScale = css.match(
-      /\.tw-piece\.is-opus \.tw-building-layer\{transform:scale\(([\d.]+)\)/
-    )?.[1];
-    expect(towerScale).toBe("1.12");
-    for (const rule of [
-      /\.tw-opus-driver\{[^}]*transform:scale\(1\.12\);transform-origin:center bottom/,
-      /\.tw-projectile\[data-weapon="golf-ball"\]\{[^}]*transform:scale\(1\.12\);transform-origin:center bottom/,
-    ]) {
-      expect(css).toMatch(rule);
-    }
+  it("locks every layer to the tower's scale via one container", () => {
+    // The scale now lives on .cb-art, so plate, scars, wounds and weapon are all
+    // children of one transform and cannot drift apart — which they previously
+    // could, leaving the OPUS plate at 301x517 and an overlay at 269x462.
+    expect(css).toContain(".cb-art.is-opus_la{transform:scale(1.12)}");
+    expect(css).toContain(".cb-art{position:absolute;inset:0;transform-origin:center bottom}");
+    // The ball is not a child of .cb-art, so it still carries the scale itself.
+    expect(css).toMatch(
+      /\.tw-projectile\[data-weapon="golf-ball"\]\{[^}]*transform:scale\(1\.12\);transform-origin:center bottom/
+    );
   });
 });

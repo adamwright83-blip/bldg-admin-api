@@ -3,6 +3,7 @@ import { ArrowRight, RefreshCw, TrendingUp, Users } from "lucide-react";
 import type { Order } from "@shared/types";
 import { trpc } from "@/lib/trpc";
 import { classifyLanternCustomer } from "@/components/admin/control-room/LanternCityAtlas";
+import { CanonicalBuildingArt } from "@/components/admin/control-room/CanonicalBuildingArt";
 
 const WORLD_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas.jpg";
 
@@ -65,8 +66,8 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
         <img src={WORLD_IMAGE} alt="Illustrated Los Angeles business world" /><div className="pwc-world-shade" />
         <header><strong>Live world overview — Los Angeles</strong><span className={sourceGap ? "has-gap" : ""}><i /> {sourceGap ? "Source gap" : "Live"}</span></header>
         {[{ label: "West Hollywood", x: 13, y: 24 }, { label: "Beverly Hills", x: 12, y: 52 }, { label: "Century City", x: 18, y: 81 }, { label: "Hollywood", x: 46, y: 37 }, { label: "Koreatown", x: 54, y: 76 }, { label: "Los Feliz", x: 78, y: 25 }, { label: "Silver Lake", x: 84, y: 50 }, { label: "Echo Park", x: 87, y: 77 }].map(neighborhood => <span key={neighborhood.label} className="pwc-place" style={{ left: `${neighborhood.x}%`, top: `${neighborhood.y}%` }}>{neighborhood.label}</span>)}
-        <button type="button" className="pwc-building cpe" onClick={() => onNavigate("/growth/tower-wars")}><img className="pwc-building-art" src="/assets/admin/control-room/tower-wars/century-park-east-tower-v2.png" alt="" /><strong>Century Park East</strong><small>Century City · {customers.isLoading || customers.isError ? "—" : buildingCounts.century} customers</small></button>
-        <button type="button" className="pwc-building opus" onClick={() => onNavigate("/growth/tower-wars")}><img className="pwc-building-art" src="/assets/admin/control-room/tower-wars/opus-la-siege-driver-v5.png" alt="" /><strong>OPUS LA</strong><small>Koreatown · {customers.isLoading || customers.isError ? "—" : buildingCounts.opus} customers</small></button>
+        <button type="button" className="pwc-building cpe" onClick={() => onNavigate("/growth/tower-wars?building=century_park_east")}><span className="pwc-building-canon"><CanonicalBuildingArt buildingId="century_park_east" /></span><strong>Century Park East</strong><small>Century City · {customers.isLoading || customers.isError ? "—" : buildingCounts.century} customers</small></button>
+        <button type="button" className="pwc-building opus" onClick={() => onNavigate("/growth/tower-wars?building=opus_la")}><span className="pwc-building-canon"><CanonicalBuildingArt buildingId="opus_la" /></span><strong>OPUS LA</strong><small>Koreatown · {customers.isLoading || customers.isError ? "—" : buildingCounts.opus} customers</small></button>
         {churnRisk > 0 ? <button type="button" className="pwc-risk-lantern" onClick={() => onNavigate("/growth/lantern-city")} aria-label={`${churnRisk} churn-risk lanterns`}><span className="pwc-lantern-symbol" /><b>{churnRisk}</b></button> : null}
       </div>
       <aside className="pwc-alerts">

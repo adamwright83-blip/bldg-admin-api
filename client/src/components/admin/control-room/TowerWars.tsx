@@ -21,7 +21,7 @@ import {
   type TowerWarsBuildingId,
 } from "@shared/towerWars";
 import { towerComparisonState } from "./towerWarsGeometry";
-import { FacadeScarLayer } from "./FacadeScarLayer";
+import { CanonicalBuildingArt } from "./CanonicalBuildingArt";
 import type { SettledStratum } from "./facadeScars";
 
 export { damageStateForIncomingAttacks } from "@shared/towerWars";
@@ -36,6 +36,15 @@ type Contributor = {
   orderCount: number;
   events: Array<{ occurredAt: string }>;
 };
+
+/**
+ * Fixed battlefield order. OPUS always holds the left slot and Century Park East the
+ * right, because their weapons face each other: OPUS strikes left-to-right, CPE
+ * right-to-left. Roles (YOU / RIVAL / leader) are badges and colour only — if role
+ * drove the slot, a lead change would make a building physically swap sides and
+ * change height, which it previously did.
+ */
+const ARENA_ORDER: TowerWarsBuildingId[] = ["opus_la", "century_park_east"];
 
 const NAMES: Record<TowerWarsBuildingId, string> = {
   opus_la: "OPUS LA",
@@ -52,46 +61,27 @@ function money(cents: number) {
 
 function BuildingArt({
   buildingId,
-  damage,
   strata,
+  businessDate,
+  incomingToday,
+  strikesRevealed,
 }: {
   buildingId: TowerWarsBuildingId;
-  damage: TowerDamageState;
   strata: readonly SettledStratum[];
+  businessDate: string;
+  incomingToday: number;
+  strikesRevealed?: number;
 }) {
-  const opus = buildingId === "opus_la";
+  // One composition, shared with Home and Lantern City, so the building cannot
+  // change identity or weapon between screens.
   return (
-    <>
-      <img
-        className="tw-building-layer"
-        src={
-          opus
-            ? "/assets/admin/control-room/tower-wars/opus-la-tower-plate-v4.png"
-            : "/assets/admin/control-room/tower-wars/century-park-east-tower-v2.png"
-        }
-        alt={`${NAMES[buildingId]}, ${damage.replace("-", " ")} damage today`}
-      />
-      {/* Settled history sits on the architecture, beneath today's effects. */}
-      <FacadeScarLayer
-        strata={strata}
-        buildingId={buildingId}
-        buildingName={NAMES[buildingId]}
-      />
-      {opus ? (
-        <>
-          <span
-            className="tw-opus-driver"
-            aria-label="Giant architectural golf driver, addressing the ball"
-          />
-        </>
-      ) : (
-        <img
-          className="tw-cpe-launcher"
-          src="/assets/admin/control-room/tower-wars/century-bazooka-optimized.png"
-          alt="Compact rooftop valet bazooka"
-        />
-      )}
-    </>
+    <CanonicalBuildingArt
+      buildingId={buildingId}
+      businessDate={businessDate}
+      strata={strata}
+      incomingToday={incomingToday}
+      strikesRevealed={strikesRevealed}
+    />
   );
 }
 
@@ -261,24 +251,29 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
         <h1 id="tower-wars-title" className="sr-only">
           Tower Wars Today
         </h1>
-        {[youId, rivalId].map((buildingId, index) => {
+        {ARENA_ORDER.map(buildingId => {
           const building = state.buildings[buildingId];
           return (
             <div
               key={buildingId}
-              className={`tw-piece ${index === 0 ? "tw-piece-you" : "tw-piece-rival"} ${buildingId === "opus_la" ? "is-opus" : "is-century"} ${replay.activeAttack === buildingId ? "is-firing" : ""}`}
+              className={`tw-piece ${buildingId === youId ? "tw-piece-you" : "tw-piece-rival"} ${buildingId === "opus_la" ? "is-opus" : "is-century"} ${replay.activeAttack === buildingId ? "is-firing" : ""}`}
               data-damage={building.damage}
             >
-              <span className={`tw-possession ${index ? "is-rival" : ""}`}>
-                {hasLoser ? (index ? "Rival" : "You") : "Tie"}
+              <span
+                className={`tw-possession ${buildingId === youId ? "" : "is-rival"}`}
+              >
+                {hasLoser ? (buildingId === youId ? "You" : "Rival") : "Tie"}
               </span>
               <BuildingArt
                 buildingId={buildingId}
-                damage={building.damage}
+                businessDate={data.businessDate}
                 strata={
                   settlementQuery.data?.settlement.buildings[buildingId]
                     .strata ?? []
                 }
+                /* The replay reducer already yields the prefix count, so damage at
+                   event N equals business state after event N for free. */
+                incomingToday={building.incomingAttackCount}
               />
               <span
                 className="tw-projectile"
