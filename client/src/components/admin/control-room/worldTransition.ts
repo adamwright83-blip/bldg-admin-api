@@ -57,6 +57,11 @@ export type WorldTransition = {
   startedAt: number;
 };
 
+export const CANONICAL_GEOGRAPHIC_TARGETS = {
+  opus_la: { latitude: 34.0618, longitude: -118.3011, altitude: 700, range: 1400, heading: 195, tilt: 55 },
+  century_park_east: { latitude: 34.0591, longitude: -118.4147, altitude: 700, range: 1400, heading: 140, tilt: 55 },
+} as const;
+
 export const TRAVERSAL_MS = 900;
 export const ESTABLISHING_MS = 420;
 /** Reduced motion keeps identity and causality, and drops the vestibular movement. */

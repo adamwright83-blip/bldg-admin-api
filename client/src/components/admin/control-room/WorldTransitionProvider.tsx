@@ -26,6 +26,8 @@ import {
   useState,
 } from "react";
 import { CanonicalBuildingArt } from "./CanonicalBuildingArt";
+import { GoogleMapsRealityLayer } from "./GoogleMapsRealityLayer";
+import { trpc } from "@/lib/trpc";
 import type { CanonicalBuildingId } from "./buildingArt";
 import {
   flipTransform,
@@ -36,6 +38,7 @@ import {
   type WorldCamera,
   type WorldRect,
 } from "./worldTransition";
+import { CANONICAL_GEOGRAPHIC_TARGETS } from "./worldTransition";
 
 type Flight = {
   entityId: CanonicalBuildingId;
@@ -45,6 +48,7 @@ type Flight = {
   sourceRect: WorldRect;
   destRect: WorldRect;
   reducedMotion: boolean;
+  geographicTarget: typeof import("./worldTransition").CANONICAL_GEOGRAPHIC_TARGETS[CanonicalBuildingId];
 };
 
 type Pending = {
@@ -99,6 +103,7 @@ export function WorldTransitionProvider({
   const [flight, setFlight] = useState<Flight | null>(null);
   const [landed, setLanded] = useState(false);
   const [returnAnchor, setReturnAnchor] = useState<string | null>(null);
+  const runtimeConfig = trpc.system.google.runtimeConfig.useQuery(undefined, { staleTime: Infinity });
   const timer = useRef<number | null>(null);
 
   const clearTimer = () => {
@@ -143,6 +148,7 @@ export function WorldTransitionProvider({
         sourceRect: current.sourceRect,
         destRect,
         reducedMotion: current.reducedMotion,
+        geographicTarget: CANONICAL_GEOGRAPHIC_TARGETS[current.entityId],
       });
       return null;
     });
@@ -197,6 +203,14 @@ export function WorldTransitionProvider({
           }`}
           aria-hidden="true"
         >
+          {runtimeConfig.data?.mapsJavascriptApiKey ? (
+            <GoogleMapsRealityLayer
+              apiKey={runtimeConfig.data.mapsJavascriptApiKey}
+              target={{ latitude: flight.geographicTarget.latitude, longitude: flight.geographicTarget.longitude, altitude: flight.geographicTarget.altitude, tilt: flight.geographicTarget.tilt, heading: flight.geographicTarget.heading }}
+              mode="maps_js_3d"
+              interactive={false}
+            />
+          ) : null}
           {/* Real spatial journey / fantasy contamination FX */}
           {!flight.reducedMotion ? (
             <div className="wt-fantasy-contamination">
