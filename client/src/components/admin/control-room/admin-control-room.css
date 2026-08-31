@@ -273,3 +273,98 @@
 .pwc-building.is-pressure .pwc-building-canon{filter:drop-shadow(0 0 14px #d52e2e);animation:pwc-pressure 1.8s ease-in-out infinite}.pwc-building.is-pressure>strong{background:#7f1717}.pwc-building.is-revenue-cue .pwc-building-canon{filter:drop-shadow(0 0 18px #42e986);animation:pwc-revenue-cue .7s ease-out both}@keyframes pwc-pressure{50%{filter:drop-shadow(0 0 24px #e53232)}}@keyframes pwc-revenue-cue{0%{transform:translateX(-50%) scale(.94)}45%{transform:translateX(-50%) scale(1.08)}100%{transform:translateX(-50%) scale(1)}}
 .lc-lantern,.lc-lantern-body,.lc-lantern-handle,.lc-lantern-base{transition:background .7s ease,border-color .7s ease,box-shadow .7s ease,filter .7s ease,transform .16s ease}.lc-lantern.state-dimming .lc-lantern-body{animation:lc-gutter 1.2s ease-out both}.lc-lantern.state-active .lc-lantern-body{animation:lc-reignite .8s ease-out both}@keyframes lc-gutter{45%{filter:brightness(.75)}100%{filter:none}}@keyframes lc-reignite{0%{filter:brightness(.6);box-shadow:0 0 3px #ffc324}55%{filter:brightness(1.35);box-shadow:0 0 24px 8px #ffc324}100%{filter:none}}
 @media (prefers-reduced-motion:reduce){.pwc-building.is-pressure .pwc-building-canon,.pwc-building.is-revenue-cue .pwc-building-canon,.lc-lantern .lc-lantern-body{animation:none!important}.lc-lantern,.lc-lantern-body,.lc-lantern-handle,.lc-lantern-base{transition:none!important}}
+
+/* ── Living Los Angeles / Google Activation Surface ───────────────────────── */
+
+.cr-world-geography-surface{position:relative;width:100%;min-height:430px;height:100%;overflow:hidden;border-radius:12px;background:#0d1c2d}
+.cr-world-skin-container{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.cr-world-skin-img{width:100%;height:100%;object-fit:cover;filter:saturate(var(--world-ground-saturation, 1.0)) contrast(var(--world-atmosphere-contrast, 1.0))}
+.cr-world-skin-shade{position:absolute;inset:0;background:linear-gradient(180deg,#0a254018 0%,transparent 35%,#04122044 100%)}
+
+/* Atmosphere Overlays */
+.cr-world-atmosphere-root{position:absolute;inset:0;pointer-events:none;z-index:3}
+.cr-atmo-lighting-layer{position:absolute;inset:0;opacity:calc(1 - var(--world-sky-luminance, 0.9));background:radial-gradient(ellipse at 50% 20%,rgba(10,25,50,0.05) 0%,rgba(3,10,20,0.65) 100%);mix-blend-mode:multiply}
+.cr-atmo-cloud-layer{position:absolute;inset:0;opacity:calc(var(--world-cloud, 0.0) * 0.45);background:radial-gradient(circle at 30% 20%,rgba(255,255,255,0.7) 0%,transparent 50%),radial-gradient(circle at 75% 65%,rgba(200,215,235,0.6) 0%,transparent 60%);mix-blend-mode:screen}
+.cr-atmo-haze-layer{position:absolute;inset:0;opacity:calc(var(--world-haze, 0.0) * 0.85);background:linear-gradient(180deg,rgba(220,195,160,0.3) 0%,rgba(180,185,195,0.45) 60%,transparent 100%);backdrop-filter:blur(1.5px)}
+.cr-atmo-rain-layer{position:absolute;inset:0;overflow:hidden;opacity:var(--world-rain-density, 0.0)}
+.cr-rain-streak{position:absolute;width:1px;height:40px;background:linear-gradient(180deg,transparent,#c5e0ff 80%,transparent);animation:cr-rain-fall 0.45s linear infinite}
+.cr-rain-streak.r1{left:25%;animation-delay:0s}
+.cr-rain-streak.r2{left:55%;animation-delay:0.18s}
+.cr-rain-streak.r3{left:82%;animation-delay:0.32s}
+@keyframes cr-rain-fall{from{transform:translateY(-50px) rotate(12deg)}to{transform:translateY(550px) rotate(12deg)}}
+
+/* Opportunity Pressure Layer (Places Aggregate) */
+.cr-opportunity-layer{position:absolute;inset:0;pointer-events:none;z-index:2}
+.cr-district-glow{position:absolute;width:110px;height:110px;transform:translate(-50%,-50%);border-radius:50%;filter:blur(18px);transition:opacity 0.4s ease}
+.cr-district-glow.pressure-unexplored{background:radial-gradient(circle,rgba(60,80,120,0.4) 0%,transparent 70%)}
+.cr-district-glow.pressure-high_potential{background:radial-gradient(circle,rgba(255,180,30,0.65) 0%,rgba(240,110,15,0.3) 45%,transparent 75%)}
+.cr-district-glow.pressure-contested{background:radial-gradient(circle,rgba(160,85,255,0.5) 0%,transparent 70%)}
+.cr-district-glow.pressure-stronghold{background:radial-gradient(circle,rgba(40,210,110,0.45) 0%,transparent 70%)}
+
+/* Strategic Neighborhoods */
+.cr-world-neighborhoods{position:absolute;inset:0;pointer-events:none;z-index:4}
+.cr-world-neighborhood-label{position:absolute;transform:translate(-50%,-50%);padding:3px 7px;border:1px solid rgba(220,210,195,0.85);border-radius:4px;color:#181628;background:rgba(255,253,245,0.92);box-shadow:0 2px 6px rgba(10,20,35,0.2);font-size:10px;font-weight:800;text-transform:uppercase;white-space:nowrap;letter-spacing:0.04em}
+
+/* Towers & Anchors */
+.cr-world-towers-layer{position:absolute;inset:0;z-index:5}
+.cr-world-tower-anchor{position:absolute;transform:translate(-50%,-80%);display:flex;flex-direction:column;align-items:center}
+.cr-reality-trigger-btn{margin-top:2px;padding:2px 6px;border:1px solid #c9b1ff;border-radius:4px;color:#28105c;background:#fffde8;font-size:8px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.25);transition:transform 0.15s ease}
+.cr-reality-trigger-btn:hover{transform:scale(1.08);background:#f2e6ff;color:#4c1598}
+
+/* Reality Window */
+.cr-reality-window{position:fixed;right:24px;bottom:24px;width:min(440px,calc(100vw - 48px));max-height:85vh;overflow-y:auto;z-index:90;padding:20px;border:1px solid #d4dbe8;border-radius:14px;background:#ffffff;box-shadow:0 20px 60px rgba(7,20,40,0.42)}
+.cr-reality-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.cr-reality-tag{display:inline-flex;align-items:center;gap:4px;color:#6730d4;font-size:9px;font-weight:850;text-transform:uppercase}
+.cr-reality-header h2{margin:3px 0 2px;font-size:20px;letter-spacing:-0.02em}
+.cr-reality-header p{margin:0;color:var(--cr-muted);font-size:11px}
+.cr-reality-header button{border:0;background:transparent;padding:4px;cursor:pointer;color:var(--cr-muted)}
+.cr-reality-tabs{display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid #eef2f7;padding-bottom:8px}
+.cr-reality-tabs button{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border:1px solid #dce2ed;border-radius:7px;background:#f7f9fc;color:var(--cr-ink);font-size:11px;font-weight:750;cursor:pointer}
+.cr-reality-tabs button.is-active{border-color:#753de0;background:#6f36db;color:#fff}
+.cr-reality-viewport{min-height:220px}
+.cr-reality-image-frame,.cr-reality-video-frame{position:relative;width:100%;height:220px;border-radius:9px;overflow:hidden;background:#06101c}
+.cr-reality-photo,.cr-reality-video{width:100%;height:100%;object-fit:cover}
+.cr-reality-badge{position:absolute;left:10px;bottom:10px;padding:3px 8px;border-radius:4px;background:rgba(6,18,34,0.85);color:#fff;font-size:9px;font-weight:800;text-transform:uppercase}
+.cr-reality-fallback{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;padding:16px;border:1px dashed #d5dde8;border-radius:9px;text-align:center;background:#f9fafc}
+.cr-reality-art-preview{width:100px;height:120px;margin-bottom:8px}
+.cr-reality-seam-grid{display:grid;grid-template-columns:100px 1fr;gap:14px;align-items:center}
+.cr-reality-details dl{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0}
+.cr-reality-details dt{font-size:8px;color:var(--cr-muted);text-transform:uppercase}
+.cr-reality-details dd{margin:2px 0 0;font-size:11px;font-weight:700}
+.cr-reality-link{display:inline-flex;align-items:center;gap:4px;margin-top:10px;color:#6730d4;font-size:10px;font-weight:750;text-decoration:none}
+.cr-reality-attribution{margin-top:12px}
+
+/* Google Maps Reality Layer & View Switcher */
+.cr-maps-reality-wrapper{position:absolute;inset:0;width:100%;height:100%}
+.cr-maps-viewport{width:100%;height:100%}
+.cr-world-view-switcher{position:absolute;right:14px;top:14px;z-index:10;display:flex;padding:3px;border-radius:8px;background:rgba(6,18,34,0.88);box-shadow:0 4px 14px rgba(0,0,0,0.3)}
+.cr-world-view-switcher button{padding:5px 11px;border:0;border-radius:6px;background:transparent;color:#bdcad9;font-size:10px;font-weight:750;cursor:pointer}
+.cr-world-view-switcher button.is-active{background:#6730d4;color:#fff}
+
+/* Protected Google Attribution Safe Zone */
+.cr-google-attribution-safezone{position:absolute;left:10px;bottom:10px;z-index:15;display:flex;align-items:center;gap:8px;padding:3px 9px;border-radius:4px;background:rgba(255,255,255,0.88);backdrop-filter:blur(3px);font-size:9px;color:#333;box-shadow:0 1px 4px rgba(0,0,0,0.2)}
+.cr-google-word{font-weight:750;font-family:Roboto,sans-serif;color:#4285F4}
+.cr-google-third-party-credits{font-size:8.5px;color:#555}
+.cr-attribution-link{color:#1a73e8;text-decoration:none}
+.cr-attribution-link:hover{text-decoration:underline}
+
+/* Fantasy Contamination in Traversal */
+.wt-fantasy-contamination{position:absolute;inset:0;pointer-events:none;z-index:30}
+.wt-gold-stream{position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,rgba(255,210,60,0.22) 0%,transparent 60%);animation:wt-stream 0.85s ease-out forwards}
+.wt-spark-burst{position:absolute;left:50%;top:50%;width:8px;height:8px;border-radius:50%;box-shadow:0 0 40px 14px #ffc820;animation:wt-burst 0.75s ease-out forwards}
+@keyframes wt-stream{0%{opacity:0;transform:scale(0.8)}50%{opacity:1;transform:scale(1.1)}100%{opacity:0;transform:scale(1.4)}}
+@keyframes wt-burst{0%{opacity:1;transform:scale(0.2)}100%{opacity:0;transform:scale(3)}}
+
+/* Sandbox Google Spine Grid */
+.sb-google-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:12px}
+.sb-cap-card{padding:10px 12px;border:1px solid #ffffff1c;border-radius:8px;background:#ffffff06}
+.sb-cap-card.is-available{border-color:#2ebb6644;background:#1538221c}
+.sb-cap-card.is-degraded{border-color:#e0a02044;background:#382c151c}
+.sb-cap-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.sb-cap-head strong{font-size:9.5px;letter-spacing:0.04em}
+.sb-cap-badge{padding:2px 6px;border-radius:4px;font-size:7.5px;font-weight:850;text-transform:uppercase}
+.sb-cap-badge.is-available{background:#188c45;color:#fff}
+.sb-cap-badge.is-degraded{background:#b87a0c;color:#fff}
+.sb-cap-badge.is-unconfigured{background:#444d5c;color:#c0c9d6}
+.sb-cap-body small{display:block;color:#9eb0c4;font-size:8px}
+.pwc-header-actions{display:flex;align-items:center;gap:10px}

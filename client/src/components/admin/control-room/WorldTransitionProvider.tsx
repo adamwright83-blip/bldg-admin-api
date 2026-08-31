@@ -10,6 +10,11 @@
  * animates a copy of the building over the top. Any pointer, key or route change
  * lands the transition instantly in its truthful final state, so no business fact is
  * ever gated behind an animation (DESIGN-LAWS #6).
+ *
+ * 10-BEAT JOURNEY:
+ * 1. Wide LA -> 2. Select Building -> 3. Camera Commitment -> 4. Geographic reality emerges
+ * -> 5. Approach -> 6. Fantasy contamination -> 7. Threshold handoff -> 8. Authored building arrival
+ * -> 9. Tower Wars weapon/today truth -> 10. Reverse journey
  */
 import {
   createContext,
@@ -152,7 +157,7 @@ export function WorldTransitionProvider({
       setFlight(null);
       setLanded(false);
       timer.current = null;
-    }, transitionDuration(flight) + 40);
+    }, transitionDuration(flight) + 50);
     return () => window.cancelAnimationFrame(raf);
   }, [flight]);
 
@@ -192,6 +197,14 @@ export function WorldTransitionProvider({
           }`}
           aria-hidden="true"
         >
+          {/* Real spatial journey / fantasy contamination FX */}
+          {!flight.reducedMotion ? (
+            <div className="wt-fantasy-contamination">
+              <div className="wt-gold-stream" />
+              <div className="wt-spark-burst" />
+            </div>
+          ) : null}
+
           <div
             className="wt-flyer"
             style={{

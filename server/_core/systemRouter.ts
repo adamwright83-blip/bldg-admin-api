@@ -34,6 +34,7 @@ import { dayDirectorRouter } from "../dayDirector/dayDirectorRouter";
 import { towerWarsRouter } from "../towerWars/towerWarsRouter";
 import { geographicTruthRouter } from "../geography/geographicTruthRouter";
 import { canonicalBuildingRouter } from "../canonicalBuilding/canonicalBuildingRouter";
+import { googleRouter } from "../google/googleRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
@@ -69,6 +70,7 @@ export const systemRouter = router({
   towerWars: towerWarsRouter,
   geographicTruth: geographicTruthRouter,
   canonicalBuilding: canonicalBuildingRouter,
+  google: googleRouter,
   health: publicProcedure
     .input(
       z.object({
