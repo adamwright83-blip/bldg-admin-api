@@ -52,6 +52,7 @@ import {
   resolveTrustedClientIp,
 } from "../dayforgeSecurity/dayforgeSecurity";
 import { registerDayforgeRetentionRoute } from "../dayforgeRetention/retentionRoute";
+import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
 
 const warnedUnknownTenantHosts = new Set<string>();
 const vendorOnboardingRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -778,6 +779,9 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    if (process.env.NODE_ENV === "production") {
+      startAutomaticGeographicReconciliation();
+    }
   });
 }
 

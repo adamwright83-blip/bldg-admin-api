@@ -414,10 +414,7 @@ for (const [sql, label] of [
   [`ALTER TABLE entity_locations ADD COLUMN lastAttemptAt TIMESTAMP NULL AFTER geocodeError`, "entity_locations.lastAttemptAt"],
   [`ALTER TABLE entity_locations ADD COLUMN createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`, "entity_locations.createdAt"],
   [`ALTER TABLE entity_locations ADD COLUMN updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`, "entity_locations.updatedAt"],
-]) await runRequired(sql, label).catch(error => {
-  if (error.code === "ER_DUP_FIELDNAME" || String(error.message).includes("Duplicate column")) console.log("→ already exists, skipping:", label);
-  else throw error;
-});
+]) await run(sql, label);
 
 await runRequired(
   `CREATE TABLE IF NOT EXISTS tower_wars_promises (

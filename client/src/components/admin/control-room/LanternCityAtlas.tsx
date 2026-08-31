@@ -6,6 +6,8 @@ import { WorldGeographySurface } from "./WorldGeographySurface";
 import type { GeographicEntity } from "./GoogleMapsRealityLayer";
 import { WorldDayPhaseIndicator } from "./WorldDayPhase";
 import { clusterGeographicCustomers, clustersAsGoogleEntities } from "./customerGeography";
+import type { CustomerLocationCluster } from "./customerGeography";
+import { CustomerClusterDetail } from "./CustomerClusterDetail";
 
 export {
   inferCustomerCadence,
@@ -26,9 +28,7 @@ export default function LanternCityAtlas({
   onNavigate: (path: string) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [selectedCustomer, setSelectedCustomer] = useState<
-    NonNullable<ReturnType<typeof useAtlasData>>["customers"][number] | null
-  >(null);
+  const [selectedCluster, setSelectedCluster] = useState<CustomerLocationCluster | null>(null);
   const [selectedPursuit, setSelectedPursuit] = useState<
     NonNullable<ReturnType<typeof useAtlasData>>["pursued"][number] | null
   >(null);
@@ -83,7 +83,7 @@ export default function LanternCityAtlas({
     () => [
       ...clustersAsGoogleEntities(customerClusters, cluster => {
         setSelectedPursuit(null);
-        setSelectedCustomer(cluster.customers[0] as any);
+        setSelectedCluster(cluster);
       }),
       ...visiblePursuits.map(item => ({
         id: `pursued:${item.pipelineId}`,
@@ -92,7 +92,7 @@ export default function LanternCityAtlas({
         label: item.name,
         kind: "pursued" as const,
         onSelect: () => {
-          setSelectedCustomer(null);
+          setSelectedCluster(null);
           setSelectedPursuit(item);
         },
       })),
@@ -199,7 +199,7 @@ export default function LanternCityAtlas({
               }}
               onClick={() => {
                 setSelectedPursuit(null);
-                setSelectedCustomer(cluster.customers[0] as any);
+                setSelectedCluster(cluster);
               }}
               aria-label={`${cluster.total} customer${cluster.total === 1 ? "" : "s"} at this location`}
             >
@@ -220,7 +220,7 @@ export default function LanternCityAtlas({
                 top: `${item.location!.y}%`,
               }}
               onClick={() => {
-                setSelectedCustomer(null);
+                setSelectedCluster(null);
                 setSelectedPursuit(item);
               }}
               aria-label={`Pursued: ${item.name}`}
@@ -290,58 +290,7 @@ export default function LanternCityAtlas({
         </article>
       </section>
 
-      {selectedCustomer ? (
-        <aside className="lc-detail" aria-live="polite">
-          <button
-            type="button"
-            onClick={() => setSelectedCustomer(null)}
-            aria-label="Close customer detail"
-          >
-            <X />
-          </button>
-          <span>
-            {selectedCustomer.cadence.state} lantern ·{" "}
-            {selectedCustomer.cadence.confidence} cadence
-          </span>
-          <h2>{selectedCustomer.displayName}</h2>
-          <p>
-            {selectedCustomer.location?.canonicalAddress ??
-              selectedCustomer.address}
-            {selectedCustomer.unit ? ` · Unit ${selectedCustomer.unit}` : ""}
-          </p>
-          <dl>
-            <div>
-              <dt>Normal cadence</dt>
-              <dd>
-                {selectedCustomer.cadence.expectedCadenceDays
-                  ? `${selectedCustomer.cadence.expectedCadenceDays} days`
-                  : "Sparse history"}
-              </dd>
-            </div>
-            <div>
-              <dt>Days since order</dt>
-              <dd>{selectedCustomer.cadence.daysSinceLastOrder}</dd>
-            </div>
-            <div>
-              <dt>Expected next</dt>
-              <dd>
-                {selectedCustomer.cadence.expectedNextOrder ?? "Unavailable"}
-              </dd>
-            </div>
-            <div>
-              <dt>Cycles missed</dt>
-              <dd>{selectedCustomer.cadence.cyclesMissed ?? "Unavailable"}</dd>
-            </div>
-          </dl>
-          <button
-            type="button"
-            className="lc-open-customer"
-            onClick={() => onOpenCustomer(selectedCustomer.phone)}
-          >
-            Open customer evidence <ArrowRight />
-          </button>
-        </aside>
-      ) : null}
+      {selectedCluster ? <CustomerClusterDetail cluster={selectedCluster} onClose={() => setSelectedCluster(null)} onOpenCustomer={onOpenCustomer} /> : null}
 
       {selectedPursuit ? (
         <aside className="lc-detail" aria-live="polite">
