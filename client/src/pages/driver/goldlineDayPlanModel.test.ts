@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { Order } from "@shared/types";
 import type { CommercialMission } from "@shared/commercialMission";
 import type { ExternalOperationalOrder } from "@shared/externalOperationalOrder";
-import { buildDayPlanProjection } from "./goldlineDayPlanModel";
+import {
+  buildDayPlanProjection,
+  liveObjectivesFromFieldToday,
+} from "./goldlineDayPlanModel";
 
 const native = (id: number, status: Order["status"] = "new") =>
   ({
@@ -213,5 +216,108 @@ describe("authoritative Goldline Day Plan projection", () => {
       "blocked"
     );
     expect(plan.growthCoverage).toBe("covered");
+  });
+});
+
+const fieldItem = (
+  overrides: Partial<Parameters<typeof liveObjectivesFromFieldToday>[0][number]> = {}
+) => ({
+  id: "recovery:abc",
+  kind: "customer_recovery",
+  title: "Recovery · Marisol Vega",
+  subtitle: "Dormant beyond observed cadence",
+  status: "approved",
+  urgency: "urgent",
+  scheduledAt: null,
+  destination: null,
+  physicalEntityId: null,
+  source: { sourceReference: "customer_recovery_interventions:abc" },
+  ...overrides,
+});
+
+describe("the authoritative day becomes playable objectives", () => {
+  it("reshapes real work without inventing any of its own", () => {
+    // An empty day is allowed to be empty. Padding it would be fabrication.
+    expect(liveObjectivesFromFieldToday([])).toEqual([]);
+    const objectives = liveObjectivesFromFieldToday([
+      fieldItem(),
+      fieldItem({ id: "pickup:1", kind: "pickup", title: "Pickup" }),
+    ]);
+    expect(objectives).toHaveLength(1);
+    expect(objectives[0]!.id).toBe("recovery:abc");
+  });
+
+  it("carries the real building and real coordinates, or null", () => {
+    const [placed, unplaced] = liveObjectivesFromFieldToday([
+      fieldItem({
+        id: "forge:1",
+        kind: "contextual_move",
+        physicalEntityId: "building-9",
+        destination: { address: "1100 Wilshire", latitude: 34.05, longitude: -118.25 },
+      }),
+      fieldItem({ id: "recovery:2" }),
+    ]);
+    expect(placed!.physicalEntityId).toBe("building-9");
+    expect(placed!.latitude).toBe(34.05);
+    // Unknown geography stays unknown rather than being estimated.
+    expect(unplaced!.physicalEntityId).toBeNull();
+    expect(unplaced!.latitude).toBeNull();
+    expect(unplaced!.address).toBeNull();
+  });
+
+  it("names the source of each objective from the work that produced it", () => {
+    const objectives = liveObjectivesFromFieldToday([
+      fieldItem(),
+      fieldItem({ id: "forge:1", kind: "contextual_move" }),
+      fieldItem({ id: "follow:1", kind: "follow_up" }),
+    ]);
+    expect(objectives.map(item => item.sourceLabel)).toEqual([
+      "Dormant relationship",
+      "Field discovery",
+      "Commercial commitment",
+    ]);
+    expect(objectives.map(item => item.kind)).toEqual(["growth", "growth", "sales"]);
+  });
+
+  it("treats a resolved outcome as done and a blocker as blocked", () => {
+    const objectives = liveObjectivesFromFieldToday([
+      fieldItem({ id: "a", status: "recovered" }),
+      fieldItem({ id: "b", status: "published" }),
+      fieldItem({ id: "c", urgency: "blocked" }),
+      fieldItem({ id: "d" }),
+    ]);
+    expect(objectives.map(item => item.status)).toEqual([
+      "completed",
+      "completed",
+      "blocked",
+      "ready",
+    ]);
+  });
+
+  it("carries real objectives into the day the driver actually plays", () => {
+    const plan = buildDayPlanProjection({
+      businessDate: "2026-08-25",
+      pickups: [native(1)],
+      liveObjectives: liveObjectivesFromFieldToday([
+        fieldItem({ physicalEntityId: "building-9" }),
+      ]),
+    });
+    const stop = plan.stops.find(item => item.source === "living_world");
+    expect(stop).toBeTruthy();
+    expect(stop!.physicalEntityId).toBe("building-9");
+    // The fixed pickup window still outranks flexible growth work.
+    expect(plan.stops[0]!.kind).toBe("pickup");
+    expect(plan.growthCoverage).toBe("covered");
+  });
+
+  it("drops an objective from the remaining day once the real work resolves", () => {
+    const remaining = buildDayPlanProjection({
+      businessDate: "2026-08-25",
+      liveObjectives: liveObjectivesFromFieldToday([
+        fieldItem({ status: "recovered" }),
+      ]),
+    }).stops.find(item => item.source === "living_world");
+    // Completed history is kept, not erased — it simply stops being pending.
+    expect(remaining?.status).toBe("completed");
   });
 });

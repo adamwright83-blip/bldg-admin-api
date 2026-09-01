@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Check, ChevronRight, Loader2, LockKeyhole, X } from "lucide-react";
+import { Link } from "wouter";
 import type { Order } from "@shared/types";
 import type { GoldlineEventEmitter } from "../../game/analytics/emitGoldlineEvent";
 import cleanOverworldUrl from "@/assets/goldline/generated/goldline-overworld-clean.png";
@@ -15,6 +16,7 @@ import {
   saveOverworldCheckpoint,
 } from "./overworld/checkpoint";
 import { GoldlineOverworldRuntime } from "./overworld/OverworldRuntime";
+import type { LiveAdventureObjective } from "../driver/goldlineDayPlanModel";
 import type {
   DestinationStateMap,
   OverworldProximity,
@@ -108,6 +110,9 @@ export default function GoldlineOverworld({
   pickups = [],
   deliveries = [],
   isLoading = false,
+  activeObjective = null,
+  onOpenDayBriefing,
+  dayObjectiveCount = 0,
   greystarActive,
   greystarCompleted = false,
   waywardUnlocked = false,
@@ -122,6 +127,10 @@ export default function GoldlineOverworld({
   pickups?: Order[];
   deliveries?: Order[];
   isLoading?: boolean;
+  activeObjective?: LiveAdventureObjective | null;
+  /** Opens today's briefing over the world, without leaving it. */
+  onOpenDayBriefing?: () => void;
+  dayObjectiveCount?: number;
   greystarActive: boolean;
   greystarCompleted?: boolean;
   waywardUnlocked?: boolean;
@@ -366,6 +375,46 @@ export default function GoldlineOverworld({
           disabled={ordersOpen || !runtimeReady}
           onInput={setRuntimeInput}
         />
+
+        {/*
+          Today's real work, already visible in the world. Tapping it opens the
+          fuller briefing over Overland rather than navigating away, so the day
+          never reads as a task list bolted onto the side of the game.
+        */}
+        {activeObjective || dayObjectiveCount > 0 ? (
+          <div className="overworld-objective" aria-live="polite">
+            {activeObjective ? (
+              <>
+                <small>{activeObjective.sourceLabel}</small>
+                <b>{activeObjective.title}</b>
+                {activeObjective.address ? <span>{activeObjective.address}</span> : null}
+                {activeObjective.physicalEntityId ? (
+                  <Link
+                    className="overworld-objective-reveal"
+                    href={`/growth/lantern-city?entity=${activeObjective.physicalEntityId}`}
+                  >
+                    REVEAL THIS PLACE IN THE CITY
+                  </Link>
+                ) : null}
+                <i>{activeObjective.sourceEvidenceReference}</i>
+              </>
+            ) : (
+              <>
+                <small>Today</small>
+                <b>{dayObjectiveCount} objective{dayObjectiveCount === 1 ? "" : "s"} standing</b>
+              </>
+            )}
+            {onOpenDayBriefing ? (
+              <button
+                type="button"
+                className="overworld-briefing-open"
+                onClick={onOpenDayBriefing}
+              >
+                READ TODAY&apos;S BRIEFING
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {proximity ? (
           <div className={`overworld-context is-${proximity.availability}`}>

@@ -422,3 +422,57 @@
     animation: none;
   }
 }
+
+.overworld-objective {
+  position: absolute;
+  z-index: 12;
+  left: 14px;
+  /* Clears the Field Ops control, which owns the top-right corner. */
+  top: calc(14px + env(safe-area-inset-top) + 60px);
+  width: min(calc(100% - 28px), 330px);
+  display: grid;
+  justify-items: center;
+  padding: 9px 12px;
+  border: 1px solid #ffe07c7a;
+  border-radius: 13px;
+  background: #081116e8;
+  box-shadow: 0 0 0 3px #160e058f, 0 10px 28px #0009;
+  text-align: center;
+  color: #fff1b3;
+  text-shadow: 0 2px 3px #000;
+  backdrop-filter: blur(6px);
+}
+.overworld-objective small {
+  font: 800 9px Inter, sans-serif;
+  letter-spacing: 0.12em;
+  color: #d7dbc8;
+  text-transform: uppercase;
+}
+.overworld-objective b {
+  margin-top: 2px;
+  font-family: Cinzel, serif;
+  font-size: 15px;
+  line-height: 1.2;
+}
+.overworld-objective span {
+  margin-top: 3px;
+  font: 700 10px Inter, sans-serif;
+  color: #fff;
+}
+.overworld-objective i {
+  margin-top: 3px;
+  font: 600 8px Inter, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.08em;
+  color: #d7dbc8b8;
+}
+.overworld-objective-reveal{display:inline-flex;min-height:36px;align-items:center;margin-top:6px;padding:0 13px;border-radius:999px;background:#f4c84c;color:#17385e;font:900 9px Inter,sans-serif;letter-spacing:.12em;text-decoration:none;text-shadow:none}
+
+/*
+  The day briefing, opened over the world. Overland stays mounted underneath —
+  its runtime, camera and checkpoint are untouched — so closing the briefing
+  returns to the exact context the player left rather than re-entering a scene.
+*/
+.overworld-briefing-open{display:inline-flex;min-height:44px;align-items:center;margin-top:8px;padding:0 15px;border:0;border-radius:999px;background:#17385e;color:#fff8dc;font:900 10px Inter,sans-serif;letter-spacing:.14em;text-shadow:none}
+.overworld-briefing-layer{position:fixed;z-index:60;inset:0;overflow-y:auto;background:#17385e26;backdrop-filter:blur(2px)}
+.overworld-briefing-close{position:sticky;z-index:2;top:calc(10px + env(safe-area-inset-top));left:100%;display:inline-flex;min-height:44px;align-items:center;margin:10px 12px 0 0;padding:0 16px;transform:translateX(-100%);border:2px solid #e0bd63;border-radius:999px;background:#fffdf2;color:#17385e;font:900 10px Inter,sans-serif;letter-spacing:.14em}

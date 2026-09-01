@@ -45,13 +45,48 @@ describe("Goldline canonical driver restoration", () => {
     );
     expect(controller).toContain('"goldlineSceneFixture"');
     expect(controller).toContain('driverScene === "colosseum" &&');
-    expect(controller).toContain(
-      'onEnterGreystar={() => setDriverScene("colosseum")}'
+    // Clockhead and the arena are entered by explicit scene choice only. The
+    // exact handler shape is free to change; what must not change is that
+    // reaching them requires a deliberate transition.
+    expect(controller).toMatch(
+      /onEnterGreystar=\{\(\)\s*=>\s*\{?[\s\S]{0,160}?setDriverScene\("colosseum"\)/
     );
-    expect(controller).toContain(
-      'onEnterOperations={() => setDriverScene("game")}'
+    expect(controller).toMatch(
+      /onEnterOperations=\{\(\)\s*=>\s*\{?[\s\S]{0,160}?setDriverScene\("game"\)/
     );
     expect(controller).not.toContain("shouldAutoEnterWayward");
+  });
+
+  it("keeps the real day reachable inside Overland instead of in front of it", () => {
+    /*
+      The Day Plan is an in-world briefing that belongs to Overland, not a
+      productivity home the player passes through on the way to the game. It
+      must therefore be openable from the world and must not be a scene of its
+      own, or real work starts reading as a break from Goldline.
+    */
+    expect(controller).not.toContain('"day-plan"');
+    expect(controller).toContain("dayBriefingOpen");
+    expect(controller).toContain("onOpenDayBriefing={() => setDayBriefingOpen(true)}");
+    expect(controller).toContain("{dayBriefingOpen ? dayBriefing : null}");
+    // Reuses the same day projection and component, not a second planner.
+    expect(controller).toContain("<GoldlineDayPlan");
+    expect(controller).toContain("liveObjectives={liveAdventureObjectives}");
+  });
+
+  it("opens the briefing over the world without tearing the world down", () => {
+    // The briefing is rendered as a sibling layer while GoldlineOverworld stays
+    // mounted, so closing it returns to the same runtime, camera and checkpoint.
+    const overworldBranch = controller.slice(
+      controller.indexOf('if (driverScene === "overworld")')
+    );
+    expect(overworldBranch).toContain("<GoldlineOverworld");
+    expect(overworldBranch).toContain("{dayBriefingOpen ? dayBriefing : null}");
+    expect(controller).toContain("setDayBriefingOpen(false)");
+  });
+
+  it("shows the authoritative active objective in the world itself", () => {
+    expect(controller).toContain("activeObjective={activeAdventureObjective}");
+    expect(controller).toContain("dayObjectiveCount={liveAdventureObjectives.length}");
   });
 
   it("renders authenticated Driver through Goldline while preserving ProductShell routes", () => {

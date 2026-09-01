@@ -1981,22 +1981,47 @@ export const driverSalesJournals = mysqlTable(
     tenantId: varchar("tenantId", { length: 64 }).notNull(),
     driverId: varchar("driverId", { length: 128 }).notNull(),
     journalDate: varchar("journalDate", { length: 10 }).notNull(),
+    clientRequestId: varchar("clientRequestId", { length: 36 }),
     audioStorageKey: varchar("audioStorageKey", { length: 512 }),
     audioMimeType: varchar("audioMimeType", { length: 96 }),
+    rawTranscript: text("rawTranscript"),
     transcript: text("transcript").notNull(),
     insightsJson: json("insightsJson").notNull(),
     processingStatus: mysqlEnum("processingStatus", [
+      "captured",
+      "transcribing",
+      "extracting",
       "processed",
       "fallback",
+      "failed",
     ]).notNull(),
     journalPoints: int("journalPoints").notNull().default(0),
+    captureLatitude: decimal("captureLatitude", { precision: 10, scale: 7 }),
+    captureLongitude: decimal("captureLongitude", { precision: 10, scale: 7 }),
+    captureAccuracyMeters: decimal("captureAccuracyMeters", {
+      precision: 10,
+      scale: 2,
+    }),
+    locationCapturedAt: timestamp("locationCapturedAt"),
+    locationContemporaneous: boolean("locationContemporaneous")
+      .notNull()
+      .default(false),
+    processingError: varchar("processingError", { length: 512 }),
+    processingAttempts: int("processingAttempts").notNull().default(0),
+    processedAt: timestamp("processedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => ({
-    tenantDriverDateUnique: uniqueIndex(
-      "uq_driver_sales_journal_tenant_driver_date"
-    ).on(table.tenantId, table.driverId, table.journalDate),
+    tenantRequestUnique: uniqueIndex(
+      "uq_driver_sales_journal_tenant_request"
+    ).on(table.tenantId, table.clientRequestId),
+    tenantDriverDateIdx: index(
+      "idx_driver_sales_journal_driver_date"
+    ).on(table.tenantId, table.driverId, table.journalDate, table.createdAt),
+    tenantProcessingIdx: index(
+      "idx_driver_sales_journal_processing"
+    ).on(table.tenantId, table.processingStatus, table.createdAt),
     tenantCreatedIdx: index("idx_driver_sales_journal_tenant_created").on(
       table.tenantId,
       table.createdAt
@@ -5688,6 +5713,451 @@ export const entityLocations = mysqlTable(
     addressIdx: index("idx_entity_locations_tenant_address").on(
       table.tenantId,
       table.normalizedSourceAddress
+    ),
+  })
+);
+
+/** Role-neutral identity. Geography remains exclusively in entityLocations. */
+export const physicalEntities = mysqlTable(
+  "physical_entities",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    kind: mysqlEnum("kind", ["building", "property", "other_place"])
+      .notNull()
+      .default("building"),
+    displayName: varchar("displayName", { length: 255 }).notNull(),
+    identityStatus: mysqlEnum("identityStatus", [
+      "confirmed",
+      "provisional",
+      "needs_review",
+      "merged",
+    ]).notNull().default("provisional"),
+    canonicalEntityId: varchar("canonicalEntityId", { length: 36 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    statusIdx: index("idx_physical_entities_tenant_status").on(
+      table.tenantId,
+      table.identityStatus,
+      table.updatedAt
+    ),
+    canonicalIdx: index("idx_physical_entities_canonical").on(
+      table.tenantId,
+      table.canonicalEntityId
+    ),
+  })
+);
+
+export const physicalEntityBindings = mysqlTable(
+  "physical_entity_bindings",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    physicalEntityId: varchar("physicalEntityId", { length: 36 }).notNull(),
+    bindingType: mysqlEnum("bindingType", [
+      "canonical_building",
+      "customer_cluster",
+      "commercial_account",
+      "commercial_location",
+      "commercial_prospect",
+      "journal_entry",
+      "tower_wars_building",
+      "tower_asset",
+      "provider_place",
+    ]).notNull(),
+    bindingKey: varchar("bindingKey", { length: 191 }).notNull(),
+    evidenceReference: varchar("evidenceReference", { length: 512 }).notNull(),
+    confidence: mysqlEnum("confidence", ["high", "medium", "low"]).notNull(),
+    reviewState: mysqlEnum("reviewState", [
+      "accepted",
+      "review_required",
+      "rejected",
+    ]).notNull().default("accepted"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    sourceUnique: uniqueIndex("uq_physical_binding_source").on(
+      table.tenantId,
+      table.bindingType,
+      table.bindingKey
+    ),
+    entityIdx: index("idx_physical_binding_entity").on(
+      table.tenantId,
+      table.physicalEntityId,
+      table.createdAt
+    ),
+  })
+);
+
+export const physicalEntityAliases = mysqlTable(
+  "physical_entity_aliases",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    physicalEntityId: varchar("physicalEntityId", { length: 36 }).notNull(),
+    aliasType: mysqlEnum("aliasType", [
+      "name",
+      "normalized_address",
+      "google_place_id",
+      "operator_alias",
+    ]).notNull(),
+    aliasValue: varchar("aliasValue", { length: 512 }).notNull(),
+    normalizedAliasValue: varchar("normalizedAliasValue", { length: 512 }).notNull(),
+    evidenceReference: varchar("evidenceReference", { length: 512 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    aliasUnique: uniqueIndex("uq_physical_alias").on(
+      table.tenantId,
+      table.aliasType,
+      table.normalizedAliasValue
+    ),
+    entityIdx: index("idx_physical_alias_entity").on(
+      table.tenantId,
+      table.physicalEntityId
+    ),
+  })
+);
+
+export const goldlineWorldEvents = mysqlTable(
+  "goldline_world_events",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    physicalEntityId: varchar("physicalEntityId", { length: 36 }),
+    eventType: varchar("eventType", { length: 64 }).notNull(),
+    classification: mysqlEnum("classification", [
+      "evidence",
+      "action",
+      "outcome",
+      "derived_signal",
+      "game_projection",
+    ]).notNull(),
+    actorType: mysqlEnum("actorType", [
+      "system",
+      "operator",
+      "field",
+      "customer",
+      "provider",
+      "unknown",
+    ]).notNull(),
+    actorId: varchar("actorId", { length: 128 }),
+    occurredAt: timestamp("occurredAt").notNull(),
+    observedAt: timestamp("observedAt"),
+    sourceType: varchar("sourceType", { length: 64 }).notNull(),
+    sourceId: varchar("sourceId", { length: 191 }).notNull(),
+    sourceEvidenceReference: varchar("sourceEvidenceReference", { length: 512 }).notNull(),
+    provenanceClass: mysqlEnum("provenanceClass", [
+      "operator_observed",
+      "operator_reported",
+      "device_location",
+      "provider_verified",
+      "official_property_source",
+      "existing_business_record",
+      "derived",
+      "generated_game_fiction",
+    ]).notNull(),
+    verificationClass: mysqlEnum("verificationClass", [
+      "VERIFIED",
+      "ATTESTED",
+      "CLAIMED",
+    ]).notNull(),
+    confidence: mysqlEnum("confidence", [
+      "high",
+      "medium",
+      "low",
+      "unknown",
+    ]).notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    correlationId: varchar("correlationId", { length: 191 }).notNull(),
+    metadataJson: json("metadataJson").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_goldline_world_event_idempotency").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
+    entityIdx: index("idx_goldline_world_event_entity").on(
+      table.tenantId,
+      table.physicalEntityId,
+      table.occurredAt
+    ),
+    classIdx: index("idx_goldline_world_event_class").on(
+      table.tenantId,
+      table.classification,
+      table.occurredAt
+    ),
+    sourceIdx: index("idx_goldline_world_event_source").on(
+      table.tenantId,
+      table.sourceType,
+      table.sourceId
+    ),
+  })
+);
+
+export const goldlineEventReceipts = mysqlTable(
+  "goldline_event_receipts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    worldEventId: varchar("worldEventId", { length: 36 }).notNull(),
+    viewerId: varchar("viewerId", { length: 128 }).notNull(),
+    receiptType: mysqlEnum("receiptType", [
+      "presented",
+      "read",
+      "acknowledged",
+    ]).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    receiptUnique: uniqueIndex("uq_goldline_event_receipt").on(
+      table.tenantId,
+      table.worldEventId,
+      table.viewerId,
+      table.receiptType
+    ),
+    viewerIdx: index("idx_goldline_event_receipt_viewer").on(
+      table.tenantId,
+      table.viewerId,
+      table.createdAt
+    ),
+  })
+);
+
+export const fieldJournalExtractions = mysqlTable(
+  "field_journal_extractions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    journalEntryId: varchar("journalEntryId", { length: 36 }).notNull(),
+    version: int("version").notNull().default(1),
+    provider: varchar("provider", { length: 64 }),
+    model: varchar("model", { length: 96 }),
+    schemaVersion: varchar("schemaVersion", { length: 32 }).notNull(),
+    status: mysqlEnum("status", [
+      "pending",
+      "processed",
+      "fallback",
+      "failed",
+    ]).notNull().default("pending"),
+    itemsJson: json("itemsJson").notNull(),
+    error: varchar("error", { length: 512 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    versionUnique: uniqueIndex("uq_field_journal_extraction_version").on(
+      table.tenantId,
+      table.journalEntryId,
+      table.version
+    ),
+    statusIdx: index("idx_field_journal_extraction_status").on(
+      table.tenantId,
+      table.status,
+      table.createdAt
+    ),
+  })
+);
+
+export const towerForgeJobs = mysqlTable(
+  "tower_forge_jobs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    physicalEntityId: varchar("physicalEntityId", { length: 36 }),
+    journalEntryId: varchar("journalEntryId", { length: 36 }),
+    commercialAccountId: int("commercialAccountId"),
+    state: mysqlEnum("state", [
+      "captured",
+      "extracting",
+      "entity_resolving",
+      "needs_review",
+      "geography_verifying",
+      "prospect_created",
+      "researching",
+      "research_partial",
+      "concepting",
+      "rendering",
+      "generation_unconfigured",
+      "generation_failed",
+      "review_ready",
+      "approved",
+      "rejected",
+      "published",
+    ]).notNull().default("captured"),
+    correlationId: varchar("correlationId", { length: 191 }).notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    candidateJson: json("candidateJson").notNull(),
+    retryCount: int("retryCount").notNull().default(0),
+    lastError: varchar("lastError", { length: 512 }),
+    leaseOwner: varchar("leaseOwner", { length: 128 }),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+    completedAt: timestamp("completedAt"),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_tower_forge_job_idempotency").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
+    queueIdx: index("idx_tower_forge_job_queue").on(
+      table.tenantId,
+      table.state,
+      table.leaseExpiresAt,
+      table.updatedAt
+    ),
+    entityIdx: index("idx_tower_forge_job_entity").on(
+      table.tenantId,
+      table.physicalEntityId,
+      table.updatedAt
+    ),
+  })
+);
+
+export const propertyEvidenceItems = mysqlTable(
+  "property_evidence_items",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    physicalEntityId: varchar("physicalEntityId", { length: 36 }).notNull(),
+    forgeJobId: varchar("forgeJobId", { length: 36 }),
+    category: mysqlEnum("category", [
+      "real_identity",
+      "field_evidence",
+      "official_property_intelligence",
+    ]).notNull(),
+    factType: varchar("factType", { length: 64 }).notNull(),
+    valueJson: json("valueJson").notNull(),
+    provenanceClass: mysqlEnum("provenanceClass", [
+      "operator_observed",
+      "operator_reported",
+      "device_location",
+      "provider_verified",
+      "official_property_source",
+      "existing_business_record",
+      "derived",
+      "generated_game_fiction",
+    ]).notNull(),
+    sourceUrl: varchar("sourceUrl", { length: 1024 }),
+    sourceReference: varchar("sourceReference", { length: 512 }).notNull(),
+    observedAt: timestamp("observedAt"),
+    retrievedAt: timestamp("retrievedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    entityIdx: index("idx_property_evidence_entity").on(
+      table.tenantId,
+      table.physicalEntityId,
+      table.category,
+      table.createdAt
+    ),
+    forgeIdx: index("idx_property_evidence_forge").on(
+      table.tenantId,
+      table.forgeJobId
+    ),
+  })
+);
+
+export const towerWeaponConcepts = mysqlTable(
+  "tower_weapon_concepts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    physicalEntityId: varchar("physicalEntityId", { length: 36 }).notNull(),
+    forgeJobId: varchar("forgeJobId", { length: 36 }).notNull(),
+    rank: int("rank").notNull(),
+    title: varchar("title", { length: 191 }).notNull(),
+    sourceCharacteristic: varchar("sourceCharacteristic", { length: 512 }).notNull(),
+    sourceEvidenceIdsJson: json("sourceEvidenceIdsJson").notNull(),
+    conceptJson: json("conceptJson").notNull(),
+    similarityRisk: mysqlEnum("similarityRisk", [
+      "low",
+      "medium",
+      "high",
+    ]).notNull(),
+    selected: boolean("selected").notNull().default(false),
+    reviewState: mysqlEnum("reviewState", [
+      "pending",
+      "accepted",
+      "rejected",
+    ]).notNull().default("pending"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    rankUnique: uniqueIndex("uq_tower_weapon_concept_rank").on(
+      table.tenantId,
+      table.forgeJobId,
+      table.rank
+    ),
+    entityIdx: index("idx_tower_weapon_concept_entity").on(
+      table.tenantId,
+      table.physicalEntityId
+    ),
+  })
+);
+
+export const towerAssetVersions = mysqlTable(
+  "tower_asset_versions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    physicalEntityId: varchar("physicalEntityId", { length: 36 }).notNull(),
+    forgeJobId: varchar("forgeJobId", { length: 36 }).notNull(),
+    conceptId: varchar("conceptId", { length: 36 }).notNull(),
+    provider: varchar("provider", { length: 64 }).notNull(),
+    modelVersion: varchar("modelVersion", { length: 96 }),
+    promptVersionHash: varchar("promptVersionHash", { length: 64 }).notNull(),
+    sourceEvidenceIdsJson: json("sourceEvidenceIdsJson").notNull(),
+    storageKey: varchar("storageKey", { length: 512 }).notNull(),
+    assetUrl: varchar("assetUrl", { length: 2048 }),
+    variantType: mysqlEnum("variantType", [
+      "base",
+      "weapon_layer",
+      "thumbnail",
+    ]).notNull(),
+    approvalStatus: mysqlEnum("approvalStatus", [
+      "draft",
+      "approved",
+      "rejected",
+      "superseded",
+    ]).notNull().default("draft"),
+    supersededBy: varchar("supersededBy", { length: 36 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    entityIdx: index("idx_tower_asset_entity").on(
+      table.tenantId,
+      table.physicalEntityId,
+      table.approvalStatus,
+      table.createdAt
+    ),
+    forgeIdx: index("idx_tower_asset_forge").on(
+      table.tenantId,
+      table.forgeJobId
+    ),
+  })
+);
+
+export const goldlineCreativeExclusions = mysqlTable(
+  "goldline_creative_exclusions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    themeKey: varchar("themeKey", { length: 96 }).notNull(),
+    reason: varchar("reason", { length: 512 }),
+    active: boolean("active").notNull().default(true),
+    createdBy: varchar("createdBy", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    exclusionUnique: uniqueIndex("uq_goldline_creative_exclusion").on(
+      table.tenantId,
+      table.themeKey
     ),
   })
 );

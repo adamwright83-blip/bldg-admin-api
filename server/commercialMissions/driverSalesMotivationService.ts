@@ -7,7 +7,6 @@ import {
 } from "../../drizzle/schema";
 import { ENV } from "../_core/env";
 import { invokeLLM, type InvokeResult } from "../_core/llm";
-import { transcribeAudio } from "../_core/voiceTranscription";
 import { getDb } from "../db";
 import { storageGet, storagePut } from "../storage";
 
@@ -53,11 +52,21 @@ async function ensureMotivationTables() {
     )`));
     await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS driver_sales_journals (
       id varchar(36) NOT NULL PRIMARY KEY, tenantId varchar(64) NOT NULL, driverId varchar(128) NOT NULL,
-      journalDate varchar(10) NOT NULL, audioStorageKey varchar(512) NULL, audioMimeType varchar(96) NULL,
-      transcript text NOT NULL, insightsJson json NOT NULL, processingStatus enum('processed','fallback') NOT NULL,
-      journalPoints int NOT NULL DEFAULT 0, createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      journalDate varchar(10) NOT NULL, clientRequestId varchar(36) NULL,
+      audioStorageKey varchar(512) NULL, audioMimeType varchar(96) NULL, rawTranscript text NULL,
+      transcript text NOT NULL, insightsJson json NOT NULL,
+      processingStatus enum('captured','transcribing','extracting','processed','fallback','failed') NOT NULL DEFAULT 'captured',
+      journalPoints int NOT NULL DEFAULT 0,
+      captureLatitude decimal(10,7) NULL, captureLongitude decimal(10,7) NULL,
+      captureAccuracyMeters decimal(10,2) NULL, locationCapturedAt timestamp NULL,
+      locationContemporaneous boolean NOT NULL DEFAULT false, processingError varchar(512) NULL,
+      processingAttempts int NOT NULL DEFAULT 0, processedAt timestamp NULL,
+      createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uq_driver_sales_journal_tenant_driver_date (tenantId,driverId,journalDate), KEY idx_driver_sales_journal_tenant_created (tenantId,createdAt)
+      UNIQUE KEY uq_driver_sales_journal_tenant_request (tenantId,clientRequestId),
+      KEY idx_driver_sales_journal_driver_date (tenantId,driverId,journalDate,createdAt),
+      KEY idx_driver_sales_journal_processing (tenantId,processingStatus,createdAt),
+      KEY idx_driver_sales_journal_tenant_created (tenantId,createdAt)
     )`));
     await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS driver_sales_playbook_sources (
       id varchar(36) NOT NULL PRIMARY KEY, tenantId varchar(64) NOT NULL, name varchar(191) NOT NULL,
@@ -95,7 +104,7 @@ function resultText(result: InvokeResult) {
   return typeof value === "string" ? value : "";
 }
 
-function fallbackInsights(transcript: string): SalesJournalInsights {
+export function fallbackInsights(transcript: string): SalesJournalInsights {
   const useful = transcript.trim().split(/\s+/).length >= 12;
   const sentences = transcript.split(/[.!?\n]+/).map(value => value.trim()).filter(Boolean);
   const objections = sentences.filter(value => /said|told me|objection|but |already|price|cost|interested|machine|provider/i.test(value)).slice(0, 3);
@@ -108,7 +117,7 @@ function fallbackInsights(transcript: string): SalesJournalInsights {
   };
 }
 
-async function extractInsights(tenantId: string, transcript: string) {
+export async function extractInsights(tenantId: string, transcript: string) {
   try {
     if (!ENV.anthropicApiKey) throw new Error("provider_unconfigured");
     const result = await invokeLLM({
@@ -193,12 +202,24 @@ function audioFileExtension(mimeType: string): string {
 }
 
 export async function saveDriverSalesJournal(input: {
-  tenantId: string; driverId: string; journalDate: string; audioDataUrl?: string; transcript?: string;
+  tenantId: string;
+  driverId: string;
+  journalDate: string;
+  clientRequestId: string;
+  audioDataUrl?: string;
+  transcript?: string;
+  location?: {
+    latitude: number;
+    longitude: number;
+    accuracyMeters: number;
+    capturedAt: string;
+    contemporaneous: boolean;
+  };
 }) {
   await ensureMotivationTables();
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  let transcript = input.transcript?.trim() ?? "";
+  const rawTranscript = input.transcript?.trim() ?? "";
   let audioStorageKey: string | null = null;
   let audioMimeType: string | null = null;
   if (input.audioDataUrl) {
@@ -206,33 +227,73 @@ export async function saveDriverSalesJournal(input: {
     audioMimeType = audio.mimeType;
     audioStorageKey = `driver-sales-journals/${input.tenantId}/${input.driverId}/${input.journalDate}-${randomUUID()}.${audioFileExtension(audio.mimeType)}`;
     await storagePut(audioStorageKey, audio.data, audio.mimeType);
-    const downloadable = await storageGet(audioStorageKey);
-    const transcription = await transcribeAudio({ audioUrl: downloadable.url, language: "en", prompt: "Transcribe a driver's end-of-day sales journal, preserving objections and responses accurately.", mimeType: audio.mimeType, fileName: `journal.${audioFileExtension(audio.mimeType)}` });
-    if (!("error" in transcription)) transcript = transcription.text.trim();
-    else if (!transcript) throw new Error(`Could not transcribe this recording: ${transcription.error}`);
   }
-  if (transcript.length < 20) throw new Error("Say a little more about what happened, what they said, and where you got stuck.");
-  const [previous] = await db.select().from(driverSalesJournals).where(and(
-    eq(driverSalesJournals.tenantId, input.tenantId), eq(driverSalesJournals.driverId, input.driverId),
-  )).orderBy(desc(driverSalesJournals.createdAt)).limit(1);
-  const extracted = await extractInsights(input.tenantId, transcript);
-  const points = extracted.insights.useful ? 8 : 0;
+  if (!audioStorageKey && rawTranscript.length < 20)
+    throw new Error("Say a little more about what happened out there.");
   const id = randomUUID();
   await db.insert(driverSalesJournals).values({
-    id, tenantId: input.tenantId, driverId: input.driverId, journalDate: input.journalDate,
-    audioStorageKey, audioMimeType, transcript, insightsJson: extracted.insights,
-    processingStatus: extracted.status, journalPoints: points,
-  }).onDuplicateKeyUpdate({ set: {
-    audioStorageKey, audioMimeType, transcript, insightsJson: extracted.insights,
-    processingStatus: extracted.status, journalPoints: points,
-  }});
-  if (points) await awardDriverSalesPoints({ tenantId: input.tenantId, driverId: input.driverId, eventType: "useful_journal", points, dedupeKey: `journal:${input.driverId}:${input.journalDate}` });
-  const previousInsights = previous?.insightsJson as SalesJournalInsights | undefined;
-  const conquered = extracted.insights.objections.find(current => current.worked && previousInsights?.objections.some(old =>
-    !old.worked && (current.objection.toLowerCase().includes(old.objection.toLowerCase().slice(0, 24)) || old.objection.toLowerCase().includes(current.objection.toLowerCase().slice(0, 24)))
-  ));
-  if (conquered) await awardDriverSalesPoints({ tenantId: input.tenantId, driverId: input.driverId, eventType: "objection_comeback", points: 15, dedupeKey: `comeback:${input.driverId}:${input.journalDate}`, metadata: { objection: conquered.objection } });
-  return { journalDate: input.journalDate, transcript, insights: extracted.insights, points: points + (conquered ? 15 : 0), processingStatus: extracted.status };
+    id,
+    tenantId: input.tenantId,
+    driverId: input.driverId,
+    journalDate: input.journalDate,
+    clientRequestId: input.clientRequestId,
+    audioStorageKey,
+    audioMimeType,
+    rawTranscript: rawTranscript || null,
+    // Kept non-null for historical compatibility. Downstream processing may
+    // fill this from audio; it never overwrites rawTranscript.
+    transcript: rawTranscript,
+    insightsJson: fallbackInsights(rawTranscript),
+    processingStatus: "captured",
+    journalPoints: 0,
+    captureLatitude: input.location ? String(input.location.latitude) : null,
+    captureLongitude: input.location ? String(input.location.longitude) : null,
+    captureAccuracyMeters: input.location ? String(input.location.accuracyMeters) : null,
+    locationCapturedAt: input.location ? new Date(input.location.capturedAt) : null,
+    locationContemporaneous: input.location?.contemporaneous ?? false,
+  }).onDuplicateKeyUpdate({ set: { clientRequestId: input.clientRequestId } });
+
+  const [stored] = await db.select().from(driverSalesJournals).where(and(
+    eq(driverSalesJournals.tenantId, input.tenantId),
+    eq(driverSalesJournals.clientRequestId, input.clientRequestId)
+  )).limit(1);
+  const journal = stored ?? {
+    id,
+    journalDate: input.journalDate,
+    transcript: rawTranscript,
+    processingStatus: "captured" as const,
+  };
+  const { appendGoldlineWorldEvent } = await import("../goldlineWorld/worldEventStore");
+  const worldEvent = await appendGoldlineWorldEvent({
+    tenantId: input.tenantId,
+    physicalEntityId: null,
+    eventType: "field_journal_saved",
+    classification: "action",
+    actorType: "field",
+    actorId: input.driverId,
+    occurredAt: new Date().toISOString(),
+    observedAt: input.location?.capturedAt ?? null,
+    sourceType: "driver_sales_journals",
+    sourceId: journal.id,
+    sourceEvidenceReference: `driver_sales_journals:${journal.id}`,
+    provenanceClass: "operator_reported",
+    verificationClass: "ATTESTED",
+    confidence: "high",
+    idempotencyKey: `field-journal-saved:${input.tenantId}:${input.clientRequestId}`,
+    correlationId: `field-journal:${journal.id}`,
+    metadata: { journalDate: input.journalDate, hasAudio: Boolean(audioStorageKey), hasDeviceLocation: Boolean(input.location) },
+  });
+  const { queueFieldJournalProcessing } = await import("../goldlineWorld/fieldJournalProcessingService");
+  queueFieldJournalProcessing({ tenantId: input.tenantId, journalEntryId: journal.id });
+  return {
+    id: journal.id,
+    journalDate: journal.journalDate,
+    transcript: journal.transcript,
+    insights: fallbackInsights(journal.transcript),
+    points: 0,
+    processingStatus: "captured" as const,
+    worldEvent,
+  };
 }
 
 export async function listDriverSalesJournals(input: { tenantId: string; driverId?: string; limit?: number; includeAudio?: boolean }) {

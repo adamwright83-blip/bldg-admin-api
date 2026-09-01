@@ -11,6 +11,8 @@ const momentum = readFileSync(new URL("../../client/src/components/driver/SalesM
 const missionPage = readFileSync(new URL("../../client/src/pages/CommercialSalesMission.tsx", import.meta.url), "utf8");
 const admin = readFileSync(new URL("../../client/src/pages/CommercialMissionAdmin.tsx", import.meta.url), "utf8");
 const migration = readFileSync(new URL("../../drizzle/0047_driver_sales_motivation.sql", import.meta.url), "utf8");
+const livingWorldMigration = readFileSync(new URL("../../drizzle/0061_goldline_living_business_world.sql", import.meta.url), "utf8");
+const processing = readFileSync(new URL("../goldlineWorld/fieldJournalProcessingService.ts", import.meta.url), "utf8");
 
 describe("driver sales motivation contract", () => {
   it("persists an idempotent rolling 30-day score and prevents repeated calls from farming full credit", () => {
@@ -20,14 +22,17 @@ describe("driver sales motivation contract", () => {
     expect(call).toContain("attempts.length <= 1 ? 4 : attempts.length === 2 ? 2 : 1");
     expect(field).toContain('input.outcome === "won" ? 100');
     expect(field).toContain('input.decisionMakerStatus === "met" ? 10');
-    expect(service).toContain('eventType: "objection_comeback", points: 15');
+    expect(processing).toContain('eventType: "objection_comeback"');
+    expect(processing).toContain("points: 15");
   });
 
   it("captures verbal journals, extracts structured memory, and exposes them to tenant admins", () => {
     expect(momentum).toContain("MediaRecorder");
-    expect(momentum).toContain("Unload the day");
-    expect(service).toContain("transcribeAudio");
-    expect(service).toContain("JOURNAL_SCHEMA");
+    expect(momentum).toContain("Capture what happened");
+    expect(processing).toContain("transcribeAudio");
+    expect(processing).toContain("extractFieldJournal");
+    expect(livingWorldMigration).toContain("DROP INDEX `uq_driver_sales_journal_tenant_driver_date`");
+    expect(service).toContain('processingStatus: "captured"');
     expect(router).toContain("saveSalesJournal");
     expect(router).toContain("salesJournalsAdmin: dayforgeTenantAdminProcedure");
     expect(admin).toContain("Driver journals");

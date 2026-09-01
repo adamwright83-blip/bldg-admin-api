@@ -1,13 +1,14 @@
-import { Fragment, useMemo, useState } from "react";
-import { ArrowRight, MapPinOff, RefreshCw, Search, X } from "lucide-react";
-import { Link } from "wouter";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { MapPinOff, RefreshCw, Search, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { WorldGeographySurface } from "./WorldGeographySurface";
 import type { GeographicEntity } from "./GoogleMapsRealityLayer";
 import { WorldDayPhaseIndicator } from "./WorldDayPhase";
 import { clusterGeographicCustomers, clustersAsGoogleEntities, fanOutAtlasCollisions } from "./customerGeography";
 import type { CustomerLocationCluster } from "./customerGeography";
-import { CustomerClusterDetail } from "./CustomerClusterDetail";
+import { WorldEntityInspector } from "./WorldEntityInspector";
+import { describeWorldPresentation, orderByProminence } from "@shared/goldlineWorldPresentation";
+import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWorldService";
 
 export {
   inferCustomerCadence,
@@ -18,6 +19,53 @@ export function classifyLanternCustomer(customer: { recencyStatus: string }) {
   if (customer.recencyStatus === "lapsed") return "dark" as const;
   if (customer.recencyStatus === "cooling") return "dimming" as const;
   return "active" as const;
+}
+
+/**
+ * The atmosphere a place is wearing, drawn onto the building itself rather than
+ * beside it. Everything here is decorative to a screen reader — the same facts
+ * reach assistive technology through `markerLabel()`, because uncertainty that
+ * can only be seen is uncertainty that some users never get.
+ */
+function WorldMarkerAtmosphere({ entity }: { entity: CityWorldEntity | null }) {
+  const presentation = entity?.presentation;
+  if (!presentation) return null;
+  return (
+    <>
+      {presentation.veil !== "none" ? (
+        <span className={`lc-veil veil-${presentation.veil}`} aria-hidden />
+      ) : null}
+      {presentation.marks.length ? (
+        <span className="lc-marks" aria-hidden>
+          {presentation.marks.map(mark => (
+            <i key={mark.semantic} data-mark={mark.semantic}>
+              {mark.count > 1 ? mark.count : null}
+            </i>
+          ))}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Attention is allowed to make a place louder and nothing else. The tier lands
+ * on the marker as emphasis; it never touches the record's stage, revenue or
+ * position.
+ */
+function worldMarkerClass(
+  base: string,
+  entity: CityWorldEntity | null,
+  revealing = false
+) {
+  const presentation = entity?.presentation;
+  if (!presentation) return base;
+  return `${base} has-world veil-${presentation.veil} attention-${presentation.prominenceTier}${revealing ? " is-revealing" : ""}`;
+}
+
+function markerLabel(base: string, entity: CityWorldEntity | null) {
+  if (!entity) return base;
+  return describeWorldPresentation(base, entity.presentation);
 }
 
 export default function LanternCityAtlas({
@@ -36,6 +84,7 @@ export default function LanternCityAtlas({
   const atlas = trpc.system.geographicTruth.atlas.useQuery(undefined, {
     staleTime: 30_000,
   });
+  const cityWorld = trpc.system.goldlineWorld.cityEntities.useQuery(undefined, { staleTime: 15_000 });
   const geocode = trpc.system.geographicTruth.geocodePending.useMutation({
     onSuccess: () => atlas.refetch(),
   });
@@ -73,6 +122,93 @@ export default function LanternCityAtlas({
 
   const [googleVisible, setGoogleVisible] = useState(false);
   const customerClusters = useMemo(() => clusterGeographicCustomers(visibleCustomers as any), [visibleCustomers]);
+
+  /*
+    Buildings are matched on the server, against the same normaliser the
+    identity resolver uses. The browser only has to look the answer up, so a
+    building cannot be one entity here and a different one there.
+  */
+  const entityByAccountId = useMemo(() => {
+    const map = new Map<number, CityWorldEntity>();
+    for (const entity of cityWorld.data ?? []) {
+      if (entity.pursuit) map.set(entity.pursuit.accountId, entity);
+    }
+    return map;
+  }, [cityWorld.data]);
+
+  const entityByResident = useMemo(() => {
+    const map = new Map<string, CityWorldEntity>();
+    for (const entity of cityWorld.data ?? []) {
+      for (const resident of entity.residents) map.set(resident.identityKey, entity);
+    }
+    return map;
+  }, [cityWorld.data]);
+
+  const entityForPursuit = (accountId: number) => entityByAccountId.get(accountId) ?? null;
+  const entityForCluster = (cluster: CustomerLocationCluster) => {
+    for (const customer of cluster.customers) {
+      const entity = entityByResident.get(customer.identityKey);
+      if (entity) return entity;
+    }
+    return null;
+  };
+
+  const requestedEntityId = new URLSearchParams(window.location.search).get("entity");
+  const requestedEntity = cityWorld.data?.find(entity => entity.id === requestedEntityId) ?? null;
+  const selectedEntity = selectedPursuit ? entityForPursuit(selectedPursuit.accountId) : selectedCluster ? entityForCluster(selectedCluster) : requestedEntity;
+
+  /*
+    A place arriving by deep link is revealed rather than merely selected: the
+    city moves to the building that was already there. Focus follows so the
+    reveal is not purely visual.
+  */
+  const revealRef = useRef<HTMLButtonElement | null>(null);
+  const [revealing, setRevealing] = useState(false);
+  useEffect(() => {
+    if (!requestedEntity) return;
+    const target = revealRef.current;
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.focus({ preventScroll: true });
+    setRevealing(true);
+    // The veil lifting is a moment, not a permanent state.
+    const timer = window.setTimeout(() => setRevealing(false), 2200);
+    return () => window.clearTimeout(timer);
+  }, [requestedEntity?.id]);
+
+  /**
+   * The loudest real signals, in order. `orderByProminence` only reorders — the
+   * entities it ranks are handed back untouched.
+   */
+  const attentionRecommendations = useMemo(
+    () =>
+      orderByProminence(
+        (cityWorld.data ?? []).filter(
+          entity => entity.presentation.attentionSummary !== null
+        ),
+        entity => entity.presentation
+      ).slice(0, 4),
+    [cityWorld.data]
+  );
+
+  /** Selecting a recommendation lands on the same building, in the same place. */
+  const revealEntity = (entity: CityWorldEntity) => {
+    const pursuit = visiblePursuits.find(
+      item => item.accountId === entity.pursuit?.accountId
+    );
+    if (pursuit) {
+      setSelectedCluster(null);
+      setSelectedPursuit(pursuit);
+      return;
+    }
+    const cluster = customerClusters.find(item =>
+      item.customers.some(customer => entityByResident.get(customer.identityKey)?.id === entity.id)
+    );
+    if (cluster) {
+      setSelectedPursuit(null);
+      setSelectedCluster(cluster);
+    }
+  };
 
   /**
    * The same visible records, addressed by the real coordinate the atlas
@@ -159,7 +295,7 @@ export default function LanternCityAtlas({
           </article>
         ))}
         <article className="lc-status-card state-pursued">
-          <span className="lc-status-icon">♨</span>
+          <span className="lc-status-icon"><i className="lc-mini-building" aria-hidden /></span>
           <div>
             <small>Pursued</small>
             <strong>
@@ -198,7 +334,12 @@ export default function LanternCityAtlas({
               ) : null}
               <button
                 type="button"
-                className={`lc-lantern state-${cluster.dark === cluster.total ? "dark" : cluster.dimming > 0 || cluster.dark > 0 ? "dimming" : "active"}${fanSlot > 0 ? ` fan-${fanSlot}` : ""}`}
+                ref={entityForCluster(cluster)?.id === requestedEntityId ? revealRef : undefined}
+                className={worldMarkerClass(
+                  `lc-lantern state-${cluster.dark === cluster.total ? "dark" : cluster.dimming > 0 || cluster.dark > 0 ? "dimming" : "active"}${fanSlot > 0 ? ` fan-${fanSlot}` : ""}`,
+                  entityForCluster(cluster),
+                  revealing && entityForCluster(cluster)?.id === requestedEntityId
+                )}
                 style={{
                   left: `${cluster.x}%`,
                   top: `${cluster.y}%`,
@@ -207,21 +348,32 @@ export default function LanternCityAtlas({
                   setSelectedPursuit(null);
                   setSelectedCluster(cluster);
                 }}
-                aria-label={`${cluster.total} customer${cluster.total === 1 ? "" : "s"} at this location`}
+                aria-label={markerLabel(
+                  `${cluster.total} customer${cluster.total === 1 ? "" : "s"} at this location`,
+                  entityForCluster(cluster)
+                )}
               >
                 <span className="lc-lantern-handle" />
                 <span className="lc-lantern-body" />
                 <span className="lc-lantern-base" />
                 {cluster.total > 1 ? <b>{cluster.total}</b> : null}
+                <WorldMarkerAtmosphere entity={entityForCluster(cluster)} />
               </button>
             </Fragment>
           ))}
 
-          {!googleVisible && visiblePursuits.map(item => (
+          {!googleVisible && visiblePursuits.map(item => {
+            const worldEntity = entityForPursuit(item.accountId);
+            return (
             <button
               type="button"
               key={item.pipelineId}
-              className="lc-pursued-flame"
+              ref={worldEntity?.id === requestedEntityId ? revealRef : undefined}
+              className={worldMarkerClass(
+                `lc-pursued-building${worldEntity?.canonicalAsset?.assetUrl ? " has-published-art" : ""}`,
+                worldEntity,
+                revealing && worldEntity?.id === requestedEntityId
+              )}
               style={{
                 left: `${item.location!.x}%`,
                 top: `${item.location!.y}%`,
@@ -230,11 +382,13 @@ export default function LanternCityAtlas({
                 setSelectedCluster(null);
                 setSelectedPursuit(item);
               }}
-              aria-label={`Pursued: ${item.name}`}
+              aria-label={markerLabel(`Pursued: ${item.name}`, worldEntity)}
             >
-              ♨
+              {worldEntity?.canonicalAsset?.assetUrl ? <img src={worldEntity.canonicalAsset.assetUrl} alt="" /> : <span aria-hidden><i/><i/><i/></span>}
+              <b>{item.name}</b>
+              <WorldMarkerAtmosphere entity={worldEntity} />
             </button>
-          ))}
+          )})}
 
           {!atlas.isLoading &&
           visibleCustomers.length + visiblePursuits.length === 0 ? (
@@ -253,6 +407,30 @@ export default function LanternCityAtlas({
         </WorldGeographySurface>
       </section>
 
+      {attentionRecommendations.length ? (
+        <section className="lc-attention-row" aria-label="Where Goldline suggests looking">
+          <h2>Where Goldline suggests looking</h2>
+          <p className="lc-attention-note">
+            Ranked by real derived signals. Nothing here changes a stage, a
+            revenue figure or a deadline — it only changes what is easy to find.
+          </p>
+          <div>
+            {attentionRecommendations.map(entity => (
+              <button
+                key={entity.id}
+                type="button"
+                className={`lc-attention-card attention-${entity.presentation.prominenceTier}`}
+                onClick={() => revealEntity(entity)}
+              >
+                <strong>{entity.displayName}</strong>
+                <span>{entity.presentation.attentionSummary}</span>
+                <small>{entity.projection.attentionReasons[0]?.sourceEvidenceReference}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="lc-utility-row">
         <article className="lc-legend">
           <h2>Lantern legend</h2>
@@ -263,8 +441,8 @@ export default function LanternCityAtlas({
             </span>
           ))}
           <span>
-            <i className="lc-mini-flame">♨</i>
-            <strong>Pursued</strong>
+            <i className="lc-mini-building" aria-hidden />
+            <strong>Pursued building</strong>
           </span>
         </article>
 
@@ -297,47 +475,7 @@ export default function LanternCityAtlas({
         </article>
       </section>
 
-      {selectedCluster ? <CustomerClusterDetail cluster={selectedCluster} onClose={() => setSelectedCluster(null)} onOpenCustomer={onOpenCustomer} /> : null}
-
-      {selectedPursuit ? (
-        <aside className="lc-detail" aria-live="polite">
-          <button
-            type="button"
-            onClick={() => setSelectedPursuit(null)}
-            aria-label="Close pursuit detail"
-          >
-            <X />
-          </button>
-          <span>Persisted commercial pursuit</span>
-          <h2>{selectedPursuit.name}</h2>
-          <p>
-            {selectedPursuit.location?.canonicalAddress ??
-              selectedPursuit.address}
-          </p>
-          <dl>
-            <div>
-              <dt>Pipeline stage</dt>
-              <dd>{selectedPursuit.stage.replaceAll("_", " ")}</dd>
-            </div>
-            <div>
-              <dt>Source</dt>
-              <dd>Commercial Pipeline</dd>
-            </div>
-            <div>
-              <dt>Last activity</dt>
-              <dd>
-                {new Date(selectedPursuit.updatedAt).toLocaleDateString()}
-              </dd>
-            </div>
-          </dl>
-          <Link
-            className="lc-open-customer"
-            href={`/commercial-pipeline?pipeline=${selectedPursuit.pipelineId}`}
-          >
-            Open Growth evidence <ArrowRight />
-          </Link>
-        </aside>
-      ) : null}
+      {selectedCluster || selectedPursuit || requestedEntity ? <WorldEntityInspector entity={selectedEntity} cluster={selectedCluster} pursuit={selectedPursuit} onClose={() => { setSelectedCluster(null); setSelectedPursuit(null); if (requestedEntityId) window.history.replaceState({}, "", "/growth/lantern-city"); }} onOpenCustomer={onOpenCustomer} /> : null}
     </main>
   );
 }

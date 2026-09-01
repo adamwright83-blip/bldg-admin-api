@@ -39,6 +39,7 @@ import type {
   GoldlineVisitContext,
 } from "../../game/actions/actionServices";
 import type { AuthoritativeFollowUp } from "../../game/actions/actionRegistry";
+import { liveObjectivesFromFieldToday } from "./goldlineDayPlanModel";
 import {
   canCompleteDelivery,
   nextCommitmentDate,
@@ -94,10 +95,15 @@ const WaywardTetheredDeck = lazy(
   () => import("../goldline/stages/WaywardTetheredDeck")
 );
 
-type DriverScene = "day-plan" | "game" | "overworld" | "colosseum" | "wayward";
+type DriverScene = "game" | "overworld" | "colosseum" | "wayward";
 
-/** The authoritative real-day projection is the fresh-session home. */
-export const INITIAL_DRIVER_SCENE: DriverScene = "day-plan";
+/**
+ * A fresh session enters Goldline's world. The authoritative real day is not a
+ * productivity screen in front of the game — it is a briefing that belongs to
+ * Overland and opens over it, so real work is never framed as a break from
+ * the world.
+ */
+export const INITIAL_DRIVER_SCENE: DriverScene = "overworld";
 
 function initialDriverScene(): DriverScene {
   if (
@@ -160,9 +166,10 @@ function LiveGoldlineDriverController() {
   const [selectedDate, setSelectedDate] = useState(() => getLocalYmd());
   const [driverScene, setDriverScene] =
     useState<DriverScene>(initialDriverScene);
-  const [stageReturnScene, setStageReturnScene] = useState<
-    "day-plan" | "overworld"
-  >("overworld");
+  const [stageReturnScene, setStageReturnScene] =
+    useState<"overworld">("overworld");
+  /** The day briefing, opened over Overland without leaving it. */
+  const [dayBriefingOpen, setDayBriefingOpen] = useState(false);
   const [waywardProgress, setWaywardProgress] = useState<WaywardProgress>(() =>
     loadWaywardProgress(null)
   );
@@ -174,6 +181,7 @@ function LiveGoldlineDriverController() {
     null
   );
   const [journalOpen, setJournalOpen] = useState(false);
+  const [activeAdventureObjectiveId, setActiveAdventureObjectiveId] = useState<string | null>(null);
   const [dayResolution, setDayResolution] = useState<DayResolution | null>(
     null
   );
@@ -854,6 +862,7 @@ function LiveGoldlineDriverController() {
 
   async function refetchGoldlineActionTruth(missionId: number | null) {
     await Promise.all([
+      fieldToday.refetch(),
       builtMissions.refetch(),
       driverGameWorld.refetch(),
       progression.refetch(),
@@ -1091,6 +1100,12 @@ function LiveGoldlineDriverController() {
     fieldToday.data?.businessDate === selectedDate
       ? fieldToday.data
       : undefined;
+  const liveAdventureObjectives = useMemo(
+    () => liveObjectivesFromFieldToday(currentDayProjection?.timeline ?? []),
+    [currentDayProjection?.timeline]
+  );
+  const activeAdventureObjective = liveAdventureObjectives.find(item => item.id === activeAdventureObjectiveId)
+    ?? liveAdventureObjectives.find(item => item.status === "ready") ?? null;
 
   const gameHomeProps = {
     pickups: pickups.data,
@@ -1139,9 +1154,26 @@ function LiveGoldlineDriverController() {
     ...(deliveries.data ?? []),
   ];
 
-  if (driverScene === "day-plan") {
-    return (
-      <>
+  /*
+    The same authoritative day, reusing the same projection and the same
+    component the driver has always seen. It opens over Overland rather than
+    replacing it, so closing it returns to the exact world context the player
+    left — the runtime underneath is never unmounted.
+  */
+  const dayBriefing = (
+    <div
+      className="overworld-briefing-layer"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Today's briefing"
+    >
+      <button
+        type="button"
+        className="overworld-briefing-close"
+        onClick={() => setDayBriefingOpen(false)}
+      >
+        CLOSE BRIEFING
+      </button>
         <GoldlineDayPlan
           businessDate={selectedDate}
           pickups={dayPlanPickups}
@@ -1149,6 +1181,7 @@ function LiveGoldlineDriverController() {
           externalOrders={externalOrders.data ?? []}
           openChannelMission={openChannel.data}
           salesMissions={builtMissions.data}
+          liveObjectives={liveAdventureObjectives}
           processingLocation={dayDirectorState.data?.processingLocation}
           commitments={dayDirectorState.data?.commitments}
           intelligenceAvailable={dayDirectorState.data?.intelligenceAvailable}
@@ -1162,10 +1195,18 @@ function LiveGoldlineDriverController() {
             externalOrders.isLoading
           }
           onOpenImport={() => setAddExternalWorkOpen(true)}
-          onEnterOperations={() => setDriverScene("game")}
-          onEnterWorld={() => setDriverScene("overworld")}
+          onEnterOperations={() => {
+            setDayBriefingOpen(false);
+            setDriverScene("game");
+          }}
+          onEnterWorld={trackedStopId => {
+            // Already in the world — track the objective and step back into it.
+            setActiveAdventureObjectiveId(trackedStopId?.replace(/^living-world-/, "") ?? null);
+            setDayBriefingOpen(false);
+          }}
           onEnterColosseum={() => {
-            setStageReturnScene("day-plan");
+            setStageReturnScene("overworld");
+            setDayBriefingOpen(false);
             setDriverScene("colosseum");
           }}
           onProposeCommitment={sourceText =>
@@ -1210,15 +1251,16 @@ function LiveGoldlineDriverController() {
             await externalOrders.refetch();
           }}
         />
-      </>
-    );
-  }
+    </div>
+  );
 
   if (driverScene === "overworld") {
     return (
+      <>
       <GoldlineOverworld
         pickups={pickups.data}
         deliveries={deliveries.data}
+        activeObjective={activeAdventureObjective}
         isLoading={pickups.isLoading || deliveries.isLoading}
         isResolvingOrder={updateStatus.isPending}
         greystarActive={Boolean(
@@ -1235,7 +1277,11 @@ function LiveGoldlineDriverController() {
         }}
         onEnterWayward={() => setDriverScene("wayward")}
         onResolveOrder={handleResolveOrder}
+        onOpenDayBriefing={() => setDayBriefingOpen(true)}
+        dayObjectiveCount={liveAdventureObjectives.length}
       />
+      {dayBriefingOpen ? dayBriefing : null}
+    </>
     );
   }
 
@@ -1428,7 +1474,7 @@ function LiveGoldlineDriverController() {
           toast.success(`Walk-in ${result.missionCode} saved.${calendarText}`);
         }}
       />
-      <SalesJournalSheet open={journalOpen} onOpenChange={setJournalOpen} />
+      <SalesJournalSheet open={journalOpen} onOpenChange={setJournalOpen} location={location} />
     </>
   );
 }

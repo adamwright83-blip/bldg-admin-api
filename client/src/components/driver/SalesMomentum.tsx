@@ -4,6 +4,8 @@ import { Diamond, Loader2, Mic, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { startBrowserSpeechTranscript, type BrowserSpeechSession } from "@/lib/browserSpeechRecognition";
+import { useGoldlineCelebration } from "@/components/goldline/GoldlineCelebrationProvider";
+import type { GoldlineLocationSnapshot } from "@/pages/driver/goldlineDriverModel";
 
 export function SalesMomentumMeter() {
   const meter = trpc.system.adaptiveSalesMeter.myMeter.useQuery(undefined, { refetchInterval: 15_000 });
@@ -60,9 +62,18 @@ export function describeSaveError(error: unknown): string {
   return message || "Could not save your journal. Your recording is still here — retry.";
 }
 
-export function SalesJournalSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+function newClientRequestId() {
+  return globalThis.crypto?.randomUUID?.() ?? `journal-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+export function SalesJournalSheet({ open, onOpenChange, location }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  location?: GoldlineLocationSnapshot;
+}) {
   const utils = trpc.useUtils();
   const save = trpc.system.commercialMission.saveSalesJournal.useMutation();
+  const { celebrate } = useGoldlineCelebration();
   const [recording, setRecording] = React.useState(false);
   const [transcript, setTranscript] = React.useState("");
   const recorderRef = React.useRef<MediaRecorder | null>(null);
@@ -71,6 +82,8 @@ export function SalesJournalSheet({ open, onOpenChange }: { open: boolean; onOpe
   const chunksRef = React.useRef<Blob[]>([]);
   const [audioDataUrl, setAudioDataUrl] = React.useState<string | null>(null);
   const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [clientRequestId, setClientRequestId] = React.useState(newClientRequestId);
+  const [attachLocation, setAttachLocation] = React.useState(true);
 
   const stopTracks = React.useCallback(() => {
     streamRef.current?.getTracks().forEach(track => track.stop());
@@ -114,15 +127,28 @@ export function SalesJournalSheet({ open, onOpenChange }: { open: boolean; onOpe
     try {
       const date = new Date();
       const journalDate = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
-      const result = await save.mutateAsync({ journalDate, audioDataUrl: audioDataUrl ?? undefined, transcript: transcript.trim() || undefined });
+      const availableLocation = location?.status === "available" ? location : null;
+      const result = await save.mutateAsync({
+        journalDate,
+        clientRequestId,
+        audioDataUrl: audioDataUrl ?? undefined,
+        transcript: transcript.trim() || undefined,
+        location: attachLocation && availableLocation ? {
+          ...availableLocation.coordinates,
+          accuracyMeters: availableLocation.accuracyMeters ?? 0,
+          capturedAt: new Date().toISOString(),
+          contemporaneous: true,
+        } : undefined,
+      });
       await Promise.all([
         utils.system.adaptiveSalesMeter.myMeter.invalidate(),
         utils.system.commercialMission.mySalesJournals.invalidate(),
       ]);
-      toast.success(result.points ? `Journal absorbed · +${result.points} momentum` : "Journal absorbed into future missions");
+      celebrate(result.worldEvent);
+      toast.success("Field Journal secured. Processing continues safely in the background.");
       // Only clear captured input on a confirmed, authoritative save — a
       // failed save must never discard the recording or typed transcript.
-      setTranscript(""); setAudioDataUrl(null); onOpenChange(false);
+      setTranscript(""); setAudioDataUrl(null); setClientRequestId(newClientRequestId()); onOpenChange(false);
     } catch (error) {
       const message = describeSaveError(error);
       setSaveError(message);
@@ -131,25 +157,29 @@ export function SalesJournalSheet({ open, onOpenChange }: { open: boolean; onOpe
   }
 
   return <AnimatePresence>{open ? (
-    <motion.div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/70 p-3 backdrop-blur-sm sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !recording && onOpenChange(false)}>
-      <motion.section role="dialog" aria-modal="true" aria-labelledby="sales-journal-title" className="w-full max-w-[760px] overflow-hidden rounded-[26px] border border-fuchsia-300/30 bg-[#101624] text-white shadow-2xl" initial={{ y: 40 }} animate={{ y: 0 }} exit={{ y: 40 }} onClick={event => event.stopPropagation()}>
-        <header className="flex items-start justify-between border-b border-white/10 p-[clamp(22px,4vw,38px)]">
-          <div><p className="text-sm font-black uppercase tracking-[.2em] text-fuchsia-300">Private coaching memory</p><h2 id="sales-journal-title" className="mt-2 text-[clamp(30px,4vw,42px)] font-black">Unload the day</h2><p className="mt-2 max-w-xl text-[clamp(15px,2vw,20px)] text-white/60">What happened out there? Tell me what they said, where you got stuck, and anything that worked.</p></div>
-          <button type="button" aria-label="Close journal" disabled={recording} onClick={() => onOpenChange(false)} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10 disabled:opacity-30"><X /></button>
+    <motion.div className="fixed inset-0 z-[90] flex items-end justify-center bg-[#17385e6b] p-3 backdrop-blur-sm sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !recording && onOpenChange(false)}>
+      <motion.section role="dialog" aria-modal="true" aria-labelledby="sales-journal-title" className="w-full max-w-[760px] overflow-hidden rounded-[26px] border-2 border-[#e0bd63] bg-[linear-gradient(#fffdf2,#f9e6ad)] text-[#17385e] shadow-[0_24px_80px_#31516e55]" initial={{ y: 40 }} animate={{ y: 0 }} exit={{ y: 40 }} onClick={event => event.stopPropagation()}>
+        <header className="flex items-start justify-between border-b-2 border-[#e0bd63] p-[clamp(22px,4vw,38px)]">
+          <div><p className="text-sm font-black uppercase tracking-[.2em] text-[#9b6410]">Field Journal · durable evidence</p><h2 id="sales-journal-title" className="mt-2 text-[clamp(30px,4vw,42px)] font-black">Capture what happened</h2><p className="mt-2 max-w-xl text-[clamp(15px,2vw,20px)] text-[#3a5f7e]">Name every property or business you encountered, what was said, what you did, and what needs follow-up. One entry can hold several places.</p></div>
+          <button type="button" aria-label="Close journal" disabled={recording} onClick={() => onOpenChange(false)} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#17385e33] bg-[#fff9df] disabled:opacity-30"><X /></button>
         </header>
         <div className="grid gap-4 p-[clamp(18px,3.5vw,32px)]">
-          <button type="button" data-testid="journal-record-toggle" onClick={recording ? stopRecording : startRecording} className={`flex min-h-[92px] items-center justify-center gap-4 rounded-[20px] text-xl font-black ${recording ? "bg-red-500" : audioDataUrl ? "bg-emerald-500 text-slate-950" : "bg-fuchsia-500 text-slate-950"}`}>
+          <button type="button" data-testid="journal-record-toggle" onClick={recording ? stopRecording : startRecording} className={`flex min-h-[92px] items-center justify-center gap-4 rounded-[20px] text-xl font-black ${recording ? "bg-[#c2392a] text-white" : audioDataUrl ? "bg-[#3f9c3a] text-white" : "bg-[#edaa26] text-[#17385e]"}`}>
             {recording ? <><Square className="fill-current" /> Stop recording</> : audioDataUrl ? <><Mic /> Recorded · tap to replace</> : <><Mic /> Start talking</>}
           </button>
-          <div className="flex items-center gap-3 text-[14px] font-black uppercase tracking-[.15em] text-white/35"><span className="h-px flex-1 bg-white/10" />or type/correct it<span className="h-px flex-1 bg-white/10" /></div>
-          <textarea data-testid="journal-transcript" value={transcript} onChange={event => setTranscript(event.target.value)} rows={5} placeholder="They said they already have laundry machines. I froze and changed the subject…" className="min-h-[130px] resize-none rounded-[18px] border border-white/15 bg-white/[.06] p-4 text-[17px] leading-relaxed outline-none placeholder:text-white/30 focus:border-fuchsia-300" />
-          <p className="text-sm leading-relaxed text-white/45">Your recording, transcript, and extracted coaching are visible to the admin owner. Coaching will appear organically inside future mission diamonds.</p>
+          <div className="flex items-center gap-3 text-[14px] font-black uppercase tracking-[.15em] text-[#9b6410]"><span className="h-px flex-1 bg-[#cd9d3d66]" />or type/correct it<span className="h-px flex-1 bg-[#cd9d3d66]" /></div>
+          <textarea data-testid="journal-transcript" value={transcript} onChange={event => setTranscript(event.target.value)} rows={5} placeholder="They said they already have laundry machines. I froze and changed the subject…" className="min-h-[130px] resize-none rounded-[18px] border-2 border-[#cd9d3d66] bg-[#fffdf2] p-4 text-[17px] leading-relaxed outline-none placeholder:text-[#8aa0b4] focus:border-[#2b8ca8]" />
+          {location ? <label className="flex min-h-12 items-center justify-between gap-4 rounded-[14px] border border-[#cd9d3d66] bg-[#fffdf2] px-4 text-sm">
+            <span><strong className="block text-[#17385e]">Attach current device location</strong><span className="text-[#4a6a86]">{location.status === "available" ? `Available${location.accuracyMeters ? ` · ±${location.accuracyMeters}m` : ""}` : location.status === "requesting" ? "Still requesting location" : "Unavailable — entry can still be saved"}</span></span>
+            <input type="checkbox" checked={attachLocation && location.status === "available"} disabled={location.status !== "available"} onChange={event => setAttachLocation(event.target.checked)} className="h-5 w-5 accent-[#edaa26]" />
+          </label> : null}
+          <p className="text-sm leading-relaxed text-[#4a6a86]">The original recording and your exact words are retained before processing. Extracted identities and coaching are labeled as interpretation and can be corrected; they never become confirmed outcomes by themselves.</p>
           {saveError ? (
-            <p data-testid="journal-save-error" role="alert" className="rounded-[14px] border border-amber-400/40 bg-amber-500/10 p-3 text-sm leading-relaxed text-amber-100">
+            <p data-testid="journal-save-error" role="alert" className="rounded-[14px] border-2 border-[#c2503a] bg-[#ffe9e2] p-3 text-sm leading-relaxed text-[#8d2f1c]">
               {saveError}
             </p>
           ) : null}
-          <button type="button" data-testid="journal-save" onClick={() => void submit()} disabled={recording || save.isPending || (!audioDataUrl && transcript.trim().length < 20)} className="flex min-h-[66px] items-center justify-center gap-3 rounded-[17px] bg-white text-lg font-black text-slate-950 disabled:opacity-35">{save.isPending ? <><Loader2 className="animate-spin" /> Absorbing the day…</> : saveError ? "Retry save" : "Save to future missions"}</button>
+          <button type="button" data-testid="journal-save" onClick={() => void submit()} disabled={recording || save.isPending || (!audioDataUrl && transcript.trim().length < 20)} className="flex min-h-[66px] items-center justify-center gap-3 rounded-[17px] bg-[#17385e] text-lg font-black text-[#fff8dc] disabled:opacity-35">{save.isPending ? <><Loader2 className="animate-spin" /> Securing evidence…</> : saveError ? "Retry same entry" : "Secure Field Journal"}</button>
         </div>
       </motion.section>
     </motion.div>
