@@ -143,8 +143,17 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     await page.mouse.down();
     await page.mouse.move(630, 385, { steps: 8 });
     await page.mouse.up();
-    await page.waitForTimeout(900);
-    const stateA = await space.getAttribute("style");
+    let stateA = "";
+    for (let i = 0; i < 20; i += 1) {
+      const first = await space.getAttribute("style");
+      await page.waitForTimeout(120);
+      const second = await space.getAttribute("style");
+      if (first && first === second) {
+        stateA = first;
+        break;
+      }
+    }
+    expect(stateA).not.toBe("");
 
     const louise = page.getByRole("button", { name: /Pursued: The Louise/i });
     const pursued = page.locator(".lc-pursued-building").first();

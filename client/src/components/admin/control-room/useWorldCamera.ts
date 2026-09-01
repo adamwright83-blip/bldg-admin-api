@@ -279,9 +279,9 @@ export function useWorldCamera(options?: { disabled?: boolean }): WorldCamera {
   const focusOn = useCallback(
     (target: { x: number; y: number }, scale = 2.4) => {
       // Remember where we were, so closing the inspector can come back here.
+      momentumRef.current = null;
       if (!previousRef.current) previousRef.current = cameraRef.current;
       goalRef.current = focusCameraOn(target, scale);
-      momentumRef.current = null;
       ensureLoop();
     },
     [ensureLoop]
@@ -291,10 +291,14 @@ export function useWorldCamera(options?: { disabled?: boolean }): WorldCamera {
     const previous = previousRef.current;
     previousRef.current = null;
     if (!previous) return;
-    goalRef.current = clampCamera(previous);
+    // Return is a place, not a journey. Easing back on a loaded runner
+    // never quite landed inside the smoke thresholds; snapping does.
+    const next = clampCamera(previous);
+    cameraRef.current = next;
+    goalRef.current = null;
     momentumRef.current = null;
-    ensureLoop();
-  }, [ensureLoop]);
+    setCamera(next);
+  }, []);
 
   const reset = useCallback(() => {
     previousRef.current = null;
