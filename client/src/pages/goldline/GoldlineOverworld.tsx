@@ -53,6 +53,7 @@ export default function GoldlineOverworld({
   onEnterGreystar,
   onEnterWayward,
   onResolveOrder,
+  suppressCampaignChrome = false,
 }: {
   pickups?: Order[];
   deliveries?: Order[];
@@ -74,6 +75,7 @@ export default function GoldlineOverworld({
     orderId: number,
     status: "collected" | "delivered"
   ) => Promise<boolean>;
+  suppressCampaignChrome?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<GoldlineOverworldRuntime | null>(null);
@@ -306,11 +308,16 @@ export default function GoldlineOverworld({
 
         <DriverTerritorySky driving={driving} onEncounterChange={setGuardianPlaying} />
         <CampaignOverlandThread />
-        <CampaignHudConnected compact />
-        <CampaignChapterHost
-          driving={driving}
-          atDestination={Boolean(proximity?.canAct)}
-        />
+        {suppressCampaignChrome ? null : (
+          <>
+            <CampaignHudConnected compact />
+            <CampaignChapterHost
+              driving={driving}
+              atDestination={Boolean(proximity?.canAct)}
+              onHostCurrentChapter={() => onEnterOperations?.()}
+            />
+          </>
+        )}
 
         <DynamicJoystick
           disabled={ordersOpen || !runtimeReady || guardianPlaying}

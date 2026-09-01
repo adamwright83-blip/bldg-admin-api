@@ -1295,6 +1295,7 @@ function LiveGoldlineDriverController() {
         onEnterWayward={() => setDriverScene("wayward")}
         onResolveOrder={handleResolveOrder}
         onOpenDayBriefing={() => setDayBriefingOpen(true)}
+        suppressCampaignChrome={dayBriefingOpen}
         dayObjectiveCount={liveAdventureObjectives.length}
       />
       {dayBriefingOpen ? dayBriefing : null}
