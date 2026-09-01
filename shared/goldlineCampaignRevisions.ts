@@ -146,7 +146,7 @@ export function recompileCampaignFuture(input: {
     completedChapterIds,
     currentChapterId: currentStillValid
       ? input.instance.currentChapterId
-      : future[0]?.stableChapterId ?? input.instance.currentChapterId,
+      : future[0]?.stableChapterId ?? null,
     campaignArchetypeId: input.instance.campaignArchetypeId,
     title: input.instance.title,
     premise: input.instance.premise,
