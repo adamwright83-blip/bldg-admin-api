@@ -21,6 +21,7 @@ const cueMap: Record<CelebrationDescriptor["cue"], AudioCueId> = {
   recovery: "signal_lock",
   tower: "scout_discovery",
   outcome: "victory_flag",
+  territory: "victory_flag",
 };
 
 const colors = ["#fde047", "#f0abfc", "#67e8f9", "#ffffff", "#fb7185"];

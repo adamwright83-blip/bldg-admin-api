@@ -40,6 +40,8 @@ export type WorldGeographySurfaceProps = {
    */
   onGoogleVisibilityChange?: (googleVisible: boolean) => void;
   focusPoint?: { x: number; y: number } | null;
+  /** Guardian encounter owns gestures so a boss tap cannot drag the city. */
+  gesturesDisabled?: boolean;
 };
 
 const CANONICAL_TOWERS: Array<{
@@ -79,6 +81,7 @@ export function WorldGeographySurface({
   geographicEntities,
   onGoogleVisibilityChange,
   focusPoint,
+  gesturesDisabled = false,
 }: WorldGeographySurfaceProps) {
   const [realityBuildingId, setRealityBuildingId] = useState<CanonicalBuildingId | null>(null);
   const [viewMode, setViewMode] = useState<"atlas" | "reality_3d">("atlas");
@@ -150,7 +153,7 @@ export function WorldGeographySurface({
     illustrated atlas. Two cameras fighting for one gesture is worse than none.
   */
   const cameraIsLive = !googleVisible;
-  const camera = useWorldCamera({ disabled: googleVisible });
+  const camera = useWorldCamera({ disabled: googleVisible || gesturesDisabled });
 
   // Focusing a building is a camera move, not a page navigation: the world
   // stays mounted underneath so closing the inspector returns to this exact view.

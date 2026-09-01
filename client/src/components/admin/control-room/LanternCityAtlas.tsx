@@ -12,6 +12,7 @@ import { useArcadeWorld } from "./useArcadeWorld";
 import { describeWorldPresentation, orderByProminence } from "@shared/goldlineWorldPresentation";
 import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWorldService";
 import { projectCustomerWindows } from "@shared/goldlineCustomerWindows";
+import { TerritoryChrome, TerritoryWorldLayer, useReducedMotionFlag } from "@/components/goldline/TerritoryWorldLayer";
 
 export {
   inferCustomerCadence,
@@ -173,6 +174,8 @@ export default function LanternCityAtlas({
   );
 
   const [googleVisible, setGoogleVisible] = useState(false);
+  const [guardianLocked, setGuardianLocked] = useState(false);
+  const reducedMotion = useReducedMotionFlag();
   /*
     One scheduler drives every playable building. Only the places actually
     drawn are handed to it, so offscreen towers cost nothing.
@@ -383,6 +386,7 @@ export default function LanternCityAtlas({
           onGoogleVisibilityChange={setGoogleVisible}
           geographicEntities={googleEntities}
           focusPoint={selectedFocusPoint}
+          gesturesDisabled={guardianLocked}
         >
           {/*
             Lanterns and pursuit flames are positioned with the atlas x/y
@@ -490,6 +494,7 @@ export default function LanternCityAtlas({
                 touches nothing real.
               */
               onPointerDown={event => {
+                if (guardianLocked) return;
                 if (!event.altKey || !worldEntity) return;
                 event.preventDefault();
                 event.stopPropagation();
@@ -542,7 +547,15 @@ export default function LanternCityAtlas({
               </span>
             </div>
           ) : null}
+          <TerritoryWorldLayer
+            entities={cityWorld.data ?? []}
+            googleVisible={googleVisible}
+            interactionLocked={guardianLocked}
+            onInteractionLock={setGuardianLocked}
+            reducedMotion={reducedMotion}
+          />
         </WorldGeographySurface>
+        <TerritoryChrome />
       </section>
 
       {attentionRecommendations.length ? (

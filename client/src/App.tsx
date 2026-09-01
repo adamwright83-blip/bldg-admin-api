@@ -30,6 +30,7 @@ const CommercialMissionAdmin = lazy(
 const SalesIntelAdmin = lazy(() => import("./pages/SalesIntelAdmin"));
 const GoldlineEffectivenessAdmin = lazy(() => import("./pages/GoldlineEffectivenessAdmin"));
 const TowerForgeAdmin = lazy(() => import("./pages/TowerForgeAdmin"));
+const GuardianRosterPage = lazy(() => import("./pages/GuardianRosterPage"));
 const CommercialSalesMission = lazy(
   () => import("./pages/CommercialSalesMission")
 );
@@ -159,6 +160,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/operations",
   "/growth",
   "/growth/lantern-city",
+  "/growth/guardians",
   "/growth/tower-wars",
   "/growth/sandbox",
   "/growth/driver-intelligence",
@@ -333,6 +335,13 @@ function AdminHostRouter() {
       <Route path="/operations" component={AdminHostApp} />
       <Route path="/growth" component={AdminHostApp} />
       <Route path="/growth/lantern-city" component={AdminHostApp} />
+      <Route path="/growth/guardians">
+        <AdminAuthGate>
+          <Suspense fallback={<PublicLandingFallback />}>
+            <GuardianRosterPage />
+          </Suspense>
+        </AdminAuthGate>
+      </Route>
       <Route path="/growth/tower-wars" component={AdminHostApp} />
       <Route path="/growth/sandbox" component={AdminHostApp} />
       <Route path="/growth/driver-intelligence" component={AdminHostApp} />
