@@ -114,7 +114,7 @@ export function recompileCampaignFuture(input: {
 
   const future = input.next.chapters.filter(chapter => {
     if (lockedIds.has(chapter.stableChapterId)) return false;
-    if (currentStillValid && current) {
+    if (currentStillValid && current && chapter.objectiveIds.length > 0) {
       return !chapter.objectiveIds.every(id => current.objectiveIds.includes(id));
     }
     return true;
