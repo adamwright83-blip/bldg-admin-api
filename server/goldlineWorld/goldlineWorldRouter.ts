@@ -22,6 +22,7 @@ import {
   getOrMaterializeTodayCampaign,
   listOperatorCampaigns,
   recordCampaignChapterGameCompleted,
+  recordCampaignGuardianFinaleForTerritory,
   upsertFictionAssignmentIfAbsent,
 } from "./campaignService";
 import { resetProofWorldFromApi } from "./goldlineProofWorld";
@@ -74,37 +75,16 @@ export const goldlineWorldRouter = router({
         territoryId: z.string().uuid(),
         guardianId: z.string().min(1).max(64),
         confrontationReady: z.boolean(),
+        // Backward-compatible client snapshot only. The server deliberately
+        // ignores it and resolves the matching persisted finale by territory.
         campaignChapterId: z.string().min(1).max(191).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Keep campaign and territory game history in a deterministic server-side
-      // order. We validate the supplied chapter against today's campaign and
-      // this exact territory before recording either piece of game projection.
-      // This avoids the old client race where clearing the territory removed the
-      // finale during campaign rematerialization before chapter completion ran.
-      let completedCampaignChapterId: string | null = null;
-      if (input.campaignChapterId) {
-        const presented = await getOrMaterializeTodayCampaign({
-          tenantId: ctx.tenantId,
-          operatorId: ctx.user.openId,
-        });
-        const finale = presented.campaign.chapters.find(
-          chapter =>
-            chapter.stableChapterId === input.campaignChapterId &&
-            chapter.chapterKind === "guardian_finale" &&
-            chapter.selectedGameplayBinding === "guardian_finale" &&
-            chapter.territoryId === input.territoryId
-        );
-        if (finale) {
-          await recordCampaignChapterGameCompleted({
-            tenantId: ctx.tenantId,
-            operatorId: ctx.user.openId,
-            chapterId: finale.stableChapterId,
-          });
-          completedCampaignChapterId = finale.stableChapterId;
-        }
-      }
+      // Territory truth is validated/written first. Invalid readiness, guardian
+      // mismatch, or a failed territory write can therefore never manufacture
+      // campaign completion. On retry, an already-cleared territory still
+      // returns recorded=true, allowing the persisted campaign finale to heal.
       const result = await recordGuardianDefeated({
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
@@ -112,10 +92,22 @@ export const goldlineWorldRouter = router({
         guardianId: input.guardianId,
         confrontationReady: input.confrontationReady,
       });
+      if (!result.recorded) {
+        return {
+          ...result,
+          campaignChapterCompleted: false,
+          completedCampaignChapterId: null,
+        };
+      }
+      const campaignResult = await recordCampaignGuardianFinaleForTerritory({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        territoryId: input.territoryId,
+      });
       return {
         ...result,
-        campaignChapterCompleted: Boolean(completedCampaignChapterId),
-        completedCampaignChapterId,
+        campaignChapterCompleted: campaignResult.completed,
+        completedCampaignChapterId: campaignResult.chapterId,
       };
     }),
   campaign: dayforgeTenantMemberProcedure.query(({ ctx }) =>
