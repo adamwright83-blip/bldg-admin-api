@@ -473,3 +473,25 @@
 .lc-unmapped button{border:2px solid #cfa94d;background:#fff6d2;color:#17385e;font-weight:800}
 /* The world canvas keeps sky behind the illustration instead of night navy. */
 .cr-world-geography-surface{background:#cfe8f4}
+.owi-blocked{margin-top:9px;padding:12px;border:1px dashed #cd9d3d;border-radius:12px;background:#fff4d6;font-size:11px;line-height:1.5}
+
+/*
+  Narrow Lantern City. The shell's existing 800px rules already stack this
+  header; what is left is that `.lc-page-header>div` styles BOTH the title
+  block and the controls row, so the title's two-column grid was also being
+  applied to the search row and collapsing it.
+*/
+@media (max-width:800px){
+  .lc-page-header>div:first-child{grid-template-columns:34px 1fr}
+  .lc-page-header h1{line-height:1.15}
+  .lc-spark{align-self:start;font-size:22px}
+  /* One column, so the search owns the full width of the stacked header. */
+  .lc-header-controls{align-self:stretch;width:100%;grid-template-columns:1fr;gap:10px}
+  .lc-header-controls .lc-search{width:100%}
+  /*
+    The Control Room shell already renders this identical day-phase chip above
+    the page, and the in-page copy is positioned out of flow, so it lands on
+    top of the search field here.
+  */
+  .lc-page .lc-header-controls .cr-day-phase{display:none}
+}

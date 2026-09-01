@@ -15,7 +15,10 @@ import { Link } from "wouter";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import type { CustomerLocationCluster, GeographicCustomer } from "./customerGeography";
+import type {
+  CustomerLocationCluster,
+  GeographicCustomer,
+} from "./customerGeography";
 import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWorldService";
 
 type CityEntity = CityWorldEntity;
@@ -48,13 +51,16 @@ function requestId() {
 function RecoveryPath({ resident }: { resident: Resident }) {
   const utils = trpc.useUtils();
   const scan = trpc.system.churnRadar.latestScan.useQuery();
+  const profile = trpc.system.churnRadar.profile.useQuery();
   const interventions = trpc.system.churnRadar.interventions.useQuery();
   const create = trpc.system.churnRadar.createIntervention.useMutation();
   const prepare = trpc.system.churnRadar.prepareManualContact.useMutation();
   const contacted = trpc.system.churnRadar.markContacted.useMutation();
 
   const snapshot =
-    scan.data?.customers.find(item => item.customerKey === resident.identityKey) ?? null;
+    scan.data?.customers.find(
+      item => item.customerKey === resident.identityKey
+    ) ?? null;
   const intervention =
     interventions.data?.find(
       item => item.customer.customerKey === resident.identityKey
@@ -63,38 +69,58 @@ function RecoveryPath({ resident }: { resident: Resident }) {
 
   async function begin() {
     if (!snapshot) return;
-    await create.mutateAsync({ snapshotId: snapshot.id, requestId: requestId() });
-    await utils.system.churnRadar.interventions.invalidate();
-    toast.success("Recovery Path prepared from real order history");
+    try {
+      await create.mutateAsync({
+        snapshotId: snapshot.id,
+        requestId: requestId(),
+      });
+      await utils.system.churnRadar.interventions.invalidate();
+      toast.success("Recovery Path prepared from real order history");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Recovery Path could not be prepared"
+      );
+    }
   }
 
   async function recordApprovedAction() {
     if (!intervention || intervention.status !== "approved") return;
-    await prepare.mutateAsync({
-      interventionId: intervention.id,
-      draftId: intervention.draft.id,
-      contentHash: intervention.draft.contentHash,
-      requestId: requestId(),
-    });
-    await contacted.mutateAsync({
-      interventionId: intervention.id,
-      draftId: intervention.draft.id,
-      contentHash: intervention.draft.contentHash,
-      requestId: requestId(),
-      confirmation:
-        "I manually sent this exact approved message to this customer",
-    });
-    await Promise.all([
-      utils.system.churnRadar.interventions.invalidate(),
-      utils.system.goldlineWorld.cityEntities.invalidate(),
-    ]);
-    toast.success(
-      "Signal sent. The lantern stays dormant until a real order returns."
-    );
+    try {
+      await prepare.mutateAsync({
+        interventionId: intervention.id,
+        draftId: intervention.draft.id,
+        contentHash: intervention.draft.contentHash,
+        requestId: requestId(),
+      });
+      await contacted.mutateAsync({
+        interventionId: intervention.id,
+        draftId: intervention.draft.id,
+        contentHash: intervention.draft.contentHash,
+        requestId: requestId(),
+        confirmation:
+          "I manually sent this exact approved message to this customer",
+      });
+      await Promise.all([
+        utils.system.churnRadar.interventions.invalidate(),
+        utils.system.goldlineWorld.cityEntities.invalidate(),
+      ]);
+      toast.success(
+        "Signal sent. The lantern stays dormant until a real order returns."
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "The action was not recorded"
+      );
+    }
   }
 
   return (
-    <section className="owi-recovery" aria-label={`Recovery Path for ${resident.displayName}`}>
+    <section
+      className="owi-recovery"
+      aria-label={`Recovery Path for ${resident.displayName}`}
+    >
       <p className="owi-kicker">Recovery Path</p>
       <h3>
         {intervention?.status === "recovered"
@@ -121,7 +147,19 @@ function RecoveryPath({ resident }: { resident: Resident }) {
         </div>
       ) : null}
 
-      {!intervention && snapshot ? (
+      {/*
+        Outreach needs a configured sender identity before any draft exists.
+        Saying so is better than offering a button that fails on click.
+      */}
+      {!intervention && snapshot && !profile.isLoading && !profile.data ? (
+        <div className="owi-blocked">
+          Recovery outreach needs a configured sender identity first.{" "}
+          <Link className="owi-evidence-link" href="/growth/churn-winback">
+            Configure the recovery profile
+          </Link>
+        </div>
+      ) : null}
+      {!intervention && snapshot && profile.data ? (
         <button disabled={busy} onClick={() => void begin()}>
           Prepare evidence-backed Recovery Path
         </button>
@@ -139,7 +177,8 @@ function RecoveryPath({ resident }: { resident: Resident }) {
       ) : null}
       {intervention?.status === "recovered" ? (
         <div className="owi-relit">
-          LANTERN RELIT · authoritative paid order {intervention.recoveredOrderId}
+          LANTERN RELIT · authoritative paid order{" "}
+          {intervention.recoveredOrderId}
         </div>
       ) : null}
     </section>
@@ -190,10 +229,12 @@ export function WorldEntityInspector({
         totalOrders: null,
       }));
 
-  const resident = residents.find(item => item.identityKey === residentKey) ?? null;
+  const resident =
+    residents.find(item => item.identityKey === residentKey) ?? null;
 
   const address =
-    entity?.aliases.find(alias => alias.aliasType === "normalized_address")?.aliasValue ??
+    entity?.aliases.find(alias => alias.aliasType === "normalized_address")
+      ?.aliasValue ??
     cluster?.canonicalAddress ??
     pursuit?.location?.canonicalAddress ??
     pursuit?.address;
@@ -342,7 +383,8 @@ export function WorldEntityInspector({
                   {String((item.valueJson as { value?: unknown }).value ?? "")}
                 </strong>
                 <small>
-                  {item.provenanceClass.replaceAll("_", " ")} · {item.sourceReference}
+                  {item.provenanceClass.replaceAll("_", " ")} ·{" "}
+                  {item.sourceReference}
                 </small>
               </div>
             ))}
