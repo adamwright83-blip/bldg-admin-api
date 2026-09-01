@@ -84,9 +84,12 @@ export function recompileCampaignFuture(input: {
     return { instance: input.instance, diff: null };
   }
   const completedObjectiveIds = new Set(input.next.authoritativeCompletedObjectiveIds ?? []);
+  const clearedTerritoryIds = new Set(input.next.clearedTerritoryIds ?? []);
   const absorbedCompleted = input.instance.chapters.filter(chapter => {
     if (input.instance.completedChapterIds.includes(chapter.stableChapterId)) return true;
-    if (chapter.chapterKind === "guardian_finale") return false;
+    if (chapter.chapterKind === "guardian_finale") {
+      return Boolean(chapter.territoryId && clearedTerritoryIds.has(chapter.territoryId));
+    }
     if (chapter.objectiveIds.length === 0) return false;
     return chapter.objectiveIds.every(id => completedObjectiveIds.has(id));
   });
