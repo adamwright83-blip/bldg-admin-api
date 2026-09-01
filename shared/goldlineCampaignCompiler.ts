@@ -159,5 +159,9 @@ export function compileGoldlineCampaign(input: CampaignCompileInput): CampaignDr
     completedChapterIds: [],
     status: readyCount === 0 ? "quiet" : "authored",
     endingTreatment: null,
+    authoritativeCompletedObjectiveIds: input.objectives
+      .filter(item => item.status === "completed")
+      .map(item => item.id)
+      .sort(),
   };
 }
