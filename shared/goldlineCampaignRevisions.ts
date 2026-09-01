@@ -150,7 +150,9 @@ export function recompileCampaignFuture(input: {
         : input.next.status;
   const nextCompletedAt = completedByReality
     ? input.instance.completedAt ?? new Date().toISOString()
-    : input.instance.completedAt;
+    : unfinished.length > 0
+      ? null
+      : input.instance.completedAt;
 
   const instance: CampaignInstance = {
     ...input.instance,
