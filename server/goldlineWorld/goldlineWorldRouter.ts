@@ -74,15 +74,50 @@ export const goldlineWorldRouter = router({
         territoryId: z.string().uuid(),
         guardianId: z.string().min(1).max(64),
         confrontationReady: z.boolean(),
+        campaignChapterId: z.string().min(1).max(191).optional(),
       })
     )
-    .mutation(({ ctx, input }) =>
-      recordGuardianDefeated({
+    .mutation(async ({ ctx, input }) => {
+      // Keep campaign and territory game history in a deterministic server-side
+      // order. We validate the supplied chapter against today's campaign and
+      // this exact territory before recording either piece of game projection.
+      // This avoids the old client race where clearing the territory removed the
+      // finale during campaign rematerialization before chapter completion ran.
+      let completedCampaignChapterId: string | null = null;
+      if (input.campaignChapterId) {
+        const presented = await getOrMaterializeTodayCampaign({
+          tenantId: ctx.tenantId,
+          operatorId: ctx.user.openId,
+        });
+        const finale = presented.campaign.chapters.find(
+          chapter =>
+            chapter.stableChapterId === input.campaignChapterId &&
+            chapter.chapterKind === "guardian_finale" &&
+            chapter.selectedGameplayBinding === "guardian_finale" &&
+            chapter.territoryId === input.territoryId
+        );
+        if (finale) {
+          await recordCampaignChapterGameCompleted({
+            tenantId: ctx.tenantId,
+            operatorId: ctx.user.openId,
+            chapterId: finale.stableChapterId,
+          });
+          completedCampaignChapterId = finale.stableChapterId;
+        }
+      }
+      const result = await recordGuardianDefeated({
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
-        ...input,
-      })
-    ),
+        territoryId: input.territoryId,
+        guardianId: input.guardianId,
+        confrontationReady: input.confrontationReady,
+      });
+      return {
+        ...result,
+        campaignChapterCompleted: Boolean(completedCampaignChapterId),
+        completedCampaignChapterId,
+      };
+    }),
   campaign: dayforgeTenantMemberProcedure.query(({ ctx }) =>
     getOrMaterializeTodayCampaign({
       tenantId: ctx.tenantId,
