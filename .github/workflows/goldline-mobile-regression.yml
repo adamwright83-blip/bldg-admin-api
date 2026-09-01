@@ -5,6 +5,7 @@ on:
     paths:
       - "client/src/game/**"
       - "client/src/pages/driver/GoldlineDriverController.tsx"
+      - "client/src/pages/Driver.tsx"
       # The Goldline page surfaces are part of the playable path, not
       # adjacent to it. OpenChannel.tsx owns the empty-day ignition and the
       # resume banner that realDayIgnition/emptyDayTruth/firstThirtySeconds
@@ -29,6 +30,7 @@ on:
       - "server/armory/armoryEvolution.integration.test.ts"
       - "server/salesIntel/driverSafeSalesIntel*"
       - "server/field/**"
+      - "server/goldlineWorld/**"
       - "server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts"
       # LOCAL_TARGET_RUN (§PR77 Part 8-20): recognition, real sourcing (with
       # the labeled-simulation fallback), and the Field Intel linkage that
@@ -65,6 +67,8 @@ on:
       - "scripts/verifyGoldlineOpenChannelExpedition.mjs"
       - "scripts/verifyGoldlineFieldIntel.mjs"
       - "scripts/verifyGoldlineExternalOrder.mjs"
+      - "scripts/capture-goldline-closure.mjs"
+      - "scripts/measure-goldline-performance.mjs"
       - ".github/workflows/goldline-mobile-regression.yml"
       - ".github/workflows/goldline-fast-smoke.yml"
   workflow_dispatch:
