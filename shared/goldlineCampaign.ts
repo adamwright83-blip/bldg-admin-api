@@ -149,6 +149,12 @@ export type CampaignDraft = {
    * status; this list is rebuilt from FieldToday on every materialization.
    */
   authoritativeCompletedObjectiveIds?: string[];
+  /**
+   * Ephemeral game-projection evidence from derived territory state. It lets a
+   * cleared Guardian finale heal campaign history after a partial write/reload
+   * without treating the game event as business completion.
+   */
+  clearedTerritoryIds?: string[];
 };
 
 export type CampaignRevisionDiff = {
