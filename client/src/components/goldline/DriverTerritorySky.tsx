@@ -51,17 +51,7 @@ export function DriverTerritorySky({
   }
 
   return (
-    <button
-      type="button"
-      className="gl-guardian"
-      style={{ left: "72%", top: "10%", position: "absolute", zIndex: 8 }}
-      data-testid="goldline-driver-territory-guardian"
-      aria-label={`${guardian.name} over ${item.definition.fantasyTitle}. ${challengeSummary({ definition: item.definition, state: item.state })}`}
-      onClick={() => {
-        setPlaying(true);
-        onEncounterChange?.(true);
-      }}
-    >
+    <div className="gl-guardian-anchor gl-driver-sky">
       <GuardianActor
         guardianId={guardian.id}
         phase={item.state.cleared ? "ghost" : "idle"}
@@ -69,6 +59,16 @@ export function DriverTerritorySky({
         reducedMotion={reducedMotion}
         scale={item.state.cleared ? 0.45 : 0.85}
       />
-    </button>
+      <button
+        type="button"
+        className="gl-guardian-hit"
+        data-testid="goldline-driver-territory-guardian"
+        aria-label={`${guardian.name} over ${item.definition.fantasyTitle}. ${challengeSummary({ definition: item.definition, state: item.state })}`}
+        onClick={() => {
+          setPlaying(true);
+          onEncounterChange?.(true);
+        }}
+      />
+    </div>
   );
 }

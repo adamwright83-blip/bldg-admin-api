@@ -14,6 +14,7 @@
 .gl-guardian-anchor{position:absolute;z-index:7;width:min(28vw,148px);height:min(28vw,148px);transform:translate(-50%,-72%);pointer-events:none}
 .gl-guardian-anchor .gl-guardian{position:relative;left:auto;top:auto;width:100%;height:100%;transform:none;pointer-events:none}
 .gl-guardian-hit{position:absolute;left:50%;top:22%;width:48px;height:48px;transform:translate(-50%,-50%);border:0;border-radius:50%;background:transparent;cursor:pointer;pointer-events:auto;z-index:8}
+.gl-driver-sky{left:72%;top:12%;width:min(26vw,120px);height:min(26vw,120px);transform:none;z-index:8}
 .gl-guardian-svg{width:100%;height:100%;overflow:visible;pointer-events:none}
 .gl-guardian .cloud-body,.gl-guardian .cloud-puff,.gl-guardian .cloud-fist{fill:#f7fbff;stroke:#d7c9a4;stroke-width:1.2}
 .gl-guardian .gold-prop{fill:#e8c15a;stroke:#a67c2a;stroke-width:1}
@@ -23,11 +24,14 @@
 .gl-guardian-wisps{position:absolute;inset:-8% -6% auto;height:30%;pointer-events:none;background:radial-gradient(circle at 20% 70%,#fff8 0 18%,transparent 19%),radial-gradient(circle at 80% 40%,#ffe9a866 0 14%,transparent 15%);animation:gl-wisp 3.6s ease-in-out infinite}
 .gl-guardian.is-reduced .gl-guardian-wisps,.gl-guardian.is-ghost .gl-guardian-wisps{animation:none}
 .gl-guardian.is-thunder_king .cloud-fist{fill:#efe7ff}
+.gl-guardian.is-thunder_king .brow{fill:none;stroke:#e8c15a;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
 .gl-guardian.is-cloud_duchess .dress{fill:#fff4fb}
 .gl-guardian.is-sleepy_one_eye .colossus{fill:#eef4ff}
-.gl-guardian.is-tiny_emperor{top:18%}
+.gl-guardian.is-sleepy_one_eye .lid{fill:#c9b48a}
+.gl-guardian.is-tiny_emperor .command-throne{fill:#f4f0ff}
 .gl-guardian.is-gust_jester .cap{fill:#6b4aa8;stroke:#e8c15a}
 .gl-guardian.is-drizzle_detective .coat{fill:#e8eef6}
+.gl-guardian.is-drizzle_detective .gold-prop.glass{fill:none}
 .gl-guardian .bird{fill:#7ec8ff}
 .gl-guardian .bird.two{fill:#f0a52a}
 .gl-guardian .bird.three{fill:#c23a3a}
