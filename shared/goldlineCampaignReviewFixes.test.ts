@@ -4,6 +4,7 @@ import {
   campaignInputFingerprint,
   stableCampaignChapterId,
   type CampaignInstance,
+  type TerritoryCampaignHint,
 } from "./goldlineCampaign";
 import { compileGoldlineCampaign } from "./goldlineCampaignCompiler";
 import {
@@ -34,7 +35,8 @@ function objective(
 
 function compile(
   objectives: GoldlineObjective[],
-  authoritativeCompletedObjectiveIds: readonly string[] = []
+  authoritativeCompletedObjectiveIds: readonly string[] = [],
+  territories: readonly TerritoryCampaignHint[] = []
 ) {
   return compileGoldlineCampaign({
     tenantId: "default",
@@ -42,6 +44,7 @@ function compile(
     businessDate: "2026-09-01",
     objectives,
     authoritativeCompletedObjectiveIds,
+    territories,
   });
 }
 
@@ -111,7 +114,7 @@ describe("campaign review hardening", () => {
     expect(revised.instance.chapters.some(chapter => chapter.stableChapterId === chapterId)).toBe(true);
     expect(revised.instance.currentChapterId).toBeNull();
     expect(revised.instance.status).toBe("completed");
-    expect(revised.instance.completedAt).toMatch(/^2026-|^20\d\d-/);
+    expect(revised.instance.completedAt).toMatch(/^20\d\d-/);
     expect(revised.diff?.reasonCodes).toContain("AUTHORITATIVE_ACTION_COMPLETED");
     expect(revised.diff?.reasonCodes).not.toContain("OPPORTUNITY_NO_LONGER_ELIGIBLE");
   });
@@ -146,6 +149,30 @@ describe("campaign review hardening", () => {
     expect(revised.instance.completedAt).toBeNull();
     expect(revised.diff?.reasonCodes).toContain("OPPORTUNITY_NO_LONGER_ELIGIBLE");
     expect(revised.diff?.reasonCodes).not.toContain("AUTHORITATIVE_ACTION_COMPLETED");
+  });
+
+  it("heals a persisted Guardian finale from cleared territory game history", () => {
+    const readyTerritory: TerritoryCampaignHint = {
+      territoryId: "territory-1",
+      memberPhysicalEntityIds: ["building-1"],
+      confrontationReady: true,
+      cleared: false,
+    };
+    const morning = compile([], [], [readyTerritory]);
+    const instance = asInstance(morning);
+    const finale = instance.chapters.find(chapter => chapter.chapterKind === "guardian_finale");
+    expect(finale).toBeTruthy();
+
+    const cleared = compile([], [], [{ ...readyTerritory, cleared: true }]);
+    expect(cleared.clearedTerritoryIds).toContain("territory-1");
+    expect(cleared.chapters.some(chapter => chapter.chapterKind === "guardian_finale")).toBe(false);
+
+    const revised = recompileCampaignFuture({ instance, next: cleared });
+    expect(revised.instance.chapters.some(chapter => chapter.stableChapterId === finale!.stableChapterId)).toBe(true);
+    expect(revised.instance.completedChapterIds).toContain(finale!.stableChapterId);
+    expect(revised.instance.currentChapterId).toBeNull();
+    expect(revised.instance.status).toBe("completed");
+    expect(revised.instance.completedAt).toMatch(/^20\d\d-/);
   });
 
   it("records an actual supplied completion time instead of the Unix epoch", () => {
