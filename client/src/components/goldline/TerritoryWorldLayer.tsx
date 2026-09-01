@@ -27,7 +27,6 @@ export function TerritoryWorldLayer({
     staleTime: 10_000,
   });
   const defeat = trpc.system.goldlineWorld.recordGuardianDefeat.useMutation();
-  const chapterDone = trpc.system.goldlineWorld.recordCampaignChapterGameCompleted.useMutation();
   const utils = trpc.useUtils();
   const campaign = trpc.system.goldlineWorld.campaign.useQuery(undefined, {
     staleTime: 15_000,
@@ -59,11 +58,17 @@ export function TerritoryWorldLayer({
           }}
           onDefeat={() => {
             if (!item.state.confrontationReady) return;
+            const finale = campaign.data?.campaign.chapters.find(
+              chapter =>
+                chapter.chapterKind === "guardian_finale" &&
+                chapter.territoryId === item.definition.id
+            );
             defeat.mutate(
               {
                 territoryId: item.definition.id,
                 guardianId: item.definition.guardianId,
                 confrontationReady: true,
+                campaignChapterId: finale?.stableChapterId,
               },
               {
                 onSettled: () => {
@@ -72,12 +77,6 @@ export function TerritoryWorldLayer({
                 },
               }
             );
-            const finale = campaign.data?.campaign.chapters.find(
-              chapter =>
-                chapter.chapterKind === "guardian_finale" &&
-                chapter.territoryId === item.definition.id
-            );
-            if (finale) chapterDone.mutate({ chapterId: finale.stableChapterId });
           }}
         />
       ))}
