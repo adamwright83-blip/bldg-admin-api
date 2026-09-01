@@ -320,4 +320,19 @@ describe("the authoritative day becomes playable objectives", () => {
     // Completed history is kept, not erased — it simply stops being pending.
     expect(remaining?.status).toBe("completed");
   });
+
+  it("lets the campaign order the briefing instead of compiling a second adventure", () => {
+    const plan = buildDayPlanProjection({
+      businessDate: "2026-08-25",
+      pickups: [native(1), native(2)],
+      campaignChapters: [
+        { objectiveIds: ["pickup:2"] },
+        { objectiveIds: ["pickup:1"] },
+      ],
+    });
+    expect(plan.stops.map(stop => stop.id)).toEqual([
+      "native-pickup-2",
+      "native-pickup-1",
+    ]);
+  });
 });

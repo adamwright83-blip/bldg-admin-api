@@ -71,7 +71,8 @@ export function CampaignGoldLine({
       {points.map((point, index) => (
         <circle
           key={`${point.x}-${point.y}-${index}`}
-          className={`gl-campaign-knot${point.hard ? " is-hard" : ""}${point.current ? " is-current" : ""}${point.completed ? " is-complete" : ""}`}
+          className={`gl-campaign-knot${point.hard ? " is-hard" : ""}${point.current ? " is-current" : ""}${point.completed ? " is-complete is-scar" : ""}`}
+          data-testid={point.completed ? "goldline-campaign-scar" : undefined}
           cx={point.x}
           cy={point.y}
           r={point.hard ? 1.8 : 1.2}
