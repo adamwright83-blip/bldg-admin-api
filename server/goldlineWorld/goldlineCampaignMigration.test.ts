@@ -45,4 +45,42 @@ describe("campaign publish concurrency", () => {
     expect(source).toContain("compileGoldlineCampaign");
     expect(source).not.toContain("insert(orders)");
   });
+
+  it("persists instance updates and revision rows in one transaction with bounded OCC retry", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "server/goldlineWorld/campaignService.ts"),
+      "utf8"
+    );
+    expect(source).toContain("MAX_CAMPAIGN_REVISION_ATTEMPTS = 4");
+    expect(source).toContain("db.transaction(async tx =>");
+    expect(source).toContain("campaignSnapshotStillMatches(input.expected)");
+    expect(source).toContain("campaignUpdateAffectedRows(result) !== 1");
+    expect(source).toContain("throw new CampaignRevisionConflictError()");
+    expect(source).toContain('return "conflict"');
+    expect(source).toContain("insertRevisionRow(tx, input)");
+    expect(source).not.toMatch(/for\s*\(\s*;\s*;\s*\)/);
+    expect(source).toContain("Campaign revision could not be persisted after concurrent updates");
+  });
+});
+
+describe("campaign review-fix contracts", () => {
+  it("does not expose a member API that completes a Guardian finale without territory defeat", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "server/goldlineWorld/goldlineWorldRouter.ts"),
+      "utf8"
+    );
+    expect(source).not.toContain("recordCampaignChapterGameCompleted");
+    expect(source).toContain("recordGuardianDefeated");
+    expect(source).toContain("recordCampaignGuardianFinaleForTerritory");
+    expect(source).toContain("if (!result.recorded)");
+  });
+
+  it("includes completed commercial follow-ups in FieldToday completion evidence", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "server/field/fieldTodayService.ts"),
+      "utf8"
+    );
+    expect(source).toContain('eq(commercialFollowUps.status, "completed")');
+    expect(source).toContain("authoritativeCompletedObjectiveIds.add(`follow-up:${followUp.id}`)");
+  });
 });

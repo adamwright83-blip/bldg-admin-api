@@ -185,4 +185,50 @@ describe("campaign review hardening", () => {
     expect(completed.completedAt).toBe(completedAt);
     expect(completed.completedAt).not.toBe("1970-01-01T00:00:00.000Z");
   });
+
+  it("locks a completed commercial follow-up into authoritative campaign history", () => {
+    const morning = compile([objective("follow-up:88", { kind: "follow_up" })]);
+    const instance = asInstance(morning);
+    const chapterId = instance.chapters[0]!.stableChapterId;
+    const noon = compile([], ["follow-up:88"]);
+    const revised = recompileCampaignFuture({ instance, next: noon });
+
+    expect(noon.authoritativeCompletedObjectiveIds).toContain("follow-up:88");
+    expect(revised.instance.completedChapterIds).toContain(chapterId);
+    expect(revised.instance.chapters.some(chapter => chapter.stableChapterId === chapterId)).toBe(true);
+    expect(revised.instance.status).toBe("completed");
+    expect(revised.diff?.reasonCodes).toContain("AUTHORITATIVE_ACTION_COMPLETED");
+    expect(revised.diff?.reasonCodes).not.toContain("OPPORTUNITY_NO_LONGER_ELIGIBLE");
+  });
+
+  it("clears completedAt when new real work reopens a completed campaign", () => {
+    const morning = compile([objective("follow-up:88", { kind: "follow_up" })]);
+    const completed = recompileCampaignFuture({
+      instance: asInstance(morning),
+      next: compile([], ["follow-up:88"]),
+    });
+    expect(completed.instance.status).toBe("completed");
+    expect(completed.instance.completedAt).toMatch(/^20\d\d-/);
+
+    const afternoon = compile(
+      [objective("pickup:99", { kind: "pickup", authority: "fixed_commitment" })],
+      ["follow-up:88"]
+    );
+    const reopened = recompileCampaignFuture({
+      instance: {
+        ...completed.instance,
+        completedAt: "2026-09-01T12:00:00.000Z",
+      },
+      next: afternoon,
+    });
+
+    expect(reopened.instance.status).toBe("active");
+    expect(reopened.instance.completedAt).toBeNull();
+    expect(reopened.instance.completedChapterIds).toContain(
+      completed.instance.chapters[0]!.stableChapterId
+    );
+    expect(reopened.instance.chapters.some(chapter => chapter.objectiveIds.includes("pickup:99"))).toBe(
+      true
+    );
+  });
 });

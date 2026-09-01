@@ -4,7 +4,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import {
   goldlineCampaignInstances,
   goldlineCampaignRevisions,
@@ -195,39 +195,104 @@ async function insertCampaign(instance: CampaignInstance): Promise<CampaignInsta
   return instance;
 }
 
+const MAX_CAMPAIGN_REVISION_ATTEMPTS = 4;
+
+class CampaignRevisionConflictError extends Error {
+  constructor() {
+    super("Campaign revision conflict");
+    this.name = "CampaignRevisionConflictError";
+  }
+}
+
+function campaignUpdateAffectedRows(result: unknown): number {
+  if (Array.isArray(result)) {
+    const header = result[0] as { affectedRows?: number } | undefined;
+    return Number(header?.affectedRows ?? 0);
+  }
+  return Number((result as { affectedRows?: number } | undefined)?.affectedRows ?? 0);
+}
+
+function completedChapterIdsStillMatch(expected: readonly string[]) {
+  const lengthMatch = sql`JSON_LENGTH(${goldlineCampaignInstances.completedChapterIdsJson}) = ${expected.length}`;
+  if (expected.length === 0) return lengthMatch;
+  return and(
+    lengthMatch,
+    ...expected.map(
+      id =>
+        sql`JSON_CONTAINS(${goldlineCampaignInstances.completedChapterIdsJson}, JSON_QUOTE(${id}))`
+    )
+  );
+}
+
+function campaignSnapshotStillMatches(expected: CampaignInstance) {
+  return and(
+    eq(goldlineCampaignInstances.id, expected.id),
+    eq(goldlineCampaignInstances.revision, expected.revision),
+    eq(goldlineCampaignInstances.inputFingerprint, expected.inputFingerprint),
+    expected.currentChapterId
+      ? eq(goldlineCampaignInstances.currentChapterId, expected.currentChapterId)
+      : isNull(goldlineCampaignInstances.currentChapterId),
+    completedChapterIdsStillMatch(expected.completedChapterIds)
+  );
+}
+
+async function insertRevisionRow(
+  db: { insert: NonNullable<Awaited<ReturnType<typeof getDb>>>["insert"] },
+  input: {
+    instance: CampaignInstance;
+    diff: CampaignRevisionDiff;
+  }
+): Promise<void> {
+  await db.insert(goldlineCampaignRevisions).values({
+    id: randomUUID(),
+    tenantId: input.instance.tenantId,
+    campaignId: input.instance.id,
+    revision: input.diff.revision,
+    inputFingerprint: input.diff.inputFingerprint,
+    reasonCodesJson: input.diff.reasonCodes,
+    addedFutureChapterIdsJson: input.diff.addedFutureChapterIds,
+    removedFutureChapterIdsJson: input.diff.removedFutureChapterIds,
+    reorderedFutureChapterIdsJson: input.diff.reorderedFutureChapterIds,
+  });
+}
+
+/**
+ * Persist instance + revision audit together. The instance update is accepted
+ * only when the row still matches the snapshot the recompile used. A conflict
+ * rolls the transaction back so a stale compiled future cannot erase locked
+ * completed history or an intervening branch selection.
+ */
 async function persistRevision(input: {
+  expected: CampaignInstance;
   instance: CampaignInstance;
   diff: CampaignRevisionDiff;
-}): Promise<void> {
+}): Promise<"committed" | "conflict"> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db
-    .update(goldlineCampaignInstances)
-    .set({
-      inputFingerprint: input.instance.inputFingerprint,
-      status: input.instance.status,
-      currentChapterId: input.instance.currentChapterId,
-      completedChapterIdsJson: input.instance.completedChapterIds,
-      chaptersJson: input.instance.chapters,
-      revision: input.instance.revision,
-      endingTreatment: input.instance.endingTreatment,
-      completedAt: input.instance.completedAt ? new Date(input.instance.completedAt) : null,
-    })
-    .where(eq(goldlineCampaignInstances.id, input.instance.id));
   try {
-    await db.insert(goldlineCampaignRevisions).values({
-      id: randomUUID(),
-      tenantId: input.instance.tenantId,
-      campaignId: input.instance.id,
-      revision: input.diff.revision,
-      inputFingerprint: input.diff.inputFingerprint,
-      reasonCodesJson: input.diff.reasonCodes,
-      addedFutureChapterIdsJson: input.diff.addedFutureChapterIds,
-      removedFutureChapterIdsJson: input.diff.removedFutureChapterIds,
-      reorderedFutureChapterIdsJson: input.diff.reorderedFutureChapterIds,
+    await db.transaction(async tx => {
+      const result = await tx
+        .update(goldlineCampaignInstances)
+        .set({
+          inputFingerprint: input.instance.inputFingerprint,
+          status: input.instance.status,
+          currentChapterId: input.instance.currentChapterId,
+          completedChapterIdsJson: input.instance.completedChapterIds,
+          chaptersJson: input.instance.chapters,
+          revision: input.instance.revision,
+          endingTreatment: input.instance.endingTreatment,
+          completedAt: input.instance.completedAt ? new Date(input.instance.completedAt) : null,
+        })
+        .where(campaignSnapshotStillMatches(input.expected));
+      if (campaignUpdateAffectedRows(result) !== 1) {
+        throw new CampaignRevisionConflictError();
+      }
+      await insertRevisionRow(tx, input);
     });
   } catch (error) {
-    if (!isMysqlDuplicateKeyError(error)) throw error;
+    if (error instanceof CampaignRevisionConflictError) return "conflict";
+    if (isMysqlDuplicateKeyError(error)) return "conflict";
+    throw error;
   }
   await recordCampaignEvent({
     tenantId: input.instance.tenantId,
@@ -237,6 +302,34 @@ async function persistRevision(input: {
     idempotencyKey: `campaign-revised:${input.instance.id}:${input.diff.revision}`,
     metadata: { reasonCodes: input.diff.reasonCodes },
   });
+  return "committed";
+}
+
+async function ensureRevisionHistory(
+  instance: CampaignInstance
+): Promise<CampaignRevisionDiff | null> {
+  const last = await latestRevision(instance.id);
+  if (instance.revision <= 1) return last;
+  if (last?.revision === instance.revision) return last;
+  try {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    await insertRevisionRow(db, {
+      instance,
+      diff: {
+        campaignId: instance.id,
+        revision: instance.revision,
+        inputFingerprint: instance.inputFingerprint,
+        reasonCodes: ["REAL_OUTCOME_CHANGED"],
+        addedFutureChapterIds: [],
+        removedFutureChapterIds: [],
+        reorderedFutureChapterIds: [],
+      },
+    });
+  } catch (error) {
+    if (!isMysqlDuplicateKeyError(error)) throw error;
+  }
+  return latestRevision(instance.id);
 }
 
 async function latestRevision(campaignId: string): Promise<CampaignRevisionDiff | null> {
@@ -379,7 +472,7 @@ export async function getOrMaterializeTodayCampaign(input: {
     priorCampaignTitle,
     travelWindowFingerprint: travel.fingerprint,
   });
-  const existing = await readCampaign({
+  let existing = await readCampaign({
     tenantId: input.tenantId,
     operatorId: input.operatorId,
     businessDate: today.businessDate,
@@ -395,32 +488,51 @@ export async function getOrMaterializeTodayCampaign(input: {
     });
     return present(created, null, travel.providerState);
   }
-  const { instance, diff } = recompileCampaignFuture({ instance: existing, next: draft });
-  if (!diff) return present(existing, await latestRevision(existing.id), travel.providerState);
+
   const unresolvedFollowUp = objectives.some(
     item => (item.kind === "follow_up" || item.kind === "recovery") && item.status === "ready"
   );
-  const ending = campaignEndingTreatment({
-    draft: instance,
-    territories: hints,
-    unresolvedFollowUp,
-  });
-  const next: CampaignInstance = {
-    ...instance,
-    endingTreatment: instance.status === "completed" ? ending.copy : instance.endingTreatment,
-  };
-  await persistRevision({ instance: next, diff });
-  if (next.status === "completed" && existing.status !== "completed") {
-    await recordCampaignEvent({
-      tenantId: next.tenantId,
-      campaignId: next.id,
-      operatorId: input.operatorId,
-      eventType: "campaign_completed",
-      idempotencyKey: `campaign-completed:${next.id}`,
-      metadata: { completionSource: "authoritative_source" },
+
+  for (let attempt = 1; attempt <= MAX_CAMPAIGN_REVISION_ATTEMPTS; attempt += 1) {
+    if (attempt > 1) {
+      existing = await readCampaign({
+        tenantId: input.tenantId,
+        operatorId: input.operatorId,
+        businessDate: today.businessDate,
+      });
+      if (!existing) {
+        throw new Error("Campaign disappeared while persisting a concurrent revision");
+      }
+    }
+    const lastRevision = await ensureRevisionHistory(existing);
+    const { instance, diff } = recompileCampaignFuture({ instance: existing, next: draft });
+    if (!diff) return present(existing, lastRevision, travel.providerState);
+    const ending = campaignEndingTreatment({
+      draft: instance,
+      territories: hints,
+      unresolvedFollowUp,
     });
+    const next: CampaignInstance = {
+      ...instance,
+      endingTreatment: instance.status === "completed" ? ending.copy : instance.endingTreatment,
+    };
+    const outcome = await persistRevision({ expected: existing, instance: next, diff });
+    if (outcome === "conflict") {
+      continue;
+    }
+    if (next.status === "completed" && existing.status !== "completed") {
+      await recordCampaignEvent({
+        tenantId: next.tenantId,
+        campaignId: next.id,
+        operatorId: input.operatorId,
+        eventType: "campaign_completed",
+        idempotencyKey: `campaign-completed:${next.id}`,
+        metadata: { completionSource: "authoritative_source" },
+      });
+    }
+    return present(next, diff, travel.providerState);
   }
-  return present(next, diff, travel.providerState);
+  throw new Error("Campaign revision could not be persisted after concurrent updates");
 }
 
 export async function chooseCampaignBranch(input: {

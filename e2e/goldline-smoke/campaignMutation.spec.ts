@@ -217,6 +217,14 @@ test.describe("Goldline campaign mutations", () => {
     const afterRejected = await readCampaign(page);
     expect(afterRejected.campaign.completedChapterIds).not.toContain(finale!.stableChapterId);
 
+    const bypass = await page.request.post(
+      "/api/trpc/system.goldlineWorld.recordCampaignChapterGameCompleted",
+      { data: { json: { chapterId: finale!.stableChapterId } } }
+    );
+    expect(bypass.ok(), await bypass.text()).toBeFalsy();
+    const afterBypass = await readCampaign(page);
+    expect(afterBypass.campaign.completedChapterIds).not.toContain(finale!.stableChapterId);
+
     // The client intentionally supplies no campaignChapterId. Server resolves it.
     const defeated = await defeatGuardian(page, {
       territoryId: ready!.definition.id,
