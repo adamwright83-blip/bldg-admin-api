@@ -36,7 +36,9 @@
     "dayforge:demo": "tsx scripts/dayforge-demo.ts",
     "test:goldline:smoke": "playwright test --config playwright.goldline-smoke.config.ts",
     "test:goldline:territories:smoke": "playwright test --config playwright.goldline-smoke.config.ts e2e/goldline-smoke/territoriesSmoke.spec.ts",
-    "goldline:territories:capture": "node scripts/capture-goldline-territories.mjs"
+    "test:goldline:campaign:smoke": "playwright test --config playwright.goldline-smoke.config.ts e2e/goldline-smoke/campaignSmoke.spec.ts",
+    "goldline:territories:capture": "node scripts/capture-goldline-territories.mjs",
+    "goldline:campaign:capture": "node scripts/capture-goldline-campaign.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

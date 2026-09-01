@@ -298,4 +298,20 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
 
     await expect(page.locator(".lc-tether").first()).toBeAttached();
   });
+
+  test("today's campaign is already in the world", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("goldline:day1:dismissed", "1");
+      window.localStorage.setItem(
+        "goldline:onboarding:v1",
+        JSON.stringify(["first_entry_explained"])
+      );
+    });
+    await signIn(page, "driver");
+    await page.goto("/driver");
+    await expect(page.getByRole("region", { name: "Goldline global overworld" })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId("goldline-campaign-hud")).toBeVisible({ timeout: 20_000 });
+  });
 });

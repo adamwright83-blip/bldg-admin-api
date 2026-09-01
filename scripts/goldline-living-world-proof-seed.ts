@@ -529,6 +529,27 @@ async function seed() {
     },
   } as never);
 
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  await db.insert(orders).values({
+    tenantId: TENANT,
+    firstName: "Campaign",
+    lastName: "Anchor",
+    phone: "3105550199",
+    address: louiseAddress,
+    status: "new",
+    paid: false,
+    total: "4200",
+    serviceType: "wash_fold",
+    pickupDate: today,
+    pickupTimeWindow: "9:00-11:00 AM",
+    specialInstructions: "proof-fixture-campaign-pickup",
+  } as never);
+
   const counts = await db.execute(
     sql`SELECT (SELECT COUNT(*) FROM physical_entities) AS entities, (SELECT COUNT(*) FROM orders) AS orders, (SELECT COUNT(*) FROM goldline_world_events) AS events`
   );
