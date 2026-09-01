@@ -7,7 +7,7 @@ import { WorldDayPhaseIndicator } from "./WorldDayPhase";
 import { clusterGeographicCustomers, clustersAsGoogleEntities, fanOutAtlasCollisions } from "./customerGeography";
 import type { CustomerLocationCluster } from "./customerGeography";
 import { WorldEntityInspector } from "./WorldEntityInspector";
-import { describeWorldPresentation } from "@shared/goldlineWorldPresentation";
+import { describeWorldPresentation, orderByProminence } from "@shared/goldlineWorldPresentation";
 import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWorldService";
 
 export {
@@ -177,6 +177,40 @@ export default function LanternCityAtlas({
   }, [requestedEntity?.id]);
 
   /**
+   * The loudest real signals, in order. `orderByProminence` only reorders — the
+   * entities it ranks are handed back untouched.
+   */
+  const attentionRecommendations = useMemo(
+    () =>
+      orderByProminence(
+        (cityWorld.data ?? []).filter(
+          entity => entity.presentation.attentionSummary !== null
+        ),
+        entity => entity.presentation
+      ).slice(0, 4),
+    [cityWorld.data]
+  );
+
+  /** Selecting a recommendation lands on the same building, in the same place. */
+  const revealEntity = (entity: CityWorldEntity) => {
+    const pursuit = visiblePursuits.find(
+      item => item.accountId === entity.pursuit?.accountId
+    );
+    if (pursuit) {
+      setSelectedCluster(null);
+      setSelectedPursuit(pursuit);
+      return;
+    }
+    const cluster = customerClusters.find(item =>
+      item.customers.some(customer => entityByResident.get(customer.identityKey)?.id === entity.id)
+    );
+    if (cluster) {
+      setSelectedPursuit(null);
+      setSelectedCluster(cluster);
+    }
+  };
+
+  /**
    * The same visible records, addressed by the real coordinate the atlas
    * projection was derived from. Only records with a successful geocode carry
    * a location at all, so nothing here is estimated or back-filled.
@@ -261,7 +295,7 @@ export default function LanternCityAtlas({
           </article>
         ))}
         <article className="lc-status-card state-pursued">
-          <span className="lc-status-icon">♨</span>
+          <span className="lc-status-icon"><i className="lc-mini-building" aria-hidden /></span>
           <div>
             <small>Pursued</small>
             <strong>
@@ -373,6 +407,30 @@ export default function LanternCityAtlas({
         </WorldGeographySurface>
       </section>
 
+      {attentionRecommendations.length ? (
+        <section className="lc-attention-row" aria-label="Where Goldline suggests looking">
+          <h2>Where Goldline suggests looking</h2>
+          <p className="lc-attention-note">
+            Ranked by real derived signals. Nothing here changes a stage, a
+            revenue figure or a deadline — it only changes what is easy to find.
+          </p>
+          <div>
+            {attentionRecommendations.map(entity => (
+              <button
+                key={entity.id}
+                type="button"
+                className={`lc-attention-card attention-${entity.presentation.prominenceTier}`}
+                onClick={() => revealEntity(entity)}
+              >
+                <strong>{entity.displayName}</strong>
+                <span>{entity.presentation.attentionSummary}</span>
+                <small>{entity.projection.attentionReasons[0]?.sourceEvidenceReference}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="lc-utility-row">
         <article className="lc-legend">
           <h2>Lantern legend</h2>
@@ -383,8 +441,8 @@ export default function LanternCityAtlas({
             </span>
           ))}
           <span>
-            <i className="lc-mini-flame">♨</i>
-            <strong>Pursued</strong>
+            <i className="lc-mini-building" aria-hidden />
+            <strong>Pursued building</strong>
           </span>
         </article>
 

@@ -426,3 +426,50 @@
 @keyframes lc-reveal{0%{filter:brightness(1.9) drop-shadow(0 0 30px #fff3c0)}45%{filter:brightness(1.25) drop-shadow(0 0 20px #f6c95c)}100%{filter:none}}
 @keyframes lc-veil-lift{0%{opacity:1;transform:scale(1.25)}70%{opacity:.25}100%{opacity:1;transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){.has-world.is-revealing,.has-world.is-revealing .lc-veil{animation:none}.has-world.is-revealing{outline:4px solid #f0a52a;outline-offset:6px}}
+
+/* Attention pulls the city toward a place without editing anything about it. */
+.lc-attention-row{margin-top:14px;padding:16px 18px;border:2px solid #e0bd63;border-radius:18px;background:linear-gradient(150deg,#fffdf2,#f9e6ad)}
+.lc-attention-row h2{margin:0;color:#17385e;font-size:15px}
+.lc-attention-note{margin:4px 0 12px;color:#4a6a86;font-size:11px;line-height:1.45}
+.lc-attention-row>div{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.lc-attention-card{display:grid;min-height:74px;gap:3px;padding:11px 13px;border:1px solid #cd9d3d66;border-radius:13px;background:#fff9df;color:#17385e;text-align:left}
+.lc-attention-card strong{font-size:13px}
+.lc-attention-card span{color:#3a5f7e;font-size:11px;line-height:1.35}
+.lc-attention-card small{overflow:hidden;color:#7b8fa3;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.lc-attention-card.attention-urgent{border-color:#e08c1c;box-shadow:0 0 0 2px #f0a52a4d}
+.lc-attention-card:focus-visible{outline:3px solid #ef9f18;outline-offset:3px}
+
+/* The legend embodies the building rather than substituting a glyph for it. */
+.lc-mini-building{position:relative;display:inline-grid;width:15px;height:17px;grid-template-columns:repeat(3,1fr);align-items:end;gap:1px;padding:5px 2px 2px;border:2px solid #265d77;border-radius:3px 3px 1px 1px;background:linear-gradient(#fff9d8,#e6a735)}
+.lc-mini-building:before,.lc-mini-building:after{content:"";height:3px;border-radius:1px;background:#fffbd0}
+.lc-mini-building:after{box-shadow:4px 0 0 #fffbd0}
+
+/* ── Lantern City: daylight adventure, not a white-card dashboard ─────────── */
+/*
+  Los Angeles sun over warm stone. The page reads as a place you are standing
+  in rather than a console you are operating, which is the whole point of the
+  city being the primary surface for these flows.
+*/
+.lc-page{background:linear-gradient(#8fd0f2,#cdeaf8 30%,#fdf6de 72%,#f8ecc6)}
+.lc-page-header h1{color:#17385e;text-shadow:0 1px 0 #fff8}
+.lc-page-header p{color:#3a5f7e}
+.lc-spark{color:#e8a71b;text-shadow:0 0 14px #ffd66a}
+.lc-search{border:2px solid #d8b25c;background:#fffdf2}
+.lc-search input{color:#17385e;background:transparent}
+.lc-status-card{border:2px solid #dcbc6b;background:#fffdf2;color:#17385e;box-shadow:0 2px 0 #e4cf9a}
+.lc-status-card small{color:#9b6410}
+.lc-status-card p{color:#4a6a86}
+.lc-status-card.state-pursued .lc-status-icon{font-size:0}
+.lc-status-card.state-pursued .lc-mini-building{width:34px;height:38px;padding:11px 5px 4px;border-width:3px;border-radius:6px 6px 2px 2px}
+.lc-status-card.state-pursued .lc-mini-building:before,.lc-status-card.state-pursued .lc-mini-building:after{height:7px}
+.lc-status-card.state-pursued .lc-mini-building:after{box-shadow:9px 0 0 #fffbd0}
+.lc-map{border:2px solid #d8b25c;background:#dff0f7}
+.lc-map-empty{border:2px solid #d8b25c;background:#fffdf2;color:#17385e}
+.lc-map-empty span{color:#4a6a86}
+.lc-legend,.lc-unmapped{border:2px solid #dcbc6b;background:#fffdf2;color:#17385e}
+.lc-legend h2,.lc-unmapped h2{color:#17385e}
+.lc-unmapped p{color:#4a6a86}
+.lc-unmapped small{color:#7b8fa3}
+.lc-unmapped button{border:2px solid #cfa94d;background:#fff6d2;color:#17385e;font-weight:800}
+/* The world canvas keeps sky behind the illustration instead of night navy. */
+.cr-world-geography-surface{background:#cfe8f4}
