@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GoldlineObjective } from "./goldlineAdventure";
 import {
+  campaignInputFingerprint,
   stableCampaignChapterId,
   type CampaignInstance,
 } from "./goldlineCampaign";
@@ -31,12 +32,16 @@ function objective(
   };
 }
 
-function compile(objectives: GoldlineObjective[]) {
+function compile(
+  objectives: GoldlineObjective[],
+  authoritativeCompletedObjectiveIds: readonly string[] = []
+) {
   return compileGoldlineCampaign({
     tenantId: "default",
     operatorId: "driver-1",
     businessDate: "2026-09-01",
     objectives,
+    authoritativeCompletedObjectiveIds,
   });
 }
 
@@ -70,7 +75,48 @@ describe("campaign review hardening", () => {
     expect(forward.length).toBeLessThanOrEqual(191);
   });
 
-  it("locks a chapter only when FieldToday says its source objective completed", () => {
+  it("fingerprints terminal source evidence even when the live objective disappears", () => {
+    const ready = objective("pickup:42", {
+      kind: "pickup",
+      authority: "fixed_commitment",
+    });
+    const before = campaignInputFingerprint({
+      tenantId: "default",
+      operatorId: "driver-1",
+      businessDate: "2026-09-01",
+      objectives: [ready],
+    });
+    const after = campaignInputFingerprint({
+      tenantId: "default",
+      operatorId: "driver-1",
+      businessDate: "2026-09-01",
+      objectives: [],
+      authoritativeCompletedObjectiveIds: ["pickup:42"],
+    });
+    expect(after).not.toBe(before);
+  });
+
+  it("locks a chapter when authoritative source evidence completes an objective omitted from Today", () => {
+    const morning = compile([objective("pickup:42", {
+      kind: "pickup",
+      authority: "fixed_commitment",
+    })]);
+    const instance = asInstance(morning);
+    const chapterId = instance.chapters[0]!.stableChapterId;
+    const noon = compile([], ["pickup:42"]);
+    const revised = recompileCampaignFuture({ instance, next: noon });
+
+    expect(noon.authoritativeCompletedObjectiveIds).toContain("pickup:42");
+    expect(revised.instance.completedChapterIds).toContain(chapterId);
+    expect(revised.instance.chapters.some(chapter => chapter.stableChapterId === chapterId)).toBe(true);
+    expect(revised.instance.currentChapterId).toBeNull();
+    expect(revised.instance.status).toBe("completed");
+    expect(revised.instance.completedAt).toMatch(/^2026-|^20\d\d-/);
+    expect(revised.diff?.reasonCodes).toContain("AUTHORITATIVE_ACTION_COMPLETED");
+    expect(revised.diff?.reasonCodes).not.toContain("OPPORTUNITY_NO_LONGER_ELIGIBLE");
+  });
+
+  it("locks a chapter when a completed row is still present in the projection", () => {
     const morning = compile([objective("recovery:one")]);
     const instance = asInstance(morning);
     const chapterId = instance.chapters[0]!.stableChapterId;
@@ -80,6 +126,8 @@ describe("campaign review hardening", () => {
     expect(revised.instance.completedChapterIds).toContain(chapterId);
     expect(revised.instance.chapters.some(chapter => chapter.stableChapterId === chapterId)).toBe(true);
     expect(revised.instance.currentChapterId).toBeNull();
+    expect(revised.instance.status).toBe("completed");
+    expect(revised.instance.completedAt).not.toBeNull();
     expect(revised.diff?.reasonCodes).toContain("AUTHORITATIVE_ACTION_COMPLETED");
     expect(revised.diff?.reasonCodes).not.toContain("OPPORTUNITY_NO_LONGER_ELIGIBLE");
   });
@@ -94,6 +142,8 @@ describe("campaign review hardening", () => {
     expect(revised.instance.completedChapterIds).not.toContain(chapterId);
     expect(revised.instance.chapters.some(chapter => chapter.stableChapterId === chapterId)).toBe(false);
     expect(revised.instance.currentChapterId).toBeNull();
+    expect(revised.instance.status).toBe("quiet");
+    expect(revised.instance.completedAt).toBeNull();
     expect(revised.diff?.reasonCodes).toContain("OPPORTUNITY_NO_LONGER_ELIGIBLE");
     expect(revised.diff?.reasonCodes).not.toContain("AUTHORITATIVE_ACTION_COMPLETED");
   });
