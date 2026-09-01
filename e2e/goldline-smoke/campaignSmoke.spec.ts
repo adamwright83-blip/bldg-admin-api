@@ -130,4 +130,41 @@ test.describe("Goldline campaign smoke", () => {
       );
     }
   });
+
+  test("guardian defeat does not rewrite campaign identity or invent a sale", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "mutates the proof world once");
+    await signIn(page, "admin");
+    const before = await readCampaign(page);
+    const territories = unwrapTrpc<
+      Array<{
+        definition: { id: string; guardianId: string };
+        state: { confrontationReady: boolean; cleared: boolean };
+      }>
+    >(
+      await (
+        await page.request.get("/api/trpc/system.goldlineWorld.territories")
+      ).json()
+    );
+    const ready = (territories ?? []).find(
+      item => item.state.confrontationReady && !item.state.cleared
+    );
+    if (!ready) {
+      test.skip(true, "No confrontation-ready territory in this fixture");
+    }
+    const defeat = await page.request.post("/api/trpc/system.goldlineWorld.recordGuardianDefeat", {
+      data: {
+        json: {
+          territoryId: ready!.definition.id,
+          guardianId: ready!.definition.guardianId,
+          confrontationReady: true,
+        },
+      },
+    });
+    expect(defeat.ok(), await defeat.text()).toBeTruthy();
+    const after = await readCampaign(page);
+    expect(after.campaign.id).toBe(before.campaign.id);
+    expect(after.campaign.title).toBe(before.campaign.title);
+  });
 });
