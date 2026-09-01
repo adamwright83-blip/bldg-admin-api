@@ -1,6 +1,6 @@
 import React from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { celebrationForEvent, type CelebrationDescriptor, type GoldlineWorldEvent } from "@shared/goldlineWorld";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getAudioManager, type AudioCueId } from "@/game/audio/AudioManager";
@@ -21,6 +21,7 @@ const cueMap: Record<CelebrationDescriptor["cue"], AudioCueId> = {
   recovery: "signal_lock",
   tower: "scout_discovery",
   outcome: "victory_flag",
+  territory: "victory_flag",
 };
 
 const colors = ["#fde047", "#f0abfc", "#67e8f9", "#ffffff", "#fb7185"];
@@ -63,6 +64,8 @@ function CelebrationStage({ descriptor }: { descriptor: CelebrationDescriptor })
 
 export function GoldlineCelebrationProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
+  const [location] = useLocation();
+  const hideStage = location.startsWith("/growth/guardians");
   const [queue, setQueue] = React.useState<CelebrationDescriptor[]>([]);
   const seenRef = React.useRef(new Set<string>());
   const mark = trpc.system.goldlineWorld.markEvent.useMutation();
@@ -100,7 +103,7 @@ export function GoldlineCelebrationProvider({ children }: { children: React.Reac
   const value = React.useMemo(() => ({ celebrate: enqueue }), [enqueue]);
   return <CelebrationContext.Provider value={value}>
     {children}
-    <AnimatePresence>{current ? <CelebrationStage key={current.eventId} descriptor={current} /> : null}</AnimatePresence>
+    <AnimatePresence>{current && !hideStage ? <CelebrationStage key={current.eventId} descriptor={current} /> : null}</AnimatePresence>
   </CelebrationContext.Provider>;
 }
 

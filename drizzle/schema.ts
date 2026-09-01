@@ -6162,6 +6162,53 @@ export const goldlineCreativeExclusions = mysqlTable(
   })
 );
 
+/**
+ * Published Goldline territory challenges.
+ *
+ * Game projection only. Membership is physicalEntityIds; progress is derived
+ * from goldline_world_events and must never be stored as a mutable counter.
+ */
+export const goldlineTerritoryDefinitions = mysqlTable(
+  "goldline_territory_definitions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    stableKey: varchar("stableKey", { length: 191 }).notNull(),
+    version: int("version").notNull().default(1),
+    fantasyTitle: varchar("fantasyTitle", { length: 128 }).notNull(),
+    realGeographyLabel: varchar("realGeographyLabel", { length: 191 }),
+    grammar: mysqlEnum("grammar", [
+      "visit_hunt",
+      "break_the_silence",
+      "send_the_standard",
+    ]).notNull(),
+    guardianId: varchar("guardianId", { length: 64 }).notNull(),
+    geometryMode: mysqlEnum("geometryMode", [
+      "corridor",
+      "cluster",
+      "authoritative_polygon",
+    ]).notNull(),
+    membersJson: json("membersJson").notNull(),
+    createdFrom: varchar("createdFrom", { length: 64 }).notNull(),
+    classification: varchar("classification", { length: 32 })
+      .notNull()
+      .default("game_projection"),
+    publishedAt: timestamp("publishedAt").notNull().defaultNow(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    stableUnique: uniqueIndex("uq_goldline_territory_stable").on(
+      table.tenantId,
+      table.stableKey,
+      table.version
+    ),
+    tenantIdx: index("idx_goldline_territory_tenant").on(
+      table.tenantId,
+      table.publishedAt
+    ),
+  })
+);
+
 /** Explicit permission/promise evidence. Tower Wars never infers these rows. */
 export const towerWarsPromises = mysqlTable(
   "tower_wars_promises",

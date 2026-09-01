@@ -384,6 +384,151 @@ async function seed() {
     },
   ] as never);
 
+  const hunt = [
+    {
+      id: "44444444-4444-4444-8444-444444444441",
+      name: "La Cienega Court",
+      address: "1520 S La Cienega Blvd, Los Angeles, CA",
+      latitude: "34.0621000",
+      longitude: "-118.3812000",
+    },
+    {
+      id: "44444444-4444-4444-8444-444444444442",
+      name: "The Marble Arms",
+      address: "1530 S La Cienega Blvd, Los Angeles, CA",
+      latitude: "34.0624000",
+      longitude: "-118.3808000",
+    },
+    {
+      id: "44444444-4444-4444-8444-444444444443",
+      name: "Sunwell House",
+      address: "1540 S La Cienega Blvd, Los Angeles, CA",
+      latitude: "34.0628000",
+      longitude: "-118.3815000",
+    },
+    {
+      id: "44444444-4444-4444-8444-444444444444",
+      name: "Orchard Place",
+      address: "1550 S La Cienega Blvd, Los Angeles, CA",
+      latitude: "34.0631000",
+      longitude: "-118.3809000",
+    },
+  ] as const;
+
+  await db.insert(physicalEntities).values(
+    hunt.map(building => ({
+      id: building.id,
+      tenantId: TENANT,
+      kind: "building" as const,
+      displayName: building.name,
+      identityStatus: "confirmed" as const,
+    }))
+  );
+  await db.insert(physicalEntityAliases).values(
+    hunt.map(building => ({
+      id: randomUUID(),
+      tenantId: TENANT,
+      physicalEntityId: building.id,
+      aliasType: "normalized_address" as const,
+      aliasValue: building.address,
+      normalizedAliasValue: normalizeSourceAddress(building.address),
+      evidenceReference: `proof:territory-hunt:${building.id}`,
+    }))
+  );
+
+  for (const building of hunt) {
+    const [huntAccount] = await db
+      .insert(commercialAccounts)
+      .values({
+        tenantId: TENANT,
+        name: building.name,
+        accountType: "residential_building",
+      })
+      .$returningId();
+    const [huntOpportunity] = await db
+      .insert(commercialOpportunities)
+      .values({
+        tenantId: TENANT,
+        accountId: huntAccount.id,
+        score: 64,
+        grade: "medium",
+        primarySignal: "Proof fixture territory hunt",
+        reasonsJson: [],
+        risksJson: [],
+        evidenceJson: [],
+      })
+      .$returningId();
+    const [huntMission] = await db
+      .insert(commercialMissions)
+      .values({
+        tenantId: TENANT,
+        opportunityId: huntOpportunity.id,
+        code: `PROOF-HUNT-${building.id.slice(-1)}`,
+        status: "game_ready",
+        accountSnapshotJson: { name: building.name, address: building.address },
+        opportunitySnapshotJson: {},
+        missionBriefJson: {},
+        createdBy: "proof-seed",
+      })
+      .$returningId();
+    await db.insert(commercialPipelineRecords).values({
+      tenantId: TENANT,
+      accountId: huntAccount.id,
+      opportunityId: huntOpportunity.id,
+      missionId: huntMission.id,
+      stage: "qualified",
+    } as never);
+    await db.insert(physicalEntityBindings).values({
+      id: randomUUID(),
+      tenantId: TENANT,
+      physicalEntityId: building.id,
+      bindingType: "commercial_account",
+      bindingKey: String(huntAccount.id),
+      evidenceReference: `commercial_accounts:${huntAccount.id}`,
+      confidence: "high",
+      reviewState: "accepted",
+    });
+    await db.insert(entityLocations).values({
+      id: randomUUID(),
+      tenantId: TENANT,
+      entityType: "commercial_prospect",
+      entityKey: String(huntAccount.id),
+      sourceAddress: building.address,
+      normalizedSourceAddress: normalizeSourceAddress(building.address),
+      canonicalAddress: building.address,
+      latitude: building.latitude,
+      longitude: building.longitude,
+      geocodeStatus: "success",
+      geocodeProvider: "proof_fixture",
+      geocodedAt: new Date(),
+    });
+  }
+
+  await db.insert(goldlineWorldEvents).values({
+    id: randomUUID(),
+    tenantId: TENANT,
+    physicalEntityId: hunt[0]!.id,
+    eventType: "field_commitment_made",
+    classification: "action",
+    actorType: "field",
+    actorId: "goldline-proof-driver",
+    occurredAt: daysAgo(2),
+    observedAt: daysAgo(2),
+    sourceType: "proof_fixture",
+    sourceId: "territory-tether",
+    sourceEvidenceReference: "proof:territory-tether",
+    provenanceClass: "operator_reported",
+    verificationClass: "ATTESTED",
+    confidence: "medium",
+    idempotencyKey: "proof-territory-tether",
+    correlationId: hunt[0]!.id,
+    metadataJson: {
+      statement: "Return with the one-sheet tomorrow",
+      promisedTo: "front desk",
+      dueDate: new Date().toISOString().slice(0, 10),
+    },
+  } as never);
+
   const counts = await db.execute(
     sql`SELECT (SELECT COUNT(*) FROM physical_entities) AS entities, (SELECT COUNT(*) FROM orders) AS orders, (SELECT COUNT(*) FROM goldline_world_events) AS events`
   );

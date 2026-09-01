@@ -399,8 +399,13 @@ export const commercialMissionRouter = router({
         actorId: ctx.user.openId,
         assignedTo: input.assignedTo ?? ctx.user.openId,
       });
+      const { findPhysicalEntityIdByAddress } = await import("../goldlineWorld/entityLookup");
+      const physicalEntityId = await findPhysicalEntityIdByAddress({
+        tenantId: ctx.tenantId,
+        address: input.address,
+      });
       const worldEvent = await appendGoldlineWorldEvent({
-        tenantId: ctx.tenantId, physicalEntityId: null, eventType: "visited", classification: "action", actorType: "field", actorId: ctx.user.openId,
+        tenantId: ctx.tenantId, physicalEntityId, eventType: "visited", classification: "action", actorType: "field", actorId: ctx.user.openId,
         occurredAt: new Date().toISOString(), observedAt: null, sourceType: "commercial_walk_ins", sourceId: String(input.requestId), sourceEvidenceReference: `commercial_walk_ins:${input.requestId}`,
         provenanceClass: "operator_reported", verificationClass: "ATTESTED", confidence: "high", idempotencyKey: `commercial-visit:${ctx.tenantId}:${input.requestId}`, correlationId: `walk-in:${input.requestId}`,
         metadata: { businessName: input.businessName, visitResult: input.visitResult, actionOnly: true, doesNotImplyOutcome: true },
