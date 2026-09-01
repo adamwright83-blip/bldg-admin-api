@@ -68,6 +68,7 @@ import {
 import {
   resolveSurveyReveals,
   stepSurveyReveals,
+  SURVEY_REVEAL_SECONDS,
   type SurveyReveal,
 } from "../expedition/surveyPulse";
 import {
@@ -386,6 +387,8 @@ export class GoldlineGame {
    */
   private strongholdRestoration: StrongholdRestoration | null = null;
   private gRestoration = new Graphics();
+  /** Read-only L4 projection of currently active fictional SURVEY reveals. */
+  private gSurvey = new Graphics();
   /** Seconds remaining in the ONE confirmation pulse for a real delta. */
   private restorationPulse = 0;
   private effectsSprite: Sprite | null = null;
@@ -690,6 +693,8 @@ export class GoldlineGame {
         this.effectsSprite.alpha = 0.4;
         this.layerEffects.addChild(this.effectsSprite);
       }
+      this.gSurvey.label = "survey-reveals";
+      this.layerEffects.addChild(this.gSurvey);
 
       const portalTexture = optionalTextures.get("portal");
       if (portalTexture)
@@ -1042,6 +1047,8 @@ export class GoldlineGame {
     this.expedition = null;
     this.expeditionCallbacks = {};
     this.expeditionDrivingMovement = false;
+    this.surveyReveals = [];
+    this.gSurvey.clear();
     this.populationSystem?.setExpeditionPresentation(false);
   }
 
@@ -1269,6 +1276,53 @@ export class GoldlineGame {
   /** Currently-lit survey reveals, aged by the main update loop. */
   getSurveyReveals(): readonly SurveyReveal[] {
     return this.surveyReveals;
+  }
+
+  /**
+   * Draw the information SURVEY actually bought. Subjects are re-resolved by
+   * opaque fictional id each frame so a moving guardian's marker follows the
+   * guardian instead of becoming a stale world-space decal. A dead/removed
+   * subject simply disappears. This is presentation only.
+   */
+  private drawSurveyReveals(width: number, height: number) {
+    const g = this.gSurvey;
+    g.clear();
+    if (!this.expedition || this.surveyReveals.length === 0) return;
+
+    const live = new Map(
+      this.expedition.getSurveyCandidates().map(candidate => [candidate.id, candidate])
+    );
+    for (const reveal of this.surveyReveals) {
+      const subject = live.get(reveal.id);
+      if (!subject) continue;
+      const at = this.projectCorridor(subject.x, subject.y, width, height);
+      const life = Math.max(0, Math.min(1, reveal.remaining / SURVEY_REVEAL_SECONDS));
+      const age = 1 - life;
+      const lift = subject.kind === "hostile" ? 44 * at.scale : 18 * at.scale;
+      const radius = (18 + age * 15) * at.scale;
+      const color =
+        subject.kind === "hazard"
+          ? 0xf4633a
+          : subject.kind === "hostile"
+            ? 0xffd98a
+            : 0xffd166;
+      const x = at.x;
+      const y = at.y - lift;
+
+      // Dark under-ring preserves readability over the bright city plate;
+      // the gold/danger ring is the actual short-lived reveal.
+      g.circle(x, y, radius + 3 * at.scale).stroke({
+        width: 5 * at.scale,
+        color: 0x071119,
+        alpha: 0.42 * life,
+      });
+      g.circle(x, y, radius).stroke({
+        width: 3 * at.scale,
+        color,
+        alpha: 0.92 * life,
+      });
+      g.circle(x, y, 4.5 * at.scale).fill({ color, alpha: 0.72 * life });
+    }
   }
 
   isDodging(): boolean {
@@ -1895,6 +1949,7 @@ export class GoldlineGame {
         (progress, lateral) => this.projectCorridor(progress, lateral, width, height),
         width
       );
+      this.drawSurveyReveals(width, height);
 
       // The fiction contributes movement in SCREEN space; convert it back
       // through the exact inverse of projectCorridor so a swing moves the

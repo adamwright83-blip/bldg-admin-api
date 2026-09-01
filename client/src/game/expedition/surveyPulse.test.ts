@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { LATERAL_TO_PROGRESS } from "./ruinbound";
 import {
   SETTLE_MS,
   SURVEY_COOLDOWN_SECONDS,
@@ -135,7 +136,7 @@ describe("SURVEY reveals", () => {
 
   it("returns nearest-first and never more than the cap", () => {
     const candidates = Array.from({ length: SURVEY_MAX_REVEALS + 4 }, (_, i) =>
-      at(`h${i}`, (i + 1) * 10, 0)
+      at(`h${i}`, (i + 1) * 0.01, 0)
     );
     const reveals = resolveSurveyReveals(candidates, 0, 0);
     expect(reveals).toHaveLength(SURVEY_MAX_REVEALS);
@@ -143,9 +144,23 @@ describe("SURVEY reveals", () => {
     expect(reveals[0].distance).toBeLessThan(reveals[1].distance);
   });
 
+  it("normalizes authored lateral into the same metric as route progress", () => {
+    const sameProgressDistance = 0.04;
+    const reveals = resolveSurveyReveals(
+      [
+        at("ahead", sameProgressDistance, 0),
+        at("side", 0, sameProgressDistance / LATERAL_TO_PROGRESS),
+      ],
+      0,
+      0
+    );
+    expect(reveals).toHaveLength(2);
+    expect(reveals[0].distance).toBeCloseTo(reveals[1].distance, 6);
+  });
+
   it("drops subjects beyond the pulse radius", () => {
     const reveals = resolveSurveyReveals(
-      [at("near", 10, 0), at("far", SURVEY_RADIUS + 1, 0)],
+      [at("near", 0.03, 0), at("far", SURVEY_RADIUS + 0.01, 0)],
       0,
       0
     );
@@ -154,7 +169,7 @@ describe("SURVEY reveals", () => {
 
   it("skips what the player can already see, so the pulse is for finding", () => {
     const reveals = resolveSurveyReveals(
-      [at("seen", 5, 0, { alreadyVisible: true }), at("hidden", 60, 0)],
+      [at("seen", 0.01, 0, { alreadyVisible: true }), at("hidden", 0.06, 0)],
       0,
       0
     );
@@ -162,14 +177,14 @@ describe("SURVEY reveals", () => {
   });
 
   it("is deterministic when subjects are equidistant", () => {
-    const a = resolveSurveyReveals([at("b", 0, 30), at("a", 30, 0)], 0, 0);
-    const b = resolveSurveyReveals([at("a", 30, 0), at("b", 0, 30)], 0, 0);
+    const a = resolveSurveyReveals([at("b", 0, 0.03 / LATERAL_TO_PROGRESS), at("a", 0.03, 0)], 0, 0);
+    const b = resolveSurveyReveals([at("a", 0.03, 0), at("b", 0, 0.03 / LATERAL_TO_PROGRESS)], 0, 0);
     expect(a.map(r => r.id)).toEqual(b.map(r => r.id));
     expect(a.map(r => r.id)).toEqual(["a", "b"]);
   });
 
   it("ages reveals out in simulation seconds", () => {
-    let reveals = resolveSurveyReveals([at("h", 10, 0)], 0, 0);
+    let reveals = resolveSurveyReveals([at("h", 0.02, 0)], 0, 0);
     expect(reveals[0].remaining).toBe(SURVEY_REVEAL_SECONDS);
     reveals = stepSurveyReveals(reveals, SURVEY_REVEAL_SECONDS - 0.1);
     expect(reveals).toHaveLength(1);
@@ -186,7 +201,7 @@ describe("SURVEY firewall", () => {
    */
   it("carries only fictional corridor data — no field can hold business truth", () => {
     const reveals = resolveSurveyReveals(
-      [{ id: "hostile-7", kind: "hostile", x: 12, y: 4 }],
+      [{ id: "hostile-7", kind: "hostile", x: 0.02, y: 4 }],
       0,
       0
     );
@@ -203,10 +218,10 @@ describe("SURVEY firewall", () => {
   it("cannot express a customer, order, building or visit as a subject kind", () => {
     const reveals = resolveSurveyReveals(
       [
-        { id: "a", kind: "hostile", x: 1, y: 0 },
-        { id: "b", kind: "hazard", x: 2, y: 0 },
-        { id: "c", kind: "anchor", x: 3, y: 0 },
-        { id: "d", kind: "opening", x: 4, y: 0 },
+        { id: "a", kind: "hostile", x: 0.01, y: 0 },
+        { id: "b", kind: "hazard", x: 0.02, y: 0 },
+        { id: "c", kind: "anchor", x: 0.03, y: 0 },
+        { id: "d", kind: "opening", x: 0.04, y: 0 },
       ],
       0,
       0

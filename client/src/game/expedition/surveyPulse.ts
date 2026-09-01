@@ -52,6 +52,8 @@
  * fiction, and looking is never evidence.
  */
 
+import { LATERAL_TO_PROGRESS } from "./ruinbound";
+
 /** Real ms the thumb must rest near centre before the pulse fires. */
 export const SETTLE_MS = 260;
 
@@ -67,7 +69,7 @@ export const SURVEY_DEADZONE = 0.12;
 export const SURVEY_COOLDOWN_SECONDS = 6;
 
 /** How far a pulse reaches, in corridor units. */
-export const SURVEY_RADIUS = 520;
+export const SURVEY_RADIUS = 0.18;
 
 /** Simulation seconds a revealed subject stays lit. */
 export const SURVEY_REVEAL_SECONDS = 4.5;
@@ -148,7 +150,10 @@ export function resolveSurveyReveals(
       kind: candidate.kind,
       x: candidate.x,
       y: candidate.y,
-      distance: Math.hypot(candidate.x - originX, candidate.y - originY),
+      distance: Math.hypot(
+        candidate.x - originX,
+        (candidate.y - originY) * LATERAL_TO_PROGRESS
+      ),
       remaining: SURVEY_REVEAL_SECONDS,
     }))
     .filter(reveal => reveal.distance <= radius)

@@ -667,10 +667,14 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       pulse.step(Math.min(0.25, (now - last) / 1000));
       last = now;
       if (pulse.getPhase() === "settling") {
-        if (pulse.pointerUpdate(now, 0)) {
-          runtimeRef.current?.expeditionSurvey();
+        const game = runtimeRef.current;
+        if (game?.getExpeditionSnapshot()?.outcome !== "running") {
+          pulse.cancel();
+          setSettleProgress(0);
+        } else {
+          if (pulse.pointerUpdate(now, 0)) game.expeditionSurvey();
+          setSettleProgress(pulse.getSettleProgress(now));
         }
-        setSettleProgress(pulse.getSettleProgress(now));
       }
       raf = requestAnimationFrame(tick);
     };
@@ -3159,6 +3163,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               onFirstMove={() => completeMilestone("movement")}
               settleProgress={settleProgress}
               onPressStart={deflection => {
+                const game = runtimeRef.current;
+                if (game?.getExpeditionSnapshot()?.outcome !== "running") {
+                  surveyPulseRef.current.cancel();
+                  setSettleProgress(0);
+                  return;
+                }
                 surveyPulseRef.current.pointerDown(
                   performance.now(),
                   deflection
@@ -3166,9 +3176,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 setSettleProgress(0);
               }}
               onPressUpdate={deflection => {
+                const game = runtimeRef.current;
+                if (game?.getExpeditionSnapshot()?.outcome !== "running") {
+                  surveyPulseRef.current.cancel();
+                  setSettleProgress(0);
+                  return;
+                }
                 const now = performance.now();
                 if (surveyPulseRef.current.pointerUpdate(now, deflection)) {
-                  runtimeRef.current?.expeditionSurvey();
+                  game.expeditionSurvey();
                 }
                 setSettleProgress(
                   surveyPulseRef.current.getSettleProgress(now)
