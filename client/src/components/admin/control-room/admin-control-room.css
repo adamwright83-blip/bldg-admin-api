@@ -395,3 +395,34 @@
 .lc-stem.fan-3{width:56px;transform:rotate(34.8deg)}
 .lc-stem.fan-4{width:56px;transform:rotate(145.2deg)}
 .owi-evidence-link{display:inline-flex;min-height:44px;align-items:center;margin-top:6px;padding:0 15px;border-radius:12px;background:#fff9df;color:#17385e;font-size:11px;font-weight:900;text-decoration:none;box-shadow:inset 0 0 0 1px #cd9d3d66}
+
+/* ── World atmosphere: knowledge and history worn by the building ─────────── */
+/* A veil describes what Goldline knows, so it never moves or hides the place. */
+.lc-veil{position:absolute;z-index:2;inset:-10% -12%;border-radius:12px;pointer-events:none}
+.lc-veil.veil-haze{background:radial-gradient(ellipse at 50% 55%,#fffdf2d9,#fff6d68c 52%,transparent 78%);mix-blend-mode:screen}
+.lc-veil.veil-fracture{background:repeating-linear-gradient(58deg,#fff3c400 0 7px,#f5a52b4d 7px 9px);animation:lc-fracture 2.6s steps(3) infinite}
+.lc-veil.veil-tracing{border:1px dashed #4f9ec27a;background:linear-gradient(#c9e9f52e,#ffffff00)}
+.lc-veil.veil-pressure{background:linear-gradient(#8aa6c400,#7d9bbd52 62%,#5f7fa33d);animation:lc-pressure 5.5s ease-in-out infinite}
+@keyframes lc-fracture{50%{opacity:.45}}
+@keyframes lc-pressure{50%{transform:translateY(-4%) scaleY(1.06)}}
+
+/* Marks are a building's permanent, explainable memory of real events. */
+.lc-marks{position:absolute;z-index:6;bottom:-9px;left:50%;display:flex;transform:translateX(-50%);gap:2px;pointer-events:none}
+.lc-marks i{display:grid;width:11px;height:11px;place-items:center;border:2px solid #a8761c;border-radius:50%;background:#fff4c9;color:#5d3d07;font-size:6px;font-style:normal;font-weight:900}
+.lc-marks i[data-mark="won"],.lc-marks i[data-mark="recovery"]{border-color:#4f8d1f;background:#a4e061;box-shadow:0 0 7px #86d13f}
+.lc-marks i[data-mark="lost"]{border-style:dashed;border-color:#a2503a;background:#e3ad99}
+.lc-marks i[data-mark="proposal_sent"]{border-color:#2d6f92;background:#a8dcf0}
+.lc-marks i[data-mark="visited"]{border-color:#7a5ba8;background:#d8c6f2}
+.lc-marks i[data-mark="customer_activity"]{border-color:#c2911d;background:#ffe9a3}
+
+/* Prominence only ever emphasises. It changes no fact about the place. */
+.has-world.attention-noticed{filter:drop-shadow(0 0 9px #f3c75a)}
+.has-world.attention-urgent{filter:drop-shadow(0 0 16px #f0a52a);animation:owi-attention 1.8s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.lc-veil.veil-fracture,.lc-veil.veil-pressure,.has-world.attention-urgent{animation:none}.has-world.attention-urgent{outline:3px solid #ef9f18;outline-offset:4px}}
+
+/* The city revealing a place that was physically there the whole time. */
+.has-world.is-revealing{animation:lc-reveal 2.2s ease-out}
+.has-world.is-revealing .lc-veil{animation:lc-veil-lift 2.2s ease-out forwards}
+@keyframes lc-reveal{0%{filter:brightness(1.9) drop-shadow(0 0 30px #fff3c0)}45%{filter:brightness(1.25) drop-shadow(0 0 20px #f6c95c)}100%{filter:none}}
+@keyframes lc-veil-lift{0%{opacity:1;transform:scale(1.25)}70%{opacity:.25}100%{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.has-world.is-revealing,.has-world.is-revealing .lc-veil{animation:none}.has-world.is-revealing{outline:4px solid #f0a52a;outline-offset:6px}}

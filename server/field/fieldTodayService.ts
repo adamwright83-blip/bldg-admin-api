@@ -4,7 +4,7 @@ import { deterministicEstimate, sourcedFact } from "../../shared/businessGame";
 import { getDb } from "../db";
 import { listDayforgeToday } from "../dayforgeToday/dayforgeTodayService";
 import type { FieldTodayItem, FieldTodayProjection } from "./types";
-import { listRecoveryInterventions } from "../churnRadar/customerChurnService";
+import { listRecoveryInterventions, physicalEntityIdsForInterventions } from "../churnRadar/customerChurnService";
 import { listForgeJobs } from "../worldForge/worldForgeService";
 
 function moneyCents(value: unknown): number {
@@ -102,10 +102,20 @@ export async function getFieldToday(input: {
       actions: [{ type: "open", label: "Open", href: item.destinationPath, mutation: null }],
     });
   }
-  for (const recovery of recoveries.filter(item => ["draft_pending_review", "approved", "contacted"].includes(item.status))) {
+  const openRecoveries = recoveries.filter(item =>
+    ["draft_pending_review", "approved", "contacted"].includes(item.status)
+  );
+  // Recovery work is placed at the building the dormant customer actually
+  // orders from, so entering it from the day lands on the same save file.
+  const recoveryEntities = await physicalEntityIdsForInterventions(
+    input.tenantId,
+    openRecoveries.map(item => item.id)
+  );
+  for (const recovery of openRecoveries) {
     timeline.push({
       id: `recovery:${recovery.id}`, kind: "customer_recovery",
       source: { entityType: "customer_recovery_intervention", entityId: recovery.id, sourceReference: `customer_recovery_interventions:${recovery.id}` },
+      physicalEntityId: recoveryEntities.get(recovery.id) ?? null,
       scheduledAt: null, urgency: recovery.status === "approved" ? "urgent" : "flexible",
       title: `Recovery · ${recovery.customer.customerName}`,
       subtitle: recovery.status === "contacted" ? "Signal sent; awaiting authoritative customer activity" : recovery.customer.recommendedAction,
@@ -113,13 +123,14 @@ export async function getFieldToday(input: {
       customer: { name: recovery.customer.customerName, phone: null, email: null },
       money: deterministicEstimate(recovery.customer.estimatedMonthlyImpactCents, `customer_churn_snapshots:${recovery.customer.id}`, recovery.customer.confidence),
       verificationClass: "VERIFIED",
-      actions: [{ type: "open", label: "Enter Recovery Path", href: "/growth/lantern-city", mutation: null }],
+      actions: [{ type: "open", label: "Enter Recovery Path", href: recoveryEntities.get(recovery.id) ? `/growth/lantern-city?entity=${recoveryEntities.get(recovery.id)}` : "/growth/lantern-city", mutation: null }],
     });
   }
   for (const forge of forgeJobs.filter(job => ["review_ready", "generation_unconfigured", "published"].includes(job.state))) {
     timeline.push({
       id: `forge:${forge.id}`, kind: "contextual_move",
       source: { entityType: "tower_forge_job", entityId: forge.id, sourceReference: `tower_forge_jobs:${forge.id}` },
+      physicalEntityId: forge.physicalEntityId ?? null,
       scheduledAt: null, urgency: forge.state === "review_ready" ? "urgent" : "flexible",
       title: forge.state === "published" ? "Published tower in Lantern City" : forge.state === "review_ready" ? "New tower discovered" : "Tower Forge awaiting art",
       subtitle: forge.state.replaceAll("_", " "), status: forge.state, destination: null, customer: null, money: null,

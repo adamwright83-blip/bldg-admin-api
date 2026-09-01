@@ -17,6 +17,12 @@ export type FieldTodayItem = {
   id: string;
   kind: FieldTodayItemKind;
   source: { entityType: string; entityId: string; sourceReference: string };
+  /**
+   * The building this piece of the day belongs to, when one is already known.
+   * Null means Goldline has not resolved a physical entity for it — never that
+   * the work is placeless, and never a building picked to fill the gap.
+   */
+  physicalEntityId?: string | null;
   scheduledAt: string | null;
   urgency: "blocked" | "overdue" | "urgent" | "scheduled" | "flexible" | "upcoming";
   title: string;

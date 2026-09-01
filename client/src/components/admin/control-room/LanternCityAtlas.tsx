@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { MapPinOff, RefreshCw, Search, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { WorldGeographySurface } from "./WorldGeographySurface";
@@ -7,6 +7,8 @@ import { WorldDayPhaseIndicator } from "./WorldDayPhase";
 import { clusterGeographicCustomers, clustersAsGoogleEntities, fanOutAtlasCollisions } from "./customerGeography";
 import type { CustomerLocationCluster } from "./customerGeography";
 import { WorldEntityInspector } from "./WorldEntityInspector";
+import { describeWorldPresentation } from "@shared/goldlineWorldPresentation";
+import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWorldService";
 
 export {
   inferCustomerCadence,
@@ -17,6 +19,53 @@ export function classifyLanternCustomer(customer: { recencyStatus: string }) {
   if (customer.recencyStatus === "lapsed") return "dark" as const;
   if (customer.recencyStatus === "cooling") return "dimming" as const;
   return "active" as const;
+}
+
+/**
+ * The atmosphere a place is wearing, drawn onto the building itself rather than
+ * beside it. Everything here is decorative to a screen reader — the same facts
+ * reach assistive technology through `markerLabel()`, because uncertainty that
+ * can only be seen is uncertainty that some users never get.
+ */
+function WorldMarkerAtmosphere({ entity }: { entity: CityWorldEntity | null }) {
+  const presentation = entity?.presentation;
+  if (!presentation) return null;
+  return (
+    <>
+      {presentation.veil !== "none" ? (
+        <span className={`lc-veil veil-${presentation.veil}`} aria-hidden />
+      ) : null}
+      {presentation.marks.length ? (
+        <span className="lc-marks" aria-hidden>
+          {presentation.marks.map(mark => (
+            <i key={mark.semantic} data-mark={mark.semantic}>
+              {mark.count > 1 ? mark.count : null}
+            </i>
+          ))}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Attention is allowed to make a place louder and nothing else. The tier lands
+ * on the marker as emphasis; it never touches the record's stage, revenue or
+ * position.
+ */
+function worldMarkerClass(
+  base: string,
+  entity: CityWorldEntity | null,
+  revealing = false
+) {
+  const presentation = entity?.presentation;
+  if (!presentation) return base;
+  return `${base} has-world veil-${presentation.veil} attention-${presentation.prominenceTier}${revealing ? " is-revealing" : ""}`;
+}
+
+function markerLabel(base: string, entity: CityWorldEntity | null) {
+  if (!entity) return base;
+  return describeWorldPresentation(base, entity.presentation);
 }
 
 export default function LanternCityAtlas({
@@ -73,12 +122,59 @@ export default function LanternCityAtlas({
 
   const [googleVisible, setGoogleVisible] = useState(false);
   const customerClusters = useMemo(() => clusterGeographicCustomers(visibleCustomers as any), [visibleCustomers]);
-  const normalizeAddress = (value: string | null | undefined) => (value ?? "").toLowerCase().replace(/\s+/g, " ").replace(/[^a-z0-9]/g, "").trim();
-  const entityForPursuit = (accountId: number) => cityWorld.data?.find(entity => entity.bindings.some(binding => binding.bindingType === "commercial_account" && binding.bindingKey === String(accountId))) ?? null;
-  const entityForCluster = (cluster: CustomerLocationCluster) => cityWorld.data?.find(entity => entity.aliases.some(alias => alias.aliasType === "normalized_address" && normalizeAddress(alias.aliasValue) === normalizeAddress(cluster.canonicalAddress))) ?? null;
+
+  /*
+    Buildings are matched on the server, against the same normaliser the
+    identity resolver uses. The browser only has to look the answer up, so a
+    building cannot be one entity here and a different one there.
+  */
+  const entityByAccountId = useMemo(() => {
+    const map = new Map<number, CityWorldEntity>();
+    for (const entity of cityWorld.data ?? []) {
+      if (entity.pursuit) map.set(entity.pursuit.accountId, entity);
+    }
+    return map;
+  }, [cityWorld.data]);
+
+  const entityByResident = useMemo(() => {
+    const map = new Map<string, CityWorldEntity>();
+    for (const entity of cityWorld.data ?? []) {
+      for (const resident of entity.residents) map.set(resident.identityKey, entity);
+    }
+    return map;
+  }, [cityWorld.data]);
+
+  const entityForPursuit = (accountId: number) => entityByAccountId.get(accountId) ?? null;
+  const entityForCluster = (cluster: CustomerLocationCluster) => {
+    for (const customer of cluster.customers) {
+      const entity = entityByResident.get(customer.identityKey);
+      if (entity) return entity;
+    }
+    return null;
+  };
+
   const requestedEntityId = new URLSearchParams(window.location.search).get("entity");
   const requestedEntity = cityWorld.data?.find(entity => entity.id === requestedEntityId) ?? null;
   const selectedEntity = selectedPursuit ? entityForPursuit(selectedPursuit.accountId) : selectedCluster ? entityForCluster(selectedCluster) : requestedEntity;
+
+  /*
+    A place arriving by deep link is revealed rather than merely selected: the
+    city moves to the building that was already there. Focus follows so the
+    reveal is not purely visual.
+  */
+  const revealRef = useRef<HTMLButtonElement | null>(null);
+  const [revealing, setRevealing] = useState(false);
+  useEffect(() => {
+    if (!requestedEntity) return;
+    const target = revealRef.current;
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.focus({ preventScroll: true });
+    setRevealing(true);
+    // The veil lifting is a moment, not a permanent state.
+    const timer = window.setTimeout(() => setRevealing(false), 2200);
+    return () => window.clearTimeout(timer);
+  }, [requestedEntity?.id]);
 
   /**
    * The same visible records, addressed by the real coordinate the atlas
@@ -204,7 +300,12 @@ export default function LanternCityAtlas({
               ) : null}
               <button
                 type="button"
-                className={`lc-lantern state-${cluster.dark === cluster.total ? "dark" : cluster.dimming > 0 || cluster.dark > 0 ? "dimming" : "active"}${fanSlot > 0 ? ` fan-${fanSlot}` : ""}`}
+                ref={entityForCluster(cluster)?.id === requestedEntityId ? revealRef : undefined}
+                className={worldMarkerClass(
+                  `lc-lantern state-${cluster.dark === cluster.total ? "dark" : cluster.dimming > 0 || cluster.dark > 0 ? "dimming" : "active"}${fanSlot > 0 ? ` fan-${fanSlot}` : ""}`,
+                  entityForCluster(cluster),
+                  revealing && entityForCluster(cluster)?.id === requestedEntityId
+                )}
                 style={{
                   left: `${cluster.x}%`,
                   top: `${cluster.y}%`,
@@ -213,12 +314,16 @@ export default function LanternCityAtlas({
                   setSelectedPursuit(null);
                   setSelectedCluster(cluster);
                 }}
-                aria-label={`${cluster.total} customer${cluster.total === 1 ? "" : "s"} at this location`}
+                aria-label={markerLabel(
+                  `${cluster.total} customer${cluster.total === 1 ? "" : "s"} at this location`,
+                  entityForCluster(cluster)
+                )}
               >
                 <span className="lc-lantern-handle" />
                 <span className="lc-lantern-body" />
                 <span className="lc-lantern-base" />
                 {cluster.total > 1 ? <b>{cluster.total}</b> : null}
+                <WorldMarkerAtmosphere entity={entityForCluster(cluster)} />
               </button>
             </Fragment>
           ))}
@@ -229,7 +334,12 @@ export default function LanternCityAtlas({
             <button
               type="button"
               key={item.pipelineId}
-              className={`lc-pursued-building${worldEntity?.canonicalAsset?.assetUrl ? " has-published-art" : ""}${worldEntity?.projection.attentionReasons.length ? " needs-attention" : ""}`}
+              ref={worldEntity?.id === requestedEntityId ? revealRef : undefined}
+              className={worldMarkerClass(
+                `lc-pursued-building${worldEntity?.canonicalAsset?.assetUrl ? " has-published-art" : ""}`,
+                worldEntity,
+                revealing && worldEntity?.id === requestedEntityId
+              )}
               style={{
                 left: `${item.location!.x}%`,
                 top: `${item.location!.y}%`,
@@ -238,10 +348,11 @@ export default function LanternCityAtlas({
                 setSelectedCluster(null);
                 setSelectedPursuit(item);
               }}
-              aria-label={`Pursued: ${item.name}`}
+              aria-label={markerLabel(`Pursued: ${item.name}`, worldEntity)}
             >
               {worldEntity?.canonicalAsset?.assetUrl ? <img src={worldEntity.canonicalAsset.assetUrl} alt="" /> : <span aria-hidden><i/><i/><i/></span>}
               <b>{item.name}</b>
+              <WorldMarkerAtmosphere entity={worldEntity} />
             </button>
           )})}
 

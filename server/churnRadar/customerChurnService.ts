@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import {
   customerChurnScans,
   customerChurnSnapshots,
@@ -24,6 +24,7 @@ import { getDb } from "../db";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
 import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
 import { appendGoldlineWorldEvent } from "../goldlineWorld/worldEventStore";
+import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
 import {
   groupCustomerRecords,
   customerIdentityHashes,
@@ -1357,6 +1358,110 @@ export async function prepareCustomerRecoveryManualContact(input: {
   };
 }
 
+/**
+ * The building a dormant customer's outreach belongs to.
+ *
+ * Resolved from the address on that customer's own most recent order, so the
+ * Chronicle mark lands on a real place or on none at all. A customer whose
+ * address has never been bound to a building simply produces an unattached
+ * event rather than a guess.
+ */
+async function physicalEntityForIntervention(input: {
+  tenantId: string;
+  interventionId: string;
+}): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ phone: customerChurnSnapshots.customerPhone })
+    .from(customerRecoveryInterventions)
+    .innerJoin(
+      customerChurnSnapshots,
+      and(
+        eq(customerChurnSnapshots.tenantId, input.tenantId),
+        eq(customerChurnSnapshots.id, customerRecoveryInterventions.churnSnapshotId)
+      )
+    )
+    .where(
+      and(
+        eq(customerRecoveryInterventions.tenantId, input.tenantId),
+        eq(customerRecoveryInterventions.id, input.interventionId)
+      )
+    )
+    .limit(1);
+  const phone = rows[0]?.phone;
+  if (!phone) return null;
+  const latest = await db
+    .select({ address: orders.address })
+    .from(orders)
+    .where(
+      and(
+        sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId}`,
+        eq(orders.phone, phone)
+      )
+    )
+    .orderBy(desc(orders.createdAt), desc(orders.id))
+    .limit(1);
+  return findPhysicalEntityIdByAddress({
+    tenantId: input.tenantId,
+    address: latest[0]?.address,
+  });
+}
+
+/**
+ * The buildings a set of recovery interventions belong to, resolved in one
+ * pass. Interventions whose customer address has never been bound to a physical
+ * entity are simply absent from the map rather than mapped to a guess.
+ */
+export async function physicalEntityIdsForInterventions(
+  tenantId: string,
+  interventionIds: string[]
+): Promise<Map<string, string>> {
+  const resolved = new Map<string, string>();
+  if (!interventionIds.length) return resolved;
+  const db = await getDb();
+  if (!db) return resolved;
+  const rows = await db
+    .select({
+      interventionId: customerRecoveryInterventions.id,
+      address: orders.address,
+      createdAt: orders.createdAt,
+    })
+    .from(customerRecoveryInterventions)
+    .innerJoin(
+      customerChurnSnapshots,
+      and(
+        eq(customerChurnSnapshots.tenantId, tenantId),
+        eq(customerChurnSnapshots.id, customerRecoveryInterventions.churnSnapshotId)
+      )
+    )
+    .innerJoin(
+      orders,
+      and(
+        sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`,
+        eq(orders.phone, customerChurnSnapshots.customerPhone)
+      )
+    )
+    .where(
+      and(
+        eq(customerRecoveryInterventions.tenantId, tenantId),
+        inArray(customerRecoveryInterventions.id, interventionIds)
+      )
+    )
+    .orderBy(asc(orders.createdAt));
+
+  // The latest order wins, so a customer who moved is placed where they are now.
+  const latestAddress = new Map<string, string>();
+  for (const row of rows) {
+    if (row.address) latestAddress.set(row.interventionId, row.address);
+  }
+  for (const [interventionId, address] of Array.from(latestAddress)) {
+    const entityId = await findPhysicalEntityIdByAddress({ tenantId, address });
+    if (entityId) resolved.set(interventionId, entityId);
+  }
+  return resolved;
+}
+
 export async function markCustomerRecoveryContacted(input: {
   tenantId: string;
   interventionId: string;
@@ -1464,7 +1569,9 @@ export async function markCustomerRecoveryContacted(input: {
     });
   });
   await appendGoldlineWorldEvent({
-    tenantId: input.tenantId, physicalEntityId: null, eventType: "recovery_outreach_completed", classification: "action", actorType: "operator", actorId: input.actorId,
+    tenantId: input.tenantId,
+    physicalEntityId: await physicalEntityForIntervention({ tenantId: input.tenantId, interventionId: input.interventionId }),
+    eventType: "recovery_outreach_completed", classification: "action", actorType: "operator", actorId: input.actorId,
     occurredAt: new Date().toISOString(), observedAt: null, sourceType: "customer_recovery_interventions", sourceId: input.interventionId, sourceEvidenceReference: `customer_recovery_interventions:${input.interventionId}`,
     provenanceClass: "operator_reported", verificationClass: "ATTESTED", confidence: "high", idempotencyKey: `recovery-outreach:${input.tenantId}:${input.requestId}`, correlationId: `recovery-intervention:${input.interventionId}`,
     metadata: { draftId: input.draftId, actionOnly: true, doesNotMeanRecovered: true },
@@ -1620,7 +1727,9 @@ export async function refreshCustomerRecoveryAttribution(tenantId: string) {
       if (transitioned) {
         recovered += 1;
         await appendGoldlineWorldEvent({
-          tenantId, physicalEntityId: null, eventType: "customer_recovered", classification: "outcome", actorType: "customer", actorId: null,
+          tenantId,
+          physicalEntityId: await findPhysicalEntityIdByAddress({ tenantId, address: match.address }),
+          eventType: "customer_recovered", classification: "outcome", actorType: "customer", actorId: null,
           occurredAt: (match.paidAt ?? match.createdAt).toISOString(), observedAt: null, sourceType: "orders", sourceId: String(match.id), sourceEvidenceReference: `orders:${match.id}`,
           provenanceClass: "existing_business_record", verificationClass: "VERIFIED", confidence: "high", idempotencyKey: `customer-recovered:${tenantId}:${intervention.id}:${match.id}`, correlationId: `recovery-intervention:${intervention.id}`,
           metadata: { interventionId: intervention.id, orderId: match.id, recoveredRevenueCents: cents(match.total), authoritativePaidOrder: true },

@@ -21,9 +21,80 @@ export type LiveAdventureObjective = {
   dueAt: string | null;
   status: "ready" | "completed" | "blocked";
   address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  /** The building this objective belongs to, when Goldline already knows it. */
+  physicalEntityId: string | null;
   explanation: string;
   sourceEvidenceReference: string;
 };
+
+/** The parts of a field-today item this projection is allowed to read. */
+type FieldTodaySource = {
+  id: string;
+  kind: string;
+  title: string;
+  subtitle: string;
+  status: string;
+  urgency: string;
+  scheduledAt: string | null;
+  destination: { address: string; latitude: number | null; longitude: number | null } | null;
+  physicalEntityId?: string | null;
+  source: { sourceReference: string };
+};
+
+const LIVE_OBJECTIVE_KINDS = [
+  "follow_up",
+  "mission_dispatch",
+  "customer_recovery",
+  "contextual_move",
+  "commercial_visit",
+];
+
+const LIVE_OBJECTIVE_SOURCE_LABELS: Record<string, string> = {
+  customer_recovery: "Dormant relationship",
+  contextual_move: "Field discovery",
+};
+
+/**
+ * The authoritative day, as objectives the world can host.
+ *
+ * This only reshapes work that already exists in the field-today projection —
+ * real pickups, deliveries, commitments, recoveries and discoveries. It creates
+ * no objective of its own, so an empty day stays an empty day rather than being
+ * padded with invented things to do.
+ */
+export function liveObjectivesFromFieldToday(
+  timeline: FieldTodaySource[]
+): LiveAdventureObjective[] {
+  return timeline
+    .filter(item => LIVE_OBJECTIVE_KINDS.includes(item.kind))
+    .map(item => ({
+      id: item.id,
+      kind:
+        item.kind === "customer_recovery" || item.kind === "contextual_move"
+          ? ("growth" as const)
+          : ("sales" as const),
+      title: item.title,
+      sourceLabel:
+        LIVE_OBJECTIVE_SOURCE_LABELS[item.kind] ?? "Commercial commitment",
+      dueAt: item.scheduledAt,
+      status:
+        item.status === "completed" ||
+        item.status === "recovered" ||
+        item.status === "published"
+          ? ("completed" as const)
+          : item.urgency === "blocked"
+            ? ("blocked" as const)
+            : ("ready" as const),
+      address: item.destination?.address ?? null,
+      latitude: item.destination?.latitude ?? null,
+      longitude: item.destination?.longitude ?? null,
+      physicalEntityId: item.physicalEntityId ?? null,
+      explanation: item.subtitle,
+      sourceEvidenceReference: item.source.sourceReference,
+    }));
+}
 
 export type DayPlanStopKind =
   | "pickup"
@@ -53,6 +124,14 @@ export type DayPlanStop = {
   status: "upcoming" | "ready" | "blocked" | "completed" | "cancelled";
   fixed: boolean;
   address: string | null;
+  /**
+   * Real verified coordinates only. Most laundry orders carry an address with
+   * no geocode, so these stay null rather than being estimated from the text.
+   */
+  latitude?: number | null;
+  longitude?: number | null;
+  /** The building this stop belongs to, when Goldline already knows it. */
+  physicalEntityId?: string | null;
   navigationUrl: string | null;
   missionTarget: "colosseum" | null;
   completedAt: string | null;
@@ -337,6 +416,9 @@ export function buildDayPlanProjection(input: {
       status: objective.status === "ready" ? "ready" : objective.status,
       fixed: Boolean(objective.dueAt),
       address: objective.address,
+      latitude: objective.latitude,
+      longitude: objective.longitude,
+      physicalEntityId: objective.physicalEntityId,
       navigationUrl: navigationUrl(objective.address),
       missionTarget: null,
       completedAt: objective.status === "completed" ? new Date().toISOString() : null,
@@ -377,11 +459,11 @@ export function buildDayPlanProjection(input: {
   const compiled = compileGoldlineAdventure({
     date: input.businessDate,
     objectives: deduped.map(stop => ({
-      id: stop.id, physicalEntityId: null,
+      id: stop.id, physicalEntityId: stop.physicalEntityId ?? null,
       kind: stop.kind === "pickup" ? "pickup" : stop.kind === "dropoff" ? "delivery" : stop.source === "living_world" && /recovery/i.test(stop.sourceLabel) ? "recovery" : stop.kind === "sales" ? "commercial_visit" : "field_capture",
       authority: stop.fixed ? "fixed_commitment" : stop.source === "living_world" ? "persisted_task" : "derived_recommendation",
       status: stop.status === "completed" ? "completed" : stop.status === "blocked" || stop.status === "cancelled" ? "blocked" : "ready",
-      latitude: null, longitude: null, windowStart: stop.fixed ? stop.sortKey : null, windowEnd: null,
+      latitude: stop.latitude ?? null, longitude: stop.longitude ?? null, windowStart: stop.fixed ? stop.sortKey : null, windowEnd: null,
       priority: stop.source === "living_world" ? 8 : stop.fixed ? 10 : 4,
       explanation: stop.sourceLabel, sourceEvidenceReference: `${stop.source}:${stop.id}`,
     })),

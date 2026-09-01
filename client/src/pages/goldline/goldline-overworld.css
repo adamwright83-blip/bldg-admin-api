@@ -466,3 +466,4 @@
   letter-spacing: 0.08em;
   color: #d7dbc8b8;
 }
+.overworld-objective-reveal{display:inline-flex;min-height:36px;align-items:center;margin-top:6px;padding:0 13px;border-radius:999px;background:#f4c84c;color:#17385e;font:900 9px Inter,sans-serif;letter-spacing:.12em;text-decoration:none;text-shadow:none}

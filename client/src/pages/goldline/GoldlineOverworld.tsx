@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Check, ChevronRight, Loader2, LockKeyhole, X } from "lucide-react";
+import { Link } from "wouter";
 import type { Order } from "@shared/types";
 import type { GoldlineEventEmitter } from "../../game/analytics/emitGoldlineEvent";
 import cleanOverworldUrl from "@/assets/goldline/generated/goldline-overworld-clean.png";
@@ -375,6 +376,15 @@ export default function GoldlineOverworld({
             <small>{activeObjective.sourceLabel}</small>
             <b>{activeObjective.title}</b>
             {activeObjective.address ? <span>{activeObjective.address}</span> : null}
+            {/* The objective's own building, so the day and the city are one place. */}
+            {activeObjective.physicalEntityId ? (
+              <Link
+                className="overworld-objective-reveal"
+                href={`/growth/lantern-city?entity=${activeObjective.physicalEntityId}`}
+              >
+                REVEAL THIS PLACE IN THE CITY
+              </Link>
+            ) : null}
             <i>{activeObjective.sourceEvidenceReference}</i>
           </div>
         ) : null}

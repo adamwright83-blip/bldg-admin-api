@@ -39,6 +39,7 @@ import type {
   GoldlineVisitContext,
 } from "../../game/actions/actionServices";
 import type { AuthoritativeFollowUp } from "../../game/actions/actionRegistry";
+import { liveObjectivesFromFieldToday } from "./goldlineDayPlanModel";
 import {
   canCompleteDelivery,
   nextCommitmentDate,
@@ -1093,19 +1094,10 @@ function LiveGoldlineDriverController() {
     fieldToday.data?.businessDate === selectedDate
       ? fieldToday.data
       : undefined;
-  const liveAdventureObjectives = useMemo(() => (currentDayProjection?.timeline ?? [])
-    .filter(item => ["follow_up", "mission_dispatch", "customer_recovery", "contextual_move", "commercial_visit"].includes(item.kind))
-    .map(item => ({
-      id: item.id,
-      kind: item.kind === "customer_recovery" || item.kind === "contextual_move" ? "growth" as const : "sales" as const,
-      title: item.title,
-      sourceLabel: item.kind === "customer_recovery" ? "Dormant relationship" : item.kind === "contextual_move" ? "Field discovery" : "Commercial commitment",
-      dueAt: item.scheduledAt,
-      status: item.status === "completed" || item.status === "recovered" || item.status === "published" ? "completed" as const : item.urgency === "blocked" ? "blocked" as const : "ready" as const,
-      address: item.destination?.address ?? null,
-      explanation: item.subtitle,
-      sourceEvidenceReference: item.source.sourceReference,
-    })), [currentDayProjection?.timeline]);
+  const liveAdventureObjectives = useMemo(
+    () => liveObjectivesFromFieldToday(currentDayProjection?.timeline ?? []),
+    [currentDayProjection?.timeline]
+  );
   const activeAdventureObjective = liveAdventureObjectives.find(item => item.id === activeAdventureObjectiveId)
     ?? liveAdventureObjectives.find(item => item.status === "ready") ?? null;
 
