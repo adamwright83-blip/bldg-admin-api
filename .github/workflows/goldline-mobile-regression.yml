@@ -19,6 +19,7 @@ on:
       # could merge without this gate running — the same gap that let the
       # front door break, one directory over.
       - "client/src/components/driver/**"
+      - "client/src/components/admin/control-room/**"
       - "server/commercialMissions/driverSalesMotivationService.ts"
       - "server/commercialMissions/driverSalesJournalResilience.test.ts"
       - "server/driverGameWorld/**"
@@ -41,12 +42,20 @@ on:
       - "shared/impactSignal.test.ts"
       - "shared/goldlineProgression.ts"
       - "shared/goldlineProgression.test.ts"
+      - "shared/goldlineArcade*"
+      - "shared/goldlineCamera*"
+      - "shared/goldlineCustomerWindows*"
+      - "shared/goldlineFuturePressure*"
+      - "shared/goldlineObligations*"
+      - "shared/goldlineTemporal*"
       - "shared/driverSafeSalesIntel.ts"
       - "client/public/goldline.webmanifest"
       - "client/public/goldline-sw.js"
       - "client/public/assets/goldline/**"
       - "e2e/goldline/**"
+      - "e2e/goldline-smoke/**"
       - "playwright.goldline.config.ts"
+      - "playwright.goldline-smoke.config.ts"
       - "scripts/checkGoldlineBundleBudget.mjs"
       - "scripts/verifyPlayableGoldline.mjs"
       - "scripts/verifyGoldlineFirstPlayGate.mjs"
@@ -57,6 +66,7 @@ on:
       - "scripts/verifyGoldlineFieldIntel.mjs"
       - "scripts/verifyGoldlineExternalOrder.mjs"
       - ".github/workflows/goldline-mobile-regression.yml"
+      - ".github/workflows/goldline-fast-smoke.yml"
   workflow_dispatch:
 
 permissions:
