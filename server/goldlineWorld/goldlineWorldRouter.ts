@@ -17,6 +17,13 @@ import {
   listPresentedTerritories,
   recordGuardianDefeated,
 } from "./territoryService";
+import {
+  chooseCampaignBranch,
+  getOrMaterializeTodayCampaign,
+  listOperatorCampaigns,
+  recordCampaignChapterGameCompleted,
+  upsertFictionAssignmentIfAbsent,
+} from "./campaignService";
 
 export const goldlineWorldRouter = router({
   cityEntities: dayforgeTenantOperatorProcedure.query(({ ctx }) => listCityWorldEntities({ tenantId: ctx.tenantId })),
@@ -72,6 +79,51 @@ export const goldlineWorldRouter = router({
       recordGuardianDefeated({
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
+        ...input,
+      })
+    ),
+  campaign: dayforgeTenantMemberProcedure.query(({ ctx }) =>
+    getOrMaterializeTodayCampaign({
+      tenantId: ctx.tenantId,
+      operatorId: ctx.user.openId,
+    })
+  ),
+  campaigns: dayforgeTenantMemberProcedure.query(({ ctx }) =>
+    listOperatorCampaigns({
+      tenantId: ctx.tenantId,
+      operatorId: ctx.user.openId,
+    })
+  ),
+  chooseCampaignBranch: dayforgeTenantMemberProcedure
+    .input(z.object({ chapterId: z.string().min(1).max(191) }))
+    .mutation(({ ctx, input }) =>
+      chooseCampaignBranch({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        chapterId: input.chapterId,
+      })
+    ),
+  recordCampaignChapterGameCompleted: dayforgeTenantMemberProcedure
+    .input(z.object({ chapterId: z.string().min(1).max(191) }))
+    .mutation(({ ctx, input }) =>
+      recordCampaignChapterGameCompleted({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        chapterId: input.chapterId,
+      })
+    ),
+  upsertFictionAssignment: dayforgeTenantMemberProcedure
+    .input(
+      z.object({
+        stableMissionKey: z.string().min(1).max(191),
+        templateId: z.string().min(1).max(64),
+        rulesVersion: z.number().int().min(1).max(32),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      upsertFictionAssignmentIfAbsent({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
         ...input,
       })
     ),

@@ -1,0 +1,214 @@
+/**
+ * Campaign revisions: past locked, active pinned unless invalidated, future may change.
+ * Refresh / pan / inspect / arcade / guardian play are not revision sources.
+ */
+
+import type {
+  CampaignChapter,
+  CampaignDraft,
+  CampaignInstance,
+  CampaignRevisionDiff,
+  CampaignRevisionReason,
+} from "./goldlineCampaign";
+
+function futureChapterIds(draft: Pick<CampaignDraft, "chapters" | "currentChapterId" | "completedChapterIds">) {
+  const locked = new Set(draft.completedChapterIds);
+  if (draft.currentChapterId) locked.add(draft.currentChapterId);
+  return draft.chapters
+    .map(chapter => chapter.stableChapterId)
+    .filter(id => !locked.has(id));
+}
+
+function chapterStillValid(
+  chapter: CampaignChapter,
+  next: CampaignDraft
+): boolean {
+  const match = next.chapters.find(item => item.stableChapterId === chapter.stableChapterId);
+  if (!match) {
+    return next.chapters.some(
+      item =>
+        item.chapterKind === chapter.chapterKind &&
+        item.objectiveIds.every(id => chapter.objectiveIds.includes(id)) &&
+        chapter.objectiveIds.every(id => item.objectiveIds.includes(id))
+    );
+  }
+  return match.objectiveIds.every(id => chapter.objectiveIds.includes(id));
+}
+
+export function detectRevisionReasons(input: {
+  previousFingerprint: string;
+  nextFingerprint: string;
+  previous: CampaignDraft;
+  next: CampaignDraft;
+}): CampaignRevisionReason[] {
+  if (input.previousFingerprint === input.nextFingerprint) return [];
+  const reasons: CampaignRevisionReason[] = [];
+  const prevIds = new Set(input.previous.chapters.flatMap(chapter => chapter.objectiveIds));
+  const nextIds = new Set(input.next.chapters.flatMap(chapter => chapter.objectiveIds));
+  const prevHardIds = new Set(
+    input.previous.chapters.filter(chapter => chapter.hardAnchor).flatMap(chapter => chapter.objectiveIds)
+  );
+  const nextHardIds = input.next.chapters
+    .filter(chapter => chapter.hardAnchor)
+    .flatMap(chapter => chapter.objectiveIds);
+  if (nextHardIds.some(id => !prevHardIds.has(id))) reasons.push("NEW_FIXED_COMMITMENT");
+  if (Array.from(nextIds).some(id => !prevIds.has(id)) && !reasons.includes("NEW_FIXED_COMMITMENT")) {
+    reasons.push("REAL_OUTCOME_CHANGED");
+  }
+  if (Array.from(prevIds).some(id => !nextIds.has(id))) {
+    reasons.push("AUTHORITATIVE_ACTION_COMPLETED");
+    if (
+      Array.from(prevIds).some(
+        id =>
+          !nextIds.has(id) &&
+          !input.previous.completedChapterIds.some(chapterId =>
+            input.previous.chapters
+              .find(chapter => chapter.stableChapterId === chapterId)
+              ?.objectiveIds.includes(id)
+          )
+      )
+    ) {
+      reasons.push("OPPORTUNITY_NO_LONGER_ELIGIBLE");
+    }
+  }
+  const prevReady = input.previous.chapters.some(chapter => chapter.chapterKind === "guardian_finale");
+  const nextReady = input.next.chapters.some(chapter => chapter.chapterKind === "guardian_finale");
+  if (!prevReady && nextReady) reasons.push("TERRITORY_BECAME_READY");
+  if (input.next.inputFingerprint.includes("obligation") && !input.previous.inputFingerprint.includes("obligation")) {
+    reasons.push("OBLIGATION_BECAME_DUE");
+  }
+  if (
+    input.next.inputFingerprint !== input.previous.inputFingerprint &&
+    input.next.inputFingerprint.includes("travel:") &&
+    input.previous.inputFingerprint.includes("travel:") &&
+    !input.next.inputFingerprint.includes("travel:unknown") &&
+    input.next.inputFingerprint.split("|")[2] !== input.previous.inputFingerprint.split("|")[2]
+  ) {
+    reasons.push("ROUTE_WINDOW_CHANGED");
+  }
+  if (reasons.length === 0) reasons.push("REAL_OUTCOME_CHANGED");
+  return Array.from(new Set(reasons));
+}
+
+/**
+ * Merge a newly compiled draft onto an existing instance.
+ * Completed chapters stay. The current chapter stays if still valid.
+ */
+export function recompileCampaignFuture(input: {
+  instance: CampaignInstance;
+  next: CampaignDraft;
+}): { instance: CampaignInstance; diff: CampaignRevisionDiff | null } {
+  if (input.instance.inputFingerprint === input.next.inputFingerprint) {
+    return { instance: input.instance, diff: null };
+  }
+  const completed = input.instance.chapters.filter(chapter =>
+    input.instance.completedChapterIds.includes(chapter.stableChapterId)
+  );
+  const current = input.instance.chapters.find(
+    chapter => chapter.stableChapterId === input.instance.currentChapterId
+  );
+  const currentStillValid = current ? chapterStillValid(current, input.next) : false;
+  const lockedIds = new Set(completed.map(chapter => chapter.stableChapterId));
+  if (currentStillValid && current) lockedIds.add(current.stableChapterId);
+
+  const future = input.next.chapters.filter(chapter => {
+    if (lockedIds.has(chapter.stableChapterId)) return false;
+    if (currentStillValid && current) {
+      return !chapter.objectiveIds.every(id => current.objectiveIds.includes(id));
+    }
+    return true;
+  });
+
+  const mergedChapters = [
+    ...completed,
+    ...(currentStillValid && current ? [current] : []),
+    ...future,
+  ];
+  const previousFuture = futureChapterIds(input.instance);
+  const nextFuture = future.map(chapter => chapter.stableChapterId);
+  const added = nextFuture.filter(id => !previousFuture.includes(id));
+  const removed = previousFuture.filter(id => !nextFuture.includes(id));
+  const reordered =
+    removed.length === 0 &&
+    added.length === 0 &&
+    previousFuture.some((id, index) => nextFuture[index] !== id)
+      ? nextFuture
+      : [];
+
+  const revision = input.instance.revision + 1;
+  const instance: CampaignInstance = {
+    ...input.instance,
+    ...input.next,
+    id: input.instance.id,
+    createdAt: input.instance.createdAt,
+    startedAt: input.instance.startedAt,
+    completedAt: input.instance.completedAt,
+    revision,
+    chapters: mergedChapters,
+    completedChapterIds: input.instance.completedChapterIds,
+    currentChapterId: currentStillValid
+      ? input.instance.currentChapterId
+      : future[0]?.stableChapterId ?? input.instance.currentChapterId,
+    campaignArchetypeId: input.instance.campaignArchetypeId,
+    title: input.instance.title,
+    premise: input.instance.premise,
+    stableKey: input.instance.stableKey,
+  };
+  const diff: CampaignRevisionDiff = {
+    campaignId: input.instance.id,
+    revision,
+    inputFingerprint: input.next.inputFingerprint,
+    reasonCodes: detectRevisionReasons({
+      previousFingerprint: input.instance.inputFingerprint,
+      nextFingerprint: input.next.inputFingerprint,
+      previous: input.instance,
+      next: input.next,
+    }),
+    addedFutureChapterIds: added,
+    removedFutureChapterIds: removed,
+    reorderedFutureChapterIds: reordered,
+  };
+  return { instance, diff };
+}
+
+export function explainCampaignRevision(diff: CampaignRevisionDiff | null): string | null {
+  if (!diff) return null;
+  const phrases: string[] = [];
+  for (const code of diff.reasonCodes) {
+    if (code === "NEW_FIXED_COMMITMENT") {
+      phrases.push("A real fixed commitment entered the day, so the unfinished future bent around it.");
+    } else if (code === "OBLIGATION_BECAME_DUE") {
+      phrases.push("A promise you made for today is now on the line.");
+    } else if (code === "AUTHORITATIVE_ACTION_COMPLETED") {
+      phrases.push("A real action completed. The morning stays history.");
+    } else if (code === "TERRITORY_BECAME_READY") {
+      phrases.push("A territory is confrontation-ready. The remaining business route is clear.");
+    } else if (code === "ROUTE_WINDOW_CHANGED") {
+      phrases.push("Real travel time changed a later window, so an optional branch moved.");
+    } else if (code === "OPPORTUNITY_NO_LONGER_ELIGIBLE") {
+      phrases.push("A later opportunity is no longer eligible. It was not marked lost.");
+    } else {
+      phrases.push("The unfinished future changed because the source day changed.");
+    }
+  }
+  return phrases[0] ?? null;
+}
+
+export function markChapterCompleted(
+  instance: CampaignInstance,
+  chapterId: string
+): CampaignInstance {
+  if (instance.completedChapterIds.includes(chapterId)) return instance;
+  const remaining = instance.chapters.filter(
+    chapter =>
+      chapter.stableChapterId !== chapterId &&
+      !instance.completedChapterIds.includes(chapter.stableChapterId)
+  );
+  return {
+    ...instance,
+    completedChapterIds: [...instance.completedChapterIds, chapterId],
+    currentChapterId: remaining[0]?.stableChapterId ?? null,
+    status: remaining.length === 0 ? "completed" : instance.status === "authored" ? "active" : instance.status,
+    completedAt: remaining.length === 0 ? new Date(0).toISOString() : instance.completedAt,
+  };
+}
