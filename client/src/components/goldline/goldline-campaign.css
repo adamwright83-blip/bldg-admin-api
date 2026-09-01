@@ -30,6 +30,7 @@
 .goldline-overworld-shell .gl-campaign-hud{left:14px;top:calc(14px + env(safe-area-inset-top));max-width:min(220px,calc(100% - 120px));background:#081116e8;color:#fff1b3;border-color:#ffe07c7a;pointer-events:none}
 .goldline-overworld-shell .gl-campaign-hud,
 .goldline-overworld-shell .gl-campaign-hud *{pointer-events:none !important}
+.goldline-overworld-shell .gl-campaign-branch{pointer-events:auto !important}
 .goldline-overworld-shell .gl-campaign-hud.is-compact{max-width:min(220px,calc(100% - 120px))}
 .goldline-overworld-shell .gl-campaign-hud strong,.goldline-overworld-shell .gl-campaign-hud p{color:#fff1b3}
 .goldline-overworld-shell .overworld-objective{top:calc(14px + env(safe-area-inset-top) + 96px)}
