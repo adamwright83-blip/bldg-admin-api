@@ -320,6 +320,10 @@ function LiveGoldlineDriverController() {
   });
   const campaign = trpc.system.goldlineWorld.campaign.useQuery(undefined, {
     staleTime: 15_000,
+    // Field Journal processing is asynchronous. Poll the compiled campaign so
+    // a newly extracted Wednesday/Thursday pressure can reweave the unfinished
+    // future without a reload or manual planner action.
+    refetchInterval: 30_000,
   });
   const upsertFictionAssignment = trpc.system.goldlineWorld.upsertFictionAssignment.useMutation();
   const builtMissions = trpc.system.commercialMission.myBuiltMissions.useQuery(
@@ -1150,7 +1154,13 @@ function LiveGoldlineDriverController() {
     onOpenWalkIn: () => setWalkInOpen(true),
     onOpenNewOrder: () => setNewOrderOpen(true),
     onOpenAddExternalWork: () => setAddExternalWorkOpen(true),
-    onOpenLogSignal: () => setLogSignalOpen(true),
+    onOpenLogSignal: () => {
+      // Ordinary field capture is Diane's durable raw-first journal. A sourced
+      // target run is the one exception: once real arrival has been confirmed,
+      // its operator-approved structured signal is the canonical visit writer.
+      if (operatorStop?.localTargetRunContext) setLogSignalOpen(true);
+      else setJournalOpen(true);
+    },
     onOperatorStopChange: setOperatorStop,
     onOpenJournal: () => setJournalOpen(true),
     onResolveDay: handleResolveDay,
@@ -1292,7 +1302,9 @@ function LiveGoldlineDriverController() {
       case "guardian_encounter":
         return;
       case "field_journal":
-        setLogSignalOpen(true);
+        // Campaign-authored Field Journal chapters use the durable audio/raw
+        // transcript seam. Interpretation happens only after that evidence is saved.
+        setJournalOpen(true);
         return;
       case "open_channel":
         setRequestedGameplayHost(hosted.host);
@@ -1546,7 +1558,22 @@ function LiveGoldlineDriverController() {
           toast.success(`Walk-in ${result.missionCode} saved.${calendarText}`);
         }}
       />
-      <SalesJournalSheet open={journalOpen} onOpenChange={setJournalOpen} location={location} />
+      <SalesJournalSheet
+        open={journalOpen}
+        onOpenChange={setJournalOpen}
+        location={location}
+        onSaved={() => {
+          // The save itself is already durable. These invalidations only make
+          // downstream world/campaign projections catch up quickly; background
+          // extraction may still finish on the next normal poll.
+          void Promise.all([
+            fieldToday.refetch(),
+            campaign.refetch(),
+            driverGameWorld.refetch(),
+            utils.system.goldlineWorld.campaign.invalidate(),
+          ]).catch(() => undefined);
+        }}
+      />
     </>
   );
 }

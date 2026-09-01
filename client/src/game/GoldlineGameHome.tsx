@@ -183,6 +183,7 @@ import { selectFictionForMission } from "./fiction/fictionDirector";
 import { reconcileFictionOnResume } from "./fiction/longHorizonResume";
 import type { FictionMissionInstance } from "./fiction/fictionDirector";
 import { SurveyPulse } from "./expedition/surveyPulse";
+import { usePhysicalArrival } from "./session/usePhysicalArrival";
 
 // New objection encounters load only when the player actually reaches one,
 // so the base game runtime stays lean.
@@ -1660,6 +1661,35 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [activeExpedition, setActiveExpedition] =
     useState<ActiveExpedition | null>(null);
 
+  const physicalArrivalTarget = useMemo(() => {
+    if (activeExpedition?.kind !== "local_target_run") return null;
+    const target = activeExpedition.currentTarget;
+    if (activeExpedition.simulated || target.lat == null || target.lng == null) return null;
+    return { id: target.id, lat: target.lat, lng: target.lng };
+  }, [
+    activeExpedition?.kind,
+    activeExpedition?.kind === "local_target_run"
+      ? activeExpedition.currentTarget.id
+      : null,
+    activeExpedition?.kind === "local_target_run"
+      ? activeExpedition.currentTarget.lat
+      : null,
+    activeExpedition?.kind === "local_target_run"
+      ? activeExpedition.currentTarget.lng
+      : null,
+    activeExpedition?.kind === "local_target_run"
+      ? activeExpedition.simulated
+      : null,
+  ]);
+  const physicalArrival = usePhysicalArrival({
+    enabled: activeExpedition?.kind === "local_target_run" && physicalArrivalTarget !== null,
+    target: physicalArrivalTarget,
+  });
+  const localTargetRealArrivalConfirmed =
+    activeExpedition?.kind === "local_target_run" &&
+    !activeExpedition.simulated &&
+    physicalArrival.snapshot?.phase === "arrived";
+
   /**
    * WHERE THE OPERATOR IS — reported upward only once it is actually true.
    *
@@ -1705,7 +1735,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               ),
               entityLabel: activeExpedition.label,
             }
-          : activeExpedition.kind === "local_target_run"
+          : activeExpedition.kind === "local_target_run" &&
+              localTargetRealArrivalConfirmed
             ? {
                 entityType: "sourced_target",
                 // The current target's own stable, provider-backed (or
@@ -2934,7 +2965,28 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 ? undefined
                 : completeExpeditionObjective
             }
-            onLogSignal={props.onOpenLogSignal}
+            onLogSignal={
+              activeExpedition?.kind === "local_target_run" &&
+              !localTargetRealArrivalConfirmed
+                ? props.onOpenJournal
+                : props.onOpenLogSignal
+            }
+            logSignalLabel={
+              activeExpedition?.kind === "local_target_run" &&
+              !localTargetRealArrivalConfirmed
+                ? "OPEN FIELD JOURNAL"
+                : "LOG A SIGNAL"
+            }
+            awaitingSignalLabel={
+              activeExpedition?.kind === "local_target_run" &&
+              !localTargetRealArrivalConfirmed
+                ? physicalArrival.availability === "permission_denied" ||
+                    physicalArrival.availability === "unsupported" ||
+                    physicalArrival.availability === "unavailable"
+                  ? "LOCATION NOT CONFIRMED · JOURNAL REMAINS AVAILABLE"
+                  : "VERIFYING REAL ARRIVAL · STAY NEAR THE TARGET"
+                : undefined
+            }
             teachingHint={teachingHint}
             cargoPhase={cargoPhase}
             completionActionLabel={

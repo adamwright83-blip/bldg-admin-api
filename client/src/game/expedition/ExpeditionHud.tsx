@@ -128,6 +128,10 @@ export type ExpeditionHudProps = {
    * be able to block recording that the real work happened.
    */
   onLogSignal?: () => void;
+  /** Button copy can distinguish a real visit writer from a journal-only fallback. */
+  logSignalLabel?: string;
+  /** Honest status while a sourced target is waiting for physical confirmation. */
+  awaitingSignalLabel?: string;
   /**
    * §PR77 Part 4 contextual teaching — the single next mechanic the player
    * has not yet performed, or null once every mechanic is learned (or none
@@ -172,6 +176,8 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     onReconcile,
     reconcileActionLabel = "I UPDATED IT",
     onLogSignal,
+    logSignalLabel = "LOG A SIGNAL",
+    awaitingSignalLabel = "LOG A SIGNAL TO RECORD THIS VISIT AND ADVANCE",
     teachingHint = null,
   } = props;
 
@@ -695,7 +701,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
               className="expedition-terminal__verifying"
               data-testid="target-run-awaiting-signal"
             >
-              LOG A SIGNAL TO RECORD THIS VISIT AND ADVANCE
+              {awaitingSignalLabel}
             </p>
           )}
 
@@ -718,7 +724,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
               data-testid="expedition-log-signal"
               onClick={onLogSignal}
             >
-              LOG A SIGNAL
+              {logSignalLabel}
             </button>
           ) : null}
         </div>
