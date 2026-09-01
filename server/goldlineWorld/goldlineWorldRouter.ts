@@ -21,7 +21,6 @@ import {
   chooseCampaignBranch,
   getOrMaterializeTodayCampaign,
   listOperatorCampaigns,
-  recordCampaignChapterGameCompleted,
   recordCampaignGuardianFinaleForTerritory,
   upsertFictionAssignmentIfAbsent,
 } from "./campaignService";
@@ -134,15 +133,6 @@ export const goldlineWorldRouter = router({
     .input(z.object({ chapterId: z.string().min(1).max(191) }))
     .mutation(({ ctx, input }) =>
       chooseCampaignBranch({
-        tenantId: ctx.tenantId,
-        operatorId: ctx.user.openId,
-        chapterId: input.chapterId,
-      })
-    ),
-  recordCampaignChapterGameCompleted: dayforgeTenantMemberProcedure
-    .input(z.object({ chapterId: z.string().min(1).max(191) }))
-    .mutation(({ ctx, input }) =>
-      recordCampaignChapterGameCompleted({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
         chapterId: input.chapterId,
