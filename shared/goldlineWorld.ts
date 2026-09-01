@@ -328,13 +328,19 @@ export type CelebrationDescriptor = {
   physicalEntityId: string | null;
   label: string;
   magnitude: "whisper" | "murmur" | "beat" | "surge" | "detonation";
-  cue: "field_intel" | "call" | "follow_up" | "visit" | "proposal" | "recovery" | "tower" | "outcome";
+  cue: "field_intel" | "call" | "follow_up" | "visit" | "proposal" | "recovery" | "tower" | "outcome" | "territory";
 };
 
 export function celebrationForEvent(
   event: GoldlineWorldEvent
 ): CelebrationDescriptor | null {
-  if (event.classification !== "action" && event.classification !== "outcome" && event.eventType !== "tower_review_ready") return null;
+  const allowed =
+    event.classification === "action" ||
+    event.classification === "outcome" ||
+    event.eventType === "tower_review_ready" ||
+    event.eventType === "territory_cleared" ||
+    event.eventType === "guardian_defeated";
+  if (!allowed) return null;
   const map: Record<string, Omit<CelebrationDescriptor, "eventId" | "physicalEntityId">> = {
     field_journal_saved: { label: "FIELD INTEL SECURED", magnitude: "beat", cue: "field_intel" },
     call_completed: { label: "CALL MADE", magnitude: "beat", cue: "call" },
@@ -347,6 +353,8 @@ export function celebrationForEvent(
     tower_review_ready: { label: "NEW TOWER DISCOVERED", magnitude: "surge", cue: "tower" },
     customer_recovered: { label: "LANTERN RELIT", magnitude: "detonation", cue: "outcome" },
     account_won: { label: "RELATIONSHIP WON", magnitude: "detonation", cue: "outcome" },
+    guardian_defeated: { label: "THE VEIL GIVES WAY", magnitude: "detonation", cue: "territory" },
+    territory_cleared: { label: "THE STREET WAS ALWAYS HERE", magnitude: "surge", cue: "territory" },
   };
   const descriptor = map[event.eventType];
   return descriptor ? { ...descriptor, eventId: event.id, physicalEntityId: event.physicalEntityId } : null;

@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   dayforgeMissionFieldProcedure,
   dayforgeTenantAdminProcedure,
+  dayforgeTenantMemberProcedure,
   dayforgeTenantOperatorProcedure,
   router,
 } from "../_core/trpc";
@@ -12,6 +13,10 @@ import {
 } from "./worldEventStore";
 import { approveAndPublishTower, getForgeReview, listForgeJobs, processTowerForgeJob, queueTowerForgeJob, rejectTowerForgeJob, selectTowerWeaponConcept } from "../worldForge/worldForgeService";
 import { listCityWorldEntities } from "./cityWorldService";
+import {
+  listPresentedTerritories,
+  recordGuardianDefeated,
+} from "./territoryService";
 
 export const goldlineWorldRouter = router({
   cityEntities: dayforgeTenantOperatorProcedure.query(({ ctx }) => listCityWorldEntities({ tenantId: ctx.tenantId })),
@@ -52,4 +57,22 @@ export const goldlineWorldRouter = router({
     }),
   processForgeNow: dayforgeTenantAdminProcedure.input(z.object({ forgeJobId: z.string().uuid() }))
     .mutation(({ ctx, input }) => processTowerForgeJob({ tenantId: ctx.tenantId, forgeJobId: input.forgeJobId })),
+  territories: dayforgeTenantMemberProcedure.query(({ ctx }) =>
+    listPresentedTerritories({ tenantId: ctx.tenantId })
+  ),
+  recordGuardianDefeat: dayforgeTenantMemberProcedure
+    .input(
+      z.object({
+        territoryId: z.string().uuid(),
+        guardianId: z.string().min(1).max(64),
+        confrontationReady: z.boolean(),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      recordGuardianDefeated({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        ...input,
+      })
+    ),
 });

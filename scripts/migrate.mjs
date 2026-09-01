@@ -466,5 +466,39 @@ await assertRequiredColumns("tower_wars_promises", [
   "fulfilledAt",
 ]);
 
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_territory_definitions (
+    id VARCHAR(36) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    stableKey VARCHAR(191) NOT NULL,
+    version INT NOT NULL DEFAULT 1,
+    fantasyTitle VARCHAR(128) NOT NULL,
+    realGeographyLabel VARCHAR(191) NULL,
+    grammar ENUM('visit_hunt','break_the_silence','send_the_standard') NOT NULL,
+    guardianId VARCHAR(64) NOT NULL,
+    geometryMode ENUM('corridor','cluster','authoritative_polygon') NOT NULL,
+    membersJson JSON NOT NULL,
+    createdFrom VARCHAR(64) NOT NULL,
+    classification VARCHAR(32) NOT NULL DEFAULT 'game_projection',
+    publishedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_goldline_territory_stable (tenantId,stableKey,version),
+    KEY idx_goldline_territory_tenant (tenantId,publishedAt)
+  )`,
+  "CREATE TABLE goldline_territory_definitions"
+);
+
+await assertRequiredColumns("goldline_territory_definitions", [
+  "tenantId",
+  "stableKey",
+  "version",
+  "fantasyTitle",
+  "grammar",
+  "guardianId",
+  "geometryMode",
+  "membersJson",
+  "classification",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");
