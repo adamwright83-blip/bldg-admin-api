@@ -39,6 +39,7 @@ export type WorldGeographySurfaceProps = {
    * geography they do not correspond to.
    */
   onGoogleVisibilityChange?: (googleVisible: boolean) => void;
+  focusPoint?: { x: number; y: number } | null;
 };
 
 const CANONICAL_TOWERS: Array<{
@@ -77,6 +78,7 @@ export function WorldGeographySurface({
   battleState,
   geographicEntities,
   onGoogleVisibilityChange,
+  focusPoint,
 }: WorldGeographySurfaceProps) {
   const [realityBuildingId, setRealityBuildingId] = useState<CanonicalBuildingId | null>(null);
   const [viewMode, setViewMode] = useState<"atlas" | "reality_3d">("atlas");
@@ -165,6 +167,13 @@ export function WorldGeographySurface({
     camera.focusOn({ x: point.x / 100, y: point.y / 100 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBuildingId, cameraIsLive]);
+
+  useEffect(() => {
+    if (!cameraIsLive) return;
+    if (focusPoint) camera.focusOn({ x: focusPoint.x / 100, y: focusPoint.y / 100 });
+    else if (!selectedBuildingId) camera.restore();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusPoint?.x, focusPoint?.y, cameraIsLive]);
 
   return (
     <div

@@ -11,6 +11,7 @@ import { WorldObligationTether } from "./WorldObligationTether";
 import { useArcadeWorld } from "./useArcadeWorld";
 import { describeWorldPresentation, orderByProminence } from "@shared/goldlineWorldPresentation";
 import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWorldService";
+import { projectCustomerWindows } from "@shared/goldlineCustomerWindows";
 
 export {
   inferCustomerCadence,
@@ -216,6 +217,13 @@ export default function LanternCityAtlas({
   const requestedEntityId = new URLSearchParams(window.location.search).get("entity");
   const requestedEntity = cityWorld.data?.find(entity => entity.id === requestedEntityId) ?? null;
   const selectedEntity = selectedPursuit ? entityForPursuit(selectedPursuit.accountId) : selectedCluster ? entityForCluster(selectedCluster) : requestedEntity;
+  const selectedFocusPoint = selectedPursuit?.location
+    ? { x: selectedPursuit.location.x, y: selectedPursuit.location.y }
+    : selectedCluster
+      ? { x: selectedCluster.x, y: selectedCluster.y }
+      : requestedEntity?.location
+        ? { x: requestedEntity.location.x, y: requestedEntity.location.y }
+        : null;
 
   /*
     A place arriving by deep link is revealed rather than merely selected: the
@@ -374,6 +382,7 @@ export default function LanternCityAtlas({
           showOpportunityLayer={true}
           onGoogleVisibilityChange={setGoogleVisible}
           geographicEntities={googleEntities}
+          focusPoint={selectedFocusPoint}
         >
           {/*
             Lanterns and pursuit flames are positioned with the atlas x/y
@@ -414,7 +423,20 @@ export default function LanternCityAtlas({
                 )}
               >
                 <span className="lc-lantern-handle" />
-                <span className="lc-lantern-body" />
+                <span className="lc-lantern-body">
+                  {(() => {
+                    const windows = projectCustomerWindows(cluster.customers);
+                    return windows.mode === "individual" ? (
+                      <span className="lc-customer-windows is-individual" data-active={windows.active} data-dormant={windows.dormant}>
+                        {windows.windows.map(window => <i key={window.identityKey} className={`is-${window.state}`} />)}
+                      </span>
+                    ) : (
+                      <span className="lc-customer-windows is-aggregate" data-total={windows.total} data-active={windows.active} data-dormant={windows.dormant}>
+                        {windows.bands.map((state, index) => <i key={index} className={`is-${state}`} />)}
+                      </span>
+                    );
+                  })()}
+                </span>
                 <span className="lc-lantern-base" />
                 {cluster.total > 1 ? <b>{cluster.total}</b> : null}
                 <WorldMarkerAtmosphere entity={entityForCluster(cluster)} />

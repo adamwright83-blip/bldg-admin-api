@@ -131,6 +131,65 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     expect(await space.getAttribute("style")).not.toBe(before);
   });
 
+  test("focus, inspect and back restore the prior camera", async ({ page }) => {
+    await signIn(page, "admin");
+    await page.goto("/growth/lantern-city");
+    const camera = page.locator(".cr-world-camera");
+    const space = page.locator(".cr-world-space");
+    await expect(camera).toBeVisible({ timeout: 30_000 });
+    await page.mouse.move(720, 430);
+    await page.mouse.wheel(0, -420);
+    await page.waitForTimeout(300);
+    await page.mouse.down();
+    await page.mouse.move(630, 385, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(900);
+    const stateA = await space.getAttribute("style");
+
+    const pursued = page.locator(".lc-pursued-building").first();
+    const building = (await pursued.count()) ? pursued : page.locator(".lc-lantern").first();
+    await building.click();
+    await expect(page.locator(".owi")).toBeVisible();
+    await page.waitForTimeout(1600);
+    expect(await space.getAttribute("style")).not.toBe(stateA);
+    await page.locator(".owi-close").click();
+    await page.waitForTimeout(1800);
+    const restored = await space.getAttribute("style");
+    const numbers = (value: string | null) => value?.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+    const [scaleA, xA, yA] = numbers(stateA);
+    const [scaleB, xB, yB] = numbers(restored);
+    expect(Math.abs(scaleA! - scaleB!)).toBeLessThan(0.002);
+    expect(Math.abs(xA! - xB!)).toBeLessThan(0.2);
+    expect(Math.abs(yA! - yB!)).toBeLessThan(0.2);
+    await expect(page.locator(".owi")).toHaveCount(0);
+  });
+
+  test("customer truth becomes windows and scales without changing the roster", async ({ page }) => {
+    await signIn(page, "admin");
+    await page.goto("/growth/lantern-city");
+    await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
+    const facades = page.locator(".lc-customer-windows");
+    if ((await facades.count()) === 0) test.skip(true, "No customer building in this fixture");
+    const represented = await facades.evaluateAll(nodes => nodes.reduce((sum, node) => {
+      const individual = node.classList.contains("is-individual");
+      return sum + (individual ? node.querySelectorAll("i").length : Number((node as HTMLElement).dataset.total));
+    }, 0));
+    const roster = await page.locator(".lc-lantern").evaluateAll(nodes => nodes.reduce((sum, node) => {
+      const label = node.getAttribute("aria-label") ?? "";
+      return sum + Number(label.match(/^(\d+) customer/)?.[1] ?? 0);
+    }, 0));
+    expect(represented).toBe(roster);
+  });
+
+  test("a bounded autonomous incident makes the idle city visibly alive", async ({ page }) => {
+    await signIn(page, "admin");
+    await page.goto("/growth/lantern-city");
+    await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".lc-idle-flourish, .lc-idle-practice, .lc-idle-machinery").first()).toBeAttached({ timeout: 14_000 });
+    const concurrent = await page.locator(".lc-idle-flourish, .lc-idle-practice, .lc-idle-machinery").count();
+    expect(concurrent).toBeLessThanOrEqual(2);
+  });
+
   test("firing a tower damages it, rebuilds it, and changes nothing real", async ({
     page,
   }) => {
