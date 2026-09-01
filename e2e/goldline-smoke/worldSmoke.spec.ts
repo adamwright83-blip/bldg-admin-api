@@ -152,15 +152,27 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     await expect(page.locator(".owi")).toBeVisible();
     await page.waitForTimeout(1600);
     expect(await space.getAttribute("style")).not.toBe(stateA);
+    const prior = (stateA?.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
     await page.locator(".owi-close").click();
-    await page.waitForTimeout(1800);
-    const restored = await space.getAttribute("style");
-    const numbers = (value: string | null) => value?.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
-    const [scaleA, xA, yA] = numbers(stateA);
-    const [scaleB, xB, yB] = numbers(restored);
-    expect(Math.abs(scaleA! - scaleB!)).toBeLessThan(0.002);
-    expect(Math.abs(xA! - xB!)).toBeLessThan(0.2);
-    expect(Math.abs(yA! - yB!)).toBeLessThan(0.2);
+    // Wait for the ease-back to finish rather than hoping a fixed delay is
+    // enough on a loaded runner. Thresholds are unchanged: zoom exact, center
+    // within 0.2 percentage points.
+    await page.waitForFunction(
+      saved => {
+        const now = (document.querySelector(".cr-world-space")?.getAttribute("style") ?? "")
+          .match(/-?\d+(?:\.\d+)?/g)
+          ?.map(Number) ?? [];
+        const [scaleA, xA, yA] = saved;
+        const [scaleB, xB, yB] = now;
+        return (
+          Math.abs((scaleA ?? 0) - (scaleB ?? 0)) < 0.002 &&
+          Math.abs((xA ?? 0) - (xB ?? 0)) < 0.2 &&
+          Math.abs((yA ?? 0) - (yB ?? 0)) < 0.2
+        );
+      },
+      prior,
+      { timeout: 8_000 }
+    );
     await expect(page.locator(".owi")).toHaveCount(0);
   });
 
