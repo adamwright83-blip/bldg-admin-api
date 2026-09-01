@@ -1,4 +1,5 @@
 import type { CampaignPresentation } from "@shared/goldlineCampaign";
+import { explainCampaignRevision } from "@shared/goldlineCampaignRevisions";
 import { trpc } from "@/lib/trpc";
 import "./goldline-campaign.css";
 
@@ -17,6 +18,8 @@ export function CampaignHud({
 }) {
   if (!presentation) return null;
   const campaign = presentation.campaign;
+  const why =
+    presentation.revisionExplanation ?? explainCampaignRevision(presentation.lastRevision);
   const current = campaign.chapters.find(item => item.stableChapterId === campaign.currentChapterId);
   const nextHard = campaign.chapters.find(
     item =>
@@ -64,9 +67,9 @@ export function CampaignHud({
       ) : optional ? (
         <p>Optional branch available</p>
       ) : null}
-      {presentation.revisionExplanation ? (
+      {why ? (
         <p className="gl-campaign-why" data-testid="goldline-campaign-revision-why">
-          {presentation.revisionExplanation}
+          {why}
         </p>
       ) : null}
     </aside>
@@ -83,11 +86,14 @@ export function CampaignHudConnected({ compact = false }: { compact?: boolean })
     <CampaignHud
       compact={compact}
       presentation={campaign.data}
-      onChooseBranch={chapterId =>
-        choose.mutate(
-          { chapterId },
-          { onSettled: () => void utils.system.goldlineWorld.campaign.invalidate() }
-        )
+      onChooseBranch={
+        compact
+          ? undefined
+          : chapterId =>
+              choose.mutate(
+                { chapterId },
+                { onSettled: () => void utils.system.goldlineWorld.campaign.invalidate() }
+              )
       }
     />
   );

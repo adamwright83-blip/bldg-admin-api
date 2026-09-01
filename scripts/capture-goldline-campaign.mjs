@@ -80,7 +80,7 @@ await trpcPost("orders.create", {
   serviceType: "wash_fold",
   pickupDate: new Date().toISOString().slice(0, 10),
   pickupTimeWindow: "3:00-5:00 PM",
-  address: "1450 S La Cienega Blvd, Los Angeles, CA",
+  address: "1 Proof Campaign Way, Los Angeles, CA",
   firstName: "Noon",
   lastName: "Window",
   phone: "3105550177",
