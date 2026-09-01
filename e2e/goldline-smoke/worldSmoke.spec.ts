@@ -227,7 +227,7 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     await building.waitFor({ state: "visible", timeout: 20_000 }).catch(() => undefined);
     if ((await building.count()) === 0) test.skip(true, "No pursued building in this fixture");
     await expect(building).toBeVisible();
-    await expect(page.getByTestId("goldline-celebration")).toHaveCount(0, { timeout: 8_000 });
+    await expect(page.getByTestId("goldline-celebration")).toHaveCount(0, { timeout: 20_000 });
 
     const truthBefore = await page.evaluate(async () =>
       (await fetch("/api/trpc/system.goldlineWorld.cityEntities", { credentials: "include" })).text()

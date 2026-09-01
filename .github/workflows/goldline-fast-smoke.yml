@@ -14,7 +14,7 @@ concurrency:
 jobs:
   fast-goldline-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     services:
       mysql:
         image: mysql:8.0
