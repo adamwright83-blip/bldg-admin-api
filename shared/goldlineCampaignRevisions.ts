@@ -45,6 +45,7 @@ export function detectRevisionReasons(input: {
   const reasons: CampaignRevisionReason[] = [];
   const prevIds = new Set(input.previous.chapters.flatMap(chapter => chapter.objectiveIds));
   const nextIds = new Set(input.next.chapters.flatMap(chapter => chapter.objectiveIds));
+  const completedIds = new Set(input.next.authoritativeCompletedObjectiveIds ?? []);
   const prevHardIds = new Set(
     input.previous.chapters.filter(chapter => chapter.hardAnchor).flatMap(chapter => chapter.objectiveIds)
   );
@@ -55,37 +56,18 @@ export function detectRevisionReasons(input: {
   if (Array.from(nextIds).some(id => !prevIds.has(id)) && !reasons.includes("NEW_FIXED_COMMITMENT")) {
     reasons.push("REAL_OUTCOME_CHANGED");
   }
-  if (Array.from(prevIds).some(id => !nextIds.has(id))) {
+
+  const removedIds = Array.from(prevIds).filter(id => !nextIds.has(id));
+  if (removedIds.some(id => completedIds.has(id))) {
     reasons.push("AUTHORITATIVE_ACTION_COMPLETED");
-    if (
-      Array.from(prevIds).some(
-        id =>
-          !nextIds.has(id) &&
-          !input.previous.completedChapterIds.some(chapterId =>
-            input.previous.chapters
-              .find(chapter => chapter.stableChapterId === chapterId)
-              ?.objectiveIds.includes(id)
-          )
-      )
-    ) {
-      reasons.push("OPPORTUNITY_NO_LONGER_ELIGIBLE");
-    }
   }
+  if (removedIds.some(id => !completedIds.has(id))) {
+    reasons.push("OPPORTUNITY_NO_LONGER_ELIGIBLE");
+  }
+
   const prevReady = input.previous.chapters.some(chapter => chapter.chapterKind === "guardian_finale");
   const nextReady = input.next.chapters.some(chapter => chapter.chapterKind === "guardian_finale");
   if (!prevReady && nextReady) reasons.push("TERRITORY_BECAME_READY");
-  if (input.next.inputFingerprint.includes("obligation") && !input.previous.inputFingerprint.includes("obligation")) {
-    reasons.push("OBLIGATION_BECAME_DUE");
-  }
-  if (
-    input.next.inputFingerprint !== input.previous.inputFingerprint &&
-    input.next.inputFingerprint.includes("travel:") &&
-    input.previous.inputFingerprint.includes("travel:") &&
-    !input.next.inputFingerprint.includes("travel:unknown") &&
-    input.next.inputFingerprint.split("|")[2] !== input.previous.inputFingerprint.split("|")[2]
-  ) {
-    reasons.push("ROUTE_WINDOW_CHANGED");
-  }
   if (reasons.length === 0) reasons.push("REAL_OUTCOME_CHANGED");
   return Array.from(new Set(reasons));
 }
@@ -101,12 +83,12 @@ export function recompileCampaignFuture(input: {
   if (input.instance.inputFingerprint === input.next.inputFingerprint) {
     return { instance: input.instance, diff: null };
   }
-  const nextReadyIds = new Set(input.next.chapters.flatMap(chapter => chapter.objectiveIds));
+  const completedObjectiveIds = new Set(input.next.authoritativeCompletedObjectiveIds ?? []);
   const absorbedCompleted = input.instance.chapters.filter(chapter => {
     if (input.instance.completedChapterIds.includes(chapter.stableChapterId)) return true;
     if (chapter.chapterKind === "guardian_finale") return false;
     if (chapter.objectiveIds.length === 0) return false;
-    return chapter.objectiveIds.every(id => !nextReadyIds.has(id));
+    return chapter.objectiveIds.every(id => completedObjectiveIds.has(id));
   });
   const completedChapterIds = Array.from(
     new Set([
@@ -212,7 +194,8 @@ export function explainCampaignRevision(diff: CampaignRevisionDiff | null): stri
 
 export function markChapterCompleted(
   instance: CampaignInstance,
-  chapterId: string
+  chapterId: string,
+  completedAt = new Date().toISOString()
 ): CampaignInstance {
   if (instance.completedChapterIds.includes(chapterId)) return instance;
   const remaining = instance.chapters.filter(
@@ -225,6 +208,6 @@ export function markChapterCompleted(
     completedChapterIds: [...instance.completedChapterIds, chapterId],
     currentChapterId: remaining[0]?.stableChapterId ?? null,
     status: remaining.length === 0 ? "completed" : instance.status === "authored" ? "active" : instance.status,
-    completedAt: remaining.length === 0 ? new Date(0).toISOString() : instance.completedAt,
+    completedAt: remaining.length === 0 ? completedAt : instance.completedAt,
   };
 }
