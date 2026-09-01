@@ -26,6 +26,7 @@ import {
   commitmentEventMetadata,
 } from "../../shared/goldlineObligations";
 import { appendGoldlineWorldEvent } from "./worldEventStore";
+import { FIELD_SIGNAL_EVENT } from "./futurePressureService";
 import { findPhysicalEntityIdByAddress } from "./entityLookup";
 import { getDb } from "../db";
 
@@ -85,12 +86,57 @@ export async function recordFieldCommitments(input: {
   const recorded: RecordedCommitment[] = [];
   for (let index = 0; index < claims.length; index += 1) {
     const claim = claims[index]!;
-    if (!claimCreatesObligation(claim)) continue;
+    const proposalForClaim = input.extraction.temporalClaims[index];
+    const claimAddress = proposalForClaim
+      ? addressForClaim(input.extraction, proposalForClaim)
+      : null;
+
+    /*
+      Everything that is not a promise is still worth remembering — it is the
+      reason to go back at all. It is recorded as a signal, never as an
+      obligation, so it can shape a future day without ever restraining a
+      building or implying the operator owes anyone anything.
+    */
+    if (!claimCreatesObligation(claim)) {
+      if (!claim.when?.startDate) continue;
+      await appendGoldlineWorldEvent({
+        tenantId: input.tenantId,
+        physicalEntityId: claimAddress
+          ? await findPhysicalEntityIdByAddress({ tenantId: input.tenantId, address: claimAddress })
+          : null,
+        eventType: FIELD_SIGNAL_EVENT,
+        classification: "evidence",
+        actorType: "operator",
+        actorId: input.actorId,
+        occurredAt: input.capturedAt,
+        observedAt: null,
+        sourceType: "driver_sales_journals",
+        sourceId: input.journalEntryId,
+        sourceEvidenceReference: `driver_sales_journals:${input.journalEntryId}`,
+        provenanceClass: "operator_reported",
+        verificationClass: "ATTESTED",
+        confidence: claim.when.hedged ? "low" : "medium",
+        idempotencyKey: `field-signal:${input.journalEntryId}:${claim.sourceText.slice(0, 80)}`,
+        correlationId: `field-journal:${input.journalEntryId}`,
+        metadata: {
+          kind: claim.kind,
+          statement: claim.sourceText,
+          whenText: claim.when.sourceText,
+          anchorDate: input.anchorDate,
+          hedged: claim.when.hedged,
+          addressClue: claimAddress,
+          // A report about somebody's availability is never a commitment and
+          // never an appointment, however it later gets displayed.
+          impliesAppointment: false,
+          impliesCommitment: false,
+        },
+      });
+      continue;
+    }
     const metadata = commitmentEventMetadata(claim);
     if (!metadata) continue;
 
-    const proposal = input.extraction.temporalClaims[index];
-    const address = proposal ? addressForClaim(input.extraction, proposal) : null;
+    const address = claimAddress;
     const physicalEntityId = address
       ? await findPhysicalEntityIdByAddress({ tenantId: input.tenantId, address })
       : null;

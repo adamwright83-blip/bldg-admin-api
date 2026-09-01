@@ -353,8 +353,22 @@ export function describeTemporalClaim(claim: TemporalClaim): string {
         : when.startDate;
 
   switch (claim.kind) {
-    case "operator_commitment":
-      return `You said you would ${claim.subject.replace(/^.*?\b(i|we)\s+(told|promised|said)[^,]*,?\s*/i, "")} — ${timing}.`;
+    case "operator_commitment": {
+      /*
+        Strip only the "I told them I'd" preamble and keep what was actually
+        promised. An over-greedy strip here swallows the promise itself and
+        leaves the player reading "You said you would — Wednesday", which
+        explains nothing.
+      */
+      const promised = claim.subject
+        .replace(
+          /^.*?\b(?:i|we)\s+(?:told|promised|assured|said\s+to)\s+[^,]*?\b(?:i'?d|i\s+would|we'?d|we\s+would|i'?ll|we'?ll)\s+/i,
+          ""
+        )
+        .replace(/^.*?\b(?:i|we)\s+said\s+(?:i'?d|i\s+would)\s+/i, "")
+        .trim();
+      return `You said you would ${promised || claim.subject} — ${timing}.`;
+    }
     case "authoritative_commitment":
       return `A committed appointment on ${timing}.`;
     case "reported_availability":

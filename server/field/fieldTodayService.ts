@@ -6,6 +6,7 @@ import { listDayforgeToday } from "../dayforgeToday/dayforgeTodayService";
 import type { FieldTodayItem, FieldTodayProjection } from "./types";
 import { listRecoveryInterventions, physicalEntityIdsForInterventions } from "../churnRadar/customerChurnService";
 import { listForgeJobs } from "../worldForge/worldForgeService";
+import { listFuturePressure } from "../goldlineWorld/futurePressureService";
 
 function moneyCents(value: unknown): number {
   const parsed = Number(value ?? 0);
@@ -55,11 +56,12 @@ export async function getFieldToday(input: {
   const now = input.now ?? new Date();
   const timeZone = input.timeZone ?? "America/Los_Angeles";
   const date = businessDate(now, timeZone);
-  const [orderRows, commercialItems, recoveries, forgeJobs] = await Promise.all([
+  const [orderRows, commercialItems, recoveries, forgeJobs, pressure] = await Promise.all([
     db.select().from(orders).where(sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId} AND (${orders.pickupDate} = ${date} OR ${orders.deliveryDate} = ${date})`).orderBy(asc(orders.pickupDate), asc(orders.id)),
     listDayforgeToday({ tenantId: input.tenantId, userId: input.userId, includeAllAssignees: input.includeAllAssignees }),
     listRecoveryInterventions(input.tenantId),
     listForgeJobs({ tenantId: input.tenantId, limit: 50 }),
+    listFuturePressure({ tenantId: input.tenantId, date }),
   ]);
   const timeline: FieldTodayItem[] = [];
   for (const order of orderRows) {
@@ -138,6 +140,46 @@ export async function getFieldToday(input: {
       actions: [{ type: "open", label: "Reveal in world", href: forge.physicalEntityId ? `/growth/lantern-city?entity=${forge.physicalEntityId}` : "/tower-forge", mutation: null }],
     });
   }
+  /*
+    Everything the world has been quietly holding for today: promises that have
+    come due, and places somebody reported would be worth returning to. These
+    are projected per day rather than stored, so a plan cannot go stale — and
+    each one carries the evidence sentence that put it here.
+  */
+  for (const item of pressure.items) {
+    const isPromise = item.isObligation;
+    timeline.push({
+      id: `pressure:${item.sourceEvidenceReference}:${item.relevantFrom}:${isPromise ? "promise" : "signal"}`,
+      kind: isPromise ? "field_commitment" : "reported_opportunity",
+      source: {
+        entityType: "goldline_world_events",
+        entityId: item.sourceEvidenceReference,
+        sourceReference: item.sourceEvidenceReference,
+      },
+      physicalEntityId: item.physicalEntityId ?? null,
+      whySurfaced: item.reason,
+      scheduledAt: null,
+      // A promise that is due is urgent. A reported possibility never is.
+      urgency: isPromise ? "urgent" : "flexible",
+      title: isPromise ? "A promise you made is due" : "Worth returning to today",
+      subtitle: item.reason,
+      status: "open",
+      destination: null,
+      customer: null,
+      money: null,
+      // The operator's own words, attested but never provider-verified.
+      verificationClass: "ATTESTED",
+      actions: [{
+        type: "open",
+        label: isPromise ? "Open this promise" : "Reveal in world",
+        href: item.physicalEntityId
+          ? `/growth/lantern-city?entity=${item.physicalEntityId}`
+          : "/growth/lantern-city",
+        mutation: null,
+      }],
+    });
+  }
+
   const sorted = sortFieldTimeline(timeline);
   const nextFixedCommitment = sorted
     .filter(item => item.scheduledAt && Date.parse(item.scheduledAt) >= now.getTime() && ["pickup", "delivery", "job"].includes(item.kind))
@@ -145,6 +187,6 @@ export async function getFieldToday(input: {
   return {
     generatedAt: now.toISOString(), businessDate: date, currentUserId: input.userId, timeline: sorted,
     nextFixedCommitment, blockers: sorted.filter(item => item.urgency === "blocked"),
-    dataQuality: { status: "partial", warnings: ["Laundry order addresses do not currently contain verified coordinates", "Travel duration is unavailable until live routing is configured"], sources: ["orders", "commercial_follow_ups", "commercial_mission_dispatches", "commercial_pipeline_records", "customer_recovery_interventions", "tower_forge_jobs"] },
+    dataQuality: { status: "partial", warnings: ["Laundry order addresses do not currently contain verified coordinates", "Travel duration is unavailable until live routing is configured"], sources: ["orders", "commercial_follow_ups", "commercial_mission_dispatches", "commercial_pipeline_records", "customer_recovery_interventions", "tower_forge_jobs", "goldline_world_events"] },
   };
 }

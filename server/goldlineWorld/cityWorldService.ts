@@ -29,6 +29,10 @@ import {
   type GoldlineWorldEvent,
 } from "../../shared/goldlineWorld";
 import { presentWorldState } from "../../shared/goldlineWorldPresentation";
+import {
+  presentObligations,
+  projectObligations,
+} from "../../shared/goldlineObligations";
 import { getGeographicTruth } from "../geography/geographicTruthService";
 import { physicalAliasesMatch } from "./identityResolver";
 import { getDb } from "../db";
@@ -82,7 +86,12 @@ function latestEvent(
   return null;
 }
 
-export async function listCityWorldEntities(input: { tenantId: string }) {
+export async function listCityWorldEntities(input: {
+  tenantId: string;
+  /** The tenant-local date used to decide what is due. Defaults to today. */
+  today?: string;
+}) {
+  const today = input.today ?? new Date().toISOString().slice(0, 10);
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const entities = await db
@@ -274,6 +283,13 @@ export async function listCityWorldEntities(input: { tenantId: string }) {
         : null,
     });
 
+    /*
+      Promises are projected from this building's own events, so an unfinished
+      one is visible on the building itself rather than in a separate list the
+      player has to remember to check.
+    */
+    const obligations = projectObligations(events);
+
     const projection = projectPhysicalWorldState({
       physicalEntityId: entity.id,
       events,
@@ -315,6 +331,7 @@ export async function listCityWorldEntities(input: { tenantId: string }) {
         : null,
       projection,
       presentation: presentWorldState(projection),
+      obligations: presentObligations(entity.id, obligations, today),
     };
   });
 }
