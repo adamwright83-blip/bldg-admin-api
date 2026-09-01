@@ -7,6 +7,7 @@ import type { FieldTodayItem, FieldTodayProjection } from "./types";
 import { listRecoveryInterventions, physicalEntityIdsForInterventions } from "../churnRadar/customerChurnService";
 import { listForgeJobs } from "../worldForge/worldForgeService";
 import { listFuturePressure } from "../goldlineWorld/futurePressureService";
+import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
 
 function moneyCents(value: unknown): number {
   const parsed = Number(value ?? 0);
@@ -73,6 +74,25 @@ export async function getFieldToday(input: {
   ]);
   const timeline: FieldTodayItem[] = [];
   const authoritativeCompletedObjectiveIds = new Set<string>();
+
+  // Sales work must land on the same physical tower as the rest of the save
+  // file when Goldline already knows that building. This is lookup-only: an
+  // unresolved address stays null rather than creating a fake entity just to
+  // make the map look complete.
+  const commercialAddresses = Array.from(new Set(
+    commercialItems
+      .map(item => item.address?.trim() ?? "")
+      .filter(Boolean)
+  ));
+  const commercialEntityIds = new Map<string, string | null>(
+    await Promise.all(
+      commercialAddresses.map(async address => [
+        address,
+        await findPhysicalEntityIdByAddress({ tenantId: input.tenantId, address }),
+      ] as const)
+    )
+  );
+
   for (const followUp of completedFollowUps) {
     if (!followUp.completedAt) continue;
     if (!input.includeAllAssignees && followUp.assignedTo && followUp.assignedTo !== input.userId) continue;
@@ -115,10 +135,12 @@ export async function getFieldToday(input: {
     }
   }
   for (const item of commercialItems) {
+    const addressKey = item.address?.trim() ?? "";
     timeline.push({
       id: item.id,
       kind: item.kind === "dispatch" ? "mission_dispatch" : item.kind === "follow_up" ? "follow_up" : "route_exception",
       source: { entityType: item.kind === "follow_up" ? "commercial_follow_up" : "commercial_mission", entityId: item.followUpId ?? String(item.missionId), sourceReference: item.kind === "follow_up" ? `commercial_follow_ups:${item.followUpId}` : `commercial_missions:${item.missionId}` },
+      physicalEntityId: addressKey ? commercialEntityIds.get(addressKey) ?? null : null,
       scheduledAt: item.dueAt, urgency: item.urgency === "overdue" ? "overdue" : item.urgency === "urgent" ? "urgent" : item.urgency === "upcoming" ? "upcoming" : "flexible",
       title: item.accountName, subtitle: item.note ?? item.missionCode, status: item.status,
       destination: item.address ? { address: item.address, latitude: null, longitude: null } : null,
@@ -218,6 +240,6 @@ export async function getFieldToday(input: {
     generatedAt: now.toISOString(), businessDate: date, currentUserId: input.userId, timeline: sorted,
     authoritativeCompletedObjectiveIds: Array.from(authoritativeCompletedObjectiveIds).sort(),
     nextFixedCommitment, blockers: sorted.filter(item => item.urgency === "blocked"),
-    dataQuality: { status: "partial", warnings: ["Laundry order addresses do not currently contain verified coordinates", "Travel duration is unavailable until live routing is configured"], sources: ["orders", "commercial_follow_ups", "commercial_mission_dispatches", "commercial_pipeline_records", "customer_recovery_interventions", "tower_forge_jobs", "goldline_world_events"] },
+    dataQuality: { status: "partial", warnings: ["Laundry order addresses do not currently contain verified coordinates", "Travel duration is unavailable until live routing is configured"], sources: ["orders", "commercial_follow_ups", "commercial_mission_dispatches", "commercial_pipeline_records", "customer_recovery_interventions", "tower_forge_jobs", "goldline_world_events", "physical_entity_aliases"] },
   };
 }
