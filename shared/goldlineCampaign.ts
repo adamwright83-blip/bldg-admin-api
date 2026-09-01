@@ -118,7 +118,14 @@ export function stableCampaignChapterId(input: {
   const members = input.objectiveIds.length
     ? [...input.objectiveIds].sort().join("+")
     : input.territoryId ?? "none";
-  return `${input.businessDate}:${input.chapterKind}:${members}`;
+  const signature = `${input.businessDate}|${input.chapterKind}|${members}`;
+  const digest = [
+    stableHash(signature),
+    stableHash(`chapter:${signature}`),
+  ]
+    .map(value => value.toString(16).padStart(8, "0"))
+    .join("");
+  return `${input.businessDate}:${input.chapterKind}:${digest}`;
 }
 
 export type CampaignDraft = {
@@ -136,6 +143,12 @@ export type CampaignDraft = {
   completedChapterIds: string[];
   status: CampaignStatus;
   endingTreatment: string | null;
+  /**
+   * Ephemeral compile evidence used only while reconciling a new draft against
+   * persisted campaign history. The campaign tables do not copy source-task
+   * status; this list is rebuilt from FieldToday on every materialization.
+   */
+  authoritativeCompletedObjectiveIds?: string[];
 };
 
 export type CampaignRevisionDiff = {
