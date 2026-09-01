@@ -1,0 +1,140 @@
+name: Real Workday field-ready apply
+
+on:
+  push:
+    branches:
+      - cursor/goldline-real-workday
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cursor/goldline-real-workday
+          fetch-depth: 0
+      - name: Wire durable Diane, campaign refresh, and real GPS arrival
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected block not found in {path}: {old[:160]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          # 1) The normal in-game Field Journal path must be raw-first. Keep
+          # LogSignalSheet only for a GPS-confirmed LOCAL_TARGET_RUN because its
+          # operator-confirmed structured signal is the canonical visited-target writer.
+          controller = "client/src/pages/driver/GoldlineDriverController.tsx"
+          replace(
+              controller,
+              '''  const campaign = trpc.system.goldlineWorld.campaign.useQuery(undefined, {\n    staleTime: 15_000,\n  });''',
+              '''  const campaign = trpc.system.goldlineWorld.campaign.useQuery(undefined, {\n    staleTime: 15_000,\n    // Field Journal processing is asynchronous. Poll the compiled campaign so\n    // a newly extracted Wednesday/Thursday pressure can reweave the unfinished\n    // future without a reload or manual planner action.\n    refetchInterval: 30_000,\n  });''',
+          )
+          replace(
+              controller,
+              '''    onOpenLogSignal: () => setLogSignalOpen(true),''',
+              '''    onOpenLogSignal: () => {\n      // Ordinary field capture is Diane's durable raw-first journal. A sourced\n      // target run is the one exception: once real arrival has been confirmed,\n      // its operator-approved structured signal is the canonical visit writer.\n      if (operatorStop?.localTargetRunContext) setLogSignalOpen(true);\n      else setJournalOpen(true);\n    },''',
+          )
+          replace(
+              controller,
+              '''      case "field_journal":\n        setLogSignalOpen(true);\n        return;''',
+              '''      case "field_journal":\n        // Campaign-authored Field Journal chapters use the durable audio/raw\n        // transcript seam. Interpretation happens only after that evidence is saved.\n        setJournalOpen(true);\n        return;''',
+          )
+          replace(
+              controller,
+              '''      <SalesJournalSheet open={journalOpen} onOpenChange={setJournalOpen} location={location} />''',
+              '''      <SalesJournalSheet\n        open={journalOpen}\n        onOpenChange={setJournalOpen}\n        location={location}\n        onSaved={() => {\n          // The save itself is already durable. These invalidations only make\n          // downstream world/campaign projections catch up quickly; background\n          // extraction may still finish on the next normal poll.\n          void Promise.all([\n            fieldToday.refetch(),\n            campaign.refetch(),\n            driverGameWorld.refetch(),\n            utils.system.goldlineWorld.campaign.invalidate(),\n          ]).catch(() => undefined);\n        }}\n      />''',
+          )
+
+          # 2) SalesJournalSheet already writes audio/raw transcript first. Give
+          # the controller a non-blocking projection-refresh hook after durable save.
+          journal = "client/src/components/driver/SalesMomentum.tsx"
+          replace(
+              journal,
+              '''export function SalesJournalSheet({ open, onOpenChange, location }: {\n  open: boolean;\n  onOpenChange: (open: boolean) => void;\n  location?: GoldlineLocationSnapshot;\n}) {''',
+              '''export function SalesJournalSheet({ open, onOpenChange, location, onSaved }: {\n  open: boolean;\n  onOpenChange: (open: boolean) => void;\n  location?: GoldlineLocationSnapshot;\n  /** Projection refresh only. The journal is already durable before this fires. */\n  onSaved?: () => void | Promise<void>;\n}) {''',
+          )
+          replace(
+              journal,
+              '''      toast.success("Field Journal secured. Processing continues safely in the background.");\n      // Only clear captured input on a confirmed, authoritative save — a\n      // failed save must never discard the recording or typed transcript.\n      setTranscript(""); setAudioDataUrl(null); setClientRequestId(newClientRequestId()); onOpenChange(false);''',
+              '''      toast.success("Field Journal secured. Processing continues safely in the background.");\n      // Projection refresh is best-effort and may race asynchronous extraction;\n      // it is deliberately incapable of turning a successful durable save into\n      // a UI failure. Normal polling catches anything that finishes later.\n      void Promise.resolve(onSaved?.()).catch(() => undefined);\n      // Only clear captured input on a confirmed, authoritative save — a\n      // failed save must never discard the recording or typed transcript.\n      setTranscript(""); setAudioDataUrl(null); setClientRequestId(newClientRequestId()); onOpenChange(false);''',
+          )
+
+          # 3) A LOCAL_TARGET_RUN's fictional corridor arrival is not a real
+          # doorstep. Gate its sourced-target identity on the conservative GPS
+          # tracker. Simulation can never produce a physical arrival claim.
+          home = "client/src/game/GoldlineGameHome.tsx"
+          replace(
+              home,
+              '''import { SurveyPulse } from "./expedition/surveyPulse";''',
+              '''import { SurveyPulse } from "./expedition/surveyPulse";\nimport { usePhysicalArrival } from "./session/usePhysicalArrival";''',
+          )
+          replace(
+              home,
+              '''  const [activeExpedition, setActiveExpedition] =\n    useState<ActiveExpedition | null>(null);\n\n  /**\n   * WHERE THE OPERATOR IS — reported upward only once it is actually true.''',
+              '''  const [activeExpedition, setActiveExpedition] =\n    useState<ActiveExpedition | null>(null);\n\n  const physicalArrivalTarget = useMemo(() => {\n    if (activeExpedition?.kind !== "local_target_run") return null;\n    const target = activeExpedition.currentTarget;\n    if (activeExpedition.simulated || target.lat == null || target.lng == null) return null;\n    return { id: target.id, lat: target.lat, lng: target.lng };\n  }, [\n    activeExpedition?.kind,\n    activeExpedition?.kind === "local_target_run"\n      ? activeExpedition.currentTarget.id\n      : null,\n    activeExpedition?.kind === "local_target_run"\n      ? activeExpedition.currentTarget.lat\n      : null,\n    activeExpedition?.kind === "local_target_run"\n      ? activeExpedition.currentTarget.lng\n      : null,\n    activeExpedition?.kind === "local_target_run"\n      ? activeExpedition.simulated\n      : null,\n  ]);\n  const physicalArrival = usePhysicalArrival({\n    enabled: activeExpedition?.kind === "local_target_run" && physicalArrivalTarget !== null,\n    target: physicalArrivalTarget,\n  });\n  const localTargetRealArrivalConfirmed =\n    activeExpedition?.kind === "local_target_run" &&\n    !activeExpedition.simulated &&\n    physicalArrival.snapshot?.phase === "arrived";\n\n  /**\n   * WHERE THE OPERATOR IS — reported upward only once it is actually true.''',
+          )
+          replace(
+              home,
+              ''': activeExpedition.kind === "local_target_run"\n            ? {\n                entityType: "sourced_target",''',
+              ''': activeExpedition.kind === "local_target_run" &&\n              localTargetRealArrivalConfirmed\n            ? {\n                entityType: "sourced_target",''',
+          )
+          replace(
+              home,
+              '''            onLogSignal={props.onOpenLogSignal}\n            teachingHint={teachingHint}''',
+              '''            onLogSignal={\n              activeExpedition?.kind === "local_target_run" &&\n              !localTargetRealArrivalConfirmed\n                ? props.onOpenJournal\n                : props.onOpenLogSignal\n            }\n            logSignalLabel={\n              activeExpedition?.kind === "local_target_run" &&\n              !localTargetRealArrivalConfirmed\n                ? "OPEN FIELD JOURNAL"\n                : "LOG A SIGNAL"\n            }\n            awaitingSignalLabel={\n              activeExpedition?.kind === "local_target_run" &&\n              !localTargetRealArrivalConfirmed\n                ? physicalArrival.availability === "permission_denied" ||\n                    physicalArrival.availability === "unsupported" ||\n                    physicalArrival.availability === "unavailable"\n                  ? "LOCATION NOT CONFIRMED · JOURNAL REMAINS AVAILABLE"\n                  : "VERIFYING REAL ARRIVAL · STAY NEAR THE TARGET"\n                : undefined\n            }\n            teachingHint={teachingHint}''',
+          )
+
+          # 4) Explain the physical gate in the existing terminal instead of
+          # leaving a dead "log signal to advance" instruction when GPS has not
+          # actually confirmed the target.
+          hud = "client/src/game/expedition/ExpeditionHud.tsx"
+          replace(
+              hud,
+              '''  onLogSignal?: () => void;\n  /**\n   * §PR77 Part 4 contextual teaching''',
+              '''  onLogSignal?: () => void;\n  /** Button copy can distinguish a real visit writer from a journal-only fallback. */\n  logSignalLabel?: string;\n  /** Honest status while a sourced target is waiting for physical confirmation. */\n  awaitingSignalLabel?: string;\n  /**\n   * §PR77 Part 4 contextual teaching''',
+          )
+          replace(
+              hud,
+              '''    onLogSignal,\n    teachingHint = null,''',
+              '''    onLogSignal,\n    logSignalLabel = "LOG A SIGNAL",\n    awaitingSignalLabel = "LOG A SIGNAL TO RECORD THIS VISIT AND ADVANCE",\n    teachingHint = null,''',
+          )
+          replace(
+              hud,
+              '''              LOG A SIGNAL TO RECORD THIS VISIT AND ADVANCE\n            </p>''',
+              '''              {awaitingSignalLabel}\n            </p>''',
+          )
+          replace(
+              hud,
+              '''              LOG A SIGNAL\n            </button>''',
+              '''              {logSignalLabel}\n            </button>''',
+          )
+
+          # 5) Make the currently opaque integration bundle fail with the exact
+          # contract name, so a single regression cannot hide three green suites.
+          workflow = ".github/workflows/goldline-mobile-regression.yml"
+          replace(
+              workflow,
+              '''      - name: Prove server-rebuilt progression and doctrine gates\n        run: >-\n          pnpm vitest run --config vitest.integration.config.ts\n          server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts\n          server/armory/armoryEvolution.integration.test.ts\n          server/salesIntel/driverSafeSalesIntel.integration.test.ts\n          server/field/authoritativeVisitRoute.integration.test.ts\n''',
+              '''      - name: Prove DayForge release journey\n        run: pnpm vitest run --config vitest.integration.config.ts server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts\n\n      - name: Prove Armory evolution\n        run: pnpm vitest run --config vitest.integration.config.ts server/armory/armoryEvolution.integration.test.ts\n\n      - name: Prove driver-safe sales intelligence\n        run: pnpm vitest run --config vitest.integration.config.ts server/salesIntel/driverSafeSalesIntel.integration.test.ts\n\n      - name: Prove authoritative visit route\n        run: pnpm vitest run --config vitest.integration.config.ts server/field/authoritativeVisitRoute.integration.test.ts\n''',
+          )
+
+          # This workflow is scaffolding for a remote code edit, not product code.
+          Path(".github/workflows/real-workday-field-ready-apply.yml").unlink()
+          PY
+
+          git config user.name "goldline-real-workday"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(real-workday): make field capture durable and arrival truthful"
+          git push origin HEAD:cursor/goldline-real-workday
