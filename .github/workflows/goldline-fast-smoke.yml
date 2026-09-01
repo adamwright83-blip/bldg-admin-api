@@ -49,6 +49,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Prove campaign truth invariants
         run: pnpm vitest run shared/goldlineCampaign.test.ts shared/goldlineCampaignReviewFixes.test.ts
+      - name: Prove Real Workday truth invariants
+        run: >-
+          pnpm vitest run
+          shared/goldlineTemporal.test.ts
+          shared/goldlineFuturePressure.test.ts
+          server/goldlineWorld/futurePressureService.test.ts
+          server/field/fieldOpportunityService.test.ts
+          server/field/fieldTodayService.test.ts
       - name: Prepare deterministic proof world
         run: |
           pnpm db:dayforge:release
