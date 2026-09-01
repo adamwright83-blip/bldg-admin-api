@@ -4180,3 +4180,25 @@
 .add-external-work__primary:disabled {
   opacity: 0.45;
 }
+
+/*
+ * SURVEY settle ring — the gathering feedback for a thumb resting at the
+ * centre of the movement stick. Deliberately drawn inside the stick rather
+ * than as a third control: SURVEY is a way of holding the stick, and the
+ * feedback should say so.
+ */
+.game-joystick .joystick-settle {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 214, 138, 0.85);
+  box-shadow: 0 0 14px rgba(255, 196, 92, 0.45);
+  pointer-events: none;
+  transition: opacity 60ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-joystick .joystick-settle {
+    transition: none;
+  }
+}

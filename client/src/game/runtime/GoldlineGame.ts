@@ -66,6 +66,11 @@ import {
   stepDodge,
 } from "../expedition/actionPad";
 import {
+  resolveSurveyReveals,
+  stepSurveyReveals,
+  type SurveyReveal,
+} from "../expedition/surveyPulse";
+import {
   portalPresentationFor,
   portalGlowAlpha,
   corridorGateVisibleDuring,
@@ -462,6 +467,8 @@ export class GoldlineGame {
    */
   private expeditionDrivingMovement = false;
   private dodgeState = createDodgeState();
+  /** Lit SURVEY reveals, aged in gameplay time alongside the dodge state. */
+  private surveyReveals: SurveyReveal[] = [];
   /** Fictional seconds until the contextual basic lash may fire again. */
   private lashCooldown = 0;
   /**
@@ -1238,6 +1245,32 @@ export class GoldlineGame {
     return true;
   }
 
+  /**
+   * SURVEY pulse — the settle gesture on the movement stick resolved into
+   * live gameplay. Returns the reveals so the caller can light them; an
+   * empty array is a legitimate answer, and means the player spent the
+   * settle and found nothing. That is information too, and it is why the
+   * cooldown is charged on firing rather than on finding something.
+   *
+   * Reveals are fictional corridor features only (see `surveyPulse.ts`) —
+   * there is no path from here to business truth.
+   */
+  expeditionSurvey(): SurveyReveal[] {
+    if (!this.expeditionCanAct()) return [];
+    const reveals = resolveSurveyReveals(
+      this.expedition!.getSurveyCandidates(),
+      this.progress,
+      this.lateral * 140
+    );
+    this.surveyReveals = reveals;
+    return reveals;
+  }
+
+  /** Currently-lit survey reveals, aged by the main update loop. */
+  getSurveyReveals(): readonly SurveyReveal[] {
+    return this.surveyReveals;
+  }
+
   isDodging(): boolean {
     return this.dodgeState.active;
   }
@@ -1807,6 +1840,11 @@ export class GoldlineGame {
       // block a reader would check first, and it should say plainly that
       // terminal state disables it.
       if (expeditionCanMove) stepDodge(this.dodgeState, gameplayDelta);
+      // Reveals fade on the same gameplay clock as the dodge cooldown, so a
+      // dilated aim does not silently extend what a scan showed.
+      if (this.surveyReveals.length > 0) {
+        this.surveyReveals = stepSurveyReveals(this.surveyReveals, gameplayDelta);
+      }
       if (expeditionCanMove && this.dodgeState.active) {
         const burst = DODGE.speed * gameplayDelta;
         this.progress = clampCorridorProgress(
