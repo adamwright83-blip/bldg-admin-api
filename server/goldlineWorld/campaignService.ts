@@ -30,15 +30,13 @@ import {
   recompileCampaignFuture,
 } from "../../shared/goldlineCampaignRevisions";
 import { campaignEndingTreatment } from "../../shared/goldlineCampaignEndings";
+import type { TravelProviderState } from "../../shared/goldlineTravelTruth";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import { getFieldToday } from "../field/fieldTodayService";
 import { appendGoldlineWorldEvent } from "./worldEventStore";
 import { listPresentedTerritories } from "./territoryService";
-import {
-  campaignTravelProviderState,
-  estimateCampaignTravel,
-} from "./campaignTravelAdapter";
+import { estimateCampaignTravel } from "./campaignTravelAdapter";
 
 function previousBusinessDate(date: string): string {
   const [year, month, day] = date.split("-").map(Number);
@@ -262,7 +260,11 @@ async function latestRevision(campaignId: string): Promise<CampaignRevisionDiff 
   };
 }
 
-function present(campaign: CampaignInstance, lastRevision: CampaignRevisionDiff | null): CampaignPresentation {
+function present(
+  campaign: CampaignInstance,
+  lastRevision: CampaignRevisionDiff | null,
+  travelProviderState: TravelProviderState
+): CampaignPresentation {
   const current = campaign.chapters.find(chapter => chapter.stableChapterId === campaign.currentChapterId);
   return {
     campaign,
@@ -287,8 +289,49 @@ function present(campaign: CampaignInstance, lastRevision: CampaignRevisionDiff 
           }))
         )
       : false,
-    travelProviderState: campaignTravelProviderState(),
+    travelProviderState,
   };
+}
+
+async function persistGuardianFinaleCompletion(input: {
+  campaign: CampaignInstance;
+  chapter: CampaignChapter;
+  actorId: string;
+}): Promise<CampaignInstance> {
+  if (input.campaign.completedChapterIds.includes(input.chapter.stableChapterId)) {
+    return input.campaign;
+  }
+  const next = markChapterCompleted(input.campaign, input.chapter.stableChapterId);
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(goldlineCampaignInstances)
+    .set({
+      currentChapterId: next.currentChapterId,
+      completedChapterIdsJson: next.completedChapterIds,
+      status: next.status,
+      completedAt: next.completedAt ? new Date(next.completedAt) : null,
+    })
+    .where(eq(goldlineCampaignInstances.id, input.campaign.id));
+  await recordCampaignEvent({
+    tenantId: input.campaign.tenantId,
+    campaignId: input.campaign.id,
+    operatorId: input.actorId,
+    eventType: "campaign_chapter_game_completed",
+    idempotencyKey: `campaign-chapter-game:${input.campaign.id}:${input.chapter.stableChapterId}`,
+    metadata: { chapterId: input.chapter.stableChapterId, gameOnly: true },
+  });
+  if (next.status === "completed" && input.campaign.status !== "completed") {
+    await recordCampaignEvent({
+      tenantId: input.campaign.tenantId,
+      campaignId: input.campaign.id,
+      operatorId: input.actorId,
+      eventType: "campaign_completed",
+      idempotencyKey: `campaign-completed:${input.campaign.id}`,
+      metadata: { completionSource: "guardian_finale" },
+    });
+  }
+  return next;
 }
 
 export async function getOrMaterializeTodayCampaign(input: {
@@ -330,6 +373,7 @@ export async function getOrMaterializeTodayCampaign(input: {
     operatorId: input.operatorId,
     businessDate: today.businessDate,
     objectives,
+    authoritativeCompletedObjectiveIds: today.authoritativeCompletedObjectiveIds,
     territories: hints,
     obligationDue: today.timeline.some(item => item.kind === "field_commitment"),
     priorCampaignTitle,
@@ -349,10 +393,10 @@ export async function getOrMaterializeTodayCampaign(input: {
       startedAt: draft.status === "quiet" ? null : new Date().toISOString(),
       completedAt: null,
     });
-    return present(created, null);
+    return present(created, null, travel.providerState);
   }
   const { instance, diff } = recompileCampaignFuture({ instance: existing, next: draft });
-  if (!diff) return present(existing, await latestRevision(existing.id));
+  if (!diff) return present(existing, await latestRevision(existing.id), travel.providerState);
   const unresolvedFollowUp = objectives.some(
     item => (item.kind === "follow_up" || item.kind === "recovery") && item.status === "ready"
   );
@@ -366,7 +410,17 @@ export async function getOrMaterializeTodayCampaign(input: {
     endingTreatment: instance.status === "completed" ? ending.copy : instance.endingTreatment,
   };
   await persistRevision({ instance: next, diff });
-  return present(next, diff);
+  if (next.status === "completed" && existing.status !== "completed") {
+    await recordCampaignEvent({
+      tenantId: next.tenantId,
+      campaignId: next.id,
+      operatorId: input.operatorId,
+      eventType: "campaign_completed",
+      idempotencyKey: `campaign-completed:${next.id}`,
+      metadata: { completionSource: "authoritative_source" },
+    });
+  }
+  return present(next, diff, travel.providerState);
 }
 
 export async function chooseCampaignBranch(input: {
@@ -391,7 +445,11 @@ export async function chooseCampaignBranch(input: {
     idempotencyKey: `campaign-branch:${presented.campaign.id}:${chapter.stableChapterId}`,
     metadata: { chapterId: chapter.stableChapterId },
   });
-  return present({ ...presented.campaign, currentChapterId: chapter.stableChapterId, status: "active" }, presented.lastRevision);
+  return present(
+    { ...presented.campaign, currentChapterId: chapter.stableChapterId, status: "active" },
+    presented.lastRevision,
+    presented.travelProviderState
+  );
 }
 
 export async function recordCampaignChapterGameCompleted(input: {
@@ -405,27 +463,54 @@ export async function recordCampaignChapterGameCompleted(input: {
   if (chapter.selectedGameplayBinding !== "guardian_finale" && chapter.chapterKind !== "guardian_finale") {
     return presented;
   }
-  const next = markChapterCompleted(presented.campaign, chapter.stableChapterId);
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db
-    .update(goldlineCampaignInstances)
-    .set({
-      currentChapterId: next.currentChapterId,
-      completedChapterIdsJson: next.completedChapterIds,
-      status: next.status,
-      completedAt: next.completedAt ? new Date(next.completedAt) : null,
-    })
-    .where(eq(goldlineCampaignInstances.id, presented.campaign.id));
-  await recordCampaignEvent({
-    tenantId: input.tenantId,
-    campaignId: presented.campaign.id,
-    operatorId: input.operatorId,
-    eventType: "campaign_chapter_game_completed",
-    idempotencyKey: `campaign-chapter-game:${presented.campaign.id}:${chapter.stableChapterId}`,
-    metadata: { chapterId: chapter.stableChapterId, gameOnly: true },
+  const next = await persistGuardianFinaleCompletion({
+    campaign: presented.campaign,
+    chapter,
+    actorId: input.operatorId,
   });
-  return present(next, presented.lastRevision);
+  return present(next, presented.lastRevision, presented.travelProviderState);
+}
+
+/**
+ * Complete the persisted Guardian finale for a territory without rematerializing
+ * the campaign after the territory has cleared. This makes the defeat path
+ * retry-safe: the server can repair campaign history even if the client never
+ * loaded the finale ID or a prior request failed after writing territory truth.
+ */
+export async function recordCampaignGuardianFinaleForTerritory(input: {
+  tenantId: string;
+  operatorId: string;
+  territoryId: string;
+}): Promise<{ completed: boolean; chapterId: string | null }> {
+  const today = await getFieldToday({
+    tenantId: input.tenantId,
+    userId: input.operatorId,
+    includeAllAssignees: true,
+  });
+  const campaign = await readCampaign({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    businessDate: today.businessDate,
+  });
+  if (!campaign) return { completed: false, chapterId: null };
+
+  const finale = campaign.chapters.find(
+    chapter =>
+      chapter.chapterKind === "guardian_finale" &&
+      chapter.selectedGameplayBinding === "guardian_finale" &&
+      chapter.territoryId === input.territoryId
+  );
+  if (!finale) return { completed: false, chapterId: null };
+  if (campaign.completedChapterIds.includes(finale.stableChapterId)) {
+    return { completed: true, chapterId: finale.stableChapterId };
+  }
+
+  await persistGuardianFinaleCompletion({
+    campaign,
+    chapter: finale,
+    actorId: input.operatorId,
+  });
+  return { completed: true, chapterId: finale.stableChapterId };
 }
 
 export async function listOperatorCampaigns(input: {
