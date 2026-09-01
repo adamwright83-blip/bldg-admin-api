@@ -219,6 +219,8 @@ export function campaignInputFingerprint(input: CampaignCompileInput): string {
           item.physicalEntityId ?? "",
           item.windowStart ?? "",
           item.windowEnd ?? "",
+          item.latitude == null ? "" : item.latitude.toFixed(5),
+          item.longitude == null ? "" : item.longitude.toFixed(5),
         ].join(":")
     )
     .sort();

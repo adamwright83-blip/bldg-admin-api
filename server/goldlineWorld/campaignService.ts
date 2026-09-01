@@ -391,46 +391,71 @@ async function persistGuardianFinaleCompletion(input: {
   chapter: CampaignChapter;
   actorId: string;
 }): Promise<CampaignInstance> {
-  if (input.campaign.completedChapterIds.includes(input.chapter.stableChapterId)) {
-    return input.campaign;
-  }
-  const next = markChapterCompleted(input.campaign, input.chapter.stableChapterId);
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db
-    .update(goldlineCampaignInstances)
-    .set({
-      currentChapterId: next.currentChapterId,
-      completedChapterIdsJson: next.completedChapterIds,
-      status: next.status,
-      completedAt: next.completedAt ? new Date(next.completedAt) : null,
-    })
-    .where(eq(goldlineCampaignInstances.id, input.campaign.id));
-  await recordCampaignEvent({
-    tenantId: input.campaign.tenantId,
-    campaignId: input.campaign.id,
-    operatorId: input.actorId,
-    eventType: "campaign_chapter_game_completed",
-    idempotencyKey: `campaign-chapter-game:${input.campaign.id}:${input.chapter.stableChapterId}`,
-    metadata: { chapterId: input.chapter.stableChapterId, gameOnly: true },
-  });
-  if (next.status === "completed" && input.campaign.status !== "completed") {
+  let campaign = input.campaign;
+  let chapter = input.chapter;
+
+  for (let attempt = 1; attempt <= MAX_CAMPAIGN_REVISION_ATTEMPTS; attempt += 1) {
+    if (attempt > 1) {
+      const latest = await readCampaign(campaign);
+      if (!latest) {
+        throw new Error("Campaign disappeared while recording Guardian finale");
+      }
+      campaign = latest;
+      const found =
+        campaign.chapters.find(item => item.stableChapterId === input.chapter.stableChapterId) ??
+        campaign.chapters.find(
+          item =>
+            item.chapterKind === "guardian_finale" &&
+            item.territoryId === input.chapter.territoryId
+        );
+      if (!found) {
+        return campaign;
+      }
+      chapter = found;
+    }
+    if (campaign.completedChapterIds.includes(chapter.stableChapterId)) {
+      return campaign;
+    }
+    const next = markChapterCompleted(campaign, chapter.stableChapterId);
+    const result = await db
+      .update(goldlineCampaignInstances)
+      .set({
+        currentChapterId: next.currentChapterId,
+        completedChapterIdsJson: next.completedChapterIds,
+        status: next.status,
+        completedAt: next.completedAt ? new Date(next.completedAt) : null,
+      })
+      .where(campaignSnapshotStillMatches(campaign));
+    if (campaignUpdateAffectedRows(result) !== 1) continue;
     await recordCampaignEvent({
-      tenantId: input.campaign.tenantId,
-      campaignId: input.campaign.id,
+      tenantId: campaign.tenantId,
+      campaignId: campaign.id,
       operatorId: input.actorId,
-      eventType: "campaign_completed",
-      idempotencyKey: `campaign-completed:${input.campaign.id}`,
-      metadata: { completionSource: "guardian_finale" },
+      eventType: "campaign_chapter_game_completed",
+      idempotencyKey: `campaign-chapter-game:${campaign.id}:${chapter.stableChapterId}`,
+      metadata: { chapterId: chapter.stableChapterId, gameOnly: true },
     });
+    if (next.status === "completed" && campaign.status !== "completed") {
+      await recordCampaignEvent({
+        tenantId: campaign.tenantId,
+        campaignId: campaign.id,
+        operatorId: input.actorId,
+        eventType: "campaign_completed",
+        idempotencyKey: `campaign-completed:${campaign.id}`,
+        metadata: { completionSource: "guardian_finale" },
+      });
+    }
+    return next;
   }
-  return next;
+  throw new Error("Guardian finale could not be persisted after concurrent updates");
 }
 
-export async function getOrMaterializeTodayCampaign(input: {
+async function loadTodayCampaignDraft(input: {
   tenantId: string;
   operatorId: string;
-}): Promise<CampaignPresentation> {
+}) {
   const today = await getFieldToday({
     tenantId: input.tenantId,
     userId: input.operatorId,
@@ -472,45 +497,61 @@ export async function getOrMaterializeTodayCampaign(input: {
     priorCampaignTitle,
     travelWindowFingerprint: travel.fingerprint,
   });
+  return {
+    today,
+    hints,
+    travel,
+    draft,
+    unresolvedFollowUp: objectives.some(
+      item => (item.kind === "follow_up" || item.kind === "recovery") && item.status === "ready"
+    ),
+  };
+}
+
+export async function getOrMaterializeTodayCampaign(input: {
+  tenantId: string;
+  operatorId: string;
+}): Promise<CampaignPresentation> {
+  let loaded = await loadTodayCampaignDraft(input);
   let existing = await readCampaign({
     tenantId: input.tenantId,
     operatorId: input.operatorId,
-    businessDate: today.businessDate,
+    businessDate: loaded.today.businessDate,
   });
   if (!existing) {
     const created = await insertCampaign({
-      ...draft,
+      ...loaded.draft,
       id: randomUUID(),
       revision: 1,
       createdAt: new Date().toISOString(),
-      startedAt: draft.status === "quiet" ? null : new Date().toISOString(),
+      startedAt: loaded.draft.status === "quiet" ? null : new Date().toISOString(),
       completedAt: null,
     });
-    return present(created, null, travel.providerState);
+    return present(created, null, loaded.travel.providerState);
   }
-
-  const unresolvedFollowUp = objectives.some(
-    item => (item.kind === "follow_up" || item.kind === "recovery") && item.status === "ready"
-  );
 
   for (let attempt = 1; attempt <= MAX_CAMPAIGN_REVISION_ATTEMPTS; attempt += 1) {
     if (attempt > 1) {
+      loaded = await loadTodayCampaignDraft(input);
       existing = await readCampaign({
         tenantId: input.tenantId,
         operatorId: input.operatorId,
-        businessDate: today.businessDate,
+        businessDate: loaded.today.businessDate,
       });
       if (!existing) {
         throw new Error("Campaign disappeared while persisting a concurrent revision");
       }
     }
     const lastRevision = await ensureRevisionHistory(existing);
-    const { instance, diff } = recompileCampaignFuture({ instance: existing, next: draft });
-    if (!diff) return present(existing, lastRevision, travel.providerState);
+    const { instance, diff } = recompileCampaignFuture({
+      instance: existing,
+      next: loaded.draft,
+    });
+    if (!diff) return present(existing, lastRevision, loaded.travel.providerState);
     const ending = campaignEndingTreatment({
       draft: instance,
-      territories: hints,
-      unresolvedFollowUp,
+      territories: loaded.hints,
+      unresolvedFollowUp: loaded.unresolvedFollowUp,
     });
     const next: CampaignInstance = {
       ...instance,
@@ -530,7 +571,7 @@ export async function getOrMaterializeTodayCampaign(input: {
         metadata: { completionSource: "authoritative_source" },
       });
     }
-    return present(next, diff, travel.providerState);
+    return present(next, diff, loaded.travel.providerState);
   }
   throw new Error("Campaign revision could not be persisted after concurrent updates");
 }
@@ -540,28 +581,35 @@ export async function chooseCampaignBranch(input: {
   operatorId: string;
   chapterId: string;
 }): Promise<CampaignPresentation> {
-  const presented = await getOrMaterializeTodayCampaign(input);
-  const chapter = presented.campaign.chapters.find(item => item.stableChapterId === input.chapterId);
-  if (!chapter || chapter.required) return presented;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db
-    .update(goldlineCampaignInstances)
-    .set({ currentChapterId: chapter.stableChapterId, status: "active" })
-    .where(eq(goldlineCampaignInstances.id, presented.campaign.id));
-  await recordCampaignEvent({
-    tenantId: input.tenantId,
-    campaignId: presented.campaign.id,
-    operatorId: input.operatorId,
-    eventType: "campaign_branch_chosen",
-    idempotencyKey: `campaign-branch:${presented.campaign.id}:${chapter.stableChapterId}`,
-    metadata: { chapterId: chapter.stableChapterId },
-  });
-  return present(
-    { ...presented.campaign, currentChapterId: chapter.stableChapterId, status: "active" },
-    presented.lastRevision,
-    presented.travelProviderState
-  );
+
+  for (let attempt = 1; attempt <= MAX_CAMPAIGN_REVISION_ATTEMPTS; attempt += 1) {
+    const presented = await getOrMaterializeTodayCampaign(input);
+    const chapter = presented.campaign.chapters.find(
+      item => item.stableChapterId === input.chapterId
+    );
+    if (!chapter || chapter.required) return presented;
+    const result = await db
+      .update(goldlineCampaignInstances)
+      .set({ currentChapterId: chapter.stableChapterId, status: "active" })
+      .where(campaignSnapshotStillMatches(presented.campaign));
+    if (campaignUpdateAffectedRows(result) !== 1) continue;
+    await recordCampaignEvent({
+      tenantId: input.tenantId,
+      campaignId: presented.campaign.id,
+      operatorId: input.operatorId,
+      eventType: "campaign_branch_chosen",
+      idempotencyKey: `campaign-branch:${presented.campaign.id}:${chapter.stableChapterId}`,
+      metadata: { chapterId: chapter.stableChapterId },
+    });
+    return present(
+      { ...presented.campaign, currentChapterId: chapter.stableChapterId, status: "active" },
+      presented.lastRevision,
+      presented.travelProviderState
+    );
+  }
+  throw new Error("Campaign branch could not be persisted after concurrent updates");
 }
 
 export async function recordCampaignChapterGameCompleted(input: {

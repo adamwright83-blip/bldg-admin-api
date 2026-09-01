@@ -60,6 +60,9 @@ describe("campaign publish concurrency", () => {
     expect(source).toContain("insertRevisionRow(tx, input)");
     expect(source).not.toMatch(/for\s*\(\s*;\s*;\s*\)/);
     expect(source).toContain("Campaign revision could not be persisted after concurrent updates");
+    expect(source).toContain("loadTodayCampaignDraft(input)");
+    expect(source).toContain("campaignSnapshotStillMatches(campaign)");
+    expect(source).toContain("campaignSnapshotStillMatches(presented.campaign)");
   });
 });
 

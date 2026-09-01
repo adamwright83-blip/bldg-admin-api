@@ -99,6 +99,21 @@ describe("campaign review hardening", () => {
     expect(after).not.toBe(before);
   });
 
+  it("fingerprints coordinates that determine chapter order", () => {
+    const base = {
+      tenantId: "default",
+      operatorId: "driver-1",
+      businessDate: "2026-09-01",
+      objectives: [objective("follow-up:1", { kind: "follow_up", latitude: 34.05, longitude: -118.3 })],
+    };
+    const before = campaignInputFingerprint(base);
+    const after = campaignInputFingerprint({
+      ...base,
+      objectives: [objective("follow-up:1", { kind: "follow_up", latitude: 34.2, longitude: -118.2 })],
+    });
+    expect(after).not.toBe(before);
+  });
+
   it("locks a chapter when authoritative source evidence completes an objective omitted from Today", () => {
     const morning = compile([objective("pickup:42", {
       kind: "pickup",

@@ -28,7 +28,7 @@ vi.mock("./worldEventStore", () => ({
   appendGoldlineWorldEvent: mocks.appendGoldlineWorldEvent,
 }));
 
-import { getOrMaterializeTodayCampaign } from "./campaignService";
+import { getOrMaterializeTodayCampaign, chooseCampaignBranch, recordCampaignGuardianFinaleForTerritory } from "./campaignService";
 
 type Row = Record<string, any>;
 
@@ -379,18 +379,18 @@ describe("campaign revision concurrency", () => {
       await hold.promise;
     });
 
-    mocks.getFieldToday
-      .mockResolvedValueOnce(
-        fieldToday({
-          timeline: [timelineItem("pickup:42", "pickup", "new")],
-        })
-      )
-      .mockResolvedValueOnce(
-        fieldToday({
-          timeline: [],
-          authoritativeCompletedObjectiveIds: ["follow-up:88"],
-        })
-      );
+    const completedToday = fieldToday({
+      timeline: [],
+      authoritativeCompletedObjectiveIds: ["follow-up:88"],
+    });
+    const staleToday = fieldToday({
+      timeline: [timelineItem("pickup:42", "pickup", "new")],
+    });
+    let fieldTodayCalls = 0;
+    mocks.getFieldToday.mockImplementation(async () => {
+      fieldTodayCalls += 1;
+      return fieldTodayCalls === 1 ? staleToday : completedToday;
+    });
 
     const stale = getOrMaterializeTodayCampaign({
       tenantId: "tenant-a",
@@ -407,6 +407,7 @@ describe("campaign revision concurrency", () => {
     expect(completed.campaign.completedChapterIds).toContain(completedChapterId);
     expect(staleResult.campaign.completedChapterIds).toContain(completedChapterId);
     expect(memory.instances[0]!.completedChapterIdsJson).toContain(completedChapterId);
+    expect(fieldTodayCalls).toBeGreaterThan(2);
     expect(memory.revisions).toHaveLength(memory.instances[0]!.revision - 1);
   });
 
@@ -497,5 +498,107 @@ describe("campaign revision concurrency", () => {
     ).rejects.toThrow("Campaign revision could not be persisted after concurrent updates");
     expect(memory.db.update).toHaveBeenCalledTimes(4);
     expect(memory.instances[0]!.revision).toBe(1);
+  });
+
+  it("merges Guardian completion onto a concurrently locked chapter instead of erasing it", async () => {
+    const seed = seedRowFromObjectives([followUpObjective]);
+    const followUpId = seed.chaptersJson[0].stableChapterId as string;
+    const finale = {
+      stableChapterId: "finale-territory-1",
+      chapterKind: "guardian_finale",
+      objectiveIds: [],
+      required: true,
+      hardAnchor: false,
+      campaignPhase: "climax",
+      eligibleGameplayBindings: ["guardian_finale"],
+      selectedGameplayBinding: "guardian_finale",
+      territoryId: "territory-1",
+      fictionalTreatment: "finale",
+      fictionTemplateId: null,
+      physicalAnchors: [],
+    };
+    seed.chaptersJson = [...seed.chaptersJson, finale];
+    const memory = memoryDb(seed);
+    mocks.getDb.mockResolvedValue(memory.db);
+    mocks.getFieldToday.mockResolvedValue(fieldToday({ timeline: [timelineItem("follow-up:88", "follow_up")] }));
+
+    const arrived = Promise.withResolvers<void>();
+    const hold = Promise.withResolvers<void>();
+    memory.onFirstUpdate(async () => {
+      arrived.resolve();
+      await hold.promise;
+    });
+
+    const guardian = recordCampaignGuardianFinaleForTerritory({
+      tenantId: "tenant-a",
+      operatorId: "driver-1",
+      territoryId: "territory-1",
+    });
+    await arrived.promise;
+    Object.assign(memory.instances[0]!, {
+      revision: 2,
+      inputFingerprint: "fp:concurrent-completion",
+      completedChapterIdsJson: [followUpId],
+      currentChapterId: finale.stableChapterId,
+    });
+    hold.resolve();
+    const result = await guardian;
+
+    expect(result.completed).toBe(true);
+    expect(result.chapterId).toBe(finale.stableChapterId);
+    expect(memory.instances[0]!.completedChapterIdsJson).toEqual(
+      expect.arrayContaining([followUpId, finale.stableChapterId])
+    );
+  });
+
+  it("does not pin a branch choice after the chapter has been revised away", async () => {
+    const memory = memoryDb(seedRowFromObjectives([pickupObjective, followUpObjective]));
+    mocks.getDb.mockResolvedValue(memory.db);
+    const chapters = memory.instances[0]!.chaptersJson as Array<{
+      stableChapterId: string;
+      required: boolean;
+    }>;
+    const optional = chapters.find(chapter => !chapter.required);
+    expect(optional).toBeTruthy();
+
+    const both = fieldToday({
+      timeline: [
+        timelineItem("pickup:1", "pickup", "new"),
+        timelineItem("follow-up:88", "follow_up"),
+      ],
+    });
+    const pickupOnly = fieldToday({
+      timeline: [timelineItem("pickup:1", "pickup", "new")],
+    });
+    let fieldTodayCalls = 0;
+    mocks.getFieldToday.mockImplementation(async () => {
+      fieldTodayCalls += 1;
+      return fieldTodayCalls === 1 ? both : pickupOnly;
+    });
+
+    const arrived = Promise.withResolvers<void>();
+    const hold = Promise.withResolvers<void>();
+    memory.onFirstUpdate(async () => {
+      arrived.resolve();
+      await hold.promise;
+    });
+
+    const branch = chooseCampaignBranch({
+      tenantId: "tenant-a",
+      operatorId: "driver-1",
+      chapterId: optional!.stableChapterId,
+    });
+    await arrived.promise;
+    await getOrMaterializeTodayCampaign({
+      tenantId: "tenant-a",
+      operatorId: "driver-1",
+    });
+    hold.resolve();
+    const result = await branch;
+
+    expect(result.campaign.chapters.some(chapter => chapter.stableChapterId === optional!.stableChapterId)).toBe(
+      false
+    );
+    expect(memory.instances[0]!.currentChapterId).not.toBe(optional!.stableChapterId);
   });
 });
