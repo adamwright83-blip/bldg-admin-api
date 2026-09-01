@@ -258,6 +258,7 @@ export function WorldEntityInspector({
     >
       <button
         className="owi-close"
+        onPointerDown={event => event.stopPropagation()}
         onClick={onClose}
         aria-label="Return to the same city location"
       >

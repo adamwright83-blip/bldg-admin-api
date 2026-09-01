@@ -103,7 +103,12 @@ export function useWorldCamera(options?: { disabled?: boolean }): WorldCamera {
         const current = cameraRef.current;
         // Reduced motion still arrives, it simply does not travel.
         const next = reducedMotionRef.current ? goal : approachCamera(current, goal, 0.18);
-        if (camerasAreClose(next, goal)) {
+        // Write the ref before React paints. On a loaded runner, rAF can
+        // fire again before the setState commit; without this the ease
+        // restarts from the same origin every frame and never lands.
+        const arrived = camerasAreClose(next, goal);
+        cameraRef.current = arrived ? goal : next;
+        if (arrived) {
           goalRef.current = null;
           setCamera(goal);
         } else {
@@ -172,8 +177,9 @@ export function useWorldCamera(options?: { disabled?: boolean }): WorldCamera {
         return;
       }
       if (touchesRef.current.size > 2) return;
-      goalRef.current = null;
-      momentumRef.current = null;
+      // A click must not cancel focus/restore. Closing the inspector sits
+      // over the map; if that pointer lands on the city, killing the goal
+      // here leaves the camera stuck on the building.
       pointerRef.current = {
         id: event.pointerId,
         lastX: event.clientX,
@@ -218,6 +224,8 @@ export function useWorldCamera(options?: { disabled?: boolean }): WorldCamera {
       if (!draggingRef.current) {
         draggingRef.current = true;
         setIsDragging(true);
+        goalRef.current = null;
+        momentumRef.current = null;
       }
       // The world owns this gesture now, so the page must not also scroll.
       event.preventDefault();

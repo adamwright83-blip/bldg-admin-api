@@ -153,7 +153,10 @@ export function WorldGeographySurface({
     illustrated atlas. Two cameras fighting for one gesture is worse than none.
   */
   const cameraIsLive = !googleVisible;
-  const camera = useWorldCamera({ disabled: googleVisible || gesturesDisabled });
+  const inspecting = Boolean(focusPoint) || Boolean(selectedBuildingId);
+  const camera = useWorldCamera({
+    disabled: googleVisible || gesturesDisabled || inspecting,
+  });
 
   // Focusing a building is a camera move, not a page navigation: the world
   // stays mounted underneath so closing the inspector returns to this exact view.
@@ -191,7 +194,7 @@ export function WorldGeographySurface({
         arcade explosion never shakes the HUD.
       */}
       <div
-        className={`cr-world-camera${camera.isDragging ? " is-dragging" : ""}`}
+        className={`cr-world-camera${camera.isDragging ? " is-dragging" : ""}${inspecting ? " is-inspecting" : ""}`}
         ref={camera.bind.ref}
       >
       <div className="cr-world-space" style={{ transform: cameraIsLive ? camera.transform : undefined }}>

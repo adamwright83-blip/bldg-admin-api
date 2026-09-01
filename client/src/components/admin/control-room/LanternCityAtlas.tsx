@@ -562,7 +562,7 @@ export default function LanternCityAtlas({
           />
         </WorldGeographySurface>
         <TerritoryChrome />
-        <CampaignChrome />
+        {selectedCluster || selectedPursuit || requestedEntity ? null : <CampaignChrome />}
       </section>
 
       {attentionRecommendations.length ? (

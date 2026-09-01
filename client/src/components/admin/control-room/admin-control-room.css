@@ -503,6 +503,7 @@
    the page does not scroll while the player is dragging Los Angeles. */
 .cr-world-camera{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab}
 .cr-world-camera.is-dragging{cursor:grabbing}
+.cr-world-camera.is-inspecting{pointer-events:none}
 .cr-world-space{position:absolute;inset:0;transform-origin:50% 50%;will-change:transform}
 .cr-world-camera-controls{position:absolute;z-index:30;right:12px;bottom:12px;display:flex;gap:6px}
 .cr-world-camera-controls button{display:grid;min-width:44px;min-height:44px;place-items:center;padding:0 12px;border:2px solid #d8b25c;border-radius:12px;background:#fffdf2;color:#17385e;font:900 12px Inter,sans-serif;cursor:pointer}
