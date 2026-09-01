@@ -29,8 +29,12 @@ describe("journal world actions", () => {
     expect(source).not.toMatch(/account_won|commercialPipeline|orders/);
   });
 
-  it("is invoked from Field Journal processing after commitments", () => {
+  it("records world actions before the journal is marked processed", () => {
     const source = readFileSync(join(__dirname, "fieldJournalProcessingService.ts"), "utf8");
     expect(source).toContain("recordJournalActionsOnMatchedEntities");
+    const actionIndex = source.indexOf("recordJournalActionsOnMatchedEntities");
+    const processedIndex = source.lastIndexOf('processingStatus: coaching.status');
+    expect(actionIndex).toBeGreaterThan(0);
+    expect(processedIndex).toBeGreaterThan(actionIndex);
   });
 });

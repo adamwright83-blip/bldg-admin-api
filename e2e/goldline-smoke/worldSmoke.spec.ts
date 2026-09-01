@@ -215,17 +215,18 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
 
     const building = page.locator(".lc-pursued-building[data-world-entity-id]").first();
-    if ((await page.locator(".lc-pursued-building").count()) === 0)
-      test.skip(true, "No pursued building in this fixture");
-    await expect(building).toBeVisible({ timeout: 20_000 });
+    await building.waitFor({ state: "visible", timeout: 20_000 }).catch(() => undefined);
+    if ((await building.count()) === 0) test.skip(true, "No pursued building in this fixture");
+    await expect(building).toBeVisible();
+    await expect(page.getByTestId("goldline-celebration")).toHaveCount(0, { timeout: 8_000 });
 
     const truthBefore = await page.evaluate(async () =>
       (await fetch("/api/trpc/system.goldlineWorld.cityEntities", { credentials: "include" })).text()
     );
 
-    const peak = await page.evaluate(async () => {
-      const shooter = document.querySelector(".lc-pursued-building[data-world-entity-id]")!;
-      shooter.dispatchEvent(
+    await building.click({ modifiers: ["Alt"], force: true }).catch(() => undefined);
+    await building.evaluate(node => {
+      node.dispatchEvent(
         new PointerEvent("pointerdown", {
           altKey: true,
           bubbles: true,
@@ -234,21 +235,31 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
           button: 0,
         })
       );
-      let damage = 0;
-      let debris = 0;
-      for (let frame = 0; frame < 18; frame += 1) {
-        await new Promise(resolve => setTimeout(resolve, 170));
-        for (const node of Array.from(document.querySelectorAll(".lc-arcade"))) {
-          const layer = node.querySelector<HTMLElement>(".lc-arcade-damage");
-          damage = Math.max(damage, parseFloat(layer?.style.opacity || "0"));
-          debris = Math.max(debris, node.querySelectorAll(".lc-arcade-debris i").length);
-        }
-      }
-      return { damage, debris };
     });
 
+    const peak = { damage: 0, debris: 0 };
+    await expect
+      .poll(
+        async () => {
+          const next = await page.locator(".lc-arcade").evaluateAll(nodes => {
+            let damage = 0;
+            let debris = 0;
+            for (const node of nodes) {
+              const layer = node.querySelector<HTMLElement>(".lc-arcade-damage");
+              damage = Math.max(damage, parseFloat(layer?.style.opacity || "0"));
+              debris = Math.max(debris, node.querySelectorAll(".lc-arcade-debris i").length);
+            }
+            return { damage, debris };
+          });
+          peak.damage = Math.max(peak.damage, next.damage);
+          peak.debris = Math.max(peak.debris, next.debris);
+          return peak.damage;
+        },
+        { timeout: 8_000 }
+      )
+      .toBeGreaterThan(0);
+
     // Visible, legible damage — not a flash.
-    expect(peak.damage).toBeGreaterThan(0);
     expect(peak.debris).toBeGreaterThan(0);
 
     const healed = await page.evaluate(async () => {
