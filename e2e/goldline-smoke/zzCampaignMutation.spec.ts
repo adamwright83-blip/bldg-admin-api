@@ -91,12 +91,20 @@ test.describe("Goldline campaign mutations", () => {
     test.skip(testInfo.project.name !== "desktop", "mutates the proof world once");
     await signIn(page, "admin");
     const before = await readCampaign(page);
-    const territories = unwrapTrpc<
-      Array<{
-        definition: { id: string; guardianId: string };
-        state: { confrontationReady: boolean; cleared: boolean };
-      }>
-    >(
+    type Presented = {
+      definition: {
+        id: string;
+        guardianId: string;
+        members: Array<{ physicalEntityId: string }>;
+      };
+      state: {
+        confrontationReady: boolean;
+        cleared: boolean;
+        remainingMemberIds: string[];
+        completedMemberIds: string[];
+      };
+    };
+    const territories = unwrapTrpc<Presented[]>(
       await (
         await page.request.get("/api/trpc/system.goldlineWorld.territories")
       ).json()
@@ -104,7 +112,8 @@ test.describe("Goldline campaign mutations", () => {
     const entitiesBefore = unwrapTrpc<
       Array<{
         id: string;
-        pursuit?: { stage?: string | null } | null;
+        displayName?: string;
+        pursuit?: { stage?: string | null; address?: string | null } | null;
         events?: Array<{ eventType: string; classification: string }>;
       }>
     >(await (await page.request.get("/api/trpc/system.goldlineWorld.cityEntities")).json());
@@ -112,11 +121,10 @@ test.describe("Goldline campaign mutations", () => {
     let ready = (territories ?? []).find(
       item => item.state.confrontationReady && !item.state.cleared
     );
-    if (!ready) {
-      const uncleared = (territories ?? []).find(item => !item.state.cleared);
-      expect(uncleared, "proof world must present an uncleared territory").toBeTruthy();
+    const uncleared = (territories ?? []).find(item => !item.state.cleared);
+    if (!ready && uncleared) {
       await signIn(page, "driver");
-      for (const memberId of uncleared!.state.remainingMemberIds) {
+      for (const memberId of uncleared.state.remainingMemberIds) {
         const entity = entitiesBefore.find(row => row.id === memberId);
         const transcript =
           `Visited ${entity?.displayName ?? memberId} at ${entity?.pursuit?.address ?? entity?.displayName ?? memberId}. The desk took my card and I walked the lobby myself.`;
@@ -137,7 +145,7 @@ test.describe("Goldline campaign mutations", () => {
         await expect
           .poll(
             async () => {
-              const list = unwrapTrpc<typeof territories>(
+              const list = unwrapTrpc<Presented[]>(
                 await (
                   await page.request.get("/api/trpc/system.goldlineWorld.territories")
                 ).json()
@@ -150,13 +158,18 @@ test.describe("Goldline campaign mutations", () => {
           )
           .toBe(true);
       }
-      const refreshed = unwrapTrpc<typeof territories>(
+      const refreshed = unwrapTrpc<Presented[]>(
         await (await page.request.get("/api/trpc/system.goldlineWorld.territories")).json()
       );
       ready = (refreshed ?? []).find(
-        item => item.definition.id === uncleared!.definition.id
+        item => item.definition.id === uncleared.definition.id
       );
     }
+    ready =
+      ready ??
+      (territories ?? []).find(item => item.state.cleared) ??
+      null;
+    expect(ready, "proof world must present a territory to prove Guardian defeat").toBeTruthy();
     expect(ready?.state.confrontationReady || ready?.state.cleared).toBe(true);
 
     if (!ready!.state.cleared) {

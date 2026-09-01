@@ -97,6 +97,15 @@ describe("deterministic extraction refuses to invent", () => {
     return extractFieldJournalDeterministically(transcript);
   };
 
+  it("reads the Field Journal smoke visit onto the hunt address", () => {
+    const result = run(
+      "Visited La Cienega Court at 1520 S La Cienega Blvd, Los Angeles, CA. The desk took my card and I walked the lobby myself."
+    );
+    expect(result.actions.some(action => action.type === "visited")).toBe(true);
+    expect(result.entities[0]!.propertyName?.value).toBe("La Cienega Court");
+    expect(result.entities[0]!.addressClue?.value).toBe("1520 S La Cienega Blvd");
+  });
+
   it("reads the property and address the transcript actually contains", () => {
     const result = run(
       "Visited The Louise at 1450 S La Cienega Blvd this morning, nice courtyard and brick facade."

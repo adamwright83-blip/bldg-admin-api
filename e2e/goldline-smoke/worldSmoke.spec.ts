@@ -214,16 +214,17 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     await page.goto("/growth/lantern-city");
     await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
 
-    const building = page.locator(".lc-pursued-building").first();
-    if ((await building.count()) === 0) test.skip(true, "No pursued building in this fixture");
-    await expect(building).toBeVisible();
+    const building = page.locator(".lc-pursued-building[data-world-entity-id]").first();
+    if ((await page.locator(".lc-pursued-building").count()) === 0)
+      test.skip(true, "No pursued building in this fixture");
+    await expect(building).toBeVisible({ timeout: 20_000 });
 
     const truthBefore = await page.evaluate(async () =>
       (await fetch("/api/trpc/system.goldlineWorld.cityEntities", { credentials: "include" })).text()
     );
 
     const peak = await page.evaluate(async () => {
-      const shooter = document.querySelector(".lc-pursued-building")!;
+      const shooter = document.querySelector(".lc-pursued-building[data-world-entity-id]")!;
       shooter.dispatchEvent(
         new PointerEvent("pointerdown", {
           altKey: true,

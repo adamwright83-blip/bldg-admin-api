@@ -476,15 +476,16 @@ export default function LanternCityAtlas({
               type="button"
               key={item.pipelineId}
               ref={worldEntity?.id === requestedEntityId ? revealRef : undefined}
-              className={worldMarkerClass(
-                `lc-pursued-building${worldEntity?.canonicalAsset?.assetUrl ? " has-published-art" : ""}`,
-                worldEntity,
-                revealing && worldEntity?.id === requestedEntityId
-              )}
-              style={{
-                left: `${item.location!.x}%`,
-                top: `${item.location!.y}%`,
-              }}
+                className={worldMarkerClass(
+                  `lc-pursued-building${worldEntity?.canonicalAsset?.assetUrl ? " has-published-art" : ""}`,
+                  worldEntity,
+                  revealing && worldEntity?.id === requestedEntityId
+                )}
+                data-world-entity-id={worldEntity?.id}
+                style={{
+                  left: `${item.location!.x}%`,
+                  top: `${item.location!.y}%`,
+                }}
               onClick={() => {
                 setSelectedCluster(null);
                 setSelectedPursuit(item);

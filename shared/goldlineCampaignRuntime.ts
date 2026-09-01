@@ -104,7 +104,7 @@ export function projectStopsOntoCampaign<T extends { id: string }>(
 }
 
 function rankForStop(stopId: string, rank: Map<string, number>): number {
-  for (const [objectiveId, value] of rank) {
+  for (const [objectiveId, value] of Array.from(rank.entries())) {
     if (dayPlanStopMatchesObjective(stopId, objectiveId)) return value;
   }
   return Number.MAX_SAFE_INTEGER;
