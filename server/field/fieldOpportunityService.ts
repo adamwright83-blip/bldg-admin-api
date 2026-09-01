@@ -20,6 +20,11 @@ export function rankFieldMoves(input: {
     if (candidate.withinServiceRadius === false) return false;
     if (candidate.expiresAt && Date.parse(candidate.expiresAt) <= input.now.getTime()) return false;
     if (input.capacityFull && candidate.moveType === "nearby_commercial_visit") return false;
+    // A visit is only a *nearby* move when current geography proves that claim.
+    // Without a current position, keep the real prospect in the system but do
+    // not turn it into an immediate field recommendation. Calls remain eligible
+    // because they do not depend on spatial certainty.
+    if (candidate.moveType === "nearby_commercial_visit" && !input.currentLocationAvailable) return false;
     const burden = candidate.expectedDurationMinutes + (candidate.travelMinutes ?? 0);
     return availableMinutes === null || burden <= availableMinutes;
   });
