@@ -150,6 +150,10 @@ export function compileGoldlineCampaign(input: CampaignCompileInput): CampaignDr
       ...input.objectives.filter(item => item.status === "completed").map(item => item.id),
     ])
   ).sort();
+  const clearedTerritoryIds = (input.territories ?? [])
+    .filter(territory => territory.cleared)
+    .map(territory => territory.territoryId)
+    .sort();
   return {
     tenantId: input.tenantId,
     operatorId: input.operatorId,
@@ -166,5 +170,6 @@ export function compileGoldlineCampaign(input: CampaignCompileInput): CampaignDr
     status: readyCount === 0 ? "quiet" : "authored",
     endingTreatment: null,
     authoritativeCompletedObjectiveIds,
+    clearedTerritoryIds,
   };
 }
