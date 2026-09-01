@@ -15,8 +15,22 @@ type CampaignPresentation = {
     revision: number;
     inputFingerprint: string;
     campaignArchetypeId: string;
+    currentChapterId: string | null;
+    completedChapterIds: string[];
+    chapters: Array<{
+      stableChapterId: string;
+      chapterKind: string;
+      territoryId: string | null;
+    }>;
   };
   lastRevision: { reasonCodes: string[] } | null;
+};
+
+type GuardianDefeatResult = {
+  recorded: boolean;
+  reason: string;
+  campaignChapterCompleted: boolean;
+  completedCampaignChapterId: string | null;
 };
 
 function unwrapTrpc<T>(payload: unknown): T {
@@ -41,10 +55,22 @@ async function readCampaign(page: Page): Promise<CampaignPresentation> {
   return unwrapTrpc<CampaignPresentation>(await response.json());
 }
 
+async function defeatGuardian(
+  page: Page,
+  input: { territoryId: string; guardianId: string; confrontationReady: boolean }
+): Promise<GuardianDefeatResult> {
+  const response = await page.request.post("/api/trpc/system.goldlineWorld.recordGuardianDefeat", {
+    data: { json: input },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  return unwrapTrpc<GuardianDefeatResult>(await response.json());
+}
+
 test.describe("Goldline campaign mutations", () => {
   test.beforeEach(async ({ request }) => {
     await resetGoldlineProofWorld(request);
   });
+
   test("a new real pickup revises future only", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "mutates the proof world once");
     await signIn(page, "driver");
@@ -88,7 +114,7 @@ test.describe("Goldline campaign mutations", () => {
     }
   });
 
-  test("guardian defeat does not rewrite campaign identity or invent a sale", async ({
+  test("guardian defeat is server-authoritative, ordered, retry-safe, and never invents a sale", async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "mutates the proof world once");
@@ -168,30 +194,56 @@ test.describe("Goldline campaign mutations", () => {
         item => item.definition.id === uncleared.definition.id
       );
     }
-    ready =
-      ready ??
-      (territories ?? []).find(item => item.state.cleared) ??
-      null;
-    expect(ready, "proof world must present a territory to prove Guardian defeat").toBeTruthy();
-    expect(ready?.state.confrontationReady || ready?.state.cleared).toBe(true);
+    expect(ready, "proof world must present an uncleared territory to prove Guardian ordering").toBeTruthy();
+    expect(ready?.state.confrontationReady).toBe(true);
+    expect(ready?.state.cleared).toBe(false);
 
-    if (!ready!.state.cleared) {
-      const defeat = await page.request.post("/api/trpc/system.goldlineWorld.recordGuardianDefeat", {
-        data: {
-          json: {
-            territoryId: ready!.definition.id,
-            guardianId: ready!.definition.guardianId,
-            confrontationReady: true,
-          },
-        },
-      });
-      expect(defeat.ok(), await defeat.text()).toBeTruthy();
-    }
+    await signIn(page, "admin");
+    const campaignAtFinale = await readCampaign(page);
+    const finale = campaignAtFinale.campaign.chapters.find(
+      chapter => chapter.chapterKind === "guardian_finale" && chapter.territoryId === ready!.definition.id
+    );
+    expect(finale, "derived-ready territory must produce a persisted campaign finale").toBeTruthy();
+    expect(campaignAtFinale.campaign.completedChapterIds).not.toContain(finale!.stableChapterId);
+
+    // Invalid defeat cannot complete the campaign finale.
+    const rejected = await defeatGuardian(page, {
+      territoryId: ready!.definition.id,
+      guardianId: ready!.definition.guardianId,
+      confrontationReady: false,
+    });
+    expect(rejected.recorded).toBe(false);
+    expect(rejected.campaignChapterCompleted).toBe(false);
+    const afterRejected = await readCampaign(page);
+    expect(afterRejected.campaign.completedChapterIds).not.toContain(finale!.stableChapterId);
+
+    // The client intentionally supplies no campaignChapterId. Server resolves it.
+    const defeated = await defeatGuardian(page, {
+      territoryId: ready!.definition.id,
+      guardianId: ready!.definition.guardianId,
+      confrontationReady: true,
+    });
+    expect(defeated.recorded).toBe(true);
+    expect(defeated.campaignChapterCompleted).toBe(true);
+    expect(defeated.completedCampaignChapterId).toBe(finale!.stableChapterId);
+
+    const afterDefeat = await readCampaign(page);
+    expect(afterDefeat.campaign.completedChapterIds).toContain(finale!.stableChapterId);
+
+    // Retry after territory is already cleared repairs/retains campaign history.
+    const retry = await defeatGuardian(page, {
+      territoryId: ready!.definition.id,
+      guardianId: ready!.definition.guardianId,
+      confrontationReady: true,
+    });
+    expect(retry.recorded).toBe(true);
+    expect(retry.campaignChapterCompleted).toBe(true);
+    expect(retry.completedCampaignChapterId).toBe(finale!.stableChapterId);
+
     const after = await readCampaign(page);
     expect(after.campaign.id).toBe(before.campaign.id);
     expect(after.campaign.title).toBe(before.campaign.title);
 
-    await signIn(page, "admin");
     const entitiesAfterResponse = await page.request.get(
       "/api/trpc/system.goldlineWorld.cityEntities"
     );
