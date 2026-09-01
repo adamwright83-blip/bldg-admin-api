@@ -119,5 +119,8 @@ export function selectCampaignArchetype(input: {
   if (territoryOpen && visits.length >= 2 && fixed.length === 0) return "six_doors";
   if (fixed.length >= 1 && (visits.length >= 1 || territoryOpen || recoveries.length >= 1)) return "broken_crown";
   if (recoveries.length >= 1 && fixed.length === 0) return "ghost_signal";
+  if ((input.territories ?? []).some(item => item.confrontationReady && !item.cleared)) {
+    return "six_doors";
+  }
   return "open_sky";
 }

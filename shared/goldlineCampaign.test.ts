@@ -191,6 +191,26 @@ describe("compileGoldlineCampaign", () => {
     expect(draft.title).toBe("OPEN SKY");
   });
 
+  it("does not mark a Guardian-only campaign quiet", () => {
+    const draft = compile(
+      [],
+      [
+        {
+          territoryId: "t1",
+          memberPhysicalEntityIds: ["p-a"],
+          confrontationReady: true,
+          cleared: false,
+        },
+      ]
+    );
+    expect(draft.chapters.some(chapter => chapter.chapterKind === "guardian_finale")).toBe(true);
+    expect(draft.status).not.toBe("quiet");
+    expect(draft.status).toBe("authored");
+    expect(draft.campaignArchetypeId).toBe("six_doors");
+    expect(draft.title).not.toBe("OPEN SKY");
+    expect(draft.currentChapterId).toBe(draft.chapters[0]!.stableChapterId);
+  });
+
   it("carries yesterday's crown forward only when history supports it", () => {
     const draft = compile(
       [

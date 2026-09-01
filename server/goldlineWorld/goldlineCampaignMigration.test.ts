@@ -63,6 +63,7 @@ describe("campaign publish concurrency", () => {
     expect(source).toContain("loadTodayCampaignDraft(input)");
     expect(source).toContain("campaignSnapshotStillMatches(campaign)");
     expect(source).toContain("campaignSnapshotStillMatches(presented.campaign)");
+    expect(source).toContain("created.inputFingerprint === loaded.draft.inputFingerprint");
   });
 });
 

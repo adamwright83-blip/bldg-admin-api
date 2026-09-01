@@ -139,7 +139,6 @@ export function compileGoldlineCampaign(input: CampaignCompileInput): CampaignDr
       physicalAnchors: [],
     });
   }
-  const readyCount = input.objectives.filter(item => item.status === "ready").length;
   const continuityTitle =
     input.priorCampaignTitle === "THE BROKEN CROWN" && archetypeId === "broken_crown"
       ? "AFTER THE CROWN"
@@ -162,12 +161,12 @@ export function compileGoldlineCampaign(input: CampaignCompileInput): CampaignDr
     campaignArchetypeId: archetypeId,
     stableKey: campaignStableKey(input),
     inputFingerprint: campaignInputFingerprint(input),
-    title: readyCount === 0 ? "OPEN SKY" : continuityTitle ?? archetype.name,
-    premise: readyCount === 0 ? CAMPAIGN_ARCHETYPES.open_sky.premise : archetype.premise,
+    title: chapters.length === 0 ? "OPEN SKY" : continuityTitle ?? archetype.name,
+    premise: chapters.length === 0 ? CAMPAIGN_ARCHETYPES.open_sky.premise : archetype.premise,
     chapters,
     currentChapterId: chapters[0]?.stableChapterId ?? null,
     completedChapterIds: [],
-    status: readyCount === 0 ? "quiet" : "authored",
+    status: chapters.length === 0 ? "quiet" : "authored",
     endingTreatment: null,
     authoritativeCompletedObjectiveIds,
     clearedTerritoryIds,

@@ -202,12 +202,16 @@ function seedRowFromObjectives(
   };
 }
 
-function memoryDb(seed: Row) {
-  const instances: Row[] = [{ ...seed, chaptersJson: structuredClone(seed.chaptersJson) }];
+function memoryDb(seed: Row | null = null) {
+  const instances: Row[] = seed
+    ? [{ ...seed, chaptersJson: structuredClone(seed.chaptersJson) }]
+    : [];
   const revisions: Row[] = [];
   let failNextRevisionInsert = false;
   let beforeFirstUpdate: (() => Promise<void>) | null = null;
   let firstUpdateSeen = false;
+  let beforeFirstInsert: (() => Promise<void>) | null = null;
+  let firstInsertSeen = false;
 
   const db: any = {
     select: vi.fn(() => ({
@@ -260,7 +264,30 @@ function memoryDb(seed: Row) {
       }
       revisions.push({ ...value });
     } else if (table === goldlineCampaignInstances) {
-      instances.push({ ...value });
+      if (beforeFirstInsert && !firstInsertSeen) {
+        firstInsertSeen = true;
+        await beforeFirstInsert();
+      }
+      if (
+        instances.some(
+          row =>
+            row.tenantId === value.tenantId &&
+            row.businessDate === value.businessDate &&
+            Number(row.rulesVersion) === Number(value.rulesVersion)
+        )
+      ) {
+        const error = new Error("Duplicate entry");
+        (error as { code?: string }).code = "ER_DUP_ENTRY";
+        throw error;
+      }
+      instances.push({
+        ...value,
+        createdAt: value.createdAt instanceof Date ? value.createdAt : new Date("2026-09-01T08:00:00.000Z"),
+        startedAt: value.startedAt ?? null,
+        completedAt: value.completedAt ?? null,
+        completedChapterIdsJson: value.completedChapterIdsJson ?? [],
+        chaptersJson: value.chaptersJson ?? [],
+      });
     }
   }
 
@@ -327,6 +354,10 @@ function memoryDb(seed: Row) {
     onFirstUpdate(gate: () => Promise<void>) {
       firstUpdateSeen = false;
       beforeFirstUpdate = gate;
+    },
+    onFirstInsert(gate: () => Promise<void>) {
+      firstInsertSeen = false;
+      beforeFirstInsert = gate;
     },
   };
 }
@@ -600,5 +631,44 @@ describe("campaign revision concurrency", () => {
       false
     );
     expect(memory.instances[0]!.currentChapterId).not.toBe(optional!.stableChapterId);
+  });
+
+  it("reconciles a newer draft when the first-day insert lost a uniqueness race", async () => {
+    const memory = memoryDb(null);
+    mocks.getDb.mockResolvedValue(memory.db);
+    const pickupToday = fieldToday({
+      timeline: [timelineItem("pickup:1", "pickup", "new")],
+    });
+    const emptyToday = fieldToday({ timeline: [] });
+    let fieldTodayCalls = 0;
+    mocks.getFieldToday.mockImplementation(async () => {
+      fieldTodayCalls += 1;
+      return fieldTodayCalls === 2 ? emptyToday : pickupToday;
+    });
+
+    const arrived = Promise.withResolvers<void>();
+    const hold = Promise.withResolvers<void>();
+    memory.onFirstInsert(async () => {
+      arrived.resolve();
+      await hold.promise;
+    });
+
+    const newer = getOrMaterializeTodayCampaign({
+      tenantId: "tenant-a",
+      operatorId: "driver-1",
+    });
+    await arrived.promise;
+    await getOrMaterializeTodayCampaign({
+      tenantId: "tenant-a",
+      operatorId: "driver-1",
+    });
+    hold.resolve();
+    const result = await newer;
+
+    expect(result.campaign.chapters.some(chapter => chapter.objectiveIds.includes("pickup:1"))).toBe(
+      true
+    );
+    expect(result.campaign.status).not.toBe("quiet");
+    expect(memory.instances).toHaveLength(1);
   });
 });

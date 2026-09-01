@@ -527,7 +527,11 @@ export async function getOrMaterializeTodayCampaign(input: {
       startedAt: loaded.draft.status === "quiet" ? null : new Date().toISOString(),
       completedAt: null,
     });
-    return present(created, null, loaded.travel.providerState);
+    if (created.inputFingerprint === loaded.draft.inputFingerprint) {
+      return present(created, null, loaded.travel.providerState);
+    }
+    existing = created;
+    loaded = await loadTodayCampaignDraft(input);
   }
 
   for (let attempt = 1; attempt <= MAX_CAMPAIGN_REVISION_ATTEMPTS; attempt += 1) {
