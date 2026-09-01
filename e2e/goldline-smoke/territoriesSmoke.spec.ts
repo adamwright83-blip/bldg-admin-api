@@ -8,6 +8,7 @@
  */
 
 import { expect, test, type Page } from "@playwright/test";
+import { resetGoldlineProofWorld } from "./proofWorld";
 
 const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "goldline-proof-admin-pass";
@@ -151,6 +152,9 @@ async function waitForMemberCompleted(page: Page, physicalEntityId: string) {
 }
 
 test.describe("Goldline territories smoke", () => {
+  test.beforeAll(async ({ request }) => {
+    await resetGoldlineProofWorld(request);
+  });
   test("compiler publishes a stable real-member territory", async ({ page }) => {
     await signIn(page, "admin");
     await page.goto("/growth/lantern-city");

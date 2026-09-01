@@ -154,32 +154,48 @@ export function WorldGeographySurface({
   */
   const cameraIsLive = !googleVisible;
   const inspecting = Boolean(focusPoint) || Boolean(selectedBuildingId);
-  const camera = useWorldCamera({
-    disabled: googleVisible || gesturesDisabled || inspecting,
-  });
-
-  // Focusing a building is a camera move, not a page navigation: the world
-  // stays mounted underneath so closing the inspector returns to this exact view.
+  const [mapAcceptsPointers, setMapAcceptsPointers] = useState(true);
   useEffect(() => {
-    if (!cameraIsLive) return;
-    if (!selectedBuildingId) {
-      camera.restore();
+    if (inspecting) {
+      setMapAcceptsPointers(false);
       return;
     }
-    const tower = CANONICAL_TOWERS.find(item => item.id === selectedBuildingId);
-    if (!tower) return;
-    const point = projectLatLngToLanternAtlas(tower);
-    if (point.outOfBounds) return;
-    camera.focusOn({ x: point.x / 100, y: point.y / 100 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBuildingId, cameraIsLive]);
+    let cancelled = false;
+    const outer = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!cancelled) setMapAcceptsPointers(true);
+      });
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(outer);
+    };
+  }, [inspecting]);
+  const suppressMap = inspecting || !mapAcceptsPointers;
+  const camera = useWorldCamera({
+    disabled: googleVisible || gesturesDisabled || suppressMap,
+  });
 
+  // Inspect is a camera mode, not a page navigation. Enter snapshots the free
+  // pose once; exit snaps back to it. Closing the inspector cannot click
+  // through into a pan because the host ignores pointers while inspecting.
   useEffect(() => {
     if (!cameraIsLive) return;
-    if (focusPoint) camera.focusOn({ x: focusPoint.x / 100, y: focusPoint.y / 100 });
-    else if (!selectedBuildingId) camera.restore();
+    if (focusPoint) {
+      camera.enterInspect({ x: focusPoint.x / 100, y: focusPoint.y / 100 });
+      return;
+    }
+    if (selectedBuildingId) {
+      const tower = CANONICAL_TOWERS.find(item => item.id === selectedBuildingId);
+      if (!tower) return;
+      const point = projectLatLngToLanternAtlas(tower);
+      if (point.outOfBounds) return;
+      camera.enterInspect({ x: point.x / 100, y: point.y / 100 });
+      return;
+    }
+    camera.exitInspect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusPoint?.x, focusPoint?.y, cameraIsLive]);
+  }, [focusPoint?.x, focusPoint?.y, selectedBuildingId, cameraIsLive]);
 
   return (
     <div
@@ -194,7 +210,8 @@ export function WorldGeographySurface({
         arcade explosion never shakes the HUD.
       */}
       <div
-        className={`cr-world-camera${camera.isDragging ? " is-dragging" : ""}${inspecting ? " is-inspecting" : ""}`}
+        className={`cr-world-camera${camera.isDragging ? " is-dragging" : ""}${suppressMap ? " is-inspecting" : ""}`}
+        data-camera-mode={camera.mode}
         ref={camera.bind.ref}
       >
       <div className="cr-world-space" style={{ transform: cameraIsLive ? camera.transform : undefined }}>

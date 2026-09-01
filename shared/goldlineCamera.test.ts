@@ -110,6 +110,13 @@ describe("the transform handed to the scene", () => {
     const transform = cameraTransform({ x: 0.6, y: 0.5, scale: 1 });
     expect(transform).toContain("translate(-10%");
   });
+
+  it("snapping back to a legal pose is exact, so inspect restore can match the pre-inspect view", () => {
+    const zoomed = zoomCameraToward(DEFAULT_CAMERA, 2.1, { x: 0.42, y: 0.37 });
+    const posed = panCamera(zoomed, 0.08, -0.05);
+    expect(clampCamera(posed)).toEqual(posed);
+    expect(cameraTransform(clampCamera({ ...posed }))).toBe(cameraTransform(posed));
+  });
 });
 
 describe("pinch arithmetic", () => {

@@ -39,6 +39,18 @@ describe("proof mode cannot reach production", () => {
     expect(goldlineProofModeEnabled()).toBe(true);
   });
 
+  it("gates proof-world reset behind proof mode and admin", async () => {
+    const { readFileSync } = await import("node:fs");
+    const router = readFileSync("server/goldlineWorld/goldlineWorldRouter.ts", "utf8");
+    const impl = readFileSync("server/goldlineWorld/goldlineProofWorld.ts", "utf8");
+    expect(router).toContain("resetProofWorld: dayforgeTenantAdminProcedure");
+    expect(impl).toContain("assertProofModeAllowed(\"resetProofWorld\")");
+    const seed = readFileSync("scripts/goldline-living-world-proof-seed.ts", "utf8");
+    expect(seed).toContain("goldline-living-world-proof-seed");
+    expect(seed).toContain("process.argv[1]");
+    expect(seed).not.toContain("fileURLToPath(import.meta.url) === path.resolve");
+  });
+
   it("never hands production the deterministic tower image adapter", () => {
     process.env.NODE_ENV = "production";
     process.env.GOLDLINE_PROOF_MODE = "1";

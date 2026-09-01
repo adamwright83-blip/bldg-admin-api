@@ -35,6 +35,11 @@ export type WorldCamera = {
   camera: Camera;
   transform: string;
   isDragging: boolean;
+  mode: "free" | "inspecting";
+  /** Frame a place as inspect. Snapshots the free pose once. */
+  enterInspect: (target: { x: number; y: number }, scale?: number) => void;
+  /** Leave inspect and snap back to the pose captured on enter. */
+  exitInspect: () => void;
   /** Move the view to a place, remembering where it came from. */
   focusOn: (target: { x: number; y: number }, scale?: number) => void;
   /** Return to wherever the view was before the last focus. */
@@ -51,15 +56,22 @@ export function useWorldCamera(options?: { disabled?: boolean }): WorldCamera {
   const disabled = options?.disabled ?? false;
   const [camera, setCamera] = useState<Camera>(DEFAULT_CAMERA);
   const [isDragging, setIsDragging] = useState(false);
+  const [mode, setMode] = useState<"free" | "inspecting">("free");
 
   const hostRef = useRef<HTMLElement | null>(null);
   const cameraRef = useRef(camera);
-  cameraRef.current = camera;
-
   /** Where the view was before a focus, so closing an inspector can return. */
   const previousRef = useRef<Camera | null>(null);
   const goalRef = useRef<Camera | null>(null);
   const momentumRef = useRef<Momentum | null>(null);
+  const inspectModeRef = useRef(false);
+  /** Pose at the start of the gesture that opened inspect — not a mid-click pan. */
+  const pendingFreePoseRef = useRef<Camera | null>(null);
+  // The animation loop writes cameraRef before React commits. Syncing from
+  // state while easing/gliding would clobber that pose and poison restore.
+  if (!goalRef.current && !momentumRef.current) {
+    cameraRef.current = camera;
+  }
   const frameRef = useRef<number | null>(null);
   const pointerRef = useRef<{
     id: number;
@@ -117,7 +129,9 @@ export function useWorldCamera(options?: { disabled?: boolean }): WorldCamera {
         }
       } else if (momentumRef.current) {
         const momentum = momentumRef.current;
-        setCamera(current => panCamera(current, momentum.x, momentum.y));
+        const next = panCamera(cameraRef.current, momentum.x, momentum.y);
+        cameraRef.current = next;
+        setCamera(next);
         momentumRef.current = stepMomentum(momentum);
         active = momentumRef.current !== null;
       }
@@ -166,6 +180,8 @@ export function useWorldCamera(options?: { disabled?: boolean }): WorldCamera {
 
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0 && event.pointerType === "mouse") return;
+      if (inspectModeRef.current) return;
+      pendingFreePoseRef.current = { ...cameraRef.current };
       touchesRef.current.set(event.pointerId, {
         clientX: event.clientX,
         clientY: event.clientY,
@@ -204,7 +220,11 @@ export function useWorldCamera(options?: { disabled?: boolean }): WorldCamera {
         pinchRef.current = { distance: next };
         const centre = touchCentroid(a!, b!);
         const focus = viewportFraction(centre.clientX, centre.clientY);
-        setCamera(current => zoomCameraToward(current, factor, focus));
+        setCamera(current => {
+          const next = zoomCameraToward(current, factor, focus);
+          cameraRef.current = next;
+          return next;
+        });
         event.preventDefault();
         return;
       }
@@ -230,7 +250,11 @@ export function useWorldCamera(options?: { disabled?: boolean }): WorldCamera {
       // The world owns this gesture now, so the page must not also scroll.
       event.preventDefault();
       momentumRef.current = { x: dx, y: dy };
-      setCamera(current => panCamera(current, -dx, -dy));
+      setCamera(current => {
+        const next = panCamera(current, -dx, -dy);
+        cameraRef.current = next;
+        return next;
+      });
     };
 
     const endPointer = (event: PointerEvent) => {
@@ -256,7 +280,11 @@ export function useWorldCamera(options?: { disabled?: boolean }): WorldCamera {
       const factor = Math.exp(-event.deltaY * 0.0016);
       goalRef.current = null;
       momentumRef.current = null;
-      setCamera(current => zoomCameraToward(current, factor, focus));
+      setCamera(current => {
+        const next = zoomCameraToward(current, factor, focus);
+        cameraRef.current = next;
+        return next;
+      });
     };
 
     host.addEventListener("pointerdown", onPointerDown);
@@ -276,23 +304,32 @@ export function useWorldCamera(options?: { disabled?: boolean }): WorldCamera {
     };
   }, [disabled, ensureLoop, viewportFraction]);
 
-  const focusOn = useCallback(
+  const enterInspect = useCallback(
     (target: { x: number; y: number }, scale = 2.4) => {
-      // Remember where we were, so closing the inspector can come back here.
       momentumRef.current = null;
-      if (!previousRef.current) previousRef.current = cameraRef.current;
+      goalRef.current = null;
+      if (!inspectModeRef.current) {
+        previousRef.current = {
+          ...(pendingFreePoseRef.current ?? cameraRef.current),
+        };
+        pendingFreePoseRef.current = null;
+        inspectModeRef.current = true;
+        setMode("inspecting");
+      }
       goalRef.current = focusCameraOn(target, scale);
       ensureLoop();
     },
     [ensureLoop]
   );
 
-  const restore = useCallback(() => {
+  const exitInspect = useCallback(() => {
+    if (!inspectModeRef.current) return;
+    inspectModeRef.current = false;
+    pendingFreePoseRef.current = null;
+    setMode("free");
     const previous = previousRef.current;
     previousRef.current = null;
     if (!previous) return;
-    // Return is a place, not a journey. Easing back on a loaded runner
-    // never quite landed inside the smoke thresholds; snapping does.
     const next = clampCamera(previous);
     cameraRef.current = next;
     goalRef.current = null;
@@ -300,25 +337,42 @@ export function useWorldCamera(options?: { disabled?: boolean }): WorldCamera {
     setCamera(next);
   }, []);
 
+  const focusOn = useCallback(
+    (target: { x: number; y: number }, scale = 2.4) => {
+      enterInspect(target, scale);
+    },
+    [enterInspect]
+  );
+
+  const restore = useCallback(() => {
+    exitInspect();
+  }, [exitInspect]);
+
   const reset = useCallback(() => {
+    inspectModeRef.current = false;
+    setMode("free");
     previousRef.current = null;
     goalRef.current = DEFAULT_CAMERA;
     momentumRef.current = null;
     ensureLoop();
   }, [ensureLoop]);
 
-  const zoomBy = useCallback(
-    (factor: number) => {
-      goalRef.current = null;
-      setCamera(current => zoomCameraToward(current, factor, { x: 0.5, y: 0.5 }));
-    },
-    []
-  );
+  const zoomBy = useCallback((factor: number) => {
+    goalRef.current = null;
+    setCamera(current => {
+      const next = zoomCameraToward(current, factor, { x: 0.5, y: 0.5 });
+      cameraRef.current = next;
+      return next;
+    });
+  }, []);
 
   return {
     camera,
     transform: cameraTransform(camera),
     isDragging,
+    mode,
+    enterInspect,
+    exitInspect,
     focusOn,
     restore,
     reset,

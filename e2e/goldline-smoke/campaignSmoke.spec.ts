@@ -6,6 +6,7 @@
  */
 
 import { expect, test, type Page } from "@playwright/test";
+import { resetGoldlineProofWorld } from "./proofWorld";
 
 const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "goldline-proof-admin-pass";
@@ -52,6 +53,9 @@ async function readCampaign(page: Page): Promise<CampaignPresentation> {
 }
 
 test.describe("Goldline campaign smoke", () => {
+  test.beforeAll(async ({ request }) => {
+    await resetGoldlineProofWorld(request);
+  });
   test("two first reads share one campaign identity", async ({ page }) => {
     await signIn(page, "driver");
     const [a, b] = await Promise.all([readCampaign(page), readCampaign(page)]);
@@ -63,6 +67,11 @@ test.describe("Goldline campaign smoke", () => {
       id.startsWith("fake-")
     );
     expect(invented).toBe(false);
+    expect(
+      a.campaign.chapters.every(
+        (chapter, index) => !chapter.stableChapterId.endsWith(`:${index}`)
+      )
+    ).toBe(true);
   });
 
   test("refresh does not create a revision", async ({ page }) => {

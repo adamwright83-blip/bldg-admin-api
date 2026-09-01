@@ -1,9 +1,9 @@
 /**
- * Mutating campaign proofs run after world/territory smokes so they cannot
- * poison the tower-truth snapshot.
+ * Mutating campaign proofs. Isolation is a proof-world reset, not file order.
  */
 
 import { expect, test, type Page } from "@playwright/test";
+import { resetGoldlineProofWorld } from "./proofWorld";
 
 const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "goldline-proof-admin-pass";
@@ -42,6 +42,9 @@ async function readCampaign(page: Page): Promise<CampaignPresentation> {
 }
 
 test.describe("Goldline campaign mutations", () => {
+  test.beforeEach(async ({ request }) => {
+    await resetGoldlineProofWorld(request);
+  });
   test("a new real pickup revises future only", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "mutates the proof world once");
     await signIn(page, "driver");
@@ -188,9 +191,13 @@ test.describe("Goldline campaign mutations", () => {
     expect(after.campaign.id).toBe(before.campaign.id);
     expect(after.campaign.title).toBe(before.campaign.title);
 
-    const entitiesAfter = unwrapTrpc<typeof entitiesBefore>(
-      await (await page.request.get("/api/trpc/system.goldlineWorld.cityEntities")).json()
+    await signIn(page, "admin");
+    const entitiesAfterResponse = await page.request.get(
+      "/api/trpc/system.goldlineWorld.cityEntities"
     );
+    expect(entitiesAfterResponse.ok(), await entitiesAfterResponse.text()).toBeTruthy();
+    const entitiesAfter =
+      unwrapTrpc<typeof entitiesBefore>(await entitiesAfterResponse.json()) ?? [];
     for (const member of ready!.definition.members ?? []) {
       const beforeEntity = entitiesBefore.find(row => row.id === member.physicalEntityId);
       const afterEntity = entitiesAfter.find(row => row.id === member.physicalEntityId);

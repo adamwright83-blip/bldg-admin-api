@@ -24,6 +24,7 @@ import {
   recordCampaignChapterGameCompleted,
   upsertFictionAssignmentIfAbsent,
 } from "./campaignService";
+import { resetProofWorldFromApi } from "./goldlineProofWorld";
 
 export const goldlineWorldRouter = router({
   cityEntities: dayforgeTenantOperatorProcedure.query(({ ctx }) => listCityWorldEntities({ tenantId: ctx.tenantId })),
@@ -127,4 +128,5 @@ export const goldlineWorldRouter = router({
         ...input,
       })
     ),
+  resetProofWorld: dayforgeTenantAdminProcedure.mutation(() => resetProofWorldFromApi()),
 });

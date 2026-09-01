@@ -4,6 +4,7 @@ import {
   campaignGameEventContract,
   campaignInputFingerprint,
   campaignStableKey,
+  stableCampaignChapterId,
   type TerritoryCampaignHint,
 } from "./goldlineCampaign";
 import { CAMPAIGN_ARCHETYPES, selectCampaignArchetype } from "./goldlineCampaignArchetypes";
@@ -86,6 +87,25 @@ describe("compileGoldlineCampaign", () => {
       b.chapters.map(chapter => chapter.selectedGameplayBinding)
     );
     expect(a.inputFingerprint).toBe(b.inputFingerprint);
+  });
+
+  it("names chapters from real membership, never array index", () => {
+    const draft = compile([
+      item({ id: "pickup", authority: "fixed_commitment", kind: "pickup", windowStart: "2026-09-01T09:00:00Z" }),
+      item({ id: "visit", kind: "commercial_visit", physicalEntityId: "p-a" }),
+    ]);
+    expect(draft.chapters.length).toBeGreaterThan(0);
+    for (const [index, chapter] of draft.chapters.entries()) {
+      expect(chapter.stableChapterId).toBe(
+        stableCampaignChapterId({
+          businessDate: draft.businessDate,
+          chapterKind: chapter.chapterKind,
+          objectiveIds: chapter.objectiveIds,
+          territoryId: chapter.territoryId,
+        })
+      );
+      expect(chapter.stableChapterId).not.toBe(`${draft.businessDate}:${chapter.chapterKind}:${index}`);
+    }
   });
 
   it("uses one stable key per tenant/day", () => {

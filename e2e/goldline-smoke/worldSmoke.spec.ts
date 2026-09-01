@@ -11,6 +11,7 @@
  */
 
 import { expect, test, type Page } from "@playwright/test";
+import { resetGoldlineProofWorld } from "./proofWorld";
 
 const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "goldline-proof-admin-pass";
@@ -22,7 +23,24 @@ async function signIn(page: Page, role: "driver" | "admin") {
   expect(response.ok()).toBeTruthy();
 }
 
+/** Wait until the world camera has stopped moving — product rest, not a sleep. */
+async function waitForCameraRest(page: Page) {
+  await page.waitForFunction(() => {
+    const style = document.querySelector(".cr-world-space")?.getAttribute("style") ?? "";
+    const holder = window as Window & { __glCamRest?: { style: string; frames: number } };
+    if (!holder.__glCamRest || holder.__glCamRest.style !== style) {
+      holder.__glCamRest = { style, frames: 0 };
+      return false;
+    }
+    holder.__glCamRest.frames += 1;
+    return holder.__glCamRest.frames >= 8;
+  });
+}
+
 test.describe("Goldline smoke — the world opens, thinks and plays", () => {
+  test.beforeAll(async ({ request }) => {
+    await resetGoldlineProofWorld(request);
+  });
   test("a fresh driver session opens directly into Overland", async ({ page }) => {
     await signIn(page, "driver");
     await page.addInitScript(() => {
@@ -119,7 +137,6 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     } else {
       await page.mouse.move(700, 420);
       await page.mouse.wheel(0, -500);
-      await page.waitForTimeout(300);
       await page.mouse.down();
       for (let step = 1; step <= 8; step += 1) {
         await page.mouse.move(700 - step * 12, 420 - step * 7);
@@ -127,7 +144,11 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
       await page.mouse.up();
     }
 
-    await page.waitForTimeout(700);
+    await page.waitForFunction(saved => {
+      const now = document.querySelector(".cr-world-space")?.getAttribute("style") ?? "";
+      return now !== saved;
+    }, before);
+    await waitForCameraRest(page);
     expect(await space.getAttribute("style")).not.toBe(before);
   });
 
@@ -139,20 +160,11 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     await expect(camera).toBeVisible({ timeout: 30_000 });
     await page.mouse.move(720, 430);
     await page.mouse.wheel(0, -420);
-    await page.waitForTimeout(300);
     await page.mouse.down();
     await page.mouse.move(630, 385, { steps: 8 });
     await page.mouse.up();
-    let stateA = "";
-    for (let i = 0; i < 20; i += 1) {
-      const first = await space.getAttribute("style");
-      await page.waitForTimeout(120);
-      const second = await space.getAttribute("style");
-      if (first && first === second) {
-        stateA = first;
-        break;
-      }
-    }
+    await waitForCameraRest(page);
+    const stateA = (await space.getAttribute("style")) ?? "";
     expect(stateA).not.toBe("");
 
     const louise = page.getByRole("button", { name: /Pursued: The Louise/i });
@@ -164,29 +176,14 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
         : page.locator(".lc-lantern").first();
     await building.click();
     await expect(page.locator(".owi")).toBeVisible();
-    await page.waitForTimeout(1600);
-    expect(await space.getAttribute("style")).not.toBe(stateA);
-    const prior = (stateA?.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+    await expect(camera).toHaveAttribute("data-camera-mode", "inspecting");
+    await page.waitForFunction(saved => {
+      const now = document.querySelector(".cr-world-space")?.getAttribute("style") ?? "";
+      return Boolean(saved) && now !== saved;
+    }, stateA);
     await page.locator(".owi-close").click();
-    // Wait for the ease-back to finish rather than hoping a fixed delay is
-    // enough on a loaded runner. Thresholds are unchanged: zoom exact, center
-    // within 0.2 percentage points.
-    await page.waitForFunction(
-      saved => {
-        const now = (document.querySelector(".cr-world-space")?.getAttribute("style") ?? "")
-          .match(/-?\d+(?:\.\d+)?/g)
-          ?.map(Number) ?? [];
-        const [scaleA, xA, yA] = saved;
-        const [scaleB, xB, yB] = now;
-        return (
-          Math.abs((scaleA ?? 0) - (scaleB ?? 0)) < 0.002 &&
-          Math.abs((xA ?? 0) - (xB ?? 0)) < 0.2 &&
-          Math.abs((yA ?? 0) - (yB ?? 0)) < 0.2
-        );
-      },
-      prior,
-      { timeout: 15_000 }
-    );
+    await expect(camera).toHaveAttribute("data-camera-mode", "free");
+    await expect(space).toHaveAttribute("style", stateA);
     await expect(page.locator(".owi")).toHaveCount(0);
   });
 
