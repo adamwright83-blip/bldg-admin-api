@@ -18,7 +18,49 @@ function businessDate(now: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
 
-function timeFromWindow(date: string, window: string | null): string | null {
+function zonedLocalToIso(date: string, hour: number, minute: number, timeZone: string): string | null {
+  const [year, month, day] = date.split("-").map(Number);
+  if (!year || !month || !day || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  const target = Date.UTC(year, month - 1, day, hour, minute, 0);
+  let candidate = target;
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const parts = Object.fromEntries(
+      formatter.formatToParts(new Date(candidate)).map(part => [part.type, part.value])
+    );
+    const observed = Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      Number(parts.hour),
+      Number(parts.minute),
+      Number(parts.second)
+    );
+    candidate += target - observed;
+  }
+  const verification = Object.fromEntries(
+    formatter.formatToParts(new Date(candidate)).map(part => [part.type, part.value])
+  );
+  if (
+    Number(verification.year) !== year ||
+    Number(verification.month) !== month ||
+    Number(verification.day) !== day ||
+    Number(verification.hour) !== hour ||
+    Number(verification.minute) !== minute
+  ) return null;
+  return new Date(candidate).toISOString();
+}
+
+export function timeFromWindow(date: string, window: string | null, timeZone: string): string | null {
   const match = window?.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
   if (!match) return null;
   let hour = Number(match[1]);
@@ -26,8 +68,7 @@ function timeFromWindow(date: string, window: string | null): string | null {
   const period = match[3]?.toUpperCase();
   if (period === "PM" && hour < 12) hour += 12;
   if (period === "AM" && hour === 12) hour = 0;
-  const value = new Date(`${date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`);
-  return Number.isFinite(value.getTime()) ? value.toISOString() : null;
+  return zonedLocalToIso(date, hour, minute, timeZone);
 }
 
 const urgencyRank: Record<FieldTodayItem["urgency"], number> = {
@@ -113,7 +154,7 @@ export async function getFieldToday(input: {
     if (order.pickupDate === date && ["new", "intake-pending"].includes(order.status)) {
       timeline.push({
         id: `pickup:${order.id}`, kind: "pickup", source: { entityType: "order", entityId: String(order.id), sourceReference: `orders:${order.id}` },
-        scheduledAt: timeFromWindow(order.pickupDate, order.pickupTimeWindow), urgency: "scheduled", title: `Pick up ${name}`, subtitle: order.serviceType === "wash_fold" ? "Laundry pickup" : "Dry-cleaning pickup", status: order.status,
+        scheduledAt: timeFromWindow(order.pickupDate, order.pickupTimeWindow, timeZone), urgency: "scheduled", title: `Pick up ${name}`, subtitle: order.serviceType === "wash_fold" ? "Laundry pickup" : "Dry-cleaning pickup", status: order.status,
         destination: { address: order.address, latitude: null, longitude: null }, customer: { name, phone: order.phone, email: order.email },
         money: deterministicEstimate(moneyCents(order.total), `orders:${order.id}:total`, "high"), verificationClass: "VERIFIED",
         actions: [{ type: "navigate", label: "Navigate", href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`, mutation: null }, { type: "start", label: "Mark collected", href: null, mutation: "admin.updateStatus:collected" }],
@@ -124,7 +165,7 @@ export async function getFieldToday(input: {
       timeline.push({
         id: `${unpaid ? "payment-blocker" : "delivery"}:${order.id}`, kind: unpaid ? "payment_blocker" : "delivery",
         source: { entityType: "order", entityId: String(order.id), sourceReference: `orders:${order.id}` },
-        scheduledAt: timeFromWindow(order.deliveryDate, order.deliveryTimeWindow), urgency: unpaid ? "blocked" : "scheduled", title: unpaid ? `Payment blocks ${name}'s delivery` : `Deliver to ${name}`,
+        scheduledAt: timeFromWindow(order.deliveryDate, order.deliveryTimeWindow, timeZone), urgency: unpaid ? "blocked" : "scheduled", title: unpaid ? `Payment blocks ${name}'s delivery` : `Deliver to ${name}`,
         subtitle: unpaid ? "This order is ready but not paid. It cannot be presented as completed." : "Paid order ready for delivery", status: order.status,
         destination: { address: order.address, latitude: null, longitude: null }, customer: { name, phone: order.phone, email: order.email },
         money: sourcedFact(moneyCents(order.total), `orders:${order.id}`), verificationClass: "VERIFIED",
