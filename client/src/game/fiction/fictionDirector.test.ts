@@ -65,9 +65,11 @@ describe("selectFictionForMission", () => {
     expect(instance?.template.id).toBe("neutralize-v1");
   });
 
-  it("returns null for a grammar with no eligible template (e.g. a phone call)", () => {
+  it("selects the conversation sanctuary for a real phone call — no timer, no combat", () => {
     const instance = selectFictionForMission(callGrammar(), { now: new Date() });
-    expect(instance).toBeNull();
+    expect(instance?.template.id).toBe("world-holds-breath-v1");
+    expect(instance?.template.timerEligible).toBe(false);
+    expect(instance?.template.humanInteractionCompatible).toBe(true);
   });
 
   describe("persistence-first determinism", () => {
@@ -136,7 +138,9 @@ describe("eligibleFictionTemplates", () => {
     expect(eligible.map(t => t.id)).toContain("neutralize-v1");
   });
 
-  it("lists nothing for a sensitive phone-call grammar (no compatible template registered)", () => {
-    expect(eligibleFictionTemplates(callGrammar())).toEqual([]);
+  it("lists the sanctuary template for a sensitive phone-call grammar", () => {
+    expect(eligibleFictionTemplates(callGrammar()).map(t => t.id)).toContain(
+      "world-holds-breath-v1"
+    );
   });
 });

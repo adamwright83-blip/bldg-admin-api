@@ -31,11 +31,10 @@ export type FictionMissionInstance = {
 /**
  * Resolves the fiction for a real, grammar-eligible action.
  *
- * Returns null when nothing is eligible for this grammar (e.g. a phone call,
- * which is never dramatized — `humanInteractionCompatible` gates that) or
- * when the referenced template id from a stale persisted record no longer
- * exists in the registry (fails safe: the real action is simply presented
- * without a genre episode rather than crash or silently reassign).
+ * Returns null when nothing is eligible for this grammar, or when a persisted
+ * template id no longer exists in the registry (fails safe: the real action
+ * is presented without a genre episode). Sensitive conversations may bind
+ * only to `humanInteractionCompatible` templates with no timer.
  */
 export function selectFictionForMission(
   grammar: ActionGrammar,
