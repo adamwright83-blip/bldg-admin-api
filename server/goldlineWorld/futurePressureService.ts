@@ -24,6 +24,8 @@ import { getDb } from "../db";
 
 /** Soft signals are recorded alongside promises, under their own event type. */
 export const FIELD_SIGNAL_EVENT = "field_temporal_signal";
+/** Later evidence can supersede a soft signal without deleting its history. */
+export const FIELD_SIGNAL_SUPERSEDED_EVENT = "field_temporal_signal_superseded";
 
 function eventFromRow(row: typeof goldlineWorldEvents.$inferSelect): GoldlineWorldEvent {
   return {
@@ -60,6 +62,7 @@ function claimFromSignal(event: GoldlineWorldEvent): TemporalClaim | null {
   const metadata = event.metadata as {
     kind?: unknown;
     statement?: unknown;
+    subject?: unknown;
     whenText?: unknown;
     anchorDate?: unknown;
   };
@@ -74,27 +77,38 @@ function claimFromSignal(event: GoldlineWorldEvent): TemporalClaim | null {
   return {
     kind,
     sourceText: statement,
-    subject: statement,
+    subject: typeof metadata.subject === "string" ? metadata.subject : statement,
     promisedTo: null,
     when: resolveTemporalReference(whenText, anchorDate),
   };
 }
 
-export async function listFuturePressure(input: {
-  tenantId: string;
+/**
+ * Returns only soft signals that still describe the future.
+ *
+ * Supersession is append-only: the old Wednesday sentence stays in Chronicle,
+ * but a later correction can point at it so Wednesday no longer materializes a
+ * stale chapter. This is the server-side half of "reality recompiles the
+ * future without rewriting the past."
+ */
+export function activeFieldSignals(events: readonly GoldlineWorldEvent[]): GoldlineWorldEvent[] {
+  const superseded = new Set(
+    events
+      .filter(event => event.eventType === FIELD_SIGNAL_SUPERSEDED_EVENT)
+      .map(event => event.metadata.signalEventId)
+      .filter((value): value is string => typeof value === "string")
+  );
+  return events.filter(
+    event => event.eventType === FIELD_SIGNAL_EVENT && !superseded.has(event.id)
+  );
+}
+
+/** Pure projection used by the live reader and by the Tuesday→Wednesday proof. */
+export function futurePressureFromEvents(input: {
+  events: readonly GoldlineWorldEvent[];
   date: string;
-}): Promise<FuturePressure> {
-  const db = await getDb();
-  if (!db) return { date: input.date, items: [] };
-
-  const rows = await db
-    .select()
-    .from(goldlineWorldEvents)
-    .where(eq(goldlineWorldEvents.tenantId, input.tenantId));
-  const events = rows.map(eventFromRow);
-
-  const claims = events
-    .filter(event => event.eventType === FIELD_SIGNAL_EVENT)
+}): FuturePressure {
+  const claims = activeFieldSignals(input.events)
     .map(event => ({
       claim: claimFromSignal(event),
       physicalEntityId: event.physicalEntityId,
@@ -110,8 +124,25 @@ export async function listFuturePressure(input: {
 
   return projectFuturePressure({
     date: input.date,
-    obligations: projectObligations(events),
+    obligations: projectObligations([...input.events]),
     claims,
+  });
+}
+
+export async function listFuturePressure(input: {
+  tenantId: string;
+  date: string;
+}): Promise<FuturePressure> {
+  const db = await getDb();
+  if (!db) return { date: input.date, items: [] };
+
+  const rows = await db
+    .select()
+    .from(goldlineWorldEvents)
+    .where(eq(goldlineWorldEvents.tenantId, input.tenantId));
+  return futurePressureFromEvents({
+    date: input.date,
+    events: rows.map(eventFromRow),
   });
 }
 
