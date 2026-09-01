@@ -144,6 +144,12 @@ export function compileGoldlineCampaign(input: CampaignCompileInput): CampaignDr
     input.priorCampaignTitle === "THE BROKEN CROWN" && archetypeId === "broken_crown"
       ? "AFTER THE CROWN"
       : null;
+  const authoritativeCompletedObjectiveIds = Array.from(
+    new Set([
+      ...(input.authoritativeCompletedObjectiveIds ?? []),
+      ...input.objectives.filter(item => item.status === "completed").map(item => item.id),
+    ])
+  ).sort();
   return {
     tenantId: input.tenantId,
     operatorId: input.operatorId,
@@ -159,9 +165,6 @@ export function compileGoldlineCampaign(input: CampaignCompileInput): CampaignDr
     completedChapterIds: [],
     status: readyCount === 0 ? "quiet" : "authored",
     endingTreatment: null,
-    authoritativeCompletedObjectiveIds: input.objectives
-      .filter(item => item.status === "completed")
-      .map(item => item.id)
-      .sort(),
+    authoritativeCompletedObjectiveIds,
   };
 }
