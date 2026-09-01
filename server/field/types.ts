@@ -50,6 +50,12 @@ export type FieldTodayProjection = {
   businessDate: string;
   currentUserId: string;
   timeline: FieldTodayItem[];
+  /**
+   * Objective IDs whose authoritative source record proves the real action is
+   * complete even when the live Today timeline intentionally stops showing the
+   * terminal row. This is evidence for campaign history, not a second task store.
+   */
+  authoritativeCompletedObjectiveIds: string[];
   nextFixedCommitment: FieldTodayItem | null;
   blockers: FieldTodayItem[];
   dataQuality: DataQuality;
