@@ -3,7 +3,12 @@
  * Same chapter + same relevant state always yields the same binding.
  */
 
-import type { CampaignChapterKind, GameplayBinding } from "./goldlineCampaign";
+import type { ActionGrammar, ActionGrammarKind } from "./actionGrammar";
+import type {
+  CampaignChapter,
+  CampaignChapterKind,
+  GameplayBinding,
+} from "./goldlineCampaign";
 import type { GoldlineObjective } from "./goldlineAdventure";
 
 export function eligibleBindingsForChapter(input: {
@@ -75,4 +80,62 @@ export function selectChapterFictionTemplateId(input: {
       : "held-breath-v1";
   }
   return CHAPTER_FICTION_TEMPLATE[input.chapterKind] ?? null;
+}
+
+const CHAPTER_ACTION_GRAMMAR_KIND: Record<CampaignChapterKind, ActionGrammarKind | null> = {
+  recovery_branch: "RECOVER_FAILED_CONTACT",
+  follow_up_branch: "FOLLOW_UP_PERSON",
+  visit_hunt: "VISIT_LOCATION",
+  territory_push: "VISIT_LOCATION",
+  opportunity_corridor: "VISIT_LOCATION",
+  open_channel: "WAIT_FOR_EVENT",
+  expedition: null,
+  hard_anchor: null,
+  guardian_finale: null,
+  return_to_stronghold: null,
+};
+
+/**
+ * Describe the current chapter's already-legitimate work as Action Grammar.
+ * Fiction binds to this kind — not to a visit-route PLACE_ITEM default —
+ * so preferred templates (ghost-echo, held-breath, beacon-walk) can match.
+ * Empty location lists stay empty; this never invents addresses.
+ */
+export function deriveCampaignChapterActionGrammar(
+  chapter: Pick<
+    CampaignChapter,
+    "chapterKind" | "stableChapterId" | "objectiveIds"
+  >
+): ActionGrammar | null {
+  const kind = CHAPTER_ACTION_GRAMMAR_KIND[chapter.chapterKind];
+  if (!kind) return null;
+  if (chapter.objectiveIds.length === 0 && kind !== "WAIT_FOR_EVENT") return null;
+  const count = Math.max(chapter.objectiveIds.length, 1);
+  const sourceType =
+    kind === "RECOVER_FAILED_CONTACT"
+      ? "recovery"
+      : kind === "FOLLOW_UP_PERSON"
+        ? "follow_up"
+        : kind === "VISIT_LOCATION"
+          ? "field_move"
+          : "mission";
+  return {
+    kind,
+    businessActionId: chapter.objectiveIds[0] ?? chapter.stableChapterId,
+    occurrenceId: null,
+    sourceType,
+    count,
+    locations: [],
+    channel:
+      kind === "VISIT_LOCATION"
+        ? "in_person"
+        : kind === "FOLLOW_UP_PERSON"
+          ? "phone"
+          : "none",
+    requiresTravel: kind === "VISIT_LOCATION",
+    requiresDriving: kind === "VISIT_LOCATION",
+    timerSafe: false,
+    sensitiveConversation:
+      kind === "FOLLOW_UP_PERSON" || kind === "RECOVER_FAILED_CONTACT",
+  };
 }

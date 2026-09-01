@@ -171,6 +171,27 @@ describe("campaign-preferred templates", () => {
     });
     expect(instance?.template.id).toBe("neutralize-v1");
   });
+
+  it("selects ghost-echo when the grammar is the chapter's recovery action", () => {
+    const grammar: ActionGrammar = {
+      kind: "RECOVER_FAILED_CONTACT",
+      businessActionId: "recovery:1",
+      occurrenceId: null,
+      sourceType: "recovery",
+      count: 1,
+      locations: [],
+      channel: "none",
+      requiresTravel: false,
+      requiresDriving: false,
+      timerSafe: false,
+      sensitiveConversation: true,
+    };
+    const instance = selectFictionForMission(grammar, {
+      now: new Date(),
+      preferredTemplateId: "ghost-echo-v1",
+    });
+    expect(instance?.template.id).toBe("ghost-echo-v1");
+  });
 });
 
 describe("eligibleFictionTemplates", () => {

@@ -170,7 +170,11 @@ import { projectChronicle } from "./world/chronicleProjection";
 import { presentAgents, projectStronghold } from "./world/strongholdProjection";
 import { toStrongholdIntel } from "./world/intelligenceFlywheel";
 import type { DriverSafeSalesIntel } from "../../../shared/driverSafeSalesIntel";
-import { deriveAuthoritativeRouteGrammar } from "../../../shared/actionGrammar";
+import {
+  deriveAuthoritativeRouteGrammar,
+  type ActionGrammar,
+} from "../../../shared/actionGrammar";
+import type { ExistingGameplayHost } from "../../../shared/goldlineCampaignRuntime";
 import { selectFictionForMission } from "./fiction/fictionDirector";
 import { reconcileFictionOnResume } from "./fiction/longHorizonResume";
 import type { FictionMissionInstance } from "./fiction/fictionDirector";
@@ -215,6 +219,9 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
    */
   playerIdentity?: string | null;
   preferredFictionTemplateId?: string | null;
+  /** Current chapter grammar when one exists — visit-route PLACE_ITEM is the fallback. */
+  campaignChapterGrammar?: ActionGrammar | null;
+  requestedGameplayHost?: ExistingGameplayHost | null;
   onPersistFictionAssignment?: (record: {
     stableMissionKey: string;
     templateId: string;
@@ -585,6 +592,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [progress, setProgress] = useState(0.06);
   const [objectivesExpanded, setObjectivesExpanded] = useState(false);
   const [utilityPanel, setUtilityPanel] = useState<UtilityPanel>(null);
+  useEffect(() => {
+    if (props.requestedGameplayHost === "local_target_run") {
+      setUtilityPanel("open-channel");
+    }
+  }, [props.requestedGameplayHost]);
   const [selectedAbility, setSelectedAbility] =
     useState<EquippedAbility | null>(null);
   const [signalReset, setSignalReset] = useState(0);
@@ -1008,9 +1020,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       }),
     [todayRoute, props.progression, props.driverSafeSalesIntel, chronicle]
   );
-  // Production fiction binds only after explicit route start has frozen
-  // authoritative membership. Transient recommendations cannot define its
-  // denominator or silently replace completed stops.
+  // Production fiction binds to the current chapter's action grammar when
+  // the compiler named one. Frozen visit-route membership remains the
+  // fallback for courier/route chapters that have no chapter grammar.
   const routeGrammar = useMemo(
     () =>
       deriveAuthoritativeRouteGrammar(props.authoritativeVisitRoute ?? null),
@@ -1025,14 +1037,21 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     [props.moves?.recommendedMoves]
   );
   const fictionMission = useMemo<FictionMissionInstance | null>(() => {
-    if (!routeGrammar) return null;
-    return selectFictionForMission(routeGrammar, {
+    const grammar = props.campaignChapterGrammar ?? routeGrammar;
+    if (!grammar) return null;
+    return selectFictionForMission(grammar, {
       now: new Date(),
       identity: props.playerIdentity ?? null,
       preferredTemplateId: props.preferredFictionTemplateId ?? null,
       persistAssignment: props.onPersistFictionAssignment,
     });
-  }, [routeGrammar, props.playerIdentity, props.preferredFictionTemplateId, props.onPersistFictionAssignment]);
+  }, [
+    props.campaignChapterGrammar,
+    routeGrammar,
+    props.playerIdentity,
+    props.preferredFictionTemplateId,
+    props.onPersistFictionAssignment,
+  ]);
   const [fictionMissionOpen, setFictionMissionOpen] = useState(false);
   const seenFictionKeysRef = useRef(new Set<string>());
   useEffect(() => {

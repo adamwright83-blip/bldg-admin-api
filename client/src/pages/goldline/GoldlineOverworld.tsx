@@ -25,6 +25,7 @@ import { CampaignHudConnected } from "@/components/goldline/CampaignHud";
 import { CampaignOverlandThread } from "@/components/goldline/CampaignWorldLayer";
 import { CampaignChapterHost } from "@/components/goldline/CampaignChapterHost";
 import { DynamicJoystick } from "./DynamicJoystick";
+import type { CampaignHostInvocation } from "@shared/goldlineCampaignRuntime";
 
 export { DynamicJoystick };
 
@@ -50,6 +51,7 @@ export default function GoldlineOverworld({
   isResolvingOrder = false,
   onEmitEvent,
   onEnterOperations,
+  onEnterCampaignHost,
   onEnterGreystar,
   onEnterWayward,
   onResolveOrder,
@@ -69,6 +71,7 @@ export default function GoldlineOverworld({
   isResolvingOrder?: boolean;
   onEmitEvent?: GoldlineEventEmitter;
   onEnterOperations?: () => void;
+  onEnterCampaignHost?: (hosted: CampaignHostInvocation) => void;
   onEnterGreystar: () => void;
   onEnterWayward?: () => void;
   onResolveOrder: (
@@ -314,7 +317,7 @@ export default function GoldlineOverworld({
             <CampaignChapterHost
               driving={driving}
               atDestination={Boolean(proximity?.canAct)}
-              onHostCurrentChapter={() => onEnterOperations?.()}
+              onHostCurrentChapter={onEnterCampaignHost}
             />
           </>
         )}

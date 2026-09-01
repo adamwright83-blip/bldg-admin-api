@@ -87,4 +87,24 @@ describe("campaign review-fix contracts", () => {
     expect(source).toContain('eq(commercialFollowUps.status, "completed")');
     expect(source).toContain("authoritativeCompletedObjectiveIds.add(`follow-up:${followUp.id}`)");
   });
+
+  it("routes chapter hosts and fiction through the chapter's own binding and grammar", () => {
+    const overworld = readFileSync(
+      resolve(process.cwd(), "client/src/pages/goldline/GoldlineOverworld.tsx"),
+      "utf8"
+    );
+    const host = readFileSync(
+      resolve(process.cwd(), "client/src/components/goldline/CampaignChapterHost.tsx"),
+      "utf8"
+    );
+    const gameHome = readFileSync(
+      resolve(process.cwd(), "client/src/game/GoldlineGameHome.tsx"),
+      "utf8"
+    );
+    expect(overworld).not.toContain("onHostCurrentChapter={() => onEnterOperations?.()}");
+    expect(host).toContain("onHostCurrentChapter({");
+    expect(host).toContain("binding: hosted.binding");
+    expect(host).toContain("objectiveIds: hosted.chapter.objectiveIds");
+    expect(gameHome).toContain("props.campaignChapterGrammar ?? routeGrammar");
+  });
 });

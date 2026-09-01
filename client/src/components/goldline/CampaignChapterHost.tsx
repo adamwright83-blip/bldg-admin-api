@@ -6,6 +6,7 @@ import {
   currentChapterHost,
   deadAirBridgeAllowed,
   hostForBinding,
+  type CampaignHostInvocation,
 } from "@shared/goldlineCampaignRuntime";
 import { trpc } from "@/lib/trpc";
 import "./goldline-campaign.css";
@@ -31,7 +32,7 @@ export function CampaignChapterHost({
 }: {
   driving?: boolean;
   atDestination?: boolean;
-  onHostCurrentChapter?: (binding: GameplayBinding) => void;
+  onHostCurrentChapter?: (hosted: CampaignHostInvocation) => void;
 }) {
   const campaign = trpc.system.goldlineWorld.campaign.useQuery(undefined, {
     staleTime: 15_000,
@@ -93,7 +94,14 @@ export function CampaignChapterHost({
           type="button"
           className="gl-campaign-host-action"
           data-testid="goldline-campaign-host-action"
-          onClick={() => onHostCurrentChapter(hosted.binding)}
+          onClick={() =>
+            onHostCurrentChapter({
+              binding: hosted.binding,
+              host: hosted.host,
+              chapterId: hosted.chapter.stableChapterId,
+              objectiveIds: hosted.chapter.objectiveIds,
+            })
+          }
         >
           {HOST_COPY[hosted.binding]}
         </button>

@@ -25,7 +25,9 @@ import {
   campaignWorldRemainsPlayable,
   hostForBinding,
   projectStopsOntoCampaign,
+  surfaceForCampaignHost,
 } from "./goldlineCampaignRuntime";
+import { deriveCampaignChapterActionGrammar } from "./goldlineCampaignBindings";
 
 const item = (
   overrides: Partial<GoldlineObjective> & Pick<GoldlineObjective, "id">
@@ -450,5 +452,54 @@ describe("campaign runtime hosts", () => {
       "living-world-visit",
       "unrelated",
     ]);
+  });
+
+  it("routes each binding to an existing driver surface instead of one operations dump", () => {
+    expect(surfaceForCampaignHost("expedition")).toBe("operations");
+    expect(surfaceForCampaignHost("recovery")).toBe("operations");
+    expect(surfaceForCampaignHost("local_target_run")).toBe("open_channel");
+    expect(surfaceForCampaignHost("field_journal")).toBe("field_journal");
+    expect(surfaceForCampaignHost("guardian_finale")).toBe("guardian_encounter");
+    expect(surfaceForCampaignHost("world_exploration")).toBe("overland");
+    expect(surfaceForCampaignHost("territory_push")).toBe("overland");
+  });
+});
+
+describe("campaign chapter action grammar", () => {
+  it("describes recovery as RECOVER_FAILED_CONTACT so ghost-echo can bind", () => {
+    const draft = compile([item({ id: "recovery:1", kind: "recovery" })]);
+    const chapter = draft.chapters.find(entry => entry.chapterKind === "recovery_branch");
+    expect(chapter?.fictionTemplateId).toBe("ghost-echo-v1");
+    expect(deriveCampaignChapterActionGrammar(chapter!).kind).toBe("RECOVER_FAILED_CONTACT");
+  });
+
+  it("describes follow-up as FOLLOW_UP_PERSON so held-breath can bind", () => {
+    const draft = compile([item({ id: "follow-up:88", kind: "follow_up" })]);
+    const chapter = draft.chapters.find(entry => entry.chapterKind === "follow_up_branch");
+    expect(chapter?.fictionTemplateId).toBe("held-breath-v1");
+    expect(deriveCampaignChapterActionGrammar(chapter!).kind).toBe("FOLLOW_UP_PERSON");
+  });
+
+  it("describes a visit chapter as VISIT_LOCATION without requiring a frozen route", () => {
+    const draft = compile([item({ id: "visit", kind: "commercial_visit", physicalEntityId: "p-a" })]);
+    const chapter = draft.chapters.find(
+      entry => entry.chapterKind === "visit_hunt" || entry.chapterKind === "opportunity_corridor"
+    );
+    expect(chapter?.fictionTemplateId).toBe("beacon-walk-v1");
+    expect(deriveCampaignChapterActionGrammar(chapter!).kind).toBe("VISIT_LOCATION");
+  });
+
+  it("does not invent grammar for courier expeditions", () => {
+    const draft = compile([
+      item({
+        id: "pickup:1",
+        kind: "pickup",
+        authority: "fixed_commitment",
+        windowStart: "2026-09-01T09:00:00Z",
+      }),
+    ]);
+    const chapter = draft.chapters.find(entry => entry.chapterKind === "expedition");
+    expect(chapter).toBeTruthy();
+    expect(deriveCampaignChapterActionGrammar(chapter!)).toBeNull();
   });
 });

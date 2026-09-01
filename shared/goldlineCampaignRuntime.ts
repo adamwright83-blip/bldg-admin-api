@@ -33,6 +33,42 @@ export function hostForBinding(binding: GameplayBinding): ExistingGameplayHost {
   return EXISTING_GAMEPLAY_HOSTS[binding];
 }
 
+export type CampaignHostInvocation = {
+  binding: GameplayBinding;
+  host: ExistingGameplayHost;
+  chapterId: string;
+  objectiveIds: readonly string[];
+};
+
+export const CAMPAIGN_HOST_SURFACES = [
+  "overland",
+  "operations",
+  "open_channel",
+  "field_journal",
+  "guardian_encounter",
+] as const;
+export type CampaignHostSurface = (typeof CAMPAIGN_HOST_SURFACES)[number];
+
+/**
+ * Map a chapter's selected binding onto an already-existing driver surface.
+ * This does not invent a second expedition or visit-route engine.
+ */
+export function surfaceForCampaignHost(binding: GameplayBinding): CampaignHostSurface {
+  switch (hostForBinding(binding)) {
+    case "overland":
+    case "territories":
+      return "overland";
+    case "guardian_encounter":
+      return "guardian_encounter";
+    case "local_target_run":
+      return "open_channel";
+    case "field_voice_journal":
+      return "field_journal";
+    default:
+      return "operations";
+  }
+}
+
 export function campaignWorldRemainsPlayable(status: CampaignStatus): boolean {
   return status === "quiet" || status === "authored" || status === "active" || status === "completed";
 }
