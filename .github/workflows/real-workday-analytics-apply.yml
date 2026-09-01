@@ -1,0 +1,38 @@
+name: Real Workday analytics apply
+
+on:
+  push:
+    branches:
+      - cursor/goldline-real-workday
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cursor/goldline-real-workday
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - run: python scripts/realWorkdayAnalyticsFix.py
+      - run: pnpm vitest run shared/dayforgeEvents.test.ts client/src/game/session/drivingLikelihood.test.ts shared/goldlineFuturePressure.test.ts
+      - name: Push product commit
+        shell: bash
+        run: |
+          git config user.name "goldline-real-workday"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git reset -- .github/workflows/real-workday-analytics-apply.yml scripts/realWorkdayAnalyticsFix.py
+          git commit -m "feat(real-workday): catalogue growth continuity telemetry"
+          git push origin HEAD:cursor/goldline-real-workday
