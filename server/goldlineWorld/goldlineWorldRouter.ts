@@ -81,6 +81,14 @@ export const goldlineWorldRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // Ensure a derived-ready finale is persisted even if the independent
+      // client campaign query has not loaded yet. This is game projection only;
+      // it does not change territory or business truth.
+      await getOrMaterializeTodayCampaign({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+      });
+
       // Territory truth is validated/written first. Invalid readiness, guardian
       // mismatch, or a failed territory write can therefore never manufacture
       // campaign completion. On retry, an already-cleared territory still
