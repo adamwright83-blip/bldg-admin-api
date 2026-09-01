@@ -183,6 +183,8 @@ export type CampaignCompileInput = {
   operatorId: string;
   businessDate: string;
   objectives: readonly GoldlineObjective[];
+  /** Source-record completion evidence for Today items that intentionally vanish from the live timeline. */
+  authoritativeCompletedObjectiveIds?: readonly string[];
   territories?: readonly TerritoryCampaignHint[];
   obligationDue?: boolean;
   priorCampaignTitle?: string | null;
@@ -214,6 +216,9 @@ export function campaignInputFingerprint(input: CampaignCompileInput): string {
         ].join(":")
     )
     .sort();
+  const completed = [...(input.authoritativeCompletedObjectiveIds ?? [])]
+    .sort()
+    .map(id => `completed:${id}`);
   const territories = [...(input.territories ?? [])]
     .map(
       item =>
@@ -225,6 +230,7 @@ export function campaignInputFingerprint(input: CampaignCompileInput): string {
     input.obligationDue ? "obligation" : "clear",
     input.travelWindowFingerprint ?? "travel:unknown",
     ...objectives,
+    ...completed,
     ...territories,
   ].join("|");
   return `fp:${stableHash(raw).toString(16)}`;
