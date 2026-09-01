@@ -23,6 +23,7 @@ import type {
 import { DriverTerritorySky } from "@/components/goldline/DriverTerritorySky";
 import { CampaignHudConnected } from "@/components/goldline/CampaignHud";
 import { CampaignOverlandThread } from "@/components/goldline/CampaignWorldLayer";
+import { CampaignChapterHost } from "@/components/goldline/CampaignChapterHost";
 import { DynamicJoystick } from "./DynamicJoystick";
 
 export { DynamicJoystick };
@@ -78,6 +79,7 @@ export default function GoldlineOverworld({
   const runtimeRef = useRef<GoldlineOverworldRuntime | null>(null);
   const [ordersOpen, setOrdersOpen] = useState(false);
   const [guardianPlaying, setGuardianPlaying] = useState(false);
+  const [driving, setDriving] = useState(false);
   const [runtimeReady, setRuntimeReady] = useState(false);
   const [proximity, setProximity] = useState<OverworldProximity>(null);
   const [lockedMessage, setLockedMessage] = useState<string | null>(null);
@@ -229,6 +231,7 @@ export default function GoldlineOverworld({
 
   const setRuntimeInput = useCallback((x: number, y: number) => {
     runtimeRef.current?.setInput(x, y);
+    setDriving(Math.hypot(x, y) > 0.12);
   }, []);
 
   function performContextAction() {
@@ -301,9 +304,13 @@ export default function GoldlineOverworld({
           </button>
         ) : null}
 
-        <DriverTerritorySky onEncounterChange={setGuardianPlaying} />
+        <DriverTerritorySky driving={driving} onEncounterChange={setGuardianPlaying} />
         <CampaignOverlandThread />
         <CampaignHudConnected compact />
+        <CampaignChapterHost
+          driving={driving}
+          atDestination={Boolean(proximity?.canAct)}
+        />
 
         <DynamicJoystick
           disabled={ordersOpen || !runtimeReady || guardianPlaying}

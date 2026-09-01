@@ -8,8 +8,10 @@ import { useReducedMotionFlag } from "@/components/goldline/TerritoryWorldLayer"
 import "@/components/goldline/goldline-territories.css";
 
 export function DriverTerritorySky({
+  driving = false,
   onEncounterChange,
 }: {
+  driving?: boolean;
   onEncounterChange?: (active: boolean) => void;
 }) {
   const territories = trpc.system.goldlineWorld.territories.useQuery(undefined, {
@@ -27,13 +29,14 @@ export function DriverTerritorySky({
   if (!item) return null;
   const guardian = guardianById(item.definition.guardianId);
   const sanctuary = Boolean(campaign.data?.conversationSanctuary);
+  const combatQuiet = sanctuary || driving;
   const finale = campaign.data?.campaign.chapters.find(
     chapter =>
       chapter.chapterKind === "guardian_finale" &&
       chapter.territoryId === item.definition.id
   );
 
-  if (playing && !sanctuary) {
+  if (playing && !combatQuiet) {
     return (
       <GuardianEncounter
         definition={item.definition}
@@ -83,7 +86,7 @@ export function DriverTerritorySky({
         data-testid="goldline-driver-territory-guardian"
         aria-label={`${guardian.name} over ${item.definition.fantasyTitle}. ${challengeSummary({ definition: item.definition, state: item.state })}`}
         onClick={() => {
-          if (sanctuary) return;
+          if (sanctuary || driving) return;
           setPlaying(true);
           onEncounterChange?.(true);
         }}

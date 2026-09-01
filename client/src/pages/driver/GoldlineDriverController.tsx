@@ -310,6 +310,10 @@ function LiveGoldlineDriverController() {
   const territories = trpc.system.goldlineWorld.territories.useQuery(undefined, {
     staleTime: 15_000,
   });
+  const campaign = trpc.system.goldlineWorld.campaign.useQuery(undefined, {
+    staleTime: 15_000,
+  });
+  const upsertFictionAssignment = trpc.system.goldlineWorld.upsertFictionAssignment.useMutation();
   const builtMissions = trpc.system.commercialMission.myBuiltMissions.useQuery(
     undefined,
     { refetchInterval: 15_000 }
@@ -1193,6 +1197,8 @@ function LiveGoldlineDriverController() {
                 member => member.physicalEntityId
               ),
             }))}
+          campaignTitle={campaign.data?.campaign.title ?? null}
+          campaignChapters={campaign.data?.campaign.chapters}
           processingLocation={dayDirectorState.data?.processingLocation}
           commitments={dayDirectorState.data?.commitments}
           intelligenceAvailable={dayDirectorState.data?.intelligenceAvailable}
@@ -1354,9 +1360,21 @@ function LiveGoldlineDriverController() {
   return (
     <>
       <Suspense fallback={<GoldlineHome {...gameHomeProps} />}>
-        <GoldlineGameHome
+          <GoldlineGameHome
           {...gameHomeProps}
           playerIdentity={identity.data?.openId ?? null}
+          preferredFictionTemplateId={
+            campaign.data?.campaign.chapters.find(
+              item => item.stableChapterId === campaign.data?.campaign.currentChapterId
+            )?.fictionTemplateId ?? null
+          }
+          onPersistFictionAssignment={record =>
+            upsertFictionAssignment.mutate({
+              stableMissionKey: record.stableMissionKey,
+              templateId: record.templateId,
+              rulesVersion: record.rulesVersion,
+            })
+          }
           worldNodes={driverGameWorld.data}
           progression={progression.data}
           driverSafeSalesIntel={

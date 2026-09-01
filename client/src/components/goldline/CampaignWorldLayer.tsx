@@ -1,6 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { CampaignGoldLine } from "./CampaignGoldLine";
 import { CampaignHudConnected } from "./CampaignHud";
+import { CampaignChapterHost } from "./CampaignChapterHost";
 import "./goldline-campaign.css";
 import type { CityWorldEntity } from "../../../../server/goldlineWorld/cityWorldService";
 
@@ -26,7 +27,12 @@ export function CampaignWorldLayer({
 }
 
 export function CampaignChrome() {
-  return <CampaignHudConnected />;
+  return (
+    <>
+      <CampaignHudConnected />
+      <CampaignChapterHost />
+    </>
+  );
 }
 
 export function CampaignOverlandThread() {
@@ -71,7 +77,7 @@ export function CampaignChronicleList() {
       <h2>Etched adventures</h2>
       <ol>
         {rows.map(item => (
-          <li key={item.id}>
+          <li key={item.id} data-testid="goldline-campaign-history-row">
             <strong>{item.title}</strong>
             <span>
               {" "}

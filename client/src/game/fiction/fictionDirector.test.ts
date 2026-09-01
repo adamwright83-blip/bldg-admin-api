@@ -132,6 +132,47 @@ describe("selectFictionForMission", () => {
   });
 });
 
+describe("campaign-preferred templates", () => {
+  const store = new Map<string, string>();
+  const fakeStorage: Storage = {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key: string) => store.get(key) ?? null,
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+    removeItem: (key: string) => void store.delete(key),
+    setItem: (key: string, value: string) => void store.set(key, value),
+  };
+
+  beforeEach(() => {
+    store.clear();
+    (globalThis as { window?: unknown }).window = { localStorage: fakeStorage };
+  });
+
+  afterEach(() => {
+    delete (globalThis as { window?: unknown }).window;
+  });
+
+  it("uses a campaign-preferred template when it is eligible", () => {
+    const alt: FictionTemplate = { ...NEUTRALIZE_TEMPLATE, id: "campaign-route-v1" };
+    const instance = selectFictionForMission(routeGrammar(), {
+      now: new Date(),
+      registry: [NEUTRALIZE_TEMPLATE, alt],
+      preferredTemplateId: "campaign-route-v1",
+    });
+    expect(instance?.template.id).toBe("campaign-route-v1");
+  });
+
+  it("ignores a preferred template that is not eligible for this grammar", () => {
+    const instance = selectFictionForMission(routeGrammar(), {
+      now: new Date(),
+      preferredTemplateId: "held-breath-v1",
+    });
+    expect(instance?.template.id).toBe("neutralize-v1");
+  });
+});
+
 describe("eligibleFictionTemplates", () => {
   it("lists NEUTRALIZE for a route grammar", () => {
     const eligible = eligibleFictionTemplates(routeGrammar());

@@ -214,6 +214,12 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
    * bucket rather than sharing one with a real account.
    */
   playerIdentity?: string | null;
+  preferredFictionTemplateId?: string | null;
+  onPersistFictionAssignment?: (record: {
+    stableMissionKey: string;
+    templateId: string;
+    rulesVersion: number;
+  }) => void;
   worldNodes?: DriverGameWorldNode[];
   progression?: GoldlineProgressionProjection | null;
   isLoadingWorld?: boolean;
@@ -1023,8 +1029,10 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     return selectFictionForMission(routeGrammar, {
       now: new Date(),
       identity: props.playerIdentity ?? null,
+      preferredTemplateId: props.preferredFictionTemplateId ?? null,
+      persistAssignment: props.onPersistFictionAssignment,
     });
-  }, [routeGrammar, props.playerIdentity]);
+  }, [routeGrammar, props.playerIdentity, props.preferredFictionTemplateId, props.onPersistFictionAssignment]);
   const [fictionMissionOpen, setFictionMissionOpen] = useState(false);
   const seenFictionKeysRef = useRef(new Set<string>());
   useEffect(() => {

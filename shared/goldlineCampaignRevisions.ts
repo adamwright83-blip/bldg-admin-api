@@ -101,13 +101,29 @@ export function recompileCampaignFuture(input: {
   if (input.instance.inputFingerprint === input.next.inputFingerprint) {
     return { instance: input.instance, diff: null };
   }
+  const nextReadyIds = new Set(input.next.chapters.flatMap(chapter => chapter.objectiveIds));
+  const absorbedCompleted = input.instance.chapters.filter(chapter => {
+    if (input.instance.completedChapterIds.includes(chapter.stableChapterId)) return true;
+    if (chapter.chapterKind === "guardian_finale") return false;
+    if (chapter.objectiveIds.length === 0) return false;
+    return chapter.objectiveIds.every(id => !nextReadyIds.has(id));
+  });
+  const completedChapterIds = Array.from(
+    new Set([
+      ...input.instance.completedChapterIds,
+      ...absorbedCompleted.map(chapter => chapter.stableChapterId),
+    ])
+  );
   const completed = input.instance.chapters.filter(chapter =>
-    input.instance.completedChapterIds.includes(chapter.stableChapterId)
+    completedChapterIds.includes(chapter.stableChapterId)
   );
   const current = input.instance.chapters.find(
     chapter => chapter.stableChapterId === input.instance.currentChapterId
   );
-  const currentStillValid = current ? chapterStillValid(current, input.next) : false;
+  const currentStillValid =
+    Boolean(current) &&
+    !completedChapterIds.includes(current!.stableChapterId) &&
+    chapterStillValid(current!, input.next);
   const lockedIds = new Set(completed.map(chapter => chapter.stableChapterId));
   if (currentStillValid && current) lockedIds.add(current.stableChapterId);
 
@@ -145,7 +161,7 @@ export function recompileCampaignFuture(input: {
     completedAt: input.instance.completedAt,
     revision,
     chapters: mergedChapters,
-    completedChapterIds: input.instance.completedChapterIds,
+    completedChapterIds,
     currentChapterId: currentStillValid
       ? input.instance.currentChapterId
       : future[0]?.stableChapterId ?? input.instance.currentChapterId,

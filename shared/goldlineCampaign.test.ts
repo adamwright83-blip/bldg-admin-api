@@ -19,6 +19,12 @@ import {
 import { arcadeLossIsGameOnly } from "./goldlineCampaignSetbacks";
 import { stubCampaignTravel, travelFingerprint } from "./goldlineTravelTruth";
 import type { CampaignInstance } from "./goldlineCampaign";
+import {
+  arcadePressureAllowed,
+  campaignWorldRemainsPlayable,
+  hostForBinding,
+  projectStopsOntoCampaign,
+} from "./goldlineCampaignRuntime";
 
 const item = (
   overrides: Partial<GoldlineObjective> & Pick<GoldlineObjective, "id">
@@ -260,6 +266,34 @@ describe("campaign revisions", () => {
     expect(revised.chapters.some(chapter => chapter.objectiveIds.includes("new-delivery"))).toBe(true);
     expect(explainCampaignRevision(diff)).toMatch(/fixed commitment/i);
   });
+
+  it("absorbs a finished real chapter as history even without an explicit game complete", () => {
+    const morning = compile([
+      item({ id: "pickup", authority: "fixed_commitment", kind: "pickup", windowStart: "2026-09-01T09:00:00Z" }),
+      item({ id: "visit", kind: "commercial_visit", physicalEntityId: "p-a", latitude: 34.2, longitude: -118.2 }),
+    ]);
+    const instance = asInstance(morning);
+    const first = instance.chapters[0]!;
+    const noon = compile([
+      item({ id: "pickup", authority: "fixed_commitment", kind: "pickup", windowStart: "2026-09-01T09:00:00Z", status: "completed" }),
+      item({ id: "visit", kind: "commercial_visit", physicalEntityId: "p-a", latitude: 34.2, longitude: -118.2 }),
+      item({
+        id: "new-delivery",
+        authority: "fixed_commitment",
+        kind: "delivery",
+        windowStart: "2026-09-01T15:00:00Z",
+      }),
+    ]);
+    const { instance: revised, diff } = recompileCampaignFuture({ instance, next: noon });
+    expect(revised.completedChapterIds).toContain(first.stableChapterId);
+    expect(revised.chapters.some(chapter => chapter.stableChapterId === first.stableChapterId)).toBe(true);
+    expect(revised.currentChapterId).not.toBe(first.stableChapterId);
+    expect(revised.id).toBe(instance.id);
+    expect(revised.title).toBe(instance.title);
+    expect(diff?.reasonCodes).toEqual(
+      expect.arrayContaining(["NEW_FIXED_COMMITMENT", "AUTHORITATIVE_ACTION_COMPLETED"])
+    );
+  });
 });
 
 describe("campaign game-event contract", () => {
@@ -341,5 +375,40 @@ describe("campaign supporting grammar", () => {
     ]);
     expect(travelFingerprint(truth)).toContain("test_stub");
     expect(truth.providerState).toBe("test_stub");
+  });
+});
+
+describe("campaign runtime hosts", () => {
+  it("binds chapters to existing engines instead of a second expedition", () => {
+    expect(hostForBinding("expedition")).toBe("expedition");
+    expect(hostForBinding("authoritative_visit_route")).toBe("authoritative_visit_route");
+    expect(hostForBinding("local_target_run")).toBe("local_target_run");
+    expect(hostForBinding("guardian_finale")).toBe("guardian_encounter");
+  });
+
+  it("keeps the world playable when the campaign is quiet", () => {
+    expect(campaignWorldRemainsPlayable("quiet")).toBe(true);
+    expect(campaignWorldRemainsPlayable("completed")).toBe(true);
+  });
+
+  it("silences arcade pressure while driving or in conversation sanctuary", () => {
+    expect(arcadePressureAllowed({ driving: true, conversationSanctuary: false, binding: "guardian_finale" })).toBe(false);
+    expect(arcadePressureAllowed({ driving: false, conversationSanctuary: true, binding: "encounter" })).toBe(false);
+    expect(arcadePressureAllowed({ driving: false, conversationSanctuary: false, binding: "guardian_finale" })).toBe(true);
+  });
+
+  it("orders Day Plan stops from campaign chapters without inventing work", () => {
+    const ordered = projectStopsOntoCampaign(
+      [{ id: "living-world-visit" }, { id: "native-pickup-1" }, { id: "unrelated" }],
+      [
+        { objectiveIds: ["pickup:1"] },
+        { objectiveIds: ["visit"] },
+      ]
+    );
+    expect(ordered.map(item => item.id)).toEqual([
+      "native-pickup-1",
+      "living-world-visit",
+      "unrelated",
+    ]);
   });
 });

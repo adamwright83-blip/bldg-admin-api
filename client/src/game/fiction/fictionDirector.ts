@@ -43,6 +43,12 @@ export function selectFictionForMission(
     identity?: FictionAssignmentIdentity;
     registry?: readonly FictionTemplate[];
     fictionRulesVersion?: number;
+    preferredTemplateId?: string | null;
+    persistAssignment?: (record: {
+      stableMissionKey: string;
+      templateId: string;
+      rulesVersion: number;
+    }) => void;
   }
 ): FictionMissionInstance | null {
   const registry = input.registry ?? FICTION_TEMPLATE_REGISTRY;
@@ -63,7 +69,13 @@ export function selectFictionForMission(
     return { stableMissionKey: key, template, grammar };
   }
 
-  const assignment = deriveFictionAssignment(key, registry, grammar);
+  const preferred = input.preferredTemplateId
+    ? registry.find(item => item.id === input.preferredTemplateId)
+    : null;
+  const assignment =
+    preferred && eligibleTemplates(registry, grammar).some(item => item.id === preferred.id)
+      ? { templateId: preferred.id, rulesVersion: preferred.rulesVersion }
+      : deriveFictionAssignment(key, registry, grammar);
   if (!assignment) return null;
   const template = registry.find(item => item.id === assignment.templateId);
   if (!template) return null;
@@ -77,6 +89,11 @@ export function selectFictionForMission(
     },
     input.identity ?? null
   );
+  input.persistAssignment?.({
+    stableMissionKey: key,
+    templateId: assignment.templateId,
+    rulesVersion: assignment.rulesVersion,
+  });
 
   return { stableMissionKey: key, template, grammar };
 }

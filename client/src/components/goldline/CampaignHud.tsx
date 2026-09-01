@@ -39,6 +39,8 @@ export function CampaignHud({
       data-campaign-id={campaign.id}
       data-revision={campaign.revision}
       data-pacing={presentation.pacing}
+      data-binding={current?.selectedGameplayBinding ?? "none"}
+      data-world-playable="true"
     >
       <strong>{campaign.title}</strong>
       {current ? (

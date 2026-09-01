@@ -67,11 +67,12 @@ await page.getByRole("region", { name: "Goldline global overworld" }).waitFor({
   timeout: 30_000,
 });
 await page.getByTestId("goldline-campaign-hud").waitFor({ state: "visible", timeout: 20_000 });
-await hold(5000);
+await page.getByTestId("goldline-campaign-host").waitFor({ state: "visible", timeout: 20_000 });
+await hold(12000);
 await page.screenshot({ path: `${output}/driver-390-campaign-home.png` });
 
 await page.setViewportSize({ width: 1024, height: 768 });
-await hold(2500);
+await hold(8000);
 await page.screenshot({ path: `${output}/driver-1024-campaign-thread.png` });
 
 const before = await trpcGet("system.goldlineWorld.campaign");
@@ -89,11 +90,31 @@ if (after?.campaign?.id !== before?.campaign?.id) {
   throw new Error("Campaign identity changed after a real order arrived");
 }
 
+await page.setViewportSize({ width: 390, height: 844 });
+await page.goto(`${baseURL}/driver`);
+await page.getByRole("region", { name: "Goldline global overworld" }).waitFor({
+  state: "visible",
+  timeout: 30_000,
+});
+await hold(14000);
+await page.screenshot({ path: `${output}/driver-390-campaign-revision.png` });
+
+const host = page.getByTestId("goldline-campaign-host-action");
+if (await host.count()) {
+  await host.click();
+  await hold(8000);
+}
+
 await login("admin", "goldline-proof-admin-pass");
 await page.setViewportSize({ width: 1440, height: 900 });
 await page.goto(`${baseURL}/growth/lantern-city`);
 await page.locator(".cr-world-camera").waitFor({ state: "visible", timeout: 30_000 });
 await page.getByTestId("goldline-campaign-hud").waitFor({ state: "visible", timeout: 20_000 });
+await hold(18000);
+await page.mouse.move(720, 450);
+await page.mouse.down();
+await page.mouse.move(880, 520, { steps: 12 });
+await page.mouse.up();
 await hold(6000);
 await page.screenshot({ path: `${output}/admin-1440-campaign-gold-line.png` });
 
@@ -104,7 +125,7 @@ if (adminCampaign?.campaign?.id !== before?.campaign?.id) {
 
 await page.reload();
 await page.locator(".cr-world-camera").waitFor({ state: "visible", timeout: 30_000 });
-await hold(4000);
+await hold(14000);
 await page.screenshot({ path: `${output}/admin-1440-campaign-reload.png` });
 
 await page.close();

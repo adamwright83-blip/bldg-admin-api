@@ -88,6 +88,11 @@ test.describe("Goldline campaign smoke", () => {
       timeout: 30_000,
     });
     await expect(page.getByTestId("goldline-campaign-hud")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("goldline-campaign-host")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("goldline-campaign-host")).toHaveAttribute(
+      "data-world-playable",
+      "true"
+    );
     await expect(page.locator(".overworld-joystick-zone")).toHaveCount(1);
   });
 
@@ -128,6 +133,13 @@ test.describe("Goldline campaign smoke", () => {
       expect(after.lastRevision?.reasonCodes ?? []).toEqual(
         expect.arrayContaining(["NEW_FIXED_COMMITMENT"])
       );
+      await page.addInitScript(() => {
+        window.localStorage.setItem("goldline:day1:dismissed", "1");
+      });
+      await page.goto("/driver");
+      await expect(page.getByTestId("goldline-campaign-revision-why")).toBeVisible({
+        timeout: 20_000,
+      });
     }
   });
 
