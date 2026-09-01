@@ -134,19 +134,37 @@ export function recompileCampaignFuture(input: {
       : [];
 
   const revision = input.instance.revision + 1;
+  const unfinished = mergedChapters.filter(
+    chapter => !completedChapterIds.includes(chapter.stableChapterId)
+  );
+  const completedByReality = mergedChapters.length > 0 && unfinished.length === 0;
+  const nextStatus = completedByReality
+    ? "completed"
+    : mergedChapters.length === 0
+      ? "quiet"
+      : input.instance.startedAt
+        ? "active"
+        : input.next.status;
+  const nextCompletedAt = completedByReality
+    ? input.instance.completedAt ?? new Date().toISOString()
+    : input.instance.completedAt;
+
   const instance: CampaignInstance = {
     ...input.instance,
     ...input.next,
     id: input.instance.id,
     createdAt: input.instance.createdAt,
     startedAt: input.instance.startedAt,
-    completedAt: input.instance.completedAt,
+    completedAt: nextCompletedAt,
     revision,
     chapters: mergedChapters,
     completedChapterIds,
-    currentChapterId: currentStillValid
-      ? input.instance.currentChapterId
-      : future[0]?.stableChapterId ?? null,
+    currentChapterId: completedByReality
+      ? null
+      : currentStillValid
+        ? input.instance.currentChapterId
+        : future[0]?.stableChapterId ?? null,
+    status: nextStatus,
     campaignArchetypeId: input.instance.campaignArchetypeId,
     title: input.instance.title,
     premise: input.instance.premise,
