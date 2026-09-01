@@ -146,8 +146,13 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     await page.waitForTimeout(900);
     const stateA = await space.getAttribute("style");
 
+    const louise = page.getByRole("button", { name: /Pursued: The Louise/i });
     const pursued = page.locator(".lc-pursued-building").first();
-    const building = (await pursued.count()) ? pursued : page.locator(".lc-lantern").first();
+    const building = (await louise.count())
+      ? louise
+      : (await pursued.count())
+        ? pursued
+        : page.locator(".lc-lantern").first();
     await building.click();
     await expect(page.locator(".owi")).toBeVisible();
     await page.waitForTimeout(1600);

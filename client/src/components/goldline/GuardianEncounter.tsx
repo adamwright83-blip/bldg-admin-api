@@ -175,7 +175,7 @@ export function GuardianEncounter({
         ))}
       </div>
       <div className="gl-guardian-hud" aria-live="polite">
-        <p className="gl-guardian-tell">{world.lastTell}</p>
+        <p className="gl-guardian-tell" data-testid="goldline-guardian-tell">{world.lastTell}</p>
         {state.confrontationReady ? (
           <p>
             Guardian {world.health}/{world.maxHealth} · You {world.playerHealth}/{world.playerMaxHealth}
@@ -195,6 +195,7 @@ export function GuardianEncounter({
         <button
           type="button"
           className="gl-guardian-counter"
+          data-testid="goldline-guardian-linehook"
           onPointerDown={event => {
             event.stopPropagation();
             dispatch({ type: "counter" });

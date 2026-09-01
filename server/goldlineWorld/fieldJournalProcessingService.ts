@@ -221,6 +221,23 @@ export async function processFieldJournalEntry(input: {
       });
     }
 
+    try {
+      const { recordJournalActionsOnMatchedEntities } = await import(
+        "./journalWorldActionService"
+      );
+      await recordJournalActionsOnMatchedEntities({
+        tenantId: input.tenantId,
+        journalEntryId: journal.id,
+        actorId: journal.driverId,
+        extraction: structured.extraction,
+      });
+    } catch (error) {
+      console.error("[FieldJournal] world action capture failed", {
+        journalEntryId: journal.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     if (structured.extraction.entities.some(entity => entity.kind === "potential_property" || entity.kind === "existing_property")) {
       const { queueForgeCandidatesFromJournal } = await import("../worldForge/worldForgeService");
       await queueForgeCandidatesFromJournal({

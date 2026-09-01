@@ -29,6 +29,7 @@ export function TerritoryWorldLayer({
   const defeat = trpc.system.goldlineWorld.recordGuardianDefeat.useMutation();
   const utils = trpc.useUtils();
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [noticedId, setNoticedId] = useState<string | null>(null);
   const presented = territories.data ?? [];
 
   if (googleVisible) return null;
@@ -41,8 +42,10 @@ export function TerritoryWorldLayer({
           item={item}
           entities={entities}
           active={activeId === item.definition.id}
+          noticed={noticedId === item.definition.id && activeId !== item.definition.id}
           reducedMotion={reducedMotion}
-          onNotice={() => {
+          onNotice={() => setNoticedId(item.definition.id)}
+          onEnter={() => {
             setActiveId(item.definition.id);
             onInteractionLock(true);
           }}
@@ -63,7 +66,6 @@ export function TerritoryWorldLayer({
           }}
         />
       ))}
-      {activeId && !interactionLocked ? null : null}
     </>
   );
 }
@@ -72,16 +74,20 @@ function TerritoryOnAtlas({
   item,
   entities,
   active,
+  noticed,
   reducedMotion,
   onNotice,
+  onEnter,
   onClose,
   onDefeat,
 }: {
   item: PresentedTerritory;
   entities: readonly CityWorldEntity[];
   active: boolean;
+  noticed: boolean;
   reducedMotion: boolean;
   onNotice: () => void;
+  onEnter: () => void;
   onClose: () => void;
   onDefeat: () => void;
 }) {
@@ -154,19 +160,22 @@ function TerritoryOnAtlas({
           onClose={onClose}
         />
       ) : (
-        <button
-          type="button"
-          className="gl-guardian"
-          style={{ left: `${geometry.centroid.x}%`, top: `${geometry.centroid.y}%` }}
-          onClick={onNotice}
-          aria-label={`${guardian.name} over ${item.definition.fantasyTitle}`}
+        <div
+          className="gl-guardian-anchor"
+          style={{ left: `${geometry.centroid.x}%`, top: `${Math.max(10, geometry.centroid.y - 8)}%` }}
         >
           <GuardianActor
             guardianId={guardian.id}
-            phase="idle"
+            phase={noticed ? "notice" : "idle"}
             reducedMotion={reducedMotion}
           />
-        </button>
+          <button
+            type="button"
+            className="gl-guardian-hit"
+            onClick={onEnter}
+            aria-label={`${guardian.name} over ${item.definition.fantasyTitle}`}
+          />
+        </div>
       )}
     </>
   );

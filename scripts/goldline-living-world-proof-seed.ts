@@ -464,7 +464,7 @@ async function seed() {
         tenantId: TENANT,
         opportunityId: huntOpportunity.id,
         code: `PROOF-HUNT-${building.id.slice(-1)}`,
-        status: "field_ready",
+        status: "game_ready",
         accountSnapshotJson: { name: building.name, address: building.address },
         opportunitySnapshotJson: {},
         missionBriefJson: {},
