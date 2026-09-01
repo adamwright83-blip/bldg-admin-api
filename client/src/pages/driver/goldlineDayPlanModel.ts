@@ -11,7 +11,7 @@ import type {
   DayDirectorCommitment,
   ProcessingLocation,
 } from "@shared/dayDirector";
-import { compileGoldlineAdventure } from "@shared/goldlineAdventure";
+import { compileGoldlineAdventure, type TerritoryBundleHint } from "@shared/goldlineAdventure";
 
 export type LiveAdventureObjective = {
   id: string;
@@ -303,6 +303,7 @@ export function buildDayPlanProjection(input: {
   commitments?: DayDirectorCommitment[];
   physicalVisitBlocked?: boolean;
   liveObjectives?: LiveAdventureObjective[];
+  territoryBundles?: TerritoryBundleHint[];
 }): DayPlanProjection {
   const fixedCount = [
     ...(input.pickups ?? []),
@@ -458,6 +459,7 @@ export function buildDayPlanProjection(input: {
   const deduped = baseStops.filter(unique);
   const compiled = compileGoldlineAdventure({
     date: input.businessDate,
+    territoryBundles: input.territoryBundles,
     objectives: deduped.map(stop => ({
       id: stop.id, physicalEntityId: stop.physicalEntityId ?? null,
       kind: stop.kind === "pickup" ? "pickup" : stop.kind === "dropoff" ? "delivery" : stop.source === "living_world" && /recovery/i.test(stop.sourceLabel) ? "recovery" : stop.kind === "sales" ? "commercial_visit" : "field_capture",

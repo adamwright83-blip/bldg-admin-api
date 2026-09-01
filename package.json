@@ -34,7 +34,8 @@
     "goldline:bundle:budget": "node scripts/checkGoldlineBundleBudget.mjs",
     "goldline:geocode:backfill": "tsx scripts/goldline-geocode-backfill.ts",
     "dayforge:demo": "tsx scripts/dayforge-demo.ts",
-    "test:goldline:smoke": "playwright test --config playwright.goldline-smoke.config.ts"
+    "test:goldline:smoke": "playwright test --config playwright.goldline-smoke.config.ts",
+    "test:goldline:territories:smoke": "playwright test --config playwright.goldline-smoke.config.ts e2e/goldline-smoke/territoriesSmoke.spec.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

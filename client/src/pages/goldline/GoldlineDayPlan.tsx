@@ -21,6 +21,7 @@ import {
   type DayPlanStop,
   type LiveAdventureObjective,
 } from "../driver/goldlineDayPlanModel";
+import type { TerritoryBundleHint } from "@shared/goldlineAdventure";
 import world from "@/assets/goldline/generated/goldline-world-empty.png";
 import operator from "@/assets/goldline/generated/trailblazer-operator.png";
 import "./goldline-day-plan.css";
@@ -33,6 +34,7 @@ export type GoldlineDayPlanProps = {
   openChannelMission?: OpenChannelMission | null;
   salesMissions?: CommercialMission[];
   liveObjectives?: LiveAdventureObjective[];
+  territoryBundles?: TerritoryBundleHint[];
   nextCommitmentAt?: string | null;
   isLoading?: boolean;
   onOpenImport: () => void;
@@ -231,6 +233,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         openChannelMission: props.openChannelMission,
         salesMissions: props.salesMissions,
         liveObjectives: props.liveObjectives,
+        territoryBundles: props.territoryBundles,
         nextCommitmentAt: props.nextCommitmentAt,
         processingLocation: props.processingLocation,
         commitments: props.commitments,
@@ -244,6 +247,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       props.openChannelMission,
       props.salesMissions,
       props.liveObjectives,
+      props.territoryBundles,
       props.nextCommitmentAt,
       props.processingLocation,
       props.commitments,

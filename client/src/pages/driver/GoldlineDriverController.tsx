@@ -307,6 +307,9 @@ function LiveGoldlineDriverController() {
   const fieldToday = trpc.system.field.today.useQuery(undefined, {
     refetchInterval: 30_000,
   });
+  const territories = trpc.system.goldlineWorld.territories.useQuery(undefined, {
+    staleTime: 15_000,
+  });
   const builtMissions = trpc.system.commercialMission.myBuiltMissions.useQuery(
     undefined,
     { refetchInterval: 15_000 }
@@ -1182,6 +1185,14 @@ function LiveGoldlineDriverController() {
           openChannelMission={openChannel.data}
           salesMissions={builtMissions.data}
           liveObjectives={liveAdventureObjectives}
+          territoryBundles={(territories.data ?? [])
+            .filter(item => !item.state.cleared)
+            .map(item => ({
+              territoryId: item.definition.id,
+              memberPhysicalEntityIds: item.definition.members.map(
+                member => member.physicalEntityId
+              ),
+            }))}
           processingLocation={dayDirectorState.data?.processingLocation}
           commitments={dayDirectorState.data?.commitments}
           intelligenceAvailable={dayDirectorState.data?.intelligenceAvailable}
