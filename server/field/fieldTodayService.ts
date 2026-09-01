@@ -258,6 +258,7 @@ export async function getFieldToday(input: {
       },
       physicalEntityId: item.physicalEntityId ?? null,
       whySurfaced: item.reason,
+      whySourceOccurredAt: item.sourceOccurredAt,
       scheduledAt: null,
       urgency: isPromise ? "urgent" : "flexible",
       title: isPromise ? "A promise you made is due" : "Worth returning to today",

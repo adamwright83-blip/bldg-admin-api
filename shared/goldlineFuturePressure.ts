@@ -29,6 +29,8 @@ export type FuturePressureItem = {
   reason: string;
   /** The evidence this traces back to, so it is always auditable. */
   sourceEvidenceReference: string;
+  /** When the source evidence entered the Chronicle, for player-facing provenance. */
+  sourceOccurredAt: string | null;
   weight: PressureWeight;
   /** True only for a promise the operator actually made. */
   isObligation: boolean;
@@ -74,6 +76,7 @@ export function projectFuturePressure(input: {
     claim: TemporalClaim;
     physicalEntityId: string | null;
     sourceEvidenceReference: string;
+    sourceOccurredAt?: string | null;
   }>;
 }): FuturePressure {
   const items: FuturePressureItem[] = [];
@@ -86,6 +89,7 @@ export function projectFuturePressure(input: {
       physicalEntityId: record.physicalEntityId,
       reason: record.explanation,
       sourceEvidenceReference: record.sourceEvidenceReference,
+      sourceOccurredAt: record.madeAt,
       weight: weighObligation(record, input.date),
       isObligation: true,
       uncertain: false,
@@ -99,6 +103,7 @@ export function projectFuturePressure(input: {
       physicalEntityId: entry.physicalEntityId,
       reason: describeTemporalClaim(entry.claim),
       sourceEvidenceReference: entry.sourceEvidenceReference,
+      sourceOccurredAt: entry.sourceOccurredAt ?? null,
       weight: weighClaim(entry.claim),
       isObligation: false,
       uncertain: Boolean(entry.claim.when?.hedged),

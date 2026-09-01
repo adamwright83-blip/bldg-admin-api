@@ -113,12 +113,14 @@ export function futurePressureFromEvents(input: {
       claim: claimFromSignal(event),
       physicalEntityId: event.physicalEntityId,
       sourceEvidenceReference: event.sourceEvidenceReference,
+      sourceOccurredAt: event.occurredAt,
     }))
     .filter(
       (entry): entry is {
         claim: TemporalClaim;
         physicalEntityId: string | null;
         sourceEvidenceReference: string;
+        sourceOccurredAt: string;
       } => entry.claim !== null
     );
 

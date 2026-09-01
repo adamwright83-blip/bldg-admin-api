@@ -4202,3 +4202,15 @@
     transition: none;
   }
 }
+
+
+/* Real Workday: passive travel shield; no touch target competes with driving. */
+.driving-safety-shield {
+  position: absolute; z-index: 95; inset: 0; display: grid; align-content: end;
+  justify-items: center; gap: 4px; padding: 24px 18px calc(24px + env(safe-area-inset-bottom));
+  text-align: center; pointer-events: auto;
+  background: linear-gradient(180deg, transparent 55%, rgba(3, 12, 17, 0.82));
+}
+.driving-safety-shield b { font-size: 15px; letter-spacing: .14em; }
+.driving-safety-shield span { font-size: 11px; color: rgba(223,254,255,.78); }
+.expedition-hud__driving { position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%); width: min(82%, 320px); text-align: center; font-size: 12px; letter-spacing: .09em; }

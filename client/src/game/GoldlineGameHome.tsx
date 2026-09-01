@@ -184,6 +184,7 @@ import { reconcileFictionOnResume } from "./fiction/longHorizonResume";
 import type { FictionMissionInstance } from "./fiction/fictionDirector";
 import { SurveyPulse } from "./expedition/surveyPulse";
 import { usePhysicalArrival } from "./session/usePhysicalArrival";
+import { useDrivingLikelihood } from "./session/useDrivingLikelihood";
 
 // New objection encounters load only when the player actually reaches one,
 // so the base game runtime stays lean.
@@ -651,6 +652,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const [coldCallOpen, setColdCallOpen] = useState(false);
   const [scoutOpen, setScoutOpen] = useState(false);
   const networkStatus = useNetworkStatus();
+  const driving = useDrivingLikelihood();
+  const drivingLikely = driving.snapshot.likely;
   const sessionIdRef = useRef(getGoldlineSessionId());
   const sessionStartRef = useRef(performance.now());
   const emit = props.onEmitEvent;
@@ -1214,6 +1217,22 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const seenMissionKeysRef = useRef(new Set<string>());
   const prevActionRef = useRef<CorridorAction | null>(null);
   const seenScoutDiscoveryIdsRef = useRef(new Set<string>());
+  const seenPressureRefs = useRef(new Set<string>());
+  useEffect(() => {
+    for (const item of props.today?.timeline ?? []) {
+      if (item.kind !== "field_commitment" && item.kind !== "reported_opportunity") continue;
+      const ref = item.source.sourceReference;
+      if (seenPressureRefs.current.has(ref)) continue;
+      seenPressureRefs.current.add(ref);
+      emit?.({
+        eventName: "future_pressure_presented",
+        sessionId: sessionIdRef.current,
+        missionId: null,
+        properties: { sessionId: sessionIdRef.current, kind: item.kind, hasPhysicalEntity: Boolean(item.physicalEntityId) },
+      });
+    }
+  }, [props.today?.timeline, emit]);
+
   const openChannelGap = detectOpenChannelGap({
     now: new Date(),
     selectedDate: props.selectedDate,
@@ -1795,7 +1814,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   );
 
   const enterExpedition = useCallback(() => {
-    if (!preparedObjective) return;
+    if (!preparedObjective || drivingLikely) return;
     // A plain Open Channel desk task has no real physical arrival — the
     // expedition shell is reserved for objectives that do (native_pickup,
     // external_order, local_target_run). It completes in the base via
@@ -1818,12 +1837,20 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             })
           : null,
     });
-  }, [preparedObjective, collectedOrderEvidence]);
+  }, [preparedObjective, collectedOrderEvidence, drivingLikely]);
 
   const exitExpedition = useCallback(() => {
     setActiveExpedition(null);
     setCargoPhase("idle");
   }, []);
+
+  useEffect(() => {
+    if (!drivingLikely) return;
+    runtimeRef.current?.setInput(0, 0);
+    if (activeExpedition) exitExpedition();
+    setColdCallOpen(false);
+    setScoutOpen(false);
+  }, [drivingLikely, activeExpedition, exitExpedition]);
 
   /**
    * A plain Open Channel desk task ("design door hangers") is real work with
@@ -2692,6 +2719,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
    */
   function handleSelectRouteStop(stop: AuthoritativeVisitRouteStop) {
     if (stop.evidenced) return;
+    emit?.({
+      eventName: "growth_action_opened",
+      sessionId: sessionIdRef.current,
+      missionId: stop.missionId,
+      properties: { sessionId: sessionIdRef.current, actionKind: "commercial_visit" },
+    });
     if (!stop.address || !stop.navigationUrl) {
       setFeedback("STOP UNAVAILABLE · NO LOCATION ON RECORD");
       return;
@@ -2771,6 +2804,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   }
 
   function performAction() {
+    if (drivingLikely) return;
     // Defense in depth: GoldlineGame.performAction() already rejects while
     // an expedition is active, but a stale React `action` value could
     // still reach this handler in the same render cycle an expedition
@@ -2891,6 +2925,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       className="playable-goldline-shell"
       ref={setShellEl}
       data-testid="goldline-shell"
+      data-driving-likely={drivingLikely ? "true" : "false"}
       data-expedition-state={
         activeExpedition != null
           ? "active"
@@ -2932,6 +2967,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           <ExpeditionHud
             runtime={runtimeRef.current}
             active={activeExpedition != null}
+            interactionDisabled={drivingLikely}
             onEnter={enterExpedition}
             onExit={exitExpedition}
             objectiveLabel={
@@ -3058,6 +3094,12 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           </div>
         ) : null}
         <div className="game-atmosphere" aria-hidden="true" />
+        {drivingLikely ? (
+          <div className="driving-safety-shield" role="status" data-testid="driving-safety-shield">
+            <b>TRAVEL IN PROGRESS</b>
+            <span>GOLDLINE IS WATCHING THE ROUTE · CONTROLS RETURN WHEN PARKED</span>
+          </div>
+        ) : null}
         {missionAffordance?.primary ? (
           <div
             className="mission-affordance-signal"
@@ -3207,8 +3249,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             ) : null}
             <Joystick
               disabled={
-                activeExpedition != null &&
-                expeditionSnapshot.outcome !== "running"
+                drivingLikely ||
+                (activeExpedition != null &&
+                  expeditionSnapshot.outcome !== "running")
               }
               onInput={(x, y) => runtimeRef.current?.setInput(x, y)}
               showMovementHint={!movementLearned}
@@ -3295,7 +3338,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             <button
               className={`cold-call-entry is-portal-${coldCallPortalState}`}
               disabled={
-                !props.coldCallBatch && props.coldCallEligibleCount === 0
+                drivingLikely ||
+                (!props.coldCallBatch && props.coldCallEligibleCount === 0)
               }
               onClick={async () => {
                 if (!props.coldCallBatch) {
@@ -3580,7 +3624,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             <GoldlineFictionMissionPanel
               instance={fictionMission}
               challengeDepth={missionDirector.challengeDepth}
-              isDriving={false}
+              isDriving={drivingLikely}
               authoritativeCount={props.authoritativeRouteCoverage ?? 0}
               routeStops={props.authoritativeVisitRoute?.stops}
               onSelectStop={handleSelectRouteStop}
