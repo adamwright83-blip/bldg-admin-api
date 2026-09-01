@@ -33,7 +33,8 @@
     "dayforge:migrations:verify": "tsx scripts/dayforge-migrations-verify.ts",
     "goldline:bundle:budget": "node scripts/checkGoldlineBundleBudget.mjs",
     "goldline:geocode:backfill": "tsx scripts/goldline-geocode-backfill.ts",
-    "dayforge:demo": "tsx scripts/dayforge-demo.ts"
+    "dayforge:demo": "tsx scripts/dayforge-demo.ts",
+    "test:goldline:smoke": "playwright test --config playwright.goldline-smoke.config.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
