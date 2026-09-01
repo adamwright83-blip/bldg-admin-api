@@ -495,3 +495,16 @@
   */
   .lc-page .lc-header-controls .cr-day-phase{display:none}
 }
+
+/* ── The city camera ──────────────────────────────────────────────────────
+   One transformed world container; fixed controls live outside it so a pan
+   never drags the interface and an arcade explosion never shakes the HUD.
+   `touch-action: none` gives the world ownership of a deliberate gesture so
+   the page does not scroll while the player is dragging Los Angeles. */
+.cr-world-camera{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab}
+.cr-world-camera.is-dragging{cursor:grabbing}
+.cr-world-space{position:absolute;inset:0;transform-origin:50% 50%;will-change:transform}
+.cr-world-camera-controls{position:absolute;z-index:30;right:12px;bottom:12px;display:flex;gap:6px}
+.cr-world-camera-controls button{display:grid;min-width:44px;min-height:44px;place-items:center;padding:0 12px;border:2px solid #d8b25c;border-radius:12px;background:#fffdf2;color:#17385e;font:900 12px Inter,sans-serif;cursor:pointer}
+.cr-world-camera-controls button:focus-visible{outline:3px solid #ef9f18;outline-offset:3px}
+@media (prefers-reduced-motion:reduce){.cr-world-space{transition:none}}
