@@ -11,6 +11,8 @@ import {
   type FieldJournalExtraction,
 } from "../../shared/fieldJournal";
 import { ENV } from "../_core/env";
+import { goldlineProofModeEnabled } from "../_core/proofMode";
+import { extractFieldJournalDeterministically } from "./deterministicJournalExtraction";
 import { invokeLLM } from "../_core/llm";
 import { transcribeAudio } from "../_core/voiceTranscription";
 import {
@@ -53,8 +55,23 @@ export async function extractFieldJournal(
   tenantId: string,
   transcript: string
 ): Promise<{ extraction: FieldJournalExtraction; provider: string | null; model: string | null; status: "processed" | "fallback" }> {
-  if (!ENV.anthropicApiKey?.trim())
+  if (!ENV.anthropicApiKey?.trim()) {
+    /*
+      Proof runs have no LLM. The deterministic fixture stands in so the
+      journal -> discovery -> forge chain is provable, and it labels itself as
+      the provider so nothing downstream can mistake it for real extraction.
+      In production this branch is unreachable and the honest empty fallback
+      is returned exactly as before.
+    */
+    if (goldlineProofModeEnabled())
+      return {
+        extraction: extractFieldJournalDeterministically(transcript),
+        provider: "deterministic_test_only",
+        model: "fixture-v1",
+        status: "processed",
+      };
     return { extraction: EMPTY_FIELD_JOURNAL_EXTRACTION, provider: null, model: null, status: "fallback" };
+  }
   try {
     const result = await invokeLLM({
       tenantId,

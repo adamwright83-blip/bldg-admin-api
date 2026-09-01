@@ -32,6 +32,7 @@ import {
   type TowerWeaponConcept,
 } from "./worldForgeContracts";
 import {
+  defaultTowerImageProvider,
   productionTowerImageProvider,
   type TowerImageProvider,
 } from "./towerImageProvider";
@@ -297,7 +298,7 @@ export async function processTowerForgeJob(input: {
     if (!entity || !selectedRow) throw new Error("Tower identity or evidence-backed concept is missing");
     const evidenceRows = await db.select().from(propertyEvidenceItems).where(and(eq(propertyEvidenceItems.tenantId, input.tenantId), eq(propertyEvidenceItems.forgeJobId, job.id)));
     const exclusions = await db.select().from(goldlineCreativeExclusions).where(and(eq(goldlineCreativeExclusions.tenantId, input.tenantId), eq(goldlineCreativeExclusions.active, true)));
-    const provider = input.imageProvider ?? productionTowerImageProvider();
+    const provider = input.imageProvider ?? defaultTowerImageProvider();
     if (!provider.configured()) return job;
     const concept = selectedRow.conceptJson as TowerWeaponConcept;
     const evidence = evidenceRows.map(row => ({ id: row.id, factType: row.factType, value: String((row.valueJson as { value?: unknown }).value ?? ""), provenance: row.provenanceClass, sourceReference: row.sourceReference })) as PropertyEvidence[];
@@ -353,7 +354,33 @@ export async function processTowerForgeJob(input: {
     }
     await transitionJob({ tenantId: input.tenantId, jobId: job.id, from: job.state, to: "geography_verifying", values: { physicalEntityId: identity.physicalEntityId } });
 
-    const mission = await createCommercialMission({
+    /*
+      One building keeps one commercial relationship. A second journal about
+      the same place must extend the existing account, not open a rival one —
+      otherwise the same property accumulates duplicate accounts, duplicate
+      geographic authority rows and eventually a duplicate published tower.
+      The physical entity's own binding is the authority on whether a
+      commercial account already exists here.
+    */
+    const existingAccountBinding = await db
+      .select({ bindingKey: physicalEntityBindings.bindingKey })
+      .from(physicalEntityBindings)
+      .where(
+        and(
+          eq(physicalEntityBindings.tenantId, input.tenantId),
+          eq(physicalEntityBindings.physicalEntityId, identity.physicalEntityId),
+          eq(physicalEntityBindings.bindingType, "commercial_account")
+        )
+      )
+      .limit(1);
+    const boundAccountId = existingAccountBinding[0]
+      ? Number(existingAccountBinding[0].bindingKey)
+      : null;
+
+    const mission: { id: number | null; account: { accountId: number } } =
+      boundAccountId && Number.isSafeInteger(boundAccountId)
+      ? { id: null, account: { accountId: boundAccountId } }
+      : await createCommercialMission({
       tenantId: input.tenantId,
       assignedTo: metadata.actorId,
       initialPipelineStage: "discovered",
@@ -390,7 +417,7 @@ export async function processTowerForgeJob(input: {
       ],
       actor: { type: "driver", id: metadata.actorId },
       idempotencyKey: `world-forge-prospect:${job.id}`,
-    });
+      });
     await syncGeographicEntities(input.tenantId);
     await geocodePendingLocations({ tenantId: input.tenantId, batchSize: 10 });
     await bindPhysicalEntity({ tenantId: input.tenantId, physicalEntityId: identity.physicalEntityId, bindingType: "commercial_account", bindingKey: String(mission.account.accountId), evidenceReference: `commercial_accounts:${mission.account.accountId}` });
@@ -405,7 +432,7 @@ export async function processTowerForgeJob(input: {
       occurredAt: new Date().toISOString(),
       observedAt: null,
       sourceType: "commercial_pipeline_records",
-      sourceId: String(mission.id),
+      sourceId: mission.id === null ? `entity:${identity.physicalEntityId}` : String(mission.id),
       sourceEvidenceReference: `driver_sales_journals:${job.journalEntryId}`,
       provenanceClass: place ? "provider_verified" : "operator_reported",
       verificationClass: place ? "VERIFIED" : "ATTESTED",
@@ -444,7 +471,7 @@ export async function processTowerForgeJob(input: {
       similarityRisk: concept.similarityRisk, selected: index === 0,
     }));
     await db.insert(towerWeaponConcepts).values(conceptRows).onDuplicateKeyUpdate({ set: { title: concepts[0]!.title } });
-    const provider = input.imageProvider ?? productionTowerImageProvider();
+    const provider = input.imageProvider ?? defaultTowerImageProvider();
     if (!provider.configured()) {
       await transitionJob({ tenantId: input.tenantId, jobId: job.id, from: "concepting", to: "generation_unconfigured", values: { lastError: "OPENAI_API_KEY or another supported tower image provider is not configured" } });
       await appendGoldlineWorldEvent({

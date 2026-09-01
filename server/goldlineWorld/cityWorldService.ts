@@ -30,7 +30,7 @@ import {
 } from "../../shared/goldlineWorld";
 import { presentWorldState } from "../../shared/goldlineWorldPresentation";
 import { getGeographicTruth } from "../geography/geographicTruthService";
-import { normalizePhysicalAlias } from "./identityResolver";
+import { physicalAliasesMatch } from "./identityResolver";
 import { getDb } from "../db";
 
 function eventFromRow(row: typeof goldlineWorldEvents.$inferSelect): GoldlineWorldEvent {
@@ -161,18 +161,21 @@ export async function listCityWorldEntities(input: { tenantId: string }) {
    * address simply does not join a building — it is not guessed onto one.
    */
   const residentsByEntity = new Map<string, TruthCustomer[]>();
-  const addressOwner = new Map<string, string>();
-  for (const alias of aliases) {
-    if (alias.aliasType !== "normalized_address") continue;
-    const key = normalizePhysicalAlias(alias.aliasValue);
-    if (!key || addressOwner.has(key)) continue;
-    addressOwner.set(key, alias.physicalEntityId);
-  }
+  const addressAliases = aliases.filter(
+    alias => alias.aliasType === "normalized_address" && alias.aliasValue.trim()
+  );
   for (const customer of geography.customers) {
     const address = customer.location?.canonicalAddress ?? customer.address;
     if (!address) continue;
-    const owner = addressOwner.get(normalizePhysicalAlias(address));
-    if (!owner) continue;
+    const owners = new Set(
+      addressAliases
+        .filter(alias => physicalAliasesMatch(alias.aliasValue, address))
+        .map(alias => alias.physicalEntityId)
+    );
+    // A customer whose address matches two buildings is an identity conflict,
+    // so they join neither rather than being assigned to an arbitrary one.
+    if (owners.size !== 1) continue;
+    const owner = Array.from(owners)[0]!;
     const roster = residentsByEntity.get(owner) ?? [];
     roster.push(customer);
     residentsByEntity.set(owner, roster);

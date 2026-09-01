@@ -10,7 +10,7 @@
 import { and, eq } from "drizzle-orm";
 import { physicalEntityAliases, physicalEntityBindings } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { normalizePhysicalAlias } from "./identityResolver";
+import { normalizePhysicalAlias, physicalAliasesMatch } from "./identityResolver";
 
 export async function findPhysicalEntityIdByAddress(input: {
   tenantId: string;
@@ -21,20 +21,32 @@ export async function findPhysicalEntityIdByAddress(input: {
   if (!db) return null;
   const normalized = normalizePhysicalAlias(input.address);
   if (!normalized) return null;
+  /*
+    Matching happens on the doorway rather than on the exact stored string, so
+    a reference that spells the street differently or omits the city still
+    finds the building it belongs to. Stored rows may also predate the current
+    normaliser, which exact column equality would silently miss.
+  */
   const rows = await db
-    .select({ physicalEntityId: physicalEntityAliases.physicalEntityId })
+    .select({
+      physicalEntityId: physicalEntityAliases.physicalEntityId,
+      aliasValue: physicalEntityAliases.aliasValue,
+    })
     .from(physicalEntityAliases)
     .where(
       and(
         eq(physicalEntityAliases.tenantId, input.tenantId),
-        eq(physicalEntityAliases.aliasType, "normalized_address"),
-        eq(physicalEntityAliases.normalizedAliasValue, normalized)
+        eq(physicalEntityAliases.aliasType, "normalized_address")
       )
     );
-  const unique = new Set(rows.map(row => row.physicalEntityId));
+  const unique = new Set(
+    rows
+      .filter(row => physicalAliasesMatch(row.aliasValue, input.address!))
+      .map(row => row.physicalEntityId)
+  );
   // An address bound to two entities is an unresolved identity conflict, not a
   // coin flip. Attaching to either one would assert something untrue.
-  return unique.size === 1 ? rows[0]!.physicalEntityId : null;
+  return unique.size === 1 ? Array.from(unique)[0]! : null;
 }
 
 export async function findPhysicalEntityIdByBinding(input: {

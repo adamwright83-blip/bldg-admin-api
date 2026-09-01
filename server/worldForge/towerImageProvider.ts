@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { goldlineProofModeEnabled } from "../_core/proofMode";
 
 export type TowerImageRequest = {
   physicalEntityId: string;
@@ -74,4 +75,19 @@ export class DeterministicTestTowerImageProvider implements TowerImageProvider {
 export function productionTowerImageProvider(): TowerImageProvider {
   const openai = new OpenAITowerImageProvider();
   return openai.configured() ? openai : new UnconfiguredTowerImageProvider();
+}
+
+/**
+ * The provider the forge uses when a caller does not inject one.
+ *
+ * Production always resolves to the real adapter or the truthful unconfigured
+ * state. Only an explicitly requested, non-production proof run gets the
+ * deterministic adapter, whose bytes are labelled test-only and whose provider
+ * key is rejected by the forge if it ever reaches a production process.
+ */
+export function defaultTowerImageProvider(): TowerImageProvider {
+  const production = productionTowerImageProvider();
+  if (production.configured()) return production;
+  if (goldlineProofModeEnabled()) return new DeterministicTestTowerImageProvider();
+  return production;
 }
