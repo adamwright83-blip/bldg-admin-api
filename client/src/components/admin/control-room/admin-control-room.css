@@ -463,7 +463,7 @@
 .lc-status-card.state-pursued .lc-mini-building{width:34px;height:38px;padding:11px 5px 4px;border-width:3px;border-radius:6px 6px 2px 2px}
 .lc-status-card.state-pursued .lc-mini-building:before,.lc-status-card.state-pursued .lc-mini-building:after{height:7px}
 .lc-status-card.state-pursued .lc-mini-building:after{box-shadow:9px 0 0 #fffbd0}
-.lc-map{border:2px solid #d8b25c;background:#dff0f7}
+.lc-map{position:relative;border:2px solid #d8b25c;background:#dff0f7}
 .lc-map-empty{border:2px solid #d8b25c;background:#fffdf2;color:#17385e}
 .lc-map-empty span{color:#4a6a86}
 .lc-legend,.lc-unmapped{border:2px solid #dcbc6b;background:#fffdf2;color:#17385e}
