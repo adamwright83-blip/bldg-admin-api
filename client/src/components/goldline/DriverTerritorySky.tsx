@@ -21,7 +21,6 @@ export function DriverTerritorySky({
     staleTime: 15_000,
   });
   const defeat = trpc.system.goldlineWorld.recordGuardianDefeat.useMutation();
-  const chapterDone = trpc.system.goldlineWorld.recordCampaignChapterGameCompleted.useMutation();
   const utils = trpc.useUtils();
   const reducedMotion = useReducedMotionFlag();
   const [playing, setPlaying] = useState(false);
@@ -51,6 +50,7 @@ export function DriverTerritorySky({
               territoryId: item.definition.id,
               guardianId: item.definition.guardianId,
               confrontationReady: true,
+              campaignChapterId: finale?.stableChapterId,
             },
             {
               onSettled: () => {
@@ -59,9 +59,6 @@ export function DriverTerritorySky({
               },
             }
           );
-          if (finale) {
-            chapterDone.mutate({ chapterId: finale.stableChapterId });
-          }
         }}
         onClose={() => {
           setPlaying(false);
