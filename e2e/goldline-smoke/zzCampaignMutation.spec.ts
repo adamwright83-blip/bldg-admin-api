@@ -101,24 +101,93 @@ test.describe("Goldline campaign mutations", () => {
         await page.request.get("/api/trpc/system.goldlineWorld.territories")
       ).json()
     );
-    const ready = (territories ?? []).find(
+    const entitiesBefore = unwrapTrpc<
+      Array<{
+        id: string;
+        pursuit?: { stage?: string | null } | null;
+        events?: Array<{ eventType: string; classification: string }>;
+      }>
+    >(await (await page.request.get("/api/trpc/system.goldlineWorld.cityEntities")).json());
+
+    let ready = (territories ?? []).find(
       item => item.state.confrontationReady && !item.state.cleared
     );
     if (!ready) {
-      test.skip(true, "No confrontation-ready territory in this fixture");
+      const uncleared = (territories ?? []).find(item => !item.state.cleared);
+      expect(uncleared, "proof world must present an uncleared territory").toBeTruthy();
+      await signIn(page, "driver");
+      for (const memberId of uncleared!.state.remainingMemberIds) {
+        const entity = entitiesBefore.find(row => row.id === memberId);
+        const transcript =
+          `Visited ${entity?.displayName ?? memberId} at ${entity?.pursuit?.address ?? entity?.displayName ?? memberId}. The desk took my card and I walked the lobby myself.`;
+        const journal = await page.request.post(
+          "/api/trpc/system.commercialMission.saveSalesJournal",
+          {
+            headers: { "content-type": "application/json" },
+            data: {
+              json: {
+                journalDate: new Date().toISOString().slice(0, 10),
+                clientRequestId: crypto.randomUUID(),
+                transcript,
+              },
+            },
+          }
+        );
+        expect(journal.ok(), await journal.text()).toBeTruthy();
+        await expect
+          .poll(
+            async () => {
+              const list = unwrapTrpc<typeof territories>(
+                await (
+                  await page.request.get("/api/trpc/system.goldlineWorld.territories")
+                ).json()
+              );
+              return (list ?? []).some(item =>
+                item.state.completedMemberIds?.includes(memberId)
+              );
+            },
+            { timeout: 20_000 }
+          )
+          .toBe(true);
+      }
+      const refreshed = unwrapTrpc<typeof territories>(
+        await (await page.request.get("/api/trpc/system.goldlineWorld.territories")).json()
+      );
+      ready = (refreshed ?? []).find(
+        item => item.definition.id === uncleared!.definition.id
+      );
     }
-    const defeat = await page.request.post("/api/trpc/system.goldlineWorld.recordGuardianDefeat", {
-      data: {
-        json: {
-          territoryId: ready!.definition.id,
-          guardianId: ready!.definition.guardianId,
-          confrontationReady: true,
+    expect(ready?.state.confrontationReady || ready?.state.cleared).toBe(true);
+
+    if (!ready!.state.cleared) {
+      const defeat = await page.request.post("/api/trpc/system.goldlineWorld.recordGuardianDefeat", {
+        data: {
+          json: {
+            territoryId: ready!.definition.id,
+            guardianId: ready!.definition.guardianId,
+            confrontationReady: true,
+          },
         },
-      },
-    });
-    expect(defeat.ok(), await defeat.text()).toBeTruthy();
+      });
+      expect(defeat.ok(), await defeat.text()).toBeTruthy();
+    }
     const after = await readCampaign(page);
     expect(after.campaign.id).toBe(before.campaign.id);
     expect(after.campaign.title).toBe(before.campaign.title);
+
+    const entitiesAfter = unwrapTrpc<typeof entitiesBefore>(
+      await (await page.request.get("/api/trpc/system.goldlineWorld.cityEntities")).json()
+    );
+    for (const member of ready!.definition.members ?? []) {
+      const beforeEntity = entitiesBefore.find(row => row.id === member.physicalEntityId);
+      const afterEntity = entitiesAfter.find(row => row.id === member.physicalEntityId);
+      expect(afterEntity?.pursuit?.stage ?? null).toBe(beforeEntity?.pursuit?.stage ?? null);
+    }
+    const gameOnly = (entitiesAfter ?? []).flatMap(entity =>
+      (entity.events ?? []).filter(
+        event => event.eventType === "guardian_defeated" || event.eventType === "territory_cleared"
+      )
+    );
+    expect(gameOnly.every(event => event.classification === "game_projection")).toBe(true);
   });
 });
