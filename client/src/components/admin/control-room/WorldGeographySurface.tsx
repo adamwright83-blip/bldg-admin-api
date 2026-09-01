@@ -12,6 +12,7 @@ import { WorldAtmosphereOverlay } from "./WorldAtmosphereOverlay";
 import { GoogleMapsRealityLayer, type GeographicCameraTarget, type GeographicEntity, type RealityRendererType } from "./GoogleMapsRealityLayer";
 import { RealityWindow } from "./RealityWindow";
 import { GoogleAttributionSafeZone } from "./GoogleAttributionSafeZone";
+import { useWorldCamera } from "./useWorldCamera";
 
 const ATLAS_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas-v2.webp";
 
@@ -38,6 +39,7 @@ export type WorldGeographySurfaceProps = {
    * geography they do not correspond to.
    */
   onGoogleVisibilityChange?: (googleVisible: boolean) => void;
+  focusPoint?: { x: number; y: number } | null;
 };
 
 const CANONICAL_TOWERS: Array<{
@@ -76,6 +78,7 @@ export function WorldGeographySurface({
   battleState,
   geographicEntities,
   onGoogleVisibilityChange,
+  focusPoint,
 }: WorldGeographySurfaceProps) {
   const [realityBuildingId, setRealityBuildingId] = useState<CanonicalBuildingId | null>(null);
   const [viewMode, setViewMode] = useState<"atlas" | "reality_3d">("atlas");
@@ -142,11 +145,53 @@ export function WorldGeographySurface({
     [onSelectBuilding, onNavigate]
   );
 
+  /*
+    Google draws and owns its own camera, so ours only takes over the
+    illustrated atlas. Two cameras fighting for one gesture is worse than none.
+  */
+  const cameraIsLive = !googleVisible;
+  const camera = useWorldCamera({ disabled: googleVisible });
+
+  // Focusing a building is a camera move, not a page navigation: the world
+  // stays mounted underneath so closing the inspector returns to this exact view.
+  useEffect(() => {
+    if (!cameraIsLive) return;
+    if (!selectedBuildingId) {
+      camera.restore();
+      return;
+    }
+    const tower = CANONICAL_TOWERS.find(item => item.id === selectedBuildingId);
+    if (!tower) return;
+    const point = projectLatLngToLanternAtlas(tower);
+    if (point.outOfBounds) return;
+    camera.focusOn({ x: point.x / 100, y: point.y / 100 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBuildingId, cameraIsLive]);
+
+  useEffect(() => {
+    if (!cameraIsLive) return;
+    if (focusPoint) camera.focusOn({ x: focusPoint.x / 100, y: focusPoint.y / 100 });
+    else if (!selectedBuildingId) camera.restore();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusPoint?.x, focusPoint?.y, cameraIsLive]);
+
   return (
     <div
       className={`cr-world-geography-surface mode-${mode} view-${viewMode} ${className}`}
       data-day-phase={atmosphere?.dayPhase ?? "day"}
     >
+      {/*
+        The world container. Everything spatial lives inside it, so the camera
+        moves one thing and every real place keeps the position its coordinate
+        gave it. Fixed interface is deliberately rendered after this block,
+        outside the transform, so panning never drags the controls and an
+        arcade explosion never shakes the HUD.
+      */}
+      <div
+        className={`cr-world-camera${camera.isDragging ? " is-dragging" : ""}`}
+        ref={camera.bind.ref}
+      >
+      <div className="cr-world-space" style={{ transform: cameraIsLive ? camera.transform : undefined }}>
       {/* 1. Base Layer: Authored Atlas Skin vs Google Reality 3D Layer */}
       {viewMode === "reality_3d" && mapsApiKey ? (
         <GoogleMapsRealityLayer
@@ -258,6 +303,22 @@ export function WorldGeographySurface({
 
       {/* Additional UI elements (lanterns, search, controls passed as children) */}
       {children}
+      </div>
+
+      {/*
+        Fixed world controls. These sit outside the transform on purpose — they
+        are the interface to the world, not part of it.
+      */}
+      {cameraIsLive ? (
+        <div className="cr-world-camera-controls">
+          <button type="button" onClick={() => camera.zoomBy(1.35)} aria-label="Zoom in">+</button>
+          <button type="button" onClick={() => camera.zoomBy(1 / 1.35)} aria-label="Zoom out">−</button>
+          <button type="button" onClick={camera.reset} aria-label="Reset the view to the whole city">
+            Whole city
+          </button>
+        </div>
+      ) : null}
+      </div>
 
       {/* Reality Window for Grounded Real Place identity */}
       {realityBuildingId ? (

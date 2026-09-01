@@ -21,6 +21,7 @@ import {
   type FieldJournalExtraction,
 } from "../../shared/fieldJournal";
 import { assertProofModeAllowed } from "../_core/proofMode";
+import { classifyTranscriptClaims } from "../../shared/goldlineTemporal";
 
 /** Street suffixes a proof transcript may use; enough to spot an address. */
 const STREET_SUFFIX =
@@ -99,7 +100,9 @@ function findAll(transcript: string, words: string[]) {
 }
 
 export function extractFieldJournalDeterministically(
-  transcript: string
+  transcript: string,
+  /** The journal's capture date, so relative time resolves the way it would live. */
+  anchorDate: string = new Date().toISOString().slice(0, 10)
 ): FieldJournalExtraction {
   assertProofModeAllowed("Deterministic Field Journal extraction");
   const text = transcript.trim();
@@ -107,7 +110,10 @@ export function extractFieldJournalDeterministically(
 
   const nameMatch = PROPERTY_NAME.exec(text);
   const addressMatch = ADDRESS.exec(text);
-  const propertyName = nameMatch?.[1]?.trim() ?? null;
+  // A sentence boundary ends the place name. The permissive token pattern
+  // accepts dots for names such as "St. James", but must not swallow the next
+  // sentence's person ("the Louise. Sarah wasn't there").
+  const propertyName = nameMatch?.[1]?.trim().replace(/\.\s+[A-Z].*$/, "") ?? null;
   const addressClue = addressMatch?.[1]?.trim() ?? null;
 
   // With neither a name nor an address there is no entity to speak of, and
@@ -156,6 +162,29 @@ export function extractFieldJournalDeterministically(
       },
     ],
     actions,
+    /*
+      Time-bearing claims, read deterministically. This is the same fallback
+      path the real pipeline uses when no intelligence provider answered, so a
+      proof run exercises the production shape rather than a special case.
+    */
+    temporalClaims: classifyTranscriptClaims(text, anchorDate).map(claim => ({
+      entityClientKey: clientEntityKey,
+      kind: claim.kind === "authoritative_commitment" ? "operator_commitment" : claim.kind,
+      sourceText: claim.sourceText,
+      subject: claim.subject,
+      promisedTo: claim.promisedTo,
+      when: claim.when
+        ? {
+            text: claim.when.sourceText,
+            startDate: claim.when.startDate,
+            endDate: claim.when.endDate,
+            daypart: claim.when.daypart,
+            precision: claim.when.precision,
+            hedged: claim.when.hedged,
+            recurring: claim.when.recurring,
+          }
+        : null,
+    })),
     // A fixture reports no outcomes at all. Wins, losses, interest and
     // reorders are exactly the claims that must never come from a stand-in.
     outcomes: [],

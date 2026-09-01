@@ -495,3 +495,98 @@
   */
   .lc-page .lc-header-controls .cr-day-phase{display:none}
 }
+
+/* ── The city camera ──────────────────────────────────────────────────────
+   One transformed world container; fixed controls live outside it so a pan
+   never drags the interface and an arcade explosion never shakes the HUD.
+   `touch-action: none` gives the world ownership of a deliberate gesture so
+   the page does not scroll while the player is dragging Los Angeles. */
+.cr-world-camera{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab}
+.cr-world-camera.is-dragging{cursor:grabbing}
+.cr-world-space{position:absolute;inset:0;transform-origin:50% 50%;will-change:transform}
+.cr-world-camera-controls{position:absolute;z-index:30;right:12px;bottom:12px;display:flex;gap:6px}
+.cr-world-camera-controls button{display:grid;min-width:44px;min-height:44px;place-items:center;padding:0 12px;border:2px solid #d8b25c;border-radius:12px;background:#fffdf2;color:#17385e;font:900 12px Inter,sans-serif;cursor:pointer}
+.cr-world-camera-controls button:focus-visible{outline:3px solid #ef9f18;outline-offset:3px}
+@media (prefers-reduced-motion:reduce){.cr-world-space{transition:none}}
+.lc-customer-windows{position:absolute;inset:4px;display:grid;gap:2px;padding:2px;border-radius:3px;background:#17385e55;overflow:hidden}.lc-customer-windows.is-individual{grid-template-columns:repeat(3,1fr)}.lc-customer-windows i{display:block;min-height:3px;border-radius:1px;background:#536374;box-shadow:inset 0 0 0 1px #18304655}.lc-customer-windows i.is-warm{background:#fff2a8;box-shadow:0 0 5px #ffbd2e}.lc-customer-windows.is-aggregate{grid-template-columns:1fr}.lc-customer-windows.is-aggregate i{min-height:2px}.lc-lantern.state-dark .lc-customer-windows i{background:#343b45;box-shadow:none}
+
+/* ── Gold Line tether + seal: the one grammar for an unfinished promise ────
+   Attached to the building, inside the camera transform, so it travels with
+   the place it belongs to. Never colour alone — it always carries a label. */
+.lc-tether{position:absolute;z-index:9;left:50%;bottom:100%;width:2px;height:34px;transform:translateX(-50%);pointer-events:none}
+.lc-tether-line{position:absolute;inset:0;border-radius:2px;background:linear-gradient(#f4c84c00,#f0a52a 35%,#e8901c);box-shadow:0 0 7px #f0a52a99}
+.lc-tether-seal{position:absolute;left:50%;top:-9px;display:grid;width:17px;height:17px;transform:translateX(-50%);place-items:center;border:2px solid #a8641c;border-radius:50%;background:radial-gradient(circle at 40% 35%,#ffe9a8,#e8901c);color:#5d3d07;font:900 8px Inter,sans-serif;box-shadow:0 0 9px #f0a52aaa}
+.lc-tether.tension-taut .lc-tether-line{animation:lc-tether-pull 1.6s ease-in-out infinite}
+.lc-tether.tension-overdue .lc-tether-line{background:linear-gradient(#f4c84c00,#e0761a 30%,#c2503a);box-shadow:0 0 11px #d2691e}
+.lc-tether.tension-overdue .lc-tether-seal{border-color:#a53a26;background:radial-gradient(circle at 40% 35%,#ffd0a8,#c2503a)}
+@keyframes lc-tether-pull{50%{height:30px;filter:brightness(1.2)}}
+
+/* ── Arcade bodies: transient fiction layered over the real building ───────
+   Every one of these is presentation. The published tower art is never
+   modified; it is wrapped, tilted and overlaid, then restored. */
+.lc-arcade{position:absolute;inset:0;transform-origin:50% 100%;transition:transform .12s linear;pointer-events:none}
+.lc-arcade-damage{position:absolute;inset:0;border-radius:8px;opacity:0;background:
+  radial-gradient(circle at 30% 40%,#3a2a1acc 0 6%,transparent 7%),
+  radial-gradient(circle at 62% 28%,#3a2a1acc 0 5%,transparent 6%),
+  radial-gradient(circle at 45% 62%,#3a2a1abb 0 7%,transparent 8%);
+  mix-blend-mode:multiply}
+.lc-arcade-scorch{position:absolute;inset:0;border-radius:8px;opacity:0;background:radial-gradient(circle at 50% 45%,#2b1c0f88,transparent 62%)}
+.lc-arcade-debris{position:absolute;left:50%;bottom:8%;width:0;height:0}
+.lc-arcade-debris i{position:absolute;width:5px;height:5px;border-radius:1px;background:#c9a35c;opacity:0}
+.lc-arcade.is-impact .lc-arcade-debris i{animation:lc-debris .9s ease-out forwards}
+.lc-arcade.is-impact{animation:lc-hit .42s ease-out}
+/* The rebuild is visible: debris returns, scorch fades, the tower straightens. */
+.lc-arcade.is-recovering{transition:transform 1.1s cubic-bezier(.22,1,.36,1)}
+.lc-arcade.is-recovering .lc-arcade-damage,.lc-arcade.is-recovering .lc-arcade-scorch{transition:opacity 1.4s ease-out}
+.lc-arcade.is-recovering .lc-arcade-debris i{animation:lc-debris-return .9s ease-in forwards}
+@keyframes lc-hit{0%{transform:translate(0,0)}18%{transform:translate(-4px,2px)}42%{transform:translate(3px,-1px)}70%{transform:translate(-2px,1px)}100%{transform:translate(0,0)}}
+@keyframes lc-debris{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(var(--dx,18px),var(--dy,-26px)) rotate(220deg)}}
+@keyframes lc-debris-return{0%{opacity:.9;transform:translate(var(--dx,18px),var(--dy,-26px)) rotate(220deg)}100%{opacity:0;transform:translate(0,0) rotate(0)}}
+
+/* ── OPUS: a driver bolted to the roofline, swinging about its attachment ──
+   The club pivots at the point where it meets the tower. It is never a
+   detached sprite flying around the scene. */
+.lc-weapon-golf_driver{position:absolute;z-index:8;left:62%;bottom:74%;width:6px;height:52px;transform-origin:50% 100%;transform:rotate(14deg);border-radius:3px;background:linear-gradient(#e9edf2,#9aa6b4);pointer-events:none}
+.lc-weapon-golf_driver:after{content:"";position:absolute;left:-7px;top:-9px;width:20px;height:13px;border-radius:4px 8px 4px 3px;background:linear-gradient(#f4f7fa,#8b97a6)}
+.is-charging .lc-weapon-golf_driver{transition:transform .78s cubic-bezier(.3,.05,.6,1);transform:rotate(-104deg)}
+.is-firing .lc-weapon-golf_driver{transition:transform .2s cubic-bezier(.2,.9,.3,1.4);transform:rotate(78deg)}
+.is-impact .lc-weapon-golf_driver,.is-recovering .lc-weapon-golf_driver{transition:transform .9s cubic-bezier(.34,1.3,.64,1);transform:rotate(14deg)}
+
+/* ── Century Park East: a valet cannon with an entirely different rhythm ───
+   It tracks, compresses, then launches a car on an arc. Slower tell than the
+   driver, harder recoil, and the projectile travels rather than swings. */
+.lc-weapon-valet_bazooka{position:absolute;z-index:8;left:58%;bottom:56%;width:34px;height:11px;transform-origin:12% 50%;transform:rotate(-8deg);border-radius:4px;background:linear-gradient(#5a6472,#2f3742);pointer-events:none}
+.lc-weapon-valet_bazooka:before{content:"";position:absolute;left:-6px;top:-3px;width:13px;height:17px;border-radius:3px;background:#f0a52a}
+.is-charging .lc-weapon-valet_bazooka{transition:transform .62s ease-in-out;transform:rotate(-26deg) scaleX(.86)}
+.is-firing .lc-weapon-valet_bazooka{transition:transform .12s ease-out;transform:rotate(-14deg) scaleX(1.06) translateX(-5px)}
+.is-impact .lc-weapon-valet_bazooka,.is-recovering .lc-weapon-valet_bazooka{transition:transform .8s cubic-bezier(.34,1.2,.64,1);transform:rotate(-8deg)}
+.lc-projectile{position:absolute;z-index:9;left:66%;bottom:58%;width:14px;height:8px;border-radius:2px;background:#d92821;opacity:0;pointer-events:none}
+.is-firing .lc-projectile{animation:lc-launch .5s cubic-bezier(.3,.1,.7,.9) forwards}
+@keyframes lc-launch{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(120px,-46px) rotate(180deg)}}
+
+/* The terrace engine and Gold Line fallback read differently again. */
+.lc-weapon-terrace_engine{position:absolute;z-index:8;left:50%;bottom:82%;width:22px;height:22px;transform:translateX(-50%);border:3px solid #2b8ca8;border-radius:50%;border-top-color:transparent;pointer-events:none}
+.is-charging .lc-weapon-terrace_engine{animation:lc-spin .54s linear infinite}
+.lc-weapon-gold_line_pulse{position:absolute;z-index:8;left:50%;bottom:70%;width:12px;height:12px;transform:translateX(-50%);border-radius:50%;background:#f4c84c;opacity:.75;pointer-events:none}
+.is-charging .lc-weapon-gold_line_pulse{animation:lc-pulse .46s ease-in-out infinite}
+@keyframes lc-spin{100%{transform:translateX(-50%) rotate(360deg)}}
+@keyframes lc-pulse{50%{transform:translateX(-50%) scale(1.9);opacity:1}}
+
+/* Idle life: small, bounded, and never more than a couple at once. */
+.lc-idle-flourish{animation:lc-idle-flourish 1.5s ease-in-out}
+.lc-idle-practice{animation:lc-idle-practice 1.5s ease-in-out}
+.lc-idle-machinery{animation:lc-idle-machinery 1.5s linear}
+@keyframes lc-idle-flourish{50%{filter:brightness(1.18) drop-shadow(0 0 12px #f6cf6e)}}
+@keyframes lc-idle-practice{35%{transform:rotate(-3deg)}65%{transform:rotate(2deg)}}
+@keyframes lc-idle-machinery{50%{transform:translateY(-3px)}}
+
+@media (prefers-reduced-motion:reduce){
+  .lc-tether.tension-taut .lc-tether-line,
+  .lc-arcade.is-impact,
+  .lc-arcade.is-impact .lc-arcade-debris i,
+  .lc-idle-flourish,.lc-idle-practice,.lc-idle-machinery,
+  .is-charging .lc-weapon-terrace_engine,
+  .is-charging .lc-weapon-gold_line_pulse,
+  .is-firing .lc-projectile{animation:none}
+  .lc-arcade,.lc-weapon-golf_driver,.lc-weapon-valet_bazooka{transition:none}
+}

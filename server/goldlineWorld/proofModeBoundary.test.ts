@@ -75,6 +75,19 @@ describe("proof mode cannot reach production", () => {
       extractFieldJournalDeterministically("Visited The Louise at 1450 S La Cienega Blvd today.")
     ).toThrow(/cannot run in production/);
   });
+
+  it("closure and performance captures refuse a non-local target", async () => {
+    const { readFileSync } = await import("node:fs");
+    const capture = readFileSync("scripts/capture-goldline-closure.mjs", "utf8");
+    const measure = readFileSync("scripts/measure-goldline-performance.mjs", "utf8");
+    const guard = readFileSync("scripts/goldlineLocalProofTarget.mjs", "utf8");
+    expect(capture).toContain("assertLocalProofUrl");
+    expect(measure).toContain("assertLocalProofUrl");
+    expect(guard).toMatch(/non-local host/);
+    const { assertLocalProofUrl } = await import("../../scripts/goldlineLocalProofTarget.mjs");
+    expect(() => assertLocalProofUrl("https://goldline.example/driver")).toThrow(/non-local/);
+    expect(() => assertLocalProofUrl("http://127.0.0.1:4177")).not.toThrow();
+  });
 });
 
 describe("deterministic extraction refuses to invent", () => {
@@ -92,6 +105,18 @@ describe("deterministic extraction refuses to invent", () => {
     expect(result.entities[0]!.propertyName?.value).toBe("The Louise");
     expect(result.entities[0]!.addressClue?.value).toBe("1450 S La Cienega Blvd");
     expect(result.entities[0]!.amenities.map(item => item.value)).toContain("courtyard");
+  });
+
+  it("stops a property name at the sentence boundary before a person's name", () => {
+    const result = run(
+      "Stopped at the Louise. Sarah wasn't there. They said she should be back Wednesday. I told the desk I'd email her first."
+    );
+    expect(result.entities[0]!.propertyName?.value).toBe("the Louise");
+    expect(result.entities[0]!.clientEntityKey).toBe("deterministic:the-louise");
+    expect(result.temporalClaims.map(claim => claim.kind)).toEqual([
+      "reported_availability",
+      "operator_commitment",
+    ]);
   });
 
   it("separates what the driver saw from what they are repeating", () => {

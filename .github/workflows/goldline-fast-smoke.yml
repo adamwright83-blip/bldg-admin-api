@@ -1,0 +1,73 @@
+name: Fast Goldline smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goldline-fast-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast-goldline-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: goldline_proof
+        ports:
+          - 3399:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      CI: "true"
+      DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_proof
+      DAYFORGE_RELEASE_DB: "1"
+      APP_SHARED_API_SECRET: goldline-proof-app-secret-000000000000000000
+      JWT_SECRET: goldline-proof-jwt-secret-000000000000000000
+      STRIPE_SECRET_KEY: goldline-proof-placeholder-not-used
+      DRIVER_PASSWORD: pixel-driver-pass
+      DRIVER_OPEN_ID: goldline-proof-driver
+      ADMIN_PASSWORD: goldline-proof-admin-pass
+      GOLDLINE_PROOF_MODE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Prepare deterministic proof world
+        run: |
+          pnpm db:dayforge:release
+          pnpm tsx scripts/goldline-living-world-proof-seed.ts
+      - name: Build the production application
+        run: pnpm build
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Start deterministic proof server
+        run: |
+          scripts/goldline-proof-server.sh > /tmp/goldline-fast-smoke.log 2>&1 &
+          echo $! > /tmp/goldline-fast-smoke.pid
+          for _ in $(seq 1 45); do
+            curl -sf -o /dev/null http://127.0.0.1:4177/driver && exit 0
+            sleep 2
+          done
+          cat /tmp/goldline-fast-smoke.log
+          exit 1
+      - name: Run deterministic fast gate
+        run: pnpm test:goldline:smoke
+      - name: Stop proof server
+        if: always()
+        run: |
+          if [ -f /tmp/goldline-fast-smoke.pid ]; then kill "$(cat /tmp/goldline-fast-smoke.pid)" 2>/dev/null || true; fi

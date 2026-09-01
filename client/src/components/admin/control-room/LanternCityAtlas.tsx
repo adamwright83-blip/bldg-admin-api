@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { MapPinOff, RefreshCw, Search, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { WorldGeographySurface } from "./WorldGeographySurface";
@@ -7,8 +7,11 @@ import { WorldDayPhaseIndicator } from "./WorldDayPhase";
 import { clusterGeographicCustomers, clustersAsGoogleEntities, fanOutAtlasCollisions } from "./customerGeography";
 import type { CustomerLocationCluster } from "./customerGeography";
 import { WorldEntityInspector } from "./WorldEntityInspector";
+import { WorldObligationTether } from "./WorldObligationTether";
+import { useArcadeWorld } from "./useArcadeWorld";
 import { describeWorldPresentation, orderByProminence } from "@shared/goldlineWorldPresentation";
 import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWorldService";
+import { projectCustomerWindows } from "@shared/goldlineCustomerWindows";
 
 export {
   inferCustomerCadence,
@@ -68,6 +71,55 @@ function markerLabel(base: string, entity: CityWorldEntity | null) {
   return describeWorldPresentation(base, entity.presentation);
 }
 
+/**
+ * The playable body layered over a real building.
+ *
+ * Everything here is transient presentation: a transform wrapper, the weapon
+ * rigged to its attachment point, and overlays for damage, scorch and debris.
+ * The published tower art underneath is never modified — it is wrapped and
+ * restored, which is what lets a building look wrecked without anything real
+ * having happened to it.
+ */
+function ArcadeBodyLayer({
+  body,
+  weapon,
+  idle,
+}: {
+  body: import("@shared/goldlineArcade").ArcadeBody | undefined;
+  weapon: import("@shared/goldlineArcade").WeaponArchetype;
+  idle: "flourish" | "practice" | "machinery" | null;
+}) {
+  const phase = body?.phase ?? "idle";
+  const damage = body?.damage ?? 0;
+  return (
+    <span
+      className={`lc-arcade is-${phase}${idle ? ` lc-idle-${idle}` : ""}`}
+      style={{
+        transform: body ? `rotate(${body.lean}deg)` : undefined,
+      }}
+      aria-hidden
+    >
+      <span className={`lc-weapon-${weapon}`} />
+      {weapon === "valet_bazooka" ? <span className="lc-projectile" /> : null}
+      <span className="lc-arcade-damage" style={{ opacity: Math.min(0.85, damage) }} />
+      <span className="lc-arcade-scorch" style={{ opacity: Math.min(0.7, damage * 0.8) }} />
+      <span className="lc-arcade-debris">
+        {Array.from({ length: Math.min(8, body?.debris ?? 0) }).map((_, index) => (
+          <i
+            key={index}
+            style={
+              {
+                "--dx": `${(index % 4) * 12 - 18}px`,
+                "--dy": `${-14 - index * 4}px`,
+              } as React.CSSProperties
+            }
+          />
+        ))}
+      </span>
+    </span>
+  );
+}
+
 export default function LanternCityAtlas({
   onOpenCustomer,
   onNavigate,
@@ -121,6 +173,15 @@ export default function LanternCityAtlas({
   );
 
   const [googleVisible, setGoogleVisible] = useState(false);
+  /*
+    One scheduler drives every playable building. Only the places actually
+    drawn are handed to it, so offscreen towers cost nothing.
+  */
+  const visibleEntityIds = useMemo(
+    () => (cityWorld.data ?? []).map(entity => entity.id),
+    [cityWorld.data]
+  );
+  const arcade = useArcadeWorld({ visibleIds: visibleEntityIds });
   const customerClusters = useMemo(() => clusterGeographicCustomers(visibleCustomers as any), [visibleCustomers]);
 
   /*
@@ -156,6 +217,13 @@ export default function LanternCityAtlas({
   const requestedEntityId = new URLSearchParams(window.location.search).get("entity");
   const requestedEntity = cityWorld.data?.find(entity => entity.id === requestedEntityId) ?? null;
   const selectedEntity = selectedPursuit ? entityForPursuit(selectedPursuit.accountId) : selectedCluster ? entityForCluster(selectedCluster) : requestedEntity;
+  const selectedFocusPoint = selectedPursuit?.location
+    ? { x: selectedPursuit.location.x, y: selectedPursuit.location.y }
+    : selectedCluster
+      ? { x: selectedCluster.x, y: selectedCluster.y }
+      : requestedEntity?.location
+        ? { x: requestedEntity.location.x, y: requestedEntity.location.y }
+        : null;
 
   /*
     A place arriving by deep link is revealed rather than merely selected: the
@@ -314,6 +382,7 @@ export default function LanternCityAtlas({
           showOpportunityLayer={true}
           onGoogleVisibilityChange={setGoogleVisible}
           geographicEntities={googleEntities}
+          focusPoint={selectedFocusPoint}
         >
           {/*
             Lanterns and pursuit flames are positioned with the atlas x/y
@@ -354,10 +423,43 @@ export default function LanternCityAtlas({
                 )}
               >
                 <span className="lc-lantern-handle" />
-                <span className="lc-lantern-body" />
+                <span className="lc-lantern-body">
+                  {(() => {
+                    const windows = projectCustomerWindows(cluster.customers);
+                    return windows.mode === "individual" ? (
+                      <span className="lc-customer-windows is-individual" data-active={windows.active} data-dormant={windows.dormant}>
+                        {windows.windows.map(window => <i key={window.identityKey} className={`is-${window.state}`} />)}
+                      </span>
+                    ) : (
+                      <span className="lc-customer-windows is-aggregate" data-total={windows.total} data-active={windows.active} data-dormant={windows.dormant}>
+                        {windows.bands.map((state, index) => <i key={index} className={`is-${state}`} />)}
+                      </span>
+                    );
+                  })()}
+                </span>
                 <span className="lc-lantern-base" />
                 {cluster.total > 1 ? <b>{cluster.total}</b> : null}
                 <WorldMarkerAtmosphere entity={entityForCluster(cluster)} />
+                <WorldObligationTether
+                  obligations={entityForCluster(cluster)?.obligations}
+                  buildingName={`${cluster.total} customer${cluster.total === 1 ? "" : "s"} here`}
+                />
+                {/* Every real building is a playable body, not just pursued ones. */}
+                {entityForCluster(cluster) ? (
+                  <ArcadeBodyLayer
+                    body={arcade.world.bodies[entityForCluster(cluster)!.id]}
+                    weapon={
+                      arcade.weaponFor({
+                        displayName: entityForCluster(cluster)!.displayName,
+                      }).archetype
+                    }
+                    idle={
+                      arcade.idle.find(
+                        i => i.physicalEntityId === entityForCluster(cluster)!.id
+                      )?.kind ?? null
+                    }
+                  />
+                ) : null}
               </button>
             </Fragment>
           ))}
@@ -382,11 +484,47 @@ export default function LanternCityAtlas({
                 setSelectedCluster(null);
                 setSelectedPursuit(item);
               }}
+              /*
+                The building is the control. A plain click inspects it; holding
+                Alt fires its own weapon at another tower, which is play and
+                touches nothing real.
+              */
+              onPointerDown={event => {
+                if (!event.altKey || !worldEntity) return;
+                event.preventDefault();
+                event.stopPropagation();
+                /*
+                  Fire at another building that is actually drawn, so the
+                  damage lands somewhere the player can see. With nothing else
+                  on screen the tower takes its own shot, which is funnier and
+                  still visible.
+                */
+                const target =
+                  (cityWorld.data ?? []).find(
+                    e => e.id !== worldEntity.id && e.location
+                  ) ?? worldEntity;
+                arcade.fireAt({
+                  shooterId: worldEntity.id,
+                  targetId: target.id,
+                  weapon: arcade.weaponFor({ displayName: item.name }).archetype,
+                });
+              }}
               aria-label={markerLabel(`Pursued: ${item.name}`, worldEntity)}
             >
               {worldEntity?.canonicalAsset?.assetUrl ? <img src={worldEntity.canonicalAsset.assetUrl} alt="" /> : <span aria-hidden><i/><i/><i/></span>}
               <b>{item.name}</b>
               <WorldMarkerAtmosphere entity={worldEntity} />
+              <WorldObligationTether
+                obligations={worldEntity?.obligations}
+                buildingName={item.name}
+              />
+              {worldEntity ? (
+                <ArcadeBodyLayer
+                  body={arcade.world.bodies[worldEntity.id]}
+                  weapon={arcade.weaponFor({ displayName: item.name }).archetype}
+                  idle={arcade.idle.find(i => i.physicalEntityId === worldEntity.id)?.kind ?? null}
+                />
+              ) : null}
             </button>
           )})}
 
