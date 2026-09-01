@@ -32,6 +32,7 @@ describe("campaign publish concurrency", () => {
     expect(source).toContain("isMysqlDuplicateKeyError");
     expect(source).toContain("readCampaign(instance)");
     expect(source).toContain("getOrMaterializeTodayCampaign");
+    expect(source).toContain("listPresentedTerritories");
     expect(source).not.toMatch(/Math\.random/);
   });
 

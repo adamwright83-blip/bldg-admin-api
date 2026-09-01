@@ -300,7 +300,12 @@ export async function getOrMaterializeTodayCampaign(input: {
     userId: input.operatorId,
     includeAllAssignees: true,
   });
-  const territories = await listPresentedTerritories({ tenantId: input.tenantId });
+  let territories;
+  try {
+    territories = await listPresentedTerritories({ tenantId: input.tenantId });
+  } catch {
+    territories = await listPresentedTerritories({ tenantId: input.tenantId });
+  }
   const hints: TerritoryCampaignHint[] = territories.map(item => ({
     territoryId: item.definition.id,
     memberPhysicalEntityIds: item.definition.members.map(member => member.physicalEntityId),
