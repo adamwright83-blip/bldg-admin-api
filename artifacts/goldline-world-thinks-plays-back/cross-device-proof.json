@@ -1,0 +1,23 @@
+{
+  "physicalEntityId": "22222222-2222-4222-8222-222222222222",
+  "coordinates": {
+    "latitude": 34.048,
+    "longitude": -118.376,
+    "canonicalAddress": "1450 S La Cienega Blvd, Los Angeles, CA",
+    "x": 31.363636363631255,
+    "y": 75.66467275718138,
+    "outOfBounds": false
+  },
+  "eventTypes": [
+    "prospect_discovered",
+    "visited",
+    "visited",
+    "proposal_sent",
+    "field_commitment_made",
+    "field_temporal_signal",
+    "field_commitment_made",
+    "field_temporal_signal"
+  ],
+  "obligationCount": 2,
+  "duplicateEntityCount": 1
+}

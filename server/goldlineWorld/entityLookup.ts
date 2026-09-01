@@ -8,7 +8,7 @@
  */
 
 import { and, eq } from "drizzle-orm";
-import { physicalEntityAliases, physicalEntityBindings } from "../../drizzle/schema";
+import { physicalEntities, physicalEntityAliases, physicalEntityBindings } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { normalizePhysicalAlias, physicalAliasesMatch } from "./identityResolver";
 
@@ -33,17 +33,19 @@ export async function findPhysicalEntityIdByAddress(input: {
       aliasValue: physicalEntityAliases.aliasValue,
     })
     .from(physicalEntityAliases)
-    .where(
-      and(
-        eq(physicalEntityAliases.tenantId, input.tenantId),
-        eq(physicalEntityAliases.aliasType, "normalized_address")
-      )
-    );
-  const unique = new Set(
-    rows
+    .where(eq(physicalEntityAliases.tenantId, input.tenantId));
+  const entities = await db
+    .select({ id: physicalEntities.id, displayName: physicalEntities.displayName })
+    .from(physicalEntities)
+    .where(eq(physicalEntities.tenantId, input.tenantId));
+  const unique = new Set([
+    ...entities
+      .filter(entity => physicalAliasesMatch(entity.displayName, input.address!))
+      .map(entity => entity.id),
+    ...rows
       .filter(row => physicalAliasesMatch(row.aliasValue, input.address!))
       .map(row => row.physicalEntityId)
-  );
+  ]);
   // An address bound to two entities is an unresolved identity conflict, not a
   // coin flip. Attaching to either one would assert something untrue.
   return unique.size === 1 ? Array.from(unique)[0]! : null;

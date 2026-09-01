@@ -94,6 +94,18 @@ describe("deterministic extraction refuses to invent", () => {
     expect(result.entities[0]!.amenities.map(item => item.value)).toContain("courtyard");
   });
 
+  it("stops a property name at the sentence boundary before a person's name", () => {
+    const result = run(
+      "Stopped at the Louise. Sarah wasn't there. They said she should be back Wednesday. I told the desk I'd email her first."
+    );
+    expect(result.entities[0]!.propertyName?.value).toBe("the Louise");
+    expect(result.entities[0]!.clientEntityKey).toBe("deterministic:the-louise");
+    expect(result.temporalClaims.map(claim => claim.kind)).toEqual([
+      "reported_availability",
+      "operator_commitment",
+    ]);
+  });
+
   it("separates what the driver saw from what they are repeating", () => {
     const entity = run(
       "Visited The Louise at 1450 S La Cienega Blvd today, nice courtyard and brick facade."

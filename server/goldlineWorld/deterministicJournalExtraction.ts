@@ -110,7 +110,10 @@ export function extractFieldJournalDeterministically(
 
   const nameMatch = PROPERTY_NAME.exec(text);
   const addressMatch = ADDRESS.exec(text);
-  const propertyName = nameMatch?.[1]?.trim() ?? null;
+  // A sentence boundary ends the place name. The permissive token pattern
+  // accepts dots for names such as "St. James", but must not swallow the next
+  // sentence's person ("the Louise. Sarah wasn't there").
+  const propertyName = nameMatch?.[1]?.trim().replace(/\.\s+[A-Z].*$/, "") ?? null;
   const addressClue = addressMatch?.[1]?.trim() ?? null;
 
   // With neither a name nor an address there is no entity to speak of, and
