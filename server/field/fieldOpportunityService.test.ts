@@ -33,4 +33,23 @@ describe("contextual FIELD move hard filters", () => {
     const result = rankFieldMoves({ now: new Date(), nextCommitmentAt: null, capacityFull: true, currentLocationAvailable: true, candidates: [candidate] });
     expect(result.reason).toBe("CAPACITY_FULL");
   });
+  it("does not call a prospect nearby when current geography is unavailable", () => {
+    const result = rankFieldMoves({ now: new Date("2026-08-08T10:00:00Z"), nextCommitmentAt: null, capacityFull: false, currentLocationAvailable: false, candidates: [candidate] });
+    expect(result.recommendedMoves).toEqual([]);
+    expect(result.reason).toBe("DATA_INSUFFICIENT");
+  });
+  it("still allows a sourced phone call when geography is unavailable", () => {
+    const callCandidate: FieldMoveCandidate = {
+      ...candidate,
+      id: "mission:1:call",
+      moveType: "commercial_call",
+      title: "Call Ridge",
+      expectedDurationMinutes: 15,
+      travelMinutes: 0,
+      relevance: "A sourced business contact is available",
+    };
+    const result = rankFieldMoves({ now: new Date("2026-08-08T10:00:00Z"), nextCommitmentAt: null, capacityFull: false, currentLocationAvailable: false, candidates: [candidate, callCandidate] });
+    expect(result.recommendedMoves.map(item => item.id)).toEqual(["mission:1:call"]);
+    expect(result.reason).toBe("MOVES_AVAILABLE");
+  });
 });
