@@ -1,5 +1,5 @@
-import { asc, sql } from "drizzle-orm";
-import { orders } from "../../drizzle/schema";
+import { and, asc, eq, sql } from "drizzle-orm";
+import { commercialFollowUps, orders } from "../../drizzle/schema";
 import { deterministicEstimate, sourcedFact } from "../../shared/businessGame";
 import { getDb } from "../db";
 import { listDayforgeToday } from "../dayforgeToday/dayforgeTodayService";
@@ -56,15 +56,29 @@ export async function getFieldToday(input: {
   const now = input.now ?? new Date();
   const timeZone = input.timeZone ?? "America/Los_Angeles";
   const date = businessDate(now, timeZone);
-  const [orderRows, commercialItems, recoveries, forgeJobs, pressure] = await Promise.all([
+  const [orderRows, commercialItems, completedFollowUps, recoveries, forgeJobs, pressure] = await Promise.all([
     db.select().from(orders).where(sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId} AND (${orders.pickupDate} = ${date} OR ${orders.deliveryDate} = ${date})`).orderBy(asc(orders.pickupDate), asc(orders.id)),
     listDayforgeToday({ tenantId: input.tenantId, userId: input.userId, includeAllAssignees: input.includeAllAssignees }),
+    db.select({
+      id: commercialFollowUps.id,
+      assignedTo: commercialFollowUps.assignedTo,
+      completedAt: commercialFollowUps.completedAt,
+    }).from(commercialFollowUps).where(and(
+      eq(commercialFollowUps.tenantId, input.tenantId),
+      eq(commercialFollowUps.status, "completed")
+    )),
     listRecoveryInterventions(input.tenantId),
     listForgeJobs({ tenantId: input.tenantId, limit: 50 }),
     listFuturePressure({ tenantId: input.tenantId, date }),
   ]);
   const timeline: FieldTodayItem[] = [];
   const authoritativeCompletedObjectiveIds = new Set<string>();
+  for (const followUp of completedFollowUps) {
+    if (!followUp.completedAt) continue;
+    if (!input.includeAllAssignees && followUp.assignedTo && followUp.assignedTo !== input.userId) continue;
+    if (businessDate(followUp.completedAt, timeZone) !== date) continue;
+    authoritativeCompletedObjectiveIds.add(`follow-up:${followUp.id}`);
+  }
   for (const order of orderRows) {
     const name = `${order.firstName} ${order.lastName}`.trim() || "Customer";
     if (
