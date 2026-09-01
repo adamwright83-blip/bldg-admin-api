@@ -47,6 +47,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Prove campaign truth invariants
+        run: pnpm vitest run shared/goldlineCampaign.test.ts shared/goldlineCampaignReviewFixes.test.ts
       - name: Prepare deterministic proof world
         run: |
           pnpm db:dayforge:release
