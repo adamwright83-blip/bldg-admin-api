@@ -117,7 +117,8 @@ describe("state commits first, camera follows", () => {
 
 describe("same-entity routing survives the move", () => {
   const pipeline = read("../../../pages/CommercialPipelinePage.tsx");
-  const atlas = read("./LanternCityAtlas.tsx");
+  // The atlas surface now includes the same-place inspector it renders inline.
+  const atlas = read("./LanternCityAtlas.tsx") + read("./WorldEntityInspector.tsx");
 
   it("selects the requested pipeline record, not merely the first one", () => {
     // Clicking a specific pursuit on the atlas previously landed you on whatever

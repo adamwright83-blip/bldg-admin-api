@@ -1,5 +1,6 @@
 import React from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { Link } from "wouter";
 import { celebrationForEvent, type CelebrationDescriptor, type GoldlineWorldEvent } from "@shared/goldlineWorld";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getAudioManager, type AudioCueId } from "@/game/audio/AudioManager";
@@ -48,12 +49,13 @@ function CelebrationStage({ descriptor }: { descriptor: CelebrationDescriptor })
           transition={{ duration: 1.45, delay: (index % 5) * .035, ease: "easeOut" }} />;
       }) : null}
       <motion.div
-        className="relative mx-5 rounded-[26px] border border-amber-200/70 bg-slate-950/94 px-7 py-6 text-center shadow-[0_0_90px_rgba(250,204,21,.55)]"
+        className="relative mx-5 rounded-[26px] border border-amber-300/70 bg-[#fff8dc]/96 px-7 py-6 text-center text-[#17385e] shadow-[0_0_90px_rgba(250,204,21,.55)]"
         initial={{ scale: reducedMotion ? 1 : .72, y: reducedMotion ? 0 : 22 }} animate={{ scale: 1, y: 0 }}
         transition={{ type: reducedMotion ? "tween" : "spring", stiffness: 280, damping: 17 }}
       >
-        <p className="text-[11px] font-black uppercase tracking-[.32em] text-amber-300">Goldline Chronicle</p>
-        <p className="mt-2 text-[clamp(25px,7vw,54px)] font-black tracking-[-.025em] text-white">{descriptor.label}</p>
+        <p className="text-[11px] font-black uppercase tracking-[.32em] text-[#9b6410]">Goldline Chronicle</p>
+        <p className="mt-2 text-[clamp(25px,7vw,54px)] font-black tracking-[-.025em]">{descriptor.label}</p>
+        {descriptor.cue === "tower" && descriptor.physicalEntityId ? <Link className="pointer-events-auto mt-4 inline-flex min-h-11 items-center rounded-full bg-amber-400 px-5 text-sm font-black text-[#17385e]" href={`/growth/lantern-city?entity=${descriptor.physicalEntityId}`}>Reveal it in Lantern City</Link> : null}
       </motion.div>
     </motion.div>
   );

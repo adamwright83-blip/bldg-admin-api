@@ -11,6 +11,19 @@ import type {
   DayDirectorCommitment,
   ProcessingLocation,
 } from "@shared/dayDirector";
+import { compileGoldlineAdventure } from "@shared/goldlineAdventure";
+
+export type LiveAdventureObjective = {
+  id: string;
+  kind: "sales" | "growth";
+  title: string;
+  sourceLabel: string;
+  dueAt: string | null;
+  status: "ready" | "completed" | "blocked";
+  address: string | null;
+  explanation: string;
+  sourceEvidenceReference: string;
+};
 
 export type DayPlanStopKind =
   | "pickup"
@@ -25,7 +38,8 @@ export type DayPlanSource =
   | "open_channel"
   | "commercial_mission"
   | "derived_operation"
-  | "user_commitment";
+  | "user_commitment"
+  | "living_world";
 
 export type DayPlanStop = {
   id: string;
@@ -209,6 +223,7 @@ export function buildDayPlanProjection(input: {
   processingLocation?: ProcessingLocation | null;
   commitments?: DayDirectorCommitment[];
   physicalVisitBlocked?: boolean;
+  liveObjectives?: LiveAdventureObjective[];
 }): DayPlanProjection {
   const fixedCount = [
     ...(input.pickups ?? []),
@@ -310,6 +325,22 @@ export function buildDayPlanProjection(input: {
         completedAt: commitment.completedAt,
       })
     ),
+    ...(input.liveObjectives ?? []).map((objective): DayPlanStop => ({
+      id: `living-world-${objective.id}`,
+      kind: objective.kind,
+      title: objective.title,
+      source: "living_world",
+      sourceLabel: `${objective.sourceLabel} · ${objective.explanation}`,
+      timeLabel: objective.dueAt ? `Due ${new Date(objective.dueAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "Flexible today",
+      sortKey: objective.dueAt ?? `72:${objective.id}`,
+      estimatedMinutes: null,
+      status: objective.status === "ready" ? "ready" : objective.status,
+      fixed: Boolean(objective.dueAt),
+      address: objective.address,
+      navigationUrl: navigationUrl(objective.address),
+      missionTarget: null,
+      completedAt: objective.status === "completed" ? new Date().toISOString() : null,
+    })),
   ];
   const pickups = baseStops.filter(
     stop => stop.kind === "pickup" && stop.status !== "cancelled"
@@ -342,9 +373,21 @@ export function buildDayPlanProjection(input: {
       completedAt: null,
     });
   }
-  const stops = baseStops
-    .filter(unique)
-    .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  const deduped = baseStops.filter(unique);
+  const compiled = compileGoldlineAdventure({
+    date: input.businessDate,
+    objectives: deduped.map(stop => ({
+      id: stop.id, physicalEntityId: null,
+      kind: stop.kind === "pickup" ? "pickup" : stop.kind === "dropoff" ? "delivery" : stop.source === "living_world" && /recovery/i.test(stop.sourceLabel) ? "recovery" : stop.kind === "sales" ? "commercial_visit" : "field_capture",
+      authority: stop.fixed ? "fixed_commitment" : stop.source === "living_world" ? "persisted_task" : "derived_recommendation",
+      status: stop.status === "completed" ? "completed" : stop.status === "blocked" || stop.status === "cancelled" ? "blocked" : "ready",
+      latitude: null, longitude: null, windowStart: stop.fixed ? stop.sortKey : null, windowEnd: null,
+      priority: stop.source === "living_world" ? 8 : stop.fixed ? 10 : 4,
+      explanation: stop.sourceLabel, sourceEvidenceReference: `${stop.source}:${stop.id}`,
+    })),
+  });
+  const rank = new Map(compiled.ordered.map((objective, index) => [objective.id, index]));
+  const stops = deduped.sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER) || a.sortKey.localeCompare(b.sortKey));
   const counts: Record<DayPlanStopKind, number> = {
     pickup: 0,
     dropoff: 0,

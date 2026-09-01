@@ -4,6 +4,8 @@ import { deterministicEstimate, sourcedFact } from "../../shared/businessGame";
 import { getDb } from "../db";
 import { listDayforgeToday } from "../dayforgeToday/dayforgeTodayService";
 import type { FieldTodayItem, FieldTodayProjection } from "./types";
+import { listRecoveryInterventions } from "../churnRadar/customerChurnService";
+import { listForgeJobs } from "../worldForge/worldForgeService";
 
 function moneyCents(value: unknown): number {
   const parsed = Number(value ?? 0);
@@ -53,9 +55,11 @@ export async function getFieldToday(input: {
   const now = input.now ?? new Date();
   const timeZone = input.timeZone ?? "America/Los_Angeles";
   const date = businessDate(now, timeZone);
-  const [orderRows, commercialItems] = await Promise.all([
+  const [orderRows, commercialItems, recoveries, forgeJobs] = await Promise.all([
     db.select().from(orders).where(sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId} AND (${orders.pickupDate} = ${date} OR ${orders.deliveryDate} = ${date})`).orderBy(asc(orders.pickupDate), asc(orders.id)),
     listDayforgeToday({ tenantId: input.tenantId, userId: input.userId, includeAllAssignees: input.includeAllAssignees }),
+    listRecoveryInterventions(input.tenantId),
+    listForgeJobs({ tenantId: input.tenantId, limit: 50 }),
   ]);
   const timeline: FieldTodayItem[] = [];
   for (const order of orderRows) {
@@ -98,6 +102,31 @@ export async function getFieldToday(input: {
       actions: [{ type: "open", label: "Open", href: item.destinationPath, mutation: null }],
     });
   }
+  for (const recovery of recoveries.filter(item => ["draft_pending_review", "approved", "contacted"].includes(item.status))) {
+    timeline.push({
+      id: `recovery:${recovery.id}`, kind: "customer_recovery",
+      source: { entityType: "customer_recovery_intervention", entityId: recovery.id, sourceReference: `customer_recovery_interventions:${recovery.id}` },
+      scheduledAt: null, urgency: recovery.status === "approved" ? "urgent" : "flexible",
+      title: `Recovery · ${recovery.customer.customerName}`,
+      subtitle: recovery.status === "contacted" ? "Signal sent; awaiting authoritative customer activity" : recovery.customer.recommendedAction,
+      status: recovery.status, destination: null,
+      customer: { name: recovery.customer.customerName, phone: null, email: null },
+      money: deterministicEstimate(recovery.customer.estimatedMonthlyImpactCents, `customer_churn_snapshots:${recovery.customer.id}`, recovery.customer.confidence),
+      verificationClass: "VERIFIED",
+      actions: [{ type: "open", label: "Enter Recovery Path", href: "/growth/lantern-city", mutation: null }],
+    });
+  }
+  for (const forge of forgeJobs.filter(job => ["review_ready", "generation_unconfigured", "published"].includes(job.state))) {
+    timeline.push({
+      id: `forge:${forge.id}`, kind: "contextual_move",
+      source: { entityType: "tower_forge_job", entityId: forge.id, sourceReference: `tower_forge_jobs:${forge.id}` },
+      scheduledAt: null, urgency: forge.state === "review_ready" ? "urgent" : "flexible",
+      title: forge.state === "published" ? "Published tower in Lantern City" : forge.state === "review_ready" ? "New tower discovered" : "Tower Forge awaiting art",
+      subtitle: forge.state.replaceAll("_", " "), status: forge.state, destination: null, customer: null, money: null,
+      verificationClass: "VERIFIED",
+      actions: [{ type: "open", label: "Reveal in world", href: forge.physicalEntityId ? `/growth/lantern-city?entity=${forge.physicalEntityId}` : "/tower-forge", mutation: null }],
+    });
+  }
   const sorted = sortFieldTimeline(timeline);
   const nextFixedCommitment = sorted
     .filter(item => item.scheduledAt && Date.parse(item.scheduledAt) >= now.getTime() && ["pickup", "delivery", "job"].includes(item.kind))
@@ -105,6 +134,6 @@ export async function getFieldToday(input: {
   return {
     generatedAt: now.toISOString(), businessDate: date, currentUserId: input.userId, timeline: sorted,
     nextFixedCommitment, blockers: sorted.filter(item => item.urgency === "blocked"),
-    dataQuality: { status: "partial", warnings: ["Laundry order addresses do not currently contain verified coordinates", "Travel duration is unavailable until live routing is configured"], sources: ["orders", "commercial_follow_ups", "commercial_mission_dispatches", "commercial_pipeline_records"] },
+    dataQuality: { status: "partial", warnings: ["Laundry order addresses do not currently contain verified coordinates", "Travel duration is unavailable until live routing is configured"], sources: ["orders", "commercial_follow_ups", "commercial_mission_dispatches", "commercial_pipeline_records", "customer_recovery_interventions", "tower_forge_jobs"] },
   };
 }

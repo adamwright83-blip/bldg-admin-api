@@ -174,6 +174,7 @@ function LiveGoldlineDriverController() {
     null
   );
   const [journalOpen, setJournalOpen] = useState(false);
+  const [activeAdventureObjectiveId, setActiveAdventureObjectiveId] = useState<string | null>(null);
   const [dayResolution, setDayResolution] = useState<DayResolution | null>(
     null
   );
@@ -854,6 +855,7 @@ function LiveGoldlineDriverController() {
 
   async function refetchGoldlineActionTruth(missionId: number | null) {
     await Promise.all([
+      fieldToday.refetch(),
       builtMissions.refetch(),
       driverGameWorld.refetch(),
       progression.refetch(),
@@ -1091,6 +1093,21 @@ function LiveGoldlineDriverController() {
     fieldToday.data?.businessDate === selectedDate
       ? fieldToday.data
       : undefined;
+  const liveAdventureObjectives = useMemo(() => (currentDayProjection?.timeline ?? [])
+    .filter(item => ["follow_up", "mission_dispatch", "customer_recovery", "contextual_move", "commercial_visit"].includes(item.kind))
+    .map(item => ({
+      id: item.id,
+      kind: item.kind === "customer_recovery" || item.kind === "contextual_move" ? "growth" as const : "sales" as const,
+      title: item.title,
+      sourceLabel: item.kind === "customer_recovery" ? "Dormant relationship" : item.kind === "contextual_move" ? "Field discovery" : "Commercial commitment",
+      dueAt: item.scheduledAt,
+      status: item.status === "completed" || item.status === "recovered" || item.status === "published" ? "completed" as const : item.urgency === "blocked" ? "blocked" as const : "ready" as const,
+      address: item.destination?.address ?? null,
+      explanation: item.subtitle,
+      sourceEvidenceReference: item.source.sourceReference,
+    })), [currentDayProjection?.timeline]);
+  const activeAdventureObjective = liveAdventureObjectives.find(item => item.id === activeAdventureObjectiveId)
+    ?? liveAdventureObjectives.find(item => item.status === "ready") ?? null;
 
   const gameHomeProps = {
     pickups: pickups.data,
@@ -1149,6 +1166,7 @@ function LiveGoldlineDriverController() {
           externalOrders={externalOrders.data ?? []}
           openChannelMission={openChannel.data}
           salesMissions={builtMissions.data}
+          liveObjectives={liveAdventureObjectives}
           processingLocation={dayDirectorState.data?.processingLocation}
           commitments={dayDirectorState.data?.commitments}
           intelligenceAvailable={dayDirectorState.data?.intelligenceAvailable}
@@ -1163,7 +1181,10 @@ function LiveGoldlineDriverController() {
           }
           onOpenImport={() => setAddExternalWorkOpen(true)}
           onEnterOperations={() => setDriverScene("game")}
-          onEnterWorld={() => setDriverScene("overworld")}
+          onEnterWorld={trackedStopId => {
+            setActiveAdventureObjectiveId(trackedStopId?.replace(/^living-world-/, "") ?? null);
+            setDriverScene("overworld");
+          }}
           onEnterColosseum={() => {
             setStageReturnScene("day-plan");
             setDriverScene("colosseum");
@@ -1219,6 +1240,7 @@ function LiveGoldlineDriverController() {
       <GoldlineOverworld
         pickups={pickups.data}
         deliveries={deliveries.data}
+        activeObjective={activeAdventureObjective}
         isLoading={pickups.isLoading || deliveries.isLoading}
         isResolvingOrder={updateStatus.isPending}
         greystarActive={Boolean(

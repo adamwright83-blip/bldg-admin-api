@@ -422,3 +422,47 @@
     animation: none;
   }
 }
+
+.overworld-objective {
+  position: absolute;
+  z-index: 12;
+  left: 50%;
+  top: calc(14px + env(safe-area-inset-top));
+  width: min(78%, 330px);
+  display: grid;
+  justify-items: center;
+  transform: translateX(-50%);
+  padding: 9px 12px;
+  border: 1px solid #ffe07c7a;
+  border-radius: 13px;
+  background: #081116e8;
+  box-shadow: 0 0 0 3px #160e058f, 0 10px 28px #0009;
+  text-align: center;
+  color: #fff1b3;
+  text-shadow: 0 2px 3px #000;
+  backdrop-filter: blur(6px);
+}
+.overworld-objective small {
+  font: 800 9px Inter, sans-serif;
+  letter-spacing: 0.12em;
+  color: #d7dbc8;
+  text-transform: uppercase;
+}
+.overworld-objective b {
+  margin-top: 2px;
+  font-family: Cinzel, serif;
+  font-size: 15px;
+  line-height: 1.2;
+}
+.overworld-objective span {
+  margin-top: 3px;
+  font: 700 10px Inter, sans-serif;
+  color: #fff;
+}
+.overworld-objective i {
+  margin-top: 3px;
+  font: 600 8px Inter, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.08em;
+  color: #d7dbc8b8;
+}

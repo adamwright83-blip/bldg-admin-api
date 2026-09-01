@@ -1,13 +1,12 @@
 import { Fragment, useMemo, useState } from "react";
-import { ArrowRight, MapPinOff, RefreshCw, Search, X } from "lucide-react";
-import { Link } from "wouter";
+import { MapPinOff, RefreshCw, Search, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { WorldGeographySurface } from "./WorldGeographySurface";
 import type { GeographicEntity } from "./GoogleMapsRealityLayer";
 import { WorldDayPhaseIndicator } from "./WorldDayPhase";
 import { clusterGeographicCustomers, clustersAsGoogleEntities, fanOutAtlasCollisions } from "./customerGeography";
 import type { CustomerLocationCluster } from "./customerGeography";
-import { CustomerClusterDetail } from "./CustomerClusterDetail";
+import { WorldEntityInspector } from "./WorldEntityInspector";
 
 export {
   inferCustomerCadence,
@@ -36,6 +35,7 @@ export default function LanternCityAtlas({
   const atlas = trpc.system.geographicTruth.atlas.useQuery(undefined, {
     staleTime: 30_000,
   });
+  const cityWorld = trpc.system.goldlineWorld.cityEntities.useQuery(undefined, { staleTime: 15_000 });
   const geocode = trpc.system.geographicTruth.geocodePending.useMutation({
     onSuccess: () => atlas.refetch(),
   });
@@ -73,6 +73,12 @@ export default function LanternCityAtlas({
 
   const [googleVisible, setGoogleVisible] = useState(false);
   const customerClusters = useMemo(() => clusterGeographicCustomers(visibleCustomers as any), [visibleCustomers]);
+  const normalizeAddress = (value: string | null | undefined) => (value ?? "").toLowerCase().replace(/\s+/g, " ").replace(/[^a-z0-9]/g, "").trim();
+  const entityForPursuit = (accountId: number) => cityWorld.data?.find(entity => entity.bindings.some(binding => binding.bindingType === "commercial_account" && binding.bindingKey === String(accountId))) ?? null;
+  const entityForCluster = (cluster: CustomerLocationCluster) => cityWorld.data?.find(entity => entity.aliases.some(alias => alias.aliasType === "normalized_address" && normalizeAddress(alias.aliasValue) === normalizeAddress(cluster.canonicalAddress))) ?? null;
+  const requestedEntityId = new URLSearchParams(window.location.search).get("entity");
+  const requestedEntity = cityWorld.data?.find(entity => entity.id === requestedEntityId) ?? null;
+  const selectedEntity = selectedPursuit ? entityForPursuit(selectedPursuit.accountId) : selectedCluster ? entityForCluster(selectedCluster) : requestedEntity;
 
   /**
    * The same visible records, addressed by the real coordinate the atlas
@@ -217,11 +223,13 @@ export default function LanternCityAtlas({
             </Fragment>
           ))}
 
-          {!googleVisible && visiblePursuits.map(item => (
+          {!googleVisible && visiblePursuits.map(item => {
+            const worldEntity = entityForPursuit(item.accountId);
+            return (
             <button
               type="button"
               key={item.pipelineId}
-              className="lc-pursued-flame"
+              className={`lc-pursued-building${worldEntity?.canonicalAsset?.assetUrl ? " has-published-art" : ""}${worldEntity?.projection.attentionReasons.length ? " needs-attention" : ""}`}
               style={{
                 left: `${item.location!.x}%`,
                 top: `${item.location!.y}%`,
@@ -232,9 +240,10 @@ export default function LanternCityAtlas({
               }}
               aria-label={`Pursued: ${item.name}`}
             >
-              ♨
+              {worldEntity?.canonicalAsset?.assetUrl ? <img src={worldEntity.canonicalAsset.assetUrl} alt="" /> : <span aria-hidden><i/><i/><i/></span>}
+              <b>{item.name}</b>
             </button>
-          ))}
+          )})}
 
           {!atlas.isLoading &&
           visibleCustomers.length + visiblePursuits.length === 0 ? (
@@ -297,47 +306,7 @@ export default function LanternCityAtlas({
         </article>
       </section>
 
-      {selectedCluster ? <CustomerClusterDetail cluster={selectedCluster} onClose={() => setSelectedCluster(null)} onOpenCustomer={onOpenCustomer} /> : null}
-
-      {selectedPursuit ? (
-        <aside className="lc-detail" aria-live="polite">
-          <button
-            type="button"
-            onClick={() => setSelectedPursuit(null)}
-            aria-label="Close pursuit detail"
-          >
-            <X />
-          </button>
-          <span>Persisted commercial pursuit</span>
-          <h2>{selectedPursuit.name}</h2>
-          <p>
-            {selectedPursuit.location?.canonicalAddress ??
-              selectedPursuit.address}
-          </p>
-          <dl>
-            <div>
-              <dt>Pipeline stage</dt>
-              <dd>{selectedPursuit.stage.replaceAll("_", " ")}</dd>
-            </div>
-            <div>
-              <dt>Source</dt>
-              <dd>Commercial Pipeline</dd>
-            </div>
-            <div>
-              <dt>Last activity</dt>
-              <dd>
-                {new Date(selectedPursuit.updatedAt).toLocaleDateString()}
-              </dd>
-            </div>
-          </dl>
-          <Link
-            className="lc-open-customer"
-            href={`/commercial-pipeline?pipeline=${selectedPursuit.pipelineId}`}
-          >
-            Open Growth evidence <ArrowRight />
-          </Link>
-        </aside>
-      ) : null}
+      {selectedCluster || selectedPursuit || requestedEntity ? <WorldEntityInspector entity={selectedEntity} cluster={selectedCluster} pursuit={selectedPursuit} onClose={() => { setSelectedCluster(null); setSelectedPursuit(null); if (requestedEntityId) window.history.replaceState({}, "", "/growth/lantern-city"); }} onOpenCustomer={onOpenCustomer} /> : null}
     </main>
   );
 }

@@ -11,8 +11,10 @@ import {
   recordGoldlineEventReceipt,
 } from "./worldEventStore";
 import { approveAndPublishTower, getForgeReview, listForgeJobs, processTowerForgeJob, queueTowerForgeJob, rejectTowerForgeJob, selectTowerWeaponConcept } from "../worldForge/worldForgeService";
+import { listCityWorldEntities } from "./cityWorldService";
 
 export const goldlineWorldRouter = router({
+  cityEntities: dayforgeTenantOperatorProcedure.query(({ ctx }) => listCityWorldEntities({ tenantId: ctx.tenantId })),
   unpresentedCelebrations: dayforgeMissionFieldProcedure
     .input(z.object({ limit: z.number().int().min(1).max(50).default(20) }).optional())
     .query(({ ctx, input }) => listUnpresentedCelebrationEvents({

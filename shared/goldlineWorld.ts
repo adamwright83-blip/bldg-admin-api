@@ -325,6 +325,7 @@ export function projectPhysicalWorldState(input: {
 
 export type CelebrationDescriptor = {
   eventId: string;
+  physicalEntityId: string | null;
   label: string;
   magnitude: "whisper" | "murmur" | "beat" | "surge" | "detonation";
   cue: "field_intel" | "call" | "follow_up" | "visit" | "proposal" | "recovery" | "tower" | "outcome";
@@ -334,7 +335,7 @@ export function celebrationForEvent(
   event: GoldlineWorldEvent
 ): CelebrationDescriptor | null {
   if (event.classification !== "action" && event.classification !== "outcome" && event.eventType !== "tower_review_ready") return null;
-  const map: Record<string, Omit<CelebrationDescriptor, "eventId">> = {
+  const map: Record<string, Omit<CelebrationDescriptor, "eventId" | "physicalEntityId">> = {
     field_journal_saved: { label: "FIELD INTEL SECURED", magnitude: "beat", cue: "field_intel" },
     call_completed: { label: "CALL MADE", magnitude: "beat", cue: "call" },
     text_sent: { label: "FOLLOW-UP SENT", magnitude: "beat", cue: "follow_up" },
@@ -348,5 +349,5 @@ export function celebrationForEvent(
     account_won: { label: "RELATIONSHIP WON", magnitude: "detonation", cue: "outcome" },
   };
   const descriptor = map[event.eventType];
-  return descriptor ? { eventId: event.id, ...descriptor } : null;
+  return descriptor ? { ...descriptor, eventId: event.id, physicalEntityId: event.physicalEntityId } : null;
 }

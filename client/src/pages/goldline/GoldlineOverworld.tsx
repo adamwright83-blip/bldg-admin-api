@@ -15,6 +15,7 @@ import {
   saveOverworldCheckpoint,
 } from "./overworld/checkpoint";
 import { GoldlineOverworldRuntime } from "./overworld/OverworldRuntime";
+import type { LiveAdventureObjective } from "../driver/goldlineDayPlanModel";
 import type {
   DestinationStateMap,
   OverworldProximity,
@@ -108,6 +109,7 @@ export default function GoldlineOverworld({
   pickups = [],
   deliveries = [],
   isLoading = false,
+  activeObjective = null,
   greystarActive,
   greystarCompleted = false,
   waywardUnlocked = false,
@@ -122,6 +124,7 @@ export default function GoldlineOverworld({
   pickups?: Order[];
   deliveries?: Order[];
   isLoading?: boolean;
+  activeObjective?: LiveAdventureObjective | null;
   greystarActive: boolean;
   greystarCompleted?: boolean;
   waywardUnlocked?: boolean;
@@ -366,6 +369,15 @@ export default function GoldlineOverworld({
           disabled={ordersOpen || !runtimeReady}
           onInput={setRuntimeInput}
         />
+
+        {activeObjective ? (
+          <div className="overworld-objective" aria-live="polite">
+            <small>{activeObjective.sourceLabel}</small>
+            <b>{activeObjective.title}</b>
+            {activeObjective.address ? <span>{activeObjective.address}</span> : null}
+            <i>{activeObjective.sourceEvidenceReference}</i>
+          </div>
+        ) : null}
 
         {proximity ? (
           <div className={`overworld-context is-${proximity.availability}`}>

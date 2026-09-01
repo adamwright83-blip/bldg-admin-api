@@ -19,6 +19,7 @@ import type { OpenChannelMission } from "../../../../server/openChannel/openChan
 import {
   buildDayPlanProjection,
   type DayPlanStop,
+  type LiveAdventureObjective,
 } from "../driver/goldlineDayPlanModel";
 import world from "@/assets/goldline/generated/goldline-world-empty.png";
 import operator from "@/assets/goldline/generated/trailblazer-operator.png";
@@ -31,6 +32,7 @@ export type GoldlineDayPlanProps = {
   externalOrders?: ExternalOperationalOrder[];
   openChannelMission?: OpenChannelMission | null;
   salesMissions?: CommercialMission[];
+  liveObjectives?: LiveAdventureObjective[];
   nextCommitmentAt?: string | null;
   isLoading?: boolean;
   onOpenImport: () => void;
@@ -161,6 +163,11 @@ function StopCard({
             </button>
           </div>
         )}
+        {stop.status === "ready" && stop.source === "living_world" && (
+          <div className="gdp-mission-actions">
+            <button type="button" onClick={() => onEnterWorld(stop.id)}><Navigation /> ENTER THIS OBJECTIVE IN WORLD</button>
+          </div>
+        )}
         {stop.status !== "ready" &&
           stop.status !== "completed" &&
           stop.navigationUrl && (
@@ -223,6 +230,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         externalOrders: props.externalOrders,
         openChannelMission: props.openChannelMission,
         salesMissions: props.salesMissions,
+        liveObjectives: props.liveObjectives,
         nextCommitmentAt: props.nextCommitmentAt,
         processingLocation: props.processingLocation,
         commitments: props.commitments,
@@ -235,6 +243,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       props.externalOrders,
       props.openChannelMission,
       props.salesMissions,
+      props.liveObjectives,
       props.nextCommitmentAt,
       props.processingLocation,
       props.commitments,
