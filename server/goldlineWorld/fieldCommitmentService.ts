@@ -12,7 +12,7 @@
  * recoverable; a forgotten one is not.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { goldlineWorldEvents } from "../../drizzle/schema";
 import type { FieldJournalExtraction } from "../../shared/fieldJournal";
 import {
@@ -26,7 +26,10 @@ import {
   commitmentEventMetadata,
 } from "../../shared/goldlineObligations";
 import { appendGoldlineWorldEvent } from "./worldEventStore";
-import { FIELD_SIGNAL_EVENT } from "./futurePressureService";
+import {
+  FIELD_SIGNAL_EVENT,
+  FIELD_SIGNAL_SUPERSEDED_EVENT,
+} from "./futurePressureService";
 import { findPhysicalEntityIdByAddress } from "./entityLookup";
 import { getDb } from "../db";
 
@@ -39,6 +42,26 @@ function addressForClaim(
     item => item.clientEntityKey === claim.entityClientKey
   );
   return entity?.addressClue?.value ?? entity?.propertyName?.value ?? null;
+}
+
+function correctionLike(text: string): boolean {
+  return /\b(actually|instead|correction|correcting|changed|change of plans|now back|now available|now there)\b|\bnot\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(text);
+}
+
+function normalizeSignalPlace(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function signalPlaceKey(row: typeof goldlineWorldEvents.$inferSelect): string | null {
+  if (row.physicalEntityId) return `id:${row.physicalEntityId}`;
+  const metadata = (row.metadataJson ?? {}) as { addressClue?: unknown };
+  if (typeof metadata.addressClue !== "string" || !metadata.addressClue.trim()) return null;
+  return `address:${normalizeSignalPlace(metadata.addressClue)}`;
+}
+
+function signalKind(row: typeof goldlineWorldEvents.$inferSelect): string | null {
+  const metadata = (row.metadataJson ?? {}) as { kind?: unknown };
+  return typeof metadata.kind === "string" ? metadata.kind : null;
 }
 
 export type RecordedCommitment = {
@@ -99,11 +122,12 @@ export async function recordFieldCommitments(input: {
     */
     if (!claimCreatesObligation(claim)) {
       if (!claim.when?.startDate) continue;
-      await appendGoldlineWorldEvent({
+      const physicalEntityId = claimAddress
+        ? await findPhysicalEntityIdByAddress({ tenantId: input.tenantId, address: claimAddress })
+        : null;
+      const storedSignal = await appendGoldlineWorldEvent({
         tenantId: input.tenantId,
-        physicalEntityId: claimAddress
-          ? await findPhysicalEntityIdByAddress({ tenantId: input.tenantId, address: claimAddress })
-          : null,
+        physicalEntityId,
         eventType: FIELD_SIGNAL_EVENT,
         classification: "evidence",
         actorType: "operator",
@@ -121,6 +145,7 @@ export async function recordFieldCommitments(input: {
         metadata: {
           kind: claim.kind,
           statement: claim.sourceText,
+          subject: claim.subject,
           whenText: claim.when.sourceText,
           anchorDate: input.anchorDate,
           hedged: claim.when.hedged,
@@ -131,6 +156,77 @@ export async function recordFieldCommitments(input: {
           impliesCommitment: false,
         },
       });
+
+      /*
+        "Actually Thursday" must remove Wednesday from the *future* without
+        deleting Tuesday's sentence. A correction therefore appends a
+        supersession edge to the Chronicle. We only do this when the source
+        itself signals a correction, and only against the newest still-active
+        signal of the same kind at the same real place. Ordinary independent
+        reports are never collapsed just because they share a building.
+      */
+      const currentPlaceKey = physicalEntityId
+        ? `id:${physicalEntityId}`
+        : claimAddress
+          ? `address:${normalizeSignalPlace(claimAddress)}`
+          : null;
+      if (currentPlaceKey && correctionLike(claim.sourceText)) {
+        const related = await db
+          .select()
+          .from(goldlineWorldEvents)
+          .where(
+            and(
+              eq(goldlineWorldEvents.tenantId, input.tenantId),
+              inArray(goldlineWorldEvents.eventType, [
+                FIELD_SIGNAL_EVENT,
+                FIELD_SIGNAL_SUPERSEDED_EVENT,
+              ])
+            )
+          );
+        const alreadySuperseded = new Set(
+          related
+            .filter(row => row.eventType === FIELD_SIGNAL_SUPERSEDED_EVENT)
+            .map(row => (row.metadataJson as { signalEventId?: unknown } | null)?.signalEventId)
+            .filter((value): value is string => typeof value === "string")
+        );
+        const prior = related
+          .filter(row =>
+            row.eventType === FIELD_SIGNAL_EVENT &&
+            row.id !== storedSignal.id &&
+            !alreadySuperseded.has(row.id) &&
+            signalKind(row) === claim.kind &&
+            signalPlaceKey(row) === currentPlaceKey
+          )
+          .sort((left, right) =>
+            right.occurredAt.getTime() - left.occurredAt.getTime() ||
+            right.createdAt.getTime() - left.createdAt.getTime()
+          )[0];
+        if (prior) {
+          await appendGoldlineWorldEvent({
+            tenantId: input.tenantId,
+            physicalEntityId,
+            eventType: FIELD_SIGNAL_SUPERSEDED_EVENT,
+            classification: "evidence",
+            actorType: "operator",
+            actorId: input.actorId,
+            occurredAt: input.capturedAt,
+            observedAt: null,
+            sourceType: "driver_sales_journals",
+            sourceId: input.journalEntryId,
+            sourceEvidenceReference: `driver_sales_journals:${input.journalEntryId}`,
+            provenanceClass: "operator_reported",
+            verificationClass: "ATTESTED",
+            confidence: "high",
+            idempotencyKey: `field-signal-superseded:${prior.id}:${storedSignal.id}`,
+            correlationId: `field-journal:${input.journalEntryId}`,
+            metadata: {
+              signalEventId: prior.id,
+              supersededBySignalEventId: storedSignal.id,
+              reason: claim.sourceText,
+            },
+          });
+        }
+      }
       continue;
     }
     const metadata = commitmentEventMetadata(claim);
