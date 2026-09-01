@@ -104,7 +104,9 @@ describe("Goldline canonical driver restoration", () => {
     expect(controller).toContain("surfaceForCampaignHost");
     expect(controller).toContain("setActiveAdventureObjectiveId(focus)");
     expect(controller).toContain("campaignChapterGrammar");
+    expect(controller).toContain("focusedCampaignObjectiveId={activeAdventureObjectiveId}");
     expect(gameHome).toContain("props.campaignChapterGrammar ?? routeGrammar");
+    expect(gameHome).toContain("focusedCampaignObjectiveId");
   });
 
   it("renders authenticated Driver through Goldline while preserving ProductShell routes", () => {

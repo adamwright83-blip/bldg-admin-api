@@ -69,6 +69,16 @@ export function surfaceForCampaignHost(binding: GameplayBinding): CampaignHostSu
   }
 }
 
+export function campaignObjectiveOrderId(objectiveId: string): number | null {
+  const match = objectiveId.match(/^(?:pickup|delivery|dropoff):(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
+export function campaignObjectiveMissionId(objectiveId: string): number | null {
+  const match = objectiveId.match(/^(?:follow-up|mission|visit):(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
 export function campaignWorldRemainsPlayable(status: CampaignStatus): boolean {
   return status === "quiet" || status === "authored" || status === "active" || status === "completed";
 }

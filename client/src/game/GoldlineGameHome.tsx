@@ -175,6 +175,10 @@ import {
   type ActionGrammar,
 } from "../../../shared/actionGrammar";
 import type { ExistingGameplayHost } from "../../../shared/goldlineCampaignRuntime";
+import {
+  campaignObjectiveMissionId,
+  campaignObjectiveOrderId,
+} from "../../../shared/goldlineCampaignRuntime";
 import { selectFictionForMission } from "./fiction/fictionDirector";
 import { reconcileFictionOnResume } from "./fiction/longHorizonResume";
 import type { FictionMissionInstance } from "./fiction/fictionDirector";
@@ -222,6 +226,7 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
   /** Current chapter grammar when one exists — visit-route PLACE_ITEM is the fallback. */
   campaignChapterGrammar?: ActionGrammar | null;
   requestedGameplayHost?: ExistingGameplayHost | null;
+  focusedCampaignObjectiveId?: string | null;
   onPersistFictionAssignment?: (record: {
     stableMissionKey: string;
     templateId: string;
@@ -814,10 +819,41 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     [history, missions]
   );
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const focusedMission = useMemo(() => {
+    const focus = props.focusedCampaignObjectiveId;
+    if (!focus) return null;
+    const missionId = campaignObjectiveMissionId(focus);
+    return (
+      (missionId != null
+        ? allMissions.find(mission => mission.missionId === missionId)
+        : null) ??
+      allMissions.find(
+        mission =>
+          mission.key === focus ||
+          mission.key === `mission:${focus}` ||
+          String(mission.missionId) === focus
+      ) ??
+      null
+    );
+  }, [allMissions, props.focusedCampaignObjectiveId]);
   const activeMission =
     allMissions.find(mission => mission.key === activeKey) ??
+    focusedMission ??
     prioritized ??
     null;
+  useEffect(() => {
+    if (focusedMission) setActiveKey(focusedMission.key);
+    if (
+      props.focusedCampaignObjectiveId &&
+      props.requestedGameplayHost !== "local_target_run"
+    ) {
+      setUtilityPanel("objectives");
+    }
+  }, [
+    focusedMission,
+    props.focusedCampaignObjectiveId,
+    props.requestedGameplayHost,
+  ]);
   const outcomeMission = encounterRuntime
     ? (authoritativeMissionTruth.find(
         mission => mission.missionId === encounterRuntime.missionId
@@ -840,8 +876,17 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     ],
     [props.pickups, props.deliveries]
   );
-  const nextOrderObjective =
-    orderObjectives.find(item => item.order.address?.trim()) ?? null;
+  const nextOrderObjective = useMemo(() => {
+    const addressed = orderObjectives.filter(item => item.order.address?.trim());
+    const focusId = props.focusedCampaignObjectiveId
+      ? campaignObjectiveOrderId(props.focusedCampaignObjectiveId)
+      : null;
+    if (focusId != null) {
+      const focused = addressed.find(item => item.order.id === focusId);
+      if (focused) return focused;
+    }
+    return addressed[0] ?? null;
+  }, [orderObjectives, props.focusedCampaignObjectiveId]);
   // The expedition shell is driven by a truthful operational objective, not
   // by the presence of a Laundry Butler-native pickup alone. Native pickup
   // keeps priority; otherwise the first pending, human-approved Open Channel

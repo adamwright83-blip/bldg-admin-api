@@ -486,7 +486,16 @@ describe("campaign chapter action grammar", () => {
       entry => entry.chapterKind === "visit_hunt" || entry.chapterKind === "opportunity_corridor"
     );
     expect(chapter?.fictionTemplateId).toBe("beacon-walk-v1");
-    expect(deriveCampaignChapterActionGrammar(chapter!).kind).toBe("VISIT_LOCATION");
+    const grammar = deriveCampaignChapterActionGrammar(chapter!);
+    expect(grammar?.kind).toBe("VISIT_LOCATION");
+    expect(grammar?.sensitiveConversation).toBe(true);
+  });
+
+  it("does not invent WAIT_FOR_EVENT fiction over actionable field captures", () => {
+    const draft = compile([item({ id: "capture:1", kind: "field_capture" })]);
+    const chapter = draft.chapters.find(entry => entry.chapterKind === "open_channel");
+    expect(chapter).toBeTruthy();
+    expect(deriveCampaignChapterActionGrammar(chapter!)).toBeNull();
   });
 
   it("does not invent grammar for courier expeditions", () => {

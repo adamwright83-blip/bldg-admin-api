@@ -1410,6 +1410,7 @@ function LiveGoldlineDriverController() {
               : null
           }
           requestedGameplayHost={requestedGameplayHost}
+          focusedCampaignObjectiveId={activeAdventureObjectiveId}
           onPersistFictionAssignment={record =>
             upsertFictionAssignment.mutate({
               stableMissionKey: record.stableMissionKey,

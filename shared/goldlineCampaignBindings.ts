@@ -88,7 +88,7 @@ const CHAPTER_ACTION_GRAMMAR_KIND: Record<CampaignChapterKind, ActionGrammarKind
   visit_hunt: "VISIT_LOCATION",
   territory_push: "VISIT_LOCATION",
   opportunity_corridor: "VISIT_LOCATION",
-  open_channel: "WAIT_FOR_EVENT",
+  open_channel: null,
   expedition: null,
   hard_anchor: null,
   guardian_finale: null,
@@ -97,8 +97,9 @@ const CHAPTER_ACTION_GRAMMAR_KIND: Record<CampaignChapterKind, ActionGrammarKind
 
 /**
  * Describe the current chapter's already-legitimate work as Action Grammar.
- * Fiction binds to this kind — not to a visit-route PLACE_ITEM default —
- * so preferred templates (ghost-echo, held-breath, beacon-walk) can match.
+ * Fiction binds to this kind — not to a visit-route PLACE_ITEM default.
+ * Open-channel/field-capture chapters return no grammar: WAIT_FOR_EVENT would
+ * invent a "nothing has happened yet" story over actionable review work.
  * Empty location lists stay empty; this never invents addresses.
  */
 export function deriveCampaignChapterActionGrammar(
@@ -109,16 +110,14 @@ export function deriveCampaignChapterActionGrammar(
 ): ActionGrammar | null {
   const kind = CHAPTER_ACTION_GRAMMAR_KIND[chapter.chapterKind];
   if (!kind) return null;
-  if (chapter.objectiveIds.length === 0 && kind !== "WAIT_FOR_EVENT") return null;
-  const count = Math.max(chapter.objectiveIds.length, 1);
+  if (chapter.objectiveIds.length === 0) return null;
+  const count = chapter.objectiveIds.length;
   const sourceType =
     kind === "RECOVER_FAILED_CONTACT"
       ? "recovery"
       : kind === "FOLLOW_UP_PERSON"
         ? "follow_up"
-        : kind === "VISIT_LOCATION"
-          ? "field_move"
-          : "mission";
+        : "field_move";
   return {
     kind,
     businessActionId: chapter.objectiveIds[0] ?? chapter.stableChapterId,
@@ -136,6 +135,8 @@ export function deriveCampaignChapterActionGrammar(
     requiresDriving: kind === "VISIT_LOCATION",
     timerSafe: false,
     sensitiveConversation:
-      kind === "FOLLOW_UP_PERSON" || kind === "RECOVER_FAILED_CONTACT",
+      kind === "FOLLOW_UP_PERSON" ||
+      kind === "RECOVER_FAILED_CONTACT" ||
+      kind === "VISIT_LOCATION",
   };
 }
