@@ -161,30 +161,34 @@ async function publishCandidate(input: {
     publishedAt: publishedAt.toISOString(),
     classification: "game_projection",
   };
-  await appendGoldlineWorldEvent({
-    tenantId: input.tenantId,
-    physicalEntityId: null,
-    eventType: "territory_published",
-    classification: "game_projection",
-    actorType: "system",
-    actorId: null,
-    occurredAt: publishedAt.toISOString(),
-    observedAt: publishedAt.toISOString(),
-    sourceType: "goldline_territory",
-    sourceId: id,
-    sourceEvidenceReference: `goldline_territory_definitions:${id}`,
-    provenanceClass: "generated_game_fiction",
-    verificationClass: "CLAIMED",
-    confidence: "unknown",
-    idempotencyKey: `territory-published:${input.tenantId}:${input.candidate.stableKey}:1`,
-    correlationId: id,
-    metadata: {
-      territoryId: id,
-      guardianId: input.candidate.guardianId,
-      memberPhysicalEntityIds: input.candidate.members.map(member => member.physicalEntityId),
+  try {
+    await appendGoldlineWorldEvent({
+      tenantId: input.tenantId,
+      physicalEntityId: null,
+      eventType: "territory_published",
       classification: "game_projection",
-    },
-  });
+      actorType: "system",
+      actorId: null,
+      occurredAt: publishedAt.toISOString(),
+      observedAt: publishedAt.toISOString(),
+      sourceType: "goldline_territory",
+      sourceId: id,
+      sourceEvidenceReference: `goldline_territory_definitions:${id}`,
+      provenanceClass: "generated_game_fiction",
+      verificationClass: "CLAIMED",
+      confidence: "unknown",
+      idempotencyKey: `territory-published:${input.tenantId}:${input.candidate.stableKey}:1`,
+      correlationId: id,
+      metadata: {
+        territoryId: id,
+        guardianId: input.candidate.guardianId,
+        memberPhysicalEntityIds: input.candidate.members.map(member => member.physicalEntityId),
+        classification: "game_projection",
+      },
+    });
+  } catch {
+    // The definition row is the publish. Chronicle is game-projection only.
+  }
   return definition;
 }
 

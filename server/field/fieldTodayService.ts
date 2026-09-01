@@ -1,5 +1,5 @@
-import { asc, sql } from "drizzle-orm";
-import { orders } from "../../drizzle/schema";
+import { and, asc, eq, sql } from "drizzle-orm";
+import { commercialFollowUps, orders } from "../../drizzle/schema";
 import { deterministicEstimate, sourcedFact } from "../../shared/businessGame";
 import { getDb } from "../db";
 import { listDayforgeToday } from "../dayforgeToday/dayforgeTodayService";
@@ -56,16 +56,40 @@ export async function getFieldToday(input: {
   const now = input.now ?? new Date();
   const timeZone = input.timeZone ?? "America/Los_Angeles";
   const date = businessDate(now, timeZone);
-  const [orderRows, commercialItems, recoveries, forgeJobs, pressure] = await Promise.all([
+  const [orderRows, commercialItems, completedFollowUps, recoveries, forgeJobs, pressure] = await Promise.all([
     db.select().from(orders).where(sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId} AND (${orders.pickupDate} = ${date} OR ${orders.deliveryDate} = ${date})`).orderBy(asc(orders.pickupDate), asc(orders.id)),
     listDayforgeToday({ tenantId: input.tenantId, userId: input.userId, includeAllAssignees: input.includeAllAssignees }),
+    db.select({
+      id: commercialFollowUps.id,
+      assignedTo: commercialFollowUps.assignedTo,
+      completedAt: commercialFollowUps.completedAt,
+    }).from(commercialFollowUps).where(and(
+      eq(commercialFollowUps.tenantId, input.tenantId),
+      eq(commercialFollowUps.status, "completed")
+    )),
     listRecoveryInterventions(input.tenantId),
     listForgeJobs({ tenantId: input.tenantId, limit: 50 }),
     listFuturePressure({ tenantId: input.tenantId, date }),
   ]);
   const timeline: FieldTodayItem[] = [];
+  const authoritativeCompletedObjectiveIds = new Set<string>();
+  for (const followUp of completedFollowUps) {
+    if (!followUp.completedAt) continue;
+    if (!input.includeAllAssignees && followUp.assignedTo && followUp.assignedTo !== input.userId) continue;
+    if (businessDate(followUp.completedAt, timeZone) !== date) continue;
+    authoritativeCompletedObjectiveIds.add(`follow-up:${followUp.id}`);
+  }
   for (const order of orderRows) {
     const name = `${order.firstName} ${order.lastName}`.trim() || "Customer";
+    if (
+      order.pickupDate === date &&
+      ["collected", "processing", "ready", "delivered"].includes(order.status)
+    ) {
+      authoritativeCompletedObjectiveIds.add(`pickup:${order.id}`);
+    }
+    if (order.deliveryDate === date && order.status === "delivered") {
+      authoritativeCompletedObjectiveIds.add(`delivery:${order.id}`);
+    }
     if (order.pickupDate === date && ["new", "intake-pending"].includes(order.status)) {
       timeline.push({
         id: `pickup:${order.id}`, kind: "pickup", source: { entityType: "order", entityId: String(order.id), sourceReference: `orders:${order.id}` },
@@ -107,6 +131,11 @@ export async function getFieldToday(input: {
   const openRecoveries = recoveries.filter(item =>
     ["draft_pending_review", "approved", "contacted"].includes(item.status)
   );
+  for (const recovery of recoveries) {
+    if (recovery.status === "recovered") {
+      authoritativeCompletedObjectiveIds.add(`recovery:${recovery.id}`);
+    }
+  }
   // Recovery work is placed at the building the dormant customer actually
   // orders from, so entering it from the day lands on the same save file.
   const recoveryEntities = await physicalEntityIdsForInterventions(
@@ -129,6 +158,9 @@ export async function getFieldToday(input: {
     });
   }
   for (const forge of forgeJobs.filter(job => ["review_ready", "generation_unconfigured", "published"].includes(job.state))) {
+    if (forge.state === "published") {
+      authoritativeCompletedObjectiveIds.add(`forge:${forge.id}`);
+    }
     timeline.push({
       id: `forge:${forge.id}`, kind: "contextual_move",
       source: { entityType: "tower_forge_job", entityId: forge.id, sourceReference: `tower_forge_jobs:${forge.id}` },
@@ -159,7 +191,6 @@ export async function getFieldToday(input: {
       physicalEntityId: item.physicalEntityId ?? null,
       whySurfaced: item.reason,
       scheduledAt: null,
-      // A promise that is due is urgent. A reported possibility never is.
       urgency: isPromise ? "urgent" : "flexible",
       title: isPromise ? "A promise you made is due" : "Worth returning to today",
       subtitle: item.reason,
@@ -167,7 +198,6 @@ export async function getFieldToday(input: {
       destination: null,
       customer: null,
       money: null,
-      // The operator's own words, attested but never provider-verified.
       verificationClass: "ATTESTED",
       actions: [{
         type: "open",
@@ -186,6 +216,7 @@ export async function getFieldToday(input: {
     .sort((a, b) => Date.parse(a.scheduledAt!) - Date.parse(b.scheduledAt!))[0] ?? null;
   return {
     generatedAt: now.toISOString(), businessDate: date, currentUserId: input.userId, timeline: sorted,
+    authoritativeCompletedObjectiveIds: Array.from(authoritativeCompletedObjectiveIds).sort(),
     nextFixedCommitment, blockers: sorted.filter(item => item.urgency === "blocked"),
     dataQuality: { status: "partial", warnings: ["Laundry order addresses do not currently contain verified coordinates", "Travel duration is unavailable until live routing is configured"], sources: ["orders", "commercial_follow_ups", "commercial_mission_dispatches", "commercial_pipeline_records", "customer_recovery_interventions", "tower_forge_jobs", "goldline_world_events"] },
   };

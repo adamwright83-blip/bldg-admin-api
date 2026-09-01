@@ -8,6 +8,7 @@
  */
 
 import { expect, test, type Page } from "@playwright/test";
+import { resetGoldlineProofWorld } from "./proofWorld";
 
 const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "goldline-proof-admin-pass";
@@ -111,6 +112,33 @@ async function recordVisitJournal(
   expect(response.ok(), JSON.stringify(payload)).toBeTruthy();
 }
 
+function entityNameAndAddress(entity: CityEntity | undefined, fallbackId: string) {
+  const fixture = HUNT_FIXTURE.find(item => item.id === fallbackId);
+  return {
+    name: entity?.displayName ?? fixture?.name ?? fallbackId,
+    address: entity?.pursuit?.address ?? fixture?.address ?? entity?.displayName ?? fallbackId,
+  };
+}
+
+async function completeRemainingMembers(
+  page: Page,
+  territory: PresentedTerritory,
+  entities: CityEntity[]
+): Promise<PresentedTerritory> {
+  for (const memberId of territory.state.remainingMemberIds) {
+    await recordVisitJournal(page, entityNameAndAddress(
+      entities.find(row => row.id === memberId),
+      memberId
+    ));
+    await waitForMemberCompleted(page, memberId);
+  }
+  const after = (await readTerritories(page)).find(
+    item => item.definition.id === territory.definition.id
+  );
+  expect(after).toBeTruthy();
+  return after!;
+}
+
 async function waitForMemberCompleted(page: Page, physicalEntityId: string) {
   await expect
     .poll(
@@ -124,6 +152,9 @@ async function waitForMemberCompleted(page: Page, physicalEntityId: string) {
 }
 
 test.describe("Goldline territories smoke", () => {
+  test.beforeAll(async ({ request }) => {
+    await resetGoldlineProofWorld(request);
+  });
   test("compiler publishes a stable real-member territory", async ({ page }) => {
     await signIn(page, "admin");
     await page.goto("/growth/lantern-city");
@@ -194,22 +225,27 @@ test.describe("Goldline territories smoke", () => {
     test.skip(testInfo.project.name !== "desktop", "mutates the proof world once");
     await signIn(page, "admin");
     await page.goto("/growth/lantern-city");
-    const before = (await readTerritories(page))[0];
+    const before =
+      (await readTerritories(page)).find(item =>
+        item.definition.members.some(member => member.physicalEntityId === HUNT_ONE)
+      ) ?? (await readTerritories(page))[0];
     expect(before).toBeTruthy();
     const targetId =
       before!.state.remainingMemberIds.find(id => id === HUNT_ONE) ??
       before!.state.remainingMemberIds[0]!;
     expect(before!.state.completedMemberIds.includes(targetId)).toBe(false);
-    const target = HUNT_FIXTURE.find(item => item.id === targetId) ?? HUNT_FIXTURE[0]!;
+    const entities = await readEntities(page);
 
     await signIn(page, "driver");
-    await recordVisitJournal(page, {
-      name: target.name,
-      address: target.address,
-    });
+    await recordVisitJournal(page, entityNameAndAddress(
+      entities.find(row => row.id === targetId),
+      targetId
+    ));
     await waitForMemberCompleted(page, targetId);
 
-    const after = (await readTerritories(page))[0]!;
+    const after = (await readTerritories(page)).find(
+      item => item.definition.id === before!.definition.id
+    )!;
     expect(after.state.completedMemberIds).toContain(targetId);
     const othersStillClosed = after.definition.members
       .map(member => member.physicalEntityId)
@@ -282,19 +318,7 @@ test.describe("Goldline territories smoke", () => {
       entities.find(entity => entity.id === HUNT_ONE)?.obligations?.count ?? 0;
 
     await signIn(page, "driver");
-    for (const memberId of territory!.state.remainingMemberIds) {
-      const fixture = HUNT_FIXTURE.find(item => item.id === memberId);
-      if (!fixture) continue;
-      await recordVisitJournal(page, {
-        name: fixture.name,
-        address: fixture.address,
-      });
-      await waitForMemberCompleted(page, memberId);
-    }
-
-    territory = (await readTerritories(page)).find(
-      item => item.definition.id === territory!.definition.id
-    );
+    territory = await completeRemainingMembers(page, territory!, entities);
     expect(territory?.state.confrontationReady || territory?.state.cleared).toBe(true);
 
     await signIn(page, "admin");

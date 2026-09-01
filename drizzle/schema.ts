@@ -6209,6 +6209,96 @@ export const goldlineTerritoryDefinitions = mysqlTable(
   })
 );
 
+/**
+ * Goldline campaign identity and authored bindings.
+ * Never copies customer, order, visit, or territory progress.
+ */
+export const goldlineCampaignInstances = mysqlTable(
+  "goldline_campaign_instances",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorId: varchar("operatorId", { length: 128 }).notNull(),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    rulesVersion: int("rulesVersion").notNull().default(1),
+    stableKey: varchar("stableKey", { length: 191 }).notNull(),
+    campaignArchetypeId: varchar("campaignArchetypeId", { length: 32 }).notNull(),
+    title: varchar("title", { length: 128 }).notNull(),
+    premise: varchar("premise", { length: 512 }).notNull(),
+    inputFingerprint: varchar("inputFingerprint", { length: 80 }).notNull(),
+    status: varchar("status", { length: 16 }).notNull(),
+    currentChapterId: varchar("currentChapterId", { length: 191 }),
+    completedChapterIdsJson: json("completedChapterIdsJson").notNull(),
+    chaptersJson: json("chaptersJson").notNull(),
+    revision: int("revision").notNull().default(1),
+    endingTreatment: varchar("endingTreatment", { length: 512 }),
+    classification: varchar("classification", { length: 32 })
+      .notNull()
+      .default("game_projection"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    startedAt: timestamp("startedAt"),
+    completedAt: timestamp("completedAt"),
+  },
+  table => ({
+    dayUnique: uniqueIndex("uq_goldline_campaign_day").on(
+      table.tenantId,
+      table.businessDate,
+      table.rulesVersion
+    ),
+    stableIdx: uniqueIndex("uq_goldline_campaign_stable").on(
+      table.tenantId,
+      table.stableKey
+    ),
+    operatorIdx: index("idx_goldline_campaign_operator").on(
+      table.tenantId,
+      table.operatorId,
+      table.businessDate
+    ),
+  })
+);
+
+export const goldlineCampaignRevisions = mysqlTable(
+  "goldline_campaign_revisions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    campaignId: varchar("campaignId", { length: 36 }).notNull(),
+    revision: int("revision").notNull(),
+    inputFingerprint: varchar("inputFingerprint", { length: 80 }).notNull(),
+    reasonCodesJson: json("reasonCodesJson").notNull(),
+    addedFutureChapterIdsJson: json("addedFutureChapterIdsJson").notNull(),
+    removedFutureChapterIdsJson: json("removedFutureChapterIdsJson").notNull(),
+    reorderedFutureChapterIdsJson: json("reorderedFutureChapterIdsJson").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    revisionUnique: uniqueIndex("uq_goldline_campaign_revision").on(
+      table.campaignId,
+      table.revision
+    ),
+  })
+);
+
+export const goldlineFictionAssignments = mysqlTable(
+  "goldline_fiction_assignments",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorId: varchar("operatorId", { length: 128 }).notNull(),
+    stableMissionKey: varchar("stableMissionKey", { length: 191 }).notNull(),
+    templateId: varchar("templateId", { length: 64 }).notNull(),
+    rulesVersion: int("rulesVersion").notNull().default(1),
+    instantiatedAt: timestamp("instantiatedAt").notNull().defaultNow(),
+  },
+  table => ({
+    missionUnique: uniqueIndex("uq_goldline_fiction_mission").on(
+      table.tenantId,
+      table.operatorId,
+      table.stableMissionKey
+    ),
+  })
+);
+
 /** Explicit permission/promise evidence. Tower Wars never infers these rows. */
 export const towerWarsPromises = mysqlTable(
   "tower_wars_promises",

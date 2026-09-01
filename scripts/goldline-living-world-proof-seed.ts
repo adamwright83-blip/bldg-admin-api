@@ -18,6 +18,7 @@ import {
   commercialOpportunities,
   commercialPipelineRecords,
   entityLocations,
+  goldlineEventReceipts,
   goldlineWorldEvents,
   orders,
   physicalEntities,
@@ -36,6 +37,34 @@ import {
 
 const TENANT = "default";
 
+/** Proof-tenant tables tests and this fixture write. Auth/users are left alone. */
+const PROOF_TENANT_TABLES = [
+  "goldline_campaign_revisions",
+  "goldline_campaign_instances",
+  "goldline_fiction_assignments",
+  "goldline_event_receipts",
+  "goldline_world_events",
+  "goldline_territory_definitions",
+  "field_journal_extractions",
+  "driver_sales_journals",
+  "property_evidence_items",
+  "tower_asset_versions",
+  "tower_weapon_concepts",
+  "tower_forge_jobs",
+  "physical_entity_bindings",
+  "physical_entity_aliases",
+  "entity_locations",
+  "physical_entities",
+  "commercial_visit_outcomes",
+  "commercial_pipeline_events",
+  "commercial_pipeline_records",
+  "commercial_mission_events",
+  "commercial_missions",
+  "commercial_opportunities",
+  "commercial_accounts",
+  "orders",
+] as const;
+
 function assertDisposableDatabase() {
   const url = process.env.DATABASE_URL ?? "";
   if (!url) throw new Error("DATABASE_URL is required");
@@ -51,10 +80,28 @@ function daysAgo(days: number) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 }
 
+async function wipeProofTenant(db: NonNullable<Awaited<ReturnType<typeof getDb>>>) {
+  await db.execute(sql.raw("SET FOREIGN_KEY_CHECKS=0"));
+  for (const table of PROOF_TENANT_TABLES) {
+    await db.execute(sql.raw(`DELETE FROM \`${table}\` WHERE tenantId = '${TENANT}'`));
+  }
+  await db.execute(sql.raw("SET FOREIGN_KEY_CHECKS=1"));
+}
+
+/**
+ * Wipe the disposable proof tenant and re-seed it. Safe to run twice.
+ * The Fast Goldline suite calls this before each spec so order cannot poison
+ * later world/territory assertions, and a human does not have to DROP DATABASE.
+ */
+export async function resetGoldlineProofWorld() {
+  await seed();
+}
+
 async function seed() {
   assertDisposableDatabase();
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  await wipeProofTenant(db);
 
   const louise = "22222222-2222-4222-8222-222222222222";
   const meridian = "33333333-3333-4333-8333-333333333333";
@@ -529,16 +576,68 @@ async function seed() {
     },
   } as never);
 
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  await db.insert(orders).values({
+    tenantId: TENANT,
+    firstName: "Campaign",
+    lastName: "Anchor",
+    phone: "3105550199",
+    address: louiseAddress,
+    status: "new",
+    paid: false,
+    total: "4200",
+    serviceType: "wash_fold",
+    pickupDate: today,
+    pickupTimeWindow: "9:00-11:00 AM",
+    specialInstructions: "proof-fixture-campaign-pickup",
+  } as never);
+
+  const seededEvents = await db
+    .select({ id: goldlineWorldEvents.id })
+    .from(goldlineWorldEvents)
+    .where(eq(goldlineWorldEvents.tenantId, TENANT));
+  const viewers = [
+    process.env.DRIVER_OPEN_ID || "goldline-proof-driver",
+    process.env.OWNER_OPEN_ID || "admin-owner",
+    "driver-primary",
+  ];
+  if (seededEvents.length) {
+    await db.insert(goldlineEventReceipts).values(
+      viewers.flatMap(viewerId =>
+        seededEvents.map(event => ({
+          id: randomUUID(),
+          tenantId: TENANT,
+          worldEventId: event.id,
+          viewerId,
+          receiptType: "presented" as const,
+        }))
+      )
+    );
+  }
+
   const counts = await db.execute(
     sql`SELECT (SELECT COUNT(*) FROM physical_entities) AS entities, (SELECT COUNT(*) FROM orders) AS orders, (SELECT COUNT(*) FROM goldline_world_events) AS events`
   );
   console.log("Seeded deterministic proof world:", JSON.stringify(counts[0]));
 }
 
-seed().then(
-  () => process.exit(0),
-  error => {
-    console.error(error);
-    process.exit(1);
-  }
+// Filename, not import.meta.url: esbuild inlines this module into dist/index.js,
+// so a URL check would treat `node dist/index.js` as a seed CLI and exit.
+const invokedDirectly = (process.argv[1] ?? "").includes(
+  "goldline-living-world-proof-seed"
 );
+
+if (invokedDirectly) {
+  seed().then(
+    () => process.exit(0),
+    error => {
+      console.error(error);
+      process.exit(1);
+    }
+  );
+}

@@ -463,7 +463,7 @@
 .lc-status-card.state-pursued .lc-mini-building{width:34px;height:38px;padding:11px 5px 4px;border-width:3px;border-radius:6px 6px 2px 2px}
 .lc-status-card.state-pursued .lc-mini-building:before,.lc-status-card.state-pursued .lc-mini-building:after{height:7px}
 .lc-status-card.state-pursued .lc-mini-building:after{box-shadow:9px 0 0 #fffbd0}
-.lc-map{border:2px solid #d8b25c;background:#dff0f7}
+.lc-map{position:relative;border:2px solid #d8b25c;background:#dff0f7}
 .lc-map-empty{border:2px solid #d8b25c;background:#fffdf2;color:#17385e}
 .lc-map-empty span{color:#4a6a86}
 .lc-legend,.lc-unmapped{border:2px solid #dcbc6b;background:#fffdf2;color:#17385e}
@@ -503,6 +503,7 @@
    the page does not scroll while the player is dragging Los Angeles. */
 .cr-world-camera{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab}
 .cr-world-camera.is-dragging{cursor:grabbing}
+.cr-world-camera.is-inspecting{pointer-events:none}
 .cr-world-space{position:absolute;inset:0;transform-origin:50% 50%;will-change:transform}
 .cr-world-camera-controls{position:absolute;z-index:30;right:12px;bottom:12px;display:flex;gap:6px}
 .cr-world-camera-controls button{display:grid;min-width:44px;min-height:44px;place-items:center;padding:0 12px;border:2px solid #d8b25c;border-radius:12px;background:#fffdf2;color:#17385e;font:900 12px Inter,sans-serif;cursor:pointer}

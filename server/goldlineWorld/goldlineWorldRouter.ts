@@ -17,6 +17,14 @@ import {
   listPresentedTerritories,
   recordGuardianDefeated,
 } from "./territoryService";
+import {
+  chooseCampaignBranch,
+  getOrMaterializeTodayCampaign,
+  listOperatorCampaigns,
+  recordCampaignGuardianFinaleForTerritory,
+  upsertFictionAssignmentIfAbsent,
+} from "./campaignService";
+import { resetProofWorldFromApi } from "./goldlineProofWorld";
 
 export const goldlineWorldRouter = router({
   cityEntities: dayforgeTenantOperatorProcedure.query(({ ctx }) => listCityWorldEntities({ tenantId: ctx.tenantId })),
@@ -66,13 +74,84 @@ export const goldlineWorldRouter = router({
         territoryId: z.string().uuid(),
         guardianId: z.string().min(1).max(64),
         confrontationReady: z.boolean(),
+        // Backward-compatible client snapshot only. The server deliberately
+        // ignores it and resolves the matching persisted finale by territory.
+        campaignChapterId: z.string().min(1).max(191).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Ensure a derived-ready finale is persisted even if the independent
+      // client campaign query has not loaded yet. This is game projection only;
+      // it does not change territory or business truth.
+      await getOrMaterializeTodayCampaign({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+      });
+
+      // Territory truth is validated/written first. Invalid readiness, guardian
+      // mismatch, or a failed territory write can therefore never manufacture
+      // campaign completion. On retry, an already-cleared territory still
+      // returns recorded=true, allowing the persisted campaign finale to heal.
+      const result = await recordGuardianDefeated({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        territoryId: input.territoryId,
+        guardianId: input.guardianId,
+        confrontationReady: input.confrontationReady,
+      });
+      if (!result.recorded) {
+        return {
+          ...result,
+          campaignChapterCompleted: false,
+          completedCampaignChapterId: null,
+        };
+      }
+      const campaignResult = await recordCampaignGuardianFinaleForTerritory({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        territoryId: input.territoryId,
+      });
+      return {
+        ...result,
+        campaignChapterCompleted: campaignResult.completed,
+        completedCampaignChapterId: campaignResult.chapterId,
+      };
+    }),
+  campaign: dayforgeTenantMemberProcedure.query(({ ctx }) =>
+    getOrMaterializeTodayCampaign({
+      tenantId: ctx.tenantId,
+      operatorId: ctx.user.openId,
+    })
+  ),
+  campaigns: dayforgeTenantMemberProcedure.query(({ ctx }) =>
+    listOperatorCampaigns({
+      tenantId: ctx.tenantId,
+      operatorId: ctx.user.openId,
+    })
+  ),
+  chooseCampaignBranch: dayforgeTenantMemberProcedure
+    .input(z.object({ chapterId: z.string().min(1).max(191) }))
+    .mutation(({ ctx, input }) =>
+      chooseCampaignBranch({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        chapterId: input.chapterId,
+      })
+    ),
+  upsertFictionAssignment: dayforgeTenantMemberProcedure
+    .input(
+      z.object({
+        stableMissionKey: z.string().min(1).max(191),
+        templateId: z.string().min(1).max(64),
+        rulesVersion: z.number().int().min(1).max(32),
       })
     )
     .mutation(({ ctx, input }) =>
-      recordGuardianDefeated({
+      upsertFictionAssignmentIfAbsent({
         tenantId: ctx.tenantId,
-        actorId: ctx.user.openId,
+        operatorId: ctx.user.openId,
         ...input,
       })
     ),
+  resetProofWorld: dayforgeTenantAdminProcedure.mutation(() => resetProofWorldFromApi()),
 });

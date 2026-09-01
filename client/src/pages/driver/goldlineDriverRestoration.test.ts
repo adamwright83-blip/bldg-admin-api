@@ -10,6 +10,14 @@ const goldline = readFileSync(
   new URL("../goldline/GoldlineHome.tsx", import.meta.url),
   "utf8"
 );
+const overworld = readFileSync(
+  new URL("../goldline/GoldlineOverworld.tsx", import.meta.url),
+  "utf8"
+);
+const gameHome = readFileSync(
+  new URL("../../game/GoldlineGameHome.tsx", import.meta.url),
+  "utf8"
+);
 const goldlineCss = [
   readFileSync(
     new URL("../goldline/goldline-home.css", import.meta.url),
@@ -87,6 +95,18 @@ describe("Goldline canonical driver restoration", () => {
   it("shows the authoritative active objective in the world itself", () => {
     expect(controller).toContain("activeObjective={activeAdventureObjective}");
     expect(controller).toContain("dayObjectiveCount={liveAdventureObjectives.length}");
+  });
+
+  it("dispatches the current chapter onto its existing gameplay host", () => {
+    expect(overworld).not.toContain("onHostCurrentChapter={() => onEnterOperations?.()}");
+    expect(overworld).toContain("onHostCurrentChapter={onEnterCampaignHost}");
+    expect(controller).toContain("onEnterCampaignHost={enterCampaignHost}");
+    expect(controller).toContain("surfaceForCampaignHost");
+    expect(controller).toContain("setActiveAdventureObjectiveId(focus)");
+    expect(controller).toContain("campaignChapterGrammar");
+    expect(controller).toContain("focusedCampaignObjectiveId={activeAdventureObjectiveId}");
+    expect(gameHome).toContain("props.campaignChapterGrammar ?? routeGrammar");
+    expect(gameHome).toContain("focusedCampaignObjectiveId");
   });
 
   it("renders authenticated Driver through Goldline while preserving ProductShell routes", () => {

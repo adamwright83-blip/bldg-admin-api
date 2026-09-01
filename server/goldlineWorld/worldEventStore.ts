@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, notInArray } from "drizzle-orm";
 import {
   goldlineEventReceipts,
@@ -7,10 +7,19 @@ import {
 import type { GoldlineWorldEvent } from "../../shared/goldlineWorld";
 import { classificationIsTruthful } from "../../shared/goldlineWorld";
 import { getDb } from "../db";
+import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 
 export type AppendGoldlineWorldEvent = Omit<GoldlineWorldEvent, "id"> & {
   id?: string;
 };
+
+/** Matches `goldline_world_events.idempotencyKey` varchar(191). */
+export const GOLDLINE_WORLD_EVENT_IDEMPOTENCY_MAX = 191;
+
+export function fitGoldlineWorldEventIdempotencyKey(key: string): string {
+  if (key.length <= GOLDLINE_WORLD_EVENT_IDEMPOTENCY_MAX) return key;
+  return `gl-ev:${createHash("sha256").update(key).digest("hex")}`;
+}
 
 function toEvent(
   row: typeof goldlineWorldEvents.$inferSelect
@@ -47,7 +56,9 @@ export async function appendGoldlineWorldEvent(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const id = input.id ?? randomUUID();
-  await db.insert(goldlineWorldEvents).values({
+  const idempotencyKey = fitGoldlineWorldEventIdempotencyKey(input.idempotencyKey);
+  try {
+    await db.insert(goldlineWorldEvents).values({
     id,
     tenantId: input.tenantId,
     physicalEntityId: input.physicalEntityId,
@@ -63,13 +74,16 @@ export async function appendGoldlineWorldEvent(
     provenanceClass: input.provenanceClass,
     verificationClass: input.verificationClass,
     confidence: input.confidence,
-    idempotencyKey: input.idempotencyKey,
+    idempotencyKey,
     correlationId: input.correlationId,
     metadataJson: input.metadata,
-  }).onDuplicateKeyUpdate({ set: { idempotencyKey: input.idempotencyKey } });
+  }).onDuplicateKeyUpdate({ set: { idempotencyKey } });
+  } catch (error) {
+    if (!isMysqlDuplicateKeyError(error)) throw error;
+  }
   const [stored] = await db.select().from(goldlineWorldEvents).where(and(
     eq(goldlineWorldEvents.tenantId, input.tenantId),
-    eq(goldlineWorldEvents.idempotencyKey, input.idempotencyKey)
+    eq(goldlineWorldEvents.idempotencyKey, idempotencyKey)
   )).limit(1);
   if (!stored) throw new Error("Goldline world event was not persisted");
   return toEvent(stored);

@@ -12,6 +12,7 @@ import type {
   ProcessingLocation,
 } from "@shared/dayDirector";
 import { compileGoldlineAdventure, type TerritoryBundleHint } from "@shared/goldlineAdventure";
+import { projectStopsOntoCampaign } from "@shared/goldlineCampaignRuntime";
 
 export type LiveAdventureObjective = {
   id: string;
@@ -304,6 +305,7 @@ export function buildDayPlanProjection(input: {
   physicalVisitBlocked?: boolean;
   liveObjectives?: LiveAdventureObjective[];
   territoryBundles?: TerritoryBundleHint[];
+  campaignChapters?: Array<{ objectiveIds: readonly string[] }>;
 }): DayPlanProjection {
   const fixedCount = [
     ...(input.pickups ?? []),
@@ -457,21 +459,25 @@ export function buildDayPlanProjection(input: {
     });
   }
   const deduped = baseStops.filter(unique);
-  const compiled = compileGoldlineAdventure({
-    date: input.businessDate,
-    territoryBundles: input.territoryBundles,
-    objectives: deduped.map(stop => ({
-      id: stop.id, physicalEntityId: stop.physicalEntityId ?? null,
-      kind: stop.kind === "pickup" ? "pickup" : stop.kind === "dropoff" ? "delivery" : stop.source === "living_world" && /recovery/i.test(stop.sourceLabel) ? "recovery" : stop.kind === "sales" ? "commercial_visit" : "field_capture",
-      authority: stop.fixed ? "fixed_commitment" : stop.source === "living_world" ? "persisted_task" : "derived_recommendation",
-      status: stop.status === "completed" ? "completed" : stop.status === "blocked" || stop.status === "cancelled" ? "blocked" : "ready",
-      latitude: stop.latitude ?? null, longitude: stop.longitude ?? null, windowStart: stop.fixed ? stop.sortKey : null, windowEnd: null,
-      priority: stop.source === "living_world" ? 8 : stop.fixed ? 10 : 4,
-      explanation: stop.sourceLabel, sourceEvidenceReference: `${stop.source}:${stop.id}`,
-    })),
-  });
-  const rank = new Map(compiled.ordered.map((objective, index) => [objective.id, index]));
-  const stops = deduped.sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER) || a.sortKey.localeCompare(b.sortKey));
+  const stops = input.campaignChapters?.length
+    ? projectStopsOntoCampaign(deduped, input.campaignChapters)
+    : (() => {
+        const compiled = compileGoldlineAdventure({
+          date: input.businessDate,
+          territoryBundles: input.territoryBundles,
+          objectives: deduped.map(stop => ({
+            id: stop.id, physicalEntityId: stop.physicalEntityId ?? null,
+            kind: stop.kind === "pickup" ? "pickup" : stop.kind === "dropoff" ? "delivery" : stop.source === "living_world" && /recovery/i.test(stop.sourceLabel) ? "recovery" : stop.kind === "sales" ? "commercial_visit" : "field_capture",
+            authority: stop.fixed ? "fixed_commitment" : stop.source === "living_world" ? "persisted_task" : "derived_recommendation",
+            status: stop.status === "completed" ? "completed" : stop.status === "blocked" || stop.status === "cancelled" ? "blocked" : "ready",
+            latitude: stop.latitude ?? null, longitude: stop.longitude ?? null, windowStart: stop.fixed ? stop.sortKey : null, windowEnd: null,
+            priority: stop.source === "living_world" ? 8 : stop.fixed ? 10 : 4,
+            explanation: stop.sourceLabel, sourceEvidenceReference: `${stop.source}:${stop.id}`,
+          })),
+        });
+        const rank = new Map(compiled.ordered.map((objective, index) => [objective.id, index]));
+        return deduped.sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER) || a.sortKey.localeCompare(b.sortKey));
+      })();
   const counts: Record<DayPlanStopKind, number> = {
     pickup: 0,
     dropoff: 0,

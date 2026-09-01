@@ -46,6 +46,12 @@ import {
   requestGoldlineLocation,
   type GoldlineLocationSnapshot,
 } from "./goldlineDriverModel";
+import { deriveCampaignChapterActionGrammar } from "@shared/goldlineCampaignBindings";
+import {
+  surfaceForCampaignHost,
+  type CampaignHostInvocation,
+  type ExistingGameplayHost,
+} from "@shared/goldlineCampaignRuntime";
 
 /**
  * The ten-day rescue run. A stable literal rather than a lookup so capture can
@@ -182,6 +188,8 @@ function LiveGoldlineDriverController() {
   );
   const [journalOpen, setJournalOpen] = useState(false);
   const [activeAdventureObjectiveId, setActiveAdventureObjectiveId] = useState<string | null>(null);
+  const [requestedGameplayHost, setRequestedGameplayHost] =
+    useState<ExistingGameplayHost | null>(null);
   const [dayResolution, setDayResolution] = useState<DayResolution | null>(
     null
   );
@@ -310,6 +318,10 @@ function LiveGoldlineDriverController() {
   const territories = trpc.system.goldlineWorld.territories.useQuery(undefined, {
     staleTime: 15_000,
   });
+  const campaign = trpc.system.goldlineWorld.campaign.useQuery(undefined, {
+    staleTime: 15_000,
+  });
+  const upsertFictionAssignment = trpc.system.goldlineWorld.upsertFictionAssignment.useMutation();
   const builtMissions = trpc.system.commercialMission.myBuiltMissions.useQuery(
     undefined,
     { refetchInterval: 15_000 }
@@ -1193,6 +1205,8 @@ function LiveGoldlineDriverController() {
                 member => member.physicalEntityId
               ),
             }))}
+          campaignTitle={campaign.data?.campaign.title ?? null}
+          campaignChapters={campaign.data?.campaign.chapters}
           processingLocation={dayDirectorState.data?.processingLocation}
           commitments={dayDirectorState.data?.commitments}
           intelligenceAvailable={dayDirectorState.data?.intelligenceAvailable}
@@ -1208,6 +1222,7 @@ function LiveGoldlineDriverController() {
           onOpenImport={() => setAddExternalWorkOpen(true)}
           onEnterOperations={() => {
             setDayBriefingOpen(false);
+            setRequestedGameplayHost(null);
             setDriverScene("game");
           }}
           onEnterWorld={trackedStopId => {
@@ -1265,6 +1280,30 @@ function LiveGoldlineDriverController() {
     </div>
   );
 
+  const currentCampaignChapter = campaign.data?.campaign.chapters.find(
+    item => item.stableChapterId === campaign.data?.campaign.currentChapterId
+  ) ?? null;
+
+  const enterCampaignHost = (hosted: CampaignHostInvocation) => {
+    const focus = hosted.objectiveIds[0];
+    if (focus) setActiveAdventureObjectiveId(focus);
+    switch (surfaceForCampaignHost(hosted.binding)) {
+      case "overland":
+      case "guardian_encounter":
+        return;
+      case "field_journal":
+        setLogSignalOpen(true);
+        return;
+      case "open_channel":
+        setRequestedGameplayHost(hosted.host);
+        setDriverScene("game");
+        return;
+      default:
+        setRequestedGameplayHost(hosted.host);
+        setDriverScene("game");
+    }
+  };
+
   if (driverScene === "overworld") {
     return (
       <>
@@ -1281,7 +1320,11 @@ function LiveGoldlineDriverController() {
         waywardUnlocked={waywardProgress.unlocked}
         playerIdentity={identity.data?.openId ?? null}
         onEmitEvent={emitGoldlineEvent}
-        onEnterOperations={() => setDriverScene("game")}
+        onEnterOperations={() => {
+          setRequestedGameplayHost(null);
+          setDriverScene("game");
+        }}
+        onEnterCampaignHost={enterCampaignHost}
         onEnterGreystar={() => {
           setStageReturnScene("overworld");
           setDriverScene("colosseum");
@@ -1289,6 +1332,7 @@ function LiveGoldlineDriverController() {
         onEnterWayward={() => setDriverScene("wayward")}
         onResolveOrder={handleResolveOrder}
         onOpenDayBriefing={() => setDayBriefingOpen(true)}
+        suppressCampaignChrome={dayBriefingOpen}
         dayObjectiveCount={liveAdventureObjectives.length}
       />
       {dayBriefingOpen ? dayBriefing : null}
@@ -1354,9 +1398,26 @@ function LiveGoldlineDriverController() {
   return (
     <>
       <Suspense fallback={<GoldlineHome {...gameHomeProps} />}>
-        <GoldlineGameHome
+          <GoldlineGameHome
           {...gameHomeProps}
           playerIdentity={identity.data?.openId ?? null}
+          preferredFictionTemplateId={
+            currentCampaignChapter?.fictionTemplateId ?? null
+          }
+          campaignChapterGrammar={
+            currentCampaignChapter
+              ? deriveCampaignChapterActionGrammar(currentCampaignChapter)
+              : null
+          }
+          requestedGameplayHost={requestedGameplayHost}
+          focusedCampaignObjectiveId={activeAdventureObjectiveId}
+          onPersistFictionAssignment={record =>
+            upsertFictionAssignment.mutate({
+              stableMissionKey: record.stableMissionKey,
+              templateId: record.templateId,
+              rulesVersion: record.rulesVersion,
+            })
+          }
           worldNodes={driverGameWorld.data}
           progression={progression.data}
           driverSafeSalesIntel={

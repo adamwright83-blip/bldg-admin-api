@@ -257,8 +257,18 @@ export function WorldEntityInspector({
       aria-live="polite"
     >
       <button
+        type="button"
         className="owi-close"
-        onClick={onClose}
+        onPointerDown={event => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+        onPointerUp={event => event.stopPropagation()}
+        onClick={event => {
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }}
         aria-label="Return to the same city location"
       >
         <X />

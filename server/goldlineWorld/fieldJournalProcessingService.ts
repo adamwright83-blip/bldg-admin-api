@@ -161,6 +161,43 @@ export async function processFieldJournalEntry(input: {
       itemsJson: structured.extraction,
       error: null,
     }).onDuplicateKeyUpdate({ set: { itemsJson: structured.extraction, status: structured.status } });
+
+    /*
+      World actions must land before this journal is marked processed. A
+      processed row is not retried, and territory progress is derived from
+      those Chronicle events — not from the extraction JSON.
+    */
+    const { recordJournalActionsOnMatchedEntities } = await import(
+      "./journalWorldActionService"
+    );
+    await recordJournalActionsOnMatchedEntities({
+      tenantId: input.tenantId,
+      journalEntryId: journal.id,
+      actorId: journal.driverId,
+      extraction: structured.extraction,
+    });
+
+    /*
+      Promises are recorded from the operator's own words first, and on their
+      own evidence. Failure here must not unwind a visit already written.
+    */
+    try {
+      await recordFieldCommitments({
+        tenantId: input.tenantId,
+        journalEntryId: journal.id,
+        actorId: journal.driverId,
+        transcript,
+        extraction: structured.extraction,
+        anchorDate: journal.journalDate,
+        capturedAt: journal.createdAt.toISOString(),
+      });
+    } catch (error) {
+      console.error("[FieldJournal] commitment capture failed", {
+        journalEntryId: journal.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     await db.update(driverSalesJournals).set({
       transcript,
       insightsJson: coaching.insights,
@@ -198,45 +235,6 @@ export async function processFieldJournalEntry(input: {
       dedupeKey: `comeback:${journal.id}`,
       metadata: { objection: conquered.objection },
     });
-
-    /*
-      Promises are recorded from the operator's own words first, and on their
-      own evidence. Everything below this point can fail without the operator
-      losing something they actually committed to.
-    */
-    try {
-      await recordFieldCommitments({
-        tenantId: input.tenantId,
-        journalEntryId: journal.id,
-        actorId: journal.driverId,
-        transcript,
-        extraction: structured.extraction,
-        anchorDate: journal.journalDate,
-        capturedAt: journal.createdAt.toISOString(),
-      });
-    } catch (error) {
-      console.error("[FieldJournal] commitment capture failed", {
-        journalEntryId: journal.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-
-    try {
-      const { recordJournalActionsOnMatchedEntities } = await import(
-        "./journalWorldActionService"
-      );
-      await recordJournalActionsOnMatchedEntities({
-        tenantId: input.tenantId,
-        journalEntryId: journal.id,
-        actorId: journal.driverId,
-        extraction: structured.extraction,
-      });
-    } catch (error) {
-      console.error("[FieldJournal] world action capture failed", {
-        journalEntryId: journal.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
 
     if (structured.extraction.entities.some(entity => entity.kind === "potential_property" || entity.kind === "existing_property")) {
       const { queueForgeCandidatesFromJournal } = await import("../worldForge/worldForgeService");

@@ -13,6 +13,7 @@ import { describeWorldPresentation, orderByProminence } from "@shared/goldlineWo
 import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWorldService";
 import { projectCustomerWindows } from "@shared/goldlineCustomerWindows";
 import { TerritoryChrome, TerritoryWorldLayer, useReducedMotionFlag } from "@/components/goldline/TerritoryWorldLayer";
+import { CampaignChrome, CampaignChronicleList, CampaignWorldLayer } from "@/components/goldline/CampaignWorldLayer";
 
 export {
   inferCustomerCadence,
@@ -475,15 +476,16 @@ export default function LanternCityAtlas({
               type="button"
               key={item.pipelineId}
               ref={worldEntity?.id === requestedEntityId ? revealRef : undefined}
-              className={worldMarkerClass(
-                `lc-pursued-building${worldEntity?.canonicalAsset?.assetUrl ? " has-published-art" : ""}`,
-                worldEntity,
-                revealing && worldEntity?.id === requestedEntityId
-              )}
-              style={{
-                left: `${item.location!.x}%`,
-                top: `${item.location!.y}%`,
-              }}
+                className={worldMarkerClass(
+                  `lc-pursued-building${worldEntity?.canonicalAsset?.assetUrl ? " has-published-art" : ""}`,
+                  worldEntity,
+                  revealing && worldEntity?.id === requestedEntityId
+                )}
+                data-world-entity-id={worldEntity?.id}
+                style={{
+                  left: `${item.location!.x}%`,
+                  top: `${item.location!.y}%`,
+                }}
               onClick={() => {
                 setSelectedCluster(null);
                 setSelectedPursuit(item);
@@ -554,8 +556,13 @@ export default function LanternCityAtlas({
             onInteractionLock={setGuardianLocked}
             reducedMotion={reducedMotion}
           />
+          <CampaignWorldLayer
+            entities={cityWorld.data ?? []}
+            googleVisible={googleVisible}
+          />
         </WorldGeographySurface>
         <TerritoryChrome />
+        {selectedCluster || selectedPursuit || requestedEntity ? null : <CampaignChrome />}
       </section>
 
       {attentionRecommendations.length ? (
@@ -625,6 +632,8 @@ export default function LanternCityAtlas({
           </div>
         </article>
       </section>
+
+      <CampaignChronicleList />
 
       {selectedCluster || selectedPursuit || requestedEntity ? <WorldEntityInspector entity={selectedEntity} cluster={selectedCluster} pursuit={selectedPursuit} onClose={() => { setSelectedCluster(null); setSelectedPursuit(null); if (requestedEntityId) window.history.replaceState({}, "", "/growth/lantern-city"); }} onOpenCustomer={onOpenCustomer} /> : null}
     </main>

@@ -52,6 +52,12 @@ describe("one building keeps one save file", () => {
       physicalAliasesMatch("1450 Main St, Pasadena CA", "1450 Main St, Burbank CA")
     ).toBe(false);
     expect(physicalAliasesMatch("", "1450 S La Cienega Blvd")).toBe(false);
+    expect(
+      physicalAliasesMatch(
+        "1520 S La Cienega Blvd, Los Angeles, CA",
+        "1520 S La Cienega Blvd"
+      )
+    ).toBe(true);
   });
 
   it("resolves a natural address variation to the same physical entity", () => {

@@ -39,6 +39,18 @@ describe("proof mode cannot reach production", () => {
     expect(goldlineProofModeEnabled()).toBe(true);
   });
 
+  it("gates proof-world reset behind proof mode and admin", async () => {
+    const { readFileSync } = await import("node:fs");
+    const router = readFileSync("server/goldlineWorld/goldlineWorldRouter.ts", "utf8");
+    const impl = readFileSync("server/goldlineWorld/goldlineProofWorld.ts", "utf8");
+    expect(router).toContain("resetProofWorld: dayforgeTenantAdminProcedure");
+    expect(impl).toContain("assertProofModeAllowed(\"resetProofWorld\")");
+    const seed = readFileSync("scripts/goldline-living-world-proof-seed.ts", "utf8");
+    expect(seed).toContain("goldline-living-world-proof-seed");
+    expect(seed).toContain("process.argv[1]");
+    expect(seed).not.toContain("fileURLToPath(import.meta.url) === path.resolve");
+  });
+
   it("never hands production the deterministic tower image adapter", () => {
     process.env.NODE_ENV = "production";
     process.env.GOLDLINE_PROOF_MODE = "1";
@@ -96,6 +108,15 @@ describe("deterministic extraction refuses to invent", () => {
     process.env.GOLDLINE_PROOF_MODE = "1";
     return extractFieldJournalDeterministically(transcript);
   };
+
+  it("reads the Field Journal smoke visit onto the hunt address", () => {
+    const result = run(
+      "Visited La Cienega Court at 1520 S La Cienega Blvd, Los Angeles, CA. The desk took my card and I walked the lobby myself."
+    );
+    expect(result.actions.some(action => action.type === "visited")).toBe(true);
+    expect(result.entities[0]!.propertyName?.value).toBe("La Cienega Court");
+    expect(result.entities[0]!.addressClue?.value).toBe("1520 S La Cienega Blvd");
+  });
 
   it("reads the property and address the transcript actually contains", () => {
     const result = run(

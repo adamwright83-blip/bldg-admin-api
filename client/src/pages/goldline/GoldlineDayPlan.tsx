@@ -35,6 +35,8 @@ export type GoldlineDayPlanProps = {
   salesMissions?: CommercialMission[];
   liveObjectives?: LiveAdventureObjective[];
   territoryBundles?: TerritoryBundleHint[];
+  campaignTitle?: string | null;
+  campaignChapters?: Array<{ objectiveIds: readonly string[] }>;
   nextCommitmentAt?: string | null;
   isLoading?: boolean;
   onOpenImport: () => void;
@@ -234,6 +236,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         salesMissions: props.salesMissions,
         liveObjectives: props.liveObjectives,
         territoryBundles: props.territoryBundles,
+        campaignChapters: props.campaignChapters,
         nextCommitmentAt: props.nextCommitmentAt,
         processingLocation: props.processingLocation,
         commitments: props.commitments,
@@ -248,6 +251,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       props.salesMissions,
       props.liveObjectives,
       props.territoryBundles,
+      props.campaignChapters,
       props.nextCommitmentAt,
       props.processingLocation,
       props.commitments,
@@ -265,7 +269,10 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       style={{ "--gdp-world": `url(${world})` } as React.CSSProperties}
     >
       <header className="gdp-header">
-        <p>TODAY · {dateHeading(props.businessDate)}</p>
+        <p>
+          {props.campaignTitle ? `${props.campaignTitle} · ` : "TODAY · "}
+          {dateHeading(props.businessDate)}
+        </p>
         <button
           className="gdp-menu-button"
           type="button"
