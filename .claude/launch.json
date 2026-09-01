@@ -56,14 +56,6 @@
         "dev"
       ],
       "port": 3000
-    },
-    {
-      "name": "goldline-living-world-proof",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": [
-        "scripts/goldline-proof-server.sh"
-      ],
-      "port": 4177
     }
   ]
 }
