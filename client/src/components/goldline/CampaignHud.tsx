@@ -51,7 +51,7 @@ export function CampaignHud({
       ) : (
         <p>{campaign.status === "quiet" ? "The city is playable. Nothing is required." : "Between acts."}</p>
       )}
-      {nextHard && !compact ? <p className="gl-campaign-next">Next hard: {chapterLabel(nextHard.chapterKind)}</p> : null}
+      {nextHard ? <p className="gl-campaign-next">Next hard: {chapterLabel(nextHard.chapterKind)}</p> : null}
       {!compact && optional && onChooseBranch ? (
         <button
           type="button"
@@ -61,10 +61,10 @@ export function CampaignHud({
         >
           Optional branch
         </button>
-      ) : !compact && optional ? (
+      ) : optional ? (
         <p>Optional branch available</p>
       ) : null}
-      {!compact && presentation.revisionExplanation ? (
+      {presentation.revisionExplanation ? (
         <p className="gl-campaign-why" data-testid="goldline-campaign-revision-why">
           {presentation.revisionExplanation}
         </p>

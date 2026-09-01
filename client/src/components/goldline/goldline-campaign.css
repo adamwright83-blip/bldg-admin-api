@@ -29,7 +29,7 @@
 .goldline-overworld-shell .gl-campaign-hud{left:14px;top:calc(14px + env(safe-area-inset-top));max-width:min(220px,calc(100% - 120px));background:#081116e8;color:#fff1b3;border-color:#ffe07c7a;pointer-events:none}
 .goldline-overworld-shell .gl-campaign-hud.is-compact{max-width:min(220px,calc(100% - 120px))}
 .goldline-overworld-shell .gl-campaign-hud strong,.goldline-overworld-shell .gl-campaign-hud p{color:#fff1b3}
-.goldline-overworld-shell .overworld-objective{top:calc(14px + env(safe-area-inset-top) + 72px)}
+.goldline-overworld-shell .overworld-objective{top:calc(14px + env(safe-area-inset-top) + 108px)}
 .gl-campaign-overland-thread{position:absolute;left:10%;right:10%;top:42%;height:18%;z-index:4;pointer-events:none}
 .gl-campaign-overland-thread polyline{fill:none;stroke:#e8c15a;stroke-width:3;opacity:.7;filter:drop-shadow(0 0 6px #e8c15a)}
 .gl-campaign-history{margin:12px;padding:10px 12px;border:1px solid #e8c15a66;border-radius:12px;background:#fffdf6}
