@@ -116,18 +116,17 @@ export async function getFieldToday(input: {
   const timeline: FieldTodayItem[] = [];
   const authoritativeCompletedObjectiveIds = new Set<string>();
 
-  // Sales work must land on the same physical tower as the rest of the save
-  // file when Goldline already knows that building. This is lookup-only: an
-  // unresolved address stays null rather than creating a fake entity just to
-  // make the map look complete.
-  const commercialAddresses = Array.from(new Set(
-    commercialItems
-      .map(item => item.address?.trim() ?? "")
-      .filter(Boolean)
-  ));
-  const commercialEntityIds = new Map<string, string | null>(
+  // Every piece of field work should land on the same physical tower whenever
+  // Goldline already knows the address. This is lookup-only: an unresolved
+  // address stays null rather than creating a fake entity just to make the map
+  // look complete.
+  const physicalAddresses = Array.from(new Set([
+    ...orderRows.map(order => order.address?.trim() ?? ""),
+    ...commercialItems.map(item => item.address?.trim() ?? ""),
+  ].filter(Boolean)));
+  const physicalEntityIdsByAddress = new Map<string, string | null>(
     await Promise.all(
-      commercialAddresses.map(async address => [
+      physicalAddresses.map(async address => [
         address,
         await findPhysicalEntityIdByAddress({ tenantId: input.tenantId, address }),
       ] as const)
@@ -142,6 +141,10 @@ export async function getFieldToday(input: {
   }
   for (const order of orderRows) {
     const name = `${order.firstName} ${order.lastName}`.trim() || "Customer";
+    const orderAddressKey = order.address?.trim() ?? "";
+    const orderPhysicalEntityId = orderAddressKey
+      ? physicalEntityIdsByAddress.get(orderAddressKey) ?? null
+      : null;
     if (
       order.pickupDate === date &&
       ["collected", "processing", "ready", "delivered"].includes(order.status)
@@ -154,6 +157,7 @@ export async function getFieldToday(input: {
     if (order.pickupDate === date && ["new", "intake-pending"].includes(order.status)) {
       timeline.push({
         id: `pickup:${order.id}`, kind: "pickup", source: { entityType: "order", entityId: String(order.id), sourceReference: `orders:${order.id}` },
+        physicalEntityId: orderPhysicalEntityId,
         scheduledAt: timeFromWindow(order.pickupDate, order.pickupTimeWindow, timeZone), urgency: "scheduled", title: `Pick up ${name}`, subtitle: order.serviceType === "wash_fold" ? "Laundry pickup" : "Dry-cleaning pickup", status: order.status,
         destination: { address: order.address, latitude: null, longitude: null }, customer: { name, phone: order.phone, email: order.email },
         money: deterministicEstimate(moneyCents(order.total), `orders:${order.id}:total`, "high"), verificationClass: "VERIFIED",
@@ -165,6 +169,7 @@ export async function getFieldToday(input: {
       timeline.push({
         id: `${unpaid ? "payment-blocker" : "delivery"}:${order.id}`, kind: unpaid ? "payment_blocker" : "delivery",
         source: { entityType: "order", entityId: String(order.id), sourceReference: `orders:${order.id}` },
+        physicalEntityId: orderPhysicalEntityId,
         scheduledAt: timeFromWindow(order.deliveryDate, order.deliveryTimeWindow, timeZone), urgency: unpaid ? "blocked" : "scheduled", title: unpaid ? `Payment blocks ${name}'s delivery` : `Deliver to ${name}`,
         subtitle: unpaid ? "This order is ready but not paid. It cannot be presented as completed." : "Paid order ready for delivery", status: order.status,
         destination: { address: order.address, latitude: null, longitude: null }, customer: { name, phone: order.phone, email: order.email },
@@ -181,7 +186,7 @@ export async function getFieldToday(input: {
       id: item.id,
       kind: item.kind === "dispatch" ? "mission_dispatch" : item.kind === "follow_up" ? "follow_up" : "route_exception",
       source: { entityType: item.kind === "follow_up" ? "commercial_follow_up" : "commercial_mission", entityId: item.followUpId ?? String(item.missionId), sourceReference: item.kind === "follow_up" ? `commercial_follow_ups:${item.followUpId}` : `commercial_missions:${item.missionId}` },
-      physicalEntityId: addressKey ? commercialEntityIds.get(addressKey) ?? null : null,
+      physicalEntityId: addressKey ? physicalEntityIdsByAddress.get(addressKey) ?? null : null,
       scheduledAt: item.dueAt, urgency: item.urgency === "overdue" ? "overdue" : item.urgency === "urgent" ? "urgent" : item.urgency === "upcoming" ? "upcoming" : "flexible",
       title: item.accountName, subtitle: item.note ?? item.missionCode, status: item.status,
       destination: item.address ? { address: item.address, latitude: null, longitude: null } : null,
