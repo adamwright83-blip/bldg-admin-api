@@ -367,3 +367,161 @@ export function describeTemporalClaim(claim: TemporalClaim): string {
       return `Possible, not confirmed: ${claim.sourceText} (${timing}).`;
   }
 }
+
+/* ── Validating what the intelligence provider proposes ────────────────────
+ *
+ * The provider does the language understanding: it reads the messy sentence,
+ * the pronouns, the asides, the things no regex will ever handle. This module
+ * does not compete with it. It is the gate the provider's answers pass
+ * through, and it only ever makes a claim weaker, never stronger.
+ *
+ * Three things are checked, because these are the three ways a confident
+ * model quietly manufactures obligations:
+ *
+ *   1. A promise must actually read like one in the operator's own words.
+ *   2. Precision must be earned by the source, not asserted by the model.
+ *   3. A resolved date must agree with the anchor it claims to come from.
+ *
+ * Anything that fails is downgraded and kept, never dropped — the raw evidence
+ * still stands, and uncertainty is preserved rather than resolved by guessing.
+ */
+
+/** A claim as the provider proposed it, before validation. */
+export type ProposedTemporalClaim = {
+  kind: Exclude<TemporalClaimKind, "authoritative_commitment">;
+  sourceText: string;
+  subject: string;
+  promisedTo: string | null;
+  when: {
+    text: string;
+    startDate: string | null;
+    endDate: string | null;
+    daypart: Daypart | null;
+    precision: TemporalPrecision;
+    hedged: boolean;
+    recurring: boolean;
+  } | null;
+};
+
+export type ValidatedTemporalClaim = TemporalClaim & {
+  /** Every way the proposal was weakened, for audit and explanation. */
+  adjustments: string[];
+};
+
+/** First-person commitment language. Without it, nothing is a promise. */
+const FIRST_PERSON_COMMITMENT =
+  /\b(i|we)\s+(told|promised|committed|assured|said)\b|\bi\s+said\s+i(?:'| wou)?l?d\b|\bi'?ll\b|\bi\s+will\b|\bi'?d\b/i;
+
+/**
+ * Checks one provider proposal against the contract.
+ *
+ * Returns a claim that is always safe to project: same words, possibly a
+ * weaker kind and possibly a blunter time, never a sharper one.
+ */
+export function validateProposedClaim(
+  proposal: ProposedTemporalClaim,
+  anchorDate: string
+): ValidatedTemporalClaim {
+  const adjustments: string[] = [];
+  let kind: TemporalClaimKind = proposal.kind;
+
+  /*
+    A model that has decided the operator made a promise must be able to point
+    at the operator saying so. Third-party reporting language in the same
+    sentence is not enough — that is exactly the confusion this guards.
+  */
+  if (kind === "operator_commitment" && !FIRST_PERSON_COMMITMENT.test(proposal.sourceText)) {
+    kind = REPORTED.test(proposal.sourceText) ? "reported_availability" : "suggested_action";
+    adjustments.push(
+      "Downgraded from a promise: the operator's own words do not commit to anything."
+    );
+  }
+
+  let when: TemporalReference | null = null;
+  if (proposal.when) {
+    // Re-read the time from the operator's words. This is the authority on
+    // precision; the provider's own resolution is only a suggestion.
+    const derived = resolveTemporalReference(
+      proposal.when.text || proposal.sourceText,
+      anchorDate
+    );
+
+    let precision = proposal.when.precision;
+    // Clock precision has to be spoken. A model may not promote a daypart.
+    if (precision === "time" && !/\b\d{1,2}(?::\d{2})?\s*(am|pm)\b/i.test(proposal.sourceText)) {
+      precision = derived?.precision ?? "day";
+      adjustments.push("No clock time was spoken, so this stays a day, not an appointment.");
+    }
+    // A hedge in the source outranks a model that decided to be confident.
+    const hedged = proposal.when.hedged || HEDGES.test(proposal.sourceText);
+    if (hedged && !proposal.when.hedged) {
+      adjustments.push("Kept as uncertain: the operator hedged.");
+    }
+
+    let startDate = proposal.when.startDate;
+    let endDate = proposal.when.endDate ?? proposal.when.startDate;
+    if (derived?.startDate && startDate && derived.startDate !== startDate) {
+      // The anchor is not negotiable. If the model's date disagrees with what
+      // the words resolve to against capture time, the words win.
+      startDate = derived.startDate;
+      endDate = derived.endDate ?? derived.startDate;
+      adjustments.push(
+        `Re-anchored to ${derived.startDate} from the words spoken and the capture date.`
+      );
+    }
+    if (!startDate && derived?.startDate) {
+      startDate = derived.startDate;
+      endDate = derived.endDate;
+    }
+
+    when = {
+      sourceText: proposal.when.text || proposal.sourceText,
+      precision: startDate ? precision : "none",
+      startDate,
+      endDate: endDate ?? startDate,
+      daypart: proposal.when.daypart ?? derived?.daypart ?? null,
+      anchorDate,
+      hedged,
+      recurring: proposal.when.recurring || Boolean(derived?.recurring),
+    };
+  }
+
+  /*
+    A promise with no time is still a promise, but a hedged one is not. "I
+    might email her Wednesday" is a thought, however the model labelled it.
+  */
+  if (kind === "operator_commitment" && when?.hedged && UNCERTAIN.test(proposal.sourceText)) {
+    kind = "operator_intent";
+    adjustments.push("Downgraded from a promise: the operator hedged the commitment itself.");
+  }
+
+  return {
+    kind,
+    sourceText: proposal.sourceText,
+    subject: proposal.subject,
+    promisedTo: kind === "operator_commitment" ? proposal.promisedTo : null,
+    when,
+    adjustments,
+  };
+}
+
+/**
+ * The claims for a transcript, preferring the provider and falling back to
+ * deterministic reading only where the provider gave nothing.
+ *
+ * The fallback exists so a proof run or a provider outage still produces
+ * something truthful for plainly-worded sentences. It is not expected to
+ * understand arbitrary speech, and it never runs when the provider answered.
+ */
+export function resolveTranscriptClaims(input: {
+  transcript: string;
+  anchorDate: string;
+  proposed: ProposedTemporalClaim[];
+}): ValidatedTemporalClaim[] {
+  if (input.proposed.length)
+    return input.proposed.map(claim => validateProposedClaim(claim, input.anchorDate));
+  return classifyTranscriptClaims(input.transcript, input.anchorDate).map(claim => ({
+    ...claim,
+    adjustments: ["Read deterministically; no intelligence provider answered."],
+  }));
+}

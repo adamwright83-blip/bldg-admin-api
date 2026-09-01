@@ -6,6 +6,8 @@ import {
   classifyTranscriptClaims,
   describeTemporalClaim,
   resolveTemporalReference,
+  resolveTranscriptClaims,
+  validateProposedClaim,
 } from "./goldlineTemporal";
 
 /** A Tuesday, so "Wednesday" is tomorrow and "Monday" is next week. */
@@ -182,5 +184,182 @@ describe("explaining why a place surfaced", () => {
       classifyTemporalClaim("I told them I'd email Sarah Wednesday", TUESDAY)!
     );
     expect(promise).toMatch(/You said you would/);
+  });
+});
+
+describe("the provider proposes, the contract disposes", () => {
+  const propose = (
+    overrides: Partial<Parameters<typeof validateProposedClaim>[0]>
+  ) =>
+    validateProposedClaim(
+      {
+        kind: "reported_availability",
+        sourceText: "Front desk said she should be back Wednesday",
+        subject: "Sarah back Wednesday",
+        promisedTo: null,
+        when: {
+          text: "Wednesday",
+          startDate: "2026-09-02",
+          endDate: "2026-09-02",
+          daypart: null,
+          precision: "day",
+          hedged: true,
+          recurring: false,
+        },
+        ...overrides,
+      },
+      TUESDAY
+    );
+
+  it("accepts a well-formed proposal unchanged", () => {
+    const claim = propose({});
+    expect(claim.kind).toBe("reported_availability");
+    expect(claim.when?.startDate).toBe("2026-09-02");
+    expect(claim.adjustments).toEqual([]);
+  });
+
+  it("refuses to let a model invent a promise the operator never made", () => {
+    // The single most dangerous provider failure: confidently upgrading a
+    // third party's report into the operator's own commitment.
+    const claim = propose({ kind: "operator_commitment", promisedTo: "Sarah" });
+    expect(claim.kind).toBe("reported_availability");
+    expect(claim.promisedTo).toBeNull();
+    expect(claim.adjustments.join(" ")).toMatch(/do not commit/i);
+  });
+
+  it("keeps a genuine promise a promise", () => {
+    const claim = propose({
+      kind: "operator_commitment",
+      sourceText: "I told them I'd email Sarah Wednesday morning",
+      promisedTo: "the front desk",
+      when: {
+        text: "Wednesday morning",
+        startDate: "2026-09-02",
+        endDate: "2026-09-02",
+        daypart: "morning",
+        precision: "daypart",
+        hedged: false,
+        recurring: false,
+      },
+    });
+    expect(claim.kind).toBe("operator_commitment");
+    expect(claim.promisedTo).toBe("the front desk");
+    expect(claim.adjustments).toEqual([]);
+  });
+
+  it("refuses to let a model manufacture a clock time", () => {
+    const claim = propose({
+      sourceText: "Front desk said she is back Wednesday afternoon",
+      when: {
+        text: "Wednesday afternoon",
+        startDate: "2026-09-02",
+        endDate: "2026-09-02",
+        daypart: "afternoon",
+        precision: "time",
+        hedged: false,
+        recurring: false,
+      },
+    });
+    expect(claim.when?.precision).not.toBe("time");
+    expect(claim.adjustments.join(" ")).toMatch(/not an appointment/i);
+  });
+
+  it("keeps a clock time the operator actually spoke", () => {
+    const claim = propose({
+      sourceText: "She confirmed Wednesday at 3pm",
+      when: {
+        text: "Wednesday at 3pm",
+        startDate: "2026-09-02",
+        endDate: "2026-09-02",
+        daypart: null,
+        precision: "time",
+        hedged: false,
+        recurring: false,
+      },
+    });
+    expect(claim.when?.precision).toBe("time");
+  });
+
+  it("re-anchors a date the model got wrong", () => {
+    // The capture date is not negotiable.
+    const claim = propose({
+      when: {
+        text: "Wednesday",
+        startDate: "2026-10-14",
+        endDate: "2026-10-14",
+        daypart: null,
+        precision: "day",
+        hedged: false,
+        recurring: false,
+      },
+    });
+    expect(claim.when?.startDate).toBe("2026-09-02");
+    expect(claim.adjustments.join(" ")).toMatch(/Re-anchored/);
+  });
+
+  it("keeps the operator's hedge even when the model sounds certain", () => {
+    const claim = propose({
+      sourceText: "She might be back Wednesday",
+      when: {
+        text: "Wednesday",
+        startDate: "2026-09-02",
+        endDate: "2026-09-02",
+        daypart: null,
+        precision: "day",
+        hedged: false,
+        recurring: false,
+      },
+    });
+    expect(claim.when?.hedged).toBe(true);
+  });
+
+  it("downgrades a promise the operator themselves hedged", () => {
+    const claim = propose({
+      kind: "operator_commitment",
+      sourceText: "I might email her Wednesday",
+      when: {
+        text: "Wednesday",
+        startDate: "2026-09-02",
+        endDate: "2026-09-02",
+        daypart: null,
+        precision: "day",
+        hedged: true,
+        recurring: false,
+      },
+    });
+    expect(claim.kind).not.toBe("operator_commitment");
+  });
+});
+
+describe("provider first, deterministic only as a fallback", () => {
+  const transcript =
+    "Front desk said she should be back Wednesday. I told them I'd email Sarah Wednesday morning.";
+
+  it("uses the provider's claims when it answered", () => {
+    const claims = resolveTranscriptClaims({
+      transcript,
+      anchorDate: TUESDAY,
+      proposed: [
+        {
+          kind: "reported_availability",
+          sourceText: "Front desk said she should be back Wednesday",
+          subject: "Sarah returns",
+          promisedTo: null,
+          when: { text: "Wednesday", startDate: "2026-09-02", endDate: "2026-09-02", daypart: null, precision: "day", hedged: true, recurring: false },
+        },
+      ],
+    });
+    expect(claims).toHaveLength(1);
+    expect(claims[0]!.adjustments).not.toContain(
+      "Read deterministically; no intelligence provider answered."
+    );
+  });
+
+  it("falls back to deterministic reading only when nothing answered", () => {
+    const claims = resolveTranscriptClaims({ transcript, anchorDate: TUESDAY, proposed: [] });
+    const kinds = claims.map(claim => claim.kind);
+    expect(kinds).toContain("operator_commitment");
+    expect(kinds).toContain("reported_availability");
+    expect(claims[0]!.adjustments[0]).toMatch(/no intelligence provider answered/);
   });
 });
