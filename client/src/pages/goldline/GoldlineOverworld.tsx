@@ -21,6 +21,8 @@ import type {
   OverworldProximity,
 } from "./overworld/types";
 import { DriverTerritorySky } from "@/components/goldline/DriverTerritorySky";
+import { CampaignHudConnected } from "@/components/goldline/CampaignHud";
+import { CampaignOverlandThread } from "@/components/goldline/CampaignWorldLayer";
 import { DynamicJoystick } from "./DynamicJoystick";
 
 export { DynamicJoystick };
@@ -300,6 +302,8 @@ export default function GoldlineOverworld({
         ) : null}
 
         <DriverTerritorySky onEncounterChange={setGuardianPlaying} />
+        <CampaignOverlandThread />
+        <CampaignHudConnected compact />
 
         <DynamicJoystick
           disabled={ordersOpen || !runtimeReady || guardianPlaying}

@@ -13,6 +13,7 @@ import { describeWorldPresentation, orderByProminence } from "@shared/goldlineWo
 import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWorldService";
 import { projectCustomerWindows } from "@shared/goldlineCustomerWindows";
 import { TerritoryChrome, TerritoryWorldLayer, useReducedMotionFlag } from "@/components/goldline/TerritoryWorldLayer";
+import { CampaignChrome, CampaignChronicleList, CampaignWorldLayer } from "@/components/goldline/CampaignWorldLayer";
 
 export {
   inferCustomerCadence,
@@ -554,8 +555,13 @@ export default function LanternCityAtlas({
             onInteractionLock={setGuardianLocked}
             reducedMotion={reducedMotion}
           />
+          <CampaignWorldLayer
+            entities={cityWorld.data ?? []}
+            googleVisible={googleVisible}
+          />
         </WorldGeographySurface>
         <TerritoryChrome />
+        <CampaignChrome />
       </section>
 
       {attentionRecommendations.length ? (
@@ -625,6 +631,8 @@ export default function LanternCityAtlas({
           </div>
         </article>
       </section>
+
+      <CampaignChronicleList />
 
       {selectedCluster || selectedPursuit || requestedEntity ? <WorldEntityInspector entity={selectedEntity} cluster={selectedCluster} pursuit={selectedPursuit} onClose={() => { setSelectedCluster(null); setSelectedPursuit(null); if (requestedEntityId) window.history.replaceState({}, "", "/growth/lantern-city"); }} onOpenCustomer={onOpenCustomer} /> : null}
     </main>

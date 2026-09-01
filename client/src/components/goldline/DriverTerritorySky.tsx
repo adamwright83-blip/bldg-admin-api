@@ -15,15 +15,25 @@ export function DriverTerritorySky({
   const territories = trpc.system.goldlineWorld.territories.useQuery(undefined, {
     staleTime: 15_000,
   });
+  const campaign = trpc.system.goldlineWorld.campaign.useQuery(undefined, {
+    staleTime: 15_000,
+  });
   const defeat = trpc.system.goldlineWorld.recordGuardianDefeat.useMutation();
+  const chapterDone = trpc.system.goldlineWorld.recordCampaignChapterGameCompleted.useMutation();
   const utils = trpc.useUtils();
   const reducedMotion = useReducedMotionFlag();
   const [playing, setPlaying] = useState(false);
   const item = territories.data?.find(row => !row.state.cleared) ?? territories.data?.[0];
   if (!item) return null;
   const guardian = guardianById(item.definition.guardianId);
+  const sanctuary = Boolean(campaign.data?.conversationSanctuary);
+  const finale = campaign.data?.campaign.chapters.find(
+    chapter =>
+      chapter.chapterKind === "guardian_finale" &&
+      chapter.territoryId === item.definition.id
+  );
 
-  if (playing) {
+  if (playing && !sanctuary) {
     return (
       <GuardianEncounter
         definition={item.definition}
@@ -39,8 +49,16 @@ export function DriverTerritorySky({
               guardianId: item.definition.guardianId,
               confrontationReady: true,
             },
-            { onSettled: () => void utils.system.goldlineWorld.territories.invalidate() }
+            {
+              onSettled: () => {
+                void utils.system.goldlineWorld.territories.invalidate();
+                void utils.system.goldlineWorld.campaign.invalidate();
+              },
+            }
           );
+          if (finale) {
+            chapterDone.mutate({ chapterId: finale.stableChapterId });
+          }
         }}
         onClose={() => {
           setPlaying(false);
@@ -65,6 +83,7 @@ export function DriverTerritorySky({
         data-testid="goldline-driver-territory-guardian"
         aria-label={`${guardian.name} over ${item.definition.fantasyTitle}. ${challengeSummary({ definition: item.definition, state: item.state })}`}
         onClick={() => {
+          if (sanctuary) return;
           setPlaying(true);
           onEncounterChange?.(true);
         }}
