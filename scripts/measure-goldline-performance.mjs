@@ -1,7 +1,9 @@
 import { chromium } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
+import { assertLocalProofUrl } from "./goldlineLocalProofTarget.mjs";
 
 const baseURL = process.env.GOLDLINE_PROOF_URL ?? "http://127.0.0.1:4177";
+assertLocalProofUrl(baseURL);
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 await context.addInitScript(() => {

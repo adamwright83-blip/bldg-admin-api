@@ -75,6 +75,19 @@ describe("proof mode cannot reach production", () => {
       extractFieldJournalDeterministically("Visited The Louise at 1450 S La Cienega Blvd today.")
     ).toThrow(/cannot run in production/);
   });
+
+  it("closure and performance captures refuse a non-local target", async () => {
+    const { readFileSync } = await import("node:fs");
+    const capture = readFileSync("scripts/capture-goldline-closure.mjs", "utf8");
+    const measure = readFileSync("scripts/measure-goldline-performance.mjs", "utf8");
+    const guard = readFileSync("scripts/goldlineLocalProofTarget.mjs", "utf8");
+    expect(capture).toContain("assertLocalProofUrl");
+    expect(measure).toContain("assertLocalProofUrl");
+    expect(guard).toMatch(/non-local host/);
+    const { assertLocalProofUrl } = await import("../../scripts/goldlineLocalProofTarget.mjs");
+    expect(() => assertLocalProofUrl("https://goldline.example/driver")).toThrow(/non-local/);
+    expect(() => assertLocalProofUrl("http://127.0.0.1:4177")).not.toThrow();
+  });
 });
 
 describe("deterministic extraction refuses to invent", () => {

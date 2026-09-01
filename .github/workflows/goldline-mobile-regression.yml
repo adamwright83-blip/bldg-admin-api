@@ -69,6 +69,7 @@ on:
       - "scripts/verifyGoldlineExternalOrder.mjs"
       - "scripts/capture-goldline-closure.mjs"
       - "scripts/measure-goldline-performance.mjs"
+      - "scripts/goldlineLocalProofTarget.mjs"
       - ".github/workflows/goldline-mobile-regression.yml"
       - ".github/workflows/goldline-fast-smoke.yml"
   workflow_dispatch:

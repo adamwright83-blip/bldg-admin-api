@@ -360,12 +360,13 @@ export function describeTemporalClaim(claim: TemporalClaim): string {
         leaves the player reading "You said you would — Wednesday", which
         explains nothing.
       */
+      // iOS/macOS often insert a typographic apostrophe; treat it as ASCII.
       const promised = claim.subject
         .replace(
-          /^.*?\b(?:i|we)\s+(?:told|promised|assured|said\s+to)\s+[^,]*?\b(?:i'?d|i\s+would|we'?d|we\s+would|i'?ll|we'?ll)\s+/i,
+          /^.*?\b(?:i|we)\s+(?:told|promised|assured|said\s+to)\s+[^,]*?\b(?:i['\u2019]?d|i\s+would|we['\u2019]?d|we\s+would|i['\u2019]?ll|we['\u2019]?ll)\s+/i,
           ""
         )
-        .replace(/^.*?\b(?:i|we)\s+said\s+(?:i'?d|i\s+would)\s+/i, "")
+        .replace(/^.*?\b(?:i|we)\s+said\s+(?:i['\u2019]?d|i\s+would)\s+/i, "")
         .trim();
       return `You said you would ${promised || claim.subject} — ${timing}.`;
     }

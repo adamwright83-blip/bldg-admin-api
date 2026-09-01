@@ -184,6 +184,15 @@ describe("explaining why a place surfaced", () => {
       classifyTemporalClaim("I told them I'd email Sarah Wednesday", TUESDAY)!
     );
     expect(promise).toMatch(/You said you would/);
+    expect(promise).toMatch(/email Sarah/i);
+  });
+
+  it("still explains a promise when the transcript uses a typographic apostrophe", () => {
+    const promise = describeTemporalClaim(
+      classifyTemporalClaim("I told the desk I’d email her first", TUESDAY)!
+    );
+    expect(promise).toMatch(/You said you would email her first/i);
+    expect(promise).not.toMatch(/You said you would I told/i);
   });
 });
 

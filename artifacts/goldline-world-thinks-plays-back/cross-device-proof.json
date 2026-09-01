@@ -1,5 +1,5 @@
 {
-  "physicalEntityId": "22222222-2222-4222-8222-222222222222",
+  "canonicalPhysicalEntityId": "22222222-2222-4222-8222-222222222222",
   "coordinates": {
     "latitude": 34.048,
     "longitude": -118.376,
@@ -8,16 +8,66 @@
     "y": 75.66467275718138,
     "outOfBounds": false
   },
-  "eventTypes": [
+  "louiseEntityCount": 1,
+  "duplicatePhysicalEntityCount": 0,
+  "commercialAccountBindingCount": 1,
+  "totalPhysicalEntities": 2,
+  "audit": "Live disposable proof DB inspected 2026-09-01 after the committed demo. Seed chronicle has no commitments. obligationCount is 2 because the capture script was invoked twice against the same throwaway database, four minutes apart. Each invocation created a distinct driver_sales_journals row; idempotency is per journal entry, so two genuine saves are two promises. This is proof-run history, not duplicate processing of one submission.",
+  "seedEventTypes": [
     "prospect_discovered",
     "visited",
     "visited",
-    "proposal_sent",
-    "field_commitment_made",
-    "field_temporal_signal",
-    "field_commitment_made",
-    "field_temporal_signal"
+    "proposal_sent"
   ],
-  "obligationCount": 2,
-  "duplicateEntityCount": 1
+  "preExistingBeforeLatestDemoSubmission": {
+    "occurredAt": "2026-09-01T05:49:36.000Z",
+    "journalIds": [
+      "11cd7746-fb14-4606-a856-b4e849d776d1"
+    ],
+    "commitmentIds": [
+      "e9dd13a3-23aa-47d1-a060-c10cc5c220c6"
+    ],
+    "temporalSignalIds": [
+      "f97d7acd-e843-4733-8e3f-fd618337ae04"
+    ],
+    "obligationCount": 1
+  },
+  "createdByThisDemoSubmission": {
+    "occurredAt": "2026-09-01T05:53:39.000Z",
+    "journalIds": [
+      "b539996b-522d-44e2-943b-72f83307699a"
+    ],
+    "commitmentIds": [
+      "2c6649bc-5cf9-49c7-93f5-e7023b2de9b1"
+    ],
+    "temporalSignalIds": [
+      "9569c409-68bf-411e-aa4a-972a213c94a0"
+    ],
+    "statement": "I told the desk I’d email her first.",
+    "reportedAvailability": "They said she should be back Wednesday."
+  },
+  "after": {
+    "eventTypes": [
+      "prospect_discovered",
+      "visited",
+      "visited",
+      "proposal_sent",
+      "field_commitment_made",
+      "field_temporal_signal",
+      "field_commitment_made",
+      "field_temporal_signal"
+    ],
+    "obligationCount": 2,
+    "obligationIds": [
+      "2c6649bc-5cf9-49c7-93f5-e7023b2de9b1",
+      "e9dd13a3-23aa-47d1-a060-c10cc5c220c6"
+    ]
+  },
+  "invariants": {
+    "oneSubmissionCreatedExactlyOneCommitment": true,
+    "oneSubmissionCreatedExactlyOneTemporalSignal": true,
+    "samePhysicalEntityIdAcrossDriverAndAdmin": true,
+    "noDuplicateLouiseBuilding": true,
+    "noDuplicateCommercialAccountBinding": true
+  }
 }
