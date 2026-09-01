@@ -42,6 +42,20 @@ function cacheSet(key: string, value: TravelLegEstimate) {
   }
 }
 
+function unavailableLeg(
+  fromObjectiveId: string,
+  toObjectiveId: string
+): TravelLegEstimate {
+  return {
+    fromObjectiveId,
+    toObjectiveId,
+    durationSeconds: null,
+    distanceMeters: null,
+    providerState: "unavailable",
+    source: "google_distance_matrix",
+  };
+}
+
 async function fetchLeg(
   from: LatLng,
   to: LatLng,
@@ -56,41 +70,41 @@ async function fetchLeg(
   url.searchParams.set("destinations", `${to.latitude},${to.longitude}`);
   url.searchParams.set("mode", "driving");
   url.searchParams.set("key", apiKey());
-  const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
-  if (!response.ok) {
-    const miss: TravelLegEstimate = {
+
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) {
+      const miss = unavailableLeg(fromObjectiveId, toObjectiveId);
+      cacheSet(key, miss);
+      return miss;
+    }
+    const body = (await response.json()) as {
+      status?: string;
+      rows?: Array<{
+        elements?: Array<{
+          status?: string;
+          duration?: { value?: number };
+          distance?: { value?: number };
+        }>;
+      }>;
+    };
+    const element = body.rows?.[0]?.elements?.[0];
+    const ok = body.status === "OK" && element?.status === "OK";
+    const estimate: TravelLegEstimate = {
       fromObjectiveId,
       toObjectiveId,
-      durationSeconds: null,
-      distanceMeters: null,
-      providerState: "unavailable",
+      durationSeconds: ok ? element?.duration?.value ?? null : null,
+      distanceMeters: ok ? element?.distance?.value ?? null : null,
+      providerState: ok ? "configured" : "unavailable",
       source: "google_distance_matrix",
     };
+    cacheSet(key, estimate);
+    return estimate;
+  } catch {
+    const miss = unavailableLeg(fromObjectiveId, toObjectiveId);
     cacheSet(key, miss);
     return miss;
   }
-  const body = (await response.json()) as {
-    status?: string;
-    rows?: Array<{
-      elements?: Array<{
-        status?: string;
-        duration?: { value?: number };
-        distance?: { value?: number };
-      }>;
-    }>;
-  };
-  const element = body.rows?.[0]?.elements?.[0];
-  const ok = body.status === "OK" && element?.status === "OK";
-  const estimate: TravelLegEstimate = {
-    fromObjectiveId,
-    toObjectiveId,
-    durationSeconds: ok ? element?.duration?.value ?? null : null,
-    distanceMeters: ok ? element?.distance?.value ?? null : null,
-    providerState: ok ? "configured" : "unavailable",
-    source: "google_distance_matrix",
-  };
-  cacheSet(key, estimate);
-  return estimate;
 }
 
 export async function estimateCampaignTravel(input: {
