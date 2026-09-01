@@ -23,6 +23,7 @@ import {
 } from "../../shared/goldlineTerritories";
 import type { GoldlineWorldEvent } from "../../shared/goldlineWorld";
 import { getDb } from "../db";
+import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import { listCityWorldEntities, type CityWorldEntity } from "./cityWorldService";
 import { appendGoldlineWorldEvent } from "./worldEventStore";
 
@@ -122,21 +123,29 @@ async function publishCandidate(input: {
   if (!db) throw new Error("Database not available");
   const id = randomUUID();
   const publishedAt = new Date();
-  await db.insert(goldlineTerritoryDefinitions).values({
-    id,
-    tenantId: input.tenantId,
-    stableKey: input.candidate.stableKey,
-    version: 1,
-    fantasyTitle: input.candidate.fantasyTitle,
-    realGeographyLabel: input.candidate.realGeographyLabel,
-    grammar: input.candidate.grammar,
-    guardianId: input.candidate.guardianId,
-    geometryMode: input.candidate.geometryMode,
-    membersJson: input.candidate.members,
-    createdFrom: input.candidate.createdFrom,
-    classification: "game_projection",
-    publishedAt,
-  });
+  try {
+    await db.insert(goldlineTerritoryDefinitions).values({
+      id,
+      tenantId: input.tenantId,
+      stableKey: input.candidate.stableKey,
+      version: 1,
+      fantasyTitle: input.candidate.fantasyTitle,
+      realGeographyLabel: input.candidate.realGeographyLabel,
+      grammar: input.candidate.grammar,
+      guardianId: input.candidate.guardianId,
+      geometryMode: input.candidate.geometryMode,
+      membersJson: input.candidate.members,
+      createdFrom: input.candidate.createdFrom,
+      classification: "game_projection",
+    });
+  } catch (error) {
+    if (!isMysqlDuplicateKeyError(error)) throw error;
+    const existing = (await listPublishedTerritoryDefinitions(input)).find(
+      definition => definition.stableKey === input.candidate.stableKey
+    );
+    if (!existing) throw error;
+    return existing;
+  }
   const definition: TerritoryDefinition = {
     id,
     tenantId: input.tenantId,

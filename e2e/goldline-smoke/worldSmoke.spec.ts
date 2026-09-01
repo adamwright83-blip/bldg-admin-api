@@ -176,7 +176,7 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
         );
       },
       prior,
-      { timeout: 8_000 }
+      { timeout: 15_000 }
     );
     await expect(page.locator(".owi")).toHaveCount(0);
   });

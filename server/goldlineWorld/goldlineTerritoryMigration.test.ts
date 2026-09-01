@@ -21,3 +21,14 @@ describe("Goldline territory migration", () => {
     expect(sql).toContain("UNIQUE KEY `uq_goldline_territory_stable`");
   });
 });
+
+describe("territory publish concurrency", () => {
+  it("treats a duplicate stable-key insert as already published", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "server/goldlineWorld/territoryService.ts"),
+      "utf8"
+    );
+    expect(source).toContain("isMysqlDuplicateKeyError");
+    expect(source).toMatch(/stableKey === input\.candidate\.stableKey/);
+  });
+});

@@ -127,6 +127,7 @@ test.describe("Goldline territories smoke", () => {
   test("compiler publishes a stable real-member territory", async ({ page }) => {
     await signIn(page, "admin");
     await page.goto("/growth/lantern-city");
+    await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
     const list = await readTerritories(page);
     expect(list.length).toBeGreaterThan(0);
     const territory = list[0]!;
