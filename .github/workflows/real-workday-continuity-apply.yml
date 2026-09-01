@@ -27,7 +27,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Apply Real Workday continuation
-        run: python scripts/realWorkdayRemoteApply.py
+        run: |
+          python scripts/realWorkdayRemoteApply.py
+          python scripts/realWorkdayRemoteFix.py
       - name: Run focused truth and mobile-model tests
         run: pnpm vitest run client/src/game/session/drivingLikelihood.test.ts client/src/game/session/physicalArrival.test.ts shared/goldlineFuturePressure.test.ts client/src/pages/driver/goldlineDayPlanModel.test.ts
       - name: Push product commit
@@ -36,6 +38,6 @@ jobs:
           git config user.name "goldline-real-workday"
           git config user.email "actions@users.noreply.github.com"
           git add -A
-          git reset -- .github/workflows/real-workday-continuity-apply.yml scripts/realWorkdayRemoteApply.py
+          git reset -- .github/workflows/real-workday-continuity-apply.yml scripts/realWorkdayRemoteApply.py scripts/realWorkdayRemoteFix.py
           git commit -m "feat(real-workday): surface provenance and lock play while driving"
           git push origin HEAD:cursor/goldline-real-workday
