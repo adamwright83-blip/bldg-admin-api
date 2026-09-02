@@ -16,6 +16,8 @@
  */
 import { useState } from "react";
 import { createPortal } from "react-dom";
+import { prepareScreenshotsForExtraction } from "./screenshotTiling";
+import { dedupeExtractedJobs } from "./externalJobDedup";
 import type {
   ExtractedExternalJob,
   ExternalJobKind,
@@ -89,18 +91,22 @@ export function AddExternalWorkSheet(props: AddExternalWorkSheetProps) {
     setBusy(true);
     setError(null);
     try {
-      const images = await Promise.all(Array.from(files).map(readAsDataUrl));
+      const originals = await Promise.all(Array.from(files).map(readAsDataUrl));
+      const images = await prepareScreenshotsForExtraction(originals);
       const proposal = await props.onExtract(images);
+      const jobs = dedupeExtractedJobs(proposal.jobs);
       setBatchId(proposal.batchId);
-      setRows(proposal.jobs);
+      setRows(jobs);
       setUnreadable(proposal.unreadableImageCount);
-      if (proposal.jobs.length === 0) {
+      if (jobs.length === 0) {
         setError(
           "No jobs could be read from those screenshots. Add one by hand instead."
         );
       }
     } catch {
-      setError("Could not read those screenshots. Try again, or add by hand.");
+      setError(
+        "Screenshot import failed before review. Try again — Goldline did not classify the screenshot as empty."
+      );
     } finally {
       setBusy(false);
     }
