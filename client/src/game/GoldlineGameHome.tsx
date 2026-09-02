@@ -315,6 +315,8 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
   authoritativeRouteCoverage?: number;
   isStartingVisitRoute?: boolean;
   onStartVisitRoute?: (missionIds: number[]) => Promise<void>;
+  /** Opens the authoritative route/day plan from anywhere in the game shell. */
+  onOpenTodayRoute?: () => void;
 };
 
 type UtilityPanel =
@@ -3757,6 +3759,20 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                     IMPORT CLEAN CLOUD DAY / ADD CLEAN CLOUD JOB chooser — so
                     the label names both paths rather than promising only one.
                   */}
+                  {props.onOpenTodayRoute ? (
+                    <button
+                      className="field-console-today-route"
+                      data-testid="field-console-today-route"
+                      onClick={() => {
+                        setUtilityPanel(null);
+                        props.onOpenTodayRoute?.();
+                      }}
+                    >
+                      <b>TODAY\u2019S ROUTE</b>
+                      <small>Pickups \u00b7 Drop-offs \u00b7 Sales stops</small>
+                    </button>
+                  ) : null}
+
                   {props.onOpenAddExternalWork ? (
                     <button
                       className="field-console-cleancloud"

@@ -1184,6 +1184,11 @@ function LiveGoldlineDriverController() {
       setOperatorStop(stop);
     },
     onOpenJournal: () => setJournalOpen(true),
+    onOpenTodayRoute: () => {
+      setRequestedGameplayHost(null);
+      setDayBriefingOpen(true);
+      setDriverScene("overworld");
+    },
     onResolveDay: handleResolveDay,
     onOpenDispatch: activeDispatch ? handleOpenDispatch : undefined,
     onGenerateOpenChannel: handleGenerateOpenChannel,
